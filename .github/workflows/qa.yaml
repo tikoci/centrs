@@ -17,6 +17,7 @@ on:
 permissions:
   actions: read
   contents: read
+  security-events: read
 concurrency:
   group: qa-${{ github.ref }}
   cancel-in-progress: true
@@ -36,6 +37,33 @@ jobs:
         run: bun run test:ci
       - name: Build
         run: bun run build
+      - name: AI findings probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -u
+          paths=(
+            "repos/${REPO}/code-quality/findings"
+            "repos/${REPO}/code-quality/alerts"
+            "repos/${REPO}/code-scanning/ai-alerts"
+            "repos/${REPO}/security/quality"
+            "repos/${REPO}/security/ai-findings"
+          )
+          found=""
+          for p in "${paths[@]}"; do
+            status=$(gh api -i "$p" 2>/dev/null | head -1 | awk '{print $2}' || true)
+            if [ -n "$status" ] && [ "$status" != "404" ] && [ "$status" != "410" ]; then
+              found="$p (HTTP $status)"
+              break
+            fi
+          done
+          if [ -z "$found" ]; then
+            echo "::notice title=AI findings API::Not yet exposed via REST. Check https://github.com/${REPO}/security/quality/ai-findings in a browser (requires auth). (Probed: ${paths[*]})"
+            exit 0
+          fi
+          echo "::warning title=AI findings API now available::Endpoint ${found} responded; promote this step from probe to gate when findings are stable."
+          gh api "${found%% *}" || true
       - name: RouterOS integration placeholder
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.run-integration }}
         run: echo "RouterOS CHR integration tests will be added with quickchr-backed specs."

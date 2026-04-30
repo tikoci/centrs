@@ -36,9 +36,33 @@ RouterOS supports many management paths, and each path has different strengths. 
 | RoMON | terminal and routed management access. |
 | WinBox Terminal | terminal where supported by local tooling. |
 
+## Protocol grounding
+
+Before implementing an adapter, record the grounded facts that affect shared
+settings, validation, errors, and tests:
+
+- RouterOS service/API/CLI path, default port, auth model, and version/package
+  requirements.
+- Supported capabilities and capabilities that are intentionally out of scope.
+- Local tooling or platform constraints.
+- Validation source and known gaps.
+- CHR/`quickchr` test shape.
+- Security cautions that must become user-visible warnings or errors.
+
+Use `rosetta` MCP tools for RouterOS documentation, command paths, properties,
+versions, and changelogs before falling back to general web search. Use related
+tikoci projects for implementation evidence where they own the domain:
+`restraml` for REST/schema/inspect data, `lsp-routeros-ts` for
+canonicalization and validation, `quickchr` for CHR-backed tests, and
+`vscode-tikbook`/`tiktui` for interaction patterns.
+
 ## Alpha scope
 
-Alpha should implement one real transport path first, with REST or SSH preferred. Native API, SNMP, MNDP, MAC Telnet, RoMON, WinBox Terminal, proxy, and richer file-transfer behavior remain planned until the first transport loop has validation and CHR-backed tests.
+Alpha should ground the full protocol map first, then implement one real
+transport path, with REST currently preferred. Native API, SSH, SNMP, MNDP,
+MAC Telnet, RoMON, WinBox Terminal, proxy, and richer file-transfer behavior
+remain planned until the first transport loop has validation and CHR-backed
+tests.
 
 ## Validation flow
 

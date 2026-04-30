@@ -65,10 +65,17 @@ bun run build:doc:api
 
 ## Current alpha direction
 
-The recommended first alpha is **CLI-only, macOS-local, explicit target input, explicit `via`, and one real transport path before broadening**. Start with REST or SSH, then add validation/canonicalization and CHR-backed tests before adding proxy/MCP or local inventory imports.
+The recommended first alpha is **protocol-grounding first, then CLI-only,
+macOS-local, explicit target input, explicit `via`, and one real transport path
+before broadening**. REST is the current preferred first implementation, but it
+should follow a grounded protocol matrix covering capabilities, settings,
+validation sources, local dependencies, security warnings, and CHR testability
+for the full planned protocol set.
 
 Useful decisions to make before implementing the first command:
 
+- What facts must be captured in the protocol matrix before transport code
+  starts?
 - Which transport lands first: REST, SSH, or native API?
 - Should alpha credentials be environment-only, macOS Keychain-backed, or both?
 - Which validation source lands first: static schema, live `/console/inspect`, or both?

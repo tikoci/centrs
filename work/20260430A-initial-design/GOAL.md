@@ -12,6 +12,7 @@ This work item is the original grounding prompt for `centrs`. Stable decisions f
 - `docs/specs/S003-device-discovery-and-cache.md` for device sources and cache.
 - `docs/specs/S004-cli-settings-and-precedence.md` for settings alignment.
 - `docs/specs/S005-spec-lifecycle-and-traceability.md` for spec lifecycle and traceability.
+- `docs/specs/S006-alpha-first-command.md` (Draft) for the first runnable command decisions.
 
 ## Original intent retained
 
@@ -27,7 +28,7 @@ The key product stance remains:
 
 ## Open follow-up work
 
-- Define the first implemented CLI command in a new spec or by expanding `S004`.
+- Ground the protocol matrix before implementing the first CLI command.
 - Decide the native SQLite schema for device/cache storage.
 - Decide the first RouterOS CHR integration test slice using `quickchr`.
 - Generate API and CLI docs from code once the command models exist.

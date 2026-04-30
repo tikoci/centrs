@@ -1,4 +1,5 @@
 ajv
+awk
 bunfig
 bunx
 CDB
@@ -36,6 +37,8 @@ strawman
 tgz
 tikoci
 TIKOCI
+tikbook
+tiktui
 TLV
 traceroute
 tsc

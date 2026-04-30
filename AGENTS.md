@@ -7,6 +7,7 @@ Start here, then load only the files relevant to the paths you are changing:
 - `docs/WORKFLOW.md` explains how `work/`, specs, source, and tests stay aligned.
 - `docs/specs/` contains accepted requirements.
 - `work/20260430A-initial-design/GOAL.md` is historical grounding, not the active source of truth.
+- `docs/specs/S006-alpha-first-command.md` (Draft) parks the open alpha decisions.
 - Directory-level `AGENTS.md` files contain local rules.
 - `.github/instructions/` contains Copilot-native path-specific rules with `applyTo` metadata.
 
@@ -45,7 +46,9 @@ bun run lint:ci
 These are summaries only; the specs and scoped rules are normative.
 
 - RouterOS syntax/semantics boundary: `docs/ARCHITECTURE.md`, `docs/specs/S002-protocols-and-access.md`.
+- RouterOS facts: prefer `rosetta` MCP tools for command paths, properties, changelogs, versions, and docs before web search.
 - Settings vocabulary: `docs/specs/S004-cli-settings-and-precedence.md`.
+- Protocol grounding before first implementation: `docs/specs/S006-alpha-first-command.md`.
 - RouterOS/CHR grounding: `test/AGENTS.md`, `docs/ARCHITECTURE.md`.
 - Generated docs preference: `.github/instructions/generated-docs.instructions.md`.
 

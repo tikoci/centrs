@@ -1,3 +1,5 @@
+#!/usr/bin/env bun
+
 import { describeCentrs, plannedProtocols, plannedSurfaces } from "./index.ts";
 
 export function renderCliHelp(): string {
