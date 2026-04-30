@@ -1,6 +1,6 @@
 # Start of "centrs" => API/CLI/TUI/MCP/webproxy (+ SQLite caching)
 
-This is a new tikoci project designed to be a `bun` based library and CLI, as well as HTTP server that can proxy request to a routeros device accepting HTTP/s, but exposing similar interface to CLI/API including CORS over REST API and OAuth/passkey and user-manager support for auth, and also MCP (potentially - <small>Excellent docs/types/library, agent-friendly API/CLI with a "SKILL.md" to is part of MVP, that may mitigate need for MCP.</small>).  A sort of "monorepo" that does work as one things, but totally okay/expected parts may be vendored/shipped separately.  But like one unified codebase that has a handle on RouterOS interaction though a more regularized scheme than raw commands to MikroTik API.  A non-goal is wrap RouterOS configuration in friendly functions (so NO createVlanOnBridge() things) => we help human/agent by "checking" existing RouterOS syntax BEFORE it's used, with full knowledge of RouterOS schema from other TIKOCI projects... so we offer up good help on what not valid so as long as closer was "close", we can help.  Future SKILL.md things can explain **using** us to do RouterOS config things SO were a "friendly conduit" to RouterOS that bakes in a lot "weird" RouterOS things so called/user/agents can focus on the CLI to run, not the protocol/ports/auth/etc/etc needed on top.  This is why we have many "frontends", since we NOT involved in _what_ operation your doing.  
+This is a new tikoci project designed to be a `bun` based library and CLI, as well as HTTP server that can proxy request to a RouterOS device accepting HTTP/s, but exposing similar interface to CLI/API including CORS over REST API and OAuth/passkey and user-manager support for auth, and also MCP (potentially - <small>Excellent docs/types/library, agent-friendly API/CLI with a "SKILL.md" to is part of MVP, that may mitigate need for MCP.</small>).  A sort of "monorepo" that does work as one things, but totally okay/expected parts may be vendored/shipped separately.  But like one unified codebase that has a handle on RouterOS interaction though a more regularized scheme than raw commands to MikroTik API.  A non-goal is wrap RouterOS configuration in friendly functions (so NO createVlanOnBridge() things) => we help human/agent by "checking" existing RouterOS syntax BEFORE it's used, with full knowledge of RouterOS schema from other TIKOCI projects... so we offer up good help on what not valid so as long as closer was "close", we can help.  Future SKILL.md things can explain **using** us to do RouterOS config things SO were a "friendly conduit" to RouterOS that bakes in a lot "weird" RouterOS things so called/user/agents can focus on the CLI to run, not the protocol/ports/auth/etc/etc needed on top.  This is why we have many "frontends", since we NOT involved in _what_ operation your doing.  
 
 Concepts:
 
@@ -9,7 +9,7 @@ Concepts:
 - Agentic AI friendly
   - Discoverable CLI - "MCP like interface"
   - Lib Code with JSDoc/SKILL/etc - anything to help agent understand API interface quickly
-    - Consider: _I am not an agent, so cannot spec directly, consider you’re an agent who in future who may be a user of the API in bun tests and need to figure out how to use this to interact with routeros (e.g. what would cause you to use this API vs. just using curl/python/Bun.fetch/ssh directly (i.e. my answer why? => Because we know the ports, username/passwords, and can check commands before running to deal with training data giving "mixed signals" on what RouterOS commands are valid - all stuff an agent have to solicit or find somehow -> less tool calls, more accurate way to interact)
+    - Consider: _I am not an agent, so cannot spec directly, consider you’re an agent who in future who may be a user of the API in bun tests and need to figure out how to use this to interact with RouterOS (e.g. what would cause you to use this API vs. just using curl/python/Bun.fetch/ssh directly (i.e. my answer why? => Because we know the ports, username/passwords, and can check commands before running to deal with training data giving "mixed signals" on what RouterOS commands are valid - all stuff an agent have to solicit or find somehow -> less tool calls, more accurate way to interact)
   - Included SKILL.md on usage to fill in any gaps or be pointer/container
     - Same considerations: _I am not an agent, so "balancing" what’s in JSDoc/comments/types vs SKILL.md IDK a priori.  Since skills have to be loaded in some context, I lean towards clear TS types and JSDocs over SKILL.
 - Knowledge of Mikrotik formats for device/password.  So WinBox CDB and dude.db be source of "Groups" and "Devices", so the data side is also multi-protocol and cached/file-based/ENVs generally tracking Dude Devices and Maps [groups] schemes
@@ -52,13 +52,13 @@ From a CLI POV, it look something like this:
   - Notes:
     - Using a group implies using tmux, only available if `tmux` is available otherwise error
     - API supports wiring up file-describer (e.g. use in VSCode extension to terminal)
-- `retrieve <device|group>` (fetch a value from routeros)
-  - Essentially either a GET if attribute or POST if path, without extra routeros semantics - just path with get/print and optional attribute
+- `retrieve <device|group>` (fetch a value from RouterOS)
+  - Essentially either a GET if attribute or POST if path, without extra RouterOS semantics - just path with get/print and optional attribute
   - Also supports SNMP retrieval `retrieve snmp <OID | MIB-name>`with —community
   -  
-- `update` (set a value on routeros)
+- `update` (set a value on RouterOS)
   - Essentially a PATCH or POST
-- `check` (ICMP to routeros device by centrs name, or IP/MAC)
+- `check` (ICMP to RouterOS device by centrs name, or IP/MAC)
   - Show arp
   - Include —mac-ping (use ARP to find MAC, info if not able)
   - Include —traceroute (runs a trace router
@@ -79,12 +79,12 @@ From a CLI POV, it look something like this:
   - Uses rest api to download if small
   - Uses scp or sftp to download if larger
   - Starts a temporary web server to `/tool/fetch from RouterOS side to cause an upload
-- `download <device> <routeros-path> —output xxx —search-all-paths`  
+- `download <device> <RouterOS-path> —output xxx —search-all-paths`  
   - If file is not at path, and —search-all-paths is used, should locate a file same **same** name, if single return it, other wise error with friendly error message
   - Uses rest api to download if small
   - Use s"back to home files" if enabled
   - Uses scp or sftp to download if larger
-- `devices` (shows discovered and stored routeros devices),
+- `devices` (shows discovered and stored RouterOS devices),
         - Sources:
             - MNDP
             - .cdb from WinBox

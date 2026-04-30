@@ -17,6 +17,7 @@ lsp-routeros-ts
 MCP
 MIB
 MikroTik
+MNDP
 netwatch
 OID
 POV
@@ -25,11 +26,14 @@ restraml
 scp
 skillcheck
 SNMP
+strawman
 tgz
 tikoci
 TIKOCI
+TLV
 traceroute
 tsc
+UDP
 uvx
 venv
 vite
