@@ -4,10 +4,9 @@
 
 > TODO: only a very brief "placeholder" so we can build out a proper structures
 
-> TODO: in general specs should be updated with src/** or work/** => not one-and-done
+> TODO: in general specs should be updated with src/**or work/** => not one-and-done
 
 > TODO: use work/*/** to help create and refine and fix doc/specs/S###-spec-name.md, numbers are sequential
-
 
 ## Goals
 

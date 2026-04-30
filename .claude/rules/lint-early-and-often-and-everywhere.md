@@ -16,9 +16,10 @@ paths:
   - "*.md"
 ---
 
-> TODO: treat all tools as suggest/concept to check but should cover using "gold standard" tools for linting **all files**.  If a linter exists, we want to run it.  We may not want **fail** in all cases, but data should be in CI outputs/reporting.  Linting should be friendly to agents, so `head` | `tail` operations are "messed up" by overwhelming linting output, so that a consideration.  Some package.json (that may not be right half) 
+> TODO: treat all tools as suggest/concept to check but should cover using "gold standard" tools for linting **all files**.  If a linter exists, we want to run it.  We may not want **fail** in all cases, but data should be in CI outputs/reporting.  Linting should be friendly to agents, so `head` | `tail` operations are "messed up" by overwhelming linting output, so that a consideration.  Some package.json (that may not be right half)
+>
 > - TBD json and yaml lint (check call YAML for syntax, including but not exclusively ./github/workflows/*)
-> - TBD zod ajv or similar to JSON/YAML schemas (include github actions using schema form schemastore, any json file we create should have a schema associated with it)[https://github.com/ajv-validator/ajv] and [https://github.com/SchemaStore/schemastore/blob/master/src/schemas/json/github-action.json]
+> - TBD zod ajv or similar to JSON/YAML schemas [include github actions using schema form schemastore, any json file we create should have a schema associated with it](https://github.com/ajv-validator/ajv) and [https://github.com/SchemaStore/schemastore/blob/master/src/schemas/json/github-action.json]
 > - skillcheck (verify project SKILL.md are valid, use uvx)
 > - biome for all it covers
 > - markdownlint-cli2 for all markdown (different rules for agent files and user-visible files)
