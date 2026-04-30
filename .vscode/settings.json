@@ -8,12 +8,11 @@
 
 	"chat.useNestedAgentsMdFiles": true,
 	"chat.instructionsFilesLocations": {
-		".github/instructions": false,
-		".claude/rules": true,
+		".github/instructions": true,
 		"~/.copilot/instructions": true,
-		"~/.claude/rules": true
+		"~/.claude/rules": false
 	},
-	// CLAUDE.md includes AGENTS.md
+	// Copilot should use AGENTS.md and .github/instructions directly.
 	"chat.useClaudeMdFile": false,
 	// allow subagents to read complex skills with `fork`
 	"github.copilot.chat.skillTool.enabled": true,

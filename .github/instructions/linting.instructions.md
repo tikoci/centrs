@@ -1,23 +1,8 @@
 ---
-description: Run focused checks while editing and full gates before handoff.
-paths:
-  - "src/**/*.{ts,tsx}"
-  - "test/**/*.test.ts"
-  - ".githooks/**"
-  - ".git/hooks"
-  - "cspell.json"
-  - ".cspell.words.txt"
-  - ".markdownlint-cli2.yaml"
-  - ".markdownlint.yaml"
-  - "**/.markdownlint*.yaml"
-  - "biome.json"
-  - "tsconfig.json"
-  - "Dockerfile"
-  - "**/*.md"
-  - "*.md"
-  - "package.json"
-  - "bun.lock"
+applyTo: "src/**/*.ts,src/**/*.tsx,test/**/*.test.ts,.githooks/**,cspell.json,.cspell.words.txt,.markdownlint-cli2.yaml,.markdownlint.yaml,**/.markdownlint*.yaml,biome.json,tsconfig.json,Dockerfile,**/*.md,package.json,bun.lock"
 ---
+
+# Linting and validation
 
 Run the narrowest useful check while editing, then the full relevant gate before finishing.
 

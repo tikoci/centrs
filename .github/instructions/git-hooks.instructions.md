@@ -1,13 +1,8 @@
 ---
-description: Keep git hooks and CI gates aligned with package scripts.
-paths:
-  - ".git/hooks/pre-commit"
-  - ".git/hooks/pre-push"
-  - ".github/workflows/*.yml"
-  - ".github/workflows/*.yaml"
-  - "package.json"
-  - ".githooks/**"
+applyTo: ".github/workflows/*.yml,.github/workflows/*.yaml,package.json,.githooks/**"
 ---
+
+# Git hooks and CI gates
 
 Keep local hooks and CI aligned with `package.json` scripts.
 

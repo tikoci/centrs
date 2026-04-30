@@ -1,14 +1,8 @@
 ---
-description: Keep security posture, CodeQL, and dependency review aligned.
-paths:
-  - "SECURITY.md"
-  - ".github/workflows/qa.yaml"
-  - ".github/codeql-config.yml"
-  - ".github/dependabot.yaml"
-  - "src/**"
-  - "package.json"
-  - "bun.lock"
+applyTo: "SECURITY.md,.github/workflows/qa.yaml,.github/codeql-config.yml,.github/dependabot.yaml,src/**,package.json,bun.lock"
 ---
+
+# GitHub security and quality scanning
 
 Use `SECURITY.md` as the source-of-truth summary for scanning posture.
 

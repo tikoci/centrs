@@ -1,12 +1,8 @@
 ---
-description: Prefer generated docs when code or schema is authoritative.
-paths:
-  - "src/**"
-  - "docs/**"
-  - "README.md"
-  - "package.json"
-  - "typedoc.json"
+applyTo: "src/**,docs/**,README.md,package.json,typedoc.json"
 ---
+
+# Generated docs
 
 Prefer generated documentation when code, CLI metadata, schema, or protocol models are the source of truth.
 

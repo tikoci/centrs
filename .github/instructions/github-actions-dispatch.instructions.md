@@ -1,9 +1,8 @@
 ---
-description: Keep manually dispatched workflows explicit and reviewable.
-paths:
-  - ".github/workflows/*.yaml"
-  - ".github/workflows/*.yml"
+applyTo: ".github/workflows/*.yaml,.github/workflows/*.yml"
 ---
+
+# GitHub Actions dispatch inputs
 
 Workflow dispatch inputs should make hidden assumptions visible.
 

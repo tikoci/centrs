@@ -60,7 +60,7 @@ Keep instructions scoped and auditable:
 
 - Root `AGENTS.md` is the entrypoint.
 - Directory `AGENTS.md` files contain only local constraints.
-- `.claude/rules/*` contains single-purpose rules with `paths` metadata.
+- `.github/instructions/*.instructions.md` contains single-purpose Copilot path-specific rules with `applyTo` metadata.
 - `.github/copilot-instructions.md` and `.claude/CLAUDE.md` are compatibility pointers, not separate sources of truth.
 
 ## Parallel work

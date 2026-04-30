@@ -8,13 +8,13 @@ Start here, then load only the files relevant to the paths you are changing:
 - `docs/specs/` contains accepted requirements.
 - `work/20260430A-initial-design/GOAL.md` is historical grounding, not the active source of truth.
 - Directory-level `AGENTS.md` files contain local rules.
-- `.claude/rules/*` contains single-purpose scoped rules with `paths` metadata.
+- `.github/instructions/` contains Copilot-native path-specific rules with `applyTo` metadata.
 
 Use fleet/subagents for independent workstreams such as docs, source, tests, workflows, and security. Keep SQL todo state authoritative when it is available.
 
 Prefer updating a scoped rule, spec, or directory `AGENTS.md` over adding more root-level prose. If an instruction gap appears during work, capture it in the relevant work item status and then promote it to the smallest durable instruction file.
 
-Copilot CLI's documented instruction sources do not currently list `.claude/rules/*` directly. This repo exposes those rules through `AGENTS.md`, `.github/copilot-instructions.md`, and editor settings; use `/instructions` or `/env` to confirm what the active client loaded.
+Copilot CLI's documented instruction sources include `AGENTS.md`, `.github/copilot-instructions.md`, and `.github/instructions/`. VS Code/Copilot Chat also supports nearest `AGENTS.md` behavior when nested AGENTS files are enabled. Use `/instructions` or `/env` to confirm what the active client loaded.
 
 ## Quick commands
 
@@ -37,7 +37,7 @@ bun run lint:ci
 | `work/` | Exploration, grounding, and multi-session context. |
 | `src/` | Bun/TypeScript source. |
 | `test/` | Unit, integration, and fixture space. |
-| `.claude/rules/` | Scoped durable instructions with `paths` metadata. |
+| `.github/instructions/` | Copilot-native path-specific instructions with `applyTo` metadata. |
 | `.github/workflows/` | CI, QA/security, release, docs, and lab automation. |
 
 ## Working rules
@@ -47,7 +47,7 @@ These are summaries only; the specs and scoped rules are normative.
 - RouterOS syntax/semantics boundary: `docs/ARCHITECTURE.md`, `docs/specs/S002-protocols-and-access.md`.
 - Settings vocabulary: `docs/specs/S004-cli-settings-and-precedence.md`.
 - RouterOS/CHR grounding: `test/AGENTS.md`, `docs/ARCHITECTURE.md`.
-- Generated docs preference: `.claude/rules/documents-are-ideally-generated-from-code.md`.
+- Generated docs preference: `.github/instructions/generated-docs.instructions.md`.
 
 ## Verification
 
@@ -55,7 +55,7 @@ Run `bun run lint && bun run test && bun run build` before finishing code change
 
 ## Security
 
-Follow `SECURITY.md` and `.claude/rules/github-security-and-quality-scanning.md`. Treat credential handling, RouterOS write execution, proxy listeners, and local discovery data as security-sensitive surfaces.
+Follow `SECURITY.md` and `.github/instructions/github-security-quality.instructions.md`. Treat credential handling, RouterOS write execution, proxy listeners, and local discovery data as security-sensitive surfaces.
 
 ## Do not
 

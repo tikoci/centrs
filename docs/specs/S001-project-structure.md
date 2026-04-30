@@ -40,7 +40,7 @@ Metadata:
 | `work/<date-topic>/` | Grounding, experiments, plans, and status for exploratory work. |
 | `src/` | Bun/TypeScript library and frontend implementations. |
 | `test/` | Unit, integration, fixtures, and RouterOS CHR tests. |
-| `.claude/rules/` | Single-purpose scoped instruction rules using `paths` metadata. |
+| `.github/instructions/` | Copilot-native path-specific instruction rules using `applyTo` metadata. |
 | `.github/workflows/` | CI, QA/security, release, pages, and lab automation. |
 
 ## Naming rules

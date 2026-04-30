@@ -1,11 +1,8 @@
 ---
-description: Use work items as grounding, not as permanent parallel specs.
-paths:
-  - "work/**"
-  - "docs/WORKFLOW.md"
-  - "docs/**"
-  - "AGENTS.md"
+applyTo: "work/**,docs/WORKFLOW.md,docs/**,AGENTS.md"
 ---
+
+# Work directory
 
 Use `work/<date-topic>/` as grounding when a change needs exploration, experiments, multi-session context, or reconciliation of conflicting notes.
 
