@@ -1,6 +1,10 @@
 ---
+description: Make runtime errors actionable for humans and agents.
 paths:
   - "src/**"
+  - "docs/specs/S002-protocols-and-access.md"
+  - "docs/specs/S003-device-discovery-and-cache.md"
+  - "docs/specs/S004-cli-settings-and-precedence.md"
 ---
 
 Error messages are part of the public API.

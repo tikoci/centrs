@@ -1,4 +1,5 @@
-name: Quality Assurance Tests
+name: QA
+run-name: QA • ${{ github.event_name }} • ${{ github.ref_name }}
 on:
   push:
     branches: [main]
@@ -9,18 +10,20 @@ on:
   workflow_dispatch:
     inputs:
       run-integration:
-        description: Run RouterOS/CHR integration tests when they exist
+        description: Run integration placeholder
         type: boolean
         default: false
 
 permissions:
   actions: read
   contents: read
-  security-events: write
+concurrency:
+  group: qa-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   extended-tests:
-    name: Bun extended tests
+    name: Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -36,9 +39,13 @@ jobs:
       - name: RouterOS integration placeholder
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.run-integration }}
         run: echo "RouterOS CHR integration tests will be added with quickchr-backed specs."
-  codeql-analyze: # NOTE borrowed from tikoci/restraml
-    name: CodeQL Analyze (${{ matrix.language }})
+  codeql-analyze:
+    name: CodeQL
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
@@ -61,6 +68,7 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
   dependency-review:
+    name: Deps
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:

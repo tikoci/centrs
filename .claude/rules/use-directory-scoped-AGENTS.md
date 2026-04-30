@@ -1,10 +1,10 @@
 ---
+description: Keep AGENTS and compatibility pointers scoped and non-overlapping.
 paths:
   - ".claude/CLAUDE.md"
+  - ".claude/rules/**"
   - "AGENTS.md"
   - "**/AGENTS.md"
-  - "src/**/*.ts"
-  - "test/**/*.ts"
   - ".github/copilot-instructions.md"
 ---
 

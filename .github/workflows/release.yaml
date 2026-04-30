@@ -1,15 +1,20 @@
-name: Build to Release
+name: Release
+run-name: Release • ${{ github.event_name }}
 on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish artifacts after the release workflow is fully implemented
+        description: Enable release placeholder
         type: boolean
         default: false
 permissions:
   contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   release-plan:
+    name: Placeholder
     runs-on: ubuntu-latest
     steps:
       - name: Release workflow placeholder

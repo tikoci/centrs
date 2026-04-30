@@ -1,4 +1,5 @@
 ---
+description: Use uv/uvx for Python tooling and keep shipping code TypeScript.
 paths:
   - "**/*.py"
   - "**/*.py*"

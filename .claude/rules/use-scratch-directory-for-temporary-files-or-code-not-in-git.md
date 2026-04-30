@@ -1,8 +1,7 @@
 ---
+description: Keep temporary agent artifacts isolated from shipping code.
 paths:
   - ".scratch/**"
-  - "src/**"
-  - "test/**"
 ---
 Use `.scratch/` for temporary code, generated experiments, and local artifacts that should not be committed.
 

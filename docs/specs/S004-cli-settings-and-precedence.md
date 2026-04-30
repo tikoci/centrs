@@ -2,7 +2,14 @@
 
 ## Status
 
-Initial baseline.
+Accepted baseline.
+
+Metadata:
+
+- Supersedes: none
+- Superseded by: none
+- Scope: baseline
+- Review source: `work/20260430A-initial-design/GOAL.md`
 
 ## Context
 
@@ -15,6 +22,7 @@ CLI, API, MCP, TUI, and proxy surfaces must share setting names and behavior. Ag
 - Prefer explicit values over cached or discovered values.
 - Explain the winning source for important resolved settings in verbose/debug output.
 - Do not silently fall back from a requested protocol to another protocol.
+- Alpha should require explicit `via` until automatic protocol selection has a spec, tests, and user-visible diagnostics.
 
 ## Precedence
 

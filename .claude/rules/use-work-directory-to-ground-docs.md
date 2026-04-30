@@ -1,10 +1,10 @@
 ---
+description: Use work items as grounding, not as permanent parallel specs.
 paths:
-  - "src/**"
-  - "test/**"
   - "work/**"
+  - "docs/WORKFLOW.md"
   - "docs/**"
-  - "docs/specs/**"
+  - "AGENTS.md"
 ---
 
 Use `work/<date-topic>/` as grounding when a change needs exploration, experiments, multi-session context, or reconciliation of conflicting notes.

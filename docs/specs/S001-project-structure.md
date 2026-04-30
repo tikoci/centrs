@@ -4,6 +4,13 @@
 
 Accepted baseline.
 
+Metadata:
+
+- Supersedes: none
+- Superseded by: none
+- Scope: baseline
+- Review source: `work/20260430A-initial-design/GOAL.md`
+
 ## Context
 
 `centrs` started as a human-authored strawman with project intent distributed across docs, instruction files, source placeholders, and workflow sketches. The repository structure should now act as the first prompt for future agents and contributors.

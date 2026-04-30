@@ -1,7 +1,9 @@
 ---
+description: Make CI output useful for humans and agents.
 paths:
   - ".github/workflows/*.yaml"
   - ".github/workflows/*.yml"
+  - "package.json"
 ---
 
 CI should produce reviewable data, not just pass/fail state.

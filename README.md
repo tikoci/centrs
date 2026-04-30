@@ -2,6 +2,8 @@
 
 `centrs` is the tikoci RouterOS interaction hub: a Bun/TypeScript library and future CLI, TUI, HTTP proxy/daemon, and MCP server for talking to MikroTik RouterOS devices through a regularized interface.
 
+> **Status:** pre-alpha / design-first. Core RouterOS transports, CLI commands, proxy, and MCP surfaces are not implemented yet; this repository currently defines the contract, workflow, and scaffolding for current development.
+
 The project is intentionally a **friendly conduit**, not a high-level configuration abstraction. It should help humans and agents reach RouterOS over the right protocol, with the right credentials and ports, and validate RouterOS-shaped commands before writes when possible. It should not hide RouterOS behind helpers like `createVlanOnBridge()`.
 
 ## Product direction
@@ -60,6 +62,17 @@ Generated API docs are planned through TypeDoc:
 ```bash
 bun run build:doc:api
 ```
+
+## Current alpha direction
+
+The recommended first alpha is **CLI-only, macOS-local, explicit target input, explicit `via`, and one real transport path before broadening**. Start with REST or SSH, then add validation/canonicalization and CHR-backed tests before adding proxy/MCP or local inventory imports.
+
+Useful decisions to make before implementing the first command:
+
+- Which transport lands first: REST, SSH, or native API?
+- Should alpha credentials be environment-only, macOS Keychain-backed, or both?
+- Which validation source lands first: static schema, live `/console/inspect`, or both?
+- Which device sources are in alpha: explicit input/env only, SQLite cache, WinBox CDB, or Dude DB?
 
 ## Project workflow
 

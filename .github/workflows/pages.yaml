@@ -1,15 +1,20 @@
-name: Publish GitHub Pages
+name: Pages
+run-name: Pages • ${{ github.event_name }}
 on:
   workflow_dispatch:
     inputs:
       build-docs:
-        description: Build generated docs when the docs pipeline is implemented
+        description: Enable docs build placeholder
         type: boolean
         default: false
 permissions:
   contents: read
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   pages-plan:
+    name: Placeholder
     runs-on: ubuntu-latest
     steps:
       - name: Pages workflow placeholder

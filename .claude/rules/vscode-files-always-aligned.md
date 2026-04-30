@@ -1,4 +1,5 @@
 ---
+description: Keep VS Code workspace files aligned with project scripts and tools.
 paths:
   - ".vscode/**"
   - "package.json"

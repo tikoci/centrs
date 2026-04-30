@@ -2,7 +2,14 @@
 
 ## Status
 
-Initial baseline.
+Accepted baseline.
+
+Metadata:
+
+- Supersedes: none
+- Superseded by: none
+- Scope: baseline
+- Review source: `work/20260430A-initial-design/GOAL.md`
 
 ## Context
 
@@ -27,6 +34,10 @@ Initial baseline.
 | WinBox CDB | Device, group, address, port, username, and password source when readable. |
 | The Dude `dude.db` | Alternative device inventory source, grounded by `tikoci/donny`. |
 | MNDP | Passive discovery and reachability context. |
+
+## Alpha scope
+
+Alpha should start with explicit input and environment variables. SQLite cache may be introduced once the target model is typed. WinBox CDB, The Dude `dude.db`, and MNDP are important planned sources, but they should not block the first working CLI transport.
 
 ## Open decisions
 

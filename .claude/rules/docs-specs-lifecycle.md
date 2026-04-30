@@ -1,14 +1,14 @@
 ---
+description: Keep work items, specs, source, and tests aligned.
 paths:
+  - "docs/WORKFLOW.md"
   - "docs/specs/**"
   - "src/**"
   - "test/**"
   - "work/**"
-  - ".claude/**"
-  - ".github/**"
-  - "package.json"
+  - "AGENTS.md"
+  - "**/AGENTS.md"
   - "README.md"
-  - "SECURITY.md"
 ---
 
 Follow `docs/WORKFLOW.md`.

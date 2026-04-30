@@ -1,7 +1,10 @@
 ---
+description: Keep README aligned with user-facing CLI behavior.
 paths:
   - "README.md"
-  - "src/**/*.ts"
+  - "src/cli.ts"
+  - "src/index.ts"
+  - "docs/specs/S004-cli-settings-and-precedence.md"
 ---
 
 `README.md` is the user-facing CLI manual until generated CLI docs exist.

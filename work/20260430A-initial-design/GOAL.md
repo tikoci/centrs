@@ -1,5 +1,7 @@
 # Initial Design Goal
 
+Status: archived historical grounding. Superseded by S001, S002, S003, S004, and S005 for durable decisions.
+
 This work item is the original grounding prompt for `centrs`. Stable decisions from the strawman now live in:
 
 - `README.md` for product and CLI direction.
@@ -9,6 +11,7 @@ This work item is the original grounding prompt for `centrs`. Stable decisions f
 - `docs/specs/S002-protocols-and-access.md` for access protocols and validation.
 - `docs/specs/S003-device-discovery-and-cache.md` for device sources and cache.
 - `docs/specs/S004-cli-settings-and-precedence.md` for settings alignment.
+- `docs/specs/S005-spec-lifecycle-and-traceability.md` for spec lifecycle and traceability.
 
 ## Original intent retained
 

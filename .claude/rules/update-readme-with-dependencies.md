@@ -1,6 +1,8 @@
 ---
+description: Document external dependencies when package or workflow requirements change.
 paths:
   - "package.json"
+  - "bun.lock"
   - ".github/workflows/*"
   - "README.md"
 ---

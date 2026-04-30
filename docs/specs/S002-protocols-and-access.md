@@ -2,7 +2,14 @@
 
 ## Status
 
-Initial baseline.
+Accepted baseline.
+
+Metadata:
+
+- Supersedes: none
+- Superseded by: none
+- Scope: baseline
+- Review source: `work/20260430A-initial-design/GOAL.md`
 
 ## Context
 
@@ -28,6 +35,10 @@ RouterOS supports many management paths, and each path has different strengths. 
 | MAC Telnet | terminal and emergency access. |
 | RoMON | terminal and routed management access. |
 | WinBox Terminal | terminal where supported by local tooling. |
+
+## Alpha scope
+
+Alpha should implement one real transport path first, with REST or SSH preferred. Native API, SNMP, MNDP, MAC Telnet, RoMON, WinBox Terminal, proxy, and richer file-transfer behavior remain planned until the first transport loop has validation and CHR-backed tests.
 
 ## Validation flow
 

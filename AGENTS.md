@@ -14,6 +14,8 @@ Use fleet/subagents for independent workstreams such as docs, source, tests, wor
 
 Prefer updating a scoped rule, spec, or directory `AGENTS.md` over adding more root-level prose. If an instruction gap appears during work, capture it in the relevant work item status and then promote it to the smallest durable instruction file.
 
+Copilot CLI's documented instruction sources do not currently list `.claude/rules/*` directly. This repo exposes those rules through `AGENTS.md`, `.github/copilot-instructions.md`, and editor settings; use `/instructions` or `/env` to confirm what the active client loaded.
+
 ## Quick commands
 
 ```bash
@@ -40,10 +42,12 @@ bun run lint:ci
 
 ## Working rules
 
-- Preserve RouterOS syntax and semantics; do not invent high-level configuration wrappers.
-- Keep settings vocabulary aligned across API, CLI, MCP, TUI, and proxy surfaces.
-- Prefer real RouterOS/CHR grounding through `quickchr` for behavior that depends on RouterOS.
-- Keep docs generated from code or schema when that source can be authoritative.
+These are summaries only; the specs and scoped rules are normative.
+
+- RouterOS syntax/semantics boundary: `docs/ARCHITECTURE.md`, `docs/specs/S002-protocols-and-access.md`.
+- Settings vocabulary: `docs/specs/S004-cli-settings-and-precedence.md`.
+- RouterOS/CHR grounding: `test/AGENTS.md`, `docs/ARCHITECTURE.md`.
+- Generated docs preference: `.claude/rules/documents-are-ideally-generated-from-code.md`.
 
 ## Verification
 

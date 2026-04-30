@@ -1,4 +1,5 @@
 ---
+description: Run focused checks while editing and full gates before handoff.
 paths:
   - "src/**/*.{ts,tsx}"
   - "test/**/*.test.ts"
@@ -14,6 +15,8 @@ paths:
   - "Dockerfile"
   - "**/*.md"
   - "*.md"
+  - "package.json"
+  - "bun.lock"
 ---
 
 Run the narrowest useful check while editing, then the full relevant gate before finishing.

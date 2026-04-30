@@ -1,15 +1,20 @@
-name: Lab Tests
+name: Lab
+run-name: Lab • ${{ inputs.experiment }}
 on:
   workflow_dispatch:
     inputs:
       experiment:
-        description: Name of the lab experiment to document in the run summary
+        description: Experiment name
         required: true
         default: "manual-routeros-grounding"
 permissions:
   contents: read
+concurrency:
+  group: lab-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   lab-placeholder:
+    name: Placeholder
     runs-on: ubuntu-latest
     steps:
       - name: Record experiment

@@ -1,4 +1,5 @@
 ---
+description: Keep manually dispatched workflows explicit and reviewable.
 paths:
   - ".github/workflows/*.yaml"
   - ".github/workflows/*.yml"

@@ -58,3 +58,7 @@ Related tikoci projects provide grounding: `rosetta` for docs/RAG, `restraml` fo
 - Friendly errors are part of the API contract.
 - Integration tests should prefer real RouterOS CHR via `quickchr` over elaborate mocks when behavior depends on RouterOS.
 - Generated docs should be preferred when the source of truth is code, CLI metadata, or schema.
+
+## Alpha slice
+
+The first implementation should intentionally be narrower than the full architecture: local macOS CLI, explicit device/credential input, explicit protocol selection, one real transport, validation plumbing, and CHR-backed tests. Proxy, MCP, CDB/Dude imports, and passive discovery should remain planned surfaces until the first transport loop is reliable.
