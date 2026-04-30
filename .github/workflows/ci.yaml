@@ -1,17 +1,24 @@
-# TODO: run all linters and reports on push to main, 
-# WARNING: **NO** integration tests => those tests run on `release.yaml` or dispatch on `qa.yaml`
-# TODO: always report data in build on coverage and linting results
 name: CI
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-jobs: 
+permissions:
+  contents: read
+jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - run: bun run lint
-      - run: bun run build
-      - run: bun run tests:ci
-      - run: bun run ci:report
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Lint
+        run: bun run lint
+      - name: Test
+        run: bun run test
+      - name: Build
+        run: bun run build

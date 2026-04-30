@@ -1,11 +1,7 @@
-# Bun-based TypeScript Project Source Code
+# Source Code Rules
 
-> TODO: .claude/rules largely defines instructions, which should load on read files as needed.
-> TODO: prefer .claude/rule to longer AGENTS.md or CLAUDE.md to capture instruction or critical information using `paths` in smaller scoped files, or code comments should reference relevant related projects files in some case => avoid context bloating large instructions <-- many narrowly targeted and scoped files always preferred
-> TODO: so using this file more than a pointer is a anti-pattern
-
-## MCP and webproxy support with Dockerfile
-
-- MCP with OAuth/Passkeys supported (tied in with webproxy)
-- webproxy support RADIUS/user-manager as auth source for proxying OAuth2 and/or Passkeys
-- Available as MikroTik /app so Dockerfile build to start mcp/webproxy, which allow DDNS name which can be used for passkey support in web proxy
+- Use Bun-native TypeScript and Web APIs where possible.
+- Keep the TypeScript API as the root contract; CLI, MCP, TUI, and proxy surfaces should wrap shared core behavior rather than reimplementing it.
+- Preserve RouterOS syntax and semantics. Do not add high-level RouterOS configuration helpers unless a spec explicitly changes that boundary.
+- Export typed models before adding generated docs or frontend-specific wrappers.
+- Errors must be actionable for humans and agents, with next-step guidance when a dependency, protocol, credential, or validation source is missing.

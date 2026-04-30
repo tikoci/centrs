@@ -1,4 +1,13 @@
 {
-    // TODO: add launch configurations to project can be debugged using VSCode
-    // TODO: consider multiple targets if needed for different operational modes
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "bun",
+			"request": "launch",
+			"name": "centrs CLI help",
+			"program": "${workspaceFolder}/src/cli.ts",
+			"args": ["--help"],
+			"cwd": "${workspaceFolder}"
+		}
+	]
 }

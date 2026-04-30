@@ -1,3 +1,5 @@
 # `.scratch` Directory Usage
 
-> TODO: this directory is for local temporary files, like one-off code/script, data being analyzed used by agent o
+Use `.scratch/` for local temporary files, one-off scripts, generated experiments, and data being analyzed by agents.
+
+Do not commit scratch artifacts unless they are intentionally promoted into `work/`, `docs/`, `src/`, or `test/`.

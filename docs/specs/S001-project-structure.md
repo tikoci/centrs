@@ -1,38 +1,51 @@
-# Project Structure
-
-## Context
-
-> TODO: only a very brief "placeholder" so we can build out a proper structures
-
-> TODO: in general specs should be updated with src/**or work/** => not one-and-done
-
-> TODO: use work/*/** to help create and refine and fix doc/specs/S###-spec-name.md, numbers are sequential
-
-## Goals
-
-- All exist files aligned and organized (or removed/replaced)
-- Add /doc/specs as needed for work described in various files found at initialization
-- Convert TODOs in various files into appropriate prose or configuration (or spec to do that work)
-- This spec cleaned up
-
-## Non-Goals
-
-- Implementing code in src/**
-- Fixing all `TODO`, rather if fixable in session okay, otherwise incorporate into a spec so TODO is captured as future work in some new/existing spec
-
-## Design
-
-> TODO Repo was human initialized with some initial preferences for structure and project goals to guide a "better agentic start" than a pure prompt.  The is no source code here, only files to support eventual code and docs.  "docs" being a broad term meaning agentic ai files, */**.md, and various config files that express preferences in more direct way than prose.  The `TODO` is a key marker for work, to either research (as a ./work item), or spec (if goals are clear enough to spec)
-
-## Alternatives
-
-- Let agent create structure based on prose.
-- Different tooling/libraries
-
-## Open Questions
-
-> Too many to list
+# S001: Project Structure
 
 ## Status
 
-Initial Draft
+Accepted baseline.
+
+## Context
+
+`centrs` started as a human-authored strawman with project intent distributed across docs, instruction files, source placeholders, and workflow sketches. The repository structure should now act as the first prompt for future agents and contributors.
+
+## Goals
+
+- Keep product intent, architecture, workflow, specs, source, tests, and agent instructions in predictable places.
+- Prefer small scoped files over large duplicated markdown documents.
+- Make generated docs the default when code, CLI metadata, or schema can be the source of truth.
+- Keep runnable project tooling even while major product features are still planned.
+
+## Non-goals
+
+- Implement RouterOS protocol behavior in this spec.
+- Freeze the project layout forever.
+- Store every idea in a root-level instruction file.
+
+## Repository layout
+
+| Path | Owner |
+| --- | --- |
+| `README.md` | User-facing overview and CLI manual surface. |
+| `AGENTS.md` | Short repository entrypoint for agents. |
+| `docs/ARCHITECTURE.md` | Stable system boundaries and cross-cutting concepts. |
+| `docs/WORKFLOW.md` | Work/spec/source lifecycle. |
+| `docs/specs/S###-*.md` | Accepted requirements and acceptance criteria. |
+| `work/<date-topic>/` | Grounding, experiments, plans, and status for exploratory work. |
+| `src/` | Bun/TypeScript library and frontend implementations. |
+| `test/` | Unit, integration, fixtures, and RouterOS CHR tests. |
+| `.claude/rules/` | Single-purpose scoped instruction rules using `paths` metadata. |
+| `.github/workflows/` | CI, QA/security, release, pages, and lab automation. |
+
+## Naming rules
+
+- Specs use `docs/specs/S###-short-name.md` with monotonically increasing numbers.
+- Work items use `work/YYYYMMDDX-short-name/`, where `X` is optional when more than one item starts on the same day.
+- Directory `AGENTS.md` files describe only local constraints.
+- Generated docs should live under a clearly generated path such as `docs/api/` and be produced by scripts.
+
+## Acceptance criteria
+
+- Root docs explain where to start without repeating the entire product plan.
+- Each stable behavior has exactly one spec source of truth.
+- Placeholder work remains non-failing in scripts and workflows.
+- Future agents can discover relevant rules by path without loading a giant instruction document.

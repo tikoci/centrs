@@ -1,30 +1,30 @@
 {
-    // this project specfies its own MCPs, avoid duplicates -> but user settings should still override
-    "chat.mcp.discovery.enabled": {
-        "claude-desktop": false,
-        "cursor-global": false,
-        "windsurf": false
-    },
-    
-    "chat.useNestedAgentsMdFiles": true,
-    "chat.instructionsFilesLocations": {
-        ".github/instructions": false,
-        ".claude/rules": true,
-        "~/.copilot/instructions": true,
-        "~/.claude/rules": true
-    },
-    // CLAUDE.md includes AGENTS.md
-    "chat.useClaudeMdFile": false,
-    // allow subagents to read complex skills with `fork`
-    "github.copilot.chat.skillTool.enabled": true,
-    // use tabSize of 2 and spaces-over-tabs by default
-    "editor.tabSize": 2,
-    "editor.tabCompletion": "on",
-    "editor.insertSpaces": true,
-    // for github workflows, and other YAML, allow completion
-    "yaml.completion": true,
-    "cSpell.diagnosticLevel": "Warning",
-    "cSpell.autocorrect": true,
-    "cSpell.diagnosticLevelFlaggedWords": "Error",
-    "cSpell.logLevel": "Warning",
+	// this project specifies its own MCPs, avoid duplicates -> but user settings should still override
+	"chat.mcp.discovery.enabled": {
+		"claude-desktop": false,
+		"cursor-global": false,
+		"windsurf": false
+	},
+
+	"chat.useNestedAgentsMdFiles": true,
+	"chat.instructionsFilesLocations": {
+		".github/instructions": false,
+		".claude/rules": true,
+		"~/.copilot/instructions": true,
+		"~/.claude/rules": true
+	},
+	// CLAUDE.md includes AGENTS.md
+	"chat.useClaudeMdFile": false,
+	// allow subagents to read complex skills with `fork`
+	"github.copilot.chat.skillTool.enabled": true,
+	// use tabSize of 2 and spaces-over-tabs by default
+	"editor.tabSize": 2,
+	"editor.tabCompletion": "on",
+	"editor.insertSpaces": true,
+	// for github workflows, and other YAML, allow completion
+	"yaml.completion": true,
+	"cSpell.diagnosticLevel": "Warning",
+	"cSpell.autocorrect": true,
+	"cSpell.diagnosticLevelFlaggedWords": "Error",
+	"cSpell.logLevel": "Warning"
 }

@@ -1,8 +1,10 @@
 ---
 description: Use Bun instead of Node.js, npm, pnpm, or vite.
-paths: 
- - "src/**"
- - "test/**
+paths:
+  - "src/**"
+  - "test/**"
+  - "package.json"
+  - "bun.lock"
 ---
 
 Default to using Bun instead of Node.js.
@@ -23,13 +25,13 @@ Default to using Bun instead of Node.js.
 - `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
 - `WebSocket` is built-in. Don't use `ws`.
 - Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+- `Bun.$` instead of `execa`.
 
 ## Testing
 
 Use `bun test` to run tests.
 
-```ts#index.test.ts
+```typescript
 import { test, expect } from "bun:test";
 
 test("hello world", () => {

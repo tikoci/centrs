@@ -1,6 +1,4 @@
-name: GitHub CodeQL Security and Quality Configuration
-# TODO perhaps nascent since option to set in qa.yaml
+name: centrs CodeQL security and quality configuration
 
-# security-and-quality covers all of security-extended plus code-quality queries 
 queries:
   - uses: security-and-quality

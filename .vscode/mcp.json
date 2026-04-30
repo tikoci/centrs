@@ -2,9 +2,7 @@
 	"servers": {
 		"io.github.tikoci/rosetta": {
 			"command": "bunx",
-			"args": [
-				"@tikoci/rosetta"
-			],
+			"args": ["@tikoci/rosetta"],
 			"type": "stdio"
 		},
 		"io.github.github/github-mcp-server": {
@@ -14,9 +12,7 @@
 		"microsoft/playwright-mcp": {
 			"type": "stdio",
 			"command": "npx",
-			"args": [
-				"@playwright/mcp@latest"
-			]
+			"args": ["@playwright/mcp@latest"]
 		},
 		"io.github.ChromeDevTools/chrome-devtools-mcp": {
 			"type": "stdio",

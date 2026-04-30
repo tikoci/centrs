@@ -1,4 +1,26 @@
 {
-  // TODO: fill tasks to as needed for launch/etc
-  "version": "2.0.0"
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "centrs: lint",
+			"type": "shell",
+			"command": "bun run lint",
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "centrs: test",
+			"type": "shell",
+			"command": "bun run test",
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "centrs: build",
+			"type": "shell",
+			"command": "bun run build",
+			"group": "build",
+			"problemMatcher": []
+		}
+	]
 }

@@ -8,5 +8,6 @@ paths:
   - "tsconfig.json"
   - "bunfig.toml"
 ---
-> TODO: see schema checks instructions
-> TODO: tasks.json / launch.json keep in-sync with package.json or other files to allow vscode run, debug, and test things
+Keep VS Code workspace files aligned with `package.json` scripts and project tooling.
+
+If a task, launch config, extension recommendation, or setting names a command, keep that command runnable or remove the stale reference.

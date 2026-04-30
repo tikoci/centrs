@@ -1,2 +1,9 @@
 ignores:
+  - "AGENTS.md"
+  - "CLAUDE.md"
+  - ".claude/**"
+  - ".github/copilot-instructions.md"
+  - ".github/instructions/**"
+  - "**/AGENTS.md"
   - "**/node_modules/**"
+  - "docs/api/**"

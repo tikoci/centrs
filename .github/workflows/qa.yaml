@@ -1,25 +1,41 @@
-# CONTEXT: This is where all extended tests live, like integration tests and security checks (CodeQL)
-# USAGE: Run as part of `release.yaml`,  or on-demand for "big "
-# TODO: Runs CodeQL code scanning, code quality, and dependabot - basically all the bells-and-whistles of GitHub CodeQL (include experimental CodeQL Quality Checks) 
-# TODO: Runs integration or other longer regularized tests 
-# NOTE: One-off tests or "labs" where a CI runner are requires should use `lab.yaml`
-
 name: Quality Assurance Tests
 on:
-  # TODO cleanup triggers, this should be trigger by release.yaml
-  workflow_dispatch
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      run-integration:
+        description: Run RouterOS/CHR integration tests when they exist
+        type: boolean
+        default: false
 
-permissions: # TODO just guessing below
+permissions:
   actions: read
   contents: read
   security-events: write
 
 jobs:
-  integration-tests:
-    name: Bun Integration Tests
-    runs-on: ubuntu # TODO should perhaps be matrix controlled by workflow_dispatch
+  extended-tests:
+    name: Bun extended tests
+    runs-on: ubuntu-latest
     steps:
-      - run: "bun run test:all"
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Test with coverage
+        run: bun run test:ci
+      - name: Build
+        run: bun run build
+      - name: RouterOS integration placeholder
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run-integration }}
+        run: echo "RouterOS CHR integration tests will be added with quickchr-backed specs."
   codeql-analyze: # NOTE borrowed from tikoci/restraml
     name: CodeQL Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
@@ -38,15 +54,21 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
-          queries: security-and-quality # <== runs "Quality Checks, with 'AI Findings', --> not visible to agents since these are not in GitHub MCP nor `gh` nor GitHub API "
+          config-file: ./.github/codeql-config.yml
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
         with:
           category: /language:${{ matrix.language }}
   dependency-review:
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
       - name: Review dependency changes
         uses: actions/dependency-review-action@v4
         with:

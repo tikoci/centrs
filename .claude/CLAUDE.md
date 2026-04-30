@@ -1,6 +1,5 @@
+# Claude Entry Point
 
-# This project is aligned for CoPilot and Claude/Anthropic models
+Read `../AGENTS.md` first. Repository behavior rules live in `.claude/rules/*` with `paths` metadata, and directory-specific guidance lives in the nearest `AGENTS.md`.
 
-- CLAUDE.md => Read @../AGENTS.md
-
-> TODO: Claude and CoPilot **should** (confirm if true in all cases) both use .claude/rules and .claude/skills => so do not duplicate in .github/**
+Keep this file as a pointer only; do not duplicate product requirements, workflow rules, or source-code conventions here.

@@ -3,5 +3,9 @@ paths:
   - "src/**"
 ---
 
-> TODO: all error message should be human/agent readable and "as actionable as possible", not _just_ internal code/stack (although those should be available/shown as appropriate) <-- like suggesting the OS-appropriate command to use fix, or tool/command that can check
-> TODO: if command is given, we should check it's installed or suggest how to install, again this should be platform aware => we want errors to not be blockers, but discovery
+Error messages are part of the public API.
+
+- Explain what failed, why it matters, and the next action the caller can take.
+- Include RouterOS path, protocol, device source, and validation source when those details explain the failure.
+- When a local tool is required, check for it where practical and suggest a platform-aware install or workaround.
+- Do not hide internal error details; attach them as structured cause/debug data instead of making the main message unreadable.

@@ -5,4 +5,6 @@ paths:
   - "README.md"
 ---
 
-> TODO: readme should also including the dependencies on external tools beyond `npm install` if any have an OS package/tool usage
+When adding runtime or development dependencies, update README if users need to install an external tool outside `bun install`.
+
+Include platform notes for macOS, Linux, and Windows when a dependency is OS-specific.

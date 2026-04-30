@@ -5,5 +5,8 @@ paths:
   - "docs/specs/**"
 ---
 
-> TODO: goal is code comments and/or tools around the code form the basis for large parts of the docs, so agents "write once", and the parcelled out by scripts/tools to various multi-level needs of a exemplar help system (e.g. short summary -> longer details -> code-level details <== always providing user/caller/agent details error/warnings with actionable next steps ==> being able to pragmatically reference docs at the right level and the right topics)
-> TODO: good documentation is essentially, having agents read/re-write long prose documents should be minimized by good design practices that
+Prefer generated documentation when code, CLI metadata, schema, or protocol models are the source of truth.
+
+- Write typed exports, JSDoc, command metadata, and schemas so TypeDoc and future CLI-doc generators can reuse them.
+- Avoid copying option tables by hand across README, API docs, MCP docs, and help output.
+- Human-authored docs should explain concepts, workflow, and decisions that cannot be generated reliably.

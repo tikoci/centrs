@@ -1,3 +1,10 @@
+FROM oven/bun:1.3.13-alpine
 
-# CONTEXT: 
-# TODO: container to run "src/webproxy.ts" in RouterOS /app containers
+WORKDIR /app
+
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
+
+COPY src ./src
+
+CMD ["bun", "src/cli.ts", "--help"]

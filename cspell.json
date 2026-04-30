@@ -1,58 +1,30 @@
-// CONTEXT: cSpell Settings to always "lint" for spelling errors, uses .cspell.words.txt for exception 
 {
-    // language - current active spelling language
-    "language": "en",
-
-    // Specify paths/files to ignore.
-    "ignorePaths": [
-        "node_modules", // this will ignore anything the node_modules directory
-        ".git", // Ignore the .git directory
-        "cspell.json" // Ignore ourselves
-    ],
-
-    "enableGlobDot": true,
-
-    // flagWords - list of words to be always considered incorrect
-    // This is useful for offensive words and common spelling errors.
-    // For example "hte" should be "the"
-    "flagWords": [
-        "hte" // cSpell: ignore
-    ],
-
-    // Words to be ignored and not suggested.
-    "ignoreWords": [
-        "behaviour"
-    ],
-
-    // words - list of words to be always considered correct
-    "words": [], // <-- for project-related words just plain-text .cspell.words.txt to add new words instead
-    
-    // Controls the maximum number of spelling errors per document.
-    "maxNumberOfProblems": 100,
-    // Controls the number of suggestions shown.
-    "numSuggestions": 8,
-    // The minimum length of a word before checking it against a dictionary.
-    "minWordLength": 3,
-    // Specify file types to spell check.
-    "enabledLanguageIds": [
-        "*"
-    ],
-    // Enable / Disable compound words like 'errormessage'
-    "allowCompoundWords": false,
-
-    // Allowed misspelled words that are "project specific" => use `./.cspell.words.txt` instead of this file's `words`.
-    "dictionaryDefinitions": [
-        {
-            "name": "project-words",
-            "path": "./.cspell.words.txt",
-            "addWords": true
-        }
-    ],
-    "dictionaries": ["project-words"],
-    
-    // Version of the setting file.  Always 0.2
-    "version": "0.2",
-
-    // Enable / Disable the spell checker.
-    "enabled": true,
+	"version": "0.2",
+	"language": "en",
+	"enabled": true,
+	"enableGlobDot": true,
+	"ignorePaths": [
+		"node_modules",
+		".git",
+		"cspell.json",
+		"coverage",
+		"dist",
+		"docs/api"
+	],
+	"flagWords": ["hte"],
+	"ignoreWords": ["behaviour"],
+	"words": [],
+	"maxNumberOfProblems": 100,
+	"numSuggestions": 8,
+	"minWordLength": 3,
+	"enabledLanguageIds": ["*"],
+	"allowCompoundWords": false,
+	"dictionaryDefinitions": [
+		{
+			"name": "project-words",
+			"path": "./.cspell.words.txt",
+			"addWords": true
+		}
+	],
+	"dictionaries": ["project-words"]
 }

@@ -1,5 +1,30 @@
-// TODO: implement...
-// CONTEXT: entrypoint to CLI interface to centrs
-// PURPOSED IMPLEMENTATION: https://mael.dev/clipanion/ + Zod validation 
-// ALT IMPLEMENTATIONs:  clipanion is a initial guess... considered (and could re-consider): commander (older but okay but needs TS type-safety, so IDK), oclif (too many deps/complex))
-// REJECTED IMPLEMENTATIONs: Bun.parseArg(), we have a complex CLI, and want **great** help for it, so DIY CLI may be too limited.
+import { describeCentrs, plannedProtocols, plannedSurfaces } from "./index.ts";
+
+export function renderCliHelp(): string {
+	return [
+		describeCentrs(),
+		"",
+		`Planned surfaces: ${plannedSurfaces.join(", ")}`,
+		`Planned protocols: ${plannedProtocols.join(", ")}`,
+		"",
+		"The CLI command model is specified in README.md and docs/specs/S004-cli-settings-and-precedence.md.",
+	].join("\n");
+}
+
+export async function runCli(
+	args: readonly string[] = Bun.argv.slice(2),
+): Promise<number> {
+	if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
+		console.log(renderCliHelp());
+		return 0;
+	}
+
+	console.error(
+		`centrs CLI commands are not implemented yet. See README.md for the planned command surface. Received: ${args.join(" ")}`,
+	);
+	return 1;
+}
+
+if (import.meta.main) {
+	process.exitCode = await runCli();
+}

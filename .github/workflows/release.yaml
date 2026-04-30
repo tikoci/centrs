@@ -1,12 +1,16 @@
-# TODO: requires `qa.yaml` to succeed
-# TODO: publishes on NPM
-# TODO: publishes Dockerfile on DockerHub and GHCR
-# SPEC: use workflow_dispatch options 
 name: Build to Release
 on:
-  - workflow_dispatch
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish artifacts after the release workflow is fully implemented
+        type: boolean
+        default: false
+permissions:
+  contents: read
 jobs:
-  build:
-    runs-on: ubuntu
+  release-plan:
+    runs-on: ubuntu-latest
     steps:
-      - run: "echo TODO finish release workflow && false" 
+      - name: Release workflow placeholder
+        run: echo "Release publishing is intentionally disabled until packaging specs are implemented. publish=${{ inputs.publish }}"
