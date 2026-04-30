@@ -1,0 +1,17 @@
+# TODO: run all linters and reports on push to main, 
+# WARNING: **NO** integration tests => those tests run on `release.yaml` or dispatch on `qa.yaml`
+# TODO: always report data in build on coverage and linting results
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs: 
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - run: bun run lint
+      - run: bun run build
+      - run: bun run tests:ci
+      - run: bun run ci:report

@@ -1,0 +1,9 @@
+---
+paths:
+  - ".github/workflows/*.yaml"
+  - ".github/workflows/*.yml"
+---
+# TODO
+
+> CONTEXT: github actions should support rich dispatch parameters with reasonable defaults => all CI to be tested in parts, and ensure variables are less hidden
+> TODO: .github/workflows/lab.yaml be the example, were if a particular platform is needed to verify some functionality/protocol/os/etc that is not local, the `lab.yaml` can be used run the desired experiment.  since this may be one-off things (or potentially items than _may_ be revisited as other details changes -> something did not work, if bug, we may report and need to confirm again.  if small/easy, this could be a unit test.  but if more involved test was done to determine what a good unit test needed, if issue is found we may need to run the lab.yaml test again to re-check past assumption is still true (without guessing, ground with new test, either in local or CI if needed)

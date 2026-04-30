@@ -1,0 +1,6 @@
+name: GitHub CodeQL Security and Quality Configuration
+# TODO perhaps nascent since option to set in qa.yaml
+
+# security-and-quality covers all of security-extended plus code-quality queries 
+queries:
+  - uses: security-and-quality

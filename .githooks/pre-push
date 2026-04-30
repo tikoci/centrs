@@ -1,0 +1,3 @@
+#!/bin/sh
+
+# TODO: call bun run git:pre-commit

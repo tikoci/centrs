@@ -1,0 +1,19 @@
+# CONTEXT: tests do **not** unless specified in workflow_dispatch - designed for more "interactive" (e.g. things use to find a ground truth, but once known likely does not re-confirmed every time [or smaller subset is done regularly, but "fuller" grounding validation test is kept here to "re-check" some previous assumption] - these could be
+# TODO: mere examples concepts, not real targets
+name: Lab Tests
+on: workflow_dispatch
+jobs: 
+  example-longer-test-where-provided-some-data-that-requires-more-processing-or-analysis:
+    runs-on: ubuntu-latest
+    # dispatch controlled
+    if: false
+  one-off-test-but-possible-could-revisit-if-something-changes-elsewhere:
+    runs-on: ubuntu-latest
+    # dispatch controlled
+    if: false
+  verify-x-thing-on-y-platform:
+    runs-on: mac
+    if: false
+  validate-some-ci-things-without-breaking-core-build:
+    runs-on: ubuntu-even-newer
+    if: false

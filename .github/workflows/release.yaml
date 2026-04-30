@@ -1,0 +1,12 @@
+# TODO: requires `qa.yaml` to succeed
+# TODO: publishes on NPM
+# TODO: publishes Dockerfile on DockerHub and GHCR
+# SPEC: use workflow_dispatch options 
+name: Build to Release
+on:
+  - workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu
+    steps:
+      - run: "echo TODO finish release workflow && false" 

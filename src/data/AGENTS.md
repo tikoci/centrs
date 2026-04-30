@@ -1,0 +1,12 @@
+# Data Sources for `devices` (including auth and ports) and other related API/CLI/MCP/TUI things that have some non-network need for local files/SQLite for their work 
+
+> TODO: `devices` in CLI comes from a winbox-cdb, that we should be able to read **and** write, and is our native storage format for device/group/ip/username/password
+> TODO: winbox's *.cdb may be encrypted or the default location behind sandbox, should prompt user if interactively.
+> TODO: env / --flag support using our own and generate our own `.cdb` file via some `devices add`, with the particular cdb file to use being expressed.  and should create a new one if not existing  
+> TODO: format is known, using MikroTik nova TLV-like IDs. see - Python implementation of WinBox CDB: <https://github.com/jabb3rd/RouterOS_Tools/blob/master/winbox-extract-passwords.py>
+> TODO: dude.db is well understood by tikoci/donny in ~/GitHub/donny which can be vendored here so can merely use a dude.db to get ip/dns/ports/username/password for RouterOS devices in database, which is also same nova TLV-like IDs as .cdb <- so largely similar, we use "cdb" for internal storage / "default", but a dude.db should be alternative source for "devices"
+> TODO: multiple sources of "devices" are possible that API/CLI work against, so "devices" is a "meta-view" all addressable mikrotik (unless ip/dns/username/password, and known port for HTTP/HTTPS/etc provided explictly) <- idea is mostly operate around devices, so a manually provided one should be _optionally_ cached (based on API/ENV/CLI flag that control)
+> TODO: MNDP is protocol behind and /ip/neighbor/print where are UDP broadcasts, so `mndp-cache.ts` is what collects the without our code.  depending on context the discovery should be largely automatic, so `devices` since devices only broadcast ever 30s to 60s by default (and it may be disabled/blocked so cannot assume a lack of MNDP means device is "invalid", it just another data source to have "friendly" UX since we can "learn" devices based on MNDP broadcasts),
+> TODO: MNDP maintains as SQLite "cache" and other transitory data to store previous MNDP found devices, which again are nova TLV IDs in MNDP.
+> TODO: see ~/GitHub/mcp-monorepo/mcp-mikrotik which has an MNDP cache implementation to vendor
+> TODO: consider if we should centralize our SQLite usage to a single DB with tables, than say have mdnp.db and one-per-use DB.

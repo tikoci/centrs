@@ -1,0 +1,14 @@
+name: Publish GitHub Pages
+# TODO: this is placeholder to track future work, but thing like CLI/API/MCP/etc docs should be published on github so there is a stable URL for latest and URLs can be used CLI error messages in a consistent and predicable manner <== so use GitHub Pages to serve them up
+on:
+  # TODO cleanup triggers
+  - workflow_dispatch 
+  - push
+jobs:
+  build:
+    runs-on: ubuntu
+    if: false
+    steps: # TODO pseudo code 
+      - run: "echo TODO do build or other ETL things"
+      - run: "echo TODO publish api doc"
+      - run: "echo TODO publish cli doc linked from tool for extended help, cross ref api docs as needs"

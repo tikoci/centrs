@@ -1,0 +1,11 @@
+{
+    "recommendations": [
+        "streetsidesoftware.code-spell-checker",
+        "oven.bun-vscode",
+        "anthropic.claude-code",
+        "github.vscode-github-actions",
+        "github.vscode-pull-request-github",
+        "github.remotehub",
+        "davidanson.vscode-markdownlint"
+    ]
+}
