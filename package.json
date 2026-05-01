@@ -45,6 +45,7 @@
 		"lint:git:push": "bun run ci",
 		"lint:ci": "bun run lint && bun run lint:markdownlint && bun run lint:cspell && bun run lint:secretlint && bun run lint:agents",
 		"lint:cspell": "cspell lint .",
+		"lint:cspell:all": "cspell lint . --no-gitignore",
 		"lint:markdownlint": "markdownlint-cli2 \"**/*.md\"",
 		"lint:markdownlint:fix": "markdownlint-cli2 --fix \"**/*.md\"",
 		"lint:typecheck": "tsc --noEmit",

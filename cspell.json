@@ -9,8 +9,10 @@
 		"cspell.json",
 		"coverage",
 		"dist",
-		"docs/api"
+		"docs/api",
+		"test/fixtures"
 	],
+	"useGitignore": true,
 	"flagWords": ["hte"],
 	"ignoreWords": ["behaviour"],
 	"words": [],
