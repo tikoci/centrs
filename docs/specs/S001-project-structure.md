@@ -37,6 +37,8 @@ Metadata:
 | `docs/ARCHITECTURE.md` | Stable system boundaries and cross-cutting concepts. |
 | `docs/WORKFLOW.md` | Work/spec/source lifecycle. |
 | `docs/specs/S###-*.md` | Accepted requirements and acceptance criteria. |
+| `GLOSSARY.txt` | Shared project vocabulary, short term definitions, and cspell-backed reference entries. |
+| `.scratch/` | Repo-local transient artifacts and whiteboard material that are not yet durable project sources. |
 | `work/<date-topic>/` | Grounding, experiments, plans, and status for exploratory work. |
 | `src/` | Bun/TypeScript library and frontend implementations. |
 | `test/` | Unit, integration, fixtures, and RouterOS CHR tests. |
@@ -46,6 +48,7 @@ Metadata:
 ## Naming rules
 
 - Specs use `docs/specs/S###-short-name.md` with monotonically increasing numbers.
+- Prefer descriptive kebab-case names for new prose markdown files unless the file uses an established conventional name such as `README.md`, `AGENTS.md`, `SECURITY.md`, `GOAL.md`, `PLAN.md`, or `STATUS.md`.
 - Work items use `work/YYYYMMDDX-short-name/`, where `X` is optional when more than one item starts on the same day.
 - Directory `AGENTS.md` files describe only local constraints.
 - Generated docs should live under a clearly generated path such as `docs/api/` and be produced by scripts.

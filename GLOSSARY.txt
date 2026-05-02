@@ -1,0 +1,137 @@
+# Project glossary and cspell dictionary
+#
+# This file is the shared source of truth for project vocabulary, short term
+# definitions, and cspell dictionary entries.
+#
+# `%term` in prompts or notes means "look up the matching entry or comment here."
+#
+# CSpell dictionary syntax supported here:
+# - `~word` => use the word only when case sensitivity is off
+# - `+word` or `word+` => allow optional compounds
+# - `-word` or `word-` => require the word to appear in a compound
+# - `!word` => explicitly forbid the word
+#
+# Correctly spelled words may still belong here when the attached comment is the
+# canonical repo-specific definition or reference for the term.
+#
+# Core tikoci references
+# %centrs: this repository and RouterOS interaction hub.
+#   https://github.com/tikoci/centrs
+# %quickchr: CHR automation and test helpers used by tikoci projects.
+#   https://github.com/tikoci/quickchr
+# %rosetta: RouterOS docs/search grounding and knowledge-base tooling.
+#   https://github.com/tikoci/rosetta
+# %restraml: RouterOS REST schema and explorer tooling.
+#   https://github.com/tikoci/restraml
+# %lsp-routeros-ts: RouterOS parser and language-server utilities.
+#   https://github.com/tikoci/lsp-routeros-ts
+# %donny: Dude/discovery grounding for RouterOS device inventories.
+#   https://github.com/tikoci/donny
+# %tikbook: RouterOS notebook/documentation vocabulary used across tikoci.
+#   See also https://github.com/tikoci/vscode-tikbook
+# %routeros-skills: reusable RouterOS agent skills.
+#   https://github.com/tikoci/routeros-skills
+# %fat-chr: larger CHR image experiments and packaging.
+#   https://github.com/tikoci/fat-chr
+# %mikropkl: MikroTik-oriented PKL experiments and schemas.
+#   https://github.com/tikoci/mikropkl
+# %tikdns: tikoci DNS tooling.
+#   https://github.com/tikoci/tikdns
+#
+# External references
+# %mac-telnet: MikroTik MAC Telnet tooling by haakonnessjoen.
+#   https://github.com/haakonnessjoen/mac-telnet
+
+ajv
+amm
+amazonq
+awk
+backpressure
+btest.exe # Mikrotik /tool/bandwidth-test client for windows
+bunfig
+bunx
+canonicalizer
+CDB
+CDP
+centrs
+cli
+cloc
+crossref
+datagram
+davidanson
+DDNS
+donny
+dotenv
+DSL # domain specific language
+env
+esbuild
+ETL
+execa
+fat-chr
+figcaption
+frontends
+haakonnessjoen
+hostfwd
+IPC # inter-process communications
+iscsi
+kbd
+KVM
+librouteros # <https://github.com/haakonnessjoen/librouteros-api>
+LLDP
+lsp-routeros-ts
+macping
+mactelnet
+mactelnetd
+MCP
+MIB
+MikroTik
+mikropkl
+MNDP
+netmiko # [Multi-vendor library to simplify Paramiko SSH connections to network devices](https://github.com/ktbyers/netmiko)
+netwatch
+npk # MikroTik package format
+nvme-over-tcp # supported by RouterOS **with** rose-storage.npk extra-package
+OID
+PII # Personally Identifiable Information
+POV
+proplist
+quickchr
+RAML
+remotehub
+restraml
+rosetta
+romon
+ros
+routeros
+routeros-skills
+scp
+scriptability
+scriptable
+skillcheck
+SNMP
+strawman
+terminal-over-winbox # [Pure Python implementation of the MikroTik WinBox terminal protocol — encrypted CLI access to RouterOS devices over TCP port 8291](https://github.com/subixonfire/winbox-terminal-protocol)
+tgz
+tikbook
+tikdns
+tikoci
+TIKOCI
+tiktui
+TLV
+traceroute
+tsc
+tzsp
+TZSP
+UDP
+uvx
+vcs
+venv
+vite
+vitest
+vrf
+webproxy
+winbox
+Wireshark
+workstreams
+YYYYMMDDX
+zod
