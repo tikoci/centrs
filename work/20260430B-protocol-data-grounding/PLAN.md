@@ -19,6 +19,9 @@ specs or durable instructions after the matrices are filled.
      Dude DB, MNDP observations, and credential storage/import behavior.
    - Capture authority level, provenance, schema/file format, credential
      handling, persistence, sample/fixture needs, and source references.
+   - Add a provisional WinBox CDB track for UI term mapping, password/mode
+     semantics, `address + user` keying, comments/notes metadata, merge/update
+     behavior, and safe synthetic fixtures.
 
 3. Native API eventing
    - Reconcile RouterOS API docs, `tiktui`, and `restraml` around `.tag`,
@@ -46,10 +49,17 @@ specs or durable instructions after the matrices are filled.
    - Record the deferred `SKILL.md`/custom-agent decision and revisit trigger in
      `STATUS.md`.
 
+7. Review triage
+   - Incorporate the May 1 local review notes into committed work artifacts
+     without treating the temporary note as a durable source.
+   - Track each material idea as promoted, spike, deferred, or rejected so future
+     agents can see what was intentionally left out.
+
 ## Promotion path
 
 1. Fill this work item.
-2. Update S006 with grounded alpha decisions.
-3. Update S002/S003 only for stable protocol/data-source requirements.
-4. Create implementation work only after the relevant spec and test shape are
+2. Create separate spike work items for large or high-risk research areas.
+3. Update S006 with grounded alpha decisions.
+4. Update S002/S003/S004 only for stable protocol/data-source requirements.
+5. Create implementation work only after the relevant spec and test shape are
    clear.

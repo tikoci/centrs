@@ -49,6 +49,26 @@ scratch mode.
   shape, and exact retrieve projection behavior still need implementation-time
   decisions.
 
+## Review incorporation checkpoint
+
+- The May 1 scratch review has been triaged into committed work artifacts instead
+  of being referenced as a durable source.
+- WinBox CDB is now recorded as a strong candidate for the first `centrs devices`
+  data target, but still provisional until its format, encryption behavior, field
+  limits, and fixture coverage are grounded.
+- The CDB working model now records `address + user` as the apparent entry key,
+  with group, workspace, RoMON agent, and comments/notes treated as attributes.
+- `CENTRS_PASSWORD`, `CENTRS_CDB_FILE`, `CENTRS_CDB_PASSWORD`, and
+  `CENTRS_CDB_MODE` are captured as CDB/password-provider vocabulary to evaluate,
+  not accepted S004 settings yet.
+- WinBox UI terms such as "Saved", "Neighbors", "RoMON", "Save to list",
+  "with password", "Remember password", "Workspace", "Open", "Move", "Import",
+  "Export", and "Set file password" are captured as design alignment material
+  for future device-management UX.
+- The note's broader WinBox/Nova, terminal-over-WinBox, RoMON, L2 lab,
+  dissector, and schema IR ideas have separate spike work items so this work item
+  can remain the umbrella grounding checkpoint.
+
 ## Instruction gaps found
 
 - RouterOS grounding instructions needed to cover `work/**` and `src/data/**`,
@@ -75,3 +95,9 @@ scratch mode.
   fixtures before any importer exists.
 - Decide whether WinBox Terminal is an in-process adapter, external-tool launcher,
   or deferred non-goal.
+- Decide whether CDB is canonical `centrs` storage, an import/export format, or
+  one provider feeding a separate SQLite cache.
+- Decide whether comments/notes metadata is safe enough for non-default protocol
+  ports and other key/value attributes.
+- Decide how non-RouterOS secrets such as SNMP communities can be represented
+  without creating fake devices or silently exposing credentials.
