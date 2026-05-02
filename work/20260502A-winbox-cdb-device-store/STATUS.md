@@ -22,6 +22,8 @@
   - duplicate same-address rows with different users.
 - Local WinBox app observations are recorded in
   `local-winbox-app-observations.md`.
+- Candidate real-WinBox harness paths are recorded in
+  `winbox-harness-options.md`.
 - The local `settings.cfg.viw2` file is not the CDB itself. It is adjacent
   WinBox metadata that remembers the selected CDB path and stores login/workspace
   oriented tables and field labels.
@@ -66,10 +68,9 @@
   - linked and exported OpenSSL-era crypto entry points including
     `PKCS5_PBKDF2_HMAC`, `EVP_BytesToKey`, `AES_cbc_encrypt`, `RAND_bytes`,
     `SHA1`, and `SHA256`.
-- Those binary findings are only **hints**, not proof of the exact file format:
-  they narrow the likely implementation family to a password-based KDF plus
-  block-cipher wrapper, but they are not enough to safely implement encrypted
-  CDB support yet.
+- Those binary findings were not enough on their own, but they did point at the
+  correct password-based wrapper family and now corroborate the grounded
+  `SHA1(salt || password)` + RC4-drop[768] implementation.
 - A new manual encrypted sample set in
   `.scratch/winbox-cdb-encrypted-manually/` now gives grounded same-content and
   same-password comparison pairs.
@@ -80,18 +81,10 @@
     payload 113 bytes,
   - the earlier synthetic encrypted fixture is also 32 bytes larger than the
     289-byte open RoMON fixture it was derived from.
-- That constant 32-byte delta strongly suggests the encrypted wrapper is closer
-  to `[32-byte per-file header][same-length ciphertext]` than to a naive
-  AES-CBC-with-padding container.
-- Simple backup-inspired hypotheses were tested locally against the smallest
-  sample and did **not** hit:
-  - RC4 keyed by `SHA1(salt || password)` / `SHA1(password || salt)`,
-  - RC4 keyed by `SHA256(...)`,
-  - AES-128-CTR with the 32-byte header split into salt/nonce material under
-    the obvious SHA1/SHA256 derivations.
-- The RouterOS password-protected backup format is therefore a weak fit for CDB:
-  public backup tooling documents larger encrypted headers and different
-  authenticated/enveloped structures than what the CDB samples show.
+- That constant 32-byte delta is now confirmed to be the cleartext random salt,
+  followed by same-length RC4 ciphertext. With the captured salt reused,
+  `encryptWinBoxCdb(...)` reproduces all four manual WinBox-generated encrypted
+  files byte-for-byte.
 - **Resolved 2026-05-02:** the encrypted CDB wrapper format is now grounded.
   Cross-referencing the WinBox macOS binary (`AddrsHandler::loadFromFile`
   → `PersistManager::readFile(QString,QString,bool,uint,uint,uint)` at
@@ -117,7 +110,9 @@
   - open CDB file detection and parsing,
   - length-prefixed `M2` record decoding,
   - open CDB encoding,
-  - encrypted payload geometry analysis for future sample comparison,
+  - encrypted payload geometry analysis for fixture comparison,
+  - encrypted CDB decrypt/encrypt via `SHA1(salt || password)` +
+    RC4-drop[768],
   - derived entry helpers for target, user, password, group, comment, profile,
     RoMON agent, and saved-password state.
 - `test/unit/winbox-cdb.test.ts` now anchors:
@@ -126,9 +121,11 @@
   - encrypted payload alignment analysis against the current encrypted fixture,
   - representative field decoding,
   - byte-for-byte round-trip of every open fixture,
-  - generation of a fresh open CDB record and parse-back verification.
-- The current implementation intentionally stops at **open CDB**. Encrypted CDB
-  files are detected cleanly but not decrypted or rewritten yet.
+  - generation of a fresh open CDB record and parse-back verification,
+  - byte-for-byte encrypt/decrypt round-trips for all open fixtures,
+  - wrong-password rejection via the embedded open magic check,
+  - byte-for-byte reproduction of all four manual WinBox-generated encrypted
+    samples when their captured salts are reused.
 - Neutral sample outputs for manual WinBox checks are generated in
   `.scratch/winbox-cdb-generated/`.
 - Manual WinBox validation confirmed that the first generated batch of four open
@@ -138,22 +135,12 @@
   - `long-comment-255.cdb` loads after longer edits,
   - WinBox persists longer strings with the 16-bit string encoding now handled
     by the codec.
-- The encrypted fixture remains intentionally opaque in code. Its current shape
-  is:
-  - 4-byte encrypted magic `0d f0 11 40`,
-  - followed by a payload that is currently best explained as a 32-byte file
-    header plus same-length ciphertext,
-  - but still not grounded enough to decode safely.
 - `analyzeEncryptedWinBoxCdb(...)` now provides a reusable way to compare
-  encrypted payload geometry in code:
+  encrypted payload geometry in code before deeper comparison:
   - payload length,
   - first/last-byte previews,
   - candidate header lengths that leave a block-aligned remainder for selected
     block sizes.
-- The current leading heuristic for future encrypted work is simpler than the
-  earlier block-alignment guess: compare the first 32 bytes as likely file-level
-  metadata and treat the remainder as same-length ciphertext until contrary
-  evidence appears.
 - Coverage now also includes:
   - known session-field handling (`tag 6`),
   - preservation of unknown extra string fields,
@@ -183,8 +170,11 @@
   compatibility contract for `centrs`.
 - Treat real WinBox as a local/manual smoke oracle, not a CI-grade automation
   target.
-- For encrypted CDB work, use the library analysis helper first so new fixtures
-  can be compared mechanically before any deeper crypto guesses are made.
+- For encrypted CDB work, keep two checks paired:
+  - use the library analysis helper first so new fixtures can be compared
+    mechanically,
+  - then prove the decrypt/encrypt mapping by reusing the captured salt and
+    reproducing the original encrypted bytes exactly.
 - If future work needs app-level confirmation, use a disposable macOS user
   profile or another stronger OS-level isolation boundary. A plain `HOME=...`
   override was not sufficient in local testing.
@@ -221,12 +211,9 @@
    `.scratch/winbox-cdb-generated/` only for targeted compatibility checks when a
    newly discovered field or encoding needs confirmation.
 2. ~~Ground the encrypted CDB wrapper and password handling~~ — done;
-   see `encrypted-cdb-format.md`. The remaining encryption work is
-   implementation-side, not grounding-side: extend `src/data/winbox-cdb.ts`
-   with a `decryptWinBoxCdb(file, password)` and matching encrypt path
-   (RC4-drop[768] over `[magic][salt][open-bytes]`), add round-trip
-   anchor tests against `.scratch/winbox-cdb-encrypted-manually/`, and
-   add a "wrong password rejected via magic mismatch" test.
+   `src/data/winbox-cdb.ts` now has working decrypt/encrypt support and the
+   work item has a durable format note in `encrypted-cdb-format.md`. The next
+   encryption work is policy and compatibility, not basic format discovery.
 3. Separate file-format encryption questions from WinBox network/session crypto:
    the Margin Research EC-SRP/AES work is important background, but it is not
    by itself the local `.cdb` wrapper format.

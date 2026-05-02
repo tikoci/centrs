@@ -11,7 +11,8 @@
 		"dist",
 		"docs/api",
 		"test/fixtures",
-		"GLOSSARY.txt"
+		"GLOSSARY.txt",
+		".claude/settings*.json"
 	],
 	"useGitignore": false,
 	"flagWords": ["hte"],

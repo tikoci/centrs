@@ -45,8 +45,12 @@
 ajv
 amm
 amazonq
+Addrs
+AT-SPI
+axuielement
 awk
 backpressure
+bjjj
 btest.exe # Mikrotik /tool/bandwidth-test client for windows
 bunfig
 bunx
@@ -57,22 +61,27 @@ centrs
 ciphertext
 cli
 cloc
+cmp
 crossref
 datagram
 davidanson
 DDNS
 donny
+dogtail
 dotenv
 DSL # domain specific language
 EVP
 env
+eventtap
 esbuild
 ETL
 execa
 fat-chr
+FlaUI
 figcaption
 frontends
 haakonnessjoen
+Hammerspoon
 hostfwd
 HMAC
 IPC # inter-process communications
@@ -80,7 +89,10 @@ iscsi
 jabb3rd
 kbd
 KDF
+keystream
+KSA
 KVM
+LDTP
 librouteros # <https://github.com/haakonnessjoen/librouteros-api>
 LLDP
 lsp-routeros-ts
@@ -100,6 +112,8 @@ OID
 PII # Personally Identifiable Information
 POV
 proplist
+PRGA
+pywinauto
 qmljsdebugger
 QML
 quickchr
@@ -116,7 +130,11 @@ scp
 scriptability
 scriptable
 skillcheck
+Sikuli
+SikuliX
+SPI
 SNMP
+subarray
 SRP
 strawman
 terminal-over-winbox # [Pure Python implementation of the MikroTik WinBox terminal protocol — encrypted CLI access to RouterOS devices over TCP port 8291](https://github.com/subixonfire/winbox-terminal-protocol)
@@ -133,6 +151,7 @@ tsc
 tzsp
 TZSP
 UDP
+UIA
 uvx
 vcs
 venv
@@ -141,8 +160,10 @@ vite
 vitest
 vrf
 webproxy
+WinAppDriver
 winbox
 Wireshark
 workstreams
+XCUI
 YYYYMMDDX
 zod

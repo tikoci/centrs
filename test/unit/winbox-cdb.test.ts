@@ -324,6 +324,19 @@ describe("WinBox CDB", () => {
 				expect(file.mode).toBe("open");
 			},
 		);
+		test.if(present)(
+			`re-encrypts the WinBox-saved sample ${sample.encrypted} byte-for-byte when the captured salt is reused`,
+			() => {
+				const encrypted = new Uint8Array(
+					readFileSync(new URL(sample.encrypted, manualEncryptedRoot)),
+				);
+				const plaintext = decryptWinBoxCdb(encrypted, sample.password);
+				const salt = encrypted.slice(4, 4 + WINBOX_CDB_ENCRYPTED_SALT_LENGTH);
+				expect(encryptWinBoxCdb(plaintext, sample.password, { salt })).toEqual(
+					encrypted,
+				);
+			},
+		);
 	}
 });
 

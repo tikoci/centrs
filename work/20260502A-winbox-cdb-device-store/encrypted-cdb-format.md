@@ -77,6 +77,10 @@ RC4 is in `__ZN3RC4...` symbols (`setKey`, `encrypt`).
    Both are valid records — the operator clearly clicked save with a
    different record-type selection between dumps. It is **not** a
    decryption bug.
+6. Re-encrypting each recovered plaintext with the captured 32-byte salt
+   from the original file reproduces all four manual WinBox outputs
+   **byte-for-byte**, which confirms the documented wrapper and the write
+   path in `src/data/winbox-cdb.ts`.
 
 ## Reference implementation
 
