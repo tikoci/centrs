@@ -26,6 +26,7 @@ frontends
 haakonnessjoen
 hostfwd
 IPC # inter-process communications
+iscsi
 kbd
 KVM
 librouteros # <https://github.com/haakonnessjoen/librouteros-api>
@@ -41,6 +42,7 @@ MNDP
 netmiko # [Multi-vendor library to simplify Paramiko SSH connections to network devices](https://github.com/ktbyers/netmiko)
 netwatch
 npk # MikroTik package format
+nvme-over-tcp # supported by RouterOS **with** rose-storage.npk extra-package
 OID
 PII # Personally Identifiable Information
 POV

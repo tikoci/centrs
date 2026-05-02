@@ -19,8 +19,24 @@ MD033:         # inline HTML — allow semantic elements GitHub renders
     - figure
     - figcaption
     - br
+    - small
+    - strong 
+    - cite
+    - code
+    - del
+    - ins
+    - div
+    - caption
+    - hr
+    - i
+    - em
+    - span
+    - time
+    - tt
+    - var
 MD040: true    # fenced code blocks must have a language tag
-MD046: true    # fenced blocks only (no indented code blocks)
+MD046:         # fenced blocks only (no indented code blocks)
+  style: fenced  
 MD048:         # backtick fence style
   style: backtick
 MD051: true    # link fragments must resolve

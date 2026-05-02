@@ -4,7 +4,6 @@ ignores:
   - ".claude/**"
   - ".github/copilot-instructions.md"
   - ".github/instructions/**"
-  - ".scratch/**"
   - "**/AGENTS.md"
   - "**/node_modules/**"
   - "docs/api/**"
