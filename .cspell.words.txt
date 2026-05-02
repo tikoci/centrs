@@ -2,6 +2,7 @@ ajv
 amm
 awk
 backpressure
+btest.exe # Mikrotik /tool/bandwidth-test client for windows
 bunfig
 bunx
 canonicalizer
@@ -27,6 +28,7 @@ hostfwd
 IPC # inter-process communications
 kbd
 KVM
+librouteros # <https://github.com/haakonnessjoen/librouteros-api>
 LLDP
 lsp-routeros-ts
 macping
@@ -38,6 +40,7 @@ MikroTik
 MNDP
 netmiko # [Multi-vendor library to simplify Paramiko SSH connections to network devices](https://github.com/ktbyers/netmiko)
 netwatch
+npk # MikroTik package format
 OID
 PII # Personally Identifiable Information
 POV

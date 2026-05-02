@@ -18,4 +18,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Record experiment
-        run: echo "Lab workflow reserved for non-gating experiments: ${{ inputs.experiment }}"
+        run: |
+          echo "Lab workflow reserved for non-gating experiments: ${{ inputs.experiment }}"
