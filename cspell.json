@@ -10,9 +10,10 @@
 		"coverage",
 		"dist",
 		"docs/api",
-		"test/fixtures"
+		"test/fixtures",
+		".cspell.words.txt"
 	],
-	"useGitignore": true,
+	"useGitignore": false, // needed for VSCode to show errors in .scratch <==  explictly controlled in package.json `lint:cspell` (--gitignore) / `lint:cspell:all` (--no-gitignore) 
 	"flagWords": ["hte"],
 	"ignoreWords": ["behaviour"],
 	"words": [],

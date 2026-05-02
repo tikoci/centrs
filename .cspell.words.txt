@@ -15,6 +15,7 @@ datagram
 davidanson
 DDNS
 dotenv
+DSL # domain specific language
 env
 esbuild
 ETL
@@ -23,6 +24,7 @@ figcaption
 frontends
 haakonnessjoen
 hostfwd
+IPC # inter-process communications
 kbd
 KVM
 LLDP
@@ -34,8 +36,10 @@ MCP
 MIB
 MikroTik
 MNDP
+netmiko # [Multi-vendor library to simplify Paramiko SSH connections to network devices](https://github.com/ktbyers/netmiko)
 netwatch
 OID
+PII # Personally Identifiable Information
 POV
 proplist
 quickchr
@@ -51,6 +55,7 @@ scriptable
 skillcheck
 SNMP
 strawman
+terminal-over-winbox # [Pure Python implementation of the MikroTik WinBox terminal protocol — encrypted CLI access to RouterOS devices over TCP port 8291](https://github.com/subixonfire/winbox-terminal-protocol)
 tgz
 tikbook
 tikoci
