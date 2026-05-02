@@ -1,19 +1,50 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
 	analyzeEncryptedWinBoxCdb,
 	buildWinBoxCdbEntryRecord,
 	decodeWinBoxCdbEntries,
+	decryptWinBoxCdb,
 	encodeOpenWinBoxCdb,
+	encryptWinBoxCdb,
 	parseWinBoxCdb,
+	WINBOX_CDB_ENCRYPTED_SALT_LENGTH,
 	WINBOX_CDB_SAVED_PASSWORD_FLAG,
 	type WinBoxCdbRecord,
+	WinBoxCdbWrongPasswordError,
 	winBoxCdbRecordType,
 } from "../../src/data/winbox-cdb.ts";
 
 // cspell:ignore nosaved owne mygroup mycomment nopassword
 
 const fixtureRoot = new URL("../fixtures/winbox-cdb/", import.meta.url);
+const manualEncryptedRoot = new URL(
+	"../../.scratch/winbox-cdb-encrypted-manually/",
+	import.meta.url,
+);
+
+const manualEncryptedSamples = [
+	{
+		encrypted: "encrypted-min-123.cdb",
+		open: "min.cdb",
+		password: "123",
+	},
+	{
+		encrypted: "encrypted-min-321.cdb",
+		open: "min.cdb",
+		password: "321",
+	},
+	{
+		encrypted: "encrypted-user-with-saved-123-password-profile-none-123.cdb",
+		open: "user-with-saved-123-password-profile-none.cdb",
+		password: "123",
+	},
+	{
+		encrypted: "encrypted-user-with-saved-123-password-profile-none-321.cdb",
+		open: "user-with-saved-123-password-profile-none.cdb",
+		password: "321",
+	},
+] as const;
 
 describe("WinBox CDB", () => {
 	test("parses the minimal open file", () => {
@@ -209,6 +240,91 @@ describe("WinBox CDB", () => {
 			"Expected an encrypted WinBox CDB file",
 		);
 	});
+
+	test("encrypts and decrypts the minimal open CDB byte-for-byte", () => {
+		const open = readFixture("min.cdb");
+		const salt = new Uint8Array(WINBOX_CDB_ENCRYPTED_SALT_LENGTH).fill(0xa5);
+		const encrypted = encryptWinBoxCdb(open, "123", { salt });
+
+		expect(encrypted.length).toBe(open.length + 4 + salt.length);
+		expect(Array.from(encrypted.slice(0, 4))).toEqual([0x0d, 0xf0, 0x11, 0x40]);
+		expect(Array.from(encrypted.slice(4, 4 + salt.length))).toEqual(
+			Array.from(salt),
+		);
+
+		const recovered = decryptWinBoxCdb(encrypted, "123");
+		expect(recovered).toEqual(open);
+	});
+
+	test("round-trips every open fixture through encrypt/decrypt", () => {
+		const salt = new Uint8Array(WINBOX_CDB_ENCRYPTED_SALT_LENGTH);
+		for (let i = 0; i < salt.length; i += 1) salt[i] = (i * 17) & 0xff;
+		for (const name of openFixtureNames) {
+			const open = readFixture(name);
+			const encrypted = encryptWinBoxCdb(open, "centrs-test", { salt });
+			const recovered = decryptWinBoxCdb(encrypted, "centrs-test");
+			expect(recovered).toEqual(open);
+		}
+	});
+
+	test("treats empty-string password as a valid encryption mode", () => {
+		const open = readFixture("user-with-saved-123-password-profile-none.cdb");
+		const salt = new Uint8Array(WINBOX_CDB_ENCRYPTED_SALT_LENGTH).fill(0x5c);
+		const encrypted = encryptWinBoxCdb(open, "", { salt });
+		const recovered = decryptWinBoxCdb(encrypted, "");
+		expect(recovered).toEqual(open);
+	});
+
+	test("rejects the wrong password via the embedded open-magic check", () => {
+		const open = readFixture("user-with-saved-123-password-profile-none.cdb");
+		const salt = new Uint8Array(WINBOX_CDB_ENCRYPTED_SALT_LENGTH).fill(0x42);
+		const encrypted = encryptWinBoxCdb(open, "right", { salt });
+		expect(() => decryptWinBoxCdb(encrypted, "wrong")).toThrow(
+			WinBoxCdbWrongPasswordError,
+		);
+	});
+
+	test("uses a fresh random salt per encryption when none is supplied", () => {
+		const open = readFixture("min.cdb");
+		const a = encryptWinBoxCdb(open, "x");
+		const b = encryptWinBoxCdb(open, "x");
+		expect(a).not.toEqual(b);
+		expect(decryptWinBoxCdb(a, "x")).toEqual(open);
+		expect(decryptWinBoxCdb(b, "x")).toEqual(open);
+	});
+
+	test("rejects salts that are not exactly 32 bytes", () => {
+		const open = readFixture("min.cdb");
+		expect(() =>
+			encryptWinBoxCdb(open, "x", { salt: new Uint8Array(16) }),
+		).toThrow("salt must be exactly 32 bytes");
+	});
+
+	test("rejects encrypting bytes that do not start with the open magic", () => {
+		expect(() => encryptWinBoxCdb(new Uint8Array([0, 0, 0, 0]), "x")).toThrow(
+			"must start with the open magic",
+		);
+	});
+
+	for (const sample of manualEncryptedSamples) {
+		const present =
+			existsSync(new URL(sample.encrypted, manualEncryptedRoot)) &&
+			existsSync(new URL(sample.open, manualEncryptedRoot));
+		test.if(present)(
+			`decrypts the WinBox-saved sample ${sample.encrypted}`,
+			() => {
+				const encrypted = new Uint8Array(
+					readFileSync(new URL(sample.encrypted, manualEncryptedRoot)),
+				);
+				const plaintext = decryptWinBoxCdb(encrypted, sample.password);
+				expect(plaintext.slice(0, 4)).toEqual(
+					new Uint8Array([0x0d, 0xf0, 0x1d, 0xc0]),
+				);
+				const file = parseWinBoxCdb(plaintext);
+				expect(file.mode).toBe("open");
+			},
+		);
+	}
 });
 
 function parseFixture(name: string) {

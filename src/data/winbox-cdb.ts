@@ -1,9 +1,14 @@
+import { createHash, randomBytes } from "node:crypto";
+
 const openFileMagic = Uint8Array.from([0x0d, 0xf0, 0x1d, 0xc0]);
 const encryptedFileMagic = Uint8Array.from([0x0d, 0xf0, 0x11, 0x40]);
 const recordMagic = Uint8Array.from([0x4d, 0x32]);
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+
+export const WINBOX_CDB_ENCRYPTED_SALT_LENGTH = 32;
+export const WINBOX_CDB_RC4_DROP_BYTES = 0x300;
 
 export const WINBOX_CDB_SAVED_PASSWORD_FLAG = 0x0100;
 
@@ -56,6 +61,17 @@ export interface OpenWinBoxCdbFile {
 export interface EncryptedWinBoxCdbFile {
 	mode: "encrypted";
 	payload: Uint8Array;
+}
+
+export interface EncryptWinBoxCdbOptions {
+	salt?: Uint8Array;
+}
+
+export class WinBoxCdbWrongPasswordError extends Error {
+	constructor(message = "Wrong WinBox CDB password.") {
+		super(message);
+		this.name = "WinBoxCdbWrongPasswordError";
+	}
 }
 
 export interface AnalyzeEncryptedWinBoxCdbOptions {
@@ -247,6 +263,92 @@ export function analyzeEncryptedWinBoxCdb(
 			),
 		})),
 	};
+}
+
+export function decryptWinBoxCdb(
+	input: ArrayBuffer | Uint8Array | EncryptedWinBoxCdbFile,
+	password: string,
+): Uint8Array {
+	const encryptedFile =
+		input instanceof Uint8Array || input instanceof ArrayBuffer
+			? parseWinBoxCdb(input)
+			: input;
+	if (encryptedFile.mode !== "encrypted") {
+		throw new Error(
+			"Expected an encrypted WinBox CDB file for decryptWinBoxCdb.",
+		);
+	}
+	const { payload } = encryptedFile;
+	if (payload.length < WINBOX_CDB_ENCRYPTED_SALT_LENGTH) {
+		throw new Error(
+			"Encrypted WinBox CDB payload is shorter than the expected 32-byte salt.",
+		);
+	}
+	const salt = payload.subarray(0, WINBOX_CDB_ENCRYPTED_SALT_LENGTH);
+	const ciphertext = payload.subarray(WINBOX_CDB_ENCRYPTED_SALT_LENGTH);
+	const plaintext = winBoxCdbStreamCipher(salt, password, ciphertext);
+	if (!hasPrefix(plaintext, openFileMagic)) {
+		throw new WinBoxCdbWrongPasswordError();
+	}
+	return plaintext;
+}
+
+export function encryptWinBoxCdb(
+	openBytes: ArrayBuffer | Uint8Array,
+	password: string,
+	options: EncryptWinBoxCdbOptions = {},
+): Uint8Array {
+	const plaintext = asUint8Array(openBytes);
+	if (!hasPrefix(plaintext, openFileMagic)) {
+		throw new Error(
+			"encryptWinBoxCdb expects open WinBox CDB bytes (must start with the open magic).",
+		);
+	}
+	const salt = options.salt ?? randomBytes(WINBOX_CDB_ENCRYPTED_SALT_LENGTH);
+	if (salt.length !== WINBOX_CDB_ENCRYPTED_SALT_LENGTH) {
+		throw new Error(
+			`WinBox CDB salt must be exactly ${WINBOX_CDB_ENCRYPTED_SALT_LENGTH} bytes; got ${salt.length}.`,
+		);
+	}
+	const ciphertext = winBoxCdbStreamCipher(salt, password, plaintext);
+	return concatChunks([encryptedFileMagic, salt, ciphertext]);
+}
+
+function winBoxCdbStreamCipher(
+	salt: Uint8Array,
+	password: string,
+	data: Uint8Array,
+): Uint8Array {
+	const key = createHash("sha1").update(salt).update(password, "utf8").digest();
+	const S = new Uint8Array(256);
+	for (let k = 0; k < 256; k += 1) S[k] = k;
+	let j = 0;
+	for (let i = 0; i < 256; i += 1) {
+		j = (j + (S[i] ?? 0) + (key[i % key.length] ?? 0)) & 0xff;
+		const tmp = S[i] ?? 0;
+		S[i] = S[j] ?? 0;
+		S[j] = tmp;
+	}
+	let i = 0;
+	j = 0;
+	for (let k = 0; k < WINBOX_CDB_RC4_DROP_BYTES; k += 1) {
+		i = (i + 1) & 0xff;
+		j = (j + (S[i] ?? 0)) & 0xff;
+		const tmp = S[i] ?? 0;
+		S[i] = S[j] ?? 0;
+		S[j] = tmp;
+	}
+	const out = new Uint8Array(data.length);
+	for (let k = 0; k < data.length; k += 1) {
+		i = (i + 1) & 0xff;
+		j = (j + (S[i] ?? 0)) & 0xff;
+		const tmp = S[i] ?? 0;
+		S[i] = S[j] ?? 0;
+		S[j] = tmp;
+		const ks = S[((S[i] ?? 0) + (S[j] ?? 0)) & 0xff] ?? 0;
+		out[k] = (data[k] ?? 0) ^ ks;
+	}
+	return out;
 }
 
 export function parseWinBoxCdbRecord(recordData: Uint8Array): WinBoxCdbRecord {

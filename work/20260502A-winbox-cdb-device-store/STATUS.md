@@ -51,7 +51,11 @@
   The public references break down into:
   - open CDB parsers (`readcdb.py`),
   - old RouterOS `user.dat` obfuscation/extraction tooling,
-  - WinBox network/session authentication and transport crypto.
+  - WinBox network/session authentication and transport crypto,
+  - **RouterOS password-protected backup tooling** (`BigNerd95/RouterOS-Backup-Tools`),
+    which turned out to be the closest precedent — same RC4-drop[768] family,
+    same `SHA1(salt || password)` KDF, just different magics and no length
+    field. See `encrypted-cdb-format.md` for the precise mapping.
 - The Margin Research and terminal-protocol references are useful for WinBox
   session/auth grounding, but they do **not** explain the local `.cdb`
   file-at-rest wrapper.
@@ -88,6 +92,24 @@
 - The RouterOS password-protected backup format is therefore a weak fit for CDB:
   public backup tooling documents larger encrypted headers and different
   authenticated/enveloped structures than what the CDB samples show.
+- **Resolved 2026-05-02:** the encrypted CDB wrapper format is now grounded.
+  Cross-referencing the WinBox macOS binary (`AddrsHandler::loadFromFile`
+  → `PersistManager::readFile(QString,QString,bool,uint,uint,uint)` at
+  `0x101898530`, KDF helper at `0x10189ab90`, `RC4::setKey`/`RC4::encrypt`
+  at `0x1018f83a0`/`0x1018f84d0`) against the manual sample matrix gives:
+  - 4-byte cleartext magic `0x4011F00D`,
+  - 32-byte cleartext random salt (OpenSSL `RAND_bytes`),
+  - ciphertext = RC4-drop[768] over the entire open `.cdb` content
+    (including the open magic `0x0DF01DC0`),
+  - key = `SHA1(salt || password_utf8)` (20 bytes),
+  - password verify = first 4 plaintext bytes must equal `0x0DF01DC0`.
+  All four manual samples (two passwords × two payloads) decrypt to
+  identical plaintext, and a wrong password fails the magic check.
+  Full write-up + reference TS implementation in
+  `encrypted-cdb-format.md`.
+- The earlier "32-byte file header + same-length ciphertext" geometry
+  hypothesis was correct in shape — the 32 bytes are the random salt and
+  the ciphertext is same-length because RC4 is a stream cipher.
 
 ## Implementation checkpoint
 
@@ -181,41 +203,37 @@
 - What exact relationship should exist between the CDB file path remembered in
   `settings.cfg.viw2`, the active workspace, and the target-specific
   `workspaces/*.cfg.viw2` files?
-- What algorithm and metadata wrap the encrypted CDB payload that starts with
-  `0d f0 11 40`, and how does the WinBox file password map to that wrapper?
-- Is the encrypted payload structured as `[small fixed header][salt/iv?][AES-CBC
-  ciphertext]`, or is it actually `[32-byte header][stream/CTR-style ciphertext]`
-  with no padding growth?
-- What are the 32 bytes after `0d f0 11 40`:
-  - pure salt,
-  - salt plus nonce/counter seed,
-  - salt plus integrity bytes,
-  - or some MikroTik-specific mixed header?
+- ~~What algorithm and metadata wrap the encrypted CDB payload~~ —
+  resolved; see `encrypted-cdb-format.md`. Salt is 32 bytes random,
+  cipher is RC4-drop[768] keyed by `SHA1(salt || password)`, no extra
+  integrity field, no padding.
 - What is the smallest real-WinBox smoke that adds value beyond fixture-based
   parser tests without turning `centrs` into a brittle native-app automation
   project?
+- Should `centrs` accept the empty-password ("no master password") case
+  as a distinct mode, or always require a non-empty password when the
+  user opts into encryption? WinBox itself appears to allow it
+  (the master-password dialog has a "no password" option).
 
 ## Next experiments
 
 1. Treat the open CDB codec as provisionally compatible and keep using
    `.scratch/winbox-cdb-generated/` only for targeted compatibility checks when a
    newly discovered field or encoding needs confirmation.
-2. Ground the encrypted CDB wrapper and password handling well enough to add
-   parse/decrypt support without guessing.
+2. ~~Ground the encrypted CDB wrapper and password handling~~ — done;
+   see `encrypted-cdb-format.md`. The remaining encryption work is
+   implementation-side, not grounding-side: extend `src/data/winbox-cdb.ts`
+   with a `decryptWinBoxCdb(file, password)` and matching encrypt path
+   (RC4-drop[768] over `[magic][salt][open-bytes]`), add round-trip
+   anchor tests against `.scratch/winbox-cdb-encrypted-manually/`, and
+   add a "wrong password rejected via magic mismatch" test.
 3. Separate file-format encryption questions from WinBox network/session crypto:
    the Margin Research EC-SRP/AES work is important background, but it is not
    by itself the local `.cdb` wrapper format.
-4. Use the current manual encrypted-fixture matrix to compare the first 32 bytes
-   against the remaining same-length ciphertext instead of treating the payload
-   as a generic padded block cipher blob.
-5. If the 32-byte-header model holds, search specifically for:
-   - stream cipher / CTR-like file encryption,
-   - a 32-byte salt or mixed header,
-   - password KDFs that do **not** add explicit HMAC blocks to the file size.
-6. If the black-box fixture matrix is still ambiguous, do a tighter local binary
-   pass around the `saveWithPassword` / `getPasswordWindow` path instead of
-   guessing from generic OpenSSL symbols.
-7. Confirm whether a disposable macOS user profile is enough to relocate WinBox
+4. Confirm whether a disposable macOS user profile is enough to relocate WinBox
    support files without touching the operator's normal profile.
-8. Only if needed later, prototype a tiny native accessibility dumper to see
+5. Only if needed later, prototype a tiny native accessibility dumper to see
    whether Qt/QML controls expose stable identifiers worth scripting.
+6. Decide how `centrs` should expose the encrypted-CDB password to the
+   wider settings model (`CENTRS_CDB_PASSWORD` vs `CENTRS_PASSWORD` vs
+   prompt-on-load) now that the wrapper crypto is no longer the unknown.
