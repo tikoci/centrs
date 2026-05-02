@@ -5,7 +5,7 @@
 	"module": "src/index.ts",
 	"devDependencies": {
 		"@agent-lint/cli": "^0.8.1",
-		"@biomejs/biome": "2.4.13",
+		"@biomejs/biome": "2.4.14",
 		"@secretlint/secretlint-rule-preset-recommend": "^12.3.1",
 		"@tikoci/quickchr": "^0.2.0",
 		"@types/bun": "^1.3.13",
