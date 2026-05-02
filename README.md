@@ -43,7 +43,7 @@ Every frontend should use the same settings vocabulary and precedence:
 
 Requirements:
 
-- Bun 1.3 or newer.
+- Bun 1.3.11 or newer. CI and `packageManager` are pinned to Bun 1.3.13; Bun 2.x is not validated here yet.
 - Git.
 - Optional integration-test tools: QEMU/KVM on Linux runners or local QEMU, plus `@tikoci/quickchr`.
 - Optional protocol tools for manual testing: SSH, `tmux`, and platform networking utilities.
