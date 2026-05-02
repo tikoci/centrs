@@ -1,6 +1,33 @@
 export const centrsVersion = "0.1.0";
 
 export {
+	type AnalyzeEncryptedWinBoxCdbOptions,
+	analyzeEncryptedWinBoxCdb,
+	type BuildWinBoxCdbEntryInput,
+	buildWinBoxCdbEntryRecord,
+	decodeWinBoxCdbEntries,
+	decodeWinBoxCdbEntry,
+	type EncryptedWinBoxCdbFile,
+	encodeOpenWinBoxCdb,
+	encodeWinBoxCdbField,
+	encodeWinBoxCdbRecord,
+	isWinBoxCdbEncrypted,
+	isWinBoxCdbOpen,
+	type OpenWinBoxCdbFile,
+	parseWinBoxCdb,
+	parseWinBoxCdbRecord,
+	WINBOX_CDB_SAVED_PASSWORD_FLAG,
+	type WinBoxCdbEncryptedAnalysis,
+	type WinBoxCdbEncryptedBlockAlignment,
+	type WinBoxCdbEntry,
+	type WinBoxCdbField,
+	type WinBoxCdbFieldValue,
+	type WinBoxCdbFile,
+	type WinBoxCdbRecord,
+	winBoxCdbFieldTag,
+	winBoxCdbRecordType,
+} from "./data/winbox-cdb.ts";
+export {
 	getProtocolPlan,
 	type ProtocolCapability,
 	type ProtocolPlan,

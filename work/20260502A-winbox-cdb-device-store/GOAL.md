@@ -37,3 +37,5 @@ work item should turn CDB assumptions into evidence.
 - `test/fixtures/winbox-cdb/`
 - `RouterOS_Tools` CDB implementation reference listed in the 20260430B
   reference inventory.
+- `https://github.com/jabb3rd/RouterOS_Tools`
+- `https://github.com/german77/TheDudeToHuman`

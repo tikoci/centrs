@@ -54,6 +54,7 @@ canonicalizer
 CDB
 CDP
 centrs
+ciphertext
 cli
 cloc
 crossref
@@ -63,6 +64,7 @@ DDNS
 donny
 dotenv
 DSL # domain specific language
+EVP
 env
 esbuild
 ETL
@@ -72,9 +74,12 @@ figcaption
 frontends
 haakonnessjoen
 hostfwd
+HMAC
 IPC # inter-process communications
 iscsi
+jabb3rd
 kbd
+KDF
 KVM
 librouteros # <https://github.com/haakonnessjoen/librouteros-api>
 LLDP
@@ -95,9 +100,12 @@ OID
 PII # Personally Identifiable Information
 POV
 proplist
+qmljsdebugger
+QML
 quickchr
 RAML
 remotehub
+readcdb
 restraml
 rosetta
 romon
@@ -109,6 +117,7 @@ scriptability
 scriptable
 skillcheck
 SNMP
+SRP
 strawman
 terminal-over-winbox # [Pure Python implementation of the MikroTik WinBox terminal protocol — encrypted CLI access to RouterOS devices over TCP port 8291](https://github.com/subixonfire/winbox-terminal-protocol)
 tgz
@@ -118,6 +127,7 @@ tikoci
 TIKOCI
 tiktui
 TLV
+tcode
 traceroute
 tsc
 tzsp
@@ -126,6 +136,7 @@ UDP
 uvx
 vcs
 venv
+viw2
 vite
 vitest
 vrf
