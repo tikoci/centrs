@@ -17,6 +17,11 @@ Create or update a `work/<date-topic>/` directory when the task needs exploratio
 
 Small bug fixes do not need a new work item when the relevant spec is already clear.
 
+Small, reversible spikes can land before a governing spec when the need is
+clear and the code is easy to remove. Treat those spikes as provisional:
+capture the open questions in `work/` quickly, and promote the durable behavior
+back into specs before other features start depending on the spike.
+
 For protocol/data work, keep rough findings in `work/` until the source references, failure modes, security notes, and test shape are clear. Specs can then link the work item as the review source instead of carrying every experiment inline.
 
 ## When to update specs
@@ -90,7 +95,10 @@ Use short `/do-*` prompts as routing hints, not rigid mini-specs. They should cl
 
 ## Parallel work
 
-Use fleet-style execution for independent tasks: inventory, docs, code, tests, workflows, and security can usually run in parallel. Serialize only when a todo truly depends on another todo's output. SQL todo state is the source of truth when available.
+Use fleet-style execution for independent tasks: inventory, docs, code, tests,
+workflows, security, and developer-experience plumbing can usually run in
+parallel. Serialize only when a todo truly depends on another todo's output.
+SQL todo state is the source of truth when available.
 
 ## Work item sizing
 

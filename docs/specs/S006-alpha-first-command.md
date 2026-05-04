@@ -9,18 +9,20 @@ Metadata:
 - Supersedes: none
 - Superseded by: none
 - Scope: extends S002, S003, S004
-- Review source: `work/20260430A-initial-design/GOAL.md` open follow-ups; README "Current alpha direction"; `work/20260430B-protocol-data-grounding/`.
+- Review source: `work/20260430A-initial-design/GOAL.md` open follow-ups; README "Current alpha direction"; `work/20260430B-protocol-data-grounding/`; `work/20260504A-typed-core-seams/`; `work/20260504B-quickchr-harness/`.
 
 ## Context
 
 `README.md`, `S002`, `S003`, and `S004` describe the full surface but leave
-the protocol-grounding work and four alpha decisions open:
+the protocol-grounding work and several alpha decisions open:
 
 1. What each planned protocol can really do, what it needs, and how it fails.
 2. Which transport lands first (REST, SSH, or native API).
 3. Whether alpha credentials are environment-only, macOS Keychain-backed, or both.
 4. Which validation source lands first (static schema, live `/console/inspect`, or both).
 5. Which device sources are in alpha (explicit/env only, SQLite cache, WinBox CDB, Dude DB).
+6. Which shared typed seams must land before transports and frontends branch out.
+7. Whether `centrs check` should land before or alongside `retrieve` as the first CLI/API shakedown.
 
 Until these are resolved, contributors and agents cannot start the first
 runnable RouterOS round-trip without re-litigating scope or coding against
@@ -90,6 +92,27 @@ Current grounding supports keeping these areas out of the first alpha:
   import or persist them before redaction, fixture, and explicit-import behavior
   are specified.
 
+## Pre-transport seams
+
+Do not implement more than one real transport or any non-trivial frontend until
+the following shared seams are typed and reviewed:
+
+- structured `CentrsError` values with stable codes, remediation, and redaction
+  rules,
+- a transport adapter contract covering capability-specific operations and
+  result/error shapes,
+- a provenance-aware target model plus `resolveTarget(...)`,
+- a settings resolver that reports the winning source for important values,
+- the CHR-backed harness tiers and version policy used to validate those seams.
+
+`S007` and `S008` stage the error-contract and harness-policy parts of this
+gate. The transport, target, settings, and command-shape details stay staged in
+`work/20260504A-typed-core-seams/` until they are grounded enough for promotion.
+
+Developer UX is part of this gate. Generated help, verbose source reporting, and
+bug-report ergonomics should reuse the same typed seams instead of being bolted
+on after the first adapter lands.
+
 ## Proposed defaults
 
 These are starting positions; resolve before promoting status to `Accepted`.
@@ -101,11 +124,20 @@ These are starting positions; resolve before promoting status to `Accepted`.
 | Validation source | Static schema plus `rosetta`/`restraml` grounding; live `/console/inspect` evaluated before implementation | Keeps the first adapter self-contained while making the validation gap explicit. Live inspect should be adopted early if it can use REST one-shot calls safely for the first command. Native API eventing/listen is important but should not be smuggled into the first read-only REST milestone. |
 | Device sources | Explicit input + environment | Defers SQLite, WinBox CDB, Dude DB, MNDP. |
 | Required `via` | Always required, never inferred | Per S004; no silent protocol fallback. |
+| CLI parser | Hand-written argv parsing until at least three real commands exist | Avoids locking in a framework before the alpha command surface and help shape settle. |
 
-## First command
+## First CLI shakedown and first RouterOS command
 
-After the protocol grounding gate is satisfied, the first runnable CLI command
-should be the smallest read-only RouterOS round-trip:
+After the protocol grounding gate and pre-transport seams are satisfied, the
+alpha should stage two early milestones:
+
+1. `centrs check <device-or-address>` as the cheapest end-to-end CLI/API
+   shakedown for target resolution, settings provenance, diagnostics, and bug
+   reporting.
+2. `centrs retrieve <device> /system/resource --via rest-api --format json` as
+   the first real RouterOS round-trip.
+
+The first RouterOS command should remain the smallest read-only round-trip:
 
 ```text
 centrs retrieve <device> /system/resource --via rest-api --format json
@@ -115,13 +147,17 @@ Acceptance for the alpha milestone:
 
 - Protocol matrix exists and explains why `rest-api` is the first implemented
   adapter.
-- `centrs --help` and `centrs retrieve --help` are generated from typed command metadata.
+- `centrs --help`, `centrs check --help`, and `centrs retrieve --help` are
+  generated from typed command metadata.
 - `CENTRS_*` settings from S004 resolve through the documented precedence and the
   resolved source is shown in `--verbose` output.
+- `centrs check` exercises target resolution and diagnostics without implying
+  full RouterOS protocol support.
 - A `quickchr`-backed integration test boots a CHR, runs the command against it,
   and asserts a non-empty JSON object with `version` and `uptime` fields.
-- A failure path test asserts that an unreachable host produces an actionable
-  error naming protocol, host, port, and remediation.
+- Failure-path tests assert that canonical unreachable/auth/unsupported cases
+  produce structured actionable errors naming protocol, host, port, code, and
+  remediation.
 
 ## Out of alpha
 
@@ -135,6 +171,9 @@ Acceptance for the alpha milestone:
 
 - Which matrix rows from `work/20260430B-protocol-data-grounding/` are stable
   enough to promote into this spec, S002, or S003?
+- Should `centrs check` perform pure TCP reachability, selected-management-path
+  checks, or both, and how much of that should require explicit `--via` in
+  alpha?
 - Should `centrs retrieve` accept a RouterOS path (`/system/resource`) and a
   `--print` flag mirroring RouterOS console behavior, or should it have a
   separate `--columns` projection?
@@ -142,3 +181,5 @@ Acceptance for the alpha milestone:
   hand-written argv parser until the command surface stabilizes?
 - Should the first integration test run on macOS via local QEMU, on Linux CI
   via `quickchr`, or both?
+- Should bug-report output be an inline flag, a sidecar command, or both once
+  `CentrsError` is typed?

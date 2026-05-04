@@ -3,6 +3,8 @@
 `centrs` is the tikoci RouterOS interaction hub: a Bun/TypeScript library and future CLI, TUI, HTTP proxy/daemon, and MCP server for talking to MikroTik RouterOS devices through a regularized interface.
 
 > **Status:** pre-alpha / design-first. Core RouterOS transports, CLI commands, proxy, and MCP surfaces are not implemented yet; this repository currently defines the contract, workflow, and scaffolding for current development.
+>
+> **Implementation reality:** the only grounded executable slice today is the WinBox CDB codec and its fixture-backed tests. The protocol registry is metadata, the CLI/API/TUI/MCP/proxy exports are scaffolding, The Dude and MNDP data sources are placeholders, and RouterOS integration remains staged work.
 
 The project is intentionally a **friendly conduit**, not a high-level configuration abstraction. It should help humans and agents reach RouterOS over the right protocol, with the right credentials and ports, and validate RouterOS-shaped commands before writes when possible. It should not hide RouterOS behind helpers like `createVlanOnBridge()`.
 
@@ -13,6 +15,21 @@ The project is intentionally a **friendly conduit**, not a high-level configurat
 - **Device sources:** explicit CLI/API input, environment variables, SQLite cache, WinBox CDB, The Dude `dude.db`, and MNDP discovery.
 - **Validation:** default to explain/validate/run flows for write-shaped operations using RouterOS schema and `/console/inspect` knowledge from related tikoci projects.
 - **Agent UX:** typed exports, JSDoc, generated docs, stable CLI help, and actionable error messages that tell the caller what to fix next.
+
+## Current implementation snapshot
+
+This table is intentionally blunt so future work starts from the code that exists,
+not from the surface the docs eventually describe. See
+`work/20260504A-typed-core-seams/` for the fuller review inventory and staged
+follow-up work.
+
+| Surface | Current state | Notes |
+| --- | --- | --- |
+| WinBox CDB codec | Implemented | Parse/encode/decrypt/encrypt plus substantial fixture-backed tests. |
+| Protocol registry | Metadata only | Capability list exists; there is no transport adapter contract yet. |
+| CLI/API/TUI/MCP/proxy exports | Scaffolding only | `cli.ts` renders help; other frontend exports are descriptive placeholders. |
+| Device sources beyond CDB | Not implemented | `dude-db.ts` and `mndp-cache.ts` are empty placeholders. |
+| RouterOS transport integration | Not implemented | The REST integration test is still skipped and no CHR harness is wired yet. |
 
 ## Planned CLI shape
 
@@ -65,21 +82,34 @@ bun run build:doc:api
 
 ## Current alpha direction
 
-The recommended first alpha is **protocol-grounding first, then CLI-only,
-macOS-local, explicit target input, explicit `via`, and one real transport path
-before broadening**. REST is the current preferred first implementation, but it
-should follow a grounded protocol matrix covering capabilities, settings,
-validation sources, local dependencies, security warnings, and CHR testability
-for the full planned protocol set.
+The recommended near-term path is intentionally cautious:
+
+1. land typed core seams for transport, target resolution, settings resolution,
+   and structured errors,
+2. land the CHR-backed harness tiers and version-matrix policy,
+3. land the first CLI shakedown and the first real transport,
+4. only then broaden transports and frontends.
+
+The point is to avoid building several attractive stubs that later force the
+same refactor in CLI, API, MCP, TUI, proxy, and tests. Transport fidelity, test
+confidence, and developer UX are co-equal constraints. REST is still the
+preferred first RouterOS transport, but only after the shared seams and harness
+shape are defined well enough that `centrs check`, `centrs retrieve`, help
+output, verbose source reporting, and bug-reportable errors can all grow from
+the same contracts.
 
 Useful decisions to make before implementing the first command:
 
+- Which typed seams must exist before transport work starts: transport adapter
+  contract, target model, settings resolver, and structured error model?
 - What facts must be captured in the protocol matrix before transport code
   starts?
 - Which transport lands first: REST, SSH, or native API?
 - Should alpha credentials be environment-only, macOS Keychain-backed, or both?
 - Which validation source lands first: static schema, live `/console/inspect`, or both?
 - Which device sources are in alpha: explicit input/env only, SQLite cache, WinBox CDB, or Dude DB?
+- Should `centrs check` land before or alongside `retrieve` as the cheapest
+  end-to-end CLI/API shakedown?
 
 ## Project workflow
 
