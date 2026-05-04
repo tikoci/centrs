@@ -106,6 +106,6 @@ The first implementation should intentionally be narrower than the full
 architecture: local macOS CLI, explicit device/credential input, explicit
 protocol selection, one real transport, validation plumbing, and CHR-backed
 tests. Before that transport breadth appears, the near-term slice should stage
-typed seams, the test harness policy, and a cheap CLI shakedown such as
-`centrs check`. Proxy, MCP, CDB/Dude imports, and passive discovery should
-remain planned surfaces until the first transport loop is reliable.
+typed seams, the test harness policy, and the first real `retrieve` loop.
+Proxy, MCP, broad CDB/Dude imports, and passive discovery should remain planned
+surfaces until the first transport loop is reliable.

@@ -1,15 +1,12 @@
+---
+status: Draft
+supersedes: none
+superseded_by: none
+scope: extends S002, S003, S004
+review_source: work/20260430A-initial-design/GOAL.md open follow-ups; README Current alpha direction; work/20260430B-protocol-data-grounding/; work/20260504A-typed-core-seams/; work/20260504B-quickchr-harness/; work/20260504C-name-resolution-and-discovery/
+---
+
 # S006: Protocol Grounding and Alpha First Command
-
-## Status
-
-Draft.
-
-Metadata:
-
-- Supersedes: none
-- Superseded by: none
-- Scope: extends S002, S003, S004
-- Review source: `work/20260430A-initial-design/GOAL.md` open follow-ups; README "Current alpha direction"; `work/20260430B-protocol-data-grounding/`; `work/20260504A-typed-core-seams/`; `work/20260504B-quickchr-harness/`.
 
 ## Context
 
@@ -18,11 +15,12 @@ the protocol-grounding work and several alpha decisions open:
 
 1. What each planned protocol can really do, what it needs, and how it fails.
 2. Which transport lands first (REST, SSH, or native API).
-3. Whether alpha credentials are environment-only, macOS Keychain-backed, or both.
-4. Which validation source lands first (static schema, live `/console/inspect`, or both).
-5. Which device sources are in alpha (explicit/env only, SQLite cache, WinBox CDB, Dude DB).
+3. How alpha credentials and CDB-backed credential lookup interact.
+4. Which validation source lands first for CLI-shaped RouterOS commands.
+5. Which device sources and name-resolution behaviors are in alpha.
 6. Which shared typed seams must land before transports and frontends branch out.
-7. Whether `centrs check` should land before or alongside `retrieve` as the first CLI/API shakedown.
+7. How REST-specific limits such as its execution timeout should surface without
+   shaping every later adapter.
 
 Until these are resolved, contributors and agents cannot start the first
 runnable RouterOS round-trip without re-litigating scope or coding against
@@ -110,8 +108,8 @@ gate. The transport, target, settings, and command-shape details stay staged in
 `work/20260504A-typed-core-seams/` until they are grounded enough for promotion.
 
 Developer UX is part of this gate. Generated help, verbose source reporting, and
-bug-report ergonomics should reuse the same typed seams instead of being bolted
-on after the first adapter lands.
+structured actionable errors should reuse the same typed seams instead of being
+bolted on after the first adapter lands.
 
 ## Proposed defaults
 
@@ -119,40 +117,36 @@ These are starting positions; resolve before promoting status to `Accepted`.
 
 | Decision | Proposed alpha default | Rationale |
 | --- | --- | --- |
-| First implementation after grounding | `rest-api` over HTTPS | Best current candidate: clean `/rest` shape, compatible with `restraml` and `quickchr`, and good for read-only `/system/resource`. Grounding found no blocker; REST cannot provide continuous monitor/eventing, but that is outside the first retrieve milestone. |
-| Credentials | Environment variables and CLI flags only | Defers Keychain integration until after the first transport works. |
-| Validation source | Static schema plus `rosetta`/`restraml` grounding; live `/console/inspect` evaluated before implementation | Keeps the first adapter self-contained while making the validation gap explicit. Live inspect should be adopted early if it can use REST one-shot calls safely for the first command. Native API eventing/listen is important but should not be smuggled into the first read-only REST milestone. |
-| Device sources | Explicit input + environment | Defers SQLite, WinBox CDB, Dude DB, MNDP. |
+| First implementation after grounding | `rest-api` over HTTPS | Best current candidate: well-understood protocol surface, compatible with `restraml` and `quickchr`, and good for read-only `/system/resource`. Use REST as the initial guinea pig, not as the common denominator for every later adapter; capture REST-specific behavior such as `/rest/execute` response quirks and router-side timeout ceilings explicitly. |
+| Credentials | Explicit CLI/API values and environment variables first, with WinBox CDB lookup available for name/user/password enrichment | Keeps explicit values authoritative while allowing alpha usability to benefit from read-only CDB resolution. The CDB file password is a separate concern from RouterOS login credentials. |
+| Validation source | Fast live parse checks for CLI-shaped commands, with static schema and deeper inspect grounding as complements | For RouterOS CLI-shaped validation, favor the fastest binary signal first, such as `:put [:parse ...]` exposed through `/rest/parse`, before widening to deeper `/console/inspect` integration. The first `retrieve` milestone remains read-only. |
+| Device sources | Explicit input + environment + read-only WinBox CDB lookup | Defers SQLite, Dude DB, and MNDP-backed discovery policy. Name-resolution behavior beyond explicit values and CDB lookup stays staged until expiry/wait semantics are specified. |
 | Required `via` | Always required, never inferred | Per S004; no silent protocol fallback. |
+| Timeout | Shared setting with protocol-specific validation | Treat timeout as a first-class setting. For REST, reject values above the effective RouterOS-side ceiling rather than pretending longer timeouts will work. |
 | CLI parser | Hand-written argv parsing until at least three real commands exist | Avoids locking in a framework before the alpha command surface and help shape settle. |
 
-## First CLI shakedown and first RouterOS command
+## First command
 
 After the protocol grounding gate and pre-transport seams are satisfied, the
-alpha should stage two early milestones:
-
-1. `centrs check <device-or-address>` as the cheapest end-to-end CLI/API
-   shakedown for target resolution, settings provenance, diagnostics, and bug
-   reporting.
-2. `centrs retrieve <device> /system/resource --via rest-api --format json` as
-   the first real RouterOS round-trip.
-
-The first RouterOS command should remain the smallest read-only round-trip:
+first runnable CLI/API milestone should be the smallest read-only RouterOS
+round-trip:
 
 ```text
 centrs retrieve <device> /system/resource --via rest-api --format json
 ```
 
+`centrs check` remains a planned command, but it should not lead the alpha.
+Its behavior depends on a better-specified model for name resolution,
+reachability, management-path probing, and discovery hints.
+
 Acceptance for the alpha milestone:
 
 - Protocol matrix exists and explains why `rest-api` is the first implemented
   adapter.
-- `centrs --help`, `centrs check --help`, and `centrs retrieve --help` are
-  generated from typed command metadata.
+- `centrs --help` and `centrs retrieve --help` are generated from typed command
+  metadata.
 - `CENTRS_*` settings from S004 resolve through the documented precedence and the
   resolved source is shown in `--verbose` output.
-- `centrs check` exercises target resolution and diagnostics without implying
-  full RouterOS protocol support.
 - A `quickchr`-backed integration test boots a CHR, runs the command against it,
   and asserts a non-empty JSON object with `version` and `uptime` fields.
 - Failure-path tests assert that canonical unreachable/auth/unsupported cases
@@ -171,9 +165,8 @@ Acceptance for the alpha milestone:
 
 - Which matrix rows from `work/20260430B-protocol-data-grounding/` are stable
   enough to promote into this spec, S002, or S003?
-- Should `centrs check` perform pure TCP reachability, selected-management-path
-  checks, or both, and how much of that should require explicit `--via` in
-  alpha?
+- Which name-resolution and discovery rows need to move from `work/` into S003
+  before `centrs check` can be specified cleanly?
 - Should `centrs retrieve` accept a RouterOS path (`/system/resource`) and a
   `--print` flag mirroring RouterOS console behavior, or should it have a
   separate `--columns` projection?
@@ -181,5 +174,5 @@ Acceptance for the alpha milestone:
   hand-written argv parser until the command surface stabilizes?
 - Should the first integration test run on macOS via local QEMU, on Linux CI
   via `quickchr`, or both?
-- Should bug-report output be an inline flag, a sidecar command, or both once
-  `CentrsError` is typed?
+- What exact REST parse flow and timeout semantics should become the first typed
+  validation and error-contract cases?

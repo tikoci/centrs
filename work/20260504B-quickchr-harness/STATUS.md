@@ -17,11 +17,21 @@
   that as dependency work instead of weakening the test shape.
 - Use the harness to validate both happy-path command behavior and canonical
   structured error behavior.
+- Prefer a clean base CHR for the default smoke path. Extra packages, disks,
+  users, device-mode changes, or non-free licensing belong in opt-in deeper
+  suites.
 
-## Next decisions
+## Working answers from the 2026-05-04 answer pass
 
-1. What exact boot helper shape should `test/integration/chr.ts` expose?
-2. Which pinned long-term, stable, and beta versions should the deep matrix
-   start with?
-3. Which fast-tier jobs should be available on pull requests versus
-   `workflow_dispatch` and scheduled QA?
+1. The default harness should boot a mostly clean base CHR and rely on the free
+   license unless a deeper suite explicitly needs more.
+2. The main smoke path should follow stable-channel RouterOS. Deeper
+   release-readiness runs should cover all four release channels, and
+   `workflow_dispatch` should be able to pin one specific version directly.
+3. Push/default CI should run unit tests plus a basic CHR smoke suite on x86
+   Linux. Wider platform coverage and more specialized CHR setups belong in
+   pre-release or deeper release-readiness runs.
+4. Test execution should be separable from the publication workflow so CI and
+   harness work can evolve without pretending every run is a release.
+5. CI output should be structured for agent readability, with concise failure
+   summaries and minimal log-hunting.

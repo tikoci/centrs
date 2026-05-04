@@ -1,15 +1,12 @@
+---
+status: Accepted
+supersedes: none
+superseded_by: none
+scope: baseline
+review_source: work/20260430A-initial-design/GOAL.md
+---
+
 # S003: Device Discovery and Cache
-
-## Status
-
-Accepted baseline.
-
-Metadata:
-
-- Supersedes: none
-- Superseded by: none
-- Scope: baseline
-- Review source: `work/20260430A-initial-design/GOAL.md`
 
 ## Context
 
@@ -37,10 +34,19 @@ Metadata:
 
 ## Alpha scope
 
-Alpha should start with explicit input and environment variables. SQLite cache may be introduced once the target model is typed. WinBox CDB, The Dude `dude.db`, and MNDP are important planned sources, but they should not block the first working CLI transport.
+Alpha should start with explicit input, environment variables, and read-only
+WinBox CDB lookup for name, address, username, and password enrichment when the
+caller did not already provide explicit values. SQLite cache may be introduced
+once the target model is typed. Broad CDB import/persist behavior, The Dude
+`dude.db`, and MNDP-backed discovery remain staged until their provenance,
+redaction, and expiry behavior are specified.
 
 ## Open decisions
 
 - The exact native SQLite schema.
 - Whether native storage should use WinBox CDB-compatible structures or an internal schema with import/export.
 - Password storage and encryption policy per platform.
+- The name-resolution policy across DNS, explicit aliases, WinBox CDB names, and
+  MNDP hints.
+- Whether first-use name resolution may wait briefly for MNDP before failing, and
+  how discovery-backed cache expiry should work when it does.

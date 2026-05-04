@@ -1,15 +1,12 @@
+---
+status: Accepted
+supersedes: none
+superseded_by: none
+scope: baseline
+review_source: work/20260430A-initial-design/GOAL.md
+---
+
 # S001: Project Structure
-
-## Status
-
-Accepted baseline.
-
-Metadata:
-
-- Supersedes: none
-- Superseded by: none
-- Scope: baseline
-- Review source: `work/20260430A-initial-design/GOAL.md`
 
 ## Context
 

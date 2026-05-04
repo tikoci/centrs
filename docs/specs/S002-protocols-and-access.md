@@ -1,15 +1,12 @@
+---
+status: Accepted
+supersedes: none
+superseded_by: none
+scope: baseline
+review_source: work/20260430A-initial-design/GOAL.md
+---
+
 # S002: Protocols and Access
-
-## Status
-
-Accepted baseline.
-
-Metadata:
-
-- Supersedes: none
-- Superseded by: none
-- Scope: baseline
-- Review source: `work/20260430A-initial-design/GOAL.md`
 
 ## Context
 
@@ -43,6 +40,8 @@ settings, validation, errors, and tests:
 
 - RouterOS service/API/CLI path, default port, auth model, and version/package
   requirements.
+- Protocol-specific limits such as router-side timeouts or capability ceilings
+  that must not be mistaken for cross-protocol behavior.
 - Supported capabilities and capabilities that are intentionally out of scope.
 - Local tooling or platform constraints.
 - Validation source and known gaps.
@@ -59,7 +58,8 @@ canonicalization and validation, `quickchr` for CHR-backed tests, and
 ## Alpha scope
 
 Alpha should ground the full protocol map first, then implement one real
-transport path, with REST currently preferred. Native API, SSH, SNMP, MNDP,
+transport path, with REST currently preferred as the first experimental adapter
+rather than the shared contract baseline. Native API, SSH, SNMP, MNDP,
 MAC Telnet, RoMON, WinBox Terminal, proxy, and richer file-transfer behavior
 remain planned until the first transport loop has validation and CHR-backed
 tests.
@@ -67,7 +67,11 @@ tests.
 ## Validation flow
 
 1. Parse RouterOS CLI/prose into a canonical shape.
-2. Validate path, verb, and arguments against static schema and live `/console/inspect` when available.
+2. Validate path, verb, and arguments against static schema and the fastest
+   useful live RouterOS validation source available for the protocol in play.
+   For CLI-shaped REST work, that likely starts with RouterOS parse checks such
+   as `:put [:parse ...]` exposed through `/rest/parse`, before deeper
+   `/console/inspect` adoption.
 3. Report all validation findings with the source of the validation data.
 4. Re-validate in runner code before touching a router.
 

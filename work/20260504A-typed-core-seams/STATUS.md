@@ -30,6 +30,11 @@
   bug-report envelope.
 - A first-class developer-UX stance: help, diagnostics, and machine-readable
   errors should be considered part of the core contract, not frontend polish.
+- Protocol-specific constraints such as REST timeout ceilings without forcing the
+  shared contract to look REST-shaped forever.
+- Alpha-friendly name and credential resolution via explicit values,
+  environment, and WinBox CDB lookup without pretending discovery policy is
+  solved.
 
 ## Working posture
 
@@ -37,3 +42,16 @@ The goal is not transport breadth. The goal is to keep the next implementation
 steps from forcing the same refactor through CLI, API, MCP, TUI, proxy, and
 tests. Transport fidelity, test confidence, and developer UX should all shape
 the shared seams before multiple adapters land.
+
+## Clarifications from the 2026-05-04 answer pass
+
+- Use REST as the first experimental adapter, but do not assume its quirks are
+  the common denominator for future adapters.
+- Keep `centrs retrieve` as the first real command. `centrs check` needs its own
+  tighter spec later.
+- Treat timeout as a first-class setting because REST has an effective ceiling
+  that should become a typed validation/error case.
+- Use explicit values and environment first, then WinBox CDB lookup for
+  name/user/password enrichment in alpha.
+- Treat MNDP-backed and cache-backed name resolution as separate staged work,
+  not as something already solved by generic SQLite wording.

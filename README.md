@@ -87,16 +87,32 @@ The recommended near-term path is intentionally cautious:
 1. land typed core seams for transport, target resolution, settings resolution,
    and structured errors,
 2. land the CHR-backed harness tiers and version-matrix policy,
-3. land the first CLI shakedown and the first real transport,
+3. land the first real `retrieve` command and use it to shake down the shared
+   CLI/API surface,
 4. only then broaden transports and frontends.
 
 The point is to avoid building several attractive stubs that later force the
 same refactor in CLI, API, MCP, TUI, proxy, and tests. Transport fidelity, test
 confidence, and developer UX are co-equal constraints. REST is still the
-preferred first RouterOS transport, but only after the shared seams and harness
-shape are defined well enough that `centrs check`, `centrs retrieve`, help
-output, verbose source reporting, and bug-reportable errors can all grow from
-the same contracts.
+preferred first RouterOS transport, but only as the initial guinea pig, not as
+the long-term common denominator for every other adapter. The shared seams and
+harness shape should be defined well enough that `centrs retrieve`, help output,
+verbose source reporting, and structured actionable errors can all grow from the
+same contracts while still leaving room for native API, SSH/SCP, and future
+proxy/eventing work to differ where the protocol really differs.
+
+Current working answers:
+
+- **First transport:** REST first, but document REST-specific behavior instead of
+  baking it into the shared contract. In particular, the RouterOS REST surface
+  has its own execution/timeout behavior, so `timeout` should be a first-class
+  setting rather than an SSH-shaped afterthought.
+- **Alpha target and credential resolution:** explicit CLI/API values and
+  environment variables stay authoritative, with WinBox CDB lookup available for
+  name/user/password enrichment when present. Discovery-backed name resolution
+  remains staged work.
+- **First command:** `centrs retrieve` stays ahead of `centrs check`; `check`
+  needs its own tighter spec before it becomes an early shakedown command.
 
 Useful decisions to make before implementing the first command:
 
@@ -108,8 +124,8 @@ Useful decisions to make before implementing the first command:
 - Should alpha credentials be environment-only, macOS Keychain-backed, or both?
 - Which validation source lands first: static schema, live `/console/inspect`, or both?
 - Which device sources are in alpha: explicit input/env only, SQLite cache, WinBox CDB, or Dude DB?
-- Should `centrs check` land before or alongside `retrieve` as the cheapest
-  end-to-end CLI/API shakedown?
+- How should shared CLI/API output express transport-specific limits such as
+  REST-side timeout ceilings without pretending every protocol behaves the same?
 
 ## Project workflow
 

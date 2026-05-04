@@ -1,15 +1,12 @@
+---
+status: Accepted
+supersedes: none
+superseded_by: none
+scope: extends S001
+review_source: follow-up structure hardening
+---
+
 # S005: Spec Lifecycle and Traceability
-
-## Status
-
-Accepted.
-
-Metadata:
-
-- Supersedes: none
-- Superseded by: none
-- Scope: extends S001
-- Review source: follow-up structure hardening
 
 ## Context
 
@@ -17,7 +14,8 @@ File-based specs are easy to create and hard to retire. Without lifecycle rules,
 
 ## Requirements
 
-- Every spec must declare status, supersession, scope, and review source near the top.
+- Every spec must declare status, supersession, scope, and review source in
+  YAML front matter at the top of the file.
 - `Accepted` specs are normative. `Draft`, `Superseded`, and `Obsolete` specs are not normative unless another accepted spec explicitly incorporates part of them.
 - Prefer replacement specs that restate the current effective behavior over long chains of delta-only specs.
 - When a spec is superseded, update the old and new specs in the same change.

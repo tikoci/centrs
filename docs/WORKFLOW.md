@@ -43,14 +43,16 @@ Specs are normative only when their status is `Accepted`.
 | `Superseded` | Kept for history; replaced by another spec and no longer normative. |
 | `Obsolete` | Historical only; the behavior or direction is intentionally abandoned. |
 
-Each spec should include a short metadata block near the top:
+Each spec should start with regularized YAML front matter:
 
-```text
-Status: Draft | Accepted | Superseded | Obsolete
-Supersedes: S### or none
-Superseded by: S### or none
-Scope: extends | replaces | baseline
-Review source: work path, issue, PR, or none
+```yaml
+---
+status: Draft | Accepted | Superseded | Obsolete
+supersedes: S### or none
+superseded_by: S### or none
+scope: baseline | extends S### | replaces S###
+review_source: work path, issue, PR, or none
+---
 ```
 
 Prefer **extends** when old behavior remains valid and the new spec adds a narrower rule. Use **replaces** when the old behavior is wrong, misleading, or no longer supported. Superseded specs stay readable but must link to the replacement and clearly state that they are non-normative.
