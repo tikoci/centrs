@@ -7,7 +7,7 @@ Start here, then load only the files relevant to the paths you are changing:
 - `docs/WORKFLOW.md` explains how `work/`, specs, source, and tests stay aligned.
 - `docs/specs/` contains accepted requirements.
 - `work/20260430A-initial-design/GOAL.md` is historical grounding, not the active source of truth.
-- `docs/specs/S006-alpha-first-command.md` (Draft) parks the open alpha decisions.
+- `docs/ROADMAP.md` is the single source of truth for feature status and what to work on next.
 - Directory-level `AGENTS.md` files contain local rules.
 - `.github/instructions/` contains Copilot-native path-specific rules with `applyTo` metadata.
 
@@ -23,6 +23,7 @@ Copilot CLI's documented instruction sources include `AGENTS.md`, `.github/copil
 bun install
 bun run lint
 bun run test
+bun run test:integration
 bun run build
 bun run lint:ci
 ```
@@ -34,7 +35,7 @@ bun run lint:ci
 | `README.md` | Product overview and planned CLI manual. |
 | `docs/ARCHITECTURE.md` | System boundaries and core concepts. |
 | `docs/WORKFLOW.md` | Work item to spec to source workflow. |
-| `docs/specs/` | Stable requirements and acceptance criteria. |
+| `docs/ROADMAP.md` | Feature status, priority order, and open decisions. |
 | `work/` | Exploration, grounding, and multi-session context. |
 | `src/` | Bun/TypeScript source. |
 | `test/` | Unit, integration, and fixture space. |
@@ -50,11 +51,14 @@ These are summaries only; the specs and scoped rules are normative.
 - Settings vocabulary: `docs/specs/S004-cli-settings-and-precedence.md`.
 - Protocol grounding before first implementation: `docs/specs/S006-alpha-first-command.md`.
 - RouterOS/CHR grounding: `test/AGENTS.md`, `docs/ARCHITECTURE.md`.
+- Feature status and what to work on next: `docs/ROADMAP.md`.
 - Generated docs preference: `.github/instructions/generated-docs.instructions.md`.
 
 ## Verification
 
 Run `bun run lint && bun run test && bun run build` before finishing code changes. Run `bun run lint:ci` when changing docs, instructions, security config, spelling dictionaries, or workflow files.
+
+**Transport code is not done until `bun run test:integration` passes.** For any change that touches RouterOS transport (`src/retrieve.ts`, `src/protocols/`, `test/integration/`): run `bun run test:integration` and confirm it passes before marking work complete. "Coded" is not "done". "Integration-tested" is "done". See `docs/ROADMAP.md` for current feature status and `test/AGENTS.md` for test tier definitions.
 
 ## Security
 

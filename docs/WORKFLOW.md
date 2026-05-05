@@ -43,6 +43,8 @@ Specs are normative only when their status is `Accepted`.
 | `Superseded` | Kept for history; replaced by another spec and no longer normative. |
 | `Obsolete` | Historical only; the behavior or direction is intentionally abandoned. |
 
+**Feature done criteria**: A feature is done when its integration test passes against CHR, not when code exists. `docs/ROADMAP.md` tracks the honest status (`idea` → `coded` → `smoke-passed` → `integration-tested`) for each feature. Do not advance a feature status in ROADMAP without the matching CHR evidence. Update ROADMAP when a feature moves to `smoke-passed` or `integration-tested`.
+
 Each spec should start with regularized YAML front matter:
 
 ```yaml

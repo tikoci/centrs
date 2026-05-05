@@ -31,13 +31,13 @@ export const protocolPlans = [
 		id: "rest-api",
 		capabilities: ["retrieve", "update", "execute", "transfer", "proxy"],
 		notes:
-			"RouterOS /rest. Alpha retrieve is implemented; other REST capabilities remain staged.",
+			"RouterOS /rest. retrieve is coded but not integration-tested against CHR yet. Other capabilities are staged.",
 		implemented: true,
 	},
 	{
 		id: "native-api",
 		capabilities: ["retrieve", "update", "execute", "proxy"],
-		notes: "Binary API. Lower priority than REST for alpha.",
+		notes: "Binary API. Not yet implemented.",
 		implemented: false,
 	},
 	{

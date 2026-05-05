@@ -168,3 +168,6 @@ XCUI
 XDG
 YYYYMMDDX
 zod
+
+nextsteps
+specced

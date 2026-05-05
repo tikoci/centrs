@@ -55,6 +55,7 @@
 		"lint:secretlint": "secretlint \"**/*\"",
 		"lint:agents": "agent-lint scan --stdout",
 		"test": "bun test",
+		"test:integration": "CENTRS_RUN_FAST_INTEGRATION=1 bun test test/integration/",
 		"test:ci": "bun test --coverage",
 		"test:all": "bun run test:ci",
 		"build": "bun build src/index.ts src/cli.ts src/mcp.ts src/tui.ts src/webproxy.ts src/protocols/index.ts --outdir dist --target bun",
