@@ -32,8 +32,11 @@ spike, deferred, or rejected.
   whether the result should be an adapter, launcher, or non-goal.
 - `work/20260502D-wireshark-dissector-inventory/` covers source-pinning
   dissectors for MNDP, MAC Telnet, RoMON, and WinBox.
-- `work/20260502E-schema-ir-protocol-knowledge/` covers the schema algebra idea as
-  exploratory protocol-knowledge infrastructure.
+- `work/20260502E-schema-ir-protocol-knowledge/` was the original centrs spike
+  for schema algebra / protocol-knowledge infrastructure. That line of work is
+  now effectively subsumed by [tikoci/m2ir](https://github.com/tikoci/m2ir), so
+  centrs should only keep the concrete findings that feed back into local CDB,
+  Nova, or device-source grounding.
 
 ## Deferred
 

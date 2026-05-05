@@ -1,5 +1,7 @@
 # Status: WinBox CDB device store grounding
 
+<!-- cspell:ignore alireza YATV wbx -->
+
 ## Current state
 
 - Work item created from the May 1 protocol/data grounding review.
@@ -145,6 +147,35 @@
   - known session-field handling (`tag 6`),
   - preservation of unknown extra string fields,
   - both 8-bit and 16-bit string encodings for open CDB string fields.
+
+## Cross-project follow-up (2026-05-04)
+
+- The exploratory schema-IR/protocol-knowledge line that started in
+  `work/20260502E-schema-ir-protocol-knowledge/` is now effectively carried by
+  [tikoci/m2ir](https://github.com/tikoci/m2ir). The most relevant current
+  follow-up note for this work item is
+  `~/GitHub/m2ir/work/2026-05-winbox-nova-sources/winbox-nova-source-inventory.md`.
+- That m2ir source sweep adds two useful public saved-session references:
+  - `alireza-k7/winbox-wbx-to-cdb` **confirms** the open-file magic
+    `0d f0 1d c0`, the `M2` record family, and the broad use of tags
+    `1`, `2`, `3`, `4`, `8`, `9`, `11`, and `12`, which matches the family
+    of fields already grounded in `src/data/winbox-cdb.ts`.
+  - `YATV/WBX-tools` **expands** the upstream WBX side of the migration story:
+    WBX signature `0f 10 c0 be`, `00 00` record separation, multiple TLV
+    layouts (`L2`, `L1`, `L0`), and the user-facing field vocabulary
+    `group`, `host`, `login`, `password`, `keep`, `note`, `type`, and
+    `secure-mode`.
+- Those same references also sharpen two caution points:
+  - `alireza-k7/winbox-wbx-to-cdb` appears to treat the numeric `tag 1` field
+    as a per-row index, while centrs's fixture-backed model treats that numeric
+    field as the record type (`ipAdmin`, `ipUser`, `romonTarget`, etc.). Treat
+    the repo as interoperability evidence, not as a stronger semantic source
+    than the current centrs fixtures plus manual WinBox validation.
+  - Its field-usage choices for `tag 8` / `tag 9` (`tag 8 = "mine"`,
+    `tag 9 = note or group`) do not line up cleanly with centrs's current
+    grounded mapping (`group = 8`, comment mirror / duplicated note field = 9).
+    This is best read as sample-driven partial knowledge, not as a reason to
+    weaken the existing centrs model.
 
 ## Working hypotheses
 
