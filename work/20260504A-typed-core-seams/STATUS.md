@@ -5,11 +5,12 @@
 | Surface | Implemented | Status |
 | --- | --- | --- |
 | `src/data/winbox-cdb.ts` parse/encode/decrypt/encrypt | Yes | Solid grounded slice with substantial tests |
-| `src/protocols/index.ts` registry | Metadata only | Planned capability list, not an adapter contract |
-| `src/cli.ts` | Help text only | Functional stub, not a real command surface |
-| `src/index.ts`, `src/mcp.ts`, `src/tui.ts`, `src/webproxy.ts` | Placeholder exports | Describe surfaces, no runnable behavior |
+| `src/protocols/index.ts` registry | Partially grounded | Shared capability list still leads, but `rest-api` now marks the first real retrieve slice |
+| `src/cli.ts` | Real retrieve command | Typed help metadata plus a hand-written `retrieve` parser and renderer |
+| `src/index.ts` | Shared core exports | Now exports retrieve, structured errors, and shared envelope/render helpers |
+| `src/mcp.ts`, `src/tui.ts`, `src/webproxy.ts` | Placeholder exports | Describe future surfaces, no runnable behavior yet |
 | `src/data/dude-db.ts`, `src/data/mndp-cache.ts` | Empty files | Not yet staged beyond placeholders |
-| `test/integration/rest-retrieve.test.ts` | `describe.skip` placeholder | No CHR harness or transport wiring yet |
+| `test/integration/rest-retrieve.test.ts` | Opt-in CHR smoke scaffold | Real quickchr-backed smoke path is staged behind `CENTRS_RUN_FAST_INTEGRATION=1` |
 
 ## Gaps already tracked elsewhere
 
@@ -49,9 +50,14 @@ the shared seams before multiple adapters land.
   the common denominator for future adapters.
 - Keep `centrs retrieve` as the first real command. `centrs check` needs its own
   tighter spec later.
+- Use live `/console/inspect request=syntax` for retrieve validation and
+  attribute discovery; reserve `/rest/parse` for later CLI-shaped `execute`
+  validation.
 - Treat timeout as a first-class setting because REST has an effective ceiling
   that should become a typed validation/error case.
 - Use explicit values and environment first, then WinBox CDB lookup for
   name/user/password enrichment in alpha.
+- Use one shared success/error envelope so warnings, target provenance, and
+  size-limit metadata survive CLI/API/MCP-style consumers.
 - Treat MNDP-backed and cache-backed name resolution as separate staged work,
   not as something already solved by generic SQLite wording.

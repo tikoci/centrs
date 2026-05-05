@@ -35,19 +35,25 @@ scratch mode.
   still require L2-capable lab work before implementation.
 - Dude DB is grounded through `donny`; it can contain plaintext credentials and
   must be treated as secret-bearing import input.
-- WinBox CDB and WinBox Terminal remain high-risk research gaps.
+- WinBox Terminal remains a high-risk research gap, and the broader WinBox CDB
+  storage/import model still needs more evidence even though read-only lookup is
+  acceptable for alpha planning.
 
 ## Alpha decision checkpoint
 
 - First transport remains `rest-api` for a read-only retrieve command.
-- Alpha device sources remain explicit input plus environment variables.
+- Alpha device sources are explicit input plus environment variables, with
+  read-only WinBox CDB lookup available for named-device enrichment.
 - Credential storage remains out of alpha.
-- Native API, MNDP, MAC Telnet, RoMON, WinBox Terminal, WinBox CDB, Dude DB,
-  proxy/eventing, and persistent cache remain planned surfaces rather than alpha
+- Broad WinBox CDB import/persist behavior, Dude DB, persistent cache, and
+  discovery-backed name resolution remain planned surfaces rather than alpha
   blockers.
+- Native API remains the strategic eventing/proxy transport after the first REST
+  retrieve loop; MNDP, MAC Telnet, RoMON, and WinBox Terminal still need their
+  own implementation-time grounding.
 - S006 remains Draft because CLI parser choice, first integration-test host
-  shape, and exact retrieve projection behavior still need implementation-time
-  decisions.
+  shape, exact retrieve envelope field names, and exact group-fan-out semantics
+  still need implementation-time decisions.
 
 ## Review incorporation checkpoint
 
@@ -81,7 +87,7 @@ scratch mode.
 
 - Durable instruction updates: done in this change.
 - S006 refinements: done in this change, but S006 remains Draft.
-- S002/S003 refinements: not needed beyond their existing grounding gates.
+- S002/S003 refinements: done in this change.
 - Source implementation: not started.
 - Tests: docs/instruction validation only.
 

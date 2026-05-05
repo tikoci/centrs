@@ -2,9 +2,14 @@
 
 `centrs` is the tikoci RouterOS interaction hub: a Bun/TypeScript library and future CLI, TUI, HTTP proxy/daemon, and MCP server for talking to MikroTik RouterOS devices through a regularized interface.
 
-> **Status:** pre-alpha / design-first. Core RouterOS transports, CLI commands, proxy, and MCP surfaces are not implemented yet; this repository currently defines the contract, workflow, and scaffolding for current development.
+> **Status:** pre-alpha. The first real vertical slice now exists: `centrs retrieve`
+> over `rest-api`, plus the shared error/settings/output seams behind it. The rest
+> of the CLI, broader transport set, proxy, and MCP surfaces remain staged work.
 >
-> **Implementation reality:** the only grounded executable slice today is the WinBox CDB codec and its fixture-backed tests. The protocol registry is metadata, the CLI/API/TUI/MCP/proxy exports are scaffolding, The Dude and MNDP data sources are placeholders, and RouterOS integration remains staged work.
+> **Implementation reality:** the WinBox CDB codec remains the deepest grounded
+> slice, and `retrieve` is now the first real RouterOS round-trip. The rest of the
+> CLI/API/TUI/MCP/proxy surface area is still mostly scaffolding, and The Dude and
+> MNDP data sources remain placeholders.
 
 The project is intentionally a **friendly conduit**, not a high-level configuration abstraction. It should help humans and agents reach RouterOS over the right protocol, with the right credentials and ports, and validate RouterOS-shaped commands before writes when possible. It should not hide RouterOS behind helpers like `createVlanOnBridge()`.
 
@@ -26,14 +31,16 @@ follow-up work.
 | Surface | Current state | Notes |
 | --- | --- | --- |
 | WinBox CDB codec | Implemented | Parse/encode/decrypt/encrypt plus substantial fixture-backed tests. |
-| Protocol registry | Metadata only | Capability list exists; there is no transport adapter contract yet. |
-| CLI/API/TUI/MCP/proxy exports | Scaffolding only | `cli.ts` renders help; other frontend exports are descriptive placeholders. |
+| Protocol registry | Partially grounded | Shared capability list remains metadata-heavy, but `rest-api` is now wired for the first real retrieve slice. |
+| CLI/API surface | Retrieve alpha only | `centrs retrieve` now resolves explicit/env settings, renders typed help, returns structured JSON/YAML envelopes, and emits actionable errors. |
+| TUI/MCP/proxy exports | Scaffolding only | These frontends still describe future surfaces rather than implement them. |
 | Device sources beyond CDB | Not implemented | `dude-db.ts` and `mndp-cache.ts` are empty placeholders. |
-| RouterOS transport integration | Not implemented | The REST integration test is still skipped and no CHR harness is wired yet. |
+| RouterOS transport integration | REST retrieve only | Read-only REST retrieve works; richer validation, more transports, and broader CHR coverage remain staged. |
 
-## Planned CLI shape
+## CLI shape
 
-The CLI is not implemented yet; this is the current contract the rest of the project should grow toward.
+`retrieve` is the first implemented command. The rest of the table remains the
+planned command surface the project should grow toward.
 
 | Command | Purpose |
 | --- | --- |
@@ -42,9 +49,40 @@ The CLI is not implemented yet; this is the current contract the rest of the pro
 | `centrs retrieve <device-or-group> <path-or-oid>` | Read RouterOS values through REST/native API or SNMP without inventing extra RouterOS semantics. |
 | `centrs update <device-or-group> <path> ...` | Apply RouterOS updates with validation and explicit protocol selection. |
 | `centrs check <device-or-address>` | Run reachability and management-port checks, enriched with MNDP and RouterOS service hints. |
+| `centrs discover` | Run reachability and management-port checks, enriched with MNDP and RouterOS service hints. |
 | `centrs upload/download ...` | Move files using REST for small files and SCP/SFTP or RouterOS `/tool/fetch` where appropriate. |
 | `centrs devices` | Show discovered, cached, and configured RouterOS devices and groups. |
 | `centrs proxy <device>` | Start the HTTP/WebSocket proxy surface for RouterOS REST/native API access. |
+
+### Alpha retrieve currently implemented
+
+```text
+centrs retrieve <target> <routeros-path> --via rest-api [flags]
+```
+
+Current alpha behavior:
+
+- Supports text, JSON, and YAML output. JSON/YAML return a shared envelope with
+  `ok`, `capability`, `via`, `target`, `auth`, `request`, `validation`,
+  `result`, `warnings`, and `settingSources`.
+- Supports `--attribute`, `--attributes`, `--all-attributes`,
+  `--list-attributes`, `--max-results`, `--validate` / `--no-validate`,
+  `--timeout`, and `--verbose`.
+- Resolves `via`, `username`, `password`, `timeout`, `format`, and
+  `max-results` from explicit CLI values first, then `CENTRS_*` environment
+  variables.
+- Uses live `/console/inspect` child queries for print availability and
+  attribute discovery in the current implementation.
+- Returns actionable structured errors for missing `via`, invalid paths,
+  oversize output budgets, and common REST transport/auth failures.
+
+Still intentionally out of scope for this first slice:
+
+- automatic protocol selection or fallback,
+- multi-target/group fan-out,
+- WinBox CDB-backed name enrichment,
+- non-REST adapters,
+- HTTPS trust-policy knobs beyond Bun's default certificate validation.
 
 ## Settings model
 
@@ -82,50 +120,41 @@ bun run build:doc:api
 
 ## Current alpha direction
 
-The recommended near-term path is intentionally cautious:
+The near-term path is intentionally narrow:
 
-1. land typed core seams for transport, target resolution, settings resolution,
-   and structured errors,
-2. land the CHR-backed harness tiers and version-matrix policy,
-3. land the first real `retrieve` command and use it to shake down the shared
-   CLI/API surface,
+1. land the typed core seams for transport, target resolution, settings
+   resolution, shared result/error envelopes, and actionable diagnostics,
+2. land the CHR-backed harness tiers and version policy,
+3. implement one real `retrieve` loop over REST and use it to settle the shared
+   CLI/API shape,
 4. only then broaden transports and frontends.
 
-The point is to avoid building several attractive stubs that later force the
-same refactor in CLI, API, MCP, TUI, proxy, and tests. Transport fidelity, test
-confidence, and developer UX are co-equal constraints. REST is still the
-preferred first RouterOS transport, but only as the initial guinea pig, not as
-the long-term common denominator for every other adapter. The shared seams and
-harness shape should be defined well enough that `centrs retrieve`, help output,
-verbose source reporting, and structured actionable errors can all grow from the
-same contracts while still leaving room for native API, SSH/SCP, and future
-proxy/eventing work to differ where the protocol really differs.
+The goal is to avoid attractive stubs that later force the same refactor
+through CLI, API, MCP, TUI, proxy, and tests. Transport fidelity, test
+confidence, and developer UX are co-equal constraints.
 
-Current working answers:
+Current working decisions:
 
-- **First transport:** REST first, but document REST-specific behavior instead of
-  baking it into the shared contract. In particular, the RouterOS REST surface
-  has its own execution/timeout behavior, so `timeout` should be a first-class
-  setting rather than an SSH-shaped afterthought.
-- **Alpha target and credential resolution:** explicit CLI/API values and
-  environment variables stay authoritative, with WinBox CDB lookup available for
-  name/user/password enrichment when present. Discovery-backed name resolution
-  remains staged work.
-- **First command:** `centrs retrieve` stays ahead of `centrs check`; `check`
-  needs its own tighter spec before it becomes an early shakedown command.
+- **First transport:** `rest-api` is the first real adapter, but only as the
+  initial guinea pig. Native API remains the strategic eventing/proxy transport,
+  and SSH is still expected to lead terminal and larger file-transfer work.
+- **First command:** `centrs retrieve` stays ahead of `centrs check` and
+  `execute`.
+- **Target and credential resolution:** explicit CLI/API values and environment
+  variables stay authoritative. Read-only WinBox CDB lookup can enrich named
+  devices and saved credentials in alpha when explicit values are missing.
+- **Validation split:** `retrieve` should use live `/console/inspect` for path
+  and attribute validation; future CLI-shaped `execute` work should use fast
+  parse checks such as `/rest/parse`.
+- **Shared settings and output:** `timeout` is a first-class setting with
+  protocol-specific validation, and the first command should return one
+  structured envelope across CLI/API JSON/YAML output so success can carry
+  warnings, provenance, and size-limit metadata.
 
-Useful decisions to make before implementing the first command:
-
-- Which typed seams must exist before transport work starts: transport adapter
-  contract, target model, settings resolver, and structured error model?
-- What facts must be captured in the protocol matrix before transport code
-  starts?
-- Which transport lands first: REST, SSH, or native API?
-- Should alpha credentials be environment-only, macOS Keychain-backed, or both?
-- Which validation source lands first: static schema, live `/console/inspect`, or both?
-- Which device sources are in alpha: explicit input/env only, SQLite cache, WinBox CDB, or Dude DB?
-- How should shared CLI/API output express transport-specific limits such as
-  REST-side timeout ceilings without pretending every protocol behaves the same?
+See `docs/specs/S006-alpha-first-command.md` for the draft first-command
+contract. The exploratory nuance stays in
+`work/20260430B-protocol-data-grounding/` and
+`work/20260504A-typed-core-seams/`.
 
 ## Project workflow
 

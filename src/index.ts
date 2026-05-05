@@ -34,6 +34,13 @@ export {
 	winBoxCdbRecordType,
 } from "./data/winbox-cdb.ts";
 export {
+	asCentrsError,
+	CentrsError,
+	type CentrsErrorCode,
+	type SerializedCentrsError,
+	serializeCentrsError,
+} from "./errors.ts";
+export {
 	getProtocolPlan,
 	type ProtocolCapability,
 	type ProtocolPlan,
@@ -42,6 +49,21 @@ export {
 	protocolsWithCapability,
 	type RouterOsProtocol,
 } from "./protocols/index.ts";
+export {
+	buildRetrieveErrorEnvelope,
+	type RetrieveEnvelope,
+	type RetrieveErrorEnvelope,
+	type RetrieveOutputFormat,
+	type RetrieveRequest,
+	type RetrieveRequestSummary,
+	type RetrieveResultSummary,
+	type RetrieveSuccessEnvelope,
+	type RetrieveValidationSummary,
+	type RetrieveWarning,
+	renderRetrieveEnvelope,
+	retrieve,
+	retrieveOutputFormats,
+} from "./retrieve.ts";
 
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 

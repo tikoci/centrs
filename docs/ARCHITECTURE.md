@@ -73,11 +73,15 @@ Protocol adapters handle transport-specific details and expose regularized capab
 
 ### Validation pipeline
 
-Write-shaped calls should follow an explain/validate/run pattern:
+RouterOS-facing calls should follow an explain/validate/run pattern:
 
-1. Parse and canonicalize RouterOS input.
-2. Validate against static schema and live `/console/inspect` when available.
-3. Return typed, actionable errors when validation fails.
+1. Canonicalize the RouterOS path, verb, and projection the caller asked for.
+2. Validate against static schema and the fastest useful live source for the
+   operation in play. For `retrieve`-style REST work, start with
+   `/console/inspect request=syntax` plus attribute inspection. For future
+   CLI-shaped `execute` work, use fast parse checks such as `:put [:parse ...]`
+   exposed through `/rest/parse`.
+3. Return typed, actionable diagnostics that name the validation source.
 4. Re-validate server-side immediately before execution for any runner that touches a router.
 
 Related tikoci projects provide grounding: `rosetta` for docs/RAG, `restraml` for REST schema and inspect output, `lsp-routeros-ts` for canonicalization and validation patterns, and `quickchr` for CHR-backed integration tests.
@@ -88,6 +92,8 @@ Developer UX is part of the architecture, not polish after transports work.
 Stable `--help` output, verbose source reporting, machine-readable errors, and
 redacted bug-report envelopes should be treated as shared-core behavior so CLI,
 API, MCP, TUI, and proxy users do not each learn a different diagnostic model.
+Shared result envelopes should also preserve warnings, provenance, and
+size-limit metadata instead of flattening everything to raw transport output.
 
 ## Invariants
 
@@ -103,9 +109,11 @@ API, MCP, TUI, and proxy users do not each learn a different diagnostic model.
 ## Alpha slice
 
 The first implementation should intentionally be narrower than the full
-architecture: local macOS CLI, explicit device/credential input, explicit
-protocol selection, one real transport, validation plumbing, and CHR-backed
-tests. Before that transport breadth appears, the near-term slice should stage
-typed seams, the test harness policy, and the first real `retrieve` loop.
-Proxy, MCP, broad CDB/Dude imports, and passive discovery should remain planned
-surfaces until the first transport loop is reliable.
+architecture: local CLI and TypeScript API, explicit target/protocol selection,
+environment-backed settings, read-only WinBox CDB lookup for missing target
+fields, one real transport (`rest-api`), one real command (`retrieve`), a
+shared structured result/error envelope, and CHR-backed tests. Before transport
+breadth appears, the near-term slice should stage typed seams, the test harness
+policy, and the first real `retrieve` loop. `check`, `execute`, proxy, MCP,
+broad CDB/Dude imports, and passive discovery should remain planned surfaces
+until the first retrieve loop is reliable.

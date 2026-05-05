@@ -31,8 +31,8 @@ export const protocolPlans = [
 		id: "rest-api",
 		capabilities: ["retrieve", "update", "execute", "transfer", "proxy"],
 		notes:
-			"RouterOS /rest. Preferred first implementation after protocol grounding.",
-		implemented: false,
+			"RouterOS /rest. Alpha retrieve is implemented; other REST capabilities remain staged.",
+		implemented: true,
 	},
 	{
 		id: "native-api",

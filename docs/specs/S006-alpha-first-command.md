@@ -6,26 +6,19 @@ scope: extends S002, S003, S004
 review_source: work/20260430A-initial-design/GOAL.md open follow-ups; README Current alpha direction; work/20260430B-protocol-data-grounding/; work/20260504A-typed-core-seams/; work/20260504B-quickchr-harness/; work/20260504C-name-resolution-and-discovery/
 ---
 
-# S006: Protocol Grounding and Alpha First Command
+# S006: Alpha First Command (REST Retrieve)
 
 ## Context
 
-`README.md`, `S002`, `S003`, and `S004` describe the full surface but leave
-the protocol-grounding work and several alpha decisions open:
+`S002`, `S003`, and `S004` now establish the broad alpha direction: `rest-api`
+first, `centrs retrieve` first, explicit/env values first with read-only WinBox
+CDB lookup, and no silent protocol fallback. This Draft captures the still-moving
+contract details needed before and during the first real implementation.
 
-1. What each planned protocol can really do, what it needs, and how it fails.
-2. Which transport lands first (REST, SSH, or native API).
-3. How alpha credentials and CDB-backed credential lookup interact.
-4. Which validation source lands first for CLI-shaped RouterOS commands.
-5. Which device sources and name-resolution behaviors are in alpha.
-6. Which shared typed seams must land before transports and frontends branch out.
-7. How REST-specific limits such as its execution timeout should surface without
-   shaping every later adapter.
-
-Until these are resolved, contributors and agents cannot start the first
-runnable RouterOS round-trip without re-litigating scope or coding against
-incorrect protocol assumptions. The intended sequence is grounding work first,
-spec promotion second, source and integration tests third.
+`work/20260430B-protocol-data-grounding/` remains the evidence collector for
+protocol and data-source grounding. `work/20260504A-typed-core-seams/` remains
+the staging area for shared contracts that are not yet stable enough to freeze
+in Accepted specs.
 
 ## Protocol grounding gate
 
@@ -111,68 +104,121 @@ Developer UX is part of this gate. Generated help, verbose source reporting, and
 structured actionable errors should reuse the same typed seams instead of being
 bolted on after the first adapter lands.
 
+## Alpha implementation slice
+
+The first runnable slice should be intentionally small:
+
+- local CLI and TypeScript API first,
+- explicit `via`, with `rest-api` as the only implemented alpha adapter,
+- one read-only command: `retrieve`,
+- explicit/env values first, with read-only WinBox CDB lookup for named-device
+  enrichment when explicit values are missing,
+- a shared `timeout` setting whose validation is adapter-aware,
+- one structured envelope for success and failure so warnings, provenance, and
+  size-limit metadata survive JSON/YAML/API use,
+- CHR-backed tests as the proof point for the round-trip.
+
 ## Proposed defaults
 
 These are starting positions; resolve before promoting status to `Accepted`.
 
 | Decision | Proposed alpha default | Rationale |
 | --- | --- | --- |
-| First implementation after grounding | `rest-api` over HTTPS | Best current candidate: well-understood protocol surface, compatible with `restraml` and `quickchr`, and good for read-only `/system/resource`. Use REST as the initial guinea pig, not as the common denominator for every later adapter; capture REST-specific behavior such as `/rest/execute` response quirks and router-side timeout ceilings explicitly. |
-| Credentials | Explicit CLI/API values and environment variables first, with WinBox CDB lookup available for name/user/password enrichment | Keeps explicit values authoritative while allowing alpha usability to benefit from read-only CDB resolution. The CDB file password is a separate concern from RouterOS login credentials. |
-| Validation source | Fast live parse checks for CLI-shaped commands, with static schema and deeper inspect grounding as complements | For RouterOS CLI-shaped validation, favor the fastest binary signal first, such as `:put [:parse ...]` exposed through `/rest/parse`, before widening to deeper `/console/inspect` integration. The first `retrieve` milestone remains read-only. |
+| First implementation after grounding | `rest-api` over HTTPS | Best current candidate: well-understood protocol surface, compatible with `restraml` and `quickchr`, and good for read-only retrieve work. Use REST as the initial guinea pig, not as the common denominator for every later adapter. |
+| Credentials | Explicit CLI/API values and environment variables first, with read-only WinBox CDB lookup available for name/group/user/password enrichment | Keeps explicit values authoritative while allowing alpha usability to benefit from local saved-router data. The CDB file password is a separate concern from RouterOS login credentials. |
+| Validation source | `/console/inspect` for retrieve path/attribute validation; fast parse checks for later CLI-shaped `execute` work | `retrieve` should use inspect-driven syntax and attribute discovery. Future CLI-shaped validation should favor the fastest binary signal first, such as `:put [:parse ...]` exposed through `/rest/parse`. |
 | Device sources | Explicit input + environment + read-only WinBox CDB lookup | Defers SQLite, Dude DB, and MNDP-backed discovery policy. Name-resolution behavior beyond explicit values and CDB lookup stays staged until expiry/wait semantics are specified. |
 | Required `via` | Always required, never inferred | Per S004; no silent protocol fallback. |
 | Timeout | Shared setting with protocol-specific validation | Treat timeout as a first-class setting. For REST, reject values above the effective RouterOS-side ceiling rather than pretending longer timeouts will work. |
 | CLI parser | Hand-written argv parsing until at least three real commands exist | Avoids locking in a framework before the alpha command surface and help shape settle. |
 
-## First command
+## First command contract
 
 After the protocol grounding gate and pre-transport seams are satisfied, the
 first runnable CLI/API milestone should be the smallest read-only RouterOS
 round-trip:
 
 ```text
-centrs retrieve <device> /system/resource --via rest-api --format json
+centrs retrieve <target> <routeros-path> [flags]
 ```
 
-`centrs check` remains a planned command, but it should not lead the alpha.
-Its behavior depends on a better-specified model for name resolution,
-reachability, management-path probing, and discovery hints.
+Alpha contract for `retrieve`:
+
+- The required path argument is a slash-prefixed RouterOS path for alpha.
+  Shortcut aliases or non-path positional forms remain future work unless they
+  are explicitly specified later.
+- The baseline mapping is RouterOS `print`-style reads. Special-case non-`print`
+  mappings are out of alpha unless explicitly documented.
+- `--attribute <name>` and `--attributes <a,b>` project selected attributes.
+- `--all-attributes` asks for the RouterOS detail/all-attributes shape and is
+  mutually exclusive with attribute projection.
+- `--list-attributes` and `--list` return inspect-derived attribute names
+  without running the data call.
+- `--filter` and `--query` may be surfaced early only as explicit
+  "Not implemented" placeholders; they are not part of the first working loop.
+- `--format` must support at least text, JSON, and YAML. `--json` may exist as
+  CLI sugar for the JSON envelope output.
+- `--max-results <bytes>` sets a serialized output budget. If the budget is
+  exceeded, the command returns a structured limit error naming object count and
+  required size rather than silently truncating.
+
+## Validation and diagnostics
+
+- `retrieve` should use live `/console/inspect` data to validate path, verb, and
+  attribute selection. The current implementation starts with `request=child`
+  for print availability and attribute discovery; stricter `request=syntax`
+  handling remains part of the hardening path.
+- The same inspect data should power `--list-attributes` and suggestion-style
+  errors for bad paths or attributes.
+- Future CLI-shaped `execute` work is intentionally different: it should use
+  fast parse checks such as `/rest/parse` instead of forcing retrieve and
+  execute through one fake shared validator.
+- CLI/API structured output should share one envelope carrying success/failure,
+  warnings, target/protocol metadata, and limit facts.
+
+`centrs check` remains a planned command, but it should not lead the alpha. Its
+behavior depends on a better-specified model for name resolution, reachability,
+management-path probing, and discovery hints.
 
 Acceptance for the alpha milestone:
 
-- Protocol matrix exists and explains why `rest-api` is the first implemented
-  adapter.
 - `centrs --help` and `centrs retrieve --help` are generated from typed command
   metadata.
-- `CENTRS_*` settings from S004 resolve through the documented precedence and the
-  resolved source is shown in `--verbose` output.
-- A `quickchr`-backed integration test boots a CHR, runs the command against it,
-  and asserts a non-empty JSON object with `version` and `uptime` fields.
+- `CENTRS_*` settings from S004 resolve through the documented precedence, and
+  the resolved source is shown in `--verbose` output.
+- A `quickchr`-backed integration test boots a CHR, runs
+  `centrs retrieve <target> /system/resource --via rest-api --format json`
+  against it, and asserts structured data with `version` and `uptime` fields.
+- A `quickchr`-backed integration test proves
+  `centrs retrieve <target> /ip/address --via rest-api --list-attributes`
+  returns inspect-derived attribute names without running the data call.
+- A `quickchr`-backed integration test proves
+  `centrs retrieve <target> /ip/address --via rest-api --attribute address --format json`
+  returns projected structured data.
 - Failure-path tests assert that canonical unreachable/auth/unsupported cases
   produce structured actionable errors naming protocol, host, port, code, and
   remediation.
+- Failure-path tests also cover inspect validation failures, timeout ceiling
+  violations, and oversized result-budget failures.
 
 ## Out of alpha
 
-- Write-shaped operations (`update`, `execute`).
+- `update`, `execute`, and `check`.
+- Protocol fallback or automatic `via` selection.
+- Shortcut aliases or extra positional selector forms beyond the RouterOS path.
+- Group fan-out aggregation and multi-target output policy.
 - Native API, SSH, SNMP, MNDP, MAC Telnet, RoMON, WinBox Terminal.
 - HTTP/WebSocket proxy and MCP frontends.
-- WinBox CDB, Dude DB, MNDP discovery imports.
+- Broad WinBox CDB or Dude DB import/persist behavior.
 - macOS Keychain or other secret stores.
 
-## Open questions
+## Remaining open questions
 
-- Which matrix rows from `work/20260430B-protocol-data-grounding/` are stable
-  enough to promote into this spec, S002, or S003?
-- Which name-resolution and discovery rows need to move from `work/` into S003
-  before `centrs check` can be specified cleanly?
-- Should `centrs retrieve` accept a RouterOS path (`/system/resource`) and a
-  `--print` flag mirroring RouterOS console behavior, or should it have a
-  separate `--columns` projection?
-- Should the alpha CLI add a framework such as `clipanion`, or stay on a
-  hand-written argv parser until the command surface stabilizes?
-- Should the first integration test run on macOS via local QEMU, on Linux CI
-  via `quickchr`, or both?
-- What exact REST parse flow and timeout semantics should become the first typed
-  validation and error-contract cases?
+- Are the current implementation envelope fields (`ok`, `capability`, `via`,
+  `target`, `auth`, `request`, `validation`, `result`, `warnings`,
+  `settingSources`) stable enough to promote into the Accepted contract?
+- Should named groups fan out in the first implementation, or only after
+  aggregation semantics are typed?
+- What exact default XDG-style WinBox CDB lookup path/name should alpha use?
+- Should the alpha CLI stay on hand-written argv parsing until the second or
+  third real command lands?

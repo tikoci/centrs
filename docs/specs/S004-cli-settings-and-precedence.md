@@ -3,7 +3,7 @@ status: Accepted
 supersedes: none
 superseded_by: none
 scope: baseline
-review_source: work/20260430A-initial-design/GOAL.md
+review_source: work/20260430A-initial-design/GOAL.md; work/20260504A-typed-core-seams/
 ---
 
 # S004: CLI Settings and Precedence
@@ -33,6 +33,10 @@ CLI, API, MCP, TUI, and proxy surfaces must share setting names and behavior. Ag
 5. Imported CDB or Dude database values.
 6. Discovery hints such as MNDP.
 
+Project and user settings should live in the platform-appropriate application
+config locations; on Unix-like systems that means an XDG-style config path
+instead of ad hoc dotfiles.
+
 ## Planned common settings
 
 | Setting | Purpose |
@@ -45,4 +49,4 @@ CLI, API, MCP, TUI, and proxy surfaces must share setting names and behavior. Ag
 | `timeout` | Operation timeout, validated against protocol-specific limits such as REST-side ceilings. |
 | `validate` | Enable or disable preflight validation. |
 | `cache` | Control whether resolved metadata is written back. |
-| `format` | Output format such as text, JSON, or table. |
+| `format` | Output format such as text, JSON, YAML, or table when the command has a table rendering. |

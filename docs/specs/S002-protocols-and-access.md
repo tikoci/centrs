@@ -3,7 +3,7 @@ status: Accepted
 supersedes: none
 superseded_by: none
 scope: baseline
-review_source: work/20260430A-initial-design/GOAL.md
+review_source: work/20260430A-initial-design/GOAL.md; work/20260430B-protocol-data-grounding/; work/20260504A-typed-core-seams/
 ---
 
 # S002: Protocols and Access
@@ -57,21 +57,23 @@ canonicalization and validation, `quickchr` for CHR-backed tests, and
 
 ## Alpha scope
 
-Alpha should ground the full protocol map first, then implement one real
-transport path, with REST currently preferred as the first experimental adapter
-rather than the shared contract baseline. Native API, SSH, SNMP, MNDP,
-MAC Telnet, RoMON, WinBox Terminal, proxy, and richer file-transfer behavior
-remain planned until the first transport loop has validation and CHR-backed
-tests.
+Alpha should implement one read-only `retrieve` loop via `rest-api` first.
+Treat REST as the first guinea pig, not as the shared contract baseline.
+Native API remains the strategic next transport for eventing and proxy work, and
+SSH remains the likely lead path for terminal and larger file-transfer
+workflows. SNMP, MNDP, MAC Telnet, RoMON, WinBox Terminal, proxy, and richer
+file-transfer behavior remain planned until the first retrieve loop, shared
+timeout behavior, and CHR-backed error handling are proven.
 
 ## Validation flow
 
-1. Parse RouterOS CLI/prose into a canonical shape.
+1. Parse RouterOS input into a canonical shape.
 2. Validate path, verb, and arguments against static schema and the fastest
    useful live RouterOS validation source available for the protocol in play.
-   For CLI-shaped REST work, that likely starts with RouterOS parse checks such
-   as `:put [:parse ...]` exposed through `/rest/parse`, before deeper
-   `/console/inspect` adoption.
+   For retrieve-style REST work, that starts with
+   `/console/inspect request=syntax` plus inspect-driven attribute discovery. For
+   future CLI-shaped `execute` work, fast parse checks such as
+   `:put [:parse ...]` exposed through `/rest/parse` are the first binary gate.
 3. Report all validation findings with the source of the validation data.
 4. Re-validate in runner code before touching a router.
 

@@ -41,14 +41,13 @@
 # External references
 # %mac-telnet: MikroTik MAC Telnet tooling by haakonnessjoen.
 #   https://github.com/haakonnessjoen/mac-telnet
-
-ajv
-amm
-amazonq
 Addrs
+ajv
+amazonq
+amm
 AT-SPI
-axuielement
 awk
+axuielement
 backpressure
 bjjj
 btest.exe # Mikrotik /tool/bandwidth-test client for windows
@@ -66,24 +65,25 @@ crossref
 datagram
 davidanson
 DDNS
-donny
+defconf
 dogtail
+donny
 dotenv
 DSL # domain specific language
-EVP
 env
-eventtap
 esbuild
 ETL
+eventtap
+EVP
 execa
 fat-chr
-FlaUI
 figcaption
+FlaUI
 frontends
 haakonnessjoen
 Hammerspoon
-hostfwd
 HMAC
+hostfwd
 IPC # inter-process communications
 iscsi
 jabb3rd
@@ -101,8 +101,8 @@ mactelnet
 mactelnetd
 MCP
 MIB
-MikroTik
 mikropkl
+MikroTik
 MNDP
 netmiko # [Multi-vendor library to simplify Paramiko SSH connections to network devices](https://github.com/ktbyers/netmiko)
 netwatch
@@ -111,32 +111,33 @@ nvme-over-tcp # supported by RouterOS **with** rose-storage.npk extra-package
 OID
 PII # Personally Identifiable Information
 POV
-proplist
 PRGA
+proplist
 pywinauto
-qmljsdebugger
 QML
+qmljsdebugger
 quickchr
 RAML
-remotehub
 readcdb
+remotehub
 restraml
-rosetta
 romon
 ros
+rosetta
 routeros
 routeros-skills
 scp
 scriptability
 scriptable
-skillcheck
 Sikuli
 SikuliX
-SPI
+skillcheck
 SNMP
-subarray
+SPI
 SRP
 strawman
+subarray
+tcode
 terminal-over-winbox # [Pure Python implementation of the MikroTik WinBox terminal protocol — encrypted CLI access to RouterOS devices over TCP port 8291](https://github.com/subixonfire/winbox-terminal-protocol)
 tgz
 tikbook
@@ -145,7 +146,6 @@ tikoci
 TIKOCI
 tiktui
 TLV
-tcode
 traceroute
 tsc
 tzsp
@@ -155,9 +155,9 @@ UIA
 uvx
 vcs
 venv
-viw2
 vite
 vitest
+viw2
 vrf
 webproxy
 WinAppDriver
@@ -165,5 +165,6 @@ winbox
 Wireshark
 workstreams
 XCUI
+XDG
 YYYYMMDDX
 zod
