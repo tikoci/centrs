@@ -19,9 +19,9 @@ Single source of truth for feature status and what to work on next.
 | Feature | Status | Governing spec | Notes |
 | --- | --- | --- | --- |
 | CLI settings and precedence | `coded` | S004 (Accepted) | Unit-tested; CHR interaction not yet validated |
-| Structured errors (shape) | `coded` | S007 (Draft) | Error shapes exist; not validated against live CHR failure modes |
-| `retrieve` via REST | `coded` | S006 (Draft) | `--validate` defaults to `true`; validation logic uses `/console/inspect` and is untested — likely broken. Run `bun run test:integration` to expose failures |
-| `retrieve` integration test | `coded` | S008 (Draft) | Test exists at `test/integration/rest-retrieve.test.ts`; it tests `/system/resource` and would catch the validation bug — run it |
+| Structured errors (shape) | `coded` | S007 (Draft) | Error shapes exist; error code `transport/connection-refused` maps to `transport/network` on unreachable host — integration test exposes this |
+| `retrieve` via REST | `smoke-passed` | S006 (Draft) | `/system/resource` retrieves successfully (validate=false). Default `validate=true` broken — `/console/inspect` path format untested. See open questions. |
+| `retrieve` integration test | `smoke-passed` | S008 (Draft) | `test/integration/rest-retrieve.test.ts` runs against CHR; 1/2 tests pass. Failing test: unreachable host error code mismatch |
 | CDB device lookup | `coded` | S003 (Accepted) | Lookup code exists; not tested end-to-end |
 | `execute` via REST | `idea` | — | Not started |
 | `update` via REST | `idea` | — | Not started |
@@ -38,9 +38,9 @@ Single source of truth for feature status and what to work on next.
 
 Ordered by priority. Do not begin a later item unless earlier `coded` items have reached `smoke-passed`.
 
-1. **Run `bun run test:integration`** — the integration test for `retrieve` already exists (`test/integration/rest-retrieve.test.ts`). Run it and fix what fails. The first failure will be the validation path; follow the code to `src/retrieve.ts` `inspectAttributes()` and the `/console/inspect` REST call.
+1. **Fix error code mismatch in unreachable-host path** — integration test shows `transport/network` is returned instead of `transport/connection-refused` when the host is down. Trace through `src/errors.ts` and the REST fetch error handler to find where the code is assigned. Fix must be validated with `bun run test:integration`.
 
-2. **Fix `--validate` default** — if the `/console/inspect` path cannot be quickly fixed, change the default from `true` to `false` so the CLI is usable while the validate path is worked on. CHR evidence is required before enabling validate-by-default again. This is a one-line change (`src/retrieve.ts`) but should only be committed after confirming behaviour with `bun run test:integration`.
+2. **Fix `--validate` default / `/console/inspect` path** — `retrieve /ip/address` and `retrieve /system/resource` both fail with `[routeros/unsupported-path]` when `validate=true` (the default). Either fix the path format in `inspectAttributes()` (`src/retrieve.ts`) with CHR evidence, or temporarily change the default to `false`. CHR evidence required before re-enabling.
 
 3. **S006 → Accepted** — the open questions in S006 are answered in `.scratch/readme-answers-nextsteps.md`. Promote those answers into S006, accept the spec, and remove the "grounding gate" language.
 
