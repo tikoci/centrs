@@ -2,33 +2,34 @@
 
 All notable changes to this repository should be recorded here.
 
-`centrs` is still pre-alpha, so early entries may describe shifts in staged
-specs, workflow, or contributor expectations before they describe a broad user
-surface. Keep version bumps and release notes aligned once the first real
-transport lands.
+The product evolves as a stream of changes; there are no alpha gates.
+Per-feature status is tracked in `docs/MATRIX.md`. Use this file for
+documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
-### Added
-
-- A clearer implementation snapshot in `README.md` so the documented surface does
-  not imply more runnable behavior than the repository currently has.
-- Draft spec `S007` for structured errors and bug-report contracts.
-- Draft spec `S008` for `quickchr`-backed harness tiers and RouterOS version
-  policy.
-- Work items `20260504A-typed-core-seams` and `20260504B-quickchr-harness` to
-  stage the missing shared seams and test-harness work before transport growth.
-- Work item `20260504C-name-resolution-and-discovery` to stage the still-open
-  policy for discovery-backed names, cache freshness, and `centrs check`.
-
 ### Changed
 
-- `S006`, `docs/ARCHITECTURE.md`, and `docs/WORKFLOW.md` now make the cautious
-  alpha sequencing explicit: shared seams, harness confidence, and developer UX
-  come before transport breadth.
-- All current specs now use regularized YAML front matter for status,
-  supersession, scope, and review source metadata.
-- The alpha docs now reflect the clarified direction from the review answer pass:
-  `retrieve` stays first, WinBox CDB participates in alpha resolution, REST is
-  the first adapter but not the shared contract baseline, and timeout is a
-  first-class cross-surface setting.
+- **Workflow restructure.** Replaced `docs/specs/`, `docs/WORKFLOW.md`,
+  `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, and `work/` with three durable
+  surfaces:
+  - `docs/CONSTITUTION.md` — the load-bearing rules (validation as product,
+    result envelope, error model + URL scheme, settings precedence, identity,
+    protocol selection, done = CHR-passed).
+  - `docs/MATRIX.md` — command×protocol grid; the only status surface.
+  - `commands/<name>/{README,examples}.md` — per-command design and
+    executable example list that gates "done."
+- Done definition codified in
+  `.github/instructions/done-definition.instructions.md`: a feature is done
+  when its examples are green on real CHR via `bun run test:integration`.
+  Disabling validation to make a test pass is forbidden; validation is the
+  product.
+
+### Removed
+
+- `docs/specs/S001`–`S008`, `docs/WORKFLOW.md`, `docs/ROADMAP.md`,
+  `docs/ARCHITECTURE.md`, all of `work/`, and the
+  `docs-specs-lifecycle` / `work-directory` / `integration-testing`
+  instruction files. Their durable content folded into the constitution and
+  per-command files; the rest was scaffolding for a workflow that did not
+  pay off.

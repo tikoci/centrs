@@ -1,5 +1,5 @@
 ---
-applyTo: "src/**,docs/specs/S002-protocols-and-access.md,docs/specs/S003-device-discovery-and-cache.md,docs/specs/S004-cli-settings-and-precedence.md"
+applyTo: "src/**,docs/CONSTITUTION.md,commands/**"
 ---
 
 # Actionable errors

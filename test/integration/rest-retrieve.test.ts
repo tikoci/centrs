@@ -73,7 +73,7 @@ async function startQuickChr(
 	return quickChrModule.QuickCHR.start({ channel });
 }
 
-describeFast("alpha REST retrieve against CHR (S006)", () => {
+describeFast("REST retrieve against CHR", () => {
 	test("retrieves /system/resource as JSON", async () => {
 		const chr = await startQuickChr(
 			(readEnv(Bun.env, "CENTRS_CHR_CHANNEL") as

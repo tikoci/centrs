@@ -1,0 +1,1 @@
+> TODO: should explain the structure more, avoid docs/CONSTITUTION.md

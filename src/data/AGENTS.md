@@ -1,6 +1,7 @@
 # Data Source Rules
 
-Follow `docs/specs/S003-device-discovery-and-cache.md`.
+Follow `docs/CONSTITUTION.md` (identity / CDB sections) and
+`commands/devices/README.md`.
 
 - Keep device source provenance visible: explicit input, environment, SQLite cache, WinBox CDB, The Dude `dude.db`, and MNDP are not equally authoritative.
 - Do not silently persist credentials or discovered devices. Persistence must be controlled by a typed setting and explained in interactive output.

@@ -1,13 +1,12 @@
 /**
  * Protocol adapter registry.
  *
- * No transport is implemented yet. This file is the typed seam future adapters
- * plug into so that the CLI, MCP, TUI, and proxy frontends can discover
- * adapters, capabilities, and `via` identifiers from one source.
+ * Typed seam that adapters plug into so CLI, MCP, TUI, and proxy frontends
+ * can discover adapters, capabilities, and `via` identifiers from one source.
  *
- * See:
- * - docs/specs/S002-protocols-and-access.md
- * - docs/specs/S006-alpha-first-command.md
+ * Status per protocol is the implementation reality (`implemented` flag).
+ * Per-cell status across commands is in `docs/MATRIX.md`. Selection rules
+ * are in `docs/CONSTITUTION.md` (protocol selection).
  */
 
 export type ProtocolCapability =
@@ -31,7 +30,7 @@ export const protocolPlans = [
 		id: "rest-api",
 		capabilities: ["retrieve", "update", "execute", "transfer", "proxy"],
 		notes:
-			"RouterOS /rest. retrieve is coded but not integration-tested against CHR yet. Other capabilities are staged.",
+			"RouterOS /rest. retrieve coded; cell status tracked in docs/MATRIX.md. Other capabilities are staged.",
 		implemented: true,
 	},
 	{

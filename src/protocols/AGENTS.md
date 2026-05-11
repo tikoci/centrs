@@ -1,6 +1,7 @@
 # Protocol Rules
 
-Follow `docs/specs/S002-protocols-and-access.md`.
+Follow `docs/CONSTITUTION.md` (protocol selection section) and the
+appropriate `commands/<name>/README.md`.
 
 - Model protocols by capabilities, not by frontend.
 - Ground protocol facts before implementation: RouterOS service/API/CLI path,

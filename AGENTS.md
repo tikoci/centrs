@@ -1,21 +1,21 @@
-# Agent Workflow
+# Agents
 
-Start here, then load only the files relevant to the paths you are changing:
+Three files cover this project. Read them in this order:
 
-- `README.md` explains the product and CLI direction.
-- `docs/ARCHITECTURE.md` explains system boundaries.
-- `docs/WORKFLOW.md` explains how `work/`, specs, source, and tests stay aligned.
-- `docs/specs/` contains accepted requirements.
-- `work/20260430A-initial-design/GOAL.md` is historical grounding, not the active source of truth.
-- `docs/ROADMAP.md` is the single source of truth for feature status and what to work on next.
-- Directory-level `AGENTS.md` files contain local rules.
-- `.github/instructions/` contains Copilot-native path-specific rules with `applyTo` metadata.
+1. `docs/CONSTITUTION.md` — the load-bearing rules. Validation, envelope,
+   errors, settings, identity, protocol selection, done definition.
+2. `docs/MATRIX.md` — the command×protocol grid. The only status surface.
+   Find the highest-priority not-`CHR-passed` cell; that is the next work.
+3. `commands/<name>/README.md` and `commands/<name>/examples.md` — the
+   executable spec for the cell you're working on.
 
-Use fleet/subagents for independent workstreams such as docs, source, tests, workflows, and security. Keep SQL todo state authoritative when it is available.
+When those three are clear, write code or tests. Do not write more prose.
 
-Prefer updating a scoped rule, spec, or directory `AGENTS.md` over adding more root-level prose. If an instruction gap appears during work, capture it in the relevant work item status and then promote it to the smallest durable instruction file.
+## Done definition
 
-Copilot CLI's documented instruction sources include `AGENTS.md`, `.github/copilot-instructions.md`, and `.github/instructions/`. VS Code/Copilot Chat also supports nearest `AGENTS.md` behavior when nested AGENTS files are enabled. Use `/instructions` or `/env` to confirm what the active client loaded.
+A feature is done when its examples in `commands/<name>/examples.md` are green
+on real CHR via `bun run test:integration`. Code existing is not done. Unit
+tests passing is not done. See `.github/instructions/done-definition.instructions.md`.
 
 ## Quick commands
 
@@ -30,43 +30,48 @@ bun run lint:ci
 
 ## Repo map
 
-| Path | Purpose |
-| --- | --- |
-| `README.md` | Product overview and planned CLI manual. |
-| `docs/ARCHITECTURE.md` | System boundaries and core concepts. |
-| `docs/WORKFLOW.md` | Work item to spec to source workflow. |
-| `docs/ROADMAP.md` | Feature status, priority order, and open decisions. |
-| `work/` | Exploration, grounding, and multi-session context. |
-| `src/` | Bun/TypeScript source. |
-| `test/` | Unit, integration, and fixture space. |
-| `.github/instructions/` | Copilot-native path-specific instructions with `applyTo` metadata. |
-| `.github/workflows/` | CI, QA/security, release, docs, and lab automation. |
+| Path                        | Purpose                                                            |
+| --------------------------- | ------------------------------------------------------------------ |
+| `README.md`                 | Product overview and CLI manual.                                   |
+| `docs/CONSTITUTION.md`      | Load-bearing rules.                                                |
+| `docs/MATRIX.md`            | Command×protocol grid; only status source of truth.                |
+| `commands/<name>/`          | Per-command README + examples (the executable spec).               |
+| `src/`                      | Bun/TypeScript source.                                             |
+| `test/`                     | Unit, integration, and fixture space.                              |
+| `.github/instructions/`     | Path-scoped Copilot instructions with `applyTo` metadata.          |
+| `.github/workflows/`        | CI, QA/security, release, docs, and lab automation.                |
 
-## Working rules
+## Rules of thumb
 
-These are summaries only; the specs and scoped rules are normative.
-
-- RouterOS syntax/semantics boundary: `docs/ARCHITECTURE.md`, `docs/specs/S002-protocols-and-access.md`.
-- RouterOS facts: prefer `rosetta` MCP tools for command paths, properties, changelogs, versions, and docs before web search.
-- Settings vocabulary: `docs/specs/S004-cli-settings-and-precedence.md`.
-- Protocol grounding before first implementation: `docs/specs/S006-alpha-first-command.md`.
-- RouterOS/CHR grounding: `test/AGENTS.md`, `docs/ARCHITECTURE.md`.
-- Feature status and what to work on next: `docs/ROADMAP.md`.
-- Generated docs preference: `.github/instructions/generated-docs.instructions.md`.
+- Prefer `rosetta` MCP tools for RouterOS facts before web search.
+- Update the constitution, the matrix, or a per-command file — not a new doc.
+- A directory `AGENTS.md` is for local constraints only.
+- `.scratch/` is not authoritative and must not be referenced from durable
+  files. Treat it as in-flight only.
 
 ## Verification
 
-Run `bun run lint && bun run test && bun run build` before finishing code changes. Run `bun run lint:ci` when changing docs, instructions, security config, spelling dictionaries, or workflow files.
+Run `bun run lint && bun run test && bun run build` before finishing code
+changes. Run `bun run lint:ci` when changing docs, instructions, security
+config, spelling dictionaries, or workflow files.
 
-**Transport code is not done until `bun run test:integration` passes.** For any change that touches RouterOS transport (`src/retrieve.ts`, `src/protocols/`, `test/integration/`): run `bun run test:integration` and confirm it passes before marking work complete. "Coded" is not "done". "Integration-tested" is "done". See `docs/ROADMAP.md` for current feature status and `test/AGENTS.md` for test tier definitions.
+**Transport / RouterOS-touching code is not done until
+`bun run test:integration` passes.** This is the only "done" rule for cells
+that involve a router.
 
 ## Security
 
-Follow `SECURITY.md` and `.github/instructions/github-security-quality.instructions.md`. Treat credential handling, RouterOS write execution, proxy listeners, and local discovery data as security-sensitive surfaces.
+Follow `SECURITY.md` and
+`.github/instructions/github-security-quality.instructions.md`. Treat
+credential handling, RouterOS write execution, proxy listeners, and local
+discovery data as security-sensitive surfaces.
 
 ## Do not
 
-- Do not commit secrets, real router credentials, private CDB/Dude databases, or packet captures with sensitive data.
-- Do not silently fall back to another protocol when the caller requested a specific `via`.
+- Do not commit secrets, real router credentials, private CDB/Dude databases,
+  or packet captures with sensitive data.
+- Do not silently fall back to another protocol when the caller pinned `--via`.
 - Do not make generated output the hand-edited source of truth.
-- Do not expand root instructions when a scoped rule, spec, or directory `AGENTS.md` would be more precise.
+- Do not add new docs to capture status, plans, or roadmaps. Use the matrix
+  and per-command files.
+- Do not disable validation to make a test pass; validation is the product.
