@@ -45,6 +45,11 @@ export interface WinBoxCdbField {
 	marker: number;
 	tcode: number;
 	value: WinBoxCdbFieldValue;
+	// When the decoder hits a tcode it doesn't recognize, it can't know the
+	// value's length without the schema, so it captures everything after the
+	// header — value, plus any subsequent fields — as a raw Uint8Array tail.
+	// On encode, a rawTail field emits its header followed by `value` verbatim.
+	rawTail?: true;
 }
 
 export interface WinBoxCdbRecord {
@@ -420,10 +425,10 @@ export function parseWinBoxCdbField(cursor: ByteCursor): WinBoxCdbField {
 			}
 			return { tag, marker, tcode, value: values };
 		}
-		default:
-			throw new Error(
-				`Unsupported WinBox CDB field type 0x${tcode.toString(16).padStart(2, "0")}.`,
-			);
+		default: {
+			const tail = cursor.readSlice(cursor.remaining());
+			return { tag, marker, tcode, value: tail, rawTail: true };
+		}
 	}
 }
 
@@ -553,6 +558,10 @@ export function encodeWinBoxCdbField(field: WinBoxCdbField): Uint8Array {
 }
 
 function encodeFieldValue(field: WinBoxCdbField): Uint8Array {
+	if (field.rawTail) {
+		return asUint8ArrayValue(field.value);
+	}
+
 	if (field.marker === 0x11) {
 		return Uint8Array.from([asByte(field.value)]);
 	}

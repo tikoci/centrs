@@ -2,13 +2,17 @@ const ERROR_DETAILS_BASE_URL = "https://tikoci.github.io/centrs/errors/";
 
 export type CentrsErrorCode =
 	| `auth/${string}`
+	| `cdb/${string}`
+	| `identity/${string}`
 	| `input/${string}`
 	| `internal/${string}`
 	| `routeros/${string}`
 	| `settings/${string}`
 	| `target/${string}`
 	| `tool/${string}`
-	| `transport/${string}`;
+	| `transport/${string}`
+	| `usage/${string}`
+	| `validation/${string}`;
 
 export interface CentrsErrorInit {
 	code: CentrsErrorCode;

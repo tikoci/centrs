@@ -30,8 +30,16 @@ A cell advances only with the matching evidence in the same change.
 | devices  | —             | —             | —             | —             |
 | check    | `not-started` | `not-started` | `not-started` | `not-started` |
 
-`devices` does not use a transport in the protocol sense; its data sources
-(CDB, MNDP cache, dude.db import) are tracked in `commands/devices/README.md`.
+`devices` does not use a transport in the protocol sense, so its grid row
+stays `—`. Its cell state is `coded`: the read-only subset (`list`, `show`,
+`groups`) is implemented in `src/devices.ts` and green under
+`bun run test:integration` against a CDB fixture built in-test from the
+known CDB primitives (open + encrypted via `--cdb-password`). It advances
+to `CHR-passed` when every example in `commands/devices/examples.md` is
+green via `bun run test:integration` — that still requires `add`, `edit`,
+`set`, `rm`, ambiguity / `--match`, and the provenance/override examples.
+Data sources (CDB, ARP cache, MNDP cache, `dude.db` import) and their
+phasing live in `commands/devices/README.md`.
 
 ## Priority order
 

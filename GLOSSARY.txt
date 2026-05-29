@@ -49,6 +49,7 @@ AT-SPI
 awk
 axuielement
 backpressure
+bak
 bjjj
 btest.exe # Mikrotik /tool/bandwidth-test client for windows
 bunfig
@@ -61,6 +62,7 @@ ciphertext
 cli
 cloc
 cmp
+cpus
 crossref
 datagram
 davidanson
@@ -76,6 +78,7 @@ ETL
 eventtap
 EVP
 execa
+fanout
 fat-chr
 figcaption
 FlaUI
@@ -138,6 +141,7 @@ SRP
 strawman
 subarray
 tcode
+tcodes
 terminal-over-winbox # [Pure Python implementation of the MikroTik WinBox terminal protocol — encrypted CLI access to RouterOS devices over TCP port 8291](https://github.com/subixonfire/winbox-terminal-protocol)
 tgz
 tikbook

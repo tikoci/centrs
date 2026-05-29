@@ -1,31 +1,245 @@
 # devices
 
-List, inspect, and resolve RouterOS targets known to centrs.
+List, inspect, and edit RouterOS targets known to centrs. `devices` is the
+user-facing surface over the device registry described in
+`docs/CONSTITUTION.md`. It is the only command that may *write* to the CDB.
 
-Status: `not-started`. This file is a stub.
+Status: `designed`. See `docs/MATRIX.md` for the matrix row.
 
-## Intent
+`devices` does not use a transport in the protocol sense and performs no
+network IO in phase 1. Its sources are:
 
-`devices` is the user-facing surface over the device registry described in
-`docs/CONSTITUTION.md`. It does not use a transport in the protocol sense; it
-reads from:
+- explicit CLI input,
+- environment variables (`CENTRS_*`),
+- the CDB at `~/.config/tikoci/winbox.cdb` (override with `--cdb-file`),
+- (later) the MNDP cache, ARP cache, and `dude.db` import via `tikoci/donny`.
 
-- explicit input,
-- environment variables,
-- the CDB at `~/.config/tikoci/winbox.cdb` (or `--cdb-file`),
-- the MNDP cache (once implemented),
-- (later) `dude.db` import via `tikoci/donny`.
+## Identity model
 
-## Sketch
+The CDB record's `target` field IS the identity — the literal you type at the
+CLI. It is one of:
 
-- `centrs devices list` — show known targets and their provenance per source.
-- `centrs devices show <name|ip|mac>` — inspect one resolved target, including
-  which source filled each field and why.
-- `centrs devices groups` — list CDB groups (when CDB groups land).
+- an IPv4 address (`192.0.2.5`, optionally `host:port`),
+- an IPv6 address (`2001:db8::5`, optionally `[2001:db8::5]:port`),
+- a MAC (`AA:BB:CC:DD:EE:FF`, case-insensitive, separators normalized),
+- a DNS name (`edge1.lan`).
 
-## Open questions
+The comment is *not* a lookup key. To make `edge1` resolvable, the CDB entry's
+target must be `edge1` (or `edge1.lan`). The comment carries free text plus an
+optional centrs **kv-soup** of option overrides — see below.
 
-- Output shape for "merged provenance" — likely a per-field source map.
-- Whether `devices` should ever cause network IO (probably no; that's `check`).
+When the CLI target is a literal IP / IPv6 / MAC that matches an entry's
+target exactly, credentials and other CDB-resident fields are loaded from that
+entry. If no entry matches, the call still proceeds but `--username` /
+`--password` (or `CENTRS_USERNAME` / `CENTRS_PASSWORD`) become mandatory.
 
-Defer until name resolution + MNDP cache are in scope.
+### Ambiguity
+
+If a typed target matches more than one entry (e.g. one IPv4 + one IPv6
+entry that share a DNS name in `target`, or two entries with the same MAC):
+
+- **TTY:** centrs prompts interactively, listing the matches and asking which
+  to use.
+- **Non-TTY:** centrs errors with `identity/ambiguous`. The error envelope
+  lists all matching entries (by `cdbRecordIndex` and `target`). The caller
+  can re-run with `--match=<exact-target>` to pin the choice.
+
+`--prefer-family=ipv4|ipv6` is a non-interactive way to break v4/v6 ties
+deterministically; with it set, no prompt is raised. It emits a warning
+when it actually selected between candidates.
+
+## Comment kv-soup (per-device overrides)
+
+The CDB `comment` field is free text. centrs additionally parses tokens
+shaped like `key=value` out of it and treats them as per-device defaults for
+its own settings. Recognized keys (allowlist):
+
+| Key        | Effect                                                                  |
+| ---------- | ----------------------------------------------------------------------- |
+| `via`      | Default transport for this device (`rest-api`, `native-api`, `ssh`, …). |
+| `validate` | `true` / `false`. `false` is the escape hatch; CLI overrides.           |
+| `timeout`  | Default request timeout in ms. Per-transport caps still apply.          |
+| `port`     | Non-default transport port. Omitted when equal to the protocol default. |
+
+Rules:
+
+- First-class CDB fields (`user`, `password`, `group`, `profile`, `session`)
+  must **not** appear in the kv-soup — they already have CDB tags. centrs
+  refuses to write them via `devices set`.
+- Unknown keys → `cdb/unknown-option` warning. The call still succeeds.
+- Tokens are shell-word tokenized. Values with spaces require double quotes
+  (`"…"`), with `\"` and `\\` escapes. `=` inside a quoted value is literal.
+- `commentMirror` is kept in sync with `comment` on every write.
+
+Precedence (lowest → highest): built-in defaults → project config →
+comment-kv → env (`CENTRS_*`) → CLI flag / API arg. `meta.settings` reports
+the winner and source per setting.
+
+## Groups
+
+Groups are CDB-native: each entry's `group` field is a single string. There
+is no group-definition record. A group is the set of all entries whose
+`group` value matches by exact, case-sensitive string compare. An entry with
+`group=""` belongs to no group.
+
+`--group <G>` on any command resolves to the membership set and fans out.
+
+## Fanout (multi-target invocations)
+
+Any command may receive multiple positional targets, one or more `--group`
+flags, or both. The resolved member set is de-duplicated by CDB record index.
+
+- Each member runs in parallel up to `--concurrency` (default
+  `max(1, floor(os.cpus().length / 2))`).
+- `--fail-fast` aborts pending members on the first failure.
+- The outer envelope's `data` is an array of inner envelopes, one per member,
+  preserving the order in which results completed. `ok` of the outer envelope
+  is `true` iff every inner envelope is `ok: true`.
+- Commands that are not safe to fan out (e.g. `terminal`) reject N > 1 with
+  `usage/fanout-not-supported`.
+
+## Subcommands
+
+```text
+centrs devices list [--group G] [--format json|yaml|text]
+centrs devices show <target> [--explain]
+centrs devices groups [--members]
+centrs devices add <target> [--user U] [--password P] [--group G]
+                             [--profile P] [--session S] [--comment "text k=v"]
+                             [--record-type ipAdmin|ipUser|macTarget|...]
+centrs devices edit <target> [--user U] [--password P] [--group G]
+                              [--profile P] [--session S]
+centrs devices set  <target> k=v [k=v ...]   # comment kv-soup overrides only
+centrs devices rm   <target>
+```
+
+- `list` shows resolved targets, their record type, group, and a one-line
+  provenance summary. No network IO.
+- `show` returns a single resolved target with the full per-field source map
+  in `meta.target`. `--explain` adds the raw CDB record dump under
+  `data.record`.
+- `groups` lists distinct non-empty group strings with member counts.
+  `--members` expands to the full membership per group.
+- `add` / `edit` modify first-class CDB fields. Both prompt before
+  overwriting an existing target unless `--force` is passed (`add` against an
+  existing target without `--force` errors `cdb/already-exists`).
+- `set` modifies only the comment kv-soup. Refuses to set keys that map to
+  first-class CDB fields. Refuses unknown keys when `--strict`.
+- `rm` removes a single entry. Group-wide deletes (`--group G`) require
+  `--force` (writes are large).
+
+## CDB write strategy
+
+All writes go through one helper that:
+
+1. Snapshots the current file to `~/.config/tikoci/winbox.cdb.bak.<iso8601>`.
+2. Keeps the last 5 backups, deletes older ones.
+3. Builds the new record set with unknown fields preserved verbatim (see
+   below).
+4. If the CDB was opened encrypted: re-encrypts with a freshly generated
+   32-byte salt (salt rotation on every write).
+5. Writes to `~/.config/tikoci/winbox.cdb.tmp.<pid>` and `fsync`s.
+6. `rename()` over the original (atomic on POSIX).
+
+Refusals:
+
+- Writing to an encrypted CDB without `--cdb-password` / `CENTRS_CDB_PASSWORD`
+  fails with `cdb/password-required`.
+- Writing to an unencrypted CDB with `--cdb-password` succeeds with the
+  existing `cdb/password-not-needed` warning. centrs does **not** silently
+  upgrade the file to encrypted; that requires `devices encrypt` (not in
+  phase 1).
+
+### Unknown CDB fields
+
+The current decoder knows tags 1–4, 6, 8, 9, 11, 12 and a fixed set of tcodes.
+WinBox writes additional fields (RoMON IPv6 addresses, future settings) that
+must round-trip.
+
+- On read: any field with an unknown tag is kept verbatim on
+  `WinBoxCdbRecord.fields`. A field with an unknown tcode is captured as a
+  `rawTail` field — its `value` is a `Uint8Array` carrying the remainder of
+  the record (its own bytes plus any subsequent fields) verbatim, since the
+  decoder cannot know the value length without the schema.
+- On write: known fields are re-encoded normally. A `rawTail` field is
+  emitted as its header (tag, marker, tcode) followed by `value` as raw
+  bytes. This round-trips WinBox-authored records that contain unknown
+  tcodes byte-for-byte. `devices add/edit/set/rm` will emit a
+  `cdb/unknown-field` warning when it preserves a record that carries
+  `rawTail` fields, listing the affected tags.
+
+## Envelope shape (target provenance)
+
+Every centrs envelope (not just `devices show`) carries:
+
+```ts
+meta.target = {
+  target: "edge1.lan",          // what the user typed, normalized
+  resolvedTarget: "edge1.lan",  // what we connect to (post DNS, post --match)
+  addressFamily: "ipv4" | "ipv6" | "mac" | "dns",
+  mac?: "AA:BB:CC:DD:EE:FF",
+  user: "admin",
+  group?: "prod-edge",
+  via: "rest-api",
+  cdbRecordIndex?: 7,           // index into CDB record array, if any
+  sources: {
+    user: "cdb",
+    password: "cdb",
+    via: "comment-kv",
+    validate: "cli",
+    timeout: "default",
+    // …per resolved setting
+  }
+}
+```
+
+For fanout calls, each inner envelope carries its own `meta.target`. The
+outer envelope's `meta.target` is replaced with `meta.targets` (the resolved
+member list and the group(s) that expanded into it).
+
+## Open questions (must be answered before `CHR-passed`)
+
+| Question | Affects | Notes |
+| --- | --- | --- |
+| Comment kv quoting & escaping edge cases (newlines, embedded `=`) | comment-kv parser | Initial proposal: shell-word tokenization, `"…"`, `\"` / `\\`. Confirm with a fixture set. |
+| MAC → IP resolution path for entries that don't carry an IP | retrieve / update / execute when target is a MAC | Phase-1 stance: CDB must carry the IP. See "Residual risks" below. |
+| WinBox compatibility check after salt rotation | encrypted writes | Need a manual round-trip ("open in WinBox after centrs write") gate before shipping `devices add`. |
+
+When a row is answered, fold it into this README and delete the row.
+
+## Residual risks
+
+- **Encrypted-CDB round-trip is untested end-to-end.** Salt rotation needs a
+  fixture test (centrs write → centrs read → bytes-identical-modulo-salt) plus
+  a manual "WinBox can still open this file" verification before `devices add`
+  / `edit` / `set` / `rm` ship for encrypted CDBs.
+- **Unknown-tcode preservation is opaque past the first unknown tcode.** The
+  decoder captures one `rawTail` blob; fields that follow the unknown tcode
+  inside the same record are kept inside that blob and cannot be surfaced
+  one-by-one. Acceptable for round-trip writes (the bytes survive); not
+  sufficient if a future cell needs to expose those individual fields.
+- **MAC → IP without MNDP.** The phase-1 stance is "CDB must carry the IP if a
+  MAC is used." Two fallbacks are planned for later phases, in order:
+  1. **ARP cache** (`/proc/net/arp` on Linux, `arp -an` on macOS) — local,
+     no network IO required, often sufficient on the same L2 segment. Add as
+     a resolver source under `meta.target.sources.ip = "arp"`.
+  2. **MNDP cache** — RouterOS neighbor announcements; requires a passive
+     listener subsystem.
+  Both are out of scope for the first `CHR-passed` of `devices`, but the
+  resolver interface must be shaped so they can be added without changing the
+  envelope.
+- **Comment kv-soup collisions with human prose.** Users may have existing
+  comments that contain `=` for non-kv reasons. The parser must require a
+  bare-word key with no leading whitespace inside the token and treat
+  free-form text outside `key=value` tokens as inert.
+
+## Notes for future cells
+
+- `devices` proper has no transport, but several flags on other commands
+  depend on its resolver (`--group`, `--match`, `--prefer-family`,
+  multi-target positionals). Those flags ship with their host command, not
+  with `devices`.
+- `dude.db` import lives in `tikoci/donny` and feeds the resolver via the
+  same envelope as the CDB. Provenance source label: `dude`.
+- The `centrs check` command will reuse the resolver and add a network probe;
+  `devices` itself stays IO-free.

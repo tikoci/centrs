@@ -235,6 +235,71 @@ describe("WinBox CDB", () => {
 		).toThrow("exceeds 65535 bytes");
 	});
 
+	test("preserves an unknown-tcode field as a rawTail and round-trips it", () => {
+		// Synthesize a record whose tail is a known string field (tag 4, tcode
+		// 0x21, value "hi") wire-encoded by hand, then prefixed with an unknown
+		// tcode field (tag 42, tcode 0x77) that carries 3 opaque bytes. Because
+		// the decoder doesn't know the length of 0x77, it must capture *both*
+		// the 3 opaque bytes and the trailing known field as one rawTail blob.
+		const knownStringField = Uint8Array.from([
+			0x04, 0x00, 0x00, 0x21, 0x02, 0x68, 0x69,
+		]);
+		const unknownPrefix = Uint8Array.from([0x2a, 0x00, 0x00, 0x77]);
+		const unknownPayload = Uint8Array.from([0xaa, 0xbb, 0xcc]);
+		const recordBody = new Uint8Array(
+			unknownPrefix.length + unknownPayload.length + knownStringField.length,
+		);
+		recordBody.set(unknownPrefix, 0);
+		recordBody.set(unknownPayload, unknownPrefix.length);
+		recordBody.set(
+			knownStringField,
+			unknownPrefix.length + unknownPayload.length,
+		);
+
+		// recordMagic 'M2' + declaredFieldCount=2 + flags=0 + body
+		const header = Uint8Array.from([0x4d, 0x32, 0x02, 0x00, 0x00, 0x00]);
+		const recordBytes = new Uint8Array(header.length + recordBody.length);
+		recordBytes.set(header, 0);
+		recordBytes.set(recordBody, header.length);
+
+		// openMagic + record-length prefix + record
+		const openMagic = Uint8Array.from([0x0d, 0xf0, 0x1d, 0xc0]);
+		const recordLen = Uint8Array.from([
+			recordBytes.length & 0xff,
+			(recordBytes.length >>> 8) & 0xff,
+			(recordBytes.length >>> 16) & 0xff,
+			(recordBytes.length >>> 24) & 0xff,
+		]);
+		const fileBytes = new Uint8Array(
+			openMagic.length + recordLen.length + recordBytes.length,
+		);
+		fileBytes.set(openMagic, 0);
+		fileBytes.set(recordLen, openMagic.length);
+		fileBytes.set(recordBytes, openMagic.length + recordLen.length);
+
+		const file = parseWinBoxCdb(fileBytes);
+		if (file.mode !== "open") {
+			throw new Error("Expected synthetic file to parse as open.");
+		}
+		const record = file.records[0];
+		if (!record) {
+			throw new Error("Expected one record.");
+		}
+		// One field, because the unknown-tcode field absorbed the rest as tail.
+		expect(record.fields.length).toBe(1);
+		const [field] = record.fields;
+		if (!field) {
+			throw new Error("Expected the rawTail field.");
+		}
+		expect(field.tag).toBe(0x2a);
+		expect(field.tcode).toBe(0x77);
+		expect(field.rawTail).toBe(true);
+		expect(field.value).toEqual(
+			new Uint8Array([0xaa, 0xbb, 0xcc, ...knownStringField]),
+		);
+		expect(encodeOpenWinBoxCdb(file.records)).toEqual(fileBytes);
+	});
+
 	test("rejects encrypted analysis on open CDB input", () => {
 		expect(() => analyzeEncryptedWinBoxCdb(readFixture("min.cdb"))).toThrow(
 			"Expected an encrypted WinBox CDB file",
