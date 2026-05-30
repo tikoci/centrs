@@ -60,20 +60,23 @@ export const protocolPlans = [
 	},
 	{
 		id: "mac-telnet",
-		capabilities: ["terminal"],
-		notes: "Layer-2 emergency access. Requires platform tooling.",
+		capabilities: ["execute", "terminal"],
+		notes:
+			"Layer-2 execute and terminal path. Default execute route for unresolved MAC targets.",
 		implemented: false,
 	},
 	{
 		id: "romon",
-		capabilities: ["terminal"],
-		notes: "Routed management overlay. Requires RouterOS-side enablement.",
+		capabilities: ["execute"],
+		notes:
+			"Routed management overlay for execute. Lower priority than mac-telnet.",
 		implemented: false,
 	},
 	{
 		id: "winbox-terminal",
-		capabilities: ["terminal"],
-		notes: "Local WinBox tooling required.",
+		capabilities: ["execute"],
+		notes:
+			"WinBox terminal protocol for execute. Lower priority than mac-telnet.",
 		implemented: false,
 	},
 ] as const satisfies readonly ProtocolPlan[];

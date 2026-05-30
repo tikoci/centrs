@@ -3,8 +3,8 @@
 Write RouterOS state. Models `<path>/<verb>` where the verb is `add`, `set`,
 `remove`, or `disable`/`enable` style.
 
-Status: `not-started`. This file is a stub. Promote when `retrieve` is
-`CHR-passed` and `execute` has shaped the envelope for write-shaped output.
+Status: `not-started`. This file is a stub. Promote when CDB groups/fanout and
+`execute` have shaped the envelope for write-shaped output.
 
 ## Intent
 

@@ -4,15 +4,17 @@ List, inspect, and edit RouterOS targets known to centrs. `devices` is the
 user-facing surface over the device registry described in
 `docs/CONSTITUTION.md`. It is the only command that may *write* to the CDB.
 
-Status: `designed`. See `docs/MATRIX.md` for the matrix row.
+Status: read-only subset `coded`; CDB mutation remains designed. See
+`docs/MATRIX.md` for the matrix row.
 
-`devices` does not use a transport in the protocol sense and performs no
-network IO in phase 1. Its sources are:
+`devices` does not use a transport in the protocol sense and does not contact a
+RouterOS device in phase 1. Its sources are:
 
 - explicit CLI input,
 - environment variables (`CENTRS_*`),
 - the CDB at `~/.config/tikoci/winbox.cdb` (override with `--cdb-file`),
-- (later) the MNDP cache, ARP cache, and `dude.db` import via `tikoci/donny`.
+- local ARP cache for MAC → IP resolution when explicitly enabled,
+- (later) the MNDP cache and `dude.db` import via `tikoci/donny`.
 
 ## Identity model
 
@@ -60,6 +62,7 @@ its own settings. Recognized keys (allowlist):
 | `validate` | `true` / `false`. `false` is the escape hatch; CLI overrides.           |
 | `timeout`  | Default request timeout in ms. Per-transport caps still apply.          |
 | `port`     | Non-default transport port. Omitted when equal to the protocol default. |
+| `source`   | Provenance marker for discovered/imported records (`mndp`, `dude`, …).  |
 
 Rules:
 
@@ -83,6 +86,8 @@ is no group-definition record. A group is the set of all entries whose
 `group=""` belongs to no group.
 
 `--group <G>` on any command resolves to the membership set and fans out.
+`discover --save --timeout 60s` writes MNDP records with `group=discovered`
+unless the caller supplies another group.
 
 ## Fanout (multi-target invocations)
 
@@ -107,10 +112,9 @@ centrs devices groups [--members]
 centrs devices add <target> [--user U] [--password P] [--group G]
                              [--profile P] [--session S] [--comment "text k=v"]
                              [--record-type ipAdmin|ipUser|macTarget|...]
-centrs devices edit <target> [--user U] [--password P] [--group G]
-                              [--profile P] [--session S]
+centrs devices edit <target>
 centrs devices set  <target> k=v [k=v ...]   # comment kv-soup overrides only
-centrs devices rm   <target>
+centrs devices remove <target>
 ```
 
 - `list` shows resolved targets, their record type, group, and a one-line
@@ -120,12 +124,13 @@ centrs devices rm   <target>
   `data.record`.
 - `groups` lists distinct non-empty group strings with member counts.
   `--members` expands to the full membership per group.
-- `add` / `edit` modify first-class CDB fields. Both prompt before
-  overwriting an existing target unless `--force` is passed (`add` against an
-  existing target without `--force` errors `cdb/already-exists`).
+- `add` modifies first-class CDB fields and prompts before overwriting an
+  existing target unless `--force` is passed (`add` against an existing target
+  without `--force` errors `cdb/already-exists`).
+- `edit` is the TUI/wizard form for changing first-class CDB fields.
 - `set` modifies only the comment kv-soup. Refuses to set keys that map to
   first-class CDB fields. Refuses unknown keys when `--strict`.
-- `rm` removes a single entry. Group-wide deletes (`--group G`) require
+- `remove` removes a single entry. Group-wide deletes (`--group G`) require
   `--force` (writes are large).
 
 ## CDB write strategy
@@ -164,7 +169,7 @@ must round-trip.
 - On write: known fields are re-encoded normally. A `rawTail` field is
   emitted as its header (tag, marker, tcode) followed by `value` as raw
   bytes. This round-trips WinBox-authored records that contain unknown
-  tcodes byte-for-byte. `devices add/edit/set/rm` will emit a
+  tcodes byte-for-byte. `devices add/edit/set/remove` will emit a
   `cdb/unknown-field` warning when it preserves a record that carries
   `rawTail` fields, listing the affected tags.
 
@@ -202,7 +207,7 @@ member list and the group(s) that expanded into it).
 | Question | Affects | Notes |
 | --- | --- | --- |
 | Comment kv quoting & escaping edge cases (newlines, embedded `=`) | comment-kv parser | Initial proposal: shell-word tokenization, `"…"`, `\"` / `\\`. Confirm with a fixture set. |
-| MAC → IP resolution path for entries that don't carry an IP | retrieve / update / execute when target is a MAC | Phase-1 stance: CDB must carry the IP. See "Residual risks" below. |
+| ARP resolver test scheme | retrieve / update / execute when target is a MAC | Need deterministic fixtures per OS plus one live same-L2 proof before relying on ARP in integration. |
 | WinBox compatibility check after salt rotation | encrypted writes | Need a manual round-trip ("open in WinBox after centrs write") gate before shipping `devices add`. |
 
 When a row is answered, fold it into this README and delete the row.
@@ -212,22 +217,17 @@ When a row is answered, fold it into this README and delete the row.
 - **Encrypted-CDB round-trip is untested end-to-end.** Salt rotation needs a
   fixture test (centrs write → centrs read → bytes-identical-modulo-salt) plus
   a manual "WinBox can still open this file" verification before `devices add`
-  / `edit` / `set` / `rm` ship for encrypted CDBs.
+  / `edit` / `set` / `remove` ship for encrypted CDBs.
 - **Unknown-tcode preservation is opaque past the first unknown tcode.** The
   decoder captures one `rawTail` blob; fields that follow the unknown tcode
   inside the same record are kept inside that blob and cannot be surfaced
   one-by-one. Acceptable for round-trip writes (the bytes survive); not
   sufficient if a future cell needs to expose those individual fields.
-- **MAC → IP without MNDP.** The phase-1 stance is "CDB must carry the IP if a
-  MAC is used." Two fallbacks are planned for later phases, in order:
-  1. **ARP cache** (`/proc/net/arp` on Linux, `arp -an` on macOS) — local,
-     no network IO required, often sufficient on the same L2 segment. Add as
-     a resolver source under `meta.target.sources.ip = "arp"`.
-  2. **MNDP cache** — RouterOS neighbor announcements; requires a passive
-     listener subsystem.
-  Both are out of scope for the first `CHR-passed` of `devices`, but the
-  resolver interface must be shaped so they can be added without changing the
-  envelope.
+- **MAC → IP without CDB.** Resolver order is CDB first, then local ARP when
+  the caller opts into IP-level access. For `execute`, an unresolved MAC
+  defaults to mac-telnet instead. MNDP arrives through `discover --save` and
+  records provenance under `group=discovered`; it is not authoritative
+  inventory.
 - **Comment kv-soup collisions with human prose.** Users may have existing
   comments that contain `=` for non-kv reasons. The parser must require a
   bare-word key with no leading whitespace inside the token and treat
@@ -242,4 +242,4 @@ When a row is answered, fold it into this README and delete the row.
 - `dude.db` import lives in `tikoci/donny` and feeds the resolver via the
   same envelope as the CDB. Provenance source label: `dude`.
 - The `centrs check` command will reuse the resolver and add a network probe;
-  `devices` itself stays IO-free.
+  `devices` itself stays RouterOS-IO-free.

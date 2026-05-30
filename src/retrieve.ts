@@ -681,22 +681,22 @@ function resolveProtocol(
 	}
 
 	const plan = getProtocolPlan(via.value as RouterOsProtocol);
+	if (!plan.capabilities.includes("retrieve")) {
+		throw new CentrsError({
+			code: "routeros/unsupported-capability",
+			summary: `Protocol ${via.value} does not support the retrieve capability.`,
+			remediation:
+				"Choose a retrieve-capable protocol such as `rest-api`, `native-api`, or `snmp`.",
+			context: { via: via.value, capability: "retrieve" },
+		});
+	}
+
 	if (!plan.implemented) {
 		throw new CentrsError({
 			code: "routeros/protocol-not-implemented",
 			summary: `Protocol ${via.value} is planned but not implemented yet.`,
 			remediation:
 				"Use `--via rest-api` for the current alpha retrieve implementation.",
-			context: { via: via.value, capability: "retrieve" },
-		});
-	}
-
-	if (!plan.capabilities.includes("retrieve")) {
-		throw new CentrsError({
-			code: "routeros/unsupported-capability",
-			summary: `Protocol ${via.value} does not support the retrieve capability.`,
-			remediation:
-				"Choose a protocol that supports retrieve, such as `rest-api` or `snmp` once implemented.",
 			context: { via: via.value, capability: "retrieve" },
 		});
 	}

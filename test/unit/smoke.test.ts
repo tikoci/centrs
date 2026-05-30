@@ -20,6 +20,11 @@ describe("centrs project baseline", () => {
 
 	test("exports one protocol registry source of truth", () => {
 		expect(getProtocolPlan("rest-api").capabilities).toContain("retrieve");
+		expect(getProtocolPlan("mac-telnet").capabilities).toContain("execute");
+		expect(getProtocolPlan("romon").capabilities).toContain("execute");
+		expect(getProtocolPlan("winbox-terminal").capabilities).toContain(
+			"execute",
+		);
 		expect(
 			protocolsWithCapability("terminal").map((plan) => plan.id),
 		).toContain("ssh");

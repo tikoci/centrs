@@ -1,7 +1,9 @@
 # retrieve
 
-Read RouterOS state. Models `<path>/<verb>` where the verb is `print`-style
-(`print`, `get`, and async POST-shaped reads as they're added).
+Read RouterOS state. RouterOS menu reads model `<path>/<verb>` where the verb
+is `print`-style (`print`, `get`, and async POST-shaped reads as they're
+added). SNMP reads use `retrieve <router> snmp <oid|MIB name>` and resolve
+names through a MikroTik MIB cache downloaded from mikrotik.com.
 
 > TODO: "POST-shaped reads" need to be identified from
 
@@ -12,6 +14,7 @@ values, all wrapped in the standard envelope (`docs/CONSTITUTION.md`).
 
 ```text
 centrs retrieve <router> <path>[/<shortcut>] [<.id|name>] [flags]
+centrs retrieve <router> snmp <oid|MIB name> [flags]
 ```
 
 - `<router>` — IP, DNS, MAC, or CDB-resolved name. See constitution: identity.
@@ -21,6 +24,9 @@ centrs retrieve <router> <path>[/<shortcut>] [<.id|name>] [flags]
   reserved shortcut — currently none are defined; future examples include
   `defconf` → `/system/default-configuration/get`.
 - `<.id|name>` — optional row selector for menus that have rows.
+- `snmp <oid|MIB name>` — planned retrieve-only SNMP form. OIDs are used
+  directly; MIB names are resolved from the cached MikroTik MIB that matches
+  the selected RouterOS version/channel once that cache is implemented.
 
 ## Flags
 
@@ -51,6 +57,9 @@ alternatives in the error envelope.
 If `--all-attributes` is combined with `--attribute(s)`, fail with
 `usage/conflicting-flags` *before* hitting the network.
 
+SNMP validation is separate from RouterOS `/console/inspect`: OIDs and MIB
+names must resolve through the MIB cache before any SNMP request is sent.
+
 ## Output shape
 
 ```ts
@@ -79,7 +88,7 @@ reach green is forbidden. See `docs/CONSTITUTION.md` for the full done rule.
 - **native-api** — preferred long-term for retrieve. Adapter contract will be
   formalized when the second transport lands; do not pre-generalize from REST
   alone.
-- **ssh** — only relevant for `retrieve` if we later want CLI-shaped print
-  output as a fallback. Not on the roadmap yet.
-- **mac-telnet** — could carry retrieve over L2 once the protocol is well
-  understood; currently scoped to terminal/execute.
+- **snmp** — retrieve-only OID/MIB reads. It does not validate through
+  `/console/inspect` and does not execute RouterOS CLI.
+- **ssh / mac-telnet / romon / winbox-terminal** — execute surfaces, not
+  retrieve surfaces.

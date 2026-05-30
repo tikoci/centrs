@@ -209,12 +209,12 @@ centrs devices set 192.0.2.5 'note="rack 7 row B"' --cdb-file $CDB
 
 `ok: true`. Re-reading parses the value back as `rack 7 row B` (one token).
 
-## rm
+## remove
 
 ### 22. Remove a single entry
 
 ```bash
-centrs devices rm 192.0.2.5 --cdb-file $CDB
+centrs devices remove 192.0.2.5 --cdb-file $CDB
 ```
 
 `ok: true`. Backup written. Subsequent `devices show` returns
@@ -223,7 +223,7 @@ centrs devices rm 192.0.2.5 --cdb-file $CDB
 ### 23. Remove unknown target
 
 ```bash
-centrs devices rm 203.0.113.99 --cdb-file $CDB
+centrs devices remove 203.0.113.99 --cdb-file $CDB
 ```
 
 `cdb/not-found-target`. No backup written.
@@ -296,3 +296,16 @@ centrs devices list --cdb-file $CDB_ENCRYPTED --cdb-password wrong
 
 `cdb/decrypt-failed`. `error.cause` includes the decoder's detected magic
 mismatch.
+
+## Discovery provenance
+
+### 31. MNDP-discovered entries are marked as discovered
+
+`discover --save --timeout 60s` writes CDB records that `devices list` surfaces
+with `group="discovered"` and `source=mndp` in comment-kv metadata.
+
+```bash
+centrs devices list --cdb-file $CDB --group discovered
+```
+
+`ok: true`; each member reports CDB provenance and discovery metadata.

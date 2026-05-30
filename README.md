@@ -28,22 +28,25 @@ roadmap.
 
 - **Frontends:** TypeScript API (root), CLI (in progress), MCP tools, TUI,
   HTTP proxy/daemon (future).
-- **Protocols:** REST API (first), native API, SSH, MAC-Telnet, plus discover
-  (MNDP) and supplementary surfaces (SNMP, RoMON, WinBox Terminal).
+- **Protocols:** REST API (first), native API, SNMP for retrieve,
+  SSH/MAC-Telnet/RoMON/WinBox Terminal for execute, plus discover (MNDP).
 - **Device sources:** explicit input, environment variables, WinBox CDB
   (`~/.config/tikoci/winbox.cdb`), MNDP cache (planned), and Dude DB import
   (delegated to `tikoci/donny`).
 
 ## Commands
 
-| Command       | Status (see `docs/MATRIX.md`)                                |
-| ------------- | ------------------------------------------------------------ |
-| `retrieve`    | First real vertical slice. REST coded; CHR-passing in progress. |
-| `update`      | Designed; not started.                                       |
-| `execute`     | Designed; not started.                                       |
-| `terminal`    | Stubbed. SSH primary, mac-telnet for L2.                     |
-| `check`       | Stubbed. Reachability + management-port probe.               |
-| `devices`     | Stubbed. Registry view over CDB / MNDP / explicit input.     |
+Status lives only in `docs/MATRIX.md`.
+
+| Command    | Purpose |
+| ---------- | ------- |
+| `retrieve` | Read RouterOS state over REST/native API and SNMP OID/MIB values. |
+| `update`   | Write RouterOS state with validation and per-target envelopes. |
+| `execute`  | Run RouterOS CLI-shaped commands over REST/native API/SSH/L2 surfaces. |
+| `terminal` | Open an interactive console, primarily SSH or MAC-Telnet. |
+| `check`    | Probe reachability and management protocol availability. |
+| `devices`  | View and maintain the CDB-backed device registry. |
+| `discover` | Discover MNDP neighbors and optionally save them into CDB. |
 
 Each command's directory under `commands/` carries the design and the
 executable example list that gates "done".

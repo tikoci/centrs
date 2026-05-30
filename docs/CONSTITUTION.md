@@ -128,8 +128,8 @@ Lowest to highest priority:
 ### Identity and CDB
 
 The `<router>` argument may be: an IP, a DNS name, a MAC, or a **name**. A
-name is resolved through the CDB (then through MNDP cache as a fallback once
-implemented).
+name is resolved through the CDB (then through ARP / MNDP-derived metadata as
+fallbacks once implemented).
 
 CDB resolution:
 
@@ -141,10 +141,17 @@ CDB resolution:
   an error; the call still succeeds.
 - A name not found in the CDB is an error unless `--username` / `--password`
   were also provided.
+- For a MAC target, CDB wins first. If no CDB record matches, retrieve/update
+  may opt into local ARP resolution to obtain an IP-level target; execute
+  defaults to mac-telnet unless the caller explicitly asks to resolve via ARP.
+- `discover --save --timeout 60s` writes MNDP-derived targets into CDB with
+  provenance metadata and default `group=discovered`; discovery remains a hint
+  source, not authoritative inventory.
 
 CDB is the native credential store. Anything in CDB must also be expressible
-via env/CLI/API for tests and ad-hoc use. `dude.db` import is out of scope here
-and belongs to `tikoci/donny`.
+via env/CLI/API for tests and ad-hoc use. CDB comments may carry centrs
+metadata such as `via` and `port` overrides. `dude.db` import is out of scope
+here and belongs to `tikoci/donny`.
 
 Group selectors (e.g. `--group prod-edge`) target CDB groups so a single
 `retrieve`/`execute`/etc. fans out to multiple routers. Group output shape
@@ -154,14 +161,14 @@ must round-trip through the same envelope.
 
 Per-operation preferences, downgrade order in parens:
 
-| Operation | Preferred       | Downgrade order                                  |
-| --------- | --------------- | ------------------------------------------------ |
-| retrieve  | rest-api (now) → native-api (later) | rest-api, native-api, ssh (cli-shaped) |
-| update    | rest-api (now) → native-api (later) | rest-api, native-api, ssh             |
-| execute   | native-api (later) → rest-api / ssh | rest-api, ssh, mac-telnet              |
-| terminal  | ssh             | mac-telnet (L2 only when ssh fails or MAC given) |
-| transfer  | ssh / scp       | rest-api files (small only)                       |
-| discover  | mndp            | (not a transport for command operations)         |
+| Operation | Preferred | Downgrade order |
+| --------- | --------- | --------------- |
+| retrieve  | rest-api (now) → native-api (later); snmp for OID/MIB reads | rest-api, native-api, snmp |
+| update    | rest-api (now) → native-api (later) | rest-api, native-api, ssh |
+| execute   | rest-api (now) → native-api / ssh / mac-telnet | rest-api, native-api, ssh, mac-telnet, romon, winbox-terminal |
+| terminal  | ssh | mac-telnet (L2 only when ssh fails or MAC given) |
+| transfer  | ssh / scp | rest-api files (small only) |
+| discover  | mndp | (not a transport for command operations) |
 
 Rules:
 
@@ -169,8 +176,15 @@ Rules:
   and REST cannot do the operation, error out with a `transport/*` code.
 - Auto-selection (no `--via`) may downgrade *within* the table above, but every
   hop is reported in `meta.warnings` with the reason.
-- mac-telnet is the only L2 path; it is the right choice when the target is a
-  MAC address or when IP-level access is known broken and a MAC is on file.
+- SNMP is retrieve-only: `retrieve <router> snmp <oid|MIB name>` resolves
+  names through a MikroTik MIB cache downloaded from mikrotik.com. It is not an
+  execute or update surface.
+- SSH, mac-telnet, RoMON, and WinBox Terminal are execute surfaces, not
+  retrieve surfaces. RoMON and WinBox Terminal are lower priority than
+  mac-telnet until their validation and test harnesses are grounded.
+- mac-telnet is the primary L2 execute path; it is the default for execute when
+  the target is an unresolved MAC address. If IP-level access is desired, the
+  caller must explicitly opt into ARP-based MAC → IP resolution.
 
 REST-specific constraint: RouterOS REST has a 60-second hard timeout. Do not
 let `--timeout` exceed 60s when `via=rest-api`; reject with a clear error.

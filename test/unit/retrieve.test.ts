@@ -311,6 +311,22 @@ describe("retrieve core", () => {
 			fetchMock.restore();
 		}
 	});
+
+	test("rejects execute-only protocols before implementation status", async () => {
+		await expect(
+			retrieve({
+				targetInput: "AA:BB:CC:DD:EE:FF",
+				path: "/system/resource",
+				via: "mac-telnet",
+				validate: false,
+				username: "admin",
+				password: "",
+			}),
+		).rejects.toMatchObject({
+			name: "CentrsError",
+			code: "routeros/unsupported-capability",
+		} satisfies Partial<CentrsError>);
+	});
 });
 
 describe("retrieve CLI", () => {
