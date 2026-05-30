@@ -8,23 +8,17 @@ import {
 	encodeOpenWinBoxCdb,
 	winBoxCdbRecordType,
 } from "../../src/data/winbox-cdb.ts";
+import {
+	exampleIds,
+	isChrIntegrationEnabled,
+	readEnv,
+	recordIntegrationEvidence,
+	splitQuickChrAuth,
+	startIntegrationChr,
+} from "./chr.ts";
 
-function readEnv(
-	record: Record<string, string | undefined>,
-	key: string,
-): string | undefined {
-	return record[key];
-}
-
-const runFastIntegration =
-	readEnv(Bun.env, "CENTRS_RUN_FAST_INTEGRATION") === "1";
+const runFastIntegration = isChrIntegrationEnabled();
 const describeFast = runFastIntegration ? describe : describe.skip;
-
-interface QuickChrInstance {
-	restUrl: string;
-	subprocessEnv(): Promise<Record<string, string>>;
-	destroy(): Promise<void>;
-}
 
 interface RetrieveSuccessTestEnvelope {
 	ok: true;
@@ -133,24 +127,6 @@ async function expectRetrieveFailure(
 	return envelope;
 }
 
-function splitQuickChrAuth(raw: string): {
-	username: string;
-	password: string;
-} {
-	const separator = raw.indexOf(":");
-	if (separator === -1) {
-		return {
-			username: raw,
-			password: "",
-		};
-	}
-
-	return {
-		username: raw.slice(0, separator),
-		password: raw.slice(separator + 1),
-	};
-}
-
 async function writeRetrieveCdb(
 	target: string,
 	username: string,
@@ -174,33 +150,14 @@ async function writeRetrieveCdb(
 	return cdbPath;
 }
 
-async function startQuickChr(
-	channel: "stable" | "long-term" | "testing" | "development",
-): Promise<QuickChrInstance> {
-	const moduleName = "@tikoci/quickchr";
-	const quickChrModule = (await import(moduleName)) as unknown as {
-		QuickCHR: {
-			start(options: {
-				channel: "stable" | "long-term" | "testing" | "development";
-			}): Promise<QuickChrInstance>;
-		};
-	};
-	return quickChrModule.QuickCHR.start({ channel });
-}
-
 describeFast("REST retrieve against CHR", () => {
 	test("runs active retrieve REST examples against CHR", async () => {
-		const chr = await startQuickChr(
-			(readEnv(Bun.env, "CENTRS_CHR_CHANNEL") as
-				| "stable"
-				| "long-term"
-				| "testing"
-				| "development") ?? "stable",
-		);
+		const started = await startIntegrationChr();
+		const chr = started.chr;
 		const consoleCapture = captureConsole();
 
 		try {
-			const env = await chr.subprocessEnv();
+			const env = started.env;
 			const auth = splitQuickChrAuth(readEnv(env, "QUICKCHR_AUTH") ?? "admin:");
 			const baseArgs = [
 				"--username",
@@ -215,12 +172,30 @@ describeFast("REST retrieve against CHR", () => {
 				"/system/resource",
 				...baseArgs,
 			]);
-			expect(
-				resourceEnvelope.result.data as Record<string, unknown> | undefined,
-			).toHaveProperty("version");
-			expect(
-				resourceEnvelope.result.data as Record<string, unknown> | undefined,
-			).toHaveProperty("uptime");
+			const resourceData = resourceEnvelope.result.data as
+				| ({ version?: unknown; "board-name"?: unknown } & Record<
+						string,
+						unknown
+				  >)
+				| undefined;
+			const routerOsVersion = resourceData?.version;
+			const boardName = resourceData?.["board-name"];
+			expect(resourceData).toHaveProperty("version");
+			expect(resourceData).toHaveProperty("uptime");
+			await recordIntegrationEvidence({
+				suite: "REST retrieve against CHR",
+				command: "retrieve",
+				protocol: "rest-api",
+				routerosVersion:
+					typeof routerOsVersion === "string"
+						? routerOsVersion
+						: chr.state.version,
+				boardName: typeof boardName === "string" ? boardName : undefined,
+				quickChrName: chr.name,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+				exampleIds: exampleIds(19),
+			});
 
 			const identityEnvelope = await expectRetrieveSuccess(consoleCapture, [
 				"retrieve",
@@ -315,6 +290,11 @@ describeFast("REST retrieve against CHR", () => {
 			]);
 			const attributes = attributesEnvelope.result.data as unknown[];
 			expect(Array.isArray(attributes)).toBe(true);
+			expect(attributes.length).toBeGreaterThan(0);
+			expect(
+				attributes.every((attribute) => typeof attribute === "string"),
+			).toBe(true);
+			expect(new Set(attributes).size).toBe(attributes.length);
 			expect(attributes).toContain("uptime");
 			expect(attributes).toContain("version");
 
@@ -459,7 +439,7 @@ describeFast("REST retrieve against CHR", () => {
 			consoleCapture.restore();
 			await chr.destroy();
 		}
-	}, 180_000);
+	}, 300_000);
 
 	test("reports actionable error when host is unreachable", async () => {
 		const consoleCapture = captureConsole();

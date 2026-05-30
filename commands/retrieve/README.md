@@ -3,7 +3,7 @@
 Read RouterOS state. Models `<path>/<verb>` where the verb is `print`-style
 (`print`, `get`, and async POST-shaped reads as they're added).
 
-> TODO: "POST-shaped reads" need to be identified from 
+> TODO: "POST-shaped reads" need to be identified from
 
 Returns an array of records, or — with `--attribute` — a value or row of
 values, all wrapped in the standard envelope (`docs/CONSTITUTION.md`).

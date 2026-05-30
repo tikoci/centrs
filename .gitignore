@@ -33,3 +33,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .scratch/**
 .scratch/*
 !.scratch/AGENTS.md
+
+# Local assistant settings
+.claude/settings*.json

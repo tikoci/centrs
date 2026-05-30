@@ -62,6 +62,7 @@ ciphertext
 cli
 cloc
 cmp
+connectionrefused
 cpus
 crossref
 datagram
@@ -72,6 +73,7 @@ dogtail
 donny
 dotenv
 DSL # domain specific language
+eai
 env
 esbuild
 ETL
@@ -142,6 +144,7 @@ strawman
 subarray
 tcode
 tcodes
+TCG # QEMU Tiny Code Generator software emulation backend.
 terminal-over-winbox # [Pure Python implementation of the MikroTik WinBox terminal protocol — encrypted CLI access to RouterOS devices over TCP port 8291](https://github.com/subixonfire/winbox-terminal-protocol)
 tgz
 tikbook
