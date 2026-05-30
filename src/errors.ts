@@ -30,6 +30,7 @@ export interface SerializedCentrsError {
 	message: string;
 	remediation?: string;
 	detailsUrl: string;
+	details_url: string;
 	context?: Record<string, unknown>;
 	cause?: unknown;
 }
@@ -69,6 +70,7 @@ export function serializeCentrsError(
 			message: error.message,
 			remediation: error.remediation,
 			detailsUrl: error.detailsUrl,
+			details_url: error.detailsUrl,
 			context: error.context,
 			cause: error.causeData ?? serializeUnknownError(error.cause),
 		};

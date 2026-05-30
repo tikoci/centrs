@@ -66,13 +66,15 @@ describe("retrieve core", () => {
 		const fetchMock = mockFetchSequence([
 			() =>
 				new Response(
-					JSON.stringify([{ type: "cmd", name: "print", "node-type": "cmd" }]),
+					JSON.stringify([
+						{ type: "child", name: "print", "node-type": "cmd" },
+					]),
 				),
 			() =>
 				new Response(
 					JSON.stringify([
-						{ type: "arg", name: "disabled", "node-type": "arg" },
-						{ type: "arg", name: "name", "node-type": "arg" },
+						{ type: "completion", completion: "disabled" },
+						{ type: "completion", completion: "name" },
 					]),
 				),
 		]);
@@ -105,13 +107,15 @@ describe("retrieve core", () => {
 		const fetchMock = mockFetchSequence([
 			() =>
 				new Response(
-					JSON.stringify([{ type: "cmd", name: "print", "node-type": "cmd" }]),
+					JSON.stringify([
+						{ type: "child", name: "print", "node-type": "cmd" },
+					]),
 				),
 			() =>
 				new Response(
 					JSON.stringify([
-						{ type: "arg", name: "address", "node-type": "arg" },
-						{ type: "arg", name: "interface", "node-type": "arg" },
+						{ type: "completion", completion: "address" },
+						{ type: "completion", completion: "interface" },
 					]),
 				),
 			(_, init) => {
@@ -145,6 +149,48 @@ describe("retrieve core", () => {
 		}
 	});
 
+	test("uses completion validation and local projection for singleton attributes", async () => {
+		const fetchMock = mockFetchSequence([
+			() =>
+				new Response(
+					JSON.stringify([
+						{ type: "child", name: "print", "node-type": "cmd" },
+						{ type: "child", name: "get", "node-type": "cmd" },
+					]),
+				),
+			(_url, init) => {
+				const body = JSON.parse(String(init?.body)) as { path?: string };
+				expect(body.path).toBe("system,resource,get,value-name");
+				return new Response(
+					JSON.stringify([
+						{ type: "completion", completion: "uptime" },
+						{ type: "completion", completion: "version" },
+					]),
+				);
+			},
+			() => new Response(JSON.stringify({ uptime: "5m", version: "7.23" })),
+		]);
+
+		try {
+			const envelope = await retrieve({
+				targetInput: "router1",
+				path: "/system/resource",
+				via: "rest-api",
+				attribute: "uptime",
+				username: "admin",
+				password: "",
+			});
+
+			expect(envelope.result.kind).toBe("data");
+			expect(envelope.result.data).toBe("5m");
+			expect(fetchMock.calls.at(-1)?.url).toBe(
+				"http://router1:80/rest/system/resource",
+			);
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
 	test("maps refused connections to a structured transport error", async () => {
 		const originalFetch = globalThis.fetch;
 		globalThis.fetch = (async () => {
@@ -168,6 +214,72 @@ describe("retrieve core", () => {
 			).rejects.toMatchObject({
 				name: "CentrsError",
 				code: "transport/connection-refused",
+			} satisfies Partial<CentrsError>);
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
+	test("maps Bun-shaped ConnectionRefused errors to connection-refused", async () => {
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = (async () => {
+			const error = new Error(
+				"Unable to connect. Is the computer able to access the url?",
+			) as Error & {
+				code?: string;
+				errno?: string;
+				path?: string;
+			};
+			error.code = "ConnectionRefused";
+			error.errno = "ConnectionRefused";
+			error.path = "http://127.0.0.1:1/rest/system/resource";
+			throw error;
+		}) as unknown as typeof fetch;
+
+		try {
+			await expect(
+				retrieve({
+					targetInput: "127.0.0.1:1",
+					path: "/system/resource",
+					via: "rest-api",
+					validate: false,
+					username: "admin",
+					password: "",
+				}),
+			).rejects.toMatchObject({
+				name: "CentrsError",
+				code: "transport/connection-refused",
+			} satisfies Partial<CentrsError>);
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
+	test("maps nested DNS causes to transport/dns", async () => {
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = (async () => {
+			const cause = new Error(
+				"getaddrinfo EAI_AGAIN router.invalid",
+			) as Error & {
+				code?: string;
+			};
+			cause.code = "EAI_AGAIN";
+			throw new AggregateError([cause], "fetch failed", { cause });
+		}) as unknown as typeof fetch;
+
+		try {
+			await expect(
+				retrieve({
+					targetInput: "router.invalid",
+					path: "/system/resource",
+					via: "rest-api",
+					validate: false,
+					username: "admin",
+					password: "",
+				}),
+			).rejects.toMatchObject({
+				name: "CentrsError",
+				code: "transport/dns",
 			} satisfies Partial<CentrsError>);
 		} finally {
 			globalThis.fetch = originalFetch;
@@ -238,7 +350,17 @@ describe("retrieve CLI", () => {
 		}
 	});
 
-	test("renders an actionable text error when via is missing", async () => {
+	test("defaults retrieve to REST when via is omitted", async () => {
+		const fetchMock = mockFetchSequence([
+			() =>
+				new Response(
+					JSON.stringify([
+						{ type: "child", name: "print", "node-type": "cmd" },
+						{ type: "child", name: "get", "node-type": "cmd" },
+					]),
+				),
+			() => new Response(JSON.stringify({ version: "7.22.1", uptime: "5m" })),
+		]);
 		const consoleCapture = captureConsole();
 
 		try {
@@ -246,13 +368,27 @@ describe("retrieve CLI", () => {
 				"retrieve",
 				"router1",
 				"/system/resource",
+				"--format",
+				"json",
+				"--username",
+				"admin",
+				"--password",
+				"",
 			]);
-			expect(exitCode).toBe(1);
-			expect(consoleCapture.logs).toHaveLength(0);
-			expect(consoleCapture.errors[0]).toContain("settings/missing-via");
-			expect(consoleCapture.errors[0]).toContain("--via rest-api");
+			expect(exitCode).toBe(0);
+			expect(consoleCapture.errors).toHaveLength(0);
+			const payload = JSON.parse(consoleCapture.logs[0] ?? "") as {
+				via: string;
+				settingSources: { via: { kind: string; key: string } };
+			};
+			expect(payload.via).toBe("rest-api");
+			expect(payload.settingSources.via).toEqual({
+				kind: "default",
+				key: "via",
+			});
 		} finally {
 			consoleCapture.restore();
+			fetchMock.restore();
 		}
 	});
 });

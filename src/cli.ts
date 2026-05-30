@@ -94,7 +94,7 @@ const retrieveCommand: CliCommandMetadata = {
 			flag: "--via",
 			valueName: "<protocol>",
 			description:
-				"Required protocol selector for the alpha slice. Use `rest-api`.",
+				"Pin the protocol selector. Defaults to `rest-api` for retrieve.",
 		},
 		{
 			flag: "--host",
@@ -144,7 +144,7 @@ const retrieveCommand: CliCommandMetadata = {
 		{
 			flag: "--format",
 			valueName: `<${retrieveOutputFormats.join("|")}>`,
-			description: "Output format for the CLI response.",
+			description: "Output format for the CLI response. Defaults to json.",
 		},
 		{
 			flag: "--json",
@@ -155,6 +155,16 @@ const retrieveCommand: CliCommandMetadata = {
 			valueName: "<bytes>",
 			description:
 				"Fail instead of printing output larger than the given byte budget.",
+		},
+		{
+			flag: "--cdb-file",
+			valueName: "<path>",
+			description: "Read target credentials from a WinBox CDB file.",
+		},
+		{
+			flag: "--cdb-password",
+			valueName: "<password>",
+			description: "Decrypt an encrypted WinBox CDB file.",
 		},
 		{
 			flag: "--validate / --no-validate",
@@ -344,6 +354,12 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveRequest & {
 					10,
 				);
 				break;
+			case "--cdb-file":
+				request.cdbFile = expectValue(args, ++index, arg);
+				break;
+			case "--cdb-password":
+				request.cdbPassword = expectValue(args, ++index, arg);
+				break;
 			case "--validate":
 				request.validate = true;
 				break;
@@ -403,7 +419,7 @@ function inferRequestedFormat(
 	if (formatIndex !== -1 && args[formatIndex + 1]) {
 		return args[formatIndex + 1] as RetrieveOutputFormat;
 	}
-	return "text";
+	return "json";
 }
 
 function fallbackRequestFromArgs(args: readonly string[]): RetrieveRequest {

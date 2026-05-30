@@ -1,14 +1,26 @@
 import {
-	CentrsError,
-	extractErrorCode,
-	serializeCentrsError,
-} from "./errors.ts";
+	type DevicesWarning,
+	type LoadedCdb,
+	loadCdb,
+	resolveDevicesSettings,
+	showDevice,
+} from "./devices.ts";
+import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { getProtocolPlan, type RouterOsProtocol } from "./protocols/index.ts";
 
 export const retrieveOutputFormats = ["text", "json", "yaml"] as const;
 export type RetrieveOutputFormat = (typeof retrieveOutputFormats)[number];
 
-type SettingSourceKind = "default" | "env" | "explicit" | "target-input";
+const ENV_CDB_FILE = "CENTRS_CDB_FILE";
+const ENV_CDB_PASSWORD = "CENTRS_CDB_PASSWORD";
+const ENV_HOST = "CENTRS_HOST";
+
+type SettingSourceKind =
+	| "default"
+	| "env"
+	| "explicit"
+	| "target-input"
+	| "cdb";
 
 interface SettingSource {
 	kind: SettingSourceKind;
@@ -56,11 +68,14 @@ export interface RetrieveRequest {
 	filter?: string;
 	query?: string;
 	maxResultsBytes?: number;
+	cdbFile?: string;
+	cdbPassword?: string;
 }
 
 export interface RetrieveWarning {
 	code: string;
 	message: string;
+	context?: Record<string, unknown>;
 }
 
 export interface RetrieveRequestSummary {
@@ -129,9 +144,21 @@ export interface RetrieveErrorEnvelope {
 export type RetrieveEnvelope = RetrieveSuccessEnvelope | RetrieveErrorEnvelope;
 
 interface InspectChildItem {
-	type: string;
-	name: string;
+	type?: string;
+	name?: string;
 	"node-type"?: string;
+}
+
+interface InspectCompletionItem {
+	type?: string;
+	name?: string;
+	completion?: string;
+	value?: string;
+	text?: string;
+}
+
+interface RetrieveInspection {
+	command: "get" | "print";
 }
 
 interface RestResponse {
@@ -153,18 +180,30 @@ interface ResolvedRetrieveRequest {
 	allAttributes: boolean;
 	listAttributes: boolean;
 	verbose: boolean;
+	warnings: readonly RetrieveWarning[];
 }
 
 export async function retrieve(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined> = Bun.env,
 ): Promise<RetrieveSuccessEnvelope> {
-	const resolved = resolveRetrieveRequest(request, env);
-	const warnings: RetrieveWarning[] = [];
+	const resolved = await resolveRetrieveRequest(request, env);
+	const warnings: RetrieveWarning[] = [...resolved.warnings];
 	let availableAttributes: string[] | undefined;
+	let inspection: RetrieveInspection | undefined;
 
 	if (resolved.listAttributes || resolved.validate.value) {
-		availableAttributes = await inspectAttributes(resolved);
+		inspection = await inspectRetrievePath(resolved);
+	}
+
+	if (
+		resolved.listAttributes ||
+		(resolved.validate.value && resolved.attributes.length > 0)
+	) {
+		availableAttributes = await inspectAttributes(
+			resolved,
+			inspection ?? (await inspectRetrievePath(resolved)),
+		);
 	}
 
 	if (resolved.listAttributes) {
@@ -176,7 +215,7 @@ export async function retrieve(
 			},
 			{
 				enabled: true,
-				source: "live /console/inspect request=child",
+				source: "live /console/inspect request=child+completion",
 				availableAttributes: availableAttributes ?? [],
 			},
 			warnings,
@@ -194,7 +233,7 @@ export async function retrieve(
 		);
 		if (missing.length > 0) {
 			throw new CentrsError({
-				code: "input/unknown-attribute",
+				code: "validation/unknown-attribute",
 				summary: `Unknown RouterOS attribute ${missing.join(", ")} for ${resolved.path}.`,
 				remediation:
 					"Check the attribute name, or use `--list-attributes` to inspect the available properties first.",
@@ -217,7 +256,9 @@ export async function retrieve(
 		{
 			enabled: resolved.validate.value,
 			source: resolved.validate.value
-				? "live /console/inspect request=child"
+				? availableAttributes
+					? "live /console/inspect request=child+completion"
+					: "live /console/inspect request=child"
 				: "disabled",
 			availableAttributes,
 		},
@@ -429,10 +470,10 @@ function applyMaxResultsBudget(
 	return envelope;
 }
 
-function resolveRetrieveRequest(
+async function resolveRetrieveRequest(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined>,
-): ResolvedRetrieveRequest {
+): Promise<ResolvedRetrieveRequest> {
 	if (!request.path.startsWith("/")) {
 		throw new CentrsError({
 			code: "input/invalid-routeros-path",
@@ -445,7 +486,7 @@ function resolveRetrieveRequest(
 
 	if (request.filter !== undefined || request.query !== undefined) {
 		throw new CentrsError({
-			code: "input/not-implemented",
+			code: "validation/not-implemented",
 			summary:
 				"`--filter` and `--query` are not implemented yet for `retrieve`.",
 			remediation:
@@ -460,7 +501,7 @@ function resolveRetrieveRequest(
 	const attributeSelections = normalizeAttributeSelection(request);
 	if (request.allAttributes && attributeSelections.length > 0) {
 		throw new CentrsError({
-			code: "input/conflicting-flags",
+			code: "usage/conflicting-flags",
 			summary:
 				"`--all-attributes` cannot be combined with `--attribute` or `--attributes`.",
 			remediation:
@@ -473,7 +514,7 @@ function resolveRetrieveRequest(
 		(request.allAttributes || attributeSelections.length > 0)
 	) {
 		throw new CentrsError({
-			code: "input/conflicting-flags",
+			code: "usage/conflicting-flags",
 			summary:
 				"`--list-attributes` cannot be combined with output-shaping flags such as `--attribute` or `--all-attributes`.",
 			remediation:
@@ -497,8 +538,9 @@ function resolveRetrieveRequest(
 		"CENTRS_MAX_RESULTS",
 		"max-results",
 	);
-	const target = resolveTarget(request, env);
-	const auth = resolveAuth(request, env);
+	const cdbResolution = await resolveRetrieveCdb(request, env);
+	const target = resolveTarget(request, env, cdbResolution);
+	const auth = resolveAuth(request, env, cdbResolution);
 
 	return {
 		path: request.path,
@@ -513,6 +555,87 @@ function resolveRetrieveRequest(
 		allAttributes: request.allAttributes ?? false,
 		listAttributes: request.listAttributes ?? false,
 		verbose: request.verbose ?? false,
+		warnings: cdbResolution?.warnings ?? [],
+	};
+}
+
+interface RetrieveCdbResolution {
+	target: string;
+	username: string;
+	password: string;
+	warnings: readonly RetrieveWarning[];
+	recordIndex: number;
+}
+
+async function resolveRetrieveCdb(
+	request: RetrieveRequest,
+	env: Record<string, string | undefined>,
+): Promise<RetrieveCdbResolution | undefined> {
+	if (!request.targetInput) {
+		return undefined;
+	}
+
+	const settings = resolveDevicesSettings({
+		cdbFile: request.cdbFile,
+		cdbPassword: request.cdbPassword,
+		env,
+	});
+	const explicitCdb =
+		request.cdbFile !== undefined ||
+		request.cdbPassword !== undefined ||
+		env[ENV_CDB_FILE] !== undefined ||
+		env[ENV_CDB_PASSWORD] !== undefined;
+	if (!explicitCdb && !(await Bun.file(settings.cdbFile.value).exists())) {
+		return undefined;
+	}
+
+	let cdb: LoadedCdb;
+	try {
+		cdb = await loadCdb({
+			cdbFile: request.cdbFile,
+			cdbPassword: request.cdbPassword,
+			env,
+		});
+	} catch (error) {
+		if (
+			!explicitCdb &&
+			error instanceof CentrsError &&
+			error.code === "cdb/not-found"
+		) {
+			return undefined;
+		}
+		throw error;
+	}
+
+	try {
+		const envelope = showDevice({ cdb, target: request.targetInput });
+		const entry = envelope.data.entry;
+		return {
+			target: entry.target,
+			username: entry.user,
+			password: entry.password,
+			warnings: envelope.warnings.map(retrieveWarningFromDevicesWarning),
+			recordIndex: entry.cdbRecordIndex,
+		};
+	} catch (error) {
+		if (
+			!explicitCdb &&
+			error instanceof CentrsError &&
+			error.code === "cdb/not-found-target"
+		) {
+			return undefined;
+		}
+		throw error;
+	}
+}
+
+function retrieveWarningFromDevicesWarning(
+	warning: DevicesWarning,
+): RetrieveWarning {
+	return {
+		code: warning.code,
+		message: warning.message,
+		context: warning.context,
 	};
 }
 
@@ -524,14 +647,15 @@ function resolveProtocol(
 		request.via,
 		env,
 		"CENTRS_VIA",
-		undefined,
+		"rest-api",
 		"via",
 	);
 	if (!via) {
 		throw new CentrsError({
-			code: "settings/missing-via",
-			summary: "Missing required setting `via` for `retrieve`.",
-			remediation: "Pass `--via rest-api` or set `CENTRS_VIA=rest-api`.",
+			code: "internal/unhandled",
+			summary: "Failed to resolve the default retrieve protocol.",
+			remediation:
+				"Report this bug; retrieve should default to `rest-api` when no protocol is pinned.",
 		});
 	}
 
@@ -588,7 +712,7 @@ function resolveFormat(
 		request.format,
 		env,
 		"CENTRS_FORMAT",
-		"text",
+		"json",
 		"format",
 		parseOutputFormat,
 	) as ResolvedSetting<RetrieveOutputFormat>;
@@ -597,12 +721,13 @@ function resolveFormat(
 function resolveTarget(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined>,
+	cdbResolution?: RetrieveCdbResolution,
 ): ResolvedTarget {
 	const hostSetting = resolveStringSetting(
 		request.host,
 		env,
 		"CENTRS_HOST",
-		request.targetInput,
+		cdbResolution?.target ?? request.targetInput,
 		"host",
 	);
 
@@ -635,13 +760,17 @@ function resolveTarget(
 		port,
 		scheme,
 		baseUrl: `${scheme}://${formatHostForUrl(parsedUrl.hostname)}:${port}/rest`,
-		source: hostSetting.source,
+		source:
+			cdbResolution && request.host === undefined && env[ENV_HOST] === undefined
+				? { kind: "cdb", key: `record:${cdbResolution.recordIndex}` }
+				: hostSetting.source,
 	};
 }
 
 function resolveAuth(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined>,
+	cdbResolution?: RetrieveCdbResolution,
 ): ResolvedAuth {
 	const username = resolveStringSetting(
 		request.username,
@@ -657,67 +786,124 @@ function resolveAuth(
 		undefined,
 		"password",
 	);
+	const cdbUsername =
+		username === undefined && cdbResolution?.username
+			? {
+					value: cdbResolution.username,
+					source: {
+						kind: "cdb" as const,
+						key: `record:${cdbResolution.recordIndex}:user`,
+					},
+				}
+			: undefined;
+	const cdbPassword =
+		password === undefined && cdbResolution
+			? {
+					value: cdbResolution.password,
+					source: {
+						kind: "cdb" as const,
+						key: `record:${cdbResolution.recordIndex}:password`,
+					},
+				}
+			: undefined;
+	const resolvedUsername = username ?? cdbUsername;
+	const resolvedPassword = password ?? cdbPassword;
 
 	return {
-		username: username?.value,
-		usernameSource: username?.source,
-		password: password?.value ?? "",
-		passwordProvided: password !== undefined,
-		passwordSource: password?.source,
+		username: resolvedUsername?.value,
+		usernameSource: resolvedUsername?.source,
+		password: resolvedPassword?.value ?? "",
+		passwordProvided: resolvedPassword !== undefined,
+		passwordSource: resolvedPassword?.source,
 	};
 }
 
-async function inspectAttributes(
+async function inspectRetrievePath(
 	resolved: ResolvedRetrieveRequest,
-): Promise<string[]> {
+): Promise<RetrieveInspection> {
+	const pathTokens = pathTokensForInspect(resolved.path);
 	const rootChildren = await restPost<InspectChildItem[]>(
 		resolved,
 		"/console/inspect",
 		{
 			request: "child",
-			path: pathToInspectString(resolved.path.split("/").filter(Boolean)),
+			path: pathToInspectString(pathTokens),
 		},
 	);
 
-	if (
-		!rootChildren.some(
-			(child) => child.type === "cmd" && child.name === "print",
-		)
-	) {
+	const supportsPrint = rootChildren.some((child) =>
+		isCommandNode(child, "print"),
+	);
+	const supportsGet = rootChildren.some((child) => isCommandNode(child, "get"));
+	if (!supportsPrint && !supportsGet) {
 		throw new CentrsError({
-			code: "routeros/unsupported-path",
-			summary: `RouterOS path ${resolved.path} does not expose a print-style retrieve command.`,
+			code: "validation/unknown-path",
+			summary: `RouterOS path ${resolved.path} does not expose a retrieve command.`,
 			remediation:
-				"Choose a slash-prefixed menu path that supports `print`, or disable validation if you are probing an undocumented edge case.",
+				"Check the slash-prefixed RouterOS path, or use a known readable path such as `/system/resource`, `/system/identity`, `/ip/address`, or `/interface`.",
 			context: {
 				path: resolved.path,
 				validationSource: "/console/inspect request=child",
+				availableChildren: rootChildren
+					.map((child) => child.name)
+					.filter((name): name is string => typeof name === "string"),
 			},
 		});
 	}
 
-	const printChildren = await restPost<InspectChildItem[]>(
+	const singleton = isKnownSingletonPath(resolved.path);
+	return {
+		command: singleton && supportsGet ? "get" : "print",
+	};
+}
+
+async function inspectAttributes(
+	resolved: ResolvedRetrieveRequest,
+	inspection: RetrieveInspection,
+): Promise<string[]> {
+	const pathTokens = pathTokensForInspect(resolved.path);
+	const argument = inspection.command === "get" ? "value-name" : "proplist";
+	const completionRows = await restPost<InspectCompletionItem[]>(
+		resolved,
+		"/console/inspect",
+		{
+			request: "completion",
+			path: pathToInspectString([...pathTokens, inspection.command, argument]),
+		},
+	);
+	const completions = extractCompletionNames(completionRows);
+	if (completions.length > 0) {
+		return completions;
+	}
+
+	const commandChildren = await restPost<InspectChildItem[]>(
 		resolved,
 		"/console/inspect",
 		{
 			request: "child",
-			path: pathToInspectString([
-				...resolved.path.split("/").filter(Boolean),
-				"print",
-			]),
+			path: pathToInspectString([...pathTokens, inspection.command]),
 		},
 	);
-
-	return printChildren
-		.filter((child) => child.type === "arg")
+	return commandChildren
+		.filter(isArgumentNode)
 		.map((child) => child.name)
-		.filter((name) => name.length > 0)
+		.filter(
+			(name): name is string => typeof name === "string" && name.length > 0,
+		)
 		.sort();
 }
 
 async function executeRestRetrieve(
 	resolved: ResolvedRetrieveRequest,
 ): Promise<unknown> {
+	if (isKnownSingletonPath(resolved.path)) {
+		const data = await restGet(resolved, resolved.path);
+		if (resolved.attributes.length > 0) {
+			return projectSingletonAttributes(data, resolved.attributes);
+		}
+		return data;
+	}
+
 	if (resolved.attributes.length > 0 || resolved.allAttributes) {
 		const body: { ".proplist"?: readonly string[]; detail?: string } = {};
 		if (resolved.attributes.length > 0) {
@@ -815,7 +1001,7 @@ function mapHttpFailure(
 ): CentrsError {
 	if (status === 401 || status === 403) {
 		return new CentrsError({
-			code: "auth/rejected",
+			code: "transport/auth-failed",
 			summary: `RouterOS rejected the REST credentials for ${resolved.target.host}:${resolved.target.port}.`,
 			remediation:
 				"Check `--username` / `--password` or the matching `CENTRS_*` environment variables, and confirm the user has RouterOS REST access.",
@@ -889,13 +1075,13 @@ function mapTransportFailure(
 	resolved: ResolvedRetrieveRequest,
 	path: string,
 ): CentrsError {
-	const code = extractErrorCode(error);
-	const message =
-		error instanceof Error
-			? error.message
-			: `Unknown transport error: ${String(error)}`;
-
-	if (code === "ABORT_ERR" || message.toLowerCase().includes("timeout")) {
+	const signals = collectTransportSignals(error);
+	const codes = signals.codes.map((code) => code.toLowerCase());
+	const messages = signals.messages.map((message) => message.toLowerCase());
+	if (
+		codes.includes("abort_err") ||
+		messages.some((candidate) => candidate.includes("timeout"))
+	) {
 		return new CentrsError({
 			code: "transport/timeout",
 			summary: `Timed out waiting for ${resolved.via.value} to respond from ${resolved.target.host}:${resolved.target.port}.`,
@@ -912,7 +1098,17 @@ function mapTransportFailure(
 		});
 	}
 
-	if (code === "ECONNREFUSED" || message.includes("ECONNREFUSED")) {
+	if (
+		codes.some(
+			(code) => code === "econnrefused" || code === "connectionrefused",
+		) ||
+		messages.some(
+			(candidate) =>
+				candidate.includes("econnrefused") ||
+				candidate.includes("connection refused") ||
+				candidate.includes("unable to connect"),
+		)
+	) {
 		return new CentrsError({
 			code: "transport/connection-refused",
 			summary: `Connection refused by ${resolved.target.host}:${resolved.target.port} over ${resolved.via.value}.`,
@@ -928,9 +1124,19 @@ function mapTransportFailure(
 		});
 	}
 
-	if (code === "ENOTFOUND" || message.includes("ENOTFOUND")) {
+	if (
+		codes.some((code) => ["enotfound", "eai_again", "dns"].includes(code)) ||
+		messages.some(
+			(candidate) =>
+				candidate.includes("enotfound") ||
+				candidate.includes("eai_again") ||
+				candidate.includes("dns") ||
+				candidate.includes("could not resolve") ||
+				candidate.includes("name lookup"),
+		)
+	) {
 		return new CentrsError({
-			code: "transport/dns-failure",
+			code: "transport/dns",
 			summary: `Could not resolve ${resolved.target.host} for ${resolved.via.value}.`,
 			remediation:
 				"Check the host spelling, DNS configuration, or pass a literal address with `--host`.",
@@ -944,7 +1150,7 @@ function mapTransportFailure(
 		});
 	}
 
-	if (message.toLowerCase().includes("certificate")) {
+	if (messages.some((candidate) => candidate.includes("certificate"))) {
 		return new CentrsError({
 			code: "transport/tls-certificate",
 			summary: `TLS certificate validation failed for ${resolved.target.host}:${resolved.target.port}.`,
@@ -973,6 +1179,106 @@ function mapTransportFailure(
 		},
 		cause: error,
 	});
+}
+
+function pathTokensForInspect(path: string): string[] {
+	return path.split("/").filter(Boolean);
+}
+
+function isCommandNode(
+	child: InspectChildItem,
+	name: "get" | "print",
+): boolean {
+	return (
+		child.name === name &&
+		(child.type === "cmd" || child["node-type"] === "cmd")
+	);
+}
+
+function isArgumentNode(child: InspectChildItem): boolean {
+	return child.type === "arg" || child["node-type"] === "arg";
+}
+
+function extractCompletionNames(
+	rows: readonly InspectCompletionItem[],
+): string[] {
+	const names = rows
+		.flatMap((row) => [row.completion, row.name, row.value, row.text])
+		.filter((value): value is string => typeof value === "string")
+		.map((value) => value.replace(/=.*$/, "").trim())
+		.filter((value) => value.length > 0);
+	return [...new Set(names)].sort();
+}
+
+function isKnownSingletonPath(path: string): boolean {
+	return ["/system/resource", "/system/identity"].includes(
+		path.replace(/\/$/, ""),
+	);
+}
+
+function projectSingletonAttributes(
+	data: unknown,
+	attributes: readonly string[],
+): unknown {
+	if (!isPlainObject(data)) {
+		return data;
+	}
+	if (attributes.length === 1) {
+		return data[attributes[0] ?? ""];
+	}
+
+	const projected: Record<string, unknown> = {};
+	for (const attribute of attributes) {
+		projected[attribute] = data[attribute];
+	}
+	return projected;
+}
+
+interface TransportSignals {
+	codes: string[];
+	messages: string[];
+}
+
+function collectTransportSignals(error: unknown): TransportSignals {
+	const signals: TransportSignals = { codes: [], messages: [] };
+	collectTransportSignalsInto(error, signals, new Set<unknown>());
+	return signals;
+}
+
+function collectTransportSignalsInto(
+	error: unknown,
+	signals: TransportSignals,
+	seen: Set<unknown>,
+): void {
+	if (error === null || error === undefined || seen.has(error)) {
+		return;
+	}
+	if (typeof error !== "object") {
+		signals.messages.push(String(error));
+		return;
+	}
+	seen.add(error);
+
+	if (error instanceof Error && error.message.length > 0) {
+		signals.messages.push(error.message);
+	}
+	if ("message" in error && typeof error.message === "string") {
+		signals.messages.push(error.message);
+	}
+	if ("code" in error && typeof error.code === "string") {
+		signals.codes.push(error.code);
+	}
+	if ("errno" in error && typeof error.errno === "string") {
+		signals.codes.push(error.errno);
+	}
+	if ("cause" in error) {
+		collectTransportSignalsInto(error.cause, signals, seen);
+	}
+	if ("errors" in error && Array.isArray(error.errors)) {
+		for (const nested of error.errors) {
+			collectTransportSignalsInto(nested, signals, seen);
+		}
+	}
 }
 
 function joinRestUrl(baseUrl: string, path: string): string {
@@ -1022,7 +1328,7 @@ function resolveTimeoutSetting(
 
 	if (via === "rest-api" && resolved.value > 60_000) {
 		throw new CentrsError({
-			code: "settings/invalid-timeout",
+			code: "usage/timeout-out-of-range",
 			summary: `REST timeout ${resolved.value}ms exceeds the current RouterOS REST ceiling.`,
 			remediation:
 				"Use `--timeout 60s` or less for the current REST retrieve path.",
@@ -1316,7 +1622,7 @@ function readRecordString(
 
 function toYaml(value: unknown, indent = 0): string {
 	const prefix = " ".repeat(indent);
-	if (value === null) {
+	if (value === null || value === undefined) {
 		return "null";
 	}
 	if (typeof value === "string") {
@@ -1327,7 +1633,7 @@ function toYaml(value: unknown, indent = 0): string {
 	}
 	if (Array.isArray(value)) {
 		if (value.length === 0) {
-			return "[]";
+			return `${prefix}[]`;
 		}
 		return value
 			.map((item) => {
@@ -1339,9 +1645,11 @@ function toYaml(value: unknown, indent = 0): string {
 			.join("\n");
 	}
 	if (isPlainObject(value)) {
-		const entries = Object.entries(value);
+		const entries = Object.entries(value).filter(
+			([, entryValue]) => entryValue !== undefined,
+		);
 		if (entries.length === 0) {
-			return "{}";
+			return `${prefix}{}`;
 		}
 		return entries
 			.map(([key, entryValue]) => {
@@ -1367,9 +1675,6 @@ function isScalar(value: unknown): value is boolean | number | string | null {
 function yamlScalar(value: string): string {
 	if (value.length === 0) {
 		return '""';
-	}
-	if (/^[A-Za-z0-9._/-]+$/.test(value)) {
-		return value;
 	}
 	return JSON.stringify(value);
 }

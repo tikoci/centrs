@@ -23,7 +23,7 @@ A cell advances only with the matching evidence in the same change.
 
 | Command  | rest-api      | native-api    | ssh           | mac-telnet    |
 | -------- | ------------- | ------------- | ------------- | ------------- |
-| retrieve | `coded`       | `not-started` | —             | —             |
+| retrieve | `CHR-passed`  | `not-started` | —             | —             |
 | update   | `not-started` | `not-started` | `not-started` | —             |
 | execute  | `not-started` | `not-started` | `not-started` | `not-started` |
 | terminal | —             | —             | `not-started` | `not-started` |
@@ -45,14 +45,11 @@ phasing live in `commands/devices/README.md`.
 
 Do not start a later item until the earlier ones are `CHR-passed`.
 
-1. **retrieve / rest-api** — drive the envelope, validation, and error model
-   to `CHR-passed` against real CHR. This is the shakedown for everything
-   else. Specifically: fix the `/console/inspect` path-format bug exposed by
-   `centrs retrieve <r> /system/resource` and `centrs retrieve <r> /ip/address`,
-   keeping `validate=true` as the default. See `commands/retrieve/examples.md`.
-2. **CDB resolution end-to-end** — name → user/password from
-   `~/.config/tikoci/winbox.cdb`, including encrypted CDBs and the
-   "unused --cdb-password" warning. Tested via retrieve.
+1. **retrieve / rest-api** — `CHR-passed` against real CHR. This is the
+   shakedown for everything else. See `commands/retrieve/examples.md`.
+2. **CDB resolution end-to-end** — `CHR-passed` through retrieve examples:
+   target → user/password from WinBox CDB, including the "unused
+   --cdb-password" warning.
 3. **execute / rest-api** — first CLI-shaped command, `[:parse]` validator
    path, semi-structured output handling.
 4. **CDB groups** — `--group` against retrieve and execute; envelope must
@@ -70,7 +67,6 @@ Do not start a later item until the earlier ones are `CHR-passed`.
 
 | Question | Affects cell | Notes |
 | -------- | ------------ | ----- |
-| Exact `/console/inspect` path-syntax for `print`/`get` verbs | retrieve / rest-api | Current `pathToInspectString` joins with commas; needs CHR confirmation. Fixing this unblocks priority #1. |
 | MNDP cache shape and TTL policy | devices, name resolution | UDP broadcast 30/60s; need cache + expiry. |
 | Bug-report rendering: inline flag, separate command, both? | cross-cutting | Constitution says envelope is rich enough; rendering deferred until needed. |
 | L2 in CI: how to fake L2 net for mac-telnet on Linux runner | mac-telnet | Likely belongs in `quickchr`. |

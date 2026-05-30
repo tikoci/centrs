@@ -130,7 +130,7 @@ centrs retrieve $R /system/resource --username wrong --password wrong
 `transport/connection-refused` (not the more general `transport/network`).
 
 ```bash
-centrs retrieve 198.51.100.1:7080 /system/resource --username $U --password $P
+centrs retrieve 127.0.0.1:1 /system/resource --username $U --password $P
 ```
 
 ### 14. REST timeout ceiling
@@ -142,14 +142,14 @@ centrs retrieve 198.51.100.1:7080 /system/resource --username $U --password $P
 centrs retrieve $R /system/resource --via rest-api --timeout 70000 --username $U --password $P
 ```
 
-## CDB resolution (once wired)
+## CDB resolution
 
 ### 15. Name resolution
 
-`<router>` is a CDB-stored name; user/password are filled from CDB.
+`<router>` matches a CDB-stored target; user/password are filled from CDB.
 
 ```bash
-centrs retrieve MyChrInCdb /system/resource
+centrs retrieve $R /system/resource --cdb-file $CDB
 ```
 
 ### 16. Unused --cdb-password on an unencrypted CDB
@@ -157,7 +157,7 @@ centrs retrieve MyChrInCdb /system/resource
 Call succeeds with a `cdb/password-not-needed` warning in `meta.warnings`.
 
 ```bash
-centrs retrieve MyChrInCdb /system/resource --cdb-password ignored
+centrs retrieve $R /system/resource --cdb-file $CDB --cdb-password ignored
 ```
 
 ## Format
