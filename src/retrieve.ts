@@ -7,6 +7,13 @@ import {
 } from "./devices.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { getProtocolPlan, type RouterOsProtocol } from "./protocols/index.ts";
+import {
+	type ApiReply,
+	connectNativeApi,
+	NATIVE_API_PORT,
+	NATIVE_API_TLS_PORT,
+	type NativeApiSession,
+} from "./protocols/native-api.ts";
 
 export const retrieveOutputFormats = ["text", "json", "yaml"] as const;
 export type RetrieveOutputFormat = (typeof retrieveOutputFormats)[number];
@@ -38,6 +45,8 @@ interface ResolvedTarget {
 	port: number;
 	scheme: "http" | "https";
 	baseUrl: string;
+	/** TLS transport (native-api over api-ssl). REST uses the URL scheme. */
+	tls: boolean;
 	source: SettingSource;
 }
 
@@ -191,80 +200,86 @@ export async function retrieve(
 	const warnings: RetrieveWarning[] = [...resolved.warnings];
 	let availableAttributes: string[] | undefined;
 	let inspection: RetrieveInspection | undefined;
+	const backend = createRetrieveBackend(resolved);
 
-	if (resolved.listAttributes || resolved.validate.value) {
-		inspection = await inspectRetrievePath(resolved);
-	}
+	try {
+		if (resolved.listAttributes || resolved.validate.value) {
+			inspection = await inspectRetrievePath(resolved, backend);
+		}
 
-	if (
-		resolved.listAttributes ||
-		(resolved.validate.value && resolved.attributes.length > 0)
-	) {
-		availableAttributes = await inspectAttributes(
-			resolved,
-			inspection ?? (await inspectRetrievePath(resolved)),
-		);
-	}
+		if (
+			resolved.listAttributes ||
+			(resolved.validate.value && resolved.attributes.length > 0)
+		) {
+			availableAttributes = await inspectAttributes(
+				resolved,
+				inspection ?? (await inspectRetrievePath(resolved, backend)),
+				backend,
+			);
+		}
 
-	if (resolved.listAttributes) {
+		if (resolved.listAttributes) {
+			const envelope = buildSuccessEnvelope(
+				resolved,
+				{
+					kind: "attributes",
+					data: availableAttributes ?? [],
+				},
+				{
+					enabled: true,
+					source: "live /console/inspect request=child+completion",
+					availableAttributes: availableAttributes ?? [],
+				},
+				warnings,
+			);
+			return applyMaxResultsBudget(envelope);
+		}
+
+		if (
+			resolved.validate.value &&
+			availableAttributes &&
+			resolved.attributes.length > 0
+		) {
+			const missing = resolved.attributes.filter(
+				(attribute) => !availableAttributes?.includes(attribute),
+			);
+			if (missing.length > 0) {
+				throw new CentrsError({
+					code: "validation/unknown-attribute",
+					summary: `Unknown RouterOS attribute ${missing.join(", ")} for ${resolved.path}.`,
+					remediation:
+						"Check the attribute name, or use `--list-attributes` to inspect the available properties first.",
+					context: {
+						path: resolved.path,
+						requested: resolved.attributes,
+						availableAttributes,
+					},
+				});
+			}
+		}
+
+		const data = await executeRetrieve(resolved, backend);
 		const envelope = buildSuccessEnvelope(
 			resolved,
 			{
-				kind: "attributes",
-				data: availableAttributes ?? [],
+				kind: "data",
+				data,
 			},
 			{
-				enabled: true,
-				source: "live /console/inspect request=child+completion",
-				availableAttributes: availableAttributes ?? [],
+				enabled: resolved.validate.value,
+				source: resolved.validate.value
+					? availableAttributes
+						? "live /console/inspect request=child+completion"
+						: "live /console/inspect request=child"
+					: "disabled",
+				availableAttributes,
 			},
 			warnings,
 		);
 		return applyMaxResultsBudget(envelope);
+	} finally {
+		await backend.close();
 	}
-
-	if (
-		resolved.validate.value &&
-		availableAttributes &&
-		resolved.attributes.length > 0
-	) {
-		const missing = resolved.attributes.filter(
-			(attribute) => !availableAttributes?.includes(attribute),
-		);
-		if (missing.length > 0) {
-			throw new CentrsError({
-				code: "validation/unknown-attribute",
-				summary: `Unknown RouterOS attribute ${missing.join(", ")} for ${resolved.path}.`,
-				remediation:
-					"Check the attribute name, or use `--list-attributes` to inspect the available properties first.",
-				context: {
-					path: resolved.path,
-					requested: resolved.attributes,
-					availableAttributes,
-				},
-			});
-		}
-	}
-
-	const data = await executeRestRetrieve(resolved);
-	const envelope = buildSuccessEnvelope(
-		resolved,
-		{
-			kind: "data",
-			data,
-		},
-		{
-			enabled: resolved.validate.value,
-			source: resolved.validate.value
-				? availableAttributes
-					? "live /console/inspect request=child+completion"
-					: "live /console/inspect request=child"
-				: "disabled",
-			availableAttributes,
-		},
-		warnings,
-	);
-	return applyMaxResultsBudget(envelope);
 }
 
 export function buildRetrieveErrorEnvelope(
@@ -539,7 +554,7 @@ async function resolveRetrieveRequest(
 		"max-results",
 	);
 	const cdbResolution = await resolveRetrieveCdb(request, env);
-	const target = resolveTarget(request, env, cdbResolution);
+	const target = resolveTarget(request, env, via.value, cdbResolution);
 	const auth = resolveAuth(request, env, cdbResolution);
 
 	return {
@@ -721,6 +736,7 @@ function resolveFormat(
 function resolveTarget(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined>,
+	via: RouterOsProtocol,
 	cdbResolution?: RetrieveCdbResolution,
 ): ResolvedTarget {
 	const hostSetting = resolveStringSetting(
@@ -752,6 +768,30 @@ function resolveTarget(
 		"port",
 	);
 	const scheme = parsedUrl.protocol === "https:" ? "https" : "http";
+	const source =
+		cdbResolution && request.host === undefined && env[ENV_HOST] === undefined
+			? { kind: "cdb" as const, key: `record:${cdbResolution.recordIndex}` }
+			: hostSetting.source;
+
+	if (via === "native-api") {
+		// Native API ignores the URL scheme for its wire protocol; it defaults to
+		// TCP 8728, or TLS (api-ssl) 8729 when the caller passed `https://` or an
+		// explicit 8729. `--port` / CENTRS_PORT overrides the default port.
+		const tls =
+			portSetting?.value === NATIVE_API_TLS_PORT || scheme === "https";
+		const port =
+			portSetting?.value ?? (tls ? NATIVE_API_TLS_PORT : NATIVE_API_PORT);
+		return {
+			input: request.targetInput,
+			host: parsedUrl.hostname,
+			port,
+			scheme,
+			tls,
+			baseUrl: `${tls ? "api-ssl" : "api"}://${formatHostForUrl(parsedUrl.hostname)}:${port}`,
+			source,
+		};
+	}
+
 	const port = portSetting?.value ?? readPort(parsedUrl, scheme);
 
 	return {
@@ -759,11 +799,9 @@ function resolveTarget(
 		host: parsedUrl.hostname,
 		port,
 		scheme,
+		tls: scheme === "https",
 		baseUrl: `${scheme}://${formatHostForUrl(parsedUrl.hostname)}:${port}/rest`,
-		source:
-			cdbResolution && request.host === undefined && env[ENV_HOST] === undefined
-				? { kind: "cdb", key: `record:${cdbResolution.recordIndex}` }
-				: hostSetting.source,
+		source,
 	};
 }
 
@@ -818,18 +856,35 @@ function resolveAuth(
 	};
 }
 
+/**
+ * Path-existence probe. An invalid path raises a native `routeros/api-trap`
+ * (REST instead returns an empty child list); normalize both to an empty list
+ * so the orchestrator surfaces a single `validation/unknown-path`. Traps during
+ * attribute/completion discovery are NOT swallowed — they surface as-is.
+ */
+async function inspectChildrenForProbe(
+	backend: RetrieveBackend,
+	path: string,
+): Promise<unknown[]> {
+	try {
+		return await backend.inspect("child", path);
+	} catch (error) {
+		if (error instanceof CentrsError && error.code === "routeros/api-trap") {
+			return [];
+		}
+		throw error;
+	}
+}
+
 async function inspectRetrievePath(
 	resolved: ResolvedRetrieveRequest,
+	backend: RetrieveBackend,
 ): Promise<RetrieveInspection> {
 	const pathTokens = pathTokensForInspect(resolved.path);
-	const rootChildren = await restPost<InspectChildItem[]>(
-		resolved,
-		"/console/inspect",
-		{
-			request: "child",
-			path: pathToInspectString(pathTokens),
-		},
-	);
+	const rootChildren = (await inspectChildrenForProbe(
+		backend,
+		pathToInspectString(pathTokens),
+	)) as InspectChildItem[];
 
 	const supportsPrint = rootChildren.some((child) =>
 		isCommandNode(child, "print"),
@@ -860,30 +915,23 @@ async function inspectRetrievePath(
 async function inspectAttributes(
 	resolved: ResolvedRetrieveRequest,
 	inspection: RetrieveInspection,
+	backend: RetrieveBackend,
 ): Promise<string[]> {
 	const pathTokens = pathTokensForInspect(resolved.path);
 	const argument = inspection.command === "get" ? "value-name" : "proplist";
-	const completionRows = await restPost<InspectCompletionItem[]>(
-		resolved,
-		"/console/inspect",
-		{
-			request: "completion",
-			path: pathToInspectString([...pathTokens, inspection.command, argument]),
-		},
-	);
+	const completionRows = (await backend.inspect(
+		"completion",
+		pathToInspectString([...pathTokens, inspection.command, argument]),
+	)) as InspectCompletionItem[];
 	const completions = extractCompletionNames(completionRows);
 	if (completions.length > 0) {
 		return completions;
 	}
 
-	const commandChildren = await restPost<InspectChildItem[]>(
-		resolved,
-		"/console/inspect",
-		{
-			request: "child",
-			path: pathToInspectString([...pathTokens, inspection.command]),
-		},
-	);
+	const commandChildren = (await backend.inspect(
+		"child",
+		pathToInspectString([...pathTokens, inspection.command]),
+	)) as InspectChildItem[];
 	return commandChildren
 		.filter(isArgumentNode)
 		.map((child) => child.name)
@@ -893,33 +941,208 @@ async function inspectAttributes(
 		.sort();
 }
 
-async function executeRestRetrieve(
+async function executeRetrieve(
 	resolved: ResolvedRetrieveRequest,
+	backend: RetrieveBackend,
 ): Promise<unknown> {
 	if (isKnownSingletonPath(resolved.path)) {
-		const data = await restGet(resolved, resolved.path);
+		const data = await backend.getSingleton(resolved.path);
 		if (resolved.attributes.length > 0) {
 			return projectSingletonAttributes(data, resolved.attributes);
 		}
 		return data;
 	}
 
-	if (resolved.attributes.length > 0 || resolved.allAttributes) {
-		const body: { ".proplist"?: readonly string[]; detail?: string } = {};
-		if (resolved.attributes.length > 0) {
-			body[".proplist"] = resolved.attributes;
+	return backend.list(resolved.path, {
+		proplist: resolved.attributes.length > 0 ? resolved.attributes : undefined,
+		detail: resolved.allAttributes,
+	});
+}
+
+/**
+ * Transport seam for retrieve. The orchestrator drives validation and data
+ * fetch through these four operations so REST and native-api share the same
+ * validate → run pipeline and the same envelope shape.
+ */
+interface RetrieveListOptions {
+	proplist?: readonly string[];
+	detail?: boolean;
+}
+
+interface RetrieveBackend {
+	/** `/console/inspect` probe (`request=child` or `request=completion`). */
+	inspect(request: "child" | "completion", path: string): Promise<unknown[]>;
+	/** Read a single record (singleton menu) as an object. */
+	getSingleton(path: string): Promise<unknown>;
+	/** Read a menu as an array of records, optionally projected/detailed. */
+	list(path: string, options: RetrieveListOptions): Promise<unknown[]>;
+	/** Release any underlying connection. Safe to call when never connected. */
+	close(): Promise<void>;
+}
+
+function createRetrieveBackend(
+	resolved: ResolvedRetrieveRequest,
+): RetrieveBackend {
+	if (resolved.via.value === "native-api") {
+		return new NativeApiRetrieveBackend(resolved);
+	}
+	return new RestRetrieveBackend(resolved);
+}
+
+class RestRetrieveBackend implements RetrieveBackend {
+	constructor(private readonly resolved: ResolvedRetrieveRequest) {}
+
+	async inspect(
+		request: "child" | "completion",
+		path: string,
+	): Promise<unknown[]> {
+		return restPost<unknown[]>(this.resolved, "/console/inspect", {
+			request,
+			path,
+		});
+	}
+
+	async getSingleton(path: string): Promise<unknown> {
+		return restGet(this.resolved, path);
+	}
+
+	async list(path: string, options: RetrieveListOptions): Promise<unknown[]> {
+		const hasProjection =
+			(options.proplist?.length ?? 0) > 0 || options.detail === true;
+		if (!hasProjection) {
+			return (await restGet(this.resolved, path)) as unknown[];
 		}
-		if (resolved.allAttributes) {
+		const body: { ".proplist"?: readonly string[]; detail?: string } = {};
+		if (options.proplist && options.proplist.length > 0) {
+			body[".proplist"] = options.proplist;
+		}
+		if (options.detail) {
 			body.detail = "true";
 		}
-		return restPost(
-			resolved,
-			`${resolved.path.replace(/\/$/, "")}/print`,
+		return restPost<unknown[]>(
+			this.resolved,
+			`${path.replace(/\/$/, "")}/print`,
 			body,
 		);
 	}
 
-	return restGet(resolved, resolved.path);
+	async close(): Promise<void> {
+		// REST is stateless; nothing to release.
+	}
+}
+
+class NativeApiRetrieveBackend implements RetrieveBackend {
+	private session?: NativeApiSession;
+
+	constructor(private readonly resolved: ResolvedRetrieveRequest) {}
+
+	private async connect(): Promise<NativeApiSession> {
+		if (this.session) {
+			return this.session;
+		}
+		const { session } = await connectNativeApi({
+			host: this.resolved.target.host,
+			port: this.resolved.target.port,
+			username: this.resolved.auth.username ?? "",
+			password: this.resolved.auth.password,
+			tls: this.resolved.target.tls,
+			timeoutMs: this.resolved.timeoutMs.value,
+		});
+		this.session = session;
+		return session;
+	}
+
+	private async talk(command: NativeApiCommandInput): Promise<ApiReply[]> {
+		const session = await this.connect();
+		return this.withTimeout(session.talk(command));
+	}
+
+	private async withTimeout<T>(promise: Promise<T>): Promise<T> {
+		const timeoutMs = this.resolved.timeoutMs.value;
+		let handle: ReturnType<typeof setTimeout> | undefined;
+		const endpoint = this.resolved.target.baseUrl;
+		// Swallow the eventual rejection from the raced command so that closing
+		// the session below (which rejects the in-flight talk) cannot surface as
+		// an unhandled rejection once the timeout has already won the race.
+		promise.catch(() => undefined);
+		const timeout = new Promise<never>((_resolve, reject) => {
+			handle = setTimeout(() => {
+				// Reject with the timeout error first so it wins the race, then
+				// tear down the connection (which rejects the pending talk with
+				// transport/connection-closed — now harmlessly ignored).
+				reject(
+					new CentrsError({
+						code: "transport/timeout",
+						summary: `The RouterOS API command to ${endpoint} timed out after ${timeoutMs}ms.`,
+						remediation:
+							"Raise `--timeout`, or confirm the api service is responsive.",
+						context: { via: "native-api", endpoint, timeoutMs },
+					}),
+				);
+				this.session?.close();
+				this.session = undefined;
+			}, timeoutMs);
+		});
+		try {
+			return await Promise.race([promise, timeout]);
+		} finally {
+			if (handle !== undefined) {
+				clearTimeout(handle);
+			}
+		}
+	}
+
+	async inspect(
+		request: "child" | "completion",
+		path: string,
+	): Promise<unknown[]> {
+		const replies = await this.talk({
+			command: "/console/inspect",
+			attributes: { request, path },
+		});
+		return repliesToRecords(replies);
+	}
+
+	async getSingleton(path: string): Promise<unknown> {
+		const replies = await this.talk({
+			command: `${path.replace(/\/$/, "")}/print`,
+		});
+		const records = repliesToRecords(replies);
+		return records[0] ?? {};
+	}
+
+	async list(path: string, options: RetrieveListOptions): Promise<unknown[]> {
+		const command: NativeApiCommandInput = {
+			command: `${path.replace(/\/$/, "")}/print`,
+		};
+		if (options.proplist && options.proplist.length > 0) {
+			command.proplist = options.proplist;
+		}
+		if (options.detail) {
+			command.attributes = { detail: "" };
+		}
+		const replies = await this.talk(command);
+		return repliesToRecords(replies);
+	}
+
+	async close(): Promise<void> {
+		this.session?.close();
+		this.session = undefined;
+	}
+}
+
+interface NativeApiCommandInput {
+	command: string;
+	attributes?: Record<string, string>;
+	proplist?: readonly string[];
+}
+
+function repliesToRecords(
+	replies: readonly ApiReply[],
+): Record<string, string>[] {
+	return replies
+		.filter((reply) => reply.type === "!re")
+		.map((reply) => ({ ...reply.attributes }));
 }
 
 async function restGet(

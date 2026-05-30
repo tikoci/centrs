@@ -36,8 +36,9 @@ export const protocolPlans = [
 	{
 		id: "native-api",
 		capabilities: ["retrieve", "update", "execute", "proxy"],
-		notes: "Binary API. Not yet implemented.",
-		implemented: false,
+		notes:
+			"Binary API (TCP 8728 / TLS 8729). Transport base implemented in native-api.ts (word/sentence codec, login, tagged talk); command wiring tracked in docs/MATRIX.md.",
+		implemented: true,
 	},
 	{
 		id: "ssh",
@@ -62,8 +63,8 @@ export const protocolPlans = [
 		id: "mac-telnet",
 		capabilities: ["execute", "terminal"],
 		notes:
-			"Layer-2 execute and terminal path. Default execute route for unresolved MAC targets.",
-		implemented: false,
+			"Layer-2 execute and terminal path (UDP 20561). Transport base implemented in mac-telnet.ts (packet/control codec, MD5 auth, session state machine); command wiring tracked in docs/MATRIX.md.",
+		implemented: true,
 	},
 	{
 		id: "romon",
@@ -103,3 +104,6 @@ export function protocolsWithCapability(
 		return capabilities.includes(capability);
 	});
 }
+
+export * from "./mac-telnet.ts";
+export * from "./native-api.ts";

@@ -41,10 +41,11 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
 | `--max-results <bytes>`             | If response would exceed the limit, return error with object count + total size needed.   |
 | `--format json` (alias `--json`)    | JSON envelope (default for non-tty).                                                      |
 | `--format yaml` (alias `--yaml`)    | YAML rendering of the same envelope.                                                      |
-| `--via <protocol>`                  | Pin the transport. No silent downgrade. See constitution: protocol selection.             |
+| `--via <protocol>`                  | Pin the transport (`rest-api` default, or `native-api`). No silent downgrade. See constitution: protocol selection. |
 | `--validate=false`                  | Escape hatch; default is `true`. See constitution: validation is the product.             |
-| `--timeout <ms>`                    | Request timeout. REST: ≤ 60000.                                                           |
+| `--timeout <ms>`                    | Request timeout. REST: ≤ 60000. native-api allows longer.                                 |
 | `--username` / `--password`         | Override CDB-resolved or env credentials.                                                 |
+| `--port <n>`                        | Override the transport port. native-api defaults to 8728 (TLS api-ssl when `--port 8729`).|
 | `--cdb-file` / `--cdb-password`     | Override CDB file location / decrypt password.                                            |
 
 ## Validation
@@ -85,9 +86,11 @@ reach green is forbidden. See `docs/CONSTITUTION.md` for the full done rule.
 
 ## Notes for future cells
 
-- **native-api** — preferred long-term for retrieve. Adapter contract will be
-  formalized when the second transport lands; do not pre-generalize from REST
-  alone.
+- **native-api** — implemented for retrieve (`--via native-api`, `CHR-passed`;
+  see `examples.md` N1–N11 and `test/integration/native-api-retrieve.test.ts`).
+  Validation still runs through `/console/inspect` (issued as a native-API
+  command). Attribute values arrive as strings because the binary API carries
+  no JSON scalar types; the envelope shape is otherwise identical to REST.
 - **snmp** — retrieve-only OID/MIB reads. It does not validate through
   `/console/inspect` and does not execute RouterOS CLI.
 - **ssh / mac-telnet / romon / winbox-terminal** — execute surfaces, not

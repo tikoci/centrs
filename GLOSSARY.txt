@@ -179,3 +179,30 @@ zod
 redactable
 specced
 TTL
+
+# MAC-Telnet and native-api protocol vocabulary
+# Wire-format terms from MikroTik MAC-Telnet (Håkon Nessjøen's reference
+# implementation) and the RouterOS binary API.
+ack
+acks
+beginauth
+clienttype
+cptype
+datagrams
+fromserver
+Håkon
+mtwei
+Nessjøen
+passsalt
+plaindata
+ptype
+seskey
+sessionstart
+
+# QEMU/host networking vocabulary (mac-telnet L2 investigation)
+BPF
+libpcap
+mcast
+netdevs
+SLIRP
+vmnet

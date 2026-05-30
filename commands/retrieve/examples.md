@@ -188,3 +188,88 @@ Same handling as `--query`.
 ```bash
 centrs retrieve $R /ip/address --filter 'disabled=no' --username $U --password $P
 ```
+
+## native-api (`--via native-api`)
+
+The same retrieve contract over the RouterOS binary API (TCP 8728, or TLS 8729
+when `--port 8729`). `$A` is `<host>` and `--port` is the resolved api port
+from quickchr (`chr.ports.api`). Validation still runs through
+`/console/inspect`, issued as a native-API command rather than over REST.
+
+These are exercised by `test/integration/native-api-retrieve.test.ts`.
+
+One transport-specific note: native-API attribute values are **strings**
+(the binary API does not carry JSON scalar types), so `data` scalars are
+strings even where the REST path returns a number/boolean. The envelope shape
+(object vs array vs bare value, projection, validation source) is identical.
+
+### N1. Singleton over native-api
+
+```bash
+centrs retrieve $A /system/resource --via native-api --port $API_PORT --username $U --password $P
+```
+
+Envelope: `ok: true`, `data` is an object, `meta.via=native-api`,
+`meta.validation.source` contains `/console/inspect`.
+
+### N2. Second singleton
+
+```bash
+centrs retrieve $A /system/identity --via native-api --port $API_PORT --username $U --password $P
+```
+
+### N3. List menu → array
+
+```bash
+centrs retrieve $A /interface --via native-api --port $API_PORT --username $U --password $P
+```
+
+### N4. Possibly-empty list
+
+```bash
+centrs retrieve $A /ip/address --via native-api --port $API_PORT --username $U --password $P
+```
+
+### N5. Singleton single `--attribute` → bare value
+
+```bash
+centrs retrieve $A /system/resource --attribute uptime --via native-api --port $API_PORT --username $U --password $P
+```
+
+### N6. List `--attributes` projection
+
+```bash
+centrs retrieve $A /interface --attributes name,type --via native-api --port $API_PORT --username $U --password $P
+```
+
+`data` is an array of objects each containing only `name` and `type`.
+
+### N7. `--all-attributes` (native `print detail`)
+
+```bash
+centrs retrieve $A /system/resource --all-attributes --via native-api --port $API_PORT --username $U --password $P
+```
+
+### N8. `--list-attributes` (inspect only, no data call)
+
+```bash
+centrs retrieve $A /system/resource --list-attributes --via native-api --port $API_PORT --username $U --password $P
+```
+
+### N9. Unknown path → `validation/unknown-path`
+
+```bash
+centrs retrieve $A /not/a/real/path --via native-api --port $API_PORT --username $U --password $P
+```
+
+### N10. Unknown attribute → `validation/unknown-attribute`
+
+```bash
+centrs retrieve $A /system/resource --attribute bogus-attr --via native-api --port $API_PORT --username $U --password $P
+```
+
+### N11. Bad credentials → `transport/auth-failed`
+
+```bash
+centrs retrieve $A /system/resource --via native-api --port $API_PORT --username wrong --password wrong
+```

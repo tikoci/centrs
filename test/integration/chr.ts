@@ -6,6 +6,7 @@ interface ChrInstance {
 	name: string;
 	state: { version: string };
 	restUrl: string;
+	ports: { api: number; apiSsl: number; [key: string]: number };
 	subprocessEnv(): Promise<Record<string, string>>;
 	destroy(): Promise<void>;
 }
