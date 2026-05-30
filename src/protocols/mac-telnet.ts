@@ -342,8 +342,7 @@ export class MacTelnetSession {
 
 	constructor(options: MacTelnetSessionOptions) {
 		this.options = options;
-		this.sessionKey =
-			options.sessionKey ?? Math.floor(Math.random() * 0xffff) & 0xffff;
+		this.sessionKey = options.sessionKey ?? Math.floor(Math.random() * 0x10000);
 	}
 
 	/** Current session key. */
@@ -446,10 +445,12 @@ export class MacTelnetSession {
 
 	private onData(header: MacTelnetHeader, bytes: Uint8Array): void {
 		const payload = bytes.subarray(MAC_TELNET_HEADER_LEN);
+		// Always ACK, even for retransmitted/non-advancing frames, so the peer
+		// stops retransmitting; only deliver the payload when it advances.
+		this.acknowledge(header.counter, payload.length);
 		if (!this.acceptCounter(header.counter)) {
 			return; // duplicate / out-of-window
 		}
-		this.acknowledge(header.counter, payload.length);
 
 		let blocks: ParsedControlBlock[];
 		try {

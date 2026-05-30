@@ -98,8 +98,12 @@ flags, or both. The resolved member set is de-duplicated by CDB record index.
   `max(1, floor(os.cpus().length / 2))`).
 - `--fail-fast` aborts pending members on the first failure.
 - The outer envelope's `data` is an array of inner envelopes, one per member,
-  preserving the order in which results completed. `ok` of the outer envelope
-  is `true` iff every inner envelope is `ok: true`.
+  in the resolved member order (CDB record index — see `devices` group
+  expansion), not completion order, so repeated runs produce stable diffs.
+  Members still execute in parallel and may *complete* out of order; progress
+  is surfaced via `meta`, but the `data` array is always reassembled in the
+  deterministic resolved order. `ok` of the outer envelope is `true` iff every
+  inner envelope is `ok: true`.
 - Commands that are not safe to fan out (e.g. `terminal`) reject N > 1 with
   `usage/fanout-not-supported`.
 

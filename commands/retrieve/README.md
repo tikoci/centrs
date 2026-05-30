@@ -5,7 +5,10 @@ is `print`-style (`print`, `get`, and async POST-shaped reads as they're
 added). SNMP reads use `retrieve <router> snmp <oid|MIB name>` and resolve
 names through a MikroTik MIB cache downloaded from mikrotik.com.
 
-> TODO: "POST-shaped reads" need to be identified from
+> "POST-shaped reads" are RouterOS menu reads that require a request body
+> (e.g. paged or query-driven `print`) and are therefore issued as REST `POST`
+> rather than `GET`. centrs identifies them from the command tree and routes
+> them accordingly as they're added.
 
 Returns an array of records, or — with `--attribute` — a value or row of
 values, all wrapped in the standard envelope (`docs/CONSTITUTION.md`).

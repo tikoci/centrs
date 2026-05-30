@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      run-integration:
+        description: Run RouterOS CHR integration tests
+        type: boolean
+        default: true
       routeros_channel:
         description: RouterOS channel for CHR integration when routeros_version is empty
         type: choice
@@ -48,6 +52,7 @@ jobs:
     name: CHR integration • ${{ inputs.routeros_version || inputs.routeros_channel || 'stable' }}
     runs-on: ubuntu-latest
     needs: ci
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run-integration }}
     timeout-minutes: 20
     steps:
       - name: Checkout repository

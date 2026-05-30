@@ -2,4 +2,4 @@
 
 Use `.scratch/` for repo-local temporary files, one-off scripts, generated experiments, whiteboard notes, and data being analyzed by agents.
 
-Do not commit scratch artifacts -> 
+Do not commit scratch artifacts: delete or ignore `.scratch/` files before committing.

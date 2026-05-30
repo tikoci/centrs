@@ -261,7 +261,10 @@ that other commands consume.
 centrs devices list --group prod-edge --cdb-file $CDB --format json
 ```
 
-The order of resolved members matches CDB record order for stable diffs.
+The order of resolved members matches CDB record order. This deterministic
+ordering is canonical across centrs: fanout consumers reassemble their `data`
+array in this same resolved order (not completion order) so repeated runs
+produce stable diffs.
 
 ### 27. Unknown group
 

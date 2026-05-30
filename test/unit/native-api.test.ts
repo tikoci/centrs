@@ -343,8 +343,12 @@ describe("native-api login flow", () => {
 		const promise = transport.apiSession.login("admin", "secret");
 		const firstTag = transport.lastTag();
 		transport.reply(["!done", `=ret=${challenge}`, `.tag=${firstTag}`]);
-		// The second /login is sent on a microtask after the first resolves.
-		await Promise.resolve();
+		// The second /login is sent on a microtask after the first resolves;
+		// poll the transport until that second write actually lands.
+		for (let i = 0; i < 100 && transport.sent.length < 2; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+		expect(transport.sent.length).toBeGreaterThan(1);
 		// Second /login carries =response=.
 		const secondTag = transport.lastTag();
 		const secondSent = transport.sent.at(-1) ?? [];
