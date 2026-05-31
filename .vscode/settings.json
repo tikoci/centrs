@@ -1,10 +1,10 @@
 {
 	// this project specifies its own MCPs, avoid duplicates -> but user settings should still override
 	"chat.mcp.discovery.enabled": {
-        "claude-desktop": false,
-        "cursor-global": false,
-        "windsurf": false
-    },
+		"claude-desktop": false,
+		"cursor-global": false,
+		"windsurf": false
+	},
 
 	"chat.useNestedAgentsMdFiles": true,
 	"chat.instructionsFilesLocations": {
