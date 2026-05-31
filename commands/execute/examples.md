@@ -1,11 +1,11 @@
 # execute — examples
 
-Each numbered example is an executable spec. The integration tests under
-`test/integration/rest-execute.test.ts` and
-`test/integration/native-api-execute.test.ts` run these examples against a CHR
-7.23 router booted by `@tikoci/quickchr`. If a line here is not exercised by a
-test, the test file is wrong; if a line passes only with `validate=false`, the
-**implementation** is wrong (see `docs/CONSTITUTION.md`).
+Each numbered example is an executable spec. The integration test
+`test/integration/execute.test.ts` runs these examples against a CHR
+7.23 router booted by `@tikoci/quickchr` (examples 1–11 over REST, 12–18 over
+the native API). If a line here is not exercised by a test, the test file is
+wrong; if a line passes only with `validate=false`, the **implementation** is
+wrong (see `docs/CONSTITUTION.md`).
 
 `$R` is `<host>:<rest-port>` resolved by quickchr. `$A` is `<host>` and
 `$API_PORT` is the native API port (`chr.ports.api`). `$U` / `$P` are CHR

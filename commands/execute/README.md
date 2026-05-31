@@ -4,8 +4,11 @@ Run a RouterOS CLI command and return its (semi-structured) output. `execute`
 is the single read/write surface for RouterOS add/set/remove and other
 CLI-shaped commands — there is no separate `update` command.
 
-Status: `not-started`. This file is a stub. Promote to a full design when CDB
-groups/fanout are grounded.
+Status: `rest-api` and `native-api` are `CHR-passed` (see `docs/MATRIX.md` and
+`commands/execute/examples.md`, examples 1–11 over REST and 12–18 over the
+native API, green via `bun run test:integration`). `ssh`, `mac-telnet`,
+`romon`, and `winbox-terminal` remain `not-started`. SNMP is retrieve-only and
+rejects `execute`.
 
 ## Intent
 
@@ -22,16 +25,17 @@ groups/fanout are grounded.
   errors); falls back to `POST /rest/execute {"script":"<cli>"}` for
   non-path-shaped console commands.
 - native-api adapter issues the same write as a tagged `talk` sentence; its
-  `!trap` strings share one error table with REST `detail`. **Deliverable
-  (carried into this cell): route REST `mapHttpFailure` through the shared
-  `mapRouterOsError` so REST and native classify the same RouterOS fault to the
-  same `routeros/*` code.** Today `RestAdapter.mapHttpFailure` hand-rolls codes
-  (404 → `routeros/path-not-found`, "Session closed" → a transport string-match)
-  and diverges from native's `mapRouterOsError`; feed REST `detail` + HTTP status
-  through `mapRouterOsError({ transport: "rest-api" })`, preserving the fanout
-  retry mapping (401/403 → auth-failed; 5xx → retryable
-  `transport/connection-closed`). This closes review finding #6 and removes the
-  `WP-1c: adopt mapRouterOsError here` TODO in `src/protocols/adapter.ts`.
+  `!trap` strings share one error table with REST `detail`. REST and native
+  classify the same RouterOS fault to the same `routeros/*` code: both feed the
+  router-side fault string through `mapRouterOsError`
+  (`src/core/routeros-errors.ts`). In `RestAdapter.mapHttpFailure`
+  (`src/protocols/adapter.ts`), transport-level HTTP statuses are classified
+  first — 401/403 → `transport/auth-failed`, 5xx → retryable
+  `transport/connection-closed` (kept distinct so the fanout retry allowlist
+  can retry drops without retrying real router rejections) — and everything
+  else passes its `detail`/body plus the HTTP status through
+  `mapRouterOsError({ transport: "rest-api", httpStatus })`. There is no longer
+  a hand-rolled `routeros/*` table on the REST side.
 - Output is *string*-shaped for script-mode; richer parsing is a future
   concern. The envelope must still distinguish RouterOS errors from successful
   runs (a 200 with a RouterOS error string is still an error — see
@@ -91,4 +95,5 @@ matrix cell to `CHR-passed`.
   single-shot model up front.
 - Whether `--strict` should reject "succeeded with stderr-like content."
 
-Defer until CDB groups/fanout have settled the multi-target envelope.
+These are deferred refinements to the already-grounded single-shot envelope,
+not blockers for the `rest-api`/`native-api` cells.

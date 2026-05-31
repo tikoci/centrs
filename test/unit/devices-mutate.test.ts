@@ -492,3 +492,99 @@ describe("devices mutation", () => {
 		}
 	});
 });
+
+function dupTargetRecords(): readonly WinBoxCdbRecord[] {
+	return [
+		buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.ipAdmin,
+			target: "2001:db8::5",
+			user: "admin-ip",
+			password: "secret",
+			group: "prod",
+		}),
+		buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.ipUser,
+			target: "2001:db8::5",
+			user: "ops-ip",
+			password: "ops-pw",
+			group: "lab",
+		}),
+	];
+}
+
+describe("showDevice --match disambiguation", () => {
+	test("duplicate targets without --match are identity/ambiguous", async () => {
+		const { path, cleanup } = await tempCdb(dupTargetRecords());
+		try {
+			const cdb = await reload(path);
+			const error = await catchError(async () =>
+				showDevice({ cdb, target: "2001:db8::5" }),
+			);
+			expect(error.code).toBe("identity/ambiguous");
+			const matches = (error.context?.["matches"] ?? []) as Array<{
+				cdbRecordIndex: number;
+				target: string;
+				recordType: number;
+			}>;
+			expect(matches).toHaveLength(2);
+			expect(matches.map((entry) => entry.recordType).sort()).toEqual([
+				winBoxCdbRecordType.ipAdmin,
+				winBoxCdbRecordType.ipUser,
+			]);
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("--match selects the entry with the named record type", async () => {
+		const { path, cleanup } = await tempCdb(dupTargetRecords());
+		try {
+			const cdb = await reload(path);
+			const result = showDevice({
+				cdb,
+				target: "2001:db8::5",
+				match: "ipUser",
+			});
+			expect(result.ok).toBe(true);
+			expect(result.data.entry.recordType).toBe(winBoxCdbRecordType.ipUser);
+			expect(result.data.entry.user).toBe("ops-ip");
+			expect(result.meta.target.resolvedTarget).toBe("2001:db8::5");
+
+			const admin = showDevice({
+				cdb,
+				target: "2001:db8::5",
+				match: "ipAdmin",
+			});
+			expect(admin.data.entry.recordType).toBe(winBoxCdbRecordType.ipAdmin);
+			expect(admin.data.entry.user).toBe("admin-ip");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("--match with an unknown record type errors with input/invalid-match", async () => {
+		const { path, cleanup } = await tempCdb(dupTargetRecords());
+		try {
+			const cdb = await reload(path);
+			const error = await catchError(async () =>
+				showDevice({ cdb, target: "2001:db8::5", match: "bogus" }),
+			);
+			expect(error.code).toBe("input/invalid-match");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("--match for an absent record type errors with identity/no-match", async () => {
+		const { path, cleanup } = await tempCdb(dupTargetRecords());
+		try {
+			const cdb = await reload(path);
+			const error = await catchError(async () =>
+				showDevice({ cdb, target: "2001:db8::5", match: "macTarget" }),
+			);
+			expect(error.code).toBe("identity/no-match");
+		} finally {
+			await cleanup();
+		}
+	});
+});

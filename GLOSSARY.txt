@@ -231,3 +231,4 @@ unpadded
 
 # RouterOS CLI canonicalization vocabulary
 subshell
+disambiguator

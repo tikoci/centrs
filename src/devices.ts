@@ -419,6 +419,14 @@ export interface ShowDeviceArgs {
 	target: string;
 	explain?: boolean;
 	via?: string;
+	/**
+	 * Disambiguator for duplicate `target` strings: a record-type token (one of
+	 * `winBoxCdbRecordType`'s names, e.g. `ipAdmin`/`ipUser`/`macTarget`). When
+	 * `show <target>` matches more than one CDB entry, `--match` selects the one
+	 * whose record type matches. It cannot select between two entries that share
+	 * both `target` and record type.
+	 */
+	match?: string;
 	env?: Record<string, string | undefined>;
 }
 
@@ -448,15 +456,46 @@ export function showDevice(
 		});
 	}
 
-	if (matches.length > 1) {
+	const recordTypeTokens = Object.keys(winBoxCdbRecordType).join(", ");
+	let selected = matches;
+	if (matches.length > 1 && args.match !== undefined) {
+		const wanted = recordTypeFromName(args.match);
+		if (wanted === undefined) {
+			throw new CentrsError({
+				code: "input/invalid-match",
+				summary: `--match "${args.match}" is not a known record type.`,
+				remediation: `Pass one of ${recordTypeTokens} to select among duplicate targets.`,
+				context: { target: args.target, match: args.match },
+			});
+		}
+		selected = matches.filter(({ entry }) => entry.recordType === wanted);
+		if (selected.length === 0) {
+			throw new CentrsError({
+				code: "identity/no-match",
+				summary: `Target "${args.target}" has no CDB entry of record type "${args.match}".`,
+				remediation:
+					"Run `centrs devices list` to see each duplicate's record type, then pass a --match that exists.",
+				context: {
+					target: args.target,
+					match: args.match,
+					matches: matches.map(({ entry, index }) => ({
+						cdbRecordIndex: index,
+						target: entry.target,
+						recordType: entry.recordType,
+					})),
+				},
+			});
+		}
+	}
+
+	if (selected.length > 1) {
 		throw new CentrsError({
 			code: "identity/ambiguous",
-			summary: `Target "${args.target}" matches ${matches.length} CDB entries.`,
-			remediation:
-				"Re-run with --match=<exact-target> once the resolver supports it, or remove the duplicate entry.",
+			summary: `Target "${args.target}" matches ${selected.length} CDB entries.`,
+			remediation: `Re-run with --match=<record-type> (one of ${recordTypeTokens}) to select among the duplicates, or remove the duplicate CDB entry.`,
 			context: {
 				target: args.target,
-				matches: matches.map(({ entry, index }) => ({
+				matches: selected.map(({ entry, index }) => ({
 					cdbRecordIndex: index,
 					target: entry.target,
 					recordType: entry.recordType,
@@ -465,7 +504,7 @@ export function showDevice(
 		});
 	}
 
-	const match = matches[0];
+	const match = selected[0];
 	if (!match) {
 		throw new CentrsError({
 			code: "internal/unreachable",

@@ -72,6 +72,12 @@ export const devicesCommand: CliCommandMetadata = {
 				"`show` only — include the raw `WinBoxCdbRecord` in `data.record`.",
 		},
 		{
+			flag: "--match",
+			valueName: `<${Object.keys(winBoxCdbRecordType).join("|")}>`,
+			description:
+				"`show` only — disambiguate duplicate targets by record type.",
+		},
+		{
 			flag: "--user",
 			valueName: "<name>",
 			description: "`add`,`edit` — first-class CDB user field.",
@@ -140,6 +146,7 @@ interface DevicesCliArgs {
 	via?: string;
 	members?: boolean;
 	explain?: boolean;
+	match?: string;
 	user?: string;
 	password?: string;
 	profile?: string;
@@ -184,6 +191,9 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			case "--explain":
 				parsed.explain = true;
+				break;
+			case "--match":
+				parsed.match = expectValue(args, ++index, arg);
 				break;
 			case "--user":
 				parsed.user = expectValue(args, ++index, arg);
@@ -347,6 +357,7 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 					cdb,
 					target: parsed.target,
 					explain: parsed.explain,
+					match: parsed.match,
 					via: parsed.via,
 					env: envSnapshot,
 				});

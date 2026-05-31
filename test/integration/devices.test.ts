@@ -148,6 +148,41 @@ function buildFixtureBytes(): Uint8Array {
 
 const ENCRYPTED_PASSWORD = "centrs-test";
 
+// Two entries that share the exact `target` string but differ by record type:
+// the same host saved once for admin access and once for user access. Exercises
+// `devices show` ambiguity detection (example 5) and `--match` disambiguation
+// (example 6).
+function buildAmbiguousFixtureBytes(): Uint8Array {
+	return encodeOpenWinBoxCdb([
+		buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.ipAdmin,
+			target: "2001:db8::5",
+			user: "admin-ip",
+			password: "secret",
+			group: "prod",
+			profile: "<own>",
+			savedPassword: true,
+		}),
+		buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.ipUser,
+			target: "2001:db8::5",
+			user: "ops-ip",
+			password: "ops-pw",
+			group: "lab",
+			profile: "<own>",
+			savedPassword: true,
+		}),
+	]);
+}
+
+async function writeAmbiguousFixture(name: string): Promise<string> {
+	const dir = join(tempDir, `${name}-${randomUUID()}`);
+	await mkdir(dir, { recursive: true });
+	const path = join(dir, "devices.cdb");
+	await writeFile(path, buildAmbiguousFixtureBytes());
+	return path;
+}
+
 beforeAll(async () => {
 	tempDir = join(
 		import.meta.dir,
@@ -346,6 +381,63 @@ describe("centrs devices (read-only)", () => {
 			error: { code: string };
 		};
 		expect(envelope.error.code).toBe("cdb/not-found-target");
+	});
+
+	test("example 5 ambiguous target (non-TTY) errors with identity/ambiguous", async () => {
+		const cdbPath = await writeAmbiguousFixture("example-5-ambiguous");
+		const result = await runWithCapture([
+			"devices",
+			"show",
+			"2001:db8::5",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(1);
+		const envelope = JSON.parse(result.stderr) as {
+			error: {
+				code: string;
+				context?: {
+					matches?: Array<{
+						cdbRecordIndex: number;
+						target: string;
+						recordType: number;
+					}>;
+				};
+			};
+		};
+		expect(envelope.error.code).toBe("identity/ambiguous");
+		const matches = envelope.error.context?.matches ?? [];
+		expect(matches).toHaveLength(2);
+		expect(matches.every((entry) => entry.target === "2001:db8::5")).toBe(true);
+		expect(matches.map((entry) => entry.recordType).sort()).toEqual([
+			winBoxCdbRecordType.ipAdmin,
+			winBoxCdbRecordType.ipUser,
+		]);
+	});
+
+	test("example 6 --match disambiguates by record type", async () => {
+		const cdbPath = await writeAmbiguousFixture("example-6-match");
+		const result = await runWithCapture([
+			"devices",
+			"show",
+			"2001:db8::5",
+			"--cdb-file",
+			cdbPath,
+			"--match",
+			"ipUser",
+			"--json",
+		]);
+		expect(result.exitCode).toBe(0);
+		const envelope = JSON.parse(result.stdout) as {
+			ok: boolean;
+			data: { entry: { user: string; recordType: number } };
+			meta: { target: { resolvedTarget?: string } };
+		};
+		expect(envelope.ok).toBe(true);
+		expect(envelope.data.entry.recordType).toBe(winBoxCdbRecordType.ipUser);
+		expect(envelope.data.entry.user).toBe("ops-ip");
+		expect(envelope.meta.target.resolvedTarget).toBe("2001:db8::5");
 	});
 
 	test("groups lists distinct non-empty groups", async () => {

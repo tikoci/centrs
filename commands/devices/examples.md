@@ -2,12 +2,13 @@
 
 Each numbered example is an executable spec. `devices` performs no network
 IO, so its integration tests run against a fixture CDB rather than a live
-CHR. The fixture lives at `test/fixtures/winbox-cdb/devices.cdb` (open) and
-`devices.encrypted.cdb` (password `centrs-test`). See
+CHR. The fixtures are built in-test from the known CDB primitives and written
+into a temporary directory at runtime (open and encrypted, encrypted password
+`centrs-test`); there are no checked-in `.cdb` files. See
 `test/integration/devices.test.ts`.
 
-Writes operate on a copy of the fixture per test; the on-disk fixture is
-read-only. `$CDB` is the per-test path.
+Writes operate on a copy of the fixture per test; the source bytes are never
+mutated in place. `$CDB` is the per-test path.
 
 ## list
 
@@ -50,23 +51,29 @@ centrs devices show 192.0.2.5 --cdb-file $CDB
 
 ### 5. Show ambiguous target (non-TTY)
 
-CDB contains both an ipAdmin (`edge1`) and a macTarget that share the same
-name in `target` via DNS. Non-TTY → error.
+The CDB holds two entries with the same `target` (`2001:db8::5`) — the same
+host saved once as an `ipAdmin` record and once as an `ipUser` record. With no
+disambiguator and no interactive prompt available, `show` refuses to guess.
 
 ```bash
-centrs devices show edge1 --cdb-file $CDB </dev/null
+centrs devices show 2001:db8::5 --cdb-file $CDB </dev/null
 ```
 
-`identity/ambiguous`. `error.cause.matches` is an array of
-`{ cdbRecordIndex, target, recordType }`.
+`identity/ambiguous`. `error.context.matches` is an array of
+`{ cdbRecordIndex, target, recordType }`, one per colliding entry.
 
 ### 6. Show with --match disambiguation
 
+`--match <record-type>` selects among duplicate targets by record type (one of
+the `winBoxCdbRecordType` names: `ipAdmin`, `ipUser`, `macTarget`, …).
+
 ```bash
-centrs devices show edge1 --cdb-file $CDB --match 2001:db8::5
+centrs devices show 2001:db8::5 --cdb-file $CDB --match ipUser
 ```
 
-`ok: true`. `meta.target.resolvedTarget` is `2001:db8::5`.
+`ok: true`. The returned entry is the `ipUser` record; `meta.target.resolvedTarget`
+is `2001:db8::5`. A `--match` token that names no colliding entry errors with
+`identity/no-match`; an unknown record-type token errors with `input/invalid-match`.
 
 ### 7. Show --explain dumps raw record
 
