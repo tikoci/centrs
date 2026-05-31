@@ -10,8 +10,10 @@ names through a MikroTik MIB cache downloaded from mikrotik.com.
 > rather than `GET`. centrs identifies them from the command tree and routes
 > them accordingly as they're added.
 
-Returns an array of records, or — with `--attribute` — a value or row of
-values, all wrapped in the standard envelope (`docs/CONSTITUTION.md`).
+Structured formats return an array of records, or — with `--attribute` — a
+value or row of values wrapped in the standard envelope
+(`docs/CONSTITUTION.md`). The default `text` format renders data and errors for
+humans.
 
 ## Synopsis
 

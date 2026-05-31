@@ -141,6 +141,7 @@ describeFast("retrieve group fanout against CHR", () => {
 				"/system/resource",
 				"--cdb-file",
 				fixture.cdbPath,
+				"--json",
 			]);
 			const stdout = consoleCapture.logs.slice(logsStart);
 
@@ -208,6 +209,7 @@ describeFast("retrieve group fanout against CHR", () => {
 				"/system/resource",
 				"--cdb-file",
 				fixture.cdbPath,
+				"--json",
 			]);
 			const stdout = consoleCapture.logs.slice(logsStart);
 			expect(exitCode).toBe(0);

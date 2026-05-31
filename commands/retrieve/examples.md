@@ -8,6 +8,8 @@ test file is wrong; if a line passes only with `validate=false`, the
 
 `$R` is `<host>:<rest-port>` resolved by quickchr.
 `$U` / `$P` are CHR credentials provided by the test harness.
+Examples that assert envelope fields pass `--json`; plain text is the default
+for human CLI use.
 
 ## Singletons (read a single record)
 
@@ -16,7 +18,7 @@ test file is wrong; if a line passes only with `validate=false`, the
 Must succeed with `validate=true` (default).
 
 ```bash
-centrs retrieve $R /system/resource --username $U --password $P
+centrs retrieve $R /system/resource --username $U --password $P --json
 ```
 
 Envelope: `ok: true`, `data` is an object, `meta.via=rest-api`,
@@ -27,7 +29,7 @@ Envelope: `ok: true`, `data` is an object, `meta.via=rest-api`,
 Same shape, different menu.
 
 ```bash
-centrs retrieve $R /system/identity --username $U --password $P
+centrs retrieve $R /system/identity --username $U --password $P --json
 ```
 
 ## Lists (read an array of rows)
@@ -37,7 +39,7 @@ centrs retrieve $R /system/identity --username $U --password $P
 Empty or populated, both must succeed with `validate=true`.
 
 ```bash
-centrs retrieve $R /ip/address --username $U --password $P
+centrs retrieve $R /ip/address --username $U --password $P --json
 ```
 
 Envelope: `ok: true`, `data` is an array.
@@ -47,7 +49,7 @@ Envelope: `ok: true`, `data` is an array.
 List of interfaces present on a default CHR.
 
 ```bash
-centrs retrieve $R /interface --username $U --password $P
+centrs retrieve $R /interface --username $U --password $P --json
 ```
 
 ## Attribute projection
@@ -55,7 +57,7 @@ centrs retrieve $R /interface --username $U --password $P
 ### 5. Single --attribute on a singleton
 
 ```bash
-centrs retrieve $R /system/resource --attribute uptime --username $U --password $P
+centrs retrieve $R /system/resource --attribute uptime --username $U --password $P --json
 ```
 
 Envelope: `data` is the bare value, not an object.
@@ -63,7 +65,7 @@ Envelope: `data` is the bare value, not an object.
 ### 6. Comma-list --attributes on a list
 
 ```bash
-centrs retrieve $R /interface --attributes name,type --username $U --password $P
+centrs retrieve $R /interface --attributes name,type --username $U --password $P --json
 ```
 
 Envelope: `data` is an array of objects each containing only `name` and `type`.
@@ -71,7 +73,7 @@ Envelope: `data` is an array of objects each containing only `name` and `type`.
 ### 7. --all-attributes (RouterOS details=true)
 
 ```bash
-centrs retrieve $R /system/resource --all-attributes --username $U --password $P
+centrs retrieve $R /system/resource --all-attributes --username $U --password $P --json
 ```
 
 ### 8. Conflict: --attribute + --all-attributes
@@ -79,7 +81,7 @@ centrs retrieve $R /system/resource --all-attributes --username $U --password $P
 Rejected before any network call, with `usage/conflicting-flags`.
 
 ```bash
-centrs retrieve $R /system/resource --attribute uptime --all-attributes --username $U --password $P
+centrs retrieve $R /system/resource --attribute uptime --all-attributes --username $U --password $P --json
 ```
 
 ## --list-attributes
@@ -89,7 +91,7 @@ centrs retrieve $R /system/resource --attribute uptime --all-attributes --userna
 Without running `print`/`get`.
 
 ```bash
-centrs retrieve $R /system/resource --list-attributes --username $U --password $P
+centrs retrieve $R /system/resource --list-attributes --username $U --password $P --json
 ```
 
 Envelope: `data` is `string[]`. No `meta.timing.request` (no transport call).
@@ -104,7 +106,7 @@ envelope must include suggested alternatives from `/console/inspect` when
 available.
 
 ```bash
-centrs retrieve $R /not/a/real/path --username $U --password $P
+centrs retrieve $R /not/a/real/path --username $U --password $P --json
 ```
 
 ### 11. Unknown attribute
@@ -112,7 +114,7 @@ centrs retrieve $R /not/a/real/path --username $U --password $P
 `validation/unknown-attribute` with suggestions.
 
 ```bash
-centrs retrieve $R /system/resource --attribute bogus --username $U --password $P
+centrs retrieve $R /system/resource --attribute bogus --username $U --password $P --json
 ```
 
 ## Transport / error contract
@@ -122,7 +124,7 @@ centrs retrieve $R /system/resource --attribute bogus --username $U --password $
 `transport/auth-failed`, `details_url` populated.
 
 ```bash
-centrs retrieve $R /system/resource --username wrong --password wrong
+centrs retrieve $R /system/resource --username wrong --password wrong --json
 ```
 
 ### 13. Unreachable host
@@ -130,7 +132,7 @@ centrs retrieve $R /system/resource --username wrong --password wrong
 `transport/connection-refused` (not the more general `transport/network`).
 
 ```bash
-centrs retrieve 127.0.0.1:1 /system/resource --username $U --password $P
+centrs retrieve 127.0.0.1:1 /system/resource --username $U --password $P --json
 ```
 
 ### 14. REST timeout ceiling
@@ -139,7 +141,7 @@ centrs retrieve 127.0.0.1:1 /system/resource --username $U --password $P
 `usage/timeout-out-of-range` (REST hard cap is 60s).
 
 ```bash
-centrs retrieve $R /system/resource --via rest-api --timeout 70000 --username $U --password $P
+centrs retrieve $R /system/resource --via rest-api --timeout 70000 --username $U --password $P --json
 ```
 
 ## CDB resolution
@@ -149,7 +151,7 @@ centrs retrieve $R /system/resource --via rest-api --timeout 70000 --username $U
 `<router>` matches a CDB-stored target; user/password are filled from CDB.
 
 ```bash
-centrs retrieve $R /system/resource --cdb-file $CDB
+centrs retrieve $R /system/resource --cdb-file $CDB --json
 ```
 
 ### 16. Unused --cdb-password on an unencrypted CDB
@@ -157,7 +159,7 @@ centrs retrieve $R /system/resource --cdb-file $CDB
 Call succeeds with a `cdb/password-not-needed` warning in `meta.warnings`.
 
 ```bash
-centrs retrieve $R /system/resource --cdb-file $CDB --cdb-password ignored
+centrs retrieve $R /system/resource --cdb-file $CDB --cdb-password ignored --json
 ```
 
 ## Group fanout
@@ -171,7 +173,7 @@ integration is enabled.
 record 1 is an unreachable REST URL.
 
 ```bash
-centrs retrieve --group fanout-chr /system/resource --cdb-file $CDB
+centrs retrieve --group fanout-chr /system/resource --cdb-file $CDB --json
 ```
 
 Outer envelope: `ok: true`, `data.summary = { total: 2, ok: 1, failed: 1 }`,
@@ -182,7 +184,7 @@ Outer envelope: `ok: true`, `data.summary = { total: 2, ok: 1, failed: 1 }`,
 ### F2. Empty / unknown group
 
 ```bash
-centrs retrieve --group no-such-group /system/resource --cdb-file $CDB
+centrs retrieve --group no-such-group /system/resource --cdb-file $CDB --json
 ```
 
 Envelope: `ok: true`, `data.summary = { total: 0, ok: 0, failed: 0 }`,
@@ -207,7 +209,7 @@ centrs retrieve $R /system/resource --format yaml --username $U --password $P
 Returns `validation/not-implemented` immediately.
 
 ```bash
-centrs retrieve $R /ip/address --query 'address~"192"' --username $U --password $P
+centrs retrieve $R /ip/address --query 'address~"192"' --username $U --password $P --json
 ```
 
 ### 19. --filter
@@ -215,7 +217,7 @@ centrs retrieve $R /ip/address --query 'address~"192"' --username $U --password 
 Same handling as `--query`.
 
 ```bash
-centrs retrieve $R /ip/address --filter 'disabled=no' --username $U --password $P
+centrs retrieve $R /ip/address --filter 'disabled=no' --username $U --password $P --json
 ```
 
 ## native-api (`--via native-api`)

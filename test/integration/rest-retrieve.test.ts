@@ -96,11 +96,18 @@ async function runCliCaptured(
 	};
 }
 
+function withJsonEnvelope(args: readonly string[]): readonly string[] {
+	if (args.includes("--json") || args.includes("--format")) {
+		return args;
+	}
+	return [...args, "--json"];
+}
+
 async function expectRetrieveSuccess(
 	consoleCapture: ConsoleCapture,
 	args: readonly string[],
 ): Promise<RetrieveSuccessTestEnvelope> {
-	const result = await runCliCaptured(consoleCapture, args);
+	const result = await runCliCaptured(consoleCapture, withJsonEnvelope(args));
 	expect(result.exitCode).toBe(0);
 	expect(result.stderr).toHaveLength(0);
 	expect(result.stdout).toHaveLength(1);
@@ -121,7 +128,7 @@ async function expectRetrieveFailure(
 	args: readonly string[],
 	expectedCode: string,
 ): Promise<RetrieveFailureTestEnvelope> {
-	const result = await runCliCaptured(consoleCapture, args);
+	const result = await runCliCaptured(consoleCapture, withJsonEnvelope(args));
 	expect(result.exitCode).toBe(1);
 	expect(result.stdout).toHaveLength(0);
 	expect(result.stderr).toHaveLength(1);
@@ -459,6 +466,7 @@ describeFast("REST retrieve against CHR", () => {
 				"admin",
 				"--password",
 				"",
+				"--json",
 			]);
 
 			expect(exitCode).toBe(1);

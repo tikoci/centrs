@@ -67,10 +67,17 @@ describeFast("native API retrieve against CHR", () => {
 			auth.password,
 		];
 
+		function withJsonEnvelope(args: readonly string[]): readonly string[] {
+			if (args.includes("--json") || args.includes("--format")) {
+				return args;
+			}
+			return [...args, "--json"];
+		}
+
 		async function ok(args: readonly string[]): Promise<SuccessEnvelope> {
 			const logStart = capture.logs.length;
 			const errStart = capture.errors.length;
-			const exitCode = await runCli(args);
+			const exitCode = await runCli(withJsonEnvelope(args));
 			const stdout = capture.logs.slice(logStart);
 			const stderr = capture.errors.slice(errStart);
 			expect(stderr).toHaveLength(0);
@@ -89,7 +96,7 @@ describeFast("native API retrieve against CHR", () => {
 		): Promise<FailureEnvelope> {
 			const logStart = capture.logs.length;
 			const errStart = capture.errors.length;
-			const exitCode = await runCli(args);
+			const exitCode = await runCli(withJsonEnvelope(args));
 			const stdout = capture.logs.slice(logStart);
 			const stderr = capture.errors.slice(errStart);
 			expect(exitCode).toBe(1);
