@@ -212,3 +212,12 @@ neteng
 upsert
 upserts
 upserted
+
+# MNDP discovery vocabulary (WP-2b)
+tlvs
+noaddr
+Hac
+HnD
+EADDRINUSE
+EACCES
+REUSEPORT

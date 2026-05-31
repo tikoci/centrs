@@ -27,7 +27,7 @@ A cell advances only with the matching evidence in the same change.
 | execute  | `not-started` | `not-started` | `not-started` | `not-started` | —             | —             | `not-started` | `not-started`    |
 | terminal | —             | —             | `not-started` | `not-started` | —             | —             | —             | —                |
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
-| discover | —             | —             | —             | —             | —             | `not-started` | —             | —                |
+| discover | —             | —             | —             | —             | —             | `coded`       | —             | —                |
 | check    | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started`    |
 
 `devices` does not use a transport in the protocol sense, so its grid row
@@ -40,6 +40,17 @@ green via `bun run test:integration` — that still requires `add`, `edit`,
 `set`, `remove`, ambiguity / `--match`, and the provenance/override examples.
 Data sources (CDB, ARP cache, MNDP cache, `dude.db` import) and their
 phasing live in `commands/devices/README.md`.
+
+`discover` is `coded`: the MNDP wire codec (`src/data/mndp.ts`), the
+TTL-expiring neighbor cache (`src/data/mndp-cache.ts`), the UDP listener, and
+`discover --save` (which persists through `devices`' `addDevice` write layer)
+live in `src/discover.ts` and are green under `bun test`. The codec is tested
+against crafted packet fixtures and the listener against a loopback socket, so
+no router is required. It advances to `CHR-passed` only once every example in
+`commands/discover/examples.md` is green against a real layer-2 segment via
+`bun run test:integration` — which needs an L2 fabric the CI runner does not
+yet provide (same blocker as mac-telnet). Flags, TTL/timeout defaults, and the
+`group=discovered` convention live in `commands/discover/README.md`.
 
 There is no `update` command: `execute` is the single read/write surface for
 RouterOS add/set/remove, and `retrieve` stays read-only. See
@@ -103,7 +114,6 @@ matching evidence.
 
 | Question | Affects cell | Notes |
 | -------- | ------------ | ----- |
-| MNDP cache shape and TTL policy | devices, name resolution | UDP broadcast 30/60s; need cache + expiry. |
 | SNMP MIB cache policy | retrieve / snmp | Decide cache location, invalidation, RouterOS version/channel matching, and offline behavior for MIB-name lookup. |
 | SSH key management | execute / ssh, terminal / ssh | Decide CDB comment-kv keys, CLI flags, env names, and redaction for stored key paths or key material. |
 | Bug-report rendering: inline flag, separate command, both? | cross-cutting | Constitution says envelope is rich enough; rendering deferred until needed. |

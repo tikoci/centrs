@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { runDevicesCli } from "./cli/devices.ts";
+import { runDiscoverCli } from "./cli/discover.ts";
 import { runExecuteCli } from "./cli/execute.ts";
 import { runRetrieveCli } from "./cli/retrieve.ts";
 import { describeCentrs, plannedProtocols, plannedSurfaces } from "./index.ts";
@@ -20,6 +21,11 @@ const commandSummaries: ReadonlyArray<{ name: string; summary: string }> = [
 		name: "devices",
 		summary:
 			"Inspect the CDB-backed device registry (read-only subcommands only in this phase).",
+	},
+	{
+		name: "discover",
+		summary:
+			"Discover RouterOS neighbors over MNDP and optionally save them into the CDB.",
 	},
 ];
 
@@ -56,6 +62,9 @@ export async function runCli(
 	}
 	if (command === "devices") {
 		return runDevicesCli(rest);
+	}
+	if (command === "discover") {
+		return runDiscoverCli(rest);
 	}
 
 	console.error(

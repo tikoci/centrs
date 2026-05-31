@@ -3,9 +3,11 @@ const ERROR_DETAILS_BASE_URL = "https://tikoci.github.io/centrs/errors/";
 export type CentrsErrorCode =
 	| `auth/${string}`
 	| `cdb/${string}`
+	| `discover/${string}`
 	| `identity/${string}`
 	| `input/${string}`
 	| `internal/${string}`
+	| `mndp/${string}`
 	| `routeros/${string}`
 	| `settings/${string}`
 	| `target/${string}`
