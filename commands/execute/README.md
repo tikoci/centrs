@@ -22,7 +22,16 @@ groups/fanout are grounded.
   errors); falls back to `POST /rest/execute {"script":"<cli>"}` for
   non-path-shaped console commands.
 - native-api adapter issues the same write as a tagged `talk` sentence; its
-  `!trap` strings share one error table with REST `detail`.
+  `!trap` strings share one error table with REST `detail`. **Deliverable
+  (carried into this cell): route REST `mapHttpFailure` through the shared
+  `mapRouterOsError` so REST and native classify the same RouterOS fault to the
+  same `routeros/*` code.** Today `RestAdapter.mapHttpFailure` hand-rolls codes
+  (404 → `routeros/path-not-found`, "Session closed" → a transport string-match)
+  and diverges from native's `mapRouterOsError`; feed REST `detail` + HTTP status
+  through `mapRouterOsError({ transport: "rest-api" })`, preserving the fanout
+  retry mapping (401/403 → auth-failed; 5xx → retryable
+  `transport/connection-closed`). This closes review finding #6 and removes the
+  `WP-1c: adopt mapRouterOsError here` TODO in `src/protocols/adapter.ts`.
 - Output is *string*-shaped for script-mode; richer parsing is a future
   concern. The envelope must still distinguish RouterOS errors from successful
   runs (a 200 with a RouterOS error string is still an error — see

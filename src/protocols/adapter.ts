@@ -301,6 +301,10 @@ class RestAdapter implements ProtocolAdapter {
 		}
 
 		// WP-1c: adopt mapRouterOsError here (REST `detail` -> normalized routeros/* code).
+		// Tracked as a deliverable in commands/execute/README.md (review finding #6):
+		// route REST detail + HTTP status through mapRouterOsError({ transport: "rest-api" })
+		// so REST and native classify the same fault identically, preserving fanout retry
+		// mapping (401/403 -> auth-failed; 5xx -> retryable transport/connection-closed).
 		return new CentrsError({
 			code: "routeros/request-failed",
 			summary: `RouterOS REST request failed with HTTP ${status} for ${path}.`,

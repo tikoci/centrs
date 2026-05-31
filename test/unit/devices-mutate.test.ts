@@ -70,11 +70,28 @@ function romonRecordWithLayout(): WinBoxCdbRecord {
 		recordType: winBoxCdbRecordType.romonTarget,
 		target: "AA:BB:CC:DD:EE:FF",
 		user: "svc",
-		comment: "rmon",
+		comment: "romon-note",
 		fieldOrder: [
 			winBoxCdbFieldTag.recordType,
 			winBoxCdbFieldTag.comment,
 			winBoxCdbFieldTag.user,
+		],
+	});
+}
+
+// A record whose on-disk layout has NO comment/commentMirror field — common for
+// WinBox-authored entries with no Note. Exercises the set path appending the
+// comment tag it writes so the kv-soup is not silently dropped.
+function noCommentRecord(): WinBoxCdbRecord {
+	return buildWinBoxCdbEntryRecord({
+		recordType: winBoxCdbRecordType.ipAdmin,
+		target: "192.0.2.7",
+		user: "admin",
+		password: "old",
+		fieldOrder: [
+			winBoxCdbFieldTag.recordType,
+			winBoxCdbFieldTag.user,
+			winBoxCdbFieldTag.password,
 		],
 	});
 }
@@ -253,6 +270,26 @@ describe("devices mutation", () => {
 		}
 	});
 
+	test("set on a record with no comment field round-trips the comment", async () => {
+		const { path, cleanup } = await tempCdb([noCommentRecord()]);
+		try {
+			const cdb = await reload(path);
+			const result = await setDeviceCommentKv({
+				cdb,
+				target: "192.0.2.7",
+				updates: [{ key: "env", value: "prod" }],
+			});
+			expect(result.ok).toBe(true);
+
+			const after = await reload(path);
+			const entry = showDevice({ cdb: after, target: "192.0.2.7" }).data.entry;
+			expect(entry.comment).toContain("env=prod");
+			expect(entry.commentMirror).toBe(entry.comment);
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("set rejects reserved first-class keys", async () => {
 		const { path, cleanup } = await tempCdb([adminRecord()]);
 		try {
@@ -383,11 +420,11 @@ describe("devices mutation", () => {
 		const { path, cleanup } = await tempCdb([unsavedPasswordRecord()]);
 		try {
 			const cdb = await reload(path);
-			await editDevice({ cdb, target: "192.0.2.9", password: "newpw" });
+			await editDevice({ cdb, target: "192.0.2.9", password: "fresh-secret" });
 			const after = await reload(path);
 			const entry = showDevice({ cdb: after, target: "192.0.2.9" }).data.entry;
 			expect(entry.savedPassword).toBe(true);
-			expect(entry.password).toBe("newpw");
+			expect(entry.password).toBe("fresh-secret");
 		} finally {
 			await cleanup();
 		}

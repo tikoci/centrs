@@ -444,10 +444,10 @@ describe("CLI help dispatch", () => {
 	test("an unknown command with --help is still an unknown-command error", async () => {
 		const consoleCapture = captureConsole();
 		try {
-			const exitCode = await runCli(["frob", "--help"]);
+			const exitCode = await runCli(["bogus", "--help"]);
 			expect(exitCode).toBe(1);
 			expect(consoleCapture.errors.join("\n")).toContain(
-				"Unknown centrs command: frob",
+				"Unknown centrs command: bogus",
 			);
 		} finally {
 			consoleCapture.restore();

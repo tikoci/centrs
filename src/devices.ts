@@ -911,7 +911,10 @@ export async function setDeviceCommentKv(
 		profile: prior.profile || undefined,
 		romonAgent: prior.romonAgent || undefined,
 		savedPassword: prior.savedPassword,
-		fieldOrder: preservedFieldOrder(prior.record),
+		fieldOrder: preservedFieldOrder(prior.record, [
+			winBoxCdbFieldTag.comment,
+			winBoxCdbFieldTag.commentMirror,
+		]),
 		declaredFieldCount: prior.record.declaredFieldCount,
 		extraFields: carried.length > 0 ? carried : undefined,
 	});
