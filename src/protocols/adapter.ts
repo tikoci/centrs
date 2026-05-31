@@ -167,7 +167,7 @@ class RestAdapter implements ProtocolAdapter {
 		request: ProtocolExecuteRequest,
 	): Promise<ProtocolExecuteResult> {
 		if (request.script !== undefined) {
-			const data = await this.restPost<unknown>("/rest/execute", {
+			const data = await this.restPost<unknown>("/execute", {
 				script: request.script,
 			});
 			return normalizeRestExecute(data);

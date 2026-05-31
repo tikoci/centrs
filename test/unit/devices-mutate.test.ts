@@ -8,6 +8,7 @@ import {
 	encryptWinBoxCdb,
 	type WinBoxCdbField,
 	type WinBoxCdbRecord,
+	winBoxCdbFieldTag,
 	winBoxCdbRecordType,
 } from "../../src/data/winbox-cdb.ts";
 import {
@@ -43,6 +44,38 @@ function adminRecord(comment = ""): WinBoxCdbRecord {
 		group: "prod-edge",
 		comment,
 		extraFields: [rawTailField()],
+	});
+}
+
+// A record that stores a password but does NOT set the saved-password flag, and
+// carries a romon-agent (a first-class known field). Exercises the edit path's
+// flag/romon-agent preservation.
+function unsavedPasswordRecord(): WinBoxCdbRecord {
+	return buildWinBoxCdbEntryRecord({
+		recordType: winBoxCdbRecordType.ipAdmin,
+		target: "192.0.2.9",
+		user: "admin",
+		password: "stored-secret",
+		romonAgent: "ether1",
+		comment: "note",
+		savedPassword: false,
+	});
+}
+
+// A non-ipAdmin record with a deliberately minimal/non-canonical field layout,
+// to prove edits preserve the on-disk field order instead of reshaping it to the
+// ipAdmin canonical order.
+function romonRecordWithLayout(): WinBoxCdbRecord {
+	return buildWinBoxCdbEntryRecord({
+		recordType: winBoxCdbRecordType.romonTarget,
+		target: "AA:BB:CC:DD:EE:FF",
+		user: "svc",
+		comment: "rmon",
+		fieldOrder: [
+			winBoxCdbFieldTag.recordType,
+			winBoxCdbFieldTag.comment,
+			winBoxCdbFieldTag.user,
+		],
 	});
 }
 
@@ -301,6 +334,90 @@ describe("devices mutation", () => {
 				removeDevice({ cdb, target: "203.0.113.99" }),
 			);
 			expect(error.code).toBe("cdb/not-found-target");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("comment-only edit preserves the saved-password flag and romon-agent", async () => {
+		const { path, cleanup } = await tempCdb([unsavedPasswordRecord()]);
+		try {
+			const cdb = await reload(path);
+			const before = showDevice({ cdb, target: "192.0.2.9" }).data.entry;
+			expect(before.savedPassword).toBe(false);
+			expect(before.romonAgent).toBe("ether1");
+
+			await editDevice({ cdb, target: "192.0.2.9", comment: "edited" });
+			const after = await reload(path);
+			const entry = showDevice({ cdb: after, target: "192.0.2.9" }).data.entry;
+			// #2: a comment-only edit must not flip the saved-password flag.
+			expect(entry.savedPassword).toBe(false);
+			expect(entry.password).toBe("stored-secret");
+			// #3: a known field (romon-agent) must not be dropped on edit.
+			expect(entry.romonAgent).toBe("ether1");
+			expect(entry.comment).toBe("edited");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("set comment-kv preserves the saved-password flag and romon-agent", async () => {
+		const { path, cleanup } = await tempCdb([unsavedPasswordRecord()]);
+		try {
+			const cdb = await reload(path);
+			await setDeviceCommentKv({
+				cdb,
+				target: "192.0.2.9",
+				updates: [{ key: "via", value: "ssh" }],
+			});
+			const after = await reload(path);
+			const entry = showDevice({ cdb: after, target: "192.0.2.9" }).data.entry;
+			expect(entry.savedPassword).toBe(false);
+			expect(entry.romonAgent).toBe("ether1");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("editing the password re-derives the saved-password flag", async () => {
+		const { path, cleanup } = await tempCdb([unsavedPasswordRecord()]);
+		try {
+			const cdb = await reload(path);
+			await editDevice({ cdb, target: "192.0.2.9", password: "newpw" });
+			const after = await reload(path);
+			const entry = showDevice({ cdb: after, target: "192.0.2.9" }).data.entry;
+			expect(entry.savedPassword).toBe(true);
+			expect(entry.password).toBe("newpw");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("editing a non-ipAdmin record preserves its field layout", async () => {
+		const { path, cleanup } = await tempCdb([romonRecordWithLayout()]);
+		try {
+			const cdb = await reload(path);
+			const priorTags = (cdb.entries[0]?.record.fields ?? [])
+				.filter((field) => field.rawTail !== true)
+				.map((field) => field.tag);
+			await editDevice({
+				cdb,
+				target: "AA:BB:CC:DD:EE:FF",
+				comment: "updated",
+			});
+			const after = await reload(path);
+			const afterTags = (after.entries[0]?.record.fields ?? [])
+				.filter((field) => field.rawTail !== true)
+				.map((field) => field.tag);
+			// #11: the edit must not reshape a non-ipAdmin record to the ipAdmin
+			// canonical layout.
+			expect(afterTags).toEqual(priorTags);
+			const entry = showDevice({
+				cdb: after,
+				target: "AA:BB:CC:DD:EE:FF",
+			}).data.entry;
+			expect(entry.comment).toBe("updated");
+			expect(entry.user).toBe("svc");
 		} finally {
 			await cleanup();
 		}

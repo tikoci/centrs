@@ -824,10 +824,13 @@ function resolveFormat(
 }
 
 /**
- * Path-existence probe. An invalid path raises a native `routeros/api-trap`
- * (REST instead returns an empty child list); normalize both to an empty list
- * so the orchestrator surfaces a single `validation/unknown-path`. Traps during
- * attribute/completion discovery are NOT swallowed — they surface as-is.
+ * Path-existence probe. An invalid path raises a native trap that
+ * {@link mapRouterOsError} normalizes to `routeros/unknown-path` (REST instead
+ * returns an empty child list). Both the legacy `routeros/api-trap` catch-all
+ * and the grounded `routeros/unknown-path` classification are flattened to an
+ * empty list so the orchestrator surfaces a single `validation/unknown-path`.
+ * Traps during attribute/completion discovery do NOT use this probe — they
+ * surface as-is.
  */
 async function inspectChildrenForProbe(
 	backend: ProtocolAdapter,
@@ -836,7 +839,11 @@ async function inspectChildrenForProbe(
 	try {
 		return await backend.inspect("child", path);
 	} catch (error) {
-		if (error instanceof CentrsError && error.code === "routeros/api-trap") {
+		if (
+			error instanceof CentrsError &&
+			(error.code === "routeros/api-trap" ||
+				error.code === "routeros/unknown-path")
+		) {
 			return [];
 		}
 		throw error;

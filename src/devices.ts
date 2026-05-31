@@ -548,6 +548,66 @@ function extraFields(record: WinBoxCdbRecord): readonly WinBoxCdbField[] {
 	);
 }
 
+/**
+ * Field-tag order to reuse when REWRITING an existing record. The builder's
+ * canonicalFieldOrder is shaped for ipAdmin records; reusing it for other record
+ * types (mac/romon targets) would reshape their on-disk layout. Deriving the
+ * order from the prior record keeps each type's layout intact. The numeric
+ * record-type marker (tag=recordType with a non-string value) is dropped because
+ * the builder re-emits it unconditionally; rawTail/unknown fields are carried
+ * separately via {@link extraFields}. Any tag in `newlySet` that the prior layout
+ * lacked is appended so freshly supplied values are still encoded.
+ */
+function preservedFieldOrder(
+	record: WinBoxCdbRecord,
+	newlySet: readonly number[] = [],
+): readonly number[] {
+	const order: number[] = [];
+	const seen = new Set<number>();
+	for (const field of record.fields) {
+		if (field.rawTail === true || !KNOWN_FIELD_TAGS.has(field.tag)) {
+			continue;
+		}
+		if (
+			field.tag === winBoxCdbFieldTag.recordType &&
+			typeof field.value !== "string"
+		) {
+			continue;
+		}
+		if (!seen.has(field.tag)) {
+			seen.add(field.tag);
+			order.push(field.tag);
+		}
+	}
+	for (const tag of newlySet) {
+		if (!seen.has(tag)) {
+			seen.add(tag);
+			order.push(tag);
+		}
+	}
+	return order;
+}
+
+/**
+ * Resolves the saved-password flag for an edit. An explicit `savedPassword`
+ * argument wins; otherwise a newly supplied password re-derives the flag from
+ * its length, and an unchanged password preserves the prior flag bit (so a
+ * comment-only edit never flips it).
+ */
+function resolveSavedPassword(
+	explicit: boolean | undefined,
+	newPassword: string | undefined,
+	prior: boolean,
+): boolean {
+	if (explicit !== undefined) {
+		return explicit;
+	}
+	if (newPassword !== undefined) {
+		return newPassword.length > 0;
+	}
+	return prior;
+}
+
 function preservedTags(
 	fields: readonly WinBoxCdbField[],
 ): readonly number[] | undefined {
@@ -743,6 +803,13 @@ export async function editDevice(
 	const match = requireSingleMatch(args.cdb.entries, args.target);
 	const prior = match.entry;
 	const carried = extraFields(prior.record);
+	const newlySet: number[] = [];
+	if (args.user !== undefined) newlySet.push(winBoxCdbFieldTag.user);
+	if (args.password !== undefined) newlySet.push(winBoxCdbFieldTag.password);
+	if (args.session !== undefined) newlySet.push(winBoxCdbFieldTag.session);
+	if (args.comment !== undefined) newlySet.push(winBoxCdbFieldTag.comment);
+	if (args.group !== undefined) newlySet.push(winBoxCdbFieldTag.group);
+	if (args.profile !== undefined) newlySet.push(winBoxCdbFieldTag.profile);
 	const record = buildWinBoxCdbEntryRecord({
 		recordType: prior.recordType,
 		target: prior.target,
@@ -752,7 +819,14 @@ export async function editDevice(
 		comment: args.comment ?? prior.comment,
 		group: args.group ?? prior.group,
 		profile: args.profile ?? (prior.profile || undefined),
-		savedPassword: args.savedPassword,
+		romonAgent: prior.romonAgent || undefined,
+		savedPassword: resolveSavedPassword(
+			args.savedPassword,
+			args.password,
+			prior.savedPassword,
+		),
+		fieldOrder: preservedFieldOrder(prior.record, newlySet),
+		declaredFieldCount: prior.record.declaredFieldCount,
 		extraFields: carried.length > 0 ? carried : undefined,
 	});
 
@@ -835,6 +909,10 @@ export async function setDeviceCommentKv(
 		comment,
 		group: prior.group,
 		profile: prior.profile || undefined,
+		romonAgent: prior.romonAgent || undefined,
+		savedPassword: prior.savedPassword,
+		fieldOrder: preservedFieldOrder(prior.record),
+		declaredFieldCount: prior.record.declaredFieldCount,
 		extraFields: carried.length > 0 ? carried : undefined,
 	});
 

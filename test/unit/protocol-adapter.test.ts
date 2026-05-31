@@ -56,7 +56,7 @@ function restConfig(
 		host: "192.0.2.10",
 		port: 80,
 		tls: false,
-		baseUrl: "http://192.0.2.10:80",
+		baseUrl: "http://192.0.2.10:80/rest",
 		username: "admin",
 		password: "secret",
 		timeoutMs: 10_000,
@@ -103,7 +103,9 @@ describe("RestAdapter retrieve operations", () => {
 			const adapter = createProtocolAdapter(restConfig());
 			const records = await adapter.inspect("child", "system,resource,print");
 			expect(records).toEqual([{ name: "print", type: "cmd" }]);
-			expect(mock.calls[0]?.url).toBe("http://192.0.2.10:80/console/inspect");
+			expect(mock.calls[0]?.url).toBe(
+				"http://192.0.2.10:80/rest/console/inspect",
+			);
 		} finally {
 			mock.restore();
 		}
@@ -120,7 +122,7 @@ describe("RestAdapter retrieve operations", () => {
 			const adapter = createProtocolAdapter(restConfig());
 			const rows = await adapter.list("/ip/address", {});
 			expect(rows).toEqual([{ ".id": "*1" }]);
-			expect(mock.calls[0]?.url).toBe("http://192.0.2.10:80/ip/address");
+			expect(mock.calls[0]?.url).toBe("http://192.0.2.10:80/rest/ip/address");
 		} finally {
 			mock.restore();
 		}
@@ -142,7 +144,9 @@ describe("RestAdapter retrieve operations", () => {
 				proplist: ["name", "type"],
 			});
 			expect(rows).toEqual([{ name: "ether1", type: "ether" }]);
-			expect(mock.calls[0]?.url).toBe("http://192.0.2.10:80/interface/print");
+			expect(mock.calls[0]?.url).toBe(
+				"http://192.0.2.10:80/rest/interface/print",
+			);
 		} finally {
 			mock.restore();
 		}
@@ -183,7 +187,9 @@ describe("RestAdapter execute seam", () => {
 				attributes: { address: "192.0.2.1/24", interface: "ether1" },
 			});
 			expect(result.records).toEqual([{ ".id": "*5" }]);
-			expect(mock.calls[0]?.url).toBe("http://192.0.2.10:80/ip/address/add");
+			expect(mock.calls[0]?.url).toBe(
+				"http://192.0.2.10:80/rest/ip/address/add",
+			);
 		} finally {
 			mock.restore();
 		}

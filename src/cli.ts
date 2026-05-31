@@ -1,33 +1,17 @@
 #!/usr/bin/env bun
 
-import { runDevicesCli } from "./cli/devices.ts";
-import { runDiscoverCli } from "./cli/discover.ts";
-import { runExecuteCli } from "./cli/execute.ts";
-import { runRetrieveCli } from "./cli/retrieve.ts";
+import { devicesCommand, runDevicesCli } from "./cli/devices.ts";
+import { discoverCommand, runDiscoverCli } from "./cli/discover.ts";
+import { executeCommand, runExecuteCli } from "./cli/execute.ts";
+import { retrieveCommand, runRetrieveCli } from "./cli/retrieve.ts";
 import { describeCentrs, plannedProtocols, plannedSurfaces } from "./index.ts";
 
 const commandSummaries: ReadonlyArray<{ name: string; summary: string }> = [
-	{
-		name: "retrieve",
-		summary:
-			"Read RouterOS values through the shared core using the selected protocol.",
-	},
-	{
-		name: "execute",
-		summary:
-			"Run a RouterOS command through the shared core (not implemented yet — WP-1c).",
-	},
-	{
-		name: "devices",
-		summary:
-			"Inspect the CDB-backed device registry (read-only subcommands only in this phase).",
-	},
-	{
-		name: "discover",
-		summary:
-			"Discover RouterOS neighbors over MNDP and optionally save them into the CDB.",
-	},
-];
+	retrieveCommand,
+	executeCommand,
+	devicesCommand,
+	discoverCommand,
+].map((command) => ({ name: command.name, summary: command.summary }));
 
 export function renderCliHelp(): string {
 	return [
@@ -48,7 +32,7 @@ export function renderCliHelp(): string {
 export async function runCli(
 	args: readonly string[] = Bun.argv.slice(2),
 ): Promise<number> {
-	if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
+	if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
 		console.log(renderCliHelp());
 		return 0;
 	}

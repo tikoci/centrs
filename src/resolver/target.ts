@@ -113,9 +113,18 @@ export function resolveTarget(
 	if (isNative) {
 		// Native API ignores the URL scheme for its wire protocol; it defaults to
 		// TCP 8728, or TLS (api-ssl) 8729 when the caller passed `https://` or an
-		// explicit 8729. `--port` / CENTRS_PORT / comment-kv override the default.
-		tls = portSetting?.value === NATIVE_API_TLS_PORT || scheme === "https";
-		port = portSetting?.value ?? (tls ? NATIVE_API_TLS_PORT : NATIVE_API_PORT);
+		// explicit 8729. An explicit well-known port wins over the scheme so
+		// `https://host --port 8728` stays plaintext instead of running a TLS
+		// handshake against the plaintext API port.
+		const explicitPort = portSetting?.value;
+		if (explicitPort === NATIVE_API_PORT) {
+			tls = false;
+		} else if (explicitPort === NATIVE_API_TLS_PORT) {
+			tls = true;
+		} else {
+			tls = scheme === "https";
+		}
+		port = explicitPort ?? (tls ? NATIVE_API_TLS_PORT : NATIVE_API_PORT);
 		baseUrl = `${tls ? "api-ssl" : "api"}://${formatHostForUrl(parsedUrl.hostname)}:${port}`;
 	} else {
 		tls = scheme === "https";

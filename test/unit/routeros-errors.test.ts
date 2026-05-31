@@ -75,6 +75,15 @@ describe("mapRouterOsError grounded vocabulary", () => {
 		expect(error.code).toBe("routeros/unknown-path");
 	});
 
+	test("maps 'failure: <object> not found' to routeros/command-failed", () => {
+		// A `failure:` command rejection whose message merely contains 'not found'
+		// is a command failure, not a path mismatch — the anchored command-failed
+		// rule must win over the bare 'not found' path heuristic.
+		const error = mapRouterOsError("failure: interface not found");
+		expect(error.code).toBe("routeros/command-failed");
+		expect(ctx(error).failure).toBe("interface not found");
+	});
+
 	test("native-api catch-all is routeros/api-trap", () => {
 		const error = mapRouterOsError("some brand new message", {
 			transport: "native-api",

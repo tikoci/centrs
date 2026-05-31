@@ -410,3 +410,47 @@ describe("retrieve CLI", () => {
 		}
 	});
 });
+
+describe("CLI help dispatch", () => {
+	test("`retrieve --help` renders command help, not the global banner", async () => {
+		const consoleCapture = captureConsole();
+		try {
+			// #7: a per-command --help must reach the command's own help, not be
+			// swallowed by the global help interceptor.
+			const exitCode = await runCli(["retrieve", "--help"]);
+			expect(exitCode).toBe(0);
+			const out = consoleCapture.logs.join("\n");
+			expect(out).toContain("Usage: centrs retrieve");
+			expect(out).toContain("Options:");
+			expect(out).not.toContain("Use `centrs <command> --help`");
+		} finally {
+			consoleCapture.restore();
+		}
+	});
+
+	test("`--help` as the first argument renders the global banner", async () => {
+		const consoleCapture = captureConsole();
+		try {
+			const exitCode = await runCli(["--help"]);
+			expect(exitCode).toBe(0);
+			const out = consoleCapture.logs.join("\n");
+			expect(out).toContain("Commands:");
+			expect(out).toContain("Use `centrs <command> --help`");
+		} finally {
+			consoleCapture.restore();
+		}
+	});
+
+	test("an unknown command with --help is still an unknown-command error", async () => {
+		const consoleCapture = captureConsole();
+		try {
+			const exitCode = await runCli(["frob", "--help"]);
+			expect(exitCode).toBe(1);
+			expect(consoleCapture.errors.join("\n")).toContain(
+				"Unknown centrs command: frob",
+			);
+		} finally {
+			consoleCapture.restore();
+		}
+	});
+});

@@ -271,6 +271,60 @@ describe("resolver target provenance", () => {
 	});
 });
 
+describe("resolver native-api TLS/port disambiguation", () => {
+	test("https implies api-ssl on the default TLS port", () => {
+		const target = resolveTarget(
+			{ targetInput: "https://10.0.0.5" },
+			EMPTY_ENV,
+			"native-api",
+		);
+		expect(target.tls).toBe(true);
+		expect(target.port).toBe(8729);
+		expect(target.baseUrl).toBe("api-ssl://10.0.0.5:8729");
+	});
+
+	test("an explicit plaintext port (8728) stays plaintext even with https", () => {
+		// #8: https://host --via native-api --port 8728 must not run a TLS
+		// handshake against the plaintext API port.
+		const target = resolveTarget(
+			{ targetInput: "https://10.0.0.5", port: 8728 },
+			EMPTY_ENV,
+			"native-api",
+		);
+		expect(target.tls).toBe(false);
+		expect(target.port).toBe(8728);
+		expect(target.baseUrl).toBe("api://10.0.0.5:8728");
+	});
+
+	test("an explicit TLS port (8729) implies api-ssl even over http", () => {
+		const target = resolveTarget(
+			{ targetInput: "http://10.0.0.5", port: 8729 },
+			EMPTY_ENV,
+			"native-api",
+		);
+		expect(target.tls).toBe(true);
+		expect(target.baseUrl).toBe("api-ssl://10.0.0.5:8729");
+	});
+
+	test("a custom port follows the scheme for TLS selection", () => {
+		const tlsTarget = resolveTarget(
+			{ targetInput: "https://10.0.0.5", port: 1234 },
+			EMPTY_ENV,
+			"native-api",
+		);
+		expect(tlsTarget.tls).toBe(true);
+		expect(tlsTarget.baseUrl).toBe("api-ssl://10.0.0.5:1234");
+
+		const plainTarget = resolveTarget(
+			{ targetInput: "http://10.0.0.5", port: 1234 },
+			EMPTY_ENV,
+			"native-api",
+		);
+		expect(plainTarget.tls).toBe(false);
+		expect(plainTarget.baseUrl).toBe("api://10.0.0.5:1234");
+	});
+});
+
 describe("resolver CDB end-to-end through retrieve", () => {
 	let tmpDir: string;
 

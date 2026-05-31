@@ -66,8 +66,8 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 	{
 		code: "routeros/unknown-path",
 		description:
-			"RouterOS did not recognize the command path or menu item (path-shaped 'not found').",
-		test: /no such command prefix|no such item|no such entry|not found/i,
+			"RouterOS did not recognize the command path or menu item ('no such ...').",
+		test: /no such command prefix|no such item|no such entry/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS does not recognize the path: ${raw.trim()}`,
 			remediation:
@@ -127,6 +127,19 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 				context: { failure },
 			};
 		},
+	},
+	{
+		// Bare path-shaped `<path> not found` (no `failure:` prefix). Placed AFTER
+		// `routeros/command-failed` so a `failure: <object> not found` command
+		// rejection is classified as a command failure, not a path mismatch.
+		code: "routeros/unknown-path",
+		description: "RouterOS reported a path-shaped 'not found'.",
+		test: /not found/i,
+		build: (_match, raw) => ({
+			summary: `RouterOS does not recognize the path: ${raw.trim()}`,
+			remediation:
+				"Check the slash-prefixed RouterOS path against the device's command tree (use `--list-attributes` or `--no-validate` to narrow the mismatch).",
+		}),
 	},
 ];
 
