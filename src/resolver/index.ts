@@ -1,0 +1,54 @@
+/**
+ * Shared, transport-agnostic resolver.
+ *
+ * One resolver feeds every command (`retrieve` today; `execute` / `devices`
+ * next) so target identity, credentials, comment-kv overrides, and settings
+ * precedence behave identically everywhere. See `docs/CONSTITUTION.md`
+ * ("Settings precedence", "Identity and CDB") for the contract.
+ *
+ * Layers:
+ *   - `./settings.ts` — precedence primitives (default < config < comment-kv <
+ *     env < cli) and source coercion to the core envelope union.
+ *   - `./cdb.ts`      — CDB identity + comment-kv parse/coerce/provenance.
+ *   - `./target.ts`   — host/port/baseUrl identity + credentials + per-field
+ *     provenance map.
+ *   - `./comment-kv.ts` — the raw kv-soup parser (pure).
+ */
+
+export {
+	type CdbResolution,
+	type CdbResolveInput,
+	type CommentKvOverrides,
+	coerceCommentKv,
+	type ResolverWarning,
+	resolveCdb,
+} from "./cdb.ts";
+export {
+	type CommentKvKey,
+	type CommentKvResult,
+	type CommentKvWarning,
+	commentKvAllowlist,
+	commentKvReservedKeys,
+	parseCommentKv,
+} from "./comment-kv.ts";
+export {
+	type CommentKvLayer,
+	parseBoolean,
+	parseDuration,
+	type ResolvedSetting,
+	type ResolverSettingSource,
+	type ResolverSettingSourceKind,
+	resolveBooleanSetting,
+	resolveOptionalIntegerSetting,
+	resolveStringSetting,
+	toCoreSource,
+} from "./settings.ts";
+export {
+	defaultPortForScheme,
+	parseHostCandidate,
+	type ResolvedAuth,
+	type ResolvedTarget,
+	resolveAuth,
+	resolveTarget,
+	type TargetResolveInput,
+} from "./target.ts";

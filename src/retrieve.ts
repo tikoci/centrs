@@ -5,13 +5,6 @@ import type {
 	SettingSource as CoreSettingSource,
 	EnvelopeValidationMeta,
 } from "./core/envelope.ts";
-import {
-	type DevicesWarning,
-	type LoadedCdb,
-	loadCdb,
-	resolveDevicesSettings,
-	showDevice,
-} from "./devices.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import {
 	getProtocolPlan,
@@ -21,53 +14,25 @@ import {
 import {
 	type ApiReply,
 	connectNativeApi,
-	NATIVE_API_PORT,
-	NATIVE_API_TLS_PORT,
 	type NativeApiSession,
 } from "./protocols/native-api.ts";
+import {
+	type CdbResolution,
+	parseDuration,
+	type ResolvedAuth,
+	type ResolvedSetting,
+	type ResolvedTarget,
+	resolveAuth,
+	resolveBooleanSetting,
+	resolveCdb,
+	resolveOptionalIntegerSetting,
+	resolveStringSetting,
+	resolveTarget,
+	toCoreSource,
+} from "./resolver/index.ts";
 
 export const retrieveOutputFormats = ["text", "json", "yaml"] as const;
 export type RetrieveOutputFormat = (typeof retrieveOutputFormats)[number];
-
-const ENV_CDB_FILE = "CENTRS_CDB_FILE";
-const ENV_CDB_PASSWORD = "CENTRS_CDB_PASSWORD";
-const ENV_HOST = "CENTRS_HOST";
-
-type SettingSourceKind =
-	| "default"
-	| "env"
-	| "explicit"
-	| "target-input"
-	| "cdb";
-
-interface SettingSource {
-	kind: SettingSourceKind;
-	key: string;
-}
-
-interface ResolvedSetting<T> {
-	value: T;
-	source: SettingSource;
-}
-
-interface ResolvedTarget {
-	input?: string;
-	host: string;
-	port: number;
-	scheme: "http" | "https";
-	baseUrl: string;
-	/** TLS transport (native-api over api-ssl). REST uses the URL scheme. */
-	tls: boolean;
-	source: SettingSource;
-}
-
-interface ResolvedAuth {
-	username?: string;
-	usernameSource?: SettingSource;
-	password: string;
-	passwordProvided: boolean;
-	passwordSource?: SettingSource;
-}
 
 export interface RetrieveRequest {
 	targetInput?: string;
@@ -377,27 +342,17 @@ function renderRetrieveErrorText(
 	return lines.join("\n");
 }
 
-function toCoreSource(source: SettingSource): CoreSettingSource {
-	switch (source.kind) {
-		case "explicit":
-		case "target-input":
-			return { kind: "cli", key: source.key };
-		default:
-			return { kind: source.kind, key: source.key };
-	}
-}
-
 function buildSuccessEnvelope(
 	resolved: ResolvedRetrieveRequest,
 	result: { kind: "attributes" | "data"; data: unknown },
 	validation: EnvelopeValidationMeta,
 	warnings: readonly RetrieveWarning[],
 ): RetrieveSuccessEnvelope {
-	const portSource: SettingSource =
-		resolved.target.source.kind === "target-input" &&
-		resolved.target.port === defaultPortForScheme(resolved.target.scheme)
-			? { kind: "default", key: `${resolved.target.scheme} default` }
-			: resolved.target.source;
+	const target = resolved.target;
+	const targetSources: Record<string, CoreSettingSource> = {};
+	for (const [field, source] of Object.entries(target.sources)) {
+		targetSources[field] = toCoreSource(source);
+	}
 
 	return {
 		ok: true,
@@ -405,17 +360,20 @@ function buildSuccessEnvelope(
 		warnings,
 		meta: {
 			target: {
-				input: resolved.target.input,
-				host: resolved.target.host,
-				port: resolved.target.port,
-				baseUrl: resolved.target.baseUrl,
-				source: toCoreSource(resolved.target.source),
+				input: target.input,
+				host: target.host,
+				port: target.port,
+				baseUrl: target.baseUrl,
+				name: target.name,
+				recordIndex: target.recordIndex,
+				source: toCoreSource(target.source),
+				sources: targetSources,
 			},
 			via: resolved.via.value,
 			settings: {
 				via: toCoreSource(resolved.via.source),
-				host: toCoreSource(resolved.target.source),
-				port: toCoreSource(portSource),
+				host: toCoreSource(target.hostSource),
+				port: toCoreSource(target.portSource),
 				timeoutMs: toCoreSource(resolved.timeoutMs.source),
 				format: toCoreSource(resolved.format.source),
 				validate: toCoreSource(resolved.validate.source),
@@ -539,7 +497,16 @@ async function resolveRetrieveRequest(
 		});
 	}
 
-	const via = resolveProtocol(request, env);
+	const cdbResolution = await resolveCdb(
+		{
+			targetInput: request.targetInput,
+			cdbFile: request.cdbFile,
+			cdbPassword: request.cdbPassword,
+		},
+		env,
+	);
+
+	const via = resolveProtocol(request, env, cdbResolution);
 	const format = resolveFormat(request, env);
 	const validate = resolveBooleanSetting(
 		request.validate,
@@ -547,17 +514,35 @@ async function resolveRetrieveRequest(
 		"CENTRS_VALIDATE",
 		true,
 		"validate",
+		cdbResolution?.overrides.validate,
 	);
-	const timeoutMs = resolveTimeoutSetting(request.timeout, env, via.value);
+	const timeoutMs = resolveTimeoutSetting(
+		request.timeout,
+		env,
+		via.value,
+		cdbResolution?.overrides.timeoutMs,
+	);
 	const maxResultsBytes = resolveOptionalIntegerSetting(
 		request.maxResultsBytes,
 		env,
 		"CENTRS_MAX_RESULTS",
 		"max-results",
 	);
-	const cdbResolution = await resolveRetrieveCdb(request, env);
-	const target = resolveTarget(request, env, via.value, cdbResolution);
-	const auth = resolveAuth(request, env, cdbResolution);
+	const target = resolveTarget(
+		{
+			targetInput: request.targetInput,
+			host: request.host,
+			port: request.port,
+		},
+		env,
+		via.value,
+		cdbResolution,
+	);
+	const auth = resolveAuth(
+		{ username: request.username, password: request.password },
+		env,
+		cdbResolution,
+	);
 
 	return {
 		path: request.path,
@@ -576,89 +561,10 @@ async function resolveRetrieveRequest(
 	};
 }
 
-interface RetrieveCdbResolution {
-	target: string;
-	username: string;
-	password: string;
-	warnings: readonly RetrieveWarning[];
-	recordIndex: number;
-}
-
-async function resolveRetrieveCdb(
-	request: RetrieveRequest,
-	env: Record<string, string | undefined>,
-): Promise<RetrieveCdbResolution | undefined> {
-	if (!request.targetInput) {
-		return undefined;
-	}
-
-	const settings = resolveDevicesSettings({
-		cdbFile: request.cdbFile,
-		cdbPassword: request.cdbPassword,
-		env,
-	});
-	const explicitCdb =
-		request.cdbFile !== undefined ||
-		request.cdbPassword !== undefined ||
-		env[ENV_CDB_FILE] !== undefined ||
-		env[ENV_CDB_PASSWORD] !== undefined;
-	if (!explicitCdb && !(await Bun.file(settings.cdbFile.value).exists())) {
-		return undefined;
-	}
-
-	let cdb: LoadedCdb;
-	try {
-		cdb = await loadCdb({
-			cdbFile: request.cdbFile,
-			cdbPassword: request.cdbPassword,
-			env,
-		});
-	} catch (error) {
-		if (
-			!explicitCdb &&
-			error instanceof CentrsError &&
-			error.code === "cdb/not-found"
-		) {
-			return undefined;
-		}
-		throw error;
-	}
-
-	try {
-		const envelope = showDevice({ cdb, target: request.targetInput });
-		const entry = envelope.data.entry;
-		return {
-			target: entry.target,
-			username: entry.user,
-			password: entry.password,
-			warnings: envelope.warnings.map(retrieveWarningFromDevicesWarning),
-			recordIndex: entry.cdbRecordIndex,
-		};
-	} catch (error) {
-		if (
-			!explicitCdb &&
-			error instanceof CentrsError &&
-			error.code === "cdb/not-found-target"
-		) {
-			return undefined;
-		}
-		throw error;
-	}
-}
-
-function retrieveWarningFromDevicesWarning(
-	warning: DevicesWarning,
-): RetrieveWarning {
-	return {
-		code: warning.code,
-		message: warning.message,
-		context: warning.context,
-	};
-}
-
 function resolveProtocol(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined>,
+	cdb?: CdbResolution,
 ): ResolvedSetting<RouterOsProtocol> {
 	const via = resolveStringSetting(
 		request.via,
@@ -666,6 +572,8 @@ function resolveProtocol(
 		"CENTRS_VIA",
 		"rest-api",
 		"via",
+		undefined,
+		cdb?.overrides.via,
 	);
 	if (!via) {
 		throw new CentrsError({
@@ -733,129 +641,6 @@ function resolveFormat(
 		"format",
 		parseOutputFormat,
 	) as ResolvedSetting<RetrieveOutputFormat>;
-}
-
-function resolveTarget(
-	request: RetrieveRequest,
-	env: Record<string, string | undefined>,
-	via: RouterOsProtocol,
-	cdbResolution?: RetrieveCdbResolution,
-): ResolvedTarget {
-	const hostSetting = resolveStringSetting(
-		request.host,
-		env,
-		"CENTRS_HOST",
-		cdbResolution?.target ?? request.targetInput,
-		"host",
-	);
-
-	if (!hostSetting || hostSetting.value.trim().length === 0) {
-		throw new CentrsError({
-			code: "target/unresolved",
-			summary: "No host could be resolved for `retrieve`.",
-			remediation:
-				"Pass a target positional like `centrs retrieve 192.0.2.10 /system/resource --via rest-api` or set `--host` / `CENTRS_HOST`.",
-			context: {
-				targetInput: request.targetInput,
-			},
-		});
-	}
-
-	const candidate = hostSetting.value.trim();
-	const parsedUrl = parseHostCandidate(candidate);
-	const portSetting = resolveOptionalIntegerSetting(
-		request.port,
-		env,
-		"CENTRS_PORT",
-		"port",
-	);
-	const scheme = parsedUrl.protocol === "https:" ? "https" : "http";
-	const source =
-		cdbResolution && request.host === undefined && env[ENV_HOST] === undefined
-			? { kind: "cdb" as const, key: `record:${cdbResolution.recordIndex}` }
-			: hostSetting.source;
-
-	if (via === "native-api") {
-		// Native API ignores the URL scheme for its wire protocol; it defaults to
-		// TCP 8728, or TLS (api-ssl) 8729 when the caller passed `https://` or an
-		// explicit 8729. `--port` / CENTRS_PORT overrides the default port.
-		const tls =
-			portSetting?.value === NATIVE_API_TLS_PORT || scheme === "https";
-		const port =
-			portSetting?.value ?? (tls ? NATIVE_API_TLS_PORT : NATIVE_API_PORT);
-		return {
-			input: request.targetInput,
-			host: parsedUrl.hostname,
-			port,
-			scheme,
-			tls,
-			baseUrl: `${tls ? "api-ssl" : "api"}://${formatHostForUrl(parsedUrl.hostname)}:${port}`,
-			source,
-		};
-	}
-
-	const port = portSetting?.value ?? readPort(parsedUrl, scheme);
-
-	return {
-		input: request.targetInput,
-		host: parsedUrl.hostname,
-		port,
-		scheme,
-		tls: scheme === "https",
-		baseUrl: `${scheme}://${formatHostForUrl(parsedUrl.hostname)}:${port}/rest`,
-		source,
-	};
-}
-
-function resolveAuth(
-	request: RetrieveRequest,
-	env: Record<string, string | undefined>,
-	cdbResolution?: RetrieveCdbResolution,
-): ResolvedAuth {
-	const username = resolveStringSetting(
-		request.username,
-		env,
-		"CENTRS_USERNAME",
-		undefined,
-		"username",
-	);
-	const password = resolveStringSetting(
-		request.password,
-		env,
-		"CENTRS_PASSWORD",
-		undefined,
-		"password",
-	);
-	const cdbUsername =
-		username === undefined && cdbResolution?.username
-			? {
-					value: cdbResolution.username,
-					source: {
-						kind: "cdb" as const,
-						key: `record:${cdbResolution.recordIndex}:user`,
-					},
-				}
-			: undefined;
-	const cdbPassword =
-		password === undefined && cdbResolution
-			? {
-					value: cdbResolution.password,
-					source: {
-						kind: "cdb" as const,
-						key: `record:${cdbResolution.recordIndex}:password`,
-					},
-				}
-			: undefined;
-	const resolvedUsername = username ?? cdbUsername;
-	const resolvedPassword = password ?? cdbPassword;
-
-	return {
-		username: resolvedUsername?.value,
-		usernameSource: resolvedUsername?.source,
-		password: resolvedPassword?.value ?? "",
-		passwordProvided: resolvedPassword !== undefined,
-		passwordSource: resolvedPassword?.source,
-	};
 }
 
 /**
@@ -1527,6 +1312,7 @@ function resolveTimeoutSetting(
 	timeout: RetrieveRequest["timeout"],
 	env: Record<string, string | undefined>,
 	via: RouterOsProtocol,
+	commentKv?: ResolvedSetting<number>,
 ): ResolvedSetting<number> {
 	const resolved = resolveStringSetting(
 		timeout === undefined ? undefined : String(timeout),
@@ -1546,6 +1332,7 @@ function resolveTimeoutSetting(
 			}
 			return parsed;
 		},
+		commentKv,
 	);
 	if (!resolved) {
 		throw new Error("timeout resolution produced no value");
@@ -1566,134 +1353,6 @@ function resolveTimeoutSetting(
 	}
 
 	return resolved;
-}
-
-function resolveBooleanSetting(
-	explicit: boolean | undefined,
-	env: Record<string, string | undefined>,
-	envName: string,
-	defaultValue: boolean,
-	key: string,
-): ResolvedSetting<boolean> {
-	if (explicit !== undefined) {
-		return {
-			value: explicit,
-			source: {
-				kind: "explicit",
-				key,
-			},
-		};
-	}
-
-	const envValue = env[envName];
-	if (envValue !== undefined) {
-		return {
-			value: parseBoolean(envValue, envName),
-			source: {
-				kind: "env",
-				key: envName,
-			},
-		};
-	}
-
-	return {
-		value: defaultValue,
-		source: {
-			kind: "default",
-			key: key,
-		},
-	};
-}
-
-function resolveOptionalIntegerSetting(
-	explicit: number | undefined,
-	env: Record<string, string | undefined>,
-	envName: string,
-	key: string,
-): ResolvedSetting<number> | undefined {
-	if (explicit !== undefined) {
-		if (!Number.isInteger(explicit) || explicit <= 0) {
-			throw new CentrsError({
-				code: "settings/invalid-integer",
-				summary: `${key} must be a positive integer. Received: ${explicit}`,
-				remediation: `Pass a positive integer for ${key}.`,
-			});
-		}
-		return {
-			value: explicit,
-			source: {
-				kind: "explicit",
-				key,
-			},
-		};
-	}
-
-	const envValue = env[envName];
-	if (envValue === undefined) {
-		return undefined;
-	}
-
-	const parsed = Number.parseInt(envValue, 10);
-	if (!Number.isInteger(parsed) || parsed <= 0) {
-		throw new CentrsError({
-			code: "settings/invalid-integer",
-			summary: `${envName} must be a positive integer. Received: ${envValue}`,
-			remediation: `Set ${envName} to a positive integer value.`,
-		});
-	}
-
-	return {
-		value: parsed,
-		source: {
-			kind: "env",
-			key: envName,
-		},
-	};
-}
-
-function resolveStringSetting<T = string>(
-	explicit: string | undefined,
-	env: Record<string, string | undefined>,
-	envName: string,
-	defaultValue: string | undefined,
-	key: string,
-	normalize?: (value: string) => T,
-): ResolvedSetting<T> | undefined {
-	if (explicit !== undefined) {
-		return {
-			value: normalize ? normalize(explicit) : (explicit as T),
-			source: {
-				kind:
-					key === "host" && defaultValue === undefined
-						? "target-input"
-						: "explicit",
-				key,
-			},
-		};
-	}
-
-	const envValue = env[envName];
-	if (envValue !== undefined) {
-		return {
-			value: normalize ? normalize(envValue) : (envValue as T),
-			source: {
-				kind: "env",
-				key: envName,
-			},
-		};
-	}
-
-	if (defaultValue !== undefined) {
-		return {
-			value: normalize ? normalize(defaultValue) : (defaultValue as T),
-			source: {
-				kind: key === "host" ? "target-input" : "default",
-				key,
-			},
-		};
-	}
-
-	return undefined;
 }
 
 function normalizeAttributeSelection(request: RetrieveRequest): string[] {
@@ -1733,82 +1392,8 @@ function parseOutputFormat(value: string): RetrieveOutputFormat {
 	});
 }
 
-function parseDuration(value: string): number {
-	const trimmed = value.trim();
-	const match = /^(\d+)(ms|s|m)?$/i.exec(trimmed);
-	if (!match) {
-		throw new CentrsError({
-			code: "settings/invalid-timeout",
-			summary: `Unsupported timeout value: ${value}`,
-			remediation:
-				"Use an integer number of milliseconds or a suffix like `500ms`, `5s`, or `1m`.",
-		});
-	}
-
-	const numeric = Number.parseInt(match[1] ?? "0", 10);
-	const unit = (match[2] ?? "ms").toLowerCase();
-	switch (unit) {
-		case "ms":
-			return numeric;
-		case "s":
-			return numeric * 1000;
-		case "m":
-			return numeric * 60_000;
-		default:
-			return numeric;
-	}
-}
-
-function parseBoolean(value: string, settingName: string): boolean {
-	const normalized = value.trim().toLowerCase();
-	if (["1", "true", "yes", "on"].includes(normalized)) {
-		return true;
-	}
-	if (["0", "false", "no", "off"].includes(normalized)) {
-		return false;
-	}
-
-	throw new CentrsError({
-		code: "settings/invalid-boolean",
-		summary: `${settingName} must be a boolean-like value. Received: ${value}`,
-		remediation: "Use one of: true/false, yes/no, on/off, or 1/0.",
-	});
-}
-
-function parseHostCandidate(value: string): URL {
-	if (/^https?:\/\//i.test(value)) {
-		const url = new URL(value);
-		if (url.pathname !== "/" && url.pathname !== "") {
-			throw new CentrsError({
-				code: "input/invalid-target",
-				summary: `Target URL must not include a path. Received: ${value}`,
-				remediation:
-					"Pass only the RouterOS host or base URL, then provide the RouterOS menu path as the second positional argument.",
-			});
-		}
-		return url;
-	}
-
-	return new URL(`http://${value}`);
-}
-
 function pathToInspectString(path: readonly string[]): string {
 	return path.join(",");
-}
-
-function readPort(parsedUrl: URL, scheme: "http" | "https"): number {
-	if (parsedUrl.port.length > 0) {
-		return Number.parseInt(parsedUrl.port, 10);
-	}
-	return defaultPortForScheme(scheme);
-}
-
-function defaultPortForScheme(scheme: "http" | "https"): number {
-	return scheme === "https" ? 443 : 80;
-}
-
-function formatHostForUrl(host: string): string {
-	return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
 
 function countResultObjects(data: unknown): number {
