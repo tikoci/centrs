@@ -16,6 +16,25 @@ export {
 	type Warning,
 } from "./core/envelope.ts";
 export {
+	encodeMndpPacket,
+	MNDP_BROADCAST_ADDRESS,
+	MNDP_IPV6_MULTICAST_ADDRESS,
+	MNDP_PORT,
+	type MndpNeighbor,
+	type MndpTlvInput,
+	type MndpUnknownTlv,
+	mndpNeighborKey,
+	mndpRefreshPacket,
+	mndpTlvType,
+	parseMndpPacket,
+} from "./data/mndp.ts";
+export {
+	MNDP_CACHE_DEFAULT_TTL_MS,
+	MndpCache,
+	type MndpCacheEntry,
+	type MndpCacheOptions,
+} from "./data/mndp-cache.ts";
+export {
 	type AnalyzeEncryptedWinBoxCdbOptions,
 	analyzeEncryptedWinBoxCdb,
 	type BuildWinBoxCdbEntryInput,
@@ -89,6 +108,30 @@ export {
 	setDeviceCommentKv,
 	showDevice,
 } from "./devices.ts";
+export {
+	DISCOVER_DEFAULT_GROUP,
+	DISCOVER_DEFAULT_REFRESH_INTERVAL_MS,
+	DISCOVER_DEFAULT_TIMEOUT_MS,
+	type DiscoverData,
+	type DiscoverEnvelope,
+	type DiscoverNeighborRecord,
+	type DiscoverOperationMeta,
+	type DiscoverOptions,
+	type DiscoverOutputFormat,
+	type DiscoverSaveRecord,
+	type DiscoverSaveSummary,
+	discover,
+	discoverNeighborTarget,
+	discoverOutputFormats,
+	formatMndpProvenanceComment,
+	type ListenMndpOptions,
+	type ListenMndpResult,
+	listenMndp,
+	renderDiscoverEnvelope,
+	type SaveDiscoveredNeighborsArgs,
+	type SaveDiscoveredNeighborsResult,
+	saveDiscoveredNeighbors,
+} from "./discover.ts";
 export {
 	asCentrsError,
 	CentrsError,
