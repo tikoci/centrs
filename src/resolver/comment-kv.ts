@@ -67,6 +67,10 @@ interface ShellWord {
 	text: string;
 	/** Per-character flag: true when the character came from inside quotes. */
 	quoted: boolean[];
+	/** Source start offset (inclusive) of the word in the original comment. */
+	start: number;
+	/** Source end offset (exclusive) of the word in the original comment. */
+	end: number;
 }
 
 const BARE_KEY = /^[A-Za-z][A-Za-z0-9_-]*$/;
@@ -88,13 +92,22 @@ function tokenize(comment: string): ShellWord[] {
 	let quoted: boolean[] = [];
 	let inWord = false;
 	let inQuotes = false;
+	let wordStart = -1;
 
-	const flush = (): void => {
+	const flush = (end: number): void => {
 		if (inWord) {
-			words.push({ text, quoted });
+			words.push({ text, quoted, start: wordStart, end });
 			text = "";
 			quoted = [];
 			inWord = false;
+			wordStart = -1;
+		}
+	};
+
+	const beginWord = (index: number): void => {
+		if (!inWord) {
+			inWord = true;
+			wordStart = index;
 		}
 	};
 
@@ -124,24 +137,24 @@ function tokenize(comment: string): ShellWord[] {
 		}
 
 		if (char === '"') {
-			inWord = true;
+			beginWord(index);
 			inQuotes = true;
 			continue;
 		}
 
 		if (char === " " || char === "\t" || char === "\n" || char === "\r") {
-			flush();
+			flush(index);
 			continue;
 		}
 
-		inWord = true;
+		beginWord(index);
 		text += char;
 		quoted.push(false);
 	}
 
 	// An unterminated quote consumes the rest of the input as quoted text; the
 	// word is still flushed so its value survives (best-effort, not an error).
-	flush();
+	flush(comment.length);
 	return words;
 }
 
@@ -199,4 +212,122 @@ export function parseCommentKv(comment: string): CommentKvResult {
 	}
 
 	return { values, warnings };
+}
+
+/**
+ * A single comment kv-soup mutation. `value: null` removes every token whose
+ * bare key matches; any other value upserts `key=value` (the value is quoted
+ * when needed so it survives re-tokenization as one token).
+ */
+export interface CommentKvUpdate {
+	key: string;
+	value: string | null;
+}
+
+/**
+ * Quote a value so it tokenizes back to exactly `value`. Bare values with no
+ * whitespace, quotes, or backslashes are emitted unquoted; everything else is
+ * double-quoted with `\"` / `\\` escapes (the only escapes the parser honors).
+ */
+function quoteCommentValue(value: string): string {
+	if (value.length > 0 && !/[\s"\\]/.test(value)) {
+		return value;
+	}
+	const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+	return `"${escaped}"`;
+}
+
+/** Render a kv token whose value round-trips through {@link parseCommentKv}. */
+export function renderCommentKvToken(key: string, value: string): string {
+	return `${key}=${quoteCommentValue(value)}`;
+}
+
+interface SpanEdit {
+	start: number;
+	end: number;
+	replacement: string;
+}
+
+/** Apply one upsert/remove to a comment string, preserving free-form text. */
+function applyOne(comment: string, update: CommentKvUpdate): string {
+	const matches = tokenize(comment).filter((word) => {
+		const kv = splitKv(word);
+		return kv !== undefined && kv.key === update.key;
+	});
+
+	const edits: SpanEdit[] = [];
+	if (update.value === null) {
+		for (const word of matches) {
+			edits.push(removalEdit(comment, word.start, word.end));
+		}
+	} else {
+		const token = renderCommentKvToken(update.key, update.value);
+		const [first, ...rest] = matches;
+		if (first) {
+			edits.push({ start: first.start, end: first.end, replacement: token });
+			for (const word of rest) {
+				edits.push(removalEdit(comment, word.start, word.end));
+			}
+		} else {
+			return appendToken(comment, token);
+		}
+	}
+
+	return applyEdits(comment, edits);
+}
+
+/**
+ * Expand a token's span to swallow one adjacent whitespace run so removal does
+ * not leave a doubled space or a leading/trailing gap.
+ */
+function removalEdit(comment: string, start: number, end: number): SpanEdit {
+	let from = start;
+	let to = end;
+	if (from > 0 && isSpace(comment[from - 1])) {
+		from -= 1;
+	} else {
+		while (to < comment.length && isSpace(comment[to])) {
+			to += 1;
+		}
+	}
+	return { start: from, end: to, replacement: "" };
+}
+
+function appendToken(comment: string, token: string): string {
+	if (comment.length === 0) {
+		return token;
+	}
+	if (isSpace(comment[comment.length - 1])) {
+		return `${comment}${token}`;
+	}
+	return `${comment} ${token}`;
+}
+
+function applyEdits(comment: string, edits: readonly SpanEdit[]): string {
+	let result = comment;
+	for (const edit of [...edits].sort((a, b) => b.start - a.start)) {
+		result =
+			result.slice(0, edit.start) + edit.replacement + result.slice(edit.end);
+	}
+	return result;
+}
+
+function isSpace(char: string | undefined): boolean {
+	return char === " " || char === "\t" || char === "\n" || char === "\r";
+}
+
+/**
+ * Apply comment kv-soup updates in order, returning the new comment string.
+ * Free-form (non-kv) text and untouched kv tokens are preserved verbatim; only
+ * the targeted keys are upserted or removed.
+ */
+export function applyCommentKv(
+	comment: string,
+	updates: readonly CommentKvUpdate[],
+): string {
+	let result = comment;
+	for (const update of updates) {
+		result = applyOne(result, update);
+	}
+	return result;
 }

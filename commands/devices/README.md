@@ -4,8 +4,9 @@ List, inspect, and edit RouterOS targets known to centrs. `devices` is the
 user-facing surface over the device registry described in
 `docs/CONSTITUTION.md`. It is the only command that may *write* to the CDB.
 
-Status: read-only subset `coded`; CDB mutation remains designed. See
-`docs/MATRIX.md` for the matrix row.
+Status: read-only subset `coded`; CDB mutation (`add`/`edit`/`set`/`remove`)
+`coded` for unencrypted CDBs. Encrypted-CDB writes are blocked pending a
+verified round-trip (see below). See `docs/MATRIX.md` for the matrix row.
 
 `devices` does not use a transport in the protocol sense and does not contact a
 RouterOS device in phase 1. Its sources are:
@@ -139,25 +140,31 @@ centrs devices remove <target>
 
 ## CDB write strategy
 
-All writes go through one helper that:
+All writes go through one helper (`writeWinBoxCdb`) that:
 
-1. Snapshots the current file to `~/.config/tikoci/winbox.cdb.bak.<iso8601>`.
+1. Snapshots the current file to `winbox.cdb.bak.<timestamp>` beside it (the
+   timestamp is a filesystem-safe, lexicographically-sortable ISO variant).
 2. Keeps the last 5 backups, deletes older ones.
 3. Builds the new record set with unknown fields preserved verbatim (see
    below).
-4. If the CDB was opened encrypted: re-encrypts with a freshly generated
-   32-byte salt (salt rotation on every write).
-5. Writes to `~/.config/tikoci/winbox.cdb.tmp.<pid>` and `fsync`s.
-6. `rename()` over the original (atomic on POSIX).
+4. Writes to `winbox.cdb.tmp.<pid>.<rand>` in the same directory and `fsync`s
+   it (then best-effort `fsync`s the directory).
+5. `rename()`s over the original (atomic on POSIX), so a crash never leaves a
+   partially-written CDB.
 
 Refusals:
 
-- Writing to an encrypted CDB without `--cdb-password` / `CENTRS_CDB_PASSWORD`
-  fails with `cdb/password-required`.
+- Writing to an encrypted CDB is **blocked** with
+  `cdb/encrypted-write-unverified`. Encrypted-CDB writes are not yet verified
+  to round-trip byte-identically through WinBox, and a bad write would corrupt
+  the file. Make the edit in WinBox until a manual round-trip is verified;
+  *reading* encrypted CDBs stays supported.
+- Writing to an encrypted CDB without `--cdb-password` /
+  `CENTRS_CDB_PASSWORD` still fails earlier at load with
+  `cdb/password-required`.
 - Writing to an unencrypted CDB with `--cdb-password` succeeds with the
   existing `cdb/password-not-needed` warning. centrs does **not** silently
-  upgrade the file to encrypted; that requires `devices encrypt` (not in
-  phase 1).
+  upgrade the file to encrypted.
 
 ### Unknown CDB fields
 
@@ -218,10 +225,12 @@ When a row is answered, fold it into this README and delete the row.
 
 ## Residual risks
 
-- **Encrypted-CDB round-trip is untested end-to-end.** Salt rotation needs a
+- **Encrypted-CDB writes are blocked, not implemented.** Until a manual
+  "WinBox can still open this file" round-trip is verified, every mutation
+  against an encrypted CDB fails fast with `cdb/encrypted-write-unverified`.
+  Reads are unaffected. Re-enabling encrypted writes needs the salt-rotation
   fixture test (centrs write → centrs read → bytes-identical-modulo-salt) plus
-  a manual "WinBox can still open this file" verification before `devices add`
-  / `edit` / `set` / `remove` ship for encrypted CDBs.
+  the manual WinBox verification.
 - **Unknown-tcode preservation is opaque past the first unknown tcode.** The
   decoder captures one `rawTail` blob; fields that follow the unknown tcode
   inside the same record are kept inside that blob and cannot be surfaced

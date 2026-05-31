@@ -132,18 +132,18 @@ centrs devices add 198.51.100.20 --user u --password p \
   --cdb-file $CDB_ENCRYPTED
 ```
 
-Errors with `cdb/password-required`.
+Errors with `cdb/password-required` (load fails before any mutation).
 
-### 14. Add against encrypted CDB with password (salt rotation)
+### 14. Add against encrypted CDB with password (write blocked)
 
 ```bash
 centrs devices add 198.51.100.20 --user u --password p \
   --cdb-file $CDB_ENCRYPTED --cdb-password centrs-test
 ```
 
-`ok: true`. Decrypting the file with the same password still works. The
-file's first 32 bytes after the magic differ from the pre-write salt (salt
-rotated).
+Errors with `cdb/encrypted-write-unverified`. The encrypted CDB loads and
+reads fine, but writes are blocked until an encrypted round-trip is verified
+safe; no file mutation, no backup written.
 
 ## edit
 
