@@ -106,6 +106,28 @@ describe("WinBox CDB atomic write", () => {
 		}
 	});
 
+	test("skips backup creation when skipBackup is true and target exists", async () => {
+		const fixture = recordWithRawTail();
+		const { path, cleanup } = await makeTempCdb([fixture]);
+		try {
+			const beforeBackups = await listWinBoxCdbBackups(path);
+			const mutated = buildWinBoxCdbEntryRecord({
+				recordType: winBoxCdbRecordType.ipAdmin,
+				target: "192.0.2.50",
+				user: "changed",
+				password: "secret",
+			});
+			const result = await writeWinBoxCdb(path, [mutated], {
+				skipBackup: true,
+			});
+			expect(result.backupPath).toBeUndefined();
+			const afterBackups = await listWinBoxCdbBackups(path);
+			expect(afterBackups).toEqual(beforeBackups);
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("retains only the newest backups and prunes older ones", async () => {
 		const fixture = recordWithRawTail();
 		const { path, cleanup } = await makeTempCdb([fixture]);
