@@ -7,15 +7,14 @@ import type {
 } from "./core/envelope.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import {
+	createProtocolAdapter,
+	type ProtocolAdapter,
+} from "./protocols/adapter.ts";
+import {
 	getProtocolPlan,
 	plannedProtocols,
 	type RouterOsProtocol,
 } from "./protocols/index.ts";
-import {
-	type ApiReply,
-	connectNativeApi,
-	type NativeApiSession,
-} from "./protocols/native-api.ts";
 import {
 	type CdbResolution,
 	parseDuration,
@@ -110,12 +109,6 @@ interface RetrieveInspection {
 	command: "get" | "print";
 }
 
-interface RestResponse {
-	status: number;
-	text: string;
-	data: unknown;
-}
-
 interface ResolvedRetrieveRequest {
 	path: string;
 	via: ResolvedSetting<RouterOsProtocol>;
@@ -140,7 +133,16 @@ export async function retrieve(
 	const warnings: RetrieveWarning[] = [...resolved.warnings];
 	let availableAttributes: string[] | undefined;
 	let inspection: RetrieveInspection | undefined;
-	const backend = createRetrieveBackend(resolved);
+	const backend = createProtocolAdapter({
+		protocol: resolved.via.value,
+		host: resolved.target.host,
+		port: resolved.target.port,
+		tls: resolved.target.tls,
+		baseUrl: resolved.target.baseUrl,
+		username: resolved.auth.username,
+		password: resolved.auth.password,
+		timeoutMs: resolved.timeoutMs.value,
+	});
 
 	try {
 		if (resolved.listAttributes || resolved.validate.value) {
@@ -650,7 +652,7 @@ function resolveFormat(
  * attribute/completion discovery are NOT swallowed — they surface as-is.
  */
 async function inspectChildrenForProbe(
-	backend: RetrieveBackend,
+	backend: ProtocolAdapter,
 	path: string,
 ): Promise<unknown[]> {
 	try {
@@ -665,7 +667,7 @@ async function inspectChildrenForProbe(
 
 async function inspectRetrievePath(
 	resolved: ResolvedRetrieveRequest,
-	backend: RetrieveBackend,
+	backend: ProtocolAdapter,
 ): Promise<RetrieveInspection> {
 	const pathTokens = pathTokensForInspect(resolved.path);
 	const rootChildren = (await inspectChildrenForProbe(
@@ -702,7 +704,7 @@ async function inspectRetrievePath(
 async function inspectAttributes(
 	resolved: ResolvedRetrieveRequest,
 	inspection: RetrieveInspection,
-	backend: RetrieveBackend,
+	backend: ProtocolAdapter,
 ): Promise<string[]> {
 	const pathTokens = pathTokensForInspect(resolved.path);
 	const argument = inspection.command === "get" ? "value-name" : "proplist";
@@ -730,7 +732,7 @@ async function inspectAttributes(
 
 async function executeRetrieve(
 	resolved: ResolvedRetrieveRequest,
-	backend: RetrieveBackend,
+	backend: ProtocolAdapter,
 ): Promise<unknown> {
 	if (isKnownSingletonPath(resolved.path)) {
 		const data = await backend.getSingleton(resolved.path);
@@ -743,452 +745,6 @@ async function executeRetrieve(
 	return backend.list(resolved.path, {
 		proplist: resolved.attributes.length > 0 ? resolved.attributes : undefined,
 		detail: resolved.allAttributes,
-	});
-}
-
-/**
- * Transport seam for retrieve. The orchestrator drives validation and data
- * fetch through these four operations so REST and native-api share the same
- * validate → run pipeline and the same envelope shape.
- */
-interface RetrieveListOptions {
-	proplist?: readonly string[];
-	detail?: boolean;
-}
-
-interface RetrieveBackend {
-	/** `/console/inspect` probe (`request=child` or `request=completion`). */
-	inspect(request: "child" | "completion", path: string): Promise<unknown[]>;
-	/** Read a single record (singleton menu) as an object. */
-	getSingleton(path: string): Promise<unknown>;
-	/** Read a menu as an array of records, optionally projected/detailed. */
-	list(path: string, options: RetrieveListOptions): Promise<unknown[]>;
-	/** Release any underlying connection. Safe to call when never connected. */
-	close(): Promise<void>;
-}
-
-function createRetrieveBackend(
-	resolved: ResolvedRetrieveRequest,
-): RetrieveBackend {
-	if (resolved.via.value === "native-api") {
-		return new NativeApiRetrieveBackend(resolved);
-	}
-	return new RestRetrieveBackend(resolved);
-}
-
-class RestRetrieveBackend implements RetrieveBackend {
-	constructor(private readonly resolved: ResolvedRetrieveRequest) {}
-
-	async inspect(
-		request: "child" | "completion",
-		path: string,
-	): Promise<unknown[]> {
-		return restPost<unknown[]>(this.resolved, "/console/inspect", {
-			request,
-			path,
-		});
-	}
-
-	async getSingleton(path: string): Promise<unknown> {
-		return restGet(this.resolved, path);
-	}
-
-	async list(path: string, options: RetrieveListOptions): Promise<unknown[]> {
-		const hasProjection =
-			(options.proplist?.length ?? 0) > 0 || options.detail === true;
-		if (!hasProjection) {
-			return (await restGet(this.resolved, path)) as unknown[];
-		}
-		const body: { ".proplist"?: readonly string[]; detail?: string } = {};
-		if (options.proplist && options.proplist.length > 0) {
-			body[".proplist"] = options.proplist;
-		}
-		if (options.detail) {
-			body.detail = "true";
-		}
-		return restPost<unknown[]>(
-			this.resolved,
-			`${path.replace(/\/$/, "")}/print`,
-			body,
-		);
-	}
-
-	async close(): Promise<void> {
-		// REST is stateless; nothing to release.
-	}
-}
-
-class NativeApiRetrieveBackend implements RetrieveBackend {
-	private session?: NativeApiSession;
-
-	constructor(private readonly resolved: ResolvedRetrieveRequest) {}
-
-	private async connect(): Promise<NativeApiSession> {
-		if (this.session) {
-			return this.session;
-		}
-		const { session } = await connectNativeApi({
-			host: this.resolved.target.host,
-			port: this.resolved.target.port,
-			username: this.resolved.auth.username ?? "",
-			password: this.resolved.auth.password,
-			tls: this.resolved.target.tls,
-			timeoutMs: this.resolved.timeoutMs.value,
-		});
-		this.session = session;
-		return session;
-	}
-
-	private async talk(command: NativeApiCommandInput): Promise<ApiReply[]> {
-		const session = await this.connect();
-		return this.withTimeout(session.talk(command));
-	}
-
-	private async withTimeout<T>(promise: Promise<T>): Promise<T> {
-		const timeoutMs = this.resolved.timeoutMs.value;
-		let handle: ReturnType<typeof setTimeout> | undefined;
-		const endpoint = this.resolved.target.baseUrl;
-		// Swallow the eventual rejection from the raced command so that closing
-		// the session below (which rejects the in-flight talk) cannot surface as
-		// an unhandled rejection once the timeout has already won the race.
-		promise.catch(() => undefined);
-		const timeout = new Promise<never>((_resolve, reject) => {
-			handle = setTimeout(() => {
-				// Reject with the timeout error first so it wins the race, then
-				// tear down the connection (which rejects the pending talk with
-				// transport/connection-closed — now harmlessly ignored).
-				reject(
-					new CentrsError({
-						code: "transport/timeout",
-						summary: `The RouterOS API command to ${endpoint} timed out after ${timeoutMs}ms.`,
-						remediation:
-							"Raise `--timeout`, or confirm the api service is responsive.",
-						context: { via: "native-api", endpoint, timeoutMs },
-					}),
-				);
-				this.session?.close();
-				this.session = undefined;
-			}, timeoutMs);
-		});
-		try {
-			return await Promise.race([promise, timeout]);
-		} finally {
-			if (handle !== undefined) {
-				clearTimeout(handle);
-			}
-		}
-	}
-
-	async inspect(
-		request: "child" | "completion",
-		path: string,
-	): Promise<unknown[]> {
-		const replies = await this.talk({
-			command: "/console/inspect",
-			attributes: { request, path },
-		});
-		return repliesToRecords(replies);
-	}
-
-	async getSingleton(path: string): Promise<unknown> {
-		const replies = await this.talk({
-			command: `${path.replace(/\/$/, "")}/print`,
-		});
-		const records = repliesToRecords(replies);
-		return records[0] ?? {};
-	}
-
-	async list(path: string, options: RetrieveListOptions): Promise<unknown[]> {
-		const command: NativeApiCommandInput = {
-			command: `${path.replace(/\/$/, "")}/print`,
-		};
-		if (options.proplist && options.proplist.length > 0) {
-			command.proplist = options.proplist;
-		}
-		if (options.detail) {
-			command.attributes = { detail: "" };
-		}
-		const replies = await this.talk(command);
-		return repliesToRecords(replies);
-	}
-
-	async close(): Promise<void> {
-		this.session?.close();
-		this.session = undefined;
-	}
-}
-
-interface NativeApiCommandInput {
-	command: string;
-	attributes?: Record<string, string>;
-	proplist?: readonly string[];
-}
-
-function repliesToRecords(
-	replies: readonly ApiReply[],
-): Record<string, string>[] {
-	return replies
-		.filter((reply) => reply.type === "!re")
-		.map((reply) => ({ ...reply.attributes }));
-}
-
-async function restGet(
-	resolved: ResolvedRetrieveRequest,
-	path: string,
-): Promise<unknown> {
-	const response = await fetchRest(resolved, path, { method: "GET" });
-	return response.data;
-}
-
-async function restPost<T = unknown>(
-	resolved: ResolvedRetrieveRequest,
-	path: string,
-	body: Record<string, unknown>,
-): Promise<T> {
-	const response = await fetchRest(resolved, path, {
-		method: "POST",
-		body: JSON.stringify(body),
-		headers: {
-			"Content-Type": "application/json",
-		},
-	});
-	return response.data as T;
-}
-
-async function fetchRest(
-	resolved: ResolvedRetrieveRequest,
-	path: string,
-	init: RequestInit,
-): Promise<RestResponse> {
-	const url = joinRestUrl(resolved.target.baseUrl, path);
-	const headers = new Headers(init.headers);
-	if (resolved.auth.username) {
-		headers.set(
-			"Authorization",
-			`Basic ${Buffer.from(`${resolved.auth.username}:${resolved.auth.password}`, "utf8").toString("base64")}`,
-		);
-	}
-
-	const controller = new AbortController();
-	const timeoutHandle = setTimeout(
-		() => controller.abort("timeout"),
-		resolved.timeoutMs.value,
-	);
-
-	try {
-		const response = await fetch(url, {
-			...init,
-			headers,
-			signal: controller.signal,
-		});
-		const text = await response.text();
-		const data = parseResponseBody(text);
-		if (!response.ok) {
-			throw mapHttpFailure(response.status, text, data, resolved, path);
-		}
-
-		return {
-			status: response.status,
-			text,
-			data,
-		};
-	} catch (error) {
-		if (error instanceof CentrsError) {
-			throw error;
-		}
-		throw mapTransportFailure(error, resolved, path);
-	} finally {
-		clearTimeout(timeoutHandle);
-	}
-}
-
-function mapHttpFailure(
-	status: number,
-	text: string,
-	data: unknown,
-	resolved: ResolvedRetrieveRequest,
-	path: string,
-): CentrsError {
-	if (status === 401 || status === 403) {
-		return new CentrsError({
-			code: "transport/auth-failed",
-			summary: `RouterOS rejected the REST credentials for ${resolved.target.host}:${resolved.target.port}.`,
-			remediation:
-				"Check `--username` / `--password` or the matching `CENTRS_*` environment variables, and confirm the user has RouterOS REST access.",
-			context: {
-				via: resolved.via.value,
-				host: resolved.target.host,
-				port: resolved.target.port,
-				path,
-				status,
-			},
-			causeData: data ?? text,
-		});
-	}
-
-	if (
-		status === 400 &&
-		isPlainObject(data) &&
-		readRecordString(data, "detail") === "Session closed"
-	) {
-		return new CentrsError({
-			code: "transport/timeout",
-			summary: `RouterOS closed the REST session before ${path} completed.`,
-			remediation:
-				"Reduce the scope of the request, or choose a path that can complete within the current RouterOS REST timeout ceiling.",
-			context: {
-				via: resolved.via.value,
-				host: resolved.target.host,
-				port: resolved.target.port,
-				path,
-				timeoutMs: resolved.timeoutMs.value,
-			},
-			causeData: data,
-		});
-	}
-
-	if (status === 404) {
-		return new CentrsError({
-			code: "routeros/path-not-found",
-			summary: `RouterOS path ${path} was not found over REST.`,
-			remediation:
-				"Check the slash-prefixed RouterOS path, or use `--list-attributes` / `--no-validate` to narrow down where the mismatch is happening.",
-			context: {
-				via: resolved.via.value,
-				host: resolved.target.host,
-				port: resolved.target.port,
-				path,
-				status,
-			},
-			causeData: data ?? text,
-		});
-	}
-
-	// WP-1c: adopt mapRouterOsError here (REST `detail` -> normalized routeros/* code).
-	return new CentrsError({
-		code: "routeros/request-failed",
-		summary: `RouterOS REST request failed with HTTP ${status} for ${path}.`,
-		remediation:
-			"Inspect the returned RouterOS message, then adjust the path, credentials, or request shape accordingly.",
-		context: {
-			via: resolved.via.value,
-			host: resolved.target.host,
-			port: resolved.target.port,
-			path,
-			status,
-		},
-		causeData: data ?? text,
-	});
-}
-
-function mapTransportFailure(
-	error: unknown,
-	resolved: ResolvedRetrieveRequest,
-	path: string,
-): CentrsError {
-	const signals = collectTransportSignals(error);
-	const codes = signals.codes.map((code) => code.toLowerCase());
-	const messages = signals.messages.map((message) => message.toLowerCase());
-	if (
-		codes.includes("abort_err") ||
-		messages.some((candidate) => candidate.includes("timeout"))
-	) {
-		return new CentrsError({
-			code: "transport/timeout",
-			summary: `Timed out waiting for ${resolved.via.value} to respond from ${resolved.target.host}:${resolved.target.port}.`,
-			remediation:
-				"Increase `--timeout` within the REST ceiling, or confirm the host and port are reachable.",
-			context: {
-				via: resolved.via.value,
-				host: resolved.target.host,
-				port: resolved.target.port,
-				path,
-				timeoutMs: resolved.timeoutMs.value,
-			},
-			cause: error,
-		});
-	}
-
-	if (
-		codes.some(
-			(code) => code === "econnrefused" || code === "connectionrefused",
-		) ||
-		messages.some(
-			(candidate) =>
-				candidate.includes("econnrefused") ||
-				candidate.includes("connection refused") ||
-				candidate.includes("unable to connect"),
-		)
-	) {
-		return new CentrsError({
-			code: "transport/connection-refused",
-			summary: `Connection refused by ${resolved.target.host}:${resolved.target.port} over ${resolved.via.value}.`,
-			remediation:
-				"Check that the RouterOS REST service is enabled on that port and that any local forwarding or firewall rules are correct.",
-			context: {
-				via: resolved.via.value,
-				host: resolved.target.host,
-				port: resolved.target.port,
-				path,
-			},
-			cause: error,
-		});
-	}
-
-	if (
-		codes.some((code) => ["enotfound", "eai_again", "dns"].includes(code)) ||
-		messages.some(
-			(candidate) =>
-				candidate.includes("enotfound") ||
-				candidate.includes("eai_again") ||
-				candidate.includes("dns") ||
-				candidate.includes("could not resolve") ||
-				candidate.includes("name lookup"),
-		)
-	) {
-		return new CentrsError({
-			code: "transport/dns",
-			summary: `Could not resolve ${resolved.target.host} for ${resolved.via.value}.`,
-			remediation:
-				"Check the host spelling, DNS configuration, or pass a literal address with `--host`.",
-			context: {
-				via: resolved.via.value,
-				host: resolved.target.host,
-				port: resolved.target.port,
-				path,
-			},
-			cause: error,
-		});
-	}
-
-	if (messages.some((candidate) => candidate.includes("certificate"))) {
-		return new CentrsError({
-			code: "transport/tls-certificate",
-			summary: `TLS certificate validation failed for ${resolved.target.host}:${resolved.target.port}.`,
-			remediation:
-				"Use an HTTP URL for this alpha slice, or install a certificate chain Bun can trust before using HTTPS.",
-			context: {
-				via: resolved.via.value,
-				host: resolved.target.host,
-				port: resolved.target.port,
-				path,
-			},
-			cause: error,
-		});
-	}
-
-	return new CentrsError({
-		code: "transport/network",
-		summary: `Network request to ${resolved.target.host}:${resolved.target.port} failed over ${resolved.via.value}.`,
-		remediation:
-			"Check the host, port, and service availability, then re-run with `--format json` if you need the structured cause data.",
-		context: {
-			via: resolved.via.value,
-			host: resolved.target.host,
-			port: resolved.target.port,
-			path,
-		},
-		cause: error,
 	});
 }
 
@@ -1243,70 +799,6 @@ function projectSingletonAttributes(
 		projected[attribute] = data[attribute];
 	}
 	return projected;
-}
-
-interface TransportSignals {
-	codes: string[];
-	messages: string[];
-}
-
-function collectTransportSignals(error: unknown): TransportSignals {
-	const signals: TransportSignals = { codes: [], messages: [] };
-	collectTransportSignalsInto(error, signals, new Set<unknown>());
-	return signals;
-}
-
-function collectTransportSignalsInto(
-	error: unknown,
-	signals: TransportSignals,
-	seen: Set<unknown>,
-): void {
-	if (error === null || error === undefined || seen.has(error)) {
-		return;
-	}
-	if (typeof error !== "object") {
-		signals.messages.push(String(error));
-		return;
-	}
-	seen.add(error);
-
-	if (error instanceof Error && error.message.length > 0) {
-		signals.messages.push(error.message);
-	}
-	if ("message" in error && typeof error.message === "string") {
-		signals.messages.push(error.message);
-	}
-	if ("code" in error && typeof error.code === "string") {
-		signals.codes.push(error.code);
-	}
-	if ("errno" in error && typeof error.errno === "string") {
-		signals.codes.push(error.errno);
-	}
-	if ("cause" in error) {
-		collectTransportSignalsInto(error.cause, signals, seen);
-	}
-	if ("errors" in error && Array.isArray(error.errors)) {
-		for (const nested of error.errors) {
-			collectTransportSignalsInto(nested, signals, seen);
-		}
-	}
-}
-
-function joinRestUrl(baseUrl: string, path: string): string {
-	const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-	return `${baseUrl}${normalizedPath}`;
-}
-
-function parseResponseBody(text: string): unknown {
-	if (text.length === 0) {
-		return null;
-	}
-
-	try {
-		return JSON.parse(text) as unknown;
-	} catch {
-		return text;
-	}
 }
 
 function resolveTimeoutSetting(
@@ -1424,14 +916,6 @@ function exhaustiveOutputFormat(value: never): never {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readRecordString(
-	value: Record<string, unknown>,
-	key: string,
-): string | undefined {
-	const candidate = value[key];
-	return typeof candidate === "string" ? candidate : undefined;
 }
 
 function toYaml(value: unknown, indent = 0): string {

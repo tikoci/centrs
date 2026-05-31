@@ -79,12 +79,19 @@ export {
 	serializeCentrsError,
 } from "./errors.ts";
 export {
+	createProtocolAdapter,
 	getProtocolPlan,
+	type ProtocolAdapter,
+	type ProtocolAdapterCapabilities,
+	type ProtocolAdapterConfig,
 	type ProtocolCapability,
+	type ProtocolExecuteRequest,
+	type ProtocolExecuteResult,
 	type ProtocolPlan,
 	plannedProtocols,
 	protocolPlans,
 	protocolsWithCapability,
+	type RetrieveListOptions,
 	type RouterOsProtocol,
 } from "./protocols/index.ts";
 export {
