@@ -6,18 +6,25 @@
 
 import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
 import {
+	addDevice,
 	buildDevicesErrorEnvelope,
+	type CommentKvUpdate,
 	type DevicesCommand,
 	type DevicesEnvelope,
 	type DevicesOutputFormat,
 	describeCentrs,
 	devicesOutputFormats,
+	editDevice,
 	listDevices,
 	listGroups,
 	loadCdb,
+	recordTypeFromName,
+	removeDevice,
 	renderDevicesEnvelope,
 	resolveDevicesSettings,
+	setDeviceCommentKv,
 	showDevice,
+	winBoxCdbRecordType,
 } from "../index.ts";
 import {
 	type CliCommandMetadata,
@@ -27,9 +34,9 @@ import {
 
 export const devicesCommand: CliCommandMetadata = {
 	name: "devices",
-	usage: "centrs devices <list|show|groups> [args] [flags]",
+	usage: "centrs devices <list|show|groups|add|edit|set|remove> [args] [flags]",
 	summary:
-		"Inspect the CDB-backed device registry (read-only subcommands only in this phase).",
+		"Inspect and mutate the CDB-backed device registry. `devices` is the only command that writes the CDB.",
 	options: [
 		{
 			flag: "--cdb-file",
@@ -41,13 +48,13 @@ export const devicesCommand: CliCommandMetadata = {
 			flag: "--cdb-password",
 			valueName: "<secret>",
 			description:
-				"Decrypt an encrypted CDB. Falls back to `CENTRS_CDB_PASSWORD`.",
+				"Decrypt an encrypted CDB. Falls back to `CENTRS_CDB_PASSWORD`. Encrypted CDBs are read-only.",
 		},
 		{
 			flag: "--group",
 			valueName: "<name>",
 			description:
-				"`list` only — filter to entries whose `group` equals <name>.",
+				"`list` filter / `add`,`edit` first-class group field for the target entry.",
 		},
 		{
 			flag: "--members",
@@ -57,6 +64,45 @@ export const devicesCommand: CliCommandMetadata = {
 			flag: "--explain",
 			description:
 				"`show` only — include the raw `WinBoxCdbRecord` in `data.record`.",
+		},
+		{
+			flag: "--user",
+			valueName: "<name>",
+			description: "`add`,`edit` — first-class CDB user field.",
+		},
+		{
+			flag: "--password",
+			valueName: "<secret>",
+			description: "`add`,`edit` — first-class CDB password field.",
+		},
+		{
+			flag: "--profile",
+			valueName: "<name>",
+			description: "`add`,`edit` — first-class CDB profile field.",
+		},
+		{
+			flag: "--session",
+			valueName: "<name>",
+			description: "`add`,`edit` — first-class CDB session field.",
+		},
+		{
+			flag: "--comment",
+			valueName: "<text>",
+			description: "`add`,`edit` — free-form comment (may include kv-soup).",
+		},
+		{
+			flag: "--record-type",
+			valueName: `<${Object.keys(winBoxCdbRecordType).join("|")}>`,
+			description: "`add` only — record type (default `ipAdmin`).",
+		},
+		{
+			flag: "--force",
+			description: "`add` only — overwrite an existing target entry.",
+		},
+		{
+			flag: "--strict",
+			description:
+				"`set` only — reject unknown comment kv keys instead of warning.",
 		},
 		{
 			flag: "--format",
@@ -70,16 +116,34 @@ export const devicesCommand: CliCommandMetadata = {
 	],
 };
 
+type DevicesSubcommand =
+	| "list"
+	| "show"
+	| "groups"
+	| "add"
+	| "edit"
+	| "set"
+	| "remove";
+
 interface DevicesCliArgs {
 	help?: boolean;
-	subcommand?: "list" | "show" | "groups";
+	subcommand?: DevicesSubcommand;
 	cdbFile?: string;
 	cdbPassword?: string;
 	group?: string;
 	members?: boolean;
 	explain?: boolean;
+	user?: string;
+	password?: string;
+	profile?: string;
+	session?: string;
+	comment?: string;
+	recordType?: string;
+	force?: boolean;
+	strict?: boolean;
 	format?: DevicesOutputFormat;
 	target?: string;
+	kvArgs?: string[];
 }
 
 function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
@@ -111,6 +175,30 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 			case "--explain":
 				parsed.explain = true;
 				break;
+			case "--user":
+				parsed.user = expectValue(args, ++index, arg);
+				break;
+			case "--password":
+				parsed.password = expectValue(args, ++index, arg);
+				break;
+			case "--profile":
+				parsed.profile = expectValue(args, ++index, arg);
+				break;
+			case "--session":
+				parsed.session = expectValue(args, ++index, arg);
+				break;
+			case "--comment":
+				parsed.comment = expectValue(args, ++index, arg);
+				break;
+			case "--record-type":
+				parsed.recordType = expectValue(args, ++index, arg);
+				break;
+			case "--force":
+				parsed.force = true;
+				break;
+			case "--strict":
+				parsed.strict = true;
+				break;
 			case "--format": {
 				const value = expectValue(args, ++index, arg);
 				if (!devicesOutputFormats.includes(value as DevicesOutputFormat)) {
@@ -137,24 +225,49 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 		return parsed;
 	}
 
+	const subcommands: readonly DevicesSubcommand[] = [
+		"list",
+		"show",
+		"groups",
+		"add",
+		"edit",
+		"set",
+		"remove",
+	];
 	const [sub, ...rest] = positional;
 	if (sub === undefined) {
 		throw new Error(
-			"`centrs devices` requires a subcommand: list, show, or groups.",
+			"`centrs devices` requires a subcommand: list, show, groups, add, edit, set, or remove.",
 		);
 	}
-	if (sub !== "list" && sub !== "show" && sub !== "groups") {
+	if (!subcommands.includes(sub as DevicesSubcommand)) {
 		throw new Error(
-			`Unknown devices subcommand: ${sub}. Use list, show, or groups.`,
+			`Unknown devices subcommand: ${sub}. Use list, show, groups, add, edit, set, or remove.`,
 		);
 	}
-	parsed.subcommand = sub;
+	parsed.subcommand = sub as DevicesSubcommand;
 
-	if (sub === "show") {
+	if (sub === "show" || sub === "add" || sub === "edit" || sub === "remove") {
 		if (rest.length !== 1) {
-			throw new Error("`centrs devices show` requires exactly one <target>.");
+			throw new Error(
+				`\`centrs devices ${sub}\` requires exactly one <target>.`,
+			);
 		}
 		parsed.target = rest[0];
+	} else if (sub === "set") {
+		const [target, ...kvArgs] = rest;
+		if (target === undefined) {
+			throw new Error(
+				"`centrs devices set` requires a <target> followed by key=value overrides.",
+			);
+		}
+		if (kvArgs.length === 0) {
+			throw new Error(
+				"`centrs devices set` requires at least one key=value override.",
+			);
+		}
+		parsed.target = target;
+		parsed.kvArgs = kvArgs;
 	} else if (rest.length > 0) {
 		throw new Error(
 			`\`centrs devices ${sub}\` does not accept positional arguments; got: ${rest.join(", ")}.`,
@@ -162,6 +275,16 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	}
 
 	return parsed;
+}
+
+function parseKvArg(token: string): CommentKvUpdate {
+	const eq = token.indexOf("=");
+	if (eq <= 0) {
+		throw new Error(
+			`Invalid kv override "${token}"; expected key=value (use key= to clear a value).`,
+		);
+	}
+	return { key: token.slice(0, eq), value: token.slice(eq + 1) };
 }
 
 export async function runDevicesCli(args: readonly string[]): Promise<number> {
@@ -198,6 +321,65 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 				break;
 			case "groups":
 				envelope = listGroups({ cdb, withMembers: parsed.members });
+				break;
+			case "add": {
+				if (!parsed.target) {
+					throw new Error("Missing <target> for devices add.");
+				}
+				let recordType: number | undefined;
+				if (parsed.recordType !== undefined) {
+					recordType = recordTypeFromName(parsed.recordType);
+					if (recordType === undefined) {
+						throw new Error(
+							`--record-type must be one of ${Object.keys(winBoxCdbRecordType).join(", ")}; got ${parsed.recordType}.`,
+						);
+					}
+				}
+				envelope = await addDevice({
+					cdb,
+					target: parsed.target,
+					recordType,
+					user: parsed.user,
+					password: parsed.password,
+					group: parsed.group,
+					profile: parsed.profile,
+					session: parsed.session,
+					comment: parsed.comment,
+					force: parsed.force,
+				});
+				break;
+			}
+			case "edit":
+				if (!parsed.target) {
+					throw new Error("Missing <target> for devices edit.");
+				}
+				envelope = await editDevice({
+					cdb,
+					target: parsed.target,
+					user: parsed.user,
+					password: parsed.password,
+					group: parsed.group,
+					profile: parsed.profile,
+					session: parsed.session,
+					comment: parsed.comment,
+				});
+				break;
+			case "set":
+				if (!parsed.target || !parsed.kvArgs) {
+					throw new Error("Missing <target> or key=value overrides for set.");
+				}
+				envelope = await setDeviceCommentKv({
+					cdb,
+					target: parsed.target,
+					updates: parsed.kvArgs.map(parseKvArg),
+					strict: parsed.strict,
+				});
+				break;
+			case "remove":
+				if (!parsed.target) {
+					throw new Error("Missing <target> for devices remove.");
+				}
+				envelope = await removeDevice({ cdb, target: parsed.target });
 				break;
 			default:
 				throw new Error("Unreachable devices subcommand.");

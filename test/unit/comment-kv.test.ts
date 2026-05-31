@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+	applyCommentKv,
 	commentKvAllowlist,
 	commentKvReservedKeys,
 	parseCommentKv,
+	renderCommentKvToken,
 } from "../../src/resolver/comment-kv.ts";
 
 describe("parseCommentKv", () => {
@@ -128,5 +130,56 @@ describe("parseCommentKv", () => {
 			"port",
 			"source",
 		]);
+	});
+});
+
+describe("applyCommentKv", () => {
+	test("appends a kv token while preserving free-form prose", () => {
+		const next = applyCommentKv("owned by neteng", [
+			{ key: "via", value: "ssh" },
+		]);
+		expect(next).toBe("owned by neteng via=ssh");
+		expect(parseCommentKv(next).values.via).toBe("ssh");
+	});
+
+	test("upserts an existing key in place without duplicating", () => {
+		const next = applyCommentKv("via=rest-api site=x", [
+			{ key: "via", value: "ssh" },
+		]);
+		expect(next).toBe("via=ssh site=x");
+	});
+
+	test("removes a key and collapses the surrounding whitespace", () => {
+		const next = applyCommentKv("via=ssh rack 7", [
+			{ key: "via", value: null },
+		]);
+		expect(next).toBe("rack 7");
+	});
+
+	test("quotes values with spaces so they round-trip as one token", () => {
+		const next = applyCommentKv("note here", [
+			{ key: "source", value: "rack 7 row B" },
+		]);
+		expect(next).toBe('note here source="rack 7 row B"');
+		expect(parseCommentKv(next).values.source).toBe("rack 7 row B");
+	});
+
+	test("escapes embedded quotes and backslashes", () => {
+		const value = 'a "b" \\c';
+		const token = renderCommentKvToken("source", value);
+		const parsed = parseCommentKv(token);
+		expect(parsed.values.source).toBe(value);
+	});
+
+	test("applies multiple updates in order", () => {
+		const next = applyCommentKv("keep me", [
+			{ key: "via", value: "ssh" },
+			{ key: "validate", value: "false" },
+			{ key: "via", value: "rest-api" },
+		]);
+		const parsed = parseCommentKv(next);
+		expect(parsed.values.via).toBe("rest-api");
+		expect(parsed.values.validate).toBe("false");
+		expect(next).toContain("keep me");
 	});
 });

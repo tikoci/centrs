@@ -24,12 +24,15 @@ export {
 	resolveCdb,
 } from "./cdb.ts";
 export {
+	applyCommentKv,
 	type CommentKvKey,
 	type CommentKvResult,
+	type CommentKvUpdate,
 	type CommentKvWarning,
 	commentKvAllowlist,
 	commentKvReservedKeys,
 	parseCommentKv,
+	renderCommentKvToken,
 } from "./comment-kv.ts";
 export {
 	type CommentKvLayer,

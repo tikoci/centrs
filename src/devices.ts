@@ -8,7 +8,9 @@ import type {
 	SettingSourceKind,
 } from "./core/envelope.ts";
 import {
+	buildWinBoxCdbEntryRecord,
 	decodeWinBoxCdbEntries,
+	decodeWinBoxCdbEntry,
 	decryptWinBoxCdb,
 	type EncryptedWinBoxCdbFile,
 	parseWinBoxCdb,
@@ -16,9 +18,20 @@ import {
 	type WinBoxCdbField,
 	type WinBoxCdbRecord,
 	WinBoxCdbWrongPasswordError,
+	winBoxCdbFieldTag,
 	winBoxCdbRecordType,
 } from "./data/winbox-cdb.ts";
+import {
+	type WriteWinBoxCdbOptions,
+	writeWinBoxCdb,
+} from "./data/winbox-cdb-write.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
+import {
+	applyCommentKv,
+	type CommentKvUpdate,
+	commentKvAllowlist,
+	commentKvReservedKeys,
+} from "./resolver/comment-kv.ts";
 
 export type { SettingSource, SettingSourceKind };
 
@@ -59,7 +72,14 @@ export interface DevicesGroupSummary {
 	memberEntries?: readonly { target: string; recordType: number }[];
 }
 
-export type DevicesCommand = "list" | "show" | "groups";
+export type DevicesCommand =
+	| "list"
+	| "show"
+	| "groups"
+	| "add"
+	| "edit"
+	| "set"
+	| "remove";
 
 export interface DevicesOperationMeta {
 	command: DevicesCommand;
@@ -98,6 +118,8 @@ export interface LoadedCdb {
 	entries: readonly WinBoxCdbEntry[];
 	settings: DevicesSettings;
 	warnings: readonly DevicesWarning[];
+	/** True when the source file on disk was encrypted (writes are blocked). */
+	encrypted: boolean;
 }
 
 const DEFAULT_CDB_RELATIVE = ".config/tikoci/winbox.cdb";
@@ -252,7 +274,12 @@ export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 		}
 	}
 
-	return { entries, settings, warnings };
+	return {
+		entries,
+		settings,
+		warnings,
+		encrypted: parsed.mode === "encrypted",
+	};
 }
 
 function decryptCdb(
@@ -467,6 +494,442 @@ export function listGroups(
 	};
 }
 
+// ---------------------------------------------------------------------------
+// Mutation (CDB write) surface
+// ---------------------------------------------------------------------------
+
+/**
+ * Result payload shared by every mutating devices command. `entry` is the
+ * resulting record (absent for `remove`); `preservedUnknownTags` lists any
+ * unknown/`rawTail` field tags carried over verbatim from the prior record.
+ */
+export interface DevicesMutationData {
+	action: "add" | "edit" | "set" | "remove";
+	target: string;
+	cdbRecordIndex: number;
+	replaced: boolean;
+	recordCount: number;
+	backupPath?: string;
+	prunedBackups: readonly string[];
+	preservedUnknownTags?: readonly number[];
+	entry?: DevicesShowItem;
+}
+
+export type DevicesMutationEnvelope = CentrsSuccessEnvelope<
+	DevicesMutationData,
+	DevicesOperationMeta
+>;
+
+const KNOWN_FIELD_TAGS = new Set<number>(Object.values(winBoxCdbFieldTag));
+
+interface EntryMatch {
+	entry: WinBoxCdbEntry;
+	index: number;
+}
+
+function matchEntries(
+	entries: readonly WinBoxCdbEntry[],
+	target: string,
+): EntryMatch[] {
+	const matches: EntryMatch[] = [];
+	for (let index = 0; index < entries.length; index += 1) {
+		const entry = entries[index];
+		if (entry && entry.target === target) {
+			matches.push({ entry, index });
+		}
+	}
+	return matches;
+}
+
+/** Fields the canonical builder does not emit and must be preserved verbatim. */
+function extraFields(record: WinBoxCdbRecord): readonly WinBoxCdbField[] {
+	return record.fields.filter(
+		(field) => field.rawTail === true || !KNOWN_FIELD_TAGS.has(field.tag),
+	);
+}
+
+function preservedTags(
+	fields: readonly WinBoxCdbField[],
+): readonly number[] | undefined {
+	if (fields.length === 0) {
+		return undefined;
+	}
+	return fields.map((field) => field.tag);
+}
+
+/** Refuse any write against a CDB that was loaded from encrypted bytes. */
+function assertWritable(cdb: LoadedCdb): void {
+	if (cdb.encrypted) {
+		throw new CentrsError({
+			code: "cdb/encrypted-write-unverified",
+			summary:
+				"Refusing to write an encrypted CDB: encrypted-CDB writes are not yet verified to round-trip safely, and a bad write would corrupt the file WinBox reads.",
+			remediation:
+				"Make this change in WinBox for now; reading encrypted CDBs stays supported, and centrs will enable encrypted writes once a manual byte round-trip is verified.",
+			context: { cdbFile: cdb.settings.cdbFile.value },
+		});
+	}
+}
+
+function ambiguousTargetError(
+	target: string,
+	matches: readonly EntryMatch[],
+): CentrsError {
+	return new CentrsError({
+		code: "identity/ambiguous",
+		summary: `Target "${target}" matches ${matches.length} CDB entries; refusing to mutate an ambiguous target.`,
+		remediation:
+			"Remove the duplicate entry, or narrow the CDB so a single record owns this target.",
+		context: {
+			target,
+			matches: matches.map(({ entry, index }) => ({
+				cdbRecordIndex: index,
+				target: entry.target,
+				recordType: entry.recordType,
+			})),
+		},
+	});
+}
+
+function notFoundTargetError(target: string): CentrsError {
+	return new CentrsError({
+		code: "cdb/not-found-target",
+		summary: `No CDB entry with target "${target}".`,
+		remediation:
+			"Run `centrs devices list` to see the available targets; use `centrs devices add` to create a new entry.",
+		context: { target },
+	});
+}
+
+/** Resolve a record-type name (e.g. `ipAdmin`) to its numeric tag. */
+export function recordTypeFromName(name: string): number | undefined {
+	const value = (winBoxCdbRecordType as Record<string, number>)[name];
+	return typeof value === "number" ? value : undefined;
+}
+
+async function persistRecords(
+	cdb: LoadedCdb,
+	records: readonly WinBoxCdbRecord[],
+	options: WriteWinBoxCdbOptions | undefined,
+	action: DevicesMutationData["action"],
+	target: string,
+	cdbRecordIndex: number,
+	replaced: boolean,
+	resultEntry: DevicesShowItem | undefined,
+	preserved: readonly number[] | undefined,
+	warnings: readonly DevicesWarning[],
+): Promise<DevicesMutationEnvelope> {
+	const written = await writeWinBoxCdb(
+		cdb.settings.cdbFile.value,
+		records,
+		options,
+	);
+	const data: DevicesMutationData = {
+		action,
+		target,
+		cdbRecordIndex,
+		replaced,
+		recordCount: written.recordCount,
+		prunedBackups: written.prunedBackups,
+	};
+	if (written.backupPath !== undefined) {
+		data.backupPath = written.backupPath;
+	}
+	if (preserved !== undefined) {
+		data.preservedUnknownTags = preserved;
+	}
+	if (resultEntry !== undefined) {
+		data.entry = resultEntry;
+	}
+	return {
+		ok: true,
+		data,
+		warnings,
+		meta: devicesMeta(action, cdb.settings),
+	};
+}
+
+export interface AddDeviceArgs {
+	cdb: LoadedCdb;
+	target: string;
+	recordType?: number;
+	user?: string;
+	password?: string;
+	group?: string;
+	profile?: string;
+	session?: string;
+	comment?: string;
+	savedPassword?: boolean;
+	force?: boolean;
+	writeOptions?: WriteWinBoxCdbOptions;
+}
+
+export async function addDevice(
+	args: AddDeviceArgs,
+): Promise<DevicesMutationEnvelope> {
+	assertWritable(args.cdb);
+	const matches = matchEntries(args.cdb.entries, args.target);
+	if (matches.length > 1) {
+		throw ambiguousTargetError(args.target, matches);
+	}
+	const existing = matches[0];
+	if (existing && !args.force) {
+		throw new CentrsError({
+			code: "cdb/already-exists",
+			summary: `A CDB entry with target "${args.target}" already exists.`,
+			remediation:
+				"Pass --force to overwrite it, or use `centrs devices edit` to change individual fields.",
+			context: { target: args.target, cdbRecordIndex: existing.index },
+		});
+	}
+
+	const carried = existing ? extraFields(existing.entry.record) : [];
+	const record = buildWinBoxCdbEntryRecord({
+		recordType: args.recordType ?? winBoxCdbRecordType.ipAdmin,
+		target: args.target,
+		user: args.user,
+		password: args.password,
+		session: args.session,
+		comment: args.comment,
+		group: args.group,
+		profile: args.profile,
+		savedPassword: args.savedPassword,
+		extraFields: carried.length > 0 ? carried : undefined,
+	});
+
+	const records = args.cdb.entries.map((entry) => entry.record);
+	let cdbRecordIndex: number;
+	if (existing) {
+		records[existing.index] = record;
+		cdbRecordIndex = existing.index;
+	} else {
+		cdbRecordIndex = records.length;
+		records.push(record);
+	}
+
+	const preserved = preservedTags(carried);
+	const warnings = mutationWarnings(args.cdb, preserved);
+	return persistRecords(
+		args.cdb,
+		records,
+		args.writeOptions,
+		"add",
+		args.target,
+		cdbRecordIndex,
+		existing !== undefined,
+		entryToShowItem(decodeWinBoxCdbEntry(record), cdbRecordIndex),
+		preserved,
+		warnings,
+	);
+}
+
+export interface EditDeviceArgs {
+	cdb: LoadedCdb;
+	target: string;
+	user?: string;
+	password?: string;
+	group?: string;
+	profile?: string;
+	session?: string;
+	comment?: string;
+	savedPassword?: boolean;
+	writeOptions?: WriteWinBoxCdbOptions;
+}
+
+export async function editDevice(
+	args: EditDeviceArgs,
+): Promise<DevicesMutationEnvelope> {
+	assertWritable(args.cdb);
+	const match = requireSingleMatch(args.cdb.entries, args.target);
+	const prior = match.entry;
+	const carried = extraFields(prior.record);
+	const record = buildWinBoxCdbEntryRecord({
+		recordType: prior.recordType,
+		target: prior.target,
+		user: args.user ?? prior.user,
+		password: args.password ?? prior.password,
+		session: args.session ?? prior.session,
+		comment: args.comment ?? prior.comment,
+		group: args.group ?? prior.group,
+		profile: args.profile ?? (prior.profile || undefined),
+		savedPassword: args.savedPassword,
+		extraFields: carried.length > 0 ? carried : undefined,
+	});
+
+	const records = args.cdb.entries.map((entry) => entry.record);
+	records[match.index] = record;
+
+	const preserved = preservedTags(carried);
+	return persistRecords(
+		args.cdb,
+		records,
+		args.writeOptions,
+		"edit",
+		args.target,
+		match.index,
+		true,
+		entryToShowItem(decodeWinBoxCdbEntry(record), match.index),
+		preserved,
+		mutationWarnings(args.cdb, preserved),
+	);
+}
+
+export interface SetDeviceCommentKvArgs {
+	cdb: LoadedCdb;
+	target: string;
+	updates: readonly CommentKvUpdate[];
+	strict?: boolean;
+	writeOptions?: WriteWinBoxCdbOptions;
+}
+
+const ALLOWLIST_SET = new Set<string>(commentKvAllowlist);
+const RESERVED_SET = new Set<string>(commentKvReservedKeys);
+
+export async function setDeviceCommentKv(
+	args: SetDeviceCommentKvArgs,
+): Promise<DevicesMutationEnvelope> {
+	assertWritable(args.cdb);
+	const match = requireSingleMatch(args.cdb.entries, args.target);
+
+	const reserved = args.updates
+		.map((update) => update.key)
+		.filter((key) => RESERVED_SET.has(key));
+	if (reserved.length > 0) {
+		throw new CentrsError({
+			code: "cdb/reserved-key",
+			summary: `Comment kv-soup cannot carry first-class CDB field(s): ${reserved.join(", ")}.`,
+			remediation: `Set ${reserved.join(", ")} through \`centrs devices edit\`; the comment kv-soup is for ${commentKvAllowlist.join(", ")}.`,
+			context: { target: args.target, reservedKeys: reserved },
+		});
+	}
+
+	const warnings: DevicesWarning[] = [...args.cdb.warnings];
+	const unknown = args.updates
+		.map((update) => update.key)
+		.filter((key) => !ALLOWLIST_SET.has(key));
+	for (const key of unknown) {
+		if (args.strict) {
+			throw new CentrsError({
+				code: "cdb/unknown-option",
+				summary: `Unknown comment option "${key}" rejected under --strict.`,
+				remediation: `Drop --strict to write it verbatim, or use an allowlisted key: ${commentKvAllowlist.join(", ")}.`,
+				context: { target: args.target, key },
+			});
+		}
+		warnings.push({
+			code: "cdb/unknown-option",
+			message: `Comment option "${key}" is not recognized; it is written verbatim but has no effect.`,
+			context: { target: args.target, key },
+		});
+	}
+
+	const prior = match.entry;
+	const comment = applyCommentKv(prior.comment, args.updates);
+	const carried = extraFields(prior.record);
+	const record = buildWinBoxCdbEntryRecord({
+		recordType: prior.recordType,
+		target: prior.target,
+		user: prior.user,
+		password: prior.password,
+		session: prior.session,
+		comment,
+		group: prior.group,
+		profile: prior.profile || undefined,
+		extraFields: carried.length > 0 ? carried : undefined,
+	});
+
+	const records = args.cdb.entries.map((entry) => entry.record);
+	records[match.index] = record;
+
+	const preserved = preservedTags(carried);
+	appendUnknownFieldWarning(warnings, args.cdb.settings, preserved);
+	return persistRecords(
+		args.cdb,
+		records,
+		args.writeOptions,
+		"set",
+		args.target,
+		match.index,
+		true,
+		entryToShowItem(decodeWinBoxCdbEntry(record), match.index),
+		preserved,
+		warnings,
+	);
+}
+
+export interface RemoveDeviceArgs {
+	cdb: LoadedCdb;
+	target: string;
+	writeOptions?: WriteWinBoxCdbOptions;
+}
+
+export async function removeDevice(
+	args: RemoveDeviceArgs,
+): Promise<DevicesMutationEnvelope> {
+	assertWritable(args.cdb);
+	const match = requireSingleMatch(args.cdb.entries, args.target);
+	const records = args.cdb.entries
+		.map((entry) => entry.record)
+		.filter((_, index) => index !== match.index);
+
+	return persistRecords(
+		args.cdb,
+		records,
+		args.writeOptions,
+		"remove",
+		args.target,
+		match.index,
+		false,
+		undefined,
+		undefined,
+		[...args.cdb.warnings],
+	);
+}
+
+function requireSingleMatch(
+	entries: readonly WinBoxCdbEntry[],
+	target: string,
+): EntryMatch {
+	const matches = matchEntries(entries, target);
+	if (matches.length === 0) {
+		throw notFoundTargetError(target);
+	}
+	if (matches.length > 1) {
+		throw ambiguousTargetError(target, matches);
+	}
+	const match = matches[0];
+	if (!match) {
+		throw new CentrsError({
+			code: "internal/unreachable",
+			summary: "Match list collapsed unexpectedly.",
+		});
+	}
+	return match;
+}
+
+function mutationWarnings(
+	cdb: LoadedCdb,
+	preserved: readonly number[] | undefined,
+): DevicesWarning[] {
+	const warnings: DevicesWarning[] = [...cdb.warnings];
+	appendUnknownFieldWarning(warnings, cdb.settings, preserved);
+	return warnings;
+}
+
+function appendUnknownFieldWarning(
+	warnings: DevicesWarning[],
+	settings: DevicesSettings,
+	preserved: readonly number[] | undefined,
+): void {
+	if (preserved && preserved.length > 0) {
+		warnings.push({
+			code: "cdb/unknown-field",
+			message: `Preserved ${preserved.length} unknown CDB field(s) verbatim on the rewritten record.`,
+			context: { cdbFile: settings.cdbFile.value, tags: preserved },
+		});
+	}
+}
+
 export function buildDevicesErrorEnvelope(
 	command: DevicesCommand,
 	settings: DevicesSettings,
@@ -587,6 +1050,12 @@ function renderText(envelope: DevicesEnvelope<unknown>): string {
 		case "groups":
 			renderGroupsText(lines, envelope.data as readonly DevicesGroupSummary[]);
 			break;
+		case "add":
+		case "edit":
+		case "set":
+		case "remove":
+			renderMutationText(lines, envelope.data as DevicesMutationData);
+			break;
 	}
 
 	appendWarnings(lines, envelope.warnings);
@@ -599,6 +1068,29 @@ function appendWarnings(
 ): void {
 	for (const warning of warnings) {
 		lines.push(`warning: [${warning.code}] ${warning.message}`);
+	}
+}
+
+function renderMutationText(lines: string[], data: DevicesMutationData): void {
+	const verb =
+		data.action === "remove" ? "removed" : data.replaced ? "updated" : "added";
+	lines.push(`${verb} ${data.target} (cdb-index ${data.cdbRecordIndex})`);
+	lines.push(`records:       ${data.recordCount}`);
+	if (data.backupPath) {
+		lines.push(`backup:        ${data.backupPath}`);
+	}
+	if (data.prunedBackups.length > 0) {
+		lines.push(`pruned-backups: ${data.prunedBackups.length}`);
+	}
+	if (data.preservedUnknownTags && data.preservedUnknownTags.length > 0) {
+		lines.push(
+			`preserved-unknown-tags: ${data.preservedUnknownTags.join(", ")}`,
+		);
+	}
+	if (data.entry) {
+		lines.push(`user:          ${data.entry.user || "-"}`);
+		lines.push(`group:         ${data.entry.group || "-"}`);
+		lines.push(`comment:       ${data.entry.comment || "-"}`);
 	}
 }
 

@@ -209,3 +209,6 @@ vmnet
 
 # centrs domain vocabulary
 neteng
+upsert
+upserts
+upserted
