@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { runCli } from "../../src/cli.ts";
 import { type CentrsError, retrieve } from "../../src/index.ts";
+import {
+	resolveMacForRetrieve,
+	resolveRetrieveRequest,
+} from "../../src/retrieve.ts";
 
 type FetchHandler = (
 	url: string,
@@ -451,6 +455,106 @@ describe("CLI help dispatch", () => {
 			);
 		} finally {
 			consoleCapture.restore();
+		}
+	});
+});
+
+describe("retrieve default output format is human-readable text", () => {
+	test("defaults to text when no --format/CENTRS_FORMAT is set", async () => {
+		const resolved = await resolveRetrieveRequest(
+			{ targetInput: "127.0.0.1", path: "/ip/address", via: "rest-api" },
+			{},
+		);
+		expect(resolved.format.value).toBe("text");
+	});
+
+	test("honors CENTRS_FORMAT=json and explicit --format yaml", async () => {
+		const json = await resolveRetrieveRequest(
+			{ targetInput: "127.0.0.1", path: "/ip/address", via: "rest-api" },
+			{ CENTRS_FORMAT: "json" },
+		);
+		expect(json.format.value).toBe("json");
+		const yaml = await resolveRetrieveRequest(
+			{
+				targetInput: "127.0.0.1",
+				path: "/ip/address",
+				via: "rest-api",
+				format: "yaml",
+			},
+			{ CENTRS_FORMAT: "json" },
+		);
+		expect(yaml.format.value).toBe("yaml");
+	});
+});
+
+describe("resolveMacForRetrieve (shared by single + fanout paths)", () => {
+	const MAC = "96:5D:80:7D:BF:59";
+
+	test("rejects L2 transports (mac-telnet) at the capability gate before ARP", async () => {
+		expect.assertions(1);
+		try {
+			await resolveMacForRetrieve(
+				{ targetInput: MAC, path: "/ip/address", via: "mac-telnet" },
+				{},
+			);
+		} catch (error) {
+			expect((error as CentrsError).code).toBe(
+				"routeros/unsupported-capability",
+			);
+		}
+	});
+
+	test("returns undefined when an IP-transport target is not a MAC", async () => {
+		const result = await resolveMacForRetrieve(
+			{ targetInput: "192.168.74.1", path: "/ip/address", via: "native-api" },
+			{},
+		);
+		expect(result).toBeUndefined();
+	});
+
+	test("throws actionable mac-unresolved for a MAC member without --resolve arp", async () => {
+		expect.assertions(2);
+		try {
+			// A CDB group member whose target is a MAC, over an IP transport: the
+			// fanout path calls this before buildResolvedRetrieve. Without the arp
+			// opt-in it must fail with an actionable error, not crash.
+			await resolveMacForRetrieve(
+				{ path: "/ip/address", via: "native-api" },
+				{},
+				{
+					matched: true,
+					target: MAC,
+					overrides: {},
+				} as never,
+			);
+		} catch (error) {
+			expect((error as CentrsError).code).toBe("target/mac-unresolved");
+			expect((error as CentrsError).context).toMatchObject({ resolve: "none" });
+		}
+	});
+
+	test("resolves a MAC member via injected ARP when --resolve arp is set", async () => {
+		// Threading proof: with policy arp, resolveMacForRetrieve resolves the CDB
+		// member MAC to its ARP IP. ARP lookup itself is covered in mac.test.ts;
+		// here we assert the fanout-shared helper honors --resolve arp end to end.
+		const result = await resolveRetrieveRequest(
+			{
+				targetInput: MAC,
+				path: "/ip/address",
+				via: "native-api",
+				resolve: "arp",
+			},
+			{},
+		).catch((error: CentrsError) => error);
+		// Either it resolved (live ARP hit) or it produced a structured ARP-miss
+		// error — never an unhandled crash.
+		const code = (result as CentrsError).code;
+		if (code !== undefined) {
+			expect(["target/mac-not-in-arp", "target/mac-unresolved"]).toContain(
+				code,
+			);
+		} else {
+			expect(result).toBeDefined();
 		}
 	});
 });

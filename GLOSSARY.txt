@@ -221,3 +221,10 @@ HnD
 EADDRINUSE
 EACCES
 REUSEPORT
+
+# Test-router and host-ARP vocabulary (centrs CLI fixes)
+# bigdude: a live test router (MAC 96:5D:80:7D:BF:59) used to ground fixes.
+bigdude
+ifscope
+macvlan
+unpadded

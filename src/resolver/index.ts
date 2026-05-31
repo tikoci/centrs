@@ -39,6 +39,19 @@ export {
 	renderCommentKvToken,
 } from "./comment-kv.ts";
 export {
+	type ArpEntry,
+	effectiveHostCandidate,
+	isIpTransport,
+	isMacAddress,
+	normalizeMac,
+	parseArpTable,
+	parseResolvePolicy,
+	type ResolvePolicy,
+	resolveMacTarget,
+	resolveMacViaArp,
+	unresolvedMacError,
+} from "./mac.ts";
+export {
 	type CommentKvLayer,
 	parseBoolean,
 	parseDuration,

@@ -42,8 +42,10 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
 | `--query <q>`                       | **Not Implemented.** Surface the flag; return `validation/not-implemented` until specced. |
 | `--filter <q>`                      | **Not Implemented.** Same handling as `--query`. RouterOS `.query` mapping is TBD.        |
 | `--max-results <bytes>`             | If response would exceed the limit, return error with object count + total size needed.   |
-| `--format json` (alias `--json`)    | JSON envelope (default for non-tty).                                                      |
+| `--format text` (default)           | Human-readable rendering (default). Errors print `[code] summary` + `Fix:` lines. |
+| `--format json` (alias `--json`)    | Structured JSON envelope (set `CENTRS_FORMAT=json` to make it the default).               |
 | `--format yaml` (alias `--yaml`)    | YAML rendering of the same envelope.                                                      |
+| `--resolve <none\|arp>`             | Resolve a MAC-address target to an IP via the host ARP cache. Default `none`.             |
 | `--via <protocol>`                  | Pin the transport (`rest-api` default, or `native-api`). No silent downgrade. See constitution: protocol selection. |
 | `--validate=false`                  | Escape hatch; default is `true`. See constitution: validation is the product.             |
 | `--timeout <ms>`                    | Request timeout. REST: ≤ 60000. native-api allows longer.                                 |

@@ -192,8 +192,9 @@ Envelope: `ok: true`, `data.summary = { total: 0, ok: 0, failed: 0 }`,
 
 ### 17. --format yaml
 
-`--format json` is the default for non-tty; `--format yaml` renders the same
-envelope. The two outputs round-trip to the same JS value.
+`text` is the default; `--json` (or `--format json`) emits the structured
+envelope, and `--format yaml` renders the same envelope. The two structured
+outputs round-trip to the same JS value.
 
 ```bash
 centrs retrieve $R /system/resource --format yaml --username $U --password $P

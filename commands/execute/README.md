@@ -40,7 +40,11 @@ groups/fanout are grounded.
   WinBox Terminal are later. SNMP is retrieve-only and must reject execute.
 - For a MAC target not resolved from CDB, auto-selection defaults to
   mac-telnet. Callers that want IP-level execution may opt into ARP-based
-  MAC → IP resolution before protocol selection.
+  MAC → IP resolution with `--resolve arp` (plus `--via native-api`/`rest-api`)
+  before protocol selection.
+- Default output is human-readable `text`; pass `--json`/`--format json`
+  (or set `CENTRS_FORMAT=json`) for the structured envelope. Errors always
+  render as `[code] summary` + `Fix:` lines in text mode.
 - CDB comment-kv metadata may provide per-target `via`, `port`, and `ssh-key`
   overrides; CLI/API arguments still win.
 - RoMON and WinBox Terminal are lower priority than mac-telnet until their

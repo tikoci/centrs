@@ -19,13 +19,18 @@ import {
 } from "./protocols/index.ts";
 import {
 	type CdbResolution,
+	effectiveHostCandidate,
+	isIpTransport,
+	isMacAddress,
 	parseDuration,
+	parseResolvePolicy,
 	type ResolvedAuth,
 	type ResolvedSetting,
 	type ResolvedTarget,
 	resolveAuth,
 	resolveBooleanSetting,
 	resolveCdb,
+	resolveMacTarget,
 	resolveOptionalIntegerSetting,
 	resolveStringSetting,
 	resolveTarget,
@@ -52,6 +57,8 @@ export interface ExecuteRequest {
 	maxResultsBytes?: number;
 	cdbFile?: string;
 	cdbPassword?: string;
+	/** Opt-in host ARP resolution for a MAC target (`none` default, or `arp`). */
+	resolve?: string;
 	stdinIsTty?: boolean;
 	confirm?: (prompt: string) => Promise<boolean>;
 }
@@ -152,7 +159,7 @@ export async function executeEnvelope(
 	} catch (error) {
 		return resolved
 			? buildExecuteErrorEnvelopeFromResolved(resolved, error)
-			: buildExecuteErrorEnvelope(request, error);
+			: buildExecuteErrorEnvelope(request, error, env);
 	}
 }
 
@@ -247,11 +254,22 @@ export async function resolveExecuteRequest(
 		"CENTRS_MAX_RESULTS",
 		"max-results",
 	);
+	const macResolution = isIpTransport(via.value)
+		? await resolveMacTarget({
+				host: request.host,
+				targetInput: request.targetInput,
+				cdbTarget: cdbResolution?.target,
+				env,
+				policy: parseResolvePolicy(request.resolve ?? env["CENTRS_RESOLVE"]),
+				operation: "execute",
+			})
+		: undefined;
 	const target = resolveTarget(
 		{
 			targetInput: request.targetInput,
 			host: request.host,
 			port: request.port,
+			macResolution,
 		},
 		env,
 		via.value,
@@ -282,6 +300,7 @@ export async function resolveExecuteRequest(
 export function buildExecuteErrorEnvelope(
 	request: ExecuteRequest,
 	error: unknown,
+	env: Record<string, string | undefined> = Bun.env,
 ): ExecuteErrorEnvelope {
 	const centrsError =
 		error instanceof CentrsError
@@ -317,7 +336,7 @@ export function buildExecuteErrorEnvelope(
 					validate: request.validate ?? true,
 					verbose: request.verbose ?? false,
 					timeoutMs: 10_000,
-					format: (request.format as ExecuteOutputFormat) ?? "json",
+					format: resolveErrorFormat(request, env),
 				},
 				auth: {
 					username: request.username,
@@ -536,6 +555,15 @@ async function runSyntaxGate(
 	try {
 		await backend.execute({ path: "", command: "", script });
 	} catch (error) {
+		// The preflight is a syntax gate, but `backend.execute` also surfaces
+		// connection and authentication failures (login happens lazily here).
+		// Those are not syntax problems — rethrow them unchanged so the caller
+		// sees the real `transport/*` cause instead of a misleading
+		// `validation/syntax`. Only genuine RouterOS parse rejections (mapped to
+		// `routeros/*`) are relabeled as a syntax failure below.
+		if (error instanceof CentrsError && isPreflightTransportError(error)) {
+			throw error;
+		}
 		throw new CentrsError({
 			code: "validation/syntax",
 			summary:
@@ -551,6 +579,15 @@ async function runSyntaxGate(
 			causeData: syntaxCause(error),
 		});
 	}
+}
+
+/**
+ * True when a `:parse` preflight error is actually a transport/auth/connection
+ * failure rather than a RouterOS syntax rejection. These must not be relabeled
+ * as `validation/syntax`.
+ */
+function isPreflightTransportError(error: CentrsError): boolean {
+	return error.code.startsWith("transport/") || error.code.startsWith("auth/");
 }
 
 async function inspectExecuteAttributes(
@@ -693,7 +730,7 @@ function resolveExecuteProtocol(
 			code: "routeros/protocol-not-implemented",
 			summary: `Execute over ${via.value} is planned but not wired through the shared execute orchestrator yet.`,
 			remediation:
-				"Use `--via native-api` or `--via rest-api` for the current execute implementation.",
+				"Use `--via native-api` or `--via rest-api`. For a MAC target, add `--resolve arp` to reach it via the host ARP cache.",
 			context: { via: via.value, capability: "execute" },
 		});
 	}
@@ -705,18 +742,20 @@ function isUnresolvedMacTarget(
 	env: Record<string, string | undefined>,
 	cdb?: CdbResolution,
 ): boolean {
-	if (
-		request.via !== undefined ||
-		env["CENTRS_VIA"] !== undefined ||
-		cdb !== undefined
-	) {
+	if (request.via !== undefined || env["CENTRS_VIA"] !== undefined) {
 		return false;
 	}
-	return isMacAddress(request.targetInput ?? "");
-}
-
-function isMacAddress(value: string): boolean {
-	return /^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i.test(value.trim());
+	// Decide the default transport from the *effective* target (host >
+	// CENTRS_HOST > CDB target > positional), not the positional alone — an IP
+	// supplied via --host/CENTRS_HOST must default to native-api even when the
+	// positional was a MAC.
+	const candidate = effectiveHostCandidate({
+		host: request.host,
+		targetInput: request.targetInput,
+		cdbTarget: cdb?.target,
+		env,
+	});
+	return candidate ? isMacAddress(candidate) : false;
 }
 
 function resolveFormat(
@@ -727,10 +766,27 @@ function resolveFormat(
 		request.format,
 		env,
 		"CENTRS_FORMAT",
-		"json",
+		"text",
 		"format",
 		parseOutputFormat,
 	) as ResolvedSetting<ExecuteOutputFormat>;
+}
+
+/**
+ * Resolve the render format for an error envelope built before settings were
+ * resolved. Honors `--format`/`CENTRS_FORMAT` like {@link resolveFormat} but
+ * never throws on a bad value (the original error must surface), defaulting to
+ * the human-readable `text` form.
+ */
+function resolveErrorFormat(
+	request: ExecuteRequest,
+	env: Record<string, string | undefined>,
+): ExecuteOutputFormat {
+	try {
+		return resolveFormat(request, env).value;
+	} catch {
+		return "text";
+	}
 }
 
 function resolveTimeoutSetting(

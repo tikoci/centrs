@@ -9,13 +9,22 @@
  * the codec is unit-tested without any socket. The socket/IO layer lives in
  * `src/discover.ts`.
  *
- * Wire facts (from the `routeros-mndp` skill, the authoritative description):
- * - Header: `type` (uint16) then `sequence` (uint16), both at offsets 0 and 2.
- * - Each TLV: `type` (uint16 LE), `length` (uint16 LE), then `length` value
- *   bytes whose interpretation depends on the type.
+ * Wire facts (grounded on live RouterOS 7.23/7.24 packet captures — see the
+ * `parses a real captured RouterOS announcement` fixture test. These supersede
+ * the `routeros-mndp` skill table, which states the wrong TLV byte order and the
+ * type→field mapping for types 10/11/12; the constitution requires grounding on
+ * live-router evidence, not the doc):
+ * - Header: 4 bytes (a per-device sequence/type word then a `sequence` field).
+ *   TLV records start at offset 4.
+ * - Each TLV: `type` (uint16 **big-endian**), `length` (uint16 **big-endian**),
+ *   then `length` value bytes whose interpretation depends on the type. (A
+ *   little-endian reading turns `00 0a 00 04` into type 2560/length 1024 and
+ *   overruns every buffer — which is why every real packet was being rejected.)
  * - MAC (type 1) and IPv4 (type 17) are big-endian byte sequences; uptime
- *   (type 11) is a little-endian uint32; string fields are UTF-8.
- * - Board may arrive as type 10 or, on some firmware, type 13; type 10 wins.
+ *   (type 10) is a little-endian uint32; string fields are UTF-8.
+ * - Type mapping confirmed against the `bigdude` test router's REST facts:
+ *   type 10 = uptime, type 11 = software-id, type 12 = board name.
+ * - Board may arrive as type 12 or, on some firmware, type 13; type 12 wins.
  * - Unknown TLV types are preserved verbatim in {@link MndpNeighbor.unknownTlvs}
  *   and never cause a throw. Only a structurally malformed packet (too-short
  *   header, or a TLV whose declared length runs past the buffer) throws.
@@ -34,9 +43,9 @@ export const mndpTlvType = {
 	identity: 5,
 	version: 7,
 	platform: 8,
-	board: 10,
-	uptime: 11,
-	softwareId: 12,
+	uptime: 10,
+	softwareId: 11,
+	board: 12,
 	boardAlt: 13,
 	unpack: 14,
 	ipv6: 15,
@@ -174,8 +183,8 @@ export function parseMndpPacket(bytes: Uint8Array): MndpNeighbor {
 
 	let offset = MNDP_HEADER_LENGTH;
 	while (offset + TLV_HEADER_LENGTH <= bytes.length) {
-		const type = view.getUint16(offset, true);
-		const length = view.getUint16(offset + 2, true);
+		const type = view.getUint16(offset, false);
+		const length = view.getUint16(offset + 2, false);
 		const valueStart = offset + TLV_HEADER_LENGTH;
 		const valueEnd = valueStart + length;
 		if (valueEnd > bytes.length) {
@@ -217,7 +226,7 @@ function applyTlv(
 			neighbor.board = text();
 			break;
 		case mndpTlvType.boardAlt:
-			// Some firmware uses type 13; prefer type 10 when both are present.
+			// Some firmware uses type 13; prefer type 12 when both are present.
 			if (neighbor.board === undefined) {
 				neighbor.board = text();
 			}
@@ -363,8 +372,8 @@ export function encodeMndpPacket(
 
 	let offset = MNDP_HEADER_LENGTH;
 	for (const tlv of tlvs) {
-		view.setUint16(offset, tlv.type, true);
-		view.setUint16(offset + 2, tlv.value.length, true);
+		view.setUint16(offset, tlv.type, false);
+		view.setUint16(offset + 2, tlv.value.length, false);
 		out.set(tlv.value, offset + TLV_HEADER_LENGTH);
 		offset += TLV_HEADER_LENGTH + tlv.value.length;
 	}

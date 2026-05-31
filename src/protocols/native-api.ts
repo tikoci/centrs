@@ -272,6 +272,24 @@ export function readAttribute(
 }
 
 /**
+ * Classify a native-API `!trap` as an authentication failure.
+ *
+ * Auth failures surface on `/login` (bad credentials) or on any command when
+ * the session is not authorized, so the trap message is matched rather than
+ * relying on the command word alone. The strings are grounded on live RouterOS
+ * CHR output: "invalid user name or password", "could not authenticate -
+ * radius timeout", "not logged in", "access denied". Misclassifying these as a
+ * syntax/validation error was the reported `execute` bug.
+ */
+export function isNativeAuthFailure(command: string, message: string): boolean {
+	return (
+		/not logged in|access denied|invalid user|could not authenticate|authentication failed|radius (?:timeout|error)|bad password|password|\blogin\b|\buser\b/i.test(
+			message,
+		) || command === "/login"
+	);
+}
+
+/**
  * Compute the legacy (pre-6.43) login response from a hex challenge.
  *
  * `response = "00" + md5( 0x00 || password || rawChallenge )` where
@@ -445,13 +463,12 @@ export class NativeApiSession {
 	private trapToError(command: string, trap: ApiReply): CentrsError {
 		const message =
 			readAttribute(trap, "message") ?? "RouterOS API command failed.";
-		const isAuth = /login|password|user/i.test(message) && command === "/login";
-		if (isAuth) {
+		if (isNativeAuthFailure(command, message)) {
 			return new CentrsError({
 				code: "transport/auth-failed",
-				summary: `RouterOS rejected the API credentials for ${this.endpoint}.`,
+				summary: `RouterOS rejected the API credentials for ${this.endpoint}: ${message}`,
 				remediation:
-					"Check the username/password and that the user has API access (group with `api` policy).",
+					"Check the username/password (and any RADIUS backend) and that the user has API access (a group with the `api` policy).",
 				context: {
 					command,
 					category: readAttribute(trap, "category"),

@@ -18,13 +18,16 @@ import {
 } from "./protocols/index.ts";
 import {
 	type CdbResolution,
+	isIpTransport,
 	parseDuration,
+	parseResolvePolicy,
 	type ResolvedAuth,
 	type ResolvedSetting,
 	type ResolvedTarget,
 	resolveAuth,
 	resolveBooleanSetting,
 	resolveCdb,
+	resolveMacTarget,
 	resolveOptionalIntegerSetting,
 	resolveStringSetting,
 	resolveTarget,
@@ -55,6 +58,8 @@ export interface RetrieveRequest {
 	maxResultsBytes?: number;
 	cdbFile?: string;
 	cdbPassword?: string;
+	/** Opt-in host ARP resolution for a MAC target (`none` default, or `arp`). */
+	resolve?: string;
 	/** CDB group selector — expands to a fanout over all matching records. */
 	group?: string;
 	/** Bounded worker-pool size for group fanout (defaults are transport-aware). */
@@ -603,6 +608,7 @@ export function buildResolvedRetrieve(
 	env: Record<string, string | undefined>,
 	cdbResolution: CdbResolution | undefined,
 	attributeSelections: readonly string[],
+	macResolution?: { mac: string; ip: string },
 ): ResolvedRetrieveRequest {
 	const via = resolveProtocol(request, env, cdbResolution);
 	const format = resolveFormat(request, env);
@@ -631,6 +637,7 @@ export function buildResolvedRetrieve(
 			targetInput: request.targetInput,
 			host: request.host,
 			port: request.port,
+			macResolution,
 		},
 		env,
 		via.value,
@@ -733,12 +740,43 @@ export async function resolveRetrieveRequest(
 		env,
 	);
 
+	const macResolution = await resolveMacForRetrieve(
+		request,
+		env,
+		cdbResolution,
+	);
+
 	return buildResolvedRetrieve(
 		request,
 		env,
 		cdbResolution,
 		attributeSelections,
+		macResolution,
 	);
+}
+
+/**
+ * Resolve a MAC target to an IP for IP-based transports, honoring the resolve
+ * policy. Returns `undefined` for L2 transports (mac-telnet/romon) or when the
+ * target is not a MAC. Shared by single-target and group-fanout paths so
+ * `--resolve arp` works for CDB group members too.
+ */
+export async function resolveMacForRetrieve(
+	request: RetrieveRequest,
+	env: Record<string, string | undefined>,
+	cdb?: CdbResolution,
+): Promise<{ mac: string; ip: string } | undefined> {
+	if (!isIpTransport(resolveProtocol(request, env, cdb).value)) {
+		return undefined;
+	}
+	return resolveMacTarget({
+		host: request.host,
+		targetInput: request.targetInput,
+		cdbTarget: cdb?.target,
+		env,
+		policy: parseResolvePolicy(request.resolve ?? env["CENTRS_RESOLVE"]),
+		operation: "retrieve",
+	});
 }
 
 function resolveProtocol(
@@ -817,7 +855,7 @@ function resolveFormat(
 		request.format,
 		env,
 		"CENTRS_FORMAT",
-		"json",
+		"text",
 		"format",
 		parseOutputFormat,
 	) as ResolvedSetting<RetrieveOutputFormat>;

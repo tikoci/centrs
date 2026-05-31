@@ -1,5 +1,6 @@
+import { mkdir, open } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type {
 	CentrsEnvelope,
 	CentrsSuccessEnvelope,
@@ -14,6 +15,7 @@ import {
 	decodeWinBoxCdbEntry,
 	decryptWinBoxCdb,
 	type EncryptedWinBoxCdbFile,
+	encodeOpenWinBoxCdb,
 	parseWinBoxCdb,
 	type WinBoxCdbEntry,
 	type WinBoxCdbField,
@@ -177,22 +179,76 @@ export function resolveDevicesSettings(
 	};
 }
 
+function isAlreadyExistsError(cause: unknown): boolean {
+	return (
+		typeof cause === "object" &&
+		cause !== null &&
+		(cause as { code?: unknown }).code === "EEXIST"
+	);
+}
+
+/**
+ * Create an empty open CDB at `path` without clobbering an existing file.
+ * Uses an exclusive-create open (`wx`) so a concurrent writer's CDB is never
+ * overwritten; the caller treats EEXIST as "another process created it".
+ */
+async function createEmptyCdbNoClobber(path: string): Promise<void> {
+	await mkdir(dirname(path), { recursive: true });
+	const handle = await open(path, "wx");
+	try {
+		await handle.write(encodeOpenWinBoxCdb([]));
+		await handle.sync();
+	} finally {
+		await handle.close();
+	}
+}
+
 export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 	const settings = resolveDevicesSettings(options);
 	const warnings: DevicesWarning[] = [];
 
 	const file = Bun.file(settings.cdbFile.value);
 	if (!(await file.exists())) {
-		throw new CentrsError({
-			code: "cdb/not-found",
-			summary: `CDB file not found: ${settings.cdbFile.value}`,
-			remediation:
-				"Pass --cdb-file PATH, set CENTRS_CDB_FILE, or place a CDB at ~/.config/tikoci/winbox.cdb.",
-			context: { cdbFile: settings.cdbFile.value },
-		});
+		// At the default path with no explicit --cdb-file/env override, a missing
+		// CDB is the first-run case, not an error: create an empty open CDB so
+		// `devices`/identity commands work out of the box. An explicit missing
+		// path stays an error (typo protection).
+		if (settings.cdbFile.source.kind === "default") {
+			try {
+				await createEmptyCdbNoClobber(settings.cdbFile.value);
+				warnings.push({
+					code: "cdb/created",
+					message: `No CDB found at the default path; created an empty CDB at ${settings.cdbFile.value}.`,
+				});
+			} catch (cause) {
+				// EEXIST means another process won the race and created the CDB
+				// between our existence check and the exclusive open — that file
+				// is authoritative; fall through and read it instead of erroring.
+				if (!isAlreadyExistsError(cause)) {
+					throw new CentrsError({
+						code: "cdb/not-found",
+						summary: `CDB file not found and could not be created: ${settings.cdbFile.value}`,
+						remediation:
+							"Check directory permissions for ~/.config/tikoci, or pass --cdb-file PATH to a writable location.",
+						context: { cdbFile: settings.cdbFile.value },
+						cause,
+					});
+				}
+			}
+		} else {
+			throw new CentrsError({
+				code: "cdb/not-found",
+				summary: `CDB file not found: ${settings.cdbFile.value}`,
+				remediation:
+					"Pass --cdb-file PATH, set CENTRS_CDB_FILE, or place a CDB at ~/.config/tikoci/winbox.cdb.",
+				context: { cdbFile: settings.cdbFile.value },
+			});
+		}
 	}
 
-	const bytes = new Uint8Array(await file.arrayBuffer());
+	const bytes = new Uint8Array(
+		await Bun.file(settings.cdbFile.value).arrayBuffer(),
+	);
 	let parsed: ReturnType<typeof parseWinBoxCdb>;
 	try {
 		parsed = parseWinBoxCdb(bytes);

@@ -17,3 +17,11 @@ table.
 - [`routeros/invalid-value`](./routeros/invalid-value.md)
 - [`routeros/session-closed`](./routeros/session-closed.md)
 - [`routeros/command-failed`](./routeros/command-failed.md)
+
+## `target/*` — target resolution errors
+
+These codes are produced by the shared resolver (`src/resolver/`) when a
+`<router>` target cannot be turned into a transport endpoint.
+
+- [`target/mac-unresolved`](./target/mac-unresolved.md)
+- [`target/mac-not-in-arp`](./target/mac-not-in-arp.md)

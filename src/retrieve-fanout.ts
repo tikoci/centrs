@@ -50,6 +50,7 @@ import {
 	type RetrieveRequest,
 	type RetrieveRequestSummary,
 	type RetrieveSuccessEnvelope,
+	resolveMacForRetrieve,
 	resolveRetrieveGlobalContext,
 	runResolvedRetrieve,
 	toYaml,
@@ -183,11 +184,17 @@ export async function retrieveGroup(
 		async (member): Promise<RetrieveEnvelope> => {
 			let resolved: ResolvedRetrieveRequest;
 			try {
+				const macResolution = await resolveMacForRetrieve(
+					request,
+					env,
+					member.resolution,
+				);
 				resolved = buildResolvedRetrieve(
 					request,
 					env,
 					member.resolution,
 					attributeSelections,
+					macResolution,
 				);
 			} catch (error) {
 				return buildResolveFailureEnvelope(member.resolution, error);

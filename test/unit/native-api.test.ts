@@ -8,6 +8,7 @@ import {
 	encodeLength,
 	encodeSentence,
 	encodeWord,
+	isNativeAuthFailure,
 	type NativeApiByteSink,
 	NativeApiSession,
 	parseReply,
@@ -370,5 +371,36 @@ describe("native-api login flow", () => {
 		await expect(promise).rejects.toMatchObject({
 			code: "transport/auth-failed",
 		});
+	});
+});
+
+describe("isNativeAuthFailure (grounded auth classification)", () => {
+	test("classifies live RouterOS auth trap strings as auth failures", () => {
+		const authMessages = [
+			"could not authenticate - radius timeout (13)",
+			"invalid user name or password (6)",
+			"not logged in",
+			"access denied",
+			"bad password",
+		];
+		for (const message of authMessages) {
+			expect(isNativeAuthFailure("/ip/address/print", message)).toBe(true);
+		}
+	});
+
+	test("treats any failure on /login as an auth failure", () => {
+		expect(isNativeAuthFailure("/login", "unexpected")).toBe(true);
+	});
+
+	test("does not misclassify a genuine syntax/parse trap as auth", () => {
+		expect(
+			isNativeAuthFailure("/ip/address/print", "no such command or directory"),
+		).toBe(false);
+		expect(
+			isNativeAuthFailure(
+				"/ip/address/print",
+				"syntax error (line 1 column 5)",
+			),
+		).toBe(false);
 	});
 });

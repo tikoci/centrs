@@ -96,7 +96,8 @@ export const retrieveCommand: CliCommandMetadata = {
 		{
 			flag: "--format",
 			valueName: `<${retrieveOutputFormats.join("|")}>`,
-			description: "Output format for the CLI response. Defaults to json.",
+			description:
+				"Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope.",
 		},
 		{
 			flag: "--json",
@@ -117,6 +118,12 @@ export const retrieveCommand: CliCommandMetadata = {
 			flag: "--cdb-password",
 			valueName: "<password>",
 			description: "Decrypt an encrypted WinBox CDB file.",
+		},
+		{
+			flag: "--resolve",
+			valueName: "<none|arp>",
+			description:
+				"Resolve a MAC-address target to an IP via the host ARP cache (default none).",
 		},
 		{
 			flag: "--validate / --no-validate",
@@ -147,7 +154,7 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 				envelope.meta.operation as {
 					request?: { format?: RetrieveOutputFormat };
 				}
-			)?.request?.format ?? "json";
+			)?.request?.format ?? "text";
 		const output = request.group
 			? renderRetrieveFanoutEnvelope(
 					envelope as Parameters<typeof renderRetrieveFanoutEnvelope>[0],
@@ -282,6 +289,9 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveRequest & {
 			case "--cdb-password":
 				request.cdbPassword = expectValue(args, ++index, arg);
 				break;
+			case "--resolve":
+				request.resolve = expectValue(args, ++index, arg);
+				break;
 			case "--group":
 				request.group = expectValue(args, ++index, arg);
 				break;
@@ -353,7 +363,11 @@ function inferRequestedFormat(
 	if (formatIndex !== -1 && args[formatIndex + 1]) {
 		return args[formatIndex + 1] as RetrieveOutputFormat;
 	}
-	return "json";
+	const envFormat = process.env["CENTRS_FORMAT"];
+	if (envFormat === "json" || envFormat === "yaml" || envFormat === "text") {
+		return envFormat;
+	}
+	return "text";
 }
 
 function fallbackRequestFromArgs(args: readonly string[]): RetrieveRequest {

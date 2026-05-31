@@ -21,6 +21,7 @@ import {
 	NATIVE_API_TLS_PORT,
 } from "../protocols/native-api.ts";
 import type { CdbResolution } from "./cdb.ts";
+import { normalizeMac } from "./mac.ts";
 import {
 	type ResolvedSetting,
 	type ResolverSettingSource,
@@ -35,6 +36,12 @@ export interface TargetResolveInput {
 	targetInput?: string;
 	host?: string;
 	port?: number;
+	/**
+	 * Pre-resolved MAC→IP mapping (host ARP lookup). When the resolved host
+	 * candidate is this MAC, `ip` is used as the transport host with `arp`
+	 * provenance. The command resolution seam decides whether ARP is allowed.
+	 */
+	macResolution?: { mac: string; ip: string };
 }
 
 export interface ResolvedTarget {
@@ -90,7 +97,30 @@ export function resolveTarget(
 		});
 	}
 
-	const candidate = hostSetting.value.trim();
+	const rawCandidate = hostSetting.value.trim();
+	const macCandidate = normalizeMac(rawCandidate);
+	let candidate = rawCandidate;
+	let arpResolvedMac: string | undefined;
+	if (macCandidate) {
+		if (
+			input.macResolution &&
+			normalizeMac(input.macResolution.mac) === macCandidate
+		) {
+			candidate = input.macResolution.ip;
+			arpResolvedMac = macCandidate;
+		} else {
+			// A MAC with no CDB record and no opted-in resolution. The command
+			// seam normally throws first with operation-specific guidance; this
+			// guards direct callers and never lets a MAC reach `new URL`.
+			throw new CentrsError({
+				code: "target/mac-unresolved",
+				summary: `Target ${rawCandidate} is a MAC address that could not be resolved to a host.`,
+				remediation:
+					"Pass an IP/hostname, add a CDB record for this MAC, or opt into host ARP resolution with `--resolve arp`.",
+				context: { mac: macCandidate },
+			});
+		}
+	}
 	const parsedUrl = parseHostCandidate(candidate);
 	const portSetting = resolveOptionalIntegerSetting(
 		input.port,
@@ -101,8 +131,9 @@ export function resolveTarget(
 	);
 	const scheme = parsedUrl.protocol === "https:" ? "https" : "http";
 
-	const identitySource: ResolverSettingSource =
-		cdb && input.host === undefined && env[ENV_HOST] === undefined
+	const identitySource: ResolverSettingSource = arpResolvedMac
+		? { kind: "arp", key: arpResolvedMac }
+		: cdb && input.host === undefined && env[ENV_HOST] === undefined
 			? { kind: "cdb", key: `record:${cdb.recordIndex}` }
 			: hostSetting.source;
 

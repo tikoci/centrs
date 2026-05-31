@@ -53,6 +53,12 @@ export const executeCommand: CliCommandMetadata = {
 			description: "Decrypt an encrypted WinBox CDB file.",
 		},
 		{
+			flag: "--resolve",
+			valueName: "<none|arp>",
+			description:
+				"Resolve a MAC-address target to an IP via the host ARP cache (default none).",
+		},
+		{
 			flag: "--timeout",
 			valueName: "<duration>",
 			description: "Per-request timeout (for REST, max 60s).",
@@ -75,7 +81,8 @@ export const executeCommand: CliCommandMetadata = {
 		{
 			flag: "--format",
 			valueName: "<text|json|yaml>",
-			description: "Output format for the CLI response.",
+			description:
+				"Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope.",
 		},
 		{
 			flag: "--json",
@@ -147,6 +154,9 @@ function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 			case "--cdb-password":
 				parsed.cdbPassword = expectValue(args, ++index, arg);
 				break;
+			case "--resolve":
+				parsed.resolve = expectValue(args, ++index, arg);
+				break;
 			case "--timeout":
 				parsed.timeout = expectValue(args, ++index, arg);
 				break;
@@ -195,7 +205,15 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 	}
 
 	const envelope = await executeEnvelope(parsed);
-	const rendered = renderExecuteEnvelope(envelope, parsed.format ?? "json", {
+	const resolvedFormat =
+		(
+			envelope.meta.operation as {
+				request?: { format?: ExecuteOutputFormat };
+			}
+		)?.request?.format ??
+		parsed.format ??
+		"text";
+	const rendered = renderExecuteEnvelope(envelope, resolvedFormat, {
 		verbose: parsed.verbose,
 	});
 	if (envelope.ok) {
