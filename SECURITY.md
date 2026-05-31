@@ -18,7 +18,7 @@ The repository's [Security tab](https://github.com/tikoci/centrs/security) is th
 - **Code Quality (AI findings, preview)** — intended to be enabled in GitHub. [`.github/workflows/qa.yaml`](.github/workflows/qa.yaml) includes a non-failing forward-compat probe for a future AI-findings API. AI findings are noisy and self-contradicting; we accept the noise because the second-opinion catches real issues that the static suite misses. Steady-state goal is 0 open findings. False positives are dismissed via the GitHub UI with a written justification — that text is the audit-log contract.
 - **Dependency review** — not enabled. GitHub dependency review follows dependency-graph ecosystem support, and this Bun-only repository currently does not have a supported lockfile for that gate.
 - **Dependabot security updates** — enabled and configured in [`.github/dependabot.yaml`](.github/dependabot.yaml).
-- **Secret scanning** — enabled in GitHub; push protection is not currently enabled.
+- **Secret scanning** — enabled in GitHub, with push protection.
 - **Private vulnerability reporting** — enabled via GitHub Security Advisories.
 
 Some GitHub Security tab data, especially Code Quality AI findings, is not currently available through stable unauthenticated APIs. Human review in the GitHub UI remains part of the security workflow.
