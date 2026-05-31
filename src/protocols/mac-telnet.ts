@@ -424,7 +424,9 @@ export class MacTelnetSession {
 	}
 
 	private onPing(header: MacTelnetHeader): void {
-		// Answer keepalive pings so long-lived sessions are not dropped.
+		// Reply to MAC-Ping probes with PONG. (This is the MAC-Ping liveness
+		// tool, not the session keepalive — idle sessions are kept alive by
+		// empty ACKs, not PING/PONG.)
 		this.options.sink.send(
 			encodeHeader({
 				type: MacTelnetPacketType.pong,

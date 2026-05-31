@@ -533,10 +533,11 @@ describe("resolveMacForRetrieve (shared by single + fanout paths)", () => {
 		}
 	});
 
-	test("resolves a MAC member via injected ARP when --resolve arp is set", async () => {
-		// Threading proof: with policy arp, resolveMacForRetrieve resolves the CDB
-		// member MAC to its ARP IP. ARP lookup itself is covered in mac.test.ts;
-		// here we assert the fanout-shared helper honors --resolve arp end to end.
+	test("resolves or produces structured ARP-miss when --resolve arp is set", async () => {
+		// Threading proof: with policy arp, resolveRetrieveRequest honors --resolve
+		// arp end to end via the fanout-shared helper. ARP lookup itself is covered
+		// in mac.test.ts; here we assert the request either resolves against live
+		// ARP or fails with a structured ARP-miss error, never an unhandled crash.
 		const result = await resolveRetrieveRequest(
 			{
 				targetInput: MAC,

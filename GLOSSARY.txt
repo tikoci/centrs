@@ -228,3 +228,6 @@ bigdude
 ifscope
 macvlan
 unpadded
+
+# RouterOS CLI canonicalization vocabulary
+subshell

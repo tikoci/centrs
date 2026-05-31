@@ -276,3 +276,22 @@ centrs does not:
 - `tikoci/quickchr` — CHR-backed integration test harness.
 
 When one of these owns a question, defer to it instead of restating here.
+
+### Canonicalizer ownership
+
+`rosetta`/`lsp-routeros-ts` own the shared, pure command canonicalizer
+(`canonicalize.ts` → `{ path, verb, args }`); centrs may align with it for
+**canonicalization**, but **centrs owns the script-vs-structured execution
+gate**. That gate (`canonicalizeExecuteCommand` + `isWriteShaped`) is the
+load-bearing discriminator for validation and the write-confirmation prompt;
+widening what counts as `structured` is a product regression. The shared parser
+is intentionally prose-tolerant and multi-command, so it must never be used as
+the structured-mode predicate. The gate's behavior is pinned by
+`test/unit/execute-canonicalize-contract.test.ts`.
+
+centrs deliberately does **not** vendor the shared parser yet. Preconditions for
+adopting it: (1) the legacy contract above stays green (no gate widening);
+(2) the vendored file is clean under centrs's strict `tsconfig` or explicitly
+quarantined with justification; (3) `lsp-routeros-ts` also vendors/consumes the
+same parser shape, so it is genuinely shared rather than a premature first
+copy.

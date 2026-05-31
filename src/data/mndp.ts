@@ -3,17 +3,19 @@
  *
  * MNDP is the UDP/5678 broadcast protocol RouterOS (and WinBox) use to discover
  * neighbors on a layer-2 segment. A response packet is a 4-byte header
- * (`type` + `sequence`) followed by zero or more little-endian TLV records.
+ * (`type` + `sequence`) followed by zero or more big-endian TLV records.
  * This module is intentionally pure: {@link parseMndpPacket} turns bytes into a
  * typed {@link MndpNeighbor} and {@link encodeMndpPacket} does the reverse, so
  * the codec is unit-tested without any socket. The socket/IO layer lives in
  * `src/discover.ts`.
  *
  * Wire facts (grounded on live RouterOS 7.23/7.24 packet captures — see the
- * `parses a real captured RouterOS announcement` fixture test. These supersede
- * the `routeros-mndp` skill table, which states the wrong TLV byte order and the
- * type→field mapping for types 10/11/12; the constitution requires grounding on
- * live-router evidence, not the doc):
+ * `parses a real captured RouterOS announcement (big-endian TLVs)` fixture
+ * test — and aligned with the `routeros-mndp` skill, which documents the same
+ * big-endian TLV byte order and the type→field mapping for types 10/11/12. An
+ * earlier revision of the skill table stated little-endian TLVs and an
+ * off-by-one type mapping; the constitution requires grounding on live-router
+ * evidence, and the skill has since been corrected to match this codec):
  * - Header: 4 bytes (a per-device sequence/type word then a `sequence` field).
  *   TLV records start at offset 4.
  * - Each TLV: `type` (uint16 **big-endian**), `length` (uint16 **big-endian**),
@@ -101,7 +103,7 @@ function malformed(summary: string, context: Record<string, unknown>): never {
 		code: "mndp/malformed",
 		summary,
 		remediation:
-			"Drop the packet; a well-formed MNDP response is a 4-byte header followed by complete little-endian TLV records. This is likely a non-MNDP datagram on the port.",
+			"Drop the packet; a well-formed MNDP response is a 4-byte header followed by complete big-endian TLV records. This is likely a non-MNDP datagram on the port.",
 		context,
 	});
 }
@@ -380,7 +382,12 @@ export function encodeMndpPacket(
 	return out;
 }
 
-/** The 9-byte MNDP discovery request that prompts immediate replies. */
+/**
+ * MNDP discovery request that prompts immediate replies. The reply trigger is
+ * the leading zeroed 4-byte header (the same minimal form MAC-Telnet sends);
+ * RouterOS accepts longer forms too, so this emits the 9-byte all-zero variant.
+ * See the `routeros-mndp` skill "Refresh Packet" section.
+ */
 export function mndpRefreshPacket(): Uint8Array {
 	return new Uint8Array(9);
 }

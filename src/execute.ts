@@ -407,30 +407,25 @@ export function renderExecuteEnvelope(
 export function canonicalizeExecuteCommand(
 	input: string,
 ): CanonicalExecuteCommand {
+	const asScript = (): CanonicalExecuteCommand => ({
+		mode: "script",
+		input,
+		path: "",
+		verb: "",
+		attributes: {},
+		queries: [],
+	});
+
 	const trimmed = input.trim();
 	if (!trimmed.startsWith("/")) {
-		return {
-			mode: "script",
-			input,
-			path: "",
-			verb: "",
-			attributes: {},
-			queries: [],
-		};
+		return asScript();
 	}
 
 	const tokens = tokenizeRouterOsCli(trimmed);
 	const pathToken = tokens[0] ?? "";
 	const pathParts = pathToken.split("/").filter(Boolean);
 	if (pathParts.length < 2) {
-		return {
-			mode: "script",
-			input,
-			path: "",
-			verb: "",
-			attributes: {},
-			queries: [],
-		};
+		return asScript();
 	}
 
 	const verb = pathParts.at(-1) ?? "";
@@ -438,20 +433,21 @@ export function canonicalizeExecuteCommand(
 	const attributes: Record<string, string> = {};
 	const queries: string[] = [];
 	for (const token of tokens.slice(1)) {
+		// `[...]` subshell selectors (e.g. `numbers=[find ...]`) cannot be
+		// represented as a structured attribute map: the inner command contains
+		// spaces this tokenizer splits on, which would mangle a write-shaped
+		// command into corrupt key=value pairs. Fall back to the raw-script path
+		// so RouterOS evaluates the subshell with its real semantics.
+		if (token.includes("[") || token.includes("]")) {
+			return asScript();
+		}
 		if (token.startsWith("?")) {
 			queries.push(token);
 			continue;
 		}
 		const separator = token.indexOf("=");
 		if (separator <= 0) {
-			return {
-				mode: "script",
-				input,
-				path: "",
-				verb: "",
-				attributes: {},
-				queries: [],
-			};
+			return asScript();
 		}
 		attributes[token.slice(0, separator)] = token.slice(separator + 1);
 	}
