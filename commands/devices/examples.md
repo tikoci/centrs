@@ -288,8 +288,8 @@ gains multi-target support; tracked here so the rule is anchored.
 centrs devices list --cdb-file $CDB_ENCRYPTED --cdb-password centrs-test
 ```
 
-`ok: true`. `meta.settings.cdbFile.source = "cli"`,
-`meta.settings.cdbPassword.source = "cli"`.
+`ok: true`. `meta.settings.cdbFile.kind = "cli"`,
+`meta.settings.cdbPassword.kind = "cli"`.
 
 ### 30. Wrong password
 

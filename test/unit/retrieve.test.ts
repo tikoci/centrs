@@ -90,8 +90,8 @@ describe("retrieve core", () => {
 			});
 
 			expect(envelope.ok).toBe(true);
-			expect(envelope.result.kind).toBe("attributes");
-			expect(envelope.result.data).toEqual(["disabled", "name"]);
+			expect(envelope.meta.operation?.kind).toBe("attributes");
+			expect(envelope.data).toEqual(["disabled", "name"]);
 			expect(fetchMock.calls).toHaveLength(2);
 			expect(
 				fetchMock.calls.every((call) =>
@@ -139,8 +139,8 @@ describe("retrieve core", () => {
 				password: "",
 			});
 
-			expect(envelope.result.kind).toBe("data");
-			expect(envelope.result.objectCount).toBe(1);
+			expect(envelope.meta.operation?.kind).toBe("data");
+			expect(envelope.meta.operation?.objectCount).toBe(1);
 			expect(fetchMock.calls.at(-1)?.url).toBe(
 				"http://router1:80/rest/ip/address/print",
 			);
@@ -181,8 +181,8 @@ describe("retrieve core", () => {
 				password: "",
 			});
 
-			expect(envelope.result.kind).toBe("data");
-			expect(envelope.result.data).toBe("5m");
+			expect(envelope.meta.operation?.kind).toBe("data");
+			expect(envelope.data).toBe("5m");
 			expect(fetchMock.calls.at(-1)?.url).toBe(
 				"http://router1:80/rest/system/resource",
 			);
@@ -356,10 +356,10 @@ describe("retrieve CLI", () => {
 			expect(consoleCapture.errors).toHaveLength(0);
 			const payload = JSON.parse(consoleCapture.logs[0] ?? "") as {
 				ok: boolean;
-				result: { data: { version: string } };
+				data: { version: string };
 			};
 			expect(payload.ok).toBe(true);
-			expect(payload.result.data.version).toBe("7.22.1");
+			expect(payload.data.version).toBe("7.22.1");
 		} finally {
 			consoleCapture.restore();
 			fetchMock.restore();
@@ -394,11 +394,13 @@ describe("retrieve CLI", () => {
 			expect(exitCode).toBe(0);
 			expect(consoleCapture.errors).toHaveLength(0);
 			const payload = JSON.parse(consoleCapture.logs[0] ?? "") as {
-				via: string;
-				settingSources: { via: { kind: string; key: string } };
+				meta: {
+					via: string;
+					settings: { via: { kind: string; key: string } };
+				};
 			};
-			expect(payload.via).toBe("rest-api");
-			expect(payload.settingSources.via).toEqual({
+			expect(payload.meta.via).toBe("rest-api");
+			expect(payload.meta.settings.via).toEqual({
 				kind: "default",
 				key: "via",
 			});

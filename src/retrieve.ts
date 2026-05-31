@@ -1,3 +1,10 @@
+import type {
+	CentrsEnvelope,
+	CentrsErrorEnvelope,
+	CentrsSuccessEnvelope,
+	SettingSource as CoreSettingSource,
+	EnvelopeValidationMeta,
+} from "./core/envelope.ts";
 import {
 	type DevicesWarning,
 	type LoadedCdb,
@@ -6,7 +13,11 @@ import {
 	showDevice,
 } from "./devices.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
-import { getProtocolPlan, type RouterOsProtocol } from "./protocols/index.ts";
+import {
+	getProtocolPlan,
+	plannedProtocols,
+	type RouterOsProtocol,
+} from "./protocols/index.ts";
 import {
 	type ApiReply,
 	connectNativeApi,
@@ -99,58 +110,22 @@ export interface RetrieveRequestSummary {
 	maxResultsBytes?: number;
 }
 
-export interface RetrieveValidationSummary {
-	enabled: boolean;
-	source: string;
-	availableAttributes?: readonly string[];
-}
-
-export interface RetrieveResultSummary {
+export interface RetrieveOperationMeta {
 	kind: "attributes" | "data";
-	data: unknown;
 	objectCount: number;
-	serializedBytes?: number;
-}
-
-export interface RetrieveSuccessEnvelope {
-	ok: true;
-	capability: "retrieve";
-	via: RouterOsProtocol;
-	target: ResolvedTarget;
+	request: RetrieveRequestSummary;
 	auth: {
 		username?: string;
-		usernameSource?: SettingSource;
 		passwordProvided: boolean;
-		passwordSource?: SettingSource;
-	};
-	request: RetrieveRequestSummary;
-	validation: RetrieveValidationSummary;
-	result: RetrieveResultSummary;
-	warnings: readonly RetrieveWarning[];
-	settingSources: {
-		via: SettingSource;
-		host: SettingSource;
-		port: SettingSource;
-		timeoutMs: SettingSource;
-		format: SettingSource;
-		validate: SettingSource;
-		maxResultsBytes?: SettingSource;
 	};
 }
 
-export interface RetrieveErrorEnvelope {
-	ok: false;
-	capability: "retrieve";
-	request: Partial<
-		Pick<RetrieveRequestSummary, "path" | "format" | "maxResultsBytes">
-	> & {
-		targetInput?: string;
-	};
-	error: ReturnType<typeof serializeCentrsError>;
-	warnings: readonly RetrieveWarning[];
-}
-
-export type RetrieveEnvelope = RetrieveSuccessEnvelope | RetrieveErrorEnvelope;
+export type RetrieveEnvelope = CentrsEnvelope<unknown, RetrieveOperationMeta>;
+export type RetrieveSuccessEnvelope = CentrsSuccessEnvelope<
+	unknown,
+	RetrieveOperationMeta
+>;
+export type RetrieveErrorEnvelope = CentrsErrorEnvelope<RetrieveOperationMeta>;
 
 interface InspectChildItem {
 	type?: string;
@@ -297,17 +272,21 @@ export function buildRetrieveErrorEnvelope(
 					cause: error,
 				});
 
+	const requestedVia = plannedProtocols.includes(
+		request.via as RouterOsProtocol,
+	)
+		? (request.via as RouterOsProtocol)
+		: null;
+
 	return {
 		ok: false,
-		capability: "retrieve",
-		request: {
-			targetInput: request.targetInput,
-			path: request.path,
-			format: parseOutputFormat(request.format ?? "text"),
-			maxResultsBytes: request.maxResultsBytes,
-		},
 		error: serializeCentrsError(centrsError),
 		warnings: [],
+		meta: {
+			target: { input: request.targetInput },
+			via: requestedVia,
+			settings: {},
+		},
 	};
 }
 
@@ -336,36 +315,37 @@ function renderRetrieveSuccessText(
 ): string {
 	const lines: string[] = [];
 	const verbose = options.verbose ?? false;
+	const meta = envelope.meta;
+	const operation = meta.operation;
 
 	if (verbose) {
+		const target = meta.target;
+		lines.push(`target: ${target.input ?? target.host} -> ${target.baseUrl}`);
+		lines.push(`via: ${meta.via}`);
 		lines.push(
-			`target: ${envelope.target.input ?? envelope.target.host} -> ${envelope.target.baseUrl}`,
-		);
-		lines.push(`via: ${envelope.via}`);
-		lines.push(
-			`sources: via=${formatSource(envelope.settingSources.via)}, host=${formatSource(
-				envelope.settingSources.host,
-			)}, port=${formatSource(envelope.settingSources.port)}, timeout=${formatSource(
-				envelope.settingSources.timeoutMs,
-			)}, format=${formatSource(envelope.settingSources.format)}, validate=${formatSource(
-				envelope.settingSources.validate,
+			`sources: via=${formatCoreSource(meta.settings.via)}, host=${formatCoreSource(
+				meta.settings.host,
+			)}, port=${formatCoreSource(meta.settings.port)}, timeout=${formatCoreSource(
+				meta.settings.timeoutMs,
+			)}, format=${formatCoreSource(meta.settings.format)}, validate=${formatCoreSource(
+				meta.settings.validate,
 			)}`,
 		);
-		if (envelope.validation.enabled) {
-			lines.push(`validation: ${envelope.validation.source}`);
+		if (meta.validation?.enabled) {
+			lines.push(`validation: ${meta.validation.source}`);
 		}
 		lines.push("");
 	}
 
-	if (envelope.result.kind === "attributes") {
-		const attributes = Array.isArray(envelope.result.data)
-			? (envelope.result.data as readonly string[])
+	if (operation?.kind === "attributes") {
+		const attributes = Array.isArray(envelope.data)
+			? (envelope.data as readonly string[])
 			: [];
 		lines.push(...attributes);
-	} else if (typeof envelope.result.data === "string") {
-		lines.push(envelope.result.data);
+	} else if (typeof envelope.data === "string") {
+		lines.push(envelope.data);
 	} else {
-		lines.push(JSON.stringify(envelope.result.data, null, 2));
+		lines.push(JSON.stringify(envelope.data, null, 2));
 	}
 
 	if (envelope.warnings.length > 0) {
@@ -397,60 +377,78 @@ function renderRetrieveErrorText(
 	return lines.join("\n");
 }
 
+function toCoreSource(source: SettingSource): CoreSettingSource {
+	switch (source.kind) {
+		case "explicit":
+		case "target-input":
+			return { kind: "cli", key: source.key };
+		default:
+			return { kind: source.kind, key: source.key };
+	}
+}
+
 function buildSuccessEnvelope(
 	resolved: ResolvedRetrieveRequest,
-	result: Pick<RetrieveResultSummary, "kind" | "data">,
-	validation: RetrieveValidationSummary,
+	result: { kind: "attributes" | "data"; data: unknown },
+	validation: EnvelopeValidationMeta,
 	warnings: readonly RetrieveWarning[],
 ): RetrieveSuccessEnvelope {
+	const portSource: SettingSource =
+		resolved.target.source.kind === "target-input" &&
+		resolved.target.port === defaultPortForScheme(resolved.target.scheme)
+			? { kind: "default", key: `${resolved.target.scheme} default` }
+			: resolved.target.source;
+
 	return {
 		ok: true,
-		capability: "retrieve",
-		via: resolved.via.value,
-		target: resolved.target,
-		auth: {
-			username: resolved.auth.username,
-			usernameSource: resolved.auth.usernameSource,
-			passwordProvided: resolved.auth.passwordProvided,
-			passwordSource: resolved.auth.passwordSource,
-		},
-		request: {
-			path: resolved.path,
-			attributes: resolved.attributes,
-			allAttributes: resolved.allAttributes,
-			listAttributes: resolved.listAttributes,
-			validate: resolved.validate.value,
-			verbose: resolved.verbose,
-			timeoutMs: resolved.timeoutMs.value,
-			format: resolved.format.value,
-			maxResultsBytes: resolved.maxResultsBytes?.value,
-		},
-		validation,
-		result: {
-			kind: result.kind,
-			data: result.data,
-			objectCount: countResultObjects(result.data),
-		},
+		data: result.data,
 		warnings,
-		settingSources: {
-			via: resolved.via.source,
-			host: resolved.target.source,
-			port: {
-				kind:
-					resolved.target.source.kind === "target-input" &&
-					resolved.target.port === defaultPortForScheme(resolved.target.scheme)
-						? "default"
-						: resolved.target.source.kind,
-				key:
-					resolved.target.source.kind === "target-input" &&
-					resolved.target.port === defaultPortForScheme(resolved.target.scheme)
-						? `${resolved.target.scheme} default`
-						: resolved.target.source.key,
+		meta: {
+			target: {
+				input: resolved.target.input,
+				host: resolved.target.host,
+				port: resolved.target.port,
+				baseUrl: resolved.target.baseUrl,
+				source: toCoreSource(resolved.target.source),
 			},
-			timeoutMs: resolved.timeoutMs.source,
-			format: resolved.format.source,
-			validate: resolved.validate.source,
-			maxResultsBytes: resolved.maxResultsBytes?.source,
+			via: resolved.via.value,
+			settings: {
+				via: toCoreSource(resolved.via.source),
+				host: toCoreSource(resolved.target.source),
+				port: toCoreSource(portSource),
+				timeoutMs: toCoreSource(resolved.timeoutMs.source),
+				format: toCoreSource(resolved.format.source),
+				validate: toCoreSource(resolved.validate.source),
+				maxResultsBytes: resolved.maxResultsBytes
+					? toCoreSource(resolved.maxResultsBytes.source)
+					: undefined,
+				username: resolved.auth.usernameSource
+					? toCoreSource(resolved.auth.usernameSource)
+					: undefined,
+				password: resolved.auth.passwordSource
+					? toCoreSource(resolved.auth.passwordSource)
+					: undefined,
+			},
+			validation,
+			operation: {
+				kind: result.kind,
+				objectCount: countResultObjects(result.data),
+				request: {
+					path: resolved.path,
+					attributes: resolved.attributes,
+					allAttributes: resolved.allAttributes,
+					listAttributes: resolved.listAttributes,
+					validate: resolved.validate.value,
+					verbose: resolved.verbose,
+					timeoutMs: resolved.timeoutMs.value,
+					format: resolved.format.value,
+					maxResultsBytes: resolved.maxResultsBytes?.value,
+				},
+				auth: {
+					username: resolved.auth.username,
+					passwordProvided: resolved.auth.passwordProvided,
+				},
+			},
 		},
 	};
 }
@@ -458,26 +456,30 @@ function buildSuccessEnvelope(
 function applyMaxResultsBudget(
 	envelope: RetrieveSuccessEnvelope,
 ): RetrieveSuccessEnvelope {
-	const rendered = renderRetrieveEnvelope(envelope, envelope.request.format, {
-		verbose: envelope.request.format === "text" && envelope.request.verbose,
+	const operation = envelope.meta.operation;
+	if (!operation) {
+		return envelope;
+	}
+	const requestSummary = operation.request;
+	const rendered = renderRetrieveEnvelope(envelope, requestSummary.format, {
+		verbose: requestSummary.format === "text" && requestSummary.verbose,
 	});
 	const serializedBytes = byteLength(rendered);
-	envelope.result.serializedBytes = serializedBytes;
 
 	if (
-		envelope.request.maxResultsBytes !== undefined &&
-		serializedBytes > envelope.request.maxResultsBytes
+		requestSummary.maxResultsBytes !== undefined &&
+		serializedBytes > requestSummary.maxResultsBytes
 	) {
 		throw new CentrsError({
 			code: "input/max-results-exceeded",
-			summary: `retrieve output exceeded the requested ${envelope.request.maxResultsBytes}-byte budget.`,
+			summary: `retrieve output exceeded the requested ${requestSummary.maxResultsBytes}-byte budget.`,
 			remediation:
 				"Increase `--max-results`, reduce the selected attributes, or switch to a more selective path.",
 			context: {
 				requiredBytes: serializedBytes,
-				maxResultsBytes: envelope.request.maxResultsBytes,
-				objectCount: envelope.result.objectCount,
-				path: envelope.request.path,
+				maxResultsBytes: requestSummary.maxResultsBytes,
+				objectCount: operation.objectCount,
+				path: requestSummary.path,
 			},
 		});
 	}
@@ -1823,8 +1825,11 @@ function byteLength(text: string): number {
 	return new TextEncoder().encode(text).length;
 }
 
-function formatSource(source: SettingSource): string {
-	return `${source.kind}:${source.key}`;
+function formatCoreSource(source: CoreSettingSource | undefined): string {
+	if (!source) {
+		return "unset";
+	}
+	return source.key ? `${source.kind}:${source.key}` : source.kind;
 }
 
 function exhaustiveOutputFormat(value: never): never {

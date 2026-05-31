@@ -1,5 +1,12 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type {
+	CentrsEnvelope,
+	CentrsSuccessEnvelope,
+	EnvelopeMeta,
+	SettingSource,
+	SettingSourceKind,
+} from "./core/envelope.ts";
 import {
 	decodeWinBoxCdbEntries,
 	decryptWinBoxCdb,
@@ -13,12 +20,7 @@ import {
 } from "./data/winbox-cdb.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 
-export type SettingSourceKind = "default" | "env" | "cli";
-
-export interface SettingSource {
-	kind: SettingSourceKind;
-	key: string;
-}
+export type { SettingSource, SettingSourceKind };
 
 export interface DevicesSettings {
 	cdbFile: { value: string; source: SettingSource };
@@ -29,10 +31,6 @@ export interface DevicesWarning {
 	code: string;
 	message: string;
 	context?: Record<string, unknown>;
-}
-
-export interface DevicesEnvelopeMeta {
-	settings: DevicesSettings;
 }
 
 export interface DevicesListItem {
@@ -63,25 +61,32 @@ export interface DevicesGroupSummary {
 
 export type DevicesCommand = "list" | "show" | "groups";
 
-export interface DevicesSuccessEnvelope<Data> {
-	ok: true;
+export interface DevicesOperationMeta {
 	command: DevicesCommand;
-	data: Data;
-	warnings: readonly DevicesWarning[];
-	meta: DevicesEnvelopeMeta;
+	cdbFile: string;
+	cdbPasswordProvided: boolean;
 }
 
-export interface DevicesErrorEnvelope {
-	ok: false;
-	command: DevicesCommand;
-	error: ReturnType<typeof serializeCentrsError>;
-	warnings: readonly DevicesWarning[];
-	meta: DevicesEnvelopeMeta;
-}
+export type DevicesEnvelope<Data> = CentrsEnvelope<Data, DevicesOperationMeta>;
 
-export type DevicesEnvelope<Data> =
-	| DevicesSuccessEnvelope<Data>
-	| DevicesErrorEnvelope;
+function devicesMeta(
+	command: DevicesCommand,
+	settings: DevicesSettings,
+): EnvelopeMeta<DevicesOperationMeta> {
+	return {
+		target: {},
+		via: null,
+		settings: {
+			cdbFile: settings.cdbFile.source,
+			cdbPassword: settings.cdbPassword.source,
+		},
+		operation: {
+			command,
+			cdbFile: settings.cdbFile.value,
+			cdbPasswordProvided: settings.cdbPassword.provided,
+		},
+	};
+}
 
 export interface LoadCdbOptions {
 	cdbFile?: string;
@@ -283,7 +288,7 @@ export interface ListDevicesArgs {
 
 export function listDevices(
 	args: ListDevicesArgs,
-): DevicesSuccessEnvelope<readonly DevicesListItem[]> {
+): CentrsSuccessEnvelope<readonly DevicesListItem[], DevicesOperationMeta> {
 	const warnings = [...args.cdb.warnings];
 	let entries = args.cdb.entries;
 	let indices = entries.map((_, index) => index);
@@ -319,10 +324,9 @@ export function listDevices(
 
 	return {
 		ok: true,
-		command: "list",
 		data,
 		warnings,
-		meta: { settings: args.cdb.settings },
+		meta: devicesMeta("list", args.cdb.settings),
 	};
 }
 
@@ -339,7 +343,7 @@ export interface DevicesShowEnvelopeData {
 
 export function showDevice(
 	args: ShowDeviceArgs,
-): DevicesSuccessEnvelope<DevicesShowEnvelopeData> {
+): CentrsSuccessEnvelope<DevicesShowEnvelopeData, DevicesOperationMeta> {
 	const matches: { entry: WinBoxCdbEntry; index: number }[] = [];
 	for (let index = 0; index < args.cdb.entries.length; index += 1) {
 		const entry = args.cdb.entries[index];
@@ -391,10 +395,9 @@ export function showDevice(
 
 	return {
 		ok: true,
-		command: "show",
 		data,
 		warnings: args.cdb.warnings,
-		meta: { settings: args.cdb.settings },
+		meta: devicesMeta("show", args.cdb.settings),
 	};
 }
 
@@ -427,7 +430,7 @@ export interface ListGroupsArgs {
 
 export function listGroups(
 	args: ListGroupsArgs,
-): DevicesSuccessEnvelope<readonly DevicesGroupSummary[]> {
+): CentrsSuccessEnvelope<readonly DevicesGroupSummary[], DevicesOperationMeta> {
 	const buckets = new Map<string, { entry: WinBoxCdbEntry; index: number }[]>();
 	for (let index = 0; index < args.cdb.entries.length; index += 1) {
 		const entry = args.cdb.entries[index];
@@ -458,10 +461,9 @@ export function listGroups(
 
 	return {
 		ok: true,
-		command: "groups",
 		data,
 		warnings: args.cdb.warnings,
-		meta: { settings: args.cdb.settings },
+		meta: devicesMeta("groups", args.cdb.settings),
 	};
 }
 
@@ -470,7 +472,7 @@ export function buildDevicesErrorEnvelope(
 	settings: DevicesSettings,
 	warnings: readonly DevicesWarning[],
 	error: unknown,
-): DevicesErrorEnvelope {
+): CentrsEnvelope<never, DevicesOperationMeta> {
 	const centrsError =
 		error instanceof CentrsError
 			? error
@@ -481,10 +483,9 @@ export function buildDevicesErrorEnvelope(
 				});
 	return {
 		ok: false,
-		command,
 		error: serializeCentrsError(centrsError),
 		warnings,
-		meta: { settings },
+		meta: devicesMeta(command, settings),
 	};
 }
 
@@ -576,7 +577,7 @@ function renderText(envelope: DevicesEnvelope<unknown>): string {
 		return lines.join("\n");
 	}
 
-	switch (envelope.command) {
+	switch (envelope.meta.operation?.command) {
 		case "list":
 			renderListText(lines, envelope.data as readonly DevicesListItem[]);
 			break;

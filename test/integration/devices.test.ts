@@ -129,7 +129,7 @@ describe("centrs devices (read-only)", () => {
 			ok: boolean;
 			data: Array<{ target: string; group: string; user: string }>;
 			warnings: unknown[];
-			meta: { settings: { cdbFile: { value: string } } };
+			meta: { operation: { cdbFile: string } };
 		};
 		expect(envelope.ok).toBe(true);
 		expect(envelope.data).toHaveLength(4);
@@ -140,7 +140,7 @@ describe("centrs devices (read-only)", () => {
 			"AA:BB:CC:DD:EE:01",
 		]);
 		expect(envelope.warnings).toEqual([]);
-		expect(envelope.meta.settings.cdbFile.value).toBe(openCdbPath);
+		expect(envelope.meta.operation.cdbFile).toBe(openCdbPath);
 	});
 
 	test("list --group filters to that group", async () => {

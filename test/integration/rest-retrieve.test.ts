@@ -22,17 +22,21 @@ const describeFast = runFastIntegration ? describe : describe.skip;
 
 interface RetrieveSuccessTestEnvelope {
 	ok: true;
-	via: string;
-	target: {
-		source?: { kind?: string };
+	data?: unknown;
+	meta: {
+		via: string;
+		target: {
+			source?: { kind?: string };
+		};
+		settings: {
+			username?: { kind?: string };
+			password?: { kind?: string };
+		};
+		validation?: { source?: string };
+		operation?: {
+			auth?: { passwordProvided?: boolean };
+		};
 	};
-	auth: {
-		usernameSource?: { kind?: string };
-		passwordSource?: { kind?: string };
-		passwordProvided?: boolean;
-	};
-	validation: { source?: string };
-	result: { data?: unknown };
 	warnings: Array<{ code?: string }>;
 }
 
@@ -104,8 +108,10 @@ async function expectRetrieveSuccess(
 		result.stdout[0] ?? "",
 	) as RetrieveSuccessTestEnvelope;
 	expect(envelope.ok).toBe(true);
-	expect(envelope.via).toBe("rest-api");
-	const validation = envelope.validation as { source?: string } | undefined;
+	expect(envelope.meta.via).toBe("rest-api");
+	const validation = envelope.meta.validation as
+		| { source?: string }
+		| undefined;
 	expect(validation?.source).toContain("/console/inspect");
 	return envelope;
 }
@@ -172,7 +178,7 @@ describeFast("REST retrieve against CHR", () => {
 				"/system/resource",
 				...baseArgs,
 			]);
-			const resourceData = resourceEnvelope.result.data as
+			const resourceData = resourceEnvelope.data as
 				| ({ version?: unknown; "board-name"?: unknown } & Record<
 						string,
 						unknown
@@ -204,7 +210,7 @@ describeFast("REST retrieve against CHR", () => {
 				...baseArgs,
 			]);
 			expect(
-				identityEnvelope.result.data as Record<string, unknown> | undefined,
+				identityEnvelope.data as Record<string, unknown> | undefined,
 			).toHaveProperty("name");
 
 			const addressesEnvelope = await expectRetrieveSuccess(consoleCapture, [
@@ -213,7 +219,7 @@ describeFast("REST retrieve against CHR", () => {
 				"/ip/address",
 				...baseArgs,
 			]);
-			expect(Array.isArray(addressesEnvelope.result.data)).toBe(true);
+			expect(Array.isArray(addressesEnvelope.data)).toBe(true);
 
 			const interfacesEnvelope = await expectRetrieveSuccess(consoleCapture, [
 				"retrieve",
@@ -221,7 +227,7 @@ describeFast("REST retrieve against CHR", () => {
 				"/interface",
 				...baseArgs,
 			]);
-			const interfaces = interfacesEnvelope.result.data;
+			const interfaces = interfacesEnvelope.data;
 			expect(Array.isArray(interfaces)).toBe(true);
 			expect((interfaces as unknown[]).length).toBeGreaterThan(0);
 
@@ -233,7 +239,7 @@ describeFast("REST retrieve against CHR", () => {
 				"uptime",
 				...baseArgs,
 			]);
-			expect(typeof uptimeEnvelope.result.data).toBe("string");
+			expect(typeof uptimeEnvelope.data).toBe("string");
 
 			const attributeEnvelope = await expectRetrieveSuccess(consoleCapture, [
 				"retrieve",
@@ -243,7 +249,7 @@ describeFast("REST retrieve against CHR", () => {
 				"name,type",
 				...baseArgs,
 			]);
-			const projectedInterfaces = attributeEnvelope.result.data as Array<
+			const projectedInterfaces = attributeEnvelope.data as Array<
 				Record<string, unknown>
 			>;
 			expect(projectedInterfaces.length).toBeGreaterThan(0);
@@ -288,7 +294,7 @@ describeFast("REST retrieve against CHR", () => {
 				"--list-attributes",
 				...baseArgs,
 			]);
-			const attributes = attributesEnvelope.result.data as unknown[];
+			const attributes = attributesEnvelope.data as unknown[];
 			expect(Array.isArray(attributes)).toBe(true);
 			expect(attributes.length).toBeGreaterThan(0);
 			expect(
@@ -350,10 +356,10 @@ describeFast("REST retrieve against CHR", () => {
 				"--cdb-file",
 				cdbPath,
 			]);
-			expect(cdbEnvelope.target.source?.kind).toBe("cdb");
-			expect(cdbEnvelope.auth.usernameSource?.kind).toBe("cdb");
-			expect(cdbEnvelope.auth.passwordSource?.kind).toBe("cdb");
-			expect(cdbEnvelope.auth.passwordProvided).toBe(true);
+			expect(cdbEnvelope.meta.target.source?.kind).toBe("cdb");
+			expect(cdbEnvelope.meta.settings.username?.kind).toBe("cdb");
+			expect(cdbEnvelope.meta.settings.password?.kind).toBe("cdb");
+			expect(cdbEnvelope.meta.operation?.auth?.passwordProvided).toBe(true);
 
 			const unusedPasswordEnvelope = await expectRetrieveSuccess(
 				consoleCapture,
@@ -406,9 +412,9 @@ describeFast("REST retrieve against CHR", () => {
 				yamlResult.stdout[0] ?? "",
 			) as RetrieveSuccessTestEnvelope;
 			expect(yamlEnvelope.ok).toBe(jsonEnvelope.ok);
-			expect(yamlEnvelope.via).toBe(jsonEnvelope.via);
-			expect((yamlEnvelope.result.data as VersionedData).version).toEqual(
-				(jsonEnvelope.result.data as VersionedData).version,
+			expect(yamlEnvelope.meta.via).toBe(jsonEnvelope.meta.via);
+			expect((yamlEnvelope.data as VersionedData).version).toEqual(
+				(jsonEnvelope.data as VersionedData).version,
 			);
 
 			await expectRetrieveFailure(

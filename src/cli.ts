@@ -243,7 +243,8 @@ async function runRetrieveCli(args: readonly string[]): Promise<number> {
 		}
 
 		const envelope = await retrieve(request);
-		const output = renderRetrieveEnvelope(envelope, envelope.request.format, {
+		const resolvedFormat = envelope.meta.operation?.request.format ?? "json";
+		const output = renderRetrieveEnvelope(envelope, resolvedFormat, {
 			verbose: request.verbose,
 		});
 		console.log(output);

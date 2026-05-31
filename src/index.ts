@@ -1,6 +1,21 @@
 export const centrsVersion = "0.1.0";
 
 export {
+	type CentrsEnvelope,
+	type CentrsErrorEnvelope,
+	type CentrsSuccessEnvelope,
+	type CommonSettingsMeta,
+	type EnvelopeMeta,
+	type EnvelopeTargetMeta,
+	type EnvelopeValidationMeta,
+	type FanoutData,
+	type FanoutSummary,
+	normalizeWarnings,
+	type SettingSource,
+	type SettingSourceKind,
+	type Warning,
+} from "./core/envelope.ts";
+export {
 	type AnalyzeEncryptedWinBoxCdbOptions,
 	analyzeEncryptedWinBoxCdb,
 	type BuildWinBoxCdbEntryInput,
@@ -37,13 +52,12 @@ export {
 	buildDevicesErrorEnvelope,
 	type DevicesCommand,
 	type DevicesEnvelope,
-	type DevicesErrorEnvelope,
 	type DevicesGroupSummary,
 	type DevicesListItem,
+	type DevicesOperationMeta,
 	type DevicesOutputFormat,
 	type DevicesShowEnvelopeData,
 	type DevicesShowItem,
-	type DevicesSuccessEnvelope,
 	type DevicesWarning,
 	defaultCdbPath,
 	devicesOutputFormats,
@@ -55,8 +69,6 @@ export {
 	recordTypeName,
 	renderDevicesEnvelope,
 	resolveDevicesSettings,
-	type SettingSource,
-	type SettingSourceKind,
 	showDevice,
 } from "./devices.ts";
 export {
@@ -79,12 +91,11 @@ export {
 	buildRetrieveErrorEnvelope,
 	type RetrieveEnvelope,
 	type RetrieveErrorEnvelope,
+	type RetrieveOperationMeta,
 	type RetrieveOutputFormat,
 	type RetrieveRequest,
 	type RetrieveRequestSummary,
-	type RetrieveResultSummary,
 	type RetrieveSuccessEnvelope,
-	type RetrieveValidationSummary,
 	type RetrieveWarning,
 	renderRetrieveEnvelope,
 	retrieve,
@@ -97,7 +108,6 @@ export const plannedSurfaces = ["api", "cli", "tui", "mcp", "proxy"] as const;
 export const plannedDeviceSources = [
 	"explicit-input",
 	"environment",
-	"sqlite-cache",
 	"winbox-cdb",
 	"dude-db",
 	"mndp",

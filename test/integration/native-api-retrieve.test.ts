@@ -14,9 +14,11 @@ const describeFast = runFastIntegration ? describe : describe.skip;
 
 interface SuccessEnvelope {
 	ok: true;
-	via: string;
-	validation: { source?: string };
-	result: { data?: unknown };
+	data?: unknown;
+	meta: {
+		via: string;
+		validation?: { source?: string };
+	};
 }
 
 interface FailureEnvelope {
@@ -76,8 +78,8 @@ describeFast("native API retrieve against CHR", () => {
 			expect(stdout).toHaveLength(1);
 			const envelope = JSON.parse(stdout[0] ?? "") as SuccessEnvelope;
 			expect(envelope.ok).toBe(true);
-			expect(envelope.via).toBe("native-api");
-			expect(envelope.validation.source).toContain("/console/inspect");
+			expect(envelope.meta.via).toBe("native-api");
+			expect(envelope.meta.validation?.source).toContain("/console/inspect");
 			return envelope;
 		}
 
@@ -107,9 +109,7 @@ describeFast("native API retrieve against CHR", () => {
 				"/system/resource",
 				...baseArgs,
 			]);
-			const resourceData = resource.result.data as
-				| Record<string, string>
-				| undefined;
+			const resourceData = resource.data as Record<string, string> | undefined;
 			expect(resourceData).toHaveProperty("version");
 			expect(resourceData).toHaveProperty("uptime");
 			const version = resourceData?.["version"];
@@ -122,9 +122,7 @@ describeFast("native API retrieve against CHR", () => {
 				"/system/identity",
 				...baseArgs,
 			]);
-			expect(identity.result.data as Record<string, unknown>).toHaveProperty(
-				"name",
-			);
+			expect(identity.data as Record<string, unknown>).toHaveProperty("name");
 
 			// 3. List menu → array.
 			const interfaces = await ok([
@@ -133,8 +131,8 @@ describeFast("native API retrieve against CHR", () => {
 				"/interface",
 				...baseArgs,
 			]);
-			expect(Array.isArray(interfaces.result.data)).toBe(true);
-			expect((interfaces.result.data as unknown[]).length).toBeGreaterThan(0);
+			expect(Array.isArray(interfaces.data)).toBe(true);
+			expect((interfaces.data as unknown[]).length).toBeGreaterThan(0);
 
 			// 4. List, possibly empty.
 			const addresses = await ok([
@@ -143,7 +141,7 @@ describeFast("native API retrieve against CHR", () => {
 				"/ip/address",
 				...baseArgs,
 			]);
-			expect(Array.isArray(addresses.result.data)).toBe(true);
+			expect(Array.isArray(addresses.data)).toBe(true);
 
 			// 5. Singleton single-attribute → bare value (string over native API).
 			const uptime = await ok([
@@ -154,7 +152,7 @@ describeFast("native API retrieve against CHR", () => {
 				"uptime",
 				...baseArgs,
 			]);
-			expect(typeof uptime.result.data).toBe("string");
+			expect(typeof uptime.data).toBe("string");
 
 			// 6. List attribute projection → array of {name,type} only.
 			const projected = await ok([
@@ -165,7 +163,7 @@ describeFast("native API retrieve against CHR", () => {
 				"name,type",
 				...baseArgs,
 			]);
-			const rows = projected.result.data as Array<Record<string, unknown>>;
+			const rows = projected.data as Array<Record<string, unknown>>;
 			expect(rows.length).toBeGreaterThan(0);
 			for (const row of rows) {
 				expect(
@@ -182,9 +180,7 @@ describeFast("native API retrieve against CHR", () => {
 				"--all-attributes",
 				...baseArgs,
 			]);
-			expect(all.result.data as Record<string, unknown>).toHaveProperty(
-				"version",
-			);
+			expect(all.data as Record<string, unknown>).toHaveProperty("version");
 
 			// 8. --list-attributes (inspect-only, no data call).
 			const attrList = await ok([
@@ -194,7 +190,7 @@ describeFast("native API retrieve against CHR", () => {
 				"--list-attributes",
 				...baseArgs,
 			]);
-			const attrs = attrList.result.data as unknown[];
+			const attrs = attrList.data as unknown[];
 			expect(Array.isArray(attrs)).toBe(true);
 			expect(attrs).toContain("version");
 			expect(attrs).toContain("uptime");
