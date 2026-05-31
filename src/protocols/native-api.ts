@@ -20,6 +20,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { mapRouterOsError } from "../core/routeros-errors.ts";
 import { CentrsError } from "../errors.ts";
 
 const utf8Encoder = new TextEncoder();
@@ -445,14 +446,22 @@ export class NativeApiSession {
 		const message =
 			readAttribute(trap, "message") ?? "RouterOS API command failed.";
 		const isAuth = /login|password|user/i.test(message) && command === "/login";
-		return new CentrsError({
-			code: isAuth ? "transport/auth-failed" : "routeros/api-trap",
-			summary: isAuth
-				? `RouterOS rejected the API credentials for ${this.endpoint}.`
-				: `RouterOS API command "${command}" failed: ${message}`,
-			remediation: isAuth
-				? "Check the username/password and that the user has API access (group with `api` policy)."
-				: "Inspect the trap message; the command word or an attribute is likely invalid.",
+		if (isAuth) {
+			return new CentrsError({
+				code: "transport/auth-failed",
+				summary: `RouterOS rejected the API credentials for ${this.endpoint}.`,
+				remediation:
+					"Check the username/password and that the user has API access (group with `api` policy).",
+				context: {
+					command,
+					category: readAttribute(trap, "category"),
+					message,
+				},
+			});
+		}
+
+		return mapRouterOsError(message, {
+			transport: "native-api",
 			context: {
 				command,
 				category: readAttribute(trap, "category"),

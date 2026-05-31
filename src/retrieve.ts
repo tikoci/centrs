@@ -1279,6 +1279,7 @@ function mapHttpFailure(
 		});
 	}
 
+	// WP-1c: adopt mapRouterOsError here (REST `detail` -> normalized routeros/* code).
 	return new CentrsError({
 		code: "routeros/request-failed",
 		summary: `RouterOS REST request failed with HTTP ${status} for ${path}.`,
