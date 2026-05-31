@@ -2,6 +2,7 @@ import type {
 	CentrsEnvelope,
 	CentrsErrorEnvelope,
 	CentrsSuccessEnvelope,
+	CommonSettingsMeta,
 	SettingSource as CoreSettingSource,
 	EnvelopeValidationMeta,
 } from "./core/envelope.ts";
@@ -54,6 +55,10 @@ export interface RetrieveRequest {
 	maxResultsBytes?: number;
 	cdbFile?: string;
 	cdbPassword?: string;
+	/** CDB group selector — expands to a fanout over all matching records. */
+	group?: string;
+	/** Bounded worker-pool size for group fanout (defaults are transport-aware). */
+	concurrency?: number;
 }
 
 export interface RetrieveWarning {
@@ -109,7 +114,7 @@ interface RetrieveInspection {
 	command: "get" | "print";
 }
 
-interface ResolvedRetrieveRequest {
+export interface ResolvedRetrieveRequest {
 	path: string;
 	via: ResolvedSetting<RouterOsProtocol>;
 	target: ResolvedTarget;
@@ -130,6 +135,19 @@ export async function retrieve(
 	env: Record<string, string | undefined> = Bun.env,
 ): Promise<RetrieveSuccessEnvelope> {
 	const resolved = await resolveRetrieveRequest(request, env);
+	return runResolvedRetrieve(resolved);
+}
+
+/**
+ * The inspect → fetch → envelope tail shared by single-target `retrieve()` and
+ * group fanout. Takes an already-resolved request (one CDB record's identity +
+ * overrides) so fanout does not re-resolve or re-load the CDB per target. On
+ * success returns a `RetrieveSuccessEnvelope`; failures throw a `CentrsError`
+ * the caller maps with {@link buildRetrieveErrorEnvelopeFromResolved}.
+ */
+export async function runResolvedRetrieve(
+	resolved: ResolvedRetrieveRequest,
+): Promise<RetrieveSuccessEnvelope> {
 	const warnings: RetrieveWarning[] = [...resolved.warnings];
 	let availableAttributes: string[] | undefined;
 	let inspection: RetrieveInspection | undefined;
@@ -257,6 +275,42 @@ export function buildRetrieveErrorEnvelope(
 	};
 }
 
+/**
+ * Error envelope for a single fanout target. Unlike
+ * {@link buildRetrieveErrorEnvelope} (which only knows the raw request and so
+ * loses `recordIndex` / `baseUrl` / `name` / per-field sources), this preserves
+ * the resolved per-target identity, auth, settings, and operation meta so a
+ * failed inner envelope carries the same provenance as a successful one.
+ */
+export function buildRetrieveErrorEnvelopeFromResolved(
+	resolved: ResolvedRetrieveRequest,
+	error: unknown,
+): RetrieveErrorEnvelope {
+	const centrsError =
+		error instanceof CentrsError
+			? error
+			: new CentrsError({
+					code: "internal/unhandled",
+					summary: "retrieve failed with an unexpected internal error.",
+					remediation:
+						"Re-run with `--format json` to capture the structured error details for debugging.",
+					cause: error,
+				});
+
+	const meta = metaFromResolved(resolved, {
+		enabled: resolved.validate.value,
+		source: resolved.validate.value ? "live /console/inspect" : "disabled",
+		result: "failed",
+	});
+
+	return {
+		ok: false,
+		error: serializeCentrsError(centrsError),
+		warnings: [...resolved.warnings],
+		meta,
+	};
+}
+
 export function renderRetrieveEnvelope(
 	envelope: RetrieveEnvelope,
 	format: RetrieveOutputFormat,
@@ -344,12 +398,31 @@ function renderRetrieveErrorText(
 	return lines.join("\n");
 }
 
-function buildSuccessEnvelope(
+function retrieveRequestSummary(
 	resolved: ResolvedRetrieveRequest,
-	result: { kind: "attributes" | "data"; data: unknown },
+): RetrieveRequestSummary {
+	return {
+		path: resolved.path,
+		attributes: resolved.attributes,
+		allAttributes: resolved.allAttributes,
+		listAttributes: resolved.listAttributes,
+		validate: resolved.validate.value,
+		verbose: resolved.verbose,
+		timeoutMs: resolved.timeoutMs.value,
+		format: resolved.format.value,
+		maxResultsBytes: resolved.maxResultsBytes?.value,
+	};
+}
+
+/**
+ * Common `target` / `via` / `settings` meta for a resolved target. Shared by
+ * success and per-target error envelopes so both carry identical provenance.
+ */
+function metaFromResolved(
+	resolved: ResolvedRetrieveRequest,
 	validation: EnvelopeValidationMeta,
-	warnings: readonly RetrieveWarning[],
-): RetrieveSuccessEnvelope {
+	operation?: RetrieveOperationMeta,
+): RetrieveEnvelope["meta"] {
 	const target = resolved.target;
 	const targetSources: Record<string, CoreSettingSource> = {};
 	for (const [field, source] of Object.entries(target.sources)) {
@@ -357,59 +430,70 @@ function buildSuccessEnvelope(
 	}
 
 	return {
-		ok: true,
-		data: result.data,
-		warnings,
-		meta: {
-			target: {
-				input: target.input,
-				host: target.host,
-				port: target.port,
-				baseUrl: target.baseUrl,
-				name: target.name,
-				recordIndex: target.recordIndex,
-				source: toCoreSource(target.source),
-				sources: targetSources,
-			},
-			via: resolved.via.value,
-			settings: {
-				via: toCoreSource(resolved.via.source),
-				host: toCoreSource(target.hostSource),
-				port: toCoreSource(target.portSource),
-				timeoutMs: toCoreSource(resolved.timeoutMs.source),
-				format: toCoreSource(resolved.format.source),
-				validate: toCoreSource(resolved.validate.source),
-				maxResultsBytes: resolved.maxResultsBytes
-					? toCoreSource(resolved.maxResultsBytes.source)
-					: undefined,
-				username: resolved.auth.usernameSource
-					? toCoreSource(resolved.auth.usernameSource)
-					: undefined,
-				password: resolved.auth.passwordSource
-					? toCoreSource(resolved.auth.passwordSource)
-					: undefined,
-			},
-			validation,
-			operation: {
-				kind: result.kind,
-				objectCount: countResultObjects(result.data),
-				request: {
-					path: resolved.path,
-					attributes: resolved.attributes,
-					allAttributes: resolved.allAttributes,
-					listAttributes: resolved.listAttributes,
-					validate: resolved.validate.value,
-					verbose: resolved.verbose,
-					timeoutMs: resolved.timeoutMs.value,
-					format: resolved.format.value,
-					maxResultsBytes: resolved.maxResultsBytes?.value,
-				},
+		target: {
+			input: target.input,
+			host: target.host,
+			port: target.port,
+			baseUrl: target.baseUrl,
+			name: target.name,
+			recordIndex: target.recordIndex,
+			source: toCoreSource(target.source),
+			sources: targetSources,
+		},
+		via: resolved.via.value,
+		settings: {
+			via: toCoreSource(resolved.via.source),
+			host: toCoreSource(target.hostSource),
+			port: toCoreSource(target.portSource),
+			timeoutMs: toCoreSource(resolved.timeoutMs.source),
+			format: toCoreSource(resolved.format.source),
+			validate: toCoreSource(resolved.validate.source),
+			maxResultsBytes: resolved.maxResultsBytes
+				? toCoreSource(resolved.maxResultsBytes.source)
+				: undefined,
+			username: resolved.auth.usernameSource
+				? toCoreSource(resolved.auth.usernameSource)
+				: undefined,
+			password: resolved.auth.passwordSource
+				? toCoreSource(resolved.auth.passwordSource)
+				: undefined,
+		},
+		validation,
+		operation:
+			operation ??
+			({
+				kind: resolved.listAttributes ? "attributes" : "data",
+				objectCount: 0,
+				request: retrieveRequestSummary(resolved),
 				auth: {
 					username: resolved.auth.username,
 					passwordProvided: resolved.auth.passwordProvided,
 				},
-			},
+			} satisfies RetrieveOperationMeta),
+	};
+}
+
+function buildSuccessEnvelope(
+	resolved: ResolvedRetrieveRequest,
+	result: { kind: "attributes" | "data"; data: unknown },
+	validation: EnvelopeValidationMeta,
+	warnings: readonly RetrieveWarning[],
+): RetrieveSuccessEnvelope {
+	const operation: RetrieveOperationMeta = {
+		kind: result.kind,
+		objectCount: countResultObjects(result.data),
+		request: retrieveRequestSummary(resolved),
+		auth: {
+			username: resolved.auth.username,
+			passwordProvided: resolved.auth.passwordProvided,
 		},
+	};
+
+	return {
+		ok: true,
+		data: result.data,
+		warnings,
+		meta: metaFromResolved(resolved, validation, operation),
 	};
 }
 
@@ -447,10 +531,15 @@ function applyMaxResultsBudget(
 	return envelope;
 }
 
-async function resolveRetrieveRequest(
+/**
+ * Validate the request-shape concerns that do not depend on a target (path
+ * form, unimplemented flags, mutually-exclusive output flags). Shared by
+ * single-target resolution and group fanout so both reject the same shapes
+ * before any network or CDB work. Returns the normalized attribute selection.
+ */
+export function validateRetrieveRequestShape(
 	request: RetrieveRequest,
-	env: Record<string, string | undefined>,
-): Promise<ResolvedRetrieveRequest> {
+): readonly string[] {
 	if (!request.path.startsWith("/")) {
 		throw new CentrsError({
 			code: "input/invalid-routeros-path",
@@ -499,15 +588,22 @@ async function resolveRetrieveRequest(
 		});
 	}
 
-	const cdbResolution = await resolveCdb(
-		{
-			targetInput: request.targetInput,
-			cdbFile: request.cdbFile,
-			cdbPassword: request.cdbPassword,
-		},
-		env,
-	);
+	return attributeSelections;
+}
 
+/**
+ * Build a {@link ResolvedRetrieveRequest} from the static request plus an
+ * already-resolved CDB record (or `undefined` for a literal target). Fanout
+ * reuses this per group member after loading + decrypting the CDB once, so the
+ * resolver settings ladder (env / cli / comment-kv) applies identically to a
+ * single target and to every target in a group.
+ */
+export function buildResolvedRetrieve(
+	request: RetrieveRequest,
+	env: Record<string, string | undefined>,
+	cdbResolution: CdbResolution | undefined,
+	attributeSelections: readonly string[],
+): ResolvedRetrieveRequest {
 	const via = resolveProtocol(request, env, cdbResolution);
 	const format = resolveFormat(request, env);
 	const validate = resolveBooleanSetting(
@@ -561,6 +657,88 @@ async function resolveRetrieveRequest(
 		verbose: request.verbose ?? false,
 		warnings: cdbResolution?.warnings ?? [],
 	};
+}
+
+export interface RetrieveGlobalContext {
+	via: RouterOsProtocol;
+	summary: RetrieveRequestSummary;
+	settings: CommonSettingsMeta;
+}
+
+/**
+ * Resolve the target-independent settings (protocol, format, validate, timeout,
+ * max-results) used for a group fanout's outer `meta.operation.request` summary
+ * and its transport-aware concurrency default. No CDB record is consulted; the
+ * global `--via` (default `rest-api`) decides the summary and concurrency base.
+ */
+export function resolveRetrieveGlobalContext(
+	request: RetrieveRequest,
+	env: Record<string, string | undefined>,
+	attributeSelections: readonly string[],
+): RetrieveGlobalContext {
+	const via = resolveProtocol(request, env);
+	const format = resolveFormat(request, env);
+	const validate = resolveBooleanSetting(
+		request.validate,
+		env,
+		"CENTRS_VALIDATE",
+		true,
+		"validate",
+	);
+	const timeoutMs = resolveTimeoutSetting(request.timeout, env, via.value);
+	const maxResultsBytes = resolveOptionalIntegerSetting(
+		request.maxResultsBytes,
+		env,
+		"CENTRS_MAX_RESULTS",
+		"max-results",
+	);
+
+	return {
+		via: via.value,
+		summary: {
+			path: request.path,
+			attributes: attributeSelections,
+			allAttributes: request.allAttributes ?? false,
+			listAttributes: request.listAttributes ?? false,
+			validate: validate.value,
+			verbose: request.verbose ?? false,
+			timeoutMs: timeoutMs.value,
+			format: format.value,
+			maxResultsBytes: maxResultsBytes?.value,
+		},
+		settings: {
+			via: toCoreSource(via.source),
+			timeoutMs: toCoreSource(timeoutMs.source),
+			format: toCoreSource(format.source),
+			validate: toCoreSource(validate.source),
+			maxResultsBytes: maxResultsBytes
+				? toCoreSource(maxResultsBytes.source)
+				: undefined,
+		},
+	};
+}
+
+export async function resolveRetrieveRequest(
+	request: RetrieveRequest,
+	env: Record<string, string | undefined>,
+): Promise<ResolvedRetrieveRequest> {
+	const attributeSelections = validateRetrieveRequestShape(request);
+
+	const cdbResolution = await resolveCdb(
+		{
+			targetInput: request.targetInput,
+			cdbFile: request.cdbFile,
+			cdbPassword: request.cdbPassword,
+		},
+		env,
+	);
+
+	return buildResolvedRetrieve(
+		request,
+		env,
+		cdbResolution,
+		attributeSelections,
+	);
 }
 
 function resolveProtocol(
@@ -918,7 +1096,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function toYaml(value: unknown, indent = 0): string {
+export function toYaml(value: unknown, indent = 0): string {
 	const prefix = " ".repeat(indent);
 	if (value === null || value === undefined) {
 		return "null";
