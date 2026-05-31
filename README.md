@@ -41,8 +41,7 @@ Status lives only in `docs/MATRIX.md`.
 | Command    | Purpose |
 | ---------- | ------- |
 | `retrieve` | Read RouterOS state over REST/native API and SNMP OID/MIB values. |
-| `update`   | Write RouterOS state with validation and per-target envelopes. |
-| `execute`  | Run RouterOS CLI-shaped commands over REST/native API/SSH/L2 surfaces. |
+| `execute`  | Run RouterOS CLI-shaped read/write commands (add/set/remove) over native API/REST/L2 surfaces. |
 | `terminal` | Open an interactive console, primarily SSH or MAC-Telnet. |
 | `check`    | Probe reachability and management protocol availability. |
 | `devices`  | View and maintain the CDB-backed device registry. |

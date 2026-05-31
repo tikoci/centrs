@@ -27,11 +27,23 @@ re-validate-server-side. Validation is not optional polish.
   `/console/inspect request=syntax path=...,print` (path joined by commas) and
   attribute inspection. The path syntax (commas, no leading slash, last token
   is the verb) is part of the validator contract.
-- `execute` and other CLI-shaped calls validate against `:put [:parse "..."]`
-  via `/rest/parse`. Parse is faster and more binary than inspect; prefer it
-  when the command is CLI-shaped.
+- `execute` and other CLI-shaped calls validate in two stages. `:put [:parse
+  "..."]` is a **syntax** gate only: grounded on CHR 7.23, it rejects malformed
+  CLI but accepts unknown attributes and out-of-range values
+  (`:put [:parse "/ip/address/add no-such-arg=x"]` returns no error). Semantic
+  validation — attribute names and value domains — therefore requires
+  `/console/inspect` (as `retrieve` already does) or the server's own
+  re-validation on the write round-trip. Parse alone is necessary, not
+  sufficient; never treat a clean `:parse` as a passed semantic validation.
 - A failing validator is a real result. Surface it with the structured error
   envelope below — do not bypass.
+
+`retrieve` is read-only and structured-data focused; explicit options control
+what a single call returns. `execute` is the single read/write surface for
+RouterOS add/set/remove and other CLI-shaped commands — there is no separate
+`update` command. Generalizing RouterOS add/set into one abstract write verb
+needs too many heuristics, so writes ride `execute`'s canonicalize → validate →
+run path instead.
 
 **Disabling validation to make a call work is forbidden.** If the validator
 rejects something a real router accepts, the validator is wrong; fix the
@@ -91,8 +103,14 @@ Two error sources must be visually distinguishable:
    nova error). Map to a normalized `routeros/*` code; preserve the original
    string in `cause`.
 
-Mapping RouterOS string errors to normalized codes is ongoing maintenance.
-`tikoci/m2ir` tracks the nova-error vocabulary; consult it when extending.
+Mapping RouterOS string errors to normalized codes is ongoing maintenance. The
+authoritative vocabulary is the live router's own strings: grounded on CHR 7.23,
+the REST `detail` field (HTTP ≥400, shape
+`{"detail":"<msg>","error":<http-status>,"message":"<http reason>"}`) and the
+native-api `!trap` message carry the **same** text for the same fault, so one
+shared table maps both transports. Ground new mappings on CHR evidence, not on
+assumption. (`tikoci/m2ir` is referenced for protocol IR but is not an
+accessible source for this mapping; the router strings are.)
 
 ### Error URL scheme
 
@@ -141,17 +159,20 @@ CDB resolution:
   an error; the call still succeeds.
 - A name not found in the CDB is an error unless `--username` / `--password`
   were also provided.
-- For a MAC target, CDB wins first. If no CDB record matches, retrieve/update
-  may opt into local ARP resolution to obtain an IP-level target; execute
+- For a MAC target, CDB wins first. If no CDB record matches, `retrieve` may
+  opt into local ARP resolution to obtain an IP-level target; `execute`
   defaults to mac-telnet unless the caller explicitly asks to resolve via ARP.
 - `discover --save --timeout 60s` writes MNDP-derived targets into CDB with
   provenance metadata and default `group=discovered`; discovery remains a hint
   source, not authoritative inventory.
 
-CDB is the native credential store. Anything in CDB must also be expressible
-via env/CLI/API for tests and ad-hoc use. CDB comments may carry centrs
-metadata such as `via` and `port` overrides. `dude.db` import is out of scope
-here and belongs to `tikoci/donny`.
+CDB is the native credential store **and** the device datastore/cache: the
+WinBox CDB file at its well-known location holds the inventory directly — there
+is no separate SQLite cache. centrs-specific meaning is overlaid via comment-kv
+keys and groups. Anything in CDB must also be expressible via env/CLI/API for
+tests and ad-hoc use. CDB comments may carry centrs metadata such as `via` and
+`port` overrides. `dude.db` import is out of scope here and belongs to
+`tikoci/donny`.
 
 Group selectors (e.g. `--group prod-edge`) target CDB groups so a single
 `retrieve`/`execute`/etc. fans out to multiple routers. Group output shape
@@ -163,14 +184,17 @@ Per-operation preferences, downgrade order in parens:
 
 | Operation | Preferred | Downgrade order |
 | --------- | --------- | --------------- |
-| retrieve  | rest-api (now) → native-api (later); snmp for OID/MIB reads | rest-api, native-api, snmp |
-| update    | rest-api (now) → native-api (later) | rest-api, native-api, ssh |
-| execute   | rest-api (now) → native-api / ssh / mac-telnet | rest-api, native-api, ssh, mac-telnet, romon, winbox-terminal |
+| retrieve  | rest-api, native-api; snmp for OID/MIB reads (future) | rest-api, native-api |
+| execute   | native-api → rest-api → mac-telnet | native-api, rest-api, mac-telnet, ssh, romon, winbox-terminal |
 | terminal  | ssh | mac-telnet (L2 only when ssh fails or MAC given) |
 | transfer  | ssh / scp | rest-api files (small only) |
 | discover  | mndp | (not a transport for command operations) |
 
 Rules:
+
+- `retrieve` is read-only (rest-api or native-api only). `execute` is the read
+  and write surface; there is no `update` operation. Writes (add/set/remove)
+  ride `execute`.
 
 - Never silently downgrade across `--via`. If the caller pinned `--via rest-api`
   and REST cannot do the operation, error out with a `transport/*` code.
@@ -178,7 +202,7 @@ Rules:
   hop is reported in `meta.warnings` with the reason.
 - SNMP is retrieve-only: `retrieve <router> snmp <oid|MIB name>` resolves
   names through a MikroTik MIB cache downloaded from mikrotik.com. It is not an
-  execute or update surface.
+  execute or write surface.
 - SSH, mac-telnet, RoMON, and WinBox Terminal are execute surfaces, not
   retrieve surfaces. RoMON and WinBox Terminal are lower priority than
   mac-telnet until their validation and test harnesses are grounded.
@@ -215,7 +239,8 @@ centrs does:
 - Choose protocols per the table above and configure them.
 - Validate before execute; re-validate server-side immediately before run.
 - Return structured envelopes with provenance and warnings.
-- Cache local metadata in SQLite (preferred) when it improves UX.
+- Use the WinBox CDB at its well-known location as the device datastore and
+  cache; overlay centrs metadata via comment-kv and groups.
 
 centrs does not:
 
@@ -239,7 +264,8 @@ centrs does not:
 
 - `tikoci/rosetta` — RouterOS docs / RAG.
 - `tikoci/restraml` — REST schema and inspect output.
-- `tikoci/m2ir` — nova-error vocabulary and protocol IR (WinBox, etc.).
+- `tikoci/m2ir` — protocol IR (WinBox, etc.). Not an accessible source for the
+  RouterOS error-string vocabulary; ground error mappings on live CHR strings.
 - `tikoci/lsp-routeros-ts` — canonicalization, parse-validation patterns.
 - `tikoci/quickchr` — CHR-backed integration test harness.
 

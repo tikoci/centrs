@@ -12,7 +12,6 @@
 export type ProtocolCapability =
 	| "execute"
 	| "retrieve"
-	| "update"
 	| "transfer"
 	| "terminal"
 	| "discover"
@@ -28,14 +27,14 @@ export interface ProtocolPlan {
 export const protocolPlans = [
 	{
 		id: "rest-api",
-		capabilities: ["retrieve", "update", "execute", "transfer", "proxy"],
+		capabilities: ["retrieve", "execute", "transfer", "proxy"],
 		notes:
 			"RouterOS /rest. retrieve coded; cell status tracked in docs/MATRIX.md. Other capabilities are staged.",
 		implemented: true,
 	},
 	{
 		id: "native-api",
-		capabilities: ["retrieve", "update", "execute", "proxy"],
+		capabilities: ["retrieve", "execute", "proxy"],
 		notes:
 			"Binary API (TCP 8728 / TLS 8729). Transport base implemented in native-api.ts (word/sentence codec, login, tagged talk); command wiring tracked in docs/MATRIX.md.",
 		implemented: true,

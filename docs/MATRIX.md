@@ -24,7 +24,6 @@ A cell advances only with the matching evidence in the same change.
 | Command  | rest-api      | native-api    | ssh           | mac-telnet    | snmp          | mndp          | romon         | winbox-terminal |
 | -------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ---------------- |
 | retrieve | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | —             | —             | —                |
-| update   | `not-started` | `not-started` | `not-started` | —             | —             | —             | —             | —                |
 | execute  | `not-started` | `not-started` | `not-started` | `not-started` | —             | —             | `not-started` | `not-started`    |
 | terminal | —             | —             | `not-started` | `not-started` | —             | —             | —             | —                |
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
@@ -42,6 +41,10 @@ green via `bun run test:integration` — that still requires `add`, `edit`,
 Data sources (CDB, ARP cache, MNDP cache, `dude.db` import) and their
 phasing live in `commands/devices/README.md`.
 
+There is no `update` command: `execute` is the single read/write surface for
+RouterOS add/set/remove, and `retrieve` stays read-only. See
+`docs/CONSTITUTION.md` (protocol selection).
+
 ### Transport-base readiness (below the command grid)
 
 The grid above tracks command cells (examples green for a `<command>` over a
@@ -53,7 +56,7 @@ glue, not new protocol code:
   streaming reader, login (post-6.43 plaintext + legacy MD5 challenge), tagged
   command multiplexing, and typed error mapping. Wired into `retrieve` behind
   `--via native-api` (see the `retrieve / native-api` cell, `CHR-passed`);
-  `update` / `execute` over native-api still need command wiring. Covered by
+  `execute` over native-api still needs command wiring. Covered by
   `test/unit/native-api.test.ts`, `test/integration/native-api.test.ts`
   (transport), and `test/integration/native-api-retrieve.test.ts` (command),
   all green via `bun run test:integration`.
@@ -77,24 +80,23 @@ matching evidence.
    in).
 3. **CDB groups and fanout** — `--group`, multi-target de-dupe, concurrency,
    and outer/inner envelope shape must be grounded before execute starts.
-4. **execute / rest-api** — first CLI-shaped command, `[:parse]` validator
-   path, semi-structured output handling.
-5. **update / rest-api** — write-shaped operations with re-validate-server-side.
-6. **devices** — complete CDB mutation (`add`, `remove`, `set`, `edit`) and
+4. **execute / native-api + rest-api** — CLI-shaped read/write surface
+   (add/set/remove). Syntax gate via `:parse`, semantic validation via
+   `/console/inspect` or server re-validation, structured path-POST (REST) /
+   tagged `talk` (native). This is the single write path; there is no `update`.
+5. **devices** — complete CDB mutation (`add`, `remove`, `set`, `edit`) and
    provenance.
-7. **retrieve / snmp** — SNMP OID/MIB reads with MikroTik MIB download/cache.
-8. **native-api** for retrieve/update/execute — second transport, drives the
-   protocol abstraction to its second consumer. `retrieve / native-api` is
-   `CHR-passed`; `update` / `execute` over native-api remain.
-9. **ssh** for execute/terminal/transfer — third transport and key-management
+6. **retrieve / snmp** — SNMP OID/MIB reads with MikroTik MIB download/cache
+   (future).
+7. **ssh** for execute/terminal/transfer — third transport and key-management
    scheme.
-10. **mac-telnet** for execute/terminal — L2 path, default execute route for
-    unresolved MAC targets.
-11. **RoMON / WinBox Terminal for execute** — lower-priority execute surfaces
-    after mac-telnet is grounded.
-12. **discover / mndp** — `discover --save --timeout 60s` populates CDB entries
+8. **mac-telnet** for execute/terminal — L2 path, default execute route for
+   unresolved MAC targets.
+9. **RoMON / WinBox Terminal for execute** — lower-priority execute surfaces
+   after mac-telnet is grounded.
+10. **discover / mndp** — `discover --save --timeout 60s` populates CDB entries
     with provenance metadata and `group=discovered`.
-13. **MCP, TUI, proxy** — frontends over the stable core. Future targets;
+11. **MCP, TUI, proxy** — frontends over the stable core. Future targets;
     they shape interface decisions today but do not block the grid.
 
 ## Open questions (decisions needed before the affected cell can advance)

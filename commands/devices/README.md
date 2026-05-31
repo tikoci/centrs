@@ -211,7 +211,7 @@ member list and the group(s) that expanded into it).
 | Question | Affects | Notes |
 | --- | --- | --- |
 | Comment kv quoting & escaping edge cases (newlines, embedded `=`) | comment-kv parser | Initial proposal: shell-word tokenization, `"…"`, `\"` / `\\`. Confirm with a fixture set. |
-| ARP resolver test scheme | retrieve / update / execute when target is a MAC | Need deterministic fixtures per OS plus one live same-L2 proof before relying on ARP in integration. |
+| ARP resolver test scheme | retrieve / execute when target is a MAC | Need deterministic fixtures per OS plus one live same-L2 proof before relying on ARP in integration. |
 | WinBox compatibility check after salt rotation | encrypted writes | Need a manual round-trip ("open in WinBox after centrs write") gate before shipping `devices add`. |
 
 When a row is answered, fold it into this README and delete the row.

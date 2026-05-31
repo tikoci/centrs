@@ -206,3 +206,6 @@ mcast
 netdevs
 SLIRP
 vmnet
+
+# centrs domain vocabulary
+neteng
