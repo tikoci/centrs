@@ -1,14 +1,10 @@
-/**
- * `centrs execute` CLI stub.
- *
- * Parses positionals/flags and `--help`, then reports a structured
- * `validation/not-implemented` envelope (JSON/YAML) or text error. The full
- * execute loop — protocol selection, write confirmation, and per-protocol
- * wiring — lands in WP-1c. This stub keeps the command discoverable and the
- * CLI dispatch surface complete without pretending to run anything.
- */
-
-import { CentrsError, formatCentrsErrorText } from "../errors.ts";
+import {
+	type ExecuteOutputFormat,
+	type ExecuteRequest,
+	executeEnvelope,
+	executeOutputFormats,
+	renderExecuteEnvelope,
+} from "../execute.ts";
 import { describeCentrs } from "../index.ts";
 import {
 	type CliCommandMetadata,
@@ -19,13 +15,12 @@ import {
 export const executeCommand: CliCommandMetadata = {
 	name: "execute",
 	usage: "centrs execute <target> <command> [flags]",
-	summary:
-		"Run a RouterOS command through the shared core (not implemented yet — WP-1c).",
+	summary: "Run a RouterOS read or write command via native API or REST.",
 	options: [
 		{
 			flag: "--via",
-			valueName: "<protocol>",
-			description: "Pin the protocol selector for the execute path.",
+			valueName: "<native-api|rest-api>",
+			description: "Pin the protocol selector; no silent downgrade when set.",
 		},
 		{
 			flag: "--host",
@@ -58,6 +53,26 @@ export const executeCommand: CliCommandMetadata = {
 			description: "Decrypt an encrypted WinBox CDB file.",
 		},
 		{
+			flag: "--timeout",
+			valueName: "<duration>",
+			description: "Per-request timeout (for REST, max 60s).",
+		},
+		{
+			flag: "--validate[=false]",
+			description:
+				"Run RouterOS :parse and /console/inspect validation before execution (default true).",
+		},
+		{
+			flag: "--yes",
+			description:
+				"Confirm write-shaped add/set/remove commands in non-interactive runs.",
+		},
+		{
+			flag: "--max-results",
+			valueName: "<bytes>",
+			description: "Fail if the rendered envelope exceeds this byte budget.",
+		},
+		{
 			flag: "--format",
 			valueName: "<text|json|yaml>",
 			description: "Output format for the CLI response.",
@@ -66,21 +81,29 @@ export const executeCommand: CliCommandMetadata = {
 			flag: "--json",
 			description: "Shortcut for `--format json`.",
 		},
+		{
+			flag: "--verbose",
+			description: "Include additional context in text output.",
+		},
 	],
 };
 
-interface ExecuteCliArgs {
+interface ExecuteCliArgs extends ExecuteRequest {
 	help?: boolean;
-	format?: "text" | "json" | "yaml";
-	positional: string[];
+	format?: ExecuteOutputFormat;
 }
 
 function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
-	const parsed: ExecuteCliArgs = { positional: [] };
+	const parsed: ExecuteCliArgs = { command: "" };
+	const positional: string[] = [];
 
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
 		if (arg === undefined) {
+			continue;
+		}
+		if (arg.startsWith("--validate=")) {
+			parsed.validate = parseBooleanFlag(arg.slice("--validate=".length), arg);
 			continue;
 		}
 		switch (arg) {
@@ -91,69 +114,112 @@ function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 			case "--json":
 				parsed.format = "json";
 				break;
+			case "--verbose":
+				parsed.verbose = true;
+				break;
+			case "--yes":
+				parsed.yes = true;
+				break;
+			case "--validate":
+				parsed.validate = true;
+				break;
+			case "--no-validate":
+				parsed.validate = false;
+				break;
+			case "--via":
+				parsed.via = expectValue(args, ++index, arg);
+				break;
+			case "--host":
+				parsed.host = expectValue(args, ++index, arg);
+				break;
+			case "--port":
+				parsed.port = parseIntegerFlag(expectValue(args, ++index, arg), arg);
+				break;
+			case "--username":
+				parsed.username = expectValue(args, ++index, arg);
+				break;
+			case "--password":
+				parsed.password = expectValue(args, ++index, arg);
+				break;
+			case "--cdb-file":
+				parsed.cdbFile = expectValue(args, ++index, arg);
+				break;
+			case "--cdb-password":
+				parsed.cdbPassword = expectValue(args, ++index, arg);
+				break;
+			case "--timeout":
+				parsed.timeout = expectValue(args, ++index, arg);
+				break;
+			case "--max-results":
+				parsed.maxResultsBytes = parseIntegerFlag(
+					expectValue(args, ++index, arg),
+					arg,
+				);
+				break;
 			case "--format": {
 				const value = expectValue(args, ++index, arg);
-				if (value !== "text" && value !== "json" && value !== "yaml") {
+				if (!executeOutputFormats.includes(value as ExecuteOutputFormat)) {
 					throw new Error(
-						`--format must be one of text, json, yaml; got ${value}.`,
+						`--format must be one of ${executeOutputFormats.join(", ")}; got ${value}.`,
 					);
 				}
-				parsed.format = value;
+				parsed.format = value as ExecuteOutputFormat;
 				break;
 			}
 			default:
-				// The stub does not interpret execute-specific flags yet; collect
-				// positionals and skip any flag values so parsing stays forgiving.
 				if (arg.startsWith("-")) {
-					if (
-						args[index + 1] !== undefined &&
-						!args[index + 1]?.startsWith("-")
-					) {
-						index += 1;
-					}
-					break;
+					throw new Error(`Unknown execute flag: ${arg}`);
 				}
-				parsed.positional.push(arg);
+				positional.push(arg);
 				break;
 		}
 	}
 
+	parsed.targetInput = positional[0];
+	parsed.command = positional.slice(1).join(" ");
+	parsed.stdinIsTty = process.stdin.isTTY;
 	return parsed;
 }
 
 export async function runExecuteCli(args: readonly string[]): Promise<number> {
-	const parsed = parseExecuteCliArgs(args);
+	let parsed: ExecuteCliArgs;
+	try {
+		parsed = parseExecuteCliArgs(args);
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		return 2;
+	}
 	if (parsed.help) {
 		console.log(renderCommandHelp(describeCentrs(), executeCommand));
 		return 0;
 	}
 
-	const error = new CentrsError({
-		code: "validation/not-implemented",
-		summary: "`centrs execute` is not implemented yet.",
-		remediation:
-			"Use `centrs retrieve` for read paths today; execute lands in a later work package (WP-1c).",
-		context: { target: parsed.positional[0], command: parsed.positional[1] },
+	const envelope = await executeEnvelope(parsed);
+	const rendered = renderExecuteEnvelope(envelope, parsed.format ?? "json", {
+		verbose: parsed.verbose,
 	});
-
-	if (parsed.format === "json") {
-		console.error(JSON.stringify(serializeStubError(error), null, 2));
-	} else if (parsed.format === "yaml") {
-		console.error(toStubYaml(serializeStubError(error)));
-	} else {
-		console.error(formatCentrsErrorText(error));
+	if (envelope.ok) {
+		console.log(rendered);
+		return 0;
 	}
+	console.error(rendered);
 	return 1;
 }
 
-function serializeStubError(error: CentrsError): {
-	ok: false;
-	error: ReturnType<CentrsError["toJSON"]>;
-	warnings: never[];
-} {
-	return { ok: false, error: error.toJSON(), warnings: [] };
+function parseIntegerFlag(value: string, flag: string): number {
+	const parsed = Number.parseInt(value, 10);
+	if (!Number.isInteger(parsed)) {
+		throw new Error(`${flag} must be an integer; got ${value}.`);
+	}
+	return parsed;
 }
 
-function toStubYaml(value: unknown): string {
-	return JSON.stringify(value, null, 2);
+function parseBooleanFlag(value: string, flag: string): boolean {
+	if (["true", "1", "yes", "on"].includes(value.toLowerCase())) {
+		return true;
+	}
+	if (["false", "0", "no", "off"].includes(value.toLowerCase())) {
+		return false;
+	}
+	throw new Error(`${flag} must be true or false; got ${value}.`);
 }

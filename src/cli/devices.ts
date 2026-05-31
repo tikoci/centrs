@@ -51,6 +51,12 @@ export const devicesCommand: CliCommandMetadata = {
 				"Decrypt an encrypted CDB. Falls back to `CENTRS_CDB_PASSWORD`. Encrypted CDBs are read-only.",
 		},
 		{
+			flag: "--via",
+			valueName: "<protocol>",
+			description:
+				"Resolve and report the protocol source for provenance examples; no network IO is performed.",
+		},
+		{
 			flag: "--group",
 			valueName: "<name>",
 			description:
@@ -131,6 +137,7 @@ interface DevicesCliArgs {
 	cdbFile?: string;
 	cdbPassword?: string;
 	group?: string;
+	via?: string;
 	members?: boolean;
 	explain?: boolean;
 	user?: string;
@@ -168,6 +175,9 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			case "--group":
 				parsed.group = expectValue(args, ++index, arg);
+				break;
+			case "--via":
+				parsed.via = expectValue(args, ++index, arg);
 				break;
 			case "--members":
 				parsed.members = true;
@@ -284,7 +294,27 @@ function parseKvArg(token: string): CommentKvUpdate {
 			`Invalid kv override "${token}"; expected key=value (use key= to clear a value).`,
 		);
 	}
-	return { key: token.slice(0, eq), value: token.slice(eq + 1) };
+	return { key: token.slice(0, eq), value: parseKvValue(token.slice(eq + 1)) };
+}
+
+function parseKvValue(value: string): string {
+	if (value.length < 2 || !value.startsWith('"') || !value.endsWith('"')) {
+		return value;
+	}
+	let parsed = "";
+	for (let index = 1; index < value.length - 1; index += 1) {
+		const char = value[index];
+		if (char === "\\" && index + 1 < value.length - 1) {
+			const next = value[index + 1];
+			if (next === '"' || next === "\\") {
+				parsed += next;
+				index += 1;
+				continue;
+			}
+		}
+		parsed += char;
+	}
+	return parsed;
 }
 
 export async function runDevicesCli(args: readonly string[]): Promise<number> {
@@ -317,6 +347,8 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 					cdb,
 					target: parsed.target,
 					explain: parsed.explain,
+					via: parsed.via,
+					env: envSnapshot,
 				});
 				break;
 			case "groups":

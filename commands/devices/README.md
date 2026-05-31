@@ -63,6 +63,7 @@ its own settings. Recognized keys (allowlist):
 | `validate` | `true` / `false`. `false` is the escape hatch; CLI overrides.           |
 | `timeout`  | Default request timeout in ms. Per-transport caps still apply.          |
 | `port`     | Non-default transport port. Omitted when equal to the protocol default. |
+| `ssh-key`  | Per-device private key file path for SSH transports.                    |
 | `source`   | Provenance marker for discovered/imported records (`mndp`, `dude`, …).  |
 
 Rules:
@@ -70,6 +71,9 @@ Rules:
 - First-class CDB fields (`user`, `password`, `group`, `profile`, `session`)
   must **not** appear in the kv-soup — they already have CDB tags. centrs
   refuses to write them via `devices set`.
+- `ssh-key` stores a path only, never private key material. Key contents belong
+  in the user's filesystem / SSH agent and are always treated as sensitive if an
+  error needs to mention them.
 - Unknown keys → `cdb/unknown-option` warning. The call still succeeds.
 - Tokens are shell-word tokenized. Values with spaces require double quotes
   (`"…"`), with `\"` and `\\` escapes. `=` inside a quoted value is literal.

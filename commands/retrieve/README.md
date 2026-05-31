@@ -50,6 +50,8 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
 | `--username` / `--password`         | Override CDB-resolved or env credentials.                                                 |
 | `--port <n>`                        | Override the transport port. native-api defaults to 8728 (TLS api-ssl when `--port 8729`).|
 | `--cdb-file` / `--cdb-password`     | Override CDB file location / decrypt password.                                            |
+| `--ros-version <version>`           | SNMP MIB lookup only: pin the MikroTik MIB version to cache/download.                     |
+| `--ros-channel <channel>`           | SNMP MIB lookup only: `stable`, `long-term`, `testing`, or `development`; default `stable`. |
 | `--group <name>`                    | Fan out across every CDB target in WinBox group `<name>`. Mutually exclusive with a `<router>` positional. See **Group fanout**. |
 | `--concurrency <n>`                 | Max in-flight targets during fanout (integer ≥ 1). Defaults are transport-aware: `rest-api` 8, `native-api` 4. Rejected with `usage/invalid-concurrency` otherwise. |
 
@@ -65,6 +67,43 @@ If `--all-attributes` is combined with `--attribute(s)`, fail with
 
 SNMP validation is separate from RouterOS `/console/inspect`: OIDs and MIB
 names must resolve through the MIB cache before any SNMP request is sent.
+
+## SNMP MIB cache policy
+
+Proposed pending sign-off: cache MikroTik MIBs under the XDG cache root,
+`${XDG_CACHE_HOME:-~/.cache}/tikoci/snmp-mibs`, not beside the CDB. The cache is
+derived data; deleting it must never remove inventory or credentials. Use one
+subdirectory per exact RouterOS version, for example
+`routeros/7.23/mikrotik.mib`, plus metadata containing source URL, ETag,
+Last-Modified, SHA-256, fetched-at, and the channel (if a channel resolved it).
+
+Version selection for MIB-name lookup is deterministic. `--ros-version` wins and
+downloads `https://download.mikrotik.com/routeros/<version>/mikrotik.mib`.
+Otherwise `--ros-channel` (default `stable`) is resolved through
+`https://upgrade.mikrotik.com/routeros/NEWESTa7.<channel>` and that exact version
+is used. If target metadata already carries a RouterOS version from a trusted
+source, it may supply the default version, but the SNMP path must not make an
+extra REST/native call merely to discover a version.
+
+Invalidation is by exact version plus HTTP validators. A missing version cache is
+downloaded before lookup; an existing cache is reused offline. When online, a
+cache older than 24h is revalidated with ETag/Last-Modified and replaced
+atomically if MikroTik republishes the file. Channel pointers are short-lived:
+re-resolve the channel after 24h, then use the cache for the resulting exact
+version.
+
+Offline behavior is intentionally conservative. Numeric OIDs do not require the
+MIB cache and proceed normally. MIB-name lookup succeeds only when the selected
+exact version is already cached; if not, fail before SNMP I/O with
+`snmp/mib-cache-miss` and a fix that tells the caller to go online once or pass a
+cached `--ros-version`. Do not silently fall back to a different version's MIB.
+
+RouterOS grounding: MikroTik documents SNMP as retrieve/write-capable but centrs
+uses it as retrieve-only; the same page points users to the MikroTik MIB download
+surface. The per-version `mikrotik.mib` URL under `download.mikrotik.com` has
+been verified for current stable/development versions, but treating it as the
+long-term canonical URL is an assumption until the implementation has fallback
+handling.
 
 ## Output shape
 

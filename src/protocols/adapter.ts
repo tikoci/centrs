@@ -14,6 +14,7 @@
  * protocol data.
  */
 
+import { mapRouterOsError } from "../core/routeros-errors.ts";
 import { CentrsError } from "../errors.ts";
 import type { RouterOsProtocol } from "./index.ts";
 import {
@@ -169,6 +170,7 @@ class RestAdapter implements ProtocolAdapter {
 		if (request.script !== undefined) {
 			const data = await this.restPost<unknown>("/execute", {
 				script: request.script,
+				"as-string": "",
 			});
 			return normalizeRestExecute(data);
 		}
@@ -246,39 +248,13 @@ class RestAdapter implements ProtocolAdapter {
 		data: unknown,
 		path: string,
 	): CentrsError {
-		const { protocol, host, port, timeoutMs } = this.config;
+		const { protocol, host, port } = this.config;
 		if (status === 401 || status === 403) {
 			return new CentrsError({
 				code: "transport/auth-failed",
 				summary: `RouterOS rejected the REST credentials for ${host}:${port}.`,
 				remediation:
 					"Check `--username` / `--password` or the matching `CENTRS_*` environment variables, and confirm the user has RouterOS REST access.",
-				context: { via: protocol, host, port, path, status },
-				causeData: data ?? text,
-			});
-		}
-
-		if (
-			status === 400 &&
-			isPlainObject(data) &&
-			readRecordString(data, "detail") === "Session closed"
-		) {
-			return new CentrsError({
-				code: "transport/timeout",
-				summary: `RouterOS closed the REST session before ${path} completed.`,
-				remediation:
-					"Reduce the scope of the request, or choose a path that can complete within the current RouterOS REST timeout ceiling.",
-				context: { via: protocol, host, port, path, timeoutMs },
-				causeData: data,
-			});
-		}
-
-		if (status === 404) {
-			return new CentrsError({
-				code: "routeros/path-not-found",
-				summary: `RouterOS path ${path} was not found over REST.`,
-				remediation:
-					"Check the slash-prefixed RouterOS path, or use `--list-attributes` / `--no-validate` to narrow down where the mismatch is happening.",
 				context: { via: protocol, host, port, path, status },
 				causeData: data ?? text,
 			});
@@ -300,18 +276,14 @@ class RestAdapter implements ProtocolAdapter {
 			});
 		}
 
-		// WP-1c: adopt mapRouterOsError here (REST `detail` -> normalized routeros/* code).
-		// Tracked as a deliverable in commands/execute/README.md (review finding #6):
-		// route REST detail + HTTP status through mapRouterOsError({ transport: "rest-api" })
-		// so REST and native classify the same fault identically, preserving fanout retry
-		// mapping (401/403 -> auth-failed; 5xx -> retryable transport/connection-closed).
-		return new CentrsError({
-			code: "routeros/request-failed",
-			summary: `RouterOS REST request failed with HTTP ${status} for ${path}.`,
-			remediation:
-				"Inspect the returned RouterOS message, then adjust the path, credentials, or request shape accordingly.",
+		const detail = isPlainObject(data)
+			? readRecordString(data, "detail")
+			: undefined;
+		const rawRouterOsError = detail ?? text;
+		return mapRouterOsError(rawRouterOsError, {
+			transport: "rest-api",
+			httpStatus: status,
 			context: { via: protocol, host, port, path, status },
-			causeData: data ?? text,
 		});
 	}
 
@@ -447,13 +419,17 @@ class NativeApiAdapter implements ProtocolAdapter {
 	async execute(
 		request: ProtocolExecuteRequest,
 	): Promise<ProtocolExecuteResult> {
-		const command: NativeApiCommand = {
-			command: `${request.path.replace(/\/$/, "")}/${request.command}`,
-		};
-		if (request.attributes && Object.keys(request.attributes).length > 0) {
+		const command: NativeApiCommand = request.script
+			? { command: "/execute", attributes: { script: request.script } }
+			: { command: `${request.path.replace(/\/$/, "")}/${request.command}` };
+		if (
+			!request.script &&
+			request.attributes &&
+			Object.keys(request.attributes).length > 0
+		) {
 			command.attributes = request.attributes;
 		}
-		if (request.queries && request.queries.length > 0) {
+		if (!request.script && request.queries && request.queries.length > 0) {
 			command.queries = request.queries;
 		}
 		const replies = await this.talk(command);
@@ -527,7 +503,7 @@ function normalizeRestExecute(data: unknown): ProtocolExecuteResult {
 		return { records: data.filter(isPlainObject) as Record<string, string>[] };
 	}
 	if (isPlainObject(data)) {
-		const ret = data["ret"];
+		const { ret } = data as { ret?: unknown };
 		if (typeof ret === "string") {
 			return { records: [], ret };
 		}
@@ -543,7 +519,11 @@ function repliesToRecords(
 	replies: readonly ApiReply[],
 ): Record<string, string>[] {
 	return replies
-		.filter((reply) => reply.type === "!re")
+		.filter(
+			(reply) =>
+				reply.type === "!re" ||
+				(reply.type === "!done" && Object.keys(reply.attributes).length > 0),
+		)
 		.map((reply) => ({ ...reply.attributes }));
 }
 

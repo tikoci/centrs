@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { mapRouterOsError } from "../../src/core/routeros-errors.ts";
 import {
 	CentrsError,
 	createProtocolAdapter,
@@ -163,6 +164,79 @@ describe("RestAdapter retrieve operations", () => {
 				.catch((caught: unknown) => caught);
 			expect(error).toBeInstanceOf(CentrsError);
 			expect((error as CentrsError).code).toBe("transport/auth-failed");
+		} finally {
+			mock.restore();
+		}
+	});
+
+	test("maps a 5xx to retryable transport/connection-closed", async () => {
+		const mock = mockFetchSequence([
+			() => jsonResponse({ detail: "internal error" }, 500),
+		]);
+		try {
+			const adapter = createProtocolAdapter(restConfig());
+			const error = await adapter
+				.getSingleton("/system/resource")
+				.catch((caught: unknown) => caught);
+			expect(error).toBeInstanceOf(CentrsError);
+			expect((error as CentrsError).code).toBe("transport/connection-closed");
+		} finally {
+			mock.restore();
+		}
+	});
+
+	test("maps REST detail through the shared RouterOS error mapper", async () => {
+		const detail = "unknown parameter foo";
+		const mock = mockFetchSequence([() => jsonResponse({ detail }, 400)]);
+		try {
+			const adapter = createProtocolAdapter(restConfig());
+			const error = await adapter
+				.getSingleton("/ip/address")
+				.catch((caught: unknown) => caught);
+			const native = mapRouterOsError(detail, { transport: "native-api" });
+			expect(error).toBeInstanceOf(CentrsError);
+			expect((error as CentrsError).code).toBe(native.code);
+			expect((error as CentrsError).causeData).toBe(detail);
+			expect((error as CentrsError).context).toMatchObject({
+				detail,
+				httpStatus: 400,
+				status: 400,
+				via: "rest-api",
+			});
+		} finally {
+			mock.restore();
+		}
+	});
+
+	test("maps REST session-closed detail with the shared RouterOS code", async () => {
+		const detail = "Session closed";
+		const mock = mockFetchSequence([() => jsonResponse({ detail }, 400)]);
+		try {
+			const adapter = createProtocolAdapter(restConfig());
+			const error = await adapter
+				.getSingleton("/interface")
+				.catch((caught: unknown) => caught);
+			const native = mapRouterOsError(detail, { transport: "native-api" });
+			expect(error).toBeInstanceOf(CentrsError);
+			expect((error as CentrsError).code).toBe(native.code);
+			expect((error as CentrsError).code).toBe("routeros/session-closed");
+		} finally {
+			mock.restore();
+		}
+	});
+
+	test("maps REST 404 detail through the shared RouterOS error mapper", async () => {
+		const detail = "/ip/nope not found";
+		const mock = mockFetchSequence([() => jsonResponse({ detail }, 404)]);
+		try {
+			const adapter = createProtocolAdapter(restConfig());
+			const error = await adapter
+				.getSingleton("/ip/nope")
+				.catch((caught: unknown) => caught);
+			const native = mapRouterOsError(detail, { transport: "native-api" });
+			expect(error).toBeInstanceOf(CentrsError);
+			expect((error as CentrsError).code).toBe(native.code);
+			expect((error as CentrsError).code).toBe("routeros/unknown-path");
 		} finally {
 			mock.restore();
 		}

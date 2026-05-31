@@ -129,6 +129,21 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		},
 	},
 	{
+		code: "routeros/command-failed",
+		description:
+			"RouterOS /execute as-string returned a script :error value with source location.",
+		test: /^\s*(.+?)\s*\(:error; line \d+\)\s*$/i,
+		build: (match) => {
+			const failure = (match[1] ?? "").trim();
+			return {
+				summary: `RouterOS command failed: ${failure}`,
+				remediation:
+					"Inspect the RouterOS failure message, then adjust the script or request shape accordingly.",
+				context: { failure },
+			};
+		},
+	},
+	{
 		// Bare path-shaped `<path> not found` (no `failure:` prefix). Placed AFTER
 		// `routeros/command-failed` so a `failure: <object> not found` command
 		// rejection is classified as a command failure, not a path mismatch.
@@ -173,6 +188,7 @@ export function mapRouterOsError(
 			summary: result.summary,
 			remediation: result.remediation,
 			context: { ...baseContext, ...result.context, ...opts.context },
+			causeData: raw,
 		});
 	}
 

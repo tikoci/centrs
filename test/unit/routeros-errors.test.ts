@@ -92,6 +92,25 @@ describe("mapRouterOsError grounded vocabulary", () => {
 		expect(error.causeData).toBe("some brand new message");
 	});
 
+	test("REST and native-api classify grounded RouterOS strings identically", () => {
+		for (const raw of [
+			"no such command prefix",
+			"unknown parameter foo",
+			"invalid value for argument address",
+			"Session closed",
+			"failure: cannot add already have such entry",
+		]) {
+			const rest = mapRouterOsError(raw, {
+				transport: "rest-api",
+				httpStatus: 400,
+			});
+			const native = mapRouterOsError(raw, { transport: "native-api" });
+			expect(rest.code).toBe(native.code);
+			expect(rest.causeData).toBe(raw);
+			expect(native.causeData).toBe(raw);
+		}
+	});
+
 	test("rest-api catch-all is routeros/request-failed", () => {
 		const error = mapRouterOsError("some brand new message", {
 			transport: "rest-api",

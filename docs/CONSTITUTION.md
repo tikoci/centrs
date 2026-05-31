@@ -96,6 +96,11 @@ Errors are typed values, not thrown strings. Every error has:
   embedded raw.
 - `redactable_fields?` — names of fields the bug-report renderer must redact.
 
+Credentials and private key material are always redactable. Private key paths are
+configuration values and may appear in `meta.settings`; redact them only when an
+error also carries sensitive key material or a caller explicitly marks the path
+as sensitive.
+
 Two error sources must be visually distinguishable:
 
 1. **centrs errors** — bad usage, validator rejection, transport plumbing.
@@ -138,8 +143,9 @@ Lowest to highest priority:
 
 1. Built-in defaults
 2. Project / config file
-3. Environment variables (`CENTRS_*`)
-4. CLI flags / API call args
+3. CDB comment-kv metadata
+4. Environment variables (`CENTRS_*`)
+5. CLI flags / API call args
 
 `meta.settings` reports the winning source for each resolved setting.
 
@@ -170,9 +176,9 @@ CDB is the native credential store **and** the device datastore/cache: the
 WinBox CDB file at its well-known location holds the inventory directly — there
 is no separate SQLite cache. centrs-specific meaning is overlaid via comment-kv
 keys and groups. Anything in CDB must also be expressible via env/CLI/API for
-tests and ad-hoc use. CDB comments may carry centrs metadata such as `via` and
-`port` overrides. `dude.db` import is out of scope here and belongs to
-`tikoci/donny`.
+tests and ad-hoc use. CDB comments may carry centrs metadata such as `via`,
+`port`, and `ssh-key` overrides. `dude.db` import is out of scope here and
+belongs to `tikoci/donny`.
 
 Group selectors (e.g. `--group prod-edge`) target CDB groups so a single
 `retrieve`/`execute`/etc. fans out to multiple routers. Group output shape

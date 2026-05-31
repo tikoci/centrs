@@ -55,6 +55,7 @@
 		"lint:secretlint": "secretlint \"**/*\"",
 		"lint:agents": "agent-lint scan --stdout",
 		"test": "bun test",
+		"test:integration:fast": "bun test test/integration/devices.test.ts",
 		"test:integration": "CENTRS_RUN_FAST_INTEGRATION=1 bun test test/integration/",
 		"test:integration:stable": "CENTRS_CHR_CHANNEL=stable bun run test:integration",
 		"test:integration:long-term": "CENTRS_CHR_CHANNEL=long-term bun run test:integration",

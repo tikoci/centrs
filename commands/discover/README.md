@@ -101,10 +101,16 @@ tested without a router (crafted packet fixtures + a loopback socket).
   ignores such datagrams rather than failing the whole scan.
 - `cdb/encrypted-write-unverified` — `--save` against an encrypted CDB.
 
-## Open questions
+## L2 validation policy
 
-- CHR/L2 test scheme for CI; likely belongs in `@tikoci/quickchr`. MNDP needs a
-  real layer-2 broadcast segment, which the current `user`-mode SLIRP CHR
-  harness does not carry (same blocker as mac-telnet). Until then the codec is
-  covered by crafted packet fixtures and the listener by a loopback socket; see
-  `commands/discover/examples.md`.
+Proposed pending sign-off: `discover` stays validated at the protocol/socket
+layer until centrs has a maintained raw-L2 integration helper. MNDP needs a real
+layer-2 broadcast segment; the current `@tikoci/quickchr` integration entry
+point uses QEMU user-mode SLIRP, which does not carry L2 broadcast traffic, and
+Bun has no raw BPF/AF_PACKET socket API for receiving host Ethernet frames. A
+future libpcap/socket_vmnet shim can provide the real-router L2 proof, but the
+current CI gate remains crafted packet fixtures plus a loopback UDP listener.
+
+This means `discover / mndp` must not advance to `CHR-passed` until every
+example in `commands/discover/examples.md` runs against a real L2 segment.
+The same L2 blocker also applies to mac-telnet execute/terminal cells.

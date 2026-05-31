@@ -55,12 +55,24 @@ export interface Warning {
 export interface EnvelopeTargetMeta {
 	/** Raw `<router>` argument as supplied by the caller. */
 	input?: string;
+	/** CDB-facing target identity, when a command exposes registry metadata. */
+	target?: string;
+	/** Concrete resolved target, after CDB / match selection. */
+	resolvedTarget?: string;
 	host?: string;
 	port?: number;
 	baseUrl?: string;
 	mac?: string;
 	name?: string;
 	recordIndex?: number;
+	/** Alias used by devices, where the CDB record index is user-facing. */
+	cdbRecordIndex?: number;
+	user?: string;
+	group?: string;
+	via?: RouterOsProtocol;
+	validate?: boolean;
+	/** Provenance marker parsed from comment kv-soup (for example `mndp`). */
+	discoverySource?: string;
 	/** Provenance of the target identity as a whole. */
 	source?: SettingSource;
 	/** Provenance per resolved field once the resolver is wired (WP-0c). */
@@ -72,6 +84,10 @@ export interface EnvelopeValidationMeta {
 	/** Validator identity, e.g. `/console/inspect` or `:put [:parse]`. */
 	source?: string;
 	result?: "passed" | "failed" | "skipped";
+	/** Syntax gate status for commands that use RouterOS `:parse`. */
+	syntax?: boolean;
+	/** Semantic `/console/inspect` gate status, or not-applicable for script mode. */
+	semantic?: boolean | "not-applicable";
 	availableAttributes?: readonly string[];
 }
 

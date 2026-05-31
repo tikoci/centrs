@@ -36,23 +36,55 @@ groups/fanout are grounded.
   concern. The envelope must still distinguish RouterOS errors from successful
   runs (a 200 with a RouterOS error string is still an error — see
   constitution: error model).
-- Protocol surfaces are native API, REST, and mac-telnet (preferred order);
-  SSH, RoMON, and WinBox Terminal are later. SNMP is retrieve-only and must
-  reject execute.
+- Protocol surfaces are native API, REST, mac-telnet, and SSH. RoMON and
+  WinBox Terminal are later. SNMP is retrieve-only and must reject execute.
 - For a MAC target not resolved from CDB, auto-selection defaults to
   mac-telnet. Callers that want IP-level execution may opt into ARP-based
   MAC → IP resolution before protocol selection.
-- CDB comment-kv metadata may provide per-target `via` and `port` overrides;
-  CLI/API arguments still win.
+- CDB comment-kv metadata may provide per-target `via`, `port`, and `ssh-key`
+  overrides; CLI/API arguments still win.
 - RoMON and WinBox Terminal are lower priority than mac-telnet until their
   validation, tooling, and CI story are grounded.
+
+## SSH key selection
+
+Proposed pending sign-off: SSH transports use one shared setting, `sshKey`,
+exposed as `--ssh-key <path>`, `CENTRS_SSH_KEY`, and the CDB comment-kv token
+`ssh-key=<path>`. Precedence follows the constitution: defaults → config → CDB
+comment-kv → env → CLI/API. When unset, centrs honors the user's system SSH
+configuration and agent exactly as `ssh` would; setting `--ssh-key` is an
+explicit per-invocation override.
+
+`ssh-key` stores a private key **path**, never private key material. The resolved
+path may appear in `meta.settings.sshKey` with its source so bug reports can
+explain why a key was selected. Private key contents, passphrases, agent socket
+contents, and any inline key material are always sensitive and must be listed in
+`error.redactable_fields` if they appear in structured error data; key paths are
+redacted only if the caller marks them sensitive or the error couples them with
+key material.
+
+## mac-telnet L2 validation
+
+Proposed pending sign-off: keep mac-telnet validated at the protocol layer for
+now and explicitly defer real-router L2 validation until a maintained raw-L2
+helper exists. The current `@tikoci/quickchr` integration harness uses QEMU
+user-mode SLIRP, which does not carry Ethernet broadcasts or MAC-Telnet frames;
+Bun also exposes no BPF/AF_PACKET raw-L2 socket. A libpcap/socket_vmnet shim may
+become the long-term harness, but it should not block execute design or force
+fragile CI privileges today.
+
+The executable contract still must cover protocol-selection behavior: when the
+`execute` target is an unresolved MAC address, auto-selection chooses
+mac-telnet; callers that want IP-level execution must explicitly opt into ARP
+resolution before protocol selection. Until the L2 harness exists, that behavior
+is covered with resolver/protocol-selection tests plus
+`test/unit/mac-telnet.test.ts` against a scripted peer, not by advancing the
+matrix cell to `CHR-passed`.
 
 ## Open shape questions
 
 - How to expose multi-line / async / progress output without committing to a
   single-shot model up front.
 - Whether `--strict` should reject "succeeded with stderr-like content."
-- How SSH key paths/material are represented across CDB metadata, env, CLI,
-  and redaction.
 
 Defer until CDB groups/fanout have settled the multi-target envelope.

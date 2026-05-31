@@ -24,22 +24,24 @@ A cell advances only with the matching evidence in the same change.
 | Command  | rest-api      | native-api    | ssh           | mac-telnet    | snmp          | mndp          | romon         | winbox-terminal |
 | -------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ---------------- |
 | retrieve | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | —             | —             | —                |
-| execute  | `not-started` | `not-started` | `not-started` | `not-started` | —             | —             | `not-started` | `not-started`    |
+| execute  | `CHR-passed`  | `CHR-passed`  | `not-started` | `not-started` | —             | —             | `not-started` | `not-started`    |
 | terminal | —             | —             | `not-started` | `not-started` | —             | —             | —             | —                |
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
 | discover | —             | —             | —             | —             | —             | `coded`       | —             | —                |
 | check    | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started`    |
 
 `devices` does not use a transport in the protocol sense, so its grid row
-stays `—`. Its cell state is `coded`: the read-only subset (`list`, `show`,
-`groups`) is implemented in `src/devices.ts` and green under
-`bun run test:integration` against a CDB fixture built in-test from the
-known CDB primitives (open + encrypted via `--cdb-password`). It advances
-to `CHR-passed` when every example in `commands/devices/examples.md` is
-green via `bun run test:integration` — that still requires `add`, `edit`,
-`set`, `remove`, ambiguity / `--match`, and the provenance/override examples.
-Data sources (CDB, ARP cache, MNDP cache, `dude.db` import) and their
-phasing live in `commands/devices/README.md`.
+stays `—`. Its cell state is `CHR-passed`: the read subset (`list`, `show`,
+`groups`) plus the full CDB mutation surface (`add`, `edit`, `set`, `remove`),
+ambiguity / `--match`, and the provenance/override examples are implemented in
+`src/devices.ts` and green under `bun run test:integration` against a CDB
+fixture built in-test from the known CDB primitives (open + encrypted via
+`--cdb-password`). Every example in `commands/devices/examples.md` is green via
+`bun run test:integration` (`test/integration/devices.test.ts`); the command
+performs no network IO, so its `CHR-passed` evidence is the fixture-backed
+integration run rather than a booted CHR. Encrypted-CDB writes remain blocked
+(`cdb/encrypted-write-unverified`). Data sources (CDB, ARP cache, MNDP cache,
+`dude.db` import) and their phasing live in `commands/devices/README.md`.
 
 `discover` is `coded`: the MNDP wire codec (`src/data/mndp.ts`), the
 TTL-expiring neighbor cache (`src/data/mndp-cache.ts`), the UDP listener, and

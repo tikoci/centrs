@@ -140,6 +140,26 @@ export {
 	serializeCentrsError,
 } from "./errors.ts";
 export {
+	buildExecuteErrorEnvelope,
+	buildExecuteErrorEnvelopeFromResolved,
+	canonicalizeExecuteCommand,
+	type ExecuteEnvelope,
+	type ExecuteErrorEnvelope,
+	type ExecuteOperationMeta,
+	type ExecuteOutputFormat,
+	type ExecuteRequest,
+	type ExecuteRequestSummary,
+	type ExecuteSuccessEnvelope,
+	execute,
+	executeEnvelope,
+	executeOutputFormats,
+	isWriteShaped,
+	renderExecuteEnvelope,
+	resolveExecuteRequest,
+	runResolvedExecute,
+	validateExecuteRequestShape,
+} from "./execute.ts";
+export {
 	createProtocolAdapter,
 	getProtocolPlan,
 	type ProtocolAdapter,

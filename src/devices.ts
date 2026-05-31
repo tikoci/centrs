@@ -4,6 +4,7 @@ import type {
 	CentrsEnvelope,
 	CentrsSuccessEnvelope,
 	EnvelopeMeta,
+	EnvelopeTargetMeta,
 	SettingSource,
 	SettingSourceKind,
 } from "./core/envelope.ts";
@@ -26,11 +27,13 @@ import {
 	writeWinBoxCdb,
 } from "./data/winbox-cdb-write.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
+import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
 	applyCommentKv,
 	type CommentKvUpdate,
 	commentKvAllowlist,
 	commentKvReservedKeys,
+	parseCommentKv,
 } from "./resolver/comment-kv.ts";
 
 export type { SettingSource, SettingSourceKind };
@@ -53,6 +56,8 @@ export interface DevicesListItem {
 	group: string;
 	user: string;
 	cdbRecordIndex: number;
+	source?: string;
+	sources?: Record<string, SettingSource>;
 }
 
 export interface DevicesShowItem extends DevicesListItem {
@@ -92,9 +97,10 @@ export type DevicesEnvelope<Data> = CentrsEnvelope<Data, DevicesOperationMeta>;
 function devicesMeta(
 	command: DevicesCommand,
 	settings: DevicesSettings,
+	target: EnvelopeTargetMeta = {},
 ): EnvelopeMeta<DevicesOperationMeta> {
 	return {
-		target: {},
+		target,
 		via: null,
 		settings: {
 			cdbFile: settings.cdbFile.source,
@@ -340,14 +346,9 @@ export function listDevices(
 		}
 	}
 
-	const data: DevicesListItem[] = entries.map((entry, position) => ({
-		target: entry.target,
-		recordType: entry.recordType,
-		recordTypeName: recordTypeName(entry.recordType),
-		group: entry.group,
-		user: entry.user,
-		cdbRecordIndex: indices[position] ?? -1,
-	}));
+	const data: DevicesListItem[] = entries.map((entry, position) =>
+		entryToListItem(entry, indices[position] ?? -1),
+	);
 
 	return {
 		ok: true,
@@ -361,6 +362,8 @@ export interface ShowDeviceArgs {
 	cdb: LoadedCdb;
 	target: string;
 	explain?: boolean;
+	via?: string;
+	env?: Record<string, string | undefined>;
 }
 
 export interface DevicesShowEnvelopeData {
@@ -420,12 +423,164 @@ export function showDevice(
 		data.record = match.entry.record;
 	}
 
+	const resolved = resolveDeviceShowTargetMeta(match.entry, match.index, args);
+
 	return {
 		ok: true,
 		data,
-		warnings: args.cdb.warnings,
-		meta: devicesMeta("show", args.cdb.settings),
+		warnings: [...args.cdb.warnings, ...resolved.warnings],
+		meta: devicesMeta("show", args.cdb.settings, resolved.target),
 	};
+}
+
+function entryToListItem(
+	entry: WinBoxCdbEntry,
+	cdbRecordIndex: number,
+): DevicesListItem {
+	const parsed = parseCommentKv(entry.comment);
+	const sources: Record<string, SettingSource> = {
+		target: { kind: "cdb", key: `record:${cdbRecordIndex}:target` },
+		user: { kind: "cdb", key: `record:${cdbRecordIndex}:user` },
+		group: { kind: "cdb", key: `record:${cdbRecordIndex}:group` },
+	};
+	const item: DevicesListItem = {
+		target: entry.target,
+		recordType: entry.recordType,
+		recordTypeName: recordTypeName(entry.recordType),
+		group: entry.group,
+		user: entry.user,
+		cdbRecordIndex,
+		sources,
+	};
+	if (parsed.values.source !== undefined) {
+		item.source = parsed.values.source;
+		sources["source"] = {
+			kind: "comment-kv",
+			key: `record:${cdbRecordIndex}:source`,
+		};
+	}
+	return item;
+}
+
+interface ResolvedDeviceTargetMeta {
+	target: EnvelopeTargetMeta;
+	warnings: DevicesWarning[];
+}
+
+function resolveDeviceShowTargetMeta(
+	entry: WinBoxCdbEntry,
+	cdbRecordIndex: number,
+	args: ShowDeviceArgs,
+): ResolvedDeviceTargetMeta {
+	const parsed = parseCommentKv(entry.comment);
+	const warnings: DevicesWarning[] = parsed.warnings.map((warning) => ({
+		code: warning.code,
+		message: warning.message,
+		context: warning.context,
+	}));
+	const sources: Record<string, SettingSource> = {
+		target: { kind: "cdb", key: `record:${cdbRecordIndex}:target` },
+		user: { kind: "cdb", key: `record:${cdbRecordIndex}:user` },
+		password: { kind: "cdb", key: `record:${cdbRecordIndex}:password` },
+		group: { kind: "cdb", key: `record:${cdbRecordIndex}:group` },
+	};
+
+	const commentVia = parseProtocolOption(
+		parsed.values.via,
+		"via",
+		cdbRecordIndex,
+		warnings,
+	);
+	const envVia = parseProtocolOption(
+		args.env?.["CENTRS_VIA"],
+		"CENTRS_VIA",
+		cdbRecordIndex,
+		warnings,
+	);
+	const cliVia = parseProtocolOption(
+		args.via,
+		"--via",
+		cdbRecordIndex,
+		warnings,
+	);
+	const via = cliVia ?? envVia ?? commentVia;
+	if (via !== undefined) {
+		sources["via"] =
+			cliVia !== undefined
+				? { kind: "cli", key: "--via" }
+				: envVia !== undefined
+					? { kind: "env", key: "CENTRS_VIA" }
+					: { kind: "comment-kv", key: `record:${cdbRecordIndex}:via` };
+	}
+	if (commentVia !== undefined && via !== commentVia) {
+		warnings.push({
+			code: "cdb/override-applied",
+			message: `Comment option "via=${commentVia}" was overridden by ${sources["via"]?.kind ?? "a higher-precedence source"}.`,
+			context: {
+				target: entry.target,
+				key: "via",
+				commentValue: commentVia,
+				winner: via,
+				source: sources["via"],
+			},
+		});
+	}
+	if (parsed.values.validate !== undefined) {
+		sources["validate"] = {
+			kind: "comment-kv",
+			key: `record:${cdbRecordIndex}:validate`,
+		};
+	}
+	if (parsed.values.source !== undefined) {
+		sources["source"] = {
+			kind: "comment-kv",
+			key: `record:${cdbRecordIndex}:source`,
+		};
+	}
+
+	const target: EnvelopeTargetMeta = {
+		input: args.target,
+		target: entry.target,
+		resolvedTarget: entry.target,
+		host: entry.target,
+		name: entry.target,
+		recordIndex: cdbRecordIndex,
+		cdbRecordIndex,
+		user: entry.user,
+		group: entry.group,
+		source: { kind: "cdb", key: `record:${cdbRecordIndex}` },
+		sources,
+	};
+	if (via !== undefined) {
+		target.via = via;
+	}
+	if (parsed.values.validate !== undefined) {
+		target.validate = parsed.values.validate !== "false";
+	}
+	if (parsed.values.source !== undefined) {
+		target.discoverySource = parsed.values.source;
+	}
+	return { target, warnings };
+}
+
+function parseProtocolOption(
+	value: string | undefined,
+	key: string,
+	recordIndex: number,
+	warnings: DevicesWarning[],
+): RouterOsProtocol | undefined {
+	if (value === undefined) {
+		return undefined;
+	}
+	if (plannedProtocols.includes(value as RouterOsProtocol)) {
+		return value as RouterOsProtocol;
+	}
+	warnings.push({
+		code: "cdb/invalid-option",
+		message: `Comment option "${key}=${value}" is invalid (unknown protocol); it is ignored.`,
+		context: { key, value, recordIndex },
+	});
+	return undefined;
 }
 
 function entryToShowItem(
