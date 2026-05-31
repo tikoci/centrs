@@ -160,6 +160,34 @@ Call succeeds with a `cdb/password-not-needed` warning in `meta.warnings`.
 centrs retrieve $R /system/resource --cdb-file $CDB --cdb-password ignored
 ```
 
+## Group fanout
+
+These are exercised by `test/integration/fanout-retrieve.test.ts` when CHR
+integration is enabled.
+
+### F1. Group fanout with one inner success and one inner failure
+
+`$CDB` contains two records in group `fanout-chr`: record 0 is the live CHR and
+record 1 is an unreachable REST URL.
+
+```bash
+centrs retrieve --group fanout-chr /system/resource --cdb-file $CDB
+```
+
+Outer envelope: `ok: true`, `data.summary = { total: 2, ok: 1, failed: 1 }`,
+`data.targets` is ordered by CDB `recordIndex`, and `meta.operation.kind` is
+`fanout`. The unreachable target is an inner `ok: false` envelope with
+`transport/connection-refused`.
+
+### F2. Empty / unknown group
+
+```bash
+centrs retrieve --group no-such-group /system/resource --cdb-file $CDB
+```
+
+Envelope: `ok: true`, `data.summary = { total: 0, ok: 0, failed: 0 }`,
+`data.targets = []`, and warnings include `cdb/empty-group`.
+
 ## Format
 
 ### 17. --format yaml

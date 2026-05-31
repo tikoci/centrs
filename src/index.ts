@@ -114,6 +114,9 @@ export {
 } from "./protocols/index.ts";
 export {
 	applyCommentKv,
+	type CdbGroupExpansion,
+	type CdbGroupResolveInput,
+	type CdbGroupTarget,
 	type CdbResolution,
 	type CdbResolveInput,
 	type CommentKvKey,
@@ -126,6 +129,7 @@ export {
 	commentKvAllowlist,
 	commentKvReservedKeys,
 	defaultPortForScheme,
+	expandCdbGroup,
 	parseBoolean,
 	parseCommentKv,
 	parseDuration,
@@ -147,9 +151,13 @@ export {
 	toCoreSource,
 } from "./resolver/index.ts";
 export {
+	buildResolvedRetrieve,
 	buildRetrieveErrorEnvelope,
+	buildRetrieveErrorEnvelopeFromResolved,
+	type ResolvedRetrieveRequest,
 	type RetrieveEnvelope,
 	type RetrieveErrorEnvelope,
+	type RetrieveGlobalContext,
 	type RetrieveOperationMeta,
 	type RetrieveOutputFormat,
 	type RetrieveRequest,
@@ -157,9 +165,31 @@ export {
 	type RetrieveSuccessEnvelope,
 	type RetrieveWarning,
 	renderRetrieveEnvelope,
+	resolveRetrieveGlobalContext,
+	resolveRetrieveRequest,
 	retrieve,
 	retrieveOutputFormats,
+	runResolvedRetrieve,
+	validateRetrieveRequestShape,
 } from "./retrieve.ts";
+export {
+	buildRetrieveFanoutErrorEnvelope,
+	isRetryableFanoutError,
+	RETRIEVE_FANOUT_BACKOFF_BASE_MS,
+	RETRIEVE_FANOUT_CONCURRENCY_DEFAULTS,
+	RETRIEVE_FANOUT_MAX_RETRIES,
+	RETRIEVE_FANOUT_RETRYABLE_CODES,
+	type RetrieveFanoutData,
+	type RetrieveFanoutEnvelope,
+	type RetrieveFanoutErrorEnvelope,
+	type RetrieveFanoutOperationMeta,
+	type RetrieveGroupInternals,
+	renderRetrieveFanoutEnvelope,
+	resolveFanoutConcurrency,
+	retrieveGroup,
+	runBoundedPool,
+	summarizeFanout,
+} from "./retrieve-fanout.ts";
 
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 

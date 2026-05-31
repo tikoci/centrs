@@ -50,6 +50,8 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
 | `--username` / `--password`         | Override CDB-resolved or env credentials.                                                 |
 | `--port <n>`                        | Override the transport port. native-api defaults to 8728 (TLS api-ssl when `--port 8729`).|
 | `--cdb-file` / `--cdb-password`     | Override CDB file location / decrypt password.                                            |
+| `--group <name>`                    | Fan out across every CDB target in WinBox group `<name>`. Mutually exclusive with a `<router>` positional. See **Group fanout**. |
+| `--concurrency <n>`                 | Max in-flight targets during fanout (integer ≥ 1). Defaults are transport-aware: `rest-api` 8, `native-api` 4. Rejected with `usage/invalid-concurrency` otherwise. |
 
 ## Validation
 
@@ -80,6 +82,53 @@ names must resolve through the MIB cache before any SNMP request is sent.
 
 `--max-results` truncation populates `meta.truncated = { returned, total, totalBytes }`
 and keeps `ok: true` with a warning entry — it is not an error.
+
+## Group fanout
+
+`--group <name>` loads the CDB once, expands every matching WinBox record in
+that group, de-dupes by CDB record index, and runs the same per-target retrieve
+pipeline for each target. `--group` replaces the `<router>` positional and is
+invalid with a separate router argument.
+
+Fanout output is one outer envelope whose `ok` reports orchestration success:
+`ok: false` is reserved for failures before reliable per-target results exist
+(for example invalid flags or CDB decrypt failure). Per-target success/failure
+is data, not metadata:
+
+```ts
+{
+  ok: true,
+  data: {
+    summary: { total: 2, ok: 1, failed: 1 },
+    targets: [
+      { ok: true, data: { ... }, meta: { target: { recordIndex: 0 }, ... } },
+      { ok: false, error: { code: "transport/connection-refused", ... }, meta: { target: { recordIndex: 1 }, ... } }
+    ]
+  },
+  warnings: [],
+  meta: {
+    target: {},
+    via: "rest-api", // null if inner targets disagree on protocol
+    settings: { ... },
+    operation: {
+      kind: "fanout",
+      group: "prod-edge",
+      concurrency: 8,
+      summary: { total: 2, ok: 1, failed: 1 },
+      request: { path: "/system/resource", validate: true, format: "json", ... }
+    }
+  }
+}
+```
+
+An empty or unknown group is `ok: true` with
+`data.summary = { total: 0, ok: 0, failed: 0 }`, `data.targets = []`, and a
+`cdb/empty-group` warning. Validation runs per target because RouterOS schemas
+can differ by version. Fanout retries each target up to two times only for
+`transport/network` and `transport/connection-closed`; REST 5xx failures are
+mapped to `transport/connection-closed`. It does not retry `routeros/*`,
+`validation/*`, `auth/*`, `cdb/*`, `target/*`, timeouts, DNS, TLS, or refused
+connections.
 
 ## Definition of done
 

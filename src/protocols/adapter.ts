@@ -284,6 +284,22 @@ class RestAdapter implements ProtocolAdapter {
 			});
 		}
 
+		if (status >= 500 && status <= 599) {
+			// A 5xx is a transient server/connection drop (RouterOS REST under
+			// fanout load drops a fraction of parallel POSTs). Classify it as a
+			// transport drop, not a `routeros/*` request failure, so the fanout
+			// retry allowlist can retry it without blanket-retrying real
+			// router-side rejections.
+			return new CentrsError({
+				code: "transport/connection-closed",
+				summary: `RouterOS REST returned HTTP ${status} for ${path}; the connection was dropped before a result.`,
+				remediation:
+					"Retry the request; if it persists, reduce fanout concurrency or check RouterOS REST service health.",
+				context: { via: protocol, host, port, path, status },
+				causeData: data ?? text,
+			});
+		}
+
 		// WP-1c: adopt mapRouterOsError here (REST `detail` -> normalized routeros/* code).
 		return new CentrsError({
 			code: "routeros/request-failed",

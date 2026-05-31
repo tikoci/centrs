@@ -16,10 +16,14 @@
  */
 
 export {
+	type CdbGroupExpansion,
+	type CdbGroupResolveInput,
+	type CdbGroupTarget,
 	type CdbResolution,
 	type CdbResolveInput,
 	type CommentKvOverrides,
 	coerceCommentKv,
+	expandCdbGroup,
 	type ResolverWarning,
 	resolveCdb,
 } from "./cdb.ts";

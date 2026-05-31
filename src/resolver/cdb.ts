@@ -26,6 +26,7 @@
  * (WP-2c / WP-1b); the shape below leaves a clean seam for them.
  */
 
+import type { WinBoxCdbEntry } from "../data/winbox-cdb.ts";
 import {
 	type DevicesWarning,
 	type LoadedCdb,
@@ -165,6 +166,93 @@ export async function resolveCdb(
 		}
 		throw error;
 	}
+}
+
+/** A single CDB group member resolved for fanout. */
+export interface CdbGroupTarget {
+	resolution: CdbResolution;
+	recordIndex: number;
+}
+
+export interface CdbGroupExpansion {
+	/** Group members ordered by CDB record index, de-duped. */
+	targets: readonly CdbGroupTarget[];
+	/** CDB load warnings plus a `cdb/empty-group` warning when empty. */
+	warnings: readonly ResolverWarning[];
+	/** True when no entry matched the group (unknown and empty are the same). */
+	empty: boolean;
+}
+
+export interface CdbGroupResolveInput {
+	group: string;
+	cdbFile?: string;
+	cdbPassword?: string;
+}
+
+/**
+ * Expand a `--group` selector into N resolved CDB members for fanout. The CDB
+ * is loaded + decrypted ONCE; every matching entry is turned into a
+ * {@link CdbResolution} (identity + comment-kv overrides) ordered by record
+ * index and de-duped by index. CDB groups are derived from entries, so an
+ * unknown group is indistinguishable from an empty one — both return
+ * `empty: true` with a `cdb/empty-group` warning rather than an error. A decrypt
+ * or parse failure throws (the fanout's outer envelope reports it).
+ */
+export async function expandCdbGroup(
+	input: CdbGroupResolveInput,
+	env: Record<string, string | undefined>,
+): Promise<CdbGroupExpansion> {
+	const cdb: LoadedCdb = await loadCdb({
+		cdbFile: input.cdbFile,
+		cdbPassword: input.cdbPassword,
+		env,
+	});
+
+	const warnings: ResolverWarning[] = cdb.warnings.map(warningFromDevices);
+	const targets: CdbGroupTarget[] = [];
+	const seen = new Set<number>();
+
+	for (let index = 0; index < cdb.entries.length; index += 1) {
+		const entry = cdb.entries[index];
+		if (!entry || entry.group !== input.group || seen.has(index)) {
+			continue;
+		}
+		seen.add(index);
+		targets.push({
+			recordIndex: index,
+			resolution: resolutionFromEntry(entry, index),
+		});
+	}
+
+	targets.sort((a, b) => a.recordIndex - b.recordIndex);
+
+	if (targets.length === 0) {
+		warnings.push({
+			code: "cdb/empty-group",
+			message: `No CDB entries matched group "${input.group}".`,
+			context: { group: input.group },
+		});
+		return { targets: [], warnings, empty: true };
+	}
+
+	return { targets, warnings, empty: false };
+}
+
+function resolutionFromEntry(
+	entry: WinBoxCdbEntry,
+	recordIndex: number,
+): CdbResolution {
+	const recordWarnings: ResolverWarning[] = [];
+	const overrides = coerceCommentKv(entry.comment, recordIndex, recordWarnings);
+	return {
+		target: entry.target,
+		name: entry.target,
+		username: entry.user,
+		password: entry.password,
+		recordIndex,
+		overrides,
+		warnings: recordWarnings,
+	};
 }
 
 /**

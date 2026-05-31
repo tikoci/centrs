@@ -7,11 +7,14 @@
 import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
 import {
 	buildRetrieveErrorEnvelope,
+	buildRetrieveFanoutErrorEnvelope,
 	describeCentrs,
 	type RetrieveOutputFormat,
 	type RetrieveRequest,
 	renderRetrieveEnvelope,
+	renderRetrieveFanoutEnvelope,
 	retrieve,
+	retrieveGroup,
 	retrieveOutputFormats,
 } from "../index.ts";
 import {
@@ -22,7 +25,8 @@ import {
 
 export const retrieveCommand: CliCommandMetadata = {
 	name: "retrieve",
-	usage: "centrs retrieve <target> <routeros-path> [flags]",
+	usage:
+		"centrs retrieve <target> <routeros-path> [flags] | centrs retrieve --group <name> <routeros-path> [flags]",
 	summary:
 		"Read RouterOS values through the shared core using the selected protocol.",
 	options: [
@@ -31,6 +35,18 @@ export const retrieveCommand: CliCommandMetadata = {
 			valueName: "<protocol>",
 			description:
 				"Pin the protocol selector. Defaults to `rest-api` for retrieve.",
+		},
+		{
+			flag: "--group",
+			valueName: "<name>",
+			description:
+				"Fan out over every CDB record in the group. Replaces the <target> positional.",
+		},
+		{
+			flag: "--concurrency",
+			valueName: "<n>",
+			description:
+				"Bounded worker-pool size for `--group` fanout (REST 8, native-api 4 by default).",
 		},
 		{
 			flag: "--host",
@@ -123,25 +139,49 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 			return 0;
 		}
 
-		const envelope = await retrieve(request);
-		const resolvedFormat = envelope.meta.operation?.request.format ?? "json";
-		const output = renderRetrieveEnvelope(envelope, resolvedFormat, {
-			verbose: request.verbose,
-		});
+		const envelope = request.group
+			? await retrieveGroup(request)
+			: await retrieve(request);
+		const resolvedFormat =
+			(
+				envelope.meta.operation as {
+					request?: { format?: RetrieveOutputFormat };
+				}
+			)?.request?.format ?? "json";
+		const output = request.group
+			? renderRetrieveFanoutEnvelope(
+					envelope as Parameters<typeof renderRetrieveFanoutEnvelope>[0],
+					resolvedFormat,
+					{ verbose: request.verbose },
+				)
+			: renderRetrieveEnvelope(
+					envelope as Parameters<typeof renderRetrieveEnvelope>[0],
+					resolvedFormat,
+					{ verbose: request.verbose },
+				);
 		console.log(output);
 		return 0;
 	} catch (error) {
 		const format = inferRequestedFormat(args, request);
 		if (format === "json" || format === "yaml") {
-			const envelope = buildRetrieveErrorEnvelope(
-				request ?? fallbackRequestFromArgs(args),
-				error,
-			);
-			console.error(
-				renderRetrieveEnvelope(envelope, format, {
-					verbose: request?.verbose ?? false,
-				}),
-			);
+			if (request?.group) {
+				const envelope = buildRetrieveFanoutErrorEnvelope(request, error);
+				console.error(
+					renderRetrieveFanoutEnvelope(envelope, format, {
+						verbose: request?.verbose ?? false,
+					}),
+				);
+			} else {
+				const envelope = buildRetrieveErrorEnvelope(
+					request ?? fallbackRequestFromArgs(args),
+					error,
+				);
+				console.error(
+					renderRetrieveEnvelope(envelope, format, {
+						verbose: request?.verbose ?? false,
+					}),
+				);
+			}
 		} else {
 			console.error(
 				formatCentrsErrorText(
@@ -242,6 +282,15 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveRequest & {
 			case "--cdb-password":
 				request.cdbPassword = expectValue(args, ++index, arg);
 				break;
+			case "--group":
+				request.group = expectValue(args, ++index, arg);
+				break;
+			case "--concurrency":
+				request.concurrency = Number.parseInt(
+					expectValue(args, ++index, arg),
+					10,
+				);
+				break;
 			case "--validate":
 				request.validate = true;
 				break;
@@ -261,6 +310,21 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveRequest & {
 	}
 
 	if (request.help) {
+		return request;
+	}
+
+	if (request.group !== undefined) {
+		if (positional.length < 1) {
+			throw new Error(
+				"`centrs retrieve --group <name>` requires a <routeros-path>.",
+			);
+		}
+		if (positional.length > 1) {
+			throw new Error(
+				"`centrs retrieve --group <name>` takes only a <routeros-path>; the group replaces the <target> positional.",
+			);
+		}
+		request.path = positional[0] ?? "";
 		return request;
 	}
 
