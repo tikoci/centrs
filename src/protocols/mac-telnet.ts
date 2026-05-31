@@ -18,7 +18,7 @@
  * here is anchored by scripted-peer unit tests.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import { CentrsError } from "../errors.ts";
 
 /** UDP port MAC-Telnet listens on. */
@@ -342,7 +342,7 @@ export class MacTelnetSession {
 
 	constructor(options: MacTelnetSessionOptions) {
 		this.options = options;
-		this.sessionKey = options.sessionKey ?? Math.floor(Math.random() * 0x10000);
+		this.sessionKey = options.sessionKey ?? randomInt(0x10000);
 	}
 
 	/** Current session key. */
