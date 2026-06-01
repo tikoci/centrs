@@ -460,33 +460,67 @@ describe("devices mutation", () => {
 		}
 	});
 
-	test("blocks every mutation against an encrypted CDB", async () => {
+	test("round-trips add/edit/remove through an encrypted CDB", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "centrs-mutate-enc-"));
 		const path = join(dir, "winbox.cdb");
 		try {
 			const open = encodeOpenWinBoxCdb([adminRecord()]);
 			await writeFile(path, encryptWinBoxCdb(open, "centrs-test"));
-			const cdb = await loadCdb({
+			let cdb = await loadCdb({
 				cdbFile: path,
 				cdbPassword: "centrs-test",
 				env: {},
 			});
 			expect(cdb.encrypted).toBe(true);
 
-			const addError = await catchError(() =>
-				addDevice({ cdb, target: "198.51.100.20", user: "u", password: "p" }),
-			);
-			expect(addError.code).toBe("cdb/encrypted-write-unverified");
+			const addResult = await addDevice({
+				cdb,
+				target: "198.51.100.20",
+				user: "u",
+				password: "p",
+			});
+			expect(addResult.ok).toBe(true);
 
-			const editError = await catchError(() =>
-				editDevice({ cdb, target: "192.0.2.5", user: "x" }),
-			);
-			expect(editError.code).toBe("cdb/encrypted-write-unverified");
+			cdb = await loadCdb({
+				cdbFile: path,
+				cdbPassword: "centrs-test",
+				env: {},
+			});
+			expect(cdb.encrypted).toBe(true);
+			expect(
+				cdb.entries.some((entry) => entry.target === "198.51.100.20"),
+			).toBe(true);
 
-			const removeError = await catchError(() =>
-				removeDevice({ cdb, target: "192.0.2.5" }),
+			const editResult = await editDevice({
+				cdb,
+				target: "192.0.2.5",
+				user: "rotated",
+			});
+			expect(editResult.ok).toBe(true);
+
+			cdb = await loadCdb({
+				cdbFile: path,
+				cdbPassword: "centrs-test",
+				env: {},
+			});
+			expect(showDevice({ cdb, target: "192.0.2.5" }).data.entry.user).toBe(
+				"rotated",
 			);
-			expect(removeError.code).toBe("cdb/encrypted-write-unverified");
+
+			const removeResult = await removeDevice({
+				cdb,
+				target: "192.0.2.5",
+			});
+			expect(removeResult.ok).toBe(true);
+
+			cdb = await loadCdb({
+				cdbFile: path,
+				cdbPassword: "centrs-test",
+				env: {},
+			});
+			expect(cdb.entries.some((entry) => entry.target === "192.0.2.5")).toBe(
+				false,
+			);
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}

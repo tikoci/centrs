@@ -141,16 +141,16 @@ centrs devices add 198.51.100.20 --user u --password p \
 
 Errors with `cdb/password-required` (load fails before any mutation).
 
-### 14. Add against encrypted CDB with password (write blocked)
+### 14. Add against encrypted CDB with password
 
 ```bash
 centrs devices add 198.51.100.20 --user u --password p \
   --cdb-file $CDB_ENCRYPTED --cdb-password centrs-test
 ```
 
-Errors with `cdb/encrypted-write-unverified`. The encrypted CDB loads and
-reads fine, but writes are blocked until an encrypted round-trip is verified
-safe; no file mutation, no backup written.
+`ok: true`. The write layer decrypts → mutates → re-encrypts under the same
+password with a fresh salt, then atomically renames over the original. The
+backup (`.bak.<timestamp>`) is the verbatim prior ciphertext.
 
 ## edit
 

@@ -79,12 +79,13 @@ never overwritten. The skip is reported in
 `meta.operation.saved.records[].action = "skipped-existing"`; hand-curated
 records win.
 
-### 7. Save against an encrypted CDB is blocked
+### 7. Save against an encrypted CDB
 
 ```bash
 centrs discover --save --cdb-file $ENC_CDB --cdb-password centrs-test
 ```
 
-Errors with `cdb/encrypted-write-unverified`. Reading an encrypted CDB stays
-supported; encrypted writes are not yet verified to round-trip and are
-refused rather than risk corrupting the file WinBox reads.
+`ok: true`. The write layer decrypts the CDB under the supplied password,
+appends new neighbors, and re-encrypts with a fresh salt before the atomic
+rename. The `.bak.<timestamp>` beside the CDB is the verbatim prior
+ciphertext.

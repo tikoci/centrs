@@ -12,8 +12,11 @@
  *   4. `rename()` the temp file over the target (atomic on one filesystem).
  *
  * Serialization reuses {@link encodeOpenWinBoxCdb}, so unknown-tcode `rawTail`
- * fields round-trip byte-for-byte. Encryption decisions (block / re-encrypt)
- * live with the caller (`src/devices.ts`); this module only writes open bytes.
+ * fields round-trip byte-for-byte. When `encryptWith` is supplied, the open
+ * bytes are wrapped via {@link encryptWinBoxCdb} (fresh random salt per write
+ * unless the caller pins one for tests) before they hit disk; the backup
+ * snapshot copies the existing on-disk bytes verbatim, so an encrypted CDB
+ * stays encrypted across backup + write.
  */
 
 import {
@@ -26,7 +29,11 @@ import {
 	unlink,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { encodeOpenWinBoxCdb, type WinBoxCdbRecord } from "./winbox-cdb.ts";
+import {
+	encodeOpenWinBoxCdb,
+	encryptWinBoxCdb,
+	type WinBoxCdbRecord,
+} from "./winbox-cdb.ts";
 
 /** Default number of timestamped backups retained next to the CDB. */
 export const WINBOX_CDB_DEFAULT_BACKUP_RETENTION = 5;
@@ -41,6 +48,14 @@ export interface WriteWinBoxCdbOptions {
 	now?: Date;
 	/** Skip the backup snapshot entirely (used for first-time creation). */
 	skipBackup?: boolean;
+	/**
+	 * When set, the serialized open bytes are wrapped via {@link encryptWinBoxCdb}
+	 * before atomic write. `salt` is optional — omit to let the codec roll a
+	 * fresh 32-byte salt per write (the normal path); pin it only in tests that
+	 * need byte-exact output. The caller is responsible for matching the source
+	 * password (centrs reads it from the loaded CDB's settings).
+	 */
+	encryptWith?: { password: string; salt?: Uint8Array };
 }
 
 export interface WriteWinBoxCdbResult {
@@ -111,7 +126,13 @@ export async function writeWinBoxCdb(
 	const dir = dirname(target);
 	await mkdir(dir, { recursive: true });
 
-	const bytes = encodeOpenWinBoxCdb(records);
+	const bytes = options.encryptWith
+		? encryptWinBoxCdb(
+				encodeOpenWinBoxCdb(records),
+				options.encryptWith.password,
+				options.encryptWith.salt ? { salt: options.encryptWith.salt } : {},
+			)
+		: encodeOpenWinBoxCdb(records);
 
 	let backupPath: string | undefined;
 	const prunedBackups: string[] = [];

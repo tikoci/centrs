@@ -48,7 +48,7 @@ export const devicesCommand: CliCommandMetadata = {
 			flag: "--cdb-password",
 			valueName: "<secret>",
 			description:
-				"Decrypt an encrypted CDB. Falls back to `CENTRS_CDB_PASSWORD`. Encrypted CDBs are read-only.",
+				"Decrypt an encrypted CDB. Falls back to `CENTRS_CDB_PASSWORD`. Also used to re-encrypt on writes.",
 		},
 		{
 			flag: "--via",

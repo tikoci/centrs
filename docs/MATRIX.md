@@ -39,8 +39,9 @@ fixture built in-test from the known CDB primitives (open + encrypted via
 `--cdb-password`). Every example in `commands/devices/examples.md` is green via
 `bun run test:integration` (`test/integration/devices.test.ts`); the command
 performs no network IO, so its `CHR-passed` evidence is the fixture-backed
-integration run rather than a booted CHR. Encrypted-CDB writes remain blocked
-(`cdb/encrypted-write-unverified`). Data sources (CDB, ARP cache, MNDP cache,
+integration run rather than a booted CHR. Encrypted-CDB writes round-trip
+through the write layer's `encryptWith` option using the password loaded from
+settings. Data sources (CDB, ARP cache, MNDP cache,
 `dude.db` import) and their phasing live in `commands/devices/README.md`.
 
 `discover` is `coded`: the MNDP wire codec (`src/data/mndp.ts`), the

@@ -12,9 +12,9 @@
  *
  * `--save` reuses WP-2a's {@link addDevice}: discovered records are written
  * through the atomic CDB writer with provenance in the comment kv-soup
- * (`source=mndp`) and `group=discovered`. Encrypted CDBs stay read-only — the
- * write layer surfaces `cdb/encrypted-write-unverified` and this module does
- * not bypass it.
+ * (`source=mndp`) and `group=discovered`. Encrypted CDBs round-trip through
+ * the write layer's `encryptWith` option (the password loaded from settings)
+ * so discovered neighbors land on disk re-encrypted under the same secret.
  */
 
 import { createSocket } from "node:dgram";
@@ -547,9 +547,9 @@ function discoverMeta(
 /**
  * Run an MNDP discovery: listen for `timeoutMs`, optionally persist the result
  * with `save`, and return a canonical envelope whose `data.neighbors` are
- * sorted deterministically by MAC. A `save` against an encrypted CDB surfaces
- * `cdb/encrypted-write-unverified` as an error envelope (the write is blocked,
- * not bypassed).
+ * sorted deterministically by MAC. A `save` against an encrypted CDB re-encrypts
+ * with the password loaded from settings via the write layer's `encryptWith`
+ * option.
  */
 export async function discover(
 	options: DiscoverOptions = {},

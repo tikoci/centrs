@@ -9,8 +9,9 @@ mutation surface (`add`/`edit`/`set`/`remove`), ambiguity / `--match`, and the
 provenance/override examples are green via `bun run test:integration`
 (`test/integration/devices.test.ts`, fixture-backed — `devices` does no network
 IO, so its evidence is the integration run, not a booted CHR). Encrypted-CDB
-**writes** remain blocked (`cdb/encrypted-write-unverified`); encrypted **reads**
-work with `--cdb-password`. See `docs/MATRIX.md` for the matrix row.
+**writes** round-trip through decrypt → mutate → re-encrypt under the loaded
+password; encrypted **reads** work with `--cdb-password`. See
+`docs/MATRIX.md` for the matrix row.
 
 `devices` does not use a transport in the protocol sense and does not contact a
 RouterOS device in phase 1. Its sources are:
@@ -161,13 +162,13 @@ All writes go through one helper (`writeWinBoxCdb`) that:
 5. `rename()`s over the original (atomic on POSIX), so a crash never leaves a
    partially-written CDB.
 
+Encrypted CDBs: the write layer decrypts on load, mutates the open record set,
+then re-encrypts with the same password loaded from settings before the atomic
+rename. A fresh salt is rolled on every write; the backup is the verbatim prior
+ciphertext.
+
 Refusals:
 
-- Writing to an encrypted CDB is **blocked** with
-  `cdb/encrypted-write-unverified`. Encrypted-CDB writes are not yet verified
-  to round-trip byte-identically through WinBox, and a bad write would corrupt
-  the file. Make the edit in WinBox until a manual round-trip is verified;
-  *reading* encrypted CDBs stays supported.
 - Writing to an encrypted CDB without `--cdb-password` /
   `CENTRS_CDB_PASSWORD` still fails earlier at load with
   `cdb/password-required`.
@@ -224,25 +225,23 @@ member list and the group(s) that expanded into it).
 
 ## Open questions (remaining work beyond the current `CHR-passed`)
 
-`devices` is `CHR-passed` for reads (open and encrypted CDBs) and for writes to
-**unencrypted** CDBs. The comment-kv grammar is settled — see "Comment kv-soup"
+`devices` is `CHR-passed` for reads and for writes against both unencrypted and
+encrypted CDBs. The comment-kv grammar is settled — see "Comment kv-soup"
 above and `test/unit/comment-kv.test.ts`. These remain open:
 
 | Question | Affects | Notes |
 | --- | --- | --- |
 | ARP resolver test scheme | retrieve / execute when target is a MAC | Need deterministic fixtures per OS plus one live same-L2 proof before relying on ARP in integration. |
-| WinBox compatibility after salt rotation | encrypted-CDB writes | Encrypted writes stay blocked (`cdb/encrypted-write-unverified`) until a manual round-trip ("open in WinBox after a centrs write") plus the salt-rotation fixture test (centrs write → centrs read → bytes-identical-modulo-salt) both pass. |
 
 When a row is answered, fold it into this README and delete the row.
 
 ## Residual risks
 
-- **Encrypted-CDB writes are blocked, not implemented.** Until a manual
-  "WinBox can still open this file" round-trip is verified, every mutation
-  against an encrypted CDB fails fast with `cdb/encrypted-write-unverified`.
-  Reads are unaffected. Re-enabling encrypted writes needs the salt-rotation
-  fixture test (centrs write → centrs read → bytes-identical-modulo-salt) plus
-  the manual WinBox verification.
+- **Encrypted-CDB writes have not been verified against WinBox.** centrs
+  decrypts → mutates → re-encrypts with a fresh salt, and the bytes round-trip
+  through centrs' own decoder. The "open in WinBox after a centrs write"
+  manual proof still needs to happen; until then, treat encrypted writes as
+  centrs-only and keep the backup the write layer leaves behind.
 - **Unknown-tcode preservation is opaque past the first unknown tcode.** The
   decoder captures one `rawTail` blob; fields that follow the unknown tcode
   inside the same record are kept inside that blob and cannot be surfaced

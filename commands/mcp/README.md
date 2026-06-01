@@ -58,9 +58,10 @@ If `centrs` is already installed on `PATH`, the equivalent command is:
 }
 ```
 
-Use `CENTRS_CDB_PASSWORD` only when reading an encrypted CDB. Encrypted CDB reads
-work; encrypted CDB writes remain blocked until the WinBox round-trip is
-verified. Prefer an unencrypted throwaway CDB for bench harnesses and CI.
+Use `CENTRS_CDB_PASSWORD` to read or write an encrypted CDB. The write layer
+decrypts under the loaded password, mutates the record set, and re-encrypts with
+a fresh salt before the atomic rename. Prefer an unencrypted throwaway CDB for
+bench harnesses and CI.
 
 ## Why a scoped surface (grounding)
 

@@ -53,7 +53,7 @@ tested without a router (crafted packet fixtures + a loopback socket).
 | `--group`        | `discovered`  | First-class CDB group assigned to saved entries.     |
 | `--port`         | `5678`        | UDP port to bind for MNDP.                            |
 | `--cdb-file`     | resolved CDB  | CDB path override for `--save`.                      |
-| `--cdb-password` | env/none      | Decrypt an encrypted CDB; encrypted CDBs are read-only. |
+| `--cdb-password` | env/none      | Decrypt an encrypted CDB; also used to re-encrypt on `--save`. |
 | `--format`       | `text`        | `text`, `json`, or `yaml`; renders the same envelope. |
 
 `--save` without `--timeout` uses the default 60s window.
@@ -87,9 +87,10 @@ tested without a router (crafted packet fixtures + a loopback socket).
   **skipped, never overwritten** — hand-curated records win. Only new targets
   are added. Writes reuse the `devices` atomic write path (`addDevice`); the CDB
   is reloaded between writes so each add sees the prior additions.
-- **Encrypted CDBs:** `--save` against an encrypted CDB surfaces
-  `cdb/encrypted-write-unverified` from the write layer (the write is blocked,
-  not bypassed). Reading an encrypted CDB stays supported.
+- **Encrypted CDBs:** `--save` against an encrypted CDB decrypts the file under
+  the loaded password, appends new neighbors, and re-encrypts with a fresh salt
+  before the atomic rename. The backup beside the CDB is the verbatim prior
+  ciphertext. Reading an encrypted CDB stays supported.
 
 ## Errors
 
@@ -99,7 +100,6 @@ tested without a router (crafted packet fixtures + a loopback socket).
 - `mndp/malformed` — the pure codec rejects a structurally invalid packet
   (too-short header or a TLV length that overruns the buffer). The listener
   ignores such datagrams rather than failing the whole scan.
-- `cdb/encrypted-write-unverified` — `--save` against an encrypted CDB.
 
 ## L2 validation policy
 

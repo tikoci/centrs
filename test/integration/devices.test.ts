@@ -674,11 +674,10 @@ describe("centrs devices (read-only)", () => {
 		expect(await listBackups(cdbPath)).toEqual([]);
 	});
 
-	test("example 14 add encrypted CDB with password refuses unverified write", async () => {
+	test("example 14 add encrypted CDB with password round-trips through decrypt/encrypt", async () => {
 		const cdbPath = await copyCdbFixture("example-14-encrypted-password", {
 			encrypted: true,
 		});
-		const before = await readFile(cdbPath);
 		const result = await runWithCapture([
 			"devices",
 			"add",
@@ -693,11 +692,28 @@ describe("centrs devices (read-only)", () => {
 			ENCRYPTED_PASSWORD,
 			"--json",
 		]);
-		expect(result.exitCode).toBe(1);
-		const envelope = JSON.parse(result.stderr) as { error: { code: string } };
-		expect(envelope.error.code).toBe("cdb/encrypted-write-unverified");
-		expect(await readFile(cdbPath)).toEqual(before);
-		expect(await listBackups(cdbPath)).toEqual([]);
+		expect(result.exitCode).toBe(0);
+		const envelope = JSON.parse(result.stdout) as {
+			data: { backupPath?: string };
+		};
+		expect(envelope.data.backupPath).toBeDefined();
+		expect(await listBackups(cdbPath)).toHaveLength(1);
+
+		const show = await runWithCapture([
+			"devices",
+			"show",
+			"198.51.100.20",
+			"--cdb-file",
+			cdbPath,
+			"--cdb-password",
+			ENCRYPTED_PASSWORD,
+			"--json",
+		]);
+		expect(show.exitCode).toBe(0);
+		const shown = JSON.parse(show.stdout) as {
+			data: { entry: { user: string } };
+		};
+		expect(shown.data.entry.user).toBe("u");
 	});
 
 	test("example 15 edit credentials preserves other fields and writes backup", async () => {

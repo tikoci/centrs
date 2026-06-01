@@ -56,7 +56,7 @@ export const discoverCommand: CliCommandMetadata = {
 			flag: "--cdb-password",
 			valueName: "<secret>",
 			description:
-				"`--save` password for an encrypted CDB. Encrypted CDBs are read-only.",
+				"`--save` password for an encrypted CDB. Used to decrypt the existing CDB and re-encrypt on write.",
 		},
 		{
 			flag: "--format",

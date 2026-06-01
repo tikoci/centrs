@@ -867,18 +867,17 @@ function preservedTags(
 	return fields.map((field) => field.tag);
 }
 
-/** Refuse any write against a CDB that was loaded from encrypted bytes. */
-function assertWritable(cdb: LoadedCdb): void {
-	if (cdb.encrypted) {
-		throw new CentrsError({
-			code: "cdb/encrypted-write-unverified",
-			summary:
-				"Refusing to write an encrypted CDB: encrypted-CDB writes are not yet verified to round-trip safely, and a bad write would corrupt the file WinBox reads.",
-			remediation:
-				"Make this change in WinBox for now; reading encrypted CDBs stays supported, and centrs will enable encrypted writes once a manual byte round-trip is verified.",
-			context: { cdbFile: cdb.settings.cdbFile.value },
-		});
+/**
+ * When the CDB was loaded from encrypted bytes, derive the `encryptWith` option
+ * for {@link writeWinBoxCdb} from the password we already have in settings, so
+ * the round-trip re-encrypts with the same secret. Returns `undefined` for an
+ * open CDB so the writer keeps emitting open bytes.
+ */
+function encryptWithFor(cdb: LoadedCdb): { password: string } | undefined {
+	if (!cdb.encrypted) {
+		return undefined;
 	}
+	return { password: cdb.settings.cdbPassword.value };
 }
 
 function ambiguousTargetError(
@@ -929,10 +928,14 @@ async function persistRecords(
 	preserved: readonly number[] | undefined,
 	warnings: readonly DevicesWarning[],
 ): Promise<DevicesMutationEnvelope> {
+	const encryptWith = encryptWithFor(cdb);
+	const writeOptions: WriteWinBoxCdbOptions | undefined = encryptWith
+		? { ...(options ?? {}), encryptWith }
+		: options;
 	const written = await writeWinBoxCdb(
 		cdb.settings.cdbFile.value,
 		records,
-		options,
+		writeOptions,
 	);
 	const data: DevicesMutationData = {
 		action,
@@ -977,7 +980,6 @@ export interface AddDeviceArgs {
 export async function addDevice(
 	args: AddDeviceArgs,
 ): Promise<DevicesMutationEnvelope> {
-	assertWritable(args.cdb);
 	const matches = matchEntries(args.cdb.entries, args.target);
 	if (matches.length > 1) {
 		throw ambiguousTargetError(args.target, matches);
@@ -1049,7 +1051,6 @@ export interface EditDeviceArgs {
 export async function editDevice(
 	args: EditDeviceArgs,
 ): Promise<DevicesMutationEnvelope> {
-	assertWritable(args.cdb);
 	const match = requireSingleMatch(args.cdb.entries, args.target);
 	const prior = match.entry;
 	const carried = extraFields(prior.record);
@@ -1112,7 +1113,6 @@ const RESERVED_SET = new Set<string>(commentKvReservedKeys);
 export async function setDeviceCommentKv(
 	args: SetDeviceCommentKvArgs,
 ): Promise<DevicesMutationEnvelope> {
-	assertWritable(args.cdb);
 	const match = requireSingleMatch(args.cdb.entries, args.target);
 
 	const reserved = args.updates
@@ -1197,7 +1197,6 @@ export interface RemoveDeviceArgs {
 export async function removeDevice(
 	args: RemoveDeviceArgs,
 ): Promise<DevicesMutationEnvelope> {
-	assertWritable(args.cdb);
 	const match = requireSingleMatch(args.cdb.entries, args.target);
 	const records = args.cdb.entries
 		.map((entry) => entry.record)

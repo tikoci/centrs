@@ -272,7 +272,7 @@ describe("discover --save", () => {
 		}
 	});
 
-	test("surfaces cdb/encrypted-write-unverified for an encrypted CDB", async () => {
+	test("persists discovered neighbors into an encrypted CDB", async () => {
 		const dir = await scratchCdbDir("centrs-discover-enc");
 		const path = join(dir, "winbox.cdb");
 		try {
@@ -289,11 +289,19 @@ describe("discover --save", () => {
 				]),
 			});
 
-			expect(envelope.ok).toBe(false);
-			if (envelope.ok) {
+			expect(envelope.ok).toBe(true);
+			if (!envelope.ok) {
 				return;
 			}
-			expect(envelope.error.code).toBe("cdb/encrypted-write-unverified");
+
+			const cdb = await loadCdb({
+				cdbFile: path,
+				cdbPassword: "centrs-test",
+				env: {},
+			});
+			expect(cdb.encrypted).toBe(true);
+			const targets = cdb.entries.map((entry) => entry.target).sort();
+			expect(targets).toEqual(["192.0.2.50", "198.51.100.1"]);
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}
