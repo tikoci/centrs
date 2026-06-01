@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { loadCdb } from "../../src/devices.ts";
 import { resolveMcpConfig } from "../../src/mcp/config.ts";
 import {
 	handleDevices,
+	handleDiscover,
 	handleExecute,
 	handleExplain,
 	handleRetrieve,
@@ -233,7 +235,7 @@ describe("handleDevices (offline registry reads)", () => {
 
 	test("show returns a registered device", async () => {
 		const { path, cleanup } = await makeMcpTestCdb([
-			{ target: "a", group: "edge" },
+			{ target: "a", group: "edge", password: "do-not-leak" },
 		]);
 		try {
 			const env = await handleDevices(
@@ -241,6 +243,180 @@ describe("handleDevices (offline registry reads)", () => {
 				config(path),
 			);
 			expect(env.ok).toBe(true);
+			if (!env.ok) {
+				return;
+			}
+			const data = env.data as {
+				entry: { password?: string; passwordSet?: boolean };
+			};
+			expect(data.entry.password).toBeUndefined();
+			expect(data.entry.passwordSet).toBe(true);
+		} finally {
+			await cleanup();
+		}
+	});
+});
+
+describe("handleDevices (CDB mutations)", () => {
+	test("requires confirmation before adding a device", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([]);
+		try {
+			const env = await handleDevices(
+				{ op: "add", target: "new-box" },
+				config(path),
+			);
+			expect(env.ok).toBe(false);
+			if (env.ok) {
+				return;
+			}
+			expect(env.error.code).toBe("usage/confirmation-required");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("adds a device without returning its password", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([]);
+		try {
+			const env = await handleDevices(
+				{
+					op: "add",
+					target: "new-box",
+					user: "admin",
+					password: "secret-password",
+					group: "edge",
+					comment: "mcp=ro",
+					confirm: true,
+				},
+				config(path),
+			);
+			expect(env.ok).toBe(true);
+			if (!env.ok) {
+				return;
+			}
+			const data = env.data as {
+				entry: { target: string; password?: string; passwordSet?: boolean };
+			};
+			expect(data.entry.target).toBe("new-box");
+			expect(data.entry.password).toBeUndefined();
+			expect(data.entry.passwordSet).toBe(true);
+
+			const cdb = await loadCdb({ cdbFile: path, env: {} });
+			expect(cdb.entries.map((entry) => entry.target)).toEqual(["new-box"]);
+			expect(cdb.entries[0]?.password).toBe("secret-password");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("sets comment kv-soup through the mutation path", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([
+			{ target: "box", comment: "mcp=ro" },
+		]);
+		try {
+			const env = await handleDevices(
+				{
+					op: "set",
+					target: "box",
+					updates: [{ key: "mcp", value: "rw" }],
+					confirm: true,
+				},
+				config(path),
+			);
+			expect(env.ok).toBe(true);
+
+			const cdb = await loadCdb({ cdbFile: path, env: {} });
+			expect(cdb.entries[0]?.comment).toBe("mcp=rw");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("edits first-class CDB fields through the mutation path", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([
+			{ target: "box", user: "old", group: "edge" },
+		]);
+		try {
+			const env = await handleDevices(
+				{
+					op: "edit",
+					target: "box",
+					user: "new",
+					group: "core",
+					confirm: true,
+				},
+				config(path),
+			);
+			expect(env.ok).toBe(true);
+
+			const cdb = await loadCdb({ cdbFile: path, env: {} });
+			expect(cdb.entries[0]?.user).toBe("new");
+			expect(cdb.entries[0]?.group).toBe("core");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("removes a device after confirmation", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([
+			{ target: "old-box" },
+			{ target: "kept-box" },
+		]);
+		try {
+			const env = await handleDevices(
+				{ op: "remove", target: "old-box", confirm: true },
+				config(path),
+			);
+			expect(env.ok).toBe(true);
+
+			const cdb = await loadCdb({ cdbFile: path, env: {} });
+			expect(cdb.entries.map((entry) => entry.target)).toEqual(["kept-box"]);
+		} finally {
+			await cleanup();
+		}
+	});
+});
+
+describe("handleDiscover (CDB save gate)", () => {
+	test("requires confirmation before discover save mutates the CDB", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([]);
+		try {
+			const env = await handleDiscover(
+				{ save: true, timeout: 1, port: 0, sendRefresh: false },
+				config(path),
+			);
+			expect(env.ok).toBe(false);
+			if (env.ok) {
+				return;
+			}
+			expect(env.error.code).toBe("usage/confirmation-required");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("runs a confirmed save path without returning credentials", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([]);
+		try {
+			const env = await handleDiscover(
+				{
+					save: true,
+					confirm: true,
+					timeout: 1,
+					port: 0,
+					sendRefresh: false,
+				},
+				config(path),
+			);
+			expect(env.ok).toBe(true);
+			if (!env.ok) {
+				return;
+			}
+			const data = env.data as { count?: number; neighbors?: unknown[] };
+			expect(data.count).toBe(0);
+			expect(data.neighbors).toEqual([]);
+			const meta = env.meta as { operation?: { saved?: { added?: number } } };
+			expect(meta.operation?.saved?.added).toBe(0);
 		} finally {
 			await cleanup();
 		}

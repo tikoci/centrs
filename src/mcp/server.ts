@@ -19,9 +19,11 @@ import {
 } from "./resources.ts";
 import {
 	devicesInputShape,
+	discoverInputShape,
 	executeInputShape,
 	explainInputShape,
 	handleDevices,
+	handleDiscover,
 	handleExecute,
 	handleExplain,
 	handleRetrieve,
@@ -38,14 +40,17 @@ const SERVER_INSTRUCTIONS = [
 	"- Tools act only on devices registered in the CDB (the allowlist). An",
 	"  unregistered target is rejected with `cdb/target-not-registered`; register",
 	"  it via centrs_devices (op add) first. Credentials live in the CDB and are",
-	"  never passed through this interface.",
-	"- Writes are double-gated: the device's CDB record must be `mcp=rw` (else",
-	"  `cdb/write-not-permitted`) and centrs_execute must be called with",
-	"  confirm:true (else `usage/confirmation-required`).",
+	"  never returned by this interface.",
+	"- RouterOS writes are double-gated: the device's CDB record must be `mcp=rw`",
+	"  (else `cdb/write-not-permitted`) and centrs_execute must be called with",
+	"  confirm:true (else `usage/confirmation-required`). CDB mutations through",
+	"  centrs_devices and centrs_discover save also require confirm:true and never",
+	"  return saved passwords.",
 	"",
 	"Recommended flow: centrs_explain (offline canonicalize) → centrs_validate",
 	"(dry-run :parse + /console/inspect, never mutates) → centrs_retrieve (read)",
-	"or centrs_execute (run). Prefer validate before any write.",
+	"or centrs_execute (run). Use centrs_discover to find MNDP neighbors and",
+	"centrs_devices to curate the CDB allowlist. Prefer validate before any write.",
 	"",
 	"Resources:",
 	`- ${DEVICES_RESOURCE_URI}: the known devices on the allowlist and each`,
@@ -138,13 +143,33 @@ export function createCentrsMcpServer(
 	server.registerTool(
 		"centrs_devices",
 		{
-			title: "Inspect the CDB device registry",
+			title: "Inspect or mutate the CDB device registry",
 			description:
-				"Read the CDB allowlist: op=list (optionally by group), op=show <target>, op=groups. Read-only in this phase.",
+				"Read or update the CDB allowlist. op=list/show/groups are read-only; op=add/edit/set/remove write the CDB and require confirm:true.",
 			inputSchema: devicesInputShape,
-			annotations: { readOnlyHint: true, openWorldHint: false },
+			annotations: {
+				readOnlyHint: false,
+				destructiveHint: true,
+				openWorldHint: false,
+			},
 		},
 		async (args) => jsonContent(await handleDevices(args, config)),
+	);
+
+	server.registerTool(
+		"centrs_discover",
+		{
+			title: "Discover MNDP neighbors",
+			description:
+				"Listen for MNDP neighbors and optionally save them into the active CDB. save=true writes the CDB and requires confirm:true.",
+			inputSchema: discoverInputShape,
+			annotations: {
+				readOnlyHint: false,
+				destructiveHint: true,
+				openWorldHint: true,
+			},
+		},
+		async (args) => jsonContent(await handleDiscover(args, config)),
 	);
 
 	server.registerResource(

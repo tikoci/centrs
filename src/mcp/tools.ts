@@ -15,11 +15,17 @@
 import { z } from "zod";
 import type { CentrsEnvelope } from "../core/envelope.ts";
 import {
+	addDevice,
+	editDevice,
 	type LoadedCdb,
 	listDevices,
 	listGroups,
+	recordTypeFromName,
+	removeDevice,
+	setDeviceCommentKv,
 	showDevice,
 } from "../devices.ts";
+import { discover } from "../discover.ts";
 import { CentrsError, serializeCentrsError } from "../errors.ts";
 import {
 	canonicalizeExecuteCommand,
@@ -27,6 +33,8 @@ import {
 	isWriteShaped,
 	validateExecuteEnvelope,
 } from "../execute.ts";
+import type { CommentKvUpdate } from "../resolver/comment-kv.ts";
+import { parseDuration } from "../resolver/settings.ts";
 import { buildRetrieveErrorEnvelope, retrieve } from "../retrieve.ts";
 import {
 	buildRetrieveFanoutErrorEnvelope,
@@ -52,6 +60,8 @@ export interface McpOperationMeta {
  * stays open on the operation slot rather than forcing a re-stamp.
  */
 type McpEnvelope = CentrsEnvelope;
+
+type EnvelopeWithData = CentrsEnvelope<unknown> & { data?: unknown };
 
 /**
  * Build a minimal centrs error envelope for failures that happen in the MCP
@@ -81,6 +91,50 @@ function mcpErrorEnvelope(
 			via: null,
 			settings: {},
 			operation: { kind: "mcp", tool },
+		},
+	};
+}
+
+function requireConfirm(tool: string, confirmed: boolean | undefined): void {
+	if (confirmed !== true) {
+		throw new CentrsError({
+			code: "usage/confirmation-required",
+			summary: `${tool} mutates the CDB and requires \`confirm: true\`.`,
+			remediation:
+				"Re-submit the MCP tool call with confirm=true after verifying the target and requested CDB change.",
+		});
+	}
+}
+
+function redactEntry(entry: unknown): unknown {
+	if (typeof entry !== "object" || entry === null) {
+		return entry;
+	}
+	const { password, ...rest } = entry as Record<string, unknown>;
+	return {
+		...rest,
+		passwordSet: typeof password === "string" ? password.length > 0 : undefined,
+	};
+}
+
+function redactDeviceSecrets(envelope: McpEnvelope): McpEnvelope {
+	if (!envelope.ok) {
+		return envelope;
+	}
+	const withData = envelope as EnvelopeWithData;
+	const data = withData.data;
+	if (typeof data !== "object" || data === null) {
+		return envelope;
+	}
+	const deviceData = data as { entry?: unknown };
+	if (deviceData.entry === undefined) {
+		return envelope;
+	}
+	return {
+		...envelope,
+		data: {
+			...data,
+			entry: redactEntry(deviceData.entry),
 		},
 	};
 }
@@ -343,22 +397,106 @@ export async function handleExecute(
 	);
 }
 
-// --- centrs_devices (read-only in phase 1) ----------------------------------
+// --- centrs_devices ----------------------------------------------------------
 
 export const devicesInputShape = {
 	op: z
-		.enum(["list", "show", "groups"])
+		.enum(["list", "show", "groups", "add", "edit", "set", "remove"])
 		.describe(
-			"Read-only registry op. Mutations (add/set/remove) are a later phase.",
+			"Registry operation. Mutations add/edit/set/remove write the CDB and require confirm=true.",
 		),
-	target: z.string().optional().describe("Required for op=show."),
+	target: z
+		.string()
+		.optional()
+		.describe("Required for op=show/add/edit/set/remove."),
 	group: z.string().optional().describe("Optional group filter for op=list."),
+	user: z.string().optional().describe("CDB username for op=add/edit."),
+	password: z
+		.string()
+		.optional()
+		.describe("CDB password for op=add/edit. It is never returned by MCP."),
+	profile: z.string().optional().describe("CDB profile for op=add/edit."),
+	session: z.string().optional().describe("CDB session for op=add/edit."),
+	comment: z.string().optional().describe("CDB comment for op=add/edit."),
+	recordType: z
+		.string()
+		.optional()
+		.describe("CDB record type for op=add, e.g. ipAdmin or macTarget."),
+	savedPassword: z
+		.boolean()
+		.optional()
+		.describe("Set the CDB saved-password flag for op=add/edit."),
+	force: z
+		.boolean()
+		.optional()
+		.describe("Allow op=add to replace an existing target."),
+	updates: z
+		.array(
+			z.object({
+				key: z.string(),
+				value: z.string().nullable(),
+			}),
+		)
+		.optional()
+		.describe("Comment kv-soup updates for op=set. Use value=null to remove."),
+	strict: z
+		.boolean()
+		.optional()
+		.describe("For op=set, reject comment keys outside the allowlist."),
+	confirm: z
+		.boolean()
+		.optional()
+		.describe("Required true for CDB-mutating ops add/edit/set/remove."),
 } as const;
 
 const devicesSchema = z.object(devicesInputShape);
 export type DevicesArgs = z.infer<typeof devicesSchema>;
 
-/** Inspect the CDB device registry — the allowlist itself. Read-only. */
+function requireDevicesTarget(
+	args: DevicesArgs,
+	operation: "show" | "add" | "edit" | "set" | "remove",
+): string {
+	if (args.target !== undefined) {
+		return args.target;
+	}
+	throw new CentrsError({
+		code: "input/invalid-command",
+		summary: `op=${operation} requires a \`target\`.`,
+		remediation:
+			"Pass the CDB target to mutate, or use op=list to enumerate registered targets.",
+	});
+}
+
+function resolveRecordType(recordType: string | undefined): number | undefined {
+	if (recordType === undefined) {
+		return undefined;
+	}
+	const resolved = recordTypeFromName(recordType);
+	if (resolved !== undefined) {
+		return resolved;
+	}
+	throw new CentrsError({
+		code: "input/invalid-command",
+		summary: `Unknown CDB recordType "${recordType}".`,
+		remediation:
+			"Use a WinBox CDB record type name such as ipAdmin, ipUser, or macTarget.",
+		context: { recordType },
+	});
+}
+
+function requireUpdates(args: DevicesArgs): readonly CommentKvUpdate[] {
+	if (args.updates !== undefined && args.updates.length > 0) {
+		return args.updates;
+	}
+	throw new CentrsError({
+		code: "input/invalid-command",
+		summary: "op=set requires at least one comment kv update.",
+		remediation:
+			"Pass updates as [{ key: 'mcp', value: 'rw' }] or use value=null to remove a key.",
+	});
+}
+
+/** Inspect or mutate the CDB device registry — the allowlist itself. */
 export async function handleDevices(
 	args: DevicesArgs,
 	config: CentrsMcpConfig,
@@ -371,24 +509,158 @@ export async function handleDevices(
 			case "groups":
 				return listGroups({ cdb, withMembers: true });
 			case "show": {
-				if (args.target === undefined) {
-					throw new CentrsError({
-						code: "input/invalid-command",
-						summary: "op=show requires a `target`.",
-						remediation:
-							"Pass the CDB target to show, or use op=list to enumerate them.",
-					});
-				}
-				return showDevice({ cdb, target: args.target, env: config.env });
+				const target = requireDevicesTarget(args, "show");
+				return redactDeviceSecrets(
+					showDevice({ cdb, target, env: config.env }),
+				);
+			}
+			case "add": {
+				requireConfirm("centrs_devices op=add", args.confirm);
+				const target = requireDevicesTarget(args, "add");
+				return redactDeviceSecrets(
+					await addDevice({
+						cdb,
+						target,
+						recordType: resolveRecordType(args.recordType),
+						user: args.user,
+						password: args.password,
+						group: args.group,
+						profile: args.profile,
+						session: args.session,
+						comment: args.comment,
+						savedPassword: args.savedPassword,
+						force: args.force,
+					}),
+				);
+			}
+			case "edit": {
+				requireConfirm("centrs_devices op=edit", args.confirm);
+				const target = requireDevicesTarget(args, "edit");
+				return redactDeviceSecrets(
+					await editDevice({
+						cdb,
+						target,
+						user: args.user,
+						password: args.password,
+						group: args.group,
+						profile: args.profile,
+						session: args.session,
+						comment: args.comment,
+						savedPassword: args.savedPassword,
+					}),
+				);
+			}
+			case "set": {
+				requireConfirm("centrs_devices op=set", args.confirm);
+				const target = requireDevicesTarget(args, "set");
+				return redactDeviceSecrets(
+					await setDeviceCommentKv({
+						cdb,
+						target,
+						updates: requireUpdates(args),
+						strict: args.strict,
+					}),
+				);
+			}
+			case "remove": {
+				requireConfirm("centrs_devices op=remove", args.confirm);
+				const target = requireDevicesTarget(args, "remove");
+				return await removeDevice({ cdb, target });
 			}
 			default:
 				throw new CentrsError({
 					code: "input/invalid-command",
 					summary: `Unknown devices op "${String(args.op)}".`,
-					remediation: "Use one of: list, show, groups.",
+					remediation:
+						"Use one of: list, show, groups, add, edit, set, remove.",
 				});
 		}
 	} catch (error) {
 		return mcpErrorEnvelope("centrs_devices", error, { target: args.target });
+	}
+}
+
+// --- centrs_discover ---------------------------------------------------------
+
+export const discoverInputShape = {
+	timeout: z
+		.union([z.string(), z.number()])
+		.optional()
+		.describe("MNDP listen window (ms or duration string). Defaults to 60s."),
+	port: z
+		.number()
+		.int()
+		.min(0)
+		.max(65535)
+		.optional()
+		.describe(
+			"UDP port to bind. Defaults to 5678; use 0 for an ephemeral port.",
+		),
+	host: z
+		.string()
+		.optional()
+		.describe("Bind address for MNDP listen. Defaults to 0.0.0.0."),
+	ttlMs: z
+		.number()
+		.int()
+		.positive()
+		.optional()
+		.describe("MNDP cache TTL in ms."),
+	save: z
+		.boolean()
+		.optional()
+		.describe("Persist discovered neighbors into the active CDB."),
+	group: z
+		.string()
+		.optional()
+		.describe("CDB group for saved neighbors. Defaults to discovered."),
+	confirm: z
+		.boolean()
+		.optional()
+		.describe("Required true when save=true because saving mutates the CDB."),
+	sendRefresh: z
+		.boolean()
+		.optional()
+		.describe(
+			"Send MNDP broadcast refresh. Defaults true; tests may set false.",
+		),
+} as const;
+
+const discoverSchema = z.object(discoverInputShape);
+export type DiscoverArgs = z.infer<typeof discoverSchema>;
+
+function mcpTimeoutMs(timeout: DiscoverArgs["timeout"]): number | undefined {
+	if (timeout === undefined) {
+		return undefined;
+	}
+	if (typeof timeout === "number") {
+		return timeout;
+	}
+	return parseDuration(timeout);
+}
+
+/** Listen for MNDP neighbors and optionally save them into the active CDB. */
+export async function handleDiscover(
+	args: DiscoverArgs,
+	config: CentrsMcpConfig,
+): Promise<McpEnvelope> {
+	try {
+		if (args.save === true) {
+			requireConfirm("centrs_discover save", args.confirm);
+		}
+		return await discover({
+			timeoutMs: mcpTimeoutMs(args.timeout),
+			port: args.port,
+			host: args.host,
+			ttlMs: args.ttlMs,
+			save: args.save,
+			group: args.group,
+			cdbFile: config.cdbFile,
+			cdbPassword: config.cdbPassword,
+			env: config.env,
+			sendRefresh: args.sendRefresh,
+		});
+	} catch (error) {
+		return mcpErrorEnvelope("centrs_discover", error);
 	}
 }

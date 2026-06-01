@@ -10,8 +10,10 @@ wrong (see `docs/CONSTITUTION.md`).
 
 These examples are MCP **tool calls** (JSON `params.arguments`), not shell
 commands. `$NAME` is the CDB name the harness assigns the booted CHR; `$U` / `$P`
-are CHR credentials stored in the CDB record (never passed inline). The result is
-the standard centrs envelope returned as the tool's JSON text content.
+are CHR credentials stored in the CDB record for RouterOS actions. Example 10
+also writes credentials into the throwaway CDB through `centrs_devices add`, but
+MCP never returns saved password material. The result is the standard centrs
+envelope returned as the tool's JSON text content.
 
 ## Phase 1 — read + validate (stdio)
 
@@ -35,9 +37,9 @@ Envelope: `ok: true`, `data.path = "/ip/route"`, `data.verb = "add"`,
 
 Envelope: `ok: false`, `error.code = "cdb/target-not-registered"`, and
 `error.fix`/`remediation` names `centrs_devices add`. No connection is attempted.
-The MCP tools accept only a CDB `target` (name/MAC/URL) — there is no inline
-`host`/`username`/`password` parameter, so credentials never pass through the
-agent.
+RouterOS-facing MCP tools accept only a CDB `target` (name/MAC/URL) — there is
+no inline `host`/`username`/`password` executor parameter, so RouterOS actions
+use credentials already stored in the CDB.
 
 ### 3. `centrs_validate` accepts the bare `blackhole` flag
 
@@ -138,20 +140,19 @@ Envelope: `ok: true`, `data.ret` matches `/^\*[0-9A-F]+$/`,
 Envelope: `ok: false`, `error.code = "usage/confirmation-required"`; the address
 added in example 8 still exists. (Cleanup runs with `confirm: true`.)
 
-## Phase 2 candidate — CDB mutations
+## CHR-verified CDB mutations
 
 ### 10. `centrs_devices add` grows the allowlist in-band
 
 ```json
 { "name": "centrs_devices",
-  "arguments": { "op": "add", "name": "lab-edge", "host": "203.0.113.4",
-                 "username": "$U", "password": "$P", "mcp": "rw" } }
+  "arguments": { "op": "add", "target": "lab-edge",
+                 "user": "$U", "password": "$P",
+                 "comment": "mcp=ro",
+                 "confirm": true } }
 ```
 
-Envelope: `ok: true`, the CDB now resolves `lab-edge`, and a subsequent
-`centrs_retrieve` against `lab-edge` no longer returns
-`cdb/target-not-registered`. (Uses the throwaway CDB; no real device contacted.)
-
-This example is **not implemented or CHR-passed yet**. Phase 1 exposes
-`centrs_devices` as read-only (`list`/`show`/`groups`) and keeps all target
-registration outside the MCP tool surface.
+Envelope: `ok: true`, the CDB now resolves `lab-edge`, `data.entry.password` is
+absent, and `data.entry.passwordSet` reports whether a password was saved. A
+subsequent `centrs_devices show` for `lab-edge` succeeds. This uses the
+throwaway CDB; no real device is contacted by the registration itself.

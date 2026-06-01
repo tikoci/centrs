@@ -189,17 +189,18 @@ must round-trip through the same envelope.
 The MCP frontend (`commands/mcp/`) is an adapter over this core, not a new set of
 RouterOS semantics. Its authorization boundary is the CDB:
 
-- MCP tools resolve targets through the CDB only (name / MAC / group). Inline
-  ad-hoc `host`+`username`+`password` are rejected by default
-  (`cdb/target-not-registered`); the escape hatch is an explicit, off-by-default
-  `--allow-adhoc-targets`. Credentials are never handed to the agent — they live
-  in the CDB.
+- RouterOS-facing MCP tools resolve targets through the CDB only (name / MAC /
+  group). Inline ad-hoc `host`+`username`+`password` executor arguments are
+  rejected by default (`cdb/target-not-registered`); the escape hatch is an
+  explicit, off-by-default `--allow-adhoc-targets`. Credentials live in the CDB
+  and MCP results/resources must not return saved password material.
 - Per-device write policy is CDB data: the comment-kv key `mcp` (`ro` default,
-  `rw` to permit writes). Write-shaped MCP calls require the resolved record to
-  be `mcp=rw`; a per-call `confirm: true` is the non-TTY analogue of the CLI's
-  `--yes` but is not sufficient on its own. `mcp` is an allowlisted comment-kv
-  key and must round-trip through env/CLI/API like every other CDB-expressible
-  setting.
+  `rw` to permit writes). Write-shaped RouterOS MCP calls require the resolved
+  record to be `mcp=rw`; a per-call `confirm: true` is the non-TTY analogue of
+  the CLI's `--yes` but is not sufficient on its own. Local CDB mutations through
+  `centrs_devices` and `centrs_discover` `save` require `confirm: true` and
+  redacted results. `mcp` is an allowlisted comment-kv key and must round-trip
+  through env/CLI/API like every other CDB-expressible setting.
 - The MCP tool surface is a small set of verbs (`explain`, `validate`,
   `retrieve`, `execute`, `devices`, `discover`) mirroring the CLI/API — never one
   tool per RouterOS command. `validate` is a dry-run (`:parse` +

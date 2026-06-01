@@ -5,11 +5,13 @@ server that exposes the centrs core to AI agents through a **small, scoped set o
 verbs** over the same canonicalize → validate → run path the CLI/API use. It is
 not a per-command tool firehose.
 
-Status: `CHR-passed` (Phase 1). The stdio server (`src/mcp/server.ts`,
-`tools.ts`, `safety.ts`, `resources.ts`, `config.ts`) is built and the examples
-below (1–9) run green against CHR 7.23 via `test/integration/mcp.test.ts`,
-including the gated `mcp=rw` + `confirm:true` write. `src/mcp.ts` is the runtime
-barrel (`@tikoci/centrs/mcp`); `docs/MATRIX.md` is the authoritative status.
+Status: `CHR-passed` (Phase 1 + first Phase 2 CDB mutation). The stdio server
+(`src/mcp/server.ts`, `tools.ts`, `safety.ts`, `resources.ts`, `config.ts`) is
+built and the examples below (1–10) run green against CHR 7.23 via
+`test/integration/mcp.test.ts`, including the gated `mcp=rw` + `confirm:true`
+RouterOS write and in-band CDB registration through `centrs_devices add`.
+`src/mcp.ts` is the runtime barrel (`@tikoci/centrs/mcp`); `docs/MATRIX.md` is
+the authoritative status.
 
 Run it:
 
@@ -21,6 +23,44 @@ centrs mcp start                  # explicit verb; equivalent to the above
 
 Bun is required (centrs uses Bun APIs and the bun-native CDB codec), as with
 `@tikoci/rosetta`.
+
+## Client install snippets
+
+For an MCP client that accepts JSON server config, use `bunx` directly:
+
+```json
+{
+  "mcpServers": {
+    "centrs": {
+      "command": "bunx",
+      "args": ["@tikoci/centrs", "mcp"],
+      "env": {
+        "CENTRS_CDB_FILE": "/absolute/path/to/winbox.cdb"
+      }
+    }
+  }
+}
+```
+
+If `centrs` is already installed on `PATH`, the equivalent command is:
+
+```json
+{
+  "mcpServers": {
+    "centrs": {
+      "command": "centrs",
+      "args": ["mcp"],
+      "env": {
+        "CENTRS_CDB_FILE": "/absolute/path/to/winbox.cdb"
+      }
+    }
+  }
+}
+```
+
+Use `CENTRS_CDB_PASSWORD` only when reading an encrypted CDB. Encrypted CDB reads
+work; encrypted CDB writes remain blocked until the WinBox round-trip is
+verified. Prefer an unencrypted throwaway CDB for bench harnesses and CI.
 
 ## Why a scoped surface (grounding)
 
@@ -66,8 +106,8 @@ benchmarked RouterOS agent support. Load-bearing findings that shape this design
 | `centrs_validate` | execute validation only (`:parse` + `/console/inspect`), **no run** | read-only | CDB |
 | `centrs_retrieve` | `retrieve` / `retrieveGroup` | read-only | CDB |
 | `centrs_execute` | `execute` | read or write | CDB |
-| `centrs_devices` | `devices` (`list`/`show`/`groups`) | CDB read-only | CDB file |
-| `centrs_discover` | planned (`discover` + `save`) | local read; `save` writes CDB | n/a |
+| `centrs_devices` | `devices` (`list`/`show`/`groups`/`add`/`edit`/`set`/`remove`) | CDB read/write | CDB file |
+| `centrs_discover` | `discover` (`listen` + optional `save`) | local read; `save` writes CDB | n/a |
 
 - `centrs_explain` is the only tool that needs no CDB and no device — it
   canonicalizes a CLI string to `{ path, verb, args, mode, writeShaped }` so an
@@ -88,9 +128,14 @@ benchmarked RouterOS agent support. Load-bearing findings that shape this design
   canonicalizer's write-shape check + the CDB `mcp=rw`/`confirm` gates do the real
   enforcement. Agents that route purely on read-only commands should prefer
   `centrs_retrieve` (truly `readOnlyHint`).
-- `centrs_devices` is read-only in Phase 1. Later phases add the in-band way to
-  grow the allowlist: an agent (or operator) registers a device, then other tools
-  can act on it.
+- `centrs_devices` is the in-band way to inspect and grow the allowlist:
+  `list`/`show`/`groups` are read-only; `add`/`edit`/`set`/`remove` mutate the
+  active CDB and require `confirm: true`. MCP device envelopes redact saved
+  passwords and expose only `passwordSet`.
+- `centrs_discover` mirrors `discover`: it listens for MNDP neighbors, returns
+  the standard discovery envelope, and can persist found neighbors into the
+  active CDB with `save: true` + `confirm: true`. Saved records use the same
+  provenance/group behavior as the CLI and no RouterOS credentials are returned.
 
 ## Safety model — the CDB is the allowlist
 
@@ -105,25 +150,26 @@ MCP server applies it as a hard allowlist:
 - **CDB source** follows the constitution: default
   `~/.config/tikoci/winbox.cdb`, overridden by `CENTRS_CDB_FILE` / `--cdb-file`,
   or a freshly created CDB the operator hands the server at start. With no CDB,
-  the server still serves `centrs_explain` (offline) and
-  `centrs_devices create`/`add`.
-- **Credentials never pass through the agent.** They live in the CDB; this also
-  closes the bench's "plaintext-credential footprint" concern for the executor
-  tier.
-- **Per-device read/write policy lives in the CDB.** A device is writable only
-  when its record opts in via the comment-kv key `mcp=rw` (default `ro`). Reads
-  are allowed for any registered device. Write-shaped `centrs_execute`,
-  `centrs_devices` mutations, and `centrs_discover` `save` require the resolved
-  target to be `mcp=rw`. `mcp` joins the comment-kv allowlist
-  (`src/resolver/comment-kv.ts`) and, per the constitution, must round-trip
-  through env/CLI/API as well as CDB.
+  the server still serves `centrs_explain` (offline); CDB mutations require a
+  loadable CDB file.
+- **Credentials live in the CDB and are never returned by MCP.** `centrs_devices
+  add`/`edit` may write credentials into the active CDB, but tool results and
+  resources redact saved passwords and expose only `passwordSet`.
+- **Per-device RouterOS read/write policy lives in the CDB.** A device is
+  writable only when its record opts in via the comment-kv key `mcp=rw` (default
+  `ro`). Reads are allowed for any registered device. Write-shaped
+  `centrs_execute` calls require the resolved target to be `mcp=rw`; `mcp` joins
+  the comment-kv allowlist (`src/resolver/comment-kv.ts`) and, per the
+  constitution, must round-trip through env/CLI/API as well as CDB.
 - **Per-call `confirm: true`** stays as a belt-and-suspenders for write-shaped
-  calls (the non-TTY analogue of the CLI's `--yes`), but the authoritative gate
-  is the CDB record. A write attempt against an `mcp=ro` target fails with a
-  typed `cdb/write-not-permitted` error regardless of `confirm`.
+  calls (the non-TTY analogue of the CLI's `--yes`). A RouterOS write attempt
+  against an `mcp=ro` target fails with typed `cdb/write-not-permitted`
+  regardless of `confirm`; a local CDB mutation through `centrs_devices` or
+  `centrs_discover` `save` fails with `usage/confirmation-required` unless
+  explicitly confirmed.
 - **`--allow-adhoc-targets`** (off by default) is reserved for one-off lab/power
-  user flows. Phase 1 tools expose no inline host+credential schema, so the CDB
-  allowlist remains the only active target source.
+  user flows. Current RouterOS-facing tools expose no inline host+credential
+  schema, so the CDB allowlist remains the only active target source.
 
 This makes the safety story declarative and auditable: *what the agent may touch*
 and *whether it may write* are both data in a file the operator controls, not
@@ -203,6 +249,8 @@ stdio. It asserts, at minimum:
 - `centrs_retrieve` returns structured records;
 - `centrs_execute` (read-shaped) runs and returns the envelope;
 - a write against an `mcp=ro` target is refused (`cdb/write-not-permitted`) and
-  the same write against an `mcp=rw` target succeeds with `confirm: true`.
+  the same write against an `mcp=rw` target succeeds with `confirm: true`;
+- `centrs_devices add` writes a new record into the throwaway CDB and returns no
+  saved password material.
 
 Each example in `commands/mcp/examples.md` maps to one such assertion.

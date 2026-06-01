@@ -1,7 +1,7 @@
 /**
  * `centrs mcp` CLI surface: starts the stdio MCP server. Arg parsing here is
  * deliberately thin — the server's behavior is governed by the CDB allowlist
- * and the two global toggles (`--cdb-file`/`--cdb-password`/
+ * and the global toggles (`--cdb-file`/`--cdb-password`/
  * `--allow-adhoc-targets`), resolved in `../mcp/config.ts`.
  *
  * Transport is stdio only; HTTP/remote access is the proxy surface's job.
@@ -38,7 +38,7 @@ export const mcpCommand: CliCommandMetadata = {
 		{
 			flag: "--allow-adhoc-targets",
 			description:
-				"Reserved unsafe escape hatch for future inline targets; Phase 1 still uses CDB-only targets.",
+				"Reserved unsafe escape hatch for future inline targets; current tools still use CDB-only targets.",
 		},
 		{ flag: "--help", description: "Show this help." },
 	],

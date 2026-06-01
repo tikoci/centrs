@@ -11,15 +11,15 @@ them. It does **not** hide RouterOS behind helpers like `createVlanOnBridge()`
 — you still speak RouterOS. Validation and structured diagnostics are the
 product; without them this would just be a worse `curl`.
 
-> **Status:** early and in active development. The library and the device
-> registry are coded; the CLI is in progress and the MCP/TUI/proxy frontends
-> are designed but not built. `docs/MATRIX.md` is the single source of truth
-> for what works today — treat anything not green there as not-yet-shipped.
+> **Status:** early and in active development. The library, CLI, device registry,
+> and first MCP server phases are coded; TUI/proxy frontends are planned.
+> `docs/MATRIX.md` is the single source of truth for what works today — treat
+> anything not green there as not-yet-shipped.
 
 ## What it talks to, and how
 
-- **Frontends:** TypeScript API (today), CLI (in progress), MCP server
-  (Phase 1 `CHR-passed` — see `commands/mcp/`), TUI and HTTP proxy/daemon
+- **Frontends:** TypeScript API, CLI, MCP server (Phase 1 + first Phase 2 CDB
+  mutation `CHR-passed` — see `commands/mcp/`), TUI and HTTP proxy/daemon
   (future).
 - **Protocols:** REST API (preferred), native API, and SNMP for reads;
   SSH / MAC-Telnet / RoMON / WinBox Terminal for interactive and L2 execute;
@@ -56,7 +56,7 @@ stores:
   the identity: it is the literal you type at the CLI. The comment is *not* a
   lookup key, so to reach a router as `edge1` its `target` must be `edge1`.
 - **`user` / `password`** — the credentials centrs connects with. They stay in
-  the CDB; they are never printed and never handed to an MCP agent.
+  the CDB and are redacted from MCP results/resources.
 - **`group`, `profile`, `session`, port** — used as-is.
 
 So `centrs retrieve edge1 /ip/address` works with no flags: `edge1` is looked
@@ -112,9 +112,11 @@ see *why* a given port or transport was chosen.
   neighbors as new entries tagged `group=discovered` with a `source=mndp`
   marker — hints to curate, not authoritative inventory.
 - **The MCP server uses the CDB as its authorization boundary.** Agents can
-  only reach targets that exist in the CDB, and write-shaped tools require the
-  resolved entry to carry `mcp=rw` plus per-call confirmation. The allowlist and
-  the write policy are *the same CDB data* you already manage — see
+  only reach targets that exist in the CDB; RouterOS write-shaped execution
+  requires the resolved entry to carry `mcp=rw` plus per-call confirmation.
+  `centrs_devices` can also add/edit/set/remove CDB records in-band, and
+  `centrs_discover` can save MNDP neighbors, with `confirm: true`. The allowlist
+  and the write policy are *the same CDB data* you already manage — see
   `commands/mcp/`.
 
 `devices` is the only command that writes the CDB, and it does so safely

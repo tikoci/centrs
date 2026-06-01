@@ -89,16 +89,18 @@ core and carry their own state, tracked here:
 | ------- | ----- | ---- | ----- |
 | api (TS) | `CHR-passed` | `src/index.ts` | Root surface; everything else adapts it. |
 | cli | `coded` | `src/cli/` | `retrieve`/`execute`/`devices`/`discover` wired. |
-| mcp | `CHR-passed` | `commands/mcp/` | Scoped-verb stdio MCP server; CDB-as-allowlist safety model. Phase 1 (explain/validate/retrieve/execute, read-only devices, 2 resources) green on CHR 7.23 via `test/integration/mcp.test.ts`, including gated write execution. |
+| mcp | `CHR-passed` | `commands/mcp/` | Scoped-verb stdio MCP server; CDB-as-allowlist safety model. Phase 1 (explain/validate/retrieve/execute, resources) plus first Phase 2 CDB mutation (`centrs_devices add`) green on CHR 7.23 via `test/integration/mcp.test.ts`, including gated write execution. |
 | tui | `not-started` | `src/tui.ts` | Stub. |
 | proxy | `not-started` | `src/webproxy.ts` | Stub. |
 
 A surface advances to `CHR-passed` only when every example in its spec
 (`commands/<surface>/examples.md`, where one exists) is green via
-`bun run test:integration`. `mcp` is `CHR-passed` for Phase 1:
+`bun run test:integration`. `mcp` is `CHR-passed` for Phase 1 plus the first
+Phase 2 CDB mutation:
 `commands/mcp/README.md` and `commands/mcp/examples.md` describe the tool surface,
-safety model, and CHR test shape; examples 1-9 are green on CHR 7.23 via
-`test/integration/mcp.test.ts`, including the `mcp=rw` + `confirm:true` write gate.
+safety model, and CHR test shape; examples 1-10 are green on CHR 7.23 via
+`test/integration/mcp.test.ts`, including the `mcp=rw` + `confirm:true` RouterOS
+write gate and `centrs_devices add` CDB registration.
 
 ## Priority order
 
@@ -134,13 +136,15 @@ matching evidence.
     (`centrs_explain`, `centrs_validate`, `centrs_retrieve`, `centrs_execute`,
     then `centrs_devices`/`centrs_discover`) with the CDB as the device
     allowlist and per-device `mcp=ro|rw` write policy. Phase 1 ships stdio,
-    explain/validate/retrieve/execute, read-only device inspection, the
-    `centrs://devices` / `centrs://errors` resources, and gated writes
-    (CHR-tested, bench-consumable); device mutations and `discover` follow. A
+    explain/validate/retrieve/execute, device inspection, the `centrs://devices`
+    / `centrs://errors` resources, and gated writes (CHR-tested,
+    bench-consumable); Phase 2 has started with CDB mutations through
+    `centrs_devices` (`add` CHR-tested; `edit`/`set`/`remove` unit-tested) and
+    `centrs_discover` save gating (unit-tested). A
     device-free manifest dump (`centrs mcp --list-tools`, printing the registered
     schemas + `instructions` as JSON) is the next small step so the bench can
     measure centrs's always-on token footprint the way it counts mikrotik-mcp's
-    166 schemas; examples 1–9 already carry stable IDs (`examples.md` ↔
+    166 schemas; examples 1–10 already carry stable IDs (`examples.md` ↔
     `test/integration/mcp.test.ts`) for per-trap citation.
     **HTTP access is the proxy surface's job, not the MCP server's** — MCP stays
     stdio-only. TUI/proxy remain later. These shape interface decisions today but

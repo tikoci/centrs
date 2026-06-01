@@ -49,7 +49,7 @@ async function callTool(
 }
 
 describeFast("centrs MCP server against CHR", () => {
-	test("drives examples 1-9 over an in-process MCP client", async () => {
+	test("drives examples 1-10 over an in-process MCP client", async () => {
 		const started = await startIntegrationChr();
 		const chr = started.chr;
 		const dir = await mkdtemp(join(tmpdir(), "centrs-mcp-int-"));
@@ -204,6 +204,29 @@ describeFast("centrs MCP server against CHR", () => {
 					confirm: true,
 				});
 				expect(cleanup.ok).toBe(true);
+
+				// Example 10: centrs_devices add grows the allowlist without
+				// returning the saved password.
+				const added = await callTool(client, "centrs_devices", {
+					op: "add",
+					target: "lab-edge",
+					user: auth.username,
+					password: auth.password,
+					comment: "mcp=ro",
+					confirm: true,
+				});
+				expect(added.ok).toBe(true);
+				const addedData = added.data as {
+					entry?: { password?: string; passwordSet?: boolean };
+				};
+				expect(addedData.entry?.password).toBeUndefined();
+				expect(addedData.entry?.passwordSet).toBe(auth.password.length > 0);
+
+				const shown = await callTool(client, "centrs_devices", {
+					op: "show",
+					target: "lab-edge",
+				});
+				expect(shown.ok).toBe(true);
 			} finally {
 				await client.close();
 			}
@@ -216,7 +239,7 @@ describeFast("centrs MCP server against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(9),
+				exampleIds: exampleIds(10),
 			});
 		} finally {
 			await rm(dir, { recursive: true, force: true });
