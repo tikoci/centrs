@@ -11,8 +11,9 @@ them. It does **not** hide RouterOS behind helpers like `createVlanOnBridge()`
 — you still speak RouterOS. Validation and structured diagnostics are the
 product; without them this would just be a worse `curl`.
 
-> **Status:** early and in active development. The library, CLI, device registry,
-> and first MCP server phases are coded; TUI/proxy frontends are planned.
+> **Status:** early and in active development. The library, device registry, and
+> first MCP server phases are CHR-verified; the CLI is wired (`coded`); encrypted-CDB
+> writes are still blocked, and the TUI/proxy frontends are planned.
 > `docs/MATRIX.md` is the single source of truth for what works today — treat
 > anything not green there as not-yet-shipped.
 

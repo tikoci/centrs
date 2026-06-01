@@ -4,9 +4,13 @@ List, inspect, and edit RouterOS targets known to centrs. `devices` is the
 user-facing surface over the device registry described in
 `docs/CONSTITUTION.md`. It is the only command that may *write* to the CDB.
 
-Status: read-only subset `coded`; CDB mutation (`add`/`edit`/`set`/`remove`)
-`coded` for unencrypted CDBs. Encrypted-CDB writes are blocked pending a
-verified round-trip (see below). See `docs/MATRIX.md` for the matrix row.
+Status: `CHR-passed`. The read subset (`list`/`show`/`groups`) and the full CDB
+mutation surface (`add`/`edit`/`set`/`remove`), ambiguity / `--match`, and the
+provenance/override examples are green via `bun run test:integration`
+(`test/integration/devices.test.ts`, fixture-backed — `devices` does no network
+IO, so its evidence is the integration run, not a booted CHR). Encrypted-CDB
+**writes** remain blocked (`cdb/encrypted-write-unverified`); encrypted **reads**
+work with `--cdb-password`. See `docs/MATRIX.md` for the matrix row.
 
 `devices` does not use a transport in the protocol sense and does not contact a
 RouterOS device in phase 1. Its sources are:
@@ -218,13 +222,16 @@ For fanout calls, each inner envelope carries its own `meta.target`. The
 outer envelope's `meta.target` is replaced with `meta.targets` (the resolved
 member list and the group(s) that expanded into it).
 
-## Open questions (must be answered before `CHR-passed`)
+## Open questions (remaining work beyond the current `CHR-passed`)
+
+`devices` is `CHR-passed` for reads (open and encrypted CDBs) and for writes to
+**unencrypted** CDBs. The comment-kv grammar is settled — see "Comment kv-soup"
+above and `test/unit/comment-kv.test.ts`. These remain open:
 
 | Question | Affects | Notes |
 | --- | --- | --- |
-| Comment kv quoting & escaping edge cases (newlines, embedded `=`) | comment-kv parser | Initial proposal: shell-word tokenization, `"…"`, `\"` / `\\`. Confirm with a fixture set. |
 | ARP resolver test scheme | retrieve / execute when target is a MAC | Need deterministic fixtures per OS plus one live same-L2 proof before relying on ARP in integration. |
-| WinBox compatibility check after salt rotation | encrypted writes | Need a manual round-trip ("open in WinBox after centrs write") gate before shipping `devices add`. |
+| WinBox compatibility after salt rotation | encrypted-CDB writes | Encrypted writes stay blocked (`cdb/encrypted-write-unverified`) until a manual round-trip ("open in WinBox after a centrs write") plus the salt-rotation fixture test (centrs write → centrs read → bytes-identical-modulo-salt) both pass. |
 
 When a row is answered, fold it into this README and delete the row.
 
