@@ -3,6 +3,7 @@
 import { devicesCommand, runDevicesCli } from "./cli/devices.ts";
 import { discoverCommand, runDiscoverCli } from "./cli/discover.ts";
 import { executeCommand, runExecuteCli } from "./cli/execute.ts";
+import { mcpCommand, runMcpCli } from "./cli/mcp.ts";
 import { retrieveCommand, runRetrieveCli } from "./cli/retrieve.ts";
 import { describeCentrs, plannedProtocols, plannedSurfaces } from "./index.ts";
 
@@ -11,6 +12,7 @@ const commandSummaries: ReadonlyArray<{ name: string; summary: string }> = [
 	executeCommand,
 	devicesCommand,
 	discoverCommand,
+	mcpCommand,
 ].map((command) => ({ name: command.name, summary: command.summary }));
 
 export function renderCliHelp(): string {
@@ -49,6 +51,9 @@ export async function runCli(
 	}
 	if (command === "discover") {
 		return runDiscoverCli(rest);
+	}
+	if (command === "mcp") {
+		return runMcpCli(rest);
 	}
 
 	console.error(

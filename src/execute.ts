@@ -163,6 +163,49 @@ export async function executeEnvelope(
 	}
 }
 
+/**
+ * Dry-run a command through validation only (`:parse` + `/console/inspect`)
+ * without ever running it. Used by the MCP `centrs_validate` tool: it shares the
+ * exact validation path `executeEnvelope` uses so a dry-run and a real run agree
+ * on what is acceptable, but it never reaches the mutate/read step. Validation is
+ * forced on regardless of any `validate=false` setting — a validate tool that can
+ * be told not to validate is pointless.
+ */
+export async function validateExecuteEnvelope(
+	request: ExecuteRequest,
+	env: Record<string, string | undefined> = Bun.env,
+): Promise<ExecuteEnvelope> {
+	let resolved: ResolvedExecuteRequest | undefined;
+	try {
+		resolved = await resolveExecuteRequest({ ...request, validate: true }, env);
+		const backend = createProtocolAdapter({
+			protocol: resolved.via.value,
+			host: resolved.target.host,
+			port: resolved.target.port,
+			tls: resolved.target.tls,
+			baseUrl: resolved.target.baseUrl,
+			username: resolved.auth.username,
+			password: resolved.auth.password,
+			timeoutMs: resolved.timeoutMs.value,
+		});
+		try {
+			const validation = await validateExecuteCommand(resolved, backend);
+			return {
+				ok: true,
+				data: null,
+				warnings: [...resolved.warnings],
+				meta: metaFromResolved(resolved, validation),
+			};
+		} finally {
+			await backend.close();
+		}
+	} catch (error) {
+		return resolved
+			? buildExecuteErrorEnvelopeFromResolved(resolved, error)
+			: buildExecuteErrorEnvelope(request, error, env);
+	}
+}
+
 export async function runResolvedExecute(
 	resolved: ResolvedExecuteRequest,
 ): Promise<ExecuteSuccessEnvelope> {

@@ -30,7 +30,7 @@ describe("parseCommentKv", () => {
 
 	test("parses every allowlisted key", () => {
 		const result = parseCommentKv(
-			"via=ssh validate=false timeout=4000 port=2222 source=mndp",
+			"via=ssh validate=false timeout=4000 port=2222 source=mndp mcp=rw",
 		);
 		expect(result.values).toEqual({
 			via: "ssh",
@@ -38,6 +38,7 @@ describe("parseCommentKv", () => {
 			timeout: "4000",
 			port: "2222",
 			source: "mndp",
+			mcp: "rw",
 		});
 		expect(result.warnings).toEqual([]);
 	});
@@ -122,13 +123,14 @@ describe("parseCommentKv", () => {
 		expect(result.warnings).toEqual([]);
 	});
 
-	test("the allowlist is exactly the documented five keys", () => {
+	test("the allowlist is exactly the documented six keys", () => {
 		expect([...commentKvAllowlist]).toEqual([
 			"via",
 			"validate",
 			"timeout",
 			"port",
 			"source",
+			"mcp",
 		]);
 	});
 });

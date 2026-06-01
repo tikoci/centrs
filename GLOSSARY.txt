@@ -232,3 +232,19 @@ unpadded
 # RouterOS CLI canonicalization vocabulary
 subshell
 disambiguator
+
+# centrs MCP surface vocabulary
+# blackhole: a RouterOS route type / bare flag used as the bench parser-truth example.
+blackhole
+readback
+creds
+# Streamable: the MCP Streamable HTTP transport.
+Streamable
+# modelcontextprotocol: npm scope of the MCP SDK (@modelcontextprotocol/sdk).
+modelcontextprotocol
+# WIP: work in progress (used for the upstream MikroTik Docusaurus docs site).
+WIP
+# adhoc: future inline host+credential targets; Phase 1 MCP uses CDB-only targets.
+adhoc
+# nonexistentattr: a deliberately invalid RouterOS attribute used to exercise the validate dual-gate.
+nonexistentattr

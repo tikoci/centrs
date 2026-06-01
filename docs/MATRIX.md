@@ -80,6 +80,26 @@ glue, not new protocol code:
   `test/unit/mac-telnet.test.ts` against a scripted peer. Real-router L2
   validation is still gated on the open question below.
 
+### Frontend surfaces (orthogonal to the command grid)
+
+The grid tracks the core (commands × protocols). Frontends are adapters over that
+core and carry their own state, tracked here:
+
+| Surface | State | Spec | Notes |
+| ------- | ----- | ---- | ----- |
+| api (TS) | `CHR-passed` | `src/index.ts` | Root surface; everything else adapts it. |
+| cli | `coded` | `src/cli/` | `retrieve`/`execute`/`devices`/`discover` wired. |
+| mcp | `CHR-passed` | `commands/mcp/` | Scoped-verb stdio MCP server; CDB-as-allowlist safety model. Phase 1 (explain/validate/retrieve/execute, read-only devices, 2 resources) green on CHR 7.23 via `test/integration/mcp.test.ts`, including gated write execution. |
+| tui | `not-started` | `src/tui.ts` | Stub. |
+| proxy | `not-started` | `src/webproxy.ts` | Stub. |
+
+A surface advances to `CHR-passed` only when every example in its spec
+(`commands/<surface>/examples.md`, where one exists) is green via
+`bun run test:integration`. `mcp` is `CHR-passed` for Phase 1:
+`commands/mcp/README.md` and `commands/mcp/examples.md` describe the tool surface,
+safety model, and CHR test shape; examples 1-9 are green on CHR 7.23 via
+`test/integration/mcp.test.ts`, including the `mcp=rw` + `confirm:true` write gate.
+
 ## Priority order
 
 Do not start a later item until the earlier cell or dependency checkpoint has
@@ -109,8 +129,22 @@ matching evidence.
    after mac-telnet is grounded.
 10. **discover / mndp** — `discover --save --timeout 60s` populates CDB entries
     with provenance metadata and `group=discovered`.
-11. **MCP, TUI, proxy** — frontends over the stable core. Future targets;
-    they shape interface decisions today but do not block the grid.
+11. **MCP, TUI, proxy** — frontends over the stable core. The MCP server is the
+    near-term target (see `commands/mcp/`): a scoped-verb stdio server
+    (`centrs_explain`, `centrs_validate`, `centrs_retrieve`, `centrs_execute`,
+    then `centrs_devices`/`centrs_discover`) with the CDB as the device
+    allowlist and per-device `mcp=ro|rw` write policy. Phase 1 ships stdio,
+    explain/validate/retrieve/execute, read-only device inspection, the
+    `centrs://devices` / `centrs://errors` resources, and gated writes
+    (CHR-tested, bench-consumable); device mutations and `discover` follow. A
+    device-free manifest dump (`centrs mcp --list-tools`, printing the registered
+    schemas + `instructions` as JSON) is the next small step so the bench can
+    measure centrs's always-on token footprint the way it counts mikrotik-mcp's
+    166 schemas; examples 1–9 already carry stable IDs (`examples.md` ↔
+    `test/integration/mcp.test.ts`) for per-trap citation.
+    **HTTP access is the proxy surface's job, not the MCP server's** — MCP stays
+    stdio-only. TUI/proxy remain later. These shape interface decisions today but
+    do not block the command grid.
 
 ## Open questions (decisions needed before the affected cell can advance)
 
@@ -121,6 +155,7 @@ matching evidence.
 | Bug-report rendering: inline flag, separate command, both? | cross-cutting | Constitution says envelope is rich enough; rendering deferred until needed. |
 | L2 in CI: how to fake L2 net for mac-telnet on Linux runner | execute / mac-telnet, terminal / mac-telnet | quickchr supports L2 netdevs (`vmnet-shared`/`vmnet-bridged` on macOS, `tap`, `socket-mcast`), but `startIntegrationChr()` uses `user`-mode SLIRP with hostfwd, which does not carry L2 broadcast/MAC-Telnet. Real-router validation also needs raw L2 frame I/O from the host (BPF on macOS / AF_PACKET on Linux) on an interface sharing the CHR's L2 segment — Bun exposes no raw-L2 socket, so a native helper (libpcap binding or socket_vmnet + a small frame shim) is required. Until then, mac-telnet is covered at the protocol layer by `test/unit/mac-telnet.test.ts` against a scripted peer. Must still cover unresolved-MAC default behavior. |
 | RoMON / WinBox Terminal validation and CI | execute / romon, execute / winbox-terminal | Lower priority than mac-telnet; need reference tooling and typed failure mapping before advancing. |
+| MCP `__default__` fallback-credentials record | mcp (Phase 4) | A reserved CDB record supplying default creds/metadata when a device has none. Precedence args → ENV → device record → `__default__` → built-in. Decide whether CLI/API honor it too. See `commands/mcp/README.md`. |
 
 When a question is answered, fold the answer into the relevant
 `commands/<name>/README.md` or `docs/CONSTITUTION.md`, then delete the row.

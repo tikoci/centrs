@@ -33,6 +33,7 @@ export const commentKvAllowlist = [
 	"timeout",
 	"port",
 	"source",
+	"mcp",
 ] as const;
 
 export type CommentKvKey = (typeof commentKvAllowlist)[number];

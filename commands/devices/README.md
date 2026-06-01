@@ -65,6 +65,7 @@ its own settings. Recognized keys (allowlist):
 | `port`     | Non-default transport port. Omitted when equal to the protocol default. |
 | `ssh-key`  | Per-device private key file path for SSH transports.                    |
 | `source`   | Provenance marker for discovered/imported records (`mndp`, `dude`, …).  |
+| `mcp`      | MCP write policy for this device: `ro` (default) or `rw`. See `commands/mcp/`. |
 
 Rules:
 
