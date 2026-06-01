@@ -79,6 +79,66 @@ export class WinBoxCdbWrongPasswordError extends Error {
 	}
 }
 
+/** What class of structural fault produced a {@link WinBoxCdbParseError}. */
+export type WinBoxCdbParseErrorKind =
+	| "underflow"
+	| "unsupported-magic"
+	| "record-magic"
+	| "record-type-missing";
+
+export interface WinBoxCdbParseErrorInit {
+	kind: WinBoxCdbParseErrorKind;
+	/** Byte offset (within the structure being read) where the fault occurred. */
+	offset?: number;
+	/** The structure/field being read, e.g. "u32", "record-magic", "slice". */
+	structure?: string;
+	/** Bytes requested at the failing read, when relevant. */
+	requested?: number;
+}
+
+/**
+ * A structural fault decoding WinBox CDB bytes. Carries the offset/structure so
+ * the `devices.ts` boundary can surface it on the `cdb/parse-failed` envelope
+ * instead of forwarding only `message`. See {@link winBoxCdbParseErrorContext}.
+ */
+export class WinBoxCdbParseError extends Error {
+	readonly kind: WinBoxCdbParseErrorKind;
+	readonly offset?: number;
+	readonly structure?: string;
+	readonly requested?: number;
+
+	constructor(message: string, init: WinBoxCdbParseErrorInit) {
+		super(message);
+		this.name = "WinBoxCdbParseError";
+		this.kind = init.kind;
+		this.offset = init.offset;
+		this.structure = init.structure;
+		this.requested = init.requested;
+	}
+}
+
+/**
+ * Extract the structured context from a {@link WinBoxCdbParseError} for use in a
+ * `cdb/parse-failed` error envelope. Returns `undefined` for any other error.
+ */
+export function winBoxCdbParseErrorContext(
+	cause: unknown,
+): Record<string, unknown> | undefined {
+	if (!(cause instanceof WinBoxCdbParseError)) {
+		return undefined;
+	}
+	return {
+		parseKind: cause.kind,
+		...(cause.offset !== undefined ? { parseOffset: cause.offset } : {}),
+		...(cause.structure !== undefined
+			? { parseStructure: cause.structure }
+			: {}),
+		...(cause.requested !== undefined
+			? { parseRequested: cause.requested }
+			: {}),
+	};
+}
+
 export interface AnalyzeEncryptedWinBoxCdbOptions {
 	blockSizes?: readonly number[];
 	maxCandidateHeaderLength?: number;
@@ -148,11 +208,17 @@ class ByteCursor {
 
 	readByte(): number {
 		if (this.remaining() < 1) {
-			throw new Error("Unexpected end of WinBox CDB data while reading byte.");
+			throw new WinBoxCdbParseError(
+				"Unexpected end of WinBox CDB data while reading byte.",
+				{ kind: "underflow", offset: this.offset, structure: "byte" },
+			);
 		}
 		const value = this.data.at(this.offset);
 		if (value === undefined) {
-			throw new Error("Unexpected end of WinBox CDB data while reading byte.");
+			throw new WinBoxCdbParseError(
+				"Unexpected end of WinBox CDB data while reading byte.",
+				{ kind: "underflow", offset: this.offset, structure: "byte" },
+			);
 		}
 		this.offset += 1;
 		return value;
@@ -160,8 +226,14 @@ class ByteCursor {
 
 	readSlice(length: number): Uint8Array {
 		if (this.remaining() < length) {
-			throw new Error(
+			throw new WinBoxCdbParseError(
 				`Unexpected end of WinBox CDB data while reading ${length} byte(s).`,
+				{
+					kind: "underflow",
+					offset: this.offset,
+					structure: "slice",
+					requested: length,
+				},
 			);
 		}
 		const start = this.offset;
@@ -170,15 +242,20 @@ class ByteCursor {
 	}
 
 	readU16(): number {
+		const offset = this.offset;
 		const slice = this.readSlice(2);
 		const [b0, b1] = slice;
 		if (b0 === undefined || b1 === undefined) {
-			throw new Error("Unexpected end of WinBox CDB data while reading u16.");
+			throw new WinBoxCdbParseError(
+				"Unexpected end of WinBox CDB data while reading u16.",
+				{ kind: "underflow", offset, structure: "u16" },
+			);
 		}
 		return b0 | (b1 << 8);
 	}
 
 	readU32(): number {
+		const offset = this.offset;
 		const slice = this.readSlice(4);
 		const [b0, b1, b2, b3] = slice;
 		if (
@@ -187,7 +264,10 @@ class ByteCursor {
 			b2 === undefined ||
 			b3 === undefined
 		) {
-			throw new Error("Unexpected end of WinBox CDB data while reading u32.");
+			throw new WinBoxCdbParseError(
+				"Unexpected end of WinBox CDB data while reading u32.",
+				{ kind: "underflow", offset, structure: "u32" },
+			);
 		}
 		return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0;
 	}
@@ -227,8 +307,9 @@ export function parseWinBoxCdb(input: ArrayBuffer | Uint8Array): WinBoxCdbFile {
 		};
 	}
 
-	throw new Error(
+	throw new WinBoxCdbParseError(
 		"Unsupported WinBox CDB file magic. Expected open or encrypted WinBox CDB bytes.",
+		{ kind: "unsupported-magic", offset: 0, structure: "file-magic" },
 	);
 }
 
@@ -358,8 +439,9 @@ function winBoxCdbStreamCipher(
 
 export function parseWinBoxCdbRecord(recordData: Uint8Array): WinBoxCdbRecord {
 	if (!hasPrefix(recordData, recordMagic)) {
-		throw new Error(
+		throw new WinBoxCdbParseError(
 			"Invalid WinBox CDB record magic. Expected 'M2' record header.",
+			{ kind: "record-magic", offset: 0, structure: "record-magic" },
 		);
 	}
 
@@ -445,7 +527,10 @@ export function decodeWinBoxCdbEntry(record: WinBoxCdbRecord): WinBoxCdbEntry {
 		0x09,
 	);
 	if (typeField === undefined) {
-		throw new Error("WinBox CDB record is missing its record-type field.");
+		throw new WinBoxCdbParseError(
+			"WinBox CDB record is missing its record-type field.",
+			{ kind: "record-type-missing", structure: "record-type" },
+		);
 	}
 
 	return {

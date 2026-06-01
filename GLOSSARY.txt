@@ -248,3 +248,6 @@ WIP
 adhoc
 # nonexistentattr: a deliberately invalid RouterOS attribute used to exercise the validate dual-gate.
 nonexistentattr
+# underflow: reading past the end of a buffer; the WinBox CDB codec reports it as a structured parse fault.
+underflow
+underflows

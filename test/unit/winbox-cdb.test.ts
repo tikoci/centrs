@@ -8,10 +8,13 @@ import {
 	encodeOpenWinBoxCdb,
 	encryptWinBoxCdb,
 	parseWinBoxCdb,
+	parseWinBoxCdbRecord,
 	WINBOX_CDB_ENCRYPTED_SALT_LENGTH,
 	WINBOX_CDB_SAVED_PASSWORD_FLAG,
+	WinBoxCdbParseError,
 	type WinBoxCdbRecord,
 	WinBoxCdbWrongPasswordError,
+	winBoxCdbParseErrorContext,
 	winBoxCdbRecordType,
 } from "../../src/data/winbox-cdb.ts";
 
@@ -403,6 +406,75 @@ describe("WinBox CDB", () => {
 			},
 		);
 	}
+});
+
+const OPEN_MAGIC = Uint8Array.from([0x0d, 0xf0, 0x1d, 0xc0]);
+
+function captureParseError(fn: () => unknown): WinBoxCdbParseError {
+	try {
+		fn();
+	} catch (error) {
+		if (error instanceof WinBoxCdbParseError) {
+			return error;
+		}
+		throw error;
+	}
+	throw new Error("Expected a WinBoxCdbParseError to be thrown.");
+}
+
+describe("WinBox CDB parse errors carry structural context", () => {
+	test("unsupported file magic reports kind/structure", () => {
+		const error = captureParseError(() =>
+			parseWinBoxCdb(Uint8Array.from([0x01, 0x02, 0x03, 0x04])),
+		);
+		expect(error.kind).toBe("unsupported-magic");
+		expect(error.structure).toBe("file-magic");
+		expect(error.offset).toBe(0);
+	});
+
+	test("a record length running past the buffer underflows with offset", () => {
+		// open magic + a u32 record length of 100 with no record bytes following.
+		const bytes = Uint8Array.from([...OPEN_MAGIC, 0x64, 0x00, 0x00, 0x00]);
+		const error = captureParseError(() => parseWinBoxCdb(bytes));
+		expect(error.kind).toBe("underflow");
+		expect(error.structure).toBe("slice");
+		expect(error.requested).toBe(100);
+		// The u32 length was consumed first, so the failing read is at offset 4.
+		expect(error.offset).toBe(4);
+	});
+
+	test("a truncated record length underflows", () => {
+		// open magic + a single stray byte (cannot complete the u32 length read).
+		const bytes = Uint8Array.from([...OPEN_MAGIC, 0x00]);
+		const error = captureParseError(() => parseWinBoxCdb(bytes));
+		expect(error.kind).toBe("underflow");
+		expect(error.offset).toBe(0);
+	});
+
+	test("a bad record magic reports record-magic", () => {
+		const error = captureParseError(() =>
+			parseWinBoxCdbRecord(Uint8Array.from([0, 0, 0, 0, 0, 0])),
+		);
+		expect(error.kind).toBe("record-magic");
+		expect(error.structure).toBe("record-magic");
+	});
+
+	test("winBoxCdbParseErrorContext projects the structured fields", () => {
+		const error = captureParseError(() =>
+			parseWinBoxCdb(Uint8Array.from([...OPEN_MAGIC, 0x64, 0x00, 0x00, 0x00])),
+		);
+		expect(winBoxCdbParseErrorContext(error)).toEqual({
+			parseKind: "underflow",
+			parseOffset: 4,
+			parseStructure: "slice",
+			parseRequested: 100,
+		});
+	});
+
+	test("returns undefined for non-parse errors", () => {
+		expect(winBoxCdbParseErrorContext(new Error("nope"))).toBeUndefined();
+		expect(winBoxCdbParseErrorContext("nope")).toBeUndefined();
+	});
 });
 
 function parseFixture(name: string) {

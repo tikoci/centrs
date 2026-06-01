@@ -52,6 +52,7 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
 | `--validate=false`                  | Escape hatch; default is `true`. See constitution: validation is the product.             |
 | `--timeout <ms>`                    | Request timeout. REST: ≤ 60000. native-api allows longer.                                 |
 | `--username` / `--password`         | Override CDB-resolved or env credentials.                                                 |
+| `--host <host\|url>`                 | Override the resolved host or base URL for the target.                                     |
 | `--port <n>`                        | Override the transport port. native-api defaults to 8728 (TLS api-ssl when `--port 8729`).|
 | `--cdb-file` / `--cdb-password`     | Override CDB file location / decrypt password.                                            |
 | `--ros-version <version>`           | SNMP MIB lookup only: pin the MikroTik MIB version to cache/download.                     |

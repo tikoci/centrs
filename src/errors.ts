@@ -1,4 +1,9 @@
-const ERROR_DETAILS_BASE_URL = "https://tikoci.github.io/centrs/errors/";
+/**
+ * Base URL for the human-readable error pages. Every `CentrsError.detailsUrl`
+ * is this prefix plus the slash-namespaced code. Exported so the error catalog
+ * and MCP resources share one definition (see `src/core/error-catalog.ts`).
+ */
+export const ERROR_DETAILS_BASE_URL = "https://tikoci.github.io/centrs/errors/";
 
 export type CentrsErrorCode =
 	| `auth/${string}`

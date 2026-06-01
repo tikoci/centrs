@@ -54,6 +54,22 @@ rejects `execute`.
 - RoMON and WinBox Terminal are lower priority than mac-telnet until their
   validation, tooling, and CI story are grounded.
 
+## Flags
+
+| Flag                            | Behavior                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------- |
+| `--via <protocol>`              | Pin the transport (`native-api` or `rest-api`). No silent downgrade.                   |
+| `--host <host\|url>`            | Override the resolved host or base URL for the target.                                 |
+| `--port <n>`                    | Override the resolved management port.                                                 |
+| `--username` / `--password`     | RouterOS credentials; fall back to `CENTRS_USERNAME` / `CENTRS_PASSWORD`.              |
+| `--cdb-file` / `--cdb-password` | Read target credentials from (and decrypt) a WinBox CDB file.                          |
+| `--resolve <none\|arp>`         | Resolve a MAC-address target to an IP via the host ARP cache. Default `none`.          |
+| `--timeout <duration>`          | Per-request timeout. REST: ≤ 60s; other transports may allow longer.                  |
+| `--validate[=false]`            | Run the `:parse` + `/console/inspect` gate before execution (default `true`).          |
+| `--yes`                         | Confirm write-shaped add/set/remove commands in non-interactive runs.                  |
+| `--max-results <bytes>`         | Fail if the rendered envelope exceeds this byte budget.                                |
+| `--format <text\|json\|yaml>`   | Output format (alias `--json`). Defaults to `text`; `CENTRS_FORMAT` sets the default.  |
+
 ## SSH key selection
 
 Proposed pending sign-off: SSH transports use one shared setting, `sshKey`,

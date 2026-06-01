@@ -86,6 +86,15 @@ export interface ListenMndpResult {
 	packetsDecoded: number;
 	/** Datagrams ignored (self-echo, MAC-less, or malformed). */
 	packetsRejected: number;
+	/** Non-fatal anomalies observed during the listen (malformed, broadcast). */
+	warnings: readonly DevicesWarning[];
+}
+
+function errorCodeOf(error: unknown): string | undefined {
+	if (error && typeof error === "object" && "code" in error) {
+		return String((error as { code: unknown }).code);
+	}
+	return undefined;
 }
 
 function listenError(error: unknown, port: number, host: string): CentrsError {
@@ -142,6 +151,28 @@ export function listenMndp(
 	let packetsReceived = 0;
 	let packetsDecoded = 0;
 	let packetsRejected = 0;
+	let malformedCount = 0;
+	let broadcastError: unknown;
+
+	const collectWarnings = (): DevicesWarning[] => {
+		const warnings: DevicesWarning[] = [];
+		if (malformedCount > 0) {
+			warnings.push({
+				code: "mndp/malformed",
+				message: `Ignored ${malformedCount} malformed MNDP datagram(s) on the listen port.`,
+				context: { count: malformedCount },
+			});
+		}
+		if (broadcastError !== undefined) {
+			warnings.push({
+				code: "discover/broadcast-unavailable",
+				message:
+					"Could not enable UDP broadcast; discovery continued passively without sending refresh probes.",
+				context: { cause: errorCodeOf(broadcastError) },
+			});
+		}
+		return warnings;
+	};
 
 	return new Promise<ListenMndpResult>((resolve, reject) => {
 		const socket = createSocket({
@@ -178,6 +209,7 @@ export function listenMndp(
 					packetsReceived,
 					packetsDecoded,
 					packetsRejected,
+					warnings: collectWarnings(),
 				});
 			});
 		};
@@ -210,8 +242,10 @@ export function listenMndp(
 				packetsDecoded += 1;
 			} catch {
 				// Malformed datagram on the port; count and ignore (never throw
-				// from the receive path).
+				// from the receive path). A single aggregated `mndp/malformed`
+				// warning surfaces these in the envelope at finish time.
 				packetsRejected += 1;
+				malformedCount += 1;
 			}
 		});
 
@@ -222,8 +256,11 @@ export function listenMndp(
 				if (sendRefresh) {
 					try {
 						socket.setBroadcast(true);
-					} catch {
-						// Some environments forbid broadcast; passive listen still works.
+					} catch (error) {
+						// Some environments forbid broadcast; passive listen still
+						// works, but surface it as a `discover/broadcast-unavailable`
+						// warning so the caller knows no refresh probes were sent.
+						broadcastError = error;
 					}
 					const refresh = (): void => {
 						socket.send(
@@ -586,7 +623,7 @@ export async function discover(
 		packetsRejected: result.packetsRejected,
 	};
 
-	const warnings: DevicesWarning[] = [];
+	const warnings: DevicesWarning[] = [...result.warnings];
 	if (options.save) {
 		try {
 			const saved = await saveDiscoveredNeighbors({

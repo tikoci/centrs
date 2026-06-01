@@ -67,4 +67,30 @@ describe("default CDB auto-create", () => {
 			await rm(dir, { recursive: true, force: true });
 		}
 	});
+
+	test("surfaces cdb/parse-failed with parse context for a corrupt CDB", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "centrs-home-"));
+		try {
+			const corrupt = join(dir, "corrupt.cdb");
+			// open magic + a u32 record length of 100 with no record bytes: the
+			// codec underflows reading the claimed record slice.
+			await Bun.write(
+				corrupt,
+				Uint8Array.from([0x0d, 0xf0, 0x1d, 0xc0, 0x64, 0x00, 0x00, 0x00]),
+			);
+			let caught: CentrsError | undefined;
+			try {
+				await loadCdb({ cdbFile: corrupt, env: {} });
+			} catch (error) {
+				caught = error as CentrsError;
+			}
+			expect(caught?.code).toBe("cdb/parse-failed");
+			expect(caught?.context?.["parseKind"]).toBe("underflow");
+			expect(caught?.context?.["parseStructure"]).toBe("slice");
+			expect(caught?.context?.["parseRequested"]).toBe(100);
+			expect(caught?.context?.["cdbFile"]).toBe(corrupt);
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
 });

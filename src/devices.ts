@@ -22,6 +22,7 @@ import {
 	type WinBoxCdbRecord,
 	WinBoxCdbWrongPasswordError,
 	winBoxCdbFieldTag,
+	winBoxCdbParseErrorContext,
 	winBoxCdbRecordType,
 } from "./data/winbox-cdb.ts";
 import {
@@ -259,7 +260,10 @@ export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 				cause instanceof Error ? cause.message : "Failed to parse CDB file.",
 			remediation:
 				"Verify the file is a WinBox CDB and not truncated; restore from a backup if necessary.",
-			context: { cdbFile: settings.cdbFile.value },
+			context: {
+				cdbFile: settings.cdbFile.value,
+				...winBoxCdbParseErrorContext(cause),
+			},
 			cause,
 		});
 	}
@@ -313,18 +317,38 @@ export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 		}
 	}
 
-	const openFile = parseWinBoxCdb(openBytes);
-	if (openFile.mode !== "open") {
+	let entries: WinBoxCdbEntry[];
+	try {
+		const openFile = parseWinBoxCdb(openBytes);
+		if (openFile.mode !== "open") {
+			throw new CentrsError({
+				code: "cdb/parse-failed",
+				summary: "Decrypted CDB did not parse as an open file.",
+				remediation:
+					"Re-check --cdb-password; the bytes after decryption are malformed.",
+				context: { cdbFile: settings.cdbFile.value },
+			});
+		}
+		entries = decodeWinBoxCdbEntries(openFile);
+	} catch (cause) {
+		if (cause instanceof CentrsError) {
+			throw cause;
+		}
 		throw new CentrsError({
 			code: "cdb/parse-failed",
-			summary: "Decrypted CDB did not parse as an open file.",
+			summary:
+				cause instanceof Error
+					? cause.message
+					: "Failed to decode the decrypted CDB.",
 			remediation:
 				"Re-check --cdb-password; the bytes after decryption are malformed.",
-			context: { cdbFile: settings.cdbFile.value },
+			context: {
+				cdbFile: settings.cdbFile.value,
+				...winBoxCdbParseErrorContext(cause),
+			},
+			cause,
 		});
 	}
-
-	const entries = decodeWinBoxCdbEntries(openFile);
 	for (const entry of entries) {
 		const tags = unknownTcodeTags(entry.record);
 		if (tags.length > 0) {

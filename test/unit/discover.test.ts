@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { createSocket } from "node:dgram";
+import { describe, expect, spyOn, test } from "bun:test";
+import { createSocket, Socket } from "node:dgram";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { encodeMndpPacket, type MndpNeighbor } from "../../src/data/mndp.ts";
@@ -48,6 +48,7 @@ function fakeListen(
 			packetsReceived: neighbors.length,
 			packetsDecoded: neighbors.length,
 			packetsRejected: 0,
+			warnings: [],
 		};
 	};
 }
@@ -134,6 +135,53 @@ describe("listenMndp (loopback)", () => {
 		expect(result.packetsReceived).toBe(1);
 		expect(result.packetsDecoded).toBe(0);
 		expect(result.packetsRejected).toBe(1);
+		// A MAC-less echo parses fine — it is not a malformed datagram.
+		expect(result.warnings).toHaveLength(0);
+	});
+
+	test("surfaces a malformed datagram as an aggregated mndp/malformed warning", async () => {
+		const result = await listenMndp({
+			host: "127.0.0.1",
+			port: 0,
+			timeoutMs: 300,
+			sendRefresh: false,
+			onBound: (port) => {
+				const sender = createSocket("udp4");
+				// 2 bytes is shorter than the 4-byte MNDP header, so the parser
+				// throws and the receive path counts it as malformed.
+				sender.send(new Uint8Array(2), port, "127.0.0.1", () => sender.close());
+			},
+		});
+		expect(result.packetsRejected).toBe(1);
+		const malformed = result.warnings.find((w) => w.code === "mndp/malformed");
+		expect(malformed).toBeDefined();
+		expect(malformed?.context?.["count"]).toBe(1);
+	});
+
+	test("warns discover/broadcast-unavailable when setBroadcast is rejected", async () => {
+		const spy = spyOn(Socket.prototype, "setBroadcast").mockImplementation(
+			() => {
+				throw Object.assign(new Error("broadcast forbidden"), {
+					code: "EPERM",
+				});
+			},
+		);
+		try {
+			const result = await listenMndp({
+				host: "127.0.0.1",
+				port: 0,
+				timeoutMs: 150,
+				sendRefresh: true,
+				refreshIntervalMs: 0,
+			});
+			const warning = result.warnings.find(
+				(w) => w.code === "discover/broadcast-unavailable",
+			);
+			expect(warning).toBeDefined();
+			expect(warning?.context?.["cause"]).toBe("EPERM");
+		} finally {
+			spy.mockRestore();
+		}
 	});
 
 	test("rejects a bind on an already-used port with mndp/listen-failed", async () => {

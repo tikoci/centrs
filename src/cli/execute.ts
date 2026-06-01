@@ -1,4 +1,6 @@
+import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
 import {
+	buildExecuteErrorEnvelope,
 	type ExecuteOutputFormat,
 	type ExecuteRequest,
 	executeEnvelope,
@@ -192,36 +194,84 @@ function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 }
 
 export async function runExecuteCli(args: readonly string[]): Promise<number> {
-	let parsed: ExecuteCliArgs;
+	let parsed: ExecuteCliArgs | undefined;
 	try {
 		parsed = parseExecuteCliArgs(args);
-	} catch (error) {
-		console.error(error instanceof Error ? error.message : String(error));
-		return 2;
-	}
-	if (parsed.help) {
-		console.log(renderCommandHelp(describeCentrs(), executeCommand));
-		return 0;
-	}
+		if (parsed.help) {
+			console.log(renderCommandHelp(describeCentrs(), executeCommand));
+			return 0;
+		}
 
-	const envelope = await executeEnvelope(parsed);
-	const resolvedFormat =
-		(
-			envelope.meta.operation as {
-				request?: { format?: ExecuteOutputFormat };
-			}
-		)?.request?.format ??
-		parsed.format ??
-		"text";
-	const rendered = renderExecuteEnvelope(envelope, resolvedFormat, {
-		verbose: parsed.verbose,
-	});
-	if (envelope.ok) {
-		console.log(rendered);
-		return 0;
+		const envelope = await executeEnvelope(parsed);
+		const resolvedFormat =
+			(
+				envelope.meta.operation as {
+					request?: { format?: ExecuteOutputFormat };
+				}
+			)?.request?.format ??
+			parsed.format ??
+			"text";
+		const rendered = renderExecuteEnvelope(envelope, resolvedFormat, {
+			verbose: parsed.verbose,
+		});
+		if (envelope.ok) {
+			console.log(rendered);
+			return 0;
+		}
+		console.error(rendered);
+		return 1;
+	} catch (error) {
+		// Parse/usage errors land here too: surface them through the same typed
+		// envelope as every other runner (no raw message, no exit code 2).
+		const format = inferExecuteFormat(args, parsed);
+		if (format === "json" || format === "yaml") {
+			const envelope = buildExecuteErrorEnvelope(
+				parsed ?? { command: "" },
+				error,
+			);
+			console.error(
+				renderExecuteEnvelope(envelope, format, {
+					verbose: parsed?.verbose ?? false,
+				}),
+			);
+		} else {
+			console.error(
+				formatCentrsErrorText(
+					asCentrsError(error, {
+						code: "input/invalid-command",
+						summary: error instanceof Error ? error.message : String(error),
+						remediation:
+							"Use `centrs execute --help` to inspect the supported command shape and flags.",
+					}),
+					{ verbose: parsed?.verbose ?? args.includes("--verbose") },
+				),
+			);
+		}
+		return 1;
 	}
-	console.error(rendered);
-	return 1;
+}
+
+function inferExecuteFormat(
+	args: readonly string[],
+	parsed?: ExecuteCliArgs,
+): ExecuteOutputFormat {
+	if (parsed?.format) {
+		return parsed.format;
+	}
+	if (args.includes("--json")) {
+		return "json";
+	}
+	const index = args.indexOf("--format");
+	if (index >= 0) {
+		const value = args[index + 1];
+		if (
+			value !== undefined &&
+			executeOutputFormats.includes(value as ExecuteOutputFormat)
+		) {
+			return value as ExecuteOutputFormat;
+		}
+	}
+	return "text";
 }
 
 function parseIntegerFlag(value: string, flag: string): number {

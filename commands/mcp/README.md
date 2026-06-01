@@ -150,7 +150,8 @@ MCP server applies it as a hard allowlist:
   agent therefore cannot reach an arbitrary router with arbitrary credentials.
 - **CDB source** follows the constitution: default
   `~/.config/tikoci/winbox.cdb`, overridden by `CENTRS_CDB_FILE` / `--cdb-file`,
-  or a freshly created CDB the operator hands the server at start. With no CDB,
+  or a freshly created CDB the operator hands the server at start. An encrypted
+  CDB is decrypted with `--cdb-password` (or `CENTRS_CDB_PASSWORD`). With no CDB,
   the server still serves `centrs_explain` (offline); CDB mutations require a
   loadable CDB file.
 - **Credentials live in the CDB and are never returned by MCP.** `centrs_devices

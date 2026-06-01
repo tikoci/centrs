@@ -76,6 +76,7 @@
 		"test:all": "bun run test:ci",
 		"build": "bun build src/index.ts src/cli.ts src/mcp.ts src/tui.ts src/webproxy.ts src/protocols/index.ts --outdir dist --target bun",
 		"build:doc:api": "typedoc --out docs/api src/index.ts",
+		"docs:errors": "bun run scripts/gen-error-pages.ts",
 		"security": "bun run lint:secretlint && bun run lint:markdownlint"
 	},
 	"type": "module",

@@ -122,7 +122,7 @@ flags, or both. The resolved member set is de-duplicated by CDB record index.
 
 ```text
 centrs devices list [--group G] [--format json|yaml|text]
-centrs devices show <target> [--explain]
+centrs devices show <target> [--explain] [--via <protocol>] [--match <type>]
 centrs devices groups [--members]
 centrs devices add <target> [--user U] [--password P] [--group G]
                              [--profile P] [--session S] [--comment "text k=v"]
@@ -136,7 +136,8 @@ centrs devices remove <target>
   provenance summary. No network IO.
 - `show` returns a single resolved target with the full per-field source map
   in `meta.target`. `--explain` adds the raw CDB record dump under
-  `data.record`.
+  `data.record`; `--via <protocol>` reports the protocol that would be selected
+  for the target without connecting.
 - `groups` lists distinct non-empty group strings with member counts.
   `--members` expands to the full membership per group.
 - `add` modifies first-class CDB fields and prompts before overwriting an
