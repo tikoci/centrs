@@ -4,6 +4,13 @@ Open an interactive RouterOS console.
 
 Status: `not-started`. This file is a stub.
 
+`terminal` is the **introduction point for SSH** as a centrs transport. SSH
+lands as one complete transport — `terminal/ssh`, `execute/ssh`, and the
+`scp`/`sftp` transfer path — not piecemeal: a half-wired SSH (e.g. the `ssh-key`
+comment-kv key without a working transport) is worse than none, because it
+misleads agents working on adjacent cells. The `ssh-key` setting therefore joins
+the comment-kv allowlist *with* the SSH transport, not before it.
+
 ## Intent
 
 - `ssh` is the default. It honors system `ssh` config and the user's SSH agent;
@@ -18,12 +25,17 @@ Status: `not-started`. This file is a stub.
 
 ## SSH key selection
 
-Proposed pending sign-off: terminal uses the same `sshKey` setting as
+Signed off (settings names): terminal uses the same `sshKey` setting as
 `execute`: `--ssh-key <path>`, `CENTRS_SSH_KEY`, and CDB comment-kv
 `ssh-key=<path>`. Precedence is defaults → config → CDB comment-kv → env →
 CLI/API. When no key is set, terminal delegates identity selection to system
 `ssh` config and the SSH agent; `--ssh-key` is an explicit override and must not
 silently merge with a conflicting CDB/env key.
+
+Residual unknowns to resolve *during* the atomic SSH implementation (not
+blockers for these names): host-key verification / `known_hosts` policy, agent
+vs explicit-key interplay, RouterOS algorithm negotiation, and the
+`terminal`→`mac-telnet` fallback when SSH is unreachable but a MAC is on file.
 
 The setting stores a key path only. Private key material, passphrases, and agent
 contents are always sensitive and belong in `error.redactable_fields` if an

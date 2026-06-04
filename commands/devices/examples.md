@@ -10,6 +10,12 @@ into a temporary directory at runtime (open and encrypted, encrypted password
 Writes operate on a copy of the fixture per test; the source bytes are never
 mutated in place. `$CDB` is the per-test path.
 
+> These examples track the **currently implemented** verbs (`edit` edits
+> first-class fields; `set` writes comment kv-soup only). `README.md` describes a
+> decided redesign (symmetric `add`/`set`, `edit` → future TUI, `identity`/`mac`/
+> `ip` lookup keys, `__default__`, `tips[]`) that lands with new examples here —
+> do not reconcile the README back to these examples; reconcile forward.
+
 ## list
 
 ### 1. List all targets

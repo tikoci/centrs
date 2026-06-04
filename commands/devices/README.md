@@ -4,14 +4,22 @@ List, inspect, and edit RouterOS targets known to centrs. `devices` is the
 user-facing surface over the device registry described in
 `docs/CONSTITUTION.md`. It is the only command that may *write* to the CDB.
 
-Status: `CHR-passed`. The read subset (`list`/`show`/`groups`) and the full CDB
-mutation surface (`add`/`edit`/`set`/`remove`), ambiguity / `--match`, and the
-provenance/override examples are green via `bun run test:integration`
-(`test/integration/devices.test.ts`, fixture-backed — `devices` does no network
-IO, so its evidence is the integration run, not a booted CHR). Encrypted-CDB
-**writes** round-trip through decrypt → mutate → re-encrypt under the loaded
-password; encrypted **reads** work with `--cdb-password`. See
-`docs/MATRIX.md` for the matrix row.
+Status: `CHR-passed` for the surface described by `examples.md`. The read subset
+(`list`/`show`/`groups`) and the CDB mutation surface (`add`/`edit`/`set`/
+`remove`), ambiguity / `--match`, and the provenance/override examples are green
+via `bun run test:integration` (`test/integration/devices.test.ts`,
+fixture-backed — `devices` does no network IO, so its evidence is the
+integration run, not a booted CHR). Encrypted-CDB **writes** round-trip through
+decrypt → mutate → re-encrypt under the loaded password; encrypted **reads**
+work with `--cdb-password`. See `docs/MATRIX.md` for the matrix row.
+
+This README also describes a **decided redesign that is not yet implemented**:
+the `identity`/`mac`/`ip` comment lookup keys, the symmetric `add`/`set` model
+with `edit` reserved for a future TUI, the `--profile-none`/`--profile-own`
+sentinels, the `__default__` record, and the `tips[]` channel. The implemented
+verbs today are the older shape (`edit` edits first-class fields; `set` writes
+comment kv-soup only). The gap is tracked under "Open questions" below — treat
+this README as the target spec, `docs/MATRIX.md` as the implemented status.
 
 `devices` does not use a transport in the protocol sense and does not contact a
 RouterOS device in phase 1. Its sources are:
@@ -24,33 +32,51 @@ RouterOS device in phase 1. Its sources are:
 
 ## Identity model
 
-The CDB record's `target` field IS the identity — the literal you type at the
-CLI. It is one of:
+The CDB record's natural identity is the **(target, user)** pair, matching
+WinBox: saving the same address under a different user creates a second record,
+not an update. The `target` is the connectable literal WinBox/REST/native use,
+and is one of:
 
 - an IPv4 address (`192.0.2.5`, optionally `host:port`),
 - an IPv6 address (`2001:db8::5`, optionally `[2001:db8::5]:port`),
 - a MAC (`AA:BB:CC:DD:EE:FF`, case-insensitive, separators normalized),
 - a DNS name (`edge1.lan`).
 
-The comment is *not* a lookup key. To make `edge1` resolvable, the CDB entry's
-target must be `edge1` (or `edge1.lan`). The comment carries free text plus an
-optional centrs **kv-soup** of option overrides — see below.
+WinBox has no separate "name" field, so a human handle is overlaid in the
+comment as **lookup keys** (constitution: identity and CDB). centrs resolves
+`<router>` against the `target` field **and** these comment-kv keys:
 
-When the CLI target is a literal IP / IPv6 / MAC that matches an entry's
-target exactly, credentials and other CDB-resident fields are loaded from that
-entry. If no entry matches, the call still proceeds but `--username` /
-`--password` (or `CENTRS_USERNAME` / `CENTRS_PASSWORD`) become mandatory.
+| Lookup key  | Meaning                                                                 |
+| ----------- | ---------------------------------------------------------------------- |
+| `identity=` | The device `/system/identity`. Human handle; deliberately may repeat. |
+| `mac=`      | A MAC, when `target` is an IP/DNS name rather than the MAC.            |
+| `ip=`       | An IP, when `target` is an identity/DNS name rather than the IP.       |
+
+Whichever identifiers are not the `target` ride the comment as lookup keys, so
+one record is resolvable by identity **or** IP **or** MAC **or** DNS-name
+regardless of which is stored as `target`. These three keys are the *only*
+sanctioned exception to "the comment is free text"; every other token stays
+inert. (Earlier drafts said "the comment is not a lookup key" — superseded.)
+
+When `<router>` matches an entry (by `target` or a lookup key), credentials and
+other CDB-resident fields load from that entry. If nothing matches, the call
+still proceeds but `--username` / `--password` (or `CENTRS_USERNAME` /
+`CENTRS_PASSWORD`, or a `__default__` record) become mandatory.
 
 ### Ambiguity
 
-If a typed target matches more than one entry (e.g. one IPv4 + one IPv6
-entry that share a DNS name in `target`, or two entries with the same MAC):
+Because identity is `(target, user)`, one address legitimately maps to several
+records — the same host saved under two users, or `ipAdmin` + `ipUser` for one
+host. That is not an error in itself; it only becomes ambiguous when `<router>`
+alone cannot pick one (the caller named an address that several records share,
+or a duplicated `identity=`):
 
 - **TTY:** centrs prompts interactively, listing the matches and asking which
   to use.
 - **Non-TTY:** centrs errors with `identity/ambiguous`. The error envelope
-  lists all matching entries (by `cdbRecordIndex` and `target`). The caller
-  can re-run with `--match=<exact-target>` to pin the choice.
+  lists all matching entries (by `cdbRecordIndex`, `target`, `user`, and
+  `recordType`). The caller pins the choice with `--match` by `user`
+  (`--match user=admin`), by record-type (`--match ipUser`), or by exact target.
 
 `--prefer-family=ipv4|ipv6` is a non-interactive way to break v4/v6 ties
 deterministically; with it set, no prompt is raised. It emits a warning
@@ -59,18 +85,22 @@ when it actually selected between candidates.
 ## Comment kv-soup (per-device overrides)
 
 The CDB `comment` field is free text. centrs additionally parses tokens
-shaped like `key=value` out of it and treats them as per-device defaults for
-its own settings. Recognized keys (allowlist):
+shaped like `key=value` out of it. Recognized keys (allowlist) fall in two
+groups: **lookup keys** affect how `<router>` resolves (see "Identity model");
+**override keys** are per-device defaults for centrs settings.
 
-| Key        | Effect                                                                  |
-| ---------- | ----------------------------------------------------------------------- |
-| `via`      | Default transport for this device (`rest-api`, `native-api`, `ssh`, …). |
-| `validate` | `true` / `false`. `false` is the escape hatch; CLI overrides.           |
-| `timeout`  | Default request timeout in ms. Per-transport caps still apply.          |
-| `port`     | Non-default transport port. Omitted when equal to the protocol default. |
-| `ssh-key`  | Per-device private key file path for SSH transports.                    |
-| `source`   | Provenance marker for discovered/imported records (`mndp`, `dude`, …).  |
-| `mcp`      | MCP write policy for this device: `ro` (default) or `rw`. See `commands/mcp/`. |
+| Key        | Group    | Effect                                                                  |
+| ---------- | -------- | ---------------------------------------------------------------------- |
+| `identity` | lookup   | Device `/system/identity`; a resolvable handle. May repeat across records. |
+| `mac`      | lookup   | A MAC, when `target` is not the MAC.                                    |
+| `ip`       | lookup   | An IP, when `target` is not the IP.                                     |
+| `via`      | override | Default transport for this device (`rest-api`, `native-api`, `ssh`, …). |
+| `validate` | override | `true` / `false`. `false` is the escape hatch; CLI overrides.           |
+| `timeout`  | override | Default request timeout in ms. Per-transport caps still apply.          |
+| `port`     | override | Non-default transport port. Omitted when equal to the protocol default. |
+| `ssh-key`  | override | Per-device private key file path for SSH transports.                    |
+| `source`   | override | Provenance marker for discovered/imported records (`mndp`, `dude`, …).  |
+| `mcp`      | override | MCP write policy for this device: `ro` (default) or `rw`. See `commands/mcp/`. |
 
 Rules:
 
@@ -79,7 +109,9 @@ Rules:
   refuses to write them via `devices set`.
 - `ssh-key` stores a path only, never private key material. Key contents belong
   in the user's filesystem / SSH agent and are always treated as sensitive if an
-  error needs to mention them.
+  error needs to mention them. It joins the comment-kv allowlist *with* the SSH
+  transport (see `commands/terminal/README.md`), not before — a key path with no
+  working SSH transport is the kind of half-feature we avoid.
 - Unknown keys → `cdb/unknown-option` warning. The call still succeeds.
 - Tokens are shell-word tokenized. Values with spaces require double quotes
   (`"…"`), with `\"` and `\\` escapes. `=` inside a quoted value is literal.
@@ -125,29 +157,68 @@ centrs devices list [--group G] [--format json|yaml|text]
 centrs devices show <target> [--explain] [--via <protocol>] [--match <type>]
 centrs devices groups [--members]
 centrs devices add <target> [--user U] [--password P] [--group G]
-                             [--profile P] [--session S] [--comment "text k=v"]
+                             [--profile P|--profile-none|--profile-own]
+                             [--session S] [--comment "text k=v"]
                              [--record-type ipAdmin|ipUser|macTarget|...]
-centrs devices edit <target>
-centrs devices set  <target> k=v [k=v ...]   # comment kv-soup overrides only
+centrs devices set  <target> [--user U] [--password P] [--group G]
+                             [--profile P|--profile-none|--profile-own]
+                             [--session S] [k=v ...]
 centrs devices remove <target>
+centrs devices edit <target>            # future: clack/TUI wizard
 ```
 
-- `list` shows resolved targets, their record type, group, and a one-line
-  provenance summary. No network IO.
-- `show` returns a single resolved target with the full per-field source map
-  in `meta.target`. `--explain` adds the raw CDB record dump under
+`add` and `set` are deliberately symmetric: both take the same first-class
+flags and the same `k=v` comment tokens. The only difference is existence —
+`add` creates (and refuses an existing target), `set` modifies (and refuses a
+missing target). `edit` is reserved for a future interactive wizard (the
+clack-style prompt used by `@tikoci/quickchr`); it is **not** a separate
+field-editing verb. There is no `update`.
+
+- `list` (alias `print`) shows resolved targets, their record type, group, and
+  a one-line provenance summary. No network IO.
+- `show` (alias `get`) returns a single resolved target with the full per-field
+  source map in `meta.target`. `--explain` adds the raw CDB record dump under
   `data.record`; `--via <protocol>` reports the protocol that would be selected
   for the target without connecting.
 - `groups` lists distinct non-empty group strings with member counts.
   `--members` expands to the full membership per group.
-- `add` modifies first-class CDB fields and prompts before overwriting an
-  existing target unless `--force` is passed (`add` against an existing target
-  without `--force` errors `cdb/already-exists`).
-- `edit` is the TUI/wizard form for changing first-class CDB fields.
-- `set` modifies only the comment kv-soup. Refuses to set keys that map to
-  first-class CDB fields. Refuses unknown keys when `--strict`.
-- `remove` removes a single entry. Group-wide deletes (`--group G`) require
-  `--force` (writes are large).
+- `add` creates a record from first-class flags + comment tokens. Against an
+  existing `(target, user)` it errors `cdb/already-exists` unless `--force`
+  overwrites; the same `target` under a *different* `--user` is a new record,
+  not a collision.
+- `set` modifies an existing record. First-class fields change via flags
+  (`--user`, `--password`, `--group`, `--profile[-none|-own]`, `--session`);
+  comment lookup/override keys change via `k=v` positionals. Against a missing
+  target it errors `cdb/not-found-target`. Writing a first-class field name as a
+  `k=v` positional (e.g. `user=x`) stays refused with `cdb/reserved-key` — the
+  flag is the only path. Unknown comment keys warn (`cdb/unknown-option`), or
+  error under `--strict`.
+- `remove` (aliases `rm`, `delete`) removes a single entry. Group-wide deletes
+  (`--group G`) require `--force` (writes are large).
+
+`--profile <name>` sets a named WinBox profile; `--profile-none` /
+`--profile-own` write the WinBox sentinels `<none>` / `<own>`. `profile` and
+`session` are **preserved for WinBox compatibility only** — centrs round-trips
+them and lets you edit them, but never acts on them itself. Unset, `profile`
+defaults to `<none>` (or is inherited from the `__default__` record).
+
+Grounding: `profile` is WinBox's "Workspace" (a saved window layout). `<none>`
+means start with a clean/empty layout; `<own>` means reuse the last session's
+layout *for that router* (per-router, not global). Both are meaningless to
+centrs's headless use, which is exactly why they are preserve-only.
+
+## Default device (`__default__`)
+
+A reserved record (`target=__default__`) holds global fallback creds + comment
+overrides for any device whose own record leaves them unset. Create/edit it like
+any other record (`devices add __default__ --user admin --password …`); WinBox
+can edit it too. Precedence is per-field: args → env → device record →
+`__default__` → built-in default (constitution: identity and CDB).
+
+- `devices list` shows it; tag it `group=default` for clarity if you like.
+- On the CLI/API it can supply creds even for a target with no CDB record. On
+  **MCP** it never widens the allowlist — an unregistered target is still
+  rejected; `__default__` only fills missing creds for a registered device.
 
 ## CDB write strategy
 
@@ -226,15 +297,29 @@ member list and the group(s) that expanded into it).
 
 ## Open questions (remaining work beyond the current `CHR-passed`)
 
-`devices` is `CHR-passed` for reads and for writes against both unencrypted and
-encrypted CDBs. The comment-kv grammar is settled — see "Comment kv-soup"
-above and `test/unit/comment-kv.test.ts`. These remain open:
+`devices` is `CHR-passed` for the currently-implemented reads and writes against
+both unencrypted and encrypted CDBs. The comment-kv *grammar* is settled — see
+"Comment kv-soup" above and `test/unit/comment-kv.test.ts`. These remain open.
+
+**Decided design, pending implementation + CHR examples:**
+
+| Item | Notes |
+| --- | --- |
+| `identity`/`mac`/`ip` lookup keys | Resolver matches `<router>` against these comment keys, not just `target`. Add to the comment-kv allowlist (`src/resolver/comment-kv.ts`) as a distinct *lookup* group; needs resolution + ambiguity examples. |
+| Rename resolver/envelope `name` → `identity` | `EnvelopeTargetMeta.name` and the resolver field (`src/resolver/cdb.ts`, `target.ts`) currently mean "the matched record's target" — `name` is too vague. Rename to `identity` and populate it from the `identity=` lookup key (falling back to the matched target). Lands with the lookup-key work so the field's value and name change together. |
+| Symmetric `add`/`set`; `edit` → future TUI | `set` gains first-class flags and require-exists; `edit` stops being a field editor. Update `src/devices.ts` + examples; the `cdb/reserved-key` rule stays for `k=v` positionals. |
+| `(target, user)` record identity | `add` existence check + ambiguity key on `(target, user)`, not `target` alone (current code keys on `target`). `--match` gains a `user=` form. Needs an example: same address under two users coexists; resolving the bare address is `identity/ambiguous`. |
+| `--profile-none` / `--profile-own` | Sentinel flags writing `<none>` / `<own>`; `profile`/`session` stay preserve-only. |
+| `__default__` record | Reserved fallback record; per-field precedence args → env → device → `__default__` → built-in; CLI/API fill any target, MCP keeps the allowlist. |
+| `tips[]` emission | Emit `tip/credentials-missing`, `tip/no-cdb`, "consider a `__default__`" tips on the relevant envelopes. |
+
+**Still genuinely open:**
 
 | Question | Affects | Notes |
 | --- | --- | --- |
 | ARP resolver test scheme | retrieve / execute when target is a MAC | Need deterministic fixtures per OS plus one live same-L2 proof before relying on ARP in integration. |
 
-When a row is answered, fold it into this README and delete the row.
+When an item ships with CHR examples, fold it into the matrix and delete the row.
 
 ## Residual risks
 

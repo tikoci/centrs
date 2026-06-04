@@ -4,7 +4,10 @@ Discover RouterOS neighbors over MNDP and optionally save them into the CDB.
 
 Status: `coded` (see `docs/MATRIX.md`). The MNDP codec, TTL cache, UDP
 listener, and `discover --save` are implemented and unit-tested; the matrix
-remains the only status surface.
+remains the only status surface. The `identity=`/`mac=` lookup-key writing and
+MAC-keyed de-dupe described below are the decided target; the current `--save`
+de-dupes on `target` and keeps identity/MAC in the inert detail — that gap moves
+with the `devices` lookup-key work.
 
 ## Synopsis
 
@@ -76,17 +79,26 @@ tested without a router (crafted packet fixtures + a loopback socket).
 ## `--save` provenance and de-dupe
 
 - **Target:** a neighbor's CDB target is its advertised IPv4 when present
-  (record type `ipAdmin`), else its MAC (record type `macTarget`).
-- **Provenance:** the comment carries the allowlisted `source=mndp` kv token
-  plus a free-form, parenthesized detail (`discovered <iso> via MNDP (identity:
-  …; platform: …; board: …; version: …; mac: …; interface: …; software-id: …)`).
-  Only `source=mndp` is parsed by the comment kv-soup; the detail is inert so it
-  preserves provenance without emitting `cdb/unknown-option` warnings later.
+  (record type `ipAdmin`), else its MAC (record type `macTarget`). One record
+  per device — the connectable address — not a MAC record plus an IP record.
+- **Lookup keys:** the identifiers that are *not* the target are written as
+  comment lookup keys so the device resolves by any of them (see
+  `commands/devices/README.md`, Identity model): `identity=<advertised
+  identity>` always, and `mac=` when the target is the IP. The advertised
+  identity is therefore usable directly — `centrs retrieve <identity> …` — even
+  though it is duplicative across factory-default devices.
+- **Provenance:** the comment also carries the allowlisted `source=mndp` token
+  plus a free-form, parenthesized detail (`discovered <iso> via MNDP (platform:
+  …; board: …; version: …; interface: …; software-id: …)`). The detail is inert
+  so it preserves provenance without emitting `cdb/unknown-option` warnings.
 - **Group:** new entries get `group=discovered` (override with `--group`).
-- **De-dupe rule:** a neighbor whose target already names a CDB entry is
-  **skipped, never overwritten** — hand-curated records win. Only new targets
-  are added. Writes reuse the `devices` atomic write path (`addDevice`); the CDB
-  is reloaded between writes so each add sees the prior additions.
+- **De-dupe rule:** keyed on the **MAC**, which MNDP always carries and which is
+  globally unique — `identity` is *not* the de-dupe key, because factory-default
+  devices all report `MikroTik`. A neighbor whose MAC already names a CDB entry
+  (as the `target` of a `macTarget` record or as a `mac=` lookup key on any
+  record) is **skipped, never overwritten** — hand-curated records win. Only
+  genuinely new devices are added. Writes reuse the `devices` atomic write path
+  (`addDevice`); the CDB is reloaded between writes so each add sees prior ones.
 - **Encrypted CDBs:** `--save` against an encrypted CDB decrypts the file under
   the loaded password, appends new neighbors, and re-encrypts with a fresh salt
   before the atomic rename. The backup beside the CDB is the verbatim prior

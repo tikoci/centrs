@@ -44,6 +44,13 @@ through the write layer's `encryptWith` option using the password loaded from
 settings. Data sources (CDB, ARP cache, MNDP cache,
 `dude.db` import) and their phasing live in `commands/devices/README.md`.
 
+A decided redesign sits ahead of the implemented surface (comment lookup keys
+`identity`/`mac`/`ip`, symmetric `add`/`set` with `edit` reserved for a future
+TUI, `--profile-none`/`--profile-own`, the `__default__` record, and the
+top-level `tips[]` channel). It is spec'd in `commands/devices/README.md` and
+`docs/CONSTITUTION.md` and tracked there pending implementation + CHR examples;
+the cell stays `CHR-passed` for what `examples.md` currently covers.
+
 `discover` is `coded`: the MNDP wire codec (`src/data/mndp.ts`), the
 TTL-expiring neighbor cache (`src/data/mndp-cache.ts`), the UDP listener, and
 `discover --save` (which persists through `devices`' `addDevice` write layer)
@@ -124,8 +131,11 @@ matching evidence.
    provenance.
 6. **retrieve / snmp** — SNMP OID/MIB reads with MikroTik MIB download/cache
    (future).
-7. **ssh** for execute/terminal/transfer — third transport and key-management
-   scheme.
+7. **ssh** for execute/terminal/transfer — third transport, landing as one
+   complete unit (not piecemeal), **introduced via `terminal/ssh`**. Settings
+   names (`--ssh-key`/`CENTRS_SSH_KEY`/`ssh-key` comment-kv) are signed off; the
+   `ssh-key` comment-kv allowlist entry arrives with the transport. See
+   `commands/terminal/README.md` for the residual SSH unknowns.
 8. **mac-telnet** for execute/terminal — L2 path, default execute route for
    unresolved MAC targets.
 9. **RoMON / WinBox Terminal for execute** — lower-priority execute surfaces
@@ -156,11 +166,9 @@ matching evidence.
 | Question | Affects cell | Notes |
 | -------- | ------------ | ----- |
 | SNMP MIB cache policy | retrieve / snmp | Decide cache location, invalidation, RouterOS version/channel matching, and offline behavior for MIB-name lookup. |
-| SSH key management | execute / ssh, terminal / ssh | Decide CDB comment-kv keys, CLI flags, env names, and redaction for stored key paths or key material. |
 | Bug-report rendering: inline flag, separate command, both? | cross-cutting | Constitution says envelope is rich enough; rendering deferred until needed. |
 | L2 in CI: how to fake L2 net for mac-telnet on Linux runner | execute / mac-telnet, terminal / mac-telnet | quickchr supports L2 netdevs (`vmnet-shared`/`vmnet-bridged` on macOS, `tap`, `socket-mcast`), but `startIntegrationChr()` uses `user`-mode SLIRP with hostfwd, which does not carry L2 broadcast/MAC-Telnet. Real-router validation also needs raw L2 frame I/O from the host (BPF on macOS / AF_PACKET on Linux) on an interface sharing the CHR's L2 segment — Bun exposes no raw-L2 socket, so a native helper (libpcap binding or socket_vmnet + a small frame shim) is required. Until then, mac-telnet is covered at the protocol layer by `test/unit/mac-telnet.test.ts` against a scripted peer. Must still cover unresolved-MAC default behavior. |
 | RoMON / WinBox Terminal validation and CI | execute / romon, execute / winbox-terminal | Lower priority than mac-telnet; need reference tooling and typed failure mapping before advancing. |
-| MCP `__default__` fallback-credentials record | mcp (Phase 4) | A reserved CDB record supplying default creds/metadata when a device has none. Precedence args → ENV → device record → `__default__` → built-in. Decide whether CLI/API honor it too. See `commands/mcp/README.md`. |
 
 When a question is answered, fold the answer into the relevant
 `commands/<name>/README.md` or `docs/CONSTITUTION.md`, then delete the row.

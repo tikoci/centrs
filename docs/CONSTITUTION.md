@@ -62,6 +62,7 @@ Every API/CLI call returns the same shape, regardless of transport:
   ok: boolean,                  // true if the operation succeeded end-to-end
   data?: unknown,               // the payload (array of records, single object, etc.)
   warnings?: Warning[],         // non-fatal anomalies (stale cache, unused --cdb-password, etc.)
+  tips?: Tip[],                 // advice, not anomalies (no username set, no CDB found, …)
   error?: CentrsError,          // present iff ok=false
   meta: {
     target: { ... },            // resolved target + provenance (where each field came from)
@@ -77,9 +78,19 @@ Every API/CLI call returns the same shape, regardless of transport:
 Notes:
 
 - "Success with footnotes" is supported: `ok: true` may carry warnings.
+- `warnings` and `tips` are both always present (`[]` when empty) so consumers
+  never branch on existence. They are distinct on purpose: a **warning** is a
+  non-fatal anomaly about *this* result (stale cache, unused `--cdb-password`); a
+  **tip** is advice that is explicitly *not* an error or anomaly (no username
+  set, no CDB found, consider a default device). The "this is not a problem,
+  just a pointer" signal is the whole reason tips are a separate channel rather
+  than folded into warnings. A `Tip` has the same shape as a warning
+  (`{ code, message, fix? }`) with `tip/*` codes and a `details_url`.
 - CLI render must be lossless against the JSON envelope; `--format json` and
   `--format yaml` are aliases that select serialization, not different shapes.
-- `data` is the only field that varies by command. The rest is invariant.
+  Text mode renders tips under a `Tips:` footer, distinct from warnings.
+- `data` is the only field whose *shape* varies by command. Everything else —
+  including `warnings` and `tips` — is invariant in shape; only contents differ.
 
 ## Error model
 
@@ -151,9 +162,23 @@ Lowest to highest priority:
 
 ### Identity and CDB
 
-The `<router>` argument may be: an IP, a DNS name, a MAC, or a **name**. A
-name is resolved through the CDB (then through ARP / MNDP-derived metadata as
-fallbacks once implemented).
+The `<router>` argument may be: an IP, a DNS name, a MAC, or an **identity**
+(the device's `/system/identity`). It is resolved through the CDB (then through
+ARP / MNDP-derived metadata as fallbacks once implemented).
+
+The WinBox CDB has no dedicated "name" field. Its natural record identity is the
+**(target, user)** pair (grounded on WinBox behavior: "Save to list" with the
+same address but a different user creates a *second* record, not an update). So
+the same address saved under two users is two legitimate records, not a
+duplicate; `group` is a flat attribute, never part of the key. centrs resolves
+`<router>` against the `target` field **and** a small set of comment-kv **lookup
+keys**: `identity=`, `mac=`, `ip=`. Whichever identifiers are not the `target` ride the comment as
+lookup keys, so one record is resolvable by identity **or** IP **or** MAC **or**
+DNS-name regardless of which one is stored as `target`. (`identity` mirrors
+RouterOS `/system/identity` and is deliberately allowed to be non-unique;
+collisions resolve through the ambiguity path below.) These lookup keys are the
+one sanctioned exception to "the comment is free text"; every other comment-kv
+token stays inert metadata.
 
 CDB resolution:
 
@@ -163,14 +188,41 @@ CDB resolution:
   `Bun.secret()` for the CLI, when wired) decrypts.
 - Providing `--cdb-password` against an unencrypted CDB is a **warning**, not
   an error; the call still succeeds.
-- A name not found in the CDB is an error unless `--username` / `--password`
-  were also provided.
+- An identity/target not found in the CDB is an error unless `--username` /
+  `--password` were also provided (or a `__default__` record supplies them —
+  see below).
+- A `<router>` that matches more than one record (an address with two users, or
+  a duplicated `identity=`) is `identity/ambiguous` in non-TTY mode; `--match`
+  pins the choice by `user` and/or record-type. centrs does not heuristically
+  pick among genuine duplicates.
 - For a MAC target, CDB wins first. If no CDB record matches, `retrieve` may
   opt into local ARP resolution to obtain an IP-level target; `execute`
   defaults to mac-telnet unless the caller explicitly asks to resolve via ARP.
 - `discover --save --timeout 60s` writes MNDP-derived targets into CDB with
   provenance metadata and default `group=discovered`; discovery remains a hint
-  source, not authoritative inventory.
+  source, not authoritative inventory. De-duplication of saved records is keyed
+  on the **MAC** (globally unique); `identity` is written as a resolution handle
+  but is never the de-dupe key, because factory-default devices all report
+  `MikroTik`.
+
+#### Default-device record (`__default__`)
+
+A reserved CDB record (`target=__default__`, optionally `group=default`) supplies
+fallback metadata + username/password for a resolved device whose own record
+leaves them unset. WinBox can edit it like any other record; sharing the CDB with
+WinBox stays opt-in.
+
+- Precedence, per field: per-call args → env (`CENTRS_*`) → the matched device
+  record → the `__default__` record → built-in default. Inheritance is
+  per-field (a device may inherit `password` from `__default__` but override
+  `user`).
+- It is **core** — honored by CLI, API, and MCP, not an MCP-only concept.
+- **Allowlist boundary holds.** On the CLI/API, `__default__` may supply creds
+  for *any* target (including one not in the CDB) — the CLI has no allowlist. On
+  **MCP**, the CDB stays the allowlist: an unregistered target is still rejected
+  with `cdb/target-not-registered`, and `__default__` only fills *missing* creds
+  for an *already-registered* device. `__default__` never widens the MCP
+  allowlist.
 
 CDB is the native credential store **and** the device datastore/cache: the
 WinBox CDB file at its well-known location holds the inventory directly — there
@@ -299,12 +351,22 @@ centrs does not:
 
 - `tikoci/rosetta` — RouterOS docs / RAG.
 - `tikoci/restraml` — REST schema and inspect output.
-- `tikoci/m2ir` — protocol IR (WinBox, etc.). Not an accessible source for the
-  RouterOS error-string vocabulary; ground error mappings on live CHR strings.
+- `tikoci/m2ir` — protocol IR (WinBox, etc.), and the home for the
+  declarative "schema-as-data" approach to representing protocol internals
+  (consult it when WinBox-terminal / RoMON / heavy protocol work lands, rather
+  than hand-rolling protocol knowledge in centrs). Not an accessible source for
+  the RouterOS error-string vocabulary; ground error mappings on live CHR
+  strings.
 - `tikoci/lsp-routeros-ts` — canonicalization, parse-validation patterns.
 - `tikoci/quickchr` — CHR-backed integration test harness.
 
 When one of these owns a question, defer to it instead of restating here.
+
+External reference implementations to compare centrs protocol/transport work
+against (SSH patterns, native-API behavior, CDB format, WinBox framing) are kept
+as bibliography entries in `GLOSSARY.txt` — e.g. `netmiko`,
+`terraform-provider-routeros`, `librouteros-api`, `RouterOS_Tools`,
+`Winbox_Protocol_Dissector`.
 
 ### Canonicalizer ownership
 

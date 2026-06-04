@@ -1,1 +1,35 @@
-> TODO: should explain the structure more, avoid docs/CONSTITUTION.md
+# commands/
+
+Each `commands/<name>/` holds the **executable spec** for one command:
+
+- `README.md` — intent, flags, behavior. The "designed" tier.
+- `examples.md` — numbered, runnable examples. Each example is one assertion in
+  the matching `test/integration/<name>.test.ts`; example N ↔ assertion N. This
+  is what `CHR-passed` is measured against.
+
+Do not restate the constitution here or in a command README — link to
+`docs/CONSTITUTION.md` for envelope, errors, settings precedence, identity/CDB,
+and protocol selection. A command file covers only what is specific to that
+command. `docs/MATRIX.md` is the only status surface; a README's "Status" line
+must agree with it.
+
+## Verb vocabulary
+
+Commands are centrs **verbs** (`retrieve`, `execute`, `devices`, `discover`,
+`check`, `terminal`), never one tool per RouterOS command. Sub-verbs and their
+aliases are canonical across CLI / API / MCP:
+
+| Canonical | Aliases          | Meaning                                  |
+| --------- | ---------------- | ---------------------------------------- |
+| `list`    | `print`          | Read many records. (`print` is RouterOS muscle-memory.) |
+| `show`    | `get`            | Read one resolved record.                |
+| `add`     | —                | Create; refuses an existing target.      |
+| `set`     | —                | Modify an existing record (same flags as `add`). |
+| `remove`  | `rm`, `delete`   | Delete a record.                         |
+| `edit`    | —                | **Reserved** for the future clack/TUI wizard. Not a field-editing verb. |
+| `groups`  | —                | List distinct groups.                    |
+
+Canonical names win in help text and docs; aliases resolve to the canonical verb
+silently. `add` and `set` are symmetric (same flags + `k=v` tokens), differing
+only on existence. There is no `update` verb — RouterOS add/set/remove ride
+`execute` (constitution: protocol selection).

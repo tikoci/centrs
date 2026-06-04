@@ -27,6 +27,9 @@
 #   https://github.com/tikoci/lsp-routeros-ts
 # %donny: Dude/discovery grounding for RouterOS device inventories.
 #   https://github.com/tikoci/donny
+# %m2ir: protocol IR (WinBox, nova messages) + the declarative schema-as-data
+#   approach to protocol internals; consulted for heavy protocol work.
+#   https://github.com/tikoci/m2ir
 # %tikbook: RouterOS notebook/documentation vocabulary used across tikoci.
 #   See also https://github.com/tikoci/vscode-tikbook
 # %routeros-skills: reusable RouterOS agent skills.
@@ -41,6 +44,22 @@
 # External references
 # %mac-telnet: MikroTik MAC Telnet tooling by haakonnessjoen.
 #   https://github.com/haakonnessjoen/mac-telnet
+# %netmiko: multi-vendor SSH abstraction; reference for SSH transport patterns.
+#   https://github.com/ktbyers/netmiko
+# %terraform-provider-routeros: widely-used Go RouterOS provider; reference for
+#   native-API behavior and provisioning idioms.
+#   https://github.com/terraform-routeros/terraform-provider-routeros
+# %librouteros-api: haakonnessjoen's C native-API client; cross-check for our
+#   native-api codec.
+#   https://github.com/haakonnessjoen/librouteros-api
+# %RouterOS_Tools: third-party WinBox CDB format implementation; cross-check for
+#   our CDB codec.
+#   https://github.com/jabb3rd/RouterOS_Tools
+# %Winbox_Protocol_Dissector: Wireshark dissector for the WinBox protocol
+#   (incl. RoMON proxy); grounding for future WinBox-terminal/RoMON work.
+#   https://github.com/Cisco-Talos/Winbox_Protocol_Dissector
+# %btest-opensource: open btest.exe (bandwidth-test) client; possible `check`
+#   feature grounding. https://github.com/samm-git/btest-opensource
 Addrs
 ajv
 amazonq
@@ -208,10 +227,20 @@ SLIRP
 vmnet
 
 # centrs domain vocabulary
+# %identity: the device /system/identity; a centrs CDB comment *lookup key*
+#   (`identity=`) used to resolve `<router>`. Human handle, deliberately may
+#   repeat across records; collisions resolve via `identity/ambiguous` + --match.
+# %tips: top-level envelope channel `tips[]` for advice that is explicitly not an
+#   error or warning (no username set, no CDB found). Shape `{ code, message,
+#   fix? }` with `tip/*` codes. See docs/CONSTITUTION.md (Result envelope).
+# %__default__: reserved CDB record (`target=__default__`) supplying fallback
+#   creds/metadata. Precedence args → env → device record → __default__ →
+#   built-in. Core (CLI/API/MCP); never widens the MCP allowlist.
 neteng
 upsert
 upserts
 upserted
+duplicative
 
 # MNDP discovery vocabulary (WP-2b)
 tlvs

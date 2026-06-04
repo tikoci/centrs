@@ -211,13 +211,14 @@ The server publishes two read-only MCP **resources** and points its
   the bench can cite per-trap results. Requested by the bench review
   (`~/GitHub/bench-routeros-tools/docs/AGENTIC_FUTURES.md` → "benchmark centrs as
   the realized scoped-execution tier").
-- **`__default__` fallback-credentials CDB record.** A reserved CDB record
-  (working name `__default__`) supplies default metadata + username/password for
-  a resolved device that has none set. Precedence: per-call args → ENV
-  (`CENTRS_*`) → the matched device record → the `__default__` record → built-in
-  default. The sentinel name and any per-field opt-outs ride the comment kv-soup.
-  Lands with packaging (Phase 4); the goal is "register a host with no creds and
-  still reach it through a shared default."
+- **`__default__` fallback-credentials CDB record** is now a **core** concept,
+  not MCP-specific — see `docs/CONSTITUTION.md` (Default-device record) and
+  `commands/devices/README.md`. It supplies fallback creds/metadata for a device
+  whose own record leaves them unset (precedence args → ENV → device →
+  `__default__` → built-in). MCP-specific rule: `__default__` **never widens the
+  allowlist** — an unregistered target is still rejected; `__default__` only
+  fills missing creds for an already-registered device (see the safety model
+  above). Implementation lands with packaging (Phase 4).
 - **MikroTik docs enrichment.** `centrs_explain` may later annotate a canonical
   `{path, verb}` with a link into MikroTik's new Docusaurus manual at
   <https://manual.mikrotik.com> (CLI/API reference, still WIP upstream). This is
