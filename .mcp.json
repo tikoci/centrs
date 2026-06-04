@@ -7,10 +7,7 @@
 		},
 		"io.github.github/github-mcp-server": {
 			"type": "http",
-			"url": "https://api.githubcopilot.com/mcp/",
-			"headers": {
-				"Authorization": "Bearer ${GITHUB_MCP_TOKEN}"
-			}
+			"url": "https://api.githubcopilot.com/mcp/"
 		},
 		"microsoft/playwright-mcp": {
 			"type": "stdio",
