@@ -571,8 +571,7 @@ function collectTransportSignalsInto(
 
 	if (error instanceof Error && error.message.length > 0) {
 		signals.messages.push(error.message);
-	}
-	if ("message" in error && typeof error.message === "string") {
+	} else if ("message" in error && typeof error.message === "string") {
 		signals.messages.push(error.message);
 	}
 	if ("code" in error && typeof error.code === "string") {
