@@ -10,11 +10,13 @@ into a temporary directory at runtime (open and encrypted, encrypted password
 Writes operate on a copy of the fixture per test; the source bytes are never
 mutated in place. `$CDB` is the per-test path.
 
-> These examples track the **currently implemented** verbs (`edit` edits
-> first-class fields; `set` writes comment kv-soup only). `README.md` describes a
-> decided redesign (symmetric `add`/`set`, `edit` → future TUI, `identity`/`mac`/
-> `ip` lookup keys, `__default__`, `tips[]`) that lands with new examples here —
-> do not reconcile the README back to these examples; reconcile forward.
+> `<router>` lookup-key resolution (`identity=`/`mac=`/`ip=`) and the broadened
+> `--match` selectors (`user=`/`target=`) are implemented — examples 32–35. The
+> remaining redesign in `README.md` (symmetric `add`/`set`, `edit` → future TUI,
+> `__default__`, `tips[]`) still lands with new examples here. The verbs below
+> are the **currently implemented** shape (`edit` edits first-class fields; `set`
+> writes comment kv-soup only). Do not reconcile the README back to these
+> examples; reconcile forward.
 
 ## list
 
@@ -325,3 +327,57 @@ centrs devices list --cdb-file $CDB --group discovered
 ```
 
 `ok: true`; each member reports CDB provenance and discovery metadata.
+
+## Lookup-key resolution
+
+`<router>` resolves against the `target` field **and** the `identity=` / `mac=` /
+`ip=` comment lookup keys (see `README.md`, Identity model). MAC values compare
+case- and separator-insensitively. These run against a dedicated lookup fixture
+(`$CDB_LOOKUP`): one `ipAdmin` record `192.0.2.60` with
+`comment="identity=edge1 mac=AA:BB:CC:DD:EE:11"`, and one `macTarget` record
+`AA:BB:CC:DD:EE:22` with `comment="identity=edge2 ip=192.0.2.61"`.
+
+### 32. Resolve by the identity= lookup key
+
+```bash
+centrs devices show edge1 --cdb-file $CDB_LOOKUP
+```
+
+`ok: true`. The resolved entry's `target` is `192.0.2.60`;
+`meta.target.identity` is `edge1`.
+
+### 33. Resolve by the mac= lookup key (case/separator-insensitive)
+
+```bash
+centrs devices show aa-bb-cc-dd-ee-11 --cdb-file $CDB_LOOKUP
+```
+
+`ok: true`. Resolves the same `192.0.2.60` record even though the typed MAC uses
+dashes and lower case.
+
+### 34. Resolve by the ip= lookup key
+
+```bash
+centrs devices show 192.0.2.61 --cdb-file $CDB_LOOKUP
+```
+
+`ok: true`. Resolves the `AA:BB:CC:DD:EE:22` record; `meta.target.identity` is
+`edge2`.
+
+### 35. A duplicated identity= is ambiguous; --match user= pins it
+
+A second fixture (`$CDB_DUP_IDENTITY`) holds two distinct hosts that share
+`identity=dup` (the deliberately non-unique identity case).
+
+```bash
+centrs devices show dup --cdb-file $CDB_DUP_IDENTITY </dev/null
+```
+
+`identity/ambiguous`; `error.context.matches` lists both records (with `user`).
+
+```bash
+centrs devices show dup --match user=ops --cdb-file $CDB_DUP_IDENTITY
+```
+
+`ok: true`; selects the `ops` record. `--match target=<addr>` and
+`--match <record-type>` are the other selectors.

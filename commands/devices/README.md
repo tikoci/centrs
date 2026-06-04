@@ -13,13 +13,16 @@ integration run, not a booted CHR). Encrypted-CDB **writes** round-trip through
 decrypt → mutate → re-encrypt under the loaded password; encrypted **reads**
 work with `--cdb-password`. See `docs/MATRIX.md` for the matrix row.
 
-This README also describes a **decided redesign that is not yet implemented**:
-the `identity`/`mac`/`ip` comment lookup keys, the symmetric `add`/`set` model
-with `edit` reserved for a future TUI, the `--profile-none`/`--profile-own`
-sentinels, the `__default__` record, and the `tips[]` channel. The implemented
-verbs today are the older shape (`edit` edits first-class fields; `set` writes
-comment kv-soup only). The gap is tracked under "Open questions" below — treat
-this README as the target spec, `docs/MATRIX.md` as the implemented status.
+This README also describes a **decided redesign that is partly implemented**:
+the `identity`/`mac`/`ip` comment lookup keys and the broadened `--match`
+selectors (`user=`/`target=`) are live (examples 32–35), and the resolver/
+envelope field is now `identity` (was `name`). Still pending: the symmetric
+`add`/`set` model with `edit` reserved for a future TUI, the `--profile-none`/
+`--profile-own` sentinels, the `__default__` record, and the `tips[]` channel —
+so the mutating verbs today are still the older shape (`edit` edits first-class
+fields; `set` writes comment kv-soup only). The gap is tracked under "Open
+questions" below — treat this README as the target spec, `docs/MATRIX.md` as the
+implemented status.
 
 `devices` does not use a transport in the protocol sense and does not contact a
 RouterOS device in phase 1. Its sources are:
@@ -305,10 +308,8 @@ both unencrypted and encrypted CDBs. The comment-kv *grammar* is settled — see
 
 | Item | Notes |
 | --- | --- |
-| `identity`/`mac`/`ip` lookup keys | Resolver matches `<router>` against these comment keys, not just `target`. Add to the comment-kv allowlist (`src/resolver/comment-kv.ts`) as a distinct *lookup* group; needs resolution + ambiguity examples. |
-| Rename resolver/envelope `name` → `identity` | `EnvelopeTargetMeta.name` and the resolver field (`src/resolver/cdb.ts`, `target.ts`) currently mean "the matched record's target" — `name` is too vague. Rename to `identity` and populate it from the `identity=` lookup key (falling back to the matched target). Lands with the lookup-key work so the field's value and name change together. |
 | Symmetric `add`/`set`; `edit` → future TUI | `set` gains first-class flags and require-exists; `edit` stops being a field editor. Update `src/devices.ts` + examples; the `cdb/reserved-key` rule stays for `k=v` positionals. |
-| `(target, user)` record identity | `add` existence check + ambiguity key on `(target, user)`, not `target` alone (current code keys on `target`). `--match` gains a `user=` form. Needs an example: same address under two users coexists; resolving the bare address is `identity/ambiguous`. |
+| `(target, user)` record identity | `add` existence check + ambiguity key on `(target, user)`, not `target` alone (current code keys on `target`). The read path already disambiguates with `--match user=`; the mutation path still keys on `target` alone. Needs an example: same address under two users coexists. |
 | `--profile-none` / `--profile-own` | Sentinel flags writing `<none>` / `<own>`; `profile`/`session` stay preserve-only. |
 | `__default__` record | Reserved fallback record; per-field precedence args → env → device → `__default__` → built-in; CLI/API fill any target, MCP keeps the allowlist. |
 | `tips[]` emission | Emit `tip/credentials-missing`, `tip/no-cdb`, "consider a `__default__`" tips on the relevant envelopes. |

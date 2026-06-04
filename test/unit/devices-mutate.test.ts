@@ -622,3 +622,156 @@ describe("showDevice --match disambiguation", () => {
 		}
 	});
 });
+
+// Two records resolvable by their comment lookup keys: A carries identity=/mac=
+// where the MAC is not its target; B carries identity=/ip= and a MAC target.
+function lookupKeyRecords(): WinBoxCdbRecord[] {
+	return [
+		buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.ipAdmin,
+			target: "192.0.2.50",
+			user: "admin",
+			password: "secret",
+			comment: "edge site identity=edge1 mac=AA:BB:CC:DD:EE:11",
+		}),
+		buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.macTarget,
+			target: "AA:BB:CC:DD:EE:22",
+			user: "l2",
+			comment: "identity=edge2 ip=192.0.2.51",
+		}),
+	];
+}
+
+describe("showDevice lookup-key resolution", () => {
+	test("resolves <router> by the identity= lookup key", async () => {
+		const { path, cleanup } = await tempCdb(lookupKeyRecords());
+		try {
+			const cdb = await reload(path);
+			const result = showDevice({ cdb, target: "edge1" });
+			expect(result.ok).toBe(true);
+			expect(result.data.entry.target).toBe("192.0.2.50");
+			expect(result.meta.target.identity).toBe("edge1");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("resolves by mac= lookup key, normalizing separators and case", async () => {
+		const { path, cleanup } = await tempCdb(lookupKeyRecords());
+		try {
+			const cdb = await reload(path);
+			const result = showDevice({ cdb, target: "aa-bb-cc-dd-ee-11" });
+			expect(result.data.entry.target).toBe("192.0.2.50");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("resolves by ip= lookup key", async () => {
+		const { path, cleanup } = await tempCdb(lookupKeyRecords());
+		try {
+			const cdb = await reload(path);
+			const result = showDevice({ cdb, target: "192.0.2.51" });
+			expect(result.data.entry.target).toBe("AA:BB:CC:DD:EE:22");
+			expect(result.meta.target.identity).toBe("edge2");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("matches a MAC target regardless of separator/case", async () => {
+		const { path, cleanup } = await tempCdb(lookupKeyRecords());
+		try {
+			const cdb = await reload(path);
+			const result = showDevice({ cdb, target: "aa:bb:cc:dd:ee:22" });
+			expect(result.data.entry.user).toBe("l2");
+		} finally {
+			await cleanup();
+		}
+	});
+});
+
+// Two distinct hosts sharing the same identity= handle — the deliberately
+// non-unique identity case from the constitution. Resolving the bare handle is
+// ambiguous; --match user=/target= pins the choice.
+function duplicateIdentityRecords(): WinBoxCdbRecord[] {
+	return [
+		buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.ipAdmin,
+			target: "10.0.0.1",
+			user: "admin",
+			password: "a",
+			comment: "identity=dup",
+		}),
+		buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.ipUser,
+			target: "10.0.0.2",
+			user: "ops",
+			password: "b",
+			comment: "identity=dup",
+		}),
+	];
+}
+
+describe("showDevice duplicate identity= disambiguation", () => {
+	test("a duplicated identity= is identity/ambiguous with user in the match list", async () => {
+		const { path, cleanup } = await tempCdb(duplicateIdentityRecords());
+		try {
+			const cdb = await reload(path);
+			const error = await catchError(async () =>
+				showDevice({ cdb, target: "dup" }),
+			);
+			expect(error.code).toBe("identity/ambiguous");
+			const matches = (error.context?.["matches"] ?? []) as Array<{
+				user: string;
+			}>;
+			expect(matches.map((entry) => entry.user).sort()).toEqual([
+				"admin",
+				"ops",
+			]);
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("--match user= selects among a duplicated identity=", async () => {
+		const { path, cleanup } = await tempCdb(duplicateIdentityRecords());
+		try {
+			const cdb = await reload(path);
+			const result = showDevice({ cdb, target: "dup", match: "user=ops" });
+			expect(result.data.entry.target).toBe("10.0.0.2");
+			expect(result.data.entry.user).toBe("ops");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("--match target= selects among a duplicated identity=", async () => {
+		const { path, cleanup } = await tempCdb(duplicateIdentityRecords());
+		try {
+			const cdb = await reload(path);
+			const result = showDevice({
+				cdb,
+				target: "dup",
+				match: "target=10.0.0.1",
+			});
+			expect(result.data.entry.user).toBe("admin");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("an unsupported --match key errors with input/invalid-match", async () => {
+		const { path, cleanup } = await tempCdb(duplicateIdentityRecords());
+		try {
+			const cdb = await reload(path);
+			const error = await catchError(async () =>
+				showDevice({ cdb, target: "dup", match: "group=x" }),
+			);
+			expect(error.code).toBe("input/invalid-match");
+		} finally {
+			await cleanup();
+		}
+	});
+});

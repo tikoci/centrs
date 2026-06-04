@@ -183,6 +183,64 @@ async function writeAmbiguousFixture(name: string): Promise<string> {
 	return path;
 }
 
+// Records resolvable by their comment lookup keys: an IP record whose MAC rides
+// the comment, and a MAC record whose IP rides the comment. Exercises examples
+// 32-34 (`identity=`/`mac=`/`ip=` resolution + MAC normalization).
+function buildLookupFixtureBytes(): Uint8Array {
+	return encodeOpenWinBoxCdb([
+		buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.ipAdmin,
+			target: "192.0.2.60",
+			user: "admin",
+			password: "secret",
+			comment: "edge site identity=edge1 mac=AA:BB:CC:DD:EE:11",
+			profile: "<own>",
+			savedPassword: true,
+		}),
+		buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.macTarget,
+			target: "AA:BB:CC:DD:EE:22",
+			user: "l2",
+			comment: "identity=edge2 ip=192.0.2.61",
+			profile: "<own>",
+			savedPassword: false,
+		}),
+	]);
+}
+
+// Two distinct hosts sharing identity=dup — the deliberately non-unique identity
+// case. Exercises example 35 (`identity/ambiguous` + `--match user=`).
+function buildDuplicateIdentityFixtureBytes(): Uint8Array {
+	return encodeOpenWinBoxCdb([
+		buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.ipAdmin,
+			target: "10.0.0.1",
+			user: "admin",
+			password: "a",
+			comment: "identity=dup",
+			profile: "<own>",
+			savedPassword: true,
+		}),
+		buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.ipUser,
+			target: "10.0.0.2",
+			user: "ops",
+			password: "b",
+			comment: "identity=dup",
+			profile: "<own>",
+			savedPassword: true,
+		}),
+	]);
+}
+
+async function writeFixture(name: string, bytes: Uint8Array): Promise<string> {
+	const dir = join(tempDir, `${name}-${randomUUID()}`);
+	await mkdir(dir, { recursive: true });
+	const path = join(dir, "devices.cdb");
+	await writeFile(path, bytes);
+	return path;
+}
+
 beforeAll(async () => {
 	tempDir = join(
 		import.meta.dir,
@@ -1114,5 +1172,118 @@ describe("centrs devices (read-only)", () => {
 		expect(envelope.data[0]?.source).toBe("mndp");
 		expect(envelope.data[0]?.sources?.["target"]?.kind).toBe("cdb");
 		expect(envelope.data[0]?.sources?.["source"]?.kind).toBe("comment-kv");
+	});
+
+	test("example 32 resolves <router> by the identity= lookup key", async () => {
+		const cdbPath = await writeFixture(
+			"example-32-identity",
+			buildLookupFixtureBytes(),
+		);
+		const result = await runWithCapture([
+			"devices",
+			"show",
+			"edge1",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(0);
+		const envelope = JSON.parse(result.stdout) as {
+			ok: boolean;
+			data: { entry: { target: string } };
+			meta: { target: { identity?: string } };
+		};
+		expect(envelope.ok).toBe(true);
+		expect(envelope.data.entry.target).toBe("192.0.2.60");
+		expect(envelope.meta.target.identity).toBe("edge1");
+	});
+
+	test("example 33 resolves by mac= lookup key, normalizing separators/case", async () => {
+		const cdbPath = await writeFixture(
+			"example-33-mac",
+			buildLookupFixtureBytes(),
+		);
+		const result = await runWithCapture([
+			"devices",
+			"show",
+			"aa-bb-cc-dd-ee-11",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(0);
+		const envelope = JSON.parse(result.stdout) as {
+			data: { entry: { target: string } };
+		};
+		expect(envelope.data.entry.target).toBe("192.0.2.60");
+	});
+
+	test("example 34 resolves by the ip= lookup key", async () => {
+		const cdbPath = await writeFixture(
+			"example-34-ip",
+			buildLookupFixtureBytes(),
+		);
+		const result = await runWithCapture([
+			"devices",
+			"show",
+			"192.0.2.61",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(0);
+		const envelope = JSON.parse(result.stdout) as {
+			data: { entry: { target: string; user: string } };
+			meta: { target: { identity?: string } };
+		};
+		expect(envelope.data.entry.target).toBe("AA:BB:CC:DD:EE:22");
+		expect(envelope.data.entry.user).toBe("l2");
+		expect(envelope.meta.target.identity).toBe("edge2");
+	});
+
+	test("example 35 duplicated identity= is ambiguous; --match user= pins it", async () => {
+		const cdbPath = await writeFixture(
+			"example-35-dup-identity",
+			buildDuplicateIdentityFixtureBytes(),
+		);
+
+		const ambiguous = await runWithCapture([
+			"devices",
+			"show",
+			"dup",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(ambiguous.exitCode).toBe(1);
+		const ambiguousEnvelope = JSON.parse(ambiguous.stderr) as {
+			error: {
+				code: string;
+				context?: { matches?: Array<{ user: string }> };
+			};
+		};
+		expect(ambiguousEnvelope.error.code).toBe("identity/ambiguous");
+		expect(
+			(ambiguousEnvelope.error.context?.matches ?? [])
+				.map((entry) => entry.user)
+				.sort(),
+		).toEqual(["admin", "ops"]);
+
+		const pinned = await runWithCapture([
+			"devices",
+			"show",
+			"dup",
+			"--match",
+			"user=ops",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(pinned.exitCode).toBe(0);
+		const pinnedEnvelope = JSON.parse(pinned.stdout) as {
+			data: { entry: { target: string; user: string } };
+		};
+		expect(pinnedEnvelope.data.entry.target).toBe("10.0.0.2");
+		expect(pinnedEnvelope.data.entry.user).toBe("ops");
 	});
 });

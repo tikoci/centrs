@@ -38,6 +38,7 @@ import {
 	commentKvReservedKeys,
 	parseCommentKv,
 } from "./resolver/comment-kv.ts";
+import { normalizeMac } from "./resolver/mac.ts";
 
 export type { SettingSource, SettingSourceKind };
 
@@ -444,11 +445,10 @@ export interface ShowDeviceArgs {
 	explain?: boolean;
 	via?: string;
 	/**
-	 * Disambiguator for duplicate `target` strings: a record-type token (one of
-	 * `winBoxCdbRecordType`'s names, e.g. `ipAdmin`/`ipUser`/`macTarget`). When
-	 * `show <target>` matches more than one CDB entry, `--match` selects the one
-	 * whose record type matches. It cannot select between two entries that share
-	 * both `target` and record type.
+	 * Disambiguator when `<router>` matches more than one CDB entry. One of:
+	 * `user=<name>`, `target=<addr>`, or a record-type token (a
+	 * `winBoxCdbRecordType` name, e.g. `ipAdmin`/`ipUser`/`macTarget`). It cannot
+	 * select between two entries that share every selectable attribute.
 	 */
 	match?: string;
 	env?: Record<string, string | undefined>;
@@ -459,54 +459,166 @@ export interface DevicesShowEnvelopeData {
 	record?: WinBoxCdbRecord;
 }
 
-export function showDevice(
-	args: ShowDeviceArgs,
-): CentrsSuccessEnvelope<DevicesShowEnvelopeData, DevicesOperationMeta> {
-	const matches: { entry: WinBoxCdbEntry; index: number }[] = [];
-	for (let index = 0; index < args.cdb.entries.length; index += 1) {
-		const entry = args.cdb.entries[index];
-		if (entry && entry.target === args.target) {
+/**
+ * Canonical form for `<router>` comparison: a MAC is normalized (case /
+ * separator / zero-pad insensitive via {@link normalizeMac}); everything else is
+ * compared verbatim after trimming. Used for both `target` and the comment
+ * lookup keys so `aa-b-cc-...` and `AA:0B:CC:...` resolve the same record.
+ */
+function canonicalRouterKey(value: string): string {
+	const trimmed = value.trim();
+	return normalizeMac(trimmed) ?? trimmed;
+}
+
+/**
+ * Every identifier a record answers to: its `target` plus the `identity=` /
+ * `mac=` / `ip=` comment lookup keys, each canonicalized. See
+ * `commands/devices/README.md` (Identity model).
+ */
+function entryRouterKeys(entry: WinBoxCdbEntry): string[] {
+	const keys = [canonicalRouterKey(entry.target)];
+	const { lookups } = parseCommentKv(entry.comment);
+	for (const value of [lookups.identity, lookups.mac, lookups.ip]) {
+		if (value !== undefined && value.trim().length > 0) {
+			keys.push(canonicalRouterKey(value));
+		}
+	}
+	return keys;
+}
+
+/**
+ * Find every CDB entry that `<router>` resolves to — by `target` or by an
+ * `identity=` / `mac=` / `ip=` comment lookup key. The candidate set feeds the
+ * ambiguity / `--match` selection in {@link showDevice} and the mutation path.
+ */
+function matchRouter(
+	entries: readonly WinBoxCdbEntry[],
+	router: string,
+): EntryMatch[] {
+	const want = canonicalRouterKey(router);
+	const matches: EntryMatch[] = [];
+	for (let index = 0; index < entries.length; index += 1) {
+		const entry = entries[index];
+		if (entry && entryRouterKeys(entry).includes(want)) {
 			matches.push({ entry, index });
 		}
 	}
+	return matches;
+}
+
+interface RouterMatchSelector {
+	user?: string;
+	target?: string;
+	recordType?: number;
+}
+
+/**
+ * Parse a `--match` token into a selector. Forms: `user=<name>`,
+ * `target=<addr>`, or a bare {@link winBoxCdbRecordType} name (e.g. `ipUser`).
+ * An unrecognized key or bare token throws `input/invalid-match`.
+ */
+function parseMatchSelector(
+	match: string,
+	contextTarget: string,
+): RouterMatchSelector {
+	const eq = match.indexOf("=");
+	if (eq > 0) {
+		const key = match.slice(0, eq);
+		const value = match.slice(eq + 1);
+		if (key === "user") {
+			return { user: value };
+		}
+		if (key === "target") {
+			return { target: canonicalRouterKey(value) };
+		}
+		throw new CentrsError({
+			code: "input/invalid-match",
+			summary: `--match key "${key}" is not supported.`,
+			remediation:
+				"Use --match user=<name>, --match target=<addr>, or a record-type token (e.g. ipAdmin / ipUser / macTarget).",
+			context: { target: contextTarget, match },
+		});
+	}
+	const recordType = recordTypeFromName(match);
+	if (recordType === undefined) {
+		throw new CentrsError({
+			code: "input/invalid-match",
+			summary: `--match "${match}" is not a known record type.`,
+			remediation: `Pass --match user=<name>, --match target=<addr>, or one of ${Object.keys(winBoxCdbRecordType).join(", ")}.`,
+			context: { target: contextTarget, match },
+		});
+	}
+	return { recordType };
+}
+
+function applyMatchSelector(
+	matches: readonly EntryMatch[],
+	selector: RouterMatchSelector,
+): EntryMatch[] {
+	return matches.filter(({ entry }) => {
+		if (selector.user !== undefined && entry.user !== selector.user) {
+			return false;
+		}
+		if (
+			selector.target !== undefined &&
+			canonicalRouterKey(entry.target) !== selector.target
+		) {
+			return false;
+		}
+		if (
+			selector.recordType !== undefined &&
+			entry.recordType !== selector.recordType
+		) {
+			return false;
+		}
+		return true;
+	});
+}
+
+function describeMatches(matches: readonly EntryMatch[]): {
+	cdbRecordIndex: number;
+	target: string;
+	user: string;
+	recordType: number;
+}[] {
+	return matches.map(({ entry, index }) => ({
+		cdbRecordIndex: index,
+		target: entry.target,
+		user: entry.user,
+		recordType: entry.recordType,
+	}));
+}
+
+export function showDevice(
+	args: ShowDeviceArgs,
+): CentrsSuccessEnvelope<DevicesShowEnvelopeData, DevicesOperationMeta> {
+	const matches = matchRouter(args.cdb.entries, args.target);
 
 	if (matches.length === 0) {
 		throw new CentrsError({
 			code: "cdb/not-found-target",
-			summary: `No CDB entry with target "${args.target}".`,
+			summary: `No CDB entry matches "${args.target}".`,
 			remediation:
-				"Run `centrs devices list` to see the available targets; check spelling and address family.",
+				"Run `centrs devices list` to see the available targets; `<router>` resolves by target, identity=, mac=, or ip=. Check spelling and address family.",
 			context: { target: args.target },
 		});
 	}
 
 	const recordTypeTokens = Object.keys(winBoxCdbRecordType).join(", ");
 	let selected = matches;
-	if (matches.length > 1 && args.match !== undefined) {
-		const wanted = recordTypeFromName(args.match);
-		if (wanted === undefined) {
-			throw new CentrsError({
-				code: "input/invalid-match",
-				summary: `--match "${args.match}" is not a known record type.`,
-				remediation: `Pass one of ${recordTypeTokens} to select among duplicate targets.`,
-				context: { target: args.target, match: args.match },
-			});
-		}
-		selected = matches.filter(({ entry }) => entry.recordType === wanted);
+	if (args.match !== undefined) {
+		const selector = parseMatchSelector(args.match, args.target);
+		selected = applyMatchSelector(matches, selector);
 		if (selected.length === 0) {
 			throw new CentrsError({
 				code: "identity/no-match",
-				summary: `Target "${args.target}" has no CDB entry of record type "${args.match}".`,
+				summary: `"${args.target}" has no CDB entry matching --match "${args.match}".`,
 				remediation:
-					"Run `centrs devices list` to see each duplicate's record type, then pass a --match that exists.",
+					"Run `centrs devices list` to see each candidate's user and record type, then pass a --match that exists.",
 				context: {
 					target: args.target,
 					match: args.match,
-					matches: matches.map(({ entry, index }) => ({
-						cdbRecordIndex: index,
-						target: entry.target,
-						recordType: entry.recordType,
-					})),
+					matches: describeMatches(matches),
 				},
 			});
 		}
@@ -515,15 +627,11 @@ export function showDevice(
 	if (selected.length > 1) {
 		throw new CentrsError({
 			code: "identity/ambiguous",
-			summary: `Target "${args.target}" matches ${selected.length} CDB entries.`,
-			remediation: `Re-run with --match=<record-type> (one of ${recordTypeTokens}) to select among the duplicates, or remove the duplicate CDB entry.`,
+			summary: `"${args.target}" matches ${selected.length} CDB entries.`,
+			remediation: `Re-run with --match user=<name>, --match target=<addr>, or --match <record-type> (one of ${recordTypeTokens}) to select among the duplicates, or remove the duplicate CDB entry.`,
 			context: {
 				target: args.target,
-				matches: selected.map(({ entry, index }) => ({
-					cdbRecordIndex: index,
-					target: entry.target,
-					recordType: entry.recordType,
-				})),
+				matches: describeMatches(selected),
 			},
 		});
 	}

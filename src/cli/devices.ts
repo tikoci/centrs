@@ -73,9 +73,9 @@ export const devicesCommand: CliCommandMetadata = {
 		},
 		{
 			flag: "--match",
-			valueName: `<${Object.keys(winBoxCdbRecordType).join("|")}>`,
+			valueName: "<user=…|target=…|record-type>",
 			description:
-				"`show` only — disambiguate duplicate targets by record type.",
+				"`show` — disambiguate when `<router>` matches several records: `user=<name>`, `target=<addr>`, or a record-type token.",
 		},
 		{
 			flag: "--user",
