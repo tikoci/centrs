@@ -6,8 +6,9 @@
 			"type": "stdio"
 		},
 		"io.github.github/github-mcp-server": {
-			"type": "http",
-			"url": "https://api.githubcopilot.com/mcp/"
+			"type": "stdio",
+			"command": "gh",
+			"args": ["mcp", "serve"]
 		},
 		"microsoft/playwright-mcp": {
 			"type": "stdio",
