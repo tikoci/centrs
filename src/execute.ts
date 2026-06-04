@@ -221,13 +221,9 @@ export async function runResolvedExecute(
 		timeoutMs: resolved.timeoutMs.value,
 	});
 
-	let validation: EnvelopeValidationMeta = {
-		enabled: resolved.validate.value,
-		source: resolved.validate.value
-			? ":put [:parse] + /console/inspect"
-			: "disabled",
-		result: resolved.validate.value ? "passed" : "skipped",
-	};
+	// Assigned unconditionally by the if/else below before first use; declared
+	// without an initializer so the dead default cannot mask a missing branch.
+	let validation: EnvelopeValidationMeta;
 
 	try {
 		if (resolved.validate.value) {
