@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	applyCommentKv,
 	commentKvAllowlist,
+	commentKvLookupKeys,
 	commentKvReservedKeys,
 	parseCommentKv,
 	renderCommentKvToken,
@@ -132,6 +133,46 @@ describe("parseCommentKv", () => {
 			"source",
 			"mcp",
 		]);
+	});
+
+	test("the lookup keys are exactly identity/mac/ip", () => {
+		expect([...commentKvLookupKeys]).toEqual(["identity", "mac", "ip"]);
+	});
+
+	test("parses lookup keys into lookups, not values, with no warnings", () => {
+		const result = parseCommentKv(
+			"identity=edge1 mac=AA:BB:CC:DD:EE:FF ip=192.0.2.5 via=ssh",
+		);
+		expect(result.lookups).toEqual({
+			identity: "edge1",
+			mac: "AA:BB:CC:DD:EE:FF",
+			ip: "192.0.2.5",
+		});
+		expect(result.values).toEqual({ via: "ssh" });
+		expect(result.warnings).toEqual([]);
+	});
+
+	test("lookup keys are recognized, not unknown-option", () => {
+		const result = parseCommentKv("identity=edge1");
+		expect(result.warnings).toEqual([]);
+		expect(result.lookups.identity).toBe("edge1");
+	});
+
+	test("last occurrence wins on duplicate lookup keys", () => {
+		expect(parseCommentKv("identity=old identity=new").lookups.identity).toBe(
+			"new",
+		);
+	});
+
+	test("a lookup value may be quoted with spaces", () => {
+		const result = parseCommentKv('identity="My Edge Router"');
+		expect(result.lookups.identity).toBe("My Edge Router");
+		expect(result.warnings).toEqual([]);
+	});
+
+	test("lookups are empty for prose and override-only comments", () => {
+		expect(parseCommentKv("via=ssh rack 7").lookups).toEqual({});
+		expect(parseCommentKv("").lookups).toEqual({});
 	});
 });
 

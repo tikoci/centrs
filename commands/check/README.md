@@ -9,7 +9,8 @@ Status: `not-started`. This file is a stub.
 - TCP reachability per protocol (rest-api, native-api, ssh).
 - Auth check on whichever protocols answered.
 - Optional `--via` to limit the probe surface.
-- Output is the standard envelope; `data` is a per-protocol probe result map.
+- Output is the [standard envelope](../../docs/CONSTITUTION.md#result-envelope);
+  `data` is a per-protocol probe result map.
 
 ## Default service ports (grounding)
 

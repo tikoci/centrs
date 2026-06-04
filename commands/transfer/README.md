@@ -11,8 +11,9 @@ file ops as a fallback) but has no matrix grid row yet.
 - Default to `scp` over SSH (lands with the SSH transport — see
   `commands/terminal/README.md`). Small files may ride REST-API file endpoints.
 - Honor the same `<router>` resolution, envelope, and settings as every other
-  command; large transfers are exempt from the REST 60s timeout cap because they
-  do not run over REST.
+  command (see [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md) for
+  identity/CDB resolution and the result envelope); large transfers are exempt
+  from the REST 60s timeout cap because they do not run over REST.
 
 ## Transfer methods (grounding)
 

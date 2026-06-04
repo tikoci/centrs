@@ -39,6 +39,18 @@ export const commentKvAllowlist = [
 export type CommentKvKey = (typeof commentKvAllowlist)[number];
 
 /**
+ * Comment keys that resolve `<router>` to a record, distinct from the setting
+ * *override* keys above. The non-`target` identifiers ride here so one record is
+ * resolvable by identity / MAC / IP regardless of which is stored as `target`.
+ * See `commands/devices/README.md` (Identity model) and `docs/CONSTITUTION.md`
+ * (Identity and CDB). Values are returned raw; normalization + matching belong
+ * to the resolver that consumes them.
+ */
+export const commentKvLookupKeys = ["identity", "mac", "ip"] as const;
+
+export type CommentKvLookupKey = (typeof commentKvLookupKeys)[number];
+
+/**
  * First-class CDB fields. These have dedicated CDB tags and must never be
  * expressed through the comment kv-soup; `devices set` refuses to write them
  * and the parser refuses to read them.
@@ -60,6 +72,8 @@ export interface CommentKvWarning {
 export interface CommentKvResult {
 	/** Allowlisted overrides, last-wins on duplicate keys, raw string values. */
 	values: Partial<Record<CommentKvKey, string>>;
+	/** Lookup keys (identity/mac/ip), last-wins, raw string values. */
+	lookups: Partial<Record<CommentKvLookupKey, string>>;
 	warnings: CommentKvWarning[];
 }
 
@@ -78,9 +92,14 @@ const BARE_KEY = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 const allowSet = new Set<string>(commentKvAllowlist);
 const reservedSet = new Set<string>(commentKvReservedKeys);
+const lookupSet = new Set<string>(commentKvLookupKeys);
 
 function isAllowlistKey(key: string): key is CommentKvKey {
 	return allowSet.has(key);
+}
+
+function isLookupKey(key: string): key is CommentKvLookupKey {
+	return lookupSet.has(key);
 }
 
 /**
@@ -186,11 +205,16 @@ function splitKv(word: ShellWord): { key: string; value: string } | undefined {
 
 export function parseCommentKv(comment: string): CommentKvResult {
 	const values: Partial<Record<CommentKvKey, string>> = {};
+	const lookups: Partial<Record<CommentKvLookupKey, string>> = {};
 	const warnings: CommentKvWarning[] = [];
 
 	for (const word of tokenize(comment)) {
 		const kv = splitKv(word);
 		if (!kv) {
+			continue;
+		}
+		if (isLookupKey(kv.key)) {
+			lookups[kv.key] = kv.value;
 			continue;
 		}
 		if (isAllowlistKey(kv.key)) {
@@ -212,7 +236,7 @@ export function parseCommentKv(comment: string): CommentKvResult {
 		});
 	}
 
-	return { values, warnings };
+	return { values, lookups, warnings };
 }
 
 /**
