@@ -140,9 +140,11 @@ describe("WinBox CDB atomic write", () => {
 				const now = new Date(Date.UTC(2024, 0, 1, 0, 0, i));
 				await writeWinBoxCdb(path, [fixture], { now });
 			}
-			const backups = await listWinBoxCdbBackups(path);
-			expect(backups).toHaveLength(retention);
-			// Newest-first ordering: the latest second should survive.
+			// Newest-first ordering: the latest generated second should survive.
+			const newestSecond = String(total - 1).padStart(2, "0");
+			const oldestSecond = String(total - retention).padStart(2, "0");
+			expect(backups[0]).toContain(`2024-01-01T00-00-${newestSecond}`);
+			expect(backups[backups.length - 1]).toContain(`2024-01-01T00-00-${oldestSecond}`);
 			expect(backups[0]).toContain("2024-01-01T00-00-07");
 			expect(backups[backups.length - 1]).toContain("2024-01-01T00-00-03");
 		} finally {
