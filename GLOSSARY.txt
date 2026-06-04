@@ -241,6 +241,7 @@ upsert
 upserts
 upserted
 duplicative
+passwordless
 
 # MNDP discovery vocabulary (WP-2b)
 tlvs
