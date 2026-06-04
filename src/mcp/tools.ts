@@ -404,21 +404,31 @@ export const devicesInputShape = {
 	op: z
 		.enum(["list", "show", "groups", "add", "edit", "set", "remove"])
 		.describe(
-			"Registry operation. Mutations add/edit/set/remove write the CDB and require confirm=true.",
+			"Registry operation. Reads: list/show/groups. Writes (require confirm=true): add/set/remove. edit is reserved for the future interactive editor and returns usage/not-implemented.",
 		),
 	target: z
 		.string()
 		.optional()
-		.describe("Required for op=show/add/edit/set/remove."),
-	group: z.string().optional().describe("Optional group filter for op=list."),
-	user: z.string().optional().describe("CDB username for op=add/edit."),
+		.describe("Required for op=show/add/set/remove."),
+	group: z
+		.string()
+		.optional()
+		.describe(
+			"Group filter for op=list; first-class group field for op=add/set.",
+		),
+	user: z.string().optional().describe("CDB username for op=add/set."),
 	password: z
 		.string()
 		.optional()
-		.describe("CDB password for op=add/edit. It is never returned by MCP."),
-	profile: z.string().optional().describe("CDB profile for op=add/edit."),
-	session: z.string().optional().describe("CDB session for op=add/edit."),
-	comment: z.string().optional().describe("CDB comment for op=add/edit."),
+		.describe("CDB password for op=add/set. It is never returned by MCP."),
+	profile: z.string().optional().describe("CDB profile for op=add/set."),
+	session: z.string().optional().describe("CDB session for op=add/set."),
+	comment: z
+		.string()
+		.optional()
+		.describe(
+			"CDB base comment for op=add; op=set edits the comment via updates.",
+		),
 	recordType: z
 		.string()
 		.optional()
@@ -426,7 +436,7 @@ export const devicesInputShape = {
 	savedPassword: z
 		.boolean()
 		.optional()
-		.describe("Set the CDB saved-password flag for op=add/edit."),
+		.describe("Set the CDB saved-password flag for op=add/set."),
 	force: z
 		.boolean()
 		.optional()
@@ -447,7 +457,7 @@ export const devicesInputShape = {
 	confirm: z
 		.boolean()
 		.optional()
-		.describe("Required true for CDB-mutating ops add/edit/set/remove."),
+		.describe("Required true for CDB-mutating ops add/set/remove."),
 } as const;
 
 const devicesSchema = z.object(devicesInputShape);

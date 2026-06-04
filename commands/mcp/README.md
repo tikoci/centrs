@@ -130,9 +130,10 @@ benchmarked RouterOS agent support. Load-bearing findings that shape this design
   enforcement. Agents that route purely on read-only commands should prefer
   `centrs_retrieve` (truly `readOnlyHint`).
 - `centrs_devices` is the in-band way to inspect and grow the allowlist:
-  `list`/`show`/`groups` are read-only; `add`/`edit`/`set`/`remove` mutate the
-  active CDB and require `confirm: true`. MCP device envelopes redact saved
-  passwords and expose only `passwordSet`.
+  `list`/`show`/`groups` are read-only; `add`/`set`/`remove` mutate the active CDB
+  and require `confirm: true`. `edit` is reserved for the future interactive
+  editor and returns `usage/not-implemented` (use `set` to modify a record). MCP
+  device envelopes redact saved passwords and expose only `passwordSet`.
 - `centrs_discover` mirrors `discover`: it listens for MNDP neighbors, returns
   the standard discovery envelope, and can persist found neighbors into the
   active CDB with `save: true` + `confirm: true`. Saved records use the same

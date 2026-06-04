@@ -115,7 +115,7 @@ see *why* a given port or transport was chosen.
 - **The MCP server uses the CDB as its authorization boundary.** Agents can
   only reach targets that exist in the CDB; RouterOS write-shaped execution
   requires the resolved entry to carry `mcp=rw` plus per-call confirmation.
-  `centrs_devices` can also add/edit/set/remove CDB records in-band, and
+  `centrs_devices` can also add/set/remove CDB records in-band, and
   `centrs_discover` can save MNDP neighbors, with `confirm: true`. The allowlist
   and the write policy are *the same CDB data* you already manage — see
   `commands/mcp/`.

@@ -27,7 +27,7 @@ centrs discover [--timeout 60s] [--save] [--group discovered] \
   identity, platform, RouterOS version when present, source, and discovery
   timestamp.
 - Discovery never supplies credentials. A later `retrieve`, `execute`, or
-  `devices edit` must still resolve credentials from CDB, env, CLI, or prompt.
+  `devices set` must still resolve credentials from CDB, env, CLI, or prompt.
 
 ## How it works
 

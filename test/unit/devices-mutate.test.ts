@@ -480,7 +480,7 @@ describe("devices mutation", () => {
 		}
 	});
 
-	test("round-trips add/edit/remove through an encrypted CDB", async () => {
+	test("round-trips add/set/remove through an encrypted CDB", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "centrs-mutate-enc-"));
 		const path = join(dir, "winbox.cdb");
 		try {
@@ -511,12 +511,12 @@ describe("devices mutation", () => {
 				cdb.entries.some((entry) => entry.target === "198.51.100.20"),
 			).toBe(true);
 
-			const editResult = await setDevice({
+			const setResult = await setDevice({
 				cdb,
 				target: "192.0.2.5",
 				user: "rotated",
 			});
-			expect(editResult.ok).toBe(true);
+			expect(setResult.ok).toBe(true);
 
 			cdb = await loadCdb({
 				cdbFile: path,
