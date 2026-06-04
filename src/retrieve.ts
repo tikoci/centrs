@@ -272,6 +272,7 @@ export function buildRetrieveErrorEnvelope(
 		ok: false,
 		error: serializeCentrsError(centrsError),
 		warnings: [],
+		tips: [],
 		meta: {
 			target: { input: request.targetInput },
 			via: requestedVia,
@@ -312,6 +313,7 @@ export function buildRetrieveErrorEnvelopeFromResolved(
 		ok: false,
 		error: serializeCentrsError(centrsError),
 		warnings: [...resolved.warnings],
+		tips: [],
 		meta,
 	};
 }
@@ -378,6 +380,17 @@ function renderRetrieveSuccessText(
 		lines.push("");
 		for (const warning of envelope.warnings) {
 			lines.push(`warning [${warning.code}]: ${warning.message}`);
+		}
+	}
+
+	if (envelope.tips.length > 0) {
+		lines.push("");
+		lines.push("Tips:");
+		for (const item of envelope.tips) {
+			lines.push(`  - [${item.code}] ${item.message}`);
+			if (item.fix) {
+				lines.push(`    fix: ${item.fix}`);
+			}
 		}
 	}
 
@@ -498,6 +511,7 @@ function buildSuccessEnvelope(
 		ok: true,
 		data: result.data,
 		warnings,
+		tips: [],
 		meta: metaFromResolved(resolved, validation, operation),
 	};
 }

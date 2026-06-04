@@ -650,6 +650,7 @@ export async function discover(
 		ok: true,
 		data: { count: neighbors.length, neighbors },
 		warnings,
+		tips: [],
 		meta: discoverMeta(operation, options),
 	};
 }
@@ -678,6 +679,7 @@ function buildDiscoverErrorEnvelope(
 		ok: false,
 		error: serializeCentrsError(centrsError),
 		warnings: [],
+		tips: [],
 		meta: discoverMeta(op, options),
 	};
 }

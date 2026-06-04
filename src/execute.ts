@@ -194,6 +194,7 @@ export async function validateExecuteEnvelope(
 				ok: true,
 				data: null,
 				warnings: [...resolved.warnings],
+				tips: [],
 				meta: metaFromResolved(resolved, validation),
 			};
 		} finally {
@@ -254,6 +255,7 @@ export async function runResolvedExecute(
 			ok: true,
 			data,
 			warnings: [...resolved.warnings],
+			tips: [],
 			meta: metaFromResolved(resolved, validation, data),
 		});
 	} finally {
@@ -365,6 +367,7 @@ export function buildExecuteErrorEnvelope(
 		ok: false,
 		error: serializeCentrsError(centrsError),
 		warnings: [],
+		tips: [],
 		meta: {
 			target: { input: request.targetInput },
 			via: requestedVia,
@@ -409,6 +412,7 @@ export function buildExecuteErrorEnvelopeFromResolved(
 		ok: false,
 		error: serializeCentrsError(centrsError),
 		warnings: [...resolved.warnings],
+		tips: [],
 		meta: metaFromResolved(
 			resolved,
 			validation ?? {

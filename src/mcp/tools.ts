@@ -85,6 +85,7 @@ function mcpErrorEnvelope(
 		ok: false,
 		error: serializeCentrsError(centrsError),
 		warnings: [],
+		tips: [],
 		meta: {
 			target: context.target ? { input: context.target } : {},
 			via: null,
@@ -171,6 +172,7 @@ export function handleExplain(args: ExplainArgs): McpEnvelope {
 				writeShaped: isWriteShaped(canonical),
 			},
 			warnings: [],
+			tips: [],
 			meta: {
 				target: {},
 				via: null,

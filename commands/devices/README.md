@@ -13,15 +13,14 @@ integration run, not a booted CHR). Encrypted-CDB **writes** round-trip through
 decrypt → mutate → re-encrypt under the loaded password; encrypted **reads**
 work with `--cdb-password`. See `docs/MATRIX.md` for the matrix row.
 
-This README also describes a **decided redesign that is mostly implemented**:
-the `identity`/`mac`/`ip` comment lookup keys and broadened `--match` selectors
-(`user=`/`target=`), the `identity` field rename (was `name`), the symmetric
-`add`/`set` model (`edit` reserved for a future interactive editor), the
-`(target, user)` record identity, the `--profile-none`/`--profile-own`
-sentinels, and the `__default__` fallback record are all live (examples 10–16,
-32–39; `__default__` is resolver-level, unit-tested in
-`test/unit/resolver.test.ts`). Still pending: the `tips[]` channel. Treat this
-README as the target spec, `docs/MATRIX.md` as the implemented status.
+The redesign this README describes is now implemented: the `identity`/`mac`/`ip`
+comment lookup keys and broadened `--match` selectors (`user=`/`target=`), the
+`identity` field rename (was `name`), the symmetric `add`/`set` model (`edit`
+reserved for a future interactive editor), the `(target, user)` record identity,
+the `--profile-none`/`--profile-own` sentinels, the `__default__` fallback
+record, and the top-level `tips[]` channel are all live (examples 10–16, 32–40;
+`__default__` is resolver-level, unit-tested in `test/unit/resolver.test.ts`).
+Treat this README as the spec, `docs/MATRIX.md` as the implemented status.
 
 `devices` does not use a transport in the protocol sense and does not contact a
 RouterOS device in phase 1. Its sources are:
@@ -301,19 +300,16 @@ member list and the group(s) that expanded into it).
 
 `devices` is `CHR-passed` for the currently-implemented reads and writes against
 both unencrypted and encrypted CDBs. The comment-kv *grammar* is settled — see
-"Comment kv-soup" above and `test/unit/comment-kv.test.ts`. These remain open.
-
-**Decided design, pending implementation + CHR examples:**
-
-| Item | Notes |
-| --- | --- |
-| `tips[]` emission | Emit `tip/credentials-missing`, `tip/no-cdb`, "consider a `__default__`" tips on the relevant envelopes. |
+"Comment kv-soup" above and `test/unit/comment-kv.test.ts`. The decided redesign
+(lookup keys, identity rename, symmetric `add`/`set`, `(target, user)` identity,
+profile sentinels, `__default__`, `tips[]`) is now implemented; what remains:
 
 **Still genuinely open:**
 
 | Question | Affects | Notes |
 | --- | --- | --- |
 | ARP resolver test scheme | retrieve / execute when target is a MAC | Need deterministic fixtures per OS plus one live same-L2 proof before relying on ARP in integration. |
+| `list`/`show`/`remove` verb aliases | CLI ergonomics | `print`/`get`/`rm`/`delete` are documented (Subcommands) but the parser does not resolve them yet. |
 
 When an item ships with CHR examples, fold it into the matrix and delete the row.
 

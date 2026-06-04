@@ -242,6 +242,7 @@ export function buildRetrieveFanoutErrorEnvelope(
 		ok: false,
 		error: serializeCentrsError(centrsError),
 		warnings: [],
+		tips: [],
 		meta: {
 			target: {},
 			via: requestedVia,
@@ -394,6 +395,7 @@ function buildResolveFailureEnvelope(
 		ok: false,
 		error: serializeCentrsError(centrsError),
 		warnings: [...resolution.warnings],
+		tips: [],
 		meta: {
 			target: {
 				input: resolution.identity,
@@ -427,6 +429,7 @@ function buildFanoutEnvelope(
 			targets: input.targets,
 		},
 		warnings: input.warnings,
+		tips: [],
 		meta: {
 			target: {},
 			via: input.via,

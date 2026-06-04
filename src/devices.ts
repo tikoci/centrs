@@ -8,6 +8,7 @@ import type {
 	EnvelopeTargetMeta,
 	SettingSource,
 	SettingSourceKind,
+	Tip,
 } from "./core/envelope.ts";
 import {
 	buildWinBoxCdbEntryRecord,
@@ -396,6 +397,46 @@ export function recordTypeName(recordType: number): string {
 	return `unknown(${recordType})`;
 }
 
+/** Reserved CDB target supplying fallback creds (mirrors the resolver constant). */
+const DEFAULT_RECORD_TARGET = "__default__";
+const TIPS_BASE_URL = "https://tikoci.github.io/centrs/tips/";
+
+function tip(code: string, message: string, fix: string): Tip {
+	return { code, message, fix, detailsUrl: `${TIPS_BASE_URL}${code}` };
+}
+
+/** Tip for an empty registry — the first-run / no-records-yet pointer. */
+function noDevicesTips(entries: readonly WinBoxCdbEntry[]): Tip[] {
+	if (entries.length > 0) {
+		return [];
+	}
+	return [
+		tip(
+			"tip/no-devices",
+			"The CDB has no device records yet.",
+			"Add one with `centrs devices add <target> --user … --password …`.",
+		),
+	];
+}
+
+/** Tip when a resolved device carries no usable stored credentials. */
+function credentialsMissingTips(
+	entry: WinBoxCdbEntry,
+	entries: readonly WinBoxCdbEntry[],
+): Tip[] {
+	const hasDefault = entries.some((e) => e.target === DEFAULT_RECORD_TARGET);
+	if (entry.password !== "" || entry.savedPassword || hasDefault) {
+		return [];
+	}
+	return [
+		tip(
+			"tip/credentials-missing",
+			`Device "${entry.target}" has no stored password.`,
+			"Pass --password at call time, set it with `centrs devices set`, or add a `__default__` record for fallback credentials.",
+		),
+	];
+}
+
 export interface ListDevicesArgs {
 	cdb: LoadedCdb;
 	group?: string;
@@ -436,6 +477,7 @@ export function listDevices(
 		ok: true,
 		data,
 		warnings,
+		tips: noDevicesTips(args.cdb.entries),
 		meta: devicesMeta("list", args.cdb.settings),
 	};
 }
@@ -607,6 +649,7 @@ export function showDevice(
 		ok: true,
 		data,
 		warnings: [...args.cdb.warnings, ...resolved.warnings],
+		tips: credentialsMissingTips(match.entry, args.cdb.entries),
 		meta: devicesMeta("show", args.cdb.settings, resolved.target),
 	};
 }
@@ -823,6 +866,7 @@ export function listGroups(
 		ok: true,
 		data,
 		warnings: args.cdb.warnings,
+		tips: [],
 		meta: devicesMeta("groups", args.cdb.settings),
 	};
 }
@@ -1045,6 +1089,7 @@ async function persistRecords(
 		ok: true,
 		data,
 		warnings,
+		tips: [],
 		meta: devicesMeta(action, cdb.settings),
 	};
 }
@@ -1402,6 +1447,7 @@ export function buildDevicesErrorEnvelope(
 		ok: false,
 		error: serializeCentrsError(centrsError),
 		warnings,
+		tips: [],
 		meta: devicesMeta(command, settings),
 	};
 }
@@ -1491,6 +1537,7 @@ function renderText(envelope: DevicesEnvelope<unknown>): string {
 			lines.push(`Details: ${error.detailsUrl}`);
 		}
 		appendWarnings(lines, envelope.warnings);
+		appendTips(lines, envelope.tips);
 		return lines.join("\n");
 	}
 
@@ -1513,6 +1560,7 @@ function renderText(envelope: DevicesEnvelope<unknown>): string {
 	}
 
 	appendWarnings(lines, envelope.warnings);
+	appendTips(lines, envelope.tips);
 	return lines.join("\n");
 }
 
@@ -1522,6 +1570,19 @@ function appendWarnings(
 ): void {
 	for (const warning of warnings) {
 		lines.push(`warning: [${warning.code}] ${warning.message}`);
+	}
+}
+
+function appendTips(lines: string[], tips: readonly Tip[]): void {
+	if (tips.length === 0) {
+		return;
+	}
+	lines.push("Tips:");
+	for (const item of tips) {
+		lines.push(`  - [${item.code}] ${item.message}`);
+		if (item.fix) {
+			lines.push(`    fix: ${item.fix}`);
+		}
 	}
 }
 

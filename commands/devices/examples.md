@@ -445,3 +445,20 @@ centrs devices add 198.51.100.30 --user admin --password p \
 `ok: true`. The record's comment carries `identity=spare via=ssh`, so the device
 is then resolvable as `spare`. A first-class field written as a positional
 (`user=x`) is refused with `cdb/reserved-key` — use the `--user` flag.
+
+## Tips
+
+Tips are advice, not anomalies (see `docs/CONSTITUTION.md`, Result envelope).
+They ride the top-level `tips[]` channel, always present (`[]` when empty),
+and render in text mode under a `Tips:` footer.
+
+### 40. An empty registry suggests adding a device
+
+```bash
+centrs devices list --cdb-file $EMPTY_CDB
+```
+
+`ok: true`, `data: []`, and `tips` carries a `tip/no-devices` entry (with a
+`fix`). `--json` includes the same `tips[]` array. `devices show` on a record
+with no stored password emits `tip/credentials-missing` unless a `__default__`
+record supplies fallback creds.

@@ -14,6 +14,7 @@ import {
 import {
 	addDevice,
 	type LoadedCdb,
+	listDevices,
 	loadCdb,
 	removeDevice,
 	setDevice,
@@ -789,6 +790,84 @@ describe("showDevice duplicate identity= disambiguation", () => {
 				showDevice({ cdb, target: "dup", match: "group=x" }),
 			);
 			expect(error.code).toBe("input/invalid-match");
+		} finally {
+			await cleanup();
+		}
+	});
+});
+
+describe("devices tips", () => {
+	test("list on an empty registry emits tip/no-devices", async () => {
+		const { path, cleanup } = await tempCdb([]);
+		try {
+			const cdb = await reload(path);
+			const result = listDevices({ cdb });
+			expect(result.tips.map((t) => t.code)).toContain("tip/no-devices");
+			expect(result.tips[0]?.fix).toBeDefined();
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("list on a populated registry emits no tips", async () => {
+		const { path, cleanup } = await tempCdb([adminRecord()]);
+		try {
+			const cdb = await reload(path);
+			expect(listDevices({ cdb }).tips).toEqual([]);
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("show emits tip/credentials-missing for a passwordless record", async () => {
+		const { path, cleanup } = await tempCdb([
+			buildWinBoxCdbEntryRecord({
+				recordType: winBoxCdbRecordType.macTarget,
+				target: "AA:BB:CC:DD:EE:01",
+				user: "mac-only",
+				savedPassword: false,
+			}),
+		]);
+		try {
+			const cdb = await reload(path);
+			const result = showDevice({ cdb, target: "AA:BB:CC:DD:EE:01" });
+			expect(result.tips.map((t) => t.code)).toContain(
+				"tip/credentials-missing",
+			);
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("a __default__ record suppresses the credentials-missing tip", async () => {
+		const { path, cleanup } = await tempCdb([
+			buildWinBoxCdbEntryRecord({
+				recordType: winBoxCdbRecordType.ipAdmin,
+				target: "__default__",
+				user: "fallback",
+				password: "fallback-pw",
+			}),
+			buildWinBoxCdbEntryRecord({
+				recordType: winBoxCdbRecordType.macTarget,
+				target: "AA:BB:CC:DD:EE:02",
+				user: "mac-only",
+				savedPassword: false,
+			}),
+		]);
+		try {
+			const cdb = await reload(path);
+			const result = showDevice({ cdb, target: "AA:BB:CC:DD:EE:02" });
+			expect(result.tips).toEqual([]);
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("show emits no tip when the record stores a password", async () => {
+		const { path, cleanup } = await tempCdb([adminRecord()]);
+		try {
+			const cdb = await reload(path);
+			expect(showDevice({ cdb, target: "192.0.2.5" }).tips).toEqual([]);
 		} finally {
 			await cleanup();
 		}

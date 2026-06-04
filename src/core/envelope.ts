@@ -51,6 +51,22 @@ export interface Warning {
 	context?: Record<string, unknown>;
 }
 
+/**
+ * Advice that is explicitly *not* an error or anomaly — a pointer the caller may
+ * act on (no username set, no CDB found, consider a `__default__` record). Tips
+ * ride their own envelope channel so "this is not a problem, just a suggestion"
+ * never has to masquerade as a warning. See `docs/CONSTITUTION.md` (Result
+ * envelope). Same shape as {@link Warning} plus an optional `fix`/`detailsUrl`.
+ */
+export interface Tip {
+	/** Slash-namespaced `tip/*` code. Example: `tip/credentials-missing`. */
+	code: string;
+	message: string;
+	/** One human sentence describing the suggested next step. */
+	fix?: string;
+	detailsUrl?: string;
+}
+
 /** Resolved target identity plus per-field provenance. */
 export interface EnvelopeTargetMeta {
 	/** Raw `<router>` argument as supplied by the caller. */
@@ -142,12 +158,14 @@ export type CentrsEnvelope<Data = unknown, Operation = unknown> =
 			ok: true;
 			data: Data;
 			warnings: readonly Warning[];
+			tips: readonly Tip[];
 			meta: EnvelopeMeta<Operation>;
 	  }
 	| {
 			ok: false;
 			error: SerializedCentrsError;
 			warnings: readonly Warning[];
+			tips: readonly Tip[];
 			meta: EnvelopeMeta<Operation>;
 	  };
 
@@ -185,4 +203,11 @@ export function normalizeWarnings(
 	warnings: readonly Warning[] | undefined,
 ): readonly Warning[] {
 	return warnings ?? [];
+}
+
+/** Normalize an optional tips list to a readonly array. */
+export function normalizeTips(
+	tips: readonly Tip[] | undefined,
+): readonly Tip[] {
+	return tips ?? [];
 }

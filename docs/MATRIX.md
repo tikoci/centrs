@@ -52,10 +52,12 @@ The `__default__` fallback record is implemented at the resolver level
 (`resolveCdb`/`resolveAuth`, unit-tested in `test/unit/resolver.test.ts`): a
 device record's unset creds fall back per-field to `__default__`, and on the
 CLI/API `__default__` supplies creds for an ad-hoc target with no record (MCP
-keeps the allowlist). One decided redesign item remains ahead of the implemented
-surface: the top-level `tips[]` channel. It is spec'd in
-`commands/devices/README.md` and `docs/CONSTITUTION.md` and tracked there pending
-implementation; the cell stays `CHR-passed` for what `examples.md` covers.
+keeps the allowlist). The top-level `tips[]` envelope channel is implemented too
+(`Tip` in `src/core/envelope.ts`, always-present `[]`, rendered under a `Tips:`
+footer in text mode); `devices` emits `tip/no-devices` and
+`tip/credentials-missing` (example 40). The whole decided `devices` redesign is
+now landed; the remaining open items (ARP test scheme, CLI verb aliases) are
+tracked in `commands/devices/README.md`.
 
 `discover` is `coded`: the MNDP wire codec (`src/data/mndp.ts`), the
 TTL-expiring neighbor cache (`src/data/mndp-cache.ts`), the UDP listener, and

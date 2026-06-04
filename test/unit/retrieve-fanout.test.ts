@@ -46,6 +46,7 @@ function fakeSuccess(
 		ok: true,
 		data: recordIndex,
 		warnings: [],
+		tips: [],
 		meta: {
 			target: { recordIndex, identity: resolved.target.identity },
 			via: "rest-api",

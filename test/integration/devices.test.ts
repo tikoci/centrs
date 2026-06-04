@@ -1433,4 +1433,37 @@ describe("centrs devices (read-only)", () => {
 		};
 		expect(reservedEnvelope.error.code).toBe("cdb/reserved-key");
 	});
+
+	test("example 40 an empty registry emits tip/no-devices", async () => {
+		const cdbPath = await writeFixture(
+			"example-40-tips",
+			encodeOpenWinBoxCdb([]),
+		);
+		const result = await runWithCapture([
+			"devices",
+			"list",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(0);
+		const envelope = JSON.parse(result.stdout) as {
+			data: unknown[];
+			tips: Array<{ code: string; fix?: string }>;
+		};
+		expect(envelope.data).toEqual([]);
+		const noDevices = envelope.tips.find((t) => t.code === "tip/no-devices");
+		expect(noDevices).toBeDefined();
+		expect(noDevices?.fix).toBeDefined();
+
+		// Text mode renders the tip under a Tips: footer (lossless vs JSON).
+		const text = await runWithCapture([
+			"devices",
+			"list",
+			"--cdb-file",
+			cdbPath,
+		]);
+		expect(text.stdout).toContain("Tips:");
+		expect(text.stdout).toContain("tip/no-devices");
+	});
 });
