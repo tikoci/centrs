@@ -894,7 +894,7 @@ function metaFromResolved(
 			host: target.host,
 			port: target.port,
 			baseUrl: target.baseUrl,
-			name: target.name,
+			identity: target.identity,
 			recordIndex: target.recordIndex,
 			source: toCoreSource(target.source),
 			sources: targetSources,

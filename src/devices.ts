@@ -662,7 +662,7 @@ function resolveDeviceShowTargetMeta(
 		target: entry.target,
 		resolvedTarget: entry.target,
 		host: entry.target,
-		name: entry.target,
+		identity: parsed.lookups.identity ?? entry.target,
 		recordIndex: cdbRecordIndex,
 		cdbRecordIndex,
 		user: entry.user,

@@ -65,8 +65,13 @@ export interface CommentKvOverrides {
 export interface CdbResolution {
 	/** Resolved target string from the CDB record (host / IP / base URL). */
 	target: string;
-	/** CDB record name == the matched `<router>` argument. */
-	name: string;
+	/**
+	 * Human-facing device handle: the `identity=` comment lookup key (mirroring
+	 * RouterOS `/system/identity`), falling back to the matched record's target
+	 * when the comment carries no `identity=`. Deliberately may repeat across
+	 * records.
+	 */
+	identity: string;
 	username: string;
 	password: string;
 	recordIndex: number;
@@ -149,7 +154,7 @@ export async function resolveCdb(
 		);
 		return {
 			target: entry.target,
-			name: entry.target,
+			identity: identityFromComment(entry.comment, entry.target),
 			username: entry.user,
 			password: entry.password,
 			recordIndex: entry.cdbRecordIndex,
@@ -246,13 +251,23 @@ function resolutionFromEntry(
 	const overrides = coerceCommentKv(entry.comment, recordIndex, recordWarnings);
 	return {
 		target: entry.target,
-		name: entry.target,
+		identity: identityFromComment(entry.comment, entry.target),
 		username: entry.user,
 		password: entry.password,
 		recordIndex,
 		overrides,
 		warnings: recordWarnings,
 	};
+}
+
+/**
+ * The human-facing device handle for a record: the `identity=` comment lookup
+ * key when present, else the record's `target`. Mirrors RouterOS
+ * `/system/identity`; deliberately non-unique (collisions resolve through the
+ * ambiguity path). See `commands/devices/README.md` (Identity model).
+ */
+export function identityFromComment(comment: string, target: string): string {
+	return parseCommentKv(comment).lookups.identity ?? target;
 }
 
 /**

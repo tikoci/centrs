@@ -63,7 +63,12 @@ export interface EnvelopeTargetMeta {
 	port?: number;
 	baseUrl?: string;
 	mac?: string;
-	name?: string;
+	/**
+	 * Human-facing device handle: the `identity=` comment lookup key (mirroring
+	 * RouterOS `/system/identity`), falling back to the matched record's target.
+	 * Deliberately may repeat across records; not a unique key.
+	 */
+	identity?: string;
 	recordIndex?: number;
 	/** Alias used by devices, where the CDB record index is user-facing. */
 	cdbRecordIndex?: number;

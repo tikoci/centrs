@@ -18,7 +18,7 @@ import {
 function fakeResolution(recordIndex: number): CdbResolution {
 	return {
 		target: `10.0.0.${recordIndex + 1}`,
-		name: `router-${recordIndex}`,
+		identity: `router-${recordIndex}`,
 		username: "admin",
 		password: "",
 		recordIndex,
@@ -47,7 +47,7 @@ function fakeSuccess(
 		data: recordIndex,
 		warnings: [],
 		meta: {
-			target: { recordIndex, name: resolved.target.name },
+			target: { recordIndex, identity: resolved.target.identity },
 			via: "rest-api",
 			settings: {},
 		},
@@ -117,9 +117,9 @@ describe("retrieve fanout orchestration", () => {
 		expect(failed?.ok).toBe(false);
 		if (failed && !failed.ok) {
 			expect(failed.error.code).toBe("transport/connection-refused");
-			// Inner failure preserves per-target identity (recordIndex/name).
+			// Inner failure preserves per-target identity (recordIndex/identity).
 			expect(failed.meta.target.recordIndex).toBe(1);
-			expect(failed.meta.target.name).toBe("router-1");
+			expect(failed.meta.target.identity).toBe("router-1");
 		}
 	});
 

@@ -396,8 +396,8 @@ function buildResolveFailureEnvelope(
 		warnings: [...resolution.warnings],
 		meta: {
 			target: {
-				input: resolution.name,
-				name: resolution.name,
+				input: resolution.identity,
+				identity: resolution.identity,
 				recordIndex: resolution.recordIndex,
 			},
 			via: null,
@@ -506,7 +506,7 @@ function renderFanoutText(
 
 	for (const target of envelope.data.targets) {
 		const meta = target.meta;
-		const label = meta.target.name ?? meta.target.host ?? "(unknown)";
+		const label = meta.target.identity ?? meta.target.host ?? "(unknown)";
 		const index = meta.target.recordIndex ?? "-";
 		if (target.ok) {
 			lines.push(

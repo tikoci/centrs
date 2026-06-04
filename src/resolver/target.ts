@@ -10,8 +10,8 @@
  * `via` selects the URL shape: `native-api` resolves to an `api://` /
  * `api-ssl://` base URL (TCP 8728 / TLS 8729), everything else to a REST
  * `http(s)://.../rest` base URL. MAC / ARP / MNDP identity fallback is out of
- * scope (WP-2c); the shape exposes `name`/`recordIndex` and leaves room for a
- * future `mac` field.
+ * scope (WP-2c); the shape exposes `identity`/`recordIndex` and leaves room for
+ * a future `mac` field.
  */
 
 import { CentrsError } from "../errors.ts";
@@ -52,8 +52,8 @@ export interface ResolvedTarget {
 	/** TLS transport (native-api over api-ssl). REST uses the URL scheme. */
 	tls: boolean;
 	baseUrl: string;
-	/** CDB record name, when the target was resolved through the CDB. */
-	name?: string;
+	/** Human-facing device handle (CDB `identity=`, else target), if resolved. */
+	identity?: string;
 	recordIndex?: number;
 	/** Provenance of the identity as a whole. */
 	source: ResolverSettingSource;
@@ -183,7 +183,7 @@ export function resolveTarget(
 		scheme,
 		tls,
 		baseUrl,
-		name: cdb?.name,
+		identity: cdb?.identity,
 		recordIndex: cdb?.recordIndex,
 		source: identitySource,
 		hostSource: identitySource,

@@ -202,7 +202,7 @@ describe("resolver target provenance", () => {
 	function cdbFixture(overrides: CdbResolution["overrides"]): CdbResolution {
 		return {
 			target: "10.0.0.5",
-			name: "edge-router",
+			identity: "edge-router",
 			username: "admin",
 			password: "secret",
 			recordIndex: 4,
@@ -242,7 +242,7 @@ describe("resolver target provenance", () => {
 		);
 
 		expect(target.host).toBe("10.0.0.5");
-		expect(target.name).toBe("edge-router");
+		expect(target.identity).toBe("edge-router");
 		expect(target.recordIndex).toBe(4);
 		expect(target.source).toEqual({ kind: "cdb", key: "record:4" });
 		expect(target.sources["host"]).toEqual({ kind: "cdb", key: "record:4" });
