@@ -308,8 +308,7 @@ both unencrypted and encrypted CDBs. The comment-kv *grammar* is settled — see
 
 | Item | Notes |
 | --- | --- |
-| Symmetric `add`/`set`; `edit` → future TUI | `set` gains first-class flags and require-exists; `edit` stops being a field editor. Update `src/devices.ts` + examples; the `cdb/reserved-key` rule stays for `k=v` positionals. |
-| `(target, user)` record identity | `add` existence check + ambiguity key on `(target, user)`, not `target` alone (current code keys on `target`). The read path already disambiguates with `--match user=`; the mutation path still keys on `target` alone. Needs an example: same address under two users coexists. |
+| Symmetric `add`/`set`; `edit` → future TUI | `set` gains first-class flags and require-exists; `edit` stops being a field editor. `add` existence is keyed on `(target, user)` (done — example 36); `set`/`remove` still resolve by `target` only and gain the router/lookup-aware match here. The `cdb/reserved-key` rule stays for `k=v` positionals. |
 | `--profile-none` / `--profile-own` | Sentinel flags writing `<none>` / `<own>`; `profile`/`session` stay preserve-only. |
 | `__default__` record | Reserved fallback record; per-field precedence args → env → device → `__default__` → built-in; CLI/API fill any target, MCP keeps the allowlist. |
 | `tips[]` emission | Emit `tip/credentials-missing`, `tip/no-cdb`, "consider a `__default__`" tips on the relevant envelopes. |

@@ -122,18 +122,21 @@ centrs devices add 198.51.100.10 --user admin --password secret \
 Envelope: `ok: true`. Re-reading the CDB shows the entry. Backup file
 `$CDB.bak.<iso8601>` exists.
 
-### 11. Add to existing target without --force
+### 11. Add the same (target, user) without --force
+
+Record identity is `(target, user)`, so a collision requires the **same user**
+(`192.0.2.5` is saved under `admin`).
 
 ```bash
-centrs devices add 192.0.2.5 --user other --password other --cdb-file $CDB
+centrs devices add 192.0.2.5 --user admin --password other --cdb-file $CDB
 ```
 
 Errors with `cdb/already-exists`. No file mutation. No backup written.
 
-### 12. Add to existing target with --force
+### 12. Replace the same (target, user) with --force
 
 ```bash
-centrs devices add 192.0.2.5 --user new --password new --force --cdb-file $CDB
+centrs devices add 192.0.2.5 --user admin --password new --force --cdb-file $CDB
 ```
 
 `ok: true`. Backup written. The previous entry's unknown fields are
@@ -381,3 +384,24 @@ centrs devices show dup --match user=ops --cdb-file $CDB_DUP_IDENTITY
 
 `ok: true`; selects the `ops` record. `--match target=<addr>` and
 `--match <record-type>` are the other selectors.
+
+## (target, user) identity
+
+### 36. The same address under a different user coexists
+
+`192.0.2.5` is saved under `admin`. Adding it under a different user is a new
+record, not a collision.
+
+```bash
+centrs devices add 192.0.2.5 --user ops --password ops-pw --cdb-file $CDB
+```
+
+`ok: true`, `data.replaced: false`. The CDB now holds two records for
+`192.0.2.5`, so the bare address is ambiguous:
+
+```bash
+centrs devices show 192.0.2.5 --cdb-file $CDB </dev/null
+```
+
+`identity/ambiguous`. `centrs devices show 192.0.2.5 --match user=ops` resolves
+the new record; `--match user=admin` the original.

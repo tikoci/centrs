@@ -651,7 +651,7 @@ describe("centrs devices (read-only)", () => {
 		expect(shown.data.entry.comment).toContain("site=NYC");
 	});
 
-	test("example 11 add existing without force errors without backup", async () => {
+	test("example 11 add same (target, user) without force errors without backup", async () => {
 		const cdbPath = await copyCdbFixture("example-11-add-existing");
 		const before = await readFile(cdbPath);
 		const result = await runWithCapture([
@@ -659,7 +659,7 @@ describe("centrs devices (read-only)", () => {
 			"add",
 			"192.0.2.5",
 			"--user",
-			"other",
+			"admin",
 			"--password",
 			"other",
 			"--cdb-file",
@@ -673,7 +673,7 @@ describe("centrs devices (read-only)", () => {
 		expect(await listBackups(cdbPath)).toEqual([]);
 	});
 
-	test("example 12 add existing with force preserves unknown fields", async () => {
+	test("example 12 replace same (target, user) with force preserves unknown fields", async () => {
 		const cdbPath = await copyCdbFixture("example-12-force", {
 			unknownField: true,
 		});
@@ -682,7 +682,7 @@ describe("centrs devices (read-only)", () => {
 			"add",
 			"192.0.2.5",
 			"--user",
-			"new",
+			"admin",
 			"--password",
 			"new",
 			"--force",
@@ -1284,6 +1284,58 @@ describe("centrs devices (read-only)", () => {
 			data: { entry: { target: string; user: string } };
 		};
 		expect(pinnedEnvelope.data.entry.target).toBe("10.0.0.2");
+		expect(pinnedEnvelope.data.entry.user).toBe("ops");
+	});
+
+	test("example 36 same address under a different user coexists", async () => {
+		const cdbPath = await copyCdbFixture("example-36-coexist");
+		const added = await runWithCapture([
+			"devices",
+			"add",
+			"192.0.2.5",
+			"--user",
+			"ops",
+			"--password",
+			"ops-pw",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(added.exitCode).toBe(0);
+		const addedEnvelope = JSON.parse(added.stdout) as {
+			data: { replaced: boolean };
+		};
+		expect(addedEnvelope.data.replaced).toBe(false);
+
+		// The bare address now matches two records.
+		const ambiguous = await runWithCapture([
+			"devices",
+			"show",
+			"192.0.2.5",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(ambiguous.exitCode).toBe(1);
+		const ambiguousEnvelope = JSON.parse(ambiguous.stderr) as {
+			error: { code: string };
+		};
+		expect(ambiguousEnvelope.error.code).toBe("identity/ambiguous");
+
+		const pinned = await runWithCapture([
+			"devices",
+			"show",
+			"192.0.2.5",
+			"--match",
+			"user=ops",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(pinned.exitCode).toBe(0);
+		const pinnedEnvelope = JSON.parse(pinned.stdout) as {
+			data: { entry: { user: string } };
+		};
 		expect(pinnedEnvelope.data.entry.user).toBe("ops");
 	});
 });

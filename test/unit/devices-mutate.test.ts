@@ -148,13 +148,13 @@ describe("devices mutation", () => {
 		}
 	});
 
-	test("refuses to add an existing target without force and does not mutate", async () => {
+	test("refuses to add the same (target, user) without force and does not mutate", async () => {
 		const { path, cleanup } = await tempCdb([adminRecord()]);
 		try {
 			const cdb = await reload(path);
 			const before = await readdir(join(path, ".."));
 			const error = await catchError(() =>
-				addDevice({ cdb, target: "192.0.2.5", user: "x", password: "y" }),
+				addDevice({ cdb, target: "192.0.2.5", user: "admin", password: "y" }),
 			);
 			expect(error.code).toBe("cdb/already-exists");
 			const after = await readdir(join(path, ".."));
@@ -164,14 +164,48 @@ describe("devices mutation", () => {
 		}
 	});
 
-	test("force-add replaces the entry and preserves unknown fields", async () => {
+	test("the same target under a different user is a new record, not a collision", async () => {
 		const { path, cleanup } = await tempCdb([adminRecord()]);
 		try {
 			const cdb = await reload(path);
 			const result = await addDevice({
 				cdb,
 				target: "192.0.2.5",
-				user: "new",
+				user: "ops",
+				password: "ops-pw",
+			});
+			expect(result.ok).toBe(true);
+			expect(result.data.replaced).toBe(false);
+
+			const after = await reload(path);
+			// Both records now share the target; the bare address is ambiguous and
+			// --match user= pins each.
+			expect(
+				after.entries.filter((entry) => entry.target === "192.0.2.5"),
+			).toHaveLength(2);
+			const ambiguous = await catchError(async () =>
+				showDevice({ cdb: after, target: "192.0.2.5" }),
+			);
+			expect(ambiguous.code).toBe("identity/ambiguous");
+			const ops = showDevice({
+				cdb: after,
+				target: "192.0.2.5",
+				match: "user=ops",
+			});
+			expect(ops.data.entry.user).toBe("ops");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("force-add replaces the same (target, user) and preserves unknown fields", async () => {
+		const { path, cleanup } = await tempCdb([adminRecord()]);
+		try {
+			const cdb = await reload(path);
+			const result = await addDevice({
+				cdb,
+				target: "192.0.2.5",
+				user: "admin",
 				password: "new",
 				force: true,
 			});

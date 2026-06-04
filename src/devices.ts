@@ -923,6 +923,34 @@ function matchEntries(
 	return matches;
 }
 
+/**
+ * Entries whose (target, user) pair matches — the natural CDB record identity
+ * (WinBox keys "Save to list" on address + user, so the same address under a
+ * different user is a second record, not an update). `target` is canonicalized
+ * so a MAC compares case/separator-insensitively; `user` is exact (empty string
+ * when unset). See `commands/devices/README.md` (Identity model) and
+ * `docs/CONSTITUTION.md` (Identity and CDB).
+ */
+function matchTargetUser(
+	entries: readonly WinBoxCdbEntry[],
+	target: string,
+	user: string,
+): EntryMatch[] {
+	const want = canonicalRouterKey(target);
+	const matches: EntryMatch[] = [];
+	for (let index = 0; index < entries.length; index += 1) {
+		const entry = entries[index];
+		if (
+			entry &&
+			canonicalRouterKey(entry.target) === want &&
+			entry.user === user
+		) {
+			matches.push({ entry, index });
+		}
+	}
+	return matches;
+}
+
 /** Fields the canonical builder does not emit and must be preserved verbatim. */
 function extraFields(record: WinBoxCdbRecord): readonly WinBoxCdbField[] {
 	return record.fields.filter(
@@ -1112,7 +1140,8 @@ export interface AddDeviceArgs {
 export async function addDevice(
 	args: AddDeviceArgs,
 ): Promise<DevicesMutationEnvelope> {
-	const matches = matchEntries(args.cdb.entries, args.target);
+	const user = args.user ?? "";
+	const matches = matchTargetUser(args.cdb.entries, args.target, user);
 	if (matches.length > 1) {
 		throw ambiguousTargetError(args.target, matches);
 	}
@@ -1120,10 +1149,10 @@ export async function addDevice(
 	if (existing && !args.force) {
 		throw new CentrsError({
 			code: "cdb/already-exists",
-			summary: `A CDB entry with target "${args.target}" already exists.`,
+			summary: `A CDB entry for target "${args.target}" under user "${user}" already exists.`,
 			remediation:
-				"Pass --force to overwrite it, or use `centrs devices edit` to change individual fields.",
-			context: { target: args.target, cdbRecordIndex: existing.index },
+				"Pass --force to overwrite it, add it under a different --user, or use `centrs devices set` to change fields.",
+			context: { target: args.target, user, cdbRecordIndex: existing.index },
 		});
 	}
 
