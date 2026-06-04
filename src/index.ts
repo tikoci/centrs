@@ -91,8 +91,7 @@ export {
 	type DevicesWarning,
 	defaultCdbPath,
 	devicesOutputFormats,
-	type EditDeviceArgs,
-	editDevice,
+	editInteractiveOnlyError,
 	type LoadCdbOptions,
 	type LoadedCdb,
 	listDevices,
@@ -104,8 +103,8 @@ export {
 	removeDevice,
 	renderDevicesEnvelope,
 	resolveDevicesSettings,
-	type SetDeviceCommentKvArgs,
-	setDeviceCommentKv,
+	type SetDeviceArgs,
+	setDevice,
 	showDevice,
 } from "./devices.ts";
 export {

@@ -774,11 +774,11 @@ describe("centrs devices (read-only)", () => {
 		expect(shown.data.entry.user).toBe("u");
 	});
 
-	test("example 15 edit credentials preserves other fields and writes backup", async () => {
-		const cdbPath = await copyCdbFixture("example-15-edit");
+	test("example 15 set credentials preserves other fields and writes backup", async () => {
+		const cdbPath = await copyCdbFixture("example-15-set");
 		const result = await runWithCapture([
 			"devices",
-			"edit",
+			"set",
 			"192.0.2.5",
 			"--user",
 			"admin2",
@@ -818,12 +818,12 @@ describe("centrs devices (read-only)", () => {
 		expect(shown.data.entry.comment).toBe("core router");
 	});
 
-	test("example 16 edit unknown target errors without backup", async () => {
-		const cdbPath = await copyCdbFixture("example-16-edit-unknown");
+	test("example 16 set a missing target errors without backup", async () => {
+		const cdbPath = await copyCdbFixture("example-16-set-unknown");
 		const before = await readFile(cdbPath);
 		const result = await runWithCapture([
 			"devices",
-			"edit",
+			"set",
 			"203.0.113.1",
 			"--user",
 			"x",
@@ -1337,5 +1337,100 @@ describe("centrs devices (read-only)", () => {
 			data: { entry: { user: string } };
 		};
 		expect(pinnedEnvelope.data.entry.user).toBe("ops");
+	});
+
+	test("example 37 edit reports usage/not-implemented", async () => {
+		const cdbPath = await copyCdbFixture("example-37-edit");
+		const before = await readFile(cdbPath);
+		const result = await runWithCapture([
+			"devices",
+			"edit",
+			"192.0.2.5",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(1);
+		const envelope = JSON.parse(result.stderr) as { error: { code: string } };
+		expect(envelope.error.code).toBe("usage/not-implemented");
+		expect(await readFile(cdbPath)).toEqual(before);
+		expect(await listBackups(cdbPath)).toEqual([]);
+	});
+
+	test("example 38 set --profile-none writes the <none> sentinel", async () => {
+		const cdbPath = await copyCdbFixture("example-38-profile");
+		const result = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"--profile-none",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(0);
+		const show = await runWithCapture([
+			"devices",
+			"show",
+			"192.0.2.5",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		const shown = JSON.parse(show.stdout) as {
+			data: { entry: { profile: string } };
+		};
+		expect(shown.data.entry.profile).toBe("<none>");
+	});
+
+	test("example 39 add accepts bare k=v positionals; reserved keys rejected", async () => {
+		const cdbPath = await copyCdbFixture("example-39-add-kv");
+		const added = await runWithCapture([
+			"devices",
+			"add",
+			"198.51.100.30",
+			"--user",
+			"admin",
+			"--password",
+			"p",
+			"identity=spare",
+			"via=ssh",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(added.exitCode).toBe(0);
+
+		// The device is now resolvable by its identity= lookup key.
+		const show = await runWithCapture([
+			"devices",
+			"show",
+			"spare",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(show.exitCode).toBe(0);
+		const shown = JSON.parse(show.stdout) as {
+			data: { entry: { target: string; comment: string } };
+		};
+		expect(shown.data.entry.target).toBe("198.51.100.30");
+		expect(shown.data.entry.comment).toContain("via=ssh");
+
+		// A first-class field as a positional is refused.
+		const reserved = await runWithCapture([
+			"devices",
+			"add",
+			"198.51.100.31",
+			"user=x",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(reserved.exitCode).toBe(1);
+		const reservedEnvelope = JSON.parse(reserved.stderr) as {
+			error: { code: string };
+		};
+		expect(reservedEnvelope.error.code).toBe("cdb/reserved-key");
 	});
 });

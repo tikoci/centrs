@@ -10,12 +10,12 @@ into a temporary directory at runtime (open and encrypted, encrypted password
 Writes operate on a copy of the fixture per test; the source bytes are never
 mutated in place. `$CDB` is the per-test path.
 
-> `<router>` lookup-key resolution (`identity=`/`mac=`/`ip=`) and the broadened
-> `--match` selectors (`user=`/`target=`) are implemented — examples 32–35. The
-> remaining redesign in `README.md` (symmetric `add`/`set`, `edit` → future TUI,
-> `__default__`, `tips[]`) still lands with new examples here. The verbs below
-> are the **currently implemented** shape (`edit` edits first-class fields; `set`
-> writes comment kv-soup only). Do not reconcile the README back to these
+> Lookup-key resolution (`identity=`/`mac=`/`ip=`), the broadened `--match`
+> selectors (`user=`/`target=`), the symmetric `add`/`set` model (`edit` reserved
+> for the interactive editor), the `(target, user)` record identity, and the
+> `--profile-none`/`--profile-own` sentinels are all implemented — see examples
+> 10–16 and 32–39. The remaining redesign in `README.md` (`__default__`, `tips[]`)
+> still lands with new examples here. Do not reconcile the README back to these
 > examples; reconcile forward.
 
 ## list
@@ -163,21 +163,25 @@ centrs devices add 198.51.100.20 --user u --password p \
 password with a fresh salt, then atomically renames over the original. The
 backup (`.bak.<timestamp>`) is the verbatim prior ciphertext.
 
-## edit
+## set (first-class fields)
 
-### 15. Edit credentials
+`set` modifies an existing record. First-class fields change via flags; comment
+override/lookup keys change via `k=v` positionals (next section). `add` takes the
+same flags + positionals — the only difference is existence (`add` creates,
+`set` requires the record to exist).
+
+### 15. Set credentials (first-class fields)
 
 ```bash
-centrs devices edit 192.0.2.5 --user admin2 --password new \
-  --cdb-file $CDB
+centrs devices set 192.0.2.5 --user admin2 --password new --cdb-file $CDB
 ```
 
 `ok: true`. Other fields (group, profile, comment, unknowns) unchanged.
 
-### 16. Edit unknown target
+### 16. Set a missing target
 
 ```bash
-centrs devices edit 203.0.113.1 --user x --password y --cdb-file $CDB
+centrs devices set 203.0.113.1 --user x --password y --cdb-file $CDB
 ```
 
 Errors with `cdb/not-found-target`.
@@ -405,3 +409,39 @@ centrs devices show 192.0.2.5 --cdb-file $CDB </dev/null
 
 `identity/ambiguous`. `centrs devices show 192.0.2.5 --match user=ops` resolves
 the new record; `--match user=admin` the original.
+
+## edit (reserved for the interactive editor)
+
+### 37. `edit` reports usage/not-implemented
+
+```bash
+centrs devices edit 192.0.2.5 --cdb-file $CDB
+```
+
+Errors with `usage/not-implemented`. The interactive (clack/TUI) editor is not
+built yet; use `set` for non-interactive field and metadata changes.
+
+## Profile sentinels
+
+### 38. Write the `<none>` / `<own>` profile sentinels
+
+```bash
+centrs devices set 192.0.2.5 --profile-none --cdb-file $CDB
+```
+
+`ok: true`; the record's `profile` becomes `<none>`. `--profile-own` writes
+`<own>`; `--profile <name>` writes a named profile. The three are mutually
+exclusive (passing more than one is a usage error).
+
+## Symmetric add (fields + k=v)
+
+### 39. Add with bare k=v positionals
+
+```bash
+centrs devices add 198.51.100.30 --user admin --password p \
+  identity=spare via=ssh --cdb-file $CDB
+```
+
+`ok: true`. The record's comment carries `identity=spare via=ssh`, so the device
+is then resolvable as `spare`. A first-class field written as a positional
+(`user=x`) is refused with `cdb/reserved-key` — use the `--user` flag.

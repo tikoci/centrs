@@ -13,11 +13,10 @@ import {
 } from "../../src/data/winbox-cdb.ts";
 import {
 	addDevice,
-	editDevice,
 	type LoadedCdb,
 	loadCdb,
 	removeDevice,
-	setDeviceCommentKv,
+	setDevice,
 	showDevice,
 } from "../../src/devices.ts";
 import { CentrsError } from "../../src/errors.ts";
@@ -227,13 +226,13 @@ describe("devices mutation", () => {
 		const { path, cleanup } = await tempCdb([adminRecord("keepme")]);
 		try {
 			const cdb = await reload(path);
-			const result = await editDevice({
+			const result = await setDevice({
 				cdb,
 				target: "192.0.2.5",
 				user: "admin2",
 				password: "rotated",
 			});
-			expect(result.data.action).toBe("edit");
+			expect(result.data.action).toBe("set");
 			expect(result.data.preservedUnknownTags).toContain(200);
 
 			const after = await reload(path);
@@ -251,7 +250,7 @@ describe("devices mutation", () => {
 		try {
 			const cdb = await reload(path);
 			const error = await catchError(() =>
-				editDevice({ cdb, target: "203.0.113.1", user: "x" }),
+				setDevice({ cdb, target: "203.0.113.1", user: "x" }),
 			);
 			expect(error.code).toBe("cdb/not-found-target");
 		} finally {
@@ -263,7 +262,7 @@ describe("devices mutation", () => {
 		const { path, cleanup } = await tempCdb([adminRecord("owned by neteng")]);
 		try {
 			const cdb = await reload(path);
-			const result = await setDeviceCommentKv({
+			const result = await setDevice({
 				cdb,
 				target: "192.0.2.5",
 				updates: [
@@ -291,7 +290,7 @@ describe("devices mutation", () => {
 		]);
 		try {
 			const cdb = await reload(path);
-			await setDeviceCommentKv({
+			await setDevice({
 				cdb,
 				target: "192.0.2.5",
 				updates: [{ key: "via", value: "ssh" }],
@@ -308,7 +307,7 @@ describe("devices mutation", () => {
 		const { path, cleanup } = await tempCdb([noCommentRecord()]);
 		try {
 			const cdb = await reload(path);
-			const result = await setDeviceCommentKv({
+			const result = await setDevice({
 				cdb,
 				target: "192.0.2.7",
 				updates: [{ key: "env", value: "prod" }],
@@ -329,7 +328,7 @@ describe("devices mutation", () => {
 		try {
 			const cdb = await reload(path);
 			const error = await catchError(() =>
-				setDeviceCommentKv({
+				setDevice({
 					cdb,
 					target: "192.0.2.5",
 					updates: [{ key: "user", value: "hacker" }],
@@ -345,7 +344,7 @@ describe("devices mutation", () => {
 		const { path, cleanup } = await tempCdb([adminRecord()]);
 		try {
 			const cdb = await reload(path);
-			const result = await setDeviceCommentKv({
+			const result = await setDevice({
 				cdb,
 				target: "192.0.2.5",
 				updates: [{ key: "future", value: "maybe" }],
@@ -366,7 +365,7 @@ describe("devices mutation", () => {
 		try {
 			const cdb = await reload(path);
 			const error = await catchError(() =>
-				setDeviceCommentKv({
+				setDevice({
 					cdb,
 					target: "192.0.2.5",
 					updates: [{ key: "future", value: "maybe" }],
@@ -410,7 +409,7 @@ describe("devices mutation", () => {
 		}
 	});
 
-	test("comment-only edit preserves the saved-password flag and romon-agent", async () => {
+	test("set comment-kv preserves the saved-password flag, password, and romon-agent", async () => {
 		const { path, cleanup } = await tempCdb([unsavedPasswordRecord()]);
 		try {
 			const cdb = await reload(path);
@@ -418,33 +417,19 @@ describe("devices mutation", () => {
 			expect(before.savedPassword).toBe(false);
 			expect(before.romonAgent).toBe("ether1");
 
-			await editDevice({ cdb, target: "192.0.2.9", comment: "edited" });
-			const after = await reload(path);
-			const entry = showDevice({ cdb: after, target: "192.0.2.9" }).data.entry;
-			// #2: a comment-only edit must not flip the saved-password flag.
-			expect(entry.savedPassword).toBe(false);
-			expect(entry.password).toBe("stored-secret");
-			// #3: a known field (romon-agent) must not be dropped on edit.
-			expect(entry.romonAgent).toBe("ether1");
-			expect(entry.comment).toBe("edited");
-		} finally {
-			await cleanup();
-		}
-	});
-
-	test("set comment-kv preserves the saved-password flag and romon-agent", async () => {
-		const { path, cleanup } = await tempCdb([unsavedPasswordRecord()]);
-		try {
-			const cdb = await reload(path);
-			await setDeviceCommentKv({
+			await setDevice({
 				cdb,
 				target: "192.0.2.9",
 				updates: [{ key: "via", value: "ssh" }],
 			});
 			const after = await reload(path);
 			const entry = showDevice({ cdb: after, target: "192.0.2.9" }).data.entry;
+			// A comment-kv-only set must not flip the saved-password flag or drop a
+			// stored password / known field (romon-agent).
 			expect(entry.savedPassword).toBe(false);
+			expect(entry.password).toBe("stored-secret");
 			expect(entry.romonAgent).toBe("ether1");
+			expect(entry.comment).toContain("via=ssh");
 		} finally {
 			await cleanup();
 		}
@@ -454,7 +439,7 @@ describe("devices mutation", () => {
 		const { path, cleanup } = await tempCdb([unsavedPasswordRecord()]);
 		try {
 			const cdb = await reload(path);
-			await editDevice({ cdb, target: "192.0.2.9", password: "fresh-secret" });
+			await setDevice({ cdb, target: "192.0.2.9", password: "fresh-secret" });
 			const after = await reload(path);
 			const entry = showDevice({ cdb: after, target: "192.0.2.9" }).data.entry;
 			expect(entry.savedPassword).toBe(true);
@@ -464,31 +449,31 @@ describe("devices mutation", () => {
 		}
 	});
 
-	test("editing a non-ipAdmin record preserves its field layout", async () => {
+	test("a field set on a non-ipAdmin record preserves its field layout", async () => {
 		const { path, cleanup } = await tempCdb([romonRecordWithLayout()]);
 		try {
 			const cdb = await reload(path);
 			const priorTags = (cdb.entries[0]?.record.fields ?? [])
 				.filter((field) => field.rawTail !== true)
 				.map((field) => field.tag);
-			await editDevice({
+			await setDevice({
 				cdb,
 				target: "AA:BB:CC:DD:EE:FF",
-				comment: "updated",
+				user: "svc2",
 			});
 			const after = await reload(path);
 			const afterTags = (after.entries[0]?.record.fields ?? [])
 				.filter((field) => field.rawTail !== true)
 				.map((field) => field.tag);
-			// #11: the edit must not reshape a non-ipAdmin record to the ipAdmin
+			// #11: the set must not reshape a non-ipAdmin record to the ipAdmin
 			// canonical layout.
 			expect(afterTags).toEqual(priorTags);
 			const entry = showDevice({
 				cdb: after,
 				target: "AA:BB:CC:DD:EE:FF",
 			}).data.entry;
-			expect(entry.comment).toBe("updated");
-			expect(entry.user).toBe("svc");
+			expect(entry.user).toBe("svc2");
+			expect(entry.comment).toBe("romon-note");
 		} finally {
 			await cleanup();
 		}
@@ -525,7 +510,7 @@ describe("devices mutation", () => {
 				cdb.entries.some((entry) => entry.target === "198.51.100.20"),
 			).toBe(true);
 
-			const editResult = await editDevice({
+			const editResult = await setDevice({
 				cdb,
 				target: "192.0.2.5",
 				user: "rotated",

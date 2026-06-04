@@ -35,6 +35,7 @@ import {
 	applyCommentKv,
 	type CommentKvUpdate,
 	commentKvAllowlist,
+	commentKvLookupKeys,
 	commentKvReservedKeys,
 	parseCommentKv,
 } from "./resolver/comment-kv.ts";
@@ -592,57 +593,7 @@ function describeMatches(matches: readonly EntryMatch[]): {
 export function showDevice(
 	args: ShowDeviceArgs,
 ): CentrsSuccessEnvelope<DevicesShowEnvelopeData, DevicesOperationMeta> {
-	const matches = matchRouter(args.cdb.entries, args.target);
-
-	if (matches.length === 0) {
-		throw new CentrsError({
-			code: "cdb/not-found-target",
-			summary: `No CDB entry matches "${args.target}".`,
-			remediation:
-				"Run `centrs devices list` to see the available targets; `<router>` resolves by target, identity=, mac=, or ip=. Check spelling and address family.",
-			context: { target: args.target },
-		});
-	}
-
-	const recordTypeTokens = Object.keys(winBoxCdbRecordType).join(", ");
-	let selected = matches;
-	if (args.match !== undefined) {
-		const selector = parseMatchSelector(args.match, args.target);
-		selected = applyMatchSelector(matches, selector);
-		if (selected.length === 0) {
-			throw new CentrsError({
-				code: "identity/no-match",
-				summary: `"${args.target}" has no CDB entry matching --match "${args.match}".`,
-				remediation:
-					"Run `centrs devices list` to see each candidate's user and record type, then pass a --match that exists.",
-				context: {
-					target: args.target,
-					match: args.match,
-					matches: describeMatches(matches),
-				},
-			});
-		}
-	}
-
-	if (selected.length > 1) {
-		throw new CentrsError({
-			code: "identity/ambiguous",
-			summary: `"${args.target}" matches ${selected.length} CDB entries.`,
-			remediation: `Re-run with --match user=<name>, --match target=<addr>, or --match <record-type> (one of ${recordTypeTokens}) to select among the duplicates, or remove the duplicate CDB entry.`,
-			context: {
-				target: args.target,
-				matches: describeMatches(selected),
-			},
-		});
-	}
-
-	const match = selected[0];
-	if (!match) {
-		throw new CentrsError({
-			code: "internal/unreachable",
-			summary: "Match list collapsed unexpectedly.",
-		});
-	}
+	const match = requireSingleMatch(args.cdb.entries, args.target, args.match);
 	const data: DevicesShowEnvelopeData = {
 		entry: entryToShowItem(match.entry, match.index),
 	};
@@ -909,20 +860,6 @@ interface EntryMatch {
 	index: number;
 }
 
-function matchEntries(
-	entries: readonly WinBoxCdbEntry[],
-	target: string,
-): EntryMatch[] {
-	const matches: EntryMatch[] = [];
-	for (let index = 0; index < entries.length; index += 1) {
-		const entry = entries[index];
-		if (entry && entry.target === target) {
-			matches.push({ entry, index });
-		}
-	}
-	return matches;
-}
-
 /**
  * Entries whose (target, user) pair matches — the natural CDB record identity
  * (WinBox keys "Save to list" on address + user, so the same address under a
@@ -1060,16 +997,6 @@ function ambiguousTargetError(
 	});
 }
 
-function notFoundTargetError(target: string): CentrsError {
-	return new CentrsError({
-		code: "cdb/not-found-target",
-		summary: `No CDB entry with target "${target}".`,
-		remediation:
-			"Run `centrs devices list` to see the available targets; use `centrs devices add` to create a new entry.",
-		context: { target },
-	});
-}
-
 /** Resolve a record-type name (e.g. `ipAdmin`) to its numeric tag. */
 export function recordTypeFromName(name: string): number | undefined {
 	const value = (winBoxCdbRecordType as Record<string, number>)[name];
@@ -1122,6 +1049,69 @@ async function persistRecords(
 	};
 }
 
+const ALLOWLIST_SET = new Set<string>(commentKvAllowlist);
+const RESERVED_SET = new Set<string>(commentKvReservedKeys);
+const LOOKUP_SET = new Set<string>(commentKvLookupKeys);
+
+/**
+ * The `usage/not-implemented` error raised by `devices edit`, whose interactive
+ * (clack/TUI) editor is reserved for the future. Field/metadata changes go
+ * through `devices set`. Shared by the CLI and MCP so both surfaces agree.
+ */
+export function editInteractiveOnlyError(): CentrsError {
+	return new CentrsError({
+		code: "usage/not-implemented",
+		summary:
+			"`devices edit` is the interactive editor, which is not implemented yet.",
+		remediation:
+			"Use `centrs devices set <target> [--user …] [--password …] [k=v …]` for non-interactive field and metadata changes.",
+	});
+}
+
+/**
+ * Validate the `k=v` comment positionals shared by `add` and `set`. First-class
+ * CDB fields are reserved and throw `cdb/reserved-key` (use the matching flag);
+ * tokens outside the recognized override + lookup keys throw `cdb/unknown-option`
+ * under `strict`, else append a `cdb/unknown-option` warning. Recognized keys
+ * (allowlist overrides + `identity`/`mac`/`ip` lookups) pass silently.
+ */
+function validateCommentKvUpdates(
+	updates: readonly CommentKvUpdate[],
+	target: string,
+	strict: boolean | undefined,
+	warnings: DevicesWarning[],
+): void {
+	const reserved = updates
+		.map((update) => update.key)
+		.filter((key) => RESERVED_SET.has(key));
+	if (reserved.length > 0) {
+		throw new CentrsError({
+			code: "cdb/reserved-key",
+			summary: `Comment kv-soup cannot carry first-class CDB field(s): ${reserved.join(", ")}.`,
+			remediation: `Set ${reserved.join(", ")} with the matching --flag; the comment kv-soup is for ${commentKvAllowlist.join(", ")} plus identity/mac/ip.`,
+			context: { target, reservedKeys: reserved },
+		});
+	}
+	for (const key of updates.map((update) => update.key)) {
+		if (ALLOWLIST_SET.has(key) || LOOKUP_SET.has(key)) {
+			continue;
+		}
+		if (strict) {
+			throw new CentrsError({
+				code: "cdb/unknown-option",
+				summary: `Unknown comment option "${key}" rejected under --strict.`,
+				remediation: `Drop --strict to write it verbatim, or use an allowlisted key: ${commentKvAllowlist.join(", ")}.`,
+				context: { target, key },
+			});
+		}
+		warnings.push({
+			code: "cdb/unknown-option",
+			message: `Comment option "${key}" is not recognized; it is written verbatim but has no effect.`,
+			context: { target, key },
+		});
+	}
+}
+
 export interface AddDeviceArgs {
 	cdb: LoadedCdb;
 	target: string;
@@ -1132,8 +1122,11 @@ export interface AddDeviceArgs {
 	profile?: string;
 	session?: string;
 	comment?: string;
+	/** `k=v` comment positionals upserted on top of `comment` (symmetric with set). */
+	commentKvUpdates?: readonly CommentKvUpdate[];
 	savedPassword?: boolean;
 	force?: boolean;
+	strict?: boolean;
 	writeOptions?: WriteWinBoxCdbOptions;
 }
 
@@ -1156,6 +1149,14 @@ export async function addDevice(
 		});
 	}
 
+	const warnings: DevicesWarning[] = [...args.cdb.warnings];
+	const updates = args.commentKvUpdates ?? [];
+	validateCommentKvUpdates(updates, args.target, args.strict, warnings);
+	const comment =
+		updates.length > 0 || args.comment !== undefined
+			? applyCommentKv(args.comment ?? "", updates)
+			: undefined;
+
 	const carried = existing ? extraFields(existing.entry.record) : [];
 	const record = buildWinBoxCdbEntryRecord({
 		recordType: args.recordType ?? winBoxCdbRecordType.ipAdmin,
@@ -1163,7 +1164,7 @@ export async function addDevice(
 		user: args.user,
 		password: args.password,
 		session: args.session,
-		comment: args.comment,
+		comment,
 		group: args.group,
 		profile: args.profile,
 		savedPassword: args.savedPassword,
@@ -1181,7 +1182,7 @@ export async function addDevice(
 	}
 
 	const preserved = preservedTags(carried);
-	const warnings = mutationWarnings(args.cdb, preserved);
+	appendUnknownFieldWarning(warnings, args.cdb.settings, preserved);
 	return persistRecords(
 		args.cdb,
 		records,
@@ -1196,39 +1197,59 @@ export async function addDevice(
 	);
 }
 
-export interface EditDeviceArgs {
+export interface SetDeviceArgs {
 	cdb: LoadedCdb;
 	target: string;
+	/** Disambiguator passed through to {@link requireSingleMatch}. */
+	match?: string;
+	/** `k=v` comment positionals (overrides + identity/mac/ip lookups). */
+	updates?: readonly CommentKvUpdate[];
 	user?: string;
 	password?: string;
 	group?: string;
 	profile?: string;
 	session?: string;
-	comment?: string;
 	savedPassword?: boolean;
+	strict?: boolean;
 	writeOptions?: WriteWinBoxCdbOptions;
 }
 
-export async function editDevice(
-	args: EditDeviceArgs,
+/**
+ * Modify an existing CDB record (the `set` verb). Symmetric with {@link addDevice}:
+ * first-class fields change via flags, comment override/lookup keys via `k=v`
+ * positionals. Resolves `<router>` (target or lookup key) to a single record via
+ * {@link requireSingleMatch}; a missing target throws `cdb/not-found-target`.
+ * Unchanged fields and the comment's free-form prose are preserved verbatim.
+ */
+export async function setDevice(
+	args: SetDeviceArgs,
 ): Promise<DevicesMutationEnvelope> {
-	const match = requireSingleMatch(args.cdb.entries, args.target);
+	const match = requireSingleMatch(args.cdb.entries, args.target, args.match);
+	const updates = args.updates ?? [];
+	const warnings: DevicesWarning[] = [...args.cdb.warnings];
+	validateCommentKvUpdates(updates, args.target, args.strict, warnings);
+
 	const prior = match.entry;
+	const comment = applyCommentKv(prior.comment, updates);
 	const carried = extraFields(prior.record);
+
 	const newlySet: number[] = [];
 	if (args.user !== undefined) newlySet.push(winBoxCdbFieldTag.user);
 	if (args.password !== undefined) newlySet.push(winBoxCdbFieldTag.password);
 	if (args.session !== undefined) newlySet.push(winBoxCdbFieldTag.session);
-	if (args.comment !== undefined) newlySet.push(winBoxCdbFieldTag.comment);
 	if (args.group !== undefined) newlySet.push(winBoxCdbFieldTag.group);
 	if (args.profile !== undefined) newlySet.push(winBoxCdbFieldTag.profile);
+	if (updates.length > 0) {
+		newlySet.push(winBoxCdbFieldTag.comment, winBoxCdbFieldTag.commentMirror);
+	}
+
 	const record = buildWinBoxCdbEntryRecord({
 		recordType: prior.recordType,
 		target: prior.target,
 		user: args.user ?? prior.user,
 		password: args.password ?? prior.password,
 		session: args.session ?? prior.session,
-		comment: args.comment ?? prior.comment,
+		comment,
 		group: args.group ?? prior.group,
 		profile: args.profile ?? (prior.profile || undefined),
 		romonAgent: prior.romonAgent || undefined,
@@ -1238,94 +1259,6 @@ export async function editDevice(
 			prior.savedPassword,
 		),
 		fieldOrder: preservedFieldOrder(prior.record, newlySet),
-		declaredFieldCount: prior.record.declaredFieldCount,
-		extraFields: carried.length > 0 ? carried : undefined,
-	});
-
-	const records = args.cdb.entries.map((entry) => entry.record);
-	records[match.index] = record;
-
-	const preserved = preservedTags(carried);
-	return persistRecords(
-		args.cdb,
-		records,
-		args.writeOptions,
-		"edit",
-		args.target,
-		match.index,
-		true,
-		entryToShowItem(decodeWinBoxCdbEntry(record), match.index),
-		preserved,
-		mutationWarnings(args.cdb, preserved),
-	);
-}
-
-export interface SetDeviceCommentKvArgs {
-	cdb: LoadedCdb;
-	target: string;
-	updates: readonly CommentKvUpdate[];
-	strict?: boolean;
-	writeOptions?: WriteWinBoxCdbOptions;
-}
-
-const ALLOWLIST_SET = new Set<string>(commentKvAllowlist);
-const RESERVED_SET = new Set<string>(commentKvReservedKeys);
-
-export async function setDeviceCommentKv(
-	args: SetDeviceCommentKvArgs,
-): Promise<DevicesMutationEnvelope> {
-	const match = requireSingleMatch(args.cdb.entries, args.target);
-
-	const reserved = args.updates
-		.map((update) => update.key)
-		.filter((key) => RESERVED_SET.has(key));
-	if (reserved.length > 0) {
-		throw new CentrsError({
-			code: "cdb/reserved-key",
-			summary: `Comment kv-soup cannot carry first-class CDB field(s): ${reserved.join(", ")}.`,
-			remediation: `Set ${reserved.join(", ")} through \`centrs devices edit\`; the comment kv-soup is for ${commentKvAllowlist.join(", ")}.`,
-			context: { target: args.target, reservedKeys: reserved },
-		});
-	}
-
-	const warnings: DevicesWarning[] = [...args.cdb.warnings];
-	const unknown = args.updates
-		.map((update) => update.key)
-		.filter((key) => !ALLOWLIST_SET.has(key));
-	for (const key of unknown) {
-		if (args.strict) {
-			throw new CentrsError({
-				code: "cdb/unknown-option",
-				summary: `Unknown comment option "${key}" rejected under --strict.`,
-				remediation: `Drop --strict to write it verbatim, or use an allowlisted key: ${commentKvAllowlist.join(", ")}.`,
-				context: { target: args.target, key },
-			});
-		}
-		warnings.push({
-			code: "cdb/unknown-option",
-			message: `Comment option "${key}" is not recognized; it is written verbatim but has no effect.`,
-			context: { target: args.target, key },
-		});
-	}
-
-	const prior = match.entry;
-	const comment = applyCommentKv(prior.comment, args.updates);
-	const carried = extraFields(prior.record);
-	const record = buildWinBoxCdbEntryRecord({
-		recordType: prior.recordType,
-		target: prior.target,
-		user: prior.user,
-		password: prior.password,
-		session: prior.session,
-		comment,
-		group: prior.group,
-		profile: prior.profile || undefined,
-		romonAgent: prior.romonAgent || undefined,
-		savedPassword: prior.savedPassword,
-		fieldOrder: preservedFieldOrder(prior.record, [
-			winBoxCdbFieldTag.comment,
-			winBoxCdbFieldTag.commentMirror,
-		]),
 		declaredFieldCount: prior.record.declaredFieldCount,
 		extraFields: carried.length > 0 ? carried : undefined,
 	});
@@ -1352,13 +1285,15 @@ export async function setDeviceCommentKv(
 export interface RemoveDeviceArgs {
 	cdb: LoadedCdb;
 	target: string;
+	/** Disambiguator passed through to {@link requireSingleMatch}. */
+	match?: string;
 	writeOptions?: WriteWinBoxCdbOptions;
 }
 
 export async function removeDevice(
 	args: RemoveDeviceArgs,
 ): Promise<DevicesMutationEnvelope> {
-	const match = requireSingleMatch(args.cdb.entries, args.target);
+	const match = requireSingleMatch(args.cdb.entries, args.target, args.match);
 	const records = args.cdb.entries
 		.map((entry) => entry.record)
 		.filter((_, index) => index !== match.index);
@@ -1377,34 +1312,62 @@ export async function removeDevice(
 	);
 }
 
+/**
+ * Resolve `<router>` to exactly one CDB entry — the shared selection used by
+ * `show` and the mutating verbs (`set`/`remove`). Matches by `target` or an
+ * `identity=`/`mac=`/`ip=` lookup key, then narrows duplicates with the optional
+ * `--match` selector (`user=`/`target=`/record-type). Throws
+ * `cdb/not-found-target`, `identity/no-match`, or `identity/ambiguous`.
+ */
 function requireSingleMatch(
 	entries: readonly WinBoxCdbEntry[],
-	target: string,
+	router: string,
+	match?: string,
 ): EntryMatch {
-	const matches = matchEntries(entries, target);
+	const matches = matchRouter(entries, router);
 	if (matches.length === 0) {
-		throw notFoundTargetError(target);
+		throw new CentrsError({
+			code: "cdb/not-found-target",
+			summary: `No CDB entry matches "${router}".`,
+			remediation:
+				"Run `centrs devices list` to see the available targets; `<router>` resolves by target, identity=, mac=, or ip=. Check spelling and address family.",
+			context: { target: router },
+		});
 	}
-	if (matches.length > 1) {
-		throw ambiguousTargetError(target, matches);
+
+	let selected = matches;
+	if (match !== undefined) {
+		const selector = parseMatchSelector(match, router);
+		selected = applyMatchSelector(matches, selector);
+		if (selected.length === 0) {
+			throw new CentrsError({
+				code: "identity/no-match",
+				summary: `"${router}" has no CDB entry matching --match "${match}".`,
+				remediation:
+					"Run `centrs devices list` to see each candidate's user and record type, then pass a --match that exists.",
+				context: { target: router, match, matches: describeMatches(matches) },
+			});
+		}
 	}
-	const match = matches[0];
-	if (!match) {
+
+	if (selected.length > 1) {
+		const recordTypeTokens = Object.keys(winBoxCdbRecordType).join(", ");
+		throw new CentrsError({
+			code: "identity/ambiguous",
+			summary: `"${router}" matches ${selected.length} CDB entries.`,
+			remediation: `Re-run with --match user=<name>, --match target=<addr>, or --match <record-type> (one of ${recordTypeTokens}) to select among the duplicates, or remove the duplicate CDB entry.`,
+			context: { target: router, matches: describeMatches(selected) },
+		});
+	}
+
+	const match0 = selected[0];
+	if (!match0) {
 		throw new CentrsError({
 			code: "internal/unreachable",
 			summary: "Match list collapsed unexpectedly.",
 		});
 	}
-	return match;
-}
-
-function mutationWarnings(
-	cdb: LoadedCdb,
-	preserved: readonly number[] | undefined,
-): DevicesWarning[] {
-	const warnings: DevicesWarning[] = [...cdb.warnings];
-	appendUnknownFieldWarning(warnings, cdb.settings, preserved);
-	return warnings;
+	return match0;
 }
 
 function appendUnknownFieldWarning(

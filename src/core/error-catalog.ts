@@ -119,7 +119,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "identity/no-match",
-		summary: "The target has no CDB entry matching the requested record type.",
+		summary:
+			"The target has no CDB entry matching the requested --match selector.",
 	},
 
 	// input/*
@@ -129,7 +130,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "input/invalid-match",
-		summary: "The --match value is not a known CDB record type.",
+		summary:
+			"The --match value is not a supported selector (user=, target=, or a record-type token).",
 	},
 	{
 		code: "input/invalid-routeros-path",
@@ -347,6 +349,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "usage/missing-group",
 		summary: "The operation requires a non-empty --group value.",
+	},
+	{
+		code: "usage/not-implemented",
+		summary:
+			"A recognized command form is reserved but not implemented yet (e.g. the interactive `devices edit` editor).",
 	},
 	{
 		code: "usage/timeout-out-of-range",

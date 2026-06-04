@@ -14,7 +14,7 @@ import {
 	type DevicesOutputFormat,
 	describeCentrs,
 	devicesOutputFormats,
-	editDevice,
+	editInteractiveOnlyError,
 	listDevices,
 	listGroups,
 	loadCdb,
@@ -22,7 +22,7 @@ import {
 	removeDevice,
 	renderDevicesEnvelope,
 	resolveDevicesSettings,
-	setDeviceCommentKv,
+	setDevice,
 	showDevice,
 	winBoxCdbRecordType,
 } from "../index.ts";
@@ -80,27 +80,35 @@ export const devicesCommand: CliCommandMetadata = {
 		{
 			flag: "--user",
 			valueName: "<name>",
-			description: "`add`,`edit` — first-class CDB user field.",
+			description: "`add`,`set` — first-class CDB user field.",
 		},
 		{
 			flag: "--password",
 			valueName: "<secret>",
-			description: "`add`,`edit` — first-class CDB password field.",
+			description: "`add`,`set` — first-class CDB password field.",
 		},
 		{
 			flag: "--profile",
 			valueName: "<name>",
-			description: "`add`,`edit` — first-class CDB profile field.",
+			description: "`add`,`set` — named WinBox profile (Workspace).",
+		},
+		{
+			flag: "--profile-none",
+			description: "`add`,`set` — write the WinBox `<none>` profile sentinel.",
+		},
+		{
+			flag: "--profile-own",
+			description: "`add`,`set` — write the WinBox `<own>` profile sentinel.",
 		},
 		{
 			flag: "--session",
 			valueName: "<name>",
-			description: "`add`,`edit` — first-class CDB session field.",
+			description: "`add`,`set` — first-class CDB session field.",
 		},
 		{
 			flag: "--comment",
 			valueName: "<text>",
-			description: "`add`,`edit` — free-form comment (may include kv-soup).",
+			description: "`add` only — base free-form comment (may include kv-soup).",
 		},
 		{
 			flag: "--record-type",
@@ -109,12 +117,12 @@ export const devicesCommand: CliCommandMetadata = {
 		},
 		{
 			flag: "--force",
-			description: "`add` only — overwrite an existing target entry.",
+			description: "`add` only — overwrite the existing (target, user) entry.",
 		},
 		{
 			flag: "--strict",
 			description:
-				"`set` only — reject unknown comment kv keys instead of warning.",
+				"`add`,`set` — reject unknown comment kv keys instead of warning.",
 		},
 		{
 			flag: "--format",
@@ -150,6 +158,8 @@ interface DevicesCliArgs {
 	user?: string;
 	password?: string;
 	profile?: string;
+	profileNone?: boolean;
+	profileOwn?: boolean;
 	session?: string;
 	comment?: string;
 	recordType?: string;
@@ -203,6 +213,12 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			case "--profile":
 				parsed.profile = expectValue(args, ++index, arg);
+				break;
+			case "--profile-none":
+				parsed.profileNone = true;
+				break;
+			case "--profile-own":
+				parsed.profileOwn = true;
 				break;
 			case "--session":
 				parsed.session = expectValue(args, ++index, arg);
@@ -267,23 +283,19 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	}
 	parsed.subcommand = sub as DevicesSubcommand;
 
-	if (sub === "show" || sub === "add" || sub === "edit" || sub === "remove") {
+	if (sub === "show" || sub === "edit" || sub === "remove") {
 		if (rest.length !== 1) {
 			throw new Error(
 				`\`centrs devices ${sub}\` requires exactly one <target>.`,
 			);
 		}
 		parsed.target = rest[0];
-	} else if (sub === "set") {
+	} else if (sub === "add" || sub === "set") {
+		// add/set are symmetric: <target> followed by optional key=value tokens.
 		const [target, ...kvArgs] = rest;
 		if (target === undefined) {
 			throw new Error(
-				"`centrs devices set` requires a <target> followed by key=value overrides.",
-			);
-		}
-		if (kvArgs.length === 0) {
-			throw new Error(
-				"`centrs devices set` requires at least one key=value override.",
+				`\`centrs devices ${sub}\` requires a <target>, optionally followed by key=value tokens.`,
 			);
 		}
 		parsed.target = target;
@@ -325,6 +337,32 @@ function parseKvValue(value: string): string {
 		parsed += char;
 	}
 	return parsed;
+}
+
+/**
+ * Resolve the profile field from `--profile` / `--profile-none` / `--profile-own`
+ * (mutually exclusive). The sentinels map to the WinBox `<none>` / `<own>`
+ * values; returns `undefined` when none was supplied so the field is left
+ * unchanged on `set` and defaulted by the builder on `add`.
+ */
+function resolveProfile(parsed: DevicesCliArgs): string | undefined {
+	const supplied = [
+		parsed.profile !== undefined,
+		parsed.profileNone === true,
+		parsed.profileOwn === true,
+	].filter(Boolean).length;
+	if (supplied > 1) {
+		throw new Error(
+			"--profile, --profile-none, and --profile-own are mutually exclusive.",
+		);
+	}
+	if (parsed.profileNone) {
+		return "<none>";
+	}
+	if (parsed.profileOwn) {
+		return "<own>";
+	}
+	return parsed.profile;
 }
 
 export async function runDevicesCli(args: readonly string[]): Promise<number> {
@@ -385,36 +423,33 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 					user: parsed.user,
 					password: parsed.password,
 					group: parsed.group,
-					profile: parsed.profile,
+					profile: resolveProfile(parsed),
 					session: parsed.session,
 					comment: parsed.comment,
+					commentKvUpdates: (parsed.kvArgs ?? []).map(parseKvArg),
 					force: parsed.force,
+					strict: parsed.strict,
 				});
 				break;
 			}
 			case "edit":
+				// The interactive editor (clack/TUI) is reserved for the future; the
+				// non-interactive path is `devices set`.
+				throw editInteractiveOnlyError();
+			case "set":
 				if (!parsed.target) {
-					throw new Error("Missing <target> for devices edit.");
+					throw new Error("Missing <target> for devices set.");
 				}
-				envelope = await editDevice({
+				envelope = await setDevice({
 					cdb,
 					target: parsed.target,
+					match: parsed.match,
+					updates: (parsed.kvArgs ?? []).map(parseKvArg),
 					user: parsed.user,
 					password: parsed.password,
 					group: parsed.group,
-					profile: parsed.profile,
+					profile: resolveProfile(parsed),
 					session: parsed.session,
-					comment: parsed.comment,
-				});
-				break;
-			case "set":
-				if (!parsed.target || !parsed.kvArgs) {
-					throw new Error("Missing <target> or key=value overrides for set.");
-				}
-				envelope = await setDeviceCommentKv({
-					cdb,
-					target: parsed.target,
-					updates: parsed.kvArgs.map(parseKvArg),
 					strict: parsed.strict,
 				});
 				break;
@@ -422,7 +457,11 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 				if (!parsed.target) {
 					throw new Error("Missing <target> for devices remove.");
 				}
-				envelope = await removeDevice({ cdb, target: parsed.target });
+				envelope = await removeDevice({
+					cdb,
+					target: parsed.target,
+					match: parsed.match,
+				});
 				break;
 			default:
 				throw new Error("Unreachable devices subcommand.");

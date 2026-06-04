@@ -13,16 +13,14 @@ integration run, not a booted CHR). Encrypted-CDB **writes** round-trip through
 decrypt → mutate → re-encrypt under the loaded password; encrypted **reads**
 work with `--cdb-password`. See `docs/MATRIX.md` for the matrix row.
 
-This README also describes a **decided redesign that is partly implemented**:
-the `identity`/`mac`/`ip` comment lookup keys and the broadened `--match`
-selectors (`user=`/`target=`) are live (examples 32–35), and the resolver/
-envelope field is now `identity` (was `name`). Still pending: the symmetric
-`add`/`set` model with `edit` reserved for a future TUI, the `--profile-none`/
-`--profile-own` sentinels, the `__default__` record, and the `tips[]` channel —
-so the mutating verbs today are still the older shape (`edit` edits first-class
-fields; `set` writes comment kv-soup only). The gap is tracked under "Open
-questions" below — treat this README as the target spec, `docs/MATRIX.md` as the
-implemented status.
+This README also describes a **decided redesign that is mostly implemented**:
+the `identity`/`mac`/`ip` comment lookup keys and broadened `--match` selectors
+(`user=`/`target=`), the `identity` field rename (was `name`), the symmetric
+`add`/`set` model (`edit` reserved for a future interactive editor), the
+`(target, user)` record identity, and the `--profile-none`/`--profile-own`
+sentinels are all live (examples 10–16, 32–39). Still pending: the `__default__`
+record and the `tips[]` channel. Treat this README as the target spec,
+`docs/MATRIX.md` as the implemented status.
 
 `devices` does not use a transport in the protocol sense and does not contact a
 RouterOS device in phase 1. Its sources are:
@@ -308,8 +306,6 @@ both unencrypted and encrypted CDBs. The comment-kv *grammar* is settled — see
 
 | Item | Notes |
 | --- | --- |
-| Symmetric `add`/`set`; `edit` → future TUI | `set` gains first-class flags and require-exists; `edit` stops being a field editor. `add` existence is keyed on `(target, user)` (done — example 36); `set`/`remove` still resolve by `target` only and gain the router/lookup-aware match here. The `cdb/reserved-key` rule stays for `k=v` positionals. |
-| `--profile-none` / `--profile-own` | Sentinel flags writing `<none>` / `<own>`; `profile`/`session` stay preserve-only. |
 | `__default__` record | Reserved fallback record; per-field precedence args → env → device → `__default__` → built-in; CLI/API fill any target, MCP keeps the allowlist. |
 | `tips[]` emission | Emit `tip/credentials-missing`, `tip/no-cdb`, "consider a `__default__`" tips on the relevant envelopes. |
 

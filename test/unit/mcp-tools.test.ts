@@ -332,14 +332,14 @@ describe("handleDevices (CDB mutations)", () => {
 		}
 	});
 
-	test("edits first-class CDB fields through the mutation path", async () => {
+	test("sets first-class CDB fields through the mutation path", async () => {
 		const { path, cleanup } = await makeMcpTestCdb([
 			{ target: "box", user: "old", group: "edge" },
 		]);
 		try {
 			const env = await handleDevices(
 				{
-					op: "edit",
+					op: "set",
 					target: "box",
 					user: "new",
 					group: "core",
@@ -352,6 +352,22 @@ describe("handleDevices (CDB mutations)", () => {
 			const cdb = await loadCdb({ cdbFile: path, env: {} });
 			expect(cdb.entries[0]?.user).toBe("new");
 			expect(cdb.entries[0]?.group).toBe("core");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("op=edit reports usage/not-implemented (use op=set)", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([{ target: "box" }]);
+		try {
+			const env = await handleDevices(
+				{ op: "edit", target: "box", user: "x", confirm: true },
+				config(path),
+			);
+			expect(env.ok).toBe(false);
+			if (!env.ok) {
+				expect(env.error.code).toBe("usage/not-implemented");
+			}
 		} finally {
 			await cleanup();
 		}

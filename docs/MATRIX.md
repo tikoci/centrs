@@ -32,24 +32,27 @@ A cell advances only with the matching evidence in the same change.
 
 `devices` does not use a transport in the protocol sense, so its grid row
 stays `—`. Its cell state is `CHR-passed`: the read subset (`list`, `show`,
-`groups`) plus the full CDB mutation surface (`add`, `edit`, `set`, `remove`),
-ambiguity / `--match`, and the provenance/override examples are implemented in
-`src/devices.ts` and green under `bun run test:integration` against a CDB
-fixture built in-test from the known CDB primitives (open + encrypted via
-`--cdb-password`). Every example in `commands/devices/examples.md` is green via
-`bun run test:integration` (`test/integration/devices.test.ts`); the command
-performs no network IO, so its `CHR-passed` evidence is the fixture-backed
-integration run rather than a booted CHR. Encrypted-CDB writes round-trip
-through the write layer's `encryptWith` option using the password loaded from
-settings. Data sources (CDB, ARP cache, MNDP cache,
-`dude.db` import) and their phasing live in `commands/devices/README.md`.
+`groups`), the CDB mutation surface (`add`, `set`, `remove`; `edit` is reserved
+for the future interactive editor and reports `usage/not-implemented`), `<router>`
+lookup-key resolution (`identity`/`mac`/`ip`), the `(target, user)` record
+identity, ambiguity / `--match` (`user=`/`target=`/record-type), the
+`--profile-none`/`--profile-own` sentinels, and the provenance/override examples
+are implemented in `src/devices.ts` and green under `bun run test:integration`
+against a CDB fixture built in-test from the known CDB primitives (open +
+encrypted via `--cdb-password`). Every example in
+`commands/devices/examples.md` is green via `bun run test:integration`
+(`test/integration/devices.test.ts`); the command performs no network IO, so its
+`CHR-passed` evidence is the fixture-backed integration run rather than a booted
+CHR. Encrypted-CDB writes round-trip through the write layer's `encryptWith`
+option using the password loaded from settings. Data sources (CDB, ARP cache,
+MNDP cache, `dude.db` import) and their phasing live in
+`commands/devices/README.md`.
 
-A decided redesign sits ahead of the implemented surface (comment lookup keys
-`identity`/`mac`/`ip`, symmetric `add`/`set` with `edit` reserved for a future
-TUI, `--profile-none`/`--profile-own`, the `__default__` record, and the
-top-level `tips[]` channel). It is spec'd in `commands/devices/README.md` and
-`docs/CONSTITUTION.md` and tracked there pending implementation + CHR examples;
-the cell stays `CHR-passed` for what `examples.md` currently covers.
+Two decided redesign items remain ahead of the implemented surface: the
+`__default__` fallback record and the top-level `tips[]` channel. They are
+spec'd in `commands/devices/README.md` and `docs/CONSTITUTION.md` and tracked
+there pending implementation + CHR examples; the cell stays `CHR-passed` for
+what `examples.md` currently covers.
 
 `discover` is `coded`: the MNDP wire codec (`src/data/mndp.ts`), the
 TTL-expiring neighbor cache (`src/data/mndp-cache.ts`), the UDP listener, and

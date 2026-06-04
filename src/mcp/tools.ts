@@ -16,13 +16,13 @@ import { z } from "zod";
 import type { CentrsEnvelope } from "../core/envelope.ts";
 import {
 	addDevice,
-	editDevice,
+	editInteractiveOnlyError,
 	type LoadedCdb,
 	listDevices,
 	listGroups,
 	recordTypeFromName,
 	removeDevice,
-	setDeviceCommentKv,
+	setDevice,
 	showDevice,
 } from "../devices.ts";
 import { discover } from "../discover.ts";
@@ -33,7 +33,6 @@ import {
 	isWriteShaped,
 	validateExecuteEnvelope,
 } from "../execute.ts";
-import type { CommentKvUpdate } from "../resolver/comment-kv.ts";
 import { parseDuration } from "../resolver/settings.ts";
 import { buildRetrieveErrorEnvelope, retrieve } from "../retrieve.ts";
 import {
@@ -484,18 +483,6 @@ function resolveRecordType(recordType: string | undefined): number | undefined {
 	});
 }
 
-function requireUpdates(args: DevicesArgs): readonly CommentKvUpdate[] {
-	if (args.updates !== undefined && args.updates.length > 0) {
-		return args.updates;
-	}
-	throw new CentrsError({
-		code: "input/invalid-command",
-		summary: "op=set requires at least one comment kv update.",
-		remediation:
-			"Pass updates as [{ key: 'mcp', value: 'rw' }] or use value=null to remove a key.",
-	});
-}
-
 /** Inspect or mutate the CDB device registry — the allowlist itself. */
 export async function handleDevices(
 	args: DevicesArgs,
@@ -533,31 +520,23 @@ export async function handleDevices(
 					}),
 				);
 			}
-			case "edit": {
-				requireConfirm("centrs_devices op=edit", args.confirm);
-				const target = requireDevicesTarget(args, "edit");
+			case "edit":
+				// The interactive editor has no MCP analogue; modify via op=set.
+				throw editInteractiveOnlyError();
+			case "set": {
+				requireConfirm("centrs_devices op=set", args.confirm);
+				const target = requireDevicesTarget(args, "set");
 				return redactDeviceSecrets(
-					await editDevice({
+					await setDevice({
 						cdb,
 						target,
+						updates: args.updates,
 						user: args.user,
 						password: args.password,
 						group: args.group,
 						profile: args.profile,
 						session: args.session,
-						comment: args.comment,
 						savedPassword: args.savedPassword,
-					}),
-				);
-			}
-			case "set": {
-				requireConfirm("centrs_devices op=set", args.confirm);
-				const target = requireDevicesTarget(args, "set");
-				return redactDeviceSecrets(
-					await setDeviceCommentKv({
-						cdb,
-						target,
-						updates: requireUpdates(args),
 						strict: args.strict,
 					}),
 				);
