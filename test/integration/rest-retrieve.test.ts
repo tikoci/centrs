@@ -97,9 +97,28 @@ async function runCliCaptured(
 }
 
 function withJsonEnvelope(args: readonly string[]): readonly string[] {
-	if (args.includes("--json") || args.includes("--format")) {
+	if (args.includes("--json")) {
 		return args;
 	}
+
+	for (let i = 0; i < args.length; i += 1) {
+		const arg = args[i];
+		if (arg === "--format") {
+			const value = args[i + 1]?.toLowerCase();
+			if (value === "json" || value === "yaml") {
+				return args;
+			}
+			return [...args, "--json"];
+		}
+		if (arg.startsWith("--format=")) {
+			const value = arg.slice("--format=".length).toLowerCase();
+			if (value === "json" || value === "yaml") {
+				return args;
+			}
+			return [...args, "--json"];
+		}
+	}
+
 	return [...args, "--json"];
 }
 
