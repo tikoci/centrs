@@ -1466,4 +1466,90 @@ describe("centrs devices (read-only)", () => {
 		expect(text.stdout).toContain("Tips:");
 		expect(text.stdout).toContain("tip/no-devices");
 	});
+
+	test("example 41 print alias resolves to list (canonical operation)", async () => {
+		const result = await runWithCapture([
+			"devices",
+			"print",
+			"--cdb-file",
+			openCdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(0);
+		const envelope = JSON.parse(result.stdout) as {
+			ok: boolean;
+			data: unknown[];
+			meta: { operation: { command?: string } };
+		};
+		expect(envelope.ok).toBe(true);
+		expect(envelope.data).toHaveLength(5);
+		// The alias resolves silently; the operation reports the canonical verb.
+		expect(envelope.meta.operation.command).toBe("list");
+	});
+
+	test("example 41 get alias resolves to show", async () => {
+		const result = await runWithCapture([
+			"devices",
+			"get",
+			"192.0.2.5",
+			"--cdb-file",
+			openCdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(0);
+		const envelope = JSON.parse(result.stdout) as {
+			data: { entry: { target: string } };
+			meta: { operation: { command?: string } };
+		};
+		expect(envelope.data.entry.target).toBe("192.0.2.5");
+		expect(envelope.meta.operation.command).toBe("show");
+	});
+
+	test("example 41 rm and delete aliases both resolve to remove", async () => {
+		for (const alias of ["rm", "delete"] as const) {
+			const cdbPath = await copyCdbFixture(`example-41-${alias}`);
+			const result = await runWithCapture([
+				"devices",
+				alias,
+				"192.0.2.5",
+				"--cdb-file",
+				cdbPath,
+				"--json",
+			]);
+			expect(result.exitCode).toBe(0);
+			const envelope = JSON.parse(result.stdout) as {
+				data: { action: string; backupPath?: string };
+				meta: { operation: { command?: string } };
+			};
+			expect(envelope.data.action).toBe("remove");
+			expect(envelope.meta.operation.command).toBe("remove");
+			expect(await listBackups(cdbPath)).toHaveLength(1);
+			// The entry is gone afterward regardless of which alias was used.
+			const show = await runWithCapture([
+				"devices",
+				"show",
+				"192.0.2.5",
+				"--cdb-file",
+				cdbPath,
+				"--json",
+			]);
+			expect(show.exitCode).toBe(1);
+		}
+	});
+
+	test("example 41 an unknown verb still errors with input/invalid-command", async () => {
+		const result = await runWithCapture([
+			"devices",
+			"bogus",
+			"--cdb-file",
+			openCdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(1);
+		const envelope = JSON.parse(result.stderr) as {
+			error: { code: string; summary?: string };
+		};
+		expect(envelope.error.code).toBe("input/invalid-command");
+		expect(envelope.error.summary).toContain("print, get, rm, delete");
+	});
 });

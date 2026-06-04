@@ -309,7 +309,6 @@ profile sentinels, `__default__`, `tips[]`) is now implemented; what remains:
 | Question | Affects | Notes |
 | --- | --- | --- |
 | ARP resolver test scheme | retrieve / execute when target is a MAC | Need deterministic fixtures per OS plus one live same-L2 proof before relying on ARP in integration. |
-| `list`/`show`/`remove` verb aliases | CLI ergonomics | `print`/`get`/`rm`/`delete` are documented (Subcommands) but the parser does not resolve them yet. |
 
 When an item ships with CHR examples, fold it into the matrix and delete the row.
 

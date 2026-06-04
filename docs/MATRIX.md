@@ -36,8 +36,10 @@ stays `—`. Its cell state is `CHR-passed`: the read subset (`list`, `show`,
 for the future interactive editor and reports `usage/not-implemented`), `<router>`
 lookup-key resolution (`identity`/`mac`/`ip`), the `(target, user)` record
 identity, ambiguity / `--match` (`user=`/`target=`/record-type), the
-`--profile-none`/`--profile-own` sentinels, and the provenance/override examples
-are implemented in `src/devices.ts` and green under `bun run test:integration`
+`--profile-none`/`--profile-own` sentinels, the CLI verb aliases
+(`print`/`get`/`rm`/`delete` → `list`/`show`/`remove`), and the
+provenance/override examples are implemented in `src/devices.ts` and green under
+`bun run test:integration`
 against a CDB fixture built in-test from the known CDB primitives (open +
 encrypted via `--cdb-password`). Every example in
 `commands/devices/examples.md` is green via `bun run test:integration`
@@ -55,9 +57,10 @@ CLI/API `__default__` supplies creds for an ad-hoc target with no record (MCP
 keeps the allowlist). The top-level `tips[]` envelope channel is implemented too
 (`Tip` in `src/core/envelope.ts`, always-present `[]`, rendered under a `Tips:`
 footer in text mode); `devices` emits `tip/no-devices` and
-`tip/credentials-missing` (example 40). The whole decided `devices` redesign is
-now landed; the remaining open items (ARP test scheme, CLI verb aliases) are
-tracked in `commands/devices/README.md`.
+`tip/credentials-missing` (example 40), and the CLI verb aliases
+(`print`/`get`/`rm`/`delete`, example 41) resolve to their canonical verbs. The
+whole decided `devices` redesign is now landed; the one remaining open item (ARP
+test scheme) is tracked in `commands/devices/README.md`.
 
 `discover` is `coded`: the MNDP wire codec (`src/data/mndp.ts`), the
 TTL-expiring neighbor cache (`src/data/mndp-cache.ts`), the UDP listener, and

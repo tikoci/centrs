@@ -145,6 +145,19 @@ type DevicesSubcommand =
 	| "set"
 	| "remove";
 
+/**
+ * RouterOS-muscle-memory aliases that resolve silently to the canonical verb
+ * (see `commands/AGENTS.md`, Verb vocabulary). Canonical names still win in help
+ * text and the usage line; these are a CLI input affordance only — the MCP `op`
+ * enum and the API functions stay canonical-only.
+ */
+const SUBCOMMAND_ALIASES: Readonly<Record<string, DevicesSubcommand>> = {
+	print: "list",
+	get: "show",
+	rm: "remove",
+	delete: "remove",
+};
+
 interface DevicesCliArgs {
 	help?: boolean;
 	subcommand?: DevicesSubcommand;
@@ -270,18 +283,20 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 		"set",
 		"remove",
 	];
-	const [sub, ...rest] = positional;
-	if (sub === undefined) {
+	const [rawSub, ...rest] = positional;
+	if (rawSub === undefined) {
 		throw new Error(
 			"`centrs devices` requires a subcommand: list, show, groups, add, edit, set, or remove.",
 		);
 	}
-	if (!subcommands.includes(sub as DevicesSubcommand)) {
+	// Resolve aliases (print/get/rm/delete) to the canonical verb before validating.
+	const sub = SUBCOMMAND_ALIASES[rawSub] ?? (rawSub as DevicesSubcommand);
+	if (!subcommands.includes(sub)) {
 		throw new Error(
-			`Unknown devices subcommand: ${sub}. Use list, show, groups, add, edit, set, or remove.`,
+			`Unknown devices subcommand: ${rawSub}. Use list, show, groups, add, edit, set, or remove (aliases: print, get, rm, delete).`,
 		);
 	}
-	parsed.subcommand = sub as DevicesSubcommand;
+	parsed.subcommand = sub;
 
 	if (sub === "show" || sub === "edit" || sub === "remove") {
 		if (rest.length !== 1) {

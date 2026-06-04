@@ -10,13 +10,15 @@ into a temporary directory at runtime (open and encrypted, encrypted password
 Writes operate on a copy of the fixture per test; the source bytes are never
 mutated in place. `$CDB` is the per-test path.
 
-> Lookup-key resolution (`identity=`/`mac=`/`ip=`), the broadened `--match`
-> selectors (`user=`/`target=`), the symmetric `add`/`set` model (`edit` reserved
-> for the interactive editor), the `(target, user)` record identity, and the
-> `--profile-none`/`--profile-own` sentinels are all implemented — see examples
-> 10–16 and 32–39. The remaining redesign in `README.md` (`__default__`, `tips[]`)
-> still lands with new examples here. Do not reconcile the README back to these
-> examples; reconcile forward.
+> The decided `devices` redesign is fully implemented and exercised below:
+> lookup-key resolution (`identity=`/`mac=`/`ip=`, examples 32–34), the broadened
+> `--match` selectors (`user=`/`target=`, examples 6/35/36), the symmetric
+> `add`/`set` model (`edit` reserved for the interactive editor, example 37), the
+> `(target, user)` record identity (example 36), the `--profile-none`/
+> `--profile-own` sentinels (example 38), the `tips[]` channel (example 40), and
+> the CLI verb aliases (example 41). The `__default__` fallback record is
+> resolver-level (unit-tested in `test/unit/resolver.test.ts`). Do not reconcile
+> the README back to these examples; reconcile forward.
 
 ## list
 
@@ -462,3 +464,25 @@ centrs devices list --cdb-file $EMPTY_CDB
 `fix`). `--json` includes the same `tips[]` array. `devices show` on a record
 with no stored password emits `tip/credentials-missing` unless a `__default__`
 record supplies fallback creds.
+
+## Verb aliases
+
+The RouterOS-muscle-memory aliases (`commands/AGENTS.md`, Verb vocabulary)
+resolve silently to the canonical verb: `print`→`list`, `get`→`show`,
+`rm`/`delete`→`remove`. Canonical names still win in help text and the usage
+line; aliases are a CLI input affordance only (the MCP `op` enum and the API
+functions stay canonical-only).
+
+### 41. Aliases resolve to the canonical verb
+
+```bash
+centrs devices print --cdb-file $CDB                 # = list
+centrs devices get 192.0.2.5 --cdb-file $CDB         # = show
+centrs devices rm 192.0.2.5 --cdb-file $CDB          # = remove
+centrs devices delete 192.0.2.5 --cdb-file $CDB      # = remove
+```
+
+Each alias produces the same envelope as its canonical verb — `meta.operation`
+reports the canonical command (`list`/`show`/`remove`), never the alias. An
+unknown verb still errors with `input/invalid-command`, and the error lists the
+canonical verbs plus the accepted aliases.
