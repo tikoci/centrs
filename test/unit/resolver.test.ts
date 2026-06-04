@@ -11,6 +11,7 @@ import {
 	type CdbResolution,
 	coerceCommentKv,
 	type ResolverWarning,
+	resolveAuth,
 	resolveBooleanSetting,
 	resolveCdb,
 	resolveOptionalIntegerSetting,
@@ -414,5 +415,133 @@ describe("resolver CDB end-to-end through retrieve", () => {
 		} finally {
 			globalThis.fetch = originalFetch;
 		}
+	});
+});
+
+describe("resolver __default__ fallback", () => {
+	let tmpDir: string;
+
+	beforeAll(async () => {
+		tmpDir = join(process.cwd(), "test", `.tmp-default-${crypto.randomUUID()}`);
+		await mkdir(tmpDir, { recursive: true });
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	interface RecordSpec {
+		target: string;
+		user?: string;
+		password?: string;
+	}
+
+	async function writeCdbRecords(
+		specs: readonly RecordSpec[],
+	): Promise<string> {
+		const cdbPath = join(tmpDir, `${crypto.randomUUID()}.cdb`);
+		const bytes = encodeOpenWinBoxCdb(
+			specs.map((spec) =>
+				buildWinBoxCdbEntryRecord({
+					recordType: winBoxCdbRecordType.ipAdmin,
+					target: spec.target,
+					user: spec.user ?? "",
+					password: spec.password ?? "",
+				}),
+			),
+		);
+		await writeFile(cdbPath, bytes);
+		return cdbPath;
+	}
+
+	test("fills creds for a device record that left them unset", async () => {
+		const cdbPath = await writeCdbRecords([
+			{ target: "__default__", user: "fallback", password: "fallback-pw" },
+			{ target: "10.9.9.1", user: "", password: "" },
+		]);
+		const resolution = await resolveCdb(
+			{ targetInput: "10.9.9.1", cdbFile: cdbPath },
+			EMPTY_ENV,
+		);
+		expect(resolution?.defaults?.username).toBe("fallback");
+
+		const auth = resolveAuth({}, EMPTY_ENV, resolution);
+		expect(auth.username).toBe("fallback");
+		expect(auth.password).toBe("fallback-pw");
+		// Provenance points at the __default__ record (index 0), not the device.
+		expect(auth.usernameSource).toEqual({ kind: "cdb", key: "record:0:user" });
+	});
+
+	test("the device record wins per-field over __default__", async () => {
+		const cdbPath = await writeCdbRecords([
+			{ target: "__default__", user: "fallback", password: "fallback-pw" },
+			{ target: "10.9.9.2", user: "owner", password: "" },
+		]);
+		const resolution = await resolveCdb(
+			{ targetInput: "10.9.9.2", cdbFile: cdbPath },
+			EMPTY_ENV,
+		);
+		const auth = resolveAuth({}, EMPTY_ENV, resolution);
+		// user comes from the device; the empty password falls back to __default__.
+		expect(auth.username).toBe("owner");
+		expect(auth.password).toBe("fallback-pw");
+		expect(auth.usernameSource).toEqual({ kind: "cdb", key: "record:1:user" });
+		expect(auth.passwordSource).toEqual({
+			kind: "cdb",
+			key: "record:0:password",
+		});
+	});
+
+	test("per-call args win over __default__", async () => {
+		const cdbPath = await writeCdbRecords([
+			{ target: "__default__", user: "fallback", password: "fallback-pw" },
+			{ target: "10.9.9.3", user: "", password: "" },
+		]);
+		const resolution = await resolveCdb(
+			{ targetInput: "10.9.9.3", cdbFile: cdbPath },
+			EMPTY_ENV,
+		);
+		const auth = resolveAuth(
+			{ username: "cli-user", password: "cli-pw" },
+			EMPTY_ENV,
+			resolution,
+		);
+		expect(auth.username).toBe("cli-user");
+		expect(auth.password).toBe("cli-pw");
+		expect(auth.usernameSource?.kind).toBe("explicit");
+	});
+
+	test("__default__ fills creds for a target with no record (CLI/API)", async () => {
+		const cdbPath = await writeCdbRecords([
+			{ target: "__default__", user: "fallback", password: "fallback-pw" },
+			{ target: "10.9.9.4", user: "owner", password: "owner-pw" },
+		]);
+		const resolution = await resolveCdb(
+			{ targetInput: "203.0.113.200", cdbFile: cdbPath },
+			EMPTY_ENV,
+		);
+		// A synthetic resolution carries the ad-hoc target plus __default__ creds.
+		expect(resolution?.target).toBe("203.0.113.200");
+		const auth = resolveAuth({}, EMPTY_ENV, resolution);
+		expect(auth.username).toBe("fallback");
+		expect(auth.password).toBe("fallback-pw");
+	});
+
+	test("no __default__ keeps the explicit-CDB not-found-target contract", async () => {
+		const cdbPath = await writeCdbRecords([
+			{ target: "10.9.9.5", user: "owner", password: "owner-pw" },
+		]);
+		// With an explicit --cdb-file and no __default__, an unknown target stays a
+		// hard error (typo protection) rather than synthesizing a resolution.
+		let caught: unknown;
+		try {
+			await resolveCdb(
+				{ targetInput: "203.0.113.201", cdbFile: cdbPath },
+				EMPTY_ENV,
+			);
+		} catch (error) {
+			caught = error;
+		}
+		expect((caught as { code?: string })?.code).toBe("cdb/not-found-target");
 	});
 });

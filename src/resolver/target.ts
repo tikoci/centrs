@@ -237,6 +237,7 @@ export function resolveAuth(
 		undefined,
 		"password",
 	);
+	const def = cdb?.defaults;
 	const cdbUsername =
 		username === undefined && cdb?.username
 			? {
@@ -257,8 +258,36 @@ export function resolveAuth(
 					},
 				}
 			: undefined;
-	const resolvedUsername = username ?? cdbUsername;
-	const resolvedPassword = password ?? cdbPassword;
+	// __default__ fallback: fill a field only when args/env and the matched
+	// device record all left it unset. An empty device value is "unset".
+	const defaultUsername =
+		username === undefined &&
+		cdbUsername === undefined &&
+		def !== undefined &&
+		def.username !== undefined
+			? {
+					value: def.username,
+					source: {
+						kind: "cdb" as const,
+						key: `record:${def.recordIndex}:user`,
+					},
+				}
+			: undefined;
+	const defaultPassword =
+		password === undefined &&
+		def !== undefined &&
+		def.password !== undefined &&
+		(cdb?.password ?? "") === ""
+			? {
+					value: def.password,
+					source: {
+						kind: "cdb" as const,
+						key: `record:${def.recordIndex}:password`,
+					},
+				}
+			: undefined;
+	const resolvedUsername = username ?? cdbUsername ?? defaultUsername;
+	const resolvedPassword = password ?? defaultPassword ?? cdbPassword;
 
 	return {
 		username: resolvedUsername?.value,

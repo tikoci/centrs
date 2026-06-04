@@ -17,10 +17,11 @@ This README also describes a **decided redesign that is mostly implemented**:
 the `identity`/`mac`/`ip` comment lookup keys and broadened `--match` selectors
 (`user=`/`target=`), the `identity` field rename (was `name`), the symmetric
 `add`/`set` model (`edit` reserved for a future interactive editor), the
-`(target, user)` record identity, and the `--profile-none`/`--profile-own`
-sentinels are all live (examples 10–16, 32–39). Still pending: the `__default__`
-record and the `tips[]` channel. Treat this README as the target spec,
-`docs/MATRIX.md` as the implemented status.
+`(target, user)` record identity, the `--profile-none`/`--profile-own`
+sentinels, and the `__default__` fallback record are all live (examples 10–16,
+32–39; `__default__` is resolver-level, unit-tested in
+`test/unit/resolver.test.ts`). Still pending: the `tips[]` channel. Treat this
+README as the target spec, `docs/MATRIX.md` as the implemented status.
 
 `devices` does not use a transport in the protocol sense and does not contact a
 RouterOS device in phase 1. Its sources are:
@@ -306,7 +307,6 @@ both unencrypted and encrypted CDBs. The comment-kv *grammar* is settled — see
 
 | Item | Notes |
 | --- | --- |
-| `__default__` record | Reserved fallback record; per-field precedence args → env → device → `__default__` → built-in; CLI/API fill any target, MCP keeps the allowlist. |
 | `tips[]` emission | Emit `tip/credentials-missing`, `tip/no-cdb`, "consider a `__default__`" tips on the relevant envelopes. |
 
 **Still genuinely open:**

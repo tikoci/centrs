@@ -48,11 +48,14 @@ option using the password loaded from settings. Data sources (CDB, ARP cache,
 MNDP cache, `dude.db` import) and their phasing live in
 `commands/devices/README.md`.
 
-Two decided redesign items remain ahead of the implemented surface: the
-`__default__` fallback record and the top-level `tips[]` channel. They are
-spec'd in `commands/devices/README.md` and `docs/CONSTITUTION.md` and tracked
-there pending implementation + CHR examples; the cell stays `CHR-passed` for
-what `examples.md` currently covers.
+The `__default__` fallback record is implemented at the resolver level
+(`resolveCdb`/`resolveAuth`, unit-tested in `test/unit/resolver.test.ts`): a
+device record's unset creds fall back per-field to `__default__`, and on the
+CLI/API `__default__` supplies creds for an ad-hoc target with no record (MCP
+keeps the allowlist). One decided redesign item remains ahead of the implemented
+surface: the top-level `tips[]` channel. It is spec'd in
+`commands/devices/README.md` and `docs/CONSTITUTION.md` and tracked there pending
+implementation; the cell stays `CHR-passed` for what `examples.md` covers.
 
 `discover` is `coded`: the MNDP wire codec (`src/data/mndp.ts`), the
 TTL-expiring neighbor cache (`src/data/mndp-cache.ts`), the UDP listener, and

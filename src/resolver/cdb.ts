@@ -77,6 +77,43 @@ export interface CdbResolution {
 	recordIndex: number;
 	overrides: CommentKvOverrides;
 	warnings: readonly ResolverWarning[];
+	/**
+	 * Fallback credentials from the reserved `__default__` record, when present.
+	 * {@link resolveAuth} fills a field from here only when the per-call args, env,
+	 * and the matched device record all leave it unset (constitution: identity and
+	 * CDB, `__default__`). Empty strings are treated as unset.
+	 */
+	defaults?: DefaultCreds;
+}
+
+/** Credentials carried by the reserved `__default__` CDB record. */
+export interface DefaultCreds {
+	username?: string;
+	password?: string;
+	/** CDB index of the `__default__` record, for provenance. */
+	recordIndex: number;
+}
+
+/** The reserved CDB target that supplies fallback credentials + metadata. */
+export const DEFAULT_RECORD_TARGET = "__default__";
+
+/**
+ * Find the reserved `__default__` record and return its credentials, or
+ * `undefined` when no such record exists. Empty username/password become
+ * `undefined` so {@link resolveAuth} treats them as unset.
+ */
+function findDefaultCreds(cdb: LoadedCdb): DefaultCreds | undefined {
+	for (let index = 0; index < cdb.entries.length; index += 1) {
+		const entry = cdb.entries[index];
+		if (entry && entry.target === DEFAULT_RECORD_TARGET) {
+			return {
+				username: entry.user || undefined,
+				password: entry.password || undefined,
+				recordIndex: index,
+			};
+		}
+	}
+	return undefined;
 }
 
 export interface CdbResolveInput {
@@ -142,6 +179,8 @@ export async function resolveCdb(
 		throw error;
 	}
 
+	const defaults = findDefaultCreds(cdb);
+
 	try {
 		const envelope = showDevice({ cdb, target: input.targetInput });
 		const entry = envelope.data.entry;
@@ -160,14 +199,31 @@ export async function resolveCdb(
 			recordIndex: entry.cdbRecordIndex,
 			overrides,
 			warnings,
+			...(defaults ? { defaults } : {}),
 		};
 	} catch (error) {
-		if (
-			!explicitCdb &&
-			error instanceof CentrsError &&
-			error.code === "cdb/not-found-target"
-		) {
-			return undefined;
+		if (error instanceof CentrsError && error.code === "cdb/not-found-target") {
+			// A `__default__` record supplies fallback credentials even when the
+			// target has no record of its own. On the CLI/API this fills creds for
+			// an ad-hoc target; on MCP the allowlist gate upstream still rejects
+			// unregistered targets, so `__default__` never widens it. Without a
+			// `__default__`, preserve the prior contract: undefined for an implicit
+			// CDB (treat `<router>` as a literal host), rethrow for an explicit one.
+			if (defaults) {
+				return {
+					target: input.targetInput,
+					identity: input.targetInput,
+					username: "",
+					password: "",
+					recordIndex: defaults.recordIndex,
+					overrides: {},
+					warnings: [],
+					defaults,
+				};
+			}
+			if (!explicitCdb) {
+				return undefined;
+			}
 		}
 		throw error;
 	}
