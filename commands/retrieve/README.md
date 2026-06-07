@@ -82,7 +82,7 @@ names must resolve through the MIB cache before any SNMP request is sent.
 
 ## SNMP MIB cache policy
 
-Proposed pending sign-off: cache MikroTik MIBs under the XDG cache root,
+Signed off (2026-06-06): cache MikroTik MIBs under the XDG cache root,
 `${XDG_CACHE_HOME:-~/.cache}/tikoci/snmp-mibs`, not beside the CDB. The cache is
 derived data; deleting it must never remove inventory or credentials. Use one
 subdirectory per exact RouterOS version, for example

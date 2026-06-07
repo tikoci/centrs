@@ -44,11 +44,14 @@ with its source unless the caller marks paths sensitive.
 
 ## mac-telnet L2 validation
 
-Proposed pending sign-off: terminal/mac-telnet remains protocol-layer validated
-until centrs has a maintained raw-L2 helper. `@tikoci/quickchr` can run CHR with
-L2-capable QEMU netdevs, but the current integration entry point uses user-mode
-SLIRP and Bun cannot open BPF/AF_PACKET frames directly. Do not mark the cell
-`CHR-passed` until a real L2 segment and host frame I/O are available.
+Decided (2026-06-06): terminal/mac-telnet uses the same `@tikoci/quickchr`
+host-side L2 capture path as execute/mac-telnet — a host TCP server with the CHR
+on a `socket-connect` NIC (QEMU streams guest frames length-prefixed; a frame
+written back injects L2). Loopback-only, cross-platform, no root. Prefer
+`socket-connect` over `socket-mcast` (macOS-broken — `SO_REUSEPORT`). Until that
+harness is wired, terminal/mac-telnet stays protocol-layer validated and the cell
+does not advance to `CHR-passed`. See `commands/execute/README.md` (mac-telnet L2
+validation) and quickchr `docs/mndp.md`.
 
 The unresolved-MAC default remains load-bearing for tests: a MAC target chooses
 mac-telnet for terminal unless an IP-level resolution path is explicitly

@@ -101,13 +101,20 @@ key material.
 
 ## mac-telnet L2 validation
 
-Proposed pending sign-off: keep mac-telnet validated at the protocol layer for
-now and explicitly defer real-router L2 validation until a maintained raw-L2
-helper exists. The current `@tikoci/quickchr` integration harness uses QEMU
-user-mode SLIRP, which does not carry Ethernet broadcasts or MAC-Telnet frames;
-Bun also exposes no BPF/AF_PACKET raw-L2 socket. A libpcap/socket_vmnet shim may
-become the long-term harness, but it should not block execute design or force
-fragile CI privileges today.
+Decided (2026-06-06): the real-L2 integration path is `@tikoci/quickchr`'s
+host-side L2 capture. The host runs a TCP server and the CHR gets a
+`socket-connect` NIC; QEMU streams every guest Ethernet frame to the host
+length-prefixed (4-byte BE length + raw frame), and **a frame written back is
+injected into the guest — exactly the MAC-Telnet primitive**. Loopback-only,
+cross-platform, no root and no native raw-L2 helper; REST/native-API keep a
+separate user-mode NIC with hostfwd. Prefer `socket-connect` over `socket-mcast`
+(the multicast netdev is broken on macOS — QEMU sets only `SO_REUSEADDR` where
+macOS needs `SO_REUSEPORT`; mcast works on Linux/CI). Grounding: quickchr
+`docs/mndp.md`, `examples/mndp/`, `test/lab/mndp/REPORT.md`.
+
+Until that harness is wired, mac-telnet stays validated at the protocol layer
+(`test/unit/mac-telnet.test.ts` against a scripted peer) and the cell does not
+advance to `CHR-passed`.
 
 The executable contract still must cover protocol-selection behavior: when the
 `execute` target is an unresolved MAC address, auto-selection chooses

@@ -115,6 +115,12 @@ configuration values and may appear in `meta.settings`; redact them only when an
 error also carries sensitive key material or a caller explicitly marks the path
 as sensitive.
 
+The bug-report renderer is invoked **inline** via `--bug-report` on any command —
+there is no separate `bug-report` verb. It re-renders the just-produced envelope
+with `redactable_fields` stripped and each error's `details_url` kept, so a
+shareable report needs no extra capture step (the envelope is already rich enough
+to be the report).
+
 Two error sources must be visually distinguishable:
 
 1. **centrs errors** — bad usage, validator rejection, transport plumbing.

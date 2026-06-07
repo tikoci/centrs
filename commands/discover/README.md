@@ -130,21 +130,19 @@ writer" holds.
 
 ## L2 validation policy
 
-Proposed pending sign-off: `discover` stays validated at the protocol/socket
-layer until centrs has a maintained raw-L2 integration helper. MNDP needs a real
-layer-2 broadcast segment; the current `@tikoci/quickchr` integration entry
-point uses QEMU user-mode SLIRP, which does not carry L2 broadcast traffic, and
-Bun has no raw BPF/AF_PACKET socket API for receiving host Ethernet frames. A
-future libpcap/socket_vmnet shim can provide the real-router L2 proof, but the
-current CI gate remains crafted packet fixtures plus a loopback UDP listener.
+Decided (2026-06-06): the real-L2 integration path for MNDP is
+`@tikoci/quickchr`'s host-side L2 capture. The host runs a TCP server and the CHR
+gets a `socket-connect` NIC; QEMU streams every guest Ethernet frame to the host
+length-prefixed (4-byte BE length + raw frame), and a frame written back is
+injected into the guest. A small host shim bridges that frame stream to centrs's
+UDP/5678 listener — capturing the CHR's MNDP announcements and injecting centrs's
+refresh broadcast — a real L2 path with no root and no native raw-frame helper,
+while REST/native-API keep a separate user-mode NIC with hostfwd. Prefer
+`socket-connect` over `socket-mcast`: the multicast netdev is broken on macOS
+(QEMU sets only `SO_REUSEADDR` where macOS needs `SO_REUSEPORT`; mcast works on
+Linux/CI). Grounding: quickchr `docs/mndp.md`, `examples/mndp/`,
+`test/lab/mndp/REPORT.md`.
 
-This means `discover / mndp` must not advance to `CHR-passed` until every
-example in `commands/discover/examples.md` runs against a real L2 segment.
-The same L2 blocker also applies to mac-telnet execute/terminal cells.
-
-A not-yet-tried CI option worth a spike: `@tikoci/quickchr` `socket`-type QEMU
-netdevs. A CHR booted with a `socket` (multicast) netdev *in addition to* the
-user-mode NIC could carry a forwarded MNDP broadcast (UDP 5678) over the socket
-segment while REST/native-API keep riding user-mode hostfwd as today — a real L2
-broadcast path without host raw-frame access, and lighter than the
-libpcap/socket_vmnet shim. See `quickchr` netdev help before committing.
+Until that harness is wired, the CI gate stays crafted packet fixtures plus a
+loopback UDP listener, and `discover / mndp` does not advance to `CHR-passed`.
+The same `socket-connect` path unblocks the mac-telnet execute/terminal cells.

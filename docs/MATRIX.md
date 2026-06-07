@@ -112,7 +112,9 @@ glue, not new protocol code:
   password auth, and the session state machine (start → auth → ready → data),
   with MTWEI/EC-SRP detected and rejected as unsupported. Covered by
   `test/unit/mac-telnet.test.ts` against a scripted peer. Real-router L2
-  validation is still gated on the open question below.
+  validation uses quickchr's `socket-connect` host-side L2 capture (see
+  `commands/discover/README.md`, L2 validation policy); wiring that harness is
+  the remaining work, not a design decision.
 
 ### Frontend surfaces (orthogonal to the command grid)
 
@@ -191,10 +193,9 @@ matching evidence.
 
 | Question | Affects cell | Notes |
 | -------- | ------------ | ----- |
-| SNMP MIB cache policy | retrieve / snmp | Decide cache location, invalidation, RouterOS version/channel matching, and offline behavior for MIB-name lookup. |
-| Bug-report rendering: inline flag, separate command, both? | cross-cutting | Constitution says envelope is rich enough; rendering deferred until needed. |
-| L2 in CI: how to fake L2 net for mac-telnet/MNDP on Linux runner | execute / mac-telnet, terminal / mac-telnet, discover / mndp | quickchr supports L2 netdevs (`vmnet-shared`/`vmnet-bridged` on macOS, `tap`, `socket-mcast`), but `startIntegrationChr()` uses `user`-mode SLIRP with hostfwd, which does not carry L2 broadcast/MAC-Telnet. **Leading candidate (spike first):** add a `socket-mcast` netdev *alongside* the user-mode NIC so MNDP (UDP 5678) / L2 frames ride the socket segment while REST/native-API keep user-mode hostfwd — a real L2 path needing no host raw-frame access. Otherwise real-router validation needs raw L2 frame I/O from the host (BPF macOS / AF_PACKET Linux), which Bun cannot do, so a native helper (libpcap or socket_vmnet + frame shim) would be required. Until then mac-telnet is covered at the protocol layer by `test/unit/mac-telnet.test.ts`; MNDP by crafted fixtures + loopback. Must still cover unresolved-MAC default behavior. |
 | RoMON / WinBox Terminal validation and CI | execute / romon, execute / winbox-terminal | Lower priority than mac-telnet; need reference tooling and typed failure mapping before advancing. |
+
+Recently closed (folded into the specs): SNMP MIB-cache policy → `commands/retrieve/README.md`; bug-report rendering (inline `--bug-report` flag, no separate verb) → `docs/CONSTITUTION.md`; L2-in-CI for mac-telnet/MNDP (quickchr `socket-connect` host-side L2 capture; `socket-mcast` is macOS-broken) → `commands/discover/README.md` + `commands/execute/README.md`.
 
 When a question is answered, fold the answer into the relevant
 `commands/<name>/README.md` or `docs/CONSTITUTION.md`, then delete the row.
