@@ -28,7 +28,7 @@ A cell advances only with the matching evidence in the same change.
 | execute  | `CHR-passed`  | `CHR-passed`  | `not-started` | `not-started` | —             | —             | `not-started` | `not-started`    |
 | terminal | —             | —             | `not-started` | `not-started` | —             | —             | —             | —                |
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
-| discover | —             | —             | —             | —             | —             | `coded`       | —             | —                |
+| discover | —             | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
 | check    | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started`    |
 | config   | —             | —             | —             | —             | —             | —             | —             | —                |
 
@@ -64,16 +64,28 @@ footer in text mode); `devices` emits `tip/no-devices` and
 whole decided `devices` redesign is now landed; the one remaining open item (ARP
 test scheme) is tracked in `commands/devices/README.md`.
 
-`discover` is `coded`: the MNDP wire codec (`src/data/mndp.ts`), the
+`discover` is `CHR-passed`: the MNDP wire codec (`src/data/mndp.ts`), the
 TTL-expiring neighbor cache (`src/data/mndp-cache.ts`), the UDP listener, and
 `discover --save` (which persists through `devices`' `addDevice` write layer)
-live in `src/discover.ts` and are green under `bun test`. The codec is tested
-against crafted packet fixtures and the listener against a loopback socket, so
-no router is required. It advances to `CHR-passed` only once every example in
-`commands/discover/examples.md` is green against a real layer-2 segment via
-`bun run test:integration` — which needs an L2 fabric the CI runner does not
-yet provide (same blocker as mac-telnet). Flags, TTL/timeout defaults, and the
-`group=discovered` convention live in `commands/discover/README.md`.
+live in `src/discover.ts`. The L2-dependent path — receiving and decoding a real
+RouterOS MNDP announcement and saving it — is green against a real layer-2
+segment via `bun run test:integration` (`test/integration/discover.test.ts`,
+RouterOS CHR 7.23.1). That test boots a CHR with a second `socket-connect` NIC,
+and a host shim (`test/integration/mndp-l2-bridge.ts`) lifts the UDP/5678 payload
+out of QEMU's length-prefixed frame stream and re-delivers it to the **unmodified**
+`listenMndp`→`parseMndpPacket`→cache→envelope path; the decoded `identity`,
+`platform`, `board`, `version`, and `mac` are cross-checked against REST as the
+source of truth, and `--save` writes a `macTarget`/`group=discovered`/`source=mndp`
+record (examples 1, 2, 4). The remaining examples are network-independent CDB/bind
+logic and stay green under `bun test`: the codec against crafted packet fixtures
+(`test/unit/mndp.test.ts`), the TTL cache with an injected clock
+(`test/unit/mndp-cache.test.ts`), and the listener / `--save` / port-in-use /
+custom-group / de-dupe / encrypted-CDB paths over a loopback socket
+(`test/unit/discover.test.ts`, examples 3, 5, 6, 7). A live integration finding:
+MNDP's board TLV is the short board id (`CHR`) while REST `board-name` is the
+verbose hardware string that begins with it. Flags, TTL/timeout defaults, the
+`group=discovered` convention, and the L2 validation policy live in
+`commands/discover/README.md`.
 
 There is no `update` command: `execute` is the single read/write surface for
 RouterOS add/set/remove, and `retrieve` stays read-only. See
@@ -113,8 +125,11 @@ glue, not new protocol code:
   with MTWEI/EC-SRP detected and rejected as unsupported. Covered by
   `test/unit/mac-telnet.test.ts` against a scripted peer. Real-router L2
   validation uses quickchr's `socket-connect` host-side L2 capture (see
-  `commands/discover/README.md`, L2 validation policy); wiring that harness is
-  the remaining work, not a design decision.
+  `commands/discover/README.md`, L2 validation policy). That harness is now
+  wired and proven: the `discover / mndp` integration test boots the
+  `socket-connect` NIC and `test/integration/mndp-l2-bridge.ts` already performs
+  the frame-injection write-back MAC-Telnet needs, so mac-telnet's remaining
+  work is command wiring over that bridge, not proving the L2 path.
 
 ### Frontend surfaces (orthogonal to the command grid)
 

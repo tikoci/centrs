@@ -8,6 +8,19 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Added
+
+- **`discover / mndp` is `CHR-passed`.** A real layer-2 integration test
+  (`test/integration/discover.test.ts`) boots a CHR with a second
+  `socket-connect` NIC and a host bridge (`test/integration/mndp-l2-bridge.ts`)
+  that lifts each frame's UDP/5678 payload into centrs's unmodified `discover()`
+  listener and injects MNDP refresh frames back over the link. It captures and
+  decodes a genuine RouterOS MNDP announcement (CHR 7.23.1), cross-checks
+  `identity`/`platform`/`board`/`version`/`mac` against REST, and `--save`s a
+  `macTarget`/`group=discovered` record. The `socket-connect` approach was first
+  proven against quickchr's own `examples/mndp/` guinea-pig run. The same bridge
+  (frame-injection write-back) is the L2 harness mac-telnet will reuse.
+
 ### Changed
 
 - **Workflow restructure.** Replaced `docs/specs/`, `docs/WORKFLOW.md`,

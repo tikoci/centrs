@@ -2,9 +2,11 @@
 
 Discover RouterOS neighbors over MNDP and optionally save them into the CDB.
 
-Status: `coded` (see `docs/MATRIX.md`). The MNDP codec, TTL cache, UDP
-listener, and `discover --save` are implemented and unit-tested; the matrix
-remains the only status surface. The `identity=`/`mac=` lookup-key writing and
+Status: `CHR-passed` (see `docs/MATRIX.md`). The MNDP codec, TTL cache, UDP
+listener, and `discover --save` are implemented; the real-L2 receive/decode/save
+path is green against RouterOS CHR 7.23.1 via `test/integration/discover.test.ts`
+(socket-connect bridge), and the network-independent paths stay unit-tested. The
+matrix remains the only status surface. The `identity=`/`mac=` lookup-key writing and
 MAC-keyed de-dupe described below are the decided target; the current `--save`
 de-dupes on `target` and keeps identity/MAC in the inert detail — that gap moves
 with the `devices` lookup-key work.
@@ -130,19 +132,39 @@ writer" holds.
 
 ## L2 validation policy
 
-Decided (2026-06-06): the real-L2 integration path for MNDP is
-`@tikoci/quickchr`'s host-side L2 capture. The host runs a TCP server and the CHR
-gets a `socket-connect` NIC; QEMU streams every guest Ethernet frame to the host
-length-prefixed (4-byte BE length + raw frame), and a frame written back is
-injected into the guest. A small host shim bridges that frame stream to centrs's
-UDP/5678 listener — capturing the CHR's MNDP announcements and injecting centrs's
-refresh broadcast — a real L2 path with no root and no native raw-frame helper,
-while REST/native-API keep a separate user-mode NIC with hostfwd. Prefer
+Decided (2026-06-06), wired and proven (2026-06-07): the real-L2 integration
+path for MNDP is `@tikoci/quickchr`'s host-side L2 capture. The host runs a TCP
+server and the CHR gets a `socket-connect` NIC; QEMU streams every guest Ethernet
+frame to the host length-prefixed (4-byte BE length + raw frame), and a frame
+written back is injected into the guest. A small host shim
+(`test/integration/mndp-l2-bridge.ts`) bridges that frame stream to centrs's
+UDP/5678 listener — lifting the UDP/5678 payload out of each frame and
+re-delivering it to the **unmodified** `discover()`/`listenMndp` path, and
+injecting MNDP refresh frames back over the same TCP connection so RouterOS
+answers within a round-trip — a real L2 path with no root and no native
+raw-frame helper, while REST/native-API keep a separate user-mode NIC with
+hostfwd. centrs runs with `sendRefresh: false` here (its own broadcast cannot
+reach the guest through the bridge, so the shim does the L2 injection; the
+refresh-send path stays covered by the loopback unit test). Prefer
 `socket-connect` over `socket-mcast`: the multicast netdev is broken on macOS
 (QEMU sets only `SO_REUSEADDR` where macOS needs `SO_REUSEPORT`; mcast works on
 Linux/CI). Grounding: quickchr `docs/mndp.md`, `examples/mndp/`,
 `test/lab/mndp/REPORT.md`.
 
-Until that harness is wired, the CI gate stays crafted packet fixtures plus a
-loopback UDP listener, and `discover / mndp` does not advance to `CHR-passed`.
-The same `socket-connect` path unblocks the mac-telnet execute/terminal cells.
+`test/integration/discover.test.ts` exercises this end to end on RouterOS CHR
+7.23.1: it boots `["user", { type: "socket-connect", port }]`, captures a real
+MNDP announcement, decodes it with centrs's codec, cross-checks
+`identity`/`platform`/`board`/`version`/`mac` against REST, and `--save`s a
+`macTarget`/`group=discovered`/`source=mndp` record (examples 1, 2, 4). It runs
+under `bun run test:integration` (gated by `CENTRS_RUN_FAST_INTEGRATION`). The
+network-independent examples (3 port-in-use, 5 custom group, 6 de-dupe, 7
+encrypted CDB) are CDB/bind logic that is identical regardless of where the
+neighbor came from, so they stay validated by `test/unit/discover.test.ts`
+against a loopback socket and crafted fixtures.
+
+Live-router finding worth carrying into mac-telnet: MNDP's board TLV (type 12)
+advertises the short board id (`CHR`), while REST `/system/resource` `board-name`
+is the verbose hardware string (`CHR QEMU Standard PC (i440FX + PIIX, 1996)`)
+that *begins with* it — so cross-checks must use `startsWith`, not equality. The
+same `socket-connect` bridge (with its frame-injection write-back) is the L2
+harness the mac-telnet execute/terminal cells will reuse.

@@ -1,15 +1,22 @@
 # discover — examples
 
 Each numbered example is an executable spec. `discover` listens on a UDP
-socket; MNDP needs a real layer-2 broadcast segment, which the current
-`user`-mode SLIRP CHR harness does not carry. Until an L2 fabric exists in CI
-(tracked as the open question in `README.md`), these examples are validated by:
+socket; MNDP needs a real layer-2 broadcast segment, which a `user`-mode SLIRP
+CHR cannot carry. The L2 fabric now comes from a second `socket-connect` NIC
+plus a host bridge (`README.md`, L2 validation policy). Examples are validated
+by:
 
+- **real L2 against CHR** — examples 1 (passive discover + neighbor fields), 2
+  (scan packet-count meta), and 4 (`--save` into a CDB): a CHR boots with a
+  `socket-connect` NIC and `test/integration/discover.test.ts` runs the
+  unmodified `discover()` path against a genuine RouterOS announcement,
+  cross-checked against REST (CHR 7.23.1, `bun run test:integration`);
 - the pure codec against crafted packet fixtures
   (`test/unit/mndp.test.ts`),
 - the TTL cache with an injected clock (`test/unit/mndp-cache.test.ts`),
-- the UDP listener over a loopback socket and `--save` against an ignored,
-  per-test CDB path in the working tree (`test/unit/discover.test.ts`).
+- the UDP listener over a loopback socket and the `--save` / port-in-use /
+  custom-group / de-dupe / encrypted-CDB paths (examples 3, 5, 6, 7) against an
+  ignored, per-test CDB path in the working tree (`test/unit/discover.test.ts`).
 
 `$CDB` is a per-test CDB path; the real `~/.config/tikoci/winbox.cdb` is never
 touched.

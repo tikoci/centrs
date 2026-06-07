@@ -2,6 +2,17 @@ import { appendFile } from "node:fs/promises";
 
 type Channel = "stable" | "long-term" | "testing" | "development";
 
+/**
+ * A quickchr network specifier (subset). `"user"` is the SLIRP management NIC;
+ * `socket-connect` is the loopback L2 netdev whose every guest Ethernet frame
+ * QEMU streams to a host TCP server — the path the MNDP/L2 integration tests use.
+ */
+export type ChrNetworkSpec =
+	| "user"
+	| { type: "socket-connect"; port: number }
+	| { type: "socket-listen"; port: number }
+	| { type: "socket-mcast"; group: string; port: number };
+
 interface ChrInstance {
 	name: string;
 	state: { version: string };
@@ -9,11 +20,27 @@ interface ChrInstance {
 	ports: { api: number; apiSsl: number; [key: string]: number };
 	subprocessEnv(): Promise<Record<string, string>>;
 	destroy(): Promise<void>;
+	/** Wait for the REST endpoint to answer; resolves true once booted. */
+	waitForBoot(timeoutMs?: number): Promise<boolean>;
+	/** Run a RouterOS console command (used here to set identity / discovery). */
+	exec(command: string): Promise<unknown>;
+	/** Issue a REST GET (the source-of-truth cross-check for L2-decoded values). */
+	rest(path: string): Promise<unknown>;
+	/** Stop and delete the machine (alias of destroy on newer quickchr). */
+	remove(): Promise<void>;
 }
 
 interface StartOptions {
 	version?: string;
 	channel?: Channel;
+	/** Override the generated machine name (L2 tests want a stable, unique name). */
+	name?: string;
+	/**
+	 * Extra NICs beyond the default management network. The MNDP test boots
+	 * `["user", { type: "socket-connect", port }]`: ether1 keeps REST/exec over
+	 * SLIRP hostfwd, ether2 carries L2 broadcasts to the host bridge.
+	 */
+	networks?: readonly ChrNetworkSpec[];
 }
 
 const routerOsChannels = [
@@ -70,12 +97,17 @@ export interface StartedChr {
 	requestedVersion?: string;
 }
 
-export async function startIntegrationChr(): Promise<StartedChr> {
+export async function startIntegrationChr(
+	extra: Partial<StartOptions> = {},
+): Promise<StartedChr> {
 	const requestedVersion = readEnv(Bun.env, "CENTRS_CHR_VERSION")?.trim();
 	const requestedChannel = asChannel(readEnv(Bun.env, "CENTRS_CHR_CHANNEL"));
-	const options: StartOptions = requestedVersion
-		? { version: requestedVersion }
-		: { channel: requestedChannel };
+	const options: StartOptions = {
+		...(requestedVersion
+			? { version: requestedVersion }
+			: { channel: requestedChannel }),
+		...extra,
+	};
 	const moduleName = "@tikoci/quickchr";
 	const quickChrModule = (await import(moduleName)) as unknown as {
 		QuickCHR: {
