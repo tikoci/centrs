@@ -12,6 +12,7 @@
 		"docs/api",
 		"test/fixtures",
 		"GLOSSARY.txt",
+		"docs/THINKING.md",
 		".claude/settings*.json"
 	],
 	"useGitignore": false,

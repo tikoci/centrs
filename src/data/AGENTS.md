@@ -8,3 +8,4 @@ Follow `docs/CONSTITUTION.md` (identity / CDB sections) and
 - MNDP is a hint source. Lack of MNDP data must not make a device invalid.
 - Prefer shared SQLite infrastructure over one database per feature unless a spec justifies separation.
 - Reuse tikoci `donny` knowledge for Dude database structures and related Nova/TLV encoding.
+- `mndp.ts` TypeDoc should document the MNDP TLV structure and attribute values inline (type codes, field meanings), so the generated API docs are self-sufficient and centrs consumers do not have to depend on the external `routeros-mndp` skill for the wire format. The skill stays canonical; the typedoc must stand alone.

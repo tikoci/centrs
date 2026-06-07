@@ -11,6 +11,14 @@ Status: `not-started`. This file is a stub.
 - Optional `--via` to limit the probe surface.
 - Output is the [standard envelope](../../docs/CONSTITUTION.md#result-envelope);
   `data` is a per-protocol probe result map.
+- `--fix` (opt-in, write-shaped): once `check` has authenticated over *one*
+  protocol, it reads the live device to **correct stale CDB connection
+  metadata** — most usefully ports. E.g. reached over MAC/mac-telnet, it can read
+  `/ip/service` to learn the real REST/native-API ports and write `port=` into
+  the record's comment-kv so later calls connect directly. `--fix` writes through
+  the `devices` layer (the only CDB writer) and is gated like any write
+  (`--yes` / `confirm`). It corrects *connection* facts only; it is not a
+  general fact-sync.
 
 ## Default service ports (grounding)
 
@@ -31,9 +39,14 @@ specifying it, and "upgrade" the connection:
 
 ## Open questions
 
-- Whether `check` should consult `/ip/service` once authenticated to reveal
-  ports we did not try (the "discover open management ports" idea — see the
-  grounding above; the fetch command is known, the policy is not).
+- `--fix` decided in principle (above): consult `/ip/service` once authenticated
+  to learn non-default ports and write them back as comment-kv. Residual: exactly
+  which fields `--fix` is allowed to touch (ports yes; what else?) and whether it
+  ever runs implicitly vs always opt-in (lean: always opt-in).
+- centrs does **not** make `check` persist version/board/software-id — those are
+  device *facts* that become queryable through the derived-fact keys on the
+  record (see `commands/devices/README.md`), refreshed on `devices add/set
+  --check` or `discover`, not as a `check` side effect.
 - Should L2 probing (mac-telnet ARP / discovery) be opt-in?
 
 Defer until `retrieve` is `CHR-passed`. `check` overlaps with discovery and is

@@ -18,7 +18,7 @@ humans.
 ## Synopsis
 
 ```text
-centrs retrieve <router> <path>[/<shortcut>] [<.id|name>] [flags]
+centrs retrieve <router> <path>[/<shortcut>] [flags]
 centrs retrieve <router> snmp <oid|MIB name> [flags]
 ```
 
@@ -28,7 +28,11 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
   `/system/resource`). If the unnamed arg does not start with `/`, it is a
   reserved shortcut — currently none are defined; future examples include
   `defconf` → `/system/default-configuration/get`.
-- `<.id|name>` — optional row selector for menus that have rows.
+- Reading one row by name is **flag-only** (there is no row positional):
+  `--query name=ether1` filters RouterOS rows and returns an **array**; the
+  caller takes the match. `--query`/`--filter` always return an array — there is
+  no singleton-by-name shape. (Decided: the old `<.id|name>` positional is
+  dropped.)
 - `snmp <oid|MIB name>` — planned retrieve-only SNMP form. OIDs are used
   directly; MIB names are resolved from the cached MikroTik MIB that matches
   the selected RouterOS version/channel once that cache is implemented.
@@ -41,9 +45,12 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
 | `--attributes <a,b,c>`              | Alias for `--attribute` with comma-separated input.                                       |
 | `--all-attributes`                  | Equivalent to RouterOS `details=true`. Mutually exclusive with `--attribute(s)`.          |
 | `--list-attributes` (alias `--list`) | Return the available attribute names for the path. No `print`/`get` is run.              |
-| `--query <q>`                       | **Not Implemented.** Surface the flag; return `validation/not-implemented` until specced. |
-| `--filter <q>`                      | **Not Implemented.** Same handling as `--query`. RouterOS `.query` mapping is TBD.        |
-| `--max-results <bytes>`             | If response would exceed the limit, return error with object count + total size needed.   |
+| `--once`                            | Bounded single read of a monitor-style menu (RouterOS `once`): returns **one** envelope and never follows. Open-ended follow is the separate `stream` verb. See constitution: protocol selection. |
+| `--query <expr>`                    | RouterOS-side **row** filter (maps to `.query`), repeatable; returns matching rows as an **array**. This is how you read one row by name (`--query name=ether1`). **Not Implemented** yet — returns `validation/not-implemented`. |
+| `--filter <expr>`                   | RouterOS row filter; same `.query` mapping and not-implemented handling as `--query`.       |
+| `--where <attr>=<value>`            | Device-class selector: fan out across CDB records whose stored fact/comment-kv matches (e.g. `--where board=RB5009`). Repeatable (AND). Filters *which devices*, not RouterOS rows. See constitution: target selection. |
+| `--max-bytes <n>`                   | Byte budget for the rendered payload. If the response would exceed it, centrs truncates to fit, keeps `ok: true`, and adds a warning + `meta.truncated`. Not an error. (Renamed from `--max-results`; the legacy flag still parses until the code split lands.) |
+| `--max-rows <n>`                    | Maximum row count for list reads. Excess rows are clipped; `ok: true` with a warning + `meta.truncated`.                                    |
 | `--format text` (default)           | Human-readable rendering (default). Errors print `[code] summary` + `Fix:` lines. |
 | `--format json` (alias `--json`)    | Structured JSON envelope (set `CENTRS_FORMAT=json` to make it the default).               |
 | `--format yaml` (alias `--yaml`)    | YAML rendering of the same envelope.                                                      |
@@ -57,7 +64,7 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
 | `--cdb-file` / `--cdb-password`     | Override CDB file location / decrypt password.                                            |
 | `--ros-version <version>`           | SNMP MIB lookup only: pin the MikroTik MIB version to cache/download.                     |
 | `--ros-channel <channel>`           | SNMP MIB lookup only: `stable`, `long-term`, `testing`, or `development`; default `stable`. |
-| `--group <name>`                    | Fan out across every CDB target in WinBox group `<name>`. Mutually exclusive with a `<router>` positional. See **Group fanout**. |
+| `--group <name>`                    | Fan out across every CDB target in WinBox group `<name>`. Repeatable, and combinable with `<router>` positionals plus `--all`/`--default`; the union is de-duped by CDB record index. See **Group fanout**. |
 | `--concurrency <n>`                 | Max in-flight targets during fanout (integer ≥ 1). Defaults are transport-aware: `rest-api` 8, `native-api` 4. Rejected with `usage/invalid-concurrency` otherwise. |
 
 ## Validation
@@ -124,15 +131,21 @@ handling.
 }
 ```
 
-`--max-results` truncation populates `meta.truncated = { returned, total, totalBytes }`
-and keeps `ok: true` with a warning entry — it is not an error.
+`--max-bytes` / `--max-rows` truncation populates
+`meta.truncated = { returned, total, totalBytes }` and keeps `ok: true` with a
+warning entry — it is not an error. (Earlier text said a byte overflow returns an
+*error* with the needed size; superseded — truncation is an `ok: true` footnote so
+partial data stays usable.)
 
 ## Group fanout
 
 `--group <name>` loads the CDB once, expands every matching WinBox record in
 that group, de-dupes by CDB record index, and runs the same per-target retrieve
-pipeline for each target. `--group` replaces the `<router>` positional and is
-invalid with a separate router argument.
+pipeline for each target. Per the shared target-selector grammar, `--group` is
+repeatable and combines freely with one or more `<router>` positionals, `--all`
+(every CDB record), and `--default` (the `__default__` record); the union is
+de-duped by CDB record index. (Earlier drafts made `--group` mutually exclusive
+with a positional — superseded by the liberal selector model.)
 
 Fanout output is one outer envelope whose `ok` reports orchestration success:
 `ok: false` is reserved for failures before reliable per-target results exist
@@ -191,3 +204,6 @@ reach green is forbidden. See `docs/CONSTITUTION.md` for the full done rule.
   `/console/inspect` and does not execute RouterOS CLI.
 - **ssh / mac-telnet / romon / winbox-terminal** — execute surfaces, not
   retrieve surfaces.
+- **tips** — when a `<router>` fails to resolve against an empty CDB, retrieve
+  emits the same `tip/no-devices` advice as `devices list`, steering toward
+  `centrs devices discover` and `centrs config`.

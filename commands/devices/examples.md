@@ -328,7 +328,7 @@ mismatch.
 
 ### 31. MNDP-discovered entries are marked as discovered
 
-`discover --save --timeout 60s` writes CDB records that `devices list` surfaces
+`discover --save` writes CDB records that `devices list` surfaces
 with `group="discovered"` and `source=mndp` in comment-kv metadata.
 
 ```bash

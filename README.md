@@ -32,11 +32,13 @@ product; without them this would just be a worse `curl`.
 | Command    | Purpose |
 | ---------- | ------- |
 | `retrieve` | Read RouterOS state over REST/native API and SNMP OID/MIB values. |
+| `stream`   | Follow live RouterOS output (`print follow`/monitor/sniffer) as an NDJSON stream of envelopes. |
 | `execute`  | Run RouterOS CLI-shaped read/write commands (add/set/remove) over native API/REST/L2 surfaces. |
 | `terminal` | Open an interactive console, primarily SSH or MAC-Telnet. |
 | `check`    | Probe reachability and management protocol availability. |
 | `devices`  | View and maintain the CDB-backed device registry (the only writer). |
 | `discover` | Discover MNDP neighbors and optionally save them into the CDB. |
+| `config`   | Manage centrs's own settings (`centrs.env`, `__default__`) and run first-time setup. |
 
 Each command's `commands/<name>/` directory carries its design and the
 executable example list that gates "done".
@@ -53,9 +55,12 @@ location, `~/.config/tikoci/winbox.cdb` (override with `--cdb-file` /
 `CENTRS_CDB_FILE`). From each saved entry it takes the fields WinBox already
 stores:
 
-- **`target`** — the address you saved (IPv4, IPv6, MAC, or DNS name). This is
-  the identity: it is the literal you type at the CLI. The comment is *not* a
-  lookup key, so to reach a router as `edge1` its `target` must be `edge1`.
+- **`target`** — the address you saved (IPv4, IPv6, MAC, or DNS name); a literal
+  you can type at the CLI to reach the box. centrs *also* resolves a `<router>`
+  against three sanctioned comment lookup keys — `identity=`, `mac=`, and `ip=` —
+  so a router whose `target` is `192.0.2.5` is still reachable as `edge1` when its
+  comment carries `identity=edge1`. Every other comment token stays inert prose.
+  See `commands/devices/README.md` (Identity model) for the full resolution rules.
 - **`user` / `password`** — the credentials centrs connects with. They stay in
   the CDB and are redacted from MCP results/resources.
 - **`group`, `profile`, `session`, port** — used as-is.

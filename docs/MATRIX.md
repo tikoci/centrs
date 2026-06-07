@@ -24,11 +24,13 @@ A cell advances only with the matching evidence in the same change.
 | Command  | rest-api      | native-api    | ssh           | mac-telnet    | snmp          | mndp          | romon         | winbox-terminal |
 | -------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ---------------- |
 | retrieve | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | —             | —             | —                |
+| stream   | —             | `designed`    | `designed`    | —             | —             | —             | —             | —                |
 | execute  | `CHR-passed`  | `CHR-passed`  | `not-started` | `not-started` | —             | —             | `not-started` | `not-started`    |
 | terminal | —             | —             | `not-started` | `not-started` | —             | —             | —             | —                |
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
 | discover | —             | —             | —             | —             | —             | `coded`       | —             | —                |
 | check    | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started`    |
+| config   | —             | —             | —             | —             | —             | —             | —             | —                |
 
 `devices` does not use a transport in the protocol sense, so its grid row
 stays `—`. Its cell state is `CHR-passed`: the read subset (`list`, `show`,
@@ -76,6 +78,19 @@ yet provide (same blocker as mac-telnet). Flags, TTL/timeout defaults, and the
 There is no `update` command: `execute` is the single read/write surface for
 RouterOS add/set/remove, and `retrieve` stays read-only. See
 `docs/CONSTITUTION.md` (protocol selection).
+
+`stream` is `designed`: `commands/stream/README.md` describes the read-only
+follow surface (RouterOS `print follow`/monitor/sniffer; `once`/`follow`/
+`duration=`/`freeze-frame-interval=`), the NDJSON stream-of-envelopes contract,
+and the native-api/ssh transport constraint (REST cannot follow — 60s cap). It
+has no code yet; the native-api streaming reader it will consume already exists
+(`src/protocols/native-api.ts`). Bounded single-shot reads stay on
+`retrieve --once`; interactive PTY stays on `terminal`.
+
+`config` is `designed` and transport-less (like `devices`), so its grid row
+stays `—`. `commands/config/README.md` describes the `centrs.env` + `__default__`
+front-end (interactive first-time setup plus `config get/set/reset/print`); no
+code yet.
 
 ### Transport-base readiness (below the command grid)
 
@@ -151,7 +166,7 @@ matching evidence.
    unresolved MAC targets.
 9. **RoMON / WinBox Terminal for execute** — lower-priority execute surfaces
    after mac-telnet is grounded.
-10. **discover / mndp** — `discover --save --timeout 60s` populates CDB entries
+10. **discover / mndp** — `discover --save` populates CDB entries
     with provenance metadata and `group=discovered`.
 11. **MCP, TUI, proxy** — frontends over the stable core. The MCP server is the
     near-term target (see `commands/mcp/`): a scoped-verb stdio server
@@ -178,7 +193,7 @@ matching evidence.
 | -------- | ------------ | ----- |
 | SNMP MIB cache policy | retrieve / snmp | Decide cache location, invalidation, RouterOS version/channel matching, and offline behavior for MIB-name lookup. |
 | Bug-report rendering: inline flag, separate command, both? | cross-cutting | Constitution says envelope is rich enough; rendering deferred until needed. |
-| L2 in CI: how to fake L2 net for mac-telnet on Linux runner | execute / mac-telnet, terminal / mac-telnet | quickchr supports L2 netdevs (`vmnet-shared`/`vmnet-bridged` on macOS, `tap`, `socket-mcast`), but `startIntegrationChr()` uses `user`-mode SLIRP with hostfwd, which does not carry L2 broadcast/MAC-Telnet. Real-router validation also needs raw L2 frame I/O from the host (BPF on macOS / AF_PACKET on Linux) on an interface sharing the CHR's L2 segment — Bun exposes no raw-L2 socket, so a native helper (libpcap binding or socket_vmnet + a small frame shim) is required. Until then, mac-telnet is covered at the protocol layer by `test/unit/mac-telnet.test.ts` against a scripted peer. Must still cover unresolved-MAC default behavior. |
+| L2 in CI: how to fake L2 net for mac-telnet/MNDP on Linux runner | execute / mac-telnet, terminal / mac-telnet, discover / mndp | quickchr supports L2 netdevs (`vmnet-shared`/`vmnet-bridged` on macOS, `tap`, `socket-mcast`), but `startIntegrationChr()` uses `user`-mode SLIRP with hostfwd, which does not carry L2 broadcast/MAC-Telnet. **Leading candidate (spike first):** add a `socket-mcast` netdev *alongside* the user-mode NIC so MNDP (UDP 5678) / L2 frames ride the socket segment while REST/native-API keep user-mode hostfwd — a real L2 path needing no host raw-frame access. Otherwise real-router validation needs raw L2 frame I/O from the host (BPF macOS / AF_PACKET Linux), which Bun cannot do, so a native helper (libpcap or socket_vmnet + frame shim) would be required. Until then mac-telnet is covered at the protocol layer by `test/unit/mac-telnet.test.ts`; MNDP by crafted fixtures + loopback. Must still cover unresolved-MAC default behavior. |
 | RoMON / WinBox Terminal validation and CI | execute / romon, execute / winbox-terminal | Lower priority than mac-telnet; need reference tooling and typed failure mapping before advancing. |
 
 When a question is answered, fold the answer into the relevant

@@ -106,8 +106,12 @@ groups: **lookup keys** affect how `<router>` resolves (see "Identity model");
 Rules:
 
 - First-class CDB fields (`user`, `password`, `group`, `profile`, `session`)
-  must **not** appear in the kv-soup — they already have CDB tags. centrs
-  refuses to write them via `devices set`.
+  must **not** appear in the kv-soup — they already have CDB tags. This has two
+  distinct outcomes by path: a reserved token found while *parsing* an existing
+  comment is inert and only warns `cdb/reserved-option` (centrs won't act on it,
+  but won't reject a hand-written comment); explicitly passing one as a `devices
+  set` positional (`user=x`) is a hard `cdb/reserved-key` error, because you are
+  asking centrs to *write* it — use the dedicated flag (`--user`) instead.
 - `ssh-key` stores a path only, never private key material. Key contents belong
   in the user's filesystem / SSH agent and are always treated as sensitive if an
   error needs to mention them. It joins the comment-kv allowlist *with* the SSH
@@ -116,11 +120,30 @@ Rules:
 - Unknown keys → `cdb/unknown-option` warning. The call still succeeds.
 - Tokens are shell-word tokenized. Values with spaces require double quotes
   (`"…"`), with `\"` and `\\` escapes. `=` inside a quoted value is literal.
+- An **empty value removes** the token: `devices set <t> via=` deletes the `via`
+  override (matching the internal upsert/remove model in `comment-kv.ts`). There
+  is no current need to store a literally-empty value; revisit if one arises.
 - `commentMirror` is kept in sync with `comment` on every write.
 
 Precedence (lowest → highest): built-in defaults → project config →
 comment-kv → env (`CENTRS_*`) → CLI flag / API arg. `meta.settings` reports
 the winner and source per setting.
+
+### Derived facts (queryable, may be stale)
+
+Beyond lookup keys and setting overrides, a record may carry **derived facts**
+learned from a probe — `board`, `version`, `software-id` (from MNDP or `check`),
+plus an `updated=<iso>` stamp marking when they were last refreshed. These are
+*facts, not settings*: they are queryable/selectable (e.g. `--where board=RB5009`
+to fan a command across a device class) but must **never override a live read**,
+and they can go stale. `devices add`/`set --check` refreshes them from a live
+device; `discover --save` seeds them. `software-id` is a **verification** key
+("is this still the same box?"), not a resolution key (you don't type it to reach
+a device); `license-id` is convenience metadata to match by hand against
+MikroTik's CHR licensing page. The `--where` selector plus this derived-fact
+allowlist are the planned home for "operate on a class of devices," distinct from
+`group`. (Promoting these keys to the comment-kv allowlist is a tracked code
+follow-up.)
 
 ## Groups
 
@@ -130,13 +153,26 @@ is no group-definition record. A group is the set of all entries whose
 `group=""` belongs to no group.
 
 `--group <G>` on any command resolves to the membership set and fans out.
-`discover --save --timeout 60s` writes MNDP records with `group=discovered`
+`discover --save` writes MNDP records with `group=discovered`
 unless the caller supplies another group.
+
+### Promotion (discovered → managed)
+
+There is no `promote` verb. Moving a device out of `group=discovered` and giving
+it credentials is `devices set <t> --group prod --user … --password …`. A **bulk**
+promotion (a whole discovered class at once) follows from applying the
+target-selector grammar to `set` — but note `--group` is *also* the field-setter
+on `set`, so bulk **selection** of a class to mutate uses `--where`/`--all`/
+positionals (not `--group`, which would be ambiguous), e.g. `devices set --where
+group=discovered --group prod --user … --password … --force`. Pinning the
+select-vs-set overload for mutation verbs is the one open wrinkle here.
 
 ## Fanout (multi-target invocations)
 
 Any command may receive multiple positional targets, one or more `--group`
-flags, or both. The resolved member set is de-duplicated by CDB record index.
+flags, `--all`, `--default`, and/or `--where <attr>=<value>` (device-class) — see
+`docs/CONSTITUTION.md` (Target selection grammar). The resolved member set is
+de-duplicated by CDB record index.
 
 - Each member runs in parallel up to `--concurrency` (default
   `max(1, floor(os.cpus().length / 2))`).
@@ -157,6 +193,7 @@ flags, or both. The resolved member set is de-duplicated by CDB record index.
 centrs devices list [--group G] [--format json|yaml|text]
 centrs devices show <target> [--explain] [--via <protocol>] [--match <type>]
 centrs devices groups [--members]
+centrs devices discover [--timeout 15s] [--group G]      # = discover --save (save implied)
 centrs devices add <target> [--user U] [--password P] [--group G]
                              [--profile P|--profile-none|--profile-own]
                              [--session S] [--comment "text k=v"]
@@ -183,6 +220,12 @@ field-editing verb. There is no `update`.
   for the target without connecting.
 - `groups` lists distinct non-empty group strings with member counts.
   `--members` expands to the full membership per group.
+- `discover` runs MNDP discovery with `--save` **implied** (you invoked the
+  registry surface, so you mean to populate it) — equivalent to `centrs discover
+  --save` with the same `group=discovered` / `source=mndp` provenance. It is the
+  natural onboarding step and where centrs steers toward setting fallback
+  credentials (`__default__`). See `commands/discover/README.md`. Still routes
+  through the atomic write layer below, so `devices` remains the only writer.
 - `add` creates a record from first-class flags + comment tokens. Against an
   existing `(target, user)` it errors `cdb/already-exists` unless `--force`
   overwrites; the same `target` under a *different* `--user` is a new record,

@@ -40,6 +40,13 @@ rejects `execute`.
   concern. The envelope must still distinguish RouterOS errors from successful
   runs (a 200 with a RouterOS error string is still an error — see
   constitution: error model).
+- Attribute values pass through **verbatim** — centrs does not guess types or
+  coerce them (RouterOS REST tolerates string values; the native API is
+  all-strings). Unlike `jo`-style KV builders, there is no per-value
+  type-forcing escape, because the device, not centrs, owns value typing.
+- On an empty-CDB resolution failure, execute (like retrieve) emits the
+  `tip/no-devices` tip, steering toward `centrs devices discover` /
+  `centrs config`.
 - Protocol surfaces are native API, REST, mac-telnet, and SSH. RoMON and
   WinBox Terminal are later. SNMP is retrieve-only and must reject execute.
 - For a MAC target not resolved from CDB, auto-selection defaults to
@@ -67,8 +74,9 @@ rejects `execute`.
 | `--timeout <duration>`          | Per-request timeout. REST: ≤ 60s; other transports may allow longer.                  |
 | `--validate[=false]`            | Run the `:parse` + `/console/inspect` gate before execution (default `true`).          |
 | `--yes`                         | Confirm write-shaped add/set/remove commands in non-interactive runs.                  |
-| `--max-results <bytes>`         | Fail if the rendered envelope exceeds this byte budget.                                |
+| `--max-bytes <n>`               | Byte budget for the rendered envelope; excess output is truncated with a warning + `meta.truncated` (not an error), matching `retrieve`. (Renamed from `--max-results`.) |
 | `--format <text\|json\|yaml>`   | Output format (alias `--json`). Defaults to `text`; `CENTRS_FORMAT` sets the default.  |
+| `--where <attr>=<value>`        | Device-class selector — run across every CDB record whose stored fact/comment-kv matches (e.g. `--where board=RB5009 /system/package/check-for-updates`). Repeatable (AND). See constitution: target selection. |
 
 ## SSH key selection
 
@@ -110,8 +118,10 @@ matrix cell to `CHR-passed`.
 
 ## Open shape questions
 
-- How to expose multi-line / async / progress output without committing to a
-  single-shot model up front.
+- ~~How to expose multi-line / async / progress output~~ — **resolved:**
+  open-ended follow/streaming reads are the separate read-only `stream` verb
+  (NDJSON stream of envelopes; see `commands/stream/README.md`). `execute` stays
+  single-shot read/write; it does not grow a follow mode.
 - Whether `--strict` should reject "succeeded with stderr-like content."
 
 These are deferred refinements to the already-grounded single-shot envelope,

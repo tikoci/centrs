@@ -12,7 +12,7 @@ with the `devices` lookup-key work.
 ## Synopsis
 
 ```text
-centrs discover [--timeout 60s] [--save] [--group discovered] \
+centrs discover [--timeout 15s] [--save] [--group discovered] \
                 [--port 5678] [--cdb-file <path>] [--cdb-password <secret>] \
                 [--format text|json|yaml]
 ```
@@ -37,8 +37,10 @@ uptime, software-id, interface, IPv4/IPv6). `discover`:
 
 1. Binds a UDP socket (default `0.0.0.0:5678`) with address/port reuse so
    it can coexist with other MNDP listeners when the platform permits it.
-2. Broadcasts a refresh request every 5s and listens for the `--timeout`
-   window.
+2. Broadcasts a refresh request **immediately**, then every 5s, and listens for
+   the `--timeout` window. Sending the first refresh up front (rather than after
+   the initial 5s tick) is what makes a short default window viable: responders
+   reply within a round-trip instead of waiting for their own ~60s passive cycle.
 3. Decodes each datagram with the pure codec in `src/data/mndp.ts`, tolerating
    unknown TLV types and ignoring malformed datagrams and its own refresh echo.
 4. Stores neighbors in an in-memory TTL cache keyed by MAC.
@@ -51,7 +53,7 @@ tested without a router (crafted packet fixtures + a loopback socket).
 
 | Flag             | Default       | Meaning                                              |
 | ---------------- | ------------- | ---------------------------------------------------- |
-| `--timeout`      | `60s`         | Listen window before results are returned.           |
+| `--timeout`      | `15s`         | Listen window before results are returned. First refresh is sent immediately. |
 | `--save`         | off           | Persist discovered neighbors into the CDB.           |
 | `--group`        | `discovered`  | First-class CDB group assigned to saved entries.     |
 | `--port`         | `5678`        | UDP port to bind for MNDP.                            |
@@ -59,7 +61,15 @@ tested without a router (crafted packet fixtures + a loopback socket).
 | `--cdb-password` | env/none      | Decrypt an encrypted CDB; also used to re-encrypt on `--save`. |
 | `--format`       | `text`        | `text`, `json`, or `yaml`; renders the same envelope. |
 
-`--save` without `--timeout` uses the default 60s window.
+`--save` without `--timeout` uses the default 15s window.
+
+Bare `centrs discover` is **read-only** — it returns the envelope and never
+writes the (WinBox-shared) CDB; `--save` is the explicit opt-in. The registry
+surface `centrs devices discover` is the inverse: invoking `devices` means you
+intend to populate it, so **`--save` is implied** there, and it is the home for
+the "set default credentials so centrs starts useful" onboarding nudge. Both
+paths write through the `devices` atomic write layer, so "devices is the only
+writer" holds.
 
 ## MNDP cache shape and TTL policy
 
@@ -103,6 +113,11 @@ tested without a router (crafted packet fixtures + a loopback socket).
   the loaded password, appends new neighbors, and re-encrypts with a fresh salt
   before the atomic rename. The backup beside the CDB is the verbatim prior
   ciphertext. Reading an encrypted CDB stays supported.
+- **No auto-deletion / aging.** centrs never removes or rewrites a CDB record it
+  did not just create in this run. Discovered records age via their discovery /
+  `updated=` timestamp, and staleness is surfaced as a **tip** ("N discovered
+  entries are >30d old"), never an automatic delete — deleting records from a
+  WinBox-shared file unprompted is unsafe.
 
 ## Errors
 
@@ -126,3 +141,10 @@ current CI gate remains crafted packet fixtures plus a loopback UDP listener.
 This means `discover / mndp` must not advance to `CHR-passed` until every
 example in `commands/discover/examples.md` runs against a real L2 segment.
 The same L2 blocker also applies to mac-telnet execute/terminal cells.
+
+A not-yet-tried CI option worth a spike: `@tikoci/quickchr` `socket`-type QEMU
+netdevs. A CHR booted with a `socket` (multicast) netdev *in addition to* the
+user-mode NIC could carry a forwarded MNDP broadcast (UDP 5678) over the socket
+segment while REST/native-API keep riding user-mode hostfwd as today — a real L2
+broadcast path without host raw-frame access, and lighter than the
+libpcap/socket_vmnet shim. See `quickchr` netdev help before committing.

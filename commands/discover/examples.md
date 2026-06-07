@@ -22,7 +22,7 @@ touched.
 centrs discover
 ```
 
-Listens for the default `60s`, broadcasting a refresh every 5s. Envelope:
+Listens for the default `15s`, broadcasting an immediate refresh then every 5s. Envelope:
 `ok: true`, `meta.via: "mndp"`, `data` is `{ count, neighbors }` with
 `neighbors` sorted by MAC. Each neighbor carries `mac`, optional `identity`,
 `version`, `platform`, `board`, `uptimeSeconds`, `softwareId`,

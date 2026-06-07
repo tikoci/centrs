@@ -70,7 +70,7 @@ Every API/CLI call returns the same shape, regardless of transport:
     settings: { ... },          // settings winners + sources (env / cli / cdb / default)
     validation?: { ... },       // validator name + result, if validation ran
     timing?: { ... },           // request/response durations
-    truncated?: { ... },        // populated when --max-results clipped output
+    truncated?: { ... },        // populated when --max-bytes/--max-rows clipped output
   }
 }
 ```
@@ -88,7 +88,10 @@ Notes:
   (`{ code, message, fix? }`) with `tip/*` codes and a `details_url`.
 - CLI render must be lossless against the JSON envelope; `--format json` and
   `--format yaml` are aliases that select serialization, not different shapes.
-  Text mode renders tips under a `Tips:` footer, distinct from warnings.
+  Text mode renders tips under a `Tips:` footer, distinct from warnings. This
+  lossless rule applies to **stdout** only: **stderr** carries progress and
+  interactive prompts (discover scan progress, write/ambiguity confirmation) and
+  is exempt — use it sparingly, since most operations are fast.
 - `data` is the only field whose *shape* varies by command. Everything else —
   including `warnings` and `tips` — is invariant in shape; only contents differ.
 
@@ -153,7 +156,19 @@ Rules:
 Lowest to highest priority:
 
 1. Built-in defaults
-2. Project / config file
+2. Config file: `${XDG_CONFIG_HOME:-~/.config}/tikoci/centrs.env` — a
+   dotenv-style `CENTRS_*=value` file centrs reads at startup, holding
+   centrs-only **global** preferences (default discovery window, default
+   `--format`, concurrency, …) that have no per-device home in the CDB. Its
+   values are tier-2 *defaults*: real `CENTRS_*` process-env (tier 4) and CLI
+   flags (tier 5) still override them, so centrs applies the file's keys as
+   fallbacks rather than injecting them into `process.env`. It is **optional**
+   (a missing file is never fatal; built-in defaults apply), needs **no new
+   dependency** (plain `KEY=value` lines, not a parsed config format), and is
+   **not** an inventory or credential store — per-device settings stay in the CDB.
+   `--skip-env-file` (and `CENTRS_SKIP_ENV_FILE=1`) bypasses it for tests and
+   dev-agent runs. The `centrs config` command is the front-end that reads and
+   writes this file (and the `__default__` record); hand-editing also works.
 3. CDB comment-kv metadata
 4. Environment variables (`CENTRS_*`)
 5. CLI flags / API call args
@@ -198,7 +213,7 @@ CDB resolution:
 - For a MAC target, CDB wins first. If no CDB record matches, `retrieve` may
   opt into local ARP resolution to obtain an IP-level target; `execute`
   defaults to mac-telnet unless the caller explicitly asks to resolve via ARP.
-- `discover --save --timeout 60s` writes MNDP-derived targets into CDB with
+- `discover --save` writes MNDP-derived targets into CDB with
   provenance metadata and default `group=discovered`; discovery remains a hint
   source, not authoritative inventory. De-duplication of saved records is keyed
   on the **MAC** (globally unique); `identity` is written as a resolution handle
@@ -236,6 +251,24 @@ Group selectors (e.g. `--group prod-edge`) target CDB groups so a single
 `retrieve`/`execute`/etc. fans out to multiple routers. Group output shape
 must round-trip through the same envelope.
 
+#### Target selection grammar
+
+One grammar across every non-terminal command. A call selects targets from any
+mix of: `<router>` positionals (one or more), repeatable `--group <name>`,
+`--all` (every CDB record), `--default` (the `__default__` record), and
+repeatable `--where <attr>=<value>` — a **device-class** selector that matches
+CDB-stored facts/comment-kv (e.g. `--where board=RB5009`), AND-combined across
+repeats. The union is **de-duped by CDB record index** and run through the same
+per-target pipeline; the `data` array is reassembled in resolved record order,
+not completion order, so repeated runs diff cleanly. Destructive multi-target
+operations (e.g. `devices remove` across a group) require `--force`. `terminal`
+and single-session `stream` are not fan-out surfaces and reject N>1 with
+`usage/fanout-not-supported`.
+
+`--where` filters *which devices* by CDB-stored facts; keep it distinct from
+`retrieve`/`execute`'s `--query`/`--filter`, which filter *RouterOS rows* in the
+response. Two layers, two flag families.
+
 ### MCP surface: the CDB is the allowlist
 
 The MCP frontend (`commands/mcp/`) is an adapter over this core, not a new set of
@@ -272,6 +305,7 @@ Per-operation preferences, downgrade order in parens:
 | Operation | Preferred | Downgrade order |
 | --------- | --------- | --------------- |
 | retrieve  | rest-api, native-api; snmp for OID/MIB reads (future) | rest-api, native-api |
+| stream    | native-api, ssh | (REST cannot follow — 60s cap; bounded or rejected) |
 | execute   | native-api → rest-api → mac-telnet | native-api, rest-api, mac-telnet, ssh, romon, winbox-terminal |
 | terminal  | ssh | mac-telnet (L2 only when ssh fails or MAC given) |
 | transfer  | ssh / scp | rest-api files (small only) |
@@ -282,6 +316,15 @@ Rules:
 - `retrieve` is read-only (rest-api or native-api only). `execute` is the read
   and write surface; there is no `update` operation. Writes (add/set/remove)
   ride `execute`.
+
+- `stream` is a **read-only** follow/streaming surface (RouterOS `print
+  follow`/monitor/sniffer with `once`/`follow`/`duration=`/
+  `freeze-frame-interval=`). It emits a sequence of envelopes as NDJSON,
+  terminated by a summary envelope (frame count, duration, stop reason); a
+  mid-stream error is a frame, and the exit code reflects whether the stream
+  *started* cleanly. True follow cannot ride REST (60s hard cap), so it is
+  native-api/ssh; `--via rest-api` is bounded-or-rejected. Bounded single-shot
+  reads stay on `retrieve --once`; interactive PTY stays on `terminal`.
 
 - Never silently downgrade across `--via`. If the caller pinned `--via rest-api`
   and REST cannot do the operation, error out with a `transport/*` code.

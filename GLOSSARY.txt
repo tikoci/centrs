@@ -222,7 +222,9 @@ sessionstart
 BPF
 libpcap
 mcast
+netdev
 netdevs
+NIC
 SLIRP
 vmnet
 

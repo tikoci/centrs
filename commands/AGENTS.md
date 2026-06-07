@@ -15,8 +15,8 @@ must agree with it.
 
 ## Verb vocabulary
 
-Commands are centrs **verbs** (`retrieve`, `execute`, `devices`, `discover`,
-`check`, `terminal`), never one tool per RouterOS command. Sub-verbs and their
+Commands are centrs **verbs** (`retrieve`, `stream`, `execute`, `devices`,
+`discover`, `check`, `terminal`, `config`), never one tool per RouterOS command. Sub-verbs and their
 aliases are canonical across CLI / API / MCP:
 
 | Canonical | Aliases          | Meaning                                  |
@@ -33,3 +33,15 @@ Canonical names win in help text and docs; aliases resolve to the canonical verb
 silently. `add` and `set` are symmetric (same flags + `k=v` tokens), differing
 only on existence. There is no `update` verb — RouterOS add/set/remove ride
 `execute` (constitution: protocol selection).
+
+## Help system
+
+Shared across CLI / API / MCP help rendering:
+
+- **Level-aware help.** `<command> <subcommand> --help` is more specific than
+  `<command> --help` — e.g. `centrs devices remove --help` shows the `remove`
+  usage and flags, not the whole `devices` surface.
+- **"Did you mean?"** On an unknown verb/sub-verb or flag, the error
+  (`input/invalid-command` / usage error) lists the closest canonical matches
+  (Levenshtein) plus accepted aliases — extending the invalid-command behavior
+  that already enumerates canonical verbs + aliases.
