@@ -136,8 +136,9 @@ learned from a probe — `board`, `version`, `software-id` (from MNDP or `check`
 plus an `updated=<iso>` stamp marking when they were last refreshed. These are
 *facts, not settings*: they are queryable/selectable (e.g. `--where board=RB5009`
 to fan a command across a device class) but must **never override a live read**,
-and they can go stale. `devices add`/`set --check` refreshes them from a live
-device; `discover --save` seeds them. `software-id` is a **verification** key
+and they can go stale. `devices add`/`set --check` and `check --fix` refresh them
+from a live device; `discover --save` seeds them. `software-id` is a
+**verification** key
 ("is this still the same box?"), not a resolution key (you don't type it to reach
 a device); `license-id` is convenience metadata to match by hand against
 MikroTik's CHR licensing page. The `--where` selector plus this derived-fact
@@ -158,14 +159,22 @@ unless the caller supplies another group.
 
 ### Promotion (discovered → managed)
 
-There is no `promote` verb. Moving a device out of `group=discovered` and giving
-it credentials is `devices set <t> --group prod --user … --password …`. A **bulk**
-promotion (a whole discovered class at once) follows from applying the
-target-selector grammar to `set` — but note `--group` is *also* the field-setter
-on `set`, so bulk **selection** of a class to mutate uses `--where`/`--all`/
-positionals (not `--group`, which would be ambiguous), e.g. `devices set --where
-group=discovered --group prod --user … --password … --force`. Pinning the
-select-vs-set overload for mutation verbs is the one open wrinkle here.
+There is no `promote` verb. Moving one device out of `group=discovered` and
+giving it credentials is `devices set <t> --new-group prod --user … --password
+…`. A **bulk** promotion (a whole discovered class at once) is the same call with
+a target selector picking the records:
+
+```bash
+devices set --group discovered --new-group prod \
+  --user admin --password … --force
+```
+
+`--group` (and `--where`/`--all`/positionals) always **selects** which records to
+modify; `--new-group` always **writes** the group field. The two are distinct
+flags, so there is no select-vs-set overload — this resolves the former wrinkle.
+(Code follow-up: the CLI still overloads `--group` as the `add`/`set` field
+setter today; `examples.md` reflects that current flag until the `--new-group`
+split lands.)
 
 ## Fanout (multi-target invocations)
 
@@ -194,14 +203,14 @@ centrs devices list [--group G] [--format json|yaml|text]
 centrs devices show <target> [--explain] [--via <protocol>] [--match <type>]
 centrs devices groups [--members]
 centrs devices discover [--timeout 15s] [--group G]      # = discover --save (save implied)
-centrs devices add <target> [--user U] [--password P] [--group G]
+centrs devices add <target> [--user U] [--password P] [--new-group G]
                              [--profile P|--profile-none|--profile-own]
                              [--session S] [--comment "text k=v"]
                              [--record-type ipAdmin|ipUser|macTarget|...]
-centrs devices set  <target> [--user U] [--password P] [--group G]
+centrs devices set  <selector…> [--user U] [--password P] [--new-group G]
                              [--profile P|--profile-none|--profile-own]
                              [--session S] [k=v ...]
-centrs devices remove <target>
+centrs devices remove <selector…>
 centrs devices edit <target>            # future: clack/TUI wizard
 ```
 
@@ -230,13 +239,16 @@ field-editing verb. There is no `update`.
   existing `(target, user)` it errors `cdb/already-exists` unless `--force`
   overwrites; the same `target` under a *different* `--user` is a new record,
   not a collision.
-- `set` modifies an existing record. First-class fields change via flags
-  (`--user`, `--password`, `--group`, `--profile[-none|-own]`, `--session`);
-  comment lookup/override keys change via `k=v` positionals. Against a missing
-  target it errors `cdb/not-found-target`. Writing a first-class field name as a
-  `k=v` positional (e.g. `user=x`) stays refused with `cdb/reserved-key` — the
-  flag is the only path. Unknown comment keys warn (`cdb/unknown-option`), or
-  error under `--strict`.
+- `set` modifies existing record(s). First-class fields change via flags
+  (`--user`, `--password`, `--new-group`, `--profile[-none|-own]`, `--session`);
+  comment lookup/override keys change via `k=v` positionals. **Which** records to
+  modify is the target selector — positionals, `--group`, `--where`, `--all`
+  (constitution: target selection) — so `--group` here *selects* and
+  `--new-group` *writes* the group field (no overload). Against a missing target
+  it errors `cdb/not-found-target`; a multi-record `set` needs `--force`. Writing
+  a first-class field name as a `k=v` positional (e.g. `user=x`) stays refused
+  with `cdb/reserved-key` — the flag is the only path. Unknown comment keys warn
+  (`cdb/unknown-option`), or error under `--strict`.
 - `remove` (aliases `rm`, `delete`) removes a single entry. Group-wide deletes
   (`--group G`) require `--force` (writes are large).
 

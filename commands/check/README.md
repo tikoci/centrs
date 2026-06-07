@@ -12,13 +12,19 @@ Status: `not-started`. This file is a stub.
 - Output is the [standard envelope](../../docs/CONSTITUTION.md#result-envelope);
   `data` is a per-protocol probe result map.
 - `--fix` (opt-in, write-shaped): once `check` has authenticated over *one*
-  protocol, it reads the live device to **correct stale CDB connection
-  metadata** — most usefully ports. E.g. reached over MAC/mac-telnet, it can read
-  `/ip/service` to learn the real REST/native-API ports and write `port=` into
-  the record's comment-kv so later calls connect directly. `--fix` writes through
-  the `devices` layer (the only CDB writer) and is gated like any write
-  (`--yes` / `confirm`). It corrects *connection* facts only; it is not a
-  general fact-sync.
+  protocol, it reads the live device and writes back through the `devices` layer
+  (the only CDB writer), gated like any write (`--yes` / `confirm`). It refreshes
+  two things in one authenticated pass:
+  - **Connection metadata** — most usefully ports. Reached over MAC/mac-telnet,
+    it reads `/ip/service` to learn the real REST/native-API ports and writes
+    `port=` into the record's comment-kv so later calls connect directly.
+  - **Derived facts** — `board`, `version`, `software-id`, plus the `updated=`
+    stamp, from the same session (the same keys `devices add/set --check` and
+    `discover --save` populate). These stay queryable-but-stale facts that never
+    override a live read (see `commands/devices/README.md`, Derived facts).
+
+  `--fix` is **always explicit**, never implicit; plain `check` (no `--fix`) is a
+  pure read-only probe that writes nothing.
 
 ## Default service ports (grounding)
 
@@ -39,14 +45,10 @@ specifying it, and "upgrade" the connection:
 
 ## Open questions
 
-- `--fix` decided in principle (above): consult `/ip/service` once authenticated
-  to learn non-default ports and write them back as comment-kv. Residual: exactly
-  which fields `--fix` is allowed to touch (ports yes; what else?) and whether it
-  ever runs implicitly vs always opt-in (lean: always opt-in).
-- centrs does **not** make `check` persist version/board/software-id — those are
-  device *facts* that become queryable through the derived-fact keys on the
-  record (see `commands/devices/README.md`), refreshed on `devices add/set
-  --check` or `discover`, not as a `check` side effect.
+- `--fix` scope **decided** (above): connection metadata (ports) **plus** the
+  derived facts (`board`/`version`/`software-id`/`updated=`), refreshed in one
+  authenticated pass through the `devices` write layer; always explicit opt-in,
+  never implicit. Plain `check` stays a read-only probe that writes nothing.
 - Should L2 probing (mac-telnet ARP / discovery) be opt-in?
 
 Defer until `retrieve` is `CHR-passed`. `check` overlaps with discovery and is

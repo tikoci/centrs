@@ -283,3 +283,6 @@ nonexistentattr
 # underflow: reading past the end of a buffer; the WinBox CDB codec reports it as a structured parse fault.
 underflow
 underflows
+
+# Werror: the gcc/clang -Werror "treat warnings as errors" flag, referenced by execute --strict.
+Werror

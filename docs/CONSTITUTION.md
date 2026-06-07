@@ -269,6 +269,10 @@ and single-session `stream` are not fan-out surfaces and reject N>1 with
 `retrieve`/`execute`'s `--query`/`--filter`, which filter *RouterOS rows* in the
 response. Two layers, two flag families.
 
+`--group` is purely a **selector** in this grammar; the group *field* is written
+by a distinct `--new-group` flag on `devices add`/`set`, so record selection and
+field-setting never collide on one flag.
+
 ### MCP surface: the CDB is the allowlist
 
 The MCP frontend (`commands/mcp/`) is an adapter over this core, not a new set of

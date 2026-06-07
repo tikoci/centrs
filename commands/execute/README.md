@@ -73,6 +73,7 @@ rejects `execute`.
 | `--resolve <none\|arp>`         | Resolve a MAC-address target to an IP via the host ARP cache. Default `none`.          |
 | `--timeout <duration>`          | Per-request timeout. REST: ≤ 60s; other transports may allow longer.                  |
 | `--validate[=false]`            | Run the `:parse` + `/console/inspect` gate before execution (default `true`).          |
+| `--strict`                      | Treat any warning on a successful run as an error (`ok: false`, nonzero exit), like `-Werror`. Default is lenient (`ok: true` + `warnings`). |
 | `--yes`                         | Confirm write-shaped add/set/remove commands in non-interactive runs.                  |
 | `--max-bytes <n>`               | Byte budget for the rendered envelope; excess output is truncated with a warning + `meta.truncated` (not an error), matching `retrieve`. (Renamed from `--max-results`.) |
 | `--format <text\|json\|yaml>`   | Output format (alias `--json`). Defaults to `text`; `CENTRS_FORMAT` sets the default.  |
@@ -122,7 +123,11 @@ matrix cell to `CHR-passed`.
   open-ended follow/streaming reads are the separate read-only `stream` verb
   (NDJSON stream of envelopes; see `commands/stream/README.md`). `execute` stays
   single-shot read/write; it does not grow a follow mode.
-- Whether `--strict` should reject "succeeded with stderr-like content."
+- ~~Whether `--strict` should reject "succeeded with stderr-like content."~~ —
+  **decided:** `--strict` promotes any warning on an otherwise-successful run to
+  `ok: false` (nonzero exit), like `-Werror`; the default stays lenient
+  (`ok: true` with the warning in the `warnings` channel). Tracked code
+  follow-up; the flag is in the table above.
 
 These are deferred refinements to the already-grounded single-shot envelope,
 not blockers for the `rest-api`/`native-api` cells.

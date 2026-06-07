@@ -55,9 +55,19 @@ creds) and `centrs devices discover` (populate the registry). See
 `commands/discover/README.md` (save-implied `devices discover`) and
 `docs/CONSTITUTION.md` (Default-device record).
 
+## Settings keys
+
+`centrs.env` holds **canonical `CENTRS_*=value` lines** — identical to the
+environment-variable spellings, prefix included (`CENTRS_FORMAT=json`,
+`CENTRS_DISCOVER_TIMEOUT=15s`, `CENTRS_CONCURRENCY=8`). One vocabulary across
+file / env / CLI: the file *is* "just default env vars," so `set -a && source
+centrs.env` works and the loader applies each key as a default **only when the
+same `CENTRS_*` is not already in the process environment** (it never injects
+into `process.env`). `config set <attr>` accepts the setting name with or
+without the prefix for convenience but always writes the canonical prefixed
+line.
+
 ## Open questions
 
-- Exact `centrs.env` key names (vs the `CENTRS_*` env spellings — likely 1:1
-  without the prefix).
 - Whether `config` ever edits project-local vs user-global `centrs.env` (XDG
   user-global only, for now).

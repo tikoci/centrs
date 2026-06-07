@@ -14,5 +14,3 @@ ignores:
   - "**/AGENTS.md"
   - "**/node_modules/**"
   - "docs/api/**"
-  # Loose human planning notes (a different audience, not rendered docs).
-  - "docs/THINKING.md"
