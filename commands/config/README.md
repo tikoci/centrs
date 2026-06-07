@@ -65,9 +65,5 @@ centrs.env` works and the loader applies each key as a default **only when the
 same `CENTRS_*` is not already in the process environment** (it never injects
 into `process.env`). `config set <attr>` accepts the setting name with or
 without the prefix for convenience but always writes the canonical prefixed
-line.
-
-## Open questions
-
-- Whether `config` ever edits project-local vs user-global `centrs.env` (XDG
-  user-global only, for now).
+line. It is **user-global only** — the single XDG path above; there is no
+project-local config file discovered from the working directory.

@@ -9,6 +9,9 @@ Status: `not-started`. This file is a stub.
 - TCP reachability per protocol (rest-api, native-api, ssh).
 - Auth check on whichever protocols answered.
 - Optional `--via` to limit the probe surface.
+- L2 probing (mac-telnet reachability / ARP) is **opt-in, off by default** —
+  enabled by a MAC target, `--via mac-telnet`, or `--l2`. It needs L2 adjacency
+  and is slower, so IP-level probing (rest/native/ssh) stays the default.
 - Output is the [standard envelope](../../docs/CONSTITUTION.md#result-envelope);
   `data` is a per-protocol probe result map.
 - `--fix` (opt-in, write-shaped): once `check` has authenticated over *one*
@@ -49,7 +52,8 @@ specifying it, and "upgrade" the connection:
   derived facts (`board`/`version`/`software-id`/`updated=`), refreshed in one
   authenticated pass through the `devices` write layer; always explicit opt-in,
   never implicit. Plain `check` stays a read-only probe that writes nothing.
-- Should L2 probing (mac-telnet ARP / discovery) be opt-in?
+- L2 probing opt-in **decided** (Intent above): off by default; enabled by a MAC
+  target, `--via mac-telnet`, or `--l2`.
 
 Defer until `retrieve` is `CHR-passed`. `check` overlaps with discovery and is
 easier to design once name resolution lands.
