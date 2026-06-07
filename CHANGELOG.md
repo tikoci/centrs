@@ -21,6 +21,14 @@ documenting cross-cutting shifts that affect contributors and consumers.
   proven against quickchr's own `examples/mndp/` guinea-pig run. The same bridge
   (frame-injection write-back) is the L2 harness mac-telnet will reuse.
 
+### Fixed
+
+- **`discover` default listen window is now `15s`** (was `60s` in code).
+  Lowering the window relied on the up-front refresh broadcast (sent immediately,
+  then every 5s) so responders reply within a round-trip; the per-command docs
+  already documented `15s`, but `DISCOVER_DEFAULT_TIMEOUT_MS`, the CLI help, and
+  the MCP `centrs_discover` tool description still said `60s`. They now agree.
+
 ### Changed
 
 - **Workflow restructure.** Replaced `docs/specs/`, `docs/WORKFLOW.md`,

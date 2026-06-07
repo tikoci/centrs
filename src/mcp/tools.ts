@@ -577,7 +577,7 @@ export const discoverInputShape = {
 	timeout: z
 		.union([z.string(), z.number()])
 		.optional()
-		.describe("MNDP listen window (ms or duration string). Defaults to 60s."),
+		.describe("MNDP listen window (ms or duration string). Defaults to 15s."),
 	port: z
 		.number()
 		.int()

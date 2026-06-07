@@ -42,14 +42,14 @@ import { renderCommentKvToken } from "./resolver/comment-kv.ts";
 export { MNDP_PORT, MndpCache };
 
 /** Default listen window when `--timeout` is omitted. */
-export const DISCOVER_DEFAULT_TIMEOUT_MS = 60_000;
+export const DISCOVER_DEFAULT_TIMEOUT_MS = 15_000;
 /** Default refresh-broadcast cadence inside the listen window. */
 export const DISCOVER_DEFAULT_REFRESH_INTERVAL_MS = 5_000;
 /** Default CDB group assigned to saved neighbors. */
 export const DISCOVER_DEFAULT_GROUP = "discovered";
 
 export interface ListenMndpOptions {
-	/** Listen window in ms before the listener resolves. Default 60000. */
+	/** Listen window in ms before the listener resolves. Default 15000. */
 	timeoutMs?: number;
 	/** UDP port to bind. Default 5678; pass `0` for an ephemeral test port. */
 	port?: number;
@@ -528,7 +528,7 @@ export async function saveDiscoveredNeighbors(
 }
 
 export interface DiscoverOptions {
-	/** Listen window in ms. Default 60000. */
+	/** Listen window in ms. Default 15000. */
 	timeoutMs?: number;
 	/** UDP port. Default 5678; `0` for an ephemeral test port. */
 	port?: number;

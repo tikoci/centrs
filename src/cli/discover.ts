@@ -22,14 +22,14 @@ import {
 
 export const discoverCommand: CliCommandMetadata = {
 	name: "discover",
-	usage: "centrs discover [--timeout 60s] [--save] [flags]",
+	usage: "centrs discover [--timeout 15s] [--save] [flags]",
 	summary:
 		"Discover RouterOS neighbors over MNDP and optionally save them into the CDB.",
 	options: [
 		{
 			flag: "--timeout",
-			valueName: "<ms|60s>",
-			description: "Listen window before results are returned. Default 60s.",
+			valueName: "<ms|15s>",
+			description: "Listen window before results are returned. Default 15s.",
 		},
 		{
 			flag: "--save",
