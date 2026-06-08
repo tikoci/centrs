@@ -119,17 +119,30 @@ glue, not new protocol code:
   `test/unit/native-api.test.ts`, `test/integration/native-api.test.ts`
   (transport), and `test/integration/native-api-retrieve.test.ts` (command),
   all green via `bun run test:integration`.
-- **mac-telnet** (`src/protocols/mac-telnet.ts`): packet/control codec
-  (direction-aware header, control blocks, little-endian terminal dims), MD5
-  password auth, and the session state machine (start → auth → ready → data),
-  with MTWEI/EC-SRP detected and rejected as unsupported. Covered by
-  `test/unit/mac-telnet.test.ts` against a scripted peer. Real-router L2
-  validation uses quickchr's `socket-connect` host-side L2 capture (see
-  `commands/discover/README.md`, L2 validation policy). That harness is now
-  wired and proven: the `discover / mndp` integration test boots the
-  `socket-connect` NIC and `test/integration/mndp-l2-bridge.ts` already performs
-  the frame-injection write-back MAC-Telnet needs, so mac-telnet's remaining
-  work is command wiring over that bridge, not proving the L2 path.
+- **mac-telnet** (`src/protocols/mac-telnet.ts` + `src/protocols/mtwei.ts`):
+  packet/control codec (direction-aware header, control blocks, little-endian
+  terminal dims), the session state machine (start → auth → ready → data), and
+  **both** auth methods — classic MD5 *and* MTWEI (EC-SRP over a custom
+  Curve25519-in-Weierstrass form, `mtwei.ts`). The transport base is **validated
+  over real L2 against stock CHR 7.23** (`test/integration/mac-telnet.test.ts`,
+  quickchr `socket-connect` host-side L2 capture via `mactelnet-l2-bridge.ts`):
+  the MTWEI login completes end to end (proof accepted, console session opens,
+  data flows both ways), and classic MD5 is refused by the device → mapped to
+  `transport/auth-failed`. Unit coverage: `test/unit/mtwei.test.ts` (EC-SRP math,
+  incl. order·G = ∞ and a node-crypto identity-hash oracle; the engine is
+  byte-identical to the `mtwei.c` / WinBox EC-SRP5 references) and
+  `test/unit/mac-telnet.test.ts` (handshake + MTWEI offer + auth-failure
+  detection against a scripted peer). **Key findings (folded into the command
+  specs):** (1) current RouterOS *requires* MTWEI — it offers a 16-byte MD5 salt
+  to a classic client but rejects the MD5 proof for valid credentials, so the
+  client offers MTWEI by default; (2) `END_AUTH` does **not** mean success — a
+  failed login also sends `END_AUTH`, then a "Login failed" message + `END`, so
+  success is confirmed only when real terminal output arrives. **Remaining
+  (Phase 1, command wiring):** the RouterOS console opens with a
+  terminal-identification query and a readline prompt, so `execute`/`terminal`
+  over mac-telnet need terminal-query handling + echo/prompt parsing to capture
+  clean command output. The transport, auth, and bidirectional data path are
+  proven; the command cells stay `not-started` until that glue lands.
 
 ### Frontend surfaces (orthogonal to the command grid)
 

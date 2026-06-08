@@ -48,18 +48,37 @@ Decided (2026-06-06): terminal/mac-telnet uses the same `@tikoci/quickchr`
 host-side L2 capture path as execute/mac-telnet — a host TCP server with the CHR
 on a `socket-connect` NIC (QEMU streams guest frames length-prefixed; a frame
 written back injects L2). Loopback-only, cross-platform, no root. Prefer
-`socket-connect` over `socket-mcast` (macOS-broken — `SO_REUSEPORT`). Until that
-harness is wired, terminal/mac-telnet stays protocol-layer validated and the cell
-does not advance to `CHR-passed`. See `commands/execute/README.md` (mac-telnet L2
-validation) and quickchr `docs/mndp.md`.
+`socket-connect` over `socket-mcast` (macOS-broken — `SO_REUSEPORT`). That
+harness is now wired and the **transport base is proven over real L2 against
+stock CHR 7.23** (`test/integration/mac-telnet.test.ts`): the MTWEI (EC-SRP)
+login completes, the console session opens, and data flows both ways. See
+`commands/execute/README.md` (mac-telnet L2 validation) for the auth findings
+(MTWEI required, MD5 refused, `END_AUTH` ≠ success).
 
-The unresolved-MAC default remains load-bearing for tests: a MAC target chooses
+The unresolved-MAC default remains load-bearing: a MAC target chooses
 mac-telnet for terminal unless an IP-level resolution path is explicitly
-requested. Until real L2 exists, cover that default with resolver/selection tests
-and keep packet/session coverage in `test/unit/mac-telnet.test.ts`.
+requested. Covered with resolver/selection tests plus packet/session coverage in
+`test/unit/mac-telnet.test.ts` and EC-SRP coverage in `test/unit/mtwei.test.ts`.
+
+## Interactive-console work (advances terminal/mac-telnet to CHR-passed)
+
+The protocol is proven; the interactive *console* is the remaining
+terminal-layer work. On login the RouterOS console emits a
+terminal-identification query (e.g. `ESC Z`) and renders a readline prompt with
+keystroke echo, so a usable `terminal` must answer terminal queries, track the
+prompt, and surface clean I/O. Two protocol facts to honor:
+
+- **MTWEI does not encrypt the terminal stream** — treat it as management-plane
+  traffic on a trusted L2 segment.
+- **Idle keepalive:** the reference client sends an empty ACK after ~10s idle and
+  the server times out a session after ~15s of silence, so an interactive
+  session needs a keepalive timer (`MacTelnetSession` is currently reactive only,
+  with no retransmit/keepalive timer — fine for a quick exchange, needed for a
+  held-open terminal).
 
 ## Open questions
 
 - How to surface keystroke recording / replay for tests.
 
-Defer until at least one transport beyond REST is implemented.
+Defer the interactive console until terminal/ssh or execute/mac-telnet wiring
+begins; the transport, auth, and data path are already grounded.

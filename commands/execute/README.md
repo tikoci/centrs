@@ -112,17 +112,33 @@ separate user-mode NIC with hostfwd. Prefer `socket-connect` over `socket-mcast`
 macOS needs `SO_REUSEPORT`; mcast works on Linux/CI). Grounding: quickchr
 `docs/mndp.md`, `examples/mndp/`, `test/lab/mndp/REPORT.md`.
 
-Until that harness is wired, mac-telnet stays validated at the protocol layer
-(`test/unit/mac-telnet.test.ts` against a scripted peer) and the cell does not
-advance to `CHR-passed`.
+That harness is now wired (`test/integration/mac-telnet.test.ts` +
+`mactelnet-l2-bridge.ts`) and the **transport base is proven over real L2
+against stock CHR 7.23**. Findings that shape the command wiring:
+
+- **MTWEI is required; classic MD5 is dead on current RouterOS.** A stock 7.23
+  device offers a 16-byte MD5 salt to a classic client but **rejects the MD5
+  proof for credentials it accepts over REST/native-API**. centrs therefore
+  advertises MTWEI (EC-SRP, `src/protocols/mtwei.ts`) by default and computes the
+  32-byte proof from the 49-byte salt; MD5 remains only as a fallback for legacy
+  gear that still honors it. The MTWEI login completes end to end on real CHR.
+- **`END_AUTH` ≠ success.** A failed login also emits `END_AUTH`, then a
+  "Login failed" message and `END`. centrs confirms success only when real
+  terminal output arrives, and maps the failure to `transport/auth-failed`.
+- **Interactive console handling is the remaining command-layer work.** After
+  login the RouterOS console sends a terminal-identification query and renders a
+  readline prompt, so capturing clean `execute` output over mac-telnet needs
+  terminal-query handling + echo/prompt parsing. The transport/auth/data path is
+  validated; this glue is what advances `execute / mac-telnet` toward
+  `CHR-passed`.
 
 The executable contract still must cover protocol-selection behavior: when the
 `execute` target is an unresolved MAC address, auto-selection chooses
 mac-telnet; callers that want IP-level execution must explicitly opt into ARP
-resolution before protocol selection. Until the L2 harness exists, that behavior
-is covered with resolver/protocol-selection tests plus
-`test/unit/mac-telnet.test.ts` against a scripted peer, not by advancing the
-matrix cell to `CHR-passed`.
+resolution before protocol selection. That behavior is covered with
+resolver/protocol-selection tests plus `test/unit/mac-telnet.test.ts` /
+`test/unit/mtwei.test.ts`; the `execute / mac-telnet` matrix cell advances to
+`CHR-passed` once the command wiring + console handling land.
 
 ## Open shape questions
 
