@@ -17,6 +17,7 @@ import {
 	parseControlBlocks,
 	parseMac,
 } from "../../src/protocols/mac-telnet.ts";
+import { mtweiKeygen } from "../../src/protocols/mtwei.ts";
 
 function hex(bytes: Uint8Array): string {
 	return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -283,6 +284,7 @@ describe("mac-telnet session handshake", () => {
 			username: "admin",
 			password: "secret",
 			sessionKey: 0x1234,
+			offerMtwei: false, // classic flow: BEGINAUTH only → 16-byte MD5 salt
 			onReady: () => events.push("ready"),
 			onData: (bytes) => output.push(bytes),
 			onClose: (error) => events.push(error ? `close:${error.code}` : "close"),
@@ -370,7 +372,7 @@ describe("mac-telnet session handshake", () => {
 		expect(decoded.counter).toBe(25);
 	});
 
-	test("becomes ready on END_AUTH", () => {
+	test("becomes ready only on terminal output after END_AUTH (not on END_AUTH)", () => {
 		const { session, events, output } = setup();
 		session.start();
 		session.handlePacket(serverPacket(MacTelnetPacketType.ack, 0x1234, 0));
@@ -391,8 +393,9 @@ describe("mac-telnet session handshake", () => {
 				encodeControlBlock(MacTelnetControlType.endAuth),
 			),
 		);
-		expect(events).toContain("ready");
-		// terminal output flows through after ready
+		// END_AUTH alone is not success — a failed login also sends END_AUTH.
+		expect(events).not.toContain("ready");
+		// The first real terminal output confirms the login and flows through.
 		session.handlePacket(
 			serverPacket(
 				MacTelnetPacketType.data,
@@ -401,12 +404,13 @@ describe("mac-telnet session handshake", () => {
 				new TextEncoder().encode("[admin@router] > "),
 			),
 		);
+		expect(events).toContain("ready");
 		expect(output).toHaveLength(1);
 		expect(new TextDecoder().decode(output[0])).toBe("[admin@router] > ");
 	});
 
-	test("rejects unsupported MTWEI auth (non-16-byte salt)", () => {
-		const { session, events } = setup();
+	test("rejects a 49-byte (MTWEI) salt when MTWEI was not offered", () => {
+		const { session, events } = setup(); // offerMtwei: false → no client key
 		session.start();
 		session.handlePacket(serverPacket(MacTelnetPacketType.ack, 0x1234, 0));
 		const ecSalt = new Uint8Array(49).fill(7);
@@ -524,6 +528,7 @@ describe("mac-telnet session terminal + lifecycle", () => {
 			username: "admin",
 			password: "secret",
 			sessionKey: 0x1234,
+			offerMtwei: false,
 			onData: (bytes) => output.push(bytes),
 		});
 		session.start();
@@ -547,6 +552,16 @@ describe("mac-telnet session terminal + lifecycle", () => {
 				encodeControlBlock(MacTelnetControlType.endAuth),
 			),
 		);
+		// END_AUTH only begins terminal mode; the first output confirms readiness.
+		session.handlePacket(
+			serverPacket(
+				MacTelnetPacketType.data,
+				0x1234,
+				34,
+				new TextEncoder().encode("> "),
+			),
+		);
+		output.length = 0;
 		transport.clear();
 		return { transport, session, output };
 	}
@@ -557,7 +572,7 @@ describe("mac-telnet session terminal + lifecycle", () => {
 			serverPacket(
 				MacTelnetPacketType.data,
 				0x1234,
-				34,
+				50,
 				new TextEncoder().encode("hello"),
 			),
 		);
@@ -570,7 +585,7 @@ describe("mac-telnet session terminal + lifecycle", () => {
 		const packet = serverPacket(
 			MacTelnetPacketType.data,
 			0x1234,
-			34,
+			50,
 			new TextEncoder().encode("x"),
 		);
 		session.handlePacket(packet);
@@ -610,5 +625,119 @@ describe("mac-telnet session terminal + lifecycle", () => {
 		session.handlePacket(serverPacket(MacTelnetPacketType.end, 0x1234, 0));
 		expect(transport.lastType()).toBe(MacTelnetPacketType.end);
 		expect(transport.closed).toBe(true);
+	});
+});
+
+describe("mac-telnet MTWEI offer + auth-failure detection", () => {
+	function mtweiSetup() {
+		const transport = new FakeMacTelnetTransport();
+		const events: string[] = [];
+		const output: Uint8Array[] = [];
+		const session = new MacTelnetSession({
+			sink: transport,
+			sourceMac: CLIENT_MAC,
+			destinationMac: SERVER_MAC,
+			username: "admin",
+			password: "secret",
+			sessionKey: 0x1234,
+			// offerMtwei defaults to true (the modern default)
+			onReady: () => events.push("ready"),
+			onData: (bytes) => output.push(bytes),
+			onClose: (error) => events.push(error ? `close:${error.code}` : "close"),
+		});
+		return { transport, session, events, output };
+	}
+
+	function driveToAuthComplete(session: MacTelnetSession): void {
+		session.start();
+		session.handlePacket(serverPacket(MacTelnetPacketType.ack, 0x1234, 0));
+		// A 16-byte salt drives MD5; the post-END_AUTH failure handling is the
+		// same regardless of auth mode.
+		session.handlePacket(
+			serverPacket(
+				MacTelnetPacketType.data,
+				0x1234,
+				0,
+				encodeControlBlock(
+					MacTelnetControlType.passwordSalt,
+					new Uint8Array(16).fill(1),
+				),
+			),
+		);
+		session.handlePacket(
+			serverPacket(
+				MacTelnetPacketType.data,
+				0x1234,
+				25,
+				encodeControlBlock(MacTelnetControlType.endAuth),
+			),
+		);
+	}
+
+	test("BEGINAUTH advertises an MTWEI offer (username + 0x00 + 33-byte pubkey)", () => {
+		const { transport, session } = mtweiSetup();
+		session.start();
+		transport.clear();
+		session.handlePacket(serverPacket(MacTelnetPacketType.ack, 0x1234, 0));
+		const blocks = parseControlBlocks(
+			transport.last().subarray(MAC_TELNET_HEADER_LEN),
+		);
+		expect(blocks[0]?.type).toBe(MacTelnetControlType.beginAuth);
+		expect(blocks[1]?.type).toBe(MacTelnetControlType.passwordSalt);
+		expect(blocks[1]?.value.length).toBe("admin".length + 1 + 33);
+		expect(blocks[1]?.value[5]).toBe(0); // NUL after "admin"
+	});
+
+	test("a 49-byte PASSSALT yields a 32-byte EC-SRP proof (not a 17-byte MD5 hash)", () => {
+		const { transport, session } = mtweiSetup();
+		session.start();
+		session.handlePacket(serverPacket(MacTelnetPacketType.ack, 0x1234, 0));
+		const server = mtweiKeygen(new Uint8Array(32).fill(9));
+		const salt49 = new Uint8Array(49);
+		salt49.set(server.publicKey, 0);
+		salt49.set(new Uint8Array(16).fill(0x5a), 33);
+		transport.clear();
+		session.handlePacket(
+			serverPacket(
+				MacTelnetPacketType.data,
+				0x1234,
+				0,
+				encodeControlBlock(MacTelnetControlType.passwordSalt, salt49),
+			),
+		);
+		const dataPacket = transport.sent.find(
+			(p) => p[1] === MacTelnetPacketType.data,
+		) as Uint8Array;
+		const blocks = parseControlBlocks(
+			dataPacket.subarray(MAC_TELNET_HEADER_LEN),
+		);
+		expect(blocks[0]?.type).toBe(MacTelnetControlType.password);
+		expect(blocks[0]?.value.length).toBe(32);
+	});
+
+	test("a 'Login failed' message after END_AUTH → transport/auth-failed (not ready)", () => {
+		const { session, events } = mtweiSetup();
+		driveToAuthComplete(session);
+		expect(events).not.toContain("ready");
+		session.handlePacket(
+			serverPacket(
+				MacTelnetPacketType.data,
+				0x1234,
+				34,
+				new TextEncoder().encode(
+					"Login failed, incorrect username or password\r\n",
+				),
+			),
+		);
+		expect(events).toContain("close:transport/auth-failed");
+		expect(events).not.toContain("ready");
+	});
+
+	test("END right after END_AUTH (no prompt) → transport/auth-failed", () => {
+		const { session, events } = mtweiSetup();
+		driveToAuthComplete(session);
+		session.handlePacket(serverPacket(MacTelnetPacketType.end, 0x1234, 0));
+		expect(events).toContain("close:transport/auth-failed");
+		expect(events).not.toContain("ready");
 	});
 });

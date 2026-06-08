@@ -106,4 +106,5 @@ export function protocolsWithCapability(
 
 export * from "./adapter.ts";
 export * from "./mac-telnet.ts";
+export * from "./mtwei.ts";
 export * from "./native-api.ts";

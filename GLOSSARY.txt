@@ -294,3 +294,22 @@ underflows
 
 # Werror: the gcc/clang -Werror "treat warnings as errors" flag, referenced by execute --strict.
 Werror
+
+# MTWEI / EC-SRP vocabulary (src/protocols/mtwei.ts, mac-telnet auth)
+# docrypto: mtwei.c's client EC-SRP proof function (mtwei_docrypto), ported to TS.
+docrypto
+# redp: REDP1 (IEEE P1363.2) random-point derivation used in the MTWEI tangle.
+redp
+keypair
+# mul: camelCase fragment from scalarMul (EC scalar multiplication).
+mul
+# weier: camelCase fragment from xWeier (a Weierstrass-form X coordinate).
+weier
+# LSB: least-significant bit (Y-parity in compressed EC point encoding).
+lsb
+# NUL: the 0x00 byte separating username and pubkey in the MTWEI offer.
+nul
+# keepalive: empty-ACK idle keepalive for a held-open MAC-Telnet session.
+keepalive
+# eths: local var for the /interface/ethernet record list in the CHR test.
+eths

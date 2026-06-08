@@ -12,14 +12,25 @@
  * own 6+6 byte source/destination MAC addressing inside every packet header
  * (independent of the outer L2/UDP delivery).
  *
- * Only the classic MD5 auth path is implemented here. The newer MTWEI
- * (EC-SRP) handshake is detected and reported as unsupported rather than
- * mishandled. L2-in-CI is an open question in `docs/MATRIX.md`; correctness
- * here is anchored by scripted-peer unit tests.
+ * Both auth modes are supported. The session offers MTWEI (EC-SRP, the modern
+ * default — see `mtwei.ts`) in its BEGINAUTH and computes the 32-byte proof when
+ * the device replies with a 49-byte PASSSALT; it falls back to classic MD5 when
+ * the device offers a 16-byte salt (legacy gear). Verified on CHR 7.23: stock
+ * RouterOS rejects MD5 and requires MTWEI. END_AUTH alone does not mean success
+ * — a failed login also sends END_AUTH, then a "Login failed" message + END — so
+ * success is confirmed only when real terminal output arrives.
  */
 
 import { createHash, randomInt } from "node:crypto";
 import { CentrsError } from "../errors.ts";
+import {
+	MTWEI_PUBKEY_LEN,
+	type MtweiKeypair,
+	mtweiDocrypto,
+	mtweiId,
+	mtweiKeygen,
+	mtweiOfferValue,
+} from "./mtwei.ts";
 
 /** UDP port MAC-Telnet listens on. */
 export const MAC_TELNET_PORT = 20561;
@@ -310,6 +321,12 @@ export interface MacTelnetSessionOptions {
 	terminalType?: string;
 	terminalWidth?: number;
 	terminalHeight?: number;
+	/**
+	 * Offer MTWEI (EC-SRP) in BEGINAUTH. Default `true` — required by current
+	 * RouterOS. Set `false` to force the legacy classic flow (BEGINAUTH only),
+	 * which yields an MD5 salt on devices that still allow it.
+	 */
+	offerMtwei?: boolean;
 	/** Called with terminal output bytes. */
 	onData?: (bytes: Uint8Array) => void;
 	/** Called once the auth handshake completes and the terminal is ready. */
@@ -323,6 +340,7 @@ type SessionState =
 	| "session-start-sent"
 	| "auth-begin-sent"
 	| "auth-sent"
+	| "auth-complete"
 	| "ready"
 	| "closed";
 
@@ -339,6 +357,7 @@ export class MacTelnetSession {
 	private state: SessionState = "init";
 	private outCounter = 0;
 	private lastInCounter: number | null = null;
+	private mtweiKeypair: MtweiKeypair | undefined;
 
 	constructor(options: MacTelnetSessionOptions) {
 		this.options = options;
@@ -439,10 +458,31 @@ export class MacTelnetSession {
 	}
 
 	private onAck(): void {
-		if (this.state === "session-start-sent") {
-			this.sendData([encodeControlBlock(MacTelnetControlType.beginAuth)]);
-			this.state = "auth-begin-sent";
+		if (this.state !== "session-start-sent") {
+			return;
 		}
+		const blocks: Uint8Array[] = [
+			encodeControlBlock(MacTelnetControlType.beginAuth),
+		];
+		if (this.options.offerMtwei !== false) {
+			// Advertise MTWEI: the device replies with a 49-byte PASSSALT and
+			// expects the EC-SRP proof. Without this, current RouterOS only offers
+			// MD5, which it then refuses.
+			this.mtweiKeypair = mtweiKeygen();
+			blocks.push(
+				encodeControlBlock(
+					MacTelnetControlType.passwordSalt,
+					mtweiOfferValue(this.identityUsername(), this.mtweiKeypair.publicKey),
+				),
+			);
+		}
+		this.sendData(blocks);
+		this.state = "auth-begin-sent";
+	}
+
+	/** Login name with any `+console-parameter` suffix stripped (for the SRP id). */
+	private identityUsername(): string {
+		return this.options.username.split("+", 1)[0] ?? this.options.username;
 	}
 
 	private onData(header: MacTelnetHeader, bytes: Uint8Array): void {
@@ -474,14 +514,14 @@ export class MacTelnetSession {
 				return;
 			case MacTelnetControlType.endAuth:
 				if (this.state === "auth-sent") {
-					this.state = "ready";
-					this.options.onReady?.();
+					// END_AUTH begins terminal mode but does NOT confirm success: a
+					// failed login also sends END_AUTH, then a "Login failed" message
+					// and END. Defer onReady until real terminal output arrives.
+					this.state = "auth-complete";
 				}
 				return;
 			case "plaindata":
-				if (this.state === "ready" && block.value.length > 0) {
-					this.options.onData?.(block.value);
-				}
+				this.handleTerminalData(block.value);
 				return;
 			case MacTelnetControlType.packetError:
 				this.fail(
@@ -498,23 +538,85 @@ export class MacTelnetSession {
 		}
 	}
 
+	/**
+	 * Terminal-stream bytes (PLAINDATA). In `auth-complete` the first content
+	 * decides the login outcome: a "Login failed" message means the device
+	 * rejected the credentials; anything else means success → fire onReady and
+	 * deliver. Once `ready`, all content flows to onData.
+	 */
+	private handleTerminalData(data: Uint8Array): void {
+		if (this.state === "auth-complete") {
+			if (/login failed/i.test(new TextDecoder().decode(data))) {
+				this.fail(
+					new CentrsError({
+						code: "transport/auth-failed",
+						summary: "MAC-Telnet login failed: incorrect username or password.",
+						remediation: "Check the credentials configured for this device.",
+					}),
+				);
+				return;
+			}
+			this.state = "ready";
+			this.options.onReady?.();
+			if (data.length > 0) {
+				this.options.onData?.(data);
+			}
+			return;
+		}
+		if (this.state === "ready" && data.length > 0) {
+			this.options.onData?.(data);
+		}
+	}
+
 	private handlePasswordSalt(salt: Uint8Array): void {
 		if (this.state !== "auth-begin-sent") {
 			return;
 		}
-		if (salt.length !== 16) {
+
+		let passwordValue: Uint8Array;
+		if (salt.length === 16) {
+			// Classic MD5 — legacy devices, or the fallback when MTWEI was not
+			// offered. Current RouterOS offers this salt but refuses the proof.
+			passwordValue = macTelnetPasswordHash(this.options.password, salt);
+		} else if (salt.length === MTWEI_PUBKEY_LEN + 16) {
+			// MTWEI: 33-byte server public key ‖ 16-byte salt → 32-byte EC-SRP proof.
+			if (!this.mtweiKeypair) {
+				this.fail(
+					new CentrsError({
+						code: "routeros/mac-telnet-unsupported-auth",
+						summary:
+							"The device requires MTWEI but this session did not offer it.",
+						remediation:
+							"Leave MTWEI enabled (the default) so the client advertises a public key.",
+					}),
+				);
+				return;
+			}
+			const serverKey = salt.subarray(0, MTWEI_PUBKEY_LEN);
+			const mtweiSalt = salt.subarray(MTWEI_PUBKEY_LEN);
+			const validator = mtweiId(
+				this.identityUsername(),
+				this.options.password,
+				mtweiSalt,
+			);
+			passwordValue = mtweiDocrypto(
+				this.mtweiKeypair.privateKey,
+				serverKey,
+				this.mtweiKeypair.publicKey,
+				validator,
+			);
+		} else {
 			this.fail(
 				new CentrsError({
 					code: "routeros/mac-telnet-unsupported-auth",
-					summary: `The device requested an unsupported MAC-Telnet auth mode (salt length ${salt.length}).`,
+					summary: `The device offered an unsupported MAC-Telnet salt length (${salt.length}).`,
 					remediation:
-						"This device requires MTWEI (EC-SRP) auth, which centrs does not yet implement; use ssh or the API instead.",
+						"Expected 16 (MD5) or 49 (MTWEI); confirm the device and RouterOS version.",
 				}),
 			);
 			return;
 		}
 
-		const passwordValue = macTelnetPasswordHash(this.options.password, salt);
 		const username = new TextEncoder().encode(this.options.username);
 		const terminalType = new TextEncoder().encode(
 			this.options.terminalType ?? "vt102",
@@ -537,7 +639,7 @@ export class MacTelnetSession {
 	}
 
 	private onEnd(header: MacTelnetHeader): void {
-		// Echo END to acknowledge, then close.
+		// Echo END to acknowledge.
 		this.options.sink.send(
 			encodeHeader({
 				type: MacTelnetPacketType.end,
@@ -547,6 +649,18 @@ export class MacTelnetSession {
 				counter: 0,
 			}),
 		);
+		if (this.state === "auth-complete") {
+			// Closed right after END_AUTH without any prompt → the login failed.
+			this.fail(
+				new CentrsError({
+					code: "transport/auth-failed",
+					summary:
+						"MAC-Telnet login failed: the device closed the session after authentication.",
+					remediation: "Check the credentials configured for this device.",
+				}),
+			);
+			return;
+		}
 		this.close();
 	}
 
