@@ -16,6 +16,7 @@
 
 import { CentrsError } from "../errors.ts";
 import type { RouterOsProtocol } from "../protocols/index.ts";
+import { MAC_TELNET_PORT } from "../protocols/mac-telnet.ts";
 import {
 	NATIVE_API_PORT,
 	NATIVE_API_TLS_PORT,
@@ -52,6 +53,8 @@ export interface ResolvedTarget {
 	/** TLS transport (native-api over api-ssl). REST uses the URL scheme. */
 	tls: boolean;
 	baseUrl: string;
+	/** Target MAC, set for L2 transports (mac-telnet) that address by MAC. */
+	mac?: string;
 	/** Human-facing device handle (CDB `identity=`, else target), if resolved. */
 	identity?: string;
 	recordIndex?: number;
@@ -99,6 +102,89 @@ export function resolveTarget(
 
 	const rawCandidate = hostSetting.value.trim();
 	const macCandidate = normalizeMac(rawCandidate);
+
+	// L2 transports (mac-telnet) address the device by **MAC** directly — no IP
+	// resolution. The MAC is the device identity (from the positional / CDB
+	// target); the `host`/`port` are the *delivery* endpoint of the UDP/20561
+	// datagrams (default L2 broadcast, overridable with `--host`/`--port` — the
+	// integration harness points them at its loopback L2 bridge).
+	if (via === "mac-telnet") {
+		// The device MAC: an explicit MAC positional wins; otherwise the matched
+		// CDB record's MAC (the `mac=` lookup key, or a MAC `target`) — so a device
+		// resolved by identity=/ip= is still reachable over L2.
+		const mac =
+			normalizeMac(input.targetInput ?? "") ??
+			cdb?.mac ??
+			normalizeMac(cdb?.target ?? "");
+		if (!mac) {
+			throw new CentrsError({
+				code: "target/mac-required",
+				summary: `mac-telnet needs a MAC address target; got "${input.targetInput ?? cdb?.target ?? rawCandidate}".`,
+				remediation:
+					"Pass the device MAC (aa:bb:cc:dd:ee:ff), or pin an IP transport with `--via native-api`/`rest-api` (add `--resolve arp` for a MAC).",
+				context: {
+					target: input.targetInput ?? cdb?.target ?? rawCandidate,
+					via,
+				},
+			});
+		}
+		const deliveryHostSetting = resolveStringSetting(
+			input.host,
+			env,
+			ENV_HOST,
+			undefined,
+			"host",
+		);
+		const macPortSetting = resolveOptionalIntegerSetting(
+			input.port,
+			env,
+			ENV_PORT,
+			"port",
+			cdb?.overrides.port,
+		);
+		// The device identity is the MAC (positional or CDB), NOT --host/CENTRS_HOST,
+		// which are only the UDP delivery endpoint. Attribute meta.target.source to
+		// where the MAC came from so an overridden delivery host does not masquerade
+		// as the identity.
+		const macSource: ResolverSettingSource = normalizeMac(
+			input.targetInput ?? "",
+		)
+			? { kind: "target-input", key: input.targetInput as string }
+			: cdb
+				? { kind: "cdb", key: `record:${cdb.recordIndex}` }
+				: hostSetting.source;
+		// Delivery host/port provenance is independent of the identity.
+		const deliverySource: ResolverSettingSource =
+			deliveryHostSetting?.source ?? {
+				kind: "default",
+				key: "l2-broadcast",
+			};
+		const portSource: ResolverSettingSource = macPortSetting?.source ?? {
+			kind: "default",
+			key: "mac-telnet",
+		};
+		const deliveryHost = deliveryHostSetting?.value.trim() || "255.255.255.255";
+		const port = macPortSetting?.value ?? MAC_TELNET_PORT;
+		return {
+			input: input.targetInput,
+			host: deliveryHost,
+			mac,
+			port,
+			scheme: "http",
+			tls: false,
+			baseUrl: `mac-telnet://${mac}`,
+			identity: cdb?.identity,
+			recordIndex: cdb?.recordIndex,
+			source: macSource,
+			hostSource: deliverySource,
+			portSource,
+			sources: {
+				host: deliverySource,
+				port: portSource,
+			},
+		};
+	}
+
 	let candidate = rawCandidate;
 	let arpResolvedMac: string | undefined;
 	if (macCandidate) {

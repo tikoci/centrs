@@ -4,11 +4,11 @@ Run a RouterOS CLI command and return its (semi-structured) output. `execute`
 is the single read/write surface for RouterOS add/set/remove and other
 CLI-shaped commands — there is no separate `update` command.
 
-Status: `rest-api` and `native-api` are `CHR-passed` (see `docs/MATRIX.md` and
-`commands/execute/examples.md`, examples 1–11 over REST and 12–18 over the
-native API, green via `bun run test:integration`). `ssh`, `mac-telnet`,
-`romon`, and `winbox-terminal` remain `not-started`. SNMP is retrieve-only and
-rejects `execute`.
+Status: `rest-api`, `native-api`, and `mac-telnet` are `CHR-passed` (see
+`docs/MATRIX.md` and `commands/execute/examples.md`, examples 1–11 over REST,
+12–18 over the native API, and 19–21 over mac-telnet, green via
+`bun run test:integration`). `ssh`, `romon`, and `winbox-terminal` remain
+`not-started`. SNMP is retrieve-only and rejects `execute`.
 
 ## Intent
 
@@ -65,14 +65,14 @@ rejects `execute`.
 
 | Flag                            | Behavior                                                                              |
 | ------------------------------- | ------------------------------------------------------------------------------------- |
-| `--via <protocol>`              | Pin the transport (`native-api` or `rest-api`). No silent downgrade.                   |
+| `--via <protocol>`              | Pin the transport (`native-api`, `rest-api`, or `mac-telnet`). No silent downgrade. A bare MAC target defaults to `mac-telnet`. |
 | `--host <host\|url>`            | Override the resolved host or base URL for the target.                                 |
 | `--port <n>`                    | Override the resolved management port.                                                 |
 | `--username` / `--password`     | RouterOS credentials; fall back to `CENTRS_USERNAME` / `CENTRS_PASSWORD`.              |
 | `--cdb-file` / `--cdb-password` | Read target credentials from (and decrypt) a WinBox CDB file.                          |
 | `--resolve <none\|arp>`         | Resolve a MAC-address target to an IP via the host ARP cache. Default `none`.          |
 | `--timeout <duration>`          | Per-request timeout. REST: ≤ 60s; other transports may allow longer.                  |
-| `--validate[=false]`            | Run the `:parse` + `/console/inspect` gate before execution (default `true`).          |
+| `--validate[=false]`            | Run transport-appropriate preflight validation before execution (default `true`): REST/native use `:parse` + `/console/inspect`; mac-telnet uses a single console `:parse` (covers syntax + unknown-attribute). |
 | `--strict`                      | Treat any warning on a successful run as an error (`ok: false`, nonzero exit), like `-Werror`. Default is lenient (`ok: true` + `warnings`). |
 | `--yes`                         | Confirm write-shaped add/set/remove commands in non-interactive runs.                  |
 | `--max-bytes <n>`               | Byte budget for the rendered envelope; excess output is truncated with a warning + `meta.truncated` (not an error), matching `retrieve`. (Renamed from `--max-results`.) |
@@ -112,33 +112,43 @@ separate user-mode NIC with hostfwd. Prefer `socket-connect` over `socket-mcast`
 macOS needs `SO_REUSEPORT`; mcast works on Linux/CI). Grounding: quickchr
 `docs/mndp.md`, `examples/mndp/`, `test/lab/mndp/REPORT.md`.
 
-That harness is now wired (`test/integration/mac-telnet.test.ts` +
-`mactelnet-l2-bridge.ts`) and the **transport base is proven over real L2
-against stock CHR 7.23**. Findings that shape the command wiring:
+`execute / mac-telnet` is now **`CHR-passed`** end to end over real L2 against
+stock CHR 7.23.1 (`test/integration/mac-telnet-console.test.ts` +
+`mactelnet-l2-bridge.ts`, examples 19–21): `executeEnvelope` resolves a MAC
+target, the `MacTelnetAdapter` opens a `MacTelnetConsole` over a UDP datagram
+transport, and reads, writes (REST-verified), and validation-rejects all work.
 
-- **MTWEI is required; classic MD5 is dead on current RouterOS.** A stock 7.23
-  device offers a 16-byte MD5 salt to a classic client but **rejects the MD5
-  proof for credentials it accepts over REST/native-API**. centrs therefore
-  advertises MTWEI (EC-SRP, `src/protocols/mtwei.ts`) by default and computes the
-  32-byte proof from the 49-byte salt; MD5 remains only as a fallback for legacy
-  gear that still honors it. The MTWEI login completes end to end on real CHR.
-- **`END_AUTH` ≠ success.** A failed login also emits `END_AUTH`, then a
-  "Login failed" message and `END`. centrs confirms success only when real
-  terminal output arrives, and maps the failure to `transport/auth-failed`.
-- **Interactive console handling is the remaining command-layer work.** After
-  login the RouterOS console sends a terminal-identification query and renders a
-  readline prompt, so capturing clean `execute` output over mac-telnet needs
-  terminal-query handling + echo/prompt parsing. The transport/auth/data path is
-  validated; this glue is what advances `execute / mac-telnet` toward
-  `CHR-passed`.
+How it is wired:
 
-The executable contract still must cover protocol-selection behavior: when the
-`execute` target is an unresolved MAC address, auto-selection chooses
-mac-telnet; callers that want IP-level execution must explicitly opt into ARP
-resolution before protocol selection. That behavior is covered with
-resolver/protocol-selection tests plus `test/unit/mac-telnet.test.ts` /
-`test/unit/mtwei.test.ts`; the `execute / mac-telnet` matrix cell advances to
-`CHR-passed` once the command wiring + console handling land.
+- **Console transport, not request/response.** mac-telnet drives the RouterOS
+  interactive console (`src/protocols/mac-telnet-console.ts`): it answers the
+  login terminal-size probe, auto-clears the first-login license, syncs on the
+  `[user@identity] >` prompt, emulates the CR/LF screen, and strips the echoed
+  command + trailing prompt to return clean per-command output. The orchestrator
+  runs the **raw CLI line** over the console (no structured path-POST / tagged
+  talk); the `MacTelnetAdapter` reports `retrieve`/`inspect` as
+  `transport/capability-unsupported` (mac-telnet is execute/terminal only).
+- **Validation is one console `:parse`.** Over the console, `:put [:parse "<cmd>"]`
+  prints both `syntax error` and `bad parameter <name>`, so a single gate covers
+  syntax **and** the unknown-attribute (semantic) check — no `/console/inspect`
+  table parsing. Maps to `validation/syntax` / `validation/unknown-attribute`,
+  same codes as REST/native (see `docs/CONSTITUTION.md`, validation).
+- **Auth (grounded):** MTWEI is required; a stock device offers a 16-byte MD5 salt
+  but rejects the MD5 proof, so centrs advertises MTWEI (`src/protocols/mtwei.ts`)
+  by default. `END_AUTH` ≠ success (a failed login emits `END_AUTH` then "Login
+  failed" + `END`) → `transport/auth-failed`.
+- **Console quirks to know:** a successful write **prints no output** (no `.id`,
+  unlike REST/native — `data.ret` is empty on a successful add); and there is a
+  ~10s terminal-negotiation stall on every login (a latency cost, not a
+  correctness issue — see `commands/terminal/README.md` for the optional fix).
+- **Delivery:** the UDP transport sends to `--host`/`--port` (default L2 broadcast
+  `255.255.255.255:20561`); the device replies to our source IP:port, and the
+  in-packet MACs do the addressing. The CHR test points `--host`/`--port` at the
+  loopback L2 bridge.
+
+Protocol selection: an unresolved MAC target auto-selects mac-telnet (covered by
+`test/unit/execute.test.ts`); callers wanting IP-level execution opt into ARP
+(`--resolve arp` + `--via native-api`/`rest-api`).
 
 ## Open shape questions
 

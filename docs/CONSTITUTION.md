@@ -27,14 +27,22 @@ re-validate-server-side. Validation is not optional polish.
   `/console/inspect request=syntax path=...,print` (path joined by commas) and
   attribute inspection. The path syntax (commas, no leading slash, last token
   is the verb) is part of the validator contract.
-- `execute` and other CLI-shaped calls validate in two stages. `:put [:parse
-  "..."]` is a **syntax** gate only: grounded on CHR 7.23, it rejects malformed
-  CLI but accepts unknown attributes and out-of-range values
-  (`:put [:parse "/ip/address/add no-such-arg=x"]` returns no error). Semantic
-  validation — attribute names and value domains — therefore requires
-  `/console/inspect` (as `retrieve` already does) or the server's own
-  re-validation on the write round-trip. Parse alone is necessary, not
-  sufficient; never treat a clean `:parse` as a passed semantic validation.
+- `execute` and other CLI-shaped calls validate with `:put [:parse "..."]` plus
+  a semantic gate. **How `:parse` surfaces an error is transport-specific**
+  (grounded on CHR 7.23.1): `:parse` *does* reject an unknown attribute
+  (`bad parameter <name>`) and malformed CLI (`syntax error`), but over REST that
+  text rides the **HTTP-200 `ret` value** (no error status), and over the
+  **native API** `:put [:parse]` returns an opaque `*NN` handle that reveals
+  nothing at all. centrs's REST/native syntax gate runs `:parse` but does not
+  read the `ret`, so for those transports the unknown-attribute catch comes from
+  the separate **`/console/inspect`** semantic gate (or the server's own
+  write re-validation); the `:parse` round-trip there mainly backstops transport
+  errors and the local quote preflight. Over **mac-telnet** the interactive
+  console *prints* the `:parse` result, so centrs reads it and a single console
+  `:parse` covers both syntax and the unknown-attribute (semantic) gate — no
+  `/console/inspect` table needed. In every case a clean parse is necessary, not
+  sufficient on its own; semantic validation is a distinct, transport-appropriate
+  step (`/console/inspect`, the console `:parse` text, or server re-validation).
 - A failing validator is a real result. Surface it with the structured error
   envelope below — do not bypass.
 

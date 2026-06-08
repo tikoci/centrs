@@ -17,12 +17,14 @@ import {
 export const executeCommand: CliCommandMetadata = {
 	name: "execute",
 	usage: "centrs execute <target> <command> [flags]",
-	summary: "Run a RouterOS read or write command via native API or REST.",
+	summary:
+		"Run a RouterOS read or write command via native API, REST, or mac-telnet.",
 	options: [
 		{
 			flag: "--via",
-			valueName: "<native-api|rest-api>",
-			description: "Pin the protocol selector; no silent downgrade when set.",
+			valueName: "<native-api|rest-api|mac-telnet>",
+			description:
+				"Pin the protocol selector; no silent downgrade when set. A bare MAC target defaults to mac-telnet.",
 		},
 		{
 			flag: "--host",

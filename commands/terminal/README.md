@@ -49,11 +49,13 @@ host-side L2 capture path as execute/mac-telnet — a host TCP server with the C
 on a `socket-connect` NIC (QEMU streams guest frames length-prefixed; a frame
 written back injects L2). Loopback-only, cross-platform, no root. Prefer
 `socket-connect` over `socket-mcast` (macOS-broken — `SO_REUSEPORT`). That
-harness is now wired and the **transport base is proven over real L2 against
-stock CHR 7.23** (`test/integration/mac-telnet.test.ts`): the MTWEI (EC-SRP)
-login completes, the console session opens, and data flows both ways. See
-`commands/execute/README.md` (mac-telnet L2 validation) for the auth findings
-(MTWEI required, MD5 refused, `END_AUTH` ≠ success).
+harness is wired and `execute / mac-telnet` is **`CHR-passed`** over it
+(`test/integration/mac-telnet-console.test.ts`): MTWEI login, the console reader,
+clean command output, writes, and the `:parse` validation gate all work end to
+end. The bridge also relays UDP both ways (`udpPort`), so the production UDP
+transport is exercised, not just the in-process callbacks. See
+`commands/execute/README.md` (mac-telnet L2 validation) for the console wiring and
+auth findings (MTWEI required, MD5 refused, `END_AUTH` ≠ success).
 
 The unresolved-MAC default remains load-bearing: a MAC target chooses
 mac-telnet for terminal unless an IP-level resolution path is explicitly
@@ -62,23 +64,34 @@ requested. Covered with resolver/selection tests plus packet/session coverage in
 
 ## Interactive-console work (advances terminal/mac-telnet to CHR-passed)
 
-The protocol is proven; the interactive *console* is the remaining
-terminal-layer work. On login the RouterOS console emits a
-terminal-identification query (e.g. `ESC Z`) and renders a readline prompt with
-keystroke echo, so a usable `terminal` must answer terminal queries, track the
-prompt, and surface clean I/O. Two protocol facts to honor:
+The console reader landed with `execute / mac-telnet` (`CHR-passed`): it answers
+the login terminal-size probe, auto-clears the first-login license, syncs on the
+prompt, and emulates the CR/LF screen — grounded on CHR 7.23.1 (the login probe
+is actually a multi-step ANSI cursor probe; `ESC[6n` DSR is the operative query,
+answered with `ESC[rows;colsR`). `terminal / mac-telnet` reuses that reader; what
+it adds on top is **interactive relay**, not protocol work:
 
-- **MTWEI does not encrypt the terminal stream** — treat it as management-plane
-  traffic on a trusted L2 segment.
-- **Idle keepalive:** the reference client sends an empty ACK after ~10s idle and
-  the server times out a session after ~15s of silence, so an interactive
-  session needs a keepalive timer (`MacTelnetSession` is currently reactive only,
-  with no retransmit/keepalive timer — fine for a quick exchange, needed for a
-  held-open terminal).
+- **PTY relay**: wire local stdin → `session.sendInput` and console output →
+  stdout in raw mode, instead of the `run(cli)` capture path `execute` uses.
+- **Real terminal size**: report the actual PTY rows/cols to the probe (and on
+  `SIGWINCH`), where `execute` reports an oversized screen to avoid paging/wrap.
+- **Idle keepalive + retransmit (already landed):** `MacTelnetSession.tick(now)`
+  (driven by `MacTelnetConsole` on a ~200ms interval) sends an empty-ACK keepalive
+  after ~8s idle and retransmits the last unacked frame on the reference backoff
+  schedule. So a held-open `terminal` is already kept alive; the relay just needs
+  to keep `tick` running (it does, via the console reader).
+- **~10s prime stall (optional polish):** every mac-telnet login waits ~10s for
+  terminal negotiation before the prompt; answering the DSR sets the width but
+  does not remove the stall. A cursor-tracking emulator (track row/col, answer
+  each `ESC[6n` with the real clamped position) would likely kill it. Latency
+  only — not a blocker.
+
+Protocol facts to honor: **MTWEI does not encrypt the terminal stream** — treat
+it as management-plane traffic on a trusted L2 segment.
 
 ## Open questions
 
 - How to surface keystroke recording / replay for tests.
 
-Defer the interactive console until terminal/ssh or execute/mac-telnet wiring
-begins; the transport, auth, and data path are already grounded.
+The transport, auth, console reader, and data path are all grounded; only the
+interactive-relay layer above remains for terminal/mac-telnet.

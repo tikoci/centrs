@@ -272,6 +272,82 @@ describe("resolver target provenance", () => {
 	});
 });
 
+describe("resolver mac-telnet target", () => {
+	test("uses the CDB record's mac= when the target is an IP/identity", () => {
+		const cdb: CdbResolution = {
+			target: "192.0.2.10",
+			identity: "edge1",
+			mac: "aa:bb:cc:dd:ee:ff",
+			username: "admin",
+			password: "",
+			recordIndex: 3,
+			overrides: {},
+			warnings: [],
+		};
+		const target = resolveTarget(
+			{ targetInput: "edge1" },
+			EMPTY_ENV,
+			"mac-telnet",
+			cdb,
+		);
+		expect(target.mac).toBe("aa:bb:cc:dd:ee:ff");
+		expect(target.baseUrl).toBe("mac-telnet://aa:bb:cc:dd:ee:ff");
+		// host/port are the delivery endpoint (default L2 broadcast / 20561).
+		expect(target.host).toBe("255.255.255.255");
+		expect(target.port).toBe(20561);
+	});
+
+	test("an explicit MAC positional wins over the CDB record's mac=", () => {
+		const cdb: CdbResolution = {
+			target: "192.0.2.10",
+			identity: "edge1",
+			mac: "aa:bb:cc:dd:ee:ff",
+			username: "admin",
+			password: "",
+			recordIndex: 3,
+			overrides: {},
+			warnings: [],
+		};
+		const target = resolveTarget(
+			{ targetInput: "11:22:33:44:55:66" },
+			EMPTY_ENV,
+			"mac-telnet",
+			cdb,
+		);
+		expect(target.mac).toBe("11:22:33:44:55:66");
+	});
+
+	test("a bare MAC positional resolves without a CDB record", () => {
+		const target = resolveTarget(
+			{ targetInput: "AA-BB-CC-DD-EE-FF" },
+			EMPTY_ENV,
+			"mac-telnet",
+		);
+		expect(target.mac).toBe("aa:bb:cc:dd:ee:ff");
+	});
+
+	test("--host/--port override the delivery endpoint, not the MAC", () => {
+		const target = resolveTarget(
+			{ targetInput: "aa:bb:cc:dd:ee:ff", host: "127.0.0.1", port: 40000 },
+			EMPTY_ENV,
+			"mac-telnet",
+		);
+		expect(target.mac).toBe("aa:bb:cc:dd:ee:ff");
+		expect(target.host).toBe("127.0.0.1");
+		expect(target.port).toBe(40000);
+	});
+
+	test("no resolvable MAC errors target/mac-required", () => {
+		let code: string | undefined;
+		try {
+			resolveTarget({ targetInput: "edge1" }, EMPTY_ENV, "mac-telnet");
+		} catch (error) {
+			code = (error as { code?: string }).code;
+		}
+		expect(code).toBe("target/mac-required");
+	});
+});
+
 describe("resolver native-api TLS/port disambiguation", () => {
 	test("https implies api-ssl on the default TLS port", () => {
 		const target = resolveTarget(

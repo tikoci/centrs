@@ -22,6 +22,7 @@
  */
 
 import { createHash, randomInt } from "node:crypto";
+import { createSocket } from "node:dgram";
 import { CentrsError } from "../errors.ts";
 import {
 	MTWEI_PUBKEY_LEN,
@@ -42,6 +43,22 @@ export const MAC_TELNET_CONTROL_HEADER_LEN = 9;
 export const MAC_TELNET_CONTROL_MAGIC = Uint8Array.of(0x56, 0x34, 0x12, 0xff);
 /** Client type identifier sent in every header (`00 15`). */
 export const MAC_TELNET_CLIENT_TYPE = Uint8Array.of(0x00, 0x15);
+
+/**
+ * Retransmission backoff (ms) for an unacknowledged outbound frame, from the
+ * reference `mactelnet` client (`retransmit_intervals`). Up to 9 tries; UDP
+ * gives no delivery guarantee, so the protocol layers ACK-by-byte-counter +
+ * timed retransmission on top. Driven by {@link MacTelnetSession.tick}.
+ */
+export const MAC_TELNET_RETRANSMIT_SCHEDULE_MS: readonly number[] = [
+	15, 20, 30, 50, 90, 170, 330, 660, 1000,
+];
+/**
+ * Idle window before an empty-ACK keepalive is sent. The reference client sends
+ * one after ~10s of inactivity and the server drops a session after ~15s
+ * (`MT_CONNECTION_TIMEOUT`), so keep it under that ceiling.
+ */
+export const MAC_TELNET_KEEPALIVE_IDLE_MS = 8000;
 
 /** MT packet types (`enum mt_ptype`). */
 export const MacTelnetPacketType = {
@@ -308,6 +325,68 @@ export interface MacTelnetDatagramSink {
 	close(): void;
 }
 
+/** A datagram sink that also delivers inbound datagrams to a handler. */
+export interface MacTelnetTransport extends MacTelnetDatagramSink {
+	/** Register the inbound-datagram handler (e.g. wired to a session). */
+	onMessage(handler: (bytes: Uint8Array) => void): void;
+	/** Resolve once the socket is bound and ready to send. */
+	ready(): Promise<void>;
+}
+
+/**
+ * Production datagram transport: a UDP socket that sends each MAC-Telnet packet
+ * to `host:port` and forwards inbound datagrams to the registered handler.
+ *
+ * MAC-Telnet's addressing is in-packet (the 6+6 MACs), so UDP delivery is just
+ * the carrier: the default `host` is the L2 broadcast address (the device claims
+ * the session by matching the in-packet destination MAC and replies to our
+ * source IP:port). The integration harness instead points `host`/`port` at its
+ * loopback L2 bridge, exercising this exact transport.
+ */
+export function createUdpMacTelnetTransport(options: {
+	host: string;
+	port: number;
+	/** Enable `SO_BROADCAST` (needed when `host` is a broadcast address). */
+	broadcast?: boolean;
+}): MacTelnetTransport {
+	const socket = createSocket({ type: "udp4", reuseAddr: true });
+	let handler: ((bytes: Uint8Array) => void) | undefined;
+	socket.on("message", (message: Buffer) => {
+		handler?.(new Uint8Array(message));
+	});
+	const readyPromise = new Promise<void>((resolve, reject) => {
+		socket.once("error", reject);
+		socket.bind(0, () => {
+			if (options.broadcast) {
+				try {
+					socket.setBroadcast(true);
+				} catch {
+					/* not all platforms allow it on an unbound family; non-fatal */
+				}
+			}
+			resolve();
+		});
+	});
+	return {
+		send(bytes) {
+			socket.send(bytes, options.port, options.host);
+		},
+		close() {
+			try {
+				socket.close();
+			} catch {
+				/* already closed */
+			}
+		},
+		onMessage(next) {
+			handler = next;
+		},
+		ready() {
+			return readyPromise;
+		},
+	};
+}
+
 export interface MacTelnetSessionOptions {
 	sink: MacTelnetDatagramSink;
 	/** Client MAC (the in-payload source address). */
@@ -358,6 +437,25 @@ export class MacTelnetSession {
 	private outCounter = 0;
 	private lastInCounter: number | null = null;
 	private mtweiKeypair: MtweiKeypair | undefined;
+	/** Counter last sent in an ACK, re-sent verbatim as the empty-ACK keepalive. */
+	private lastAckCounter = 0;
+	/** Highest inbound ACK counter seen, used to clear {@link pending}. */
+	private maxOutAck = -1;
+	/** Last unacked retransmittable outbound frame (SESSIONSTART or DATA). */
+	private pending:
+		| {
+				bytes: Uint8Array;
+				ackTarget: number;
+				attempts: number;
+				elapsedMs: number;
+		  }
+		| undefined;
+	/** Set on any send/accepted-recv; consumed by {@link tick} to reset the idle clock. */
+	private activitySinceTick = false;
+	/** Idle accumulator (ms) for the keepalive, advanced by {@link tick} deltas. */
+	private idleMs = 0;
+	/** Last `tick` timestamp, for delta accumulation (clockless between ticks). */
+	private lastTickMs: number | undefined;
 
 	constructor(options: MacTelnetSessionOptions) {
 		this.options = options;
@@ -374,7 +472,9 @@ export class MacTelnetSession {
 		if (this.state !== "init") {
 			return;
 		}
-		this.sendPacket(MacTelnetPacketType.sessionStart);
+		const bytes = this.sendPacket(MacTelnetPacketType.sessionStart);
+		// Retransmit SESSIONSTART until any ACK arrives (ackTarget 0).
+		this.pending = { bytes, ackTarget: 0, attempts: 0, elapsedMs: 0 };
 		this.state = "session-start-sent";
 	}
 
@@ -386,17 +486,10 @@ export class MacTelnetSession {
 		let header: MacTelnetHeader;
 		try {
 			header = decodeHeader(bytes, { fromServer: true });
-		} catch (error) {
-			this.fail(
-				error instanceof CentrsError
-					? error
-					: new CentrsError({
-							code: "routeros/mac-telnet-protocol",
-							summary: "Failed to decode a MAC-Telnet packet.",
-							remediation: "Confirm the datagram source is MAC-Telnet.",
-							cause: error,
-						}),
-			);
+		} catch {
+			// A truncated / not-MAC-Telnet datagram on the shared UDP/L2 segment is
+			// not our session's problem — drop it rather than tearing the session
+			// down. Loss of one of our own frames is recovered by retransmit/timeout.
 			return;
 		}
 
@@ -405,7 +498,7 @@ export class MacTelnetSession {
 				if (!this.matchesSession(header)) {
 					return;
 				}
-				this.onAck();
+				this.onAck(header);
 				return;
 			case MacTelnetPacketType.data:
 				if (!this.matchesSession(header)) {
@@ -420,7 +513,15 @@ export class MacTelnetSession {
 				this.onEnd(header);
 				return;
 			case MacTelnetPacketType.ping:
-				this.onPing(header);
+				// MAC-Ping (18-byte, zeroed session key) does not carry our session
+				// key, so it cannot pass matchesSession; only answer pings addressed
+				// to our MAC, and ignore everyone else's on the shared segment.
+				if (
+					header.version === 1 &&
+					macEquals(header.destinationMac, this.options.sourceMac)
+				) {
+					this.onPing(header);
+				}
 				return;
 			default:
 				return; // pong/unknown: ignore for the client base
@@ -446,7 +547,8 @@ export class MacTelnetSession {
 		// Reply to MAC-Ping probes with PONG. (This is the MAC-Ping liveness
 		// tool, not the session keepalive — idle sessions are kept alive by
 		// empty ACKs, not PING/PONG.)
-		this.options.sink.send(
+		this.activitySinceTick = true;
+		this.emit(
 			encodeHeader({
 				type: MacTelnetPacketType.pong,
 				sourceMac: this.options.sourceMac,
@@ -457,7 +559,13 @@ export class MacTelnetSession {
 		);
 	}
 
-	private onAck(): void {
+	private onAck(header: MacTelnetHeader): void {
+		this.activitySinceTick = true;
+		// Clear the pending retransmit once the peer has acknowledged it.
+		this.maxOutAck = Math.max(this.maxOutAck, header.counter);
+		if (this.pending && this.maxOutAck >= this.pending.ackTarget) {
+			this.pending = undefined;
+		}
 		if (this.state !== "session-start-sent") {
 			return;
 		}
@@ -486,6 +594,7 @@ export class MacTelnetSession {
 	}
 
 	private onData(header: MacTelnetHeader, bytes: Uint8Array): void {
+		this.activitySinceTick = true;
 		const payload = bytes.subarray(MAC_TELNET_HEADER_LEN);
 		// Always ACK, even for retransmitted/non-advancing frames, so the peer
 		// stops retransmitting; only deliver the payload when it advances.
@@ -640,7 +749,7 @@ export class MacTelnetSession {
 
 	private onEnd(header: MacTelnetHeader): void {
 		// Echo END to acknowledge.
-		this.options.sink.send(
+		this.emit(
 			encodeHeader({
 				type: MacTelnetPacketType.end,
 				sourceMac: this.options.sourceMac,
@@ -682,7 +791,7 @@ export class MacTelnetSession {
 		if (this.state === "closed") {
 			return;
 		}
-		this.options.sink.send(
+		this.emit(
 			encodeHeader({
 				type: MacTelnetPacketType.end,
 				sourceMac: this.options.sourceMac,
@@ -699,12 +808,27 @@ export class MacTelnetSession {
 			return;
 		}
 		this.state = "closed";
+		this.pending = undefined;
 		this.options.sink.close();
 		this.options.onClose?.(error);
 	}
 
 	private fail(error: CentrsError): void {
 		this.close(error);
+	}
+
+	/**
+	 * Fault-tolerant outbound send. A transient transport error (socket already
+	 * closed, write-after-end during teardown) must never propagate out of an
+	 * inbound-datagram handler and crash the caller's event loop; recovery is the
+	 * peer's retransmit or our own timeout. All session sends go through here.
+	 */
+	private emit(bytes: Uint8Array): void {
+		try {
+			this.options.sink.send(bytes);
+		} catch {
+			/* transport closing / transient send failure — ignore */
+		}
 	}
 
 	private acceptCounter(counter: number): boolean {
@@ -720,36 +844,106 @@ export class MacTelnetSession {
 	}
 
 	private acknowledge(counter: number, payloadLength: number): void {
-		this.options.sink.send(
+		this.lastAckCounter = (counter + payloadLength) >>> 0;
+		this.activitySinceTick = true;
+		this.emit(
 			encodeHeader({
 				type: MacTelnetPacketType.ack,
 				sourceMac: this.options.sourceMac,
 				destinationMac: this.options.destinationMac,
 				sessionKey: this.sessionKey,
-				counter: (counter + payloadLength) >>> 0,
+				counter: this.lastAckCounter,
 			}),
 		);
 	}
 
-	private sendPacket(type: number, payload?: Uint8Array): void {
-		this.options.sink.send(
-			buildPacket({
-				type,
-				sourceMac: this.options.sourceMac,
-				destinationMac: this.options.destinationMac,
-				sessionKey: this.sessionKey,
-				counter: this.outCounter,
-				payload,
-			}),
-		);
+	private sendPacket(type: number, payload?: Uint8Array): Uint8Array {
+		const bytes = buildPacket({
+			type,
+			sourceMac: this.options.sourceMac,
+			destinationMac: this.options.destinationMac,
+			sessionKey: this.sessionKey,
+			counter: this.outCounter,
+			payload,
+		});
+		this.activitySinceTick = true;
+		this.emit(bytes);
+		return bytes;
 	}
 
 	private sendData(parts: readonly Uint8Array[]): void {
 		const payload = concatBytes(parts);
-		this.sendPacket(MacTelnetPacketType.data, payload);
+		const bytes = this.sendPacket(MacTelnetPacketType.data, payload);
 		// Control blocks include their 9-byte headers in `payload.length`;
 		// PLAINDATA contributes its raw bytes. Both advance the counter by the
 		// number of payload bytes actually sent.
 		this.outCounter = (this.outCounter + payload.length) >>> 0;
+		// Retransmit this frame until the peer's ACK reaches its end (outCounter).
+		this.pending = {
+			bytes,
+			ackTarget: this.outCounter,
+			attempts: 0,
+			elapsedMs: 0,
+		};
+	}
+
+	/**
+	 * Advance the session's internal timers. The owner (e.g. {@link
+	 * MacTelnetConsole}) calls this on a short interval with `Date.now()`. It is
+	 * the only clocked behavior: it retransmits the last unacknowledged frame on
+	 * the reference backoff schedule and emits an empty-ACK keepalive after an idle
+	 * window. Unit tests that never call `tick` see a purely reactive session.
+	 */
+	tick(nowMs: number): void {
+		if (this.state === "closed") {
+			return;
+		}
+		const delta =
+			this.lastTickMs === undefined ? 0 : Math.max(0, nowMs - this.lastTickMs);
+		this.lastTickMs = nowMs;
+
+		// Keepalive: an empty ACK after an idle window keeps the server from
+		// dropping a held-open or slow session.
+		if (this.activitySinceTick) {
+			this.idleMs = 0;
+			this.activitySinceTick = false;
+		} else {
+			this.idleMs += delta;
+		}
+		if (this.idleMs >= MAC_TELNET_KEEPALIVE_IDLE_MS) {
+			this.sendKeepalive();
+			this.idleMs = 0;
+		}
+
+		// Retransmit the last unacked frame (idempotent: the peer dedupes on the
+		// byte counter, so re-sending a command frame never double-executes it).
+		const pending = this.pending;
+		if (
+			pending &&
+			pending.attempts < MAC_TELNET_RETRANSMIT_SCHEDULE_MS.length
+		) {
+			pending.elapsedMs += delta;
+			const wait = MAC_TELNET_RETRANSMIT_SCHEDULE_MS[
+				pending.attempts
+			] as number;
+			if (pending.elapsedMs >= wait) {
+				this.emit(pending.bytes);
+				pending.attempts += 1;
+				pending.elapsedMs = 0;
+			}
+		}
+	}
+
+	/** Re-send the last ACK as an empty-ACK keepalive (no payload, no counter advance). */
+	private sendKeepalive(): void {
+		this.emit(
+			encodeHeader({
+				type: MacTelnetPacketType.ack,
+				sourceMac: this.options.sourceMac,
+				destinationMac: this.options.destinationMac,
+				sessionKey: this.sessionKey,
+				counter: this.lastAckCounter,
+			}),
+		);
 	}
 }

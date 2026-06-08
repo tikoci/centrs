@@ -313,3 +313,27 @@ nul
 keepalive
 # eths: local var for the /interface/ethernet record list in the CHR test.
 eths
+
+# MAC-Telnet interactive-console vocabulary (src/protocols/mac-telnet-console.ts)
+# DSR: ANSI Device Status Report (ESC[6n cursor-position query) the console sends.
+DSR
+# DECID: ANSI "identify terminal" escape (ESC Z) the console also sends.
+DECID
+# CSI: ANSI Control Sequence Introducer (ESC[) — the escape family we strip.
+CSI
+# SIGWINCH: terminal-resize signal; an interactive terminal re-reports its size on it.
+SIGWINCH
+# evl: RouterOS :parse renders a parsed command as "(evl ...)" on the console.
+evl
+# unconfigured: a freshly-flashed RouterOS device with no IP — the mac-telnet use case.
+unconfigured
+
+# MAC-Telnet reliability vocabulary (MacTelnetSession.tick: retransmit + keepalive)
+# unacked: an outbound frame not yet acknowledged by the peer's byte-counter ACK.
+unacked
+# retransmittable: a frame (SESSIONSTART/DATA) the session resends until acked.
+retransmittable
+# clockless: the session keeps no real timer; tick(now) supplies time deltas.
+clockless
+# keepalives: plural of keepalive (empty-ACK idle frames).
+keepalives

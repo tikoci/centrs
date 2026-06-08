@@ -33,6 +33,7 @@
  * against its interface MAC) is the session's job, not the bridge's.
  */
 
+import dgram from "node:dgram";
 import net from "node:net";
 
 /** UDP port MAC-Telnet listens on. */
@@ -112,6 +113,15 @@ export interface MacTelnetL2BridgeStats {
 export interface MacTelnetL2Bridge {
 	/** TCP port to hand quickchr as `{ type: "socket-connect", port }`. */
 	readonly tcpPort: number;
+	/**
+	 * Loopback UDP port the bridge listens on. Point a real UDP MAC-Telnet client
+	 * (the centrs adapter's `createUdpMacTelnetTransport`) at `127.0.0.1:udpPort`:
+	 * datagrams sent here are injected into the guest, and guest→host UDP/20561
+	 * payloads are relayed back to the last sender. This exercises the production
+	 * transport (UDP socket) end to end, not just the in-process `onPacket`/`inject`
+	 * callbacks.
+	 */
+	readonly udpPort: number;
 	/** Register the handler for inbound (guest→host) UDP/20561 payloads. */
 	onPacket(handler: (payload: Buffer) => void): void;
 	/** Inject one MAC-Telnet datagram into the guest (no-op until connected). */
@@ -148,6 +158,30 @@ export async function startMacTelnetL2Bridge(
 		injected: 0,
 	};
 
+	// Wrap a MAC-Telnet datagram in a broadcast L2 frame and write it to the guest.
+	const injectToGuest = (
+		payload: Uint8Array,
+		injectOpts: { dstMac?: Uint8Array } = {},
+	): void => {
+		if (!conn || conn.destroyed) return;
+		conn.write(buildMacTelnetStreamFrame(payload, injectOpts));
+		stats.injected += 1;
+		if (options.debug) {
+			console.log(
+				`  bridge → guest udp/${MAC_TELNET_PORT} (${payload.length}B), type=${payload[1]}`,
+			);
+		}
+	};
+
+	// UDP relay: a real client (the centrs adapter) sends here; we inject to the
+	// guest and remember the sender to relay guest replies back.
+	let udpClient: dgram.RemoteInfo | undefined;
+	const udp = dgram.createSocket("udp4");
+	udp.on("message", (message, rinfo) => {
+		udpClient = rinfo;
+		injectToGuest(new Uint8Array(message));
+	});
+
 	const server = net.createServer((socket) => {
 		conn = socket;
 		stats.connected = true;
@@ -170,6 +204,9 @@ export async function startMacTelnetL2Bridge(
 					);
 				}
 				handler?.(payload);
+				if (udpClient) {
+					udp.send(payload, udpClient.port, udpClient.address);
+				}
 			}
 		});
 		const stop = (): void => {
@@ -186,20 +223,21 @@ export async function startMacTelnetL2Bridge(
 		});
 	});
 
+	const udpPort: number = await new Promise((resolve, reject) => {
+		udp.once("error", reject);
+		udp.bind(0, "127.0.0.1", () => {
+			resolve((udp.address() as net.AddressInfo).port);
+		});
+	});
+
 	return {
 		tcpPort,
+		udpPort,
 		onPacket(next) {
 			handler = next;
 		},
 		inject(payload, injectOpts = {}) {
-			if (!conn || conn.destroyed) return;
-			conn.write(buildMacTelnetStreamFrame(payload, injectOpts));
-			stats.injected += 1;
-			if (options.debug) {
-				console.log(
-					`  bridge → guest udp/${MAC_TELNET_PORT} (${payload.length}B), type=${payload[1]}`,
-				);
-			}
+			injectToGuest(payload, injectOpts);
 		},
 		async waitForConnection(timeoutMs) {
 			if (stats.connected) return true;
@@ -212,6 +250,11 @@ export async function startMacTelnetL2Bridge(
 		async close() {
 			try {
 				conn?.destroy();
+			} catch {
+				/* ignore */
+			}
+			try {
+				udp.close();
 			} catch {
 				/* ignore */
 			}

@@ -62,7 +62,7 @@ export const protocolPlans = [
 		id: "mac-telnet",
 		capabilities: ["execute", "terminal"],
 		notes:
-			"Layer-2 execute and terminal path (UDP 20561). Transport base implemented in mac-telnet.ts (packet/control codec, MD5 auth, session state machine); command wiring tracked in docs/MATRIX.md.",
+			"Layer-2 execute path (UDP 20561). Codec + MD5/MTWEI session (mac-telnet.ts), interactive-console reader (mac-telnet-console.ts), and UDP transport + execute adapter wired into execute. terminal cell tracked in docs/MATRIX.md.",
 		implemented: true,
 	},
 	{
