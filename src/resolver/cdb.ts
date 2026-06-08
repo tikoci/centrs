@@ -37,6 +37,7 @@ import {
 import { CentrsError } from "../errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "../protocols/index.ts";
 import { parseCommentKv } from "./comment-kv.ts";
+import { normalizeMac } from "./mac.ts";
 import {
 	parseBoolean,
 	parseDuration,
@@ -72,6 +73,12 @@ export interface CdbResolution {
 	 * records.
 	 */
 	identity: string;
+	/**
+	 * The record's MAC, for L2 transports (mac-telnet): the `mac=` comment lookup
+	 * key, or the `target` itself when that is a MAC. Lets `--via mac-telnet`
+	 * address a device resolved by `identity=`/`ip=` whose `target` is not a MAC.
+	 */
+	mac?: string;
 	username: string;
 	password: string;
 	recordIndex: number;
@@ -194,6 +201,7 @@ export async function resolveCdb(
 		return {
 			target: entry.target,
 			identity: identityFromComment(entry.comment, entry.target),
+			mac: macFromComment(entry.comment, entry.target),
 			username: entry.user,
 			password: entry.password,
 			recordIndex: entry.cdbRecordIndex,
@@ -213,6 +221,7 @@ export async function resolveCdb(
 				return {
 					target: input.targetInput,
 					identity: input.targetInput,
+					mac: normalizeMac(input.targetInput),
 					username: "",
 					password: "",
 					recordIndex: defaults.recordIndex,
@@ -308,6 +317,7 @@ function resolutionFromEntry(
 	return {
 		target: entry.target,
 		identity: identityFromComment(entry.comment, entry.target),
+		mac: macFromComment(entry.comment, entry.target),
 		username: entry.user,
 		password: entry.password,
 		recordIndex,
@@ -324,6 +334,19 @@ function resolutionFromEntry(
  */
 export function identityFromComment(comment: string, target: string): string {
 	return parseCommentKv(comment).lookups.identity ?? target;
+}
+
+/**
+ * The record's MAC for L2 addressing: the `mac=` comment lookup key when present,
+ * else the `target` when it is itself a MAC. Normalized; `undefined` when neither
+ * is a MAC (the record is reachable only over IP transports).
+ */
+export function macFromComment(
+	comment: string,
+	target: string,
+): string | undefined {
+	const lookup = parseCommentKv(comment).lookups.mac;
+	return normalizeMac(lookup ?? "") ?? normalizeMac(target);
 }
 
 /**

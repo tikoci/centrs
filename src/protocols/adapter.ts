@@ -14,9 +14,17 @@
  * protocol data.
  */
 
+import { randomBytes } from "node:crypto";
 import { mapRouterOsError } from "../core/routeros-errors.ts";
 import { CentrsError } from "../errors.ts";
 import type { RouterOsProtocol } from "./index.ts";
+import {
+	createUdpMacTelnetTransport,
+	type MacAddress,
+	type MacTelnetTransport,
+	parseMac,
+} from "./mac-telnet.ts";
+import { MacTelnetConsole } from "./mac-telnet-console.ts";
 import {
 	type ApiReply,
 	connectNativeApi,
@@ -42,6 +50,10 @@ export interface ProtocolAdapterConfig {
 	password: string;
 	/** Per-command timeout in milliseconds. */
 	timeoutMs: number;
+	/** Target device MAC, for L2 transports (mac-telnet). */
+	mac?: string;
+	/** Client (in-packet source) MAC for mac-telnet; a synthetic one is used when omitted. */
+	sourceMac?: string;
 }
 
 /** Projection/detail options for a menu `list`. */
@@ -115,6 +127,9 @@ export function createProtocolAdapter(
 ): ProtocolAdapter {
 	if (config.protocol === "native-api") {
 		return new NativeApiAdapter(config);
+	}
+	if (config.protocol === "mac-telnet") {
+		return new MacTelnetAdapter(config);
 	}
 	return new RestAdapter(config);
 }
@@ -496,6 +511,135 @@ class NativeApiAdapter implements ProtocolAdapter {
 			}
 		}
 	}
+}
+
+/**
+ * MAC-Telnet execute adapter: drives a {@link MacTelnetConsole} over a UDP
+ * datagram transport. Unlike REST/native this is a console transport, so it is
+ * **execute-only** — `retrieve`/`inspect` are not mac-telnet capabilities
+ * (matrix: retrieve/mac-telnet is out of scope), and `execute` runs the raw CLI
+ * line over the console and returns the captured output as `ret`. Validation
+ * over mac-telnet is the console `:parse` gate (see `execute.ts`).
+ */
+class MacTelnetAdapter implements ProtocolAdapter {
+	readonly protocol: RouterOsProtocol = "mac-telnet";
+	readonly capabilities: ProtocolAdapterCapabilities = {
+		retrieve: false,
+		execute: true,
+		inspect: false,
+	};
+	private readonly destinationMac: MacAddress;
+	private readonly sourceMac: MacAddress;
+	private transport?: MacTelnetTransport;
+	private console?: MacTelnetConsole;
+	private opening?: Promise<MacTelnetConsole>;
+
+	constructor(private readonly config: ProtocolAdapterConfig) {
+		if (!config.mac) {
+			throw new CentrsError({
+				code: "internal/unhandled",
+				summary: "The mac-telnet adapter was built without a target MAC.",
+				remediation:
+					"Report this bug; resolveTarget must set target.mac for mac-telnet.",
+			});
+		}
+		this.destinationMac = parseMac(config.mac);
+		this.sourceMac = config.sourceMac
+			? parseMac(config.sourceMac)
+			: randomLocalMac();
+	}
+
+	private unsupported(operation: string): CentrsError {
+		return new CentrsError({
+			code: "transport/capability-unsupported",
+			summary: `mac-telnet does not support ${operation}.`,
+			remediation:
+				"mac-telnet is an execute/terminal (console) transport; use `--via rest-api`/`native-api` to read structured data.",
+			context: { via: "mac-telnet", operation },
+		});
+	}
+
+	inspect(): Promise<unknown[]> {
+		return Promise.reject(this.unsupported("/console/inspect"));
+	}
+
+	getSingleton(): Promise<unknown> {
+		return Promise.reject(this.unsupported("singleton reads"));
+	}
+
+	list(): Promise<unknown[]> {
+		return Promise.reject(this.unsupported("menu reads"));
+	}
+
+	async execute(
+		request: ProtocolExecuteRequest,
+	): Promise<ProtocolExecuteResult> {
+		const cli = request.script;
+		if (cli === undefined) {
+			throw new CentrsError({
+				code: "internal/unhandled",
+				summary:
+					"mac-telnet execute requires a raw CLI line (script), not a structured path command.",
+				remediation:
+					"Report this bug; runCommand must pass the raw command as `script` for mac-telnet.",
+			});
+		}
+		const console = await this.open();
+		const { output } = await console.run(cli);
+		return { records: [], ret: output };
+	}
+
+	async close(): Promise<void> {
+		this.console?.close();
+		this.transport?.close();
+		this.console = undefined;
+		this.transport = undefined;
+		this.opening = undefined;
+	}
+
+	private open(): Promise<MacTelnetConsole> {
+		if (this.console?.isReady) {
+			return Promise.resolve(this.console);
+		}
+		if (!this.opening) {
+			this.opening = this.connect();
+		}
+		return this.opening;
+	}
+
+	private async connect(): Promise<MacTelnetConsole> {
+		const transport = createUdpMacTelnetTransport({
+			host: this.config.host,
+			port: this.config.port,
+			broadcast: isBroadcastHost(this.config.host),
+		});
+		await transport.ready();
+		const console = new MacTelnetConsole({
+			sink: transport,
+			sourceMac: this.sourceMac,
+			destinationMac: this.destinationMac,
+			username: this.config.username ?? "",
+			password: this.config.password,
+			primeTimeoutMs: Math.max(this.config.timeoutMs, 30_000),
+			commandTimeoutMs: this.config.timeoutMs,
+		});
+		transport.onMessage((bytes) => console.handlePacket(bytes));
+		this.transport = transport;
+		this.console = console;
+		await console.open();
+		return console;
+	}
+}
+
+/** A random locally-administered unicast MAC (`02:xx:…`) for the in-packet source. */
+function randomLocalMac(): MacAddress {
+	const octets = new Uint8Array(randomBytes(6));
+	octets[0] = ((octets[0] as number) & 0xfe) | 0x02; // locally administered, unicast
+	return octets;
+}
+
+function isBroadcastHost(host: string): boolean {
+	return host === "255.255.255.255" || host.endsWith(".255");
 }
 
 function normalizeRestExecute(data: unknown): ProtocolExecuteResult {

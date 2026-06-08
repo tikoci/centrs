@@ -125,19 +125,16 @@ describe("execute bare-MAC transport default honors host precedence", () => {
 	const MAC = "96:5D:80:7D:BF:59";
 	const IP = "192.168.74.1";
 
-	test("bare MAC with no host/via defaults to mac-telnet (not yet wired)", async () => {
-		expect.assertions(2);
-		try {
-			await resolveExecuteRequest(
-				{ targetInput: MAC, command: "/system/identity/print" },
-				{},
-			);
-		} catch (error) {
-			expect(error).toBeInstanceOf(CentrsError);
-			expect((error as CentrsError).code).toBe(
-				"routeros/protocol-not-implemented",
-			);
-		}
+	test("bare MAC with no host/via defaults to mac-telnet, addressing the MAC", async () => {
+		const resolved = await resolveExecuteRequest(
+			{ targetInput: MAC, command: "/system/identity/print" },
+			{},
+		);
+		expect(resolved.via.value).toBe("mac-telnet");
+		// The MAC is the device identity; delivery defaults to L2 broadcast.
+		expect(resolved.target.mac).toBe("96:5d:80:7d:bf:59");
+		expect(resolved.target.host).toBe("255.255.255.255");
+		expect(resolved.target.port).toBe(20561);
 	});
 
 	test("MAC positional with --host IP defaults to native-api, targets the IP", async () => {

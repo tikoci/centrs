@@ -18,6 +18,10 @@ import {
 	type RouterOsProtocol,
 } from "./protocols/index.ts";
 import {
+	classifyParseResult,
+	parseScriptFor,
+} from "./protocols/mac-telnet-console.ts";
+import {
 	type CdbResolution,
 	effectiveHostCandidate,
 	isIpTransport,
@@ -187,6 +191,7 @@ export async function validateExecuteEnvelope(
 			username: resolved.auth.username,
 			password: resolved.auth.password,
 			timeoutMs: resolved.timeoutMs.value,
+			mac: resolved.target.mac,
 		});
 		try {
 			const validation = await validateExecuteCommand(resolved, backend);
@@ -219,6 +224,7 @@ export async function runResolvedExecute(
 		username: resolved.auth.username,
 		password: resolved.auth.password,
 		timeoutMs: resolved.timeoutMs.value,
+		mac: resolved.target.mac,
 	});
 
 	// Assigned unconditionally by the if/else below before first use; declared
@@ -527,6 +533,10 @@ async function validateExecuteCommand(
 	resolved: ResolvedExecuteRequest,
 	backend: ProtocolAdapter,
 ): Promise<EnvelopeValidationMeta> {
+	if (resolved.via.value === "mac-telnet") {
+		return validateMacTelnetCommand(resolved, backend);
+	}
+
 	await runSyntaxGate(resolved, backend);
 
 	if (resolved.canonical.mode !== "structured") {
@@ -568,6 +578,49 @@ async function validateExecuteCommand(
 		syntax: true,
 		semantic: true,
 		availableAttributes,
+	};
+}
+
+/**
+ * Validate a command over mac-telnet with a single console `:put [:parse ...]`.
+ * Unlike REST/native (a syntax gate plus a `/console/inspect` semantic gate),
+ * one console `:parse` reports both `syntax error` and `bad parameter <name>`,
+ * so it covers syntax and the unknown-attribute (semantic) gate at once
+ * (grounded on CHR 7.23.1; see `mac-telnet-console.ts`).
+ */
+async function validateMacTelnetCommand(
+	resolved: ResolvedExecuteRequest,
+	backend: ProtocolAdapter,
+): Promise<EnvelopeValidationMeta> {
+	if (hasUnbalancedQuotes(resolved.command)) {
+		throw new CentrsError({
+			code: "validation/syntax",
+			summary:
+				"RouterOS rejected the command syntax during local quote preflight.",
+			remediation:
+				"Close the RouterOS string quote, then retry. The command was not executed.",
+			context: {
+				command: resolved.command,
+				validationSource: "local quote preflight before :put [:parse ...]",
+				via: resolved.via.value,
+			},
+			causeData: "unterminated string literal",
+		});
+	}
+	const result = await backend.execute({
+		path: "",
+		command: "",
+		script: parseScriptFor(resolved.command),
+	});
+	// Throws validation/syntax or validation/unknown-attribute on a bad parse.
+	classifyParseResult(result.ret ?? "", resolved.command);
+	return {
+		enabled: true,
+		source: ":put [:parse ...] over mac-telnet",
+		result: "passed",
+		syntax: true,
+		semantic:
+			resolved.canonical.mode === "structured" ? true : "not-applicable",
 	};
 }
 
@@ -660,6 +713,11 @@ async function runCommand(
 	resolved: ResolvedExecuteRequest,
 	backend: ProtocolAdapter,
 ): Promise<ProtocolExecuteResult> {
+	if (resolved.via.value === "mac-telnet") {
+		// mac-telnet is a console transport: run the raw CLI line and capture the
+		// console output (structured path-POST / tagged talk do not apply).
+		return backend.execute({ path: "", command: "", script: resolved.command });
+	}
 	if (resolved.canonical.mode === "script") {
 		if (resolved.via.value === "native-api") {
 			throw new CentrsError({
@@ -764,12 +822,12 @@ function resolveExecuteProtocol(
 			context: { via: via.value, capability: "execute" },
 		});
 	}
-	if (!["native-api", "rest-api"].includes(via.value)) {
+	if (!["native-api", "rest-api", "mac-telnet"].includes(via.value)) {
 		throw new CentrsError({
 			code: "routeros/protocol-not-implemented",
 			summary: `Execute over ${via.value} is planned but not wired through the shared execute orchestrator yet.`,
 			remediation:
-				"Use `--via native-api` or `--via rest-api`. For a MAC target, add `--resolve arp` to reach it via the host ARP cache.",
+				"Use `--via native-api`, `--via rest-api`, or `--via mac-telnet`. For an IP transport against a MAC target, add `--resolve arp`.",
 			context: { via: via.value, capability: "execute" },
 		});
 	}
@@ -894,6 +952,7 @@ function metaFromResolved(
 			host: target.host,
 			port: target.port,
 			baseUrl: target.baseUrl,
+			mac: target.mac,
 			identity: target.identity,
 			recordIndex: target.recordIndex,
 			source: toCoreSource(target.source),
@@ -983,14 +1042,15 @@ function routerOsFailureFromResult(
 	);
 	return failure
 		? mapRouterOsError(failure, {
-				transport: via === "rest-api" ? "rest-api" : "native-api",
+				transport:
+					via === "rest-api" || via === "mac-telnet" ? via : "native-api",
 				context: { via },
 			})
 		: undefined;
 }
 
 function isRouterOsFailureString(value: string): boolean {
-	return /^(failure:|error:)|unknown parameter|invalid value|session closed|\(:error; line \d+\)/i.test(
+	return /^(failure:|error:)|unknown parameter|invalid value|session closed|\(:error; line \d+\)|bad parameter\s|bad command name|syntax error|expected end of command/i.test(
 		value.trim(),
 	);
 }

@@ -1,16 +1,19 @@
 # execute — examples
 
-Each numbered example is an executable spec. The integration test
-`test/integration/execute.test.ts` runs these examples against a CHR
-7.23 router booted by `@tikoci/quickchr` (examples 1–11 over REST, 12–18 over
-the native API). If a line here is not exercised by a test, the test file is
-wrong; if a line passes only with `validate=false`, the **implementation** is
-wrong (see `docs/CONSTITUTION.md`).
+Each numbered example is an executable spec, run against a CHR 7.23 router booted
+by `@tikoci/quickchr`: `test/integration/execute.test.ts` covers examples 1–11
+over REST and 12–18 over the native API; `test/integration/mac-telnet-console.test.ts`
+covers examples 19–21 over mac-telnet (real L2 via the `socket-connect` bridge).
+If a line here is not exercised by a test, the test file is wrong; if a line
+passes only with `validate=false`, the **implementation** is wrong (see
+`docs/CONSTITUTION.md`).
 
 `$R` is `<host>:<rest-port>` resolved by quickchr. `$A` is `<host>` and
-`$API_PORT` is the native API port (`chr.ports.api`). `$U` / `$P` are CHR
-credentials provided by the test harness. `$ID` is the `.id` returned by the
-preceding add example in the same transport section.
+`$API_PORT` is the native API port (`chr.ports.api`). `$MAC` is the device MAC and
+`$MT_HOST`/`$MT_PORT` are the mac-telnet UDP delivery endpoint (the loopback L2
+bridge in CI). `$U` / `$P` are CHR credentials provided by the test harness.
+`$ID` is the `.id` returned by the preceding add example in the same transport
+section.
 
 All write-shaped examples use `--yes` as the explicit non-interactive
 confirmation flag. Without `--yes`, non-TTY writes fail before validation or any
@@ -239,6 +242,50 @@ centrs execute $A '/ip/address/add address=198.51.100.23/32 interface=ether1 com
 Envelope: `ok: false`, `error.code=usage/confirmation-required`,
 `meta.via=native-api`, no validation command is sent, and no address is added.
 
+## mac-telnet (`--via mac-telnet`)
+
+Layer-2 execute over the RouterOS interactive console (UDP/20561). `$MAC` is the
+device MAC; `$MT_HOST`/`$MT_PORT` are the UDP delivery endpoint (L2 broadcast in
+the field, the `quickchr` loopback L2 bridge in CI). Validation over mac-telnet
+is a **single console `:put [:parse …]`** — it reports both `syntax error` and
+`bad parameter <name>`, so it covers the syntax *and* the unknown-attribute gate
+at once (no `/console/inspect` table parsing). The console opens through a
+first-login license screen (auto-answered) and a ~10s terminal-negotiation stall;
+**a successful write prints nothing** over the console (no `.id`/`ret`, unlike
+REST/native). Examples 19–21 are green via `bun run test:integration`
+(`test/integration/mac-telnet-console.test.ts`, CHR 7.23.1) over the real L2
+bridge; the console reader is also exercised directly in the same test.
+
+### 19. Read a command over mac-telnet
+
+```bash
+centrs execute $MAC '/system/identity/print' --via mac-telnet --host $MT_HOST --port $MT_PORT --username $U --password $P
+```
+
+Envelope: `ok: true`, `meta.via=mac-telnet`, `data.ret` is the console output and
+contains the device identity (cross-checked against REST). `meta.validation.source`
+is `:put [:parse ...] over mac-telnet`.
+
+### 20. Write (add) over mac-telnet
+
+```bash
+centrs execute $MAC '/ip/address/add address=198.51.100.40/32 interface=ether1' --via mac-telnet --host $MT_HOST --port $MT_PORT --username $U --password $P --yes
+```
+
+Envelope: `ok: true`, `meta.via=mac-telnet`, `data.ret` is empty (a successful
+console write prints nothing — there is no `.id` to return). A subsequent REST
+read of `/ip/address` shows `198.51.100.40`.
+
+### 21. Validation rejects an unknown attribute over mac-telnet
+
+```bash
+centrs execute $MAC '/ip/address/add address=198.51.100.41/32 interface=ether1 no-such-arg=x' --via mac-telnet --host $MT_HOST --port $MT_PORT --username $U --password $P --yes
+```
+
+Envelope: `ok: false`, `error.code=validation/unknown-attribute`,
+`meta.via=mac-telnet`, and no address is added — the console `:parse` gate
+catches `no-such-arg` before any mutation.
+
 ## Protocol selection notes
 
 For an unresolved MAC target, execute auto-selection defaults to mac-telnet
@@ -249,7 +296,7 @@ centrs execute $MAC '/system/identity/set name=chr-via-mac' --username $U --pass
 ```
 
 Envelope: `meta.via=mac-telnet` when `$MAC` is not resolved from CDB and no
-`--via` is pinned. If the caller wants IP-level REST or native API execution,
-they must opt into MAC-to-IP resolution before protocol selection. This note is
-not part of the rest-api/native-api CHR gate until the L2 mac-telnet harness is
-available.
+`--via` is pinned (delivery defaults to L2 broadcast; override with
+`--host`/`--port`). If the caller wants IP-level REST or native API execution,
+they must opt into MAC-to-IP resolution (`--resolve arp` + `--via …`) before
+protocol selection.

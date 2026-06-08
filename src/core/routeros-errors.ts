@@ -19,7 +19,7 @@
 import { CentrsError, type CentrsErrorCode } from "../errors.ts";
 
 /** Transport that produced the raw RouterOS string. */
-export type RouterOsErrorTransport = "rest-api" | "native-api";
+export type RouterOsErrorTransport = "rest-api" | "native-api" | "mac-telnet";
 
 /** Options that refine how a raw RouterOS string is mapped. */
 export interface MapRouterOsErrorOptions {
@@ -77,7 +77,10 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 	{
 		code: "routeros/unknown-attribute",
 		description: "RouterOS rejected an unknown parameter/attribute name.",
-		test: /unknown parameter\s+(\S+)/i,
+		// REST/native say "unknown parameter <name>"; the interactive console
+		// (mac-telnet) says "bad parameter <name> (line N column M)" for the same
+		// fault. Grounded on CHR 7.23.1.
+		test: /(?:unknown|bad) parameter\s+(\S+)/i,
 		build: (match) => {
 			const parameter = cleanToken(match[1] ?? "");
 			return {
@@ -87,6 +90,18 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 				context: { parameter },
 			};
 		},
+	},
+	{
+		code: "routeros/unknown-path",
+		description:
+			"RouterOS console rejected the command word ('bad command name …').",
+		// Console form (mac-telnet) of an unrecognized command/path word.
+		test: /bad command name/i,
+		build: (_match, raw) => ({
+			summary: `RouterOS does not recognize the command: ${raw.trim()}`,
+			remediation:
+				"Check the slash-prefixed RouterOS path/command against the device's command tree.",
+		}),
 	},
 	{
 		code: "routeros/invalid-value",

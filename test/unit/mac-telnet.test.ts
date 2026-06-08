@@ -9,6 +9,8 @@ import {
 	formatMac,
 	MAC_TELNET_CONTROL_MAGIC,
 	MAC_TELNET_HEADER_LEN,
+	MAC_TELNET_KEEPALIVE_IDLE_MS,
+	MAC_TELNET_RETRANSMIT_SCHEDULE_MS,
 	MacTelnetControlType,
 	type MacTelnetDatagramSink,
 	MacTelnetPacketType,
@@ -739,5 +741,161 @@ describe("mac-telnet MTWEI offer + auth-failure detection", () => {
 		session.handlePacket(serverPacket(MacTelnetPacketType.end, 0x1234, 0));
 		expect(events).toContain("close:transport/auth-failed");
 		expect(events).not.toContain("ready");
+	});
+});
+
+describe("mac-telnet retransmit + keepalive (tick)", () => {
+	function setup() {
+		const transport = new FakeMacTelnetTransport();
+		const session = new MacTelnetSession({
+			sink: transport,
+			sourceMac: CLIENT_MAC,
+			destinationMac: SERVER_MAC,
+			username: "admin",
+			password: "secret",
+			sessionKey: 0x1234,
+			offerMtwei: false,
+		});
+		return { transport, session };
+	}
+
+	/** Drive the MD5 handshake to a ready terminal, clearing any pending frame. */
+	function driveReady(
+		session: MacTelnetSession,
+		transport: FakeMacTelnetTransport,
+	) {
+		session.start();
+		session.handlePacket(serverPacket(MacTelnetPacketType.ack, 0x1234, 0));
+		session.handlePacket(
+			serverPacket(
+				MacTelnetPacketType.data,
+				0x1234,
+				0,
+				encodeControlBlock(
+					MacTelnetControlType.passwordSalt,
+					new Uint8Array(16).fill(1),
+				),
+			),
+		);
+		session.handlePacket(
+			serverPacket(
+				MacTelnetPacketType.data,
+				0x1234,
+				25,
+				encodeControlBlock(MacTelnetControlType.endAuth),
+			),
+		);
+		session.handlePacket(
+			serverPacket(MacTelnetPacketType.data, 0x1234, 34, Uint8Array.of(0x3e)),
+		);
+		// A high-counter ACK clears any unacked auth/input frame.
+		session.handlePacket(
+			serverPacket(MacTelnetPacketType.ack, 0x1234, 0xffffff),
+		);
+		transport.clear();
+	}
+
+	test("a tick does nothing on its first call (delta baseline)", () => {
+		const { transport, session } = setup();
+		session.start(); // SESSIONSTART pending
+		transport.clear();
+		session.tick(1000);
+		expect(transport.sent).toHaveLength(0);
+	});
+
+	test("retransmits an unacked SESSIONSTART on the backoff schedule", () => {
+		const { transport, session } = setup();
+		session.start();
+		transport.clear();
+		session.tick(1000); // baseline
+		session.tick(1000 + (MAC_TELNET_RETRANSMIT_SCHEDULE_MS[0] as number));
+		expect(transport.lastType()).toBe(MacTelnetPacketType.sessionStart);
+		expect(transport.sent).toHaveLength(1);
+		// Second retransmit after the next (longer) interval.
+		session.tick(
+			1000 +
+				(MAC_TELNET_RETRANSMIT_SCHEDULE_MS[0] as number) +
+				(MAC_TELNET_RETRANSMIT_SCHEDULE_MS[1] as number),
+		);
+		expect(transport.sent).toHaveLength(2);
+	});
+
+	test("an ACK covering the frame stops retransmission", () => {
+		const { transport, session } = setup();
+		driveReady(session, transport);
+		session.sendInput(new TextEncoder().encode("x"));
+		transport.clear();
+		session.tick(1000); // baseline
+		session.tick(1000 + (MAC_TELNET_RETRANSMIT_SCHEDULE_MS[0] as number));
+		expect(transport.sent.length).toBeGreaterThan(0); // retransmitted
+		transport.clear();
+		// Device acknowledges everything → pending cleared → no more retransmits.
+		session.handlePacket(
+			serverPacket(MacTelnetPacketType.ack, 0x1234, 0xffffff),
+		);
+		transport.clear();
+		session.tick(5000);
+		session.tick(9000);
+		expect(transport.sent).toHaveLength(0);
+	});
+
+	test("gives up after the schedule is exhausted", () => {
+		const { transport, session } = setup();
+		session.start();
+		transport.clear();
+		let now = 0;
+		session.tick(now); // baseline
+		for (const interval of MAC_TELNET_RETRANSMIT_SCHEDULE_MS) {
+			now += interval;
+			session.tick(now);
+		}
+		const retransmits = () =>
+			transport.sent.filter((p) => p[1] === MacTelnetPacketType.sessionStart);
+		expect(retransmits()).toHaveLength(
+			MAC_TELNET_RETRANSMIT_SCHEDULE_MS.length,
+		);
+		// A much later tick may emit a keepalive, but no further SESSIONSTART
+		// retransmit once the schedule is exhausted.
+		session.tick(now + 100_000);
+		expect(retransmits()).toHaveLength(
+			MAC_TELNET_RETRANSMIT_SCHEDULE_MS.length,
+		);
+	});
+
+	test("sends an empty-ACK keepalive after the idle window", () => {
+		const { transport, session } = setup();
+		driveReady(session, transport); // pending cleared, ready
+		session.tick(1000); // consume the drive's activity → idle clock at 0
+		expect(transport.sent).toHaveLength(0);
+		session.tick(1000 + MAC_TELNET_KEEPALIVE_IDLE_MS + 1);
+		expect(transport.lastType()).toBe(MacTelnetPacketType.ack);
+		expect(transport.last().length).toBe(MAC_TELNET_HEADER_LEN); // header-only ACK
+	});
+
+	test("inbound activity defers the keepalive", () => {
+		const { transport, session } = setup();
+		driveReady(session, transport);
+		session.tick(1000);
+		// Inbound data just before the idle window elapses resets the clock.
+		session.handlePacket(
+			serverPacket(MacTelnetPacketType.data, 0x1234, 100, Uint8Array.of(0x79)),
+		);
+		transport.clear();
+		session.tick(1000 + MAC_TELNET_KEEPALIVE_IDLE_MS + 1);
+		// The only thing sent is the ACK for that inbound data — not a keepalive.
+		// (Activity reset the idle clock, so no keepalive this window.)
+		const keepalives = transport.sent.filter(
+			(p) => p[1] === MacTelnetPacketType.ack,
+		);
+		expect(keepalives).toHaveLength(0);
+	});
+
+	test("tick is a no-op once closed", () => {
+		const { transport, session } = setup();
+		session.start();
+		session.end();
+		transport.clear();
+		session.tick(1_000_000);
+		expect(transport.sent).toHaveLength(0);
 	});
 });

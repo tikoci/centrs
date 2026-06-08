@@ -286,6 +286,10 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"The MAC is not in the host ARP cache, so it cannot be resolved to an IP.",
 	},
 	{
+		code: "target/mac-required",
+		summary: "The chosen L2 transport (mac-telnet) needs a MAC-address target.",
+	},
+	{
 		code: "target/mac-unresolved",
 		summary: "The MAC target could not be resolved to a host.",
 	},
@@ -298,6 +302,10 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "transport/auth-failed",
 		summary: "RouterOS rejected the credentials over the transport.",
+	},
+	{
+		code: "transport/capability-unsupported",
+		summary: "The chosen transport cannot perform this kind of operation.",
 	},
 	{
 		code: "transport/connection-closed",

@@ -25,7 +25,7 @@ A cell advances only with the matching evidence in the same change.
 | -------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ---------------- |
 | retrieve | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | —             | —             | —                |
 | stream   | —             | `designed`    | `designed`    | —             | —             | —             | —             | —                |
-| execute  | `CHR-passed`  | `CHR-passed`  | `not-started` | `not-started` | —             | —             | `not-started` | `not-started`    |
+| execute  | `CHR-passed`  | `CHR-passed`  | `not-started` | `CHR-passed`  | —             | —             | `not-started` | `not-started`    |
 | terminal | —             | —             | `not-started` | `not-started` | —             | —             | —             | —                |
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
 | discover | —             | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
@@ -119,30 +119,40 @@ glue, not new protocol code:
   `test/unit/native-api.test.ts`, `test/integration/native-api.test.ts`
   (transport), and `test/integration/native-api-retrieve.test.ts` (command),
   all green via `bun run test:integration`.
-- **mac-telnet** (`src/protocols/mac-telnet.ts` + `src/protocols/mtwei.ts`):
-  packet/control codec (direction-aware header, control blocks, little-endian
-  terminal dims), the session state machine (start → auth → ready → data), and
-  **both** auth methods — classic MD5 *and* MTWEI (EC-SRP over a custom
-  Curve25519-in-Weierstrass form, `mtwei.ts`). The transport base is **validated
-  over real L2 against stock CHR 7.23** (`test/integration/mac-telnet.test.ts`,
-  quickchr `socket-connect` host-side L2 capture via `mactelnet-l2-bridge.ts`):
-  the MTWEI login completes end to end (proof accepted, console session opens,
-  data flows both ways), and classic MD5 is refused by the device → mapped to
-  `transport/auth-failed`. Unit coverage: `test/unit/mtwei.test.ts` (EC-SRP math,
-  incl. order·G = ∞ and a node-crypto identity-hash oracle; the engine is
-  byte-identical to the `mtwei.c` / WinBox EC-SRP5 references) and
-  `test/unit/mac-telnet.test.ts` (handshake + MTWEI offer + auth-failure
-  detection against a scripted peer). **Key findings (folded into the command
-  specs):** (1) current RouterOS *requires* MTWEI — it offers a 16-byte MD5 salt
-  to a classic client but rejects the MD5 proof for valid credentials, so the
-  client offers MTWEI by default; (2) `END_AUTH` does **not** mean success — a
-  failed login also sends `END_AUTH`, then a "Login failed" message + `END`, so
-  success is confirmed only when real terminal output arrives. **Remaining
-  (Phase 1, command wiring):** the RouterOS console opens with a
-  terminal-identification query and a readline prompt, so `execute`/`terminal`
-  over mac-telnet need terminal-query handling + echo/prompt parsing to capture
-  clean command output. The transport, auth, and bidirectional data path are
-  proven; the command cells stay `not-started` until that glue lands.
+- **mac-telnet** (`src/protocols/mac-telnet.ts` + `mtwei.ts` +
+  `mac-telnet-console.ts` + the `MacTelnetAdapter` in `adapter.ts`): packet/control
+  codec, the session state machine, **both** auth methods (classic MD5 + MTWEI
+  EC-SRP, `mtwei.ts`), an interactive-**console reader** (`mac-telnet-console.ts`:
+  terminal-probe answering, license auto-clear, prompt sync, CR/LF screen
+  emulation → clean per-command output, and a `:put [:parse]` validation gate),
+  and a UDP datagram transport (`createUdpMacTelnetTransport`) wired into the
+  execute orchestrator. **`execute / mac-telnet` is `CHR-passed`** end to end over
+  real L2 against stock CHR 7.23.1: `executeEnvelope` (resolver →
+  `MacTelnetAdapter` → UDP transport) runs reads, writes (REST-verified), and the
+  validation-reject path, plus the console reader directly — all green via
+  `bun run test:integration` (`test/integration/mac-telnet-console.test.ts`,
+  examples 19–21). Transport/auth alone stay covered by
+  `test/integration/mac-telnet.test.ts` (MTWEI login + MD5 refusal). Unit coverage:
+  `test/unit/mtwei.test.ts` (EC-SRP math, byte-identical to `mtwei.c` / WinBox
+  EC-SRP5), `test/unit/mac-telnet.test.ts` (handshake + MTWEI offer + auth-failure),
+  and `test/unit/mac-telnet-console.test.ts` (screen emulation + output extraction
+  pinned to real captured device bytes). **Grounded console findings (CHR 7.23.1):**
+  (1) MTWEI is required — MD5 is offered but its proof is refused; (2) `END_AUTH` ≠
+  success (a failed login sends `END_AUTH` then "Login failed" + `END`); (3) the
+  console opens with a multi-step ANSI terminal-size probe — answering each `ESC[6n`
+  (DSR) with `ESC[rows;colsR` sets a wide terminal (else it wraps at 80); (4) a
+  ~10s terminal-negotiation stall on **every** login (answering the probe sets the
+  width but does not remove it — a cursor-tracking emulator could); (5) a one-time
+  first-login license prompt the reader auto-answers; (6) a successful console
+  **write returns no output** (no `.id`); (7) the console `:parse` reports both
+  `syntax error` and `bad parameter <name>`, so one gate covers syntax + the
+  unknown-attribute (semantic) check — no `/console/inspect` table parsing.
+  Reliability: `MacTelnetSession.tick` (driven by the console reader) does
+  byte-counter retransmit on the reference backoff + an empty-ACK keepalive, and
+  stray/malformed datagrams are dropped (not session-fatal). **Remaining:**
+  `terminal / mac-telnet` (interactive PTY relay over the same console reader —
+  stdin/stdout wiring + real PTY size; keepalive/retransmit already land via
+  `tick`. See `commands/terminal/README.md`).
 
 ### Frontend surfaces (orthogonal to the command grid)
 
@@ -193,7 +203,11 @@ matching evidence.
    `ssh-key` comment-kv allowlist entry arrives with the transport. See
    `commands/terminal/README.md` for the residual SSH unknowns.
 8. **mac-telnet** for execute/terminal — L2 path, default execute route for
-   unresolved MAC targets.
+   unresolved MAC targets. `execute / mac-telnet` is **`CHR-passed`** (console
+   reader + UDP transport + adapter; examples 19–21; byte-counter retransmit +
+   empty-ACK keepalive via `MacTelnetSession.tick`). Remaining: `terminal /
+   mac-telnet` (interactive PTY relay over the console reader) and the optional
+   ~10s prime-latency fix (cursor-tracking DSR emulator).
 9. **RoMON / WinBox Terminal for execute** — lower-priority execute surfaces
    after mac-telnet is grounded.
 10. **discover / mndp** — `discover --save` populates CDB entries
