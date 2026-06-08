@@ -602,7 +602,16 @@ class MacTelnetAdapter implements ProtocolAdapter {
 			return Promise.resolve(this.console);
 		}
 		if (!this.opening) {
-			this.opening = this.connect();
+			// On failure, tear down any partial socket/console and clear `opening` so
+			// a later call can retry cleanly rather than re-await a rejected promise.
+			this.opening = this.connect().catch((error) => {
+				this.console?.close();
+				this.transport?.close();
+				this.console = undefined;
+				this.transport = undefined;
+				this.opening = undefined;
+				throw error;
+			});
 		}
 		return this.opening;
 	}

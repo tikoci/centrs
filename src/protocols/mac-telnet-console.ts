@@ -59,6 +59,9 @@ const ANSI_ESC2 = new RegExp(`${ESC}[@-_]`, "g");
 /** RouterOS readline prompt: `[user@identity] > ` / `[user@identity] /ip/address> `. */
 export const ROUTEROS_PROMPT_RE = /\[[^\]@\r\n]+@[^\]\r\n]*\][^\r\n]*>\s*$/;
 
+/** How often the console drives {@link MacTelnetSession.tick} (retransmit/keepalive). */
+const TICK_INTERVAL_MS = 15;
+
 /** The first-login one-time license question. */
 const LICENSE_RE = /do you want to see the software license/i;
 
@@ -139,13 +142,30 @@ export function emulateScreen(text: string): string[] {
 
 /**
  * Extract the command's clean output from its raw console response: drop the
- * echoed-command line and any trailing prompt / blank lines.
+ * echoed-command line(s) and any trailing prompt / blank lines.
+ *
+ * The echo is `[prompt] > <command>`. With a normal-length command it is one
+ * line, but a command longer than the terminal width wraps onto further lines.
+ * When `command` is supplied, consume exactly as many echoed lines as the command
+ * spans (so a wrapped echo — e.g. a long `:put [:parse "…"]` — does not leak into
+ * the output); otherwise fall back to dropping the single first line.
  */
-export function extractCommandOutput(raw: string): string {
+export function extractCommandOutput(raw: string, command?: string): string {
 	const lines = emulateScreen(raw);
-	// Line 0 is the echoed `[prompt] > <command>`. (With the wide cols we report,
-	// the echo does not wrap; a >cols-long command is the one case this misses.)
-	const body = lines.slice(1);
+	let start = 1;
+	if (command !== undefined && lines.length > 0) {
+		const first = lines[0] ?? "";
+		const promptMatch = first.match(/^\[[^\]\r\n]*\][^\r\n]*?>\s?/);
+		const echoedOnFirst = promptMatch
+			? first.slice(promptMatch[0].length)
+			: first;
+		let consumed = echoedOnFirst.length;
+		while (consumed < command.length && start < lines.length) {
+			consumed += (lines[start] ?? "").length;
+			start += 1;
+		}
+	}
+	const body = lines.slice(start);
 	while (body.length > 0) {
 		const last = body[body.length - 1] as string;
 		if (last.length === 0 || ROUTEROS_PROMPT_RE.test(last)) {
@@ -179,6 +199,8 @@ export class MacTelnetConsole {
 		reject: (e: CentrsError) => void;
 	}> = [];
 	private readonly decoder = new TextDecoder();
+	/** Rolling tail across chunks so a terminal probe split across packets is still matched. */
+	private probeTail = "";
 
 	constructor(options: MacTelnetConsoleOptions) {
 		this.options = {
@@ -208,7 +230,24 @@ export class MacTelnetConsole {
 
 	/** Feed an inbound datagram into the session. */
 	handlePacket(bytes: Uint8Array): void {
-		this.session.handlePacket(bytes);
+		// This is called from a socket `data`/`message` event — it must never throw
+		// back to the emitter. Outbound sends are already fault-tolerant; an
+		// unexpected processing error here closes the console (rejecting waiters)
+		// rather than crashing the caller's event loop.
+		try {
+			this.session.handlePacket(bytes);
+		} catch (error) {
+			this.onClose(
+				error instanceof CentrsError
+					? error
+					: new CentrsError({
+							code: "routeros/mac-telnet-protocol",
+							summary: "Failed to process a MAC-Telnet datagram.",
+							remediation: "Re-open the session and retry.",
+							cause: error,
+						}),
+			);
+		}
 	}
 
 	/**
@@ -216,13 +255,21 @@ export class MacTelnetConsole {
 	 * first prompt. Resolves once the console is ready to take commands.
 	 */
 	async open(): Promise<void> {
-		// Drive the session's retransmit + keepalive timers. ~200ms is well under
-		// the first retransmit interval and the keepalive idle window. `unref` so a
-		// dangling console never keeps the process alive.
-		this.tickTimer = setInterval(() => this.session.tick(Date.now()), 200);
+		// Drive the session's retransmit + keepalive timers. The tick interval is
+		// small enough to honor the reference retransmit backoff (15ms first step) —
+		// a coarse tick would collapse the early 15/20/30ms steps and delay recovery
+		// from packet loss during session start/auth. `unref` so a dangling console
+		// never keeps the process alive.
+		this.tickTimer = setInterval(() => {
+			try {
+				this.session.tick(Date.now());
+			} catch {
+				/* timer callback must not throw to the event loop */
+			}
+		}, TICK_INTERVAL_MS);
 		this.tickTimer.unref?.();
 		this.session.start();
-		await this.waitReady();
+		await this.waitReady(this.options.primeTimeoutMs);
 		// Wait for the banner / license / first prompt (covers the ~10s stall).
 		await this.waitFor(
 			(buffer) => this.endsWithPrompt(buffer) || LICENSE_RE.test(buffer),
@@ -260,7 +307,7 @@ export class MacTelnetConsole {
 			`running over mac-telnet: ${cli}`,
 		);
 		const raw = this.buffer;
-		return { output: extractCommandOutput(raw), raw };
+		return { output: extractCommandOutput(raw, cli), raw };
 	}
 
 	/**
@@ -302,9 +349,17 @@ export class MacTelnetConsole {
 	}
 
 	private onData(bytes: Uint8Array): void {
-		const chunk = this.decoder.decode(bytes);
+		// Stream-decode so a multi-byte char split across datagrams is not corrupted.
+		const chunk = this.decoder.decode(bytes, { stream: true });
 		this.buffer += chunk;
-		this.answerSizeProbe(chunk);
+		// Match the size probe against `(carry || prev tail) + chunk` so an `ESC[6n`
+		// straddling a packet boundary is still answered. The carry is exactly the
+		// longest probe (`ESC[6n`, 4 bytes) minus one, so a full probe never fits in
+		// the carry alone — i.e. a match always includes a fresh byte and is answered
+		// once, never re-answered as the tail slides.
+		const combined = `${this.probeTail}${chunk}`;
+		this.answerSizeProbe(combined);
+		this.probeTail = combined.slice(-3);
 		this.checkWaiter();
 	}
 
@@ -358,7 +413,7 @@ export class MacTelnetConsole {
 		return ROUTEROS_PROMPT_RE.test(lines[lines.length - 1] ?? "");
 	}
 
-	private waitReady(): Promise<void> {
+	private waitReady(timeoutMs: number): Promise<void> {
 		if (this.ready) return Promise.resolve();
 		if (this.closed) {
 			return Promise.reject(
@@ -370,9 +425,34 @@ export class MacTelnetConsole {
 					}),
 			);
 		}
-		return new Promise((resolve, reject) =>
-			this.readyWaiters.push({ resolve, reject }),
-		);
+		// Bound the wait: if the device never responds (or auth never completes
+		// without closing), open() would otherwise hang forever, ignoring --timeout.
+		return new Promise((resolve, reject) => {
+			const entry = {
+				resolve: () => {
+					clearTimeout(timer);
+					resolve();
+				},
+				reject: (error: CentrsError) => {
+					clearTimeout(timer);
+					reject(error);
+				},
+			};
+			const timer = setTimeout(() => {
+				this.readyWaiters = this.readyWaiters.filter((w) => w !== entry);
+				reject(
+					new CentrsError({
+						code: "transport/timeout",
+						summary:
+							"MAC-Telnet login did not complete — no console response from the device.",
+						remediation:
+							"Confirm the device is reachable over mac-telnet (mac-server interface list) and the credentials are correct.",
+						context: { timeoutMs },
+					}),
+				);
+			}, timeoutMs);
+			this.readyWaiters.push(entry);
+		});
 	}
 
 	/**

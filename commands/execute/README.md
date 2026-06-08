@@ -72,7 +72,7 @@ Status: `rest-api`, `native-api`, and `mac-telnet` are `CHR-passed` (see
 | `--cdb-file` / `--cdb-password` | Read target credentials from (and decrypt) a WinBox CDB file.                          |
 | `--resolve <none\|arp>`         | Resolve a MAC-address target to an IP via the host ARP cache. Default `none`.          |
 | `--timeout <duration>`          | Per-request timeout. REST: ≤ 60s; other transports may allow longer.                  |
-| `--validate[=false]`            | Run the `:parse` + `/console/inspect` gate before execution (default `true`).          |
+| `--validate[=false]`            | Run transport-appropriate preflight validation before execution (default `true`): REST/native use `:parse` + `/console/inspect`; mac-telnet uses a single console `:parse` (covers syntax + unknown-attribute). |
 | `--strict`                      | Treat any warning on a successful run as an error (`ok: false`, nonzero exit), like `-Werror`. Default is lenient (`ok: true` + `warnings`). |
 | `--yes`                         | Confirm write-shaped add/set/remove commands in non-interactive runs.                  |
 | `--max-bytes <n>`               | Byte budget for the rendered envelope; excess output is truncated with a warning + `meta.truncated` (not an error), matching `retrieve`. (Renamed from `--max-results`.) |

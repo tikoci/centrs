@@ -548,7 +548,7 @@ export class MacTelnetSession {
 		// tool, not the session keepalive — idle sessions are kept alive by
 		// empty ACKs, not PING/PONG.)
 		this.activitySinceTick = true;
-		this.options.sink.send(
+		this.emit(
 			encodeHeader({
 				type: MacTelnetPacketType.pong,
 				sourceMac: this.options.sourceMac,
@@ -749,7 +749,7 @@ export class MacTelnetSession {
 
 	private onEnd(header: MacTelnetHeader): void {
 		// Echo END to acknowledge.
-		this.options.sink.send(
+		this.emit(
 			encodeHeader({
 				type: MacTelnetPacketType.end,
 				sourceMac: this.options.sourceMac,
@@ -791,7 +791,7 @@ export class MacTelnetSession {
 		if (this.state === "closed") {
 			return;
 		}
-		this.options.sink.send(
+		this.emit(
 			encodeHeader({
 				type: MacTelnetPacketType.end,
 				sourceMac: this.options.sourceMac,
@@ -817,6 +817,20 @@ export class MacTelnetSession {
 		this.close(error);
 	}
 
+	/**
+	 * Fault-tolerant outbound send. A transient transport error (socket already
+	 * closed, write-after-end during teardown) must never propagate out of an
+	 * inbound-datagram handler and crash the caller's event loop; recovery is the
+	 * peer's retransmit or our own timeout. All session sends go through here.
+	 */
+	private emit(bytes: Uint8Array): void {
+		try {
+			this.options.sink.send(bytes);
+		} catch {
+			/* transport closing / transient send failure — ignore */
+		}
+	}
+
 	private acceptCounter(counter: number): boolean {
 		if (this.lastInCounter === null) {
 			this.lastInCounter = counter;
@@ -832,7 +846,7 @@ export class MacTelnetSession {
 	private acknowledge(counter: number, payloadLength: number): void {
 		this.lastAckCounter = (counter + payloadLength) >>> 0;
 		this.activitySinceTick = true;
-		this.options.sink.send(
+		this.emit(
 			encodeHeader({
 				type: MacTelnetPacketType.ack,
 				sourceMac: this.options.sourceMac,
@@ -853,7 +867,7 @@ export class MacTelnetSession {
 			payload,
 		});
 		this.activitySinceTick = true;
-		this.options.sink.send(bytes);
+		this.emit(bytes);
 		return bytes;
 	}
 
@@ -913,7 +927,7 @@ export class MacTelnetSession {
 				pending.attempts
 			] as number;
 			if (pending.elapsedMs >= wait) {
-				this.options.sink.send(pending.bytes);
+				this.emit(pending.bytes);
 				pending.attempts += 1;
 				pending.elapsedMs = 0;
 			}
@@ -922,7 +936,7 @@ export class MacTelnetSession {
 
 	/** Re-send the last ACK as an empty-ACK keepalive (no payload, no counter advance). */
 	private sendKeepalive(): void {
-		this.options.sink.send(
+		this.emit(
 			encodeHeader({
 				type: MacTelnetPacketType.ack,
 				sourceMac: this.options.sourceMac,

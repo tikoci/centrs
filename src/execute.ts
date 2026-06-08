@@ -1050,8 +1050,26 @@ function routerOsFailureFromResult(
 }
 
 function isRouterOsFailureString(value: string): boolean {
-	return /^(failure:|error:)|unknown parameter|invalid value|session closed|\(:error; line \d+\)|bad parameter\s|bad command name|syntax error|expected end of command/i.test(
-		value.trim(),
+	const trimmed = value.trim();
+	// REST/native fault strings (unchanged).
+	if (
+		/^(failure:|error:)|unknown parameter|invalid value|session closed|\(:error; line \d+\)/i.test(
+			trimmed,
+		)
+	) {
+		return true;
+	}
+	// Console (mac-telnet) error forms. `ret` here is ordinary stdout (every
+	// mac-telnet command and REST `/execute`), so anchor to the grounded RouterOS
+	// error *shapes* — the `(line N column M)` source location for parse rejections
+	// — rather than bare phrases, so `:put "syntax error"` is not misread as a
+	// failure.
+	return (
+		/(?:^|\n)\s*(?:bad parameter \S+|syntax error)\b[^\n]*\(line \d+ column \d+\)/i.test(
+			trimmed,
+		) ||
+		/(?:^|\n)\s*bad command name\b/i.test(trimmed) ||
+		/(?:^|\n)\s*expected end of command\b/i.test(trimmed)
 	);
 }
 

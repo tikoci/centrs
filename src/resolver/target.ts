@@ -142,10 +142,27 @@ export function resolveTarget(
 			"port",
 			cdb?.overrides.port,
 		);
-		const identitySource: ResolverSettingSource =
-			cdb && input.host === undefined && env[ENV_HOST] === undefined
+		// The device identity is the MAC (positional or CDB), NOT --host/CENTRS_HOST,
+		// which are only the UDP delivery endpoint. Attribute meta.target.source to
+		// where the MAC came from so an overridden delivery host does not masquerade
+		// as the identity.
+		const macSource: ResolverSettingSource = normalizeMac(
+			input.targetInput ?? "",
+		)
+			? { kind: "target-input", key: input.targetInput as string }
+			: cdb
 				? { kind: "cdb", key: `record:${cdb.recordIndex}` }
 				: hostSetting.source;
+		// Delivery host/port provenance is independent of the identity.
+		const deliverySource: ResolverSettingSource =
+			deliveryHostSetting?.source ?? {
+				kind: "default",
+				key: "l2-broadcast",
+			};
+		const portSource: ResolverSettingSource = macPortSetting?.source ?? {
+			kind: "default",
+			key: "mac-telnet",
+		};
 		const deliveryHost = deliveryHostSetting?.value.trim() || "255.255.255.255";
 		const port = macPortSetting?.value ?? MAC_TELNET_PORT;
 		return {
@@ -158,12 +175,12 @@ export function resolveTarget(
 			baseUrl: `mac-telnet://${mac}`,
 			identity: cdb?.identity,
 			recordIndex: cdb?.recordIndex,
-			source: identitySource,
-			hostSource: deliveryHostSetting?.source ?? identitySource,
-			portSource: macPortSetting?.source ?? identitySource,
+			source: macSource,
+			hostSource: deliverySource,
+			portSource,
 			sources: {
-				host: deliveryHostSetting?.source ?? identitySource,
-				port: macPortSetting?.source ?? identitySource,
+				host: deliverySource,
+				port: portSource,
 			},
 		};
 	}

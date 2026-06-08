@@ -208,7 +208,7 @@ export function mapRouterOsError(
 	}
 
 	const catchAllCode: CentrsErrorCode =
-		opts.transport === "rest-api"
+		opts.transport === "rest-api" || opts.transport === "mac-telnet"
 			? "routeros/request-failed"
 			: "routeros/api-trap";
 

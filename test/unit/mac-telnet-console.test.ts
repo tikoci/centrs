@@ -93,6 +93,19 @@ describe("extractCommandOutput — real CHR 7.23.1 captures", () => {
 		expect(extractCommandOutput(raw)).toContain("bad parameter no-such-arg");
 	});
 
+	test("a wrapped echo (command longer than a line) does not leak into output", () => {
+		// The device wrapped the echoed command across two lines, then a successful
+		// write returned straight to the prompt (no output).
+		const cmd = "/ip/address/add address=10.9.9.9/32 interface=ether1";
+		const split = 14;
+		const part1 = cmd.slice(0, split);
+		const part2 = cmd.slice(split);
+		const raw = `${P}${part1}\r\n${part2}\r\n${TAIL}`;
+		// Without the command, the wrapped tail leaks; with it the echo is stripped.
+		expect(extractCommandOutput(raw)).toBe(part2);
+		expect(extractCommandOutput(raw, cmd)).toBe("");
+	});
+
 	test("successful write produces empty output", () => {
 		// A successful add prints nothing — straight back to the prompt.
 		const raw = `/ip/address/add address=10.9.9.7/32 interface=ether1\r${P}/ip/address/add address=10.9.9.7/32 interface=ether1\r\n${TAIL}`;
