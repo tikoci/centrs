@@ -18,6 +18,15 @@ The product is *not* "REST/SSH/native API wrappers." The product is
 **validation + structured envelopes + identity resolution** on top of those
 transports. Without those, this is a worse `curl`.
 
+centrs also speaks a small set of MikroTik **peer protocols** that are *not*
+RouterOS-command transports — currently the **bandwidth test** (`btest`), which
+mirrors `/tool/bandwidth-test` and `/tool/bandwidth-server`. This is a
+deliberate, separate capability axis (*measurement*, not "run a validated
+command"): centrs still gives structured envelopes, identity resolution, and
+friendly errors, but the "validate a RouterOS-shaped command" gate below does
+**not** apply to it (see "Validation is the product" and Protocol selection's
+`measure` row).
+
 ## Validation is the product
 
 Every RouterOS-shaped call goes through canonicalize → validate → run →
@@ -43,6 +52,13 @@ re-validate-server-side. Validation is not optional polish.
   `/console/inspect` table needed. In every case a clean parse is necessary, not
   sufficient on its own; semantic validation is a distinct, transport-appropriate
   step (`/console/inspect`, the console `:parse` text, or server re-validation).
+- **Peer-measurement commands (`btest`) are exempt from this gate.** They issue
+  no RouterOS command, so there is no `:parse` / `/console/inspect` step. Their
+  validation is *option-grammar* validation (centrs-side: e.g. `connection-count`
+  only with `protocol=tcp`, `*-udp-tx-size` only with `protocol=udp`, and the
+  direction / speed / size shapes) plus the **EC-SRP5** auth exchange. The
+  structured-envelope, identity-resolution, and friendly-error contract still
+  holds; only the RouterOS-command gate is absent.
 - A failing validator is a real result. Surface it with the structured error
   envelope below — do not bypass.
 
@@ -328,6 +344,7 @@ Per-operation preferences, downgrade order in parens:
 | terminal  | ssh | mac-telnet (L2 only when ssh fails or MAC given) |
 | transfer  | ssh / scp | rest-api files (small only) |
 | discover  | mndp | (not a transport for command operations) |
+| measure   | btest | (explicit-only — no downgrade) |
 
 Rules:
 
@@ -357,6 +374,10 @@ Rules:
 - mac-telnet is the primary L2 execute path; it is the default for execute when
   the target is an unresolved MAC address. If IP-level access is desired, the
   caller must explicitly opt into ARP-based MAC → IP resolution.
+- `measure` (btest, the bandwidth test) is **explicit-only**: it is never part of
+  the auto-selection / downgrade chain above, never substitutes for another
+  protocol, and no other command rides it. `centrs btest …` always uses the btest
+  protocol over TCP/UDP port 2000.
 
 REST-specific constraint: RouterOS REST has a 60-second hard timeout. Do not
 let `--timeout` exceed 60s when `via=rest-api`; reject with a clear error.
@@ -389,6 +410,9 @@ centrs does:
 - Return structured envelopes with provenance and warnings.
 - Use the WinBox CDB at its well-known location as the device datastore and
   cache; overlay centrs metadata via comment-kv and groups.
+- Speak MikroTik peer-measurement protocols on explicit request — the bandwidth
+  test (`btest`), as both client and server — with the same envelope / identity /
+  error contract (but not the RouterOS-command validation gate).
 
 centrs does not:
 
@@ -396,6 +420,17 @@ centrs does not:
 - Treat passive discovery (MNDP) as authoritative inventory.
 - Run write-shaped operations without an explicit target and validation policy.
 - Make generated output the hand-edited source of truth.
+
+### Network listeners
+
+centrs opens a network listener in exactly two sanctioned places: the **proxy**
+surface (HTTP / remote access; `src/webproxy.ts`) and the **btest server**
+(`centrs btest server`, TCP/UDP port 2000). The btest server is an **explicit,
+foreground, user-invoked** command — not an always-on daemon, and not the proxy.
+It **binds loopback by default** (`--bind` to expose), **requires auth by
+default** (`authenticate=yes`, mirroring RouterOS), and is security-sensitive
+surface: treat credentials as redactable (`SECURITY.md`). The MCP server stays
+stdio-only and grows no listener of its own.
 
 ## Invariants
 

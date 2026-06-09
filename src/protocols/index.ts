@@ -15,6 +15,7 @@ export type ProtocolCapability =
 	| "transfer"
 	| "terminal"
 	| "discover"
+	| "measure"
 	| "proxy";
 
 export interface ProtocolPlan {
@@ -77,6 +78,13 @@ export const protocolPlans = [
 		capabilities: ["execute"],
 		notes:
 			"WinBox terminal protocol for execute. Lower priority than mac-telnet.",
+		implemented: false,
+	},
+	{
+		id: "btest",
+		capabilities: ["measure"],
+		notes:
+			"MikroTik bandwidth test (peer protocol, TCP/UDP 2000). Explicit-only — never in the execute/retrieve downgrade chains. v1: client + server, EC-SRP5 + unauthenticated, TCP+UDP. Cell status in docs/MATRIX.md (Peer measurement).",
 		implemented: false,
 	},
 ] as const satisfies readonly ProtocolPlan[];
