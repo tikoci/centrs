@@ -23,6 +23,8 @@
 
 import { createHash, randomInt } from "node:crypto";
 import { createSocket } from "node:dgram";
+import { readFileSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import { CentrsError } from "../errors.ts";
 import {
 	MTWEI_PUBKEY_LEN,
@@ -385,6 +387,290 @@ export function createUdpMacTelnetTransport(options: {
 			return readyPromise;
 		},
 	};
+}
+
+function isZeroMac(mac: MacAddress): boolean {
+	return mac.every((octet) => octet === 0);
+}
+
+function tryParseMac(value: string | undefined): MacAddress | undefined {
+	if (!value) {
+		return undefined;
+	}
+	try {
+		return parseMac(value);
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Read an interface's real hardware MAC from the OS when {@link networkInterfaces}
+ * reports an all-zero MAC. Some virtual NICs do this — notably ZeroTier's `feth*`
+ * taps on macOS — yet RouterOS needs the *real* MAC as the in-packet source. Linux
+ * exposes it at `/sys/class/net/<name>/address`; macOS/BSD print it on the `ether`
+ * line of `ifconfig <name>`. Returns `undefined` on any failure.
+ */
+function hardwareMacOf(name: string): MacAddress | undefined {
+	try {
+		const sys = readFileSync(`/sys/class/net/${name}/address`, "utf8").trim();
+		const mac = tryParseMac(sys);
+		if (mac && !isZeroMac(mac)) {
+			return mac;
+		}
+	} catch {
+		/* not Linux / no sysfs entry */
+	}
+	try {
+		const result = Bun.spawnSync(["ifconfig", name]);
+		const text = new TextDecoder().decode(result.stdout);
+		const match = text.match(/\bether\s+([0-9a-f:]{17})\b/i);
+		const mac = tryParseMac(match?.[1]);
+		if (mac && !isZeroMac(mac)) {
+			return mac;
+		}
+	} catch {
+		/* no ifconfig on PATH */
+	}
+	return undefined;
+}
+
+function ipv4ToInt(addr: string): number | undefined {
+	const parts = addr.split(".");
+	if (parts.length !== 4) {
+		return undefined;
+	}
+	let value = 0;
+	for (const part of parts) {
+		const octet = Number(part);
+		if (!Number.isInteger(octet) || octet < 0 || octet > 255) {
+			return undefined;
+		}
+		value = (value << 8) | octet;
+	}
+	return value >>> 0;
+}
+
+function intToIpv4(value: number): string {
+	return [24, 16, 8, 0].map((shift) => (value >>> shift) & 0xff).join(".");
+}
+
+/** The IPv4 subnet-directed broadcast for `address`/`netmask` (e.g. `172.29.8.255`). */
+export function directedBroadcast(
+	address: string,
+	netmask: string,
+): string | undefined {
+	const addr = ipv4ToInt(address);
+	const mask = ipv4ToInt(netmask);
+	if (addr === undefined || mask === undefined) {
+		return undefined;
+	}
+	return intToIpv4(((addr & mask) | (~mask >>> 0)) >>> 0);
+}
+
+/** A local interface usable for MAC-Telnet broadcast: real MAC + directed broadcast. */
+export interface BroadcastInterface {
+	name: string;
+	address: string;
+	broadcast: string;
+	mac: MacAddress;
+}
+
+/**
+ * Enumerate up, non-internal IPv4 interfaces that can carry a MAC-Telnet broadcast,
+ * each with its **real** MAC (via {@link hardwareMacOf} when the OS reports zeros)
+ * and subnet-directed broadcast. The directed broadcast — not the limited
+ * `255.255.255.255` — is what reaches a device on a non-default-route NIC: macOS
+ * sends the limited broadcast only out the default route, whereas a directed
+ * broadcast is steered to its interface by the routing table.
+ */
+export function listBroadcastInterfaces(): BroadcastInterface[] {
+	const out: BroadcastInterface[] = [];
+	for (const [name, infos] of Object.entries(networkInterfaces())) {
+		for (const info of infos ?? []) {
+			if (info.family !== "IPv4" || info.internal) {
+				continue;
+			}
+			let mac = tryParseMac(info.mac);
+			if (!mac || isZeroMac(mac)) {
+				mac = hardwareMacOf(name);
+			}
+			if (!mac || isZeroMac(mac)) {
+				continue;
+			}
+			const broadcast = directedBroadcast(info.address, info.netmask);
+			if (!broadcast) {
+				continue;
+			}
+			out.push({ name, address: info.address, broadcast, mac });
+		}
+	}
+	return out;
+}
+
+/** The local source address the OS would pick to reach `host:port` (sends nothing). */
+async function egressAddressFor(
+	host: string,
+	port: number,
+): Promise<string | undefined> {
+	return await new Promise<string | undefined>((resolve) => {
+		const probe = createSocket("udp4");
+		const done = (addr?: string): void => {
+			try {
+				probe.close();
+			} catch {
+				/* already closed */
+			}
+			resolve(addr);
+		};
+		probe.on("error", () => done(undefined));
+		try {
+			// `connect` only fixes the peer + selects a route; it sends no packet.
+			probe.connect(port, host, () => {
+				try {
+					done(probe.address().address);
+				} catch {
+					done(undefined);
+				}
+			});
+		} catch {
+			done(undefined);
+		}
+	});
+}
+
+/**
+ * Resolve the **real MAC of the interface that egresses toward `host:port`**, for
+ * use as the in-packet source MAC.
+ *
+ * RouterOS's mac-server only replies to a SESSIONSTART whose in-packet source MAC
+ * is the sending interface's real MAC — a synthetic/locally-administered MAC gets
+ * no reply at all (verified on RB1100AHx4 / RouterOS 7.24beta1 over the real
+ * UDP/L2 broadcast path; the reference `mactelnet` likewise uses each interface's
+ * own MAC). Returns `undefined` when no interface matches the egress address, so
+ * the caller can fall back to a synthetic source MAC.
+ */
+export async function resolveEgressMac(
+	host: string,
+	port: number,
+): Promise<MacAddress | undefined> {
+	const localAddr = await egressAddressFor(host, port);
+	if (!localAddr) {
+		return undefined;
+	}
+	for (const ifc of listBroadcastInterfaces()) {
+		if (ifc.address === localAddr) {
+			return ifc.mac;
+		}
+	}
+	return undefined;
+}
+
+/** Which interface (source MAC + delivery host) reaches a target over MAC-Telnet. */
+export interface MacTelnetRoute {
+	sourceMac: MacAddress;
+	host: string;
+}
+
+/**
+ * Find which local interface can reach `destinationMac` over MAC-Telnet by
+ * spraying a SESSIONSTART to **every interface's directed broadcast** (each with
+ * that interface's real MAC, all sharing one session key) and matching the
+ * device's reply. This is how `execute <mac>` reaches a device wherever it lives —
+ * the default-route LAN, a ZeroTier tap, etc. — without the caller naming an
+ * interface, mirroring how the reference client and WinBox probe every NIC.
+ *
+ * The reply is the device's broadcast ACK; its in-packet *destination* MAC tells
+ * us which interface's source MAC the device accepted, and that interface's
+ * directed broadcast is the winning delivery host. Resolves `undefined` when no
+ * interface answers within `timeoutMs` (caller falls back to single-egress).
+ */
+export async function discoverMacTelnetRoute(opts: {
+	destinationMac: MacAddress;
+	port: number;
+	timeoutMs: number;
+	sessionKey?: number;
+}): Promise<MacTelnetRoute | undefined> {
+	const interfaces = listBroadcastInterfaces();
+	if (interfaces.length === 0) {
+		return undefined;
+	}
+	const sessionKey = opts.sessionKey ?? randomInt(0x10000);
+	return await new Promise<MacTelnetRoute | undefined>((resolve) => {
+		const socket = createSocket({ type: "udp4", reuseAddr: true });
+		let settled = false;
+		const timers: ReturnType<typeof setTimeout>[] = [];
+		const finish = (route?: MacTelnetRoute): void => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			for (const t of timers) {
+				clearTimeout(t);
+			}
+			try {
+				socket.close();
+			} catch {
+				/* already closed */
+			}
+			resolve(route);
+		};
+		socket.on("error", () => finish(undefined));
+		socket.on("message", (message: Buffer) => {
+			let header: MacTelnetHeader;
+			try {
+				header = decodeHeader(new Uint8Array(message), { fromServer: true });
+			} catch {
+				return; // stray/truncated datagram on the shared segment
+			}
+			if (header.version !== 1 || header.sessionKey !== sessionKey) {
+				return;
+			}
+			if (
+				header.type !== MacTelnetPacketType.ack &&
+				header.type !== MacTelnetPacketType.data
+			) {
+				return;
+			}
+			if (!macEquals(header.sourceMac, opts.destinationMac)) {
+				return;
+			}
+			const winner = interfaces.find((ifc) =>
+				macEquals(ifc.mac, header.destinationMac),
+			);
+			if (winner) {
+				finish({ sourceMac: winner.mac, host: winner.broadcast });
+			}
+		});
+		const spray = (): void => {
+			for (const ifc of interfaces) {
+				const packet = buildPacket({
+					type: MacTelnetPacketType.sessionStart,
+					sourceMac: ifc.mac,
+					destinationMac: opts.destinationMac,
+					sessionKey,
+					counter: 0,
+				});
+				try {
+					socket.send(packet, opts.port, ifc.broadcast);
+				} catch {
+					/* one interface failing must not abort the spray */
+				}
+			}
+		};
+		socket.bind(0, () => {
+			try {
+				socket.setBroadcast(true);
+			} catch {
+				/* some platforms forbid it on an unbound family; sends may still work */
+			}
+			spray();
+			// A couple of retransmits cover an early dropped SESSIONSTART (UDP).
+			timers.push(setTimeout(spray, 250));
+			timers.push(setTimeout(spray, 700));
+			timers.push(setTimeout(() => finish(undefined), opts.timeoutMs));
+		});
+	});
 }
 
 export interface MacTelnetSessionOptions {

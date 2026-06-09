@@ -3,10 +3,12 @@ import { createHash } from "node:crypto";
 import {
 	buildPacket,
 	decodeHeader,
+	directedBroadcast,
 	encodeControlBlock,
 	encodeHeader,
 	encodeTerminalDimension,
 	formatMac,
+	listBroadcastInterfaces,
 	MAC_TELNET_CONTROL_MAGIC,
 	MAC_TELNET_HEADER_LEN,
 	MAC_TELNET_KEEPALIVE_IDLE_MS,
@@ -187,6 +189,44 @@ describe("mac-telnet password hashing", () => {
 		expect(value.length).toBe(17);
 		expect(value[0]).toBe(0x00);
 		expect(hex(value.slice(1))).toBe(hex(new Uint8Array(expectedDigest)));
+	});
+});
+
+describe("mac-telnet directed broadcast", () => {
+	test("computes the subnet broadcast from address + netmask", () => {
+		expect(directedBroadcast("172.29.8.123", "255.255.255.0")).toBe(
+			"172.29.8.255",
+		);
+		expect(directedBroadcast("192.168.163.152", "255.255.255.0")).toBe(
+			"192.168.163.255",
+		);
+		expect(directedBroadcast("10.87.100.222", "255.255.0.0")).toBe(
+			"10.87.255.255",
+		);
+		// /25 — broadcast is mid-octet, the case a naive `.255` would get wrong.
+		expect(directedBroadcast("192.0.2.10", "255.255.255.128")).toBe(
+			"192.0.2.127",
+		);
+		expect(directedBroadcast("192.0.2.200", "255.255.255.128")).toBe(
+			"192.0.2.255",
+		);
+	});
+
+	test("returns undefined for malformed input", () => {
+		expect(directedBroadcast("not.an.ip", "255.255.255.0")).toBeUndefined();
+		expect(directedBroadcast("192.0.2.1", "999.0.0.0")).toBeUndefined();
+		expect(directedBroadcast("192.0.2.1.5", "255.255.255.0")).toBeUndefined();
+	});
+});
+
+describe("mac-telnet broadcast interfaces", () => {
+	test("each entry has a real 6-octet MAC and a valid directed broadcast", () => {
+		for (const ifc of listBroadcastInterfaces()) {
+			expect(ifc.mac.length).toBe(6);
+			expect(ifc.mac.some((octet) => octet !== 0)).toBe(true);
+			expect(ifc.broadcast).toMatch(/^\d{1,3}(\.\d{1,3}){3}$/);
+			expect(typeof ifc.name).toBe("string");
+		}
 	});
 });
 

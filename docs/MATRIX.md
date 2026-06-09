@@ -132,7 +132,25 @@ glue, not new protocol code:
   validation-reject path, plus the console reader directly — all green via
   `bun run test:integration` (`test/integration/mac-telnet-console.test.ts`,
   examples 19–21). Transport/auth alone stay covered by
-  `test/integration/mac-telnet.test.ts` (MTWEI login + MD5 refusal). Unit coverage:
+  `test/integration/mac-telnet.test.ts` (MTWEI login + MD5 refusal).
+  **Caveat — what the CHR integration evidence does *not* cover:** it drives the
+  session/console over the quickchr `socket-connect` **L2 bridge**
+  (`test/integration/mactelnet-l2-bridge.ts`), so the real UDP transport
+  (`createUdpMacTelnetTransport` and its egress/delivery choices) is *not*
+  exercised there. That hid a real-device break — the in-packet source MAC was a
+  synthetic `02:..`, which RouterOS silently ignores. **UDP-delivery facts (now
+  real-device-verified against an RB1100AHx4 on RouterOS 7.24beta1 over a
+  ZeroTier-extended LAN):** (a) the in-packet source MAC must be the **sending
+  interface's real MAC** or the device never replies — `resolveEgressMac` reads it
+  (with an `ifconfig`/sysfs fallback for virtual NICs that report all-zero); (b)
+  the device answers only a **broadcast** delivery, not unicast; (c) macOS sends
+  the limited `255.255.255.255` broadcast out the default-route NIC only, so
+  reaching a device on another NIC (ZeroTier) needs that NIC's **directed**
+  broadcast; (d) the reply is itself a broadcast, so the receiving socket must bind
+  `0.0.0.0`. `MacTelnetAdapter` therefore runs `discoverMacTelnetRoute` for the
+  default target — sprays every interface's directed broadcast with its real MAC,
+  shared session key, first ACK wins — so `execute <mac>` finds the device on any
+  NIC without naming an interface (the same reach WinBox's MAC connection has). Unit coverage:
   `test/unit/mtwei.test.ts` (EC-SRP math, byte-identical to `mtwei.c` / WinBox
   EC-SRP5), `test/unit/mac-telnet.test.ts` (handshake + MTWEI offer + auth-failure),
   and `test/unit/mac-telnet-console.test.ts` (screen emulation + output extraction

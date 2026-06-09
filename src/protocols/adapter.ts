@@ -20,9 +20,11 @@ import { CentrsError } from "../errors.ts";
 import type { RouterOsProtocol } from "./index.ts";
 import {
 	createUdpMacTelnetTransport,
+	discoverMacTelnetRoute,
 	type MacAddress,
 	type MacTelnetTransport,
 	parseMac,
+	resolveEgressMac,
 } from "./mac-telnet.ts";
 import { MacTelnetConsole } from "./mac-telnet-console.ts";
 import {
@@ -529,7 +531,8 @@ class MacTelnetAdapter implements ProtocolAdapter {
 		inspect: false,
 	};
 	private readonly destinationMac: MacAddress;
-	private readonly sourceMac: MacAddress;
+	/** Explicit client MAC from config; when unset, connect() resolves the real egress MAC. */
+	private readonly explicitSourceMac?: MacAddress;
 	private transport?: MacTelnetTransport;
 	private console?: MacTelnetConsole;
 	private opening?: Promise<MacTelnetConsole>;
@@ -544,9 +547,9 @@ class MacTelnetAdapter implements ProtocolAdapter {
 			});
 		}
 		this.destinationMac = parseMac(config.mac);
-		this.sourceMac = config.sourceMac
+		this.explicitSourceMac = config.sourceMac
 			? parseMac(config.sourceMac)
-			: randomLocalMac();
+			: undefined;
 	}
 
 	private unsupported(operation: string): CentrsError {
@@ -617,15 +620,16 @@ class MacTelnetAdapter implements ProtocolAdapter {
 	}
 
 	private async connect(): Promise<MacTelnetConsole> {
+		const { sourceMac, host } = await this.resolveRoute();
 		const transport = createUdpMacTelnetTransport({
-			host: this.config.host,
+			host,
 			port: this.config.port,
-			broadcast: isBroadcastHost(this.config.host),
+			broadcast: isBroadcastHost(host),
 		});
 		await transport.ready();
 		const console = new MacTelnetConsole({
 			sink: transport,
-			sourceMac: this.sourceMac,
+			sourceMac,
 			destinationMac: this.destinationMac,
 			username: this.config.username ?? "",
 			password: this.config.password,
@@ -638,7 +642,45 @@ class MacTelnetAdapter implements ProtocolAdapter {
 		await console.open();
 		return console;
 	}
+
+	/**
+	 * Decide the in-packet source MAC and UDP delivery host. RouterOS only replies
+	 * to a SESSIONSTART whose in-packet source MAC is the sending interface's real
+	 * MAC, so a synthetic MAC is only a last resort.
+	 *
+	 * - An explicit configured source MAC always wins (keeps the configured host).
+	 * - The default delivery host (the `255.255.255.255` sentinel) means "find the
+	 *   device": spray every interface's directed broadcast and use the one that
+	 *   answers — the only path that reaches a device on a non-default-route NIC
+	 *   (e.g. ZeroTier), where WinBox's MAC connection also works.
+	 * - An explicit host is honored, using that interface's real egress MAC.
+	 */
+	private async resolveRoute(): Promise<{
+		sourceMac: MacAddress;
+		host: string;
+	}> {
+		if (this.explicitSourceMac) {
+			return { sourceMac: this.explicitSourceMac, host: this.config.host };
+		}
+		if (this.config.host === DEFAULT_MAC_TELNET_BROADCAST) {
+			const route = await discoverMacTelnetRoute({
+				destinationMac: this.destinationMac,
+				port: this.config.port,
+				timeoutMs: Math.min(this.config.timeoutMs, 5_000),
+			});
+			if (route) {
+				return route;
+			}
+		}
+		const sourceMac =
+			(await resolveEgressMac(this.config.host, this.config.port)) ??
+			randomLocalMac();
+		return { sourceMac, host: this.config.host };
+	}
 }
+
+/** Resolver default delivery host for mac-telnet; signals "discover the route". */
+const DEFAULT_MAC_TELNET_BROADCAST = "255.255.255.255";
 
 /** A random locally-administered unicast MAC (`02:xx:…`) for the in-packet source. */
 function randomLocalMac(): MacAddress {
