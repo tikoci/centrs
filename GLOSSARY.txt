@@ -377,3 +377,9 @@ testuser
 testpass
 wrongpass
 antar
+swordfish
+
+# btest session layer.
+pselect
+interoperation
+Mbps

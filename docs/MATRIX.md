@@ -215,8 +215,13 @@ Auth reuses the EC-SRP5 curve math shared with mac-telnet — now **extracted** 
 `src/protocols/ec-srp5.ts` (mac-telnet stays byte-identical) with the net-new
 **server** role (`ecSrp5ServerPublicKey`/`ecSrp5ServerShared`), loopback-tested.
 The wire **codec** (`src/protocols/btest.ts`: command / `[len][payload]` EC-SRP5
-4-message framing / status / UDP) is unit-tested. The session state machine, data
-engines, orchestrator, and CLI are not started, so the cells stay `not-started`.
+4-message framing / status / UDP) is unit-tested. The **session state machine +
+TCP/UDP data engines** (`src/protocols/btest-session.ts`) now exist and are
+loopback-tested both roles (`test/unit/btest-session.test.ts`): the handshake
+(none + EC-SRP5), single-connection TCP + UDP throughput, and UDP loss accounting,
+all grounded on `manawenuz/btest-rs`. TCP multi-connection (`connection-count > 1`)
+data fan-out, the orchestrator, and the CLI are not started, so the cells stay
+`not-started` (no runnable command yet).
 Output: live `text` (default) or `--csv` streaming records, plus a single summary
 envelope for `--format json`/`yaml` (`data.sessions[]` for the server,
 `data.reports[]` for the client). The broader JSON-streaming (NDJSON) decision is

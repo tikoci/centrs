@@ -6,10 +6,13 @@ and `/tool/bandwidth-server` (server), so it is a drop-in for the Windows-only
 `btest.exe` on macOS/Linux.
 
 Status: `designed` (CLI/orchestrator). The protocol **codec**
-(`src/protocols/btest.ts`) and the shared **EC-SRP5** core including the net-new
-server role (`src/protocols/ec-srp5.ts`) exist and are unit-tested; the CLI,
-orchestrator, session state machine, and data engines are **not started**, and no
-cell is `CHR-passed`. See `docs/MATRIX.md` ("Peer measurement
+(`src/protocols/btest.ts`), the shared **EC-SRP5** core including the net-new
+server role (`src/protocols/ec-srp5.ts`), and the **session state machine +
+TCP/UDP data engines** (`src/protocols/btest-session.ts`) exist and are
+unit/loopback-tested (handshake both roles, none + EC-SRP5, single-connection
+TCP + UDP throughput/loss accounting); the **CLI and orchestrator** are **not
+started**, TCP multi-connection (`connection-count > 1`) data fan-out is a
+follow-up, and no cell is `CHR-passed`. See `docs/MATRIX.md` ("Peer measurement
 (`btest`)") for the cell states — that is the only status surface. v1 scope:
 **both** modes (client + server), **EC-SRP5 + unauthenticated** auth, **TCP and
 UDP** tests. Legacy pre-6.43 double-MD5 is out of scope.
