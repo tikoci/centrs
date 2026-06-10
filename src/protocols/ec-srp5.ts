@@ -30,22 +30,43 @@ export const EC_SRP5_PUBKEY_LEN = 33;
 export const EC_SRP5_VALIDATOR_LEN = 32;
 
 // ── Curve constants (verbatim from mtwei.c `mtwei_init`) ────────────────────
+// Expressed via `BigInt("0x…")` rather than `0x…n` literals: CodeQL's JS
+// extractor wrongly infers hex BigInt literals as possibly-undefined, which makes
+// every downstream `+`/`*`/`%` here trip "implicit operand conversion". The
+// constructor form is byte-identical (same hex value) and is correctly modelled
+// as `bigint`, so the false positives go away without touching the math.
 /** Field prime: 2^255 − 19. */
-const P = 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffedn;
+const P = BigInt(
+	"0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed",
+);
 /** Short-Weierstrass curve coefficient a. */
-const A = 0x2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa984914a144n;
+const A = BigInt(
+	"0x2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa984914a144",
+);
 /** Short-Weierstrass curve coefficient b. */
-const B = 0x7b425ed097b425ed097b425ed097b425ed097b425ed097b4260b5e9c7710c864n;
+const B = BigInt(
+	"0x7b425ed097b425ed097b425ed097b425ed097b425ed097b4260b5e9c7710c864",
+);
 /** Group order. */
-const N = 0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3edn;
+const N = BigInt(
+	"0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed",
+);
 /** Generator X (Weierstrass affine). */
-const GX = 0x2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaad245an;
+const GX = BigInt(
+	"0x2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaad245a",
+);
 /** Generator Y (Weierstrass affine). */
-const GY = 0x5f51e65e475f794b1fe122d388b72eb36dc2b28192839e4dd6163a5d81312c14n;
+const GY = BigInt(
+	"0x5f51e65e475f794b1fe122d388b72eb36dc2b28192839e4dd6163a5d81312c14",
+);
 /** Weierstrass-X → Montgomery-X additive conversion (mtwei.c `w2m`). */
-const W2M = 0x555555555555555555555555555555555555555555555555555555555552db9cn;
+const W2M = BigInt(
+	"0x555555555555555555555555555555555555555555555555555555555552db9c",
+);
 /** Montgomery-X → Weierstrass-X additive conversion (mtwei.c `m2w`). */
-const M2W = 0x2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaad2451n;
+const M2W = BigInt(
+	"0x2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaad2451",
+);
 /** sqrt(−1) mod P, for the p ≡ 5 (mod 8) square-root path. */
 const SQRT_M1 = modPow(2n, (P - 1n) / 4n, P);
 

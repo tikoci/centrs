@@ -130,11 +130,17 @@ describeFast("btest: CHR bandwidth-test client → centrs server (SLIRP)", () =>
 				return env;
 			};
 			const fireTest = (args: string): void => {
-				void ready
-					.exec(`/tool/bandwidth-test address=${GATEWAY} ${args}`)
-					.catch(() => {
-						/* a non-returning interactive run is expected; the server is the truth */
-					});
+				const command = `/tool/bandwidth-test address=${GATEWAY} ${args}`;
+				void ready.exec(command).catch((error: unknown) => {
+					// A non-returning interactive run is expected (the server is the
+					// source of truth), but log launcher errors so a connectivity or
+					// console failure is diagnosable rather than silently swallowed.
+					console.log(
+						`  [fireTest] \`${command}\` did not return cleanly: ${
+							error instanceof Error ? error.message : String(error)
+						}`,
+					);
+				});
 			};
 
 			// Run all cycles first (logging each), then assert — so one run surfaces

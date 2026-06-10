@@ -84,8 +84,8 @@ export const protocolPlans = [
 		id: "btest",
 		capabilities: ["measure"],
 		notes:
-			"MikroTik bandwidth test (peer protocol, TCP/UDP 2000). Explicit-only — never in the execute/retrieve downgrade chains. v1: client + server, EC-SRP5 + unauthenticated, TCP+UDP. Cell status in docs/MATRIX.md (Peer measurement).",
-		implemented: false,
+			"MikroTik bandwidth test (peer protocol, TCP/UDP 2000). Explicit-only — never in the execute/retrieve downgrade chains. v1: client + server, EC-SRP5 + unauthenticated, TCP+UDP. Server CHR-passed; cell status in docs/MATRIX.md (Peer measurement).",
+		implemented: true,
 	},
 ] as const satisfies readonly ProtocolPlan[];
 

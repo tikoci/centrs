@@ -43,7 +43,7 @@ centrs btest client <router> [--protocol udp|tcp] [--direction receive|transmit|
 
 centrs btest server [--authenticate[=false]] [--user U] [--password P] \
                     [--bind 127.0.0.1] [--port 2000] \
-                    [--allocate-udp-ports-from 2000] [--max-sessions 100] \
+                    [--allocate-udp-ports-from 2001] [--max-sessions 100] \
                     [--duration 1h] [--csv | --format text|csv|json|yaml]
 ```
 
@@ -102,7 +102,7 @@ centrs btest server [--authenticate[=false]] [--user U] [--password P] \
 | `--user` / `--password` | — | The accepted credential when `authenticate=true` (v1: one user). Falls back to `CENTRS_*`. |
 | `--bind <addr>` | **centrs-only** | Listen address; **default `127.0.0.1`**. Use `0.0.0.0` to expose on the LAN. |
 | `--port <n>` | — (default `2000`) | Control-connection port. |
-| `--allocate-udp-ports-from <n>` | `allocate-udp-ports-from`, default `2000` | Base of the UDP data-port range. |
+| `--allocate-udp-ports-from <n>` | `allocate-udp-ports-from` | Base of the UDP data-port range; default `2001` (just above the TCP/2000 control port). |
 | `--max-sessions <n>` | `max-sessions` (1..1000), default `100` | Concurrent test cap; further clients get `routeros/btest-too-many-sessions`. |
 | `--duration <dur>` | — | Optional auto-stop; otherwise runs until Ctrl-C. |
 | `--format <text\|csv\|json\|yaml>` | — (default `text`) | `text` = human session log; `csv` = streaming CSV records; `json`/`yaml` = final summary envelope. |
@@ -156,9 +156,11 @@ contract yet (see Open questions):
   `text` and `csv` streamed. It is not itself streamed (one envelope, at the end).
 
 CSV columns — client:
-`time,direction,protocol,tx_bps,rx_bps,tx_avg_bps,rx_avg_bps,lost_packets,tx_size,rx_size`;
-server:
-`time,event,client,protocol,direction,user,tx_bps,rx_bps`. A mid-run error ends
+`seq,direction,protocol,tx_bps,rx_bps,lost_packets,tx_bytes,rx_bytes` (one row per
+interval; `seq` is the status sequence number, `tx_bytes`/`rx_bytes` the per-interval
+byte counts); server:
+`duration_ms,event,client,protocol,direction,user,tx_bps,rx_bps` (one row per session;
+`tx_bps`/`rx_bps` are session averages). A mid-run error ends
 the stream and is carried in the summary envelope's `error` (`json`) or a final
 `error` row (`csv`); the process exit code reflects whether the test/server
 *started* cleanly.

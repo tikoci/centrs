@@ -462,6 +462,13 @@ export async function btestServer(
 	const authenticate = request.authenticate ?? true;
 	const maxSessions = request.maxSessions ?? DEFAULT_MAX_SESSIONS;
 	const allocateFrom = request.allocateUdpPortsFrom ?? BTEST_UDP_PORT_START;
+	// Resolve the single accepted credential through the same path as the client
+	// (flags first, then CENTRS_USERNAME / CENTRS_PASSWORD). No CDB here — the
+	// server has no target device.
+	const auth = resolveAuth(
+		{ username: request.username, password: request.password },
+		request.env ?? Bun.env,
+	);
 	const operation: BtestServerOperationMeta = {
 		command: "btest",
 		mode: "server",
@@ -471,6 +478,17 @@ export async function btestServer(
 
 	try {
 		validateServerOptions(request);
+		// authenticate=true (the default) without a credential would bind a server
+		// that rejects every client — fail fast instead.
+		if (
+			authenticate &&
+			(auth.username === undefined || !auth.passwordProvided)
+		) {
+			throw optionError(
+				"authenticate",
+				"btest server authenticate=true needs --user and --password (or CENTRS_USERNAME / CENTRS_PASSWORD); pass --no-authenticate for an open server.",
+			);
+		}
 	} catch (error) {
 		return buildServerErrorEnvelope(operation, error);
 	}
@@ -512,11 +530,13 @@ export async function btestServer(
 				try {
 					const result = await handleBtestServerConnection(channel, {
 						authenticate,
-						...(request.username !== undefined
-							? { username: request.username }
+						// Only the resolved credential, and only when auth is on (never
+						// leak creds into an unauthenticated handshake).
+						...(authenticate && auth.username !== undefined
+							? { username: auth.username }
 							: {}),
-						...(request.password !== undefined
-							? { password: request.password }
+						...(authenticate && auth.passwordProvided
+							? { password: auth.password }
 							: {}),
 						serverUdpPort,
 						udpBindHost: bind === "127.0.0.1" ? "127.0.0.1" : "0.0.0.0",
@@ -629,8 +649,10 @@ function listenError(error: unknown, bind: string, port: number): CentrsError {
 			? String((error as { code: unknown }).code)
 			: undefined;
 	if (code === "EADDRINUSE") {
+		// Local bind failure — not a remote peer refusing us, so `transport/network`
+		// rather than `transport/connection-refused`.
 		return new CentrsError({
-			code: "transport/connection-refused",
+			code: "transport/network",
 			summary: `TCP ${bind}:${port} is already in use; cannot bind the btest server.`,
 			remediation:
 				"Stop the process holding the port (often another bandwidth server), or pass a different --port.",
@@ -668,18 +690,34 @@ function buildServerErrorEnvelope(
 
 // ── Output rendering ──────────────────────────────────────────────────────────
 
-/** CSV header for the client interval stream. */
+/**
+ * CSV header for the client interval stream. Columns track the row emitted by
+ * {@link btestClientCsvRow} 1:1 — `seq` is the status sequence number and
+ * `tx_bytes`/`rx_bytes` are the per-interval byte counts (not packet sizes).
+ */
 export const BTEST_CLIENT_CSV_HEADER =
-	"time,direction,protocol,tx_bps,rx_bps,lost_packets,tx_size,rx_size";
-/** CSV header for the server session stream. */
+	"seq,direction,protocol,tx_bps,rx_bps,lost_packets,tx_bytes,rx_bytes";
+/**
+ * CSV header for the server session stream. `duration_ms` is the session
+ * lifetime and `tx_bps`/`rx_bps` are its average throughput.
+ */
 export const BTEST_SERVER_CSV_HEADER =
-	"time,event,client,protocol,direction,user,tx_bps,rx_bps";
+	"duration_ms,event,client,protocol,direction,user,tx_bps,rx_bps";
+
+/**
+ * RFC 4180 field escape: wrap in double quotes (doubling any internal quote)
+ * when the value carries a comma, quote, or newline. Keeps string fields like
+ * `user` and `client` (e.g. an IPv6 address) from breaking the column layout.
+ */
+function escapeCsvField(value: string): string {
+	return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
 
 export function btestClientCsvRow(record: BtestReportRecord): string {
 	return [
 		record.seq,
-		record.direction,
-		record.protocol,
+		escapeCsvField(record.direction),
+		escapeCsvField(record.protocol),
 		Math.round(record.txBps),
 		Math.round(record.rxBps),
 		record.lostPackets,
@@ -692,10 +730,10 @@ export function btestServerCsvRow(record: BtestSessionRecord): string {
 	return [
 		record.durationMs,
 		"session",
-		record.client,
-		record.protocol,
-		record.direction,
-		record.user,
+		escapeCsvField(record.client),
+		escapeCsvField(record.protocol),
+		escapeCsvField(record.direction),
+		escapeCsvField(record.user),
 		Math.round(record.txAvgBps),
 		Math.round(record.rxAvgBps),
 	].join(",");

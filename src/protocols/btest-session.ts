@@ -983,11 +983,33 @@ async function udpTxLoop(
 	const { counters } = ctx;
 	let seq = 0;
 	let interval = calcSendIntervalMs(counters.txSpeed, ctx.txSize);
+	// A bandwidth test emits a huge number of datagrams, so a fresh allocation per
+	// packet is pure GC pressure. Rotate through a small ring of pre-allocated
+	// buffers instead, writing only the 4-byte BE seq each send. node:dgram must
+	// not see a buffer mutated while an earlier send is still queued, but pace()
+	// yields the event loop every iteration (sleep, or setImmediate when
+	// unlimited), so a slot's prior send has flushed long before we cycle back to
+	// it. The first allocation also runs encodeUdpPacket's size guard (≥ 4 bytes).
+	const RING = 8;
+	const ring = Array.from({ length: RING }, (_, i) => {
+		const buf =
+			i === 0
+				? encodeUdpPacket(0, ctx.txSize, ctx.randomData)
+				: new Uint8Array(ctx.txSize);
+		if (i !== 0 && ctx.randomData) crypto.getRandomValues(buf);
+		return {
+			buf,
+			view: new DataView(buf.buffer, buf.byteOffset, buf.byteLength),
+		};
+	});
+	let slot = 0;
 	while (counters.running) {
-		const packet = encodeUdpPacket(seq, ctx.txSize, ctx.randomData);
+		const cell = ring[slot] as (typeof ring)[number];
+		slot = (slot + 1) % RING;
+		cell.view.setUint32(0, seq, false);
 		try {
-			if (target) udp.send(packet, target.port, target.host);
-			else udp.send(packet);
+			if (target) udp.send(cell.buf, target.port, target.host);
+			else udp.send(cell.buf);
 		} catch {
 			await sleep(1);
 			continue;
