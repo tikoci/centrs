@@ -362,12 +362,20 @@ export function createBtestUdpSocket(): BtestUdpSocket {
 	return {
 		bind: (port, host) =>
 			new Promise<number>((resolve, reject) => {
-				// Detach the bind-time error listener once bound, so a later runtime
-				// error doesn't fire this (stale) reject and pin the closure alive.
-				const onBindError = (error: Error): void => reject(error);
-				socket.once("error", onBindError);
+				// Keep a permanent error listener so runtime errors (e.g. ICMP
+				// "port unreachable" → ECONNREFUSED when a SLIRP peer is
+				// unreachable) don't crash the process as unhandled events.
+				// Only reject on errors that arrive before the socket is bound.
+				let bound = false;
+				socket.on("error", (error: Error): void => {
+					if (!bound) reject(error);
+					// Post-bind errors are swallowed: the UDP TX loop already
+					// handles send failures via try/catch; ICMP-driven errors
+					// arriving on the event queue are expected when the peer is
+					// behind NAT (e.g. SLIRP) and cannot receive our datagrams.
+				});
 				socket.bind(port, host, () => {
-					socket.removeListener("error", onBindError);
+					bound = true;
 					resolve(socket.address().port);
 				});
 			}),
