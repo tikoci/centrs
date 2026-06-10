@@ -383,3 +383,10 @@ swordfish
 pselect
 interoperation
 Mbps
+Gbps
+Kbps
+trippable
+
+# btest integration-test fixtures.
+btestuser
+btestpass

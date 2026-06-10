@@ -151,7 +151,7 @@ centrs btest client $SRV --protocol udp --connection-count 4
 ```
 
 `ok: false`, `error.code = "validation/option"`,
-`error.cause.option = "connection-count"`, and **no socket is opened**.
+`error.context.option = "connection-count"`, and **no socket is opened**.
 `connection-count` applies only to `protocol=tcp`. This is the product claim: btest
 validates its option grammar before touching the network, with no `:parse` step.
 

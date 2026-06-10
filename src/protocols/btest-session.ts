@@ -240,26 +240,54 @@ export interface BtestControlChannel {
  */
 export function channelFromSocket(socket: Socket): BtestControlChannel {
 	const reader = new ByteReader();
+	let closed = false;
 	socket.on("data", (chunk: Buffer) => reader.push(new Uint8Array(chunk)));
 	socket.on("end", () => reader.end());
-	socket.on("close", () => reader.end());
-	socket.on("error", (error: Error) => reader.fail(error));
+	socket.on("close", () => {
+		closed = true;
+		reader.end();
+	});
+	socket.on("error", (error: Error) => {
+		closed = true;
+		reader.fail(error);
+	});
 	const remote = socket.remoteAddress;
 	return {
 		readExact: (n) => reader.readExact(n),
 		read: () => reader.read(),
 		write: (bytes) =>
 			new Promise<void>((resolve, reject) => {
-				const flushed = socket.write(bytes, (error) => {
-					if (error) reject(error);
-				});
-				if (flushed) {
-					resolve();
-				} else {
-					socket.once("drain", () => resolve());
+				if (closed) {
+					reject(new Error("btest channel is closed"));
+					return;
 				}
+				let settled = false;
+				const onClose = (): void =>
+					finish(new Error("btest channel closed during write"));
+				const finish = (error?: Error): void => {
+					if (settled) return;
+					settled = true;
+					socket.removeListener("close", onClose);
+					socket.removeListener("error", onClose);
+					socket.removeListener("drain", onDrain);
+					if (error) reject(error);
+					else resolve();
+				};
+				const onDrain = (): void => finish();
+				// A destroyed socket never emits `drain`, so a write parked on
+				// backpressure must also unblock on close/error — otherwise the TX
+				// loop (and the whole session) hangs when the peer/abort tears down
+				// the connection mid-transfer.
+				socket.once("close", onClose);
+				socket.once("error", onClose);
+				const flushed = socket.write(bytes, (error) => {
+					if (error) finish(error);
+				});
+				if (flushed) finish();
+				else socket.once("drain", onDrain);
 			}),
 		close: () => {
+			closed = true;
 			try {
 				socket.destroy();
 			} catch {
@@ -570,12 +598,27 @@ export async function clientHandshake(
 				"the server requires EC-SRP5 auth but no --user/--password were given",
 			);
 		}
-		await runClientEcSrp5(channel, options.username, options.password);
-		username = options.username;
-		// After EC-SRP5 the server sends a final AUTH_OK.
-		const post = await channel.readExact(4);
-		if (classifyAuthResponse(post) !== "none") {
-			throw authFailed("unexpected response after the EC-SRP5 exchange");
+		try {
+			await runClientEcSrp5(channel, options.username, options.password);
+			username = options.username;
+			// After EC-SRP5 the server sends a final AUTH_OK.
+			const post = await channel.readExact(4);
+			if (classifyAuthResponse(post) !== "none") {
+				throw authFailed("unexpected response after the EC-SRP5 exchange");
+			}
+		} catch (error) {
+			// A mid-exchange close means the server rejected our proof and hung up —
+			// surface that as an auth failure, not a raw protocol/stream error.
+			if (
+				error instanceof CentrsError &&
+				error.code === "transport/auth-failed"
+			) {
+				throw error;
+			}
+			throw authFailed(
+				"the server closed the connection during EC-SRP5 (likely bad credentials)",
+				error,
+			);
 		}
 	}
 
@@ -1219,6 +1262,17 @@ export async function handleBtestServerConnection(
 	options: BtestServerConnectionOptions,
 ): Promise<BtestSessionResult> {
 	const start = Date.now();
+	// Closing the channel on abort unblocks **any** pending read — including the
+	// handshake, which (unlike the data loops) does not poll a running flag. This
+	// guarantees the session task settles when the server stops, so a peer whose
+	// handshake diverges from ours surfaces as a fast error, not a hang.
+	if (options.signal) {
+		if (options.signal.aborted) channel.close();
+		else
+			options.signal.addEventListener("abort", () => channel.close(), {
+				once: true,
+			});
+	}
 	const handshakeOptions: BtestServerHandshakeOptions = {
 		authenticate: options.authenticate,
 		...(options.username !== undefined ? { username: options.username } : {}),
@@ -1240,12 +1294,10 @@ export async function handleBtestServerConnection(
 			negotiated.serverUdpPort as number,
 			options.udpBindHost ?? "0.0.0.0",
 		);
-		if (channel.remoteAddress) {
-			await udp.connect(
-				negotiated.clientUdpPort as number,
-				channel.remoteAddress,
-			);
-		}
+		// The server leaves its UDP socket **unconnected** and addresses the client
+		// with `send_to`: a connected socket only accepts the connected peer, but a
+		// client behind NAT (e.g. a QEMU SLIRP guest) appears from a rewritten
+		// source port, so the server must receive from any source.
 	}
 
 	const ctx: RunContext = {
@@ -1322,11 +1374,16 @@ async function driveSession(
 
 	const tasks: Promise<void>[] = [];
 	if (ctx.command.protocol === "udp") {
-		// Single connection: both sides `connect()` their UDP socket, so the TX
-		// loop sends with no per-packet address. (Multi-connection RouterOS sends
-		// from several source ports and needs an unconnected `send_to` target — a
-		// follow-up alongside the parallel TCP fan-out.)
-		if (dirs.shouldTx) tasks.push(udpTxLoop(ctx));
+		// The client `connect()`s its socket (sends with no per-packet address); the
+		// server is unconnected and `send_to`s the client (so it can receive from a
+		// NAT-rewritten source). See the server's UDP setup.
+		const target =
+			role === "server" &&
+			ctx.clientUdpPort !== undefined &&
+			ctx.udpPeerHost !== undefined
+				? { port: ctx.clientUdpPort, host: ctx.udpPeerHost }
+				: undefined;
+		if (dirs.shouldTx) tasks.push(udpTxLoop(ctx, target));
 		if (dirs.shouldRx) tasks.push(udpRxLoop(ctx));
 		tasks.push(udpStatusExchange(ctx, dirs));
 	} else {

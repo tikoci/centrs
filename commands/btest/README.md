@@ -5,17 +5,21 @@ is centrs's peer-measurement surface: it mirrors `/tool/bandwidth-test` (client)
 and `/tool/bandwidth-server` (server), so it is a drop-in for the Windows-only
 `btest.exe` on macOS/Linux.
 
-Status: `designed` (CLI/orchestrator). The protocol **codec**
+Status: server `CHR-passed`, client `coded`. The protocol **codec**
 (`src/protocols/btest.ts`), the shared **EC-SRP5** core including the net-new
-server role (`src/protocols/ec-srp5.ts`), and the **session state machine +
-TCP/UDP data engines** (`src/protocols/btest-session.ts`) exist and are
-unit/loopback-tested (handshake both roles, none + EC-SRP5, single-connection
-TCP + UDP throughput/loss accounting); the **CLI and orchestrator** are **not
-started**, TCP multi-connection (`connection-count > 1`) data fan-out is a
-follow-up, and no cell is `CHR-passed`. See `docs/MATRIX.md` ("Peer measurement
-(`btest`)") for the cell states — that is the only status surface. v1 scope:
-**both** modes (client + server), **EC-SRP5 + unauthenticated** auth, **TCP and
-UDP** tests. Legacy pre-6.43 double-MD5 is out of scope.
+server role (`src/protocols/ec-srp5.ts`), the **session state machine + TCP/UDP
+data engines** (`src/protocols/btest-session.ts`), the **orchestrator**
+(`src/btest.ts`), and the **CLI** (`centrs btest client|server`) all exist and are
+unit/loopback-tested. The gated CHR integration test
+(`test/integration/btest.test.ts`) **passes on CHR 7.23.1**: a real RouterOS
+`/tool/bandwidth-test` client lands TCP-receive, UDP-transmit (with loss
+accounting), and **EC-SRP5** sessions on the centrs server — so the **server** cell
+is `CHR-passed`. The **client** cell stays `coded` (loopback + transitive — no
+direct client→CHR-server gate, by decision); TCP multi-connection
+(`connection-count > 1`) data fan-out is a follow-up. See `docs/MATRIX.md` ("Peer
+measurement (`btest`)") for the cell states — that is the only status surface. v1
+scope: **both** modes (client + server), **EC-SRP5 + unauthenticated** auth, **TCP
+and UDP** tests. Legacy pre-6.43 double-MD5 is out of scope.
 
 ## Why this is not `execute`
 
@@ -175,7 +179,7 @@ are redactable in bug-report output.
   protocol/direction (e.g. `connection-count` with `protocol=udp`,
   `*-udp-tx-size` with `protocol=tcp`) **or** out of range (UDP size `28..64000`,
   `connection-count 1..255`, `interval 20ms..5s`, `max-sessions 1..1000`). Caught
-  before any socket opens; `error.cause.option` names the offending flag.
+  before any socket opens; `error.context.option` names the offending flag.
 - `transport/connection-refused` — no bandwidth server answered on port 2000
   (server disabled, firewalled, or wrong host). Fix: enable
   `/tool/bandwidth-server`, check the port/`--bind`.

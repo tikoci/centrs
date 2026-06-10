@@ -208,20 +208,30 @@ of scope.
 
 | Mode           | State         | Evidence target |
 | -------------- | ------------- | --------------- |
-| btest / server | `not-started` | CHR `/tool/bandwidth-test` client → centrs server (TCP+UDP, unauth + EC-SRP5). |
-| btest / client | `not-started` | centrs client ↔ centrs server loopback + `btest.exe`-via-wine cross-check. |
+| btest / server | `CHR-passed`  | CHR `/tool/bandwidth-test` client → centrs server (TCP+UDP, unauth + EC-SRP5) — CHR 7.23.1, `test/integration/btest.test.ts`. |
+| btest / client | `coded`       | centrs client ↔ centrs server loopback + `btest.exe`-via-wine cross-check. |
 
 Auth reuses the EC-SRP5 curve math shared with mac-telnet — now **extracted** into
 `src/protocols/ec-srp5.ts` (mac-telnet stays byte-identical) with the net-new
 **server** role (`ecSrp5ServerPublicKey`/`ecSrp5ServerShared`), loopback-tested.
 The wire **codec** (`src/protocols/btest.ts`: command / `[len][payload]` EC-SRP5
 4-message framing / status / UDP) is unit-tested. The **session state machine +
-TCP/UDP data engines** (`src/protocols/btest-session.ts`) now exist and are
-loopback-tested both roles (`test/unit/btest-session.test.ts`): the handshake
-(none + EC-SRP5), single-connection TCP + UDP throughput, and UDP loss accounting,
-all grounded on `manawenuz/btest-rs`. TCP multi-connection (`connection-count > 1`)
-data fan-out, the orchestrator, and the CLI are not started, so the cells stay
-`not-started` (no runnable command yet).
+TCP/UDP data engines** (`src/protocols/btest-session.ts`), the **orchestrator**
+(`src/btest.ts`: option-grammar validation, resolver-backed client, listener +
+accept loop + max-sessions server, text/`--csv`/json-summary envelopes), and the
+**CLI** (`centrs btest client|server`, `src/cli/btest.ts`) all exist and are
+loopback-tested both roles (`test/unit/btest-session.test.ts`,
+`test/unit/btest-command.test.ts`): the handshake (none + EC-SRP5), single-connection
+TCP + UDP throughput, UDP loss accounting, and the option-grammar rejects — all
+grounded on `manawenuz/btest-rs`. The **server** cell is `CHR-passed`: the gated
+`test/integration/btest.test.ts` runs a real RouterOS `/tool/bandwidth-test` client
+against the centrs server on **CHR 7.23.1** — TCP receive (server transmits) and
+EC-SRP5 TCP receive (the net-new server verifier accepted by real RouterOS) and
+UDP transmit (server receives, with loss accounting) all land sessions with
+non-zero throughput. The **client** cell stays `coded` (loopback + transitive — no
+direct client→CHR-server gate, by decision). TCP multi-connection
+(`connection-count > 1`) data fan-out is a follow-up (the session token is
+negotiated, but the server's parallel-stream join is not built).
 Output: live `text` (default) or `--csv` streaming records, plus a single summary
 envelope for `--format json`/`yaml` (`data.sessions[]` for the server,
 `data.reports[]` for the client). The broader JSON-streaming (NDJSON) decision is
@@ -231,9 +241,10 @@ envelope for `--format json`/`yaml` (`data.sessions[]` for the server,
 **Honest grounding caveat (decided with the user):** the **server** mode gets
 direct `CHR-passed` evidence — a real RouterOS `/tool/bandwidth-test` client dials
 the centrs server over the QEMU SLIRP gateway `10.0.2.2` (no hostfwd; TCP any
-direction + UDP **transmit**; UDP receive/both is gated behind a one-shot SLIRP
-smoke test, since server→guest UDP must traverse SLIRP NAT — see
-`commands/btest/README.md`, Open questions).
+direction + UDP **transmit**). UDP receive/both is a **soft smoke test** (logged,
+not asserted): the server transmits fine, but guest *receipt* of server→guest UDP
+through SLIRP NAT is unconfirmed (it needs the guest to originate the flow first) —
+see `commands/btest/README.md`, Open questions.
 The **client** mode is grounded **transitively**: the server test validates the
 shared btest codec + EC-SRP5 against real RouterOS, and the loopback test proves
 the client drives that codec. `btest.exe`-via-wine is a **coding-time grounding

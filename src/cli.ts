@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { btestCommand, runBtestCli } from "./cli/btest.ts";
 import { devicesCommand, runDevicesCli } from "./cli/devices.ts";
 import { discoverCommand, runDiscoverCli } from "./cli/discover.ts";
 import { executeCommand, runExecuteCli } from "./cli/execute.ts";
@@ -13,6 +14,7 @@ const commandSummaries: ReadonlyArray<{ name: string; summary: string }> = [
 	executeCommand,
 	devicesCommand,
 	discoverCommand,
+	btestCommand,
 	mcpCommand,
 ].map((command) => ({ name: command.name, summary: command.summary }));
 
@@ -53,6 +55,9 @@ export async function runCli(
 		}
 		if (command === "discover") {
 			return await runDiscoverCli(rest);
+		}
+		if (command === "btest") {
+			return await runBtestCli(rest);
 		}
 		if (command === "mcp") {
 			return await runMcpCli(rest);
