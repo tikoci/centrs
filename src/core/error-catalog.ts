@@ -205,8 +205,21 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"The RouterOS native API returned a !trap with no more specific mapping.",
 	},
 	{
+		code: "routeros/btest-protocol",
+		summary: "A bandwidth-test (btest) packet could not be decoded.",
+	},
+	{
+		code: "routeros/btest-too-many-sessions",
+		summary:
+			"The btest server refused a client because max-sessions is reached.",
+	},
+	{
 		code: "routeros/command-failed",
 		summary: "RouterOS reported a command failure.",
+	},
+	{
+		code: "routeros/ec-srp5-protocol",
+		summary: "An EC-SRP5 authentication message or key could not be processed.",
 	},
 	{
 		code: "routeros/error",

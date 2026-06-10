@@ -227,6 +227,10 @@ netdevs
 NIC
 SLIRP
 vmnet
+# feth: macOS fake-ethernet interface; sysfs: Linux /sys pseudo-filesystem —
+# both read by resolveEgressMac's virtual-NIC MAC fallback (src/protocols/mac-telnet.ts).
+feth
+sysfs
 
 # centrs domain vocabulary
 # %identity: the device /system/identity; a centrs CDB comment *lookup key*
@@ -337,3 +341,52 @@ retransmittable
 clockless
 # keepalives: plural of keepalive (empty-ACK idle frames).
 keepalives
+
+# btest / bandwidth-test vocabulary (commands/btest, src/protocols/btest.ts)
+# btest: MikroTik bandwidth test peer protocol (TCP/UDP 2000); /tool/bandwidth-test
+#   + /tool/bandwidth-server. centrs's "measure" capability axis.
+btest
+# goodput: application-level TCP throughput (excludes TCP/IP headers + retransmits),
+#   how RouterOS accounts the TCP bandwidth test.
+goodput
+# Weierstrass: the short-Weierstrass curve form of Curve25519 used by MikroTik
+#   EC-SRP5 (shared with mac-telnet MTWEI; see src/protocols/mtwei.ts / ec-srp5.ts).
+Weierstrass
+# ndjson: newline-delimited JSON; the stream / btest output contract (one envelope per line).
+ndjson
+# allocate-udp-ports-from: /tool/bandwidth-server base of the UDP data-port range.
+# srp5: the "5" suffix of EC-SRP5 (the MikroTik EC-SRP variant).
+srp5
+# SRV: the server-endpoint test variable in commands/btest/examples.md.
+srv
+# firewalled: blocked by a firewall (a btest connection-refused remediation).
+firewalled
+# btest reference implementations + EC-SRP5 protocol vocabulary:
+# manawenuz/btest-rs (Rust; both modes + EC-SRP5) and samm-git/btest-opensource
+# (C; no EC-SRP5) are the wire-format references; ECPESVDP-SRP-A/B name the
+# client/server EC-SRP shared-secret roles; docryptos = mtwei.c's server proof fn.
+manawenuz
+samm
+opensource
+ecsrp
+ECPESVDP
+docryptos
+keypairs
+# btest test fixtures (credentials + the "antar" username from the MITM capture).
+testuser
+testpass
+wrongpass
+antar
+swordfish
+
+# btest session layer.
+pselect
+interoperation
+Mbps
+Gbps
+Kbps
+trippable
+
+# btest integration-test fixtures.
+btestuser
+btestpass

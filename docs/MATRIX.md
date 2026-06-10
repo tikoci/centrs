@@ -194,6 +194,65 @@ safety model, and CHR test shape; examples 1-10 are green on CHR 7.23 via
 `test/integration/mcp.test.ts`, including the `mcp=rw` + `confirm:true` RouterOS
 write gate and `centrs_devices add` CDB registration.
 
+### Peer measurement (`btest`) — orthogonal to the command grid
+
+`btest` is the MikroTik **bandwidth test**, a peer measurement protocol (TCP/UDP
+port 2000) — *not* a RouterOS-command transport — so it sits outside the
+command×protocol grid above, like the transport-base and frontend-surface
+sections. It is its own single protocol (`btest`, capability `measure` in
+`src/protocols/index.ts`); `docs/CONSTITUTION.md` adds it as a deliberate
+capability axis (peer measurement), exempt from the `:parse` / `/console/inspect`
+gate. v1 scope (decided with the user): **both** client and server,
+**EC-SRP5 + unauthenticated**, **TCP and UDP**; legacy pre-6.43 double-MD5 is out
+of scope.
+
+| Mode           | State         | Evidence target |
+| -------------- | ------------- | --------------- |
+| btest / server | `CHR-passed`  | CHR `/tool/bandwidth-test` client → centrs server (TCP+UDP, unauth + EC-SRP5) — CHR 7.23.1, `test/integration/btest.test.ts`. |
+| btest / client | `coded`       | centrs client ↔ centrs server loopback + `btest.exe`-via-wine cross-check. |
+
+Auth reuses the EC-SRP5 curve math shared with mac-telnet — now **extracted** into
+`src/protocols/ec-srp5.ts` (mac-telnet stays byte-identical) with the net-new
+**server** role (`ecSrp5ServerPublicKey`/`ecSrp5ServerShared`), loopback-tested.
+The wire **codec** (`src/protocols/btest.ts`: command / `[len][payload]` EC-SRP5
+4-message framing / status / UDP) is unit-tested. The **session state machine +
+TCP/UDP data engines** (`src/protocols/btest-session.ts`), the **orchestrator**
+(`src/btest.ts`: option-grammar validation, resolver-backed client, listener +
+accept loop + max-sessions server, text/`--csv`/json-summary envelopes), and the
+**CLI** (`centrs btest client|server`, `src/cli/btest.ts`) all exist and are
+loopback-tested both roles (`test/unit/btest-session.test.ts`,
+`test/unit/btest-command.test.ts`): the handshake (none + EC-SRP5), single-connection
+TCP + UDP throughput, UDP loss accounting, and the option-grammar rejects — all
+grounded on `manawenuz/btest-rs`. The **server** cell is `CHR-passed`: the gated
+`test/integration/btest.test.ts` runs a real RouterOS `/tool/bandwidth-test` client
+against the centrs server on **CHR 7.23.1** — TCP receive (server transmits) and
+EC-SRP5 TCP receive (the net-new server verifier accepted by real RouterOS) and
+UDP transmit (server receives, with loss accounting) all land sessions with
+non-zero throughput. The **client** cell stays `coded` (loopback + transitive — no
+direct client→CHR-server gate, by decision). TCP multi-connection
+(`connection-count > 1`) data fan-out is a follow-up (the session token is
+negotiated, but the server's parallel-stream join is not built).
+Output: live `text` (default) or `--csv` streaming records, plus a single summary
+envelope for `--format json`/`yaml` (`data.sessions[]` for the server,
+`data.reports[]` for the client). The broader JSON-streaming (NDJSON) decision is
+**deferred** — btest does not adopt the `stream` contract yet. See
+`commands/btest/README.md` and `commands/btest/examples.md`.
+
+**Honest grounding caveat (decided with the user):** the **server** mode gets
+direct `CHR-passed` evidence — a real RouterOS `/tool/bandwidth-test` client dials
+the centrs server over the QEMU SLIRP gateway `10.0.2.2` (no hostfwd; TCP any
+direction + UDP **transmit**). UDP receive/both is a **soft smoke test** (logged,
+not asserted): the server transmits fine, but guest *receipt* of server→guest UDP
+through SLIRP NAT is unconfirmed (it needs the guest to originate the flow first) —
+see `commands/btest/README.md`, Open questions.
+The **client** mode is grounded **transitively**: the server test validates the
+shared btest codec + EC-SRP5 against real RouterOS, and the loopback test proves
+the client drives that codec. `btest.exe`-via-wine is a **coding-time grounding
+aid** only (not CI, not the long-term plan). A **direct** centrs-client →
+CHR-server gated test is **deferred future work** — it needs host→guest UDP/TCP
+port mapping through QEMU, intentionally not set up now (a TCP-only version would
+need only `hostfwd tcp:2000`).
+
 ## Priority order
 
 Do not start a later item until the earlier cell or dependency checkpoint has
@@ -248,6 +307,13 @@ matching evidence.
     **HTTP access is the proxy surface's job, not the MCP server's** — MCP stays
     stdio-only. TUI/proxy remain later. These shape interface decisions today but
     do not block the command grid.
+12. **btest (peer measurement)** — the bandwidth test as client + server, its own
+    protocol axis (see "Peer measurement (`btest`)" above). Independent of the
+    command grid: it shares only the EC-SRP5 curve math with mac-telnet (already
+    `CHR-passed`), so it can proceed in parallel. v1: both modes, EC-SRP5 + unauth,
+    TCP+UDP. Server mode reaches `CHR-passed` via a CHR bandwidth-test client;
+    client mode is grounded transitively + against `btest.exe` (see the caveat
+    above).
 
 ## Open questions (decisions needed before the affected cell can advance)
 

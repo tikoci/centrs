@@ -1,0 +1,417 @@
+/**
+ * btest session layer — handshake state machine + TCP/UDP data engines.
+ *
+ * Two tiers, both router-free:
+ *   1. Deterministic unit checks of the pure helpers (timing, loss accounting)
+ *      and the control handshake (none + EC-SRP5 both roles, success + reject)
+ *      over a real loopback socket pair — no timers, so they are fast and stable.
+ *   2. Full client↔server loopback runs of the data engines on `127.0.0.1` with
+ *      short durations, asserting that bytes flow in the negotiated direction and
+ *      the summaries aggregate. Exact throughput is not asserted (that is the
+ *      CHR integration test's job); these pin structure + interoperation.
+ *
+ * Sequencing is grounded on `manawenuz/btest-rs` (see `btest-session.ts`).
+ */
+
+import { describe, expect, test } from "bun:test";
+import { type AddressInfo, connect, createServer } from "node:net";
+import {
+	BandwidthCounters,
+	type BtestControlChannel,
+	type BtestRunSummary,
+	type BtestSessionResult,
+	calcSendIntervalMs,
+	channelFromSocket,
+	clientHandshake,
+	handleBtestServerConnection,
+	runBtestClientSession,
+	serverHandshake,
+	speedFeedbackBps,
+} from "../../src/protocols/btest-session.ts";
+
+/**
+ * EC-SRP5 runs ~6–8 sequential Curve25519 scalar multiplications across both
+ * roles in the pure-BigInt core, so a full handshake takes a few seconds. These
+ * tests get a generous timeout rather than masking the (expected, CHR-validated)
+ * crypto cost.
+ */
+const EC_SRP5_TIMEOUT_MS = 30000;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** A connected loopback channel pair (server-accepted side + client side). */
+function connectedPair(): Promise<{
+	server: BtestControlChannel;
+	client: BtestControlChannel;
+	close: () => void;
+}> {
+	return new Promise((resolve, reject) => {
+		const srv = createServer();
+		srv.listen(0, "127.0.0.1", () => {
+			const port = (srv.address() as AddressInfo).port;
+			const clientSocket = connect({ host: "127.0.0.1", port });
+			let serverChannel: BtestControlChannel | undefined;
+			let clientChannel: BtestControlChannel | undefined;
+			srv.once("connection", (socket) => {
+				serverChannel = channelFromSocket(socket);
+				if (clientChannel) finish();
+			});
+			clientSocket.once("connect", () => {
+				clientChannel = channelFromSocket(clientSocket);
+				if (serverChannel) finish();
+			});
+			clientSocket.once("error", reject);
+			function finish(): void {
+				resolve({
+					server: serverChannel as BtestControlChannel,
+					client: clientChannel as BtestControlChannel,
+					close: () => {
+						serverChannel?.close();
+						clientChannel?.close();
+						srv.close();
+					},
+				});
+			}
+		});
+	});
+}
+
+interface LoopbackResult {
+	client: BtestRunSummary;
+	server: BtestSessionResult;
+}
+
+/** Run a full client session against a one-shot centrs server on loopback. */
+async function runLoopback(opts: {
+	server: Parameters<typeof handleBtestServerConnection>[1];
+	client: Omit<
+		Parameters<typeof runBtestClientSession>[0],
+		"host" | "controlPort"
+	>;
+}): Promise<LoopbackResult> {
+	const srv = createServer();
+	await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
+	const port = (srv.address() as AddressInfo).port;
+
+	const serverDone = new Promise<BtestSessionResult>((resolve, reject) => {
+		srv.once("connection", (socket) => {
+			handleBtestServerConnection(channelFromSocket(socket), opts.server).then(
+				resolve,
+				reject,
+			);
+		});
+	});
+
+	const client = await runBtestClientSession({
+		host: "127.0.0.1",
+		controlPort: port,
+		...opts.client,
+	});
+	const server = await serverDone;
+	srv.close();
+	return { client, server };
+}
+
+/** A high, unlikely-to-collide UDP base port for a loopback test. */
+function randomUdpBase(): number {
+	return 30000 + Math.floor(Math.random() * 20000);
+}
+
+// ── Pure helpers ──────────────────────────────────────────────────────────────
+
+describe("btest timing + accounting", () => {
+	test("calcSendIntervalMs matches bandwidth.rs", () => {
+		// 100 Mbps, 1500-byte packets → (1e3 * 1500*8) / 1e8 = 0.12 ms
+		expect(calcSendIntervalMs(100_000_000, 1500)).toBeCloseTo(0.12, 5);
+		// Unlimited
+		expect(calcSendIntervalMs(0, 1500)).toBeNull();
+		// A very slow rate clamps to 1 s (matches the >500ms→1s rule)
+		expect(calcSendIntervalMs(1000, 1500)).toBe(1000);
+	});
+
+	test("speedFeedbackBps is bytes*8*1.5, clamped to u32", () => {
+		expect(speedFeedbackBps(125_000)).toBe(1_500_000);
+		expect(speedFeedbackBps(0)).toBe(0);
+		expect(speedFeedbackBps(0xffffffff)).toBe(0xffffffff);
+	});
+
+	test("BandwidthCounters tracks UDP sequence-gap loss", () => {
+		const c = new BandwidthCounters();
+		c.observeUdpSeq(0, 100);
+		c.observeUdpSeq(1, 100);
+		c.observeUdpSeq(4, 100); // gap: expected 2, got 4 → 2 lost
+		expect(c.rxPackets).toBe(3);
+		expect(c.rxBytes).toBe(300);
+		expect(c.rxLost).toBe(2);
+		expect(c.swapLost()).toBe(2);
+		expect(c.swapLost()).toBe(0); // reset after swap
+	});
+
+	test("stopped() resolves once stop() is called", async () => {
+		const c = new BandwidthCounters();
+		let resolved = false;
+		const p = c.stopped().then(() => {
+			resolved = true;
+		});
+		expect(resolved).toBe(false);
+		c.stop();
+		await p;
+		expect(resolved).toBe(true);
+		// After stop, stopped() resolves immediately.
+		await c.stopped();
+	});
+});
+
+// ── Handshake (deterministic, loopback socket pair) ───────────────────────────
+
+describe("btest handshake — no auth", () => {
+	test("TCP transmit negotiates with authKind none", async () => {
+		const pair = await connectedPair();
+		const serverP = serverHandshake(pair.server, {
+			authenticate: false,
+		}).catch((e) => e);
+		const clientP = clientHandshake(pair.client, {
+			protocol: "tcp",
+			direction: "transmit",
+		}).catch((e) => e);
+
+		const serverRes = await serverP;
+		const clientRes = await clientP;
+		pair.close();
+
+		expect(serverRes.authKind).toBe("none");
+		expect(serverRes.command.protocol).toBe("tcp");
+		expect(serverRes.command.serverReceives).toBe(true); // client transmit
+		expect(clientRes.authKind).toBe("none");
+	});
+
+	test("UDP negotiates the +256 client port", async () => {
+		const pair = await connectedPair();
+		const base = randomUdpBase();
+		const serverP = serverHandshake(pair.server, {
+			authenticate: false,
+			serverUdpPort: base,
+		}).catch((e) => e);
+		const clientP = clientHandshake(pair.client, {
+			protocol: "udp",
+			direction: "receive",
+		}).catch((e) => e);
+
+		const serverRes = await serverP;
+		const clientRes = await clientP;
+		pair.close();
+
+		expect(clientRes.serverUdpPort).toBe(base);
+		expect(clientRes.clientUdpPort).toBe(base + 256);
+		expect(serverRes.clientUdpPort).toBe(base + 256);
+	});
+});
+
+describe("btest handshake — EC-SRP5", () => {
+	test(
+		"matching credentials authenticate both roles",
+		async () => {
+			const pair = await connectedPair();
+			const serverP = serverHandshake(pair.server, {
+				authenticate: true,
+				username: "tester",
+				password: "swordfish",
+			}).catch((e) => e);
+			const clientP = clientHandshake(pair.client, {
+				protocol: "tcp",
+				direction: "receive",
+				username: "tester",
+				password: "swordfish",
+			}).catch((e) => e);
+
+			const serverRes = await serverP;
+			const clientRes = await clientP;
+			pair.close();
+
+			expect(serverRes.authKind).toBe("ec-srp5");
+			expect(serverRes.username).toBe("tester");
+			expect(clientRes.authKind).toBe("ec-srp5");
+			expect(clientRes.username).toBe("tester");
+		},
+		EC_SRP5_TIMEOUT_MS,
+	);
+
+	test(
+		"a wrong password is rejected by the server verifier",
+		async () => {
+			const pair = await connectedPair();
+			const serverP = serverHandshake(pair.server, {
+				authenticate: true,
+				username: "tester",
+				password: "swordfish",
+			}).catch((e) => e);
+			const clientP = clientHandshake(pair.client, {
+				protocol: "tcp",
+				direction: "receive",
+				username: "tester",
+				password: "wrong",
+			}).catch((e) => e);
+
+			const serverRes = await serverP;
+			pair.server.close();
+			pair.client.close();
+			const clientRes = await clientP;
+			pair.close();
+
+			expect(serverRes).toBeInstanceOf(Error);
+			expect(serverRes.code).toBe("transport/auth-failed");
+			expect(clientRes).toBeInstanceOf(Error); // client cannot complete either
+		},
+		EC_SRP5_TIMEOUT_MS,
+	);
+
+	test(
+		"an unknown username is rejected",
+		async () => {
+			const pair = await connectedPair();
+			const serverP = serverHandshake(pair.server, {
+				authenticate: true,
+				username: "tester",
+				password: "swordfish",
+			}).catch((e) => e);
+			const clientP = clientHandshake(pair.client, {
+				protocol: "tcp",
+				direction: "receive",
+				username: "someone-else",
+				password: "swordfish",
+			}).catch((e) => e);
+
+			const serverRes = await serverP;
+			pair.server.close();
+			pair.client.close();
+			await clientP;
+			pair.close();
+
+			expect(serverRes).toBeInstanceOf(Error);
+			expect(serverRes.code).toBe("transport/auth-failed");
+		},
+		EC_SRP5_TIMEOUT_MS,
+	);
+
+	test(
+		"client refuses an EC-SRP5 server without credentials",
+		async () => {
+			const pair = await connectedPair();
+			const serverP = serverHandshake(pair.server, {
+				authenticate: true,
+				username: "tester",
+				password: "swordfish",
+			}).catch((e) => e);
+			const clientP = clientHandshake(pair.client, {
+				protocol: "tcp",
+				direction: "receive",
+			}).catch((e) => e);
+
+			const clientRes = await clientP;
+			pair.close();
+			await serverP;
+
+			expect(clientRes).toBeInstanceOf(Error);
+			expect(clientRes.code).toBe("transport/auth-failed");
+		},
+		EC_SRP5_TIMEOUT_MS,
+	);
+});
+
+// ── Full data-engine loopback ─────────────────────────────────────────────────
+
+describe("btest loopback data engine", () => {
+	const short = { durationMs: 300, statusIntervalMs: 40 };
+
+	test("TCP receive: client downloads, server uploads", async () => {
+		const { client, server } = await runLoopback({
+			server: { authenticate: false, statusIntervalMs: 40, durationMs: 3000 },
+			client: { protocol: "tcp", direction: "receive", ...short },
+		});
+		expect(client.stopReason).toBe("duration-elapsed");
+		expect(client.totalRxBytes).toBeGreaterThan(0);
+		expect(server.totalTxBytes).toBeGreaterThan(0);
+		expect(client.intervals).toBeGreaterThanOrEqual(1);
+	});
+
+	test("TCP transmit: client uploads, server receives + sends status", async () => {
+		const { client, server } = await runLoopback({
+			server: { authenticate: false, statusIntervalMs: 40, durationMs: 3000 },
+			client: { protocol: "tcp", direction: "transmit", ...short },
+		});
+		expect(client.totalTxBytes).toBeGreaterThan(0);
+		expect(server.totalRxBytes).toBeGreaterThan(0);
+	});
+
+	test("UDP both: data flows in both directions with loss accounting", async () => {
+		const base = randomUdpBase();
+		const { client, server } = await runLoopback({
+			server: {
+				authenticate: false,
+				statusIntervalMs: 40,
+				durationMs: 3000,
+				serverUdpPort: base,
+				udpBindHost: "127.0.0.1",
+			},
+			client: {
+				protocol: "udp",
+				direction: "both",
+				txSize: 1000,
+				...short,
+			},
+		});
+		expect(client.totalTxBytes).toBeGreaterThan(0);
+		expect(client.totalRxBytes).toBeGreaterThan(0);
+		expect(server.totalRxBytes).toBeGreaterThan(0);
+		expect(client.totalLostPackets).toBeGreaterThanOrEqual(0);
+		expect(client.serverUdpPort).toBe(base);
+	});
+
+	test(
+		"EC-SRP5 client↔server over UDP receive",
+		async () => {
+			const base = randomUdpBase();
+			const { client, server } = await runLoopback({
+				server: {
+					authenticate: true,
+					username: "u",
+					password: "p",
+					statusIntervalMs: 40,
+					durationMs: 3000,
+					serverUdpPort: base,
+					udpBindHost: "127.0.0.1",
+				},
+				client: {
+					protocol: "udp",
+					direction: "receive",
+					username: "u",
+					password: "p",
+					...short,
+				},
+			});
+			expect(client.authKind).toBe("ec-srp5");
+			expect(server.negotiated.authKind).toBe("ec-srp5");
+			expect(client.totalRxBytes).toBeGreaterThan(0);
+			expect(server.totalTxBytes).toBeGreaterThan(0);
+		},
+		EC_SRP5_TIMEOUT_MS,
+	);
+
+	test("connection-refused when nothing is listening", async () => {
+		// Bind+close to grab a definitely-free port, then dial it.
+		const srv = createServer();
+		await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+		const port = (srv.address() as AddressInfo).port;
+		await new Promise<void>((r) => srv.close(() => r()));
+
+		const err = await runBtestClientSession({
+			host: "127.0.0.1",
+			controlPort: port,
+			protocol: "tcp",
+			direction: "receive",
+			durationMs: 200,
+		}).catch((e) => e);
+		expect(err).toBeInstanceOf(Error);
+		expect(err.code).toBe("transport/connection-refused");
+	});
+});
