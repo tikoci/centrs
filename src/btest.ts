@@ -443,6 +443,17 @@ function validateServerOptions(request: BtestServerRequest): void {
 		65535,
 		"allocate-udp-ports-from",
 	);
+	// The UDP data-port window [allocateFrom, allocateFrom + maxSessions) must fit
+	// under 65535, or later sessions would be assigned an out-of-range port at
+	// runtime — reject the incoherent combination up front.
+	const allocFrom = request.allocateUdpPortsFrom ?? BTEST_UDP_PORT_START;
+	const sessionCap = request.maxSessions ?? DEFAULT_MAX_SESSIONS;
+	if (allocFrom + sessionCap - 1 > 65535) {
+		throw optionError(
+			"allocate-udp-ports-from",
+			`btest allocate-udp-ports-from (${allocFrom}) + max-sessions (${sessionCap}) would run past UDP port 65535; lower one of them.`,
+		);
+	}
 }
 
 function serverDirectionLabel(
@@ -523,7 +534,10 @@ export async function btestServer(
 			return;
 		}
 		active += 1;
-		const serverUdpPort = allocateFrom + udpOffset;
+		// Wrap within the validated [allocateFrom, allocateFrom + maxSessions)
+		// window so a long-lived server never walks the monotonic counter past
+		// 65535; at most `maxSessions` ports are ever live at once.
+		const serverUdpPort = allocateFrom + (udpOffset % maxSessions);
 		udpOffset += 1;
 		sessionTasks.push(
 			(async () => {
@@ -699,10 +713,11 @@ export const BTEST_CLIENT_CSV_HEADER =
 	"seq,direction,protocol,tx_bps,rx_bps,lost_packets,tx_bytes,rx_bytes";
 /**
  * CSV header for the server session stream. `duration_ms` is the session
- * lifetime and `tx_bps`/`rx_bps` are its average throughput.
+ * lifetime, `tx_bps`/`rx_bps` are its average throughput, and `lost_packets` is
+ * the session's UDP loss total (0 for TCP).
  */
 export const BTEST_SERVER_CSV_HEADER =
-	"duration_ms,event,client,protocol,direction,user,tx_bps,rx_bps";
+	"duration_ms,event,client,protocol,direction,user,tx_bps,rx_bps,lost_packets";
 
 /**
  * RFC 4180 field escape: wrap in double quotes (doubling any internal quote)
@@ -736,6 +751,7 @@ export function btestServerCsvRow(record: BtestSessionRecord): string {
 		escapeCsvField(record.user),
 		Math.round(record.txAvgBps),
 		Math.round(record.rxAvgBps),
+		record.totalLostPackets,
 	].join(",");
 }
 

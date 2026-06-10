@@ -94,6 +94,27 @@ describe("btest option-grammar validation (no socket opened)", () => {
 		expect(env.error.context?.["option"]).toBe("max-sessions");
 	});
 
+	test("a UDP port window that overruns 65535 is rejected", async () => {
+		const env = await btestServer({
+			authenticate: false,
+			allocateUdpPortsFrom: 65500,
+			maxSessions: 100,
+			env: {},
+		});
+		expect(env.ok).toBe(false);
+		if (env.ok) return;
+		expect(env.error.code).toBe("validation/option");
+		expect(env.error.context?.["option"]).toBe("allocate-udp-ports-from");
+	});
+
+	test("authenticate without a credential is rejected (no listener)", async () => {
+		const env = await btestServer({ authenticate: true, env: {} });
+		expect(env.ok).toBe(false);
+		if (env.ok) return;
+		expect(env.error.code).toBe("validation/option");
+		expect(env.error.context?.["option"]).toBe("authenticate");
+	});
+
 	test("a connection-refused client surfaces transport/connection-refused", async () => {
 		// Grab a free port then dial it (nothing listening).
 		const probe = await startServer({ authenticate: false, durationMs: 50 });

@@ -362,8 +362,14 @@ export function createBtestUdpSocket(): BtestUdpSocket {
 	return {
 		bind: (port, host) =>
 			new Promise<number>((resolve, reject) => {
-				socket.once("error", reject);
-				socket.bind(port, host, () => resolve(socket.address().port));
+				// Detach the bind-time error listener once bound, so a later runtime
+				// error doesn't fire this (stale) reject and pin the closure alive.
+				const onBindError = (error: Error): void => reject(error);
+				socket.once("error", onBindError);
+				socket.bind(port, host, () => {
+					socket.removeListener("error", onBindError);
+					resolve(socket.address().port);
+				});
 			}),
 		connect: (port, host) =>
 			new Promise<void>((resolve, reject) => {
@@ -694,6 +700,18 @@ export async function serverHandshake(
 	channel: BtestControlChannel,
 	options: BtestServerHandshakeOptions,
 ): Promise<BtestNegotiated> {
+	// Fail fast on a misconfigured listener: authenticate=true with no (or empty)
+	// credential would otherwise accept an empty-username/empty-password proof,
+	// which is a silent foot-gun for a network-exposed surface.
+	if (options.authenticate && (!options.username || !options.password)) {
+		throw new CentrsError({
+			code: "validation/option",
+			summary:
+				"btest server authentication requires a non-empty username and password.",
+			remediation:
+				"Pass credentials, or run the server with authenticate=false.",
+		});
+	}
 	await channel.write(BTEST_HELLO);
 	const commandBytes = await channel.readExact(16);
 	const command = decodeCommand(commandBytes);

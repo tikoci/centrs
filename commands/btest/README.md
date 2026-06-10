@@ -159,8 +159,9 @@ CSV columns — client:
 `seq,direction,protocol,tx_bps,rx_bps,lost_packets,tx_bytes,rx_bytes` (one row per
 interval; `seq` is the status sequence number, `tx_bytes`/`rx_bytes` the per-interval
 byte counts); server:
-`duration_ms,event,client,protocol,direction,user,tx_bps,rx_bps` (one row per session;
-`tx_bps`/`rx_bps` are session averages). A mid-run error ends
+`duration_ms,event,client,protocol,direction,user,tx_bps,rx_bps,lost_packets` (one row
+per session; `tx_bps`/`rx_bps` are session averages, `lost_packets` is the UDP loss
+total — 0 for TCP). A mid-run error ends
 the stream and is carried in the summary envelope's `error` (`json`) or a final
 `error` row (`csv`); the process exit code reflects whether the test/server
 *started* cleanly.
