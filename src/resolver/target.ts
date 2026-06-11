@@ -74,6 +74,9 @@ export interface ResolvedAuth {
 	password: string;
 	passwordProvided: boolean;
 	passwordSource?: ResolverSettingSource;
+	/** SSH private-key path for sftp/scp/ssh; path only, never key material. */
+	sshKey?: string;
+	sshKeySource?: ResolverSettingSource;
 }
 
 export function resolveTarget(
@@ -224,10 +227,19 @@ export function resolveTarget(
 			: hostSetting.source;
 
 	const isNative = via === "native-api";
+	const isSsh = via === "ssh";
 	let port: number;
 	let tls: boolean;
 	let baseUrl: string;
-	if (isNative) {
+	if (isSsh) {
+		// SSH (sftp/scp/exec) addresses host:22 and carries its own crypto, so the
+		// URL scheme is irrelevant. An explicit `--port` / URL port wins over 22.
+		tls = false;
+		port =
+			portSetting?.value ??
+			(parsedUrl.port.length > 0 ? Number.parseInt(parsedUrl.port, 10) : 22);
+		baseUrl = `ssh://${formatHostForUrl(parsedUrl.hostname)}:${port}`;
+	} else if (isNative) {
 		// Native API ignores the URL scheme for its wire protocol; it defaults to
 		// TCP 8728, or TLS (api-ssl) 8729 when the caller passed `https://` or an
 		// explicit 8729. An explicit well-known port wins over the scheme so
@@ -305,7 +317,7 @@ function resolvePortSource(
 }
 
 export function resolveAuth(
-	credentials: { username?: string; password?: string },
+	credentials: { username?: string; password?: string; sshKey?: string },
 	env: Record<string, string | undefined>,
 	cdb?: CdbResolution,
 ): ResolvedAuth {
@@ -315,6 +327,17 @@ export function resolveAuth(
 		"CENTRS_USERNAME",
 		undefined,
 		"username",
+	);
+	// SSH key path: --ssh-key → CENTRS_SSH_KEY → CDB `ssh-key=` comment-kv → unset.
+	// Path only; the SFTP/SSH transport reads the file, centrs never stores material.
+	const sshKey = resolveStringSetting(
+		credentials.sshKey,
+		env,
+		"CENTRS_SSH_KEY",
+		undefined,
+		"ssh-key",
+		undefined,
+		cdb?.overrides.sshKey,
 	);
 	const password = resolveStringSetting(
 		credentials.password,
@@ -381,6 +404,8 @@ export function resolveAuth(
 		password: resolvedPassword?.value ?? "",
 		passwordProvided: resolvedPassword !== undefined,
 		passwordSource: resolvedPassword?.source,
+		sshKey: sshKey?.value,
+		sshKeySource: sshKey?.source,
 	};
 }
 

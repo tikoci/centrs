@@ -18,7 +18,9 @@
  *   error (examples P1–P4).
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type {
 	CentrsEnvelope,
 	CentrsErrorEnvelope,
@@ -34,6 +36,7 @@ import {
 	type ProtocolExecuteResult,
 } from "./protocols/adapter.ts";
 import type { RouterOsProtocol } from "./protocols/index.ts";
+import { SftpClient } from "./protocols/sftp.ts";
 import {
 	type CdbResolution,
 	parseDuration,
@@ -99,6 +102,10 @@ export interface TransferRequest {
 	port?: number;
 	username?: string;
 	password?: string;
+	/** SSH private-key path for sftp/scp (`--ssh-key`). Path only. */
+	sshKey?: string;
+	/** Accept self-signed TLS / new SSH host keys (`--insecure`). Default false. */
+	insecure?: boolean;
 	timeout?: string | number;
 	format?: string;
 	validate?: boolean;
@@ -164,6 +171,7 @@ interface ResolvedTransferRequest {
 	timeoutMs: ResolvedSetting<number>;
 	format: ResolvedSetting<TransferOutputFormat>;
 	validate: ResolvedSetting<boolean>;
+	insecure: ResolvedSetting<boolean>;
 	via: ResolvedSetting<string>;
 	local?: string;
 	remote?: string;
@@ -184,16 +192,7 @@ export async function transfer(
 	env: Record<string, string | undefined> = Bun.env,
 ): Promise<TransferSuccessEnvelope> {
 	const resolved = await resolveTransferRequest(request, env);
-	const backend = createProtocolAdapter({
-		protocol: resolved.protocol,
-		host: resolved.target.host,
-		port: resolved.target.port,
-		tls: resolved.target.tls,
-		baseUrl: resolved.target.baseUrl,
-		username: resolved.auth.username,
-		password: resolved.auth.password,
-		timeoutMs: resolved.timeoutMs.value,
-	});
+	const backend = createFileBackend(resolved);
 	try {
 		return await runResolvedTransfer(resolved, backend);
 	} finally {
@@ -202,12 +201,49 @@ export async function transfer(
 }
 
 /**
+ * Build the file backend for the resolved method. `rest`/`native` wrap the
+ * shared {@link ProtocolAdapter} `/file` command seam; `sftp` drives the host
+ * OpenSSH `sftp` subsystem (the only reliable SSH file path — RouterOS has no
+ * exec channel). Both satisfy {@link FileBackend}, so the verb runners are
+ * backend-agnostic.
+ */
+export function createFileBackend(
+	resolved: ResolvedTransferRequest,
+): FileBackend {
+	if (resolved.method === "sftp" || resolved.method === "scp") {
+		return new SftpFileBackend(
+			new SftpClient({
+				host: resolved.target.host,
+				port: resolved.target.port,
+				username: resolved.auth.username,
+				sshKey: resolved.auth.sshKey,
+				insecure: resolved.insecure.value,
+				timeoutMs: resolved.timeoutMs.value,
+			}),
+		);
+	}
+	const adapter = createProtocolAdapter({
+		protocol: resolved.protocol,
+		host: resolved.target.host,
+		port: resolved.target.port,
+		tls: resolved.target.tls,
+		baseUrl: resolved.target.baseUrl,
+		username: resolved.auth.username,
+		password: resolved.auth.password,
+		timeoutMs: resolved.timeoutMs.value,
+		insecure: resolved.insecure.value,
+	});
+	return new AdapterFileBackend(adapter);
+}
+
+/**
  * The verb dispatch shared by `transfer()` and (future) fanout. Takes an
- * already-built adapter so tests can drive it with a mocked transport.
+ * already-built {@link FileBackend} so tests can drive it with a mocked
+ * transport.
  */
 export async function runResolvedTransfer(
 	resolved: ResolvedTransferRequest,
-	backend: ProtocolAdapter,
+	backend: FileBackend,
 ): Promise<TransferSuccessEnvelope> {
 	const startedAt = Date.now();
 	const warnings: Warning[] = [...resolved.warnings];
@@ -239,7 +275,7 @@ interface VerbResult {
 
 async function dispatchTransferVerb(
 	resolved: ResolvedTransferRequest,
-	backend: ProtocolAdapter,
+	backend: FileBackend,
 	warnings: Warning[],
 ): Promise<VerbResult> {
 	switch (resolved.verb) {
@@ -260,15 +296,13 @@ async function dispatchTransferVerb(
 	}
 }
 
-// ── Verb implementations (REST / native via the adapter) ────────────────────
+// ── Verb implementations (backend-agnostic over FileBackend) ─────────────────
 
 async function runList(
 	resolved: ResolvedTransferRequest,
-	backend: ProtocolAdapter,
+	backend: FileBackend,
 ): Promise<VerbResult> {
-	const rows = (await backend.list("/file", {
-		proplist: [".id", "name", "type", "size", "last-modified"],
-	})) as Record<string, unknown>[];
+	const rows = await backend.listFiles(resolved.listPath);
 	const filtered = rows.filter((row) => matchesListFilters(row, resolved));
 	return {
 		rows: filtered,
@@ -278,46 +312,27 @@ async function runList(
 
 async function runUpload(
 	resolved: ResolvedTransferRequest,
-	backend: ProtocolAdapter,
+	backend: FileBackend,
 	warnings: Warning[],
 ): Promise<VerbResult> {
 	const remote = requireRemote(resolved);
 	const bytes = readLocalSource(resolved);
-	const text = bytes.toString("utf8");
 
-	if (bytes.byteLength > REST_FILE_WRITE_CAP_BYTES) {
+	// REST/native cannot write past the 60 KB `/file/set contents` cap; fail
+	// before any network call. sftp has no such cap (it streams the file).
+	if (
+		isRestFamily(resolved.method) &&
+		bytes.byteLength > REST_FILE_WRITE_CAP_BYTES
+	) {
 		throw restWriteCapError(remote, bytes.byteLength);
 	}
 
-	const existing = await findFile(backend, remote);
+	const existing = await backend.findFile(remote);
 	if (existing && !resolved.force) {
 		throw targetExistsError(remote);
 	}
 
-	let id = existing?.id;
-	if (!id) {
-		const added = await backend.execute({
-			path: "/file",
-			command: "add",
-			attributes: { name: remote, type: "file" },
-		});
-		id = extractNewId(added) ?? (await findFile(backend, remote))?.id;
-	}
-	if (!id) {
-		throw new CentrsError({
-			code: "routeros/command-failed",
-			summary: `RouterOS did not create the file ${remote}.`,
-			remediation:
-				"Confirm the path is writable and the user has `ftp`/`write` policy.",
-			context: { remote },
-		});
-	}
-
-	await backend.execute({
-		path: "/file",
-		command: "set",
-		attributes: { ".id": id, contents: text },
-	});
+	await backend.writeFile(remote, bytes, existing);
 
 	const verified = await verifyWrittenSize(
 		resolved,
@@ -340,10 +355,10 @@ async function runUpload(
 
 async function runDownload(
 	resolved: ResolvedTransferRequest,
-	backend: ProtocolAdapter,
+	backend: FileBackend,
 ): Promise<VerbResult> {
 	const remote = requireRemote(resolved);
-	const row = await findFile(backend, remote);
+	const row = await backend.findFile(remote);
 	if (!row) {
 		throw new CentrsError({
 			code: "routeros/command-failed",
@@ -354,11 +369,7 @@ async function runDownload(
 		});
 	}
 
-	const bytes =
-		row.size !== undefined && row.size <= REST_FILE_WRITE_CAP_BYTES
-			? await downloadSmall(backend, row.id)
-			: await downloadChunked(backend, remote, row.size);
-
+	const bytes = await backend.readFile(row);
 	writeLocalSink(resolved, bytes);
 
 	return {
@@ -374,10 +385,10 @@ async function runDownload(
 
 async function runRemove(
 	resolved: ResolvedTransferRequest,
-	backend: ProtocolAdapter,
+	backend: FileBackend,
 ): Promise<VerbResult> {
 	const remote = requireRemote(resolved);
-	const row = await findFile(backend, remote);
+	const row = await backend.findFile(remote);
 	if (!row) {
 		throw new CentrsError({
 			code: "routeros/command-failed",
@@ -386,11 +397,7 @@ async function runRemove(
 			context: { remote },
 		});
 	}
-	await backend.execute({
-		path: "/file",
-		command: "remove",
-		attributes: { ".id": row.id },
-	});
+	await backend.removeFile(row);
 	return {
 		data: baseData(resolved, { op: "remove", remote, local: null }),
 	};
@@ -398,18 +405,14 @@ async function runRemove(
 
 async function runMkdir(
 	resolved: ResolvedTransferRequest,
-	backend: ProtocolAdapter,
+	backend: FileBackend,
 ): Promise<VerbResult> {
 	const remote = requireRemote(resolved);
-	const existing = await findFile(backend, remote);
+	const existing = await backend.findFile(remote);
 	if (existing && !resolved.force) {
 		throw targetExistsError(remote);
 	}
-	await backend.execute({
-		path: "/file",
-		command: "add",
-		attributes: { name: remote, type: "directory" },
-	});
+	await backend.makeDir(remote);
 	return {
 		data: baseData(resolved, { op: "mkdir", remote, local: null }),
 	};
@@ -417,7 +420,7 @@ async function runMkdir(
 
 async function runCopy(
 	resolved: ResolvedTransferRequest,
-	backend: ProtocolAdapter,
+	backend: FileBackend,
 ): Promise<VerbResult> {
 	const remote = requireRemote(resolved);
 	const dest = resolved.remoteDest
@@ -430,7 +433,7 @@ async function runCopy(
 			remediation: "Pass both: `transfer <router> copy <src> <dst>`.",
 		});
 	}
-	const source = await findFile(backend, remote);
+	const source = await backend.findFile(remote);
 	if (!source) {
 		throw new CentrsError({
 			code: "routeros/command-failed",
@@ -439,20 +442,16 @@ async function runCopy(
 			context: { remote },
 		});
 	}
-	if (!resolved.force && (await findFile(backend, dest))) {
+	if (!resolved.force && (await backend.findFile(dest))) {
 		throw targetExistsError(dest);
 	}
-	await backend.execute({
-		path: "/file",
-		command: "copy",
-		attributes: { ".id": source.id, name: dest },
-	});
+	await backend.copyFile(source, dest);
 	return {
 		data: baseData(resolved, { op: "copy", remote, local: null }),
 	};
 }
 
-// ── RouterOS `/file` primitives (the one place wire shapes live) ─────────────
+// ── FileBackend: the seam the verb runners drive ─────────────────────────────
 
 interface FileRow {
 	id: string;
@@ -461,75 +460,244 @@ interface FileRow {
 	size?: number;
 }
 
-/** Resolve a file by its (normalized) name to its `.id` + size via `print`. */
-async function findFile(
-	backend: ProtocolAdapter,
-	name: string,
-): Promise<FileRow | undefined> {
-	const rows = (await backend.list("/file", {
-		proplist: [".id", "name", "type", "size"],
-	})) as Record<string, unknown>[];
-	const match = rows.find((row) => readString(row, "name") === name);
-	if (!match) {
-		return undefined;
+/**
+ * A backend-agnostic view of a device's file store. The verb runners drive this
+ * seam so the orchestration (existence guard, verify, envelope) lives in one
+ * place regardless of transport. `rest`/`native` map these to `/file` commands;
+ * `sftp` maps them to SFTP-subsystem operations.
+ */
+export interface FileBackend {
+	/** List files (optionally scoped to a directory prefix), `/file`-row shaped. */
+	listFiles(listPath?: string): Promise<Record<string, unknown>[]>;
+	/** Resolve a file by normalized name; `undefined` when absent. */
+	findFile(name: string): Promise<FileRow | undefined>;
+	/** Write `bytes` to `name`, reusing `existing` when present (overwrite). */
+	writeFile(
+		name: string,
+		bytes: Buffer,
+		existing: FileRow | undefined,
+	): Promise<void>;
+	/** Read a file's bytes. */
+	readFile(row: FileRow): Promise<Buffer>;
+	removeFile(row: FileRow): Promise<void>;
+	makeDir(name: string): Promise<void>;
+	copyFile(source: FileRow, dest: string): Promise<void>;
+	close(): Promise<void>;
+}
+
+function isRestFamily(method: TransferMethod): boolean {
+	return method === "rest" || method === "native";
+}
+
+/** REST / native-api `/file` command seam. The one place those wire shapes live. */
+class AdapterFileBackend implements FileBackend {
+	constructor(private readonly adapter: ProtocolAdapter) {}
+
+	async listFiles(): Promise<Record<string, unknown>[]> {
+		return (await this.adapter.list("/file", {
+			proplist: [".id", "name", "type", "size", "last-modified"],
+		})) as Record<string, unknown>[];
 	}
-	return {
-		id: readString(match, ".id") ?? "",
-		name,
-		type: readString(match, "type"),
-		size: readNumber(match, "size"),
-	};
-}
 
-/** Small read: `/file/get … contents`. */
-async function downloadSmall(
-	backend: ProtocolAdapter,
-	id: string,
-): Promise<Buffer> {
-	const result = await backend.execute({
-		path: "/file",
-		command: "get",
-		attributes: { ".id": id, "value-name": "contents" },
-	});
-	return Buffer.from(extractContents(result), "utf8");
-}
+	async findFile(name: string): Promise<FileRow | undefined> {
+		const rows = (await this.adapter.list("/file", {
+			proplist: [".id", "name", "type", "size"],
+		})) as Record<string, unknown>[];
+		const match = rows.find((row) => readString(row, "name") === name);
+		if (!match) {
+			return undefined;
+		}
+		return {
+			id: readString(match, ".id") ?? "",
+			name,
+			type: readString(match, "type"),
+			size: readNumber(match, "size"),
+		};
+	}
 
-/** Large read: loop `/file/read offset chunk-size` until a short chunk. */
-async function downloadChunked(
-	backend: ProtocolAdapter,
-	name: string,
-	totalSize: number | undefined,
-): Promise<Buffer> {
-	const parts: Buffer[] = [];
-	let offset = 0;
-	// Bound the loop defensively even if RouterOS never returns a short chunk.
-	const max = totalSize ?? Number.MAX_SAFE_INTEGER;
-	while (offset < max) {
-		const result = await backend.execute({
+	async writeFile(
+		name: string,
+		bytes: Buffer,
+		existing: FileRow | undefined,
+	): Promise<void> {
+		const text = bytes.toString("utf8");
+		let id = existing?.id;
+		if (!id) {
+			const added = await this.adapter.execute({
+				path: "/file",
+				command: "add",
+				attributes: { name, type: "file" },
+			});
+			id = extractNewId(added) ?? (await this.findFile(name))?.id;
+		}
+		if (!id) {
+			throw new CentrsError({
+				code: "routeros/command-failed",
+				summary: `RouterOS did not create the file ${name}.`,
+				remediation:
+					"Confirm the path is writable and the user has `ftp`/`write` policy.",
+				context: { remote: name },
+			});
+		}
+		await this.adapter.execute({
 			path: "/file",
-			command: "read",
-			attributes: {
-				file: name,
-				offset: String(offset),
-				"chunk-size": String(FILE_READ_CHUNK_BYTES),
-			},
+			command: "set",
+			attributes: { ".id": id, contents: text },
 		});
-		const chunk = Buffer.from(extractReadData(result), "utf8");
-		if (chunk.byteLength === 0) {
-			break;
-		}
-		parts.push(chunk);
-		offset += chunk.byteLength;
-		if (chunk.byteLength < FILE_READ_CHUNK_BYTES) {
-			break;
-		}
 	}
-	return Buffer.concat(parts);
+
+	async readFile(row: FileRow): Promise<Buffer> {
+		// Small file: `/file/get … contents`. Large: chunked `/file/read`.
+		if (row.size !== undefined && row.size <= REST_FILE_WRITE_CAP_BYTES) {
+			const result = await this.adapter.execute({
+				path: "/file",
+				command: "get",
+				attributes: { ".id": row.id, "value-name": "contents" },
+			});
+			return Buffer.from(extractContents(result), "utf8");
+		}
+		const parts: Buffer[] = [];
+		let offset = 0;
+		// Bound the loop defensively even if RouterOS never returns a short chunk.
+		const max = row.size ?? Number.MAX_SAFE_INTEGER;
+		while (offset < max) {
+			const result = await this.adapter.execute({
+				path: "/file",
+				command: "read",
+				attributes: {
+					file: row.name,
+					offset: String(offset),
+					"chunk-size": String(FILE_READ_CHUNK_BYTES),
+				},
+			});
+			const chunk = Buffer.from(extractReadData(result), "utf8");
+			if (chunk.byteLength === 0) {
+				break;
+			}
+			parts.push(chunk);
+			offset += chunk.byteLength;
+			if (chunk.byteLength < FILE_READ_CHUNK_BYTES) {
+				break;
+			}
+		}
+		return Buffer.concat(parts);
+	}
+
+	async removeFile(row: FileRow): Promise<void> {
+		await this.adapter.execute({
+			path: "/file",
+			command: "remove",
+			attributes: { ".id": row.id },
+		});
+	}
+
+	async makeDir(name: string): Promise<void> {
+		await this.adapter.execute({
+			path: "/file",
+			command: "add",
+			attributes: { name, type: "directory" },
+		});
+	}
+
+	async copyFile(source: FileRow, dest: string): Promise<void> {
+		await this.adapter.execute({
+			path: "/file",
+			command: "copy",
+			attributes: { ".id": source.id, name: dest },
+		});
+	}
+
+	async close(): Promise<void> {
+		await this.adapter.close();
+	}
+}
+
+/** SFTP-subsystem seam over the host OpenSSH `sftp` (see `protocols/sftp.ts`). */
+class SftpFileBackend implements FileBackend {
+	constructor(private readonly client: SftpClient) {}
+
+	async listFiles(listPath?: string): Promise<Record<string, unknown>[]> {
+		const entries = await this.client.readdir(listPath ?? ".");
+		return entries.map((entry) => ({
+			// Prefix with the listed directory so the shared `--type`/`--name`/path
+			// filters see the same full-path shape the REST family returns.
+			name: listPath ? `${listPath}/${entry.name}` : entry.name,
+			type: entry.type,
+			...(entry.size === undefined ? {} : { size: entry.size }),
+		}));
+	}
+
+	async findFile(name: string): Promise<FileRow | undefined> {
+		const entry = await this.client.stat(name);
+		if (!entry) {
+			return undefined;
+		}
+		// Existence probe only — no size. SFTP `put`/`get` are protocol-guaranteed
+		// complete (a partial transfer errors), so the upload `--verify size` trusts
+		// that guarantee rather than re-reading a server-format-dependent `ls -l`
+		// size; and `get` streams any size without needing it.
+		return { id: "", name, type: entry.type };
+	}
+
+	async writeFile(name: string, bytes: Buffer): Promise<void> {
+		await withTempFile(bytes, (path) => this.client.put(path, name));
+	}
+
+	async readFile(row: FileRow): Promise<Buffer> {
+		return withTempFile(undefined, async (path) => {
+			await this.client.get(row.name, path);
+			return readFileSync(path);
+		});
+	}
+
+	async removeFile(row: FileRow): Promise<void> {
+		await this.client.remove(row.name);
+	}
+
+	async makeDir(name: string): Promise<void> {
+		await this.client.mkdir(name);
+	}
+
+	async copyFile(): Promise<void> {
+		// RouterOS SFTP exposes no server-side copy; `copy` stays on rest/native.
+		throw new CentrsError({
+			code: "transport/unsupported-operation",
+			summary: "On-device `copy` is not available over sftp.",
+			remediation:
+				"Use `--via rest` / `--via native` for on-device copy; sftp moves bytes host↔device only.",
+			context: { via: "ssh", op: "copy" },
+		});
+	}
+
+	async close(): Promise<void> {
+		// The sftp client is stateless across calls (one batch per op).
+	}
+}
+
+/**
+ * Run `fn` with a private temp-file path. When `seed` is given the file is
+ * pre-filled (upload); otherwise `fn` writes it (download). The temp dir is
+ * always removed.
+ */
+async function withTempFile<T>(
+	seed: Buffer | undefined,
+	fn: (path: string) => Promise<T>,
+): Promise<T> {
+	const dir = mkdtempSync(join(tmpdir(), "centrs-sftp-"));
+	const path = join(dir, "data");
+	try {
+		if (seed !== undefined) {
+			writeFileSync(path, seed);
+		}
+		return await fn(path);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
 }
 
 async function verifyWrittenSize(
 	resolved: ResolvedTransferRequest,
-	backend: ProtocolAdapter,
+	backend: FileBackend,
 	remote: string,
 	expected: number,
 	warnings: Warning[],
@@ -544,7 +712,7 @@ async function verifyWrittenSize(
 				"RouterOS exposes no file digest over REST/native; verifying by size instead.",
 		});
 	}
-	const row = await findFile(backend, remote);
+	const row = await backend.findFile(remote);
 	const actual = row?.size;
 	if (actual !== undefined && actual !== expected) {
 		throw new CentrsError({
@@ -594,6 +762,14 @@ export async function resolveTransferRequest(
 		"validate",
 		cdbResolution?.overrides.validate,
 	);
+	const insecure = resolveBooleanSetting(
+		request.insecure,
+		env,
+		"CENTRS_INSECURE",
+		false,
+		"insecure",
+		cdbResolution?.overrides.insecure,
+	);
 	const timeoutMs = resolveTransferTimeout(
 		request.timeout,
 		env,
@@ -611,10 +787,35 @@ export async function resolveTransferRequest(
 		cdbResolution,
 	);
 	const auth = resolveAuth(
-		{ username: request.username, password: request.password },
+		{
+			username: request.username,
+			password: request.password,
+			sshKey: request.sshKey,
+		},
 		env,
 		cdbResolution,
 	);
+
+	const warnings: Warning[] = [
+		...((cdbResolution?.warnings ?? []) as readonly Warning[]),
+	];
+	// Report the auto hop: a large upload cannot ride the REST family's 60 KB
+	// `/file/set` cap, so auto-selection moved it to sftp.
+	if (via.value === "auto" && method === "sftp") {
+		warnings.push({
+			code: "transport/auto-method",
+			message:
+				"Large upload (>60 KB) auto-selected sftp; the REST family cannot write past the 60 KB `/file/set` cap.",
+		});
+	}
+	// A self-signed-accepting run is an anomaly worth surfacing on every transport.
+	if (insecure.value) {
+		warnings.push({
+			code: "transport/insecure-trust",
+			message:
+				"`--insecure` is set: TLS peer verification and strict SSH host-key checking are disabled.",
+		});
+	}
 
 	return {
 		verb: request.verb,
@@ -625,6 +826,7 @@ export async function resolveTransferRequest(
 		timeoutMs,
 		format,
 		validate,
+		insecure,
 		via,
 		local: request.local,
 		remote: request.remote ? normalizeRemotePath(request.remote) : undefined,
@@ -635,7 +837,7 @@ export async function resolveTransferRequest(
 		type: request.type,
 		name: request.name,
 		verbose: request.verbose ?? false,
-		warnings: (cdbResolution?.warnings ?? []) as readonly Warning[],
+		warnings,
 	};
 }
 
@@ -666,14 +868,15 @@ export function selectTransferMethod(
 	const requested = via.value;
 
 	if (requested === "auto") {
-		// Auto: REST family carries reads and small writes; a large upload needs
-		// sftp (not built yet), so it surfaces as not-implemented.
+		// Auto: REST family carries reads and small writes; a large upload exceeds
+		// the 60 KB `/file/set` cap, so it auto-selects sftp (reported as an auto
+		// hop in meta.warnings by the caller).
 		if (
 			direction === "upload" &&
 			uploadBytes !== undefined &&
 			uploadBytes > REST_FILE_WRITE_CAP_BYTES
 		) {
-			throw notImplementedMethod("sftp", "large uploads (>60 KB) need sftp");
+			return { method: "sftp", protocol: "ssh", via };
 		}
 		return { method: "rest", protocol: "rest-api", via };
 	}
@@ -684,7 +887,10 @@ export function selectTransferMethod(
 	if (requested === "native" || requested === "native-api") {
 		return { method: "native", protocol: "native-api", via };
 	}
-	if (requested === "sftp" || requested === "scp" || requested === "fetch") {
+	if (requested === "sftp") {
+		return { method: "sftp", protocol: "ssh", via };
+	}
+	if (requested === "scp" || requested === "fetch") {
 		throw notImplementedMethod(requested);
 	}
 	if (requested === "ftp") {
@@ -715,7 +921,7 @@ function notImplementedMethod(method: string, why?: string): CentrsError {
 			? `transfer ${why} — \`--via ${method}\` is not implemented yet.`
 			: `transfer \`--via ${method}\` is not implemented yet.`,
 		remediation:
-			"Use `--via rest` / `--via native` (≤60 KB writes and all reads) for now; sftp/scp/fetch land with the SSH transport.",
+			"Use `--via sftp` for large transfers, or `--via rest` / `--via native` (≤60 KB writes and all reads); scp/fetch are not built yet.",
 		context: { via: method },
 	});
 }
@@ -984,11 +1190,15 @@ function metaFromResolved(
 			timeoutMs: toCoreSource(resolved.timeoutMs.source),
 			format: toCoreSource(resolved.format.source),
 			validate: toCoreSource(resolved.validate.source),
+			insecure: toCoreSource(resolved.insecure.source),
 			username: resolved.auth.usernameSource
 				? toCoreSource(resolved.auth.usernameSource)
 				: undefined,
 			password: resolved.auth.passwordSource
 				? toCoreSource(resolved.auth.passwordSource)
+				: undefined,
+			sshKey: resolved.auth.sshKeySource
+				? toCoreSource(resolved.auth.sshKeySource)
 				: undefined,
 		},
 		validation,

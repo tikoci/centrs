@@ -47,7 +47,18 @@ export const transferCommand: CliCommandMetadata = {
 			flag: "--via",
 			valueName: "<method>",
 			description:
-				"Pin the method: rest (default secure family), native, or sftp/scp/fetch/ftp (not built yet).",
+				"Pin the method: rest, native, or sftp (large transfers); scp/fetch/ftp are not built yet. Auto picks the cheapest by size/direction.",
+		},
+		{
+			flag: "--ssh-key",
+			valueName: "<path>",
+			description:
+				"sftp only: explicit private-key path. Falls back to CENTRS_SSH_KEY / the ssh-agent.",
+		},
+		{
+			flag: "--insecure",
+			description:
+				"Accept a self-signed TLS cert (https/api-ssl) or a new SSH host key. Default verifies.",
 		},
 		{
 			flag: "--force",
@@ -217,6 +228,12 @@ function parseTransferCliArgs(
 				break;
 			case "--password":
 				flags.password = expectValue(args, ++index, arg);
+				break;
+			case "--ssh-key":
+				flags.sshKey = expectValue(args, ++index, arg);
+				break;
+			case "--insecure":
+				flags.insecure = true;
 				break;
 			case "--timeout":
 				flags.timeout = expectValue(args, ++index, arg);

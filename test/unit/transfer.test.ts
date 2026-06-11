@@ -105,15 +105,15 @@ describe("selectTransferMethod", () => {
 		).toMatchObject({ method: "rest", protocol: "rest-api" });
 	});
 
-	test("auto upload over 60 KB defers to sftp (not implemented)", () => {
-		expect(() =>
+	test("auto upload over 60 KB auto-selects sftp", () => {
+		expect(
 			selectTransferMethod(
 				baseRequest({ verb: "upload" }),
 				"upload",
 				70_000,
 				{},
 			),
-		).toThrow(/not implemented/i);
+		).toMatchObject({ method: "sftp", protocol: "ssh" });
 	});
 
 	test("explicit rest / native map to their grid protocol", () => {
@@ -135,8 +135,14 @@ describe("selectTransferMethod", () => {
 		).toMatchObject({ method: "native", protocol: "native-api" });
 	});
 
-	test("sftp / scp / fetch are not implemented yet", () => {
-		for (const via of ["sftp", "scp", "fetch"]) {
+	test("sftp routes to the ssh transport", () => {
+		expect(
+			selectTransferMethod(baseRequest({ via: "sftp" }), "upload", 10, {}),
+		).toMatchObject({ method: "sftp", protocol: "ssh" });
+	});
+
+	test("scp / fetch are not implemented yet", () => {
+		for (const via of ["scp", "fetch"]) {
 			let code = "";
 			try {
 				selectTransferMethod(baseRequest({ via }), "upload", 10, {});

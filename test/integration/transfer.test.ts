@@ -13,14 +13,15 @@ import {
 } from "./chr.ts";
 
 /**
- * CHR integration for `transfer` over rest-api + native-api. Maps
+ * CHR integration for `transfer` over rest-api + native-api + ssh/sftp. Maps
  * `commands/transfer/examples.md`: the REST round-trip, list + filters,
  * validate-before-write, device file management, error contract, the native
- * mirror (N1–N4), and the pending-transport gating (P1–P4).
+ * mirror (N1–N4), the sftp key-auth round-trip incl. the >60 KB gap REST cannot
+ * write (S1–S6, which also closes example 17), and the residual gating (scp/fetch
+ * not-implemented, ftp gated).
  *
  * Deferred to a follow-up (need a different harness than `runCli` console
- * capture): the stdin/stdout/cwd-default forms (examples 8–10) and the
- * fetch-seeded >60 KB chunked read (example 17).
+ * capture): the stdin/stdout/cwd-default forms (examples 8–10).
  */
 
 const runFastIntegration = isChrIntegrationEnabled();
@@ -35,6 +36,19 @@ interface SuccessEnvelope {
 interface FailureEnvelope {
 	ok: false;
 	error: { code?: string; details_url?: string };
+}
+
+/** Generate an ed25519 keypair (no passphrase) at `keyPath` / `keyPath.pub`. */
+async function generateKeyPair(keyPath: string): Promise<void> {
+	const proc = Bun.spawn(
+		["ssh-keygen", "-t", "ed25519", "-N", "", "-C", "centrs-it", "-f", keyPath],
+		{ stdout: "pipe", stderr: "pipe" },
+	);
+	const exitCode = await proc.exited;
+	if (exitCode !== 0) {
+		const stderr = await new Response(proc.stderr).text();
+		throw new Error(`ssh-keygen failed (${exitCode}): ${stderr}`);
+	}
 }
 
 function captureConsole() {
@@ -95,7 +109,11 @@ describeFast("transfer against CHR", () => {
 				const exitCode = await runCli([...args, "--json"]);
 				const stdout = capture.logs.slice(logStart);
 				const stderr = capture.errors.slice(errStart);
-				expect(stderr).toHaveLength(0);
+				if (stderr.length > 0) {
+					throw new Error(
+						`unexpected stderr for [${args.join(" ")}]: ${stderr.join("\n")}`,
+					);
+				}
 				expect(exitCode).toBe(0);
 				const envelope = JSON.parse(stdout[0] ?? "") as SuccessEnvelope;
 				expect(envelope.ok).toBe(true);
@@ -303,11 +321,85 @@ describeFast("transfer against CHR", () => {
 				"transport/unsupported-operation",
 			);
 
-			// P1-P4. pending transports / gated ftp
-			await fail(
-				["transfer", ...rest, "upload", src, "centrs-up.txt", "--via", "sftp"],
-				"usage/not-implemented",
+			// ── sftp (ssh): key-auth round-trip, the >60 KB gap, list/mkdir/remove ──
+			// RouterOS refuses password login once a user has an SSH key, and centrs's
+			// sftp client runs BatchMode=yes (no password prompts), so the faithful
+			// path is key auth: generate a keypair, import the public half to the CHR
+			// user, then drive `--via sftp --ssh-key`. The CHR forwards guest TCP/22 to
+			// chr.sshPort over SLIRP. `--insecure` accepts the ephemeral host key.
+			const keyPath = join(tmp, "id_centrs");
+			await generateKeyPair(keyPath);
+			await ok([
+				"transfer",
+				...rest,
+				"upload",
+				`${keyPath}.pub`,
+				"centrs_it.pub",
+			]);
+			await chr.exec(
+				`/user ssh-keys import public-key-file=centrs_it.pub user=${auth.username}`,
 			);
+
+			const sftp = [
+				"127.0.0.1",
+				"--via",
+				"sftp",
+				"--port",
+				String(chr.sshPort),
+				"--username",
+				auth.username,
+				"--ssh-key",
+				keyPath,
+				"--insecure",
+			];
+
+			// S1-S2. sftp upload + download round-trip (meta.via === ssh)
+			const sUp = await ok([
+				"transfer",
+				...sftp,
+				"upload",
+				src,
+				"centrs-sftp.txt",
+			]);
+			expect(sUp.meta.via).toBe("ssh");
+			expect(sUp.data).toMatchObject({
+				op: "upload",
+				remote: "centrs-sftp.txt",
+			});
+			const sOut = join(tmp, "sftp-down.txt");
+			await ok(["transfer", ...sftp, "download", "centrs-sftp.txt", sOut]);
+			expect(await readFile(sOut, "utf8")).toBe(payload);
+
+			// S3. the >60 KB gap REST cannot write — sftp streams it up, sftp reads back
+			const bigOut = join(tmp, "sftp-big.bin");
+			await ok(["transfer", ...sftp, "upload", big, "centrs-big.bin"]);
+			await ok(["transfer", ...sftp, "download", "centrs-big.bin", bigOut]);
+			expect((await readFile(bigOut)).byteLength).toBe(70_000);
+
+			// 17. the same sftp-seeded >60 KB file reads back over REST via chunked
+			// /file/read (no fetch-seed hack needed now that sftp can place it).
+			const restBigOut = join(tmp, "rest-big.bin");
+			const restBig = await ok([
+				"transfer",
+				...rest,
+				"download",
+				"centrs-big.bin",
+				restBigOut,
+			]);
+			expect(restBig.meta.via).toBe("rest-api");
+			expect((await readFile(restBigOut)).byteLength).toBe(70_000);
+
+			// S4. list over sftp surfaces the uploaded file
+			const sList = await ok(["transfer", ...sftp, "list"]);
+			expect(
+				(sList.data as Array<Record<string, unknown>>).map((r) => r["name"]),
+			).toContain("centrs-sftp.txt");
+
+			// S5. mkdir + remove over sftp
+			await ok(["transfer", ...sftp, "mkdir", "centrs-sftp-dir"]);
+			await ok(["transfer", ...sftp, "remove", "centrs-big.bin"]);
+
+			// Residual gating: scp / fetch not-implemented, ftp gated.
 			await fail(
 				["transfer", ...rest, "upload", src, "centrs-up.txt", "--via", "scp"],
 				"usage/not-implemented",
@@ -326,6 +418,9 @@ describeFast("transfer against CHR", () => {
 				"centrs-up.txt",
 				"centrs-no-verify.txt",
 				"centrs-nv.txt",
+				"centrs-sftp.txt",
+				"centrs_it.pub",
+				"centrs-sftp-dir",
 				"centrs-dir/nested.txt",
 				"centrs-dir",
 			]) {
@@ -335,12 +430,12 @@ describeFast("transfer against CHR", () => {
 			await recordIntegrationEvidence({
 				suite: "transfer against CHR",
 				command: "transfer",
-				protocol: "rest-api+native-api",
+				protocol: "rest-api+native-api+ssh",
 				routerosVersion: chr.state.version,
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(21),
+				exampleIds: exampleIds(27),
 			});
 		} finally {
 			capture.restore();

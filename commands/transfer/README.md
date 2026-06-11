@@ -2,12 +2,15 @@
 
 Copy files to and from a RouterOS device, and manage device files.
 
-Status (agrees with `docs/MATRIX.md`): `coded` for `rest-api` / `native-api`
-(`src/transfer.ts`, `src/cli/transfer.ts`, unit-green; CHR-passed pending the
-integration run in `test/integration/transfer.test.ts`); `designed` for `ssh`.
-The `ssh` (sftp/scp) path is blocked on the SSH transport landing as one unit via
-`terminal/ssh` (see `commands/terminal/README.md`); the `fetch` method below is
-**designed but deferred** past the first coded pass.
+Status (agrees with `docs/MATRIX.md`): `coded` for `rest-api` / `native-api` and
+for `ssh`/**sftp** (`src/transfer.ts`, `src/cli/transfer.ts`,
+`src/protocols/sftp.ts`, unit-green; CHR-passed pending the integration run in
+`test/integration/transfer.test.ts`). **sftp** is the first SSH consumer and lands
+as a self-contained SFTP transfer client over the host OpenSSH `sftp` subsystem
+(not blocked on `execute`/`terminal` over SSH, which need a console reader
+RouterOS's no-pseudo-tty server makes harder — see `commands/terminal/README.md`,
+RouterOS SSH surface). `scp` and `fetch` are **designed but deferred** past this
+pass.
 
 ## Intent
 
@@ -145,7 +148,7 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 
 | Flag | Behavior |
 | ---- | -------- |
-| `--via <method>` | Pin the method: `sftp` (default secure), `scp`, `rest`, `native`, `fetch` *(deferred)*, `ftp` *(gated)*. No silent downgrade. See *Method selection* and constitution: protocol selection. |
+| `--via <method>` | Pin the method: `sftp` (built; secure default for large transfers), `rest`, `native`, or `scp` *(deferred)* / `fetch` *(deferred)* / `ftp` *(gated)*. No silent downgrade. See *Method selection* and constitution: protocol selection. |
 | `--force` (alias `--overwrite`) | Replace an existing target. Default **refuses** an existing target with `usage/target-exists` (mirrors how `add` refuses an existing record). Applies to the destination side: the local file for `download`, the remote file for `upload`. |
 | `--verify <size\|checksum\|off>` | Post-transfer integrity check. Default `size` (compare the byte count centrs sent/received against the settled `/file` size). `off` (alias `--no-verify`) skips it. See *Integrity*. |
 | `--type <file\|directory\|disk\|package>` | `list` only: filter by `/file` row type. |
@@ -159,7 +162,8 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 | `--timeout <ms>` | Request timeout. `rest`/`native` per-request ≤ 60000 (a chunked read is many short requests, each capped); `sftp`/`scp`/`fetch` accept longer for a single large transfer. |
 | `--username` / `--password` | Override CDB-resolved or env credentials. |
 | `--host <host\|url>` / `--port <n>` | Override the resolved host / transport port. |
-| `--ssh-key <path>` | `sftp`/`scp` only: explicit private-key path. Same `sshKey` setting as `terminal`/`execute` (`CENTRS_SSH_KEY`, CDB `ssh-key=`). See `commands/terminal/README.md`. |
+| `--ssh-key <path>` | `sftp` (and future `scp`): explicit private-key path. Same `sshKey` setting as `terminal`/`execute` (`CENTRS_SSH_KEY`, CDB `ssh-key=`). When unset, the ssh-agent / `~/.ssh/config` is used. See `commands/terminal/README.md`. |
+| `--insecure` | Accept a self-signed TLS cert (`https`/`api-ssl`) or a new SSH host key (TOFU). Default verifies; see constitution: transport trust. Adds a `transport/insecure-trust` warning. |
 | `--cdb-file` / `--cdb-password` | Override CDB file location / decrypt password. |
 | `--group <name>` / `--where <attr>=<value>` / `--all` / `--default` / `--concurrency <n>` | Fan out across CDB targets (e.g. push one firmware file to a fleet). Same selector grammar and per-target envelope as `retrieve` (constitution: target selection). `download` fanout requires `--out-dir`; `remove`/`mkdir`/`copy`/`upload` fan out directly. |
 
@@ -278,14 +282,20 @@ done rule. The first coded pass targets `rest`/`native` (no SSH dependency);
   binary REST serialization fixed 7.17). Open questions: advertise-host
   auto-detection behind NAT, HTTP-vs-HTTPS + `check-certificate`, and whether to
   add fetch's `user`/`password` on top of the URL token.
-- **ssh** — `sftp`/`scp` ride the single SSH transport introduced by
-  `terminal/ssh`; the SSH library/host-key/agent decisions live there, not here.
-  Two RouterOS auth facts the SSH transport must honor (so transfer inherits them):
-  a user **cannot** password-auth over SSH once an SSH key is set for it
-  ([User](https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User)) — so
-  password vs `--ssh-key` is not a free choice per target; and `strong-crypto=yes`
-  disables ssh-rsa/SHA1 (7.4/7.7/7.9), so the client must offer ed25519 /
-  rsa-sha2-256. RouterOS's SSH server has no exec channel, so the file path is the
-  SFTP **subsystem**, not exec-driven scp.
+- **ssh** — `sftp` is **built** (`src/protocols/sftp.ts`, host OpenSSH `sftp`
+  subsystem; `scp` is the deferred follow-on). The host SSH client owns
+  host-key/agent/algorithm negotiation; the centrs-side trust knob is the unified
+  `--insecure` (constitution: transport trust). Two RouterOS auth facts transfer
+  inherits, grounded on the [SSH](https://help.mikrotik.com/docs/spaces/ROS/pages/132350014/SSH)
+  / [User](https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User) pages:
+  **by default** a user cannot password-auth over SSH once an SSH key is set for it
+  (`/ip/ssh password-authentication=yes-if-no-key`, the default — settable to
+  `yes` to allow both), so key auth is the normal path; and `strong-crypto=yes`
+  disables ssh-rsa/SHA1, so the client must offer ed25519 / rsa-sha2-256 (the host
+  OpenSSH negotiates this natively). RouterOS's SSH server has no exec channel, so
+  the file path is the SFTP **subsystem**, not exec-driven scp; on-device `copy`
+  has no SFTP primitive and stays on rest/native (`--via sftp copy` →
+  `transport/unsupported-operation`). See `commands/terminal/README.md` (RouterOS
+  SSH surface) for the full device-side option alignment.
 - **list ↔ retrieve** — `transfer list` is sugar over `retrieve /file`; keep the
   read logic in one place.

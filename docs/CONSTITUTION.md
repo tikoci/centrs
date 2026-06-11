@@ -390,6 +390,31 @@ REST-specific constraint: RouterOS REST has a 60-second hard timeout. Do not
 let `--timeout` exceed 60s when `via=rest-api`; reject with a clear error.
 Other transports may accept longer timeouts.
 
+### Transport trust (TLS / SSH host keys)
+
+One opt-out across every transport: `--insecure` (`CENTRS_INSECURE`, CDB
+`insecure=` comment-kv). Default is **verify**; `--insecure` disables peer
+verification and adds a `transport/insecure-trust` warning to the envelope so the
+downgrade is always visible. Because RouterOS ships **self-signed** certificates
+and host keys, the *default posture per transport follows that transport's
+ecosystem norm* rather than one literal value:
+
+- **TLS** (REST `https`, native-api `api-ssl`) **verifies** by default; a
+  self-signed cert fails with `transport/tls-certificate` whose remediation names
+  `--insecure`. (Both transports honor the same knob — previously native-api
+  silently accepted any cert; that is fixed.)
+- **SSH host keys** (sftp/scp) default to **trust-on-first-use**
+  (`StrictHostKeyChecking=accept-new` into the user's `known_hosts`): a new key is
+  accepted, a *changed* key fails with `transport/host-key-mismatch`. `--insecure`
+  disables the check entirely. TOFU is the universal SSH norm, so the SSH default
+  is laxer than the TLS default by design.
+
+SSH identity selection: the `sshKey` setting (`--ssh-key`/`CENTRS_SSH_KEY`/CDB
+`ssh-key=`) carries a private-key **path only** — never key material; when unset,
+the host SSH agent / `~/.ssh/config` is used. RouterOS refuses password login once
+an SSH key is set for a user (`password-authentication=yes-if-no-key`, the
+default), so key auth is the normal sftp path.
+
 ## Done definition
 
 A feature is done when its **CHR integration test is green** against a real

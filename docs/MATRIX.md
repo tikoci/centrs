@@ -27,7 +27,7 @@ A cell advances only with the matching evidence in the same change.
 | stream   | —             | `designed`    | `designed`    | —             | —             | —             | —             | —                |
 | execute  | `CHR-passed`  | `CHR-passed`  | `not-started` | `CHR-passed`  | —             | —             | `not-started` | `not-started`    |
 | terminal | —             | —             | `not-started` | `not-started` | —             | —             | —             | —                |
-| transfer | `coded`       | `coded`       | `designed`    | —             | —             | —             | —             | —                |
+| transfer | `coded`       | `coded`       | `coded`       | —             | —             | —             | —             | —                |
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
 | discover | —             | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
 | check    | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started`    |
@@ -110,25 +110,40 @@ selection, leading-slash normalization, the `print`-probe existence guard, and
 shape validation, and the REST round-trip wire shape via mocked `fetch`). The
 cells carry small writes (`/file/set contents`, ≤60 KB) and all reads (chunked
 `/file/read`). `test/integration/transfer.test.ts` is **green against a real CHR
-7.23.1** (92 assertions): the rest + native round-trip, list + filters,
+7.23.1** (98 assertions): the rest + native round-trip, list + filters,
 validate-before-write, device file management (mkdir/copy/remove), leading-slash
 normalization, the >60 KB rejection, the error contract (missing file, bad creds,
-conflicting flags), the native `N1`–`N4` mirror, and the `P1`–`P4` gating — which
-confirmed the `/file` `get`/`set`/`add`/`copy`/`remove` wire shapes on real
+conflicting flags), the native `N1`–`N4` mirror, the sftp `S1`–`S5` round-trip,
+example 17 (chunked REST read of an sftp-seeded >60 KB file), and the residual
+gating (scp/fetch not-implemented, ftp gated) — which confirmed the `/file`
+`get`/`set`/`add`/`copy`/`remove` wire shapes and the SFTP subsystem on real
 RouterOS. They stay `coded` rather than `CHR-passed` only because the strict bar
-is *every* example, and four are deliberately deferred as harness work: examples
-8–10 (stdin/stdout/default-local, which need a non-console capture path) and
-example 17 (the fetch-seeded >60 KB chunked read).
+is *every* example, and three remain deliberately deferred as harness work:
+examples 8–10 (stdin/stdout/default-local, which need a subprocess stdin/stdout
+capture path the `runCli` console harness lacks). Example 17 is now closed (the
+sftp path seeds the >60 KB file, so the fetch hack is gone).
 
-The single `ssh` grid column carries **two distinct methods** — `sftp` and `scp`
-— which centrs treats separately even though they share the SSH transport.
-**sftp is first**: it is the default secure method, and its `stat`/`readdir`/
-partial ops are what make the existence check, `--verify`, and
-`list`/`remove`/`mkdir` work over SSH (scp, a dumb byte-stream, can't). **scp is a
-deliberate later pass** behind `--via scp` — kept because in some locked-down
-environments it may be the only file path the SSH server exposes. Both are blocked
-on the SSH transport landing as one unit via `terminal/ssh`; the column reads
-`designed` for the sftp design, with scp tracked as the follow-on method.
+`transfer / ssh` is `coded` for **sftp**, the first SSH consumer. This
+deliberately re-scopes the earlier "SSH lands as one unit" plan: the SSH
+*transport base* lands here as a self-contained **SFTP transfer client**
+(`src/protocols/sftp.ts`, the host OpenSSH `sftp` subsystem), and the harder
+console-channel surfaces (`execute / ssh`, `terminal / ssh`) layer on later —
+RouterOS's SSH server has no exec channel / no pseudo-tty, so those need an
+interactive-shell reader (like mac-telnet's), which sftp does not. The single
+`ssh` grid column still carries **two methods**: **sftp is built** (default secure;
+its `stat`/`readdir`/partial ops drive the existence check, `--verify`, and
+`list`/`remove`/`mkdir`), while **scp stays a deliberate later pass** behind
+`--via scp` (a dumb byte-stream — kept only because some locked-down environments
+expose nothing else). `src/transfer.ts` selects sftp via the shared `FileBackend`
+seam (rest/native vs sftp), and the SSH host-key trust rides the unified
+`--insecure` knob (see `docs/CONSTITUTION.md`, Transport trust). The sftp path is
+**green against real CHR 7.23.1** (`test/integration/transfer.test.ts`, S1–S5: a
+key-auth round-trip, the >60 KB upload REST cannot do, list/mkdir/remove); the
+cell stays `coded` only because the shared examples 8–10 (stdin/stdout) are
+deferred harness work. **CHR finding:** RouterOS's sftp `ls -l` does not report a
+reliable byte size, so the sftp `--verify size` trusts the SFTP transfer guarantee
+(a partial `put`/`get` errors) rather than re-reading a size. On-device `copy` has
+no SFTP primitive and stays on rest/native.
 
 `fetch` (centrs-as-HTTP-server + `/tool/fetch`) is a **deferred, explicit-only
 method within the rest-api/native-api cells**, not a grid column — it needs
@@ -309,11 +324,14 @@ matching evidence.
    provenance.
 6. **retrieve / snmp** — SNMP OID/MIB reads with MikroTik MIB download/cache
    (future).
-7. **ssh** for execute/terminal/transfer — third transport, landing as one
-   complete unit (not piecemeal), **introduced via `terminal/ssh`**. Settings
-   names (`--ssh-key`/`CENTRS_SSH_KEY`/`ssh-key` comment-kv) are signed off; the
-   `ssh-key` comment-kv allowlist entry arrives with the transport. See
-   `commands/terminal/README.md` for the residual SSH unknowns.
+7. **ssh** for transfer/execute/terminal — third transport. **Re-scoped (decided
+   with the user): land it transfer-first.** The SSH transport base ships as the
+   **SFTP transfer client** (`transfer / ssh`, `coded` — `src/protocols/sftp.ts`
+   over host OpenSSH); the `ssh-key` (`--ssh-key`/`CENTRS_SSH_KEY`/comment-kv) and
+   `insecure` settings land **with** it, honoring the "no half-wired setting" rule.
+   `execute / ssh` + `terminal / ssh` (the no-pseudo-tty interactive-shell reader)
+   follow as a later pass. See `commands/terminal/README.md` (RouterOS SSH surface)
+   for the device-side option alignment and residual unknowns.
 8. **mac-telnet** for execute/terminal — L2 path, default execute route for
    unresolved MAC targets. `execute / mac-telnet` is **`CHR-passed`** (console
    reader + UDP transport + adapter; examples 19–21; byte-counter retransmit +

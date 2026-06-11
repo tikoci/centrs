@@ -18,6 +18,8 @@ interface ChrInstance {
 	state: { version: string };
 	restUrl: string;
 	ports: { api: number; apiSsl: number; [key: string]: number };
+	/** Host port forwarded to the guest's SSH (TCP/22) over the SLIRP NIC. */
+	sshPort: number;
 	subprocessEnv(): Promise<Record<string, string>>;
 	destroy(): Promise<void>;
 	/** Wait for the REST endpoint to answer; resolves true once booted. */

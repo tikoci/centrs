@@ -134,6 +134,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"The --match value is not a supported selector (user=, target=, or a record-type token).",
 	},
 	{
+		code: "input/invalid-path",
+		summary:
+			"A file path contains a character the transport cannot quote (e.g. a quote or newline).",
+	},
+	{
 		code: "input/invalid-routeros-path",
 		summary: "The RouterOS path is malformed (it must be slash-prefixed).",
 	},
@@ -326,6 +331,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "RouterOS rejected the credentials over the transport.",
 	},
 	{
+		code: "transport/auto-method",
+		summary:
+			"Auto-selection moved the operation to a different method (informational auto-hop).",
+	},
+	{
 		code: "transport/capability-unsupported",
 		summary: "The chosen transport cannot perform this kind of operation.",
 	},
@@ -347,9 +357,18 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "The device host name could not be resolved.",
 	},
 	{
+		code: "transport/host-key-mismatch",
+		summary: "The device's SSH host key did not match the known key.",
+	},
+	{
 		code: "transport/incomplete-transfer",
 		summary:
 			"A file transfer settled at fewer bytes than expected (verify mismatch).",
+	},
+	{
+		code: "transport/insecure-trust",
+		summary:
+			"Peer verification was disabled via --insecure (TLS / SSH host-key checks skipped).",
 	},
 	{
 		code: "transport/network",

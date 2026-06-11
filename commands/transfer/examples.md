@@ -188,10 +188,9 @@ Envelope: `ok: true`, `data.verified="off"`.
 
 ## Large file over REST (chunked read scales)
 
-The harness seeds a >60 KB device file `centrs-big.bin` by having the CHR
-`/tool/fetch` it from a temporary host HTTP server reachable at the QEMU user-net
-gateway (`10.0.2.2`) — the same plumbing the deferred `fetch` method will
-productize.
+The harness seeds the >60 KB device file `centrs-big.bin` with an **sftp upload**
+(see S3 below) — REST cannot write past 60 KB, so sftp is the natural seeder and
+no host-HTTP `fetch` hack is needed.
 
 ### 17. Download >60 KB via chunked `/file/read` (auto → rest)
 
@@ -282,16 +281,59 @@ centrs transfer $A upload $BIG centrs-too-big.txt --via native-api --port $API_P
 
 Envelope: `ok: false`, `error.code="transport/unsupported-operation"`.
 
-## Pending transports (contract defined; flips when the transport lands)
+## ssh (`--via sftp`)
 
-### P1. `--via sftp` before the SSH transport lands
+The first SSH consumer: a key-authenticated SFTP round-trip over the host OpenSSH
+`sftp` subsystem. The harness generates an ed25519 keypair, imports the public
+half to the CHR user (`/user ssh-keys import`), and drives `--via sftp --ssh-key`
+against the CHR's forwarded SSH port; `--insecure` accepts the ephemeral host key
+(default is `accept-new` trust-on-first-use). RouterOS refuses password login once
+a key is set, and centrs's sftp runs `BatchMode=yes`, so key auth is the path.
+
+### S1. sftp upload (host → device)
 
 ```bash
-centrs transfer $R upload $SRC centrs-up.txt --via sftp --username $U --password $P --json
+centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $U --ssh-key $KEY --insecure upload $SRC centrs-sftp.txt --json
 ```
 
-Envelope: `ok: false`, `error.code="usage/not-implemented"`. Replaced by a real
-round-trip when `terminal/ssh` lands (`sftp` becomes the large-upload default).
+Envelope: `ok: true`, `meta.via="ssh"`, `data.op="upload"`.
+
+### S2. sftp download (device → host, round-trip)
+
+```bash
+centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $U --ssh-key $KEY --insecure download centrs-sftp.txt $TMP/sftp-down.txt --json
+```
+
+`$TMP/sftp-down.txt` is byte-identical to `$SRC`.
+
+### S3. sftp carries a >60 KB file (the gap REST cannot write)
+
+```bash
+centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $U --ssh-key $KEY --insecure upload $BIG centrs-big.bin --json
+```
+
+Envelope: `ok: true`. This is also the seed for example 17 (the same file then
+reads back over REST via chunked `/file/read`).
+
+### S4. list over sftp
+
+```bash
+centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $U --ssh-key $KEY --insecure list --json
+```
+
+Envelope: `data` is the file array; includes `centrs-sftp.txt`.
+
+### S5. mkdir + remove over sftp
+
+```bash
+centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $U --ssh-key $KEY --insecure mkdir centrs-sftp-dir --json
+centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $U --ssh-key $KEY --insecure remove centrs-big.bin --json
+```
+
+Both `ok: true`. On-device `copy` has no SFTP primitive — `--via sftp copy` returns
+`transport/unsupported-operation` (it stays on rest/native).
+
+## Pending transports (contract defined; flips when the transport lands)
 
 ### P2. `--via scp` (follow-on pass after sftp)
 

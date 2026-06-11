@@ -34,6 +34,8 @@ export const commentKvAllowlist = [
 	"port",
 	"source",
 	"mcp",
+	"ssh-key",
+	"insecure",
 ] as const;
 
 export type CommentKvKey = (typeof commentKvAllowlist)[number];

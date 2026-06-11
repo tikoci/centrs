@@ -124,7 +124,7 @@ describe("parseCommentKv", () => {
 		expect(result.warnings).toEqual([]);
 	});
 
-	test("the allowlist is exactly the documented six keys", () => {
+	test("the allowlist is exactly the documented keys", () => {
 		expect([...commentKvAllowlist]).toEqual([
 			"via",
 			"validate",
@@ -132,6 +132,8 @@ describe("parseCommentKv", () => {
 			"port",
 			"source",
 			"mcp",
+			"ssh-key",
+			"insecure",
 		]);
 	});
 
