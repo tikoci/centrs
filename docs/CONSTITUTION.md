@@ -342,7 +342,7 @@ Per-operation preferences, downgrade order in parens:
 | stream    | native-api, ssh | (REST cannot follow — 60s cap; bounded or rejected) |
 | execute   | native-api → rest-api → mac-telnet | native-api, rest-api, mac-telnet, ssh, romon, winbox-terminal |
 | terminal  | ssh | mac-telnet (L2 only when ssh fails or MAC given) |
-| transfer  | ssh / scp | rest-api files (small only) |
+| transfer  | size/direction-aware: rest-api/native-api for ≤60 KB writes & all reads (chunked), sftp for large uploads | sftp ⇄ rest/native by size; scp · fetch · ftp explicit-only |
 | discover  | mndp | (not a transport for command operations) |
 | measure   | btest | (explicit-only — no downgrade) |
 
@@ -374,6 +374,13 @@ Rules:
 - mac-telnet is the primary L2 execute path; it is the default for execute when
   the target is an unresolved MAC address. If IP-level access is desired, the
   caller must explicitly opt into ARP-based MAC → IP resolution.
+- `transfer` selection is **size- and direction-aware**, not a single default:
+  rest-api/native-api carry small writes (`/file/set contents`, ≤60 KB) and all
+  reads (chunked `/file/read` scales to any size, no SSH needed); sftp carries
+  large uploads. `scp`, `ftp`, and `fetch` (centrs-as-HTTP-server + `/tool/fetch`)
+  are explicit-only — `fetch` needs inbound reachability (router → centrs) so it
+  is never auto-selected. `ftp` additionally requires `ALLOW_UNSAFE_PROTOCOLS=ftp`.
+
 - `measure` (btest, the bandwidth test) is **explicit-only**: it is never part of
   the auto-selection / downgrade chain above, never substitutes for another
   protocol, and no other command rides it. `centrs btest …` always uses the btest
@@ -382,6 +389,31 @@ Rules:
 REST-specific constraint: RouterOS REST has a 60-second hard timeout. Do not
 let `--timeout` exceed 60s when `via=rest-api`; reject with a clear error.
 Other transports may accept longer timeouts.
+
+### Transport trust (TLS / SSH host keys)
+
+One opt-out across every transport: `--insecure` (`CENTRS_INSECURE`, CDB
+`insecure=` comment-kv). Default is **verify**; `--insecure` disables peer
+verification and adds a `transport/insecure-trust` warning to the envelope so the
+downgrade is always visible. Because RouterOS ships **self-signed** certificates
+and host keys, the *default posture per transport follows that transport's
+ecosystem norm* rather than one literal value:
+
+- **TLS** (REST `https`, native-api `api-ssl`) **verifies** by default; a
+  self-signed cert fails with `transport/tls-certificate` whose remediation names
+  `--insecure`. (Both transports honor the same knob — previously native-api
+  silently accepted any cert; that is fixed.)
+- **SSH host keys** (sftp/scp) default to **trust-on-first-use**
+  (`StrictHostKeyChecking=accept-new` into the user's `known_hosts`): a new key is
+  accepted, a *changed* key fails with `transport/host-key-mismatch`. `--insecure`
+  disables the check entirely. TOFU is the universal SSH norm, so the SSH default
+  is laxer than the TLS default by design.
+
+SSH identity selection: the `sshKey` setting (`--ssh-key`/`CENTRS_SSH_KEY`/CDB
+`ssh-key=`) carries a private-key **path only** — never key material; when unset,
+the host SSH agent / `~/.ssh/config` is used. RouterOS refuses password login once
+an SSH key is set for a user (`password-authentication=yes-if-no-key`, the
+default), so key auth is the normal sftp path.
 
 ## Done definition
 

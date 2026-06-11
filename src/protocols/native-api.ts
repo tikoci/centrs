@@ -744,12 +744,38 @@ function mapConnectError(error: unknown, endpoint: string): CentrsError {
 			cause: error,
 		});
 	}
+	if (isTlsCertificateError(code, error)) {
+		return new CentrsError({
+			code: "transport/tls-certificate",
+			summary: `TLS certificate validation failed for the api-ssl service at ${endpoint}.`,
+			remediation:
+				"RouterOS ships a self-signed certificate by default. Install a trusted chain, or pass `--insecure` (`CENTRS_INSECURE=1`) to accept it.",
+			cause: error,
+		});
+	}
 	return new CentrsError({
 		code: "transport/network",
 		summary: `Failed to connect to the RouterOS API service at ${endpoint}.`,
 		remediation: "Confirm the host, port, and network path to the device.",
 		cause: error,
 	});
+}
+
+/** Detect a TLS peer-verification failure (api-ssl self-signed cert, etc.). */
+function isTlsCertificateError(
+	code: string | undefined,
+	error: unknown,
+): boolean {
+	if (code && /CERT|SELF_SIGNED|VERIFY|SSL|TLS/i.test(code)) {
+		return true;
+	}
+	const message =
+		error instanceof Error
+			? error.message
+			: typeof error === "object" && error && "message" in error
+				? String((error as { message: unknown }).message)
+				: "";
+	return /certificate|self.signed|self_signed/i.test(message);
 }
 
 function extractSystemCode(error: unknown): string | undefined {

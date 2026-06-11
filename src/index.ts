@@ -278,6 +278,31 @@ export {
 	runBoundedPool,
 	summarizeFanout,
 } from "./retrieve-fanout.ts";
+export {
+	buildTransferErrorEnvelope,
+	FILE_READ_CHUNK_BYTES,
+	normalizeRemotePath,
+	REST_FILE_WRITE_CAP_BYTES,
+	renderTransferEnvelope,
+	resolveTransferRequest,
+	runResolvedTransfer,
+	selectTransferMethod,
+	type TransferData,
+	type TransferEnvelope,
+	type TransferErrorEnvelope,
+	type TransferMethod,
+	type TransferOp,
+	type TransferOperationMeta,
+	type TransferOutputFormat,
+	type TransferRequest,
+	type TransferSuccessEnvelope,
+	type TransferVerb,
+	transfer,
+	transferMethods,
+	transferOutputFormats,
+	transferVerbs,
+	validateTransferRequestShape,
+} from "./transfer.ts";
 
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 

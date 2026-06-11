@@ -17,7 +17,7 @@
 	"useGitignore": false,
 	"flagWords": ["hte"],
 	"ignoreWords": ["behaviour"],
-	"words": [],
+	"words": ["dlbcps", "drwxrwx", "nodename", "publickey", "rwxs", "servname"],
 	"maxNumberOfProblems": 100,
 	"numSuggestions": 8,
 	"minWordLength": 3,

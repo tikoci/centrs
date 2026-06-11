@@ -61,6 +61,10 @@ export interface CommentKvOverrides {
 	validate?: ResolvedSetting<boolean>;
 	/** Identity-source hint (e.g. `arp`); parsed but not consumed yet. */
 	source?: ResolvedSetting<string>;
+	/** Per-device SSH private-key path (`ssh-key=`), raw string (path only). */
+	sshKey?: ResolvedSetting<string>;
+	/** Per-device TLS / SSH host-key trust opt-out (`insecure=`), boolean. */
+	insecure?: ResolvedSetting<boolean>;
 }
 
 export interface CdbResolution {
@@ -414,6 +418,25 @@ export function coerceCommentKv(
 		};
 	}
 
+	if (parsed.values["ssh-key"] !== undefined) {
+		overrides.sshKey = {
+			value: parsed.values["ssh-key"],
+			source: { kind: "comment-kv", key: keyFor("ssh-key") },
+		};
+	}
+
+	const insecure = coerceInsecure(
+		parsed.values.insecure,
+		recordIndex,
+		warnings,
+	);
+	if (insecure !== undefined) {
+		overrides.insecure = {
+			value: insecure,
+			source: { kind: "comment-kv", key: keyFor("insecure") },
+		};
+	}
+
 	return overrides;
 }
 
@@ -527,6 +550,27 @@ function coerceValidate(
 	} catch {
 		return invalidOption(
 			"validate",
+			raw,
+			recordIndex,
+			"expected a boolean (true/false, yes/no, on/off, 1/0)",
+			warnings,
+		);
+	}
+}
+
+function coerceInsecure(
+	raw: string | undefined,
+	recordIndex: number,
+	warnings: ResolverWarning[],
+): boolean | undefined {
+	if (raw === undefined) {
+		return undefined;
+	}
+	try {
+		return parseBoolean(raw, "insecure");
+	} catch {
+		return invalidOption(
+			"insecure",
 			raw,
 			recordIndex,
 			"expected a boolean (true/false, yes/no, on/off, 1/0)",

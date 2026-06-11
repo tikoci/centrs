@@ -134,12 +134,21 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"The --match value is not a supported selector (user=, target=, or a record-type token).",
 	},
 	{
+		code: "input/invalid-path",
+		summary:
+			"A file path contains a character the transport cannot quote (e.g. a quote or newline).",
+	},
+	{
 		code: "input/invalid-routeros-path",
 		summary: "The RouterOS path is malformed (it must be slash-prefixed).",
 	},
 	{
 		code: "input/invalid-target",
 		summary: "The target string is invalid for the requested operation.",
+	},
+	{
+		code: "input/local-file-not-found",
+		summary: "A local file required for the transfer could not be read.",
 	},
 	{
 		code: "input/mac-address",
@@ -291,6 +300,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "settings/invalid-via",
 		summary: "An unsupported protocol identifier was supplied to --via.",
 	},
+	{
+		code: "settings/unsafe-protocol-blocked",
+		summary:
+			"A cleartext protocol (e.g. ftp) was requested without the explicit ALLOW_UNSAFE_PROTOCOLS opt-in.",
+	},
 
 	// target/*
 	{
@@ -317,8 +331,18 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "RouterOS rejected the credentials over the transport.",
 	},
 	{
+		code: "transport/auto-method",
+		summary:
+			"Auto-selection moved the operation to a different method (informational auto-hop).",
+	},
+	{
 		code: "transport/capability-unsupported",
 		summary: "The chosen transport cannot perform this kind of operation.",
+	},
+	{
+		code: "transport/checksum-unavailable",
+		summary:
+			"No file digest is available over the transport, so integrity was verified by size instead.",
 	},
 	{
 		code: "transport/connection-closed",
@@ -331,6 +355,25 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "transport/dns",
 		summary: "The device host name could not be resolved.",
+	},
+	{
+		code: "transport/host-key-mismatch",
+		summary: "The device's SSH host key did not match the known key.",
+	},
+	{
+		code: "transport/incomplete-transfer",
+		summary:
+			"A file transfer settled at fewer bytes than expected (verify mismatch).",
+	},
+	{
+		code: "transport/insecure-trust",
+		summary:
+			"Peer verification was disabled via --insecure (TLS / SSH host-key checks skipped).",
+	},
+	{
+		code: "transport/local-tool-missing",
+		summary:
+			"A required local CLI (e.g. the OpenSSH `sftp` client) is not installed or not on PATH.",
 	},
 	{
 		code: "transport/network",
@@ -375,6 +418,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "usage/not-implemented",
 		summary:
 			"A recognized command form is reserved but not implemented yet (e.g. the interactive `devices edit` editor).",
+	},
+	{
+		code: "usage/target-exists",
+		summary:
+			"The destination already exists and would be overwritten; pass --force to replace it.",
 	},
 	{
 		code: "usage/timeout-out-of-range",

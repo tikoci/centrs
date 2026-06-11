@@ -43,6 +43,31 @@ describe("resolver comment-kv coercion", () => {
 		expect(overrides.port?.source.kind).toBe("comment-kv");
 	});
 
+	test("coerces ssh-key (path) and insecure (boolean) overrides", () => {
+		const warnings: ResolverWarning[] = [];
+		const overrides = coerceCommentKv(
+			"ssh-key=/keys/edge.pem insecure=yes",
+			4,
+			warnings,
+		);
+		expect(warnings).toEqual([]);
+		expect(overrides.sshKey?.value).toBe("/keys/edge.pem");
+		expect(overrides.sshKey?.source).toEqual({
+			kind: "comment-kv",
+			key: "record:4:ssh-key",
+		});
+		expect(overrides.insecure?.value).toBe(true);
+		expect(overrides.insecure?.source.kind).toBe("comment-kv");
+	});
+
+	test("emits cdb/invalid-option for a malformed insecure value", () => {
+		const warnings: ResolverWarning[] = [];
+		const overrides = coerceCommentKv("insecure=perhaps", 2, warnings);
+		expect(overrides.insecure).toBeUndefined();
+		expect(warnings[0]?.code).toBe("cdb/invalid-option");
+		expect(warnings[0]?.context).toMatchObject({ key: "insecure" });
+	});
+
 	test("emits cdb/invalid-option for a malformed port and drops it", () => {
 		const warnings: ResolverWarning[] = [];
 		const overrides = coerceCommentKv("port=99999", 1, warnings);
@@ -88,6 +113,44 @@ describe("resolver comment-kv coercion", () => {
 			"cdb/reserved-option",
 			"cdb/unknown-option",
 		]);
+	});
+});
+
+describe("resolver ssh-key resolution", () => {
+	const cdb = {
+		username: "",
+		password: "",
+		recordIndex: 0,
+		overrides: {
+			sshKey: {
+				value: "/cdb/key",
+				source: { kind: "comment-kv" as const, key: "record:0:ssh-key" },
+			},
+		},
+	} as unknown as Parameters<typeof resolveAuth>[2];
+
+	test("explicit > env > comment-kv, with provenance", () => {
+		const cli = resolveAuth(
+			{ sshKey: "/cli/key" },
+			{ CENTRS_SSH_KEY: "/env/key" },
+			cdb,
+		);
+		expect(cli.sshKey).toBe("/cli/key");
+		expect(cli.sshKeySource?.kind).toBe("explicit");
+
+		const env = resolveAuth({}, { CENTRS_SSH_KEY: "/env/key" }, cdb);
+		expect(env.sshKey).toBe("/env/key");
+		expect(env.sshKeySource).toEqual({ kind: "env", key: "CENTRS_SSH_KEY" });
+
+		const comment = resolveAuth({}, {}, cdb);
+		expect(comment.sshKey).toBe("/cdb/key");
+		expect(comment.sshKeySource?.kind).toBe("comment-kv");
+	});
+
+	test("unset ssh-key leaves the field undefined", () => {
+		const auth = resolveAuth({}, {}, undefined);
+		expect(auth.sshKey).toBeUndefined();
+		expect(auth.sshKeySource).toBeUndefined();
 	});
 });
 

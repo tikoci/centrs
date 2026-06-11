@@ -56,6 +56,14 @@ export interface ProtocolAdapterConfig {
 	mac?: string;
 	/** Client (in-packet source) MAC for mac-telnet; a synthetic one is used when omitted. */
 	sourceMac?: string;
+	/** SSH private-key path for the ssh/sftp transport (path only). */
+	sshKey?: string;
+	/**
+	 * Opt out of peer verification: accept self-signed TLS certs (REST/native
+	 * api-ssl) and disable strict SSH host-key checking. Default `false`
+	 * (verify). The single `--insecure` knob across every transport.
+	 */
+	insecure?: boolean;
 }
 
 /** Projection/detail options for a menu `list`. */
@@ -236,12 +244,20 @@ class RestAdapter implements ProtocolAdapter {
 			this.config.timeoutMs,
 		);
 
+		// Unified TLS trust: verify by default, accept self-signed only when the
+		// caller opted in with `--insecure` (RouterOS ships self-signed www-ssl
+		// certs). Bun honors a `tls` field on the fetch init at runtime.
+		const fetchInit: RequestInit & {
+			tls?: { rejectUnauthorized?: boolean };
+		} = {
+			...init,
+			headers,
+			signal: controller.signal,
+			tls: { rejectUnauthorized: this.config.insecure !== true },
+		};
+
 		try {
-			const response = await fetch(url, {
-				...init,
-				headers,
-				signal: controller.signal,
-			});
+			const response = await fetch(url, fetchInit);
 			const text = await response.text();
 			const data = parseResponseBody(text);
 			if (!response.ok) {
@@ -370,7 +386,7 @@ class RestAdapter implements ProtocolAdapter {
 				code: "transport/tls-certificate",
 				summary: `TLS certificate validation failed for ${host}:${port}.`,
 				remediation:
-					"Use an HTTP URL for this alpha slice, or install a certificate chain Bun can trust before using HTTPS.",
+					"RouterOS ships a self-signed certificate by default. Install a trusted chain, or pass `--insecure` (`CENTRS_INSECURE=1`) to accept it; an HTTP URL also avoids TLS.",
 				context: { via: protocol, host, port, path },
 				cause: error,
 			});
@@ -468,6 +484,9 @@ class NativeApiAdapter implements ProtocolAdapter {
 			username: this.config.username ?? "",
 			password: this.config.password,
 			tls: this.config.tls,
+			// Unified TLS trust: verify api-ssl peers by default; `--insecure` accepts
+			// RouterOS's self-signed cert. (Previously native-api always accepted.)
+			rejectUnauthorized: this.config.insecure !== true,
 			timeoutMs: this.config.timeoutMs,
 		});
 		this.session = session;
