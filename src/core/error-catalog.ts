@@ -371,6 +371,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"Peer verification was disabled via --insecure (TLS / SSH host-key checks skipped).",
 	},
 	{
+		code: "transport/local-tool-missing",
+		summary:
+			"A required local CLI (e.g. the OpenSSH `sftp` client) is not installed or not on PATH.",
+	},
+	{
 		code: "transport/network",
 		summary: "A network request to the device failed.",
 	},

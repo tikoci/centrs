@@ -284,7 +284,7 @@ async function dispatchTransferVerb(
 		case "upload":
 			return runUpload(resolved, backend, warnings);
 		case "download":
-			return runDownload(resolved, backend);
+			return runDownload(resolved, backend, warnings);
 		case "remove":
 			return runRemove(resolved, backend);
 		case "mkdir":
@@ -356,6 +356,7 @@ async function runUpload(
 async function runDownload(
 	resolved: ResolvedTransferRequest,
 	backend: FileBackend,
+	warnings: Warning[],
 ): Promise<VerbResult> {
 	const remote = requireRemote(resolved);
 	const row = await backend.findFile(remote);
@@ -370,6 +371,16 @@ async function runDownload(
 	}
 
 	const bytes = await backend.readFile(row);
+	// Verify the byte count against the device-reported size *before* writing the
+	// local sink, so a short read never clobbers a local file or emits partial
+	// bytes to stdout.
+	const verified = verifyReadSize(
+		resolved,
+		row.size,
+		bytes.byteLength,
+		remote,
+		warnings,
+	);
 	writeLocalSink(resolved, bytes);
 
 	return {
@@ -378,7 +389,7 @@ async function runDownload(
 			remote,
 			local: localLabel(resolved),
 			bytes: bytes.byteLength,
-			verified: resolved.verify === "off" ? "off" : "size",
+			verified,
 		}),
 	};
 }
@@ -720,6 +731,41 @@ async function verifyWrittenSize(
 			summary: `Uploaded ${remote} settled at ${actual} bytes, expected ${expected}.`,
 			remediation:
 				"Re-run the upload; if it recurs, the device may be low on storage.",
+			context: { remote, expected, actual },
+		});
+	}
+	return "size";
+}
+
+/**
+ * Verify a download by byte count. REST/native `/file` rows carry a size, so a
+ * short/truncated read fails with `transport/incomplete-transfer`. SFTP rows
+ * report no reliable size, so it trusts the `get` guarantee (a partial transfer
+ * errors) — mirroring {@link verifyWrittenSize}.
+ */
+function verifyReadSize(
+	resolved: ResolvedTransferRequest,
+	expected: number | undefined,
+	actual: number,
+	remote: string,
+	warnings: Warning[],
+): "size" | "checksum" | "off" {
+	if (resolved.verify === "off") {
+		return "off";
+	}
+	if (resolved.verify === "checksum") {
+		warnings.push({
+			code: "transport/checksum-unavailable",
+			message:
+				"RouterOS exposes no file digest over REST/native; verifying by size instead.",
+		});
+	}
+	if (expected !== undefined && expected !== actual) {
+		throw new CentrsError({
+			code: "transport/incomplete-transfer",
+			summary: `Downloaded ${remote} is ${actual} bytes, expected ${expected}.`,
+			remediation:
+				"Re-run the download; if it recurs, the remote file or link may be unstable.",
 			context: { remote, expected, actual },
 		});
 	}

@@ -196,6 +196,29 @@ describe("SftpClient error mapping", () => {
 	});
 });
 
+// ── spawn failure (no injected runner → real host spawn) ─────────────────────
+
+describe("SftpClient spawn", () => {
+	test("a missing host `sftp` binary maps to transport/local-tool-missing", async () => {
+		// No `runner` override → exercises the default spawnSftpBatch path. Point at a
+		// binary that cannot exist so Bun.spawn throws ENOENT synchronously.
+		const client = new SftpClient({
+			host: "192.0.2.10",
+			port: 22,
+			username: "admin",
+			timeoutMs: 5000,
+			binary: "centrs-nonexistent-sftp-binary-xyz",
+		});
+		let code = "";
+		try {
+			await client.stat("flash/fw.rsc");
+		} catch (error) {
+			code = (error as CentrsError).code;
+		}
+		expect(code).toBe("transport/local-tool-missing");
+	});
+});
+
 // ── quoting guard ────────────────────────────────────────────────────────────
 
 describe("quote", () => {

@@ -373,6 +373,30 @@ describe("transfer download (rest)", () => {
 			fetchMock.restore();
 		}
 	});
+
+	test("a short read fails verification with transport/incomplete-transfer", async () => {
+		const out = join(TMP, "short.txt");
+		const fetchMock = mockFetchSequence([
+			// device claims 99 bytes…
+			() =>
+				json([{ ".id": "*9", name: "src.txt", type: ".txt file", size: "99" }]),
+			// …but only 12 come back
+			() => json({ ret: "hello-centrs" }),
+		]);
+		try {
+			let code = "";
+			try {
+				await runTransfer(
+					baseRequest({ verb: "download", remote: "src.txt", local: out }),
+				);
+			} catch (error) {
+				code = (error as CentrsError).code;
+			}
+			expect(code).toBe("transport/incomplete-transfer");
+		} finally {
+			fetchMock.restore();
+		}
+	});
 });
 
 // ── CLI: stdin/stdout positional `-` (examples 9/10, deferred from CHR) ───────

@@ -381,16 +381,34 @@ function basename(path: string): string {
  * stdout/stderr with a hard kill timeout. No shell — argv is passed directly, so
  * hostnames / paths from the CDB cannot inject commands.
  */
+function startSftp(argv: readonly string[]) {
+	try {
+		return Bun.spawn(argv as string[], {
+			stdin: "pipe",
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+	} catch (cause) {
+		// `sftp` not on PATH (ENOENT) — Bun.spawn throws synchronously. Without this
+		// the failure surfaces as `internal/unhandled` (or a raw stack) instead of an
+		// actionable transport error.
+		throw new CentrsError({
+			code: "transport/local-tool-missing",
+			summary: `Cannot launch the host \`${argv[0]}\` client for the SFTP transfer.`,
+			remediation:
+				"Install an OpenSSH client so `sftp` is on PATH (macOS ships it; Debian/Ubuntu: `openssh-client`), or use `--via rest` / `--via native` for files ≤60 KB.",
+			context: { binary: argv[0] },
+			cause,
+		});
+	}
+}
+
 async function spawnSftpBatch(
 	argv: readonly string[],
 	batch: string,
 	timeoutMs: number,
 ): Promise<SftpBatchResult> {
-	const proc = Bun.spawn(argv as string[], {
-		stdin: "pipe",
-		stdout: "pipe",
-		stderr: "pipe",
-	});
+	const proc = startSftp(argv);
 	proc.stdin.write(batch);
 	await proc.stdin.end();
 

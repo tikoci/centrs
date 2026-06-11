@@ -42,9 +42,8 @@ centrs transfer <router> copy     <remote-src> <remote-dst> [flags]   # on-devic
   `transfer` composes in shell pipelines. If omitted, `download` writes the
   remote basename into the current directory.
 - `<remote>` — a RouterOS file path (e.g. `flash/fw.rsc`). If omitted on
-  `upload`, centrs uses the local basename at the device's default writable
-  location: `flash/<basename>` when the device exposes a `flash` disk, else
-  `<basename>`.
+  `upload`, centrs uses the **local basename**. *(Planned: prefer the device's
+  `flash` disk — `flash/<basename>` — when one is present.)*
 - Remote paths match RouterOS exactly — no path rewriting. RouterOS file names
   carry **no leading slash** (`/file/print` shows `flash/fw.rsc`), but the
   `/file/add name=/flash/…` form *accepts* one, so centrs accepts a leading `/`
@@ -52,12 +51,11 @@ centrs transfer <router> copy     <remote-src> <remote-dst> [flags]   # on-devic
   on the wire (REST `/file` keys and SFTP paths both want it stripped).
   `flash/fw.rsc` and `/flash/fw.rsc` are the same target.
 - Reboot-persistence: on devices that have a `flash` disk, anything stored
-  **outside** `flash/` lives on a RAM disk and is lost on reboot. So when
-  `<remote>` is omitted, the default writable location **is** `flash/` on such a
-  device (detected from a `/file/print` row of `type=disk name=flash`), and an
-  `upload` to an explicit non-`flash/` path **warns**. centrs never silently
-  relocates an explicit path. CHR has no `flash` disk — everything persists — so
-  neither the `flash/` default nor the warning applies there.
+  **outside** `flash/` lives on a RAM disk and is lost on reboot — so prefer an
+  explicit `flash/…` remote on such devices. CHR has no `flash` disk —
+  everything persists. *(Planned: detect a `type=disk name=flash` row to default
+  omitted uploads into `flash/` and warn on an explicit non-`flash/` path;
+  centrs never silently relocates an explicit path.)*
 
 `list` is thin sugar over `retrieve <router> /file` (a `/file/print` menu read),
 rendered for humans (human-readable sizes, `flash/` tree, `.npk` package
@@ -153,9 +151,9 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 | `--verify <size\|checksum\|off>` | Post-transfer integrity check. Default `size` (compare the byte count centrs sent/received against the settled `/file` size). `off` (alias `--no-verify`) skips it. See *Integrity*. |
 | `--type <file\|directory\|disk\|package>` | `list` only: filter by `/file` row type. |
 | `--name <glob>` | `list` only: filter by file name glob. |
-| `--out-dir <dir>` | `download` fanout only: write one file per target into `<dir>` (named by CDB target), since N devices cannot share one local path. |
+| `--out-dir <dir>` | `download` fanout only *(deferred — fanout not built yet)*: write one file per target into `<dir>` (named by CDB target), since N devices cannot share one local path. |
 | `--advertise-host <host>` / `--advertise-port <n>` / `--bind <addr>` | `fetch` only *(deferred)*: the host/IP/port centrs advertises in the fetch URL and the local bind address. Default: auto-detect the local IP on the route to the router; ephemeral port; single-use random URL token. |
-| `--resolve <none\|arp>` | Resolve a MAC-address target to an IP via the host ARP cache. Default `none`. |
+| `--resolve <none\|arp>` | *(deferred — not parsed yet)* Resolve a MAC-address target to an IP via the host ARP cache. Default `none`. |
 | `--format text` (default) | Human summary: method, bytes, duration, verified. Errors print `[code] summary` + `Fix:` lines. |
 | `--format json` (alias `--json`) / `--format yaml` (alias `--yaml`) | Structured envelope. `CENTRS_FORMAT=json` makes JSON the default. |
 | `--validate=false` | Escape hatch; default `true`. See constitution: validation is the product. |
@@ -165,7 +163,7 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 | `--ssh-key <path>` | `sftp` (and future `scp`): explicit private-key path. Same `sshKey` setting as `terminal`/`execute` (`CENTRS_SSH_KEY`, CDB `ssh-key=`). When unset, the ssh-agent / `~/.ssh/config` is used. See `commands/terminal/README.md`. |
 | `--insecure` | Accept a self-signed TLS cert (`https`/`api-ssl`) or a new SSH host key (TOFU). Default verifies; see constitution: transport trust. Adds a `transport/insecure-trust` warning. |
 | `--cdb-file` / `--cdb-password` | Override CDB file location / decrypt password. |
-| `--group <name>` / `--where <attr>=<value>` / `--all` / `--default` / `--concurrency <n>` | Fan out across CDB targets (e.g. push one firmware file to a fleet). Same selector grammar and per-target envelope as `retrieve` (constitution: target selection). `download` fanout requires `--out-dir`; `remove`/`mkdir`/`copy`/`upload` fan out directly. |
+| `--group <name>` / `--where <attr>=<value>` / `--all` / `--default` / `--concurrency <n>` | *(deferred — fanout not built for `transfer` yet)* Fan out across CDB targets (e.g. push one firmware file to a fleet). Same selector grammar and per-target envelope as `retrieve` (constitution: target selection). `download` fanout requires `--out-dir`; `remove`/`mkdir`/`copy`/`upload` fan out directly. |
 
 ## Integrity
 
@@ -173,8 +171,9 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 compares it to the byte count centrs moved. Two RouterOS facts shape this:
 
 - **NAND write-back** delays the flush up to ~40 s on some devices, so the size
-  may read short immediately after an upload. centrs briefly polls `/file/print`
-  before declaring a mismatch.
+  may read short immediately after an upload. centrs does a single post-write
+  `/file/print` size probe today. *(Planned: a brief poll/retry to absorb the
+  write-back window before declaring a mismatch.)*
 - **Transparent compression**: the `/file` menu reports the *uncompressed* size
   (compression only shows up in `/system/resource` free space), so size-compare
   against the uncompressed byte count we sent stays valid.
@@ -199,8 +198,8 @@ envelope carries transfer *metadata*, not file contents.
     verified: "size",             // size | checksum | off
     durationMs: 1840
   },
-  warnings: [],                   // e.g. auto-method hops, non-flash upload, write-back wait
-  meta: { target, via: "sftp", settings, validation, timing }
+  warnings: [],                   // e.g. auto-method hops, insecure-trust
+  meta: { target, via: "ssh", settings, validation, timing }  // via is the grid transport: rest-api | native-api | ssh
 }
 ```
 

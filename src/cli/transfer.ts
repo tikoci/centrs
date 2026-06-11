@@ -210,14 +210,10 @@ function redactTransferRequest(
 	if (!request) {
 		return undefined;
 	}
-	if (request.password === undefined && request.cdbPassword === undefined) {
-		return request;
-	}
-	return {
-		...request,
-		...(request.password !== undefined ? { password: "<redacted>" } : {}),
-		...(request.cdbPassword !== undefined ? { cdbPassword: "<redacted>" } : {}),
-	};
+	// Always return a fresh object with the secrets stripped — never alias the
+	// original request, so the raw password cannot flow into a rendered error
+	// even by way of a sibling field.
+	return { ...request, password: undefined, cdbPassword: undefined };
 }
 
 interface ParsedTransfer {
