@@ -41,7 +41,7 @@ export const transferCommand: CliCommandMetadata = {
 	usage:
 		"centrs transfer <router> upload <local> [remote] | download <remote> [local] | list [path] | remove <remote> | mkdir <remote> | copy <src> <dst> [flags]",
 	summary:
-		"Copy files to/from a RouterOS device and manage device files (rest/native).",
+		"Copy files to/from a RouterOS device and manage device files (rest/native/sftp).",
 	options: [
 		{
 			flag: "--via",
@@ -154,20 +154,32 @@ export async function runTransferCli(
 
 		const envelope = await transfer(request);
 		const format = resolvedFormat(request);
-		console.log(
-			renderTransferEnvelope(envelope, format, { verbose: request.verbose }),
-		);
+		const rendered = renderTransferEnvelope(envelope, format, {
+			verbose: request.verbose,
+		});
+		// A download to stdout (`local === "-"`) has already streamed the file bytes
+		// to stdout inside `transfer()`; keep the structured envelope on stderr so it
+		// cannot interleave with — and corrupt — the piped payload.
+		if (request.verb === "download" && request.local === "-") {
+			console.error(rendered);
+		} else {
+			console.log(rendered);
+		}
 		return 0;
 	} catch (error) {
-		const format = inferRequestedFormat(args, request);
+		// Drop credential fields before any renderer touches the request: error
+		// output reaches stderr/CI logs and must never carry the raw password
+		// (CodeQL js/clear-text-logging).
+		const safeRequest = redactTransferRequest(request);
+		const format = inferRequestedFormat(args, safeRequest);
 		if (format === "json" || format === "yaml") {
 			const envelope = buildTransferErrorEnvelope(
-				request ?? { verb: options.fixedVerb ?? "list" },
+				safeRequest ?? { verb: options.fixedVerb ?? "list" },
 				error,
 			);
 			console.error(
 				renderTransferEnvelope(envelope, format, {
-					verbose: request?.verbose ?? false,
+					verbose: safeRequest?.verbose ?? false,
 				}),
 			);
 		} else {
@@ -179,12 +191,33 @@ export async function runTransferCli(
 						remediation:
 							"Use `centrs transfer --help` to inspect the supported command shape and flags.",
 					}),
-					{ verbose: request?.verbose ?? args.includes("--verbose") },
+					{ verbose: safeRequest?.verbose ?? args.includes("--verbose") },
 				),
 			);
 		}
 		return 1;
 	}
+}
+
+/**
+ * Strip credential fields before a failed request is handed to the error
+ * envelope/text renderers. Those outputs land on stderr (and CI logs), so the
+ * raw `password` / `cdbPassword` must never reach them.
+ */
+function redactTransferRequest(
+	request: TransferRequest | undefined,
+): TransferRequest | undefined {
+	if (!request) {
+		return undefined;
+	}
+	if (request.password === undefined && request.cdbPassword === undefined) {
+		return request;
+	}
+	return {
+		...request,
+		...(request.password !== undefined ? { password: "<redacted>" } : {}),
+		...(request.cdbPassword !== undefined ? { cdbPassword: "<redacted>" } : {}),
+	};
 }
 
 interface ParsedTransfer {
@@ -281,8 +314,16 @@ function parseTransferCliArgs(
 				flags.verbose = true;
 				break;
 			default:
-				if (arg.startsWith("-")) {
-					throw new Error(`Unknown transfer flag: ${arg}`);
+				// A lone `-` is the stdin/stdout positional (upload from / download
+				// to a pipe), not a flag.
+				if (arg !== "-" && arg.startsWith("-")) {
+					throw new CentrsError({
+						code: "input/invalid-command",
+						summary: `Unknown transfer flag: ${arg}`,
+						remediation:
+							"Remove the flag or run `centrs transfer --help` for the supported options.",
+						context: { flag: arg },
+					});
 				}
 				positional.push(arg);
 				break;
@@ -328,16 +369,26 @@ function assemblePositionals(
 		targetInput = positional[0];
 		const rawVerb = positional[1];
 		if (!targetInput || !rawVerb) {
-			throw new Error(
-				"`centrs transfer` requires <router> and a verb (upload|download|list|remove|mkdir|copy).",
-			);
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary:
+					"`centrs transfer` requires <router> and a verb (upload|download|list|remove|mkdir|copy).",
+				remediation:
+					"Pass the target then a verb, e.g. `centrs transfer <router> list`; run `--help` for the full shape.",
+				context: { targetInput, verb: rawVerb },
+			});
 		}
 		verb = canonicalVerb(rawVerb);
 		rest = positional.slice(2);
 	}
 
 	if (!targetInput) {
-		throw new Error("`centrs transfer` requires a <router> target.");
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary: "`centrs transfer` requires a <router> target.",
+			remediation:
+				"Pass the router host/identity as the first argument; run `centrs transfer --help` for the command shape.",
+		});
 	}
 
 	const request: TransferRequest = { verb, targetInput, ...flags };
@@ -375,9 +426,12 @@ function canonicalVerb(raw: string): TransferVerb {
 	if (alias) {
 		return alias;
 	}
-	throw new Error(
-		`Unknown transfer verb: ${raw}. Use one of ${transferVerbs.join(", ")}.`,
-	);
+	throw new CentrsError({
+		code: "input/invalid-command",
+		summary: `Unknown transfer verb: ${raw}.`,
+		remediation: `Use one of ${transferVerbs.join(", ")} (aliases: ${Object.keys(VERB_ALIASES).join(", ")}), or run \`centrs transfer --help\`.`,
+		context: { verb: raw },
+	});
 }
 
 function resolvedFormat(request: TransferRequest): TransferOutputFormat {

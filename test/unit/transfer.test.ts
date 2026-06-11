@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runTransferCli } from "../../src/cli/transfer.ts";
 import {
 	type CentrsError,
 	normalizeRemotePath,
@@ -252,6 +253,34 @@ describe("transfer upload (rest)", () => {
 		}
 	});
 
+	test("an omitted remote defaults to the local basename", async () => {
+		const local = tmpFile("config.rsc", "hello-centrs");
+		const fetchMock = mockFetchSequence([
+			() => json([]), // findFile pre-add: not present
+			() => json({ ret: "*5" }), // add → new id
+			() => json({}), // set contents
+			() =>
+				json([
+					{ ".id": "*5", name: "config.rsc", type: ".txt file", size: "12" },
+				]), // verify print
+		]);
+		try {
+			// `remote` omitted on upload → derived from the local file name.
+			const envelope = await runTransfer(
+				baseRequest({ verb: "upload", local, remote: undefined }),
+			);
+			expect(envelope.ok).toBe(true);
+			expect(envelope.data).toMatchObject({
+				op: "upload",
+				remote: "config.rsc",
+			});
+			const addBody = JSON.parse(String(fetchMock.calls[1]?.init?.body));
+			expect(addBody).toMatchObject({ name: "config.rsc", type: "file" });
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
 	test("refuses an existing target without --force", async () => {
 		const local = tmpFile("up2.txt", "hi");
 		const fetchMock = mockFetchSequence([
@@ -341,6 +370,56 @@ describe("transfer download (rest)", () => {
 			}
 			expect(code).toBe("routeros/command-failed");
 		} finally {
+			fetchMock.restore();
+		}
+	});
+});
+
+// ── CLI: stdin/stdout positional `-` (examples 9/10, deferred from CHR) ───────
+
+describe("transfer CLI piping", () => {
+	test("download to `-` puts bytes on stdout and the envelope on stderr", async () => {
+		// `-` must parse as the stdout positional, not be rejected as a flag; and
+		// the success envelope must not interleave with the piped file bytes.
+		const fetchMock = mockFetchSequence([
+			() =>
+				json([{ ".id": "*1", name: "src.txt", type: ".txt file", size: "5" }]),
+			() => json({ ret: "hello" }),
+		]);
+		const stdoutChunks: string[] = [];
+		const errLines: string[] = [];
+		const origWrite = process.stdout.write.bind(process.stdout);
+		const origErr = console.error;
+		process.stdout.write = ((chunk: unknown) => {
+			stdoutChunks.push(
+				typeof chunk === "string"
+					? chunk
+					: Buffer.from(chunk as Uint8Array).toString("utf8"),
+			);
+			return true;
+		}) as typeof process.stdout.write;
+		console.error = (...a: unknown[]) => {
+			errLines.push(a.map(String).join(" "));
+		};
+		try {
+			const code = await runTransferCli([
+				"router",
+				"download",
+				"src.txt",
+				"-",
+				"--host",
+				"127.0.0.1",
+				"--port",
+				"9999",
+				"--username",
+				"admin",
+			]);
+			expect(code).toBe(0);
+			expect(stdoutChunks.join("")).toBe("hello"); // only the file bytes
+			expect(errLines.join("\n")).toContain("download ok"); // envelope off stdout
+		} finally {
+			process.stdout.write = origWrite;
+			console.error = origErr;
 			fetchMock.restore();
 		}
 	});

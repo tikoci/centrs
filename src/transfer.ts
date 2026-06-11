@@ -210,7 +210,7 @@ export async function transfer(
 export function createFileBackend(
 	resolved: ResolvedTransferRequest,
 ): FileBackend {
-	if (resolved.method === "sftp" || resolved.method === "scp") {
+	if (resolved.method === "sftp") {
 		return new SftpFileBackend(
 			new SftpClient({
 				host: resolved.target.host,
@@ -829,7 +829,7 @@ export async function resolveTransferRequest(
 		insecure,
 		via,
 		local: request.local,
-		remote: request.remote ? normalizeRemotePath(request.remote) : undefined,
+		remote: resolveRemoteTarget(request),
 		remoteDest: request.remoteDest,
 		listPath: request.path ? normalizeRemotePath(request.path) : undefined,
 		force: request.force ?? false,
@@ -1332,11 +1332,11 @@ function uploadSizeHint(request: TransferRequest): number | undefined {
 	if (request.verb !== "upload" || !request.local || request.local === "-") {
 		return undefined;
 	}
-	try {
-		return readFileSync(request.local).byteLength;
-	} catch {
-		return undefined;
-	}
+	// Size from stat only — `readLocalSource` reads the bytes later, so reading
+	// the whole file here just to count would double the I/O. A missing file
+	// reports `0`; method selection treats that like an unknown hint (→ rest).
+	const size = Bun.file(request.local).size;
+	return size > 0 ? size : undefined;
 }
 
 function matchesListFilters(
@@ -1371,6 +1371,22 @@ function globMatch(glob: string, value: string): boolean {
 		.map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
 		.join(".*");
 	return new RegExp(`^${pattern}$`).test(value);
+}
+
+/**
+ * Resolve the effective remote path. `upload` marks `[remote]` optional in the
+ * CLI/docs: when it is omitted and the source is a real file (not stdin), it
+ * defaults to that file's basename. Stdin uploads (`local === "-"`) can't derive
+ * a name and fall through to {@link requireRemote}'s actionable error.
+ */
+function resolveRemoteTarget(request: TransferRequest): string | undefined {
+	if (request.remote) {
+		return normalizeRemotePath(request.remote);
+	}
+	if (request.verb === "upload" && request.local && request.local !== "-") {
+		return normalizeRemotePath(basename(request.local));
+	}
+	return undefined;
 }
 
 function requireRemote(resolved: ResolvedTransferRequest): string {

@@ -39,15 +39,40 @@ interface FailureEnvelope {
 }
 
 /** Generate an ed25519 keypair (no passphrase) at `keyPath` / `keyPath.pub`. */
+function spawnKeygen(keyPath: string) {
+	try {
+		return Bun.spawn(
+			[
+				"ssh-keygen",
+				"-t",
+				"ed25519",
+				"-N",
+				"",
+				"-C",
+				"centrs-it",
+				"-f",
+				keyPath,
+			],
+			{ stdout: "pipe", stderr: "pipe" },
+		);
+	} catch (cause) {
+		// `ssh-keygen` not on PATH — Bun.spawn throws synchronously.
+		throw new Error(
+			"SFTP integration needs a local `ssh-keygen` to mint a test keypair. Install an OpenSSH client (macOS/Linux package: openssh-client) or unset CENTRS_RUN_FAST_INTEGRATION to skip this suite.",
+			{ cause },
+		);
+	}
+}
+
 async function generateKeyPair(keyPath: string): Promise<void> {
-	const proc = Bun.spawn(
-		["ssh-keygen", "-t", "ed25519", "-N", "", "-C", "centrs-it", "-f", keyPath],
-		{ stdout: "pipe", stderr: "pipe" },
-	);
+	const proc = spawnKeygen(keyPath);
 	const exitCode = await proc.exited;
 	if (exitCode !== 0) {
 		const stderr = await new Response(proc.stderr).text();
-		throw new Error(`ssh-keygen failed (${exitCode}): ${stderr}`);
+		throw new Error(
+			`ssh-keygen failed to generate the SFTP test keypair (exit ${exitCode}): ${stderr}`,
+			{ cause: { tool: "ssh-keygen", exitCode, stderr, keyPath } },
+		);
 	}
 }
 

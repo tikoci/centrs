@@ -2,9 +2,11 @@
 
 Each numbered example is an executable spec. The integration test under
 `test/integration/transfer.test.ts` runs every example against a CHR booted by
-`@tikoci/quickchr`. If a line here is not exercised by a test, the test file is
-wrong; if a line passes only with `validate=false`, the **implementation** is
-wrong (see `docs/CONSTITUTION.md`).
+`@tikoci/quickchr` — except examples 8–10 (stdin/stdout/default-local), which are
+deferred pending a subprocess-capture harness (`runCli` console capture can't see
+piped bytes). If a non-deferred line here is not exercised by a test, the test
+file is wrong; if a line passes only with `validate=false`, the **implementation**
+is wrong (see `docs/CONSTITUTION.md`).
 
 Conventions (provided by the harness):
 

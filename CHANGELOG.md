@@ -49,11 +49,11 @@ documenting cross-cutting shifts that affect contributors and consumers.
   `--force`), a leading `/` in a remote path is normalized away, and
   `sftp`/`scp`/`fetch`/`ftp` report a defined not-implemented / gated error.
   Unit-green via mocked `fetch` (`test/unit/transfer.test.ts`).
-  `test/integration/transfer.test.ts` is green against a real CHR 7.23.1 (92
-  assertions) — confirming the `/file` `get`/`set`/`add`/`copy`/`remove` wire
-  shapes over both REST and native — covering all examples except the four
-  deferred for harness reasons (8–10 stdin/stdout/default-local and 17's
-  fetch-seeded chunked read), so the cells stay `coded` shy of the strict
+  `test/integration/transfer.test.ts` is green against a real CHR 7.23.1 (98
+  assertions, after the sftp commit below also seeds example 17) — confirming the
+  `/file` `get`/`set`/`add`/`copy`/`remove` wire shapes over both REST and native
+  — covering all examples except the three deferred for harness reasons (8–10
+  stdin/stdout/default-local), so the cells stay `coded` shy of the strict
   every-example `CHR-passed` bar. New error codes: `usage/target-exists`,
   `transport/incomplete-transfer`, `transport/checksum-unavailable`,
   `input/local-file-not-found`, `settings/unsafe-protocol-blocked`.
