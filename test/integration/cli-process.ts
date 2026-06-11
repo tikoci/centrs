@@ -29,7 +29,8 @@ const CLI_ENTRY = join(import.meta.dir, "..", "..", "src", "cli.ts");
 export interface CliProcessOptions {
 	/** Argv passed after the entry (e.g. `["transfer", url, "download", "-"]`). */
 	args: readonly string[];
-	/** Bytes piped to the child's stdin; omit for no stdin (`transfer upload -`). */
+	/** Bytes piped to the child's stdin (e.g. `transfer upload -`); omit for a
+	 * command that does not read fd 0 (e.g. `transfer download …`). */
 	stdin?: Buffer | string;
 	/** Working directory for the child (a default-local `download` writes here). */
 	cwd?: string;

@@ -76,6 +76,7 @@ export const terminalCommand: CliCommandMetadata = {
 				"Error-envelope format on failure. --json / --yaml shortcuts.",
 		},
 		{ flag: "--json", description: "Shortcut for --format json." },
+		{ flag: "--yaml", description: "Shortcut for --format yaml." },
 		{ flag: "--verbose", description: "Verbose error output." },
 	],
 };
@@ -138,8 +139,13 @@ export async function runTerminalCli(args: readonly string[]): Promise<number> {
 		await runTerminal(request, processTerminalIo());
 		return 0;
 	} catch (error) {
-		// Strip the password before any renderer touches the request (stderr/CI logs).
-		const format = inferRequestedFormat(args, request?.format);
+		// Render errors from `args` and the (credential-free) error only — never the
+		// parsed `request`, which holds the raw password for auth. CodeQL still
+		// reports js/clear-text-logging on any CLI error render (it follows the
+		// password parsed earlier in this function); the password reaches neither the
+		// error nor these renderers, so the alert is dismissed as a false positive
+		// repo-wide — see the matching dismissals on src/cli/{transfer,execute}.ts.
+		const format = inferRequestedFormat(args);
 		if (format === "json" || format === "yaml") {
 			const envelope = buildTerminalErrorEnvelope(error);
 			console.error(
@@ -154,7 +160,7 @@ export async function runTerminalCli(args: readonly string[]): Promise<number> {
 						remediation:
 							"Use `centrs terminal --help` for the supported command shape and flags.",
 					}),
-					{ verbose: request?.verbose ?? args.includes("--verbose") },
+					{ verbose: args.includes("--verbose") },
 				),
 			);
 		}
