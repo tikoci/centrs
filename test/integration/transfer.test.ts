@@ -11,6 +11,7 @@ import {
 	splitQuickChrAuth,
 	startIntegrationChr,
 } from "./chr.ts";
+import { runCliProcess } from "./cli-process.ts";
 
 /**
  * CHR integration for `transfer` over rest-api + native-api + ssh/sftp. Maps
@@ -20,8 +21,9 @@ import {
  * write (S1–S6, which also closes example 17), and the residual gating (scp/fetch
  * not-implemented, ftp gated).
  *
- * Deferred to a follow-up (need a different harness than `runCli` console
- * capture): the stdin/stdout/cwd-default forms (examples 8–10).
+ * The stdin/stdout/cwd-default forms (examples 8–10) run through the subprocess
+ * harness (`./cli-process.ts`): in-process `runCli` console capture cannot pipe
+ * stdin bytes, see raw `process.stdout.write` payload bytes, or control cwd.
  */
 
 const runFastIntegration = isChrIntegrationEnabled();
@@ -272,6 +274,53 @@ describeFast("transfer against CHR", () => {
 			]);
 			expect(noVerify.data).toMatchObject({ verified: "off" });
 
+			// 8-10. stdin/stdout/cwd-default forms — driven through the subprocess
+			// harness so real fd-0 stdin, raw process.stdout bytes, and cwd are
+			// exercised. centrs-up.txt still equals `payload` here (uploaded at 1/7).
+			const restArgs = ["transfer", ...rest] as const;
+
+			// 8. omitted local on download → remote basename in the current directory
+			const ex8 = await runCliProcess({
+				args: [...restArgs, "download", "centrs-up.txt", "--json"],
+				cwd: tmp,
+			});
+			expect(ex8.exitCode).toBe(0);
+			const ex8env = JSON.parse(ex8.stdoutText) as SuccessEnvelope & {
+				data: { local: string };
+			};
+			expect(ex8env.ok).toBe(true);
+			expect(ex8env.data.local.endsWith("centrs-up.txt")).toBe(true);
+			expect(await readFile(join(tmp, "centrs-up.txt"), "utf8")).toBe(payload);
+
+			// 9. download to stdout (`-`): payload bytes on stdout, summary on stderr
+			// (no --json, matching the example) — the two channels must not interleave.
+			const ex9 = await runCliProcess({
+				args: [...restArgs, "download", "centrs-up.txt", "-"],
+				cwd: tmp,
+			});
+			expect(ex9.exitCode).toBe(0);
+			expect(ex9.stdout.equals(Buffer.from(payload))).toBe(true);
+			expect(ex9.stderrText.length).toBeGreaterThan(0);
+
+			// 10. upload from stdin (`-`), then read it back to stdout
+			const ex10 = await runCliProcess({
+				args: [...restArgs, "upload", "-", "centrs-stdin.txt", "--json"],
+				stdin: "hello-centrs",
+				cwd: tmp,
+			});
+			expect(ex10.exitCode).toBe(0);
+			const ex10env = JSON.parse(ex10.stdoutText) as SuccessEnvelope & {
+				data: { bytes: number };
+			};
+			expect(ex10env.ok).toBe(true);
+			expect(ex10env.data.bytes).toBe(12);
+			const ex10back = await runCliProcess({
+				args: [...restArgs, "download", "centrs-stdin.txt", "-"],
+				cwd: tmp,
+			});
+			expect(ex10back.exitCode).toBe(0);
+			expect(ex10back.stdout.equals(Buffer.from("hello-centrs"))).toBe(true);
+
 			// 18. --via rest upload over 60 KB → rejected up front
 			const big = join(tmp, "big.bin");
 			await writeFile(big, Buffer.alloc(70_000, 7));
@@ -441,6 +490,7 @@ describeFast("transfer against CHR", () => {
 			// cleanup device files we created
 			for (const name of [
 				"centrs-up.txt",
+				"centrs-stdin.txt",
 				"centrs-no-verify.txt",
 				"centrs-nv.txt",
 				"centrs-sftp.txt",

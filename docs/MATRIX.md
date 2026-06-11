@@ -27,7 +27,7 @@ A cell advances only with the matching evidence in the same change.
 | stream   | —             | `designed`    | `designed`    | —             | —             | —             | —             | —                |
 | execute  | `CHR-passed`  | `CHR-passed`  | `not-started` | `CHR-passed`  | —             | —             | `not-started` | `not-started`    |
 | terminal | —             | —             | `not-started` | `not-started` | —             | —             | —             | —                |
-| transfer | `coded`       | `coded`       | `coded`       | —             | —             | —             | —             | —                |
+| transfer | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —                |
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
 | discover | —             | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
 | check    | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started`    |
@@ -100,7 +100,7 @@ has no code yet; the native-api streaming reader it will consume already exists
 (`src/protocols/native-api.ts`). Bounded single-shot reads stay on
 `retrieve --once`; interactive PTY stays on `terminal`.
 
-`transfer` is `coded` for `rest-api`/`native-api`: `src/transfer.ts` (verbs
+`transfer` is `CHR-passed` for `rest-api`/`native-api`: `src/transfer.ts` (verbs
 `upload`/`download`/`list`/`remove`/`mkdir`/`copy`, size/direction-aware method
 selection, leading-slash normalization, the `print`-probe existence guard, and
 `--verify`/`--no-verify`) plus `src/cli/transfer.ts` (with the top-level
@@ -110,20 +110,21 @@ selection, leading-slash normalization, the `print`-probe existence guard, and
 shape validation, and the REST round-trip wire shape via mocked `fetch`). The
 cells carry small writes (`/file/set contents`, ≤60 KB) and all reads (chunked
 `/file/read`). `test/integration/transfer.test.ts` is **green against a real CHR
-7.23.1** (98 assertions): the rest + native round-trip, list + filters,
+7.23.1** (110 assertions): the rest + native round-trip, list + filters,
 validate-before-write, device file management (mkdir/copy/remove), leading-slash
 normalization, the >60 KB rejection, the error contract (missing file, bad creds,
-conflicting flags), the native `N1`–`N4` mirror, the sftp `S1`–`S5` round-trip,
-example 17 (chunked REST read of an sftp-seeded >60 KB file), and the residual
-gating (scp/fetch not-implemented, ftp gated) — which confirmed the `/file`
+conflicting flags), the stdin/stdout/default-local forms (examples 8–10), the
+native `N1`–`N4` mirror, the sftp `S1`–`S5` round-trip, example 17 (chunked REST
+read of an sftp-seeded >60 KB file), and the residual gating (scp/fetch
+not-implemented, ftp gated) — which confirmed the `/file`
 `get`/`set`/`add`/`copy`/`remove` wire shapes and the SFTP subsystem on real
-RouterOS. They stay `coded` rather than `CHR-passed` only because the strict bar
-is *every* example, and three remain deliberately deferred as harness work:
-examples 8–10 (stdin/stdout/default-local, which need a subprocess stdin/stdout
-capture path the `runCli` console harness lacks). Example 17 is now closed (the
-sftp path seeds the >60 KB file, so the fetch hack is gone).
+RouterOS. Examples 8–10 close via the subprocess harness
+(`test/integration/cli-process.ts`), which drives the real CLI binary so piped
+stdin, raw `process.stdout` bytes, and cwd are exercised — the in-process `runCli`
+console capture cannot reach those. Example 17 closed earlier (the sftp path seeds
+the >60 KB file, so the fetch hack is gone), so every example is now green.
 
-`transfer / ssh` is `coded` for **sftp**, the first SSH consumer. This
+`transfer / ssh` is `CHR-passed` for **sftp**, the first SSH consumer. This
 deliberately re-scopes the earlier "SSH lands as one unit" plan: the SSH
 *transport base* lands here as a self-contained **SFTP transfer client**
 (`src/protocols/sftp.ts`, the host OpenSSH `sftp` subsystem), and the harder
@@ -138,9 +139,8 @@ expose nothing else). `src/transfer.ts` selects sftp via the shared `FileBackend
 seam (rest/native vs sftp), and the SSH host-key trust rides the unified
 `--insecure` knob (see `docs/CONSTITUTION.md`, Transport trust). The sftp path is
 **green against real CHR 7.23.1** (`test/integration/transfer.test.ts`, S1–S5: a
-key-auth round-trip, the >60 KB upload REST cannot do, list/mkdir/remove); the
-cell stays `coded` only because the shared examples 8–10 (stdin/stdout) are
-deferred harness work. **CHR finding:** RouterOS's sftp `ls -l` does not report a
+key-auth round-trip, the >60 KB upload REST cannot do, list/mkdir/remove). **CHR
+finding:** RouterOS's sftp `ls -l` does not report a
 reliable byte size, so the sftp `--verify size` trusts the SFTP transfer guarantee
 (a partial `put`/`get` errors) rather than re-reading a size. On-device `copy` has
 no SFTP primitive and stays on rest/native.
