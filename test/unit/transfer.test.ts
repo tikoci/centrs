@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runTransferCli } from "../../src/cli/transfer.ts";
@@ -393,6 +399,8 @@ describe("transfer download (rest)", () => {
 				code = (error as CentrsError).code;
 			}
 			expect(code).toBe("transport/incomplete-transfer");
+			// fail-before-write: the short read must not clobber the local sink.
+			expect(existsSync(out)).toBe(false);
 		} finally {
 			fetchMock.restore();
 		}
