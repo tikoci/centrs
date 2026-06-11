@@ -26,7 +26,7 @@ A cell advances only with the matching evidence in the same change.
 | retrieve | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | —             | —             | —                |
 | stream   | —             | `designed`    | `designed`    | —             | —             | —             | —             | —                |
 | execute  | `CHR-passed`  | `CHR-passed`  | `not-started` | `CHR-passed`  | —             | —             | `not-started` | `not-started`    |
-| terminal | —             | —             | `not-started` | `not-started` | —             | —             | —             | —                |
+| terminal | —             | —             | `not-started` | `CHR-passed`  | —             | —             | —             | —                |
 | transfer | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —                |
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
 | discover | —             | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
@@ -217,10 +217,27 @@ glue, not new protocol code:
   unknown-attribute (semantic) check — no `/console/inspect` table parsing.
   Reliability: `MacTelnetSession.tick` (driven by the console reader) does
   byte-counter retransmit on the reference backoff + an empty-ACK keepalive, and
-  stray/malformed datagrams are dropped (not session-fatal). **Remaining:**
-  `terminal / mac-telnet` (interactive PTY relay over the same console reader —
-  stdin/stdout wiring + real PTY size; keepalive/retransmit already land via
-  `tick`. See `commands/terminal/README.md`).
+  stray/malformed datagrams are dropped (not session-fatal).
+
+  **`terminal / mac-telnet` is `CHR-passed`** (the interactive relay over the same
+  console reader). `MacTelnetConsole.attachInteractive` switches the opened console
+  from capture to raw passthrough (device bytes → an output sink, a `write()` →
+  `session.sendInput`); `src/terminal.ts` orchestrates it over an injectable
+  `TerminalIo` (real stdin/stdout/`SIGWINCH` in `src/cli/terminal.ts`), reusing the
+  execute resolver and the shared `resolveMacTelnetRoute`. `terminal` has two input
+  modes by whether stdin is a TTY: interactive (raw-mode keystrokes, real size) and
+  batch (pipe a command, close on EOF after an output drain). The route/source-MAC
+  logic the adapter used is extracted to `mac-telnet.ts` (`resolveMacTelnetRoute`,
+  one home for the load-bearing source-MAC choice). Green on CHR 7.23.1 via
+  `test/integration/terminal-mac-telnet.test.ts` (T1–T3), driving the **real
+  `centrs terminal` binary** through the subprocess harness
+  (`test/integration/cli-process.ts`) pointed at the L2 bridge's UDP relay — the
+  same UDP transport the execute command path uses. **What the pipe test does not
+  cover** (thin OS glue, mock-unit-tested): raw-mode stdin and real-TTY size, since
+  a piped subprocess stdin is not a TTY. A full-TTY test would need a PTY
+  (`script(1)` / node-pty) — deferred. **Remaining:** `terminal / ssh` (RouterOS's
+  SSH server has no pseudo-tty, so it needs its own interactive-shell reader; the
+  later SSH pass). See `commands/terminal/README.md`.
 
 ### Frontend surfaces (orthogonal to the command grid)
 
@@ -230,7 +247,7 @@ core and carry their own state, tracked here:
 | Surface | State | Spec | Notes |
 | ------- | ----- | ---- | ----- |
 | api (TS) | `CHR-passed` | `src/index.ts` | Root surface; everything else adapts it. |
-| cli | `coded` | `src/cli/` | `retrieve`/`execute`/`devices`/`discover` wired. |
+| cli | `coded` | `src/cli/` | `retrieve`/`execute`/`transfer`/`terminal`/`devices`/`discover`/`btest` wired. |
 | mcp | `CHR-passed` | `commands/mcp/` | Scoped-verb stdio MCP server; CDB-as-allowlist safety model. Phase 1 (explain/validate/retrieve/execute, resources) plus first Phase 2 CDB mutation (`centrs_devices add`) green on CHR 7.23 via `test/integration/mcp.test.ts`, including gated write execution. |
 | tui | `not-started` | `src/tui.ts` | Stub. |
 | proxy | `not-started` | `src/webproxy.ts` | Stub. |
@@ -333,11 +350,11 @@ matching evidence.
    follow as a later pass. See `commands/terminal/README.md` (RouterOS SSH surface)
    for the device-side option alignment and residual unknowns.
 8. **mac-telnet** for execute/terminal — L2 path, default execute route for
-   unresolved MAC targets. `execute / mac-telnet` is **`CHR-passed`** (console
-   reader + UDP transport + adapter; examples 19–21; byte-counter retransmit +
-   empty-ACK keepalive via `MacTelnetSession.tick`). Remaining: `terminal /
-   mac-telnet` (interactive PTY relay over the console reader) and the optional
-   ~10s prime-latency fix (cursor-tracking DSR emulator).
+   unresolved MAC targets. `execute / mac-telnet` **and** `terminal / mac-telnet`
+   are both **`CHR-passed`** (console reader + UDP transport + adapter; execute
+   examples 19–21, terminal T1–T3; byte-counter retransmit + empty-ACK keepalive
+   via `MacTelnetSession.tick`). Remaining (optional): the ~10s prime-latency fix
+   (cursor-tracking DSR emulator) and a full-TTY terminal test under a real PTY.
 9. **RoMON / WinBox Terminal for execute** — lower-priority execute surfaces
    after mac-telnet is grounded.
 10. **discover / mndp** — `discover --save` populates CDB entries
