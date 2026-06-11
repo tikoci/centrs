@@ -27,6 +27,7 @@ A cell advances only with the matching evidence in the same change.
 | stream   | —             | `designed`    | `designed`    | —             | —             | —             | —             | —                |
 | execute  | `CHR-passed`  | `CHR-passed`  | `not-started` | `CHR-passed`  | —             | —             | `not-started` | `not-started`    |
 | terminal | —             | —             | `not-started` | `not-started` | —             | —             | —             | —                |
+| transfer | `coded`       | `coded`       | `designed`    | —             | —             | —             | —             | —                |
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
 | discover | —             | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
 | check    | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started`    |
@@ -98,6 +99,40 @@ and the native-api/ssh transport constraint (REST cannot follow — 60s cap). It
 has no code yet; the native-api streaming reader it will consume already exists
 (`src/protocols/native-api.ts`). Bounded single-shot reads stay on
 `retrieve --once`; interactive PTY stays on `terminal`.
+
+`transfer` is `coded` for `rest-api`/`native-api`: `src/transfer.ts` (verbs
+`upload`/`download`/`list`/`remove`/`mkdir`/`copy`, size/direction-aware method
+selection, leading-slash normalization, the `print`-probe existence guard, and
+`--verify`/`--no-verify`) plus `src/cli/transfer.ts` (with the top-level
+`upload`/`download` aliases). Every `/file` op rides the shared
+`ProtocolAdapter` `execute`/`list` seam over both transports. Unit coverage is
+`test/unit/transfer.test.ts` (path normalization, method-selection gating,
+shape validation, and the REST round-trip wire shape via mocked `fetch`). The
+cells carry small writes (`/file/set contents`, ≤60 KB) and all reads (chunked
+`/file/read`). `test/integration/transfer.test.ts` is **green against a real CHR
+7.23.1** (92 assertions): the rest + native round-trip, list + filters,
+validate-before-write, device file management (mkdir/copy/remove), leading-slash
+normalization, the >60 KB rejection, the error contract (missing file, bad creds,
+conflicting flags), the native `N1`–`N4` mirror, and the `P1`–`P4` gating — which
+confirmed the `/file` `get`/`set`/`add`/`copy`/`remove` wire shapes on real
+RouterOS. They stay `coded` rather than `CHR-passed` only because the strict bar
+is *every* example, and four are deliberately deferred as harness work: examples
+8–10 (stdin/stdout/default-local, which need a non-console capture path) and
+example 17 (the fetch-seeded >60 KB chunked read).
+
+The single `ssh` grid column carries **two distinct methods** — `sftp` and `scp`
+— which centrs treats separately even though they share the SSH transport.
+**sftp is first**: it is the default secure method, and its `stat`/`readdir`/
+partial ops are what make the existence check, `--verify`, and
+`list`/`remove`/`mkdir` work over SSH (scp, a dumb byte-stream, can't). **scp is a
+deliberate later pass** behind `--via scp` — kept because in some locked-down
+environments it may be the only file path the SSH server exposes. Both are blocked
+on the SSH transport landing as one unit via `terminal/ssh`; the column reads
+`designed` for the sftp design, with scp tracked as the follow-on method.
+
+`fetch` (centrs-as-HTTP-server + `/tool/fetch`) is a **deferred, explicit-only
+method within the rest-api/native-api cells**, not a grid column — it needs
+inbound reachability (router → centrs) so it is never auto-selected.
 
 `config` is `designed` and transport-less (like `devices`), so its grid row
 stays `—`. `commands/config/README.md` describes the `centrs.env` + `__default__`

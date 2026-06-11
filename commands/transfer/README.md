@@ -1,47 +1,291 @@
 # transfer
 
-Copy files to and from a RouterOS device.
+Copy files to and from a RouterOS device, and manage device files.
 
-Status: `not-started`. This file is a stub. `transfer` appears in the
-constitution's protocol-selection table (`ssh`/`scp` preferred; small REST-API
-file ops as a fallback) but has no matrix grid row yet.
+Status (agrees with `docs/MATRIX.md`): `coded` for `rest-api` / `native-api`
+(`src/transfer.ts`, `src/cli/transfer.ts`, unit-green; CHR-passed pending the
+integration run in `test/integration/transfer.test.ts`); `designed` for `ssh`.
+The `ssh` (sftp/scp) path is blocked on the SSH transport landing as one unit via
+`terminal/ssh` (see `commands/terminal/README.md`); the `fetch` method below is
+**designed but deferred** past the first coded pass.
 
 ## Intent
 
-- Default to `sftp` over SSH (lands with the SSH transport — see
-  `commands/terminal/README.md`). sftp rides the same username/password centrs
-  resolves from the CDB — RouterOS's SSH server supports the SFTP subsystem
-  (MikroTik's own container docs transfer files this way) — so the default needs
-  no per-router SSH key; `ssh-key=` stays an optional override and `scp` an
-  explicit `--via`. Small files may ride REST-API file endpoints.
-- Honor the same `<router>` resolution, envelope, and settings as every other
-  command (see [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md) for
-  identity/CDB resolution and the result envelope); large transfers are exempt
-  from the REST 60s timeout cap because they do not run over REST.
+`transfer` is centrs's file verb. Direction is explicit in the sub-verb —
+`upload` is host → device (the WinBox "upload files" direction), `download` is
+device → host. It honors the same `<router>` resolution, credentials, envelope,
+and settings as every other command (see [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md)
+for identity/CDB resolution and the result envelope). Large transfers are exempt
+from the REST 60 s timeout cap because they do not ride a single REST request.
 
-## Transfer methods (grounding)
+centrs does not pick one method for you and hope; it picks the **cheapest method
+that can carry this file in this direction**, reports the choice in
+`meta.via`, and never silently crosses an explicit `--via`. See *Method
+selection*.
 
-RouterOS exposes several file paths; centrs prefers the secure, always-available
-ones and treats the rest as explicit opt-ins:
+## Synopsis
 
-| Method | Notes |
-| ------ | ----- |
-| `sftp` | **Default.** Over SSH; works with the CDB username/password — RouterOS supports the SFTP subsystem. |
-| `scp` | Over SSH; explicit `--via` alternative. TIKOCI has existing scp code; handy when key-based auth is already set up. |
-| `ftp` | Enabled by default on RouterOS but **insecure**. Gate behind an explicit opt-in (e.g. `ALLOW_UNSAFE_PROTOCOLS=ftp`) so it is never silently chosen. |
-| REST-API files | Small files only; rides `www`/`www-ssl`, subject to the REST 60s cap. |
-| `/system/smb` | Supported by RouterOS but not enabled by default; unlikely an early target. |
-| `rose-storage` (`rsync`/`nfs`/`nvme-over-tcp`/`iscsi`) | Require the `rose-storage.npk` package and explicit configuration; far-future, behind explicit `--via`. Documented so users know the capability exists. |
+```text
+centrs transfer <router> upload   <local> [<remote>] [flags]
+centrs transfer <router> download <remote> [<local>] [flags]
+centrs transfer <router> list     [<path>] [flags]
+centrs transfer <router> remove   <remote> [flags]
+centrs transfer <router> mkdir    <remote> [flags]
+centrs transfer <router> copy     <remote-src> <remote-dst> [flags]   # on-device
+```
 
-## Decided (2026-06-06)
+- `<router>` — IP, DNS, MAC, or CDB-resolved name. See constitution: identity.
+- `<local>` — a host path, or `-` for stdin (`upload`) / stdout (`download`), so
+  `transfer` composes in shell pipelines. If omitted, `download` writes the
+  remote basename into the current directory.
+- `<remote>` — a RouterOS file path (e.g. `flash/fw.rsc`). If omitted on
+  `upload`, centrs uses the local basename at the device's default writable
+  location: `flash/<basename>` when the device exposes a `flash` disk, else
+  `<basename>`.
+- Remote paths match RouterOS exactly — no path rewriting. RouterOS file names
+  carry **no leading slash** (`/file/print` shows `flash/fw.rsc`), but the
+  `/file/add name=/flash/…` form *accepts* one, so centrs accepts a leading `/`
+  for ergonomics and **normalizes it away** to the canonical no-slash form used
+  on the wire (REST `/file` keys and SFTP paths both want it stripped).
+  `flash/fw.rsc` and `/flash/fw.rsc` are the same target.
+- Reboot-persistence: on devices that have a `flash` disk, anything stored
+  **outside** `flash/` lives on a RAM disk and is lost on reboot. So when
+  `<remote>` is omitted, the default writable location **is** `flash/` on such a
+  device (detected from a `/file/print` row of `type=disk name=flash`), and an
+  `upload` to an explicit non-`flash/` path **warns**. centrs never silently
+  relocates an explicit path. CHR has no `flash` disk — everything persists — so
+  neither the `flash/` default nor the warning applies there.
 
-- **`sftp` is the default secure method** (not `scp`): it uses the
-  username/password centrs already resolves from the CDB, and RouterOS supports
-  the SFTP subsystem, so the common case works without a per-router SSH key.
-  Both ride SSH and both accept password or key auth; `scp` stays an explicit
-  `--via` and `ssh-key=` an optional override.
-- **CI proof is a small-file round-trip**, not a large-copy stress test — the
-  free CHR license caps throughput at 1 Mb/s, so stressing throughput buys
-  nothing.
+`list` is thin sugar over `retrieve <router> /file` (a `/file/print` menu read),
+rendered for humans (human-readable sizes, `flash/` tree, `.npk` package
+metadata). For RouterOS-side row queries beyond `--type` / `--name`, use
+`retrieve /file --query` directly.
 
-Implementation still defers until the SSH transport is grounded.
+### Top-level shortcuts
+
+`upload` and `download` are also promoted to **top-level command aliases** for the
+two highest-frequency operations, so the router stays the first positional:
+
+```text
+centrs upload   <router> <local> [<remote>] [flags]   →  centrs transfer <router> upload   <local> [<remote>]
+centrs download <router> <remote> [<local>] [flags]   →  centrs transfer <router> download <remote> [<local>]
+```
+
+They are pure aliases (identical flags, envelope, and validation); help and docs
+show the canonical `transfer …` form, and the shared "did you mean?" / level-aware
+help applies. Only `upload`/`download` are promoted — `list`/`remove`/`mkdir`/
+`copy` stay under `transfer` because those verbs would be ambiguous at the top
+level (every command can list or remove something).
+
+## Method selection
+
+The RouterOS file plumbing is asymmetric, so the default is direction- and
+size-aware. Grounding: [Files](https://help.mikrotik.com/docs/spaces/ROS/pages/2555971/Files),
+[Fetch](https://help.mikrotik.com/docs/spaces/ROS/pages/8978514/Fetch).
+
+| Method (`--via`) | Grid transport | download (device → host) | upload (host → device) |
+| ---------------- | -------------- | ------------------------ | ---------------------- |
+| `rest` / `native` | rest-api / native-api | small via `/file/get … contents` (**≤ 60 KB**); **large via chunked `/file/read offset chunk-size≤32768`** | **`/file/set contents=` ≤ 60 KB only** — no chunked write |
+| `sftp` (default secure) | ssh | any size | any size |
+| `scp` | ssh | any size | any size |
+| `fetch` *(deferred)* | rest-api/native-api + inbound HTTP | router PUTs to centrs (`upload=yes http-method=put src-path=…`) | router GETs from centrs (`url=http://centrs/… dst-path=…`) |
+| `ftp` *(gated)* | ftp | any size | any size |
+
+Auto-selection (no `--via`):
+
+- **download** — `rest`/`native` for everything (chunked `/file/read` scales to
+  any size with no SSH service required); fall back to `sftp` only if the REST
+  family is unreachable.
+- **upload ≤ 60 KB** — `rest`/`native` (`/file/set contents`); one round trip, no
+  SSH needed.
+- **upload > 60 KB** — `sftp`. The REST family cannot write past 60 KB, and
+  `fetch` is the only REST-family way to push a large file without SSH — but it
+  needs inbound reachability we can't assume, so it is **explicit-only** (see
+  below), never auto-selected.
+
+Every auto hop is reported in `meta.warnings` with its reason. An explicit
+`--via` is never silently downgraded: if you pin `--via rest` and ask to upload a
+2 MB file, centrs fails with `transport/unsupported-operation` (REST cannot write
+past 60 KB) rather than quietly switching to sftp. `scp`, `fetch`, and `ftp` are
+explicit-only; `ftp` additionally requires `ALLOW_UNSAFE_PROTOCOLS=ftp` because
+it is cleartext.
+
+> Future methods documented so callers know the capability exists, behind an
+> explicit `--via`: `/system/smb` (not enabled by default) and `rose-storage`
+> (`rsync`/`nfs`/`nvme-over-tcp`/`iscsi`, needs `rose-storage.npk`).
+
+### SFTP vs SCP (why sftp is the SSH default)
+
+RouterOS supports both over its SSH server, and MikroTik documents both — their
+container guides use `sftp admin@<router>` to push/pull config files
+([example 1](https://help.mikrotik.com/docs/spaces/ROS/pages/172294200/Container%2B-%2Bfreeradius%2Bserver),
+[example 2](https://help.mikrotik.com/docs/spaces/ROS/pages/169246787/Container%2B-%2Bmosquitto%2BMQTT%2Bserver)),
+while the [CHR-ProxMox guide](https://help.mikrotik.com/docs/spaces/ROS/pages/48660553/CHR%2BProxMox%2Binstallation)
+uses `scp`. centrs makes **sftp the default and the primary investment**; `scp`
+is an explicit `--via scp` escape hatch. The reason is capability, not taste:
+
+- **SFTP is a real protocol** — `stat`, `readdir`, partial reads/writes, `mkdir`,
+  `remove`, `rename`. Those are exactly what centrs's feature set needs: the
+  validate-before-write existence check (`stat` the target), `--verify` (`stat`
+  the settled size), and the `list`/`remove`/`mkdir` verbs all fall out of SFTP.
+- **SCP is a dumb byte-stream** — no stat, no listing, no existence check; it just
+  blasts bytes and truncates on collision. An `--via scp` upload therefore
+  **cannot do the existence check itself** and would need a side-channel REST/SFTP
+  `stat` anyway — so `--via scp` skips the refuse-overwrite guard unless REST is
+  also reachable, and `--verify` degrades to `off` (warned). scp buys only a
+  marginally lighter single-file stream, irrelevant under the CHR 1 Mb/s cap.
+- **Direction of the ecosystem** — OpenSSH deprecated the legacy SCP wire protocol
+  (9.0, 2022); modern `scp` rides SFTP underneath. And MikroTik's SSH server has
+  **no exec channel / no pseudo-tty** ([SSH page](https://help.mikrotik.com/docs/spaces/ROS/pages/132350014/SSH):
+  *"does not support `ssh -T` / `ssh host command`"*), so the reliable SSH file
+  channel is the **SFTP subsystem**, not an exec-driven copy. (Same no-exec fact
+  is why `execute / ssh` is hard — noted in `commands/execute/README.md`.)
+
+## Flags
+
+| Flag | Behavior |
+| ---- | -------- |
+| `--via <method>` | Pin the method: `sftp` (default secure), `scp`, `rest`, `native`, `fetch` *(deferred)*, `ftp` *(gated)*. No silent downgrade. See *Method selection* and constitution: protocol selection. |
+| `--force` (alias `--overwrite`) | Replace an existing target. Default **refuses** an existing target with `usage/target-exists` (mirrors how `add` refuses an existing record). Applies to the destination side: the local file for `download`, the remote file for `upload`. |
+| `--verify <size\|checksum\|off>` | Post-transfer integrity check. Default `size` (compare the byte count centrs sent/received against the settled `/file` size). `off` (alias `--no-verify`) skips it. See *Integrity*. |
+| `--type <file\|directory\|disk\|package>` | `list` only: filter by `/file` row type. |
+| `--name <glob>` | `list` only: filter by file name glob. |
+| `--out-dir <dir>` | `download` fanout only: write one file per target into `<dir>` (named by CDB target), since N devices cannot share one local path. |
+| `--advertise-host <host>` / `--advertise-port <n>` / `--bind <addr>` | `fetch` only *(deferred)*: the host/IP/port centrs advertises in the fetch URL and the local bind address. Default: auto-detect the local IP on the route to the router; ephemeral port; single-use random URL token. |
+| `--resolve <none\|arp>` | Resolve a MAC-address target to an IP via the host ARP cache. Default `none`. |
+| `--format text` (default) | Human summary: method, bytes, duration, verified. Errors print `[code] summary` + `Fix:` lines. |
+| `--format json` (alias `--json`) / `--format yaml` (alias `--yaml`) | Structured envelope. `CENTRS_FORMAT=json` makes JSON the default. |
+| `--validate=false` | Escape hatch; default `true`. See constitution: validation is the product. |
+| `--timeout <ms>` | Request timeout. `rest`/`native` per-request ≤ 60000 (a chunked read is many short requests, each capped); `sftp`/`scp`/`fetch` accept longer for a single large transfer. |
+| `--username` / `--password` | Override CDB-resolved or env credentials. |
+| `--host <host\|url>` / `--port <n>` | Override the resolved host / transport port. |
+| `--ssh-key <path>` | `sftp`/`scp` only: explicit private-key path. Same `sshKey` setting as `terminal`/`execute` (`CENTRS_SSH_KEY`, CDB `ssh-key=`). See `commands/terminal/README.md`. |
+| `--cdb-file` / `--cdb-password` | Override CDB file location / decrypt password. |
+| `--group <name>` / `--where <attr>=<value>` / `--all` / `--default` / `--concurrency <n>` | Fan out across CDB targets (e.g. push one firmware file to a fleet). Same selector grammar and per-target envelope as `retrieve` (constitution: target selection). `download` fanout requires `--out-dir`; `remove`/`mkdir`/`copy`/`upload` fan out directly. |
+
+## Integrity
+
+`--verify size` (default) reads the settled `/file` size after the transfer and
+compares it to the byte count centrs moved. Two RouterOS facts shape this:
+
+- **NAND write-back** delays the flush up to ~40 s on some devices, so the size
+  may read short immediately after an upload. centrs briefly polls `/file/print`
+  before declaring a mismatch.
+- **Transparent compression**: the `/file` menu reports the *uncompressed* size
+  (compression only shows up in `/system/resource` free space), so size-compare
+  against the uncompressed byte count we sent stays valid.
+
+A confirmed shortfall (clear truncation after the poll window) is
+`transport/incomplete-transfer`. `--verify checksum` is stronger but only where
+RouterOS exposes a usable digest; otherwise it degrades to `size` with a warning.
+
+## Output shape
+
+The downloaded/uploaded bytes go to disk (or stdout for `download -`); the
+envelope carries transfer *metadata*, not file contents.
+
+```ts
+{
+  ok: true,
+  data: {
+    op: "upload",                 // upload | download | list | remove | mkdir | copy
+    remote: "flash/fw.rsc",
+    local: "./fw.rsc",            // null for list/remove/mkdir/copy
+    bytes: 1048576,
+    verified: "size",             // size | checksum | off
+    durationMs: 1840
+  },
+  warnings: [],                   // e.g. auto-method hops, non-flash upload, write-back wait
+  meta: { target, via: "sftp", settings, validation, timing }
+}
+```
+
+`list` returns `data` as the `/file` row array (same shape as
+`retrieve /file`). Fanout returns the shared one-outer-envelope form documented
+in `commands/retrieve/README.md` (Group fanout): `ok` reports orchestration
+success, per-target results live in `data.targets`.
+
+## Validation
+
+`transfer` validates what it can locally first — conflicting flags
+(`usage/conflicting-flags`), a missing local source on `upload`, a `--via rest`
+upload that exceeds 60 KB (`transport/unsupported-operation`). The
+**refuse-overwrite** guard is a real precondition probe, not a local check:
+unless `--force`, centrs `stat`s the destination (SFTP `stat`, or `/file/print`
+for the REST family) and fails with `usage/target-exists` if it is already there.
+This is the "validate before write" gate applied to files — see constitution:
+validation is the product.
+
+The `/file` menu path is fixed, so there is no `/console/inspect` path/attribute
+gate as in `retrieve` / `execute`; RouterOS's own menu errors (missing remote
+file, permission denied) map to `routeros/*`, and SFTP/SCP/fetch errors map to
+`transport/*` and `auth/*`.
+
+**Error codes reuse existing namespaces — `transfer` adds no namespace of its
+own.** Everything specific to transfer fits `usage/*` (`usage/target-exists`),
+`transport/*` (`transport/unsupported-operation` for the REST 60 KB write cap,
+`transport/incomplete-transfer` for a verified shortfall, `transport/unreachable`
+for fetch inbound-reachability), `routeros/*`, `auth/*`, and `validation/*`. A new
+code is only justified where the *semantics* are genuinely file-transfer-specific
+and not already expressible in those namespaces.
+
+## Decided (2026-06-10)
+
+- **Verbs are `upload` / `download` / `list`** (+ `remove` / `mkdir` / `copy` for
+  device file management). Direction is explicit in the sub-verb; `upload` =
+  host → device per WinBox wording.
+- **Method selection is size/direction-aware** (table above), superseding the
+  earlier "sftp is always the default" decision. REST/native carry small writes
+  and all reads (reads scale via chunked `/file/read`); sftp carries large
+  uploads. This updates the constitution's protocol-selection row.
+- **sftp is the SSH default, scp is `--via scp` only** — sftp's `stat`/`readdir`/
+  partial ops are what enable the existence check, `--verify`, and
+  `list`/`remove`/`mkdir`; scp can't do those and degrades the overwrite guard and
+  `--verify`. See *SFTP vs SCP*.
+- **Remote paths match RouterOS** (no rewriting); a leading `/` is accepted but
+  normalized away to the canonical no-slash wire form. The omitted-`<remote>`
+  default uses `flash/` on devices that have a flash disk.
+- **`upload` / `download` are also top-level command aliases** (`centrs upload
+  <router> …`), the only sub-verbs promoted to the top level.
+- **Error codes reuse existing namespaces** — no `transfer/*` namespace; new codes
+  only where the semantics are genuinely transfer-specific.
+- **`fetch` (centrs-as-HTTP-server + `/tool/fetch`) is explicit-only and
+  deferred** — designed here, built after sftp + REST land. It is the only
+  REST-family way to push a > 60 KB file without SSH, but needs inbound
+  reachability (router → centrs), so it is never auto-selected.
+- **v1 includes** device file management (`remove`/`mkdir`/`copy`), integrity
+  verification (`--verify`), and stdout/stdin piping (`-`). **Directory /
+  recursive transfer is a later phase.**
+- **CI proof is a small-file round-trip**, not a throughput stress test — the
+  free CHR license caps throughput at 1 Mb/s.
+
+## Definition of done
+
+`CHR-passed` only when every line in `examples.md` runs green against a real CHR
+through `bun run test:integration` (one example ↔ one assertion). Disabling
+validation to reach green is forbidden. See `docs/CONSTITUTION.md` for the full
+done rule. The first coded pass targets `rest`/`native` (no SSH dependency);
+`sftp`/`scp` advance with the SSH transport; `fetch` and `ftp` follow.
+
+## Notes for future cells
+
+- **fetch design (deferred).** centrs starts an ephemeral single-use HTTP server
+  (random URL token, bound to the interface facing the router) and drives the
+  router with `/tool/fetch` over `rest`/`native`. **upload**: serve the local
+  file, `fetch url=http://<advertise>/<token> dst-path=<remote>` → router GETs.
+  **download**: `fetch upload=yes http-method=put url=http://<advertise>/<token>
+  src-path=<remote>` → router PUTs to centrs (`http-method` any since 7.21;
+  binary REST serialization fixed 7.17). Open questions: advertise-host
+  auto-detection behind NAT, HTTP-vs-HTTPS + `check-certificate`, and whether to
+  add fetch's `user`/`password` on top of the URL token.
+- **ssh** — `sftp`/`scp` ride the single SSH transport introduced by
+  `terminal/ssh`; the SSH library/host-key/agent decisions live there, not here.
+  Two RouterOS auth facts the SSH transport must honor (so transfer inherits them):
+  a user **cannot** password-auth over SSH once an SSH key is set for it
+  ([User](https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User)) — so
+  password vs `--ssh-key` is not a free choice per target; and `strong-crypto=yes`
+  disables ssh-rsa/SHA1 (7.4/7.7/7.9), so the client must offer ed25519 /
+  rsa-sha2-256. RouterOS's SSH server has no exec channel, so the file path is the
+  SFTP **subsystem**, not exec-driven scp.
+- **list ↔ retrieve** — `transfer list` is sugar over `retrieve /file`; keep the
+  read logic in one place.

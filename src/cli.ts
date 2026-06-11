@@ -6,12 +6,14 @@ import { discoverCommand, runDiscoverCli } from "./cli/discover.ts";
 import { executeCommand, runExecuteCli } from "./cli/execute.ts";
 import { mcpCommand, runMcpCli } from "./cli/mcp.ts";
 import { retrieveCommand, runRetrieveCli } from "./cli/retrieve.ts";
+import { runTransferCli, transferCommand } from "./cli/transfer.ts";
 import { asCentrsError, formatCentrsErrorText } from "./errors.ts";
 import { describeCentrs, plannedProtocols, plannedSurfaces } from "./index.ts";
 
 const commandSummaries: ReadonlyArray<{ name: string; summary: string }> = [
 	retrieveCommand,
 	executeCommand,
+	transferCommand,
 	devicesCommand,
 	discoverCommand,
 	btestCommand,
@@ -49,6 +51,17 @@ export async function runCli(
 		}
 		if (command === "execute") {
 			return await runExecuteCli(rest);
+		}
+		if (command === "transfer") {
+			return await runTransferCli(rest);
+		}
+		// Top-level shortcuts for the two highest-frequency transfer verbs; they
+		// forward to the transfer runner with a fixed verb (commands/transfer/README.md).
+		if (command === "upload") {
+			return await runTransferCli(rest, { fixedVerb: "upload" });
+		}
+		if (command === "download") {
+			return await runTransferCli(rest, { fixedVerb: "download" });
 		}
 		if (command === "devices") {
 			return await runDevicesCli(rest);

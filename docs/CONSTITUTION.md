@@ -342,7 +342,7 @@ Per-operation preferences, downgrade order in parens:
 | stream    | native-api, ssh | (REST cannot follow — 60s cap; bounded or rejected) |
 | execute   | native-api → rest-api → mac-telnet | native-api, rest-api, mac-telnet, ssh, romon, winbox-terminal |
 | terminal  | ssh | mac-telnet (L2 only when ssh fails or MAC given) |
-| transfer  | ssh / scp | rest-api files (small only) |
+| transfer  | size/direction-aware: rest-api/native-api for ≤60 KB writes & all reads (chunked), sftp for large uploads | sftp ⇄ rest/native by size; scp · fetch · ftp explicit-only |
 | discover  | mndp | (not a transport for command operations) |
 | measure   | btest | (explicit-only — no downgrade) |
 
@@ -374,6 +374,13 @@ Rules:
 - mac-telnet is the primary L2 execute path; it is the default for execute when
   the target is an unresolved MAC address. If IP-level access is desired, the
   caller must explicitly opt into ARP-based MAC → IP resolution.
+- `transfer` selection is **size- and direction-aware**, not a single default:
+  rest-api/native-api carry small writes (`/file/set contents`, ≤60 KB) and all
+  reads (chunked `/file/read` scales to any size, no SSH needed); sftp carries
+  large uploads. `scp`, `ftp`, and `fetch` (centrs-as-HTTP-server + `/tool/fetch`)
+  are explicit-only — `fetch` needs inbound reachability (router → centrs) so it
+  is never auto-selected. `ftp` additionally requires `ALLOW_UNSAFE_PROTOCOLS=ftp`.
+
 - `measure` (btest, the bandwidth test) is **explicit-only**: it is never part of
   the auto-selection / downgrade chain above, never substitutes for another
   protocol, and no other command rides it. `centrs btest …` always uses the btest

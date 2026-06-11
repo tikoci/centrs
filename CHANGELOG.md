@@ -10,6 +10,25 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Added
 
+- **`transfer` is `coded` for `rest-api` / `native-api`.** `src/transfer.ts` +
+  `src/cli/transfer.ts` implement the file verb — `upload`/`download`/`list`/
+  `remove`/`mkdir`/`copy` (plus top-level `upload`/`download` aliases) — over the
+  RouterOS `/file` menu, driven through the shared `ProtocolAdapter`
+  `execute`/`list` seam so REST and native share one path. Size/direction-aware
+  method selection encodes the asymmetric `/file` plumbing (writes capped at
+  60 KB via `/file/set contents`; reads scale via chunked `/file/read`), a
+  `print`-probe enforces validate-before-write (refuse-overwrite unless
+  `--force`), a leading `/` in a remote path is normalized away, and
+  `sftp`/`scp`/`fetch`/`ftp` report a defined not-implemented / gated error.
+  Unit-green via mocked `fetch` (`test/unit/transfer.test.ts`).
+  `test/integration/transfer.test.ts` is green against a real CHR 7.23.1 (92
+  assertions) — confirming the `/file` `get`/`set`/`add`/`copy`/`remove` wire
+  shapes over both REST and native — covering all examples except the four
+  deferred for harness reasons (8–10 stdin/stdout/default-local and 17's
+  fetch-seeded chunked read), so the cells stay `coded` shy of the strict
+  every-example `CHR-passed` bar. New error codes: `usage/target-exists`,
+  `transport/incomplete-transfer`, `transport/checksum-unavailable`,
+  `input/local-file-not-found`, `settings/unsafe-protocol-blocked`.
 - **`discover / mndp` is `CHR-passed`.** A real layer-2 integration test
   (`test/integration/discover.test.ts`) boots a CHR with a second
   `socket-connect` NIC and a host bridge (`test/integration/mndp-l2-bridge.ts`)
