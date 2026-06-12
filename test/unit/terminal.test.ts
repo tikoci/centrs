@@ -69,6 +69,8 @@ describe("buildSshTerminalArgv", () => {
 		expect(argv.at(-1)).toBe("admin@192.0.2.10");
 		expect(argv).not.toContain("-t");
 		expect(argv).not.toContain("-tt");
+		// Interactive: no BatchMode, so ssh can prompt for a passphrase/password.
+		expect(argv.join(" ")).not.toContain("BatchMode=yes");
 	});
 
 	test("insecure disables host-key checking", () => {

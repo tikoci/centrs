@@ -47,9 +47,15 @@ const COMMAND_TIMEOUT_MS = 15_000;
 const DRAIN_IDLE_MS = 500;
 
 export interface TerminalRequest {
-	/** Device handle: a MAC, or a CDB identity/ip that resolves to one. */
+	/**
+	 * Device handle: a MAC (resolves to the L2 console over mac-telnet), or a
+	 * host / IP / CDB identity (the IP-level console over ssh).
+	 */
 	targetInput?: string;
-	/** Transport. Defaults to mac-telnet; rest/native have no terminal capability. */
+	/**
+	 * Transport. Defaults to `mac-telnet` for a MAC target and `ssh` for any other
+	 * (host / IP / CDB identity); rest/native have no terminal capability.
+	 */
 	via?: string;
 	/** UDP delivery host override (defaults to the L2 broadcast route discovery). */
 	host?: string;
@@ -59,7 +65,7 @@ export interface TerminalRequest {
 	password?: string;
 	/** Explicit in-packet source MAC (overrides egress-MAC resolution; mac-telnet). */
 	sourceMac?: string;
-	/** SSH private-key path for `--via ssh` (path only; agent / ~/.ssh used if unset). */
+	/** `--via ssh`: private-key path (path only; agent / ~/.ssh used if unset). */
 	sshKey?: string;
 	/** `--via ssh`: disable SSH host-key verification (accepts changed keys). */
 	insecure?: boolean;
@@ -329,7 +335,11 @@ export async function runTerminal(
  * Build the `ssh` argv for an interactive RouterOS terminal: `ssh -p <port>
  * <key/trust options> user@host` with **no** command (so it opens the console)
  * and **no** `-t` (RouterOS grants no PTY; forcing one with `-tt` hangs, and a
- * real TTY makes the host `ssh` request a PTY on its own). Exported for tests.
+ * real TTY makes the host `ssh` request a PTY on its own). `interactive: true`
+ * drops `BatchMode=yes` (unlike the batch sftp/execute clients), so the host
+ * `ssh` may prompt on the inherited TTY for an encrypted key's passphrase or a
+ * password — centrs does not forward `--password`, as OpenSSH takes no password
+ * on the argv. Exported for tests.
  */
 export function buildSshTerminalArgv(resolved: ResolvedTerminal): string[] {
 	const conn = {
@@ -338,6 +348,7 @@ export function buildSshTerminalArgv(resolved: ResolvedTerminal): string[] {
 		username: resolved.auth.username,
 		sshKey: resolved.auth.sshKey,
 		insecure: resolved.insecure,
+		interactive: true,
 		timeoutMs: PRIME_TIMEOUT_MS,
 	};
 	return [

@@ -80,9 +80,18 @@ pseudo-tty, but `ssh user@host` opens the interactive console and the OS relays 
 (the no-PTY stream is already clean — no screen emulation). centrs's value is
 resolving the target/key/trust and building the argv; the interactive TTY, raw
 mode, and signals are the inherited terminal's. A **host target defaults to ssh**
-(a MAC target defaults to mac-telnet). `$SSH_PORT` is the SSH port, `$KEY` the
-private key. TS1–TS2 are green via `bun run test:integration`
-(`test/integration/terminal-ssh.test.ts`, CHR 7.23.1).
+(a MAC target defaults to mac-telnet). Because the session is interactive, the
+terminal argv omits `BatchMode=yes` (the batch sftp/execute clients keep it), so
+the host `ssh` may prompt on the TTY for an encrypted key's passphrase or a
+password — centrs does not forward `--password`, since OpenSSH takes no password
+on the argv.
+
+Harness inputs (from `test/integration/terminal-ssh.test.ts`): `$SSH_PORT` is
+`chr.sshPort` (passed via `--port`), and `$KEY` is the ephemeral private key the
+test mints with `ssh-keygen -f <tmp>/id` and passes via `--ssh-key`. **TS1–TS2 are
+the CHR-tested set** (green via `bun run test:integration`, CHR 7.23.1) — the
+matrix's `CHR-passed` claim rests on them. **TS3 is the interactive hand-verified
+analog of T4** (a piped subprocess stdin cannot be a TTY), not in CI.
 
 ### TS1. Run a command over an SSH terminal (batch relay)
 
@@ -104,7 +113,7 @@ centrs terminal 127.0.0.1 --via rest-api --username $U --password $P
 Envelope on stderr: `ok: false`, `error.code="transport/capability-unsupported"`,
 exit `1` — same gate as mac-telnet's T2/T3, evaluated before any connection.
 
-### TS3. Open an interactive console over SSH (verified by hand)
+### TS3. Open an interactive console over SSH (verified by hand, not in CI)
 
 ```bash
 centrs terminal 192.0.2.10 --username $U --ssh-key $KEY

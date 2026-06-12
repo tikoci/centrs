@@ -51,6 +51,13 @@ CLI/API. When no key is set, terminal delegates identity selection to system
 `ssh` config and the SSH agent; `--ssh-key` is an explicit override and must not
 silently merge with a conflicting CDB/env key.
 
+Unlike the batch sftp/execute clients, the **interactive** `terminal / ssh` argv
+omits `BatchMode=yes` (`interactive: true` in `sshCommonOptions`), so the host
+`ssh` can prompt on the inherited TTY for an encrypted key's passphrase or a
+password. centrs does not forward `--password` to ssh — OpenSSH accepts no
+password on the argv — so password auth is satisfied by that interactive prompt,
+not by the centrs-resolved credential.
+
 Resolved by the sftp transfer client (`src/protocols/sftp.ts`), so they are no
 longer open for the file path: **host-key verification** rides the unified
 `--insecure` knob (default `StrictHostKeyChecking=accept-new` trust-on-first-use;
