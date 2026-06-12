@@ -25,7 +25,9 @@ export interface SshConnectionConfig {
 	/**
 	 * Opt out of strict host-key checking. Default (false) is `accept-new`
 	 * (trust-on-first-use into the user's `known_hosts`); `true` disables checking
-	 * and uses an ephemeral hosts file.
+	 * entirely (`StrictHostKeyChecking=no` + a null `known_hosts` sink —
+	 * `/dev/null`, or `NUL` on Windows), so a *changed* / impersonated host key is
+	 * accepted too.
 	 */
 	insecure?: boolean;
 	/** Per-operation timeout (also the connect timeout, in whole seconds). */
@@ -50,7 +52,9 @@ export function sshCommonOptions(config: SshConnectionConfig): string[] {
 	options.push("-o", `ConnectTimeout=${connectSeconds}`);
 	if (config.insecure) {
 		options.push("-o", "StrictHostKeyChecking=no");
-		options.push("-o", "UserKnownHostsFile=/dev/null");
+		// Null `known_hosts` sink: `/dev/null` on POSIX, `NUL` on Windows OpenSSH.
+		const nullSink = process.platform === "win32" ? "NUL" : "/dev/null";
+		options.push("-o", `UserKnownHostsFile=${nullSink}`);
 	} else {
 		// Trust-on-first-use: accept a new host key, refuse a *changed* one.
 		options.push("-o", "StrictHostKeyChecking=accept-new");

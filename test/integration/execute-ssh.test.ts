@@ -40,11 +40,23 @@ function retOf(data: unknown): string {
 	return asRecord(data)["ret"] ?? "";
 }
 
+function spawnKeygen(path: string) {
+	try {
+		return Bun.spawn(
+			["ssh-keygen", "-t", "ed25519", "-N", "", "-C", "centrs-it", "-f", path],
+			{ stdout: "pipe", stderr: "pipe" },
+		);
+	} catch (cause) {
+		// `ssh-keygen` not on PATH — Bun.spawn throws synchronously.
+		throw new Error(
+			"execute/ssh integration needs a local `ssh-keygen` to mint a test keypair. Install an OpenSSH client (macOS ships it; Debian/Ubuntu: openssh-client) or unset CENTRS_RUN_FAST_INTEGRATION to skip.",
+			{ cause },
+		);
+	}
+}
+
 async function keygen(path: string): Promise<void> {
-	const proc = Bun.spawn(
-		["ssh-keygen", "-t", "ed25519", "-N", "", "-C", "centrs-it", "-f", path],
-		{ stdout: "pipe", stderr: "pipe" },
-	);
+	const proc = spawnKeygen(path);
 	if ((await proc.exited) !== 0) {
 		throw new Error(
 			`ssh-keygen failed to mint the execute/ssh test key: ${await new Response(proc.stderr).text()}`,

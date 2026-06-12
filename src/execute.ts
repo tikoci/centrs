@@ -55,7 +55,12 @@ export interface ExecuteRequest {
 	password?: string;
 	/** SSH private-key path for `--via ssh` (path only; agent / ~/.ssh used if unset). */
 	sshKey?: string;
-	/** Accept a new SSH host key (`--insecure`); also self-signed TLS for api-ssl. */
+	/**
+	 * Disable peer verification (`--insecure`). For `--via ssh` this sets
+	 * `StrictHostKeyChecking=no` with a null `known_hosts`, so a *changed* /
+	 * impersonated host key is accepted too — not just trust-on-first-use; for
+	 * api-ssl it accepts a self-signed TLS cert. Default verifies.
+	 */
 	insecure?: boolean;
 	timeout?: string | number;
 	format?: string;
@@ -997,6 +1002,7 @@ function settingsMeta(resolved: ResolvedExecuteRequest): CommonSettingsMeta {
 		timeoutMs: toCoreSource(resolved.timeoutMs.source),
 		format: toCoreSource(resolved.format.source),
 		validate: toCoreSource(resolved.validate.source),
+		insecure: toCoreSource(resolved.insecure.source),
 		maxResultsBytes: resolved.maxResultsBytes
 			? toCoreSource(resolved.maxResultsBytes.source)
 			: undefined,
@@ -1005,6 +1011,9 @@ function settingsMeta(resolved: ResolvedExecuteRequest): CommonSettingsMeta {
 			: undefined,
 		password: resolved.auth.passwordSource
 			? toCoreSource(resolved.auth.passwordSource)
+			: undefined,
+		sshKey: resolved.auth.sshKeySource
+			? toCoreSource(resolved.auth.sshKeySource)
 			: undefined,
 	};
 }

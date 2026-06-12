@@ -50,12 +50,12 @@ export const executeCommand: CliCommandMetadata = {
 			flag: "--ssh-key",
 			valueName: "<path>",
 			description:
-				"--via ssh: explicit private-key path. Falls back to CENTRS_SSH_KEY / the ssh-agent.",
+				"`--via ssh`: explicit private-key path. Falls back to `CENTRS_SSH_KEY` / the `ssh-agent`.",
 		},
 		{
 			flag: "--insecure",
 			description:
-				"Accept a new SSH host key (--via ssh) or a self-signed api-ssl TLS cert. Default verifies.",
+				"Disable SSH host-key verification (`--via ssh`: accepts changed/impersonated keys, not just new) or accept a self-signed `api-ssl` TLS cert. Default verifies.",
 		},
 		{
 			flag: "--cdb-file",
