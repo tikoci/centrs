@@ -279,6 +279,7 @@ export {
 	summarizeFanout,
 } from "./retrieve-fanout.ts";
 export {
+	buildSshTerminalArgv,
 	buildTerminalErrorEnvelope,
 	resolveTerminalRequest,
 	runTerminal,

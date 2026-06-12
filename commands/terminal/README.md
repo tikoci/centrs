@@ -2,8 +2,13 @@
 
 Open an interactive RouterOS console.
 
-Status: `terminal / mac-telnet` is **`CHR-passed`** (see `docs/MATRIX.md` and
-`examples.md` T1–T3); `terminal / ssh` is `not-started` (the later SSH pass).
+Status: `terminal / mac-telnet` **and** `terminal / ssh` are both **`CHR-passed`**
+(see `docs/MATRIX.md` and `examples.md` T1–T3 / TS1–TS2). The two transports take
+different paths: **mac-telnet** is the in-process raw passthrough over
+`MacTelnetConsole.attachInteractive`; **ssh** execs the host `ssh` with inherited
+stdio (RouterOS grants no PTY, but `ssh user@host` opens the console and the OS
+relays the already-clean stream — no screen emulation; a host target defaults to
+ssh, a MAC target to mac-telnet). The mac-telnet path is described below;
 `src/terminal.ts` is the raw passthrough over `MacTelnetConsole.attachInteractive`,
 driven through an injectable `TerminalIo` (real stdin/stdout/`SIGWINCH` in
 `src/cli/terminal.ts`). Two input modes by whether stdin is a TTY: interactive
@@ -18,10 +23,12 @@ The SSH transport *base* shipped as the **SFTP transfer client** (`transfer / ss
 `src/protocols/sftp.ts` over the host OpenSSH `sftp` subsystem); the `ssh-key` and
 `insecure` settings landed **with** it (so no setting is half-wired without a
 working transport — the rule still holds). `execute / ssh` and `terminal / ssh`
-are the **follow-on pass**: RouterOS's SSH server has **no exec channel / no
-pseudo-tty**, so both need an interactive-shell reader (like
-`MacTelnetConsole` — prompt sync, screen emulation, the `:parse` gate), which is
-materially harder than sftp and is why they trail.
+then followed and are both `CHR-passed`. **A CHR spike corrected the earlier "no
+exec channel, needs an interactive-shell reader" framing:** RouterOS's SSH server
+has **no pseudo-tty**, but a single-line `ssh user@host "<command>"` runs on the
+console and returns clean output — so `execute / ssh` is a per-command batch client
+and `terminal / ssh` is a thin inherited-stdio exec of `ssh`. Neither needed a
+`MacTelnetConsole`-style screen-emulating reader.
 
 ## Intent
 
@@ -43,6 +50,13 @@ Signed off (settings names): terminal uses the same `sshKey` setting as
 CLI/API. When no key is set, terminal delegates identity selection to system
 `ssh` config and the SSH agent; `--ssh-key` is an explicit override and must not
 silently merge with a conflicting CDB/env key.
+
+Unlike the batch sftp/execute clients, the **interactive** `terminal / ssh` argv
+omits `BatchMode=yes` (`interactive: true` in `sshCommonOptions`), so the host
+`ssh` can prompt on the inherited TTY for an encrypted key's passphrase or a
+password. centrs does not forward `--password` to ssh — OpenSSH accepts no
+password on the argv — so password auth is satisfied by that interactive prompt,
+not by the centrs-resolved credential.
 
 Resolved by the sftp transfer client (`src/protocols/sftp.ts`), so they are no
 longer open for the file path: **host-key verification** rides the unified

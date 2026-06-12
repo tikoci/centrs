@@ -34,6 +34,14 @@ export interface SshConnectionConfig {
 	timeoutMs: number;
 	/** Override the `known_hosts` file (tests / ephemeral runs). */
 	knownHostsFile?: string;
+	/**
+	 * Interactive session (the `terminal` relay): **omit** `BatchMode=yes` so the
+	 * host `ssh` may prompt on the inherited TTY for a key passphrase or a
+	 * password. The batch clients (`sftp`, `execute`) leave this unset, keeping
+	 * `BatchMode=yes` so a missing credential fails fast instead of hanging on a
+	 * prompt no one can answer.
+	 */
+	interactive?: boolean;
 }
 
 /**
@@ -48,7 +56,13 @@ export function sshCommonOptions(config: SshConnectionConfig): string[] {
 	if (config.sshKey) {
 		options.push("-i", config.sshKey);
 	}
-	options.push("-o", "BatchMode=yes");
+	// Batch clients (sftp/execute) keep BatchMode so a missing/encrypted credential
+	// errors out rather than blocking on a prompt; the interactive terminal relay
+	// (`config.interactive`) omits it so ssh can prompt on the TTY for a passphrase
+	// or password.
+	if (!config.interactive) {
+		options.push("-o", "BatchMode=yes");
+	}
 	options.push("-o", `ConnectTimeout=${connectSeconds}`);
 	if (config.insecure) {
 		options.push("-o", "StrictHostKeyChecking=no");

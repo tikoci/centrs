@@ -26,7 +26,7 @@ A cell advances only with the matching evidence in the same change.
 | retrieve | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | —             | —             | —                |
 | stream   | —             | `designed`    | `designed`    | —             | —             | —             | —             | —                |
 | execute  | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | `not-started`    |
-| terminal | —             | —             | `not-started` | `CHR-passed`  | —             | —             | —             | —                |
+| terminal | —             | —             | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —                |
 | transfer | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —                |
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
 | discover | —             | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
@@ -127,12 +127,13 @@ the >60 KB file, so the fetch hack is gone), so every example is now green.
 `transfer / ssh` is `CHR-passed` for **sftp**, the first SSH consumer. This
 deliberately re-scopes the earlier "SSH lands as one unit" plan: the SSH
 *transport base* lands here as a self-contained **SFTP transfer client**
-(`src/protocols/sftp.ts`, the host OpenSSH `sftp` subsystem); `execute / ssh`
-layers on next (below), and `terminal / ssh` trails. **CHR-grounded correction:**
-RouterOS's SSH server has no pseudo-tty, but a single-line `ssh user@host
-"<command>"` *does* run on the console and return clean output — so `execute / ssh`
-needs no interactive-shell reader (the earlier "no exec channel" framing was
-wrong); only `terminal / ssh` (an interactive relay) hits the no-PTY roughness. The single
+(`src/protocols/sftp.ts`, the host OpenSSH `sftp` subsystem); `execute / ssh` and
+`terminal / ssh` both layer on after (below — all three SSH cells are now
+`CHR-passed`). **CHR-grounded correction:** RouterOS's SSH server has no
+pseudo-tty, but a single-line `ssh user@host "<command>"` *does* run on the console
+and return clean output — so `execute / ssh` needs no interactive-shell reader (the
+earlier "no exec channel" framing was wrong); `terminal / ssh` execs `ssh` with
+inherited stdio for the interactive relay. The single
 `ssh` grid column still carries **two methods**: **sftp is built** (default secure;
 its `stat`/`readdir`/partial ops drive the existence check, `--verify`, and
 `list`/`remove`/`mkdir`), while **scp stays a deliberate later pass** behind
@@ -164,7 +165,24 @@ CLI line; a successful write prints nothing (like mac-telnet). `--ssh-key` /
 `test/integration/execute-ssh.test.ts` (S1–S4: read, multi-line read,
 REST-verified write, the `:parse` unknown-attribute reject) on CHR 7.23.1; unit
 coverage for the client/output-cleanup/error-mapping is `test/unit/ssh.test.ts`.
-**Remaining SSH cell:** `terminal / ssh` (the interactive no-PTY relay).
+
+`terminal / ssh` is `CHR-passed`, the third and last SSH consumer. RouterOS grants
+no pseudo-tty, but `ssh user@host` (no command) opens the interactive console — so
+`terminal / ssh` **execs the host `ssh` with inherited stdio** and lets the OS
+relay the already-clean no-PTY stream; there is no screen emulation, and centrs's
+value is resolving the target/key/trust and building the argv
+(`buildSshTerminalArgv` in `src/terminal.ts`, reusing `sshCommonOptions`). No `-t`
+is passed (a real TTY makes `ssh` request a PTY on its own; forcing `-tt` hangs
+RouterOS). `runTerminal` returns the exit code now: mac-telnet returns 0 on a clean
+console close, ssh returns `ssh`'s code (a no-PTY console closed by EOF can exit
+non-zero — the device/ssh's result, not a centrs failure). A **host target
+defaults to ssh**, a MAC target to mac-telnet. Green via
+`test/integration/terminal-ssh.test.ts` (TS1: batch relay over the real binary
+through the subprocess harness; TS2: the rest/native capability gate) on CHR
+7.23.1; argv construction is unit-tested (`test/unit/terminal.test.ts`). **All SSH
+cells (transfer/execute/terminal) are now `CHR-passed`.** The no-PTY limitation
+(no multi-line brace blocks over SSH) is the device's, documented in
+`commands/terminal/README.md`.
 
 `fetch` (centrs-as-HTTP-server + `/tool/fetch`) is a **deferred, explicit-only
 method within the rest-api/native-api cells**, not a grid column — it needs
@@ -256,9 +274,10 @@ glue, not new protocol code:
   same UDP transport the execute command path uses. **What the pipe test does not
   cover** (thin OS glue, mock-unit-tested): raw-mode stdin and real-TTY size, since
   a piped subprocess stdin is not a TTY. A full-TTY test would need a PTY
-  (`script(1)` / node-pty) — deferred. **Remaining:** `terminal / ssh` (RouterOS's
-  SSH server has no pseudo-tty, so it needs its own interactive-shell reader; the
-  later SSH pass). See `commands/terminal/README.md`.
+  (`script(1)` / node-pty) — deferred. **`terminal / ssh` is now `CHR-passed`** (a
+  separate path — exec the host `ssh` with inherited stdio, no screen emulation; it
+  did not need the mac-telnet console reader after all). See the `transfer / ssh`
+  section above and `commands/terminal/README.md`.
 
 ### Frontend surfaces (orthogonal to the command grid)
 
@@ -369,8 +388,10 @@ matching evidence.
    `insecure` settings landed **with** it. **`execute / ssh` is now `CHR-passed`**
    too (a per-command `ssh host "<command>"` batch client — a CHR spike disproved
    the "needs an interactive-shell reader" assumption; RouterOS returns clean
-   no-PTY output, so it reuses the mac-telnet `:parse` gate, no reader). Remaining:
-   `terminal / ssh` (the interactive no-PTY relay). See `commands/terminal/README.md`
+   no-PTY output, so it reuses the mac-telnet `:parse` gate, no reader).
+   **`terminal / ssh` is now `CHR-passed`** as well (exec the host `ssh` with
+   inherited stdio — no screen emulation; a host target defaults to ssh). **All
+   three SSH cells are done.** See `commands/terminal/README.md`
    (RouterOS SSH surface)
    for the device-side option alignment and residual unknowns.
 8. **mac-telnet** for execute/terminal — L2 path, default execute route for
