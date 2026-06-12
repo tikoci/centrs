@@ -85,9 +85,17 @@ describe("createProtocolAdapter", () => {
 		expect(adapter.capabilities.execute).toBe(true);
 	});
 
-	test("defaults unknown protocols to the REST adapter", () => {
+	test("builds an ssh execute adapter for the ssh protocol", () => {
 		const adapter = createProtocolAdapter(restConfig({ protocol: "ssh" }));
 		expect(adapter.protocol).toBe("ssh");
+		expect(adapter.capabilities.execute).toBe(true);
+		expect(adapter.capabilities.retrieve).toBe(false);
+		expect(adapter.capabilities.inspect).toBe(false);
+	});
+
+	test("defaults unwired protocols to the REST adapter", () => {
+		const adapter = createProtocolAdapter(restConfig({ protocol: "romon" }));
+		expect(adapter.protocol).toBe("romon");
 		expect(adapter.capabilities.retrieve).toBe(true);
 	});
 });

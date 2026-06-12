@@ -25,6 +25,7 @@
  */
 
 import { CentrsError } from "../errors.ts";
+import { sshCommonOptions, sshUserHost } from "./ssh.ts";
 
 /** A directory entry as parsed from an `sftp` `ls -l` long-name line. */
 export interface SftpFileEntry {
@@ -146,27 +147,17 @@ export class SftpClient {
 
 	/** Build the `sftp` argv (one place so tests can assert it). */
 	argv(): string[] {
-		const connectSeconds = Math.max(1, Math.ceil(this.config.timeoutMs / 1000));
-		const argv = [this.config.binary ?? "sftp", "-b", "-"];
-		argv.push("-P", String(this.config.port));
-		if (this.config.sshKey) {
-			argv.push("-i", this.config.sshKey);
-		}
-		argv.push("-o", "BatchMode=yes");
-		argv.push("-o", `ConnectTimeout=${connectSeconds}`);
-		if (this.config.insecure) {
-			argv.push("-o", "StrictHostKeyChecking=no");
-			argv.push("-o", "UserKnownHostsFile=/dev/null");
-		} else {
-			// Trust-on-first-use: accept a new host key, refuse a *changed* one.
-			argv.push("-o", "StrictHostKeyChecking=accept-new");
-			if (this.config.knownHostsFile) {
-				argv.push("-o", `UserKnownHostsFile=${this.config.knownHostsFile}`);
-			}
-		}
-		const user = this.config.username ? `${this.config.username}@` : "";
-		argv.push(`${user}${this.config.host}`);
-		return argv;
+		// `sftp` takes the port as `-P` (vs `ssh -p`); the `-i`/`-o` trust + batch
+		// options are shared with the ssh execute client via `sshCommonOptions`.
+		return [
+			this.config.binary ?? "sftp",
+			"-b",
+			"-",
+			"-P",
+			String(this.config.port),
+			...sshCommonOptions(this.config),
+			sshUserHost(this.config),
+		];
 	}
 
 	/** Connect/auth/host-key failures happen before the batch runs. */

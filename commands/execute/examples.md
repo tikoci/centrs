@@ -286,6 +286,57 @@ Envelope: `ok: false`, `error.code=validation/unknown-attribute`,
 `meta.via=mac-telnet`, and no address is added — the console `:parse` gate
 catches `no-such-arg` before any mutation.
 
+## ssh (`--via ssh`)
+
+Execute over the RouterOS SSH server using the **host `ssh`** client. RouterOS
+grants no pseudo-tty, but `ssh user@host "<command>"` runs one single-line console
+command and returns **clean** output (no prompt, no ANSI, no echo) — so each
+execute is one `ssh` invocation (a fresh login, like the SFTP batch client), and
+the only post-processing is trimming the console's column padding. Validation is
+the **same single console `:put [:parse …]`** as mac-telnet (over SSH it returns
+the identical `(evl …)` / `bad parameter <name>` strings), so syntax and the
+unknown-attribute gate are covered at once. Key auth is the path (`--ssh-key` /
+agent); `--insecure` accepts the device's host key. `$SSH_PORT` is the SSH port,
+`$KEY` the private key. Examples S1–S4 are green via `bun run test:integration`
+(`test/integration/execute-ssh.test.ts`, CHR 7.23.1).
+
+### S1. Read a command over ssh
+
+```bash
+centrs execute 127.0.0.1 '/system/identity/print' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure
+```
+
+Envelope: `ok: true`, `meta.via=ssh`, `data.ret` is the cleaned console output and
+contains the device identity (cross-checked against REST). `meta.validation.source`
+is `:put [:parse ...] over ssh`.
+
+### S2. Multi-line read returns cleaned, column-aligned output
+
+```bash
+centrs execute 127.0.0.1 '/system/resource/print' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure
+```
+
+Envelope: `ok: true`; `data.ret` contains the running RouterOS version (each line
+trimmed of trailing padding, CRLF normalized).
+
+### S3. Write (add) over ssh
+
+```bash
+centrs execute 127.0.0.1 '/ip/address/add address=198.51.100.50/32 interface=ether1' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure --yes
+```
+
+Envelope: `ok: true`, `meta.via=ssh`, `data.ret` empty (a successful console write
+prints nothing). A subsequent REST read of `/ip/address` shows `198.51.100.50`.
+
+### S4. Validation rejects an unknown attribute over ssh
+
+```bash
+centrs execute 127.0.0.1 '/ip/address/add address=198.51.100.51/32 interface=ether1 bogus=x' --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure --yes
+```
+
+Envelope: `ok: false`, `error.code=validation/unknown-attribute`, `meta.via=ssh`,
+and no address is added — the console `:parse` gate catches `bogus` pre-mutation.
+
 ## Protocol selection notes
 
 For an unresolved MAC target, execute auto-selection defaults to mac-telnet

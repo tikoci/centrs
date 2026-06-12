@@ -4,10 +4,10 @@ Run a RouterOS CLI command and return its (semi-structured) output. `execute`
 is the single read/write surface for RouterOS add/set/remove and other
 CLI-shaped commands — there is no separate `update` command.
 
-Status: `rest-api`, `native-api`, and `mac-telnet` are `CHR-passed` (see
+Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
 `docs/MATRIX.md` and `commands/execute/examples.md`, examples 1–11 over REST,
-12–18 over the native API, and 19–21 over mac-telnet, green via
-`bun run test:integration`). `ssh`, `romon`, and `winbox-terminal` remain
+12–18 over the native API, 19–21 over mac-telnet, and S1–S4 over ssh, green via
+`bun run test:integration`). `romon` and `winbox-terminal` remain
 `not-started`. SNMP is retrieve-only and rejects `execute`.
 
 ## Intent
@@ -65,14 +65,16 @@ Status: `rest-api`, `native-api`, and `mac-telnet` are `CHR-passed` (see
 
 | Flag                            | Behavior                                                                              |
 | ------------------------------- | ------------------------------------------------------------------------------------- |
-| `--via <protocol>`              | Pin the transport (`native-api`, `rest-api`, or `mac-telnet`). No silent downgrade. A bare MAC target defaults to `mac-telnet`. |
+| `--via <protocol>`              | Pin the transport (`native-api`, `rest-api`, `ssh`, or `mac-telnet`). No silent downgrade. A bare MAC target defaults to `mac-telnet`. |
 | `--host <host\|url>`            | Override the resolved host or base URL for the target.                                 |
 | `--port <n>`                    | Override the resolved management port.                                                 |
 | `--username` / `--password`     | RouterOS credentials; fall back to `CENTRS_USERNAME` / `CENTRS_PASSWORD`.              |
+| `--ssh-key <path>`              | `--via ssh`: explicit private-key path. Falls back to `CENTRS_SSH_KEY` / the ssh-agent. |
+| `--insecure`                    | Accept a new SSH host key (`--via ssh`) or a self-signed `api-ssl` TLS cert. Default verifies. |
 | `--cdb-file` / `--cdb-password` | Read target credentials from (and decrypt) a WinBox CDB file.                          |
 | `--resolve <none\|arp>`         | Resolve a MAC-address target to an IP via the host ARP cache. Default `none`.          |
 | `--timeout <duration>`          | Per-request timeout. REST: ≤ 60s; other transports may allow longer.                  |
-| `--validate[=false]`            | Run transport-appropriate preflight validation before execution (default `true`): REST/native use `:parse` + `/console/inspect`; mac-telnet uses a single console `:parse` (covers syntax + unknown-attribute). |
+| `--validate[=false]`            | Run transport-appropriate preflight validation before execution (default `true`): REST/native use `:parse` + `/console/inspect`; mac-telnet and ssh use a single console `:parse` (covers syntax + unknown-attribute). |
 | `--strict`                      | Treat any warning on a successful run as an error (`ok: false`, nonzero exit), like `-Werror`. Default is lenient (`ok: true` + `warnings`). |
 | `--yes`                         | Confirm write-shaped add/set/remove commands in non-interactive runs.                  |
 | `--max-bytes <n>`               | Byte budget for the rendered envelope; excess output is truncated with a warning + `meta.truncated` (not an error), matching `retrieve`. (Renamed from `--max-results`.) |

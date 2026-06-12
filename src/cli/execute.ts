@@ -47,6 +47,17 @@ export const executeCommand: CliCommandMetadata = {
 			description: "RouterOS password. Falls back to `CENTRS_PASSWORD`.",
 		},
 		{
+			flag: "--ssh-key",
+			valueName: "<path>",
+			description:
+				"`--via ssh`: explicit private-key path. Falls back to `CENTRS_SSH_KEY` / the `ssh-agent`.",
+		},
+		{
+			flag: "--insecure",
+			description:
+				"Disable SSH host-key verification (`--via ssh`: accepts changed/impersonated keys, not just new) or accept a self-signed `api-ssl` TLS cert. Default verifies.",
+		},
+		{
 			flag: "--cdb-file",
 			valueName: "<path>",
 			description: "Read target credentials from a WinBox CDB file.",
@@ -151,6 +162,12 @@ function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 				break;
 			case "--password":
 				parsed.password = expectValue(args, ++index, arg);
+				break;
+			case "--ssh-key":
+				parsed.sshKey = expectValue(args, ++index, arg);
+				break;
+			case "--insecure":
+				parsed.insecure = true;
 				break;
 			case "--cdb-file":
 				parsed.cdbFile = expectValue(args, ++index, arg);

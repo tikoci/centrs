@@ -53,6 +53,15 @@ export interface ExecuteRequest {
 	port?: number;
 	username?: string;
 	password?: string;
+	/** SSH private-key path for `--via ssh` (path only; agent / ~/.ssh used if unset). */
+	sshKey?: string;
+	/**
+	 * Disable peer verification (`--insecure`). For `--via ssh` this sets
+	 * `StrictHostKeyChecking=no` with a null `known_hosts`, so a *changed* /
+	 * impersonated host key is accepted too — not just trust-on-first-use; for
+	 * api-ssl it accepts a self-signed TLS cert. Default verifies.
+	 */
+	insecure?: boolean;
 	timeout?: string | number;
 	format?: string;
 	validate?: boolean;
@@ -114,6 +123,7 @@ export interface ResolvedExecuteRequest {
 	timeoutMs: ResolvedSetting<number>;
 	format: ResolvedSetting<ExecuteOutputFormat>;
 	validate: ResolvedSetting<boolean>;
+	insecure: ResolvedSetting<boolean>;
 	maxResultsBytes?: ResolvedSetting<number>;
 	yes: boolean;
 	verbose: boolean;
@@ -192,6 +202,8 @@ export async function validateExecuteEnvelope(
 			password: resolved.auth.password,
 			timeoutMs: resolved.timeoutMs.value,
 			mac: resolved.target.mac,
+			sshKey: resolved.auth.sshKey,
+			insecure: resolved.insecure.value,
 		});
 		try {
 			const validation = await validateExecuteCommand(resolved, backend);
@@ -225,6 +237,8 @@ export async function runResolvedExecute(
 		password: resolved.auth.password,
 		timeoutMs: resolved.timeoutMs.value,
 		mac: resolved.target.mac,
+		sshKey: resolved.auth.sshKey,
+		insecure: resolved.insecure.value,
 	});
 
 	// Assigned unconditionally by the if/else below before first use; declared
@@ -323,9 +337,21 @@ export async function resolveExecuteRequest(
 		cdbResolution,
 	);
 	const auth = resolveAuth(
-		{ username: request.username, password: request.password },
+		{
+			username: request.username,
+			password: request.password,
+			sshKey: request.sshKey,
+		},
 		env,
 		cdbResolution,
+	);
+	const insecure = resolveBooleanSetting(
+		request.insecure,
+		env,
+		"CENTRS_INSECURE",
+		false,
+		"insecure",
+		cdbResolution?.overrides.insecure,
 	);
 
 	return {
@@ -337,6 +363,7 @@ export async function resolveExecuteRequest(
 		timeoutMs,
 		format,
 		validate,
+		insecure,
 		maxResultsBytes,
 		yes: request.yes ?? false,
 		verbose: request.verbose ?? false,
@@ -533,8 +560,8 @@ async function validateExecuteCommand(
 	resolved: ResolvedExecuteRequest,
 	backend: ProtocolAdapter,
 ): Promise<EnvelopeValidationMeta> {
-	if (resolved.via.value === "mac-telnet") {
-		return validateMacTelnetCommand(resolved, backend);
+	if (resolved.via.value === "mac-telnet" || resolved.via.value === "ssh") {
+		return validateConsoleParseCommand(resolved, backend);
 	}
 
 	await runSyntaxGate(resolved, backend);
@@ -582,13 +609,14 @@ async function validateExecuteCommand(
 }
 
 /**
- * Validate a command over mac-telnet with a single console `:put [:parse ...]`.
- * Unlike REST/native (a syntax gate plus a `/console/inspect` semantic gate),
- * one console `:parse` reports both `syntax error` and `bad parameter <name>`,
- * so it covers syntax and the unknown-attribute (semantic) gate at once
- * (grounded on CHR 7.23.1; see `mac-telnet-console.ts`).
+ * Validate a command over a console transport (mac-telnet or ssh) with a single
+ * `:put [:parse ...]`. Unlike REST/native (a syntax gate plus a `/console/inspect`
+ * semantic gate), one console `:parse` reports both `syntax error` and `bad
+ * parameter <name>`, so it covers syntax and the unknown-attribute (semantic)
+ * gate at once — identical strings over mac-telnet and ssh (CHR 7.23.1 grounded;
+ * see `mac-telnet-console.ts` and `ssh.ts`).
  */
-async function validateMacTelnetCommand(
+async function validateConsoleParseCommand(
 	resolved: ResolvedExecuteRequest,
 	backend: ProtocolAdapter,
 ): Promise<EnvelopeValidationMeta> {
@@ -616,7 +644,7 @@ async function validateMacTelnetCommand(
 	classifyParseResult(result.ret ?? "", resolved.command);
 	return {
 		enabled: true,
-		source: ":put [:parse ...] over mac-telnet",
+		source: `:put [:parse ...] over ${resolved.via.value}`,
 		result: "passed",
 		syntax: true,
 		semantic:
@@ -713,9 +741,10 @@ async function runCommand(
 	resolved: ResolvedExecuteRequest,
 	backend: ProtocolAdapter,
 ): Promise<ProtocolExecuteResult> {
-	if (resolved.via.value === "mac-telnet") {
-		// mac-telnet is a console transport: run the raw CLI line and capture the
-		// console output (structured path-POST / tagged talk do not apply).
+	if (resolved.via.value === "mac-telnet" || resolved.via.value === "ssh") {
+		// Console transports: run the raw CLI line and capture the console output
+		// (structured path-POST / tagged talk do not apply). ssh runs it as a
+		// single `ssh host "<command>"`; mac-telnet drives the L2 console.
 		return backend.execute({ path: "", command: "", script: resolved.command });
 	}
 	if (resolved.canonical.mode === "script") {
@@ -822,12 +851,12 @@ function resolveExecuteProtocol(
 			context: { via: via.value, capability: "execute" },
 		});
 	}
-	if (!["native-api", "rest-api", "mac-telnet"].includes(via.value)) {
+	if (!["native-api", "rest-api", "mac-telnet", "ssh"].includes(via.value)) {
 		throw new CentrsError({
 			code: "routeros/protocol-not-implemented",
 			summary: `Execute over ${via.value} is planned but not wired through the shared execute orchestrator yet.`,
 			remediation:
-				"Use `--via native-api`, `--via rest-api`, or `--via mac-telnet`. For an IP transport against a MAC target, add `--resolve arp`.",
+				"Use `--via native-api`, `--via rest-api`, `--via ssh`, or `--via mac-telnet`. For an IP transport against a MAC target, add `--resolve arp`.",
 			context: { via: via.value, capability: "execute" },
 		});
 	}
@@ -973,6 +1002,7 @@ function settingsMeta(resolved: ResolvedExecuteRequest): CommonSettingsMeta {
 		timeoutMs: toCoreSource(resolved.timeoutMs.source),
 		format: toCoreSource(resolved.format.source),
 		validate: toCoreSource(resolved.validate.source),
+		insecure: toCoreSource(resolved.insecure.source),
 		maxResultsBytes: resolved.maxResultsBytes
 			? toCoreSource(resolved.maxResultsBytes.source)
 			: undefined,
@@ -981,6 +1011,9 @@ function settingsMeta(resolved: ResolvedExecuteRequest): CommonSettingsMeta {
 			: undefined,
 		password: resolved.auth.passwordSource
 			? toCoreSource(resolved.auth.passwordSource)
+			: undefined,
+		sshKey: resolved.auth.sshKeySource
+			? toCoreSource(resolved.auth.sshKeySource)
 			: undefined,
 	};
 }
@@ -1043,7 +1076,9 @@ function routerOsFailureFromResult(
 	return failure
 		? mapRouterOsError(failure, {
 				transport:
-					via === "rest-api" || via === "mac-telnet" ? via : "native-api",
+					via === "rest-api" || via === "mac-telnet" || via === "ssh"
+						? via
+						: "native-api",
 				context: { via },
 			})
 		: undefined;
