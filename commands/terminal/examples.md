@@ -73,6 +73,44 @@ into raw mode; keystrokes reach the device and its output paints stdout. The rea
 terminal rows/cols are reported to the console (so it neither wraps nor paginates)
 and a window resize forwards via `SIGWINCH`. `Ctrl-D` / session end exits `0`.
 
-> SSH terminal (`terminal / ssh`) is a separate later cell — RouterOS's SSH server
-> has no pseudo-tty, so it needs its own interactive-shell reader. v1 `terminal`
-> is mac-telnet only; `--via ssh` is not wired yet.
+## ssh (`--via ssh`)
+
+`terminal / ssh` execs the **host `ssh`** with inherited stdio: RouterOS grants no
+pseudo-tty, but `ssh user@host` opens the interactive console and the OS relays it
+(the no-PTY stream is already clean — no screen emulation). centrs's value is
+resolving the target/key/trust and building the argv; the interactive TTY, raw
+mode, and signals are the inherited terminal's. A **host target defaults to ssh**
+(a MAC target defaults to mac-telnet). `$SSH_PORT` is the SSH port, `$KEY` the
+private key. TS1–TS2 are green via `bun run test:integration`
+(`test/integration/terminal-ssh.test.ts`, CHR 7.23.1).
+
+### TS1. Run a command over an SSH terminal (batch relay)
+
+```bash
+printf '/system/identity/print\n/quit\n' | centrs terminal 127.0.0.1 --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure
+```
+
+stdout contains the device identity (cross-checked against REST). centrs returns
+ssh's exit code (a no-PTY console closed by EOF can exit non-zero — that is the
+device/ssh's result, not a centrs failure; a clean `/quit` from a real TTY exits
+`0`).
+
+### TS2. `--via rest-api` has no terminal capability
+
+```bash
+centrs terminal 127.0.0.1 --via rest-api --username $U --password $P
+```
+
+Envelope on stderr: `ok: false`, `error.code="transport/capability-unsupported"`,
+exit `1` — same gate as mac-telnet's T2/T3, evaluated before any connection.
+
+### TS3. Open an interactive console over SSH (verified by hand)
+
+```bash
+centrs terminal 192.0.2.10 --username $U --ssh-key $KEY
+```
+
+A host target with no `--via` selects `ssh`. The inherited terminal hands the
+RouterOS console to the user; `/quit` (or `Ctrl-D`) ends the session. RouterOS's
+no-PTY limitation applies (e.g. multi-line brace blocks are not supported over
+SSH — see the SSH page); single-line commands work.

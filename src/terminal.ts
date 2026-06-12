@@ -26,11 +26,14 @@ import {
 	resolveMacTelnetRoute,
 } from "./protocols/mac-telnet.ts";
 import { MacTelnetConsole } from "./protocols/mac-telnet-console.ts";
+import { sshCommonOptions, sshUserHost } from "./protocols/ssh.ts";
 import {
 	type CdbResolution,
+	isMacAddress,
 	type ResolvedAuth,
 	type ResolvedTarget,
 	resolveAuth,
+	resolveBooleanSetting,
 	resolveCdb,
 	resolveStringSetting,
 	resolveTarget,
@@ -54,8 +57,12 @@ export interface TerminalRequest {
 	port?: number;
 	username?: string;
 	password?: string;
-	/** Explicit in-packet source MAC (overrides egress-MAC resolution). */
+	/** Explicit in-packet source MAC (overrides egress-MAC resolution; mac-telnet). */
 	sourceMac?: string;
+	/** SSH private-key path for `--via ssh` (path only; agent / ~/.ssh used if unset). */
+	sshKey?: string;
+	/** `--via ssh`: disable SSH host-key verification (accepts changed keys). */
+	insecure?: boolean;
 	cdbFile?: string;
 	cdbPassword?: string;
 	format?: string;
@@ -86,12 +93,13 @@ interface ResolvedTerminal {
 	target: ResolvedTarget;
 	auth: ResolvedAuth;
 	sourceMac?: string;
+	insecure: boolean;
 	warnings: CdbResolution["warnings"];
 }
 
-/** Reject any transport without a v1 terminal capability (mac-telnet only). */
+/** Reject any transport without a terminal capability (mac-telnet + ssh). */
 function gateTerminalVia(via: string): void {
-	if (via === "mac-telnet") {
+	if (via === "mac-telnet" || via === "ssh") {
 		return;
 	}
 	if (via === "rest-api" || via === "native-api") {
@@ -99,23 +107,14 @@ function gateTerminalVia(via: string): void {
 			code: "transport/capability-unsupported",
 			summary: `${via} has no terminal capability.`,
 			remediation:
-				"terminal is a console transport: use a MAC target over `--via mac-telnet`. For structured reads use `retrieve --via rest-api`/`native-api`.",
-			context: { via, command: "terminal" },
-		});
-	}
-	if (via === "ssh") {
-		throw new CentrsError({
-			code: "usage/not-implemented",
-			summary: "terminal over ssh is planned but not wired yet.",
-			remediation:
-				"Use a MAC target over `--via mac-telnet` (RouterOS SSH has no pseudo-tty, so the ssh terminal needs a separate interactive-shell reader).",
+				"terminal is a console transport: use `--via ssh` (host target) or `--via mac-telnet` (MAC target). For structured reads use `retrieve --via rest-api`/`native-api`.",
 			context: { via, command: "terminal" },
 		});
 	}
 	throw new CentrsError({
 		code: "settings/invalid-via",
 		summary: `Unsupported terminal transport: ${via}.`,
-		remediation: "terminal v1 supports `--via mac-telnet` only.",
+		remediation: "terminal supports `--via mac-telnet` or `--via ssh`.",
 		context: { via },
 	});
 }
@@ -141,16 +140,21 @@ export async function resolveTerminalRequest(
 		},
 		env,
 	);
+	// A MAC target defaults to the L2 console (mac-telnet); any other target
+	// (host / IP / CDB identity) defaults to ssh — the IP-level terminal transport.
+	const defaultVia = isMacAddress(request.targetInput ?? "")
+		? "mac-telnet"
+		: "ssh";
 	const via = resolveStringSetting(
 		request.via,
 		env,
 		"CENTRS_VIA",
-		"mac-telnet",
+		defaultVia,
 		"via",
 		undefined,
 		cdb?.overrides.via,
 	);
-	const viaValue = via?.value ?? "mac-telnet";
+	const viaValue = via?.value ?? defaultVia;
 	// Re-gate on the fully resolved value to catch a CDB comment-kv `via=` override.
 	gateTerminalVia(viaValue);
 	const target = resolveTarget(
@@ -160,19 +164,32 @@ export async function resolveTerminalRequest(
 			port: request.port,
 		},
 		env,
-		"mac-telnet",
+		viaValue === "ssh" ? "ssh" : "mac-telnet",
 		cdb,
 	);
 	const auth = resolveAuth(
-		{ username: request.username, password: request.password },
+		{
+			username: request.username,
+			password: request.password,
+			sshKey: request.sshKey,
+		},
 		env,
 		cdb,
+	);
+	const insecure = resolveBooleanSetting(
+		request.insecure,
+		env,
+		"CENTRS_INSECURE",
+		false,
+		"insecure",
+		cdb?.overrides.insecure,
 	);
 	return {
 		via: viaValue,
 		target,
 		auth,
 		sourceMac: request.sourceMac,
+		insecure: insecure.value,
 		warnings: cdb?.warnings ?? [],
 	};
 }
@@ -224,16 +241,21 @@ async function connectTerminalConsole(
 }
 
 /**
- * Run an interactive terminal session over the injected {@link TerminalIo}.
- * Resolves on a clean session close; rejects (before any output) on a pre-stream
- * failure, or (after output) if the session closes with an error.
+ * Run an interactive terminal session and resolve with the exit code. mac-telnet
+ * drives the in-process console relay over {@link TerminalIo} (returns 0 on a
+ * clean close; throws before any output on a pre-stream failure). ssh delegates to
+ * the host `ssh` client with inherited stdio and returns its exit code. A
+ * non-terminal transport throws `transport/capability-unsupported` from the gate.
  */
 export async function runTerminal(
 	request: TerminalRequest,
 	io: TerminalIo,
 	env: Record<string, string | undefined> = Bun.env,
-): Promise<void> {
+): Promise<number> {
 	const resolved = await resolveTerminalRequest(request, env);
+	if (resolved.via === "ssh") {
+		return runTerminalSsh(resolved);
+	}
 	const { console: cons, transport } = await connectTerminalConsole(
 		resolved,
 		io,
@@ -300,6 +322,61 @@ export async function runTerminal(
 
 		io.readInput((bytes) => cons.write(bytes), onEnd);
 	});
+	return 0;
+}
+
+/**
+ * Build the `ssh` argv for an interactive RouterOS terminal: `ssh -p <port>
+ * <key/trust options> user@host` with **no** command (so it opens the console)
+ * and **no** `-t` (RouterOS grants no PTY; forcing one with `-tt` hangs, and a
+ * real TTY makes the host `ssh` request a PTY on its own). Exported for tests.
+ */
+export function buildSshTerminalArgv(resolved: ResolvedTerminal): string[] {
+	const conn = {
+		host: resolved.target.host,
+		port: resolved.target.port,
+		username: resolved.auth.username,
+		sshKey: resolved.auth.sshKey,
+		insecure: resolved.insecure,
+		timeoutMs: PRIME_TIMEOUT_MS,
+	};
+	return [
+		"ssh",
+		"-p",
+		String(resolved.target.port),
+		...sshCommonOptions(conn),
+		sshUserHost(conn),
+	];
+}
+
+/**
+ * Terminal over SSH: exec the host `ssh` with inherited stdio, so the OS relays
+ * the (already clean, no-PTY) RouterOS console — no screen emulation needed. The
+ * interactive TTY, raw mode, and signals are the inherited terminal's; centrs's
+ * value is resolving the target/key/trust and building the argv. Returns ssh's
+ * exit code (a no-PTY console closed by EOF can exit non-zero — that is the
+ * device/ssh's result, not a centrs failure).
+ */
+async function runTerminalSsh(resolved: ResolvedTerminal): Promise<number> {
+	const argv = buildSshTerminalArgv(resolved);
+	let proc: ReturnType<typeof Bun.spawn>;
+	try {
+		proc = Bun.spawn(argv, {
+			stdin: "inherit",
+			stdout: "inherit",
+			stderr: "inherit",
+		});
+	} catch (cause) {
+		throw new CentrsError({
+			code: "transport/local-tool-missing",
+			summary: "Cannot launch the host `ssh` client for the terminal.",
+			remediation:
+				"Install an OpenSSH client so `ssh` is on PATH (macOS ships it; Debian/Ubuntu: `openssh-client`).",
+			context: { binary: "ssh", via: "ssh" },
+			cause,
+		});
+	}
+	return await proc.exited;
 }
 
 export interface TerminalErrorEnvelope {

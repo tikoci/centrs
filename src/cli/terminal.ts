@@ -24,24 +24,25 @@ import {
 export const terminalCommand: CliCommandMetadata = {
 	name: "terminal",
 	usage: "centrs terminal <router> [flags]",
-	summary: "Open an interactive RouterOS console (mac-telnet).",
+	summary: "Open an interactive RouterOS console (ssh or mac-telnet).",
 	options: [
 		{
 			flag: "--via",
 			valueName: "<method>",
 			description:
-				"Transport. Defaults to mac-telnet (the only v1 terminal transport); rest/native have no terminal capability.",
+				"Transport: `ssh` (host target, default) or `mac-telnet` (MAC target, default for a MAC). rest/native have no terminal capability.",
 		},
 		{
 			flag: "--host",
 			valueName: "<host>",
 			description:
-				"UDP delivery host override. Default discovers the L2 route by broadcast.",
+				"Override the target host (ssh) / UDP delivery host (mac-telnet, default L2 broadcast).",
 		},
 		{
 			flag: "--port",
 			valueName: "<port>",
-			description: "UDP delivery port override. Default 20561.",
+			description:
+				"Override the port: ssh default 22, mac-telnet default 20561.",
 		},
 		{
 			flag: "--username",
@@ -57,7 +58,18 @@ export const terminalCommand: CliCommandMetadata = {
 			flag: "--source-mac",
 			valueName: "<mac>",
 			description:
-				"Explicit in-packet source MAC (overrides egress resolution).",
+				"mac-telnet: explicit in-packet source MAC (overrides egress resolution).",
+		},
+		{
+			flag: "--ssh-key",
+			valueName: "<path>",
+			description:
+				"`--via ssh`: explicit private-key path. Falls back to `CENTRS_SSH_KEY` / the `ssh-agent`.",
+		},
+		{
+			flag: "--insecure",
+			description:
+				"`--via ssh`: disable host-key verification (accepts changed/impersonated keys). Default verifies.",
 		},
 		{
 			flag: "--cdb-file",
@@ -136,8 +148,7 @@ export async function runTerminalCli(args: readonly string[]): Promise<number> {
 			return 0;
 		}
 		request = parsed.request;
-		await runTerminal(request, processTerminalIo());
-		return 0;
+		return await runTerminal(request, processTerminalIo());
 	} catch (error) {
 		// Render errors from `args` and the (credential-free) error only — never the
 		// parsed `request`, which holds the raw password for auth. CodeQL still
@@ -205,6 +216,12 @@ function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 				break;
 			case "--source-mac":
 				flags.sourceMac = expectValue(args, ++index, arg);
+				break;
+			case "--ssh-key":
+				flags.sshKey = expectValue(args, ++index, arg);
+				break;
+			case "--insecure":
+				flags.insecure = true;
 				break;
 			case "--cdb-file":
 				flags.cdbFile = expectValue(args, ++index, arg);
