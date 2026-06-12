@@ -19,7 +19,11 @@
 import { CentrsError, type CentrsErrorCode } from "../errors.ts";
 
 /** Transport that produced the raw RouterOS string. */
-export type RouterOsErrorTransport = "rest-api" | "native-api" | "mac-telnet";
+export type RouterOsErrorTransport =
+	| "rest-api"
+	| "native-api"
+	| "mac-telnet"
+	| "ssh";
 
 /** Options that refine how a raw RouterOS string is mapped. */
 export interface MapRouterOsErrorOptions {
@@ -208,7 +212,9 @@ export function mapRouterOsError(
 	}
 
 	const catchAllCode: CentrsErrorCode =
-		opts.transport === "rest-api" || opts.transport === "mac-telnet"
+		opts.transport === "rest-api" ||
+		opts.transport === "mac-telnet" ||
+		opts.transport === "ssh"
 			? "routeros/request-failed"
 			: "routeros/api-trap";
 

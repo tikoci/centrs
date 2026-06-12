@@ -334,6 +334,7 @@ SIGWINCH
 evl
 # unconfigured: a freshly-flashed RouterOS device with no IP — the mac-telnet use case.
 unconfigured
+unwired
 
 # MAC-Telnet reliability vocabulary (MacTelnetSession.tick: retransmit + keepalive)
 # unacked: an outbound frame not yet acknowledged by the peer's byte-counter ACK.

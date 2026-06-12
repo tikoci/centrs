@@ -32,6 +32,7 @@ import {
 	type NativeApiCommand,
 	type NativeApiSession,
 } from "./native-api.ts";
+import { SshExecClient } from "./ssh.ts";
 
 /** Connection inputs an adapter needs, free of retrieve-specific resolver types. */
 export interface ProtocolAdapterConfig {
@@ -139,6 +140,9 @@ export function createProtocolAdapter(
 	}
 	if (config.protocol === "mac-telnet") {
 		return new MacTelnetAdapter(config);
+	}
+	if (config.protocol === "ssh") {
+		return new SshExecAdapter(config);
 	}
 	return new RestAdapter(config);
 }
@@ -681,6 +685,79 @@ class MacTelnetAdapter implements ProtocolAdapter {
 			timeoutMs: this.config.timeoutMs,
 			explicitSourceMac: this.explicitSourceMac,
 		});
+	}
+}
+
+/**
+ * Execute over SSH. RouterOS grants no pseudo-tty, but `ssh host "<command>"`
+ * runs one single-line console command and returns clean output, so this is a
+ * per-command batch adapter (like the SFTP client) — no persistent session,
+ * `close()` is a no-op. It is a console transport: only the raw-CLI (`script`)
+ * execute path applies; structured reads/inspect are unsupported (use
+ * rest-api/native-api). Validation rides the shared `:put [:parse …]` gate the
+ * orchestrator runs through `execute({ script })`.
+ */
+class SshExecAdapter implements ProtocolAdapter {
+	readonly protocol: RouterOsProtocol = "ssh";
+	readonly capabilities: ProtocolAdapterCapabilities = {
+		retrieve: false,
+		execute: true,
+		inspect: false,
+	};
+	private readonly client: SshExecClient;
+
+	constructor(config: ProtocolAdapterConfig) {
+		this.client = new SshExecClient({
+			host: config.host,
+			port: config.port,
+			username: config.username,
+			sshKey: config.sshKey,
+			insecure: config.insecure,
+			timeoutMs: config.timeoutMs,
+		});
+	}
+
+	private unsupported(operation: string): CentrsError {
+		return new CentrsError({
+			code: "transport/capability-unsupported",
+			summary: `ssh does not support ${operation}.`,
+			remediation:
+				"ssh is an execute/terminal (console) transport; use `--via rest-api`/`native-api` to read structured data.",
+			context: { via: "ssh", operation },
+		});
+	}
+
+	inspect(): Promise<unknown[]> {
+		return Promise.reject(this.unsupported("/console/inspect"));
+	}
+
+	getSingleton(): Promise<unknown> {
+		return Promise.reject(this.unsupported("singleton reads"));
+	}
+
+	list(): Promise<unknown[]> {
+		return Promise.reject(this.unsupported("menu reads"));
+	}
+
+	async execute(
+		request: ProtocolExecuteRequest,
+	): Promise<ProtocolExecuteResult> {
+		const cli = request.script;
+		if (cli === undefined) {
+			throw new CentrsError({
+				code: "internal/unhandled",
+				summary:
+					"ssh execute requires a raw CLI line (script), not a structured path command.",
+				remediation:
+					"Report this bug; runCommand must pass the raw command as `script` for ssh.",
+			});
+		}
+		const output = await this.client.exec(cli);
+		return { records: [], ret: output };
+	}
+
+	close(): Promise<void> {
+		return Promise.resolve();
 	}
 }
 

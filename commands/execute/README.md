@@ -65,10 +65,12 @@ Status: `rest-api`, `native-api`, and `mac-telnet` are `CHR-passed` (see
 
 | Flag                            | Behavior                                                                              |
 | ------------------------------- | ------------------------------------------------------------------------------------- |
-| `--via <protocol>`              | Pin the transport (`native-api`, `rest-api`, or `mac-telnet`). No silent downgrade. A bare MAC target defaults to `mac-telnet`. |
+| `--via <protocol>`              | Pin the transport (`native-api`, `rest-api`, `ssh`, or `mac-telnet`). No silent downgrade. A bare MAC target defaults to `mac-telnet`. |
 | `--host <host\|url>`            | Override the resolved host or base URL for the target.                                 |
 | `--port <n>`                    | Override the resolved management port.                                                 |
 | `--username` / `--password`     | RouterOS credentials; fall back to `CENTRS_USERNAME` / `CENTRS_PASSWORD`.              |
+| `--ssh-key <path>`              | `--via ssh`: explicit private-key path. Falls back to `CENTRS_SSH_KEY` / the ssh-agent. |
+| `--insecure`                    | Accept a new SSH host key (`--via ssh`) or a self-signed `api-ssl` TLS cert. Default verifies. |
 | `--cdb-file` / `--cdb-password` | Read target credentials from (and decrypt) a WinBox CDB file.                          |
 | `--resolve <none\|arp>`         | Resolve a MAC-address target to an IP via the host ARP cache. Default `none`.          |
 | `--timeout <duration>`          | Per-request timeout. REST: ≤ 60s; other transports may allow longer.                  |
