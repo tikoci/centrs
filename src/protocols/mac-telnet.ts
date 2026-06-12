@@ -21,7 +21,7 @@
  * success is confirmed only when real terminal output arrives.
  */
 
-import { createHash, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { createSocket } from "node:dgram";
 import { readFileSync } from "node:fs";
 import { networkInterfaces } from "node:os";
@@ -671,6 +671,63 @@ export async function discoverMacTelnetRoute(opts: {
 			timers.push(setTimeout(() => finish(undefined), opts.timeoutMs));
 		});
 	});
+}
+
+/** Resolver default delivery host for mac-telnet; signals "discover the route". */
+export const DEFAULT_MAC_TELNET_BROADCAST = "255.255.255.255";
+
+/** A random locally-administered unicast MAC (`02:xx:…`) for the in-packet source. */
+export function randomLocalMac(): MacAddress {
+	const octets = new Uint8Array(randomBytes(6));
+	octets[0] = ((octets[0] as number) & 0xfe) | 0x02; // locally administered, unicast
+	return octets;
+}
+
+/** True when `host` is a broadcast delivery address (needs `SO_BROADCAST`). */
+export function isBroadcastHost(host: string): boolean {
+	return host === DEFAULT_MAC_TELNET_BROADCAST || host.endsWith(".255");
+}
+
+export interface MacTelnetRouteConfig {
+	destinationMac: MacAddress;
+	host: string;
+	port: number;
+	timeoutMs: number;
+	/** Explicit client MAC; when set it always wins and the host is kept as-is. */
+	explicitSourceMac?: MacAddress;
+}
+
+/**
+ * Decide the in-packet source MAC and UDP delivery host for a mac-telnet session.
+ * Shared by the execute adapter and the `terminal` command so the (load-bearing)
+ * source-MAC choice cannot diverge between them.
+ *
+ * - An explicit configured source MAC always wins (keeps the configured host).
+ * - The default delivery host (the `255.255.255.255` sentinel) means "find the
+ *   device": spray every interface's directed broadcast and use the one that
+ *   answers — the only path that reaches a device on a non-default-route NIC.
+ * - An explicit host is honored, using that interface's real egress MAC (falling
+ *   back to a random locally-administered MAC when the OS reports none).
+ */
+export async function resolveMacTelnetRoute(
+	config: MacTelnetRouteConfig,
+): Promise<MacTelnetRoute> {
+	if (config.explicitSourceMac) {
+		return { sourceMac: config.explicitSourceMac, host: config.host };
+	}
+	if (config.host === DEFAULT_MAC_TELNET_BROADCAST) {
+		const route = await discoverMacTelnetRoute({
+			destinationMac: config.destinationMac,
+			port: config.port,
+			timeoutMs: Math.min(config.timeoutMs, 5_000),
+		});
+		if (route) {
+			return route;
+		}
+	}
+	const sourceMac =
+		(await resolveEgressMac(config.host, config.port)) ?? randomLocalMac();
+	return { sourceMac, host: config.host };
 }
 
 export interface MacTelnetSessionOptions {

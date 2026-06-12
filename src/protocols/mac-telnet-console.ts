@@ -201,6 +201,12 @@ export class MacTelnetConsole {
 	private readonly decoder = new TextDecoder();
 	/** Rolling tail across chunks so a terminal probe split across packets is still matched. */
 	private probeTail = "";
+	/** Interactive relay: when set, raw device bytes are forwarded here verbatim. */
+	private outputSink?: (bytes: Uint8Array) => void;
+	/** In an interactive TTY relay the downstream terminal answers the size probe. */
+	private suppressProbeAnswer = false;
+	/** Listeners notified once the session closes (drives a terminal relay's exit). */
+	private closeListeners: Array<(error?: CentrsError) => void> = [];
 
 	constructor(options: MacTelnetConsoleOptions) {
 		this.options = {
@@ -323,6 +329,57 @@ export class MacTelnetConsole {
 		return output;
 	}
 
+	/**
+	 * Switch the (already-open) console into interactive raw passthrough: device
+	 * bytes are forwarded verbatim to `sink` instead of being captured, and the
+	 * capture buffer is dropped. Call after {@link open} resolves.
+	 *
+	 * `answerProbe` defaults true (batch relay: no downstream terminal, so the
+	 * console still auto-answers the size probe). An interactive TTY relay passes
+	 * `false` so the user's real terminal answers it instead of double-replying.
+	 */
+	attachInteractive(
+		sink: (bytes: Uint8Array) => void,
+		options: { answerProbe?: boolean } = {},
+	): void {
+		this.outputSink = sink;
+		this.suppressProbeAnswer = options.answerProbe === false;
+		// Cancel any pending capture waiter; interactive mode never resolves one.
+		if (this.waiter) {
+			clearTimeout(this.waiter.timeout);
+			if (this.waiter.settle) clearTimeout(this.waiter.settle);
+			this.waiter = undefined;
+		}
+		this.buffer = "";
+	}
+
+	/** Forward raw input bytes (keystrokes / piped commands) to the device. */
+	write(bytes: Uint8Array): void {
+		if (this.closed) {
+			return;
+		}
+		this.session.sendInput(bytes);
+	}
+
+	/**
+	 * Update the reported terminal size (e.g. on `SIGWINCH`). Best-effort: the new
+	 * size is used for any subsequent device size probe; RouterOS does not renegotiate
+	 * mac-telnet terminal dimensions mid-session, so a live resize is advisory.
+	 */
+	reportSize(rows: number, cols: number): void {
+		this.options.rows = rows;
+		this.options.cols = cols;
+	}
+
+	/** Register a listener fired once the session closes (drives a relay's exit). */
+	onClosed(listener: (error?: CentrsError) => void): void {
+		if (this.closed) {
+			listener(this.closeError);
+			return;
+		}
+		this.closeListeners.push(listener);
+	}
+
 	/** Send END and close the session. */
 	close(): void {
 		if (this.tickTimer) {
@@ -351,7 +408,6 @@ export class MacTelnetConsole {
 	private onData(bytes: Uint8Array): void {
 		// Stream-decode so a multi-byte char split across datagrams is not corrupted.
 		const chunk = this.decoder.decode(bytes, { stream: true });
-		this.buffer += chunk;
 		// Match the size probe against `(carry || prev tail) + chunk` so an `ESC[6n`
 		// straddling a packet boundary is still answered. The carry is exactly the
 		// longest probe (`ESC[6n`, 4 bytes) minus one, so a full probe never fits in
@@ -360,6 +416,13 @@ export class MacTelnetConsole {
 		const combined = `${this.probeTail}${chunk}`;
 		this.answerSizeProbe(combined);
 		this.probeTail = combined.slice(-3);
+		if (this.outputSink) {
+			// Interactive relay: forward raw device bytes verbatim and do not grow a
+			// capture buffer (a held-open terminal would accumulate without bound).
+			this.outputSink(bytes);
+			return;
+		}
+		this.buffer += chunk;
 		this.checkWaiter();
 	}
 
@@ -369,6 +432,9 @@ export class MacTelnetConsole {
 		if (this.tickTimer) {
 			clearInterval(this.tickTimer);
 			this.tickTimer = undefined;
+		}
+		for (const listener of this.closeListeners.splice(0)) {
+			listener(error);
 		}
 		const failure =
 			error ??
@@ -396,6 +462,12 @@ export class MacTelnetConsole {
 	 * identification. (This does not remove the ~10s negotiation stall.)
 	 */
 	private answerSizeProbe(chunk: string): void {
+		// In an interactive TTY relay the user's real terminal answers the probe;
+		// answering it ourselves too would double-reply. Batch mode (no TTY) keeps
+		// answering so the console still gets a wide screen.
+		if (this.suppressProbeAnswer) {
+			return;
+		}
 		if (chunk.includes(`${ESC}[6n`)) {
 			// The console probes height and width with several DSR queries; answer
 			// every one (a fixed reply still sets the width and avoids 80-col wrap).

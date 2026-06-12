@@ -2,9 +2,17 @@
 
 Open an interactive RouterOS console.
 
-Status: `not-started`. This file is a stub.
+Status: `terminal / mac-telnet` is **`CHR-passed`** (see `docs/MATRIX.md` and
+`examples.md` T1–T3); `terminal / ssh` is `not-started` (the later SSH pass).
+`src/terminal.ts` is the raw passthrough over `MacTelnetConsole.attachInteractive`,
+driven through an injectable `TerminalIo` (real stdin/stdout/`SIGWINCH` in
+`src/cli/terminal.ts`). Two input modes by whether stdin is a TTY: interactive
+(raw-mode keystrokes, real size) and batch (pipe a command, close on EOF after an
+output drain). The pipe integration test does not exercise raw-mode/real-TTY-size
+(a piped subprocess stdin is not a TTY); a full-TTY test would need a PTY and is
+deferred.
 
-`terminal` is the documentation home for SSH as a centrs transport. **Re-scoped
+`terminal` is also the documentation home for SSH as a centrs transport. **Re-scoped
 (decided with the user): SSH lands transfer-first, not as one monolithic unit.**
 The SSH transport *base* shipped as the **SFTP transfer client** (`transfer / ssh`,
 `src/protocols/sftp.ts` over the host OpenSSH `sftp` subsystem); the `ssh-key` and

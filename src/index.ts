@@ -279,6 +279,14 @@ export {
 	summarizeFanout,
 } from "./retrieve-fanout.ts";
 export {
+	buildTerminalErrorEnvelope,
+	resolveTerminalRequest,
+	runTerminal,
+	type TerminalErrorEnvelope,
+	type TerminalIo,
+	type TerminalRequest,
+} from "./terminal.ts";
+export {
 	buildTransferErrorEnvelope,
 	FILE_READ_CHUNK_BYTES,
 	normalizeRemotePath,

@@ -14,17 +14,16 @@
  * protocol data.
  */
 
-import { randomBytes } from "node:crypto";
 import { mapRouterOsError } from "../core/routeros-errors.ts";
 import { CentrsError } from "../errors.ts";
 import type { RouterOsProtocol } from "./index.ts";
 import {
 	createUdpMacTelnetTransport,
-	discoverMacTelnetRoute,
+	isBroadcastHost,
 	type MacAddress,
 	type MacTelnetTransport,
 	parseMac,
-	resolveEgressMac,
+	resolveMacTelnetRoute,
 } from "./mac-telnet.ts";
 import { MacTelnetConsole } from "./mac-telnet-console.ts";
 import {
@@ -674,42 +673,15 @@ class MacTelnetAdapter implements ProtocolAdapter {
 	 *   (e.g. ZeroTier), where WinBox's MAC connection also works.
 	 * - An explicit host is honored, using that interface's real egress MAC.
 	 */
-	private async resolveRoute(): Promise<{
-		sourceMac: MacAddress;
-		host: string;
-	}> {
-		if (this.explicitSourceMac) {
-			return { sourceMac: this.explicitSourceMac, host: this.config.host };
-		}
-		if (this.config.host === DEFAULT_MAC_TELNET_BROADCAST) {
-			const route = await discoverMacTelnetRoute({
-				destinationMac: this.destinationMac,
-				port: this.config.port,
-				timeoutMs: Math.min(this.config.timeoutMs, 5_000),
-			});
-			if (route) {
-				return route;
-			}
-		}
-		const sourceMac =
-			(await resolveEgressMac(this.config.host, this.config.port)) ??
-			randomLocalMac();
-		return { sourceMac, host: this.config.host };
+	private resolveRoute(): Promise<{ sourceMac: MacAddress; host: string }> {
+		return resolveMacTelnetRoute({
+			destinationMac: this.destinationMac,
+			host: this.config.host,
+			port: this.config.port,
+			timeoutMs: this.config.timeoutMs,
+			explicitSourceMac: this.explicitSourceMac,
+		});
 	}
-}
-
-/** Resolver default delivery host for mac-telnet; signals "discover the route". */
-const DEFAULT_MAC_TELNET_BROADCAST = "255.255.255.255";
-
-/** A random locally-administered unicast MAC (`02:xx:…`) for the in-packet source. */
-function randomLocalMac(): MacAddress {
-	const octets = new Uint8Array(randomBytes(6));
-	octets[0] = ((octets[0] as number) & 0xfe) | 0x02; // locally administered, unicast
-	return octets;
-}
-
-function isBroadcastHost(host: string): boolean {
-	return host === "255.255.255.255" || host.endsWith(".255");
 }
 
 function normalizeRestExecute(data: unknown): ProtocolExecuteResult {

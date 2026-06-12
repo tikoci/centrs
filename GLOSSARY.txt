@@ -84,6 +84,7 @@ cmp
 connectionrefused
 cpus
 crossref
+cwd
 datagram
 davidanson
 DDNS
