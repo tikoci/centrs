@@ -222,7 +222,8 @@ flags and the same `k=v` comment tokens. The only difference is existence —
 `add` creates (and refuses an existing target), `set` modifies (and refuses a
 missing target). `edit` is reserved for a future interactive wizard (the
 clack-style prompt used by `@tikoci/quickchr`); it is **not** a separate
-field-editing verb. There is no `update`.
+field-editing verb, and invoking it today returns `usage/not-implemented`. There
+is no `update`.
 
 - `list` (alias `print`) shows resolved targets, their record type, group, and
   a one-line provenance summary. No network IO.

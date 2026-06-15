@@ -33,37 +33,15 @@ A cell advances only with the matching evidence in the same change.
 | check    | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started`    |
 | config   | —             | —             | —             | —             | —             | —             | —             | —                |
 
-`devices` does not use a transport in the protocol sense, so its grid row
-stays `—`. Its cell state is `CHR-passed`: the read subset (`list`, `show`,
-`groups`), the CDB mutation surface (`add`, `set`, `remove`; `edit` is reserved
-for the future interactive editor and reports `usage/not-implemented`), `<router>`
-lookup-key resolution (`identity`/`mac`/`ip`), the `(target, user)` record
-identity, ambiguity / `--match` (`user=`/`target=`/record-type), the
-`--profile-none`/`--profile-own` sentinels, the CLI verb aliases
-(`print`/`get`/`rm`/`delete` → `list`/`show`/`remove`), and the
-provenance/override examples are implemented in `src/devices.ts` and green under
-`bun run test:integration`
-against a CDB fixture built in-test from the known CDB primitives (open +
-encrypted via `--cdb-password`). Every example in
-`commands/devices/examples.md` is green via `bun run test:integration`
-(`test/integration/devices.test.ts`); the command performs no network IO, so its
-`CHR-passed` evidence is the fixture-backed integration run rather than a booted
-CHR. Encrypted-CDB writes round-trip through the write layer's `encryptWith`
-option using the password loaded from settings. Data sources (CDB, ARP cache,
-MNDP cache, `dude.db` import) and their phasing live in
-`commands/devices/README.md`.
-
-The `__default__` fallback record is implemented at the resolver level
-(`resolveCdb`/`resolveAuth`, unit-tested in `test/unit/resolver.test.ts`): a
-device record's unset creds fall back per-field to `__default__`, and on the
-CLI/API `__default__` supplies creds for an ad-hoc target with no record (MCP
-keeps the allowlist). The top-level `tips[]` envelope channel is implemented too
-(`Tip` in `src/core/envelope.ts`, always-present `[]`, rendered under a `Tips:`
-footer in text mode); `devices` emits `tip/no-devices` and
-`tip/credentials-missing` (example 40), and the CLI verb aliases
-(`print`/`get`/`rm`/`delete`, example 41) resolve to their canonical verbs. The
-whole decided `devices` redesign is now landed; the one remaining open item (ARP
-test scheme) is tracked in `commands/devices/README.md`.
+`devices` does not use a transport in the protocol sense, so its grid row stays
+`—`; its cell state is `CHR-passed`. `devices` performs no network IO, so that
+evidence is a fixture-backed `bun run test:integration` run
+(`test/integration/devices.test.ts`, every example in
+`commands/devices/examples.md`) against an in-test CDB (open + encrypted), not a
+booted CHR. The implemented surface (read subset, CDB mutation, lookup-key
+resolution, `(target, user)` identity, ambiguity / `--match`, profile sentinels,
+verb aliases, `__default__`, `tips[]`, provenance/override) and the one open item
+(ARP test scheme) are documented in `commands/devices/README.md`.
 
 `discover` is `CHR-passed`: the MNDP wire codec (`src/data/mndp.ts`), the
 TTL-expiring neighbor cache (`src/data/mndp-cache.ts`), the UDP listener, and
