@@ -11,6 +11,8 @@ cell you're working on. Read `commands/<name>/README.md` and
 
 ## A feature is done when its CHR integration test is green
 
+The **normative** done definition lives in `docs/CONSTITUTION.md` (Done
+definition); this section is the Copilot-workflow procedure for satisfying it.
 "Coded" is not "done." "Unit-tested" is not "done." A cell in
 `docs/MATRIX.md` advances to `CHR-passed` only when every example in
 `commands/<name>/examples.md` passes against a real RouterOS CHR booted by
