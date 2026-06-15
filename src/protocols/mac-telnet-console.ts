@@ -30,9 +30,11 @@
  *   - **Prompt.** `[user@identity] > ` (root) or `[user@identity] /path> `,
  *     redrawn with CR + space-padding + CR. {@link ROUTEROS_PROMPT_RE}.
  *   - **Response shape** (after CR/LF terminal-emulation): line 0 is the echoed
- *     `[prompt] > <command>`, the middle lines are the output (often empty), and
- *     the last line is the trailing prompt. No ANSI appears in command responses
- *     — only in the login probe.
+ *     `[prompt] > <command>`, the middle lines are the output, and the last line
+ *     is the trailing prompt. No ANSI appears in command responses — only in the
+ *     login probe. A successful **write** (add/set/remove) prints nothing — no
+ *     `.id`, no confirmation — so the middle is empty and only the bracketing
+ *     prompt frames it (the same silent-write behavior `execute / ssh` sees).
  *   - **`:put [:parse "<cmd>"]`** returns a human string the console can be
  *     scraped for: `(evl …)` = ok, `syntax error (line …)` = malformed, and
  *     `bad parameter <name> (line …)` = unknown attribute. A single console

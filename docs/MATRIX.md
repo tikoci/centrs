@@ -195,89 +195,45 @@ code yet.
 
 ### Transport-base readiness (below the command grid)
 
-The grid above tracks command cells (examples green for a `<command>` over a
-`<protocol>`). Two transport bases are implemented and tested at the protocol
-layer ahead of their command wiring, so the matching cells only need command
-glue, not new protocol code:
+The grid above tracks command cells. The transports those cells ride are
+implemented and grounded in their `src/protocols/*.ts` **module headers** — the
+single home for wire-format, auth, and delivery facts (one fact, one place).
+Status here is terse; the module header carries the detail.
 
-- **native-api** (`src/protocols/native-api.ts`): word/sentence codec,
-  streaming reader, login (post-6.43 plaintext + legacy MD5 challenge), tagged
-  command multiplexing, and typed error mapping. Wired into `retrieve` behind
-  `--via native-api` (see the `retrieve / native-api` cell, `CHR-passed`);
-  `execute` over native-api still needs command wiring. Covered by
+- **native-api** (`src/protocols/native-api.ts`): word/sentence codec, streaming
+  reader, login (post-6.43 plaintext + legacy MD5 challenge), tagged command
+  multiplexing, typed error mapping. Live cell status is in the grid (`retrieve`,
+  `execute`, and `transfer` over `native-api` are all `CHR-passed`). Covered by
   `test/unit/native-api.test.ts`, `test/integration/native-api.test.ts`
-  (transport), and `test/integration/native-api-retrieve.test.ts` (command),
-  all green via `bun run test:integration`.
+  (transport), and `test/integration/native-api-retrieve.test.ts` (command).
 - **mac-telnet** (`src/protocols/mac-telnet.ts` + `mtwei.ts` +
-  `mac-telnet-console.ts` + the `MacTelnetAdapter` in `adapter.ts`): packet/control
-  codec, the session state machine, **both** auth methods (classic MD5 + MTWEI
-  EC-SRP, `mtwei.ts`), an interactive-**console reader** (`mac-telnet-console.ts`:
-  terminal-probe answering, license auto-clear, prompt sync, CR/LF screen
-  emulation → clean per-command output, and a `:put [:parse]` validation gate),
-  and a UDP datagram transport (`createUdpMacTelnetTransport`) wired into the
-  execute orchestrator. **`execute / mac-telnet` is `CHR-passed`** end to end over
-  real L2 against stock CHR 7.23.1: `executeEnvelope` (resolver →
-  `MacTelnetAdapter` → UDP transport) runs reads, writes (REST-verified), and the
-  validation-reject path, plus the console reader directly — all green via
-  `bun run test:integration` (`test/integration/mac-telnet-console.test.ts`,
-  examples 19–21). Transport/auth alone stay covered by
-  `test/integration/mac-telnet.test.ts` (MTWEI login + MD5 refusal).
-  **Caveat — what the CHR integration evidence does *not* cover:** it drives the
-  session/console over the quickchr `socket-connect` **L2 bridge**
-  (`test/integration/mactelnet-l2-bridge.ts`), so the real UDP transport
-  (`createUdpMacTelnetTransport` and its egress/delivery choices) is *not*
-  exercised there. That hid a real-device break — the in-packet source MAC was a
-  synthetic `02:..`, which RouterOS silently ignores. **UDP-delivery facts (now
-  real-device-verified against an RB1100AHx4 on RouterOS 7.24beta1 over a
-  ZeroTier-extended LAN):** (a) the in-packet source MAC must be the **sending
-  interface's real MAC** or the device never replies — `resolveEgressMac` reads it
-  (with an `ifconfig`/sysfs fallback for virtual NICs that report all-zero); (b)
-  the device answers only a **broadcast** delivery, not unicast; (c) macOS sends
-  the limited `255.255.255.255` broadcast out the default-route NIC only, so
-  reaching a device on another NIC (ZeroTier) needs that NIC's **directed**
-  broadcast; (d) the reply is itself a broadcast, so the receiving socket must bind
-  `0.0.0.0`. `MacTelnetAdapter` therefore runs `discoverMacTelnetRoute` for the
-  default target — sprays every interface's directed broadcast with its real MAC,
-  shared session key, first ACK wins — so `execute <mac>` finds the device on any
-  NIC without naming an interface (the same reach WinBox's MAC connection has). Unit coverage:
-  `test/unit/mtwei.test.ts` (EC-SRP math, byte-identical to `mtwei.c` / WinBox
-  EC-SRP5), `test/unit/mac-telnet.test.ts` (handshake + MTWEI offer + auth-failure),
-  and `test/unit/mac-telnet-console.test.ts` (screen emulation + output extraction
-  pinned to real captured device bytes). **Grounded console findings (CHR 7.23.1):**
-  (1) MTWEI is required — MD5 is offered but its proof is refused; (2) `END_AUTH` ≠
-  success (a failed login sends `END_AUTH` then "Login failed" + `END`); (3) the
-  console opens with a multi-step ANSI terminal-size probe — answering each `ESC[6n`
-  (DSR) with `ESC[rows;colsR` sets a wide terminal (else it wraps at 80); (4) a
-  ~10s terminal-negotiation stall on **every** login (answering the probe sets the
-  width but does not remove it — a cursor-tracking emulator could); (5) a one-time
-  first-login license prompt the reader auto-answers; (6) a successful console
-  **write returns no output** (no `.id`); (7) the console `:parse` reports both
-  `syntax error` and `bad parameter <name>`, so one gate covers syntax + the
-  unknown-attribute (semantic) check — no `/console/inspect` table parsing.
-  Reliability: `MacTelnetSession.tick` (driven by the console reader) does
-  byte-counter retransmit on the reference backoff + an empty-ACK keepalive, and
-  stray/malformed datagrams are dropped (not session-fatal).
-
-  **`terminal / mac-telnet` is `CHR-passed`** (the interactive relay over the same
-  console reader). `MacTelnetConsole.attachInteractive` switches the opened console
-  from capture to raw passthrough (device bytes → an output sink, a `write()` →
-  `session.sendInput`); `src/terminal.ts` orchestrates it over an injectable
-  `TerminalIo` (real stdin/stdout/`SIGWINCH` in `src/cli/terminal.ts`), reusing the
-  execute resolver and the shared `resolveMacTelnetRoute`. `terminal` has two input
-  modes by whether stdin is a TTY: interactive (raw-mode keystrokes, real size) and
-  batch (pipe a command, close on EOF after an output drain). The route/source-MAC
-  logic the adapter used is extracted to `mac-telnet.ts` (`resolveMacTelnetRoute`,
-  one home for the load-bearing source-MAC choice). Green on CHR 7.23.1 via
-  `test/integration/terminal-mac-telnet.test.ts` (T1–T3), driving the **real
-  `centrs terminal` binary** through the subprocess harness
-  (`test/integration/cli-process.ts`) pointed at the L2 bridge's UDP relay — the
-  same UDP transport the execute command path uses. **What the pipe test does not
-  cover** (thin OS glue, mock-unit-tested): raw-mode stdin and real-TTY size, since
-  a piped subprocess stdin is not a TTY. A full-TTY test would need a PTY
-  (`script(1)` / node-pty) — deferred. **`terminal / ssh` is now `CHR-passed`** (a
-  separate path — exec the host `ssh` with inherited stdio, no screen emulation; it
-  did not need the mac-telnet console reader after all). See the `transfer / ssh`
-  section above and `commands/terminal/README.md`.
+  `mac-telnet-console.ts` + `MacTelnetAdapter` in `adapter.ts`): packet/control
+  codec, session state machine, both auth methods (classic MD5 + MTWEI EC-SRP),
+  the interactive-console reader, and the UDP datagram transport with route
+  discovery. The deep findings — auth (MTWEI-required / MD5-refused /
+  `END_AUTH`≠success), console (ANSI terminal-size probe, ~10s prime stall,
+  one-time license gate, `:put [:parse]` syntax+semantic gate, silent writes),
+  reliability (byte-counter retransmit + empty-ACK keepalive), and the
+  real-device UDP-delivery facts (real egress MAC required; broadcast-only reply;
+  per-NIC directed-broadcast reach via `discoverMacTelnetRoute`; bind `0.0.0.0`)
+  — are documented in those module headers. Two cells are `CHR-passed`:
+  - **`execute / mac-telnet`**: `executeEnvelope` (resolver → `MacTelnetAdapter` →
+    UDP transport) runs reads, REST-verified writes, and the validation-reject
+    path. Green via `test/integration/mac-telnet-console.test.ts` (examples
+    19–21); transport/auth alone via `test/integration/mac-telnet.test.ts` (MTWEI
+    login + MD5 refusal). Unit: `test/unit/{mtwei,mac-telnet,mac-telnet-console}.test.ts`.
+  - **`terminal / mac-telnet`**: the interactive relay over the same console
+    reader (`MacTelnetConsole.attachInteractive`), orchestrated in
+    `src/terminal.ts` over an injectable `TerminalIo`, reusing the execute
+    resolver and the shared `resolveMacTelnetRoute`. Green via
+    `test/integration/terminal-mac-telnet.test.ts` (T1–T3) driving the real
+    `centrs terminal` binary through the subprocess harness.
+  - **Evidence caveat:** the CHR integration runs over the quickchr
+    `socket-connect` **L2 bridge** (`test/integration/mactelnet-l2-bridge.ts`), so
+    the real `createUdpMacTelnetTransport` egress/broadcast path is *not* exercised
+    in CI — the RB1100AHx4 / RouterOS 7.24beta1 real-device run grounded the
+    UDP-delivery facts (and caught the synthetic-source-MAC break). A full-TTY
+    `terminal` test (real PTY via `script(1)`/node-pty) is likewise deferred.
 
 ### Frontend surfaces (orthogonal to the command grid)
 

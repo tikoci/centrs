@@ -340,10 +340,16 @@ export interface MacTelnetTransport extends MacTelnetDatagramSink {
  * to `host:port` and forwards inbound datagrams to the registered handler.
  *
  * MAC-Telnet's addressing is in-packet (the 6+6 MACs), so UDP delivery is just
- * the carrier: the default `host` is the L2 broadcast address (the device claims
- * the session by matching the in-packet destination MAC and replies to our
- * source IP:port). The integration harness instead points `host`/`port` at its
- * loopback L2 bridge, exercising this exact transport.
+ * the carrier: callers pass `host` as an L2 broadcast address (chosen upstream
+ * by {@link resolveMacTelnetRoute} — this function applies no default) and the
+ * device claims the session by matching the in-packet destination MAC. **Real-device
+ * delivery facts (verified on RB1100AHx4 / RouterOS 7.24beta1 over the real
+ * UDP/L2 path):** the device answers only a *broadcast* delivery — a unicast
+ * datagram addressed straight to it gets no reply — and the reply is itself an
+ * L2 broadcast, so the socket binds `0.0.0.0` (any local address) rather than a
+ * specific egress IP; binding a single local IP would miss the broadcast reply.
+ * The integration harness instead points `host`/`port` at its loopback L2
+ * bridge, exercising this exact transport.
  */
 export function createUdpMacTelnetTransport(options: {
 	host: string;
@@ -358,6 +364,7 @@ export function createUdpMacTelnetTransport(options: {
 	});
 	const readyPromise = new Promise<void>((resolve, reject) => {
 		socket.once("error", reject);
+		// Bind 0.0.0.0 (not the egress IP): the device's reply is an L2 broadcast.
 		socket.bind(0, () => {
 			if (options.broadcast) {
 				try {
