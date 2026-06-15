@@ -43,28 +43,16 @@ resolution, `(target, user)` identity, ambiguity / `--match`, profile sentinels,
 verb aliases, `__default__`, `tips[]`, provenance/override) and the one open item
 (ARP test scheme) are documented in `commands/devices/README.md`.
 
-`discover` is `CHR-passed`: the MNDP wire codec (`src/data/mndp.ts`), the
-TTL-expiring neighbor cache (`src/data/mndp-cache.ts`), the UDP listener, and
-`discover --save` (which persists through `devices`' `addDevice` write layer)
-live in `src/discover.ts`. The L2-dependent path — receiving and decoding a real
-RouterOS MNDP announcement and saving it — is green against a real layer-2
-segment via `bun run test:integration` (`test/integration/discover.test.ts`,
-RouterOS CHR 7.23.1). That test boots a CHR with a second `socket-connect` NIC,
-and a host shim (`test/integration/mndp-l2-bridge.ts`) lifts the UDP/5678 payload
-out of QEMU's length-prefixed frame stream and re-delivers it to the **unmodified**
-`listenMndp`→`parseMndpPacket`→cache→envelope path; the decoded `identity`,
-`platform`, `board`, `version`, and `mac` are cross-checked against REST as the
-source of truth, and `--save` writes a `macTarget`/`group=discovered`/`source=mndp`
-record (examples 1, 2, 4). The remaining examples are network-independent CDB/bind
-logic and stay green under `bun test`: the codec against crafted packet fixtures
-(`test/unit/mndp.test.ts`), the TTL cache with an injected clock
-(`test/unit/mndp-cache.test.ts`), and the listener / `--save` / port-in-use /
-custom-group / de-dupe / encrypted-CDB paths over a loopback socket
-(`test/unit/discover.test.ts`, examples 3, 5, 6, 7). A live integration finding:
-MNDP's board TLV is the short board id (`CHR`) while REST `board-name` is the
-verbose hardware string that begins with it. Flags, TTL/timeout defaults, the
-`group=discovered` convention, and the L2 validation policy live in
-`commands/discover/README.md`.
+`discover` is `CHR-passed`: the MNDP codec (`src/data/mndp.ts`), the TTL neighbor
+cache (`src/data/mndp-cache.ts`), the UDP listener, and `discover --save`
+(through `devices`' atomic write layer) live in `src/discover.ts`. The real-L2
+receive/decode/save path is green on RouterOS CHR 7.23.1 via
+`test/integration/discover.test.ts` (the quickchr `socket-connect` L2 bridge,
+`test/integration/mndp-l2-bridge.ts`; examples 1, 2, 4); the network-independent
+codec/cache/listener/`--save` paths stay unit-tested (examples 3, 5, 6, 7). The
+wire format, the MAC-keyed de-dupe, TTL/timeout defaults, the live board-TLV
+finding (short board id vs the verbose REST `board-name`), and the L2 validation
+policy are documented in `commands/discover/README.md`.
 
 There is no `update` command: `execute` is the single read/write surface for
 RouterOS add/set/remove, and `retrieve` stays read-only. See
