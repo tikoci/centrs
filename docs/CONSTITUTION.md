@@ -296,43 +296,26 @@ Per-operation preferences, downgrade order in parens:
 
 Rules:
 
-- `retrieve` is read-only (rest-api or native-api only). `execute` is the read
-  and write surface; there is no `update` operation. Writes (add/set/remove)
-  ride `execute`.
-
-- `stream` is a **read-only** follow/streaming surface (RouterOS `print
-  follow`/monitor/sniffer with `once`/`follow`/`duration=`/
-  `freeze-frame-interval=`). It emits a sequence of envelopes as NDJSON,
-  terminated by a summary envelope (frame count, duration, stop reason); a
-  mid-stream error is a frame, and the exit code reflects whether the stream
-  *started* cleanly. True follow cannot ride REST (60s hard cap), so it is
-  native-api/ssh; `--via rest-api` is bounded-or-rejected. Bounded single-shot
-  reads stay on `retrieve --once`; interactive PTY stays on `terminal`.
-
-- Never silently downgrade across `--via`. If the caller pinned `--via rest-api`
-  and REST cannot do the operation, error out with a `transport/*` code.
-- Auto-selection (no `--via`) may downgrade *within* the table above, but every
-  hop is reported in `meta.warnings` with the reason.
-- SNMP is retrieve-only: `retrieve <router> snmp <oid|MIB name>` resolves
-  names through a MikroTik MIB cache downloaded from mikrotik.com. It is not an
-  execute or write surface.
-- SSH, mac-telnet, RoMON, and WinBox Terminal are execute surfaces, not
-  retrieve surfaces. RoMON and WinBox Terminal are lower priority than
-  mac-telnet until their validation and test harnesses are grounded.
-- mac-telnet is the primary L2 execute path; it is the default for execute when
-  the target is an unresolved MAC address. If IP-level access is desired, the
-  caller must explicitly opt into ARP-based MAC → IP resolution.
-- `transfer` selection is **size- and direction-aware**, not a single default:
-  rest-api/native-api carry small writes (`/file/set contents`, ≤60 KB) and all
-  reads (chunked `/file/read` scales to any size, no SSH needed); sftp carries
-  large uploads. `scp`, `ftp`, and `fetch` (centrs-as-HTTP-server + `/tool/fetch`)
-  are explicit-only — `fetch` needs inbound reachability (router → centrs) so it
-  is never auto-selected. `ftp` additionally requires `ALLOW_UNSAFE_PROTOCOLS=ftp`.
-
-- `measure` (btest, the bandwidth test) is **explicit-only**: it is never part of
-  the auto-selection / downgrade chain above, never substitutes for another
-  protocol, and no other command rides it. `centrs btest …` always uses the btest
-  protocol over TCP/UDP port 2000.
+- **Read vs write:** `retrieve` is read-only (rest-api/native-api); `execute` is
+  the read **and** write surface — writes (add/set/remove) ride `execute`, and
+  there is no `update` operation.
+- **Never silently downgrade across `--via`.** If the caller pinned a transport
+  that cannot do the operation, error out with a `transport/*` code.
+  Auto-selection (no `--via`) may downgrade *within* the table, but every hop is
+  reported in `meta.warnings` with its reason.
+- **Execute vs retrieve surfaces:** native-api, rest-api, ssh, mac-telnet (and
+  later RoMON / WinBox Terminal) are execute surfaces; SNMP is **retrieve-only**.
+  mac-telnet is the default execute path for an unresolved-MAC target — IP-level
+  access needs explicit ARP opt-in.
+- **`measure` (btest) is explicit-only** — never in the auto-select/downgrade
+  chain, never a substitute, and no other command rides it.
+- Per-command selection **depth** lives in the command READMEs: `stream`'s
+  follow/NDJSON contract and the REST-cannot-follow constraint
+  (`commands/stream/README.md`), `transfer`'s size/direction-aware method
+  selection and the explicit-only `scp`/`ftp`/`fetch`
+  (`commands/transfer/README.md`), SNMP's MIB-cache
+  (`commands/retrieve/README.md`), and btest's port/auth
+  (`commands/btest/README.md`).
 
 REST-specific constraint: RouterOS REST has a 60-second hard timeout. Do not
 let `--timeout` exceed 60s when `via=rest-api`; reject with a clear error.
