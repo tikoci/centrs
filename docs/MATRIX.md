@@ -97,8 +97,9 @@ console — no screen emulation. No `-t` is passed (`-tt` hangs RouterOS);
 `runTerminal` returns `ssh`'s exit code. A host target defaults to ssh, a MAC
 target to mac-telnet. Green via `test/integration/terminal-ssh.test.ts` (TS1/TS2),
 with argv unit-tested in `test/unit/terminal.test.ts`. **All three SSH cells
-(transfer/execute/terminal) are `CHR-passed`.** The no-PTY/exit-code detail and the no-multi-line-brace
-limitation live in `src/terminal.ts` and `commands/terminal/README.md`.
+(transfer/execute/terminal) are `CHR-passed`.** The no-PTY / exit-code semantics are documented in
+`src/terminal.ts`; the no-multi-line-brace limitation is in
+`commands/terminal/README.md`.
 
 `fetch` (centrs-as-HTTP-server + `/tool/fetch`) is a **deferred, explicit-only
 method within the rest-api/native-api cells**, not a grid column — it needs
