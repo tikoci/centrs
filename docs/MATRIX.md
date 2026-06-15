@@ -236,72 +236,21 @@ need only `hostfwd tcp:2000`).
 ## Priority order
 
 Do not start a later item until the earlier cell or dependency checkpoint has
-matching evidence.
+matching evidence. The grid above is the live status; per-item detail lives in
+the linked `commands/<name>/`.
 
-1. **retrieve / rest-api** — `CHR-passed` against real CHR. This is the
-   shakedown for everything else. See `commands/retrieve/examples.md`.
-2. **CDB resolution and metadata overrides** — target → user/password from
-   WinBox CDB, including the unused `--cdb-password` warning, comment-kv
-   `via`/`port` overrides, and MAC resolution order (CDB, then ARP when opted
-   in).
-3. **CDB groups and fanout** — `--group`, multi-target de-dupe, concurrency,
-   and outer/inner envelope shape must be grounded before execute starts.
-4. **execute / native-api + rest-api** — CLI-shaped read/write surface
-   (add/set/remove). Syntax gate via `:parse`, semantic validation via
-   `/console/inspect` or server re-validation, structured path-POST (REST) /
-   tagged `talk` (native). This is the single write path; there is no `update`.
-5. **devices** — complete CDB mutation (`add`, `remove`, `set`, `edit`) and
-   provenance.
-6. **retrieve / snmp** — SNMP OID/MIB reads with MikroTik MIB download/cache
-   (future).
-7. **ssh** for transfer/execute/terminal — third transport. **Re-scoped (decided
-   with the user): land it transfer-first.** The SSH transport base shipped as the
-   **SFTP transfer client** (`transfer / ssh`, `CHR-passed` — `src/protocols/sftp.ts`
-   over host OpenSSH); the `ssh-key` (`--ssh-key`/`CENTRS_SSH_KEY`/comment-kv) and
-   `insecure` settings landed **with** it. **`execute / ssh` is now `CHR-passed`**
-   too (a per-command `ssh host "<command>"` batch client — a CHR spike disproved
-   the "needs an interactive-shell reader" assumption; RouterOS returns clean
-   no-PTY output, so it reuses the mac-telnet `:parse` gate, no reader).
-   **`terminal / ssh` is now `CHR-passed`** as well (exec the host `ssh` with
-   inherited stdio — no screen emulation; a host target defaults to ssh). **All
-   three SSH cells are done.** See `commands/terminal/README.md`
-   (RouterOS SSH surface)
-   for the device-side option alignment and residual unknowns.
-8. **mac-telnet** for execute/terminal — L2 path, default execute route for
-   unresolved MAC targets. `execute / mac-telnet` **and** `terminal / mac-telnet`
-   are both **`CHR-passed`** (console reader + UDP transport + adapter; execute
-   examples 19–21, terminal T1–T3; byte-counter retransmit + empty-ACK keepalive
-   via `MacTelnetSession.tick`). Remaining (optional): the ~10s prime-latency fix
-   (cursor-tracking DSR emulator) and a full-TTY terminal test under a real PTY.
-9. **RoMON / WinBox Terminal for execute** — lower-priority execute surfaces
-   after mac-telnet is grounded.
-10. **discover / mndp** — `discover --save` populates CDB entries
-    with provenance metadata and `group=discovered`.
-11. **MCP, TUI, proxy** — frontends over the stable core. The MCP server is the
-    near-term target (see `commands/mcp/`): a scoped-verb stdio server
-    (`centrs_explain`, `centrs_validate`, `centrs_retrieve`, `centrs_execute`,
-    then `centrs_devices`/`centrs_discover`) with the CDB as the device
-    allowlist and per-device `mcp=ro|rw` write policy. Phase 1 ships stdio,
-    explain/validate/retrieve/execute, device inspection, the `centrs://devices`
-    / `centrs://errors` resources, and gated writes (CHR-tested,
-    bench-consumable); Phase 2 has started with CDB mutations through
-    `centrs_devices` (`add` CHR-tested; `edit`/`set`/`remove` unit-tested) and
-    `centrs_discover` save gating (unit-tested). A
-    device-free manifest dump (`centrs mcp --list-tools`, printing the registered
-    schemas + `instructions` as JSON) is the next small step so the bench can
-    measure centrs's always-on token footprint the way it counts mikrotik-mcp's
-    166 schemas; examples 1–10 already carry stable IDs (`examples.md` ↔
-    `test/integration/mcp.test.ts`) for per-trap citation.
-    **HTTP access is the proxy surface's job, not the MCP server's** — MCP stays
-    stdio-only. TUI/proxy remain later. These shape interface decisions today but
-    do not block the command grid.
-12. **btest (peer measurement)** — the bandwidth test as client + server, its own
-    protocol axis (see "Peer measurement (`btest`)" above). Independent of the
-    command grid: it shares only the EC-SRP5 curve math with mac-telnet (already
-    `CHR-passed`), so it can proceed in parallel. v1: both modes, EC-SRP5 + unauth,
-    TCP+UDP. Server mode reaches `CHR-passed` via a CHR bandwidth-test client;
-    client mode is grounded transitively + against `btest.exe` (see the caveat
-    above).
+1. **retrieve / rest-api** — `CHR-passed`. The shakedown for everything else (`commands/retrieve/`).
+2. **CDB resolution + metadata overrides** — `CHR-passed` (`commands/devices/`).
+3. **CDB groups + fanout** — `CHR-passed` (`commands/devices/`, Fanout).
+4. **execute / native-api + rest-api** — `CHR-passed` (`commands/execute/`). The single write path; there is no `update`.
+5. **devices** (CDB mutation + provenance) — `CHR-passed` (`commands/devices/`).
+6. **retrieve / snmp** — `not-started` (future: SNMP OID/MIB reads + MikroTik MIB cache).
+7. **ssh** for transfer/execute/terminal — **all three `CHR-passed`** (landed transfer-first; the `transfer`/`execute`/`terminal` READMEs + `src/protocols/ssh.ts` and `src/protocols/sftp.ts`).
+8. **mac-telnet** for execute/terminal — both `CHR-passed` (`src/protocols/mac-telnet.ts` + `src/protocols/mac-telnet-console.ts`). Optional polish: the ~10s prime-latency fix and a full-TTY terminal test under a real PTY.
+9. **RoMON / WinBox Terminal for execute** — `not-started` (see Open questions).
+10. **discover / mndp** — `CHR-passed` (`commands/discover/`).
+11. **MCP, TUI, proxy** — frontends over the stable core. **MCP** is `CHR-passed` for Phase 1 + the first Phase 2 CDB mutation (`commands/mcp/`); next small step is the device-free `centrs mcp --list-tools` manifest dump (bench token-footprint measurement). MCP stays **stdio-only** (HTTP is the proxy's job). **TUI / proxy** `not-started`.
+12. **btest (peer measurement)** — server `CHR-passed`, client `coded` (`commands/btest/`). Own protocol axis; shares EC-SRP5 with mac-telnet, so it can proceed in parallel.
 
 ## Open questions (decisions needed before the affected cell can advance)
 
