@@ -2,15 +2,21 @@
 
 Copy files to and from a RouterOS device, and manage device files.
 
-Status (agrees with `docs/MATRIX.md`): `coded` for `rest-api` / `native-api` and
-for `ssh`/**sftp** (`src/transfer.ts`, `src/cli/transfer.ts`,
-`src/protocols/sftp.ts`, unit-green; CHR-passed pending the integration run in
-`test/integration/transfer.test.ts`). **sftp** is the first SSH consumer and lands
-as a self-contained SFTP transfer client over the host OpenSSH `sftp` subsystem
-(not blocked on `execute`/`terminal` over SSH, which need a console reader
-RouterOS's no-pseudo-tty server makes harder — see `commands/terminal/README.md`,
-RouterOS SSH surface). `scp` and `fetch` are **designed but deferred** past this
-pass.
+Status (agrees with `docs/MATRIX.md`): `CHR-passed` for `rest-api` / `native-api`
+and for `ssh`/**sftp** (`src/transfer.ts`, `src/cli/transfer.ts`,
+`src/protocols/sftp.ts`). `test/integration/transfer.test.ts` is green against a
+real CHR 7.23.1 (110 assertions): the rest + native round-trip, list + filters,
+validate-before-write, device file management (mkdir/copy/remove), leading-slash
+normalization, the >60 KB REST-write rejection, the error contract, the
+stdin/stdout/default-local forms (examples 8–10, driven through the real CLI
+binary via the subprocess harness `test/integration/cli-process.ts`), the native
+`N1`–`N4` mirror, the sftp `S1`–`S5` round-trip (key-auth, the >60 KB upload REST
+cannot do, list/mkdir/remove), and example 17 (chunked REST read of an
+sftp-seeded >60 KB file) — confirming the `/file`
+`get`/`set`/`add`/`copy`/`remove` wire shapes and the SFTP subsystem on real
+RouterOS. Unit coverage is `test/unit/transfer.test.ts`. **sftp** is the first SSH
+consumer — a self-contained SFTP transfer client over the host OpenSSH `sftp`
+subsystem. `scp` and `fetch` are **designed but deferred** past this pass.
 
 ## Intent
 
@@ -127,8 +133,11 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 
 - **SFTP is a real protocol** — `stat`, `readdir`, partial reads/writes, `mkdir`,
   `remove`, `rename`. Those are exactly what centrs's feature set needs: the
-  validate-before-write existence check (`stat` the target), `--verify` (`stat`
-  the settled size), and the `list`/`remove`/`mkdir` verbs all fall out of SFTP.
+  validate-before-write existence check (`stat` the target) and the
+  `list`/`remove`/`mkdir` verbs all fall out of SFTP. (`--verify size` is still
+  supported over sftp — it just trusts the SFTP transfer guarantee rather than
+  re-reading a settled size, since RouterOS's `ls -l` has no reliable size column;
+  see *Integrity*.)
 - **SCP is a dumb byte-stream** — no stat, no listing, no existence check; it just
   blasts bytes and truncates on collision. An `--via scp` upload therefore
   **cannot do the existence check itself** and would need a side-channel REST/SFTP
@@ -136,11 +145,11 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
   also reachable, and `--verify` degrades to `off` (warned). scp buys only a
   marginally lighter single-file stream, irrelevant under the CHR 1 Mb/s cap.
 - **Direction of the ecosystem** — OpenSSH deprecated the legacy SCP wire protocol
-  (9.0, 2022); modern `scp` rides SFTP underneath. And MikroTik's SSH server has
-  **no exec channel / no pseudo-tty** ([SSH page](https://help.mikrotik.com/docs/spaces/ROS/pages/132350014/SSH):
-  *"does not support `ssh -T` / `ssh host command`"*), so the reliable SSH file
-  channel is the **SFTP subsystem**, not an exec-driven copy. (Same no-exec fact
-  is why `execute / ssh` is hard — noted in `commands/execute/README.md`.)
+  (9.0, 2022); modern `scp` rides SFTP underneath, so the reliable SSH file channel
+  is the **SFTP subsystem**, not an exec-driven copy. (RouterOS's SSH server has no
+  pseudo-tty, but a single-line `ssh user@host "<command>"` *does* run and return
+  clean output — that path drives `execute / ssh`, see `commands/execute/README.md`;
+  it is not a file-transfer channel.)
 
 ## Flags
 
@@ -167,8 +176,11 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 
 ## Integrity
 
-`--verify size` (default) reads the settled `/file` size after the transfer and
-compares it to the byte count centrs moved. Two RouterOS facts shape this:
+`--verify size` (default) over `rest`/`native` reads the settled `/file` size
+after the transfer and compares it to the byte count centrs moved. Over **sftp**,
+RouterOS's `ls -l` reports no reliable byte size (CHR 7.23.1), so `--verify size`
+instead trusts the SFTP transfer guarantee — a partial `put`/`get` errors — rather
+than re-reading a size. Two RouterOS facts shape the `/file`-size path:
 
 - **NAND write-back** delays the flush up to ~40 s on some devices, so the size
   may read short immediately after an upload. centrs does a single post-write
@@ -291,8 +303,8 @@ done rule. The first coded pass targets `rest`/`native` (no SSH dependency);
   (`/ip/ssh password-authentication=yes-if-no-key`, the default — settable to
   `yes` to allow both), so key auth is the normal path; and `strong-crypto=yes`
   disables ssh-rsa/SHA1, so the client must offer ed25519 / rsa-sha2-256 (the host
-  OpenSSH negotiates this natively). RouterOS's SSH server has no exec channel, so
-  the file path is the SFTP **subsystem**, not exec-driven scp; on-device `copy`
+  OpenSSH negotiates this natively). The SSH file path is the SFTP **subsystem**
+  (a real file protocol), not exec-driven scp; on-device `copy`
   has no SFTP primitive and stays on rest/native (`--via sftp copy` →
   `transport/unsupported-operation`). See `commands/terminal/README.md` (RouterOS
   SSH surface) for the full device-side option alignment.

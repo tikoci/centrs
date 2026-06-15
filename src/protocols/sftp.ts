@@ -5,8 +5,9 @@
  * already inherits `~/.ssh/config`, the ssh-agent, `known_hosts`, and the full
  * algorithm negotiation RouterOS needs (rsa-sha2-256/512, ed25519,
  * `strong-crypto`) — for free, with zero new dependencies. RouterOS's SSH server
- * has **no exec channel / no pseudo-tty**, so the only reliable SSH file path is
- * the **SFTP subsystem**; this client speaks exactly that. See
+ * has **no pseudo-tty** (and a single-line `ssh host "cmd"` exec — used by
+ * `execute / ssh` — is not a file channel), so the reliable SSH file path is the
+ * **SFTP subsystem**; this client speaks exactly that. See
  * `commands/transfer/README.md` (SFTP vs SCP) and `commands/terminal/README.md`
  * (RouterOS SSH surface).
  *

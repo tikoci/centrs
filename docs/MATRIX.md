@@ -67,53 +67,19 @@ has no code yet; the native-api streaming reader it will consume already exists
 (`src/protocols/native-api.ts`). Bounded single-shot reads stay on
 `retrieve --once`; interactive PTY stays on `terminal`.
 
-`transfer` is `CHR-passed` for `rest-api`/`native-api`: `src/transfer.ts` (verbs
-`upload`/`download`/`list`/`remove`/`mkdir`/`copy`, size/direction-aware method
-selection, leading-slash normalization, the `print`-probe existence guard, and
-`--verify`/`--no-verify`) plus `src/cli/transfer.ts` (with the top-level
-`upload`/`download` aliases). Every `/file` op rides the shared
-`ProtocolAdapter` `execute`/`list` seam over both transports. Unit coverage is
-`test/unit/transfer.test.ts` (path normalization, method-selection gating,
-shape validation, and the REST round-trip wire shape via mocked `fetch`). The
-cells carry small writes (`/file/set contents`, ≤60 KB) and all reads (chunked
-`/file/read`). `test/integration/transfer.test.ts` is **green against a real CHR
-7.23.1** (110 assertions): the rest + native round-trip, list + filters,
-validate-before-write, device file management (mkdir/copy/remove), leading-slash
-normalization, the >60 KB rejection, the error contract (missing file, bad creds,
-conflicting flags), the stdin/stdout/default-local forms (examples 8–10), the
-native `N1`–`N4` mirror, the sftp `S1`–`S5` round-trip, example 17 (chunked REST
-read of an sftp-seeded >60 KB file), and the residual gating (scp/fetch
-not-implemented, ftp gated) — which confirmed the `/file`
-`get`/`set`/`add`/`copy`/`remove` wire shapes and the SFTP subsystem on real
-RouterOS. Examples 8–10 close via the subprocess harness
-(`test/integration/cli-process.ts`), which drives the real CLI binary so piped
-stdin, raw `process.stdout` bytes, and cwd are exercised — the in-process `runCli`
-console capture cannot reach those. Example 17 closed earlier (the sftp path seeds
-the >60 KB file, so the fetch hack is gone), so every example is now green.
-
-`transfer / ssh` is `CHR-passed` for **sftp**, the first SSH consumer. This
-deliberately re-scopes the earlier "SSH lands as one unit" plan: the SSH
-*transport base* lands here as a self-contained **SFTP transfer client**
-(`src/protocols/sftp.ts`, the host OpenSSH `sftp` subsystem); `execute / ssh` and
-`terminal / ssh` both layer on after (below — all three SSH cells are now
-`CHR-passed`). **CHR-grounded correction:** RouterOS's SSH server has no
-pseudo-tty, but a single-line `ssh user@host "<command>"` *does* run on the console
-and return clean output — so `execute / ssh` needs no interactive-shell reader (the
-earlier "no exec channel" framing was wrong); `terminal / ssh` execs `ssh` with
-inherited stdio for the interactive relay. The single
-`ssh` grid column still carries **two methods**: **sftp is built** (default secure;
-its `stat`/`readdir`/partial ops drive the existence check, `--verify`, and
-`list`/`remove`/`mkdir`), while **scp stays a deliberate later pass** behind
-`--via scp` (a dumb byte-stream — kept only because some locked-down environments
-expose nothing else). `src/transfer.ts` selects sftp via the shared `FileBackend`
-seam (rest/native vs sftp), and the SSH host-key trust rides the unified
-`--insecure` knob (see `docs/CONSTITUTION.md`, Transport trust). The sftp path is
-**green against real CHR 7.23.1** (`test/integration/transfer.test.ts`, S1–S5: a
-key-auth round-trip, the >60 KB upload REST cannot do, list/mkdir/remove). **CHR
-finding:** RouterOS's sftp `ls -l` does not report a
-reliable byte size, so the sftp `--verify size` trusts the SFTP transfer guarantee
-(a partial `put`/`get` errors) rather than re-reading a size. On-device `copy` has
-no SFTP primitive and stays on rest/native.
+`transfer` is `CHR-passed` for `rest-api`/`native-api` and for **sftp** (the
+`ssh` column's first method): `src/transfer.ts` + `src/cli/transfer.ts`
+(size/direction-aware method selection, leading-slash normalization, the
+`print`-probe existence guard, `--verify`) over the shared `FileBackend` seam,
+with the SFTP client in `src/protocols/sftp.ts` (host OpenSSH `sftp` subsystem;
+`scp` deferred). `test/integration/transfer.test.ts` is green on real CHR 7.23.1
+(110 assertions): the rest + native round-trip, the native `N1`–`N4` mirror, the
+sftp `S1`–`S5` round-trip, the stdin/stdout forms via the subprocess harness
+(examples 8–10), and example 17 (chunked REST read of an sftp-seeded >60 KB file).
+The method-selection grammar, the SFTP-vs-SCP rationale, the `--verify` behavior
+(sftp trusts the transfer guarantee; rest/native re-read the `/file` size), and the
+deferred `scp`/`fetch`/`ftp` methods are documented in
+`commands/transfer/README.md`.
 
 `execute / ssh` is `CHR-passed`, the second SSH consumer. RouterOS grants no
 pseudo-tty, but `ssh user@host "<command>"` runs one single-line console command
