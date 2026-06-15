@@ -186,19 +186,13 @@ Rules:
 Lowest to highest priority:
 
 1. Built-in defaults
-2. Config file: `${XDG_CONFIG_HOME:-~/.config}/tikoci/centrs.env` — a
-   dotenv-style `CENTRS_*=value` file centrs reads at startup, holding
-   centrs-only **global** preferences (default discovery window, default
-   `--format`, concurrency, …) that have no per-device home in the CDB. Its
-   values are tier-2 *defaults*: real `CENTRS_*` process-env (tier 4) and CLI
-   flags (tier 5) still override them, so centrs applies the file's keys as
-   fallbacks rather than injecting them into `process.env`. It is **optional**
-   (a missing file is never fatal; built-in defaults apply), needs **no new
-   dependency** (plain `KEY=value` lines, not a parsed config format), and is
-   **not** an inventory or credential store — per-device settings stay in the CDB.
-   `--skip-env-file` (and `CENTRS_SKIP_ENV_FILE=1`) bypasses it for tests and
-   dev-agent runs. The `centrs config` command is the front-end that reads and
-   writes this file (and the `__default__` record); hand-editing also works.
+2. Config file: `${XDG_CONFIG_HOME:-~/.config}/tikoci/centrs.env` — optional
+   dotenv-style `CENTRS_*=value` **global** defaults (centrs-only preferences
+   with no per-device home; **not** an inventory or credential store — per-device
+   settings stay in the CDB). Applied as fallbacks, never injected into
+   `process.env`. The `centrs config` command is its front-end; the file
+   mechanics, `--skip-env-file`, and the settings-key vocabulary live in
+   `commands/config/README.md`.
 3. CDB comment-kv metadata
 4. Environment variables (`CENTRS_*`)
 5. CLI flags / API call args
