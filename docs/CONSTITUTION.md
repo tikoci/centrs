@@ -52,22 +52,18 @@ re-validate-server-side. Validation is not optional polish.
   `/console/inspect` table needed. In every case a clean parse is necessary, not
   sufficient on its own; semantic validation is a distinct, transport-appropriate
   step (`/console/inspect`, the console `:parse` text, or server re-validation).
-- **Peer-measurement commands (`btest`) are exempt from this gate.** They issue
-  no RouterOS command, so there is no `:parse` / `/console/inspect` step. Their
-  validation is *option-grammar* validation (centrs-side: e.g. `connection-count`
-  only with `protocol=tcp`, `*-udp-tx-size` only with `protocol=udp`, and the
-  direction / speed / size shapes) plus the **EC-SRP5** auth exchange. The
-  structured-envelope, identity-resolution, and friendly-error contract still
-  holds; only the RouterOS-command gate is absent.
+- **Peer-measurement commands (`btest`) are exempt from this gate** — they issue
+  no RouterOS command, so they validate *option-grammar* + the **EC-SRP5** auth
+  exchange instead (the envelope, identity-resolution, and friendly-error
+  contract still hold; only the RouterOS-command gate is absent). The grammar
+  rules are in `commands/btest/README.md`.
 - A failing validator is a real result. Surface it with the structured error
   envelope below — do not bypass.
 
-`retrieve` is read-only and structured-data focused; explicit options control
-what a single call returns. `execute` is the single read/write surface for
-RouterOS add/set/remove and other CLI-shaped commands — there is no separate
-`update` command. Generalizing RouterOS add/set into one abstract write verb
-needs too many heuristics, so writes ride `execute`'s canonicalize → validate →
-run path instead.
+There is no `update` verb: generalizing RouterOS add/set/remove into one abstract
+write would need too many heuristics, so writes ride `execute`'s
+canonicalize → validate → run path while `retrieve` stays read-only (see Protocol
+selection).
 
 **Disabling validation to make a call work is forbidden.** If the validator
 rejects something a real router accepts, the validator is wrong; fix the
