@@ -480,6 +480,21 @@ export function renderExecuteEnvelope(
 	}
 }
 
+/**
+ * The **script-vs-structured execution gate** — centrs's load-bearing
+ * discriminator (with {@link isWriteShaped}) for which validation runs and
+ * whether the write-confirmation prompt fires. centrs owns this gate; the shared,
+ * prose-tolerant, multi-command canonicalizer that `rosetta` / `lsp-routeros-ts`
+ * publish is for *canonicalization*, never the structured-mode predicate —
+ * widening what counts as `structured` is a product regression. Behavior is
+ * pinned by `test/unit/execute-canonicalize-contract.test.ts`.
+ *
+ * centrs deliberately does **not** vendor the shared parser yet. Preconditions
+ * for adopting it: (1) that contract stays green (no gate widening); (2) the
+ * vendored file is clean under centrs's strict `tsconfig` (or explicitly
+ * quarantined with justification); (3) `lsp-routeros-ts` also vendors/consumes
+ * the same parser shape, so it is genuinely shared, not a premature first copy.
+ */
 export function canonicalizeExecuteCommand(
 	input: string,
 ): CanonicalExecuteCommand {
