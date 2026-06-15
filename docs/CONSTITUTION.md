@@ -217,7 +217,7 @@ principles are load-bearing:
   `group` is a flat attribute, never part of the key.
 - **The CDB is both the device datastore and the credential store.** The WinBox
   CDB file at its well-known location *is* the inventory; there is no separate
-  cache. centrs meaning is overlaid through an allowlist of comment-kv keys —
+  cache. centrs-specific meaning is overlaid through an allowlist of comment-kv keys —
   the lookup keys `identity=`/`mac=`/`ip=` (the one sanctioned exception to "the
   comment is free text") plus override keys like `via`/`port`/`ssh-key`; every
   other comment token stays inert. **Anything expressible in the CDB must also

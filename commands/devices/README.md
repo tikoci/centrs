@@ -27,9 +27,10 @@ RouterOS device in phase 1. Its sources are:
 
 - explicit CLI input,
 - environment variables (`CENTRS_*`),
-- the CDB at `~/.config/tikoci/winbox.cdb` (XDG; override with `--cdb-file` /
-  `CENTRS_CDB_FILE`; if encrypted, decrypt with `--cdb-password` /
-  `CENTRS_CDB_PASSWORD`, or `Bun.secret()` on the CLI when that lands),
+- the CDB at `~/.config/tikoci/winbox.cdb` (resolved under `$HOME`, not
+  `$XDG_CONFIG_HOME`; override with `--cdb-file` / `CENTRS_CDB_FILE`; if
+  encrypted, decrypt with `--cdb-password` / `CENTRS_CDB_PASSWORD`, or
+  `Bun.secret()` on the CLI when that lands),
 - local ARP cache for MAC → IP resolution when explicitly enabled,
 - (later) the MNDP cache and `dude.db` import via `tikoci/donny`.
 
