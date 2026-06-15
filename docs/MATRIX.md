@@ -50,9 +50,10 @@ receive/decode/save path is green on RouterOS CHR 7.23.1 via
 `test/integration/discover.test.ts` (the quickchr `socket-connect` L2 bridge,
 `test/integration/mndp-l2-bridge.ts`; examples 1, 2, 4); the network-independent
 codec/cache/listener/`--save` paths stay unit-tested (examples 3, 5, 6, 7). The
-wire format, the MAC-keyed de-dupe, TTL/timeout defaults, the live board-TLV
-finding (short board id vs the verbose REST `board-name`), and the L2 validation
-policy are documented in `commands/discover/README.md`.
+wire format, the de-dupe rule (`target`-keyed today, MAC-keyed is the decided
+target), TTL/timeout defaults, the live board-TLV finding (short board id vs the
+verbose REST `board-name`), and the L2 validation policy are documented in
+`commands/discover/README.md`.
 
 There is no `update` command: `execute` is the single read/write surface for
 RouterOS add/set/remove, and `retrieve` stays read-only. See
