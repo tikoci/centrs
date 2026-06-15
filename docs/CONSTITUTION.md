@@ -274,7 +274,9 @@ RouterOS semantics. Two boundaries are load-bearing:
 - **Authorization is the CDB allowlist.** RouterOS-facing tools resolve targets
   through the CDB only; an unregistered target is rejected
   (`cdb/target-not-registered`), and `__default__` never widens the allowlist (see
-  Identity and CDB). The off-by-default `--allow-adhoc-targets` is the only escape.
+  Identity and CDB). The off-by-default `--allow-adhoc-targets` flag is reserved
+  for future inline-target flows — today no RouterOS-facing tool exposes an inline
+  host+credential schema, so the CDB allowlist is the only active target source.
 - **Transport is stdio only.** HTTP/remote access is the proxy surface's job
   (`src/webproxy.ts`), which fronts the same CDB; the MCP server grows no listener
   of its own. One surface owns network exposure.
