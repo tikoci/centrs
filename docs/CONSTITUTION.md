@@ -269,31 +269,20 @@ field-setting never collide on one flag.
 ### MCP surface: the CDB is the allowlist
 
 The MCP frontend (`commands/mcp/`) is an adapter over this core, not a new set of
-RouterOS semantics. Its authorization boundary is the CDB:
+RouterOS semantics. Two boundaries are load-bearing:
 
-- RouterOS-facing MCP tools resolve targets through the CDB only (name / MAC /
-  group). Inline ad-hoc `host`+`username`+`password` executor arguments are
-  rejected by default (`cdb/target-not-registered`); the escape hatch is an
-  explicit, off-by-default `--allow-adhoc-targets`. Credentials live in the CDB
-  and MCP results/resources must not return saved password material.
-- Per-device write policy is CDB data: the comment-kv key `mcp` (`ro` default,
-  `rw` to permit writes). Write-shaped RouterOS MCP calls require the resolved
-  record to be `mcp=rw`; a per-call `confirm: true` is the non-TTY analogue of
-  the CLI's `--yes` but is not sufficient on its own. Local CDB mutations through
-  `centrs_devices` and `centrs_discover` `save` require `confirm: true` and
-  redacted results. `mcp` is an allowlisted comment-kv key and must round-trip
-  through env/CLI/API like every other CDB-expressible setting.
-- The MCP tool surface is a small set of verbs (`explain`, `validate`,
-  `retrieve`, `execute`, `devices`, `discover`) mirroring the CLI/API — never one
-  tool per RouterOS command. `validate` is a dry-run (`:parse` +
-  `/console/inspect`) that must not mutate.
-- **Transport is stdio only.** HTTP/remote access is owned by the proxy surface
-  (`src/webproxy.ts`), which fronts the same CDB; the MCP server grows no HTTP
-  listener of its own. One surface owns network exposure.
-- The server publishes read-only MCP resources `centrs://devices` (the active
-  CDB's allowlist, no passwords) and `centrs://errors` (the error-code catalog →
-  details URLs), and its `instructions` point at them so a client discovers the
-  allowlist and error contract without guessing.
+- **Authorization is the CDB allowlist.** RouterOS-facing tools resolve targets
+  through the CDB only; an unregistered target is rejected
+  (`cdb/target-not-registered`), and `__default__` never widens the allowlist (see
+  Identity and CDB). The off-by-default `--allow-adhoc-targets` is the only escape.
+- **Transport is stdio only.** HTTP/remote access is the proxy surface's job
+  (`src/webproxy.ts`), which fronts the same CDB; the MCP server grows no listener
+  of its own. One surface owns network exposure.
+
+The scoped tool surface (verbs mirroring the CLI/API, never one tool per RouterOS
+command), the per-device `mcp=ro|rw` + `confirm: true` write gate, the
+`centrs://devices` / `centrs://errors` resources, and the full safety model are in
+`commands/mcp/README.md`.
 
 ## Protocol selection
 
