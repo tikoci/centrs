@@ -340,8 +340,9 @@ export interface MacTelnetTransport extends MacTelnetDatagramSink {
  * to `host:port` and forwards inbound datagrams to the registered handler.
  *
  * MAC-Telnet's addressing is in-packet (the 6+6 MACs), so UDP delivery is just
- * the carrier: the default `host` is an L2 broadcast address and the device
- * claims the session by matching the in-packet destination MAC. **Real-device
+ * the carrier: callers pass `host` as an L2 broadcast address (chosen upstream
+ * by {@link resolveMacTelnetRoute} — this function applies no default) and the
+ * device claims the session by matching the in-packet destination MAC. **Real-device
  * delivery facts (verified on RB1100AHx4 / RouterOS 7.24beta1 over the real
  * UDP/L2 path):** the device answers only a *broadcast* delivery — a unicast
  * datagram addressed straight to it gets no reply — and the reply is itself an
