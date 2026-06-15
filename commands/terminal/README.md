@@ -28,7 +28,9 @@ exec channel, needs an interactive-shell reader" framing:** RouterOS's SSH serve
 has **no pseudo-tty**, but a single-line `ssh user@host "<command>"` runs on the
 console and returns clean output — so `execute / ssh` is a per-command batch client
 and `terminal / ssh` is a thin inherited-stdio exec of `ssh`. Neither needed a
-`MacTelnetConsole`-style screen-emulating reader.
+`MacTelnetConsole`-style screen-emulating reader. The one no-PTY limitation is the
+device's, not centrs's: multi-line brace blocks (`{ … }`) do not work over
+`terminal / ssh` — reach for `mac-telnet` when you need them.
 
 ## Intent
 
@@ -89,7 +91,7 @@ gaps between what the device offers and what centrs can negotiate:
 | `password-authentication` | `yes-if-no-key` \| `yes` \| `no` (**yes-if-no-key**) | The default refuses password login once a user has an imported SSH key, so centrs's normal path is key auth (`--ssh-key` / agent). No password is ever placed on the `sftp` argv. |
 | `publickey-authentication-options` | `none`\|`touch-required`\|`verify-required` (**none**) | FIDO touch/verify is handled by the host ssh-agent when the key is a FIDO key; transparent to centrs. |
 | `forwarding-enabled` | `both`\|`local`\|`remote`\|`no` (**no**) | centrs does not use SSH forwarding; no dependency. |
-| — (subsystem) | SFTP subsystem | The **only** reliable file channel (no exec / no pseudo-tty); `transfer --via sftp` speaks it. scp would ride the same subsystem on modern OpenSSH. **CHR-confirmed (7.23.1):** `put`/`get`/`ls`/`mkdir`/`rm` all work over the subsystem. |
+| — (subsystem) | SFTP subsystem | The reliable **file** channel (no pseudo-tty; a single-line `ssh host "cmd"` exec runs, but it's for `execute`, not files); `transfer --via sftp` speaks it. scp would ride the same subsystem on modern OpenSSH. **CHR-confirmed (7.23.1):** `put`/`get`/`ls`/`mkdir`/`rm` all work over the subsystem. |
 | `/user` group policy | `ftp` (+ `ssh`, `read`/`write`) | SFTP file access needs the user group's `ftp` policy. **CHR-confirmed:** the `full`-group admin (which includes `ftp`) authenticates and transfers; a restricted user must be granted `ftp`. |
 
 **CHR finding (7.23.1):** RouterOS's sftp `ls -l` does **not** report a reliable
