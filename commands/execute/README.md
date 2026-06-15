@@ -88,10 +88,17 @@ exposed as `--ssh-key <path>`, `CENTRS_SSH_KEY`, and the CDB comment-kv token
 `ssh-key=<path>`. Precedence follows the constitution: defaults → config → CDB
 comment-kv → env → CLI/API. When unset, centrs honors the user's system SSH
 configuration and agent exactly as `ssh` would; setting `--ssh-key` is an
-explicit per-invocation override. SSH lands as one complete transport
-(introduced via `terminal/ssh`; see `commands/terminal/README.md`), so
-`execute/ssh` and the `ssh-key` comment-kv allowlist entry arrive together, not
-piecemeal.
+explicit per-invocation override. The `ssh-key` setting (and `--insecure`) landed
+with the first SSH consumer, `transfer`/sftp; `execute / ssh` (this command) and
+`terminal / ssh` followed as separate transports over the same host-`ssh`
+plumbing (`src/protocols/ssh.ts`) — all three SSH cells are `CHR-passed`.
+
+Over SSH — like mac-telnet — `execute` is a **console transport**: it runs a
+CLI line and returns text (`SshExecClient`, one `ssh user@host "<command>"` per
+command; validation reuses the same `:put [:parse …]` gate), so structured
+path-POST reads and `/console/inspect` are `rest-api`/`native-api`-only. Green via
+`test/integration/execute-ssh.test.ts` (S1–S4); see `src/protocols/ssh.ts` for the
+no-PTY/clean-output grounding.
 
 `ssh-key` stores a private key **path**, never private key material. The resolved
 path may appear in `meta.settings.sshKey` with its source so bug reports can

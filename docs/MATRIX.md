@@ -81,23 +81,14 @@ The method-selection grammar, the SFTP-vs-SCP rationale, the `--verify` behavior
 deferred `scp`/`fetch`/`ftp` methods are documented in
 `commands/transfer/README.md`.
 
-`execute / ssh` is `CHR-passed`, the second SSH consumer. RouterOS grants no
-pseudo-tty, but `ssh user@host "<command>"` runs one single-line console command
-and returns **clean** output (no prompt / ANSI / echo — spike-grounded on CHR
-7.23.1), so this is a **per-command batch client** (`SshExecClient` in
-`src/protocols/ssh.ts`: one `ssh` invocation per command, like the SFTP batch
-client), not a screen-emulating reader. The shared host-`ssh` plumbing (key/trust
-option builder `sshCommonOptions`, connect-error mapping) is extracted from
-`sftp.ts` into `ssh.ts`; the `SshExecAdapter` (`adapter.ts`) is a console transport
-like mac-telnet (execute-only; structured reads/inspect unsupported). The execute
-orchestrator routes ssh through the **same single console `:put [:parse …]`** gate
-as mac-telnet — over SSH it returns the identical `(evl …)` / `bad parameter
-<name>` strings, so `classifyParseResult` is reused verbatim — then runs the raw
-CLI line; a successful write prints nothing (like mac-telnet). `--ssh-key` /
-`--insecure` thread through `resolveAuth` + the execute config. Green via
-`test/integration/execute-ssh.test.ts` (S1–S4: read, multi-line read,
-REST-verified write, the `:parse` unknown-attribute reject) on CHR 7.23.1; unit
-coverage for the client/output-cleanup/error-mapping is `test/unit/ssh.test.ts`.
+`execute / ssh` is `CHR-passed` (the second SSH consumer): a per-command batch
+client (`SshExecClient` in `src/protocols/ssh.ts` — one `ssh user@host "<cmd>"`
+per command, sharing `sftp.ts`'s host-`ssh` plumbing) behind the `SshExecAdapter`
+console transport (execute-only, like mac-telnet; structured reads/inspect
+unsupported). It reuses the mac-telnet `:put [:parse …]` gate verbatim. Green via
+`test/integration/execute-ssh.test.ts` (S1–S4) + `test/unit/ssh.test.ts`; the
+no-PTY / clean-output / `:parse` wire grounding lives in the `src/protocols/ssh.ts`
+header and `commands/execute/README.md`.
 
 `terminal / ssh` is `CHR-passed`, the third and last SSH consumer. RouterOS grants
 no pseudo-tty, but `ssh user@host` (no command) opens the interactive console — so
