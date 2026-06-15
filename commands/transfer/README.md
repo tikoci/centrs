@@ -134,9 +134,10 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 - **SFTP is a real protocol** — `stat`, `readdir`, partial reads/writes, `mkdir`,
   `remove`, `rename`. Those are exactly what centrs's feature set needs: the
   validate-before-write existence check (`stat` the target) and the
-  `list`/`remove`/`mkdir` verbs all fall out of SFTP. (`--verify` is the one
-  exception — RouterOS's sftp `ls -l` reports no reliable byte size, so it trusts
-  the transfer guarantee instead of re-`stat`-ing; see *Integrity*.)
+  `list`/`remove`/`mkdir` verbs all fall out of SFTP. (`--verify size` is still
+  supported over sftp — it just trusts the SFTP transfer guarantee rather than
+  re-reading a settled size, since RouterOS's `ls -l` has no reliable size column;
+  see *Integrity*.)
 - **SCP is a dumb byte-stream** — no stat, no listing, no existence check; it just
   blasts bytes and truncates on collision. An `--via scp` upload therefore
   **cannot do the existence check itself** and would need a side-channel REST/SFTP

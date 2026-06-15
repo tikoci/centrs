@@ -203,8 +203,9 @@ export async function transfer(
 /**
  * Build the file backend for the resolved method. `rest`/`native` wrap the
  * shared {@link ProtocolAdapter} `/file` command seam; `sftp` drives the host
- * OpenSSH `sftp` subsystem (the only reliable SSH file path — RouterOS has no
- * exec channel). Both satisfy {@link FileBackend}, so the verb runners are
+ * OpenSSH `sftp` subsystem (the SSH file path — RouterOS has no pseudo-tty, and
+ * its SFTP subsystem is the real file protocol, unlike a one-shot `ssh host "cmd"`
+ * exec). Both satisfy {@link FileBackend}, so the verb runners are
  * backend-agnostic.
  */
 export function createFileBackend(
