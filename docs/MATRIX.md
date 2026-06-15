@@ -90,22 +90,15 @@ unsupported). It reuses the mac-telnet `:put [:parse …]` gate verbatim. Green 
 no-PTY / clean-output / `:parse` wire grounding lives in the `src/protocols/ssh.ts`
 header and `commands/execute/README.md`.
 
-`terminal / ssh` is `CHR-passed`, the third and last SSH consumer. RouterOS grants
-no pseudo-tty, but `ssh user@host` (no command) opens the interactive console — so
-`terminal / ssh` **execs the host `ssh` with inherited stdio** and lets the OS
-relay the already-clean no-PTY stream; there is no screen emulation, and centrs's
-value is resolving the target/key/trust and building the argv
-(`buildSshTerminalArgv` in `src/terminal.ts`, reusing `sshCommonOptions`). No `-t`
-is passed (a real TTY makes `ssh` request a PTY on its own; forcing `-tt` hangs
-RouterOS). `runTerminal` returns the exit code now: mac-telnet returns 0 on a clean
-console close, ssh returns `ssh`'s code (a no-PTY console closed by EOF can exit
-non-zero — the device/ssh's result, not a centrs failure). A **host target
-defaults to ssh**, a MAC target to mac-telnet. Green via
-`test/integration/terminal-ssh.test.ts` (TS1: batch relay over the real binary
-through the subprocess harness; TS2: the rest/native capability gate) on CHR
-7.23.1; argv construction is unit-tested (`test/unit/terminal.test.ts`). **All SSH
-cells (transfer/execute/terminal) are now `CHR-passed`.** The no-PTY limitation
-(no multi-line brace blocks over SSH) is the device's, documented in
+`terminal / ssh` is `CHR-passed` (the third and last SSH consumer): it execs the
+host `ssh` with inherited stdio (`buildSshTerminalArgv` in `src/terminal.ts`,
+reusing `sshCommonOptions`) and lets the OS relay RouterOS's already-clean no-PTY
+console — no screen emulation. No `-t` is passed (`-tt` hangs RouterOS);
+`runTerminal` returns `ssh`'s exit code. A host target defaults to ssh, a MAC
+target to mac-telnet. Green via `test/integration/terminal-ssh.test.ts` (TS1/TS2),
+with argv unit-tested in `test/unit/terminal.test.ts`. **All three SSH cells
+(transfer/execute/terminal) are `CHR-passed`.** The no-PTY / exit-code semantics are documented in
+`src/terminal.ts`; the no-multi-line-brace limitation is in
 `commands/terminal/README.md`.
 
 `fetch` (centrs-as-HTTP-server + `/tool/fetch`) is a **deferred, explicit-only
