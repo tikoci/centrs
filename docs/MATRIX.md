@@ -239,14 +239,14 @@ Do not start a later item until the earlier cell or dependency checkpoint has
 matching evidence. The grid above is the live status; per-item detail lives in
 the linked `commands/<name>/`.
 
-1. **retrieve / rest-api** — `CHR-passed`. The shakedown for everything else.
+1. **retrieve / rest-api** — `CHR-passed`. The shakedown for everything else (`commands/retrieve/`).
 2. **CDB resolution + metadata overrides** — `CHR-passed` (`commands/devices/`).
 3. **CDB groups + fanout** — `CHR-passed` (`commands/devices/`, Fanout).
-4. **execute / native-api + rest-api** — `CHR-passed`. The single write path; there is no `update`.
-5. **devices** (CDB mutation + provenance) — `CHR-passed`.
+4. **execute / native-api + rest-api** — `CHR-passed` (`commands/execute/`). The single write path; there is no `update`.
+5. **devices** (CDB mutation + provenance) — `CHR-passed` (`commands/devices/`).
 6. **retrieve / snmp** — `not-started` (future: SNMP OID/MIB reads + MikroTik MIB cache).
-7. **ssh** for transfer/execute/terminal — **all three `CHR-passed`** (landed transfer-first; `commands/{transfer,execute,terminal}/` + `src/protocols/{ssh,sftp}.ts`).
-8. **mac-telnet** for execute/terminal — both `CHR-passed` (`src/protocols/mac-telnet*`). Optional polish: the ~10s prime-latency fix and a full-TTY terminal test under a real PTY.
+7. **ssh** for transfer/execute/terminal — **all three `CHR-passed`** (landed transfer-first; the `transfer`/`execute`/`terminal` READMEs + `src/protocols/ssh.ts` and `src/protocols/sftp.ts`).
+8. **mac-telnet** for execute/terminal — both `CHR-passed` (`src/protocols/mac-telnet.ts` + `src/protocols/mac-telnet-console.ts`). Optional polish: the ~10s prime-latency fix and a full-TTY terminal test under a real PTY.
 9. **RoMON / WinBox Terminal for execute** — `not-started` (see Open questions).
 10. **discover / mndp** — `CHR-passed` (`commands/discover/`).
 11. **MCP, TUI, proxy** — frontends over the stable core. **MCP** is `CHR-passed` for Phase 1 + the first Phase 2 CDB mutation (`commands/mcp/`); next small step is the device-free `centrs mcp --list-tools` manifest dump (bench token-footprint measurement). MCP stays **stdio-only** (HTTP is the proxy's job). **TUI / proxy** `not-started`.
