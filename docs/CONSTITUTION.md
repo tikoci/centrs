@@ -311,9 +311,11 @@ Rules:
   chain, never a substitute, and no other command rides it.
 - Per-command selection **depth** lives in the command READMEs: `stream`'s
   follow/NDJSON contract and the REST-cannot-follow constraint
-  (`commands/stream/`), `transfer`'s size/direction-aware method selection and
-  the explicit-only `scp`/`ftp`/`fetch` (`commands/transfer/`), SNMP's MIB-cache
-  (`commands/retrieve/`), and btest's port/auth (`commands/btest/`).
+  (`commands/stream/README.md`), `transfer`'s size/direction-aware method
+  selection and the explicit-only `scp`/`ftp`/`fetch`
+  (`commands/transfer/README.md`), SNMP's MIB-cache
+  (`commands/retrieve/README.md`), and btest's port/auth
+  (`commands/btest/README.md`).
 
 REST-specific constraint: RouterOS REST has a 60-second hard timeout. Do not
 let `--timeout` exceed 60s when `via=rest-api`; reject with a clear error.
