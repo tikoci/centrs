@@ -20,6 +20,13 @@ Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
   bad values. Semantic validation needs `/console/inspect` or the server's own
   re-validation on the write round-trip. A clean parse is necessary, not
   sufficient.
+- centrs owns the **script-vs-structured gate** (`canonicalizeExecuteCommand` +
+  `isWriteShaped` in `src/execute.ts`): it decides which validation runs and
+  whether the write-confirm prompt fires. The shared `rosetta`/`lsp-routeros-ts`
+  canonicalizer is for canonicalization only — never the structured predicate
+  (widening `structured` is a product regression). Pinned by
+  `test/unit/execute-canonicalize-contract.test.ts`; the parser-vendoring
+  preconditions live in the `canonicalizeExecuteCommand` doc-comment.
 - REST adapter prefers structured path-POST when the CLI canonicalizes to
   path+verb+attrs (`POST /rest/<path>/<verb>` → `{"ret":"<.id>"}`, clean typed
   errors); falls back to `POST /rest/execute {"script":"<cli>"}` for
