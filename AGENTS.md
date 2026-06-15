@@ -15,7 +15,10 @@ When those three are clear, write code or tests. Do not write more prose.
 
 A feature is done when its examples in `commands/<name>/examples.md` are green
 on real CHR via `bun run test:integration`. Code existing is not done. Unit
-tests passing is not done. See `.github/instructions/done-definition.instructions.md`.
+tests passing is not done. The **normative** definition is
+[`docs/CONSTITUTION.md` → Done definition](docs/CONSTITUTION.md#done-definition);
+the integration-test procedure is in
+`.github/instructions/done-definition.instructions.md`.
 
 ## Quick commands
 

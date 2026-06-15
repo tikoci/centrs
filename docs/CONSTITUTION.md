@@ -346,18 +346,15 @@ default), so key auth is the normal sftp path.
 
 A feature is done when its **CHR integration test is green** against a real
 RouterOS CHR booted by `@tikoci/quickchr`. Not when code exists. Not when unit
-tests pass. Not when the spec says so.
+tests pass. Not when the spec says so. This is the **normative** done
+definition; `AGENTS.md` and
+`.github/instructions/done-definition.instructions.md` point here (the latter
+carries the Copilot-workflow procedure for satisfying it).
 
-`docs/MATRIX.md` is the single source of truth for what is done. Cell states:
-
-- `not-started` — no code, no design
-- `designed` — `commands/<name>/README.md` describes intent and flags
-- `coded` — implementation exists in `src/`
-- `CHR-passed` — every example in `commands/<name>/examples.md` runs green
-  against CHR via `bun run test:integration`
-
-A cell advances only with the matching evidence in the same change. A commit
-that advances a cell must include the test name and CHR version.
+`docs/MATRIX.md` is the single source of truth for *what* is done and defines the
+cell states (`not-started` / `designed` / `coded` / `CHR-passed`). A cell
+advances only with the matching evidence in the same change, and the commit that
+advances it must include the test name and CHR version.
 
 ## Boundaries
 
