@@ -59,13 +59,10 @@ There is no `update` command: `execute` is the single read/write surface for
 RouterOS add/set/remove, and `retrieve` stays read-only. See
 `docs/CONSTITUTION.md` (protocol selection).
 
-`stream` is `designed`: `commands/stream/README.md` describes the read-only
-follow surface (RouterOS `print follow`/monitor/sniffer; `once`/`follow`/
-`duration=`/`freeze-frame-interval=`), the NDJSON stream-of-envelopes contract,
-and the native-api/ssh transport constraint (REST cannot follow — 60s cap). It
-has no code yet; the native-api streaming reader it will consume already exists
-(`src/protocols/native-api.ts`). Bounded single-shot reads stay on
-`retrieve --once`; interactive PTY stays on `terminal`.
+`stream` is `designed` (no code yet): the read-only follow surface (NDJSON
+stream-of-envelopes; native-api/ssh only — REST's 60s cap cannot follow) is
+specified in `commands/stream/README.md`. The native-api streaming reader it will
+consume already exists (`src/protocols/native-api.ts`).
 
 `transfer` is `CHR-passed` for `rest-api`/`native-api` and for **sftp** (the
 `ssh` column's first method): `src/transfer.ts` + `src/cli/transfer.ts`
@@ -167,12 +164,9 @@ core and carry their own state, tracked here:
 
 A surface advances to `CHR-passed` only when every example in its spec
 (`commands/<surface>/examples.md`, where one exists) is green via
-`bun run test:integration`. `mcp` is `CHR-passed` for Phase 1 plus the first
-Phase 2 CDB mutation:
-`commands/mcp/README.md` and `commands/mcp/examples.md` describe the tool surface,
-safety model, and CHR test shape; examples 1-10 are green on CHR 7.23 via
-`test/integration/mcp.test.ts`, including the `mcp=rw` + `confirm:true` RouterOS
-write gate and `centrs_devices add` CDB registration.
+`bun run test:integration`. The `mcp` surface's tool list, CDB-as-allowlist safety
+model, and CHR test shape (examples 1–10, the `mcp=rw` + `confirm:true` write gate)
+are documented in `commands/mcp/README.md` and `commands/mcp/examples.md`.
 
 ### Peer measurement (`btest`) — orthogonal to the command grid
 
