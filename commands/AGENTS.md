@@ -8,10 +8,13 @@ Each `commands/<name>/` holds the **executable spec** for one command:
   is what `CHR-passed` is measured against.
 
 Do not restate the constitution here or in a command README — link to
-`docs/CONSTITUTION.md` for envelope, errors, settings precedence, identity/CDB,
-and protocol selection. A command file covers only what is specific to that
-command. `docs/MATRIX.md` is the only status surface; a README's "Status" line
-must agree with it.
+`docs/CONSTITUTION.md` for envelope, errors, settings precedence, target
+selection, and protocol selection. The identity/CDB **resolution depth** (lookup
+keys, ambiguity, `__default__`, comment-kv allowlist, write strategy) lives in
+`commands/devices/README.md` — the registry command owns it; the constitution
+keeps only the identity/CDB principle. A command file covers only what is
+specific to that command. `docs/MATRIX.md` is the only status surface; a
+README's "Status" line must agree with it.
 
 ## Verb vocabulary
 

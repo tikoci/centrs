@@ -207,75 +207,38 @@ Lowest to highest priority:
 
 ### Identity and CDB
 
-The `<router>` argument may be: an IP, a DNS name, a MAC, or an **identity**
-(the device's `/system/identity`). It is resolved through the CDB (then through
-ARP / MNDP-derived metadata as fallbacks once implemented).
+The `<router>` argument may be an IP, a DNS name, a MAC, or an **identity**
+(the device's `/system/identity`); centrs resolves it through the CDB (then
+through ARP / MNDP-derived metadata as fallbacks, once implemented). Two
+principles are load-bearing:
 
-The WinBox CDB has no dedicated "name" field. Its natural record identity is the
-**(target, user)** pair (grounded on WinBox behavior: "Save to list" with the
-same address but a different user creates a *second* record, not an update). So
-the same address saved under two users is two legitimate records, not a
-duplicate; `group` is a flat attribute, never part of the key. centrs resolves
-`<router>` against the `target` field **and** a small set of comment-kv **lookup
-keys**: `identity=`, `mac=`, `ip=`. Whichever identifiers are not the `target` ride the comment as
-lookup keys, so one record is resolvable by identity **or** IP **or** MAC **or**
-DNS-name regardless of which one is stored as `target`. (`identity` mirrors
-RouterOS `/system/identity` and is deliberately allowed to be non-unique;
-collisions resolve through the ambiguity path below.) These lookup keys are the
-one sanctioned exception to "the comment is free text"; every other comment-kv
-token stays inert metadata.
+- **Record identity is the `(target, user)` pair** — matching WinBox, the same
+  address saved under a different user is a second record, not an update.
+  `group` is a flat attribute, never part of the key.
+- **The CDB is both the device datastore and the credential store.** The WinBox
+  CDB file at its well-known location *is* the inventory; there is no separate
+  cache. centrs meaning is overlaid through an allowlist of comment-kv keys —
+  the lookup keys `identity=`/`mac=`/`ip=` (the one sanctioned exception to "the
+  comment is free text") plus override keys like `via`/`port`/`ssh-key`; every
+  other comment token stays inert. **Anything expressible in the CDB must also
+  be expressible via env/CLI/API**, so tests and ad-hoc use never require one.
+  `dude.db` import is out of scope (→ `tikoci/donny`).
 
-CDB resolution:
-
-- Default location: `~/.config/tikoci/winbox.cdb` (XDG Base Directory).
-- `--cdb-file` / `CENTRS_CDB_FILE` overrides the location.
-- If the CDB is encrypted, `--cdb-password` / `CENTRS_CDB_PASSWORD` (or
-  `Bun.secret()` for the CLI, when wired) decrypts.
-- Providing `--cdb-password` against an unencrypted CDB is a **warning**, not
-  an error; the call still succeeds.
-- An identity/target not found in the CDB is an error unless `--username` /
-  `--password` were also provided (or a `__default__` record supplies them —
-  see below).
-- A `<router>` that matches more than one record (an address with two users, or
-  a duplicated `identity=`) is `identity/ambiguous` in non-TTY mode; `--match`
-  pins the choice by `user` and/or record-type. centrs does not heuristically
-  pick among genuine duplicates.
-- For a MAC target, CDB wins first. If no CDB record matches, `retrieve` may
-  opt into local ARP resolution to obtain an IP-level target; `execute`
-  defaults to mac-telnet unless the caller explicitly asks to resolve via ARP.
-- `discover --save` writes MNDP-derived targets into CDB with
-  provenance metadata and default `group=discovered`; discovery remains a hint
-  source, not authoritative inventory. De-duplication of saved records is keyed
-  on the **MAC** (globally unique); `identity` is written as a resolution handle
-  but is never the de-dupe key, because factory-default devices all report
-  `MikroTik`.
+The lookup-key grammar, the CDB resolution and ambiguity rules (`--match`,
+`identity/ambiguous`, `--prefer-family`), the comment-kv allowlist, encrypted-CDB
+handling, and the atomic write strategy live in `commands/devices/README.md` —
+`devices` is the registry command and the CDB's only writer.
 
 #### Default-device record (`__default__`)
 
-A reserved CDB record (`target=__default__`, optionally `group=default`) supplies
-fallback metadata + username/password for a resolved device whose own record
-leaves them unset. WinBox can edit it like any other record; sharing the CDB with
-WinBox stays opt-in.
-
-- Precedence, per field: per-call args → env (`CENTRS_*`) → the matched device
-  record → the `__default__` record → built-in default. Inheritance is
-  per-field (a device may inherit `password` from `__default__` but override
-  `user`).
-- It is **core** — honored by CLI, API, and MCP, not an MCP-only concept.
-- **Allowlist boundary holds.** On the CLI/API, `__default__` may supply creds
-  for *any* target (including one not in the CDB) — the CLI has no allowlist. On
-  **MCP**, the CDB stays the allowlist: an unregistered target is still rejected
-  with `cdb/target-not-registered`, and `__default__` only fills *missing* creds
-  for an *already-registered* device. `__default__` never widens the MCP
-  allowlist.
-
-CDB is the native credential store **and** the device datastore/cache: the
-WinBox CDB file at its well-known location holds the inventory directly — there
-is no separate SQLite cache. centrs-specific meaning is overlaid via comment-kv
-keys and groups. Anything in CDB must also be expressible via env/CLI/API for
-tests and ad-hoc use. CDB comments may carry centrs metadata such as `via`,
-`port`, and `ssh-key` overrides. `dude.db` import is out of scope here and
-belongs to `tikoci/donny`.
+A reserved CDB record (`target=__default__`) supplies fallback metadata +
+credentials, **per field**, for a resolved device whose own record leaves them
+unset. Precedence is per-field: per-call args → env (`CENTRS_*`) → matched device
+record → `__default__` → built-in default. It is **core** (honored by CLI, API,
+and MCP) and **never widens the MCP allowlist**: on MCP an unregistered target is
+still `cdb/target-not-registered`, and `__default__` only fills *missing* creds
+for an already-registered device. Create/edit it like any record; mechanics and
+examples are in `commands/devices/README.md`.
 
 Group selectors (e.g. `--group prod-edge`) target CDB groups so a single
 `retrieve`/`execute`/etc. fans out to multiple routers. Group output shape
