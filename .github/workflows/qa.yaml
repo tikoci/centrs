@@ -38,7 +38,16 @@ concurrency:
 jobs:
   extended-tests:
     name: Tests
-    runs-on: ubuntu-latest
+    # OS axis (JG-18): pushes/PRs stay on ubuntu (the fast gate), while the
+    # scheduled + dispatched QA adds macos to catch platform-specific behavior —
+    # path handling, the ssh `/dev/null` vs `NUL` sink, and process spawning in
+    # the network-free cli-smoke tier. CHR itself stays ubuntu-only (it needs
+    # KVM, which GitHub only provides on Linux runners).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -111,6 +120,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Test against CHR
+        id: chr_test
         env:
           CENTRS_CHR_CHANNEL: ${{ matrix.routeros_channel }}
           CENTRS_CHR_VERSION: ${{ inputs.routeros_version || '' }}
@@ -129,6 +139,28 @@ jobs:
           else
            echo "::warning::No CHR integration evidence report was written."
           fi
+      # Persist the run (channel, the version that actually booted, pass/fail,
+      # date, commit) to a bun:sqlite history so the channel→version drift and
+      # the must-pass policy can be read from real data. Additive + always-run:
+      # recording never changes the job's pass/fail.
+      - name: Record QA result
+        if: always()
+        run: |
+          outcome='${{ steps.chr_test.outcome == 'success' && 'pass' || 'fail' }}'
+          bun run scripts/qa-results-db.ts \
+            --db "${{ runner.temp }}/qa-results.sqlite" \
+            --channel "${{ matrix.routeros_channel }}" \
+            --requested-version "${{ inputs.routeros_version || '' }}" \
+            --outcome "$outcome" \
+            --commit "${{ github.sha }}" \
+            --report "${{ runner.temp }}/centrs-integration-report.jsonl"
+      - name: Upload QA results DB
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-results-${{ matrix.routeros_channel }}
+          path: ${{ runner.temp }}/qa-results.sqlite
+          if-no-files-found: warn
   codeql-analyze:
     name: CodeQL
     runs-on: ubuntu-latest
