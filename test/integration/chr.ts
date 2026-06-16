@@ -67,6 +67,46 @@ export function exampleIds(count: number): number[] {
 	return Array.from({ length: count }, (_, index) => index + 1);
 }
 
+/**
+ * RouterOS classifies a *validation reject* differently across versions. For an
+ * unknown attribute (e.g. `no-such-arg=x`), `:parse`:
+ *   - ≥ 7.23 reports `bad parameter <name>` → centrs `validation/unknown-attribute`
+ *   - ≤ 7.21.x reports a generic `syntax error (line/col)` → centrs `validation/syntax`
+ * centrs cannot tell "unknown attribute" from "syntax error" on the older wording,
+ * so both are correct "validation rejected, nothing ran" outcomes. Integration
+ * tests assert the reject is one of these, not the exact sub-code.
+ * (JG-14: surfaced by the 7.21.4 long-term CHR run.)
+ */
+export const VALIDATION_REJECT_CODES: readonly string[] = [
+	"validation/unknown-attribute",
+	"validation/syntax",
+];
+
+/**
+ * Compare two RouterOS version strings (e.g. "7.21.4 (long-term) ...", "7.23").
+ * Returns true when `running` ≥ `target` on major.minor.patch (channel/beta/rc
+ * suffixes ignored). Used to version-gate features that only exist on newer
+ * RouterOS — e.g. the `/file/copy` REST endpoint, first seen in 7.23beta2.
+ */
+export function routerOsAtLeast(running: string, target: string): boolean {
+	const parts = (raw: string): number[] => {
+		const match = raw.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
+		return match
+			? [Number(match[1]), Number(match[2]), Number(match[3] ?? 0)]
+			: [0, 0, 0];
+	};
+	const a = parts(running);
+	const b = parts(target);
+	for (let index = 0; index < 3; index += 1) {
+		const left = a[index] ?? 0;
+		const right = b[index] ?? 0;
+		if (left !== right) {
+			return left > right;
+		}
+	}
+	return true;
+}
+
 function asChannel(value: string | undefined): Channel {
 	if (routerOsChannels.some((channel) => channel === value)) {
 		return value as Channel;

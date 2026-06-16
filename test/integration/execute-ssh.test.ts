@@ -26,6 +26,7 @@ import {
 	recordIntegrationEvidence,
 	splitQuickChrAuth,
 	startIntegrationChr,
+	VALIDATION_REJECT_CODES,
 } from "./chr.ts";
 
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
@@ -149,7 +150,7 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 			});
 			expect(reject.ok).toBe(false);
 			if (reject.ok) return;
-			expect(reject.error.code).toBe("validation/unknown-attribute");
+			expect(VALIDATION_REJECT_CODES).toContain(reject.error.code);
 			const after = asRecordArray(await chr.rest("/ip/address"));
 			expect(
 				after.some((a) => (a["address"] ?? "").startsWith("198.51.100.51")),

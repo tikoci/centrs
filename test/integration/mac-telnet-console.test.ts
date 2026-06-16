@@ -27,6 +27,7 @@ import {
 	isChrIntegrationEnabled,
 	recordIntegrationEvidence,
 	startIntegrationChr,
+	VALIDATION_REJECT_CODES,
 } from "./chr.ts";
 import { HOST_MAC, startMacTelnetL2Bridge } from "./mactelnet-l2-bridge.ts";
 
@@ -98,8 +99,8 @@ describeFast("execute over mac-telnet (console reader + command path)", () => {
 			} catch (error) {
 				parseErr = error;
 			}
-			expect((parseErr as CentrsError)?.code).toBe(
-				"validation/unknown-attribute",
+			expect(VALIDATION_REJECT_CODES).toContain(
+				(parseErr as CentrsError)?.code ?? "",
 			);
 			cons.close();
 			cons = undefined;
@@ -150,7 +151,7 @@ describeFast("execute over mac-telnet (console reader + command path)", () => {
 			});
 			expect(reject.ok).toBe(false);
 			if (reject.ok) return;
-			expect(reject.error.code).toBe("validation/unknown-attribute");
+			expect(VALIDATION_REJECT_CODES).toContain(reject.error.code);
 			// The rejected address must NOT have been written.
 			const after = asRecordArray(await chr.rest("/ip/address"));
 			expect(

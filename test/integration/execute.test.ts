@@ -8,6 +8,7 @@ import {
 	recordIntegrationEvidence,
 	splitQuickChrAuth,
 	startIntegrationChr,
+	VALIDATION_REJECT_CODES,
 } from "./chr.ts";
 
 const runFastIntegration = isChrIntegrationEnabled();
@@ -48,12 +49,14 @@ function expectExecuteSuccess(
 function expectExecuteFailure(
 	envelope: Awaited<ReturnType<typeof executeEnvelope>>,
 	via: "rest-api" | "native-api",
-	code: string,
+	code: string | readonly string[],
 ): ExecuteFailureEnvelope {
 	expect(envelope.ok).toBe(false);
 	expect(envelope.meta.via).toBe(via);
 	const failure = envelope as ExecuteFailureEnvelope;
-	expect(failure.error.code).toBe(code);
+	const acceptable: readonly string[] =
+		typeof code === "string" ? [code] : code;
+	expect(acceptable).toContain(failure.error.code ?? "");
 	return failure;
 }
 
@@ -177,7 +180,15 @@ describeFast("execute against CHR", () => {
 				}),
 				"rest-api",
 			);
-			expect(JSON.stringify(script.data)).toContain("CHR");
+			// Assert the `:put [...]` script returned the *live* identity rather than a
+			// hard-coded "CHR": the default identity is version/image-dependent
+			// (e.g. "MikroTik" on 7.21.4 long-term, not "CHR"). (JG-14.)
+			const liveIdentity =
+				((await chr.rest("/system/identity")) as Record<string, string>)[
+					"name"
+				] ?? "";
+			expect(liveIdentity.length).toBeGreaterThan(0);
+			expect(JSON.stringify(script.data)).toContain(liveIdentity);
 			expect(script.meta.validation?.syntax).toBe(true);
 			expect(script.meta.validation?.semantic).toBe("not-applicable");
 
@@ -199,9 +210,14 @@ describeFast("execute against CHR", () => {
 					yes: true,
 				}),
 				"rest-api",
-				"validation/unknown-attribute",
+				VALIDATION_REJECT_CODES,
 			);
-			expect(semantic.error.context?.["attribute"]).toBe("no-such-arg");
+			// The offending attribute name is only surfaced when RouterOS reports it as
+			// a `bad parameter` (≥ 7.23, via /console/inspect). On ≤ 7.21.x the `:parse`
+			// syntax gate rejects it generically first, so there is no attribute. (JG-14.)
+			if (semantic.error.code === "validation/unknown-attribute") {
+				expect(semantic.error.context?.["attribute"]).toBe("no-such-arg");
+			}
 			await ensureNoAddressWithComment({ ...base, comment: "missing-confirm" });
 
 			expectExecuteFailure(
