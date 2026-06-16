@@ -29,12 +29,15 @@ import { MacTelnetConsole } from "./protocols/mac-telnet-console.ts";
 import { sshCommonOptions, sshUserHost } from "./protocols/ssh.ts";
 import {
 	type CdbResolution,
+	isIpTransport,
 	isMacAddress,
+	parseResolvePolicy,
 	type ResolvedAuth,
 	type ResolvedTarget,
 	resolveAuth,
 	resolveBooleanSetting,
 	resolveCdb,
+	resolveMacTarget,
 	resolveStringSetting,
 	resolveTarget,
 } from "./resolver/index.ts";
@@ -61,6 +64,12 @@ export interface TerminalRequest {
 	host?: string;
 	/** UDP delivery port override (defaults to 20561). */
 	port?: number;
+	/**
+	 * MAC→IP resolution policy for the IP transport (`--via ssh`): `none`
+	 * (default; CDB-first, then error) or `arp` (opt into host ARP). Ignored by
+	 * the L2 default (`mac-telnet`), which addresses the MAC directly.
+	 */
+	resolve?: string;
 	username?: string;
 	password?: string;
 	/** Explicit in-packet source MAC (overrides egress-MAC resolution; mac-telnet). */
@@ -163,11 +172,27 @@ export async function resolveTerminalRequest(
 	const viaValue = via?.value ?? defaultVia;
 	// Re-gate on the fully resolved value to catch a CDB comment-kv `via=` override.
 	gateTerminalVia(viaValue);
+	// A MAC target over the IP transport (`--via ssh`) needs an IP. Resolve it
+	// CDB-first (the matched record's `target` already wins below); only when no
+	// record matches does this throw `target/mac-unresolved` — unless the caller
+	// opted into host ARP with `--resolve arp`. The L2 default (mac-telnet)
+	// addresses the MAC directly, so it never resolves (NO silent ARP).
+	const macResolution = isIpTransport(viaValue)
+		? await resolveMacTarget({
+				host: request.host,
+				targetInput: request.targetInput,
+				cdbTarget: cdb?.target,
+				env,
+				policy: parseResolvePolicy(request.resolve ?? env["CENTRS_RESOLVE"]),
+				operation: "terminal",
+			})
+		: undefined;
 	const target = resolveTarget(
 		{
 			targetInput: request.targetInput,
 			host: request.host,
 			port: request.port,
+			macResolution,
 		},
 		env,
 		viaValue === "ssh" ? "ssh" : "mac-telnet",

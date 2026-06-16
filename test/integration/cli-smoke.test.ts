@@ -130,6 +130,34 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		}
 	});
 
+	test("terminal MAC over --via ssh with no CDB record errors + tips L2 (JG-01)", async () => {
+		// A temp HOME means the default CDB has no record for the MAC, so the
+		// IP-transport (ssh) MAC→IP resolution fails hermetically — no router, no
+		// ARP opt-in. The tip must lead with the L2 alternative.
+		const home = await mkdtemp(join(tmpdir(), "centrs-smoke-home-"));
+		try {
+			const res = await runCliProcess({
+				args: [
+					"terminal",
+					"aa:bb:cc:dd:ee:ff",
+					"--via",
+					"ssh",
+					"--username",
+					"admin",
+					"--json",
+				],
+				env: { HOME: home },
+			});
+			expect(res.exitCode).toBe(1);
+			const envelope = parseEnvelope(res.stderrText);
+			expect(envelope.ok).toBe(false);
+			expect(envelope.error?.code).toBe("target/mac-unresolved");
+			expect(res.stderrText).toContain("--via mac-telnet");
+		} finally {
+			await rm(home, { recursive: true, force: true });
+		}
+	});
+
 	test("--user and -u are accepted aliases for --username (JG-23)", async () => {
 		// With no command, the alias must be *parsed* (consuming "admin") so we reach
 		// the missing-command check — not rejected as an unknown flag.

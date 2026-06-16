@@ -197,4 +197,30 @@ describe("resolveMacTarget", () => {
 			expect((error as CentrsError).code).toBe("target/mac-not-in-arp");
 		}
 	});
+
+	test("terminal operation leads its remediation with the L2 alternative", async () => {
+		// JG-01: a MAC over `--via ssh` should point at `--via mac-telnet` first,
+		// since L2 needs no IP — both the no-opt-in and ARP-miss branches.
+		const unresolved = await resolveMacTarget({
+			targetInput: "aa:bb:cc:dd:ee:ff",
+			env: {},
+			policy: "none",
+			operation: "terminal",
+			runArp: arp,
+		}).catch((caught: unknown) => caught);
+		expect((unresolved as CentrsError).code).toBe("target/mac-unresolved");
+		expect((unresolved as CentrsError).remediation).toContain(
+			"--via mac-telnet",
+		);
+
+		const notInArp = await resolveMacTarget({
+			targetInput: "aa:bb:cc:dd:ee:ff",
+			env: {},
+			policy: "arp",
+			operation: "terminal",
+			runArp: arp,
+		}).catch((caught: unknown) => caught);
+		expect((notInArp as CentrsError).code).toBe("target/mac-not-in-arp");
+		expect((notInArp as CentrsError).remediation).toContain("--via mac-telnet");
+	});
 });

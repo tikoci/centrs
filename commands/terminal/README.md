@@ -44,6 +44,20 @@ device's, not centrs's: multi-line brace blocks (`{ … }`) do not work over
 - RoMON and WinBox Terminal are execute protocol surfaces in centrs, not
   terminal routes, unless future matrix cells explicitly add terminal support.
 
+## MAC target over SSH (`--resolve`)
+
+A MAC `<router>` defaults to `mac-telnet`, which addresses the device by MAC —
+no IP, no resolution. Pinning `--via ssh` asks for the IP-level console, so the
+MAC must first resolve to an IP. That resolution follows the shared `--resolve`
+policy (CDB record → `--resolve arp` host-ARP opt-in → error; never a silent ARP
+or transport swap) — see `docs/CONSTITUTION.md`, *Target selection grammar* and
+*Protocol selection*.
+
+Terminal-specific: when no IP resolves, the `target/mac-unresolved` (and
+`target/mac-not-in-arp`) tip **leads with `--via mac-telnet`**, since for terminal
+reaching the device over L2 needs no IP at all — it is the first thing to try.
+`--resolve` is a no-op for the `mac-telnet` default (the MAC is the target).
+
 ## SSH key selection
 
 Signed off (settings names): terminal uses the same `sshKey` setting as
@@ -66,9 +80,12 @@ longer open for the file path: **host-key verification** rides the unified
 a changed key → `transport/host-key-mismatch`; `--insecure` →
 `StrictHostKeyChecking=no` — see `docs/CONSTITUTION.md`, Transport trust);
 **agent vs explicit-key** interplay and **algorithm negotiation** are delegated to
-the host OpenSSH (`-i <ssh-key>` when set, else the agent / `~/.ssh/config`).
-Still open for the **interactive** surfaces: the `terminal`→`mac-telnet` fallback
-when SSH is unreachable but a MAC is on file, and the no-pseudo-tty console reader.
+the host OpenSSH (`-i <ssh-key>` when set, else the agent / `~/.ssh/config`). The
+MAC-on-file-but-SSH-pinned case is settled (see *MAC target over SSH* above):
+centrs resolves a MAC for `--via ssh` CDB-first, then tips `--via mac-telnet` —
+it does **not** silently fall back to L2 (constitution: a pinned `--via` is never
+swapped). The no-pseudo-tty console reader is likewise resolved — a CHR spike
+proved `ssh user@host` opens a clean console with no screen emulation.
 
 The setting stores a key path only. Private key material, passphrases, and agent
 contents are always sensitive and belong in `error.redactable_fields` if an
