@@ -83,6 +83,12 @@ export const terminalCommand: CliCommandMetadata = {
 			description: "Decrypt an encrypted WinBox CDB file.",
 		},
 		{
+			flag: "--resolve",
+			valueName: "<none|arp>",
+			description:
+				"`--via ssh` only: turn a MAC target into an IP. CDB-first; `arp` opts into the host ARP cache (default none). The mac-telnet default ignores it.",
+		},
+		{
 			flag: "--format",
 			valueName: "<text|json|yaml>",
 			description:
@@ -231,6 +237,9 @@ function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 				break;
 			case "--cdb-password":
 				flags.cdbPassword = expectValue(args, ++index, arg);
+				break;
+			case "--resolve":
+				flags.resolve = expectValue(args, ++index, arg);
 				break;
 			case "--format":
 				flags.format = expectValue(args, ++index, arg);

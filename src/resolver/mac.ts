@@ -160,7 +160,7 @@ export async function resolveMacTarget(opts: {
 	cdbTarget?: string;
 	env: Record<string, string | undefined>;
 	policy: ResolvePolicy;
-	operation: "retrieve" | "execute";
+	operation: "retrieve" | "execute" | "terminal";
 	runArp?: (cmd: string[]) => Promise<string>;
 }): Promise<{ mac: string; ip: string } | undefined> {
 	const candidate = effectiveHostCandidate(opts);
@@ -186,16 +186,13 @@ export async function resolveMacTarget(opts: {
 export function unresolvedMacError(
 	mac: string,
 	policy: ResolvePolicy,
-	operation: "retrieve" | "execute",
+	operation: "retrieve" | "execute" | "terminal",
 ): CentrsError {
 	if (policy !== "arp") {
 		return new CentrsError({
 			code: "target/mac-unresolved",
 			summary: `Target ${mac} is a MAC address with no matching CDB record.`,
-			remediation:
-				operation === "execute"
-					? "Pass an IP/hostname, add a CDB record for this MAC, or opt into host ARP resolution with `--resolve arp` (mac-telnet L2 execute is not yet available)."
-					: "Pass an IP/hostname, add a CDB record for this MAC, or opt into host ARP resolution with `--resolve arp`.",
+			remediation: unresolvedMacRemediation(operation),
 			context: { mac, resolve: policy },
 		});
 	}
@@ -203,7 +200,27 @@ export function unresolvedMacError(
 		code: "target/mac-not-in-arp",
 		summary: `MAC ${mac} is not in the host ARP cache, so it cannot be resolved to an IP.`,
 		remediation:
-			"Make the device reachable first (e.g. ping its IP, or run `centrs discover`) so the host learns its MAC→IP mapping, then retry — or pass the IP/hostname directly.",
+			operation === "terminal"
+				? "Reach it over Layer 2 with `--via mac-telnet` (no IP needed), or make the device IP-reachable first (e.g. ping it, or run `centrs discover`) so the host learns its MAC→IP mapping, then retry."
+				: "Make the device reachable first (e.g. ping its IP, or run `centrs discover`) so the host learns its MAC→IP mapping, then retry — or pass the IP/hostname directly.",
 		context: { mac, resolve: policy },
 	});
+}
+
+/**
+ * The non-ARP "MAC has no CDB record" remediation, tailored per command. For
+ * `terminal` the natural alternative is L2 (`--via mac-telnet` needs no IP); the
+ * IP-only `retrieve`/`execute` paths lead with an IP/hostname instead.
+ */
+function unresolvedMacRemediation(
+	operation: "retrieve" | "execute" | "terminal",
+): string {
+	switch (operation) {
+		case "terminal":
+			return "Reach it over Layer 2 with `--via mac-telnet` (no IP needed), pass an IP/hostname, add a CDB record for this MAC, or opt into host ARP resolution with `--resolve arp`.";
+		case "execute":
+			return "Pass an IP/hostname, add a CDB record for this MAC, or opt into host ARP resolution with `--resolve arp` (mac-telnet L2 execute is not yet available).";
+		default:
+			return "Pass an IP/hostname, add a CDB record for this MAC, or opt into host ARP resolution with `--resolve arp`.";
+	}
 }

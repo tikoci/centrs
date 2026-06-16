@@ -44,6 +44,28 @@ device's, not centrs's: multi-line brace blocks (`{ … }`) do not work over
 - RoMON and WinBox Terminal are execute protocol surfaces in centrs, not
   terminal routes, unless future matrix cells explicitly add terminal support.
 
+## MAC target over SSH (`--resolve`)
+
+A MAC `<router>` defaults to `mac-telnet`, which addresses the device by MAC
+directly — no IP, no resolution. Pinning `--via ssh` for a MAC asks for the
+IP-level console, so the MAC must first become an IP. The policy mirrors
+`retrieve`/`execute` (constitution: target selection), but **terminal leads its
+"unresolved" tip with the L2 alternative**, since `--via mac-telnet` needs no IP:
+
+- **CDB-first.** If the MAC matches a CDB record carrying a `target` IP/host, that
+  IP is used and ssh connects to it. This needs no flag.
+- **No silent ARP.** With no matching record and the default `--resolve none`,
+  centrs errors `target/mac-unresolved` and points at `--via mac-telnet` (reach it
+  over L2), an IP/hostname, a CDB record, or `--resolve arp`. It never falls back
+  to ARP — or to another transport — on its own (constitution: a pinned `--via` is
+  never silently swapped).
+- **`--resolve arp`** (or `CENTRS_RESOLVE=arp`) opts into the host ARP cache: a
+  cache hit yields the IP; a miss errors `target/mac-not-in-arp` (again tipping
+  `--via mac-telnet`). ARP is host-local and best-effort — the neighbor must have
+  been talked to recently.
+
+`--resolve` is a no-op for the `mac-telnet` default (the MAC is the target).
+
 ## SSH key selection
 
 Signed off (settings names): terminal uses the same `sshKey` setting as
@@ -66,9 +88,12 @@ longer open for the file path: **host-key verification** rides the unified
 a changed key → `transport/host-key-mismatch`; `--insecure` →
 `StrictHostKeyChecking=no` — see `docs/CONSTITUTION.md`, Transport trust);
 **agent vs explicit-key** interplay and **algorithm negotiation** are delegated to
-the host OpenSSH (`-i <ssh-key>` when set, else the agent / `~/.ssh/config`).
-Still open for the **interactive** surfaces: the `terminal`→`mac-telnet` fallback
-when SSH is unreachable but a MAC is on file, and the no-pseudo-tty console reader.
+the host OpenSSH (`-i <ssh-key>` when set, else the agent / `~/.ssh/config`). The
+MAC-on-file-but-SSH-pinned case is settled (see *MAC target over SSH* above):
+centrs resolves a MAC for `--via ssh` CDB-first, then tips `--via mac-telnet` —
+it does **not** silently fall back to L2 (constitution: a pinned `--via` is never
+swapped). The no-pseudo-tty console reader is likewise resolved — a CHR spike
+proved `ssh user@host` opens a clean console with no screen emulation.
 
 The setting stores a key path only. Private key material, passphrases, and agent
 contents are always sensitive and belong in `error.redactable_fields` if an

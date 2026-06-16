@@ -123,3 +123,19 @@ A host target with no `--via` selects `ssh`. The inherited terminal hands the
 RouterOS console to the user; `/quit` (or `Ctrl-D`) ends the session. RouterOS's
 no-PTY limitation applies (e.g. multi-line brace blocks are not supported over
 SSH — see the SSH page); single-line commands work.
+
+### TS4. MAC target over `--via ssh` with no CDB record (network-free; `--resolve`)
+
+```bash
+centrs terminal aa:bb:cc:dd:ee:ff --via ssh --username $U --json
+```
+
+A MAC pinned to the IP transport needs an IP. With no matching CDB record and the
+default `--resolve none`, the envelope on stderr is `ok: false`,
+`error.code="target/mac-unresolved"`, exit `1` — and the remediation leads with
+`--via mac-telnet` (reach it over L2, no IP needed). `--resolve arp` opts into the
+host ARP cache instead; a miss is `target/mac-not-in-arp`. centrs never resolves a
+MAC over ARP, or swaps to another transport, on its own. This path touches no
+router, so it is verified by the network-free smoke tier
+(`test/integration/cli-smoke.test.ts`, JG-01) and `test/unit/{terminal,mac}.test.ts`,
+not the CHR integration set.

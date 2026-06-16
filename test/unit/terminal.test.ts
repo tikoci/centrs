@@ -42,6 +42,46 @@ describe("resolveTerminalRequest transport gate", () => {
 	});
 });
 
+/**
+ * `--resolve` (JG-01): a MAC target over the IP transport (`--via ssh`) needs an
+ * IP. The default policy is CDB-first, then an actionable error that leads with
+ * the L2 alternative — never a silent ARP. The mac-telnet default ignores the
+ * MAC→IP step entirely (it addresses the MAC directly).
+ */
+describe("resolveTerminalRequest MAC→IP resolution (--resolve)", () => {
+	test("MAC + --via ssh with no CDB record errors, no silent ARP", async () => {
+		const error = await resolveTerminalRequest(
+			{ targetInput: MAC, via: "ssh" },
+			noEnv,
+		).catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(CentrsError);
+		expect((error as CentrsError).code).toBe("target/mac-unresolved");
+		// The terminal tip leads with the L2 alternative.
+		expect((error as CentrsError).remediation).toContain("--via mac-telnet");
+		expect((error as CentrsError).remediation).toContain("--resolve arp");
+	});
+
+	test("MAC + --via mac-telnet ignores --resolve (addresses the MAC directly)", async () => {
+		// `--resolve arp` on the L2 default is a no-op: mac-telnet never does the
+		// MAC→IP step, so resolution succeeds and the MAC is the target.
+		const resolved = await resolveTerminalRequest(
+			{ targetInput: MAC, via: "mac-telnet", resolve: "arp" },
+			noEnv,
+		);
+		expect(resolved.via).toBe("mac-telnet");
+		expect(resolved.target.mac).toBe(MAC);
+	});
+
+	test("an unknown --resolve value is rejected", async () => {
+		await expect(
+			resolveTerminalRequest(
+				{ targetInput: MAC, via: "ssh", resolve: "dns" },
+				noEnv,
+			),
+		).rejects.toMatchObject({ code: "validation/option" });
+	});
+});
+
 type ResolvedTerminal = Parameters<typeof buildSshTerminalArgv>[0];
 
 function resolvedSsh(
