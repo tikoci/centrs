@@ -31,7 +31,7 @@ A cell advances only with the matching evidence in the same change.
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
 | discover | —             | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
 | check    | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started`    |
-| config   | —             | —             | —             | —             | —             | —             | —             | —                |
+| settings | —             | —             | —             | —             | —             | —             | —             | —                |
 
 `devices` does not use a transport in the protocol sense, so its grid row stays
 `—`; its cell state is `CHR-passed`. `devices` performs no network IO, so that
@@ -102,9 +102,9 @@ with argv unit-tested in `test/unit/terminal.test.ts`. **All three SSH cells
 method within the rest-api/native-api cells**, not a grid column — it needs
 inbound reachability (router → centrs) so it is never auto-selected.
 
-`config` is `designed` and transport-less (like `devices`), so its grid row
-stays `—`. `commands/config/README.md` describes the `centrs.env` + `__default__`
-front-end (interactive first-time setup plus `config get/set/reset/print`); no
+`settings` is `designed` and transport-less (like `devices`), so its grid row
+stays `—`. `commands/settings/README.md` describes the `centrs.env` + `__default__`
+front-end (interactive first-time setup plus `settings get/set/reset/print`); no
 code yet.
 
 ### Transport-base readiness (below the command grid)

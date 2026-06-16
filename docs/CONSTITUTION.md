@@ -165,9 +165,9 @@ Lowest to highest priority:
    dotenv-style `CENTRS_*=value` **global** defaults (centrs-only preferences
    with no per-device home; **not** an inventory or credential store — per-device
    settings stay in the CDB). Applied as fallbacks, never injected into
-   `process.env`. The `centrs config` command is its front-end; the file
+   `process.env`. The `centrs settings` command is its front-end; the file
    mechanics, `--skip-env-file`, and the settings-key vocabulary live in
-   `commands/config/README.md`.
+   `commands/settings/README.md`.
 3. CDB comment-kv metadata
 4. Environment variables (`CENTRS_*`)
 5. CLI flags / API call args
