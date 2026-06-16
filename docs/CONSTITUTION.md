@@ -124,7 +124,7 @@ Errors are typed values, not thrown strings. Every error has:
   `validation/unknown-attribute`, `cdb/decrypt-failed`.
 - `message` — one human sentence. No stack trace.
 - `fix` — one human sentence describing the next step the caller should take.
-- `details_url` — pointer to the canonical explanation (see URL scheme).
+- `details_url` — pointer to the canonical explanation (`docs/errors/README.md`).
 - `cause?` — structured sub-error, when relevant (RouterOS nova error,
   transport detail). Stack traces and raw exception text are summarized, not
   embedded raw.
@@ -148,34 +148,12 @@ Two error sources must be visually distinguishable:
    nova error). Map to a normalized `routeros/*` code; preserve the original
    string in `cause`.
 
-Mapping RouterOS string errors to normalized codes is ongoing maintenance. The
-authoritative vocabulary is the live router's own strings: grounded on CHR 7.23,
-the REST `detail` field (HTTP ≥400, shape
-`{"detail":"<msg>","error":<http-status>,"message":"<http reason>"}`) and the
-native-api `!trap` message carry the **same** text for the same fault, so one
-shared table maps both transports. Ground new mappings on CHR evidence, not on
-assumption. (`tikoci/m2ir` is referenced for protocol IR but is not an
-accessible source for this mapping; the router strings are.)
-
-### Error URL scheme
-
-All errors carry `details_url` of the form:
-
-```text
-https://tikoci.github.io/centrs/errors/<code>
-```
-
-`<code>` is the slash-namespaced error code as-is. Example:
-`https://tikoci.github.io/centrs/errors/routeros/unsupported-path`.
-
-Rules:
-
-- The URL is normalized; the GitHub Pages site routes it to a human page. The
-  page is not the typedoc URL — typedoc lives elsewhere.
-- Adding an error code requires adding a Pages entry under the same path.
-  Code and Pages must ship together; a missing page is a centrs bug.
-- The URL must remain stable across centrs versions. If a code is renamed,
-  the old URL must redirect.
+RouterOS faults map to a normalized `routeros/*` code (the original string kept
+in `cause`) via a CHR-grounded table shared by REST `detail` and native `!trap`
+(`src/core/routeros-errors.ts`). Every error's `details_url` is the stable
+`https://tikoci.github.io/centrs/errors/<code>`. The mapping shape, the
+ground-on-CHR-evidence rule, and the URL-scheme rules live in
+`docs/errors/README.md`.
 
 ## Settings precedence
 
