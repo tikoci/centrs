@@ -86,7 +86,12 @@ export function recordQaRun(db: Database, input: QaRunInput): QaRunRow {
 			input.suites ?? 0,
 			input.examples ?? 0,
 			input.commitSha ?? null,
-		) as unknown as QaRunRow;
+		) as QaRunRow | null;
+	if (!row) {
+		throw new Error(
+			"Failed to record QA run: INSERT RETURNING produced no row",
+		);
+	}
 	return row;
 }
 
@@ -228,5 +233,12 @@ async function main(args: readonly string[]): Promise<number> {
 }
 
 if (import.meta.main) {
-	process.exit(await main(Bun.argv.slice(2)));
+	// Best-effort telemetry: surface a clear message (the CI step is
+	// continue-on-error, so a crash here logs but does not fail the QA job).
+	try {
+		process.exit(await main(Bun.argv.slice(2)));
+	} catch (error) {
+		console.error(`::warning title=QA results store::${String(error)}`);
+		process.exit(1);
+	}
 }

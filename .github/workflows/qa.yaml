@@ -143,19 +143,28 @@ jobs:
       # date, commit) to a bun:sqlite history so the channel→version drift and
       # the must-pass policy can be read from real data. Additive + always-run:
       # recording never changes the job's pass/fail.
+      # Best-effort telemetry: continue-on-error keeps the CHR test result as the
+      # job outcome. All run-block values come in via env (or built-in
+      # $RUNNER_TEMP/$GITHUB_SHA) so the shell treats user-controllable inputs
+      # (routeros_version) as data, never as code — no template injection.
       - name: Record QA result
         if: always()
+        continue-on-error: true
+        env:
+          CHANNEL: ${{ matrix.routeros_channel }}
+          REQUESTED_VERSION: ${{ inputs.routeros_version || '' }}
+          OUTCOME: ${{ steps.chr_test.outcome == 'success' && 'pass' || 'fail' }}
         run: |
-          outcome='${{ steps.chr_test.outcome == 'success' && 'pass' || 'fail' }}'
           bun run scripts/qa-results-db.ts \
-            --db "${{ runner.temp }}/qa-results.sqlite" \
-            --channel "${{ matrix.routeros_channel }}" \
-            --requested-version "${{ inputs.routeros_version || '' }}" \
-            --outcome "$outcome" \
-            --commit "${{ github.sha }}" \
-            --report "${{ runner.temp }}/centrs-integration-report.jsonl"
+            --db "$RUNNER_TEMP/qa-results.sqlite" \
+            --channel "$CHANNEL" \
+            --requested-version "$REQUESTED_VERSION" \
+            --outcome "$OUTCOME" \
+            --commit "$GITHUB_SHA" \
+            --report "$RUNNER_TEMP/centrs-integration-report.jsonl"
       - name: Upload QA results DB
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: qa-results-${{ matrix.routeros_channel }}
