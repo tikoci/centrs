@@ -389,6 +389,8 @@ stdio-only and grows no listener of its own.
   the RouterOS error-string vocabulary; ground error mappings on live CHR
   strings.
 - `tikoci/lsp-routeros-ts` — canonicalization, parse-validation patterns.
+- `tikoci/vscode-tikbook` — peer RouterOS front-end (notebook UX); a source for
+  run-time error-string mapping (faults that pass `:parse` but fail at run).
 - `tikoci/quickchr` — CHR-backed integration test harness.
 
 When one of these owns a question, defer to it instead of restating here.
