@@ -37,9 +37,10 @@ export const executeCommand: CliCommandMetadata = {
 			description: "Override the resolved management port.",
 		},
 		{
-			flag: "--username",
+			flag: "--username / --user / -u",
 			valueName: "<name>",
-			description: "RouterOS username. Falls back to `CENTRS_USERNAME`.",
+			description:
+				"RouterOS username (aliases `--user`, `-u`). Falls back to `CENTRS_USERNAME`.",
 		},
 		{
 			flag: "--password",
@@ -157,6 +158,8 @@ function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 			case "--port":
 				parsed.port = parseIntegerFlag(expectValue(args, ++index, arg), arg);
 				break;
+			case "--user":
+			case "-u":
 			case "--username":
 				parsed.username = expectValue(args, ++index, arg);
 				break;

@@ -104,9 +104,10 @@ export const btestCommand: CliCommandMetadata = {
 			description: "(server) Concurrent test cap (1..1000). Default 100.",
 		},
 		{
-			flag: "--user",
+			flag: "--user / --username / -u",
 			valueName: "<name>",
-			description: "Credential (falls back to CDB / CENTRS_USERNAME).",
+			description:
+				"Credential (aliases --username, -u; falls back to CDB / CENTRS_USERNAME).",
 		},
 		{
 			flag: "--password",
@@ -242,6 +243,8 @@ function parseClientArgs(args: readonly string[]): ClientCliArgs {
 			case "--nat-mode":
 				request.natMode = true;
 				break;
+			case "--username":
+			case "-u":
 			case "--user":
 				request.username = expectValue(args, ++i, arg);
 				break;
@@ -311,6 +314,8 @@ function parseServerArgs(args: readonly string[]): ServerCliArgs {
 			case "--duration":
 				request.durationMs = parseDuration(expectValue(args, ++i, arg));
 				break;
+			case "--username":
+			case "-u":
 			case "--user":
 				request.username = expectValue(args, ++i, arg);
 				break;
