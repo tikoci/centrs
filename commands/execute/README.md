@@ -31,6 +31,15 @@ Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
   path+verb+attrs (`POST /rest/<path>/<verb>` → `{"ret":"<.id>"}`, clean typed
   errors); falls back to `POST /rest/execute {"script":"<cli>"}` for
   non-path-shaped console commands.
+- **RouterOS REST verb mapping — the `POST` ≠ `add` trap (surfaced explicitly).**
+  RouterOS REST maps `GET`→print, **`PUT`→add**, `PATCH`→set, `DELETE`→remove,
+  and `POST`→the *universal* "run any console command" method ([REST API → HTTP
+  Methods](https://help.mikrotik.com/docs/spaces/ROS/pages/47579162/REST%2BAPI#RESTAPI-HTTPMethods)).
+  So the naive REST assumption `POST`=create is **wrong** — `PUT` is RouterOS's
+  create. centrs sidesteps the trap with the explicit verb-in-path form
+  `POST /rest/<path>/<verb>` (e.g. `POST /rest/ip/route/add`): add/set/remove are
+  **named**, never inferred from the HTTP method. The mapping is documented here
+  so the trap is impossible to miss at the api layer.
 - native-api adapter issues the same write as a tagged `talk` sentence; its
   `!trap` strings share one error table with REST `detail`. REST and native
   classify the same RouterOS fault to the same `routeros/*` code: both feed the
