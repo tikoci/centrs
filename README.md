@@ -38,7 +38,7 @@ product; without them this would just be a worse `curl`.
 | `check`    | Probe reachability and management protocol availability. |
 | `devices`  | View and maintain the CDB-backed device registry (the only writer). |
 | `discover` | Discover MNDP neighbors and optionally save them into the CDB. |
-| `config`   | Manage centrs's own settings (`centrs.env`, `__default__`) and run first-time setup. |
+| `settings` | Manage centrs's own settings (`centrs.env`, `__default__`) and run first-time setup. |
 
 Each command's `commands/<name>/` directory carries its design and the
 executable example list that gates "done".
