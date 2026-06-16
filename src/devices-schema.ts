@@ -64,6 +64,8 @@ export type DeviceRecord = z.infer<typeof deviceRecordSchema>;
 
 function remediationFor(field: string): string {
 	switch (field) {
+		case "(record)":
+			return "Pass a device record object with at least `recordType` (a non-negative integer) and a non-blank `target`.";
 		case "target":
 			return "Pass a non-blank address or MAC (optionally host:port) as the target.";
 		case "recordType":
@@ -85,12 +87,21 @@ export function parseDeviceRecord(input: unknown): DeviceRecord {
 	if (result.success) {
 		return result.data;
 	}
+	// An empty issue path means the input was not a record object at all
+	// (e.g. a string/null), so blame the record rather than a named field.
 	const issue = result.error.issues[0];
-	const field = issue?.path.join(".") || "(record)";
+	const field =
+		issue && issue.path.length > 0 ? issue.path.join(".") : "(record)";
 	throw new CentrsError({
 		code: "cdb/invalid-record",
 		summary: `Invalid device record: ${field} — ${issue?.message ?? "failed validation"}.`,
 		remediation: remediationFor(field),
 		context: { field },
+		// Flattened Zod issues for debugging — summarized, not the raw error.
+		causeData: result.error.issues.map((i) => ({
+			path: i.path.join("."),
+			code: i.code,
+			message: i.message,
+		})),
 	});
 }

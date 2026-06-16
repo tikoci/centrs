@@ -63,6 +63,21 @@ describe("deviceRecordSchema / parseDeviceRecord", () => {
 		}
 	});
 
+	test("a non-object input blames the whole record and carries Zod cause data", () => {
+		try {
+			parseDeviceRecord("not-a-record");
+			throw new Error("expected parseDeviceRecord to throw");
+		} catch (error) {
+			expect((error as CentrsError).code).toBe("cdb/invalid-record");
+			expect((error as CentrsError).context).toMatchObject({
+				field: "(record)",
+			});
+			expect((error as CentrsError).remediation).toContain("recordType");
+			// Flattened Zod issues are attached for debugging.
+			expect(Array.isArray((error as CentrsError).causeData)).toBe(true);
+		}
+	});
+
 	test("rejects a non-integer / negative recordType", () => {
 		for (const recordType of [1.5, -1]) {
 			expect(() =>
