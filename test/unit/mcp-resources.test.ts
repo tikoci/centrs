@@ -26,9 +26,27 @@ describe("buildErrorsResource", () => {
 
 describe("buildDevicesResource", () => {
 	test("lists registered devices with write policy and no passwords", async () => {
+		// Long, unique canary passwords on purpose. DevicesResource intentionally
+		// includes `cdbFile` (the random mkdtemp path, e.g. /tmp/centrs-mcp-Ap1x9z/
+		// winbox.cdb). A short password like "p1" can appear by chance inside that
+		// random path segment, making `not.toContain("p1")` flakily fail even
+		// though nothing leaked — that was the #36 flake. A 20+ char canary cannot
+		// be a substring of a 6-char temp suffix, so the leak assertion is exact.
+		const rwPassword = "rw-canary-pw-3f9a2b7c5e";
+		const roPassword = "ro-canary-pw-8d1e4f6a0b";
 		const { path, cleanup } = await makeMcpTestCdb([
-			{ target: "rw-box", group: "edge", comment: "mcp=rw", password: "p1" },
-			{ target: "ro-box", group: "edge", comment: "mcp=ro", password: "p2" },
+			{
+				target: "rw-box",
+				group: "edge",
+				comment: "mcp=rw",
+				password: rwPassword,
+			},
+			{
+				target: "ro-box",
+				group: "edge",
+				comment: "mcp=ro",
+				password: roPassword,
+			},
 		]);
 		try {
 			const resource = await buildDevicesResource(
@@ -39,8 +57,8 @@ describe("buildDevicesResource", () => {
 			expect(byTarget.get("rw-box")?.writePolicy).toBe("rw");
 			expect(byTarget.get("ro-box")?.writePolicy).toBe("ro");
 			const serialized = JSON.stringify(resource);
-			expect(serialized).not.toContain("p1");
-			expect(serialized).not.toContain("p2");
+			expect(serialized).not.toContain(rwPassword);
+			expect(serialized).not.toContain(roPassword);
 			expect(serialized).not.toContain("password");
 		} finally {
 			await cleanup();
