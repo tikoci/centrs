@@ -199,28 +199,29 @@ export function unresolvedMacError(
 	return new CentrsError({
 		code: "target/mac-not-in-arp",
 		summary: `MAC ${mac} is not in the host ARP cache, so it cannot be resolved to an IP.`,
-		remediation:
-			operation === "terminal"
-				? "Reach it over Layer 2 with `--via mac-telnet` (no IP needed), or make the device IP-reachable first (e.g. ping it, or run `centrs discover`) so the host learns its MAC→IP mapping, then retry."
-				: "Make the device reachable first (e.g. ping its IP, or run `centrs discover`) so the host learns its MAC→IP mapping, then retry — or pass the IP/hostname directly.",
+		remediation: macTelnetCapable(operation)
+			? "Reach it over Layer 2 with `--via mac-telnet` (no IP needed), or make the device IP-reachable first (e.g. ping it, or run `centrs discover`) so the host learns its MAC→IP mapping, then retry."
+			: "Make the device reachable first (e.g. ping its IP, or run `centrs discover`) so the host learns its MAC→IP mapping, then retry — or pass the IP/hostname directly.",
 		context: { mac, resolve: policy },
 	});
 }
 
 /**
- * The non-ARP "MAC has no CDB record" remediation, tailored per command. For
- * `terminal` the natural alternative is L2 (`--via mac-telnet` needs no IP); the
- * IP-only `retrieve`/`execute` paths lead with an IP/hostname instead.
+ * `execute` and `terminal` both have a mac-telnet L2 path that reaches a MAC
+ * with no IP at all, so their remediation leads with `--via mac-telnet`.
+ * `retrieve` has no L2 transport and leads with an IP/hostname instead.
  */
+function macTelnetCapable(
+	operation: "retrieve" | "execute" | "terminal",
+): boolean {
+	return operation !== "retrieve";
+}
+
+/** The non-ARP "MAC has no CDB record" remediation, tailored per command. */
 function unresolvedMacRemediation(
 	operation: "retrieve" | "execute" | "terminal",
 ): string {
-	switch (operation) {
-		case "terminal":
-			return "Reach it over Layer 2 with `--via mac-telnet` (no IP needed), pass an IP/hostname, add a CDB record for this MAC, or opt into host ARP resolution with `--resolve arp`.";
-		case "execute":
-			return "Pass an IP/hostname, add a CDB record for this MAC, or opt into host ARP resolution with `--resolve arp` (mac-telnet L2 execute is not yet available).";
-		default:
-			return "Pass an IP/hostname, add a CDB record for this MAC, or opt into host ARP resolution with `--resolve arp`.";
-	}
+	return macTelnetCapable(operation)
+		? "Reach it over Layer 2 with `--via mac-telnet` (no IP needed), pass an IP/hostname, add a CDB record for this MAC, or opt into host ARP resolution with `--resolve arp`."
+		: "Pass an IP/hostname, add a CDB record for this MAC, or opt into host ARP resolution with `--resolve arp`.";
 }

@@ -46,24 +46,16 @@ device's, not centrs's: multi-line brace blocks (`{ … }`) do not work over
 
 ## MAC target over SSH (`--resolve`)
 
-A MAC `<router>` defaults to `mac-telnet`, which addresses the device by MAC
-directly — no IP, no resolution. Pinning `--via ssh` for a MAC asks for the
-IP-level console, so the MAC must first become an IP. The policy mirrors
-`retrieve`/`execute` (constitution: target selection), but **terminal leads its
-"unresolved" tip with the L2 alternative**, since `--via mac-telnet` needs no IP:
+A MAC `<router>` defaults to `mac-telnet`, which addresses the device by MAC —
+no IP, no resolution. Pinning `--via ssh` asks for the IP-level console, so the
+MAC must first resolve to an IP. That resolution follows the shared `--resolve`
+policy (CDB record → `--resolve arp` host-ARP opt-in → error; never a silent ARP
+or transport swap) — see `docs/CONSTITUTION.md`, *Target selection grammar* and
+*Protocol selection*.
 
-- **CDB-first.** If the MAC matches a CDB record carrying a `target` IP/host, that
-  IP is used and ssh connects to it. This needs no flag.
-- **No silent ARP.** With no matching record and the default `--resolve none`,
-  centrs errors `target/mac-unresolved` and points at `--via mac-telnet` (reach it
-  over L2), an IP/hostname, a CDB record, or `--resolve arp`. It never falls back
-  to ARP — or to another transport — on its own (constitution: a pinned `--via` is
-  never silently swapped).
-- **`--resolve arp`** (or `CENTRS_RESOLVE=arp`) opts into the host ARP cache: a
-  cache hit yields the IP; a miss errors `target/mac-not-in-arp` (again tipping
-  `--via mac-telnet`). ARP is host-local and best-effort — the neighbor must have
-  been talked to recently.
-
+Terminal-specific: when no IP resolves, the `target/mac-unresolved` (and
+`target/mac-not-in-arp`) tip **leads with `--via mac-telnet`**, since for terminal
+reaching the device over L2 needs no IP at all — it is the first thing to try.
 `--resolve` is a no-op for the `mac-telnet` default (the MAC is the target).
 
 ## SSH key selection

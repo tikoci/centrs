@@ -124,7 +124,12 @@ RouterOS console to the user; `/quit` (or `Ctrl-D`) ends the session. RouterOS's
 no-PTY limitation applies (e.g. multi-line brace blocks are not supported over
 SSH — see the SSH page); single-line commands work.
 
-### TS4. MAC target over `--via ssh` with no CDB record (network-free; `--resolve`)
+## MAC target over `--via ssh` resolution (behavior note — not a numbered CHR example)
+
+This path resolves a MAC to an IP and, on the unresolved / no-opt-in branch,
+fails before reaching any router — so it is **not** a numbered CHR integration
+example. It is covered by the network-free smoke tier
+(`test/integration/cli-smoke.test.ts`, JG-01) and `test/unit/{terminal,mac}.test.ts`.
 
 ```bash
 centrs terminal aa:bb:cc:dd:ee:ff --via ssh --username $U --json
@@ -135,7 +140,5 @@ default `--resolve none`, the envelope on stderr is `ok: false`,
 `error.code="target/mac-unresolved"`, exit `1` — and the remediation leads with
 `--via mac-telnet` (reach it over L2, no IP needed). `--resolve arp` opts into the
 host ARP cache instead; a miss is `target/mac-not-in-arp`. centrs never resolves a
-MAC over ARP, or swaps to another transport, on its own. This path touches no
-router, so it is verified by the network-free smoke tier
-(`test/integration/cli-smoke.test.ts`, JG-01) and `test/unit/{terminal,mac}.test.ts`,
-not the CHR integration set.
+MAC over ARP, or swaps to another transport, on its own (see
+`commands/terminal/README.md` → *MAC target over SSH*).
