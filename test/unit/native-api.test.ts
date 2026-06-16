@@ -117,6 +117,59 @@ describe("native-api word and sentence framing", () => {
 	});
 });
 
+/**
+ * JG-15 — attribute *value* round-trip across the codec, the worry case the
+ * other transports escape but native-api does not. The API protocol is
+ * length-prefix framed, not delimiter-escaped: a value is a count of raw bytes,
+ * so `=`, spaces, CR/LF, NUL, and multibyte UTF-8 all survive verbatim with no
+ * escaping. `parseReply` splits `=name=value` on the *second* `=`
+ * ({@link parseReply} uses `indexOf("=", 1)`), so a value that itself contains
+ * `=` is returned whole, not truncated. This pins that no caller-side trimming
+ * or naive `split("=")` corrupts a value end-to-end:
+ * `attributeWord → encodeSentence → SentenceReader → parseReply`.
+ */
+describe("native-api attribute value round-trip (JG-15)", () => {
+	/** Send one `=name=value` attribute through the full codec and read it back. */
+	function roundTrip(name: string, value: string): string | undefined {
+		const words = ["!re", attributeWord(name, value)];
+		const reader = new SentenceReader();
+		const sentences = reader.push(encodeSentence(words));
+		expect(sentences).toHaveLength(1);
+		return readAttribute(parseReply(sentences[0] as string[]), name);
+	}
+
+	const cases: Array<[label: string, value: string]> = [
+		["a value containing '=' (split on the second =)", "key1=val1=val2"],
+		["an embedded RouterOS expression with =", "([/system/clock/get date]=x)"],
+		["spaces (an unquoted comment)", "office uplink — do not touch"],
+		["a literal CR/LF inside the value", "line1\r\nline2"],
+		["a tab and other control bytes", "a\tb\x01c"],
+		["a NUL byte mid-value (framing is length-prefixed)", "before\x00after"],
+		["multibyte UTF-8", "café — ☃ — 日本語 — 🛰️"],
+		[
+			"RouterOS escapes left literal (no double-escaping)",
+			'\\"quoted\\" $x \\n ;',
+		],
+		["leading/trailing whitespace is preserved", "  padded  "],
+		["the empty value", ""],
+		["a long value spanning a multi-byte length prefix", "z".repeat(0x250)],
+	];
+
+	for (const [label, value] of cases) {
+		test(label, () => {
+			expect(roundTrip("comment", value)).toBe(value);
+		});
+	}
+
+	test("a value-less attribute (`=name=`) reads back as the empty string", () => {
+		// parseReply maps both `=name=` and a bare `=name` to "".
+		expect(roundTrip("disabled", "")).toBe("");
+		const reader = new SentenceReader();
+		const [sentence] = reader.push(encodeSentence(["!re", "=name"]));
+		expect(readAttribute(parseReply(sentence as string[]), "name")).toBe("");
+	});
+});
+
 describe("native-api SentenceReader streaming", () => {
 	test("reassembles a sentence split across arbitrary byte boundaries", () => {
 		const sentence = encodeSentence(["!re", "=name=ether1", "=type=ether"]);

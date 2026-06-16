@@ -307,7 +307,15 @@ export function challengeResponse(
 	return `00${hash.digest("hex")}`;
 }
 
-/** Build an API command word `=name=value` attribute word. */
+/**
+ * Build an API command word `=name=value` attribute word.
+ *
+ * The value needs **no escaping**: words are length-prefix framed on the wire
+ * ({@link encodeWord}), so any bytes — `=`, spaces, CR/LF, NUL, multibyte UTF-8 —
+ * pass through verbatim, and {@link parseReply} splits on the *second* `=` so a
+ * value that contains `=` is read back whole. Round-trip pinned in
+ * `test/unit/native-api.test.ts` ("attribute value round-trip (JG-15)").
+ */
 export function attributeWord(name: string, value: string): string {
 	return `=${name}=${value}`;
 }
