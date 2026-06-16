@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Bare manual trigger so the fast gate can be re-run from the UI/CLI without a
+  # push; no inputs (the CHR-specific inputs moved to qa.yaml with the CHR job).
+  workflow_dispatch: {}
 # CI is the fast push/PR gate (lint, unit tests, build, fixture integration).
 # RouterOS CHR integration lives only in qa.yaml (scheduled matrix + on-demand
 # workflow_dispatch) so there is one chr-integration definition, not two.
