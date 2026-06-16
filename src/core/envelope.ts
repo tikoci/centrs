@@ -67,6 +67,14 @@ export interface Tip {
 	detailsUrl?: string;
 }
 
+/** Base URL for the human-readable tip pages (mirrors the error catalog scheme). */
+export const TIPS_BASE_URL = "https://tikoci.github.io/centrs/tips/";
+
+/** Build a {@link Tip} with a `tip/*` code and its generated `detailsUrl`. */
+export function buildTip(code: string, message: string, fix: string): Tip {
+	return { code, message, fix, detailsUrl: `${TIPS_BASE_URL}${code}` };
+}
+
 /** Resolved target identity plus per-field provenance. */
 export interface EnvelopeTargetMeta {
 	/** Raw `<router>` argument as supplied by the caller. */

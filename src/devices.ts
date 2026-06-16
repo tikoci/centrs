@@ -10,6 +10,7 @@ import type {
 	SettingSourceKind,
 	Tip,
 } from "./core/envelope.ts";
+import { buildTip as tip } from "./core/envelope.ts";
 import {
 	buildWinBoxCdbEntryRecord,
 	decodeWinBoxCdbEntries,
@@ -399,11 +400,6 @@ export function recordTypeName(recordType: number): string {
 
 /** Reserved CDB target supplying fallback creds (mirrors the resolver constant). */
 const DEFAULT_RECORD_TARGET = "__default__";
-const TIPS_BASE_URL = "https://tikoci.github.io/centrs/tips/";
-
-function tip(code: string, message: string, fix: string): Tip {
-	return { code, message, fix, detailsUrl: `${TIPS_BASE_URL}${code}` };
-}
 
 /** Tip for an empty registry — the first-run / no-records-yet pointer. */
 function noDevicesTips(entries: readonly WinBoxCdbEntry[]): Tip[] {
