@@ -248,10 +248,10 @@ and not already expressible in those namespaces.
 
 - **Verbs are `upload` / `download` / `list`** (+ `remove` / `mkdir` / `copy` for
   device file management). Direction is explicit in the sub-verb; `upload` =
-  host → device per WinBox wording. **`copy` needs RouterOS ≥ 7.23**: server-side
-  copy rides the REST `/file/copy` endpoint, first seen in 7.23beta2; on ≤ 7.21.x
-  RouterOS returns `no such command` (the integration test gates the `copy`
-  example on the running version).
+  host → device per WinBox wording. **`copy` needs RouterOS ≥ 7.23beta2**:
+  server-side copy rides the REST `/file/copy` endpoint, first seen in 7.23beta2;
+  earlier RouterOS (e.g. 7.21.x long-term) returns `no such command` (the
+  integration test gates the `copy` example on the running version).
 - **Method selection is size/direction-aware** (table above), superseding the
   earlier "sftp is always the default" decision. REST/native carry small writes
   and all reads (reads scale via chunked `/file/read`); sftp carries large

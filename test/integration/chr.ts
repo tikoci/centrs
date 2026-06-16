@@ -69,7 +69,7 @@ export function exampleIds(count: number): number[] {
 
 /**
  * RouterOS classifies a *validation reject* differently across versions. For an
- * unknown attribute (e.g. `no-such-arg=x`), `:parse`:
+ * unknown attribute (e.g. `no-such-arg=x`), the RouterOS `:parse` output differs:
  *   - ≥ 7.23 reports `bad parameter <name>` → centrs `validation/unknown-attribute`
  *   - ≤ 7.21.x reports a generic `syntax error (line/col)` → centrs `validation/syntax`
  * centrs cannot tell "unknown attribute" from "syntax error" on the older wording,
@@ -83,21 +83,34 @@ export const VALIDATION_REJECT_CODES: readonly string[] = [
 ];
 
 /**
- * Compare two RouterOS version strings (e.g. "7.21.4 (long-term) ...", "7.23").
- * Returns true when `running` ≥ `target` on major.minor.patch (channel/beta/rc
- * suffixes ignored). Used to version-gate features that only exist on newer
- * RouterOS — e.g. the `/file/copy` REST endpoint, first seen in 7.23beta2.
+ * Compare two RouterOS version strings (e.g. "7.21.4 (long-term) ...", "7.23",
+ * "7.23beta2"). Returns true when `running` ≥ `target`, ordering on
+ * major.minor.patch, then prerelease stage (beta < rc < release), then the stage
+ * number — so 7.23beta1 < 7.23beta2 < 7.23rc1 < 7.23 < 7.23.1. Used to
+ * version-gate features that only exist on newer RouterOS — e.g. the `/file/copy`
+ * REST endpoint, first seen in 7.23beta2 (so a 7.23beta1 testing build must gate
+ * out). A release with no suffix sorts above any beta/rc of the same x.y.
  */
 export function routerOsAtLeast(running: string, target: string): boolean {
-	const parts = (raw: string): number[] => {
-		const match = raw.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
-		return match
-			? [Number(match[1]), Number(match[2]), Number(match[3] ?? 0)]
-			: [0, 0, 0];
+	const parts = (raw: string): [number, number, number, number, number] => {
+		const match = raw.match(/(\d+)\.(\d+)(?:\.(\d+))?(?:(beta|rc)(\d+))?/i);
+		if (!match) {
+			return [0, 0, 0, 2, 0];
+		}
+		// Stage rank: release (no beta/rc) sorts above rc, which sorts above beta.
+		const stage = match[4]?.toLowerCase();
+		const stageRank = stage === undefined ? 2 : stage === "rc" ? 1 : 0;
+		return [
+			Number(match[1]),
+			Number(match[2]),
+			Number(match[3] ?? 0),
+			stageRank,
+			Number(match[5] ?? 0),
+		];
 	};
 	const a = parts(running);
 	const b = parts(target);
-	for (let index = 0; index < 3; index += 1) {
+	for (let index = 0; index < a.length; index += 1) {
 		const left = a[index] ?? 0;
 		const right = b[index] ?? 0;
 		if (left !== right) {

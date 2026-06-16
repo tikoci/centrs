@@ -239,7 +239,7 @@ describeFast("transfer against CHR", () => {
 				((await chr.rest("/system/resource")) as Record<string, string>)[
 					"version"
 				] ?? "";
-			if (routerOsAtLeast(routerOsVersion, "7.23")) {
+			if (routerOsAtLeast(routerOsVersion, "7.23beta2")) {
 				await ok([
 					"transfer",
 					...rest,
