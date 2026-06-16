@@ -45,9 +45,10 @@ export const terminalCommand: CliCommandMetadata = {
 				"Override the port: ssh default 22, mac-telnet default 20561.",
 		},
 		{
-			flag: "--username",
+			flag: "--username / --user / -u",
 			valueName: "<name>",
-			description: "RouterOS username. Falls back to CENTRS_USERNAME.",
+			description:
+				"RouterOS username (aliases --user, -u). Falls back to CENTRS_USERNAME.",
 		},
 		{
 			flag: "--password",
@@ -208,6 +209,8 @@ function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 			case "--port":
 				flags.port = Number.parseInt(expectValue(args, ++index, arg), 10);
 				break;
+			case "--user":
+			case "-u":
 			case "--username":
 				flags.username = expectValue(args, ++index, arg);
 				break;

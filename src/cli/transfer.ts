@@ -92,9 +92,10 @@ export const transferCommand: CliCommandMetadata = {
 			description: "Override the resolved management port.",
 		},
 		{
-			flag: "--username",
+			flag: "--username / --user / -u",
 			valueName: "<name>",
-			description: "RouterOS username. Falls back to CENTRS_USERNAME.",
+			description:
+				"RouterOS username (aliases --user, -u). Falls back to CENTRS_USERNAME.",
 		},
 		{
 			flag: "--password",
@@ -252,6 +253,8 @@ function parseTransferCliArgs(
 			case "--port":
 				flags.port = Number.parseInt(expectValue(args, ++index, arg), 10);
 				break;
+			case "--user":
+			case "-u":
 			case "--username":
 				flags.username = expectValue(args, ++index, arg);
 				break;

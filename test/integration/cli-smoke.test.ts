@@ -129,4 +129,19 @@ describe("CLI smoke (real subprocess, no network)", () => {
 			await rm(home, { recursive: true, force: true });
 		}
 	});
+
+	test("--user and -u are accepted aliases for --username (JG-23)", async () => {
+		// With no command, the alias must be *parsed* (consuming "admin") so we reach
+		// the missing-command check — not rejected as an unknown flag.
+		for (const alias of ["--user", "-u"]) {
+			const res = await runCliProcess({
+				args: ["execute", alias, "admin", "--json"],
+			});
+			expect(res.exitCode).toBe(1);
+			const envelope = parseEnvelope(res.stderrText);
+			expect(envelope.ok).toBe(false);
+			expect(envelope.error?.code).toBe("input/invalid-command");
+			expect(res.stderrText).toContain("requires a RouterOS command");
+		}
+	});
 });
