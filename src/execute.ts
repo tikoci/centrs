@@ -5,8 +5,10 @@ import type {
 	CommonSettingsMeta,
 	SettingSource as CoreSettingSource,
 	EnvelopeValidationMeta,
+	Tip,
 	Warning,
 } from "./core/envelope.ts";
+import { buildTip } from "./core/envelope.ts";
 import { mapRouterOsError } from "./core/routeros-errors.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import {
@@ -271,7 +273,7 @@ export async function runResolvedExecute(
 			ok: true,
 			data,
 			warnings: [...resolved.warnings],
-			tips: [],
+			tips: resolvedExecuteTips(resolved),
 			meta: metaFromResolved(resolved, validation, data),
 		});
 	} finally {
@@ -441,7 +443,7 @@ export function buildExecuteErrorEnvelopeFromResolved(
 		ok: false,
 		error: serializeCentrsError(centrsError),
 		warnings: [...resolved.warnings],
-		tips: [],
+		tips: resolvedExecuteTips(resolved),
 		meta: metaFromResolved(
 			resolved,
 			validation ?? {
@@ -1047,6 +1049,31 @@ function executeRequestSummary(
 		format: resolved.format.value,
 		maxResultsBytes: resolved.maxResultsBytes?.value,
 	};
+}
+
+/**
+ * Advisory tips derived from the resolved request (advice, never an anomaly —
+ * see the constitution's tips channel). Today: a mac-telnet target with no
+ * credentials resolved from any source. mac-telnet logs in with RouterOS
+ * credentials over MTWEI (MD5 is refused by current RouterOS), so an empty login
+ * is rejected at connect time — surface that up front rather than only as a
+ * downstream auth error.
+ */
+export function resolvedExecuteTips(resolved: ResolvedExecuteRequest): Tip[] {
+	if (
+		resolved.via.value === "mac-telnet" &&
+		resolved.auth.username === undefined &&
+		!resolved.auth.passwordProvided
+	) {
+		return [
+			buildTip(
+				"tip/mac-telnet-no-credentials",
+				"No username or password was resolved for this mac-telnet target.",
+				"mac-telnet logs in with RouterOS credentials over MTWEI (MD5 is refused): pass --username/--password, set CENTRS_USERNAME/CENTRS_PASSWORD, or add a CDB record for this device.",
+			),
+		];
+	}
+	return [];
 }
 
 function dataFromResult(result: ProtocolExecuteResult): unknown {

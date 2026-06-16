@@ -5,6 +5,8 @@ import {
 	execute,
 	executeEnvelope,
 	isWriteShaped,
+	type ResolvedExecuteRequest,
+	resolvedExecuteTips,
 	resolveExecuteRequest,
 } from "../../src/execute.ts";
 
@@ -153,5 +155,58 @@ describe("execute bare-MAC transport default honors host precedence", () => {
 		);
 		expect(resolved.via.value).toBe("native-api");
 		expect(resolved.target.host).toBe(IP);
+	});
+});
+
+describe("resolvedExecuteTips — mac-telnet no-credentials tip (JG-24)", () => {
+	// `resolvedExecuteTips` reads only `via.value` and `auth`, so a minimal stub
+	// pins the fire/no-fire logic hermetically (no CDB/network). The two envelope
+	// builders wire it as `tips: resolvedExecuteTips(resolved)`.
+	function stub(over: {
+		via: string;
+		username?: string;
+		passwordProvided: boolean;
+	}): ResolvedExecuteRequest {
+		return {
+			via: { value: over.via },
+			auth: {
+				username: over.username,
+				password: "",
+				passwordProvided: over.passwordProvided,
+			},
+		} as unknown as ResolvedExecuteRequest;
+	}
+
+	test("fires for mac-telnet with no username and no password", () => {
+		const tips = resolvedExecuteTips(
+			stub({ via: "mac-telnet", passwordProvided: false }),
+		);
+		expect(tips.map((t) => t.code)).toContain("tip/mac-telnet-no-credentials");
+		expect(tips[0]?.detailsUrl).toContain(
+			"/tips/tip/mac-telnet-no-credentials",
+		);
+		expect(tips[0]?.fix).toContain("MTWEI");
+	});
+
+	test("does not fire once a password is resolved", () => {
+		expect(
+			resolvedExecuteTips(stub({ via: "mac-telnet", passwordProvided: true })),
+		).toEqual([]);
+	});
+
+	test("does not fire when a username is resolved (not 'no auth options')", () => {
+		expect(
+			resolvedExecuteTips(
+				stub({ via: "mac-telnet", username: "admin", passwordProvided: false }),
+			),
+		).toEqual([]);
+	});
+
+	test("is mac-telnet-specific: no tip for an IP transport", () => {
+		for (const via of ["rest-api", "native-api", "ssh"]) {
+			expect(
+				resolvedExecuteTips(stub({ via, passwordProvided: false })),
+			).toEqual([]);
+		}
 	});
 });
