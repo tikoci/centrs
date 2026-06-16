@@ -57,6 +57,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "cdb/invalid-option",
 		summary: "A comment kv-soup option carried an invalid value.",
 	},
+	{
+		code: "cdb/invalid-record",
+		summary:
+			"A device record failed schema validation (blank target or wrong field type).",
+	},
 	{ code: "cdb/not-found", summary: "The CDB file could not be found." },
 	{
 		code: "cdb/not-found-target",

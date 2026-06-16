@@ -164,6 +164,33 @@ describe("devices mutation", () => {
 		}
 	});
 
+	test("addDevice rejects a blank target via the schema gate (cdb/invalid-record)", async () => {
+		const { path, cleanup } = await tempCdb([adminRecord()]);
+		try {
+			const cdb = await reload(path);
+			const error = await catchError(() =>
+				addDevice({ cdb, target: "   ", user: "writer", password: "x" }),
+			);
+			expect(error.code).toBe("cdb/invalid-record");
+			expect(error.context).toMatchObject({ field: "target" });
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("setDevice rejects a wrong-typed field via the schema gate", async () => {
+		const { path, cleanup } = await tempCdb([adminRecord()]);
+		try {
+			const cdb = await reload(path);
+			const error = await catchError(() =>
+				setDevice({ cdb, target: "192.0.2.5", user: 5 as never }),
+			);
+			expect(error.code).toBe("cdb/invalid-record");
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("the same target under a different user is a new record, not a collision", async () => {
 		const { path, cleanup } = await tempCdb([adminRecord()]);
 		try {
