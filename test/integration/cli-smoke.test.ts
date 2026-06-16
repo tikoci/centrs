@@ -23,7 +23,17 @@ interface Envelope {
 }
 
 function parseEnvelope(text: string): Envelope {
-	return JSON.parse(text) as Envelope;
+	const value = JSON.parse(text) as unknown;
+	if (
+		typeof value !== "object" ||
+		value === null ||
+		typeof (value as Envelope).ok !== "boolean"
+	) {
+		throw new Error(
+			`expected a centrs envelope with a boolean \`ok\`; got: ${text.slice(0, 200)}`,
+		);
+	}
+	return value as Envelope;
 }
 
 describe("CLI smoke (real subprocess, no network)", () => {
