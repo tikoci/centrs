@@ -699,6 +699,9 @@ async function runSyntaxGate(
 		if (error instanceof CentrsError && isPreflightTransportError(error)) {
 			throw error;
 		}
+		// If the mapped RouterOS fault carried a `(line N column M)` byte offset,
+		// keep it on the wrapped syntax error rather than dropping it.
+		const position = error instanceof CentrsError ? error.position : undefined;
 		throw new CentrsError({
 			code: "validation/syntax",
 			summary:
@@ -710,6 +713,7 @@ async function runSyntaxGate(
 				validationSource: ":put [:parse ...]",
 				via: resolved.via.value,
 			},
+			...(position ? { position } : {}),
 			cause: error,
 			causeData: syntaxCause(error),
 		});

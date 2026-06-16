@@ -21,11 +21,25 @@ export type CentrsErrorCode =
 	| `usage/${string}`
 	| `validation/${string}`;
 
+/**
+ * A RouterOS-reported source location for a parse/syntax fault. RouterOS prints
+ * `(line N column M)` on a console `:parse` rejection; `column` is RouterOS's
+ * **authoritative 1-based BYTE offset**, not a JS character index — the RouterOS
+ * console is not Unicode-aware, so a multibyte command can make the byte column
+ * differ from a code-point index. Carried verbatim; never re-derived.
+ */
+export interface RouterOsErrorPosition {
+	line: number;
+	column: number;
+}
+
 export interface CentrsErrorInit {
 	code: CentrsErrorCode;
 	summary: string;
 	remediation?: string;
 	context?: Record<string, unknown>;
+	/** RouterOS-reported byte offset of a parse fault, when one is available. */
+	position?: RouterOsErrorPosition;
 	cause?: unknown;
 	causeData?: unknown;
 }
@@ -39,6 +53,7 @@ export interface SerializedCentrsError {
 	detailsUrl: string;
 	details_url: string;
 	context?: Record<string, unknown>;
+	position?: RouterOsErrorPosition;
 	cause?: unknown;
 }
 
@@ -48,6 +63,7 @@ export class CentrsError extends Error {
 	readonly remediation?: string;
 	readonly detailsUrl: string;
 	readonly context?: Record<string, unknown>;
+	readonly position?: RouterOsErrorPosition;
 	readonly causeData?: unknown;
 
 	constructor(init: CentrsErrorInit) {
@@ -58,6 +74,7 @@ export class CentrsError extends Error {
 		this.remediation = init.remediation;
 		this.detailsUrl = `${ERROR_DETAILS_BASE_URL}${init.code}`;
 		this.context = init.context;
+		this.position = init.position;
 		this.causeData = init.causeData;
 	}
 
@@ -79,6 +96,7 @@ export function serializeCentrsError(
 			detailsUrl: error.detailsUrl,
 			details_url: error.detailsUrl,
 			context: error.context,
+			...(error.position ? { position: error.position } : {}),
 			cause: error.causeData ?? serializeUnknownError(error.cause),
 		};
 	}
@@ -107,6 +125,13 @@ export function formatCentrsErrorText(
 ): string {
 	const serialized = serializeCentrsError(error);
 	const lines = [`[${serialized.code}] ${serialized.summary}`];
+
+	if (serialized.position) {
+		// RouterOS's authoritative byte column (1-based); see RouterOsErrorPosition.
+		lines.push(
+			`At: line ${serialized.position.line}, column ${serialized.position.column} (RouterOS byte offset)`,
+		);
+	}
 
 	if (serialized.remediation) {
 		lines.push(`Fix: ${serialized.remediation}`);

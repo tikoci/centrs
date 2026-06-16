@@ -129,6 +129,10 @@ Errors are typed values, not thrown strings. Every error has:
 - `cause?` — structured sub-error, when relevant (RouterOS nova error,
   transport detail). Stack traces and raw exception text are summarized, not
   embedded raw.
+- `position?` — RouterOS's `(line N column M)` parse location, when the fault
+  carries one (console `:parse` rejections do). `column` is RouterOS's
+  authoritative 1-based **byte** offset — the console is not Unicode-aware — so
+  it is carried verbatim, never re-derived into a character index.
 - `redactable_fields?` — names of fields the bug-report renderer must redact.
 
 Credentials and private key material are always redactable. Private key paths are

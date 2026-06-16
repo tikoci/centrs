@@ -42,6 +42,7 @@
  *     (semantic) gate — no `/console/inspect` table parsing needed.
  */
 
+import { parseRouterOsPosition } from "../core/routeros-errors.ts";
 import { CentrsError } from "../errors.ts";
 import {
 	type MacAddress,
@@ -610,6 +611,9 @@ export function parseScriptFor(cli: string): string {
  * CLI. Throws the matching `validation/*` error; returns on a clean parse.
  */
 export function classifyParseResult(output: string, cli: string): void {
+	// The console `:parse` rejection carries RouterOS's authoritative byte offset
+	// (`… (line N column M)`); surface it as the structured `error.position`.
+	const position = parseRouterOsPosition(output);
 	const unknown = output.match(/bad parameter\s+(\S+)/i);
 	if (unknown) {
 		throw new CentrsError({
@@ -623,6 +627,7 @@ export function classifyParseResult(output: string, cli: string): void {
 				validationSource: ":put [:parse ...] over mac-telnet",
 				detail: output,
 			},
+			...(position ? { position } : {}),
 		});
 	}
 	if (/syntax error|bad command name|expected\b/i.test(output)) {
@@ -636,6 +641,7 @@ export function classifyParseResult(output: string, cli: string): void {
 				validationSource: ":put [:parse ...] over mac-telnet",
 				detail: output,
 			},
+			...(position ? { position } : {}),
 		});
 	}
 }

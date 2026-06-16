@@ -16,7 +16,41 @@
  * not on assumption.
  */
 
-import { CentrsError, type CentrsErrorCode } from "../errors.ts";
+import {
+	CentrsError,
+	type CentrsErrorCode,
+	type RouterOsErrorPosition,
+} from "../errors.ts";
+
+/**
+ * Matches RouterOS's `(line N column M)` source location. Not anchored — the
+ * console embeds it mid-string (e.g. `(evl bad parameter no-such-arg (line 1
+ * column 28) /ip/address/add)`), so the location is found wherever it appears.
+ */
+const ROUTEROS_POSITION_RE = /\(line (\d+) column (\d+)\)/i;
+
+/**
+ * Extract RouterOS's `(line N column M)` parse position from a raw fault string,
+ * or `undefined` when absent. The console `:parse` rejection carries it — either
+ * bare (`bad parameter address (line 1 column 35)`) or embedded in the parsed
+ * `(evl … (line N column M) /path)` form; REST/native `unknown parameter` strings
+ * do not. `column` is RouterOS's authoritative 1-based **byte** offset — see
+ * {@link RouterOsErrorPosition}.
+ */
+export function parseRouterOsPosition(
+	text: string,
+): RouterOsErrorPosition | undefined {
+	const match = text.match(ROUTEROS_POSITION_RE);
+	if (!match) {
+		return undefined;
+	}
+	const line = Number.parseInt(match[1] ?? "", 10);
+	const column = Number.parseInt(match[2] ?? "", 10);
+	if (!Number.isFinite(line) || !Number.isFinite(column)) {
+		return undefined;
+	}
+	return { line, column };
+}
 
 /** Transport that produced the raw RouterOS string. */
 export type RouterOsErrorTransport =
@@ -191,6 +225,7 @@ export function mapRouterOsError(
 	opts: MapRouterOsErrorOptions = {},
 ): CentrsError {
 	const trimmed = raw.trim();
+	const position = parseRouterOsPosition(raw);
 	const baseContext: Record<string, unknown> = {
 		detail: raw,
 		...(opts.httpStatus !== undefined ? { httpStatus: opts.httpStatus } : {}),
@@ -207,6 +242,7 @@ export function mapRouterOsError(
 			summary: result.summary,
 			remediation: result.remediation,
 			context: { ...baseContext, ...result.context, ...opts.context },
+			...(position ? { position } : {}),
 			causeData: raw,
 		});
 	}
@@ -226,6 +262,7 @@ export function mapRouterOsError(
 		remediation:
 			"Inspect the original RouterOS message; the command word, path, or an attribute is likely invalid.",
 		context: { ...baseContext, ...opts.context },
+		...(position ? { position } : {}),
 		causeData: raw,
 	});
 }
