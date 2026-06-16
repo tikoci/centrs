@@ -234,6 +234,11 @@ vmnet
 # both read by resolveEgressMac's virtual-NIC MAC fallback (src/protocols/mac-telnet.ts).
 feth
 sysfs
+# getent ahostsv4 / errno: used by the QA CHR-integration job to pin MikroTik's
+# dual-stack download hosts to IPv4 (GitHub runners have no IPv6 egress).
+ahostsv4
+errno
+getent
 
 # centrs domain vocabulary
 # %identity: the device /system/identity; a centrs CDB comment *lookup key*
