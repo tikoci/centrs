@@ -39,7 +39,7 @@ Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
   create. centrs sidesteps the trap with the explicit verb-in-path form
   `POST /rest/<path>/<verb>` (e.g. `POST /rest/ip/route/add`): add/set/remove are
   **named**, never inferred from the HTTP method. The mapping is documented here
-  so the trap is impossible to miss at the api layer.
+  so the trap is impossible to miss at centrs's `api` surface.
 - native-api adapter issues the same write as a tagged `talk` sentence; its
   `!trap` strings share one error table with REST `detail`. REST and native
   classify the same RouterOS fault to the same `routeros/*` code: both feed the
