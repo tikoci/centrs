@@ -31,6 +31,7 @@ import {
 	type WriteWinBoxCdbOptions,
 	writeWinBoxCdb,
 } from "./data/winbox-cdb-write.ts";
+import { parseDeviceRecord } from "./devices-schema.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
@@ -1199,7 +1200,10 @@ export async function addDevice(
 			: undefined;
 
 	const carried = existing ? extraFields(existing.entry.record) : [];
-	const record = buildWinBoxCdbEntryRecord({
+	// Validate the logical record against the canonical schema before rendering
+	// it to CDB bytes — a blank target or wrong field type fails here for every
+	// caller (CLI, MCP, direct API), not just the CLI's own guards.
+	const validated = parseDeviceRecord({
 		recordType: args.recordType ?? winBoxCdbRecordType.ipAdmin,
 		target: args.target,
 		user: args.user,
@@ -1209,6 +1213,17 @@ export async function addDevice(
 		group: args.group,
 		profile: args.profile,
 		savedPassword: args.savedPassword,
+	});
+	const record = buildWinBoxCdbEntryRecord({
+		recordType: validated.recordType,
+		target: validated.target,
+		user: validated.user,
+		password: validated.password,
+		session: validated.session,
+		comment,
+		group: validated.group,
+		profile: validated.profile,
+		savedPassword: validated.savedPassword,
 		extraFields: carried.length > 0 ? carried : undefined,
 	});
 
@@ -1284,6 +1299,26 @@ export async function setDevice(
 		newlySet.push(winBoxCdbFieldTag.comment, winBoxCdbFieldTag.commentMirror);
 	}
 
+	const savedPassword = resolveSavedPassword(
+		args.savedPassword,
+		args.password,
+		prior.savedPassword,
+	);
+	// Validate the merged record (prior fields + this edit) against the canonical
+	// schema. recordType/target are inherited and the schema is lenient about
+	// record types it does not name, so an edit never regresses on an unusual
+	// existing record; it does catch a wrong field type from a non-CLI caller.
+	parseDeviceRecord({
+		recordType: prior.recordType,
+		target: prior.target,
+		user: args.user ?? prior.user,
+		password: args.password ?? prior.password,
+		session: args.session ?? prior.session,
+		comment,
+		group: args.group ?? prior.group,
+		profile: args.profile ?? (prior.profile || undefined),
+		savedPassword,
+	});
 	const record = buildWinBoxCdbEntryRecord({
 		recordType: prior.recordType,
 		target: prior.target,
@@ -1294,11 +1329,7 @@ export async function setDevice(
 		group: args.group ?? prior.group,
 		profile: args.profile ?? (prior.profile || undefined),
 		romonAgent: prior.romonAgent || undefined,
-		savedPassword: resolveSavedPassword(
-			args.savedPassword,
-			args.password,
-			prior.savedPassword,
-		),
+		savedPassword,
 		fieldOrder: preservedFieldOrder(prior.record, newlySet),
 		declaredFieldCount: prior.record.declaredFieldCount,
 		extraFields: carried.length > 0 ? carried : undefined,
