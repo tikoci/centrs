@@ -181,11 +181,11 @@ describe("resolvedExecuteTips — mac-telnet no-credentials tip (JG-24)", () => 
 		const tips = resolvedExecuteTips(
 			stub({ via: "mac-telnet", passwordProvided: false }),
 		);
-		expect(tips.map((t) => t.code)).toContain("tip/mac-telnet-no-credentials");
-		expect(tips[0]?.detailsUrl).toContain(
-			"/tips/tip/mac-telnet-no-credentials",
-		);
-		expect(tips[0]?.fix).toContain("MTWEI");
+		// Select by code, not index, so the assertion survives added/reordered tips.
+		const tip = tips.find((t) => t.code === "tip/mac-telnet-no-credentials");
+		expect(tip).toBeDefined();
+		expect(tip?.detailsUrl).toContain("/tips/tip/mac-telnet-no-credentials");
+		expect(tip?.fix).toContain("MTWEI");
 	});
 
 	test("does not fire once a password is resolved", () => {
