@@ -50,8 +50,8 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Test with coverage
         run: bun run test:ci
-      - name: Build
-        run: bun run build
+      # `build` is the fast gate's job (ci.yaml); QA owns coverage, CodeQL,
+      # the AI-findings probe, and the CHR matrix. No duplicate build here.
       - name: AI findings probe
         env:
           GH_TOKEN: ${{ github.token }}
