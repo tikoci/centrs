@@ -124,7 +124,8 @@ Errors are typed values, not thrown strings. Every error has:
   `validation/unknown-attribute`, `cdb/decrypt-failed`.
 - `message` — one human sentence. No stack trace.
 - `fix` — one human sentence describing the next step the caller should take.
-- `details_url` — pointer to the canonical explanation (`docs/errors/README.md`).
+- `details_url` — pointer to the canonical **per-code** page (the URL scheme is
+  in `docs/errors/README.md`).
 - `cause?` — structured sub-error, when relevant (RouterOS nova error,
   transport detail). Stack traces and raw exception text are summarized, not
   embedded raw.
@@ -145,11 +146,11 @@ Two error sources must be visually distinguishable:
 
 1. **centrs errors** — bad usage, validator rejection, transport plumbing.
 2. **RouterOS errors** — surfaced by the router (HTTP 4xx/5xx, parse refusal,
-   nova error). Map to a normalized `routeros/*` code; preserve the original
-   string in `cause`.
+   nova error). Map to a normalized `routeros/*` code, preserving the original
+   string.
 
-RouterOS faults map to a normalized `routeros/*` code (the original string kept
-in `cause`) via a CHR-grounded table shared by REST `detail` and native `!trap`
+RouterOS faults map to a normalized `routeros/*` code (preserving the original
+string) via a CHR-grounded table shared by REST `detail` and native `!trap`
 (`src/core/routeros-errors.ts`). Every error's `details_url` is the stable
 `https://tikoci.github.io/centrs/errors/<code>`. The mapping shape, the
 ground-on-CHR-evidence rule, and the URL-scheme rules live in

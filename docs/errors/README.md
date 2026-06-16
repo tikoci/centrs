@@ -68,6 +68,7 @@ The authoritative vocabulary for `routeros/*` is the live router's own strings
 `{"detail":"<msg>","error":<http-status>,"message":"<http reason>"}` — and the
 native-api `!trap` carry the **same** text for the same fault, so one shared
 table (`src/core/routeros-errors.ts`) maps both transports. The original string
-is preserved in the error's `cause`. Ground new mappings on CHR evidence, not
-assumption (`tikoci/m2ir` is protocol-IR reference, not an accessible mapping
+is always preserved — in `context.detail` for a matched rule, and in `cause` for
+the catch-all (`routeros/request-failed`). Ground new mappings on CHR evidence,
+not assumption (`tikoci/m2ir` is protocol-IR reference, not an accessible mapping
 source — the router strings are).
