@@ -56,6 +56,17 @@ Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
   concern. The envelope must still distinguish RouterOS errors from successful
   runs (a 200 with a RouterOS error string is still an error — see
   constitution: error model).
+- **Print width / column wrapping (JG-04).** RouterOS wraps `print` output to the
+  terminal width, so each transport handles width differently. **mac-telnet** is
+  the only one that negotiates a size: `src/protocols/mac-telnet-console.ts`
+  answers the device's terminal-size probe with a deliberately tall/wide screen,
+  so captured columns are neither wrapped nor paginated. **SSH execute** runs
+  *without* a pseudo-tty (`src/protocols/ssh.ts`), so RouterOS emits no
+  terminal-wrapped output to begin with — there is nothing to negotiate.
+  **REST/native-api** are not consoles, so terminal width never applies (they
+  return structured records, or a string `ret` for script-mode). There is
+  therefore no per-call `--width` knob today — an explicit width override is
+  deferred until a concrete need appears.
 - Attribute values pass through **verbatim** — centrs does not guess types or
   coerce them (RouterOS REST tolerates string values; the native API is
   all-strings). Unlike `jo`-style KV builders, there is no per-value
