@@ -77,6 +77,18 @@ describe("SshExecClient", () => {
 		expect(argv.at(-1)).toBe("/system/identity/print");
 	});
 
+	test("never forces a PTY — RouterOS grants none and `-tt` hangs it", () => {
+		// Per-command batch exec must not *force* a tty (the terminal relay guards
+		// the same in terminal.test.ts). `-tt` makes the host ssh demand a PTY that
+		// RouterOS refuses, hanging the session (CHR 7.23.1 grounded). Disabling a
+		// PTY (`-T`, `RequestTTY=no`) is the opposite and would be fine, so only the
+		// forcing forms are forbidden.
+		const argv = client({ exitCode: 0, stdout: "", stderr: "" }).argv("/x");
+		expect(argv).not.toContain("-t");
+		expect(argv).not.toContain("-tt");
+		expect(argv.join(" ")).not.toMatch(/RequestTTY[= ](?:force|yes)/i);
+	});
+
 	test("exec returns cleaned stdout on success", async () => {
 		const out = await client({
 			exitCode: 0,
