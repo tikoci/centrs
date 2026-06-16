@@ -174,6 +174,16 @@ describe("parseRouterOsPosition (JG-16)", () => {
 		});
 	});
 
+	test("finds the position embedded in the parsed `(evl …)` console form", () => {
+		// The grounded console capture (CHR 7.23.1): the position sits mid-string,
+		// not as a suffix — see test/unit/mac-telnet-console.test.ts fixtures.
+		expect(
+			parseRouterOsPosition(
+				"(evl bad parameter no-such-arg (line 1 column 28) /ip/address/add)",
+			),
+		).toEqual({ line: 1, column: 28 });
+	});
+
 	test("returns undefined when no position is present", () => {
 		// REST/native say `unknown parameter <name>` with no source location.
 		expect(parseRouterOsPosition("unknown parameter foo")).toBeUndefined();

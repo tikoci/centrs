@@ -22,15 +22,20 @@ import {
 	type RouterOsErrorPosition,
 } from "../errors.ts";
 
-/** Matches RouterOS's `(line N column M)` source-location suffix. */
+/**
+ * Matches RouterOS's `(line N column M)` source location. Not anchored — the
+ * console embeds it mid-string (e.g. `(evl bad parameter no-such-arg (line 1
+ * column 28) /ip/address/add)`), so the location is found wherever it appears.
+ */
 const ROUTEROS_POSITION_RE = /\(line (\d+) column (\d+)\)/i;
 
 /**
  * Extract RouterOS's `(line N column M)` parse position from a raw fault string,
- * or `undefined` when absent. The console `:parse` rejection carries it (e.g.
- * `bad parameter address (line 1 column 35)`); REST/native `unknown parameter`
- * strings do not. `column` is RouterOS's authoritative 1-based **byte** offset —
- * see {@link RouterOsErrorPosition}.
+ * or `undefined` when absent. The console `:parse` rejection carries it — either
+ * bare (`bad parameter address (line 1 column 35)`) or embedded in the parsed
+ * `(evl … (line N column M) /path)` form; REST/native `unknown parameter` strings
+ * do not. `column` is RouterOS's authoritative 1-based **byte** offset — see
+ * {@link RouterOsErrorPosition}.
  */
 export function parseRouterOsPosition(
 	text: string,
