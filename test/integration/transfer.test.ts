@@ -8,6 +8,7 @@ import {
 	isChrIntegrationEnabled,
 	readEnv,
 	recordIntegrationEvidence,
+	routerOsAtLeast,
 	splitQuickChrAuth,
 	startIntegrationChr,
 } from "./chr.ts";
@@ -230,26 +231,49 @@ describeFast("transfer against CHR", () => {
 			// 11-14. device file management: mkdir, upload into dir, copy, remove
 			await ok(["transfer", ...rest, "mkdir", "centrs-dir"]);
 			await ok(["transfer", ...rest, "upload", src, "centrs-dir/nested.txt"]);
-			await ok([
-				"transfer",
-				...rest,
-				"copy",
-				"centrs-dir/nested.txt",
-				"centrs-dir/copy.txt",
-			]);
-			const afterCopy = await ok([
-				"transfer",
-				...rest,
-				"list",
-				"--name",
-				"centrs-dir/*",
-			]);
-			const copyNames = (afterCopy.data as Array<Record<string, unknown>>).map(
-				(r) => r["name"],
-			);
-			expect(copyNames).toContain("centrs-dir/nested.txt");
-			expect(copyNames).toContain("centrs-dir/copy.txt");
-			await ok(["transfer", ...rest, "remove", "centrs-dir/copy.txt"]);
+			// Server-side `copy` rides the REST `/file/copy` endpoint, first seen in
+			// 7.23beta2 (rosetta command_version_check). On ≤ 7.21.x RouterOS returns
+			// "no such command", so gate the copy + its verification on the running
+			// version. (JG-14: long-term=7.21.4 lacks /file/copy.)
+			const routerOsVersion =
+				((await chr.rest("/system/resource")) as Record<string, string>)[
+					"version"
+				] ?? "";
+			if (routerOsAtLeast(routerOsVersion, "7.23beta2")) {
+				await ok([
+					"transfer",
+					...rest,
+					"copy",
+					"centrs-dir/nested.txt",
+					"centrs-dir/copy.txt",
+				]);
+				const afterCopy = await ok([
+					"transfer",
+					...rest,
+					"list",
+					"--name",
+					"centrs-dir/*",
+				]);
+				const copyNames = (
+					afterCopy.data as Array<Record<string, unknown>>
+				).map((r) => r["name"]);
+				expect(copyNames).toContain("centrs-dir/nested.txt");
+				expect(copyNames).toContain("centrs-dir/copy.txt");
+				await ok(["transfer", ...rest, "remove", "centrs-dir/copy.txt"]);
+			} else {
+				// Older RouterOS: no /file/copy. Still verify the upload-into-dir landed.
+				const inDir = await ok([
+					"transfer",
+					...rest,
+					"list",
+					"--name",
+					"centrs-dir/*",
+				]);
+				const inDirNames = (inDir.data as Array<Record<string, unknown>>).map(
+					(r) => r["name"],
+				);
+				expect(inDirNames).toContain("centrs-dir/nested.txt");
+			}
 
 			// 15. leading-slash normalization (download "/centrs-up.txt" === "centrs-up.txt")
 			const slashOut = join(tmp, "slash.txt");
