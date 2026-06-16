@@ -96,6 +96,7 @@ Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
 | `--max-bytes <n>`               | Byte budget for the rendered envelope; excess output is truncated with a warning + `meta.truncated` (not an error), matching `retrieve`. (Renamed from `--max-results`.) |
 | `--format <text\|json\|yaml>`   | Output format (alias `--json`). Defaults to `text`; `CENTRS_FORMAT` sets the default.  |
 | `--where <attr>=<value>`        | Device-class selector — run across every CDB record whose stored fact/comment-kv matches (e.g. `--where board=RB5009 /system/package/check-for-updates`). Repeatable (AND). See constitution: target selection. |
+| `--`                            | End-of-options marker. Every token after `--` is taken as the literal RouterOS command, even flag-shaped ones — e.g. `centrs execute $R -- /interface print where disabled=yes`. Use it when the command contains tokens that would otherwise be claimed as centrs flags; otherwise the command must be quoted as a single argument. |
 
 ## SSH key selection
 

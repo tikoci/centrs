@@ -108,6 +108,11 @@ export const executeCommand: CliCommandMetadata = {
 			flag: "--verbose",
 			description: "Include additional context in text output.",
 		},
+		{
+			flag: "--",
+			description:
+				"End centrs option parsing: every following token is the literal RouterOS command, even flag-shaped ones (e.g. `-- /interface print where disabled=yes`).",
+		},
 	],
 };
 
@@ -116,13 +121,26 @@ interface ExecuteCliArgs extends ExecuteRequest {
 	format?: ExecuteOutputFormat;
 }
 
-function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
+export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 	const parsed: ExecuteCliArgs = { command: "" };
 	const positional: string[] = [];
+	let endOfOptions = false;
 
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
 		if (arg === undefined) {
+			continue;
+		}
+		// A bare `--` ends centrs option parsing: every later token is part of the
+		// literal RouterOS command, even flag-shaped ones. Lets a command carry
+		// tokens like `--` / `-foo` (or a value that looks like a flag) without the
+		// parser claiming them. `--` itself is consumed, not added to the command.
+		if (endOfOptions) {
+			positional.push(arg);
+			continue;
+		}
+		if (arg === "--") {
+			endOfOptions = true;
 			continue;
 		}
 		if (arg.startsWith("--validate=")) {
