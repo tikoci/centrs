@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { CentrsError } from "../../src/errors.ts";
 import {
+	classifyParseResult,
 	emulateScreen,
 	extractCommandOutput,
 	ROUTEROS_PROMPT_RE,
@@ -136,5 +138,41 @@ describe("extractCommandOutput — real CHR 7.23.1 captures", () => {
 			"0 D 10.0.2.15/24  10.0.2.0  ether1     main",
 			"1   10.9.9.7/32   10.9.9.7  ether1     main",
 		]);
+	});
+});
+
+describe("classifyParseResult surfaces error.position (JG-16)", () => {
+	test("unknown-attribute carries the console byte offset", () => {
+		try {
+			classifyParseResult(
+				"bad parameter address (line 1 column 35)",
+				"/ip/address/add comment=x",
+			);
+			throw new Error("expected classifyParseResult to throw");
+		} catch (error) {
+			expect(error).toBeInstanceOf(CentrsError);
+			expect((error as CentrsError).code).toBe("validation/unknown-attribute");
+			expect((error as CentrsError).position).toEqual({ line: 1, column: 35 });
+		}
+	});
+
+	test("syntax error carries the console byte offset", () => {
+		try {
+			classifyParseResult("syntax error (line 1 column 9)", "/ip/ address");
+			throw new Error("expected classifyParseResult to throw");
+		} catch (error) {
+			expect((error as CentrsError).code).toBe("validation/syntax");
+			expect((error as CentrsError).position).toEqual({ line: 1, column: 9 });
+		}
+	});
+
+	test("a rejection with no source location still classifies, with no position", () => {
+		try {
+			classifyParseResult("bad command name", "bogus");
+			throw new Error("expected classifyParseResult to throw");
+		} catch (error) {
+			expect((error as CentrsError).code).toBe("validation/syntax");
+			expect((error as CentrsError).position).toBeUndefined();
+		}
 	});
 });

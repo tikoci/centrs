@@ -121,3 +121,33 @@ describe("extractErrorCode", () => {
 		expect(extractErrorCode(undefined)).toBeUndefined();
 	});
 });
+
+describe("error.position (JG-16)", () => {
+	test("serializes a present position and omits it when absent", () => {
+		const withPos = serializeCentrsError(
+			new CentrsError({
+				code: "validation/syntax",
+				summary: "bad",
+				position: { line: 1, column: 35 },
+			}),
+		);
+		expect(withPos.position).toEqual({ line: 1, column: 35 });
+
+		const withoutPos = serializeCentrsError(
+			new CentrsError({ code: "validation/syntax", summary: "bad" }),
+		);
+		expect("position" in withoutPos).toBe(false);
+	});
+
+	test("text rendering shows the byte offset when present", () => {
+		const text = formatCentrsErrorText(
+			new CentrsError({
+				code: "validation/syntax",
+				summary: "RouterOS rejected the command syntax.",
+				position: { line: 1, column: 35 },
+			}),
+		);
+		expect(text).toContain("line 1, column 35");
+		expect(text).toContain("byte offset");
+	});
+});

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	mapRouterOsError,
+	parseRouterOsPosition,
 	routerOsErrorRules,
 } from "../../src/core/routeros-errors.ts";
 import type { CentrsError } from "../../src/errors.ts";
@@ -158,5 +159,37 @@ describe("mapRouterOsError grounded vocabulary", () => {
 			expect(rule.test).toBeInstanceOf(RegExp);
 			expect(typeof rule.build).toBe("function");
 		}
+	});
+});
+
+describe("parseRouterOsPosition (JG-16)", () => {
+	test("extracts the byte line/column from a console parse string", () => {
+		// Grounded console form: `bad parameter <name> (line N column M)`.
+		expect(
+			parseRouterOsPosition("bad parameter address (line 1 column 35)"),
+		).toEqual({ line: 1, column: 35 });
+		expect(parseRouterOsPosition("syntax error (line 2 column 7)")).toEqual({
+			line: 2,
+			column: 7,
+		});
+	});
+
+	test("returns undefined when no position is present", () => {
+		// REST/native say `unknown parameter <name>` with no source location.
+		expect(parseRouterOsPosition("unknown parameter foo")).toBeUndefined();
+		expect(parseRouterOsPosition("")).toBeUndefined();
+	});
+});
+
+describe("mapRouterOsError surfaces error.position when present (JG-16)", () => {
+	test("attaches the byte offset from a positioned console string", () => {
+		const error = mapRouterOsError("bad parameter address (line 1 column 35)");
+		expect(error.position).toEqual({ line: 1, column: 35 });
+		// The raw string is still preserved verbatim.
+		expect(ctx(error).detail).toBe("bad parameter address (line 1 column 35)");
+	});
+
+	test("omits position for a REST/native string without a source location", () => {
+		expect(mapRouterOsError("unknown parameter foo").position).toBeUndefined();
 	});
 });
