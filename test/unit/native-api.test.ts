@@ -120,9 +120,9 @@ describe("native-api word and sentence framing", () => {
 /**
  * JG-15 — attribute *value* round-trip across the codec, the worry case the
  * other transports escape but native-api does not. The API protocol is
- * length-prefix framed, not delimiter-escaped: a value is a count of raw bytes,
- * so `=`, spaces, CR/LF, NUL, and multibyte UTF-8 all survive verbatim with no
- * escaping. `parseReply` splits `=name=value` on the *second* `=`
+ * length-prefix framed, not delimiter-escaped: a word is a UTF-8 byte count, so
+ * any UTF-8 content — `=`, spaces, CR/LF, NUL, multibyte characters — survives
+ * verbatim with no escaping. `parseReply` splits `=name=value` on the *second* `=`
  * ({@link parseReply} uses `indexOf("=", 1)`), so a value that itself contains
  * `=` is returned whole, not truncated. This pins that no caller-side trimming
  * or naive `split("=")` corrupts a value end-to-end:
@@ -133,9 +133,10 @@ describe("native-api attribute value round-trip (JG-15)", () => {
 	function roundTrip(name: string, value: string): string | undefined {
 		const words = ["!re", attributeWord(name, value)];
 		const reader = new SentenceReader();
-		const sentences = reader.push(encodeSentence(words));
-		expect(sentences).toHaveLength(1);
-		return readAttribute(parseReply(sentences[0] as string[]), name);
+		const [sentence, ...rest] = reader.push(encodeSentence(words));
+		expect(rest).toHaveLength(0);
+		if (!sentence) throw new Error("codec decoded no sentence");
+		return readAttribute(parseReply(sentence), name);
 	}
 
 	const cases: Array<[label: string, value: string]> = [
@@ -166,7 +167,8 @@ describe("native-api attribute value round-trip (JG-15)", () => {
 		expect(roundTrip("disabled", "")).toBe("");
 		const reader = new SentenceReader();
 		const [sentence] = reader.push(encodeSentence(["!re", "=name"]));
-		expect(readAttribute(parseReply(sentence as string[]), "name")).toBe("");
+		if (!sentence) throw new Error("codec decoded no sentence");
+		expect(readAttribute(parseReply(sentence), "name")).toBe("");
 	});
 });
 
