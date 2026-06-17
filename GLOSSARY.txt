@@ -244,6 +244,9 @@ funcs
 gsub
 img
 pipefail
+# CodeRabbit review bot (.coderabbit.yaml); @coderabbitai is the on-demand handle.
+coderabbit
+coderabbitai
 
 # centrs domain vocabulary
 # %identity: the device /system/identity; a centrs CDB comment *lookup key*
