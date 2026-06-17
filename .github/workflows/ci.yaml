@@ -1,24 +1,53 @@
 name: CI
 run-name: CI • ${{ github.event_name }} • ${{ github.ref_name }}
+
+# Fast push/PR gate, staged so the cheapest signal fails first:
+#
+#   checks (lint) ┐
+#   unit+coverage ┴→ chr-smoke (stable, x86 KVM) → cross-platform-unit
+#   build (parallel)
+#
+# Why staged: a lint/unit failure is platform-agnostic, so there is no point
+# booting a ~10-min CHR or spinning up macOS/Windows runners until the core x86
+# path is green. The full RouterOS channel × OS matrix lives in qa.yaml; the
+# release-tier sweep in release.yaml; the platform/arch sweep in
+# verify-extended.yaml. See
+# .github/instructions/ci-test-tiers-and-release-versioning.instructions.md.
+#
+# IMPORTANT: every `bun test … | tee` step runs under `set -eo pipefail` — without
+# it `tee`'s exit code masks a bun failure and the step reports green.
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-  # Bare manual trigger so the fast gate can be re-run from the UI/CLI without a
-  # push; no inputs (the CHR-specific inputs moved to qa.yaml with the CHR job).
-  workflow_dispatch: {}
-# CI is the fast push/PR gate (lint, unit tests, build, fixture integration).
-# RouterOS CHR integration lives only in qa.yaml (scheduled matrix + on-demand
-# workflow_dispatch) so there is one chr-integration definition, not two.
+  workflow_dispatch:
+    inputs:
+      min-funcs:
+        type: string
+        description: "Function-coverage floor % — emits a warning annotation below this; never blocks. Default 0 (trend only)."
+        default: "0"
+      min-lines:
+        type: string
+        description: "Line-coverage floor % — emits a warning annotation below this; never blocks. Default 0 (trend only)."
+        default: "0"
+
+# Coverage is a trend signal, not a gate (github-actions-rich-data instruction):
+# defaults of 0 mean the threshold step never warns unless a dispatch sets a floor.
+env:
+  COVERAGE_MIN_FUNCS: ${{ github.event.inputs.min-funcs || '0' }}
+  COVERAGE_MIN_LINES: ${{ github.event.inputs.min-lines || '0' }}
+
 permissions:
   contents: read
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
-  ci:
-    name: Build & test
+  checks:
+    name: Repo checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -33,14 +62,10 @@ jobs:
         run: bun run lint
       - name: Lint CI (docs, spelling, agents)
         run: bun run lint:ci
-      - name: Test
-        run: bun run test
-      - name: Build
-        run: bun run build
-  fixture-integration:
-    name: Fixture integration
+
+  unit:
+    name: Unit tests & coverage
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -50,7 +75,172 @@ jobs:
           bun-version: 1.3.13
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - name: Test fixture-backed integration
+      # Network-free integration (cli-smoke, devices fixture) runs here under plain
+      # `bun test`; CHR-backed suites self-skip without CENTRS_RUN_FAST_INTEGRATION.
+      - name: Unit tests with coverage
+        id: coverage
+        run: |
+          set -eo pipefail
+          echo "::group::Test output"
+          bun run test:ci 2>&1 | tee /tmp/coverage-report.txt
+          echo "::endgroup::"
+      # Always-run: surfaces the failing tests + coverage table to the run summary
+      # so an agent reads the signal without ingesting the full log.
+      - name: Surface results to job summary
+        if: always()
+        run: |
+          set -o pipefail
+          {
+            echo "## Unit tests"
+            if grep -qE '\(fail\)' /tmp/coverage-report.txt 2>/dev/null; then
+              echo "### ❌ Failing tests"
+              echo '```'
+              grep -E '\(fail\)' /tmp/coverage-report.txt || true
+              echo '```'
+            else
+              echo "✅ all unit tests passed"
+            fi
+            echo ""
+            echo "### Coverage"
+            echo '```'
+            awk '/^-{5,}\|/{f=1} f{print}' /tmp/coverage-report.txt 2>/dev/null | head -300
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: /tmp/coverage-report.txt
+          retention-days: 14
+      # Non-blocking: emits annotations only, so coverage stays a trend signal.
+      - name: Coverage thresholds (non-blocking annotations)
+        if: always() && steps.coverage.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -eo pipefail
+          ALL_ROW=$(grep -E '^All files' /tmp/coverage-report.txt | head -1 || true)
+          if [ -z "$ALL_ROW" ]; then
+            echo "::notice title=Coverage::No 'All files' row parsed; skipping threshold check."
+            exit 0
+          fi
+          FUNC_PCT=$(echo "$ALL_ROW" | awk -F'|' '{gsub(/ /,"",$2); print $2}')
+          LINE_PCT=$(echo "$ALL_ROW" | awk -F'|' '{gsub(/ /,"",$3); print $3}')
+          if awk "BEGIN{exit !(${FUNC_PCT:-0}+0 < ${COVERAGE_MIN_FUNCS}+0)}"; then
+            echo "::warning title=Coverage::Function coverage ${FUNC_PCT}% below floor ${COVERAGE_MIN_FUNCS}%"
+          fi
+          if awk "BEGIN{exit !(${LINE_PCT:-0}+0 < ${COVERAGE_MIN_LINES}+0)}"; then
+            echo "::warning title=Coverage::Line coverage ${LINE_PCT}% below floor ${COVERAGE_MIN_LINES}%"
+          fi
+
+  build:
+    name: Build
+    needs: [checks]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Setup Bun 1.3.13
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build
+        run: bun run build
+
+  chr-smoke:
+    name: CHR smoke (stable)
+    needs: [checks, unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils unzip
+      - name: Enable KVM
+        run: |
+          if [ -e /dev/kvm ]; then
+           sudo chmod 666 /dev/kvm
+           ls -l /dev/kvm
+          else
+           echo "::warning::/dev/kvm is unavailable; quickchr will use slower TCG emulation."
+          fi
+      # Cache the downloaded CHR .img across runs to cut the stable-channel boot
+      # time (quickchr caches at $HOME/.local/share/quickchr/cache; getDataDir()).
+      - name: Cache CHR images
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/quickchr/cache
+          key: chr-cache-${{ runner.os }}-stable-v1
+          restore-keys: chr-cache-${{ runner.os }}-
+      - name: Setup Bun 1.3.13
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: CHR smoke (stable channel)
+        id: smoke
         env:
-          TMPDIR: ${{ runner.temp }}
-        run: bun run test:integration:fast
+          CENTRS_CHR_CHANNEL: stable
+          CENTRS_INTEGRATION_REPORT: ${{ runner.temp }}/smoke-report.jsonl
+        run: |
+          set -eo pipefail
+          echo "::group::CHR smoke output"
+          bun run test:integration:smoke 2>&1 | tee /tmp/smoke-output.txt
+          echo "::endgroup::"
+      - name: Surface smoke result to job summary
+        if: always()
+        run: |
+          set -o pipefail
+          {
+            echo "## CHR smoke (stable)"
+            if grep -qE '\(fail\)' /tmp/smoke-output.txt 2>/dev/null; then
+              echo "### ❌ Failing"
+              echo '```'
+              grep -E '\(fail\)' /tmp/smoke-output.txt || true
+              echo '```'
+            else
+              echo "✅ core paths green"
+            fi
+            echo '```'
+            tail -40 /tmp/smoke-output.txt 2>/dev/null || echo "(no output captured)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chr-smoke-logs
+          path: |
+            /tmp/smoke-output.txt
+            ${{ runner.temp }}/smoke-report.jsonl
+          if-no-files-found: warn
+          retention-days: 7
+
+  cross-platform-unit:
+    name: Unit tests (${{ matrix.os }})
+    needs: [chr-smoke]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # Windows is informational until centrs is verified Windows-clean: it runs for
+    # signal (the ssh `/dev/null` vs `NUL` sink, path handling) but never gates.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Setup Bun 1.3.13
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Unit tests
+        run: bun test test/unit/

@@ -235,6 +235,16 @@ vmnet
 feth
 sysfs
 
+# CI workflow shell vocabulary (.github/workflows/*.yaml step scripts)
+# pipefail: `set -eo pipefail` so a tee'd `bun test` failure isn't masked;
+# endgroup: GitHub `::endgroup::` log fold; funcs/gsub/img: coverage-parse and
+# CHR-image terms in the gate's summary + coverage-threshold steps.
+endgroup
+funcs
+gsub
+img
+pipefail
+
 # centrs domain vocabulary
 # %identity: the device /system/identity; a centrs CDB comment *lookup key*
 #   (`identity=`) used to resolve `<router>`. Human handle, deliberately may
