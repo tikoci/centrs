@@ -1,0 +1,88 @@
+name: CodeQL
+run-name: CodeQL • ${{ github.event_name }} • ${{ github.ref_name }}
+
+# Security + quality scanning lives in its own workflow (not qa.yaml) so it runs
+# on the same cadence regardless of the heavy CHR matrix: every PR and push to
+# main (catch before + at merge), a weekly cron, and on demand. Keeping it
+# separate is what lets qa.yaml drop its PR trigger without losing CodeQL on PRs.
+# See .github/instructions/github-security-quality.instructions.md and SECURITY.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - javascript-typescript
+          - actions
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          config-file: ./.github/codeql-config.yml
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  ai-findings-probe:
+    name: AI findings probe
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      # Forward-compat, non-failing: GitHub's Code Quality "AI findings" are not yet
+      # exposed via a stable REST endpoint. Probe the candidates; emit a notice
+      # until one answers, then promote from probe to gate. (Audit detail in
+      # SECURITY.md.) All probe inputs are built-in context, never untrusted input.
+      - name: Probe for the AI-findings REST API
+        run: |
+          set -u
+          paths=(
+            "repos/${REPO}/code-quality/findings"
+            "repos/${REPO}/code-quality/alerts"
+            "repos/${REPO}/code-scanning/ai-alerts"
+            "repos/${REPO}/security/quality"
+            "repos/${REPO}/security/ai-findings"
+          )
+          found=""
+          for p in "${paths[@]}"; do
+            status=$(gh api -i "$p" 2>/dev/null | head -1 | awk '{print $2}' || true)
+            if [ -n "$status" ] && [ "$status" != "404" ] && [ "$status" != "410" ]; then
+              found="$p (HTTP $status)"
+              break
+            fi
+          done
+          if [ -z "$found" ]; then
+            echo "::notice title=AI findings API::Not yet exposed via REST. Check https://github.com/${REPO}/security/quality/ai-findings in a browser (requires auth). (Probed: ${paths[*]})"
+            exit 0
+          fi
+          echo "::warning title=AI findings API now available::Endpoint ${found} responded; promote this step from probe to gate when findings are stable."
+          gh api "${found%% *}" || true
