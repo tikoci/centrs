@@ -39,3 +39,31 @@ Even/odd **minor** signals channel; **both publish to NPM**:
 - Even minor = **release** (e.g. `0.2.x`).
 
 Keep `CHANGELOG.md` current with the bump.
+
+## Realized in
+
+The policy above maps to five workflows (quickchr's `ci`/`publish`/`verify-extended`
+scheme as the reference):
+
+- **Push/PR gate** → `ci.yaml`: lint ‖ unit+coverage → **stable CHR smoke**
+  (`test/integration/chr-smoke.test.ts`, single boot) → cross-platform unit
+  (macOS gates; Windows informational). Coverage + failing tests surface to the
+  job summary + artifacts; coverage floor is a non-blocking annotation.
+- **Definitive channel matrix** → `qa.yaml`: push[main] + weekly + dispatch +
+  `workflow_call`. Active set `[stable, long-term]` on push/schedule (must-pass);
+  `all` / single channel / `routeros_version` on dispatch. Event-aware
+  concurrency (cancel on main-push; independent dispatch). bun:sqlite results
+  store per run.
+- **Security/quality** → `codeql.yaml` (PR + push + weekly + dispatch) + the
+  AI-findings probe.
+- **Release/publish** → `release.yaml`: `v*` tag or dispatch(dry-run); even/odd
+  minor → npm `next`/`latest`; release-tier sweep via `qa.yaml` `workflow_call`
+  (all channels); `--provenance`; needs `NPM_TOKEN`.
+- **Extended platforms** → `verify-extended.yaml` (dispatch): macOS-x86 (HVF) +
+  Windows-x86 (TCG, informational).
+
+Deviations from the strict tiers, by design: cross-platform **unit** runs on the
+gate (not a separate pre-release trigger); macOS/Windows **integration** is the
+dispatch-only `verify-extended` sweep; arm64 hosts and release-tier "extra
+packages" (e.g. `container`) are deferred (they need `startIntegrationChr` to take
+an arch/packages option from quickchr).

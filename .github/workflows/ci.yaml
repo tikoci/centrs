@@ -82,8 +82,10 @@ jobs:
         run: |
           set -eo pipefail
           echo "::group::Test output"
-          bun run test:ci 2>&1 | tee /tmp/coverage-report.txt
+          status=0
+          bun run test:ci 2>&1 | tee /tmp/coverage-report.txt || status=$?
           echo "::endgroup::"
+          exit "$status"
       # Always-run: surfaces the failing tests + coverage table to the run summary
       # so an agent reads the signal without ingesting the full log.
       - name: Surface results to job summary
@@ -191,8 +193,10 @@ jobs:
         run: |
           set -eo pipefail
           echo "::group::CHR smoke output"
-          bun run test:integration:smoke 2>&1 | tee /tmp/smoke-output.txt
+          status=0
+          bun run test:integration:smoke 2>&1 | tee /tmp/smoke-output.txt || status=$?
           echo "::endgroup::"
+          exit "$status"
       - name: Surface smoke result to job summary
         if: always()
         run: |
