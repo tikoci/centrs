@@ -54,6 +54,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # read (not write) so the probe can tell 404 "not found" from 403
+      # "forbidden" and never emit a false "API now available" warning.
+      security-events: read
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
