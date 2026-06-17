@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# Staged review to conserve the org's prepaid CodeRabbit credits (the default —
+# review every PR + every incremental push — exhausts them). Policy:
+#   - review only when a PR is marked ready-for-review (skip drafts)
+#   - one review per ready PR; no automatic per-commit incremental re-reviews
+#   - re-review on demand with an `@coderabbitai review` PR comment
+language: en-US
+reviews:
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: false
