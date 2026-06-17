@@ -244,6 +244,10 @@ funcs
 gsub
 img
 pipefail
+# HVF: macOS Hypervisor.framework (x86 CHR acceleration on Intel Macs in
+# verify-extended); choco: Chocolatey, the Windows package manager (QEMU install).
+HVF
+choco
 # CodeRabbit review bot (.coderabbit.yaml); @coderabbitai is the on-demand handle.
 coderabbit
 coderabbitai
