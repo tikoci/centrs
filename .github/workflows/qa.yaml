@@ -57,14 +57,17 @@ jobs:
     name: CHR • ${{ matrix.routeros_channel }}${{ inputs.routeros_version && format(' • {0}', inputs.routeros_version) || '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    # Active channels (stable / long-term / development) on push + schedule; a
-    # dispatch/call picks one channel or "all". `testing` is currently older than
-    # stable, so it is not in the active set (choose it explicitly to run it).
+    # Push + schedule gate on the released must-pass channels (stable, long-term)
+    # so a merge to main is never reddened by a beta flake. `development` (beta)
+    # and `testing` are verified on demand: `all` (one run over
+    # stable/long-term/development) or an explicit single channel, plus the
+    # release-tier sweep via workflow_call. (`development`'s btest/EC-SRP5 path is
+    # still flaky — JG-31 — so it stays out of the per-push gate until stabilized.)
     # macOS/arm CHR coverage lives in verify-extended.yaml (CHR here needs KVM).
     strategy:
       fail-fast: false
       matrix:
-        routeros_channel: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'push') && '["stable","long-term","development"]' || (inputs.routeros_channel == 'all' && '["stable","long-term","development"]') || format('["{0}"]', inputs.routeros_channel || 'stable')) }}
+        routeros_channel: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'push') && '["stable","long-term"]' || (inputs.routeros_channel == 'all' && '["stable","long-term","development"]') || format('["{0}"]', inputs.routeros_channel || 'stable')) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
