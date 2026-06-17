@@ -1,21 +1,148 @@
 name: Release
-run-name: Release • ${{ github.event_name }}
+run-name: Release • ${{ github.event_name }} • ${{ github.ref_name }}
+
+# Publishes @tikoci/centrs to npm. Triggered by a pushed v* tag (real publish) or
+# a manual dispatch (dry-run by default — set dry-run=false to publish from a
+# dispatch). Pipeline: checks ‖ unit → release-tier CHR sweep (all channels via
+# qa.yaml workflow_call) → publish.
+#
+# Even/odd MINOR selects the npm dist-tag and signals pre-release vs release:
+#   odd  minor (0.1.x, 0.3.x) → npm tag "next"   (pre-release)
+#   even minor (0.2.x, 0.4.x) → npm tag "latest"  (release)
+# Keep CHANGELOG.md current with the bump (move "## Unreleased" to the version).
+#
+# Requires repo secret NPM_TOKEN (npm automation token with publish access to
+# @tikoci/centrs). Provenance uses id-token: write on the publish job only.
+# Policy: .github/instructions/ci-test-tiers-and-release-versioning.instructions.md.
+#
+# Injection safety: every workflow value used in a `run:` block arrives via `env:`
+# (or a built-in like $GITHUB_REF_NAME) — never inlined `${{ }}` — so a crafted
+# tag/version is treated as data, not code.
+
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
-      publish:
-        description: Enable release placeholder
+      dry-run:
+        description: "Run all checks + the CHR sweep but skip npm publish (npm pack --dry-run instead)."
         type: boolean
-        default: false
+        default: true
+
 permissions:
   contents: read
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
+
 jobs:
-  release-plan:
-    name: Placeholder
+  checks:
+    name: Repo checks
     runs-on: ubuntu-latest
     steps:
-      - name: Release workflow placeholder
-        run: echo "Release publishing is intentionally disabled until packaging specs are implemented. publish=${{ inputs.publish }}"
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Setup Bun 1.3.13
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Lint
+        run: bun run lint
+      - name: Lint CI (docs, spelling, agents)
+        run: bun run lint:ci
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Setup Bun 1.3.13
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Test
+        run: bun run test
+
+  # Release-tier sweep: the full RouterOS channel matrix on real CHR, reusing the
+  # definitive qa.yaml. "all" fans over the active set (stable/long-term/dev).
+  release-tier:
+    name: Release-tier CHR sweep
+    needs: [checks, unit]
+    uses: ./.github/workflows/qa.yaml
+    with:
+      routeros_channel: all
+
+  publish:
+    name: Publish to npm
+    needs: [release-tier]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Setup Bun 1.3.13
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: Setup Node (npm registry auth + provenance)
+        uses: actions/setup-node@v5
+        with:
+          registry-url: https://registry.npmjs.org
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Determine version and npm tag
+        id: version
+        env:
+          DRY_RUN: ${{ inputs.dry-run || 'false' }}
+        run: |
+          set -eo pipefail
+          VERSION=$(node -pe "require('./package.json').version")
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          if [ $((MINOR % 2)) -ne 0 ]; then
+            NPM_TAG="next"
+            echo "::notice::Pre-release $VERSION (odd minor $MINOR) → npm tag 'next'"
+          else
+            NPM_TAG="latest"
+            echo "::notice::Release $VERSION (even minor $MINOR) → npm tag 'latest'"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "npm-tag=$NPM_TAG" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Release"
+            echo "- Version: \`$VERSION\`"
+            echo "- npm tag: \`$NPM_TAG\`"
+            echo "- Dry run: \`$DRY_RUN\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Validate tag matches package.json version
+        if: github.ref_type == 'tag'
+        env:
+          PKG_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -eo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::package.json version ($PKG_VERSION) does not match git tag ($TAG_VERSION)"
+            exit 1
+          fi
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TAG: ${{ steps.version.outputs.npm-tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          DRY_RUN: ${{ inputs.dry-run || 'false' }}
+        run: |
+          set -eo pipefail
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run — not publishing $VERSION (would use npm tag '$NPM_TAG')"
+            bunx npm pack --dry-run
+          else
+            bunx npm publish --access public --provenance --tag "$NPM_TAG"
+          fi
