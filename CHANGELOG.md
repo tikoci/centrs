@@ -10,6 +10,21 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Added
 
+- **CI/release rework — staged gate, definitive QA matrix, NPM publish, extended
+  sweep.** The CI surface is reconciled with the tier/versioning doctrine
+  (quickchr's `ci`/`publish`/`verify-extended` scheme as the reference).
+  `ci.yaml` is a staged push/PR gate (lint ‖ unit+coverage → **stable CHR smoke**
+  → cross-platform unit) with coverage + failing tests surfaced to job summaries
+  and artifacts. `qa.yaml` is the definitive RouterOS channel matrix (push +
+  weekly + dispatch + `workflow_call`) with **event-aware concurrency** (a new
+  main push cancels the old run; dispatches never cancel one another — including
+  an `all`-channels dispatch in a single run) and a `bun:sqlite` results store.
+  `codeql.yaml` carries security/quality scanning on its own cadence.
+  `release.yaml` publishes to npm on a `v*` tag (even/odd minor → `next`/`latest`,
+  `--provenance`, dry-run) — **requires the `NPM_TOKEN` repo secret**.
+  `verify-extended.yaml` adds a dispatch-only macOS-x86 / Windows-x86 sweep. New
+  `chr-smoke` integration test + `test:integration:smoke` script; `.coderabbit.yaml`
+  stages bot review to conserve credits.
 - **`transfer / ssh` (sftp) — SSH lands transfer-first.** SSH joins centrs as a
   self-contained **SFTP transfer client** (`src/protocols/sftp.ts`) over the host
   OpenSSH `sftp` subsystem — the only reliable SSH file path, since RouterOS's SSH
