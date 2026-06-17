@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { runCli } from "../../src/cli.ts";
+import { executeEnvelope } from "../../src/execute.ts";
 import {
 	exampleIds,
 	isChrIntegrationEnabled,
@@ -119,12 +120,17 @@ describeFast("CHR smoke (single boot, core paths)", () => {
 
 			// 4. execute — a read-only `:put` script proves the validate → run path
 			//    end-to-end (the returned value is the live identity, not a constant).
-			const script = await ok([
-				"execute",
-				chr.restUrl,
-				":put [/system/identity/get name]",
-				...restBase,
-			]);
+			//    Uses the programmatic executeEnvelope (as execute.test.ts does) so the
+			//    non-TTY CI runner's stdin state never enters the picture.
+			const scriptEnvelope = await executeEnvelope({
+				targetInput: chr.restUrl,
+				via: "rest-api",
+				username: auth.username,
+				password: auth.password,
+				command: ":put [/system/identity/get name]",
+			});
+			expect(scriptEnvelope.ok).toBe(true);
+			const script = scriptEnvelope as SuccessEnvelope;
 			expect(script.meta.via).toBe("rest-api");
 			expect(JSON.stringify(script.data)).toContain(identityName);
 
