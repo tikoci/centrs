@@ -105,8 +105,10 @@ jobs:
           set -eo pipefail
           echo "RouterOS target: ${CENTRS_CHR_VERSION:-channel ${CENTRS_CHR_CHANNEL}}"
           echo "::group::CHR integration output"
-          bun run test:integration 2>&1 | tee /tmp/chr-output.txt
+          status=0
+          bun run test:integration 2>&1 | tee /tmp/chr-output.txt || status=$?
           echo "::endgroup::"
+          exit "$status"
       # Surface the failing tests (not the whole log) to the run summary so an
       # agent reads the signal directly (github-actions-rich-data instruction).
       - name: Surface result to job summary
