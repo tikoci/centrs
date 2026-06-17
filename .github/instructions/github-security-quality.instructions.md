@@ -1,5 +1,5 @@
 ---
-applyTo: "SECURITY.md,.github/workflows/qa.yaml,.github/codeql-config.yml,.github/dependabot.yaml,src/**,package.json,bun.lock"
+applyTo: "SECURITY.md,.github/workflows/codeql.yaml,.github/workflows/qa.yaml,.github/codeql-config.yml,.github/dependabot.yaml,src/**,package.json,bun.lock"
 ---
 
 # GitHub security and quality scanning
