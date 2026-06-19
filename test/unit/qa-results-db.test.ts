@@ -128,7 +128,7 @@ describe("channelStatuses", () => {
 		});
 
 		const statuses = channelStatuses(db);
-		const byChannel = Object.fromEntries(statuses.map((s) => [s.channel, s]));
+		const byChannel = Object.fromEntries(statuses.map((status) => [status.channel, status]));
 		expect(byChannel["stable"]?.runs).toBe(2);
 		expect(byChannel["stable"]?.latestResolvedVersion).toBe("7.23.1");
 		expect(byChannel["stable"]?.latestOutcome).toBe("pass");
