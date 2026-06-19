@@ -89,9 +89,25 @@ describe("deviceRecordSchema / parseDeviceRecord", () => {
 	test("is LENIENT on an unknown recordType so decoded records round-trip", () => {
 		// The CDB decoder preserves record types centrs does not name yet; the
 		// canonical model must accept them or `set` would regress on such a record.
-		const record = parseDeviceRecord({ recordType: 99, target: "192.0.2.5" });
-		expect(record.recordType).toBe(99);
+		const unknown = parseDeviceRecord({ recordType: 99, target: "192.0.2.5" });
+		expect(unknown.recordType).toBe(99);
 		expect(isKnownRecordType(99)).toBe(false);
+
+		// Boundary: largest safe integer should still be accepted when non-negative.
+		const maxSafe = parseDeviceRecord({
+			recordType: Number.MAX_SAFE_INTEGER,
+			target: "192.0.2.5",
+		});
+		expect(maxSafe.recordType).toBe(Number.MAX_SAFE_INTEGER);
+		expect(isKnownRecordType(Number.MAX_SAFE_INTEGER)).toBe(false);
+
+		// Just beyond the safe integer boundary should be rejected.
+		expect(() =>
+			parseDeviceRecord({
+				recordType: Number.MAX_SAFE_INTEGER + 1,
+				target: "192.0.2.5",
+			}),
+		).toThrow(CentrsError);
 	});
 
 	test("isKnownRecordType matches the named WinBox types only", () => {
