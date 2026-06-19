@@ -25,9 +25,11 @@ function captureConsole() {
 	const errors: string[] = [];
 	console.log = ((...args: unknown[]) => {
 		logs.push(args.map(String).join(" "));
+		originalLog.apply(console, args);
 	}) as typeof console.log;
 	console.error = ((...args: unknown[]) => {
 		errors.push(args.map(String).join(" "));
+		originalError.apply(console, args);
 	}) as typeof console.error;
 	return {
 		logs,
