@@ -53,9 +53,9 @@ describe("recordQaRun / schema", () => {
 });
 
 describe("summarizeIntegrationReport", () => {
-	const line = (o: Record<string, unknown>) => JSON.stringify(o);
+	const toJsonLine = (o: Record<string, unknown>) => JSON.stringify(o);
 	const jsonl = [
-		line({
+		toJsonLine({
 			suite: "execute",
 			protocol: "rest-api",
 			routerosVersion: "7.23.1 (stable)",
@@ -64,7 +64,7 @@ describe("summarizeIntegrationReport", () => {
 		}),
 		"", // blank line is skipped
 		"{ not json", // malformed line is skipped
-		line({
+		toJsonLine({
 			suite: "transfer",
 			protocol: "native-api",
 			routerosVersion: "7.23.1 (stable)",
@@ -93,7 +93,7 @@ describe("summarizeIntegrationReport", () => {
 
 	test("carries an explicit requested version through", () => {
 		const summary = summarizeIntegrationReport(
-			line({
+			toJsonLine({
 				suite: "execute",
 				routerosVersion: "7.21.4 (long-term)",
 				requestedVersion: "7.21.4",
