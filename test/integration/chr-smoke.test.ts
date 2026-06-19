@@ -65,7 +65,19 @@ describeFast("CHR smoke (single boot, core paths)", () => {
 			expect(stderr).toHaveLength(0);
 			expect(exitCode).toBe(0);
 			expect(stdout).toHaveLength(1);
-			const envelope = JSON.parse(stdout[0] ?? "") as SuccessEnvelope;
+			const firstLine = stdout[0];
+			if (firstLine === undefined) {
+				throw new Error("Expected one JSON line in stdout, but none was captured.");
+			}
+			let envelope: SuccessEnvelope;
+			try {
+				envelope = JSON.parse(firstLine) as SuccessEnvelope;
+			} catch (error) {
+				throw new Error(
+					`Failed to parse CLI JSON output. stdout[0]=${firstLine}`,
+					{ cause: error },
+				);
+			}
 			expect(envelope.ok).toBe(true);
 			return envelope;
 		}
