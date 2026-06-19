@@ -185,7 +185,9 @@ describe("resolvedExecuteTips — mac-telnet no-credentials tip (JG-24)", () => 
 		const tip = tips.find((t) => t.code === "tip/mac-telnet-no-credentials");
 		expect(tip).toBeDefined();
 		expect(tip?.detailsUrl).toContain("/tips/tip/mac-telnet-no-credentials");
-		expect(tip?.fix).toContain("MTWEI");
+		expect(tip?.fix).toBe(
+			"Set credentials for mac-telnet. MTWEI is not accepted as an authentication option.",
+		);
 	});
 
 	test("does not fire once a password is resolved", () => {
