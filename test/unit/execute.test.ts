@@ -109,6 +109,33 @@ describe("execute default output format is human-readable text", () => {
 		expect(resolved.format.value).toBe("json");
 	});
 
+	test("rejects invalid CENTRS_FORMAT value", async () => {
+		await expect(
+			resolveExecuteRequest(
+				{
+					targetInput: "127.0.0.1",
+					command: "/ip/address/print",
+					via: "native-api",
+				},
+				{ CENTRS_FORMAT: "xml" },
+			),
+		).rejects.toBeInstanceOf(CentrsError);
+	});
+
+	test("rejects invalid explicit --format value", async () => {
+		await expect(
+			resolveExecuteRequest(
+				{
+					targetInput: "127.0.0.1",
+					command: "/ip/address/print",
+					via: "native-api",
+					format: "invalid" as ResolvedExecuteRequest["format"]["value"],
+				},
+				{},
+			),
+		).rejects.toBeInstanceOf(CentrsError);
+	});
+
 	test("explicit --format yaml wins", async () => {
 		const resolved = await resolveExecuteRequest(
 			{
