@@ -74,7 +74,18 @@ describe("deviceRecordSchema / parseDeviceRecord", () => {
 			});
 			expect((error as CentrsError).remediation).toContain("recordType");
 			// Flattened Zod issues are attached for debugging.
-			expect(Array.isArray((error as CentrsError).causeData)).toBe(true);
+			const causeData = (error as CentrsError).causeData;
+			expect(Array.isArray(causeData)).toBe(true);
+			expect(causeData).toHaveLength(expect.any(Number));
+			expect((causeData as unknown[]).length).toBeGreaterThan(0);
+
+			const firstIssue = (causeData as Array<Record<string, unknown>>)[0];
+			expect(firstIssue).toMatchObject({
+				code: expect.any(String),
+				message: expect.any(String),
+				path: expect.any(Array),
+			});
+			expect(String(firstIssue.message)).toMatch(/object/i);
 		}
 	});
 
