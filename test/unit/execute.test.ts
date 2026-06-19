@@ -78,8 +78,13 @@ describe("execute preflight does not mask transport failures", () => {
 		);
 		expect(envelope.ok).toBe(false);
 		if (!envelope.ok) {
+			const expectedTransportCodes = [
+				"transport/connection-refused",
+				"transport/network-unreachable",
+			];
 			expect(envelope.error.code.startsWith("transport/")).toBe(true);
 			expect(envelope.error.code).not.toBe("validation/syntax");
+			expect(expectedTransportCodes).toContain(envelope.error.code);
 		}
 	});
 });
