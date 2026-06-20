@@ -343,6 +343,23 @@ describe("btest loopback data engine", () => {
 		expect(server.totalRxBytes).toBeGreaterThan(0);
 	});
 
+	test("TCP both: both sides account tx and rx (no dropped server tx)", async () => {
+		const { client, server } = await runLoopback({
+			server: { authenticate: false, statusIntervalMs: 40, durationMs: 3000 },
+			client: { protocol: "tcp", direction: "both", ...short },
+		});
+		// The client drives bytes in both directions and accounts both halves.
+		expect(client.totalTxBytes).toBeGreaterThan(0);
+		expect(client.totalRxBytes).toBeGreaterThan(0);
+		// The server receives the client's transmit half...
+		expect(server.totalRxBytes).toBeGreaterThan(0);
+		// ...and transmits the client's receive half — that tx must be recorded in
+		// the session total, not dropped. (Regression: the server's bulk-TX loop
+		// swapped rx into the interval but never its own tx, so a `both` TCP session
+		// reported totalTxBytes=0 / txAvgBps=0 despite sending hundreds of MB.)
+		expect(server.totalTxBytes).toBeGreaterThan(0);
+	});
+
 	test("UDP both: data flows in both directions with loss accounting", async () => {
 		const base = randomUdpBase();
 		const { client, server } = await runLoopback({

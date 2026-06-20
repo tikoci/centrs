@@ -13,6 +13,22 @@ export type ChrNetworkSpec =
 	| { type: "socket-listen"; port: number }
 	| { type: "socket-mcast"; group: string; port: number };
 
+/**
+ * A host→guest port forward (quickchr `extraPorts` / `PortMapping`). The btest
+ * client test boots with `{ name: "btest", host: 0, guest: 2000, proto: "tcp" }`
+ * so a host TCP port (auto-allocated when `host: 0`) maps onto the guest's
+ * `/tool/bandwidth-server` on 2000 — the host→guest mapping a direct
+ * centrs-client → CHR-server test needs (a `user`/SLIRP guest is otherwise
+ * unreachable from the host). The host port surfaces on the instance as
+ * `chr.ports[name]`.
+ */
+export interface ChrPortForward {
+	name: string;
+	host: number;
+	guest: number;
+	proto: "tcp" | "udp";
+}
+
 interface ChrInstance {
 	name: string;
 	state: { version: string };
@@ -43,6 +59,11 @@ interface StartOptions {
 	 * SLIRP hostfwd, ether2 carries L2 broadcasts to the host bridge.
 	 */
 	networks?: readonly ChrNetworkSpec[];
+	/**
+	 * Extra host→guest port forwards beyond the management mappings. The btest
+	 * client test forwards a host TCP port onto guest 2000 ({@link ChrPortForward}).
+	 */
+	extraPorts?: readonly ChrPortForward[];
 }
 
 const routerOsChannels = [

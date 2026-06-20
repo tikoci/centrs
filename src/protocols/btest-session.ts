@@ -899,14 +899,22 @@ async function tcpTxLoop(ctx: RunContext, sendStatus: boolean): Promise<void> {
 		if (sendStatus && Date.now() >= nextStatus) {
 			statusSeq += 1;
 			const rx = counters.swapRx();
+			// `sendStatus` is the server's `both` TCP role: it transmits bulk here
+			// *and* receives the client's transmit half. The wire status reports rx
+			// (so the client adapts its send rate), but the interval accounting must
+			// flush both halves — the bulk tx is in `txBytes` via addTx and would
+			// otherwise never reach the session total (a `both` session then showed
+			// totalTxBytes=0). A pure TX-only sender uses sendStatus=false and is
+			// accounted by reportOnlyLoop, so there is no double-count here.
+			const tx = counters.swapTx();
 			try {
 				await ctx.channel.write(encodeStatus(statusSeq, rx & 0xffffffff, 0));
 			} catch {
 				counters.stop();
 				break;
 			}
-			counters.recordInterval(0, rx, 0);
-			emitInterval(ctx, statusSeq, 0, rx, 0);
+			counters.recordInterval(tx, rx, 0);
+			emitInterval(ctx, statusSeq, tx, rx, 0);
 			nextStatus = Date.now() + ctx.statusIntervalMs;
 		}
 		try {
@@ -1458,6 +1466,20 @@ async function driveSession(
 	} finally {
 		if (durationTimer) clearTimeout(durationTimer);
 		bounds.signal?.removeEventListener("abort", onAbort);
+		// Flush the final partial interval. The per-interval loops record totals on
+		// a tick cadence (statusIntervalMs) and exit without capturing bytes that
+		// arrived after the last tick — or before the first tick, when a slow/loaded
+		// host delays it past a short run's end. Fold the remaining counter bytes
+		// into the totals (per this role's directions) so a real transfer is never
+		// reported as zero, and `data.reports[]` stays lossless against the totals.
+		// Guarded so a tick-aligned run gains no phantom interval.
+		const tx = dirs.shouldTx ? counters.swapTx() : 0;
+		const rx = dirs.shouldRx ? counters.swapRx() : 0;
+		const lost = dirs.shouldRx ? counters.swapLost() : 0;
+		if (tx > 0 || rx > 0 || lost > 0) {
+			counters.recordInterval(tx, rx, lost);
+			emitInterval(ctx, counters.intervals, tx, rx, lost);
+		}
 	}
 	return stopReason;
 }
