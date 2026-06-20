@@ -210,7 +210,7 @@ Decided with the user. Both cells have direct gated `CHR-passed` evidence:
   questions).
 - **Client cell — centrs client → CHR `/tool/bandwidth-server`**
   (`test/integration/btest-client.test.ts`): the CHR boots with a host→guest
-  `extraPorts` forward `{ name: "btest", host: 0, guest: 2000 }`, so a host TCP port
+  `extraPorts` forward `{ name: "btest", host: 0, guest: 2000, proto: "tcp" }`, so a host TCP port
   maps onto the guest bandwidth server on 2000 (the same SLIRP inbound path that
   already carries REST/SSH — no firewall change). The centrs client dials
   `127.0.0.1:<host port>` and proves **TCP receive**, unauth and **EC-SRP5** (its

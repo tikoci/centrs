@@ -10,8 +10,8 @@
  * verifier, plus the client's TCP receive data engine against a real peer.
  *
  * Topology: a `user`/SLIRP guest is unreachable from the host, so the CHR boots
- * with an `extraPorts` forward `{ name: "btest", host: 0, guest: 2000 }` — a host
- * TCP port mapped onto the guest's bandwidth server on 2000. The centrs client
+ * with an `extraPorts` forward `{ name: "btest", host: 0, guest: 2000, proto: "tcp" }`
+ * — a host TCP port mapped onto the guest's bandwidth server on 2000. The centrs client
  * dials `127.0.0.1:<host port>`. The same SLIRP inbound path already carries REST
  * and SSH, so no firewall change is needed. TCP only: UDP needs the server's
  * datagrams to traverse SLIRP back to the host, which this forward does not give

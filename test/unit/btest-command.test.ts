@@ -179,6 +179,7 @@ describe("btest client↔server loopback (orchestrators)", () => {
 		// first's teardown.
 		expect(first.ok).toBe(true);
 		expect(second.ok).toBe(true);
+		expect(server.ok).toBe(true);
 		if (!first.ok || !second.ok || !server.ok) return;
 		expect(first.data.totalTxBytes).toBeGreaterThan(0);
 		expect(first.data.totalRxBytes).toBeGreaterThan(0);
