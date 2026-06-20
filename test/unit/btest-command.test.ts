@@ -160,6 +160,41 @@ describe("btest client↔server loopback (orchestrators)", () => {
 		expect(server.data.sessions[0]?.protocol).toBe("tcp");
 	});
 
+	test("TCP both, back-to-back: two sequential sessions both account tx+rx", async () => {
+		const srv = await startServer({ authenticate: false, intervalMs: 40 });
+		const run = () =>
+			btestClient({
+				host: "127.0.0.1",
+				controlPort: srv.port,
+				protocol: "tcp",
+				direction: "both",
+				env: {},
+				...short,
+			});
+		const first = await run();
+		const second = await run();
+		const server = await srv.stop();
+
+		// Both back-to-back clients complete — the second is not poisoned by the
+		// first's teardown.
+		expect(first.ok).toBe(true);
+		expect(second.ok).toBe(true);
+		if (!first.ok || !second.ok || !server.ok) return;
+		expect(first.data.totalTxBytes).toBeGreaterThan(0);
+		expect(first.data.totalRxBytes).toBeGreaterThan(0);
+
+		// One server session per client, each a bidirectional `both` test whose tx
+		// *and* rx land in the record (regression: a `both` server session reported
+		// totalTxBytes=0 / txAvgBps=0 despite transmitting the client's receive half).
+		expect(server.data.sessions.length).toBe(2);
+		for (const session of server.data.sessions) {
+			expect(session.direction).toBe("both");
+			expect(session.totalRxBytes).toBeGreaterThan(0);
+			expect(session.totalTxBytes).toBeGreaterThan(0);
+			expect(session.txAvgBps).toBeGreaterThan(0);
+		}
+	});
+
 	test("UDP both: CSV render carries header + rows", async () => {
 		const base = 41000 + Math.floor(Math.random() * 10000);
 		const srv = await startServer({

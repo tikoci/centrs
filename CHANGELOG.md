@@ -85,6 +85,14 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Fixed
 
+- **`btest` bidirectional TCP server tx is now accounted.** A `direction=both`
+  TCP session reported `totalTxBytes=0` / `txAvgBps=0` on the server side even
+  though it transmitted the client's receive half (hundreds of MB): the server's
+  bulk-TX loop flushed only its rx into each interval, never its own tx. The
+  server now records both halves, so a `both` session's `data.sessions[]` and the
+  CSV/text renders carry a non-zero tx rate. Loopback-grounded
+  (`test/unit/btest-{session,command}.test.ts`); UDP `both` and single-direction
+  TCP were already correct.
 - **`discover` default listen window is now `15s`** (was `60s` in code).
   Lowering the window relied on the up-front refresh broadcast (sent immediately,
   then every 5s) so responders reply within a round-trip; the per-command docs
