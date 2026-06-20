@@ -10,6 +10,16 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Added
 
+- **`btest / client` is now `CHR-passed`.** A direct centrs-client → CHR
+  `/tool/bandwidth-server` gated test (`test/integration/btest-client.test.ts`)
+  boots a CHR with a host→guest `tcp:2000` forward and runs the centrs client
+  against real RouterOS: unauthenticated TCP receive, an **EC-SRP5 client proof
+  verified by RouterOS's own server verifier**, and a wrong-password reject (CHR
+  7.23.1). This closes the last open product-grid cell — the client cell was
+  previously grounded only transitively (loopback + the server test). The
+  integration harness (`test/integration/chr.ts`) gains an `extraPorts` option for
+  arbitrary host→guest forwards. UDP client→server and TCP `connection-count > 1`
+  fan-out remain loopback/transitive (README, Open questions).
 - **CI/release rework — staged gate, definitive QA matrix, NPM publish, extended
   sweep.** The CI surface is reconciled with the tier/versioning doctrine
   (quickchr's `ci`/`publish`/`verify-extended` scheme as the reference).

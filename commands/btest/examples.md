@@ -17,10 +17,20 @@ matrix's honest grounding split (`docs/MATRIX.md`, "Peer measurement (`btest`)")
   **5** (multi-connection TCP) are **designed but not yet gated** — the auth-reject
   path is covered by the loopback unit test, and the multi-stream fan-out is a
   documented follow-up — so they are not part of the asserted run.
+- **Gated `CHR-passed` (client cell): centrs client → CHR bandwidth-server** —
+  examples **6** (TCP receive) and **8** (EC-SRP5 client role + wrong-password
+  reject) are *also* asserted directly against a real RouterOS
+  `/tool/bandwidth-server`, over a host→guest `tcp:2000` forward
+  (`test/integration/btest-client.test.ts`, CHR 7.23.1). This is what makes the
+  **client** cell `CHR-passed`: centrs's EC-SRP5 **client proof** is verified by
+  RouterOS's own server verifier. TCP only — the EC-SRP5 example is run over TCP
+  receive here (the loopback variant below uses UDP); UDP client→server stays
+  loopback (README, Open questions).
 - **Unit / loopback (client cell + codec)** — examples 6–10. centrs client ↔
   centrs server on `127.0.0.1` with injected sockets; the EC-SRP5 both-roles math
   and the pre-socket option-grammar rejects (`test/unit/btest.test.ts`). These are
-  deterministic and need no router.
+  deterministic and need no router, and remain the fast backstop under the gated
+  client-cell coverage above.
 
 `btest.exe` (via wine) is **not** in this example set: it cannot run in CI, so it
 is a **coding-time grounding aid** only — run by hand against the centrs client and

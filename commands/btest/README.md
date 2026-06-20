@@ -5,21 +5,23 @@ is centrs's peer-measurement surface: it mirrors `/tool/bandwidth-test` (client)
 and `/tool/bandwidth-server` (server), so it is a drop-in for the Windows-only
 `btest.exe` on macOS/Linux.
 
-Status: server `CHR-passed`, client `coded`. The protocol **codec**
+Status: server **and** client both `CHR-passed`. The protocol **codec**
 (`src/protocols/btest.ts`), the shared **EC-SRP5** core including the net-new
 server role (`src/protocols/ec-srp5.ts`), the **session state machine + TCP/UDP
 data engines** (`src/protocols/btest-session.ts`), the **orchestrator**
 (`src/btest.ts`), and the **CLI** (`centrs btest client|server`) all exist and are
-unit/loopback-tested. The gated CHR integration test
-(`test/integration/btest.test.ts`) **passes on CHR 7.23.1**: a real RouterOS
-`/tool/bandwidth-test` client lands TCP-receive, UDP-transmit (with loss
-accounting), and **EC-SRP5** sessions on the centrs server — so the **server** cell
-is `CHR-passed`. The **client** cell stays `coded` (loopback + transitive — no
-direct client→CHR-server gate, by decision); TCP multi-connection
-(`connection-count > 1`) data fan-out is a follow-up. See `docs/MATRIX.md` ("Peer
-measurement (`btest`)") for the cell states — that is the only status surface. v1
-scope: **both** modes (client + server), **EC-SRP5 + unauthenticated** auth, **TCP
-and UDP** tests. Legacy pre-6.43 double-MD5 is out of scope.
+unit/loopback-tested. Two gated CHR integration tests **pass on CHR 7.23.1**:
+`test/integration/btest.test.ts` lands a real RouterOS `/tool/bandwidth-test`
+client's TCP-receive, UDP-transmit (with loss accounting), and **EC-SRP5** sessions
+on the centrs **server**; `test/integration/btest-client.test.ts` runs the centrs
+**client** against a real RouterOS `/tool/bandwidth-server` over a host→guest
+`tcp:2000` forward — unauthenticated TCP receive, an **EC-SRP5 client proof
+verified by RouterOS's own verifier**, and a wrong-password reject. TCP
+multi-connection (`connection-count > 1`) data fan-out is a follow-up. See
+`docs/MATRIX.md` ("Peer measurement (`btest`)") for the cell states — that is the
+only status surface. v1 scope: **both** modes (client + server), **EC-SRP5 +
+unauthenticated** auth, **TCP and UDP** tests. Legacy pre-6.43 double-MD5 is out of
+scope.
 
 ## Why this is not `execute`
 
@@ -194,32 +196,40 @@ are redactable in bug-report output.
 
 ## Validation policy (CHR + loopback + btest.exe)
 
-Decided with the user. The gated `CHR-passed` evidence is **CHR client → centrs
-server**: `@tikoci/quickchr` boots a CHR whose `/tool/bandwidth-test` dials the
-**host** (the QEMU SLIRP gateway `10.0.2.2`) where the centrs server listens on
-`--bind 0.0.0.0 --port 2000`. Guest→host needs **no hostfwd**. The first proven
-paths are **TCP** (any direction, single + multi-connection — TCP is bidirectional
-on the outbound control connection) and **UDP transmit** (client→server, which the
-guest originates, so SLIRP NATs it cleanly), with unauth + EC-SRP5 and throughput
-cross-checked against the CHR's own status output. **UDP receive / both** depend on
-the server's packets reaching the guest's UDP port *back* through SLIRP NAT, which
-needs the RouterOS client to originate a UDP flow first (btest's NAT-probe mode
-exists for exactly this); that path is **gated behind a one-shot CHR smoke test**
-before the suite relies on it — see Open questions. The fast/deterministic backstop
-is **centrs client ↔ centrs server
+Decided with the user. Both cells have direct gated `CHR-passed` evidence:
+
+- **Server cell — CHR client → centrs server** (`test/integration/btest.test.ts`):
+  `@tikoci/quickchr` boots a CHR whose `/tool/bandwidth-test` dials the **host**
+  (the QEMU SLIRP gateway `10.0.2.2`) where the centrs server listens on
+  `--bind 0.0.0.0 --port 2000`. Guest→host needs **no hostfwd**. Proven paths are
+  **TCP** (any direction — TCP is bidirectional on the outbound control connection)
+  and **UDP transmit** (client→server, which the guest originates, so SLIRP NATs it
+  cleanly), with unauth + EC-SRP5 and throughput cross-checked against the CHR's own
+  status. **UDP receive / both** depend on the server's packets reaching the guest's
+  UDP port *back* through SLIRP NAT (a one-shot smoke cycle only — see Open
+  questions).
+- **Client cell — centrs client → CHR `/tool/bandwidth-server`**
+  (`test/integration/btest-client.test.ts`): the CHR boots with a host→guest
+  `extraPorts` forward `{ name: "btest", host: 0, guest: 2000 }`, so a host TCP port
+  maps onto the guest bandwidth server on 2000 (the same SLIRP inbound path that
+  already carries REST/SSH — no firewall change). The centrs client dials
+  `127.0.0.1:<host port>` and proves **TCP receive**, unauth and **EC-SRP5** (its
+  client proof verified by RouterOS's real server verifier), plus a wrong-password
+  reject. **TCP only** — UDP would need the server's datagrams to traverse SLIRP
+  back to the host, which this forward does not provide, so UDP client→server stays
+  loopback/transitive.
+
+The fast/deterministic backstop under both is **centrs client ↔ centrs server
 loopback** (`127.0.0.1`, injected sockets) covering the full client↔server matrix,
 EC-SRP5 both roles, and the option-grammar rejects.
 **`btest.exe` (via wine) is a coding-time grounding aid only** — used by hand
 while implementing the EC-SRP5 framing and the server-side verifier; it is **not**
 an integration test (it cannot run in CI) and **not** part of the long-term plan.
 
-**Honest grounding caveat:** the **server** cell is directly CHR-passed; the
-**client** cell is grounded *transitively* — the server test validates the shared
-codec + EC-SRP5 against real RouterOS, and loopback proves the client drives it.
-Rounding out a **direct** centrs-client → CHR-server gated test is **deferred
-future work**: it needs host→guest UDP/TCP port mapping through QEMU, which we are
-intentionally not setting up now (a TCP-only version would need only
-`hostfwd tcp:2000`).
+**Honest grounding caveat:** both cells are now directly CHR-passed. The remaining
+transitive-only paths are **UDP client→CHR-server** (the SLIRP reverse-NAT path the
+TCP forward does not cover) and TCP **multi-connection** fan-out — both deferred,
+not yet gated.
 
 ## Open questions
 
@@ -232,13 +242,16 @@ intentionally not setting up now (a TCP-only version would need only
   works — i.e. that the RouterOS client originates an initial UDP/NAT probe that
   opens the SLIRP reverse mapping. Until then the gated UDP coverage is
   **transmit** (guest→host); TCP already covers both directions.
-- **Direct client integration test is future work.** A gated centrs-client →
-  CHR-server test needs host→guest port mapping through QEMU; intentionally out of
-  scope now. `btest.exe` (wine) is the coding-time grounding peer, not CI.
+- **UDP client→CHR-server and TCP multi-connection are not yet gated.** The direct
+  client→CHR-server gate (`test/integration/btest-client.test.ts`) is **TCP only**;
+  a UDP variant needs the server's datagrams to traverse SLIRP back to the host
+  (the reverse-NAT path), and `connection-count > 1` needs the parallel-stream
+  fan-out. Both remain loopback/transitive until gated. `btest.exe` (wine) is the
+  coding-time grounding peer, not CI.
 
 ## Out of scope (v1)
 
-Legacy pre-6.43 double-MD5 auth; direct centrs-client → CHR-server gated test; the
-≥3-router "test-through" topology RouterOS recommends for measuring a *transit*
-device (centrs is an endpoint peer); TUI/proxy btest frontends (later, over the
-stable core).
+Legacy pre-6.43 double-MD5 auth; a UDP client→CHR-server gated test (TCP is gated;
+UDP needs SLIRP reverse-NAT); the ≥3-router "test-through" topology RouterOS
+recommends for measuring a *transit* device (centrs is an endpoint peer); TUI/proxy
+btest frontends (later, over the stable core).

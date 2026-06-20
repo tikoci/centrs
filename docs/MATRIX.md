@@ -180,16 +180,18 @@ pre-6.43 double-MD5 is out of scope).
 | Mode           | State        | Evidence |
 | -------------- | ------------ | -------- |
 | btest / server | `CHR-passed` | CHR `/tool/bandwidth-test` client → centrs server (TCP+UDP, unauth + EC-SRP5), CHR 7.23.1, `test/integration/btest.test.ts`. |
-| btest / client | `coded`      | centrs client ↔ centrs server loopback + transitive; `btest.exe`-via-wine cross-check (coding-time aid only). |
+| btest / client | `CHR-passed` | centrs client → CHR `/tool/bandwidth-server` over a host→guest `tcp:2000` forward — unauth + **EC-SRP5 client proof verified by real RouterOS** + wrong-pass reject (TCP receive), CHR 7.23.1, `test/integration/btest-client.test.ts`; plus client↔server loopback (`test/unit/btest-*.test.ts`). |
 
 The wire codec, the EC-SRP5 session/handshake (shared core byte-identical with
 mac-telnet's MTWEI, plus the net-new server role), the TCP/UDP data engines, the
 orchestrator + CLI, and the honest grounding caveat (the server gets direct CHR
-evidence over the QEMU SLIRP gateway `10.0.2.2`; UDP-receive is a soft smoke test;
-the client is grounded transitively; a direct client→CHR-server gate and TCP
-`connection-count > 1` fan-out are deferred; NDJSON is not adopted) are documented
-in `commands/btest/README.md` and the `src/protocols/btest.ts`,
-`src/protocols/btest-session.ts`, and `src/protocols/ec-srp5.ts` module headers.
+evidence over the QEMU SLIRP gateway `10.0.2.2`; the client gets direct CHR
+evidence over a host→guest `tcp:2000` forward — TCP only; UDP-receive is a soft
+smoke test and UDP client→CHR-server stays loopback/transitive over the SLIRP
+reverse path; TCP `connection-count > 1` fan-out is deferred; NDJSON is not
+adopted) are documented in `commands/btest/README.md` and the
+`src/protocols/btest.ts`, `src/protocols/btest-session.ts`, and
+`src/protocols/ec-srp5.ts` module headers.
 
 ## Priority order
 
@@ -208,7 +210,7 @@ the linked `commands/<name>/`.
 9. **RoMON / WinBox Terminal for execute** — `not-started` (see Open questions).
 10. **discover / mndp** — `CHR-passed` (`commands/discover/`).
 11. **MCP, TUI, proxy** — frontends over the stable core. **MCP** is `CHR-passed` for Phase 1 + the first Phase 2 CDB mutation (`commands/mcp/`); next small step is the device-free `centrs mcp --list-tools` manifest dump (bench token-footprint measurement). MCP stays **stdio-only** (HTTP is the proxy's job). **TUI / proxy** `not-started`.
-12. **btest (peer measurement)** — server `CHR-passed`, client `coded` (`commands/btest/`). Own protocol axis; shares EC-SRP5 with mac-telnet, so it can proceed in parallel.
+12. **btest (peer measurement)** — server **and** client both `CHR-passed` (`commands/btest/`). Own protocol axis; shares EC-SRP5 with mac-telnet, so it can proceed in parallel.
 
 ## Open questions (decisions needed before the affected cell can advance)
 
