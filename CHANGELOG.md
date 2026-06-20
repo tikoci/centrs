@@ -103,6 +103,12 @@ documenting cross-cutting shifts that affect contributors and consumers.
   CSV/text renders carry a non-zero tx rate. Loopback-grounded
   (`test/unit/btest-{session,command}.test.ts`); UDP `both` and single-direction
   TCP were already correct.
+- **`btest` totals now flush the final partial interval.** The per-interval
+  accounting loops recorded totals on a tick cadence and exited without folding in
+  bytes that arrived after the last tick (or before the first, on a slow host), so
+  a short run under-reported the final fraction of a second of each direction.
+  `driveSession` now folds the remaining counter bytes into the totals on stop,
+  keeping `data.reports[]` lossless against them.
 - **`discover` default listen window is now `15s`** (was `60s` in code).
   Lowering the window relied on the up-front refresh broadcast (sent immediately,
   then every 5s) so responders reply within a round-trip; the per-command docs

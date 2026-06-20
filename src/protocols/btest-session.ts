@@ -1466,6 +1466,20 @@ async function driveSession(
 	} finally {
 		if (durationTimer) clearTimeout(durationTimer);
 		bounds.signal?.removeEventListener("abort", onAbort);
+		// Flush the final partial interval. The per-interval loops record totals on
+		// a tick cadence (statusIntervalMs) and exit without capturing bytes that
+		// arrived after the last tick — or before the first tick, when a slow/loaded
+		// host delays it past a short run's end. Fold the remaining counter bytes
+		// into the totals (per this role's directions) so a real transfer is never
+		// reported as zero, and `data.reports[]` stays lossless against the totals.
+		// Guarded so a tick-aligned run gains no phantom interval.
+		const tx = dirs.shouldTx ? counters.swapTx() : 0;
+		const rx = dirs.shouldRx ? counters.swapRx() : 0;
+		const lost = dirs.shouldRx ? counters.swapLost() : 0;
+		if (tx > 0 || rx > 0 || lost > 0) {
+			counters.recordInterval(tx, rx, lost);
+			emitInterval(ctx, counters.intervals, tx, rx, lost);
+		}
 	}
 	return stopReason;
 }
