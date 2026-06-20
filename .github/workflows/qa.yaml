@@ -70,7 +70,7 @@ jobs:
         routeros_channel: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'push') && '["stable","long-term"]' || (inputs.routeros_channel == 'all' && '["stable","long-term","development"]') || format('["{0}"]', inputs.routeros_channel || 'stable')) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install QEMU
         run: |
           sudo apt-get update
@@ -84,7 +84,7 @@ jobs:
            echo "::warning::/dev/kvm is unavailable; quickchr will use slower TCG emulation."
           fi
       - name: Cache CHR images
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.local/share/quickchr/cache
           key: chr-cache-${{ runner.os }}-${{ matrix.routeros_channel }}-v1
@@ -142,7 +142,7 @@ jobs:
       - name: Upload CHR logs
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: chr-logs-${{ matrix.routeros_channel }}
           path: |
@@ -173,7 +173,7 @@ jobs:
       - name: Upload QA results DB
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: qa-results-${{ matrix.routeros_channel }}
           path: ${{ runner.temp }}/qa-results.sqlite
