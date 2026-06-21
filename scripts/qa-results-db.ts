@@ -2,11 +2,16 @@
  * QA results store — a `bun:sqlite` history of CHR integration runs (JG-18).
  *
  * The RouterOS channel → version mapping drifts as MikroTik promotes builds, so
- * one "stable" or "long-term" run means a different version over time. This
- * keeps one row per CHR run — channel, the version that actually booted,
- * pass/fail, date, commit — so the **must-pass policy** (current long-term and
- * newer must pass; older than current long-term is best-effort) is evaluated
- * against real history rather than a hard-coded version string.
+ * one "stable" or "long-term" run means a different version over time — and the
+ * testing/development channels are not even monotonically ordered (testing can
+ * sit behind stable as a stale rc, then leapfrog it). This keeps one row per CHR
+ * run — channel, the version that actually booted, pass/fail, date, commit. The
+ * **gate** (`channelPolicy` / `evaluateMustPassGate` below) is *maturity*-based,
+ * not recency-based: only released channels (stable, long-term) are must-pass;
+ * pre-release channels (testing, development) are best-effort — recorded but
+ * never reds a merge, regardless of how new their version is. Version *recency*
+ * matters only for which pre-release channels are worth sampling, which is why
+ * the resolved version is kept per run rather than a hard-coded version string.
  *
  * The run shape is ingested from the integration-evidence JSONL that
  * `recordIntegrationEvidence` (`test/integration/chr.ts`) appends. The store is
