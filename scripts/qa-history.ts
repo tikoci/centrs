@@ -41,12 +41,16 @@ async function collectLegRuns(legsDir: string): Promise<QaRunRow[]> {
 	const glob = new Glob("**/qa-results.sqlite");
 	for await (const rel of glob.scan({ cwd: legsDir, onlyFiles: true })) {
 		const path = `${legsDir}/${rel}`;
+		let db: Database | undefined;
 		try {
-			const db = new Database(path, { readonly: true });
+			db = new Database(path, { readonly: true });
 			runs.push(...allRuns(db));
-			db.close();
 		} catch (error) {
-			console.error(`::warning title=QA history::skipped ${path}: ${error}`);
+			console.error(
+				`::warning title=QA history::skipped ${path}: ${String(error)}`,
+			);
+		} finally {
+			db?.close();
 		}
 	}
 	return runs;
