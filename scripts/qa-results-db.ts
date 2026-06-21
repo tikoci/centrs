@@ -186,6 +186,128 @@ export function channelStatuses(db: Database): ChannelStatus[] {
 	});
 }
 
+/** Every recorded run, oldest first — the source for the accumulating history. */
+export function allRuns(db: Database): QaRunRow[] {
+	return db.query<QaRunRow, never[]>("SELECT * FROM qa_runs ORDER BY id").all();
+}
+
+/**
+ * A run as it lives on the `qa-history` branch: the DB row minus the
+ * per-DB `id` (which is reassigned whenever the store is rebuilt from JSONL).
+ * Snake_case mirrors the table columns so the append-log reads the same as the
+ * schema in a `git diff`.
+ */
+export type QaRunRecord = Omit<QaRunRow, "id">;
+
+/** One JSONL line for the append-only history log. */
+export function serializeRun(row: QaRunRow): string {
+	const { id: _id, ...record } = row;
+	return JSON.stringify(record satisfies QaRunRecord);
+}
+
+/**
+ * Parse the accumulating history JSONL into rows. Blank and malformed lines are
+ * skipped (tolerant, like {@link summarizeIntegrationReport}) so a half-written
+ * history never breaks the gate; only lines with the required keys are kept.
+ */
+export function parseHistoryJsonl(jsonl: string): QaRunRecord[] {
+	const rows: QaRunRecord[] = [];
+	for (const line of jsonl.split("\n")) {
+		const trimmed = line.trim();
+		if (trimmed.length === 0) continue;
+		let record: Record<string, unknown>;
+		try {
+			record = JSON.parse(trimmed) as Record<string, unknown>;
+		} catch {
+			continue;
+		}
+		const channel = record["channel"];
+		const outcome = record["outcome"];
+		const runDate = record["run_date"];
+		if (
+			typeof channel !== "string" ||
+			(outcome !== "pass" && outcome !== "fail") ||
+			typeof runDate !== "string"
+		) {
+			continue;
+		}
+		rows.push({
+			run_date: runDate,
+			channel,
+			requested_version:
+				typeof record["requested_version"] === "string"
+					? record["requested_version"]
+					: null,
+			resolved_version:
+				typeof record["resolved_version"] === "string"
+					? record["resolved_version"]
+					: null,
+			outcome,
+			suites: typeof record["suites"] === "number" ? record["suites"] : 0,
+			examples: typeof record["examples"] === "number" ? record["examples"] : 0,
+			commit_sha:
+				typeof record["commit_sha"] === "string" ? record["commit_sha"] : null,
+		});
+	}
+	return rows;
+}
+
+/**
+ * Must-pass policy: a regression on a **released** channel reds a merge; beta
+ * and test channels record to history but never gate (their EC-SRP5/btest path
+ * is intermittently flaky — JG-31 — and a beta flake must never red main). The
+ * "active set" promotion (running `development` on push) is decoupled from this:
+ * a channel can run on every push yet still be best-effort.
+ */
+export const MUST_PASS_CHANNELS: readonly string[] = ["stable", "long-term"];
+
+export type GatePolicy = "must-pass" | "best-effort";
+
+export function channelPolicy(channel: string): GatePolicy {
+	return MUST_PASS_CHANNELS.includes(channel) ? "must-pass" : "best-effort";
+}
+
+export interface GateResult {
+	ok: boolean;
+	/** Must-pass channels whose latest result is `fail` — these red the gate. */
+	failures: ChannelStatus[];
+	/** Must-pass channels considered (have data). */
+	evaluated: ChannelStatus[];
+}
+
+/**
+ * Evaluate the must-pass gate over the current run's channel statuses. Only an
+ * explicit `fail` on a must-pass channel fails the gate; a must-pass channel
+ * that produced no row (e.g. an infra-absent leg) is the orchestrator's concern
+ * to warn about, not a hard fail — infra absence must not red a merge the way a
+ * real RouterOS regression does.
+ */
+export function evaluateMustPassGate(statuses: ChannelStatus[]): GateResult {
+	const evaluated = statuses.filter(
+		(s) => channelPolicy(s.channel) === "must-pass",
+	);
+	const failures = evaluated.filter((s) => s.latestOutcome === "fail");
+	return { ok: failures.length === 0, failures, evaluated };
+}
+
+/** Rebuild an in-memory store from history records (ids are reassigned). */
+export function rebuildHistoryDb(records: QaRunRecord[]): Database {
+	const db = openQaResultsDb(":memory:");
+	for (const record of records) {
+		recordQaRun(db, {
+			channel: record.channel,
+			requestedVersion: record.requested_version ?? undefined,
+			resolvedVersion: record.resolved_version ?? undefined,
+			outcome: record.outcome,
+			suites: record.suites,
+			examples: record.examples,
+			commitSha: record.commit_sha ?? undefined,
+			runDate: record.run_date,
+		});
+	}
+	return db;
+}
+
 function flag(args: readonly string[], name: string): string | undefined {
 	const index = args.indexOf(name);
 	return index >= 0 ? args[index + 1] : undefined;

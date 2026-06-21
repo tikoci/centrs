@@ -238,12 +238,15 @@ sysfs
 # CI workflow shell vocabulary (.github/workflows/*.yaml step scripts)
 # pipefail: `set -eo pipefail` so a tee'd `bun test` failure isn't masked;
 # endgroup: GitHub `::endgroup::` log fold; funcs/gsub/img: coverage-parse and
-# CHR-image terms in the gate's summary + coverage-threshold steps.
+# CHR-image terms in the gate's summary + coverage-threshold steps;
+# worktree: the git worktree the qa.yaml accumulate-and-gate job uses for the
+# durable qa-history append-log branch.
 endgroup
 funcs
 gsub
 img
 pipefail
+worktree
 # HVF: macOS Hypervisor.framework (x86 CHR acceleration on Intel Macs in
 # verify-extended); choco: Chocolatey, the Windows package manager (QEMU install).
 HVF
