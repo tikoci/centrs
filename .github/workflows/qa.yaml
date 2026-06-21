@@ -57,17 +57,22 @@ jobs:
     name: CHR • ${{ matrix.routeros_channel }}${{ inputs.routeros_version && format(' • {0}', inputs.routeros_version) || '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    # Push + schedule gate on the released must-pass channels (stable, long-term)
-    # so a merge to main is never reddened by a beta flake. `development` (beta)
-    # and `testing` are verified on demand: `all` (one run over
-    # stable/long-term/development) or an explicit single channel, plus the
-    # release-tier sweep via workflow_call. (`development`'s btest/EC-SRP5 path is
-    # still flaky — JG-31 — so it stays out of the per-push gate until stabilized.)
-    # macOS/arm CHR coverage lives in verify-extended.yaml (CHR here needs KVM).
+    # Push + schedule run the active set: stable, long-term, development. Only the
+    # released channels are *must-pass*: a beta flake on `development` (JG-31's
+    # EC-SRP5/btest path is intermittently flaky) is recorded to history but never
+    # reds the run — best-effort legs are `continue-on-error`, mirroring
+    # `channelPolicy` in scripts/qa-results-db.ts. The downstream
+    # `accumulate-and-gate` job is the policy gate + cross-run history accumulator.
+    # `testing` and explicit versions are on demand; the release-tier sweep arrives
+    # via workflow_call. macOS/arm CHR coverage lives in verify-extended.yaml (KVM).
     strategy:
       fail-fast: false
       matrix:
-        routeros_channel: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'push') && '["stable","long-term"]' || (inputs.routeros_channel == 'all' && '["stable","long-term","development"]') || format('["{0}"]', inputs.routeros_channel || 'stable')) }}
+        routeros_channel: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'push' || inputs.routeros_channel == 'all') && '["stable","long-term","development"]' || format('["{0}"]', inputs.routeros_channel || 'stable')) }}
+    # Best-effort (non-released) legs never red the workflow on their own; the
+    # accumulate-and-gate job is the merge-reddening authority. The released set
+    # here must match MUST_PASS_CHANNELS in scripts/qa-results-db.ts.
+    continue-on-error: ${{ matrix.routeros_channel != 'stable' && matrix.routeros_channel != 'long-term' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -178,3 +183,85 @@ jobs:
           name: qa-results-${{ matrix.routeros_channel }}
           path: ${{ runner.temp }}/qa-results.sqlite
           if-no-files-found: warn
+
+  # Cross-run accumulation + the must-pass gate (the harder half of JG-18). Runs
+  # once after the matrix: pulls every per-leg result, appends them to a durable
+  # append-log on the `qa-history` branch (artifact retention is finite, and the
+  # channel→version drift is the whole point of keeping long history), and fails
+  # only when a *released* channel regressed. Beta/test legs are recorded but
+  # never gate — see scripts/qa-history.ts.
+  accumulate-and-gate:
+    name: Accumulate + must-pass gate
+    needs: chr-matrix
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # commit the accumulating history to the qa-history branch
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Setup Bun 1.3.13
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Download per-leg QA results
+        uses: actions/download-artifact@v7
+        with:
+          pattern: qa-results-*
+          path: incoming
+          merge-multiple: false
+      # A worktree on the orphan `qa-history` branch (created on first run). The
+      # checkout above set up authenticated `origin`, so fetch/push need no token
+      # handling. Identity values are static literals, not user input.
+      - name: Prepare qa-history worktree
+        env:
+          QA_BRANCH: qa-history
+        run: |
+          set -eo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin "$QA_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$QA_BRANCH"
+            git worktree add qa-history "origin/$QA_BRANCH"
+            git -C qa-history checkout -B "$QA_BRANCH"
+          else
+            git worktree add --detach qa-history
+            git -C qa-history checkout --orphan "$QA_BRANCH"
+            git -C qa-history rm -rf . >/dev/null 2>&1 || true
+          fi
+      - name: Accumulate history + evaluate must-pass gate
+        id: gate
+        run: |
+          bun run scripts/qa-history.ts \
+            --legs incoming \
+            --history qa-history/qa-runs.jsonl \
+            --summary "$GITHUB_STEP_SUMMARY"
+      # Persist even when the gate failed (a failing run must still land in
+      # history) — so this is `always()` and ordered after the gate step.
+      - name: Commit accumulated history
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          QA_BRANCH: qa-history
+        run: |
+          set -eo pipefail
+          cd qa-history
+          git add qa-runs.jsonl
+          if git diff --cached --quiet; then
+            echo "No history change to commit."
+            exit 0
+          fi
+          git commit -m "qa: accumulate CHR run ${GITHUB_SHA}"
+          # Rebase-retry in case a concurrent dispatch advanced the branch.
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:${QA_BRANCH}"; then
+              exit 0
+            fi
+            git fetch origin "$QA_BRANCH" || true
+            git rebase "origin/${QA_BRANCH}" || git rebase --abort || true
+          done
+          echo "::warning title=QA history::could not push qa-history after retries"

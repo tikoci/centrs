@@ -50,10 +50,16 @@ scheme as the reference):
   (macOS gates; Windows informational). Coverage + failing tests surface to the
   job summary + artifacts; coverage floor is a non-blocking annotation.
 - **Definitive channel matrix** → `qa.yaml`: push[main] + weekly + dispatch +
-  `workflow_call`. Active set `[stable, long-term]` on push/schedule (must-pass);
-  `all` / single channel / `routeros_version` on dispatch. Event-aware
-  concurrency (cancel on main-push; independent dispatch). bun:sqlite results
-  store per run.
+  `workflow_call`. Active set `[stable, long-term, development]` on push/schedule;
+  only the **released** channels (stable, long-term) are must-pass — `development`
+  is best-effort (a beta btest/EC-SRP5 flake records to history but never reds the
+  run). `all` / single channel / `routeros_version` on dispatch. Event-aware
+  concurrency (cancel on main-push; independent dispatch). Per-run `bun:sqlite`
+  store, plus an `accumulate-and-gate` job that appends every run to a durable
+  append-log on the `qa-history` branch and fails only on a released-channel
+  regression. The must-pass policy is defined once in `scripts/qa-results-db.ts`
+  (`channelPolicy` / `evaluateMustPassGate`), with the accumulator in
+  `scripts/qa-history.ts`.
 - **Security/quality** → `codeql.yaml` (PR + push + weekly + dispatch) + the
   AI-findings probe.
 - **Release/publish** → `release.yaml`: `v*` tag or dispatch(dry-run); even/odd

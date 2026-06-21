@@ -35,6 +35,17 @@ documenting cross-cutting shifts that affect contributors and consumers.
   `verify-extended.yaml` adds a dispatch-only macOS-x86 / Windows-x86 sweep. New
   `chr-smoke` integration test + `test:integration:smoke` script; `.coderabbit.yaml`
   stages bot review to conserve credits.
+- **QA cross-run history + must-pass gate; `development` joins the push matrix.**
+  `qa.yaml` now runs `[stable, long-term, development]` on every push to main and
+  weekly. A new `accumulate-and-gate` job appends each CHR run to a durable
+  append-log on the `qa-history` branch (per-run artifacts have finite retention,
+  and the channel→version drift over time is exactly what a long history captures)
+  and fails the run **only when a released channel (stable, long-term) regresses**
+  — `development` is best-effort, so a beta btest/EC-SRP5 flake (JG-31) is recorded
+  but never reds main. The must-pass policy lives once in
+  `scripts/qa-results-db.ts` (`channelPolicy` / `evaluateMustPassGate`, mirrored by
+  the matrix `continue-on-error`), with the cross-run accumulator in
+  `scripts/qa-history.ts`.
 - **`transfer / ssh` (sftp) — SSH lands transfer-first.** SSH joins centrs as a
   self-contained **SFTP transfer client** (`src/protocols/sftp.ts`) over the host
   OpenSSH `sftp` subsystem — the only reliable SSH file path, since RouterOS's SSH
