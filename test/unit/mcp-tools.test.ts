@@ -10,6 +10,13 @@ import {
 	handleValidate,
 } from "../../src/mcp/tools.ts";
 import { makeMcpTestCdb } from "./mcp-cdb-fixture.ts";
+import { udpLoopbackSupported } from "./udp-loopback.ts";
+
+// A *confirmed* discover save runs the real MNDP listener, which binds a UDP
+// socket with reusePort; skip it where that bind is unsupported (Windows
+// SO_REUSEPORT → ENOTSUP). The confirmation-*gate* test bails before binding, so
+// it stays covered. The listen path itself is exercised by CHR integration. (#69)
+const UDP_LOOPBACK = await udpLoopbackSupported();
 
 interface ExplainData {
 	path?: string;
@@ -411,30 +418,33 @@ describe("handleDiscover (CDB save gate)", () => {
 		}
 	});
 
-	test("runs a confirmed save path without returning credentials", async () => {
-		const { path, cleanup } = await makeMcpTestCdb([]);
-		try {
-			const env = await handleDiscover(
-				{
-					save: true,
-					confirm: true,
-					timeout: 1,
-					port: 0,
-					sendRefresh: false,
-				},
-				config(path),
-			);
-			expect(env.ok).toBe(true);
-			if (!env.ok) {
-				return;
+	test.skipIf(!UDP_LOOPBACK)(
+		"runs a confirmed save path without returning credentials",
+		async () => {
+			const { path, cleanup } = await makeMcpTestCdb([]);
+			try {
+				const env = await handleDiscover(
+					{
+						save: true,
+						confirm: true,
+						timeout: 1,
+						port: 0,
+						sendRefresh: false,
+					},
+					config(path),
+				);
+				expect(env.ok).toBe(true);
+				if (!env.ok) {
+					return;
+				}
+				const data = env.data as { count?: number; neighbors?: unknown[] };
+				expect(data.count).toBe(0);
+				expect(data.neighbors).toEqual([]);
+				const meta = env.meta as { operation?: { saved?: { added?: number } } };
+				expect(meta.operation?.saved?.added).toBe(0);
+			} finally {
+				await cleanup();
 			}
-			const data = env.data as { count?: number; neighbors?: unknown[] };
-			expect(data.count).toBe(0);
-			expect(data.neighbors).toEqual([]);
-			const meta = env.meta as { operation?: { saved?: { added?: number } } };
-			expect(meta.operation?.saved?.added).toBe(0);
-		} finally {
-			await cleanup();
-		}
-	});
+		},
+	);
 });

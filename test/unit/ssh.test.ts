@@ -44,7 +44,10 @@ describe("sshCommonOptions", () => {
 	test("insecure disables host-key checking with an ephemeral hosts file", () => {
 		const opts = sshCommonOptions({ ...base, insecure: true }).join(" ");
 		expect(opts).toContain("StrictHostKeyChecking=no");
-		expect(opts).toContain("UserKnownHostsFile=/dev/null");
+		// The null known_hosts sink is platform-specific: `NUL` on Windows OpenSSH,
+		// `/dev/null` elsewhere (mirrors src/protocols/ssh.ts).
+		const nullSink = process.platform === "win32" ? "NUL" : "/dev/null";
+		expect(opts).toContain(`UserKnownHostsFile=${nullSink}`);
 	});
 });
 
