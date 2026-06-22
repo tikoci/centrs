@@ -211,6 +211,55 @@ export interface StartedChr {
 	requestedArch?: Arch;
 }
 
+/**
+ * A freshly-booted CHR brings its services up in stages: the REST endpoint
+ * (which `waitForBoot` polls) can answer before the binary API service is
+ * listening, so a cold `connectNativeApi` races it and gets refused/reset —
+ * an intermittent `transport/connection-refused` (raw `ECONNREFUSED`/`ECONNRESET`
+ * on a slow long-term boot). That is a **boot-readiness** race in the test, not a
+ * product fault: production must surface a refusal immediately, so the retry
+ * lives here, not in `src/`.
+ *
+ * Retries `attempt` only while it fails with a *transient connect* error; any
+ * other rejection (e.g. `transport/auth-failed` — the expected terminal result of
+ * the bad-credentials test) propagates immediately, so assertions are unweakened.
+ */
+const TRANSIENT_CONNECT_CODES = new Set([
+	// centrs-mapped transport codes (connectNativeApi → mapConnectError / timeout)
+	"transport/connection-refused",
+	"transport/timeout",
+	// raw socket error codes — Bun/Node set these on `error.code` directly
+	"ECONNREFUSED",
+	"ECONNRESET",
+]);
+
+function isTransientConnect(error: unknown): boolean {
+	const code = (error as { code?: string }).code;
+	if (typeof code === "string" && TRANSIENT_CONNECT_CODES.has(code)) {
+		return true;
+	}
+	// Fallback only for errors that carry the errno in the message text, not `.code`.
+	const message = String((error as { message?: string }).message ?? "");
+	return /ECONNREFUSED|ECONNRESET/.test(message);
+}
+
+export async function withBootReadyRetry<T>(
+	attempt: () => Promise<T>,
+	{ timeoutMs = 90_000, intervalMs = 2_000 } = {},
+): Promise<T> {
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		try {
+			return await attempt();
+		} catch (error) {
+			if (!isTransientConnect(error) || Date.now() >= deadline) {
+				throw error;
+			}
+			await Bun.sleep(intervalMs);
+		}
+	}
+}
+
 export async function startIntegrationChr(
 	extra: Partial<StartOptions> = {},
 ): Promise<StartedChr> {
