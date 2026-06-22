@@ -73,9 +73,15 @@ jobs:
 
   # Release-tier sweep: the full RouterOS channel matrix on real CHR, reusing the
   # definitive qa.yaml. "all" fans over the active set (stable/long-term/dev).
+  # A reusable workflow can't be granted more than the calling job, and qa.yaml's
+  # accumulate-and-gate job commits to the qa-history branch (contents: write), so
+  # grant it here — else the run fails at startup (the caller's read cap can't
+  # satisfy the callee's write).
   release-tier:
     name: Release-tier CHR sweep
     needs: [checks, unit]
+    permissions:
+      contents: write
     uses: ./.github/workflows/qa.yaml
     with:
       routeros_channel: all
