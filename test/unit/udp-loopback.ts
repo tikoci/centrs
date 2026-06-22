@@ -13,8 +13,8 @@ import { createSocket } from "node:dgram";
  * is unaffected, so TCP-based tests are not gated.
  *
  * The probe MUST mirror the real bind options — a bare `reusePort:false` bind
- * succeeds on Windows and would falsely report the path as supported, leaving the
- * real (reusePort) binds to ENOTSUP-fail unskipped.
+ * succeeds on Windows and would falsely report the path as supported, so the
+ * skip guards never fire and the real (reusePort) binds ENOTSUP-fail instead.
  *
  * Probed once per file at import time: bind a throwaway socket to an ephemeral
  * loopback port and report whether it succeeds.
