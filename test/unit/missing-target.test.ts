@@ -92,10 +92,12 @@ describe("buildTargetSelectionTips", () => {
 			const tips = await buildTargetSelectionTips({ cdbFile: path });
 			expect(tips).toHaveLength(1);
 			expect(tips[0]?.code).toBe("tip/select-target");
-			expect(tips[0]?.message).toContain("edge-router");
-			expect(tips[0]?.message).toContain("192.0.2.11");
-			expect(tips[0]?.message).toContain("2 saved device");
-			expect(tips[0]?.message).not.toContain("__default__");
+			const message = tips[0]?.message ?? "";
+			expect(message).toContain("edge-router");
+			expect(message).toContain("192.0.2.11");
+			expect(message).toContain("2 saved device");
+			expect(message).not.toContain("__default__");
+			expect(message).not.toContain("192.0.2.10");
 		} finally {
 			await cleanup();
 		}
