@@ -21,7 +21,8 @@ function pagesOnDisk(): string[] {
 		if (rel === "README.md") {
 			continue;
 		}
-		codes.push(rel.replace(/\.md$/, ""));
+		// Normalize Windows path separators so codes compare as `family/slug`.
+		codes.push(rel.replace(/\.md$/, "").replaceAll("\\", "/"));
 	}
 	return codes;
 }
@@ -37,7 +38,8 @@ describe("error pages", () => {
 				missing.push(code);
 				continue;
 			}
-			const firstLine = text.split("\n", 1)[0] ?? "";
+			// Tolerate CRLF checkouts (Windows): drop a trailing carriage return.
+			const firstLine = (text.split("\n", 1)[0] ?? "").replace(/\r$/, "");
 			expect(firstLine).toBe(`# \`${code}\``);
 		}
 		expect(missing).toEqual([]);

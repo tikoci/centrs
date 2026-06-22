@@ -28,6 +28,12 @@ import {
 	serverHandshake,
 	speedFeedbackBps,
 } from "../../src/protocols/btest-session.ts";
+import { udpLoopbackSupported } from "./udp-loopback.ts";
+
+// The UDP data-engine runs bind a UDP socket on 127.0.0.1; skip them where the
+// runner rejects a UDP loopback bind (ENOTSUP on some Windows CI instances). The
+// TCP runs and the (TCP-only) handshakes are unaffected. (issue #69)
+const UDP_LOOPBACK = await udpLoopbackSupported();
 
 /**
  * EC-SRP5 runs ~6–8 sequential Curve25519 scalar multiplications across both
@@ -360,31 +366,34 @@ describe("btest loopback data engine", () => {
 		expect(server.totalTxBytes).toBeGreaterThan(0);
 	});
 
-	test("UDP both: data flows in both directions with loss accounting", async () => {
-		const base = randomUdpBase();
-		const { client, server } = await runLoopback({
-			server: {
-				authenticate: false,
-				statusIntervalMs: 40,
-				durationMs: 3000,
-				serverUdpPort: base,
-				udpBindHost: "127.0.0.1",
-			},
-			client: {
-				protocol: "udp",
-				direction: "both",
-				txSize: 1000,
-				...short,
-			},
-		});
-		expect(client.totalTxBytes).toBeGreaterThan(0);
-		expect(client.totalRxBytes).toBeGreaterThan(0);
-		expect(server.totalRxBytes).toBeGreaterThan(0);
-		expect(client.totalLostPackets).toBeGreaterThanOrEqual(0);
-		expect(client.serverUdpPort).toBe(base);
-	});
+	test.skipIf(!UDP_LOOPBACK)(
+		"UDP both: data flows in both directions with loss accounting",
+		async () => {
+			const base = randomUdpBase();
+			const { client, server } = await runLoopback({
+				server: {
+					authenticate: false,
+					statusIntervalMs: 40,
+					durationMs: 3000,
+					serverUdpPort: base,
+					udpBindHost: "127.0.0.1",
+				},
+				client: {
+					protocol: "udp",
+					direction: "both",
+					txSize: 1000,
+					...short,
+				},
+			});
+			expect(client.totalTxBytes).toBeGreaterThan(0);
+			expect(client.totalRxBytes).toBeGreaterThan(0);
+			expect(server.totalRxBytes).toBeGreaterThan(0);
+			expect(client.totalLostPackets).toBeGreaterThanOrEqual(0);
+			expect(client.serverUdpPort).toBe(base);
+		},
+	);
 
-	test(
+	test.skipIf(!UDP_LOOPBACK)(
 		"EC-SRP5 client↔server over UDP receive",
 		async () => {
 			const base = randomUdpBase();

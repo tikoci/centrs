@@ -20,6 +20,11 @@ import {
 	saveDiscoveredNeighbors,
 } from "../../src/discover.ts";
 import { parseCommentKv } from "../../src/resolver/comment-kv.ts";
+import { udpLoopbackSupported } from "./udp-loopback.ts";
+
+// Skip the loopback listener tests where the runner rejects a UDP loopback bind
+// (ENOTSUP on some Windows CI instances); the path is covered by CHR integration.
+const UDP_LOOPBACK = await udpLoopbackSupported();
 
 function neighbor(
 	mac: string,
@@ -81,7 +86,7 @@ function seedRecord(target: string): WinBoxCdbRecord {
 	});
 }
 
-describe("listenMndp (loopback)", () => {
+describe.skipIf(!UDP_LOOPBACK)("listenMndp (loopback)", () => {
 	test("decodes crafted packets and ends after the timeout window", async () => {
 		const packets = [
 			encodeMndpPacket(

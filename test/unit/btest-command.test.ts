@@ -18,8 +18,14 @@ import {
 	btestServer,
 	renderBtestClientEnvelope,
 } from "../../src/btest.ts";
+import { udpLoopbackSupported } from "./udp-loopback.ts";
 
 const EC_SRP5_TIMEOUT_MS = 30000;
+
+// The UDP orchestrator run binds a UDP socket on 127.0.0.1; skip it where the
+// runner rejects a UDP loopback bind (ENOTSUP on some Windows CI instances). The
+// TCP loopback runs are unaffected and stay covered. (issue #69)
+const UDP_LOOPBACK = await udpLoopbackSupported();
 
 /** Start a loopback server on an ephemeral port; returns the port + a stopper. */
 async function startServer(
@@ -196,37 +202,40 @@ describe("btest client↔server loopback (orchestrators)", () => {
 		}
 	});
 
-	test("UDP both: CSV render carries header + rows", async () => {
-		const base = 41000 + Math.floor(Math.random() * 10000);
-		const srv = await startServer({
-			authenticate: false,
-			intervalMs: 40,
-			allocateUdpPortsFrom: base,
-		});
-		const client = await btestClient({
-			host: "127.0.0.1",
-			controlPort: srv.port,
-			protocol: "udp",
-			direction: "both",
-			localUdpTxSize: 1000,
-			remoteUdpTxSize: 1000,
-			env: {},
-			...short,
-		});
-		await srv.stop();
+	test.skipIf(!UDP_LOOPBACK)(
+		"UDP both: CSV render carries header + rows",
+		async () => {
+			const base = 41000 + Math.floor(Math.random() * 10000);
+			const srv = await startServer({
+				authenticate: false,
+				intervalMs: 40,
+				allocateUdpPortsFrom: base,
+			});
+			const client = await btestClient({
+				host: "127.0.0.1",
+				controlPort: srv.port,
+				protocol: "udp",
+				direction: "both",
+				localUdpTxSize: 1000,
+				remoteUdpTxSize: 1000,
+				env: {},
+				...short,
+			});
+			await srv.stop();
 
-		expect(client.ok).toBe(true);
-		if (!client.ok) return;
-		expect(client.data.totalTxBytes).toBeGreaterThan(0);
-		const csv = renderBtestClientEnvelope(client, "csv");
-		expect(csv.split("\n")[0]).toBe(BTEST_CLIENT_CSV_HEADER);
-		expect(csv.split("\n").length).toBeGreaterThan(1);
+			expect(client.ok).toBe(true);
+			if (!client.ok) return;
+			expect(client.data.totalTxBytes).toBeGreaterThan(0);
+			const csv = renderBtestClientEnvelope(client, "csv");
+			expect(csv.split("\n")[0]).toBe(BTEST_CLIENT_CSV_HEADER);
+			expect(csv.split("\n").length).toBeGreaterThan(1);
 
-		// JSON is lossless + round-trippable.
-		const json = JSON.parse(renderBtestClientEnvelope(client, "json"));
-		expect(json.ok).toBe(true);
-		expect(json.meta.via).toBe("btest");
-	});
+			// JSON is lossless + round-trippable.
+			const json = JSON.parse(renderBtestClientEnvelope(client, "json"));
+			expect(json.ok).toBe(true);
+			expect(json.meta.via).toBe("btest");
+		},
+	);
 
 	test(
 		"EC-SRP5: matching credentials authenticate, wrong password is rejected",
