@@ -3,6 +3,12 @@
 	"version": "0.1.0",
 	"main": "src/index.ts",
 	"module": "src/index.ts",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/tikoci/centrs.git"
+	},
+	"homepage": "https://github.com/tikoci/centrs#readme",
+	"bugs": "https://github.com/tikoci/centrs/issues",
 	"packageManager": "bun@1.3.13",
 	"devDependencies": {
 		"@agent-lint/cli": "^0.8.1",
