@@ -488,11 +488,11 @@ export async function runBtestCli(args: readonly string[]): Promise<number> {
 				error: { code: centrsError.code },
 				tips,
 			};
-			// lgtm[js/clear-text-logging]
-			console.error(format === "yaml" ? toYaml(out) : JSON.stringify(out));
+			const serialized = format === "yaml" ? toYaml(out) : JSON.stringify(out);
+			console.error(serialized); // lgtm[js/clear-text-logging]
 		} else {
-			// lgtm[js/clear-text-logging]
-			console.error(formatCentrsErrorText(centrsError) + formatTipsText(tips));
+			const text = formatCentrsErrorText(centrsError) + formatTipsText(tips);
+			console.error(text); // lgtm[js/clear-text-logging]
 		}
 		return 1;
 	}

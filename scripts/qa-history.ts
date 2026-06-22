@@ -110,7 +110,10 @@ function flag(args: readonly string[], name: string): string | undefined {
 	return index >= 0 ? args[index + 1] : undefined;
 }
 
-export async function main(args: readonly string[]): Promise<number> {
+export async function main(
+	args: readonly string[],
+	annotate = import.meta.main,
+): Promise<number> {
 	const legsDir = flag(args, "--legs");
 	const historyPath = flag(args, "--history");
 	if (!legsDir || !historyPath) {
@@ -155,7 +158,7 @@ export async function main(args: readonly string[]): Promise<number> {
 	}
 	console.log(summary);
 
-	if (!gate.ok) {
+	if (!gate.ok && annotate) {
 		console.error(
 			`::error title=QA must-pass gate::released channels failed: ${gate.failures
 				.map((f) => f.channel)
