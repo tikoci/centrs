@@ -21,7 +21,7 @@ describeFast("native API against CHR", () => {
 	test("logs in and runs /system/resource over the binary API", async () => {
 		const started = await startIntegrationChr();
 		const chr = started.chr;
-		await chr.waitForBoot(180_000);
+		expect(await chr.waitForBoot(180_000)).toBe(true);
 		const auth = splitQuickChrAuth(
 			readEnv(started.env, "QUICKCHR_AUTH") ?? "admin:",
 		);
@@ -87,7 +87,7 @@ describeFast("native API against CHR", () => {
 	test("maps bad credentials to transport/auth-failed", async () => {
 		const started = await startIntegrationChr();
 		const chr = started.chr;
-		await chr.waitForBoot(180_000);
+		expect(await chr.waitForBoot(180_000)).toBe(true);
 
 		try {
 			// Retry only the boot-readiness refusal; the expected `auth-failed` is not

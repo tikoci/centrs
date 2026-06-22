@@ -225,8 +225,12 @@ export interface StartedChr {
  * the bad-credentials test) propagates immediately, so assertions are unweakened.
  */
 const TRANSIENT_CONNECT_CODES = new Set([
+	// centrs-mapped transport codes (connectNativeApi → mapConnectError / timeout)
 	"transport/connection-refused",
 	"transport/timeout",
+	// raw socket errnos — Bun/Node set these on `error.code` directly
+	"ECONNREFUSED",
+	"ECONNRESET",
 ]);
 
 function isTransientConnect(error: unknown): boolean {
@@ -234,6 +238,7 @@ function isTransientConnect(error: unknown): boolean {
 	if (typeof code === "string" && TRANSIENT_CONNECT_CODES.has(code)) {
 		return true;
 	}
+	// Fallback only for errors that carry the errno in the message text, not `.code`.
 	const message = String((error as { message?: string }).message ?? "");
 	return /ECONNREFUSED|ECONNRESET/.test(message);
 }
