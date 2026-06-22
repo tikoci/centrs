@@ -70,9 +70,9 @@ describe("withBootReadyRetry", () => {
 					calls += 1;
 					throw codeError("transport/connection-refused");
 				},
-				{ timeoutMs: 5, intervalMs: 1 },
+				{ timeoutMs: 20, intervalMs: 1 },
 			),
 		).rejects.toMatchObject({ code: "transport/connection-refused" });
-		expect(calls).toBeGreaterThanOrEqual(1);
+		expect(calls).toBeGreaterThanOrEqual(2);
 	});
 });
