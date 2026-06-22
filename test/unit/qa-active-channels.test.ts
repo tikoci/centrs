@@ -1,9 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
 	activeMatrixSummary,
 	type Channel,
 	type ChannelStatus,
 	isConcreteChannel,
+	main,
 	matrixChannels,
 	type QuickChrVersionApi,
 	resolveChannelPlan,
@@ -126,6 +127,44 @@ describe("recency contract via quickchr (pure, fixture-driven)", () => {
 			"testing",
 			"development",
 		]);
+	});
+});
+
+describe("main — explicit version pins a single leg (no network)", () => {
+	async function emittedChannels(args: string[]): Promise<string[]> {
+		const logged: string[] = [];
+		const spy = spyOn(console, "log").mockImplementation((m: unknown) => {
+			logged.push(String(m));
+		});
+		try {
+			const code = await main(args);
+			expect(code).toBe(0);
+		} finally {
+			spy.mockRestore();
+		}
+		return JSON.parse(logged.at(-1) ?? "[]");
+	}
+
+	test('version + "all" pins one stable-labelled leg', async () => {
+		expect(
+			await emittedChannels([
+				"--requested-channel",
+				"all",
+				"--requested-version",
+				"7.25.0",
+			]),
+		).toEqual(["stable"]);
+	});
+
+	test("version keeps a concrete channel's label", async () => {
+		expect(
+			await emittedChannels([
+				"--requested-channel",
+				"testing",
+				"--requested-version",
+				"7.25.0",
+			]),
+		).toEqual(["testing"]);
 	});
 });
 

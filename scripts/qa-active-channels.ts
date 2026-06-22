@@ -26,12 +26,14 @@
  *
  * CLI (used by `.github/workflows/qa.yaml`):
  *   bun run scripts/qa-active-channels.ts --requested-channel <ch|all|''> \
- *     [--summary "$GITHUB_STEP_SUMMARY"]
+ *     [--requested-version <version|''>] [--summary "$GITHUB_STEP_SUMMARY"]
  *
  * A concrete channel (stable|long-term|testing|development) pins a single leg
  * (on-demand dispatch); "all" or "" (push, schedule, the release sweep) fans the
- * recency-aware active set. The chosen array is printed to stdout and, when
- * `$GITHUB_OUTPUT` is set, appended there as `channels=<json>` for the matrix.
+ * recency-aware active set. An explicit `--requested-version` also pins a single
+ * leg — the version overrides recency, so it boots once rather than re-booting the
+ * same build across every active channel. The chosen array is printed to stdout
+ * and, when `$GITHUB_OUTPUT` is set, appended there as `channels=<json>`.
  */
 
 import { appendFile } from "node:fs/promises";
@@ -155,15 +157,25 @@ function flag(args: readonly string[], name: string): string | undefined {
 
 export async function main(args: readonly string[]): Promise<number> {
 	const requestedChannel = (flag(args, "--requested-channel") ?? "").trim();
+	const requestedVersion = (flag(args, "--requested-version") ?? "").trim();
 
-	let activeSet: string[];
+	// An explicit version pins a single leg: the version overrides recency, so
+	// there is no active-set decision and no network resolve — booting once
+	// instead of re-running the same build across every active channel. A
+	// concrete requested channel labels that leg; otherwise it defaults to the
+	// `stable` (must-pass) label.
+	const effectiveChannel =
+		requestedVersion && !isConcreteChannel(requestedChannel)
+			? "stable"
+			: requestedChannel;
+	const pinnedLeg =
+		requestedVersion.length > 0 || isConcreteChannel(effectiveChannel);
+
+	let activeSet: string[] = [];
 	let statuses: ChannelStatus[] = [];
 	let degraded = false;
 
-	if (isConcreteChannel(requestedChannel)) {
-		// On-demand single channel: no network needed, no recency decision.
-		activeSet = [requestedChannel];
-	} else {
+	if (!pinnedLeg) {
 		const plan = await resolveChannelPlan();
 		if (plan) {
 			statuses = plan.statuses;
@@ -174,12 +186,14 @@ export async function main(args: readonly string[]): Promise<number> {
 		}
 	}
 
-	const channels = matrixChannels(requestedChannel, activeSet);
+	const channels = matrixChannels(effectiveChannel, activeSet);
 	const json = JSON.stringify(channels);
 
 	const summaryPath = flag(args, "--summary");
 	if (summaryPath) {
-		await Bun.write(
+		// Append (not overwrite) so the summary coexists with any other writer in
+		// the job, matching test/integration/chr.ts.
+		await appendFile(
 			summaryPath,
 			activeMatrixSummary(statuses, channels, degraded),
 		);

@@ -48,7 +48,7 @@ documenting cross-cutting shifts that affect contributors and consumers.
   automatically once it leapfrogs stable). A new `accumulate-and-gate` job appends
   each CHR run to a durable append-log on the `qa-history` branch (per-run
   artifacts have finite retention, and the channel→version drift over time is
-  exactly what a long history captures) and fails the run **only when a released
+  what a long history captures) and fails the run **only when a released
   channel (stable, long-term) regresses** — pre-release legs are best-effort, so a
   beta btest/EC-SRP5 flake (JG-31) is recorded but never reds main. Boundary:
   quickchr owns recency ("what's worth booting"); centrs owns the gate ("what must
