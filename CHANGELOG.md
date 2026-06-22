@@ -128,6 +128,10 @@ First published pre-release (odd minor → npm `next`). `@tikoci/centrs@0.1.0`.
 
 ### Fixed
 
+- **`package.json` declares its `repository` (and `homepage`/`bugs`).** Without it,
+  `npm publish --provenance` failed validation (`E422`: empty `repository.url` vs
+  the GitHub-Actions provenance source). The package now points at
+  `github.com/tikoci/centrs`, matching the signed provenance.
 - **Flaky must-pass CHR cells no longer red the release gate.** The first
   `v0.1.0` release sweep was blocked by transient long-term failures (native-api
   `ECONNREFUSED`, mac-telnet L2 prime-latency) — the same cells pass locally and
