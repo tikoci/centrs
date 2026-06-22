@@ -243,7 +243,9 @@ export async function startIntegrationChr(
 		env,
 		requestedChannel: requestedVersion ? undefined : requestedChannel,
 		requestedVersion: requestedVersion || undefined,
-		requestedArch: options.arch,
+		// Env-derived, like requestedChannel/requestedVersion — reflects the
+		// CENTRS_CHR_ARCH pin, not an `extra` boot-option override.
+		requestedArch,
 	};
 }
 
