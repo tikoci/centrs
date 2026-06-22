@@ -11,8 +11,10 @@ run-name: Release • ${{ github.event_name }} • ${{ github.ref_name }}
 #   even minor (0.2.x, 0.4.x) → npm tag "latest"  (release)
 # Keep CHANGELOG.md current with the bump (move "## Unreleased" to the version).
 #
-# Requires repo secret NPM_TOKEN (npm automation token with publish access to
-# @tikoci/centrs). Provenance uses id-token: write on the publish job only.
+# Requires NPM_TOKEN (npm automation token with publish access to @tikoci/centrs)
+# resolvable as `secrets.NPM_TOKEN` — a repo secret, or a tikoci org secret with
+# centrs in its repository access. Provenance uses id-token: write on the publish
+# job only.
 # Policy: .github/instructions/ci-test-tiers-and-release-versioning.instructions.md.
 #
 # Injection safety: every workflow value used in a `run:` block arrives via `env:`
@@ -132,17 +134,17 @@ jobs:
             echo "::error::package.json version ($PKG_VERSION) does not match git tag ($TAG_VERSION)"
             exit 1
           fi
-      # NPM_TOKEN is a tikoci *org* secret; it only reaches this runner if centrs
-      # is in the secret's repository access. Prove that BEFORE attempting publish
-      # (and on a dry-run, so a dispatch validates visibility without publishing).
-      # The value is masked by Actions; only its presence is logged.
+      # `secrets.NPM_TOKEN` must resolve on this runner — a repo secret, or a
+      # tikoci org secret with centrs in its repository access. Prove that BEFORE
+      # attempting publish (and on a dry-run, so a dispatch validates it without
+      # publishing). The value is masked by Actions; only its presence is logged.
       - name: Verify NPM_TOKEN reaches this runner
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -eo pipefail
           if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "::error::NPM_TOKEN is empty — the org (tikoci) secret is not visible to this repo. Grant access at org → Settings → Secrets and variables → Actions → NPM_TOKEN → Repository access (all repos, or add centrs)."
+            echo "::error::NPM_TOKEN did not reach this runner. Set it as a repo secret (Settings → Secrets and variables → Actions), or — if it is a tikoci org secret — add centrs to its repository access."
             exit 1
           fi
           echo "NPM_TOKEN is present and non-empty (value masked by Actions)."
