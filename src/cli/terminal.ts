@@ -20,6 +20,14 @@ import {
 	expectValue,
 	renderCommandHelp,
 } from "./common.ts";
+import {
+	buildTargetSelectionTips,
+	cdbFileFromArgs,
+	formatTipsText,
+	isMissingTargetError,
+	missingTargetError,
+	withTips,
+} from "./missing-target.ts";
 
 export const terminalCommand: CliCommandMetadata = {
 	name: "terminal",
@@ -164,8 +172,14 @@ export async function runTerminalCli(args: readonly string[]): Promise<number> {
 		// error nor these renderers, so the alert is dismissed as a false positive
 		// repo-wide — see the matching dismissals on src/cli/{transfer,execute}.ts.
 		const format = inferRequestedFormat(args);
+		const tips = isMissingTargetError(error)
+			? await buildTargetSelectionTips({
+					cdbFile: request?.cdbFile ?? cdbFileFromArgs(args),
+					env: Bun.env,
+				})
+			: [];
 		if (format === "json" || format === "yaml") {
-			const envelope = buildTerminalErrorEnvelope(error);
+			const envelope = withTips(buildTerminalErrorEnvelope(error), tips);
 			console.error(
 				format === "yaml" ? toYaml(envelope) : JSON.stringify(envelope),
 			);
@@ -179,7 +193,7 @@ export async function runTerminalCli(args: readonly string[]): Promise<number> {
 							"Use `centrs terminal --help` for the supported command shape and flags.",
 					}),
 					{ verbose: args.includes("--verbose") },
-				),
+				) + formatTipsText(tips),
 			);
 		}
 		return 1;
@@ -272,8 +286,8 @@ function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 	}
 	const targetInput = positional[0];
 	if (!targetInput) {
-		throw asCentrsError(new Error("terminal requires a <router> target."), {
-			code: "input/invalid-command",
+		throw missingTargetError({
+			command: "terminal",
 			summary: "`centrs terminal` requires a <router> target.",
 			remediation:
 				"Pass the device MAC (or a CDB identity/ip) as the first argument; run `centrs terminal --help` for the shape.",

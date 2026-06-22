@@ -22,6 +22,14 @@ import {
 	expectValue,
 	renderCommandHelp,
 } from "./common.ts";
+import {
+	buildTargetSelectionTips,
+	cdbFileFromArgs,
+	formatTipsText,
+	isMissingTargetError,
+	missingTargetError,
+	withTips,
+} from "./missing-target.ts";
 
 export const retrieveCommand: CliCommandMetadata = {
 	name: "retrieve",
@@ -171,6 +179,12 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 		return 0;
 	} catch (error) {
 		const format = inferRequestedFormat(args, request);
+		const tips = isMissingTargetError(error)
+			? await buildTargetSelectionTips({
+					cdbFile: request?.cdbFile ?? cdbFileFromArgs(args),
+					env: Bun.env,
+				})
+			: [];
 		if (format === "json" || format === "yaml") {
 			if (request?.group) {
 				const envelope = buildRetrieveFanoutErrorEnvelope(request, error);
@@ -180,9 +194,14 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 					}),
 				);
 			} else {
-				const envelope = buildRetrieveErrorEnvelope(
-					request ?? fallbackRequestFromArgs(args),
-					error,
+				// When parsing failed before a request existed, build the error
+				// envelope from an empty request rather than reconstructing positionals
+				// from raw args — a credential value (e.g. the token after
+				// `--password` / `--cdb-password`) would otherwise be echoed as
+				// `meta.target.input`.
+				const envelope = withTips(
+					buildRetrieveErrorEnvelope(request ?? { path: "" }, error),
+					tips,
 				);
 				console.error(
 					renderRetrieveEnvelope(envelope, format, {
@@ -202,7 +221,7 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 					{
 						verbose: request?.verbose ?? args.includes("--verbose"),
 					},
-				),
+				) + formatTipsText(tips),
 			);
 		}
 		return 1;
@@ -341,9 +360,17 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveRequest & {
 		return request;
 	}
 
+	if (positional.length === 0) {
+		throw missingTargetError({
+			command: "retrieve",
+			summary: "`centrs retrieve` requires a <target> and a <routeros-path>.",
+			remediation:
+				"Pass the router host/identity then the RouterOS path, e.g. `centrs retrieve 192.0.2.10 /system/resource`.",
+		});
+	}
 	if (positional.length < 2) {
 		throw new Error(
-			"`centrs retrieve` requires both <target> and <routeros-path>.",
+			"`centrs retrieve` requires a <routeros-path> after the <target>.",
 		);
 	}
 
@@ -371,13 +398,4 @@ function inferRequestedFormat(
 		return envFormat;
 	}
 	return "text";
-}
-
-function fallbackRequestFromArgs(args: readonly string[]): RetrieveRequest {
-	const positionals = args.filter((arg) => !arg.startsWith("-"));
-	return {
-		targetInput: positionals[0],
-		path: positionals[1] ?? "",
-		format: inferRequestedFormat(args),
-	};
 }

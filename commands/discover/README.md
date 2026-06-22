@@ -6,10 +6,10 @@ Status: `CHR-passed` (see `docs/MATRIX.md`). The MNDP codec, TTL cache, UDP
 listener, and `discover --save` are implemented; the real-L2 receive/decode/save
 path is green against RouterOS CHR 7.23.1 via `test/integration/discover.test.ts`
 (socket-connect bridge), and the network-independent paths stay unit-tested. The
-matrix remains the only status surface. The `identity=`/`mac=` lookup-key writing and
-MAC-keyed de-dupe described below are the decided target; the current `--save`
-de-dupes on `target` and keeps identity/MAC in the inert detail — that gap moves
-with the `devices` lookup-key work.
+matrix remains the only status surface. `--save` now writes the `identity=`/`mac=`
+lookup keys and de-dupes on the MAC (both described below), so a discovered
+device resolves by its advertised identity, IP, or MAC — not just the stored
+`target`.
 
 ## Synopsis
 
@@ -66,7 +66,14 @@ tested without a router (crafted packet fixtures + a loopback socket).
 `--save` without `--timeout` uses the default 15s window.
 
 Bare `centrs discover` is **read-only** — it returns the envelope and never
-writes the (WinBox-shared) CDB; `--save` is the explicit opt-in. The registry
+writes the (WinBox-shared) CDB; `--save` is the explicit opt-in. When it finds
+neighbors but was not given `--save`, the envelope carries a `tip/discover-save`
+pointer so the read-only run advertises how to persist the result. In the
+human-facing text format on an interactive terminal (TTY) `discover` also prints
+a one-line "listening…" progress note to **stderr** so the listen window does not
+look like a hang; `--format json|yaml` and piped/redirected runs stay silent
+(stderr is exempt from the lossless-stdout rule — see
+[`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md), Result envelope). The registry
 surface `centrs devices discover` is the inverse: invoking `devices` means you
 intend to populate it, so **`--save` is implied** there, and it is the home for
 the "set default credentials so centrs starts useful" onboarding nudge. Both
@@ -108,9 +115,11 @@ writer" holds.
   globally unique — `identity` is *not* the de-dupe key, because factory-default
   devices all report `MikroTik`. A neighbor whose MAC already names a CDB entry
   (as the `target` of a `macTarget` record or as a `mac=` lookup key on any
-  record) is **skipped, never overwritten** — hand-curated records win. Only
-  genuinely new devices are added. Writes reuse the `devices` atomic write path
-  (`addDevice`); the CDB is reloaded between writes so each add sees prior ones.
+  record) is **skipped, never overwritten** — hand-curated records win. A
+  neighbor whose IP `target` already names an entry is likewise skipped, so a
+  curated record is never clobbered. Only genuinely new devices are added. Writes
+  reuse the `devices` atomic write path (`addDevice`); the CDB is reloaded between
+  writes so each add sees prior ones.
 - **Encrypted CDBs:** `--save` against an encrypted CDB decrypts the file under
   the loaded password, appends new neighbors, and re-encrypts with a fresh salt
   before the atomic rename. The backup beside the CDB is the verbatim prior

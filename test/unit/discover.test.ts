@@ -237,6 +237,20 @@ describe("discover", () => {
 		expect(envelope.meta.via).toBe("mndp");
 		expect(envelope.meta.operation?.saved).toBeUndefined();
 	});
+
+	test("tips to use --save when neighbors are found but not saved", async () => {
+		const envelope = await discover({
+			listen: fakeListen([neighbor("00:00:00:00:00:01", { identity: "a" })]),
+		});
+		expect(envelope.ok).toBe(true);
+		expect(envelope.tips.map((tip) => tip.code)).toContain("tip/discover-save");
+	});
+
+	test("no --save tip when nothing was discovered", async () => {
+		const envelope = await discover({ listen: fakeListen([]) });
+		expect(envelope.ok).toBe(true);
+		expect(envelope.tips).toHaveLength(0);
+	});
 });
 
 describe("discover --save", () => {
@@ -274,7 +288,16 @@ describe("discover --save", () => {
 			const kv = parseCommentKv(shown.data.entry.comment);
 			expect(kv.values.source).toBe("mndp");
 			expect(kv.warnings).toHaveLength(0);
-			expect(shown.data.entry.comment).toContain("identity: edge");
+			// Identity/MAC are written as resolvable lookup keys, not inert detail.
+			expect(kv.lookups.identity).toBe("edge");
+			expect(kv.lookups.mac).toBe("e4:8d:8c:11:22:33");
+			expect(shown.data.entry.comment).not.toContain("identity: edge");
+			// The advertised identity now resolves the IP-targeted record directly.
+			const byIdentity = showDevice({ cdb, target: "edge" });
+			expect(byIdentity.ok).toBe(true);
+			if (byIdentity.ok) {
+				expect(byIdentity.data.entry.target).toBe("192.0.2.50");
+			}
 		} finally {
 			await cleanup();
 		}
@@ -295,6 +318,38 @@ describe("discover --save", () => {
 				return;
 			}
 			expect(shown.data.entry.recordType).toBe(winBoxCdbRecordType.macTarget);
+			// identity= is the only added lookup key (the MAC *is* the target, so no
+			// redundant mac= key); the record resolves by its advertised identity.
+			const kv = parseCommentKv(shown.data.entry.comment);
+			expect(kv.lookups.identity).toBe("l2-only");
+			expect(kv.lookups.mac).toBeUndefined();
+			const byIdentity = showDevice({ cdb, target: "l2-only" });
+			expect(byIdentity.ok).toBe(true);
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("de-dupes on the MAC even when the IP differs (mac= lookup key)", async () => {
+		// Seed an IP record that already carries the neighbor's MAC as a mac= lookup
+		// key. A later announcement at a *different* IP but the same MAC must be
+		// recognized as the same device and skipped.
+		const seeded = buildWinBoxCdbEntryRecord({
+			recordType: winBoxCdbRecordType.ipAdmin,
+			target: "192.0.2.50",
+			user: "admin",
+			comment: "mac=AA:BB:CC:DD:EE:FF",
+		});
+		const { path, cleanup } = await tempCdb([seeded]);
+		try {
+			const result = await saveDiscoveredNeighbors({
+				loadOptions: { cdbFile: path, env: {} },
+				neighbors: [neighbor("aa:bb:cc:dd:ee:ff", { ipv4: "192.0.2.99" })],
+			});
+			expect(result.summary.added).toBe(0);
+			expect(result.summary.skipped).toBe(1);
+			const cdb = await loadCdb({ cdbFile: path, env: {} });
+			expect(cdb.entries.map((entry) => entry.target)).toEqual(["192.0.2.50"]);
 		} finally {
 			await cleanup();
 		}
