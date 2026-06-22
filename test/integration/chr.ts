@@ -228,7 +228,7 @@ const TRANSIENT_CONNECT_CODES = new Set([
 	// centrs-mapped transport codes (connectNativeApi → mapConnectError / timeout)
 	"transport/connection-refused",
 	"transport/timeout",
-	// raw socket errnos — Bun/Node set these on `error.code` directly
+	// raw socket error codes — Bun/Node set these on `error.code` directly
 	"ECONNREFUSED",
 	"ECONNRESET",
 ]);
