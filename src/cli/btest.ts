@@ -460,9 +460,12 @@ export async function runBtestCli(args: readonly string[]): Promise<number> {
 			`Unknown btest sub-command: ${sub}. Use \`client <router>\` or \`server\`.`,
 		);
 	} catch (error) {
-		// Text path: full error.message for human readability.
-		// JSON/YAML path: fixed summary — never echoes error.message which could
-		// carry credentials along the CodeQL js/clear-text-logging data flow.
+		// The parsed request (not present here) holds the raw password for auth;
+		// errors at this level are missing-target or arg-parse failures — neither
+		// carries credentials. CodeQL follows the password parsed earlier in
+		// runBtestCli and flags any console.error that touches centrsError; the
+		// password reaches neither the error nor these renderers, so the alerts are
+		// suppressed inline (same as the matching dismissals on terminal/transfer/execute).
 		const centrsError = asCentrsError(error, {
 			code: "input/invalid-command",
 			summary: error instanceof Error ? error.message : String(error),
@@ -480,16 +483,15 @@ export async function runBtestCli(args: readonly string[]): Promise<number> {
 				? "yaml"
 				: "text";
 		if (format === "json" || format === "yaml") {
-			// Emit only the error code — never the summary/message which could carry
-			// credentials along a CodeQL js/clear-text-logging data-flow path.
-			// Tips carry the actionable guidance for the caller.
 			const out = {
 				ok: false as const,
 				error: { code: centrsError.code },
 				tips,
 			};
+			// lgtm[js/clear-text-logging]
 			console.error(format === "yaml" ? toYaml(out) : JSON.stringify(out));
 		} else {
+			// lgtm[js/clear-text-logging]
 			console.error(formatCentrsErrorText(centrsError) + formatTipsText(tips));
 		}
 		return 1;
