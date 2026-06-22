@@ -21,10 +21,10 @@ Patch release. `@tikoci/centrs@0.1.1`.
 
 ### Fixed
 
-- **CLI: actionable `missing-router` tips.** All router-taking commands now emit a
-  concise, command-specific hint when no `<router>` argument is supplied — pointing
-  at the right flag (`--mac`, `--ip`, `--router`) rather than a generic usage
-  block.
+- **CLI: registry-aware `missing-router` tips.** All router-taking commands now
+  emit a CDB-aware tip when no `<router>` argument is supplied — listing saved
+  handles from the CDB (`tip/select-target`) or pointing to `centrs discover
+  --save` when the registry is empty (`tip/no-devices`).
 - **`discover --save` lookup keys and progress.** The saved device record now
   includes `identity=` and `mac=` keys so downstream commands can resolve the
   entry; MAC addresses are de-duplicated. TTY progress is shown during a scan and

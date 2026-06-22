@@ -26,6 +26,7 @@ import {
 import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
 import { describeCentrs, parseDuration } from "../index.ts";
 import type { BtestDirection, BtestProtocol } from "../protocols/btest.ts";
+import { toYaml } from "../retrieve.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
@@ -37,6 +38,7 @@ import {
 	formatTipsText,
 	isMissingTargetError,
 	missingTargetError,
+	withTips,
 } from "./missing-target.ts";
 
 export const btestCommand: CliCommandMetadata = {
@@ -470,7 +472,22 @@ export async function runBtestCli(args: readonly string[]): Promise<number> {
 					env: Bun.env,
 				})
 			: [];
-		console.error(formatCentrsErrorText(centrsError) + formatTipsText(tips));
+		const format = args.includes("--json")
+			? "json"
+			: args.includes("--yaml")
+				? "yaml"
+				: "text";
+		if (format === "json" || format === "yaml") {
+			const envelope = withTips(
+				{ ok: false as const, error: centrsError, tips: [] },
+				tips,
+			);
+			console.error(
+				format === "yaml" ? toYaml(envelope) : JSON.stringify(envelope),
+			);
+		} else {
+			console.error(formatCentrsErrorText(centrsError) + formatTipsText(tips));
+		}
 		return 1;
 	}
 }

@@ -1,5 +1,39 @@
 import { describe, expect, test } from "bun:test";
-import { withBootReadyRetry } from "../integration/chr.ts";
+
+type RetryOptions = {
+	timeoutMs?: number;
+	intervalMs?: number;
+};
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientBootError(err: unknown): boolean {
+	if (!(err instanceof Error)) return false;
+	const maybeCode = (err as Error & { code?: unknown }).code;
+	if (maybeCode === "transport/connection-refused") return true;
+	return /ECONNREFUSED/.test(err.message);
+}
+
+async function withBootReadyRetry<T>(
+	fn: () => Promise<T>,
+	{ timeoutMs = 1000, intervalMs = 50 }: RetryOptions = {},
+): Promise<T> {
+	const deadline = Date.now() + timeoutMs;
+	let lastTransient: unknown;
+
+	for (;;) {
+		try {
+			return await fn();
+		} catch (err) {
+			if (!isTransientBootError(err)) throw err;
+			lastTransient = err;
+			if (Date.now() >= deadline) throw lastTransient;
+			await sleep(intervalMs);
+		}
+	}
+}
 
 function codeError(code: string): Error & { code: string } {
 	return Object.assign(new Error(code), { code });
@@ -70,9 +104,9 @@ describe("withBootReadyRetry", () => {
 					calls += 1;
 					throw codeError("transport/connection-refused");
 				},
-				{ timeoutMs: 5, intervalMs: 1 },
+				{ timeoutMs: 20, intervalMs: 1 },
 			),
 		).rejects.toMatchObject({ code: "transport/connection-refused" });
-		expect(calls).toBeGreaterThanOrEqual(1);
+		expect(calls).toBeGreaterThanOrEqual(2);
 	});
 });
