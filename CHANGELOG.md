@@ -8,6 +8,10 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+## 0.1.0 — 2026-06-22
+
+First published pre-release (odd minor → npm `next`). `@tikoci/centrs@0.1.0`.
+
 ### Added
 
 - **`btest / client` is now `CHR-passed`.** A direct centrs-client → CHR
