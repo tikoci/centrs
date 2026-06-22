@@ -16,9 +16,16 @@ import { createSocket } from "node:dgram";
  * succeeds on Windows and would falsely report the path as supported, so the
  * skip guards never fire and the real (reusePort) binds ENOTSUP-fail instead.
  *
+ * Skip only for the *known-unsupported* bind errors — Windows lacks
+ * `SO_REUSEPORT` → `ENOTSUP`; a runner with no IPv4 stack → `EAFNOSUPPORT`. Any
+ * other bind error is treated as supported (resolve `true`) so the real test
+ * still runs and surfaces the genuine regression instead of silently skipping it.
+ *
  * Probed once per file at import time: bind a throwaway socket to an ephemeral
  * loopback port and report whether it succeeds.
  */
+const UNSUPPORTED_BIND_CODES = new Set(["ENOTSUP", "EAFNOSUPPORT"]);
+
 export async function udpLoopbackSupported(): Promise<boolean> {
 	return new Promise<boolean>((resolve) => {
 		const socket = createSocket({
@@ -37,11 +44,16 @@ export async function udpLoopbackSupported(): Promise<boolean> {
 			}
 			resolve(ok);
 		};
-		socket.once("error", () => finish(false));
+		const onError = (error: unknown) => {
+			const code = (error as { code?: string }).code ?? "";
+			// Unknown error ⇒ assume supported, let the real test fail loudly.
+			finish(!UNSUPPORTED_BIND_CODES.has(code));
+		};
+		socket.once("error", onError);
 		try {
 			socket.bind(0, "127.0.0.1", () => finish(true));
-		} catch {
-			finish(false);
+		} catch (error) {
+			onError(error);
 		}
 	});
 }
