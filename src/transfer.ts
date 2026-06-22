@@ -1520,7 +1520,12 @@ function readNumber(
 }
 
 function basename(path: string): string {
-	const parts = path.split("/").filter(Boolean);
+	// Split on both separators: this helper derives a name from RouterOS remote
+	// paths (always `/`) *and* from a host-local path (which uses `\` on Windows).
+	// A `\`-split is harmless for remote paths since RouterOS filenames never
+	// contain a backslash. (Without this, an omitted upload remote on Windows
+	// defaulted to the full `C:\…\file` path instead of `file`.)
+	const parts = path.split(/[/\\]/).filter(Boolean);
 	return parts[parts.length - 1] ?? path;
 }
 

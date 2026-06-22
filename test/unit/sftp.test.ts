@@ -73,7 +73,10 @@ describe("SftpClient argv", () => {
 		const { client } = clientWith(ok(), { insecure: true });
 		const argv = client.argv().join(" ");
 		expect(argv).toContain("StrictHostKeyChecking=no");
-		expect(argv).toContain("UserKnownHostsFile=/dev/null");
+		// The null known_hosts sink is platform-specific: `NUL` on Windows OpenSSH,
+		// `/dev/null` elsewhere (mirrors src/protocols/ssh.ts).
+		const nullSink = process.platform === "win32" ? "NUL" : "/dev/null";
+		expect(argv).toContain(`UserKnownHostsFile=${nullSink}`);
 	});
 
 	test("no username omits the user@ prefix", () => {
