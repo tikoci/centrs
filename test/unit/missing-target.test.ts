@@ -52,6 +52,27 @@ describe("cdbFileFromArgs", () => {
 		).toBe("/a.cdb");
 		expect(cdbFileFromArgs(["--cdb-file"])).toBeUndefined();
 		expect(cdbFileFromArgs(["--cdb-password", "pw"])).toBeUndefined();
+		// duplicate flags — first wins
+		expect(
+			cdbFileFromArgs([
+				"--cdb-file",
+				"/first.cdb",
+				"--cdb-file",
+				"/second.cdb",
+			]),
+		).toBe("/first.cdb");
+		// trailing flag with no value — treated as missing, not a path
+		expect(cdbFileFromArgs(["x", "--cdb-file"])).toBeUndefined();
+		// flag-like token after --cdb-file is rejected, not used as path
+		expect(
+			cdbFileFromArgs([
+				"--cdb-file",
+				"--cdb-password",
+				"pw",
+				"--cdb-file",
+				"/a.cdb",
+			]),
+		).toBeUndefined();
 	});
 });
 
@@ -92,10 +113,30 @@ describe("buildTargetSelectionTips", () => {
 			const tips = await buildTargetSelectionTips({ cdbFile: path });
 			expect(tips).toHaveLength(1);
 			expect(tips[0]?.code).toBe("tip/select-target");
-			expect(tips[0]?.message).toContain("edge-router");
-			expect(tips[0]?.message).toContain("192.0.2.11");
-			expect(tips[0]?.message).toContain("2 saved device");
-			expect(tips[0]?.message).not.toContain("__default__");
+			const message = tips[0]?.message ?? "";
+			expect(message).toContain("edge-router");
+			expect(message).toContain("192.0.2.11");
+			expect(message).toContain("2 saved device");
+			expect(message).not.toContain("__default__");
+			expect(message).not.toContain("192.0.2.10");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("registry with only reserved fallback record tips toward discover --save", async () => {
+		const { path, cleanup } = await cdbFile([
+			buildWinBoxCdbEntryRecord({
+				recordType: winBoxCdbRecordType.ipAdmin,
+				target: "__default__",
+				user: "admin",
+			}),
+		]);
+		try {
+			const tips = await buildTargetSelectionTips({ cdbFile: path });
+			expect(tips).toHaveLength(1);
+			expect(tips[0]?.code).toBe("tip/no-devices");
+			expect(tips[0]?.fix).toContain("centrs discover --save");
 		} finally {
 			await cleanup();
 		}

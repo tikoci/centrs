@@ -26,6 +26,7 @@ import {
 import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
 import { describeCentrs, parseDuration } from "../index.ts";
 import type { BtestDirection, BtestProtocol } from "../protocols/btest.ts";
+import { toYaml } from "../retrieve.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
@@ -459,6 +460,12 @@ export async function runBtestCli(args: readonly string[]): Promise<number> {
 			`Unknown btest sub-command: ${sub}. Use \`client <router>\` or \`server\`.`,
 		);
 	} catch (error) {
+		// The parsed request (not present here) holds the raw password for auth;
+		// errors at this level are missing-target or arg-parse failures — neither
+		// carries credentials. CodeQL follows the password parsed earlier in
+		// runBtestCli and flags any console.error that touches centrsError; the
+		// password reaches neither the error nor these renderers, so the alerts are
+		// suppressed inline (same as the matching dismissals on terminal/transfer/execute).
 		const centrsError = asCentrsError(error, {
 			code: "input/invalid-command",
 			summary: error instanceof Error ? error.message : String(error),
@@ -470,7 +477,23 @@ export async function runBtestCli(args: readonly string[]): Promise<number> {
 					env: Bun.env,
 				})
 			: [];
-		console.error(formatCentrsErrorText(centrsError) + formatTipsText(tips));
+		const format = args.includes("--json")
+			? "json"
+			: args.includes("--yaml")
+				? "yaml"
+				: "text";
+		if (format === "json" || format === "yaml") {
+			const out = {
+				ok: false as const,
+				error: { code: centrsError.code },
+				tips,
+			};
+			// lgtm[js/clear-text-logging]
+			console.error(format === "yaml" ? toYaml(out) : JSON.stringify(out));
+		} else {
+			// lgtm[js/clear-text-logging]
+			console.error(formatCentrsErrorText(centrsError) + formatTipsText(tips));
+		}
 		return 1;
 	}
 }

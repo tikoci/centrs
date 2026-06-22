@@ -407,6 +407,14 @@ function toDiscoverNeighbor(
  * parenthesized detail carries no `key=value` shapes, so it stays inert and
  * never emits a `cdb/unknown-option` warning later.
  */
+
+// Strip `=` from free-form device-advertised strings so they can't be
+// misinterpreted as lookup key=value tokens if parseCommentKv ever processes
+// the parenthesized section.
+function sanitizeDetail(value: string): string {
+	return value.replaceAll("=", "≔");
+}
+
 export function formatMndpProvenanceComment(
 	neighbor: MndpNeighbor,
 	at: Date,
@@ -420,19 +428,19 @@ export function formatMndpProvenanceComment(
 	}
 	const detail: string[] = [`discovered ${at.toISOString()} via MNDP`];
 	if (neighbor.platform) {
-		detail.push(`platform: ${neighbor.platform}`);
+		detail.push(`platform: ${sanitizeDetail(neighbor.platform)}`);
 	}
 	if (neighbor.board) {
-		detail.push(`board: ${neighbor.board}`);
+		detail.push(`board: ${sanitizeDetail(neighbor.board)}`);
 	}
 	if (neighbor.version) {
-		detail.push(`version: ${neighbor.version}`);
+		detail.push(`version: ${sanitizeDetail(neighbor.version)}`);
 	}
 	if (neighbor.interfaceName) {
-		detail.push(`interface: ${neighbor.interfaceName}`);
+		detail.push(`interface: ${sanitizeDetail(neighbor.interfaceName)}`);
 	}
 	if (neighbor.softwareId) {
-		detail.push(`software-id: ${neighbor.softwareId}`);
+		detail.push(`software-id: ${sanitizeDetail(neighbor.softwareId)}`);
 	}
 	return `${tokens.join(" ")} (${detail.join("; ")})`;
 }

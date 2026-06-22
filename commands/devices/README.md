@@ -411,8 +411,8 @@ the bare usage error into a registry-aware tip (shared helper
 `src/cli/missing-target.ts`): it reads the CDB best-effort and emits either
 `tip/select-target` (lists a few saved handles to pass — identity over target) or
 `tip/no-devices` (→ `centrs discover --save`) when the registry is empty. The
-read is unencrypted-only and the CDB **password never threads into the tip path**
-(it is logged), so an encrypted registry falls back to generic guidance.
+read is unencrypted-only and the CDB **password never threads into the tip path**,
+so an encrypted registry falls back to generic guidance.
 
 This guidance is currently **CLI-shaped on purpose** and is *not* yet wired into
 the MCP/proxy frontends — that is deferred spec/review work. Two boundaries

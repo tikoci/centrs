@@ -63,7 +63,10 @@ export interface CdbInputs {
 export function cdbFileFromArgs(args: readonly string[]): string | undefined {
 	for (let index = 0; index < args.length; index += 1) {
 		if (args[index] === "--cdb-file") {
-			return args[index + 1];
+			if (index + 1 >= args.length) return undefined;
+			const value = args[index + 1] as string; // bounds-checked above
+			if (value.startsWith("--")) return undefined;
+			return value;
 		}
 	}
 	return undefined;

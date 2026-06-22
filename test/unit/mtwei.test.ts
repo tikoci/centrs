@@ -99,8 +99,9 @@ describe("mtwei redp1", () => {
 		const b = redp1(seed, 1);
 		expect(isOnCurve(a)).toBe(true);
 		expect(a).toEqual(b);
-		if (a === null) throw new Error("redp1 returned infinity");
-		expect(Number(a.y & 1n)).toBe(1); // requested parity
+		// redp1 never returns null for a valid parity request; isOnCurve above
+		// confirms the point is real — the cast is a TypeScript narrowing aid.
+		expect(Number((a as NonNullable<typeof a>).y & 1n)).toBe(1); // requested parity
 	});
 });
 

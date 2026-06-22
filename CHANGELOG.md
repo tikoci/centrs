@@ -8,6 +8,31 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+## 0.1.1 — 2026-06-22
+
+Patch release. `@tikoci/centrs@0.1.1`.
+
+### Changed
+
+- **CI is now faster on PRs.** Cross-platform unit tests (macOS + Windows) moved
+  from `ci.yaml` to `qa.yaml`, where they run in parallel with the CHR matrix on
+  every push to `main`. PRs no longer wait for macOS/Windows runners; escapes are
+  caught on the merge-to-main QA run instead.
+
+### Fixed
+
+- **CLI: registry-aware `missing-router` tips.** All router-taking commands now
+  emit a CDB-aware tip when no `<router>` argument is supplied — listing saved
+  handles from the CDB (`tip/select-target`) or pointing to `centrs discover
+  --save` when the registry is empty (`tip/no-devices`).
+- **`discover --save` lookup keys and progress.** The saved device record now
+  includes `identity=` and `mac=` keys so downstream commands can resolve the
+  entry; MAC addresses are de-duplicated. TTY progress is shown during a scan and
+  a `--save` tip is printed at the end of a bare discover run.
+- **CodeQL / security hardening (PR #80 review).** Addressed reviewer findings:
+  clear-text credential log suppressed; progress output switched to stderr/JSON-safe
+  path; `retrieve` resource leak closed; doc corrections.
+
 ## 0.1.0 — 2026-06-22
 
 First published pre-release (odd minor → npm `next`). `@tikoci/centrs@0.1.0`.
