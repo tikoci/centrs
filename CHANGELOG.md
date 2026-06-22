@@ -35,17 +35,26 @@ documenting cross-cutting shifts that affect contributors and consumers.
   `verify-extended.yaml` adds a dispatch-only macOS-x86 / Windows-x86 sweep. New
   `chr-smoke` integration test + `test:integration:smoke` script; `.coderabbit.yaml`
   stages bot review to conserve credits.
-- **QA cross-run history + must-pass gate; `development` joins the push matrix.**
-  `qa.yaml` now runs `[stable, long-term, development]` on every push to main and
-  weekly. A new `accumulate-and-gate` job appends each CHR run to a durable
-  append-log on the `qa-history` branch (per-run artifacts have finite retention,
-  and the channel→version drift over time is exactly what a long history captures)
-  and fails the run **only when a released channel (stable, long-term) regresses**
-  — `development` is best-effort, so a beta btest/EC-SRP5 flake (JG-31) is recorded
-  but never reds main. The must-pass policy lives once in
-  `scripts/qa-results-db.ts` (`channelPolicy` / `evaluateMustPassGate`, mirrored by
-  the matrix `continue-on-error`), with the cross-run accumulator in
-  `scripts/qa-history.ts`.
+- **QA recency-aware channel matrix + cross-run history + must-pass gate.**
+  `qa.yaml`'s channel axis is now resolved per run by a `resolve-matrix` pre-flight
+  job (`scripts/qa-active-channels.ts`) instead of a hard-coded list: it asks
+  quickchr 0.4.2's public version/channel API (`resolveAllVersions` /
+  `selectActiveChannels`, with the suffix-aware `compareRouterOsVersion` that
+  finally orders `7.24beta2 < 7.24rc1 < 7.24`) for the channels *worth booting* —
+  the released channels (stable, long-term) always, plus any pre-release (testing,
+  development) at or ahead of stable. This closes the `testing` blind spot and
+  auto-adapts as MikroTik promotes builds, because the four channels are not
+  monotonically ordered (a stale `testing` rc is skipped; it is picked up
+  automatically once it leapfrogs stable). A new `accumulate-and-gate` job appends
+  each CHR run to a durable append-log on the `qa-history` branch (per-run
+  artifacts have finite retention, and the channel→version drift over time is
+  exactly what a long history captures) and fails the run **only when a released
+  channel (stable, long-term) regresses** — pre-release legs are best-effort, so a
+  beta btest/EC-SRP5 flake (JG-31) is recorded but never reds main. Boundary:
+  quickchr owns recency ("what's worth booting"); centrs owns the gate ("what must
+  pass") — the must-pass policy lives once in `scripts/qa-results-db.ts`
+  (`channelPolicy` / `evaluateMustPassGate`, mirrored by the matrix
+  `continue-on-error`), with the cross-run accumulator in `scripts/qa-history.ts`.
 - **`transfer / ssh` (sftp) — SSH lands transfer-first.** SSH joins centrs as a
   self-contained **SFTP transfer client** (`src/protocols/sftp.ts`) over the host
   OpenSSH `sftp` subsystem — the only reliable SSH file path, since RouterOS's SSH
