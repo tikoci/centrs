@@ -72,10 +72,15 @@ scheme as the reference):
   minor → npm `next`/`latest`; release-tier sweep via `qa.yaml` `workflow_call`
   (all channels); `--provenance`; needs `NPM_TOKEN`.
 - **Extended platforms** → `verify-extended.yaml` (dispatch): macOS-x86 (HVF) +
-  Windows-x86 (TCG, informational).
+  Windows-x86 (TCG, informational). A `packages` input installs extra RouterOS
+  packages into the CHR (e.g. `container`) for a fuller-RouterOS run.
 
 Deviations from the strict tiers, by design: cross-platform **unit** runs on the
 gate (not a separate pre-release trigger); macOS/Windows **integration** is the
-dispatch-only `verify-extended` sweep; arm64 hosts and release-tier "extra
-packages" (e.g. `container`) are deferred (they need `startIntegrationChr` to take
-an arch/packages option from quickchr).
+dispatch-only `verify-extended` sweep. `startIntegrationChr` now takes arch +
+packages from quickchr (`CENTRS_CHR_ARCH`, `CENTRS_CHR_PACKAGES`), so the
+centrs side is ready; what stays deferred is the **arm64 job** — quickchr 0.4.2
+has an arm64 REST-POST bug (returns the prior GET's body; quickchr BACKLOG P3)
+that breaks centrs's execute path, so an arm64 job would be known-red until that
+upstream fix lands — and wiring the **release-tier** extra-packages through
+`qa.yaml`, folded into the release re-review.
