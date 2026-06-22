@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	buildTargetSelectionTips,
-	cdbInputsFromArgs,
+	cdbFileFromArgs,
 	formatTipsText,
 	isMissingTargetError,
 	missingTargetError,
@@ -45,12 +45,13 @@ describe("isMissingTargetError", () => {
 	});
 });
 
-describe("cdbInputsFromArgs", () => {
-	test("pulls --cdb-file / --cdb-password out of raw args", () => {
+describe("cdbFileFromArgs", () => {
+	test("pulls --cdb-file out of raw args, never the password", () => {
 		expect(
-			cdbInputsFromArgs(["x", "--cdb-file", "/a.cdb", "--cdb-password", "pw"]),
-		).toEqual({ cdbFile: "/a.cdb", cdbPassword: "pw" });
-		expect(cdbInputsFromArgs(["--cdb-file"])).toEqual({});
+			cdbFileFromArgs(["x", "--cdb-file", "/a.cdb", "--cdb-password", "pw"]),
+		).toBe("/a.cdb");
+		expect(cdbFileFromArgs(["--cdb-file"])).toBeUndefined();
+		expect(cdbFileFromArgs(["--cdb-password", "pw"])).toBeUndefined();
 	});
 });
 

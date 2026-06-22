@@ -24,7 +24,7 @@ import {
 } from "./common.ts";
 import {
 	buildTargetSelectionTips,
-	cdbInputsFromArgs,
+	cdbFileFromArgs,
 	formatTipsText,
 	isMissingTargetError,
 	missingTargetError,
@@ -179,11 +179,9 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 		return 0;
 	} catch (error) {
 		const format = inferRequestedFormat(args, request);
-		const fromArgs = cdbInputsFromArgs(args);
 		const tips = isMissingTargetError(error)
 			? await buildTargetSelectionTips({
-					cdbFile: request?.cdbFile ?? fromArgs.cdbFile,
-					cdbPassword: request?.cdbPassword ?? fromArgs.cdbPassword,
+					cdbFile: request?.cdbFile ?? cdbFileFromArgs(args),
 					env: Bun.env,
 				})
 			: [];
@@ -196,11 +194,13 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 					}),
 				);
 			} else {
+				// When parsing failed before a request existed, build the error
+				// envelope from an empty request rather than reconstructing positionals
+				// from raw args — a credential value (e.g. the token after
+				// `--password` / `--cdb-password`) would otherwise be echoed as
+				// `meta.target.input`.
 				const envelope = withTips(
-					buildRetrieveErrorEnvelope(
-						request ?? fallbackRequestFromArgs(args),
-						error,
-					),
+					buildRetrieveErrorEnvelope(request ?? { path: "" }, error),
 					tips,
 				);
 				console.error(
@@ -398,13 +398,4 @@ function inferRequestedFormat(
 		return envFormat;
 	}
 	return "text";
-}
-
-function fallbackRequestFromArgs(args: readonly string[]): RetrieveRequest {
-	const positionals = args.filter((arg) => !arg.startsWith("-"));
-	return {
-		targetInput: positionals[0],
-		path: positionals[1] ?? "",
-		format: inferRequestedFormat(args),
-	};
 }

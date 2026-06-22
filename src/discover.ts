@@ -488,9 +488,12 @@ export interface SaveDiscoveredNeighborsResult {
 
 /**
  * Persist discovered neighbors into the CDB via {@link addDevice}. De-dupe
- * rule: a neighbor whose target (IPv4, else MAC) already names a CDB entry is
- * skipped — never overwritten — so hand-curated records win. New neighbors are
- * added with `group=discovered` and `source=mndp` provenance. The CDB is
+ * rule: a neighbor whose **MAC** already names a CDB entry — as a `macTarget`
+ * record's `target` or a `mac=` lookup key on any record (see
+ * {@link neighborMacKnown}) — is skipped, never overwritten; a neighbor whose
+ * `target` string already names an entry is likewise skipped. Hand-curated
+ * records always win. New neighbors are added with `group=discovered`, the
+ * `identity=`/`mac=` lookup keys, and `source=mndp` provenance. The CDB is
  * reloaded between writes so each `addDevice` sees the prior additions.
  */
 export async function saveDiscoveredNeighbors(

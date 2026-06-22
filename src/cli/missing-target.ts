@@ -49,33 +49,24 @@ export function isMissingTargetError(error: unknown): boolean {
 
 export interface CdbInputs {
 	cdbFile?: string;
-	cdbPassword?: string;
 	env?: Record<string, string | undefined>;
 }
 
 /**
- * Pull `--cdb-file` / `--cdb-password` out of raw args. Used by catch paths
- * where the request never finished parsing (the missing-target throw happens
- * mid-parse), so the request object is unavailable but the flags may still be on
- * the command line.
+ * Pull the `--cdb-file` path out of raw args. Used by catch paths where the
+ * request never finished parsing (the missing-target throw happens mid-parse),
+ * so the request object is unavailable but the flag may still be on the command
+ * line. The CDB *password* is deliberately not extracted: a credential must
+ * never flow into the (logged) tip path, and the tips read only an unencrypted
+ * registry — an encrypted CDB falls back to generic guidance.
  */
-export function cdbInputsFromArgs(args: readonly string[]): {
-	cdbFile?: string;
-	cdbPassword?: string;
-} {
-	const out: { cdbFile?: string; cdbPassword?: string } = {};
+export function cdbFileFromArgs(args: readonly string[]): string | undefined {
 	for (let index = 0; index < args.length; index += 1) {
-		const next = args[index + 1];
-		if (next === undefined) {
-			continue;
-		}
 		if (args[index] === "--cdb-file") {
-			out.cdbFile = next;
-		} else if (args[index] === "--cdb-password") {
-			out.cdbPassword = next;
+			return args[index + 1];
 		}
 	}
-	return out;
+	return undefined;
 }
 
 /**
@@ -83,7 +74,8 @@ export function cdbInputsFromArgs(args: readonly string[]): {
  * a list of saved targets when the registry has any, otherwise a pointer to
  * `discover --save`. Never throws: an unreadable/encrypted CDB falls back to
  * generic guidance, and a missing default CDB is reported as an empty registry
- * (no file is created as a side effect of a usage error).
+ * (no file is created as a side effect of a usage error). The CDB password is
+ * intentionally never read here, so no credential can reach the rendered tip.
  */
 export async function buildTargetSelectionTips(
 	inputs: CdbInputs,
@@ -99,7 +91,6 @@ export async function buildTargetSelectionTips(
 	try {
 		const cdb = await loadCdb({
 			cdbFile: inputs.cdbFile,
-			cdbPassword: inputs.cdbPassword,
 			env,
 		});
 		entries = cdb.entries.filter(

@@ -33,7 +33,7 @@ import {
 } from "./common.ts";
 import {
 	buildTargetSelectionTips,
-	cdbInputsFromArgs,
+	cdbFileFromArgs,
 	formatTipsText,
 	isMissingTargetError,
 	missingTargetError,
@@ -466,7 +466,7 @@ export async function runBtestCli(args: readonly string[]): Promise<number> {
 		});
 		const tips = isMissingTargetError(centrsError)
 			? await buildTargetSelectionTips({
-					...cdbInputsFromArgs(args),
+					cdbFile: cdbFileFromArgs(args),
 					env: Bun.env,
 				})
 			: [];

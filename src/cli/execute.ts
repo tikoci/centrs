@@ -15,7 +15,7 @@ import {
 } from "./common.ts";
 import {
 	buildTargetSelectionTips,
-	cdbInputsFromArgs,
+	cdbFileFromArgs,
 	formatTipsText,
 	isMissingTargetError,
 	missingTargetError,
@@ -284,11 +284,9 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 		// Parse/usage errors land here too: surface them through the same typed
 		// envelope as every other runner (no raw message, no exit code 2).
 		const format = inferExecuteFormat(args, parsed);
-		const fromArgs = cdbInputsFromArgs(args);
 		const tips = isMissingTargetError(error)
 			? await buildTargetSelectionTips({
-					cdbFile: parsed?.cdbFile ?? fromArgs.cdbFile,
-					cdbPassword: parsed?.cdbPassword ?? fromArgs.cdbPassword,
+					cdbFile: parsed?.cdbFile ?? cdbFileFromArgs(args),
 					env: Bun.env,
 				})
 			: [];

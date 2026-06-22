@@ -26,7 +26,7 @@ import {
 } from "./common.ts";
 import {
 	buildTargetSelectionTips,
-	cdbInputsFromArgs,
+	cdbFileFromArgs,
 	formatTipsText,
 	isMissingTargetError,
 	missingTargetError,
@@ -181,11 +181,9 @@ export async function runTransferCli(
 		// (CodeQL js/clear-text-logging).
 		const safeRequest = redactTransferRequest(request);
 		const format = inferRequestedFormat(args, safeRequest);
-		const fromArgs = cdbInputsFromArgs(args);
 		const tips = isMissingTargetError(error)
 			? await buildTargetSelectionTips({
-					cdbFile: safeRequest?.cdbFile ?? fromArgs.cdbFile,
-					cdbPassword: fromArgs.cdbPassword,
+					cdbFile: safeRequest?.cdbFile ?? cdbFileFromArgs(args),
 					env: Bun.env,
 				})
 			: [];

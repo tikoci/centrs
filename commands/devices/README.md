@@ -403,3 +403,29 @@ When an item ships with CHR examples, fold it into the matrix and delete the row
   same envelope as the CDB. Provenance source label: `dude`.
 - The `centrs check` command will reuse the resolver and add a network probe;
   `devices` itself stays RouterOS-IO-free.
+
+### Missing-target guidance (and the MCP/proxy follow-up)
+
+When a command that takes a `<router>` is called without one, the **CLI** turns
+the bare usage error into a registry-aware tip (shared helper
+`src/cli/missing-target.ts`): it reads the CDB best-effort and emits either
+`tip/select-target` (lists a few saved handles to pass — identity over target) or
+`tip/no-devices` (→ `centrs discover --save`) when the registry is empty. The
+read is unencrypted-only and the CDB **password never threads into the tip path**
+(it is logged), so an encrypted registry falls back to generic guidance.
+
+This guidance is currently **CLI-shaped on purpose** and is *not* yet wired into
+the MCP/proxy frontends — that is deferred spec/review work. Two boundaries
+should shape it when it lands, because the registry's role differs per frontend:
+
+- The `tip/*` envelope channel is shared-core, but the specific remediation
+  *strings* (`centrs devices list`, `centrs discover --save`) are CLI verbs and
+  must **not** be emitted verbatim by MCP/proxy. Each frontend phrases the
+  next-step in its own vocabulary.
+- On **MCP**, targets come from the **CDB allowlist**, not free-text `<router>`
+  (constitution: MCP surface). An unregistered/empty target is
+  `cdb/target-not-registered`, and the `centrs://devices` resource already
+  enumerates the allowlisted targets — so the MCP equivalent of "what can I
+  pass?" is "read the `centrs://devices` resource / register a device first,"
+  not "run discover." The **proxy** fronts the same CDB and should mirror the MCP
+  framing, not the CLI's `discover --save` nudge.

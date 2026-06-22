@@ -146,13 +146,17 @@ function parseDiscoverCliArgs(args: readonly string[]): DiscoverCliArgs {
 
 /**
  * A 15s passive listen looks like a hang on an interactive terminal, so print a
- * one-line progress note to **stderr** when attached to a TTY. stderr is the
+ * one-line progress note to **stderr** for the human-facing text format on a
+ * TTY. Skipped when piped/redirected (not a TTY) and for the `--format
+ * json|yaml` structured modes, so machine consumers never see it. stderr is the
  * sanctioned channel for discover scan progress (`docs/CONSTITUTION.md` → Result
- * envelope) and is skipped when piped, so it never pollutes the `--format
- * json|yaml` envelope on stdout.
+ * envelope).
  */
-function emitDiscoverProgress(options: DiscoverOptions): void {
-	if (!process.stderr.isTTY) {
+function emitDiscoverProgress(
+	options: DiscoverOptions,
+	format: DiscoverOutputFormat | undefined,
+): void {
+	if (format === "json" || format === "yaml" || !process.stderr.isTTY) {
 		return;
 	}
 	const windowMs = options.timeoutMs ?? DISCOVER_DEFAULT_TIMEOUT_MS;
@@ -181,7 +185,7 @@ export async function runDiscoverCli(args: readonly string[]): Promise<number> {
 			cdbPassword: parsed.cdbPassword,
 			env: Bun.env,
 		};
-		emitDiscoverProgress(options);
+		emitDiscoverProgress(options, parsed.format);
 		const envelope = await discover(options);
 		const format = parsed.format ?? "text";
 		const rendered = renderDiscoverEnvelope(envelope, format);

@@ -22,7 +22,7 @@ import {
 } from "./common.ts";
 import {
 	buildTargetSelectionTips,
-	cdbInputsFromArgs,
+	cdbFileFromArgs,
 	formatTipsText,
 	isMissingTargetError,
 	missingTargetError,
@@ -172,11 +172,9 @@ export async function runTerminalCli(args: readonly string[]): Promise<number> {
 		// error nor these renderers, so the alert is dismissed as a false positive
 		// repo-wide — see the matching dismissals on src/cli/{transfer,execute}.ts.
 		const format = inferRequestedFormat(args);
-		const fromArgs = cdbInputsFromArgs(args);
 		const tips = isMissingTargetError(error)
 			? await buildTargetSelectionTips({
-					cdbFile: request?.cdbFile ?? fromArgs.cdbFile,
-					cdbPassword: request?.cdbPassword ?? fromArgs.cdbPassword,
+					cdbFile: request?.cdbFile ?? cdbFileFromArgs(args),
 					env: Bun.env,
 				})
 			: [];

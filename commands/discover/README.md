@@ -68,11 +68,12 @@ tested without a router (crafted packet fixtures + a loopback socket).
 Bare `centrs discover` is **read-only** — it returns the envelope and never
 writes the (WinBox-shared) CDB; `--save` is the explicit opt-in. When it finds
 neighbors but was not given `--save`, the envelope carries a `tip/discover-save`
-pointer so the read-only run advertises how to persist the result. On an
-interactive terminal (TTY only) `discover` also prints a one-line "listening…"
-progress note to **stderr** so the listen window does not look like a hang;
-piped/`--format json` runs stay silent (stderr is exempt from the lossless-stdout
-rule — constitution: Result envelope). The registry
+pointer so the read-only run advertises how to persist the result. In the
+human-facing text format on an interactive terminal (TTY) `discover` also prints
+a one-line "listening…" progress note to **stderr** so the listen window does not
+look like a hang; `--format json|yaml` and piped/redirected runs stay silent
+(stderr is exempt from the lossless-stdout rule — see
+[`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md), Result envelope). The registry
 surface `centrs devices discover` is the inverse: invoking `devices` means you
 intend to populate it, so **`--save` is implied** there, and it is the home for
 the "set default credentials so centrs starts useful" onboarding nudge. Both
