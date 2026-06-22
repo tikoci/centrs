@@ -38,7 +38,6 @@ import {
 	formatTipsText,
 	isMissingTargetError,
 	missingTargetError,
-	withTips,
 } from "./missing-target.ts";
 
 export const btestCommand: CliCommandMetadata = {
@@ -481,19 +480,15 @@ export async function runBtestCli(args: readonly string[]): Promise<number> {
 				? "yaml"
 				: "text";
 		if (format === "json" || format === "yaml") {
-			const safeError = asCentrsError(error, {
-				code: "input/invalid-command",
-				summary: "btest command failed",
-				remediation:
-					"Use `centrs btest --help` to inspect the supported flags.",
-			});
-			const envelope = withTips(
-				{ ok: false as const, error: safeError, tips: [] },
+			// Emit only the error code — never the summary/message which could carry
+			// credentials along a CodeQL js/clear-text-logging data-flow path.
+			// Tips carry the actionable guidance for the caller.
+			const out = {
+				ok: false as const,
+				error: { code: centrsError.code },
 				tips,
-			);
-			console.error(
-				format === "yaml" ? toYaml(envelope) : JSON.stringify(envelope),
-			);
+			};
+			console.error(format === "yaml" ? toYaml(out) : JSON.stringify(out));
 		} else {
 			console.error(formatCentrsErrorText(centrsError) + formatTipsText(tips));
 		}
