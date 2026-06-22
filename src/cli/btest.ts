@@ -461,6 +461,9 @@ export async function runBtestCli(args: readonly string[]): Promise<number> {
 			`Unknown btest sub-command: ${sub}. Use \`client <router>\` or \`server\`.`,
 		);
 	} catch (error) {
+		// Text path: full error.message for human readability.
+		// JSON/YAML path: fixed summary — never echoes error.message which could
+		// carry credentials along the CodeQL js/clear-text-logging data flow.
 		const centrsError = asCentrsError(error, {
 			code: "input/invalid-command",
 			summary: error instanceof Error ? error.message : String(error),
@@ -478,8 +481,14 @@ export async function runBtestCli(args: readonly string[]): Promise<number> {
 				? "yaml"
 				: "text";
 		if (format === "json" || format === "yaml") {
+			const safeError = asCentrsError(error, {
+				code: "input/invalid-command",
+				summary: "btest command failed",
+				remediation:
+					"Use `centrs btest --help` to inspect the supported flags.",
+			});
 			const envelope = withTips(
-				{ ok: false as const, error: centrsError, tips: [] },
+				{ ok: false as const, error: safeError, tips: [] },
 				tips,
 			);
 			console.error(
