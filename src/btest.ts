@@ -215,8 +215,28 @@ export async function btestClient(
 		controlPort,
 	};
 
+	const warnings: { code: string; message: string }[] = [];
+
 	try {
 		validateClientOptions(request);
+
+		// The btest wire command carries a single tx-size field; --remote-udp-tx-size
+		// and --local-udp-tx-size map to it separately only for receive (remote wins)
+		// and transmit (local wins). For both, localUdpTxSize wins and
+		// remoteUdpTxSize is silently discarded — warn when they differ so the user
+		// knows which size the server will actually use.
+		if (
+			protocol === "udp" &&
+			direction === "both" &&
+			request.remoteUdpTxSize !== undefined &&
+			request.localUdpTxSize !== undefined &&
+			request.remoteUdpTxSize !== request.localUdpTxSize
+		) {
+			warnings.push({
+				code: "validation/option",
+				message: `--remote-udp-tx-size (${request.remoteUdpTxSize}) is ignored for --direction both; the btest wire protocol carries a single tx-size and --local-udp-tx-size (${request.localUdpTxSize}) is used for both directions.`,
+			});
+		}
 
 		const cdbResolution = await resolveCdb(
 			{
@@ -311,7 +331,7 @@ export async function btestClient(
 		return {
 			ok: true,
 			data,
-			warnings: [],
+			warnings: warnings.map((w) => ({ ...w })),
 			tips: [],
 			meta: clientMeta(target.host, controlPort, operation, auth.username),
 		};

@@ -1226,10 +1226,20 @@ export async function runBtestClientSession(
 	if (options.protocol === "udp") {
 		udp = (options.createUdpSocket ?? createBtestUdpSocket)();
 		await udp.bind(negotiated.clientUdpPort as number, "0.0.0.0");
-		await udp.connect(negotiated.serverUdpPort as number, options.host);
+		// Do NOT connect() the socket: connect() installs a kernel receive filter
+		// that silently drops datagrams whose source port differs from the connected
+		// peer. RouterOS may send UDP data from a different source port than the
+		// negotiated serverUdpPort (separate TX socket), so the filter would discard
+		// all incoming packets and leave rx at 0 bps throughout. Instead, keep the
+		// socket unconnected (like the server side) and always address sends
+		// explicitly via udpTxLoop's target argument.
 		if (options.natMode || dirs.shouldRx) {
 			// Originate a flow so the server's datagrams can return (NAT/SLIRP).
-			udp.send(new Uint8Array(0));
+			udp.send(
+				new Uint8Array(0),
+				negotiated.serverUdpPort as number,
+				options.host,
+			);
 		}
 	}
 
@@ -1430,15 +1440,21 @@ async function driveSession(
 
 	const tasks: Promise<void>[] = [];
 	if (ctx.command.protocol === "udp") {
-		// The client `connect()`s its socket (sends with no per-packet address); the
-		// server is unconnected and `send_to`s the client (so it can receive from a
-		// NAT-rewritten source). See the server's UDP setup.
+		// Both client and server address sends explicitly (no connected-socket
+		// default): client → serverUdpPort, server → clientUdpPort. An unconnected
+		// socket accepts datagrams from any source, avoiding the BSD receive filter
+		// that connect() installs and that silently drops packets when RouterOS
+		// sends from an unexpected source port.
 		const target =
 			role === "server" &&
 			ctx.clientUdpPort !== undefined &&
 			ctx.udpPeerHost !== undefined
 				? { port: ctx.clientUdpPort, host: ctx.udpPeerHost }
-				: undefined;
+				: role === "client" &&
+						ctx.serverUdpPort !== undefined &&
+						ctx.udpPeerHost !== undefined
+					? { port: ctx.serverUdpPort, host: ctx.udpPeerHost }
+					: undefined;
 		if (dirs.shouldTx) tasks.push(udpTxLoop(ctx, target));
 		if (dirs.shouldRx) tasks.push(udpRxLoop(ctx));
 		tasks.push(udpStatusExchange(ctx, dirs));
