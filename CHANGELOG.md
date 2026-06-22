@@ -156,6 +156,11 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Changed
 
+- **`release.yaml` fails closed when `NPM_TOKEN` is missing.** A guard step in the
+  publish job errors with an actionable message if the org (`tikoci`) secret does
+  not reach the runner — so a dry-run dispatch proves visibility before any real
+  publish, instead of failing opaquely inside `npm publish`. The value stays
+  masked; only its presence is logged.
 - **Workflow restructure.** Replaced `docs/specs/`, `docs/WORKFLOW.md`,
   `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, and `work/` with three durable
   surfaces:

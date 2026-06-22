@@ -132,6 +132,20 @@ jobs:
             echo "::error::package.json version ($PKG_VERSION) does not match git tag ($TAG_VERSION)"
             exit 1
           fi
+      # NPM_TOKEN is a tikoci *org* secret; it only reaches this runner if centrs
+      # is in the secret's repository access. Prove that BEFORE attempting publish
+      # (and on a dry-run, so a dispatch validates visibility without publishing).
+      # The value is masked by Actions; only its presence is logged.
+      - name: Verify NPM_TOKEN reaches this runner
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -eo pipefail
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN is empty — the org (tikoci) secret is not visible to this repo. Grant access at org → Settings → Secrets and variables → Actions → NPM_TOKEN → Repository access (all repos, or add centrs)."
+            exit 1
+          fi
+          echo "NPM_TOKEN is present and non-empty (value masked by Actions)."
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
