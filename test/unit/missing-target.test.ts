@@ -100,6 +100,24 @@ describe("buildTargetSelectionTips", () => {
 			await cleanup();
 		}
 	});
+
+	test("registry with only reserved fallback record tips toward discover --save", async () => {
+		const { path, cleanup } = await cdbFile([
+			buildWinBoxCdbEntryRecord({
+				recordType: winBoxCdbRecordType.ipAdmin,
+				target: "__default__",
+				user: "admin",
+			}),
+		]);
+		try {
+			const tips = await buildTargetSelectionTips({ cdbFile: path });
+			expect(tips).toHaveLength(1);
+			expect(tips[0]?.code).toBe("tip/no-devices");
+			expect(tips[0]?.fix).toContain("centrs discover --save");
+		} finally {
+			await cleanup();
+		}
+	});
 });
 
 describe("formatTipsText", () => {
