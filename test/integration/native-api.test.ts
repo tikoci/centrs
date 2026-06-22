@@ -11,6 +11,7 @@ import {
 	recordIntegrationEvidence,
 	splitQuickChrAuth,
 	startIntegrationChr,
+	withBootReadyRetry,
 } from "./chr.ts";
 
 const runFastIntegration = isChrIntegrationEnabled();
@@ -20,17 +21,22 @@ describeFast("native API against CHR", () => {
 	test("logs in and runs /system/resource over the binary API", async () => {
 		const started = await startIntegrationChr();
 		const chr = started.chr;
+		await chr.waitForBoot(180_000);
 		const auth = splitQuickChrAuth(
 			readEnv(started.env, "QUICKCHR_AUTH") ?? "admin:",
 		);
 
 		try {
-			const { session } = await connectNativeApi({
-				host: "127.0.0.1",
-				port: chr.ports.api,
-				username: auth.username,
-				password: auth.password,
-			});
+			// The api service can lag the REST endpoint waitForBoot polls; retry the
+			// cold connect past that boot-readiness race (see withBootReadyRetry).
+			const { session } = await withBootReadyRetry(() =>
+				connectNativeApi({
+					host: "127.0.0.1",
+					port: chr.ports.api,
+					username: auth.username,
+					password: auth.password,
+				}),
+			);
 
 			try {
 				const replies = await session.talk({
@@ -81,14 +87,19 @@ describeFast("native API against CHR", () => {
 	test("maps bad credentials to transport/auth-failed", async () => {
 		const started = await startIntegrationChr();
 		const chr = started.chr;
+		await chr.waitForBoot(180_000);
 
 		try {
-			const attempt = connectNativeApi({
-				host: "127.0.0.1",
-				port: chr.ports.api,
-				username: "definitely-wrong",
-				password: "definitely-wrong",
-			});
+			// Retry only the boot-readiness refusal; the expected `auth-failed` is not
+			// transient, so it propagates on the first real login attempt.
+			const attempt = withBootReadyRetry(() =>
+				connectNativeApi({
+					host: "127.0.0.1",
+					port: chr.ports.api,
+					username: "definitely-wrong",
+					password: "definitely-wrong",
+				}),
+			);
 			await expect(attempt).rejects.toBeInstanceOf(CentrsError);
 			await attempt.catch((error: unknown) => {
 				expect((error as CentrsError).code).toBe("transport/auth-failed");

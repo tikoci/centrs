@@ -281,6 +281,8 @@ EADDRINUSE
 EACCES
 ENOTSUP
 EAFNOSUPPORT
+ECONNREFUSED
+ECONNRESET
 REUSEPORT
 REUSEADDR
 # L2 bridge frame-parsing terms (test/integration/mndp-l2-bridge.ts):

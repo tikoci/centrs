@@ -128,6 +128,18 @@ First published pre-release (odd minor → npm `next`). `@tikoci/centrs@0.1.0`.
 
 ### Fixed
 
+- **Flaky must-pass CHR cells no longer red the release gate.** The first
+  `v0.1.0` release sweep was blocked by transient long-term failures (native-api
+  `ECONNREFUSED`, mac-telnet L2 prime-latency) — the same cells pass locally and
+  the reds hop channels run-to-run, i.e. CI timing flake, not regressions. Two
+  fixes: (1) the native-api integration test now `waitForBoot`s and retries the
+  cold connect past the boot-readiness race (the api service can lag the REST
+  endpoint), via a `withBootReadyRetry` harness helper that retries **only**
+  transient connect errors — `auth-failed` still propagates, so assertions are
+  unweakened; (2) the qa.yaml CHR sweep runs integration **per-file with one
+  retry** — a real regression fails both attempts and still gates, but a single
+  transient flake is absorbed, and per-file isolation avoids the resource
+  contention that fast-fails a later file.
 - **`windows-latest` unit tier is green.** It was perpetually red on two causes,
   now both addressed without losing coverage: (1) Windows has no `SO_REUSEPORT`,
   so the MNDP/btest UDP loopback binds (`reusePort: true`) threw `ENOTSUP` — a

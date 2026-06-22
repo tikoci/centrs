@@ -157,8 +157,28 @@ jobs:
           set -eo pipefail
           echo "RouterOS target: ${CENTRS_CHR_VERSION:-channel ${CENTRS_CHR_CHANNEL}}"
           echo "::group::CHR integration output"
+          : > /tmp/chr-output.txt
           status=0
-          bun run test:integration 2>&1 | tee /tmp/chr-output.txt || status=$?
+          # Per-file isolation + one retry. Real-CHR integration is timing-sensitive
+          # (slow QEMU boots, mac-telnet L2 prime latency, a native-api service that
+          # lags REST), so a single transient flake must not red the must-pass gate
+          # that blocks releases. A *real* regression fails both attempts and still
+          # gates (the gate reads this step's outcome). Per-file also avoids the
+          # resource contention that fast-fails a later file when many CHRs booted in
+          # one bun process. Locally these same cells pass; the reds are CI-only flake.
+          for f in test/integration/*.test.ts; do
+            echo "::notice::integration $f"
+            if CENTRS_RUN_FAST_INTEGRATION=1 bun test "$f" 2>&1 | tee -a /tmp/chr-output.txt; then
+              continue
+            fi
+            echo "::warning::$f failed; retrying once (CHR timing-flake mitigation)"
+            if CENTRS_RUN_FAST_INTEGRATION=1 bun test "$f" 2>&1 | tee -a /tmp/chr-output.txt; then
+              echo "::notice::$f passed on retry"
+            else
+              echo "::error::$f failed twice — treating as a real failure"
+              status=1
+            fi
+          done
           echo "::endgroup::"
           exit "$status"
       # Surface the failing tests (not the whole log) to the run summary so an
