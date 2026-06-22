@@ -31,6 +31,13 @@ import {
 	expectValue,
 	renderCommandHelp,
 } from "./common.ts";
+import {
+	buildTargetSelectionTips,
+	cdbInputsFromArgs,
+	formatTipsText,
+	isMissingTargetError,
+	missingTargetError,
+} from "./missing-target.ts";
 
 export const btestCommand: CliCommandMetadata = {
 	name: "btest",
@@ -355,6 +362,14 @@ async function runClient(args: readonly string[]): Promise<number> {
 		console.log(renderCommandHelp(describeCentrs(), btestCommand));
 		return 0;
 	}
+	if (request.targetInput === undefined) {
+		throw missingTargetError({
+			command: "btest client",
+			summary: "`centrs btest client` requires a <router> target.",
+			remediation:
+				"Pass the bandwidth-test server's host/identity, e.g. `centrs btest client 192.0.2.10`.",
+		});
+	}
 	const streaming = format === "text" || format === "csv";
 	let csvHeader = false;
 	if (streaming) {
@@ -449,7 +464,13 @@ export async function runBtestCli(args: readonly string[]): Promise<number> {
 			summary: error instanceof Error ? error.message : String(error),
 			remediation: "Use `centrs btest --help` to inspect the supported flags.",
 		});
-		console.error(formatCentrsErrorText(centrsError));
+		const tips = isMissingTargetError(centrsError)
+			? await buildTargetSelectionTips({
+					...cdbInputsFromArgs(args),
+					env: Bun.env,
+				})
+			: [];
+		console.error(formatCentrsErrorText(centrsError) + formatTipsText(tips));
 		return 1;
 	}
 }

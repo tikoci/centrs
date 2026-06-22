@@ -18,7 +18,8 @@
  */
 
 import { createSocket } from "node:dgram";
-import type { CentrsEnvelope, EnvelopeMeta } from "./core/envelope.ts";
+import type { CentrsEnvelope, EnvelopeMeta, Tip } from "./core/envelope.ts";
+import { buildTip } from "./core/envelope.ts";
 import {
 	MNDP_BROADCAST_ADDRESS,
 	MNDP_PORT,
@@ -27,7 +28,7 @@ import {
 	parseMndpPacket,
 } from "./data/mndp.ts";
 import { MndpCache } from "./data/mndp-cache.ts";
-import { winBoxCdbRecordType } from "./data/winbox-cdb.ts";
+import { type WinBoxCdbEntry, winBoxCdbRecordType } from "./data/winbox-cdb.ts";
 import type { WriteWinBoxCdbOptions } from "./data/winbox-cdb-write.ts";
 import {
 	addDevice,
@@ -37,7 +38,8 @@ import {
 	resolveDevicesSettings,
 } from "./devices.ts";
 import { asCentrsError, CentrsError, serializeCentrsError } from "./errors.ts";
-import { renderCommentKvToken } from "./resolver/comment-kv.ts";
+import { parseCommentKv, renderCommentKvToken } from "./resolver/comment-kv.ts";
+import { normalizeMac } from "./resolver/mac.ts";
 
 export { MNDP_PORT, MndpCache };
 
@@ -396,19 +398,27 @@ function toDiscoverNeighbor(
 }
 
 /**
- * Build the human/structured comment for a saved neighbor. The only kv token is
- * the allowlisted `source=mndp`; the parenthesized detail is free-form (no
- * `key=value` shapes) so it preserves provenance without emitting
- * `cdb/unknown-option` warnings later.
+ * Build the comment for a saved neighbor: the allowlisted `source=mndp` token
+ * and the `identity=`/`mac=` **lookup keys** (so the device resolves by any of
+ * its identifiers — see `commands/devices/README.md`, Identity model), followed
+ * by a free-form, parenthesized provenance detail. `identity=` is written
+ * whenever advertised; `mac=` only when the **target is the IP** (a `macTarget`
+ * record's target already *is* the MAC, so a `mac=` key would be redundant). The
+ * parenthesized detail carries no `key=value` shapes, so it stays inert and
+ * never emits a `cdb/unknown-option` warning later.
  */
 export function formatMndpProvenanceComment(
 	neighbor: MndpNeighbor,
 	at: Date,
 ): string {
-	const detail: string[] = [`discovered ${at.toISOString()} via MNDP`];
+	const tokens: string[] = [renderCommentKvToken("source", "mndp")];
 	if (neighbor.identity) {
-		detail.push(`identity: ${neighbor.identity}`);
+		tokens.push(renderCommentKvToken("identity", neighbor.identity));
 	}
+	if (neighbor.ipv4 && neighbor.macAddress) {
+		tokens.push(renderCommentKvToken("mac", neighbor.macAddress));
+	}
+	const detail: string[] = [`discovered ${at.toISOString()} via MNDP`];
 	if (neighbor.platform) {
 		detail.push(`platform: ${neighbor.platform}`);
 	}
@@ -418,16 +428,37 @@ export function formatMndpProvenanceComment(
 	if (neighbor.version) {
 		detail.push(`version: ${neighbor.version}`);
 	}
-	if (neighbor.macAddress) {
-		detail.push(`mac: ${neighbor.macAddress}`);
-	}
 	if (neighbor.interfaceName) {
 		detail.push(`interface: ${neighbor.interfaceName}`);
 	}
 	if (neighbor.softwareId) {
 		detail.push(`software-id: ${neighbor.softwareId}`);
 	}
-	return `${renderCommentKvToken("source", "mndp")} (${detail.join("; ")})`;
+	return `${tokens.join(" ")} (${detail.join("; ")})`;
+}
+
+/**
+ * True when a discovered neighbor's MAC already names a CDB entry — as the
+ * `target` of a `macTarget` record or as a `mac=` lookup key on any record. MNDP
+ * always carries the MAC and it is globally unique, so it is the de-dupe key
+ * (`commands/discover/README.md`, `--save` de-dupe); `identity` is *not*, since
+ * factory-default devices all report `MikroTik`.
+ */
+function neighborMacKnown(
+	entries: readonly WinBoxCdbEntry[],
+	mac: string | undefined,
+): boolean {
+	const want = normalizeMac(mac ?? "");
+	if (!want) {
+		return false;
+	}
+	return entries.some((entry) => {
+		if (normalizeMac(entry.target) === want) {
+			return true;
+		}
+		const lookupMac = parseCommentKv(entry.comment).lookups.mac;
+		return lookupMac !== undefined && normalizeMac(lookupMac) === want;
+	});
 }
 
 /** Target a neighbor maps to in the CDB: its IPv4, else its MAC. */
@@ -484,7 +515,13 @@ export async function saveDiscoveredNeighbors(
 		if (!target) {
 			continue;
 		}
-		const exists = cdb.entries.some((entry) => entry.target === target);
+		// De-dupe on the MAC (globally unique, always advertised), and also skip a
+		// target string that already names an entry — both guard a hand-curated
+		// record from being clobbered, and the latter keeps `addDevice` from
+		// failing `cdb/already-exists` on a colliding connectable address.
+		const exists =
+			neighborMacKnown(cdb.entries, neighbor.macAddress) ||
+			cdb.entries.some((entry) => entry.target === target);
 		const detail: DiscoverSaveRecord = {
 			target,
 			action: exists ? "skipped-existing" : "added",
@@ -646,11 +683,22 @@ export async function discover(
 		}
 	}
 
+	const tips: Tip[] = [];
+	if (!options.save && neighbors.length > 0) {
+		tips.push(
+			buildTip(
+				"tip/discover-save",
+				`Found ${neighbors.length} neighbor(s); this run did not save them (read-only without --save).`,
+				"Re-run with `--save` to persist them into the CDB (group=discovered) so you can target them by identity/ip/mac.",
+			),
+		);
+	}
+
 	return {
 		ok: true,
 		data: { count: neighbors.length, neighbors },
 		warnings,
-		tips: [],
+		tips,
 		meta: discoverMeta(operation, options),
 	};
 }
@@ -743,7 +791,21 @@ function renderDiscoverText(envelope: DiscoverEnvelope): string {
 		);
 	}
 	appendDiscoverWarnings(lines, envelope.warnings);
+	appendDiscoverTips(lines, envelope.tips);
 	return lines.join("\n");
+}
+
+function appendDiscoverTips(lines: string[], tips: readonly Tip[]): void {
+	if (tips.length === 0) {
+		return;
+	}
+	lines.push("Tips:");
+	for (const item of tips) {
+		lines.push(`  - [${item.code}] ${item.message}`);
+		if (item.fix) {
+			lines.push(`    fix: ${item.fix}`);
+		}
+	}
 }
 
 function appendDiscoverWarnings(

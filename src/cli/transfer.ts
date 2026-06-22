@@ -24,6 +24,14 @@ import {
 	expectValue,
 	renderCommandHelp,
 } from "./common.ts";
+import {
+	buildTargetSelectionTips,
+	cdbInputsFromArgs,
+	formatTipsText,
+	isMissingTargetError,
+	missingTargetError,
+	withTips,
+} from "./missing-target.ts";
 
 /** Sub-verb aliases, resolved to canonical verbs silently (commands/AGENTS.md). */
 const VERB_ALIASES: Record<string, TransferVerb> = {
@@ -173,10 +181,21 @@ export async function runTransferCli(
 		// (CodeQL js/clear-text-logging).
 		const safeRequest = redactTransferRequest(request);
 		const format = inferRequestedFormat(args, safeRequest);
+		const fromArgs = cdbInputsFromArgs(args);
+		const tips = isMissingTargetError(error)
+			? await buildTargetSelectionTips({
+					cdbFile: safeRequest?.cdbFile ?? fromArgs.cdbFile,
+					cdbPassword: fromArgs.cdbPassword,
+					env: Bun.env,
+				})
+			: [];
 		if (format === "json" || format === "yaml") {
-			const envelope = buildTransferErrorEnvelope(
-				safeRequest ?? { verb: options.fixedVerb ?? "list" },
-				error,
+			const envelope = withTips(
+				buildTransferErrorEnvelope(
+					safeRequest ?? { verb: options.fixedVerb ?? "list" },
+					error,
+				),
+				tips,
 			);
 			console.error(
 				renderTransferEnvelope(envelope, format, {
@@ -193,7 +212,7 @@ export async function runTransferCli(
 							"Use `centrs transfer --help` to inspect the supported command shape and flags.",
 					}),
 					{ verbose: safeRequest?.verbose ?? args.includes("--verbose") },
-				),
+				) + formatTipsText(tips),
 			);
 		}
 		return 1;
@@ -367,13 +386,24 @@ function assemblePositionals(
 	} else {
 		targetInput = positional[0];
 		const rawVerb = positional[1];
-		if (!targetInput || !rawVerb) {
+		// A missing target gets the tagged missing-target error (CDB picker tip);
+		// a present target with no verb is a distinct "which verb?" usage error.
+		if (!targetInput) {
+			throw missingTargetError({
+				command: "transfer",
+				summary:
+					"`centrs transfer` requires a <router> target and a verb (upload|download|list|remove|mkdir|copy).",
+				remediation:
+					"Pass the target then a verb, e.g. `centrs transfer <router> list`; run `--help` for the full shape.",
+			});
+		}
+		if (!rawVerb) {
 			throw new CentrsError({
 				code: "input/invalid-command",
 				summary:
-					"`centrs transfer` requires <router> and a verb (upload|download|list|remove|mkdir|copy).",
+					"`centrs transfer` requires a verb after the <router> (upload|download|list|remove|mkdir|copy).",
 				remediation:
-					"Pass the target then a verb, e.g. `centrs transfer <router> list`; run `--help` for the full shape.",
+					"Pass a verb, e.g. `centrs transfer <router> list`; run `--help` for the full shape.",
 				context: { targetInput, verb: rawVerb },
 			});
 		}
@@ -382,8 +412,8 @@ function assemblePositionals(
 	}
 
 	if (!targetInput) {
-		throw new CentrsError({
-			code: "input/invalid-command",
+		throw missingTargetError({
+			command: "transfer",
 			summary: "`centrs transfer` requires a <router> target.",
 			remediation:
 				"Pass the router host/identity as the first argument; run `centrs transfer --help` for the command shape.",

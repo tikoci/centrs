@@ -22,6 +22,14 @@ import {
 	expectValue,
 	renderCommandHelp,
 } from "./common.ts";
+import {
+	buildTargetSelectionTips,
+	cdbInputsFromArgs,
+	formatTipsText,
+	isMissingTargetError,
+	missingTargetError,
+	withTips,
+} from "./missing-target.ts";
 
 export const retrieveCommand: CliCommandMetadata = {
 	name: "retrieve",
@@ -171,6 +179,14 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 		return 0;
 	} catch (error) {
 		const format = inferRequestedFormat(args, request);
+		const fromArgs = cdbInputsFromArgs(args);
+		const tips = isMissingTargetError(error)
+			? await buildTargetSelectionTips({
+					cdbFile: request?.cdbFile ?? fromArgs.cdbFile,
+					cdbPassword: request?.cdbPassword ?? fromArgs.cdbPassword,
+					env: Bun.env,
+				})
+			: [];
 		if (format === "json" || format === "yaml") {
 			if (request?.group) {
 				const envelope = buildRetrieveFanoutErrorEnvelope(request, error);
@@ -180,9 +196,12 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 					}),
 				);
 			} else {
-				const envelope = buildRetrieveErrorEnvelope(
-					request ?? fallbackRequestFromArgs(args),
-					error,
+				const envelope = withTips(
+					buildRetrieveErrorEnvelope(
+						request ?? fallbackRequestFromArgs(args),
+						error,
+					),
+					tips,
 				);
 				console.error(
 					renderRetrieveEnvelope(envelope, format, {
@@ -202,7 +221,7 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 					{
 						verbose: request?.verbose ?? args.includes("--verbose"),
 					},
-				),
+				) + formatTipsText(tips),
 			);
 		}
 		return 1;
@@ -341,9 +360,17 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveRequest & {
 		return request;
 	}
 
+	if (positional.length === 0) {
+		throw missingTargetError({
+			command: "retrieve",
+			summary: "`centrs retrieve` requires a <target> and a <routeros-path>.",
+			remediation:
+				"Pass the router host/identity then the RouterOS path, e.g. `centrs retrieve 192.0.2.10 /system/resource`.",
+		});
+	}
 	if (positional.length < 2) {
 		throw new Error(
-			"`centrs retrieve` requires both <target> and <routeros-path>.",
+			"`centrs retrieve` requires a <routeros-path> after the <target>.",
 		);
 	}
 

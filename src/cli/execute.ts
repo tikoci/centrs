@@ -13,6 +13,14 @@ import {
 	expectValue,
 	renderCommandHelp,
 } from "./common.ts";
+import {
+	buildTargetSelectionTips,
+	cdbInputsFromArgs,
+	formatTipsText,
+	isMissingTargetError,
+	missingTargetError,
+	withTips,
+} from "./missing-target.ts";
 
 export const executeCommand: CliCommandMetadata = {
 	name: "execute",
@@ -241,6 +249,18 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 			console.log(renderCommandHelp(describeCentrs(), executeCommand));
 			return 0;
 		}
+		// No positional at all: lead with the missing-target guidance (CDB picker /
+		// discover) rather than the missing-command error — there is nothing to run
+		// without a device. A lone positional is treated as the target, so the
+		// "requires a command" path still fires for `execute <target>`.
+		if (!parsed.targetInput) {
+			throw missingTargetError({
+				command: "execute",
+				summary: "`centrs execute` requires a <target> and a RouterOS command.",
+				remediation:
+					'Pass the router host/identity then the command, e.g. `centrs execute 192.0.2.10 "/system/resource/print"`.',
+			});
+		}
 
 		const envelope = await executeEnvelope(parsed);
 		const resolvedFormat =
@@ -264,10 +284,18 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 		// Parse/usage errors land here too: surface them through the same typed
 		// envelope as every other runner (no raw message, no exit code 2).
 		const format = inferExecuteFormat(args, parsed);
+		const fromArgs = cdbInputsFromArgs(args);
+		const tips = isMissingTargetError(error)
+			? await buildTargetSelectionTips({
+					cdbFile: parsed?.cdbFile ?? fromArgs.cdbFile,
+					cdbPassword: parsed?.cdbPassword ?? fromArgs.cdbPassword,
+					env: Bun.env,
+				})
+			: [];
 		if (format === "json" || format === "yaml") {
-			const envelope = buildExecuteErrorEnvelope(
-				parsed ?? { command: "" },
-				error,
+			const envelope = withTips(
+				buildExecuteErrorEnvelope(parsed ?? { command: "" }, error),
+				tips,
 			);
 			console.error(
 				renderExecuteEnvelope(envelope, format, {
@@ -284,7 +312,7 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 							"Use `centrs execute --help` to inspect the supported command shape and flags.",
 					}),
 					{ verbose: parsed?.verbose ?? args.includes("--verbose") },
-				),
+				) + formatTipsText(tips),
 			);
 		}
 		return 1;

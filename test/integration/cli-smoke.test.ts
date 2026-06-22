@@ -159,17 +159,48 @@ describe("CLI smoke (real subprocess, no network)", () => {
 	});
 
 	test("--user and -u are accepted aliases for --username (JG-23)", async () => {
-		// With no command, the alias must be *parsed* (consuming "admin") so we reach
-		// the missing-command check — not rejected as an unknown flag.
-		for (const alias of ["--user", "-u"]) {
+		// A temp HOME keeps the default CDB empty, so the missing-target tip is
+		// deterministic and no real inventory leaks into the assertion. With neither
+		// a target nor a command, `execute` leads with the missing-target error — but
+		// the alias still has to be *parsed* (consuming "admin") to get there;
+		// otherwise "admin" is read as the target and we'd hit the missing-command
+		// error instead. So the missing-target code path itself proves the alias.
+		const home = await mkdtemp(join(tmpdir(), "centrs-smoke-home-"));
+		try {
+			for (const alias of ["--user", "-u"]) {
+				const res = await runCliProcess({
+					args: ["execute", alias, "admin", "--json"],
+					env: { HOME: home },
+				});
+				expect(res.exitCode).toBe(1);
+				const envelope = parseEnvelope(res.stderrText);
+				expect(envelope.ok).toBe(false);
+				expect(envelope.error?.code).toBe("input/invalid-command");
+				expect(res.stderrText).toContain("requires a <target>");
+				expect(res.stderrText).not.toContain("requires a RouterOS command");
+				expect(res.stderrText).toContain("tip/no-devices");
+			}
+		} finally {
+			await rm(home, { recursive: true, force: true });
+		}
+	});
+
+	test("a missing <router> tips toward discover/devices (terminal, JG-?)", async () => {
+		// Empty HOME ⇒ empty registry ⇒ the tip points at `discover --save`. This is
+		// the text path, so it exercises the `Tips:` footer the error renderer adds.
+		const home = await mkdtemp(join(tmpdir(), "centrs-smoke-home-"));
+		try {
 			const res = await runCliProcess({
-				args: ["execute", alias, "admin", "--json"],
+				args: ["terminal"],
+				env: { HOME: home },
 			});
 			expect(res.exitCode).toBe(1);
-			const envelope = parseEnvelope(res.stderrText);
-			expect(envelope.ok).toBe(false);
-			expect(envelope.error?.code).toBe("input/invalid-command");
-			expect(res.stderrText).toContain("requires a RouterOS command");
+			expect(res.stderrText).toContain("requires a <router>");
+			expect(res.stderrText).toContain("Tips:");
+			expect(res.stderrText).toContain("tip/no-devices");
+			expect(res.stderrText).toContain("centrs discover --save");
+		} finally {
+			await rm(home, { recursive: true, force: true });
 		}
 	});
 });

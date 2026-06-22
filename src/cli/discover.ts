@@ -6,10 +6,12 @@
  */
 
 import {
+	DISCOVER_DEFAULT_TIMEOUT_MS,
 	type DiscoverOptions,
 	type DiscoverOutputFormat,
 	discover,
 	discoverOutputFormats,
+	MNDP_PORT,
 	renderDiscoverEnvelope,
 } from "../discover.ts";
 import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
@@ -142,6 +144,25 @@ function parseDiscoverCliArgs(args: readonly string[]): DiscoverCliArgs {
 	return parsed;
 }
 
+/**
+ * A 15s passive listen looks like a hang on an interactive terminal, so print a
+ * one-line progress note to **stderr** when attached to a TTY. stderr is the
+ * sanctioned channel for discover scan progress (`docs/CONSTITUTION.md` → Result
+ * envelope) and is skipped when piped, so it never pollutes the `--format
+ * json|yaml` envelope on stdout.
+ */
+function emitDiscoverProgress(options: DiscoverOptions): void {
+	if (!process.stderr.isTTY) {
+		return;
+	}
+	const windowMs = options.timeoutMs ?? DISCOVER_DEFAULT_TIMEOUT_MS;
+	const port = options.port ?? MNDP_PORT;
+	const hint = options.save ? "" : " (add --save to populate the CDB)";
+	process.stderr.write(
+		`Listening for MNDP neighbors for ${Math.round(windowMs / 1000)}s on UDP ${port}…${hint}\n`,
+	);
+}
+
 export async function runDiscoverCli(args: readonly string[]): Promise<number> {
 	let parsed: DiscoverCliArgs | undefined;
 	try {
@@ -160,6 +181,7 @@ export async function runDiscoverCli(args: readonly string[]): Promise<number> {
 			cdbPassword: parsed.cdbPassword,
 			env: Bun.env,
 		};
+		emitDiscoverProgress(options);
 		const envelope = await discover(options);
 		const format = parsed.format ?? "text";
 		const rendered = renderDiscoverEnvelope(envelope, format);

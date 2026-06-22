@@ -63,9 +63,11 @@ centrs discover --save --cdb-file $CDB
 ```
 
 New neighbors are added through the `devices` atomic write path with
-`group=discovered`. Each saved comment contains the `source=mndp` kv token and
-free-form provenance (`identity:`, `board:`, `version:`, `mac:`, …).
-`meta.operation.saved` reports `{ group, added, skipped, records }`.
+`group=discovered`. Each saved comment carries the `source=mndp` kv token, the
+`identity=`/`mac=` **lookup keys** (so the device resolves by its advertised
+identity, IP, or MAC), and a free-form parenthesized detail (`board:`,
+`version:`, `interface:`, `software-id:`). `meta.operation.saved` reports
+`{ group, added, skipped, records }`.
 
 ### 5. Save with a custom group
 
@@ -81,8 +83,11 @@ New entries get `group=lab` instead of `discovered`.
 centrs discover --save --cdb-file $CDB
 ```
 
-A neighbor whose target (IPv4, else MAC) already names a CDB entry is skipped,
-never overwritten. The skip is reported in
+A neighbor whose **MAC** already names a CDB entry — as a `macTarget` record's
+target or a `mac=` lookup key on any record (and likewise any record sharing the
+neighbor's IP target) — is skipped, never overwritten. MAC is the de-dupe key
+because it is globally unique and always advertised; `identity` is not, since
+factory-default devices all report `MikroTik`. The skip is reported in
 `meta.operation.saved.records[].action = "skipped-existing"`; hand-curated
 records win.
 

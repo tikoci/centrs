@@ -168,6 +168,11 @@ describeFast("discover over MNDP against CHR (socket-connect L2)", () => {
 			expect(shown.data.entry.group).toBe("discovered");
 			const kv = parseCommentKv(shown.data.entry.comment);
 			expect(kv.values.source).toBe("mndp");
+			// The advertised identity is written as a resolvable lookup key, so the
+			// saved device answers to `centrs <verb> <identity>` too.
+			expect(kv.lookups.identity).toBe(match.identity);
+			const byIdentity = showDevice({ cdb, target: match.identity ?? "" });
+			expect(byIdentity.ok).toBe(true);
 
 			await recordIntegrationEvidence({
 				suite: "discover over MNDP against CHR (socket-connect L2)",
