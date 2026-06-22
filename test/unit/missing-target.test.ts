@@ -52,6 +52,18 @@ describe("cdbFileFromArgs", () => {
 		).toBe("/a.cdb");
 		expect(cdbFileFromArgs(["--cdb-file"])).toBeUndefined();
 		expect(cdbFileFromArgs(["--cdb-password", "pw"])).toBeUndefined();
+		expect(
+			cdbFileFromArgs([
+				"--cdb-file",
+				"/first.cdb",
+				"--cdb-file",
+				"/second.cdb",
+			]),
+		).toBe("/first.cdb");
+		expect(cdbFileFromArgs(["x", "--cdb-file"])).toBeUndefined();
+		expect(
+			cdbFileFromArgs(["--cdb-file", "--cdb-password", "pw", "--cdb-file", "/a.cdb"]),
+		).toBe("--cdb-password");
 	});
 });
 
