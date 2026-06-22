@@ -251,6 +251,33 @@ jobs:
           path: ${{ runner.temp }}/qa-results.sqlite
           if-no-files-found: warn
 
+  # Cross-platform unit tests (macOS + Windows). Runs in parallel with chr-matrix
+  # because it needs no CHR; results are informational for Windows (continue-on-error)
+  # and gating for macOS. Moved here from ci.yaml to keep CI fast on PRs — pushes to
+  # main catch escapes via this job. Does not feed into accumulate-and-gate (CHR gate
+  # only); a macOS failure reds the QA run directly via the job's own outcome.
+  cross-platform-unit:
+    name: Unit tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # Windows is informational until centrs is verified Windows-clean: it runs for
+    # signal (the ssh `/dev/null` vs `NUL` sink, path handling) but never gates.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Setup Bun 1.3.13
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Unit tests
+        run: bun test test/unit/
+
   # Cross-run accumulation + the must-pass gate (the harder half of JG-18). Runs
   # once after the matrix: pulls every per-leg result, appends them to a durable
   # append-log on the `qa-history` branch (artifact retention is finite, and the

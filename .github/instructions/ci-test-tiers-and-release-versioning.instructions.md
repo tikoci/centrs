@@ -46,9 +46,10 @@ The policy above maps to five workflows (quickchr's `ci`/`publish`/`verify-exten
 scheme as the reference):
 
 - **Push/PR gate** → `ci.yaml`: lint ‖ unit+coverage → **stable CHR smoke**
-  (`test/integration/chr-smoke.test.ts`, single boot) → cross-platform unit
-  (macOS gates; Windows informational). Coverage + failing tests surface to the
-  job summary + artifacts; coverage floor is a non-blocking annotation.
+  (`test/integration/chr-smoke.test.ts`, single boot). Coverage + failing tests
+  surface to the job summary + artifacts; coverage floor is a non-blocking
+  annotation. Cross-platform unit (macOS + Windows) runs in `qa.yaml` on push to
+  main, not here — keeping PR runs fast.
 - **Definitive channel matrix** → `qa.yaml`: push[main] + weekly + dispatch +
   `workflow_call`. The active set is **recency-aware**, resolved per run by the
   `resolve-matrix` pre-flight job via quickchr (`resolveAllVersions` /
@@ -75,9 +76,10 @@ scheme as the reference):
   Windows-x86 (TCG, informational). A `packages` input installs extra RouterOS
   packages into the CHR (e.g. `container`) for a fuller-RouterOS run.
 
-Deviations from the strict tiers, by design: cross-platform **unit** runs on the
-gate (not a separate pre-release trigger); macOS/Windows **integration** is the
-dispatch-only `verify-extended` sweep. `startIntegrationChr` now takes arch +
+Deviations from the strict tiers, by design: cross-platform **unit** runs in
+`qa.yaml` on push to main (not on every PR, and not a separate pre-release
+trigger — QA catches escapes before they compound); macOS/Windows
+**integration** is the dispatch-only `verify-extended` sweep. `startIntegrationChr` now takes arch +
 packages from quickchr (`CENTRS_CHR_ARCH`, `CENTRS_CHR_PACKAGES`), so the
 centrs side is ready; what stays deferred is the **arm64 job** — quickchr 0.4.2
 has an arm64 REST-POST bug (returns the prior GET's body; quickchr BACKLOG P3)

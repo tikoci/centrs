@@ -3,6 +3,8 @@
 default: true
 MD001: false   # heading increment — enforce elsewhere
 MD013: false   # line length — prose is readable at any width
+MD024:         # duplicate headings — siblings_only allows same name under different parents (changelog)
+  siblings_only: true
 MD033:         # inline HTML — allow semantic elements GitHub renders
   allowed_elements:
     - kbd
