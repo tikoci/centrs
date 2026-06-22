@@ -112,8 +112,27 @@ documenting cross-cutting shifts that affect contributors and consumers.
   `macTarget`/`group=discovered` record. The `socket-connect` approach was first
   proven against quickchr's own `examples/mndp/` guinea-pig run. The same bridge
   (frame-injection write-back) is the L2 harness mac-telnet will reuse.
+- **Integration CHR can now boot a chosen arch + extra packages.**
+  `startIntegrationChr` reads `CENTRS_CHR_ARCH` (`arm64`/`x86`) and
+  `CENTRS_CHR_PACKAGES` (comma/space list) and threads them through quickchr
+  0.4.2's `StartOptions`; `verify-extended.yaml` gains a `packages` input that
+  installs them into the CHR (e.g. `container`) for a fuller-RouterOS sweep. The
+  arm64 path is wired on the centrs side but no arm64 job is added yet: quickchr
+  0.4.2 has an arm64 REST-POST bug (returns the prior GET's body) that breaks the
+  execute path every integration test uses, so an arm64 job would be known-red
+  until that upstream fix lands.
 
 ### Fixed
+
+- **`windows-latest` unit tier is green.** It was perpetually red on two causes,
+  now both addressed without losing coverage: (1) Windows has no `SO_REUSEPORT`,
+  so the MNDP/btest UDP loopback binds (`reusePort: true`) threw `ENOTSUP` — a
+  capability probe (`test/unit/udp-loopback.ts`) now skips just those UDP tests on
+  such a runner (TCP + CHR integration keep the coverage), gating only on the
+  known-unsupported bind codes so real regressions still surface; (2) the
+  `ssh`/`sftp` argv tests asserted `/dev/null` where the src correctly emits `NUL`
+  on Windows, and `transfer.basename()` split on `/` only so an omitted upload
+  remote defaulted to the full `C:\…` path — it now splits on `\` too.
 
 - **`btest` bidirectional TCP server tx is now accounted.** A `direction=both`
   TCP session reported `totalTxBytes=0` / `txAvgBps=0` on the server side even

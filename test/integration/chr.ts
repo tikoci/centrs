@@ -3,6 +3,16 @@ import { appendFile } from "node:fs/promises";
 type Channel = "stable" | "long-term" | "testing" | "development";
 
 /**
+ * Guest architecture quickchr can boot (subset of its `Arch`). Default is the
+ * host arch; `CENTRS_CHR_ARCH=arm64` forces an aarch64 CHR. NOTE: as of quickchr
+ * 0.4.2 an arm64 CHR has a REST-POST bug (a `restPost` to `/rest/execute` returns
+ * the prior `restGet`'s body — quickchr BACKLOG, P3), which breaks centrs's
+ * execute path, so no arm64 integration job is wired yet — the plumbing here just
+ * makes centrs ready for the day that lands. x86 is the validated path.
+ */
+type Arch = "arm64" | "x86";
+
+/**
  * A quickchr network specifier (subset). `"user"` is the SLIRP management NIC;
  * `socket-connect` is the loopback L2 netdev whose every guest Ethernet frame
  * QEMU streams to a host TCP server — the path the MNDP/L2 integration tests use.
@@ -51,6 +61,14 @@ interface ChrInstance {
 interface StartOptions {
 	version?: string;
 	channel?: Channel;
+	/** Guest architecture. Omitted = host arch (x86 on the maintainer's Intel Mac). */
+	arch?: Arch;
+	/**
+	 * Extra RouterOS packages to install after boot (quickchr provisioning, e.g.
+	 * `["container"]`). Lets the release/extended sweep validate centrs against a
+	 * fuller RouterOS than the bare CHR image.
+	 */
+	packages?: string[];
 	/** Override the generated machine name (L2 tests want a stable, unique name). */
 	name?: string;
 	/**
@@ -148,6 +166,24 @@ function asChannel(value: string | undefined): Channel {
 	return "stable";
 }
 
+const routerOsArches = ["arm64", "x86"] as const satisfies readonly Arch[];
+
+/** `CENTRS_CHR_ARCH` → a known arch, or undefined to let quickchr pick the host arch. */
+export function asArch(value: string | undefined): Arch | undefined {
+	return routerOsArches.find((arch) => arch === value?.trim());
+}
+
+/** `CENTRS_CHR_PACKAGES` (comma/whitespace-separated) → a clean package list. */
+export function parsePackages(value: string | undefined): string[] {
+	if (!value) {
+		return [];
+	}
+	return value
+		.split(/[\s,]+/)
+		.map((pkg) => pkg.trim())
+		.filter(Boolean);
+}
+
 export function splitQuickChrAuth(raw: string): {
 	username: string;
 	password: string;
@@ -171,6 +207,8 @@ export interface StartedChr {
 	env: Record<string, string>;
 	requestedChannel?: Channel;
 	requestedVersion?: string;
+	/** The arch quickchr was asked to boot, when `CENTRS_CHR_ARCH` pinned one. */
+	requestedArch?: Arch;
 }
 
 export async function startIntegrationChr(
@@ -178,10 +216,17 @@ export async function startIntegrationChr(
 ): Promise<StartedChr> {
 	const requestedVersion = readEnv(Bun.env, "CENTRS_CHR_VERSION")?.trim();
 	const requestedChannel = asChannel(readEnv(Bun.env, "CENTRS_CHR_CHANNEL"));
+	const requestedArch = asArch(readEnv(Bun.env, "CENTRS_CHR_ARCH"));
+	const requestedPackages = parsePackages(
+		readEnv(Bun.env, "CENTRS_CHR_PACKAGES"),
+	);
 	const options: StartOptions = {
 		...(requestedVersion
 			? { version: requestedVersion }
 			: { channel: requestedChannel }),
+		// Env supplies defaults; an explicit `extra` (a test's own boot options) wins.
+		...(requestedArch ? { arch: requestedArch } : {}),
+		...(requestedPackages.length > 0 ? { packages: requestedPackages } : {}),
 		...extra,
 	};
 	const moduleName = "@tikoci/quickchr";
@@ -198,6 +243,9 @@ export async function startIntegrationChr(
 		env,
 		requestedChannel: requestedVersion ? undefined : requestedChannel,
 		requestedVersion: requestedVersion || undefined,
+		// Env-derived, like requestedChannel/requestedVersion — reflects the
+		// CENTRS_CHR_ARCH pin, not an `extra` boot-option override.
+		requestedArch,
 	};
 }
 

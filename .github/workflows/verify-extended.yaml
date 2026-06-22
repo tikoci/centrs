@@ -5,16 +5,25 @@ run-name: Verify Extended • ${{ github.event_name }}
 # x86 CHR smoke) and qa.yaml (Linux x86 channel matrix) don't cover. Dispatch-only;
 # each platform input maps 1:1 to a job, all independent and parallel.
 #
-# Scope note: centrs's startIntegrationChr boots an *x86* CHR, so x86-CHR only gets
-# hardware acceleration on an x86 host. That makes macos-x86 (Intel, HVF — the
-# maintainer's own platform) the primary extended target; windows-x86 is TCG and
-# informational. arm64 hosts (linux-arm64, macos-arm64) would run x86 CHR under
-# slow TCG, so they're deferred until quickchr's arm64 CHR is wired into
-# startIntegrationChr (a test-harness change, not a workflow one).
+# Scope note: by default startIntegrationChr boots an *x86* CHR, so x86-CHR only
+# gets hardware acceleration on an x86 host. That makes macos-x86 (Intel, HVF —
+# the maintainer's own platform) the primary extended target; windows-x86 is TCG
+# and informational.
+#
+# arm64: startIntegrationChr can now boot an aarch64 CHR (`CENTRS_CHR_ARCH=arm64`,
+# wired in chr.ts), but no arm64 job is added yet — quickchr 0.4.2 has an arm64
+# REST-POST bug (a `restPost` to /rest/execute returns the prior `restGet`'s body;
+# quickchr BACKLOG P3) that breaks centrs's execute path, which every integration
+# test exercises. So an arm64 job would be known-red. It gets wired once that
+# upstream bug is fixed (tikoci/quickchr); the centrs side is already ready.
 #
 # test-filter picks integration files (comma-separated, e.g.
 # "chr-smoke.test.ts,rest-retrieve.test.ts"); each file boots its own CHR, so a
 # narrow filter is much faster. Default = the single-boot smoke. Empty = all.
+#
+# packages installs extra RouterOS packages into the CHR before the tests run
+# (comma/space-separated, e.g. "container") — exercises centrs against a fuller
+# RouterOS than the bare image. Empty = bare CHR.
 
 on:
   workflow_dispatch:
@@ -31,6 +40,10 @@ on:
         description: "Comma-separated integration file names. Default = chr-smoke; empty = all."
         type: string
         default: "chr-smoke.test.ts"
+      packages:
+        description: "Extra RouterOS packages to install in the CHR (comma/space-separated, e.g. \"container\"). Empty = bare CHR."
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -80,6 +93,7 @@ jobs:
         id: run
         env:
           FILES: ${{ steps.files.outputs.list }}
+          CENTRS_CHR_PACKAGES: ${{ inputs.packages }}
         run: |
           set -eo pipefail
           echo "::group::Integration output"
@@ -168,6 +182,7 @@ jobs:
       - name: Run integration (per-file, x86 CHR via TCG)
         env:
           FILES: ${{ steps.files.outputs.list }}
+          CENTRS_CHR_PACKAGES: ${{ inputs.packages }}
         run: |
           set -eo pipefail
           echo "::group::Integration output"
