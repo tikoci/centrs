@@ -186,12 +186,19 @@ The wire codec, the EC-SRP5 session/handshake (shared core byte-identical with
 mac-telnet's MTWEI, plus the net-new server role), the TCP/UDP data engines, the
 orchestrator + CLI, and the honest grounding caveat (the server gets direct CHR
 evidence over the QEMU SLIRP gateway `10.0.2.2`; the client gets direct CHR
-evidence over a host→guest `tcp:2000` forward — TCP only; UDP-receive is a soft
-smoke test and UDP client→CHR-server stays loopback/transitive over the SLIRP
-reverse path; TCP `connection-count > 1` fan-out is deferred; NDJSON is not
-adopted) are documented in `commands/btest/README.md` and the
-`src/protocols/btest.ts`, `src/protocols/btest-session.ts`, and
-`src/protocols/ec-srp5.ts` module headers.
+evidence over a host→guest `tcp:2000` forward — TCP only; UDP-receive was
+previously a soft smoke test because the SLIRP reverse path blocks real
+validation and a `connect()` socket filter was silently dropping all received
+datagrams — RouterOS sends UDP data **from a different source port** than the
+negotiated `serverUdpPort`, so the BSD receive filter rejected every packet;
+fixed by removing `connect()` and addressing sends explicitly, validated against
+a real RouterOS device at 163–203 Mbps receive and 104 Mbps bidirectional; CI
+still validates TCP only since SLIRP blocks the UDP reverse path (#88); TCP
+`connection-count > 1` is parsed-but-unwired (#84) and the parallel-stream
+fan-out is deferred (#87); the Windows unit tier skips UDP-loopback tests (#69);
+NDJSON is not adopted) are
+documented in `commands/btest/README.md` and the `src/protocols/btest.ts`,
+`src/protocols/btest-session.ts`, and `src/protocols/ec-srp5.ts` module headers.
 
 ## Priority order
 

@@ -228,6 +228,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"The btest server refused a client because max-sessions is reached.",
 	},
 	{
+		code: "routeros/btest-udp-tx-size-ignored",
+		summary:
+			"For UDP --direction both, the btest wire protocol carries a single tx-size; --remote-udp-tx-size is ignored and --local-udp-tx-size is used for both directions.",
+	},
+	{
 		code: "routeros/command-failed",
 		summary: "RouterOS reported a command failure.",
 	},
