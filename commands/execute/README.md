@@ -52,6 +52,12 @@ Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
   else passes its `detail`/body plus the HTTP status through
   `mapRouterOsError({ transport: "rest-api", httpStatus })`. There is no longer
   a hand-rolled `routeros/*` table on the REST side.
+- **Run-time fault mapping — later (JG-28).** `mapRouterOsError`'s table covers
+  the faults seen so far; a known gap is errors that *pass* `:parse`/validation
+  but fail at **run time** (a syntactically valid command the router rejects when
+  executed). `tikoci/vscode-tikbook` has an error-string mapping for these worth
+  porting into `src/core/routeros-errors.ts`. Background research, not yet
+  scheduled — captured here so it isn't lost (no GitHub issue by design).
 - Output is *string*-shaped for script-mode; richer parsing is a future
   concern. The envelope must still distinguish RouterOS errors from successful
   runs (a 200 with a RouterOS error string is still an error — see
