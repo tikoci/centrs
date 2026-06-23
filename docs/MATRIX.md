@@ -193,8 +193,10 @@ datagrams — RouterOS sends UDP data **from a different source port** than the
 negotiated `serverUdpPort`, so the BSD receive filter rejected every packet;
 fixed by removing `connect()` and addressing sends explicitly, validated against
 a real RouterOS device at 163–203 Mbps receive and 104 Mbps bidirectional; CI
-still validates TCP only since SLIRP blocks the UDP reverse path; TCP
-`connection-count > 1` fan-out is deferred (#84); NDJSON is not adopted) are
+still validates TCP only since SLIRP blocks the UDP reverse path (#88); TCP
+`connection-count > 1` is parsed-but-unwired (#84) and the parallel-stream
+fan-out is deferred (#87); the Windows unit tier skips UDP-loopback tests (#69);
+NDJSON is not adopted) are
 documented in `commands/btest/README.md` and the `src/protocols/btest.ts`,
 `src/protocols/btest-session.ts`, and `src/protocols/ec-srp5.ts` module headers.
 

@@ -92,6 +92,63 @@ describe("btest option-grammar validation (no socket opened)", () => {
 		expect(env.error.context?.["option"]).toBe("remote-udp-tx-size");
 	});
 
+	test("UDP both with differing tx-sizes warns that remote is ignored", async () => {
+		const env = await btestClient({
+			host: "192.0.2.10",
+			protocol: "udp",
+			direction: "both",
+			localUdpTxSize: 1000,
+			remoteUdpTxSize: 1400,
+			env: {},
+			// Inject a no-op session so no socket is opened; we only assert the warning.
+			runSession: async () => ({
+				protocol: "udp",
+				direction: "both",
+				authKind: "none",
+				totalTxBytes: 0,
+				totalRxBytes: 0,
+				totalLostPackets: 0,
+				intervals: 0,
+				durationMs: 0,
+				stopReason: "duration-elapsed",
+			}),
+		});
+		expect(env.ok).toBe(true);
+		if (!env.ok) return;
+		const warning = env.warnings.find(
+			(w) => w.code === "routeros/btest-udp-tx-size-ignored",
+		);
+		expect(warning).toBeDefined();
+		expect(warning?.context).toMatchObject({ ignored: 1400, used: 1000 });
+	});
+
+	test("UDP both with matching tx-sizes does not warn", async () => {
+		const env = await btestClient({
+			host: "192.0.2.10",
+			protocol: "udp",
+			direction: "both",
+			localUdpTxSize: 1000,
+			remoteUdpTxSize: 1000,
+			env: {},
+			runSession: async () => ({
+				protocol: "udp",
+				direction: "both",
+				authKind: "none",
+				totalTxBytes: 0,
+				totalRxBytes: 0,
+				totalLostPackets: 0,
+				intervals: 0,
+				durationMs: 0,
+				stopReason: "duration-elapsed",
+			}),
+		});
+		expect(env.ok).toBe(true);
+		if (!env.ok) return;
+		expect(
+			env.warnings.some((w) => w.code === "routeros/btest-udp-tx-size-ignored"),
+		).toBe(false);
+	});
+
 	test("server max-sessions out of range is rejected", async () => {
 		const env = await btestServer({ maxSessions: 5000, env: {} });
 		expect(env.ok).toBe(false);

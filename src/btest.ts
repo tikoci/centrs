@@ -215,7 +215,11 @@ export async function btestClient(
 		controlPort,
 	};
 
-	const warnings: { code: string; message: string }[] = [];
+	const warnings: {
+		code: string;
+		message: string;
+		context?: Record<string, unknown>;
+	}[] = [];
 
 	try {
 		validateClientOptions(request);
@@ -233,8 +237,12 @@ export async function btestClient(
 			request.remoteUdpTxSize !== request.localUdpTxSize
 		) {
 			warnings.push({
-				code: "validation/option",
+				code: "routeros/btest-udp-tx-size-ignored",
 				message: `--remote-udp-tx-size (${request.remoteUdpTxSize}) is ignored for --direction both; the btest wire protocol carries a single tx-size and --local-udp-tx-size (${request.localUdpTxSize}) is used for both directions.`,
+				context: {
+					ignored: request.remoteUdpTxSize,
+					used: request.localUdpTxSize,
+				},
 			});
 		}
 

@@ -1222,24 +1222,38 @@ export async function runBtestClientSession(
 	counters.txSpeed = options.localTxSpeed ?? 0;
 	const dirs = clientDirections(negotiated.command);
 
+	// Reuse the IP node already resolved for the TCP control connection as the UDP
+	// peer address. The client now addresses every datagram explicitly (no
+	// connect()), so passing a hostname here would make node:dgram run a DNS
+	// lookup per send on the UDP hot path; channel.remoteAddress is already an IP.
+	const udpPeerHost = channel.remoteAddress ?? options.host;
+
 	let udp: BtestUdpSocket | undefined;
 	if (options.protocol === "udp") {
 		udp = (options.createUdpSocket ?? createBtestUdpSocket)();
-		await udp.bind(negotiated.clientUdpPort as number, "0.0.0.0");
-		// Do NOT connect() the socket: connect() installs a kernel receive filter
-		// that silently drops datagrams whose source port differs from the connected
-		// peer. RouterOS may send UDP data from a different source port than the
-		// negotiated serverUdpPort (separate TX socket), so the filter would discard
-		// all incoming packets and leave rx at 0 bps throughout. Instead, keep the
-		// socket unconnected (like the server side) and always address sends
-		// explicitly via udpTxLoop's target argument.
-		if (options.natMode || dirs.shouldRx) {
-			// Originate a flow so the server's datagrams can return (NAT/SLIRP).
-			udp.send(
-				new Uint8Array(0),
-				negotiated.serverUdpPort as number,
-				options.host,
-			);
+		try {
+			await udp.bind(negotiated.clientUdpPort as number, "0.0.0.0");
+			// Do NOT connect() the socket: connect() installs a kernel receive filter
+			// that silently drops datagrams whose source port differs from the connected
+			// peer. RouterOS may send UDP data from a different source port than the
+			// negotiated serverUdpPort (separate TX socket), so the filter would discard
+			// all incoming packets and leave rx at 0 bps throughout. Instead, keep the
+			// socket unconnected (like the server side) and always address sends
+			// explicitly via udpTxLoop's target argument.
+			if (options.natMode || dirs.shouldRx) {
+				// Originate a flow so the server's datagrams can return (NAT/SLIRP).
+				udp.send(
+					new Uint8Array(0),
+					negotiated.serverUdpPort as number,
+					udpPeerHost,
+				);
+			}
+		} catch (error) {
+			// bind()/send() can throw before the normal close path runs; release the
+			// socket and the control channel so a UDP bootstrap failure leaks neither.
+			udp.close();
+			channel.close();
+			throw error;
 		}
 	}
 
@@ -1258,7 +1272,7 @@ export async function runBtestClientSession(
 		...(negotiated.serverUdpPort !== undefined
 			? { serverUdpPort: negotiated.serverUdpPort }
 			: {}),
-		udpPeerHost: options.host,
+		udpPeerHost,
 		...(options.onInterval ? { onInterval: options.onInterval } : {}),
 	};
 
@@ -1445,16 +1459,14 @@ async function driveSession(
 		// socket accepts datagrams from any source, avoiding the BSD receive filter
 		// that connect() installs and that silently drops packets when RouterOS
 		// sends from an unexpected source port.
-		const target =
-			role === "server" &&
-			ctx.clientUdpPort !== undefined &&
-			ctx.udpPeerHost !== undefined
-				? { port: ctx.clientUdpPort, host: ctx.udpPeerHost }
-				: role === "client" &&
-						ctx.serverUdpPort !== undefined &&
-						ctx.udpPeerHost !== undefined
-					? { port: ctx.serverUdpPort, host: ctx.udpPeerHost }
-					: undefined;
+		let target: { port: number; host: string } | undefined;
+		if (ctx.udpPeerHost !== undefined) {
+			if (role === "server" && ctx.clientUdpPort !== undefined) {
+				target = { port: ctx.clientUdpPort, host: ctx.udpPeerHost };
+			} else if (role === "client" && ctx.serverUdpPort !== undefined) {
+				target = { port: ctx.serverUdpPort, host: ctx.udpPeerHost };
+			}
+		}
 		if (dirs.shouldTx) tasks.push(udpTxLoop(ctx, target));
 		if (dirs.shouldRx) tasks.push(udpRxLoop(ctx));
 		tasks.push(udpStatusExchange(ctx, dirs));
