@@ -258,7 +258,7 @@ export async function btestClient(
 		) {
 			warnings.push({
 				code: "routeros/btest-connection-count-single-stream",
-				message: `--connection-count (${request.connectionCount}) is sent to the server, but centrs still drives a single TCP data stream; multi-stream fan-out is not yet active (#87), so aggregate throughput will not scale with the count.`,
+				message: `--connection-count (${request.connectionCount}) is sent to the server, but centrs still drives a single TCP data stream; multi-stream fan-out is not yet implemented, so throughput will not scale with the count. Run several clients in parallel to approximate parallel streams.`,
 				context: { requested: request.connectionCount, active: 1 },
 			});
 		}
