@@ -24,8 +24,9 @@ matrix's honest grounding split (`docs/MATRIX.md`, "Peer measurement (`btest`)")
   (`test/integration/btest-client.test.ts`, CHR 7.23.1). This is what makes the
   **client** cell `CHR-passed`: centrs's EC-SRP5 **client proof** is verified by
   RouterOS's own server verifier. Example **11** (TCP **multi-connection**
-  fan-out) and a TCP `direction=both` #85 regression guard are gated in the same
-  suite. TCP only — UDP client→server stays loopback (README, Open questions).
+  fan-out), a TCP `direction=both` #85 regression guard, and **UDP receive/both**
+  (#88 — the server→client return over the guest→host SLIRP gateway) are gated in
+  the same suite.
 - **Unit / loopback (client cell + codec)** — examples 6–10. centrs client ↔
   centrs server on `127.0.0.1` with injected sockets; the EC-SRP5 both-roles math
   and the pre-socket option-grammar rejects (`test/unit/btest.test.ts`). These are

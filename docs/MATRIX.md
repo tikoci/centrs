@@ -192,8 +192,11 @@ validation and a `connect()` socket filter was silently dropping all received
 datagrams — RouterOS sends UDP data **from a different source port** than the
 negotiated `serverUdpPort`, so the BSD receive filter rejected every packet;
 fixed by removing `connect()` and addressing sends explicitly, validated against
-a real RouterOS device at 163–203 Mbps receive and 104 Mbps bidirectional; CI
-still validates TCP only since SLIRP blocks the UDP reverse path (#88); TCP
+a real RouterOS device at 163–203 Mbps receive and 104 Mbps bidirectional, and
+**CI now gates UDP client receive/both** — the server→client return rides the
+guest→host SLIRP gateway (`10.0.2.2:clientUdpPort`), needing no UDP forward and no
+quickchr change (#88 closed; the `connect()` filter fix in #86 is what enabled it);
+TCP
 `connection-count` reaches the server's command packet (#84) and centrs opens the
 negotiated extra TCP data connections — multi-connection **fan-out** (#87),
 grounded byte-for-byte against RouterOS 7.23.1 (secondary join

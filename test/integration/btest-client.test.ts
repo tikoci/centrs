@@ -24,7 +24,9 @@
  * fan-out — the client opens connection-count-1 secondaries against real RouterOS),
  * now against real RouterOS rather than a loopback centrs server, plus a TCP
  * `direction=both` regression guard for the #85 status-reader fix (bidirectional
- * throughput is sustained, not starved).
+ * throughput is sustained, not starved) and **UDP receive/both** (#88) — the
+ * server→client reverse path over the guest→host SLIRP gateway, which was
+ * previously validated manually only.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -178,6 +180,30 @@ describeFast(
 					}`,
 				);
 
+				// 6 + 7. UDP receive / both (#88): the client cell's UDP coverage. The
+				//    server→client return rides the guest→host SLIRP gateway
+				//    (`10.0.2.2:clientUdpPort`) — the same path the server cell's
+				//    UDP-transmit uses — so it needs NO host→guest UDP forward and no
+				//    quickchr change; PR #86's unconnected client socket is what made it
+				//    work (a `connect()` filter previously dropped every datagram). This
+				//    was the "validated manually only" gap (#88); it is now CHR-gated. We
+				//    assert the reverse path (rx > 0); client→server transmit verification
+				//    needs server-side stats and stays covered by the server cell.
+				const udpReceive = await runClient({
+					protocol: "udp",
+					remoteUdpTxSize: 1000,
+				});
+				const udpBoth = await runClient({
+					protocol: "udp",
+					direction: "both",
+					localUdpTxSize: 1000,
+					remoteUdpTxSize: 1000,
+				});
+				console.log(
+					`  [udp-receive] ok=${udpReceive.ok} ${udpReceive.ok ? `rx=${udpReceive.data.totalRxBytes} lost=${udpReceive.data.totalLostPackets}` : udpReceive.error.code}` +
+						`\n  [udp-both] ok=${udpBoth.ok} ${udpBoth.ok ? `tx=${udpBoth.data.totalTxBytes} rx=${udpBoth.data.totalRxBytes} lost=${udpBoth.data.totalLostPackets}` : udpBoth.error.code}`,
+				);
+
 				// ── assertions ──
 				// 1. Unauth download produced bytes with no auth negotiated.
 				expect(
@@ -238,6 +264,24 @@ describeFast(
 				expect(fanout.data.totalRxBytes).toBeGreaterThan(0);
 				expect(single.ok).toBe(true);
 				if (single.ok) expect(single.data.activeConnections).toBe(1);
+
+				// 6 + 7. UDP receive / both (#88): the server→client reverse path now
+				//    lands real UDP throughput on the centrs client over CHR — the gap
+				//    that was "validated manually only."
+				expect(
+					udpReceive.ok,
+					`udp receive failed: ${udpReceive.ok ? "" : `${udpReceive.error.code} ${udpReceive.error.summary}`}`,
+				).toBe(true);
+				if (udpReceive.ok)
+					expect(udpReceive.data.totalRxBytes).toBeGreaterThan(0);
+				expect(
+					udpBoth.ok,
+					`udp both failed: ${udpBoth.ok ? "" : `${udpBoth.error.code} ${udpBoth.error.summary}`}`,
+				).toBe(true);
+				if (udpBoth.ok) {
+					expect(udpBoth.data.totalTxBytes).toBeGreaterThan(0);
+					expect(udpBoth.data.totalRxBytes).toBeGreaterThan(0);
+				}
 
 				await recordIntegrationEvidence({
 					suite:

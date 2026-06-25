@@ -227,10 +227,11 @@ Decided with the user. Both cells have direct gated `CHR-passed` evidence:
   maps onto the guest bandwidth server on 2000 (the same SLIRP inbound path that
   already carries REST/SSH — no firewall change). The centrs client dials
   `127.0.0.1:<host port>` and proves **TCP receive**, unauth and **EC-SRP5** (its
-  client proof verified by RouterOS's real server verifier), plus a wrong-password
-  reject. **TCP only** — UDP would need the server's datagrams to traverse SLIRP
-  back to the host, which this forward does not provide, so UDP client→server stays
-  loopback/transitive.
+  client proof verified by RouterOS's real server verifier), a wrong-password
+  reject, **TCP multi-connection fan-out** (`connection-count=4`), and **UDP
+  receive/both**. The UDP server→client return needs no UDP forward: it rides the
+  guest→host SLIRP gateway (`10.0.2.2:clientUdpPort`, the same path the server cell
+  uses), which works because the client socket is left unconnected (#86, #88).
 
 The fast/deterministic backstop under both is **centrs client ↔ centrs server
 loopback** (`127.0.0.1`, injected sockets) covering the full client↔server matrix,
@@ -246,10 +247,11 @@ centrs client opening `connection-count=4` against a real RouterOS
 every connection (`activeConnections: 4`). The *throughput increase* multiple
 streams give is a WAN/latency property and is not observable over the near-zero-
 latency SLIRP loopback, so the gate asserts the fan-out, not a higher number (the
-per-connection drive is asserted deterministically by the loopback unit test). The
-remaining transitive-only path is **UDP client→CHR-server** (the SLIRP reverse-NAT
-path the TCP forward does not cover). Authenticated multi-connection (capturing the
-EC-SRP5 post-auth token) is the one fan-out edge still single-stream.
+per-connection drive is asserted deterministically by the loopback unit test).
+**UDP client receive/both is now CHR-gated too** — the server→client return rides
+the guest→host SLIRP gateway, no UDP forward needed (#88). The remaining fan-out
+edge is **authenticated** multi-connection (capturing the EC-SRP5 post-auth token),
+still single-stream.
 
 ## Open questions
 
@@ -262,12 +264,13 @@ EC-SRP5 post-auth token) is the one fan-out edge still single-stream.
   works — i.e. that the RouterOS client originates an initial UDP/NAT probe that
   opens the SLIRP reverse mapping. Until then the gated UDP coverage is
   **transmit** (guest→host); TCP already covers both directions.
-- **UDP client→CHR-server is not yet gated.** The direct client→CHR-server gate
-  (`test/integration/btest-client.test.ts`) is **TCP only** (now including
-  multi-connection fan-out); a UDP variant needs the server's datagrams to traverse
-  SLIRP back to the host (the reverse-NAT path), so UDP client→server stays
-  loopback/transitive until that path lands (#88). `btest.exe` (wine) is the
-  coding-time grounding peer, not CI.
+- **UDP client receive/both is now gated (#88).** The client cell
+  (`test/integration/btest-client.test.ts`) lands real UDP server→client throughput:
+  the return rides the guest→host SLIRP gateway (`10.0.2.2:clientUdpPort`), needing
+  no UDP forward and no quickchr change — it works because the client socket is
+  unconnected (#86). The remaining unproven UDP edge is the **server cell's**
+  server→guest direction (host→guest, the bullet above), which *would* need a UDP
+  hostfwd; `btest.exe` (wine) is the coding-time grounding peer, not CI.
 - **Authenticated multi-connection stays single-stream.** Fan-out negotiates the
   session token from the unauthenticated OK; capturing the EC-SRP5 post-auth token
   to fan out authenticated tests is a follow-up. centrs warns
@@ -276,7 +279,6 @@ EC-SRP5 post-auth token) is the one fan-out edge still single-stream.
 
 ## Out of scope (v1)
 
-Legacy pre-6.43 double-MD5 auth; a UDP client→CHR-server gated test (TCP is gated;
-UDP needs SLIRP reverse-NAT); the ≥3-router "test-through" topology RouterOS
+Legacy pre-6.43 double-MD5 auth; the ≥3-router "test-through" topology RouterOS
 recommends for measuring a *transit* device (centrs is an endpoint peer); TUI/proxy
 btest frontends (later, over the stable core).
