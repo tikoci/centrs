@@ -15,8 +15,9 @@ matrix's honest grounding split (`docs/MATRIX.md`, "Peer measurement (`btest`)")
   loss / direction against the CHR's own `/tool/bandwidth-test` status output
   (CHR 7.23.1, `bun run test:integration`). Examples **4** (wrong-credentials) and
   **5** (multi-connection TCP) are **designed but not yet gated** — the auth-reject
-  path is covered by the loopback unit test, and the multi-stream fan-out is a
-  documented follow-up — so they are not part of the asserted run.
+  path is covered by the loopback unit test, and example 5 is the **server-side**
+  secondary-accept (distinct from the now-gated **client** fan-out in example 11),
+  still a documented follow-up — so they are not part of the asserted run.
 - **Gated `CHR-passed` (client cell): centrs client → CHR bandwidth-server** —
   examples **6** (TCP receive) and **8** (EC-SRP5 client role + wrong-password
   reject) are *also* asserted directly against a real RouterOS
