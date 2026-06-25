@@ -200,8 +200,10 @@ TCP
 `connection-count` reaches the server's command packet (#84) and centrs opens the
 negotiated extra TCP data connections — multi-connection **fan-out** (#87),
 grounded byte-for-byte against RouterOS 7.23.1 (secondary join
-`[token:u16 BE][0x02][0 …]`) and CHR-gated for throughput-rises; authenticated
-sessions stay single-stream (warned); TCP `direction=both` demuxes the server's
+`[token:u16 BE][0x02][0 …]`) and CHR-gated for the realized fan-out
+(`activeConnections == count`; no throughput-rise assertion — the SLIRP loopback is
+bandwidth-bound); authenticated sessions stay single-stream (warned); TCP
+`direction=both` demuxes the server's
 interleaved status frames so the client paces its TX from feedback and does not
 starve server→client RX (#85 fixed); the Windows unit tier skips UDP-loopback
 tests (#69); NDJSON is not adopted) are

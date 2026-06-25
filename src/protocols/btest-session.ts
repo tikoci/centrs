@@ -26,8 +26,9 @@
  *
  * Scope: UDP, plus TCP single- **and** multi-connection. For `connection-count > 1`
  * the client reads the session token from the primary's OK, opens the extra data
- * connections (each: server HELLO → 16-byte join `[token:u16 BE][0x02][0 …]` →
- * server OK), and drives them into one shared `BandwidthCounters` so throughput
+ * connections (each: read the server HELLO, send the 16-byte join
+ * `[token:u16 BE][0x02][0 …]`, then bulk data flows — the server sends **no** ack
+ * before data), and drives them into one shared `BandwidthCounters` so throughput
  * aggregates. The secondary-join format is grounded byte-for-byte against RouterOS
  * 7.23.1 (captured all directions; the `0x02` marker is direction-independent).
  * Authenticated (EC-SRP5) multi-connection is not yet supported — the post-auth

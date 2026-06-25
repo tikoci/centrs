@@ -255,9 +255,10 @@ export function sessionTokenFromResponse(buf: Uint8Array): number {
 /**
  * The 16-byte "command" a secondary TCP connection sends to join an existing
  * session — the token in bytes 0-1 (big-endian), a constant `0x02` join marker in
- * byte 2, the rest zero. The server answers `01 <tokenHi> <tokenLo> 00` and the
- * connection joins without auth. Grounded byte-for-byte against RouterOS 7.23.1
- * (`12 34 02 00 …`, direction-independent — see the btest-session.ts header).
+ * byte 2, the rest zero. The connection joins without auth; the server sends **no**
+ * acknowledgement before it starts streaming bulk data, so the client must not
+ * await one. Grounded byte-for-byte against RouterOS 7.23.1 (`12 34 02 00 …`,
+ * direction-independent — see the btest-session.ts header).
  */
 export function encodeSecondaryJoin(sessionToken: number): Uint8Array {
 	assertField(sessionToken, U16_MAX, "session-token");
