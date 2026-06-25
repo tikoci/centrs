@@ -16,6 +16,7 @@
 import { describe, expect, test } from "bun:test";
 import { type AddressInfo, connect, createServer } from "node:net";
 import {
+	applyEmbeddedStatus,
 	BandwidthCounters,
 	type BtestControlChannel,
 	type BtestRunSummary,
@@ -139,6 +140,70 @@ describe("btest timing + accounting", () => {
 		expect(speedFeedbackBps(125_000)).toBe(1_500_000);
 		expect(speedFeedbackBps(0)).toBe(0);
 		expect(speedFeedbackBps(0xffffffff)).toBe(0xffffffff);
+	});
+
+	// #85: in TCP `direction=both` the server interleaves 12-byte status frames into
+	// the bulk RX stream; the client must demux them and pace its TX, or its TX
+	// saturates the link and starves server→client RX. `applyEmbeddedStatus` is that
+	// demux. A frame is `[0x07][cpu][0x00][0x00][seq LE][bytesReceived LE]`.
+	const embeddedStatusFrame = (
+		cpu: number,
+		seq: number,
+		bytesReceived: number,
+		highBit: boolean,
+	): Uint8Array => {
+		const f = new Uint8Array(12);
+		f[0] = 0x07;
+		f[1] = (highBit ? 0x80 : 0x00) | (cpu & 0x7f);
+		new DataView(f.buffer).setUint32(4, seq, true);
+		new DataView(f.buffer).setUint32(8, bytesReceived, true);
+		return f;
+	};
+	const bulkWithStatus = (
+		preZeros: number,
+		frame: Uint8Array,
+		postZeros: number,
+	): Uint8Array => {
+		const buf = new Uint8Array(preZeros + frame.length + postZeros);
+		buf.set(frame, preZeros);
+		return buf;
+	};
+	type StatusCtx = Parameters<typeof applyEmbeddedStatus>[0];
+
+	test("applyEmbeddedStatus adapts client TX from a server status frame (#85)", () => {
+		const counters = new BandwidthCounters();
+		const ctx = { counters, adaptTxFromStatus: true } as unknown as StatusCtx;
+		// RouterOS server frame: CPU high bit CLEAR (0x07 1e 00 00 …) embedded in zeros.
+		const frame = embeddedStatusFrame(30, 7, 125_000, false);
+		applyEmbeddedStatus(ctx, bulkWithStatus(1500, frame, 1500));
+		expect(counters.remoteCpu).toBe(30);
+		expect(counters.txSpeed).toBe(speedFeedbackBps(125_000));
+		expect(counters.txSpeedChanged).toBe(true);
+	});
+
+	test("applyEmbeddedStatus records CPU but does not pace when not adapting (#85)", () => {
+		const counters = new BandwidthCounters();
+		const ctx = { counters, adaptTxFromStatus: false } as unknown as StatusCtx;
+		applyEmbeddedStatus(
+			ctx,
+			bulkWithStatus(0, embeddedStatusFrame(42, 1, 999_999, true), 64),
+		);
+		expect(counters.remoteCpu).toBe(42);
+		expect(counters.txSpeed).toBe(0); // server / receive-only never paces from feedback
+		expect(counters.txSpeedChanged).toBe(false);
+	});
+
+	test("applyEmbeddedStatus applies the freshest (last) frame in a chunk (#85)", () => {
+		const counters = new BandwidthCounters();
+		const ctx = { counters, adaptTxFromStatus: true } as unknown as StatusCtx;
+		const a = embeddedStatusFrame(10, 1, 50_000, false);
+		const b = embeddedStatusFrame(20, 2, 200_000, false);
+		const buf = new Uint8Array(8 + a.length + 16 + b.length + 8);
+		buf.set(a, 8);
+		buf.set(b, 8 + a.length + 16);
+		applyEmbeddedStatus(ctx, buf);
+		expect(counters.remoteCpu).toBe(20); // the later frame wins
+		expect(counters.txSpeed).toBe(speedFeedbackBps(200_000));
 	});
 
 	test("BandwidthCounters tracks UDP sequence-gap loss", () => {

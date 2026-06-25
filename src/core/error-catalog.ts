@@ -219,6 +219,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"The RouterOS native API returned a !trap with no more specific mapping.",
 	},
 	{
+		code: "routeros/btest-connection-count-single-stream",
+		summary:
+			"--connection-count is sent to the server, but centrs still drives a single TCP data stream; multi-stream fan-out is not yet implemented, so throughput will not scale with the count.",
+	},
+	{
 		code: "routeros/btest-protocol",
 		summary: "A bandwidth-test (btest) packet could not be decoded.",
 	},

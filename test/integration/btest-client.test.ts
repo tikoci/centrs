@@ -21,7 +21,9 @@
  * self-bounds with `durationMs`, so each `btestClient` returns on its own; the CHR
  * server just listens. Covers `commands/btest/examples.md` 6 (client TCP receive)
  * and 8 (EC-SRP5 client role, matching + wrong-password), now against real
- * RouterOS rather than a loopback centrs server.
+ * RouterOS rather than a loopback centrs server, plus a TCP `direction=both`
+ * regression guard for the #85 status-reader fix (bidirectional throughput is
+ * sustained, not starved).
  */
 
 import { describe, expect, test } from "bun:test";
@@ -127,6 +129,33 @@ describeFast(
 					}`,
 				);
 
+				// 4. TCP both: the #85 regression guard. The client both transmits and
+				//    receives on the one TCP stream; without the status-reader fix its TX
+				//    saturates the link and server→client RX collapses (issue #85 evidence
+				//    had RX falling to ~17 Mbps after second 1). With the fix the client
+				//    demuxes the server's interleaved status frames and paces its TX, so
+				//    bidirectional throughput is sustained. The deterministic TX-pacing
+				//    correctness is unit-tested (applyEmbeddedStatus); here we gate that the
+				//    wired `both` path runs end to end against real RouterOS and produces
+				//    real bidirectional bytes (the demux must not corrupt the bulk stream).
+				await ready.exec("/tool/bandwidth-server set authenticate=no");
+				const both = await runClient({ direction: "both" });
+				const rxOverTx =
+					both.ok && both.data.txTotalAvgBps > 0
+						? both.data.rxTotalAvgBps / both.data.txTotalAvgBps
+						: 0;
+				console.log(
+					`  [tcp-both] ok=${both.ok} ${
+						both.ok
+							? `tx=${both.data.totalTxBytes} rx=${both.data.totalRxBytes} ` +
+								`txAvg=${Math.round(both.data.txTotalAvgBps / 1e6)}Mbps ` +
+								`rxAvg=${Math.round(both.data.rxTotalAvgBps / 1e6)}Mbps ` +
+								`rx/tx=${rxOverTx.toFixed(2)} ` +
+								`rxPerInterval=[${both.data.reports.map((r) => Math.round(r.rxBps / 1e6)).join(",")}]Mbps`
+							: `${both.error.code}: ${both.error.summary}`
+					}`,
+				);
+
 				// ── assertions ──
 				// 1. Unauth download produced bytes with no auth negotiated.
 				expect(
@@ -151,6 +180,16 @@ describeFast(
 				// 3. Wrong credentials are rejected, no throughput.
 				expect(bad.ok).toBe(false);
 				if (!bad.ok) expect(bad.error.code).toBe("transport/auth-failed");
+
+				// 4. TCP both produced real bidirectional bytes against real RouterOS —
+				//    the #85 status-demux path runs end to end without breaking the run.
+				expect(
+					both.ok,
+					`tcp both client failed: ${both.ok ? "" : `${both.error.code} ${both.error.summary}`}`,
+				).toBe(true);
+				if (!both.ok) return;
+				expect(both.data.totalTxBytes).toBeGreaterThan(0);
+				expect(both.data.totalRxBytes).toBeGreaterThan(0);
 
 				await recordIntegrationEvidence({
 					suite:

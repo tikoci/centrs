@@ -149,6 +149,91 @@ describe("btest option-grammar validation (no socket opened)", () => {
 		).toBe(false);
 	});
 
+	test("TCP connection-count reaches the session options (#84)", async () => {
+		// Regression: --connection-count was validated but never mapped into
+		// runBtestClientSession, so the command packet's byte 3 was always 0.
+		let seen: number | undefined = -1;
+		const env = await btestClient({
+			host: "192.0.2.10",
+			protocol: "tcp",
+			direction: "transmit",
+			connectionCount: 4,
+			env: {},
+			runSession: async (options) => {
+				seen = options.tcpConnectionCount;
+				return {
+					protocol: "tcp",
+					direction: "transmit",
+					authKind: "none",
+					totalTxBytes: 0,
+					totalRxBytes: 0,
+					totalLostPackets: 0,
+					intervals: 0,
+					durationMs: 0,
+					stopReason: "duration-elapsed",
+				};
+			},
+		});
+		expect(env.ok).toBe(true);
+		expect(seen).toBe(4);
+	});
+
+	test("TCP connection-count > 1 warns the fan-out is not active (#84/#87)", async () => {
+		const env = await btestClient({
+			host: "192.0.2.10",
+			protocol: "tcp",
+			direction: "transmit",
+			connectionCount: 8,
+			env: {},
+			runSession: async () => ({
+				protocol: "tcp",
+				direction: "transmit",
+				authKind: "none",
+				totalTxBytes: 0,
+				totalRxBytes: 0,
+				totalLostPackets: 0,
+				intervals: 0,
+				durationMs: 0,
+				stopReason: "duration-elapsed",
+			}),
+		});
+		expect(env.ok).toBe(true);
+		if (!env.ok) return;
+		const warning = env.warnings.find(
+			(w) => w.code === "routeros/btest-connection-count-single-stream",
+		);
+		expect(warning).toBeDefined();
+		expect(warning?.context).toMatchObject({ requested: 8, active: 1 });
+	});
+
+	test("TCP connection-count 1 does not warn (#84)", async () => {
+		const env = await btestClient({
+			host: "192.0.2.10",
+			protocol: "tcp",
+			direction: "transmit",
+			connectionCount: 1,
+			env: {},
+			runSession: async () => ({
+				protocol: "tcp",
+				direction: "transmit",
+				authKind: "none",
+				totalTxBytes: 0,
+				totalRxBytes: 0,
+				totalLostPackets: 0,
+				intervals: 0,
+				durationMs: 0,
+				stopReason: "duration-elapsed",
+			}),
+		});
+		expect(env.ok).toBe(true);
+		if (!env.ok) return;
+		expect(
+			env.warnings.some(
+				(w) => w.code === "routeros/btest-connection-count-single-stream",
+			),
+		).toBe(false);
+	});
+
 	test("server max-sessions out of range is rejected", async () => {
 		const env = await btestServer({ maxSessions: 5000, env: {} });
 		expect(env.ok).toBe(false);

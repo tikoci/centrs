@@ -44,6 +44,7 @@ import {
 	type BtestCommandOptions,
 	type BtestDirection,
 	type BtestProtocol,
+	type BtestStatus,
 	classifyAuthResponse,
 	clientUdpPort,
 	decodeCommand,
@@ -534,10 +535,6 @@ export function speedFeedbackBps(bytesReceived: number): number {
 	return Math.min(Math.floor((bytesReceived * 8 * 3) / 2), 0xffffffff);
 }
 
-function isStatusMarker(buf: Uint8Array, i: number): boolean {
-	return buf[i] === BTEST_STATUS_MSG_TYPE && (buf[i + 1] as number) >= 0x80;
-}
-
 // ── Handshake ─────────────────────────────────────────────────────────────────
 
 /** What both sides agree on after the control handshake. */
@@ -860,6 +857,12 @@ interface RunContext {
 	serverUdpPort?: number;
 	/** Peer host for UDP (client: server host; server: client host). */
 	udpPeerHost?: string;
+	/**
+	 * Adapt this side's TX rate from peer status frames (client transmit / both).
+	 * Set so the merged-stream status reader in `tcpRxLoop` and the dedicated
+	 * `tcpStatusReaderLoop` share one feedback gate.
+	 */
+	adaptTxFromStatus?: boolean;
 	onInterval?: (sample: BtestIntervalSample) => void;
 }
 
@@ -932,7 +935,63 @@ async function tcpTxLoop(ctx: RunContext, sendStatus: boolean): Promise<void> {
 	}
 }
 
-/** Bulk TCP receive loop: counts bytes and scans for interleaved status. */
+/**
+ * Apply a decoded peer status to the counters: record the peer CPU and, when this
+ * side adapts (client transmit / both), retarget TX from the peer's `bytesReceived`
+ * speed-feedback. Shared by the dedicated `tcpStatusReaderLoop` (pure status stream)
+ * and the merged-stream demux in `tcpRxLoop`.
+ */
+function applyStatusFeedback(ctx: RunContext, status: BtestStatus): void {
+	const { counters } = ctx;
+	counters.remoteCpu = status.cpuLoad;
+	if (ctx.adaptTxFromStatus && status.bytesReceived > 0) {
+		counters.txSpeed = speedFeedbackBps(status.bytesReceived);
+		counters.txSpeedChanged = true;
+	}
+}
+
+/**
+ * Demux the most recent 12-byte status frame embedded in a bulk TCP chunk and apply
+ * it. In `direction=both` the peer interleaves status frames into the same bulk
+ * stream with no length framing, so they are found structurally: a frame is
+ * `[0x07][cpu][0x00][0x00][seq u32 LE][bytesReceived u32 LE]` — the two reserved
+ * bytes are always zero, making `0x07 ?? 00 00` a reliable marker in the default
+ * zero-filled payload, and it matches both client (CPU high-bit set) and RouterOS
+ * server (high-bit clear) frames. A `--random-data` payload can yield a rare false
+ * positive, and a frame split across a read boundary is missed, but TX speed is a
+ * soft pacing target that self-corrects on the next interval's frame. Only the last
+ * frame in the chunk is applied (the freshest feedback); the scan is in place, so it
+ * adds no copy on the RX hot path. The frame bytes stay counted in `rx` (matching
+ * RouterOS, which bills the overhead as stream bytes).
+ */
+export function applyEmbeddedStatus(ctx: RunContext, chunk: Uint8Array): void {
+	if (chunk.length < BTEST_STATUS_MSG_SIZE) return;
+	const limit = chunk.length - BTEST_STATUS_MSG_SIZE;
+	let last = -1;
+	let i = 0;
+	while (i <= limit) {
+		if (
+			chunk[i] === BTEST_STATUS_MSG_TYPE &&
+			chunk[i + 2] === 0 &&
+			chunk[i + 3] === 0
+		) {
+			// A status frame's own seq/bytes fields can contain `0x07 ?? 00 00`
+			// (e.g. seq 7), so consume the whole frame before scanning on — never
+			// re-match a matched frame's payload as a second, garbage frame.
+			last = i;
+			i += BTEST_STATUS_MSG_SIZE;
+		} else {
+			i += 1;
+		}
+	}
+	if (last < 0) return;
+	applyStatusFeedback(
+		ctx,
+		decodeStatus(chunk.subarray(last, last + BTEST_STATUS_MSG_SIZE)),
+	);
+}
+
+/** Bulk TCP receive loop: counts bytes and demuxes interleaved status frames. */
 async function tcpRxLoop(ctx: RunContext): Promise<void> {
 	const { counters } = ctx;
 	while (counters.running) {
@@ -942,14 +1001,7 @@ async function tcpRxLoop(ctx: RunContext): Promise<void> {
 			break;
 		}
 		counters.addRx(chunk.length);
-		if (chunk.length >= BTEST_STATUS_MSG_SIZE) {
-			for (let i = 0; i <= chunk.length - BTEST_STATUS_MSG_SIZE; i += 1) {
-				if (isStatusMarker(chunk, i)) {
-					counters.remoteCpu = Math.min((chunk[i + 1] as number) & 0x7f, 100);
-					break;
-				}
-			}
-		}
+		applyEmbeddedStatus(ctx, chunk);
 	}
 }
 
@@ -960,12 +1012,7 @@ async function tcpStatusReaderLoop(ctx: RunContext): Promise<void> {
 		const frame = await readExactOrStop(ctx, BTEST_STATUS_MSG_SIZE);
 		if (frame === null) break;
 		if (frame[0] !== BTEST_STATUS_MSG_TYPE) continue;
-		const status = decodeStatus(frame);
-		counters.remoteCpu = status.cpuLoad;
-		if (status.bytesReceived > 0) {
-			counters.txSpeed = speedFeedbackBps(status.bytesReceived);
-			counters.txSpeedChanged = true;
-		}
+		applyStatusFeedback(ctx, decodeStatus(frame));
 	}
 }
 
@@ -1157,6 +1204,8 @@ export interface BtestClientSessionOptions {
 	remoteTxSpeed?: number;
 	/** UDP per-packet size; TCP uses its bulk default. */
 	txSize?: number;
+	/** Parallel TCP data connections (TCP only); encoded in command byte 3. */
+	tcpConnectionCount?: number;
 	randomData?: boolean;
 	natMode?: boolean;
 	durationMs?: number;
@@ -1200,6 +1249,9 @@ export async function runBtestClientSession(
 			? { randomData: options.randomData }
 			: {}),
 		...(options.txSize !== undefined ? { txSize: options.txSize } : {}),
+		...(options.tcpConnectionCount !== undefined
+			? { tcpConnectionCount: options.tcpConnectionCount }
+			: {}),
 		...(options.localTxSpeed !== undefined
 			? { localTxSpeed: options.localTxSpeed }
 			: {}),
@@ -1471,7 +1523,11 @@ async function driveSession(
 		if (dirs.shouldRx) tasks.push(udpRxLoop(ctx));
 		tasks.push(udpStatusExchange(ctx, dirs));
 	} else {
-		// TCP: only the receiving server emits status frames; the client never does.
+		// A transmitting client paces its TX from the server's status feedback. For
+		// `transmit` that arrives on the dedicated status stream (tcpStatusReaderLoop);
+		// for `both` it is interleaved into the bulk RX stream (tcpRxLoop's demux).
+		// Either way this gate routes the feedback into counters.txSpeed.
+		ctx.adaptTxFromStatus = role === "client" && dirs.shouldTx;
 		if (dirs.shouldTx && dirs.shouldRx) {
 			tasks.push(tcpTxLoop(ctx, role === "server"));
 			tasks.push(tcpRxLoop(ctx));

@@ -246,6 +246,23 @@ export async function btestClient(
 			});
 		}
 
+		// --connection-count now reaches RouterOS in the command packet (byte 3), but
+		// the centrs client still drives a single TCP data stream: the parallel
+		// secondary-connection fan-out is not built yet (#87). Warn so a user passing
+		// e.g. --connection-count 20 knows the extra streams are not yet active and
+		// throughput will not multiply, rather than silently believing they are.
+		if (
+			protocol === "tcp" &&
+			request.connectionCount !== undefined &&
+			request.connectionCount > 1
+		) {
+			warnings.push({
+				code: "routeros/btest-connection-count-single-stream",
+				message: `--connection-count (${request.connectionCount}) is sent to the server, but centrs still drives a single TCP data stream; multi-stream fan-out is not yet active (#87), so aggregate throughput will not scale with the count.`,
+				context: { requested: request.connectionCount, active: 1 },
+			});
+		}
+
 		const cdbResolution = await resolveCdb(
 			{
 				targetInput: request.targetInput,
@@ -301,6 +318,9 @@ export async function btestClient(
 				? { statusIntervalMs: request.intervalMs }
 				: {}),
 			...(txSize !== undefined ? { txSize } : {}),
+			...(request.connectionCount !== undefined
+				? { tcpConnectionCount: request.connectionCount }
+				: {}),
 			...(request.localTxSpeed !== undefined
 				? { localTxSpeed: request.localTxSpeed }
 				: {}),

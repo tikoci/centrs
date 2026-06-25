@@ -194,9 +194,12 @@ negotiated `serverUdpPort`, so the BSD receive filter rejected every packet;
 fixed by removing `connect()` and addressing sends explicitly, validated against
 a real RouterOS device at 163–203 Mbps receive and 104 Mbps bidirectional; CI
 still validates TCP only since SLIRP blocks the UDP reverse path (#88); TCP
-`connection-count > 1` is parsed-but-unwired (#84) and the parallel-stream
-fan-out is deferred (#87); the Windows unit tier skips UDP-loopback tests (#69);
-NDJSON is not adopted) are
+`connection-count` now reaches the server's command packet (#84 fixed) but centrs
+still drives a single TCP data stream — the parallel-stream fan-out is deferred
+(#87), with a warning on counts > 1; TCP `direction=both` demuxes the server's
+interleaved status frames so the client paces its TX from feedback and does not
+starve server→client RX (#85 fixed); the Windows unit tier skips UDP-loopback
+tests (#69); NDJSON is not adopted) are
 documented in `commands/btest/README.md` and the `src/protocols/btest.ts`,
 `src/protocols/btest-session.ts`, and `src/protocols/ec-srp5.ts` module headers.
 
