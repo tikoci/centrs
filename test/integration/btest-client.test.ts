@@ -19,11 +19,12 @@
  *
  * Hang-safety: unlike the server suite, every cycle here is a centrs *client* that
  * self-bounds with `durationMs`, so each `btestClient` returns on its own; the CHR
- * server just listens. Covers `commands/btest/examples.md` 6 (client TCP receive)
- * and 8 (EC-SRP5 client role, matching + wrong-password), now against real
- * RouterOS rather than a loopback centrs server, plus a TCP `direction=both`
- * regression guard for the #85 status-reader fix (bidirectional throughput is
- * sustained, not starved).
+ * server just listens. Covers `commands/btest/examples.md` 6 (client TCP receive),
+ * 8 (EC-SRP5 client role, matching + wrong-password), and 11 (TCP multi-connection
+ * fan-out — the client opens connection-count-1 secondaries against real RouterOS),
+ * now against real RouterOS rather than a loopback centrs server, plus a TCP
+ * `direction=both` regression guard for the #85 status-reader fix (bidirectional
+ * throughput is sustained, not starved).
  */
 
 import { describe, expect, test } from "bun:test";
@@ -156,6 +157,27 @@ describeFast(
 					}`,
 				);
 
+				// 5. TCP multi-connection fan-out (#87): the client reads the session
+				//    token from the primary's OK and opens connection-count-1 additional
+				//    TCP data connections (each presenting the grounded join
+				//    `[token BE][0x02][0]`). Against real RouterOS this proves the
+				//    secondaries are accepted and data flows on every connection
+				//    (activeConnections == 4). The throughput *increase* multi-connection
+				//    gives is a WAN/latency property and is NOT observable over the
+				//    near-zero-latency SLIRP loopback (one TCP stream already saturates it),
+				//    so we assert the realized fan-out, not a higher number. The
+				//    per-connection drive is asserted deterministically by the unit test.
+				const fanout = await runClient({ connectionCount: 4 });
+				const single = await runClient({ connectionCount: 1 });
+				console.log(
+					`  [fanout-4] ok=${fanout.ok} ${
+						fanout.ok
+							? `conns=${fanout.data.activeConnections} rx=${fanout.data.totalRxBytes} ` +
+								`vs single conns=${single.ok ? single.data.activeConnections : "-"} rx=${single.ok ? single.data.totalRxBytes : "-"}`
+							: `${fanout.error.code}: ${fanout.error.summary}`
+					}`,
+				);
+
 				// ── assertions ──
 				// 1. Unauth download produced bytes with no auth negotiated.
 				expect(
@@ -203,6 +225,20 @@ describeFast(
 					rxIntervals.reduce((a, b) => a + b, 0) / rxIntervals.length;
 				expect(Math.min(...rxIntervals)).toBeGreaterThan(meanRx * 0.25);
 
+				// 5. Multi-connection fan-out (#87): real RouterOS accepted the 3 secondary
+				//    joins (activeConnections == 4) and data flowed; the single-connection
+				//    control run opens exactly 1. No throughput-rise assertion (loopback is
+				//    bandwidth-bound — see the comment above).
+				expect(
+					fanout.ok,
+					`fanout client failed: ${fanout.ok ? "" : `${fanout.error.code} ${fanout.error.summary}`}`,
+				).toBe(true);
+				if (!fanout.ok) return;
+				expect(fanout.data.activeConnections).toBe(4);
+				expect(fanout.data.totalRxBytes).toBeGreaterThan(0);
+				expect(single.ok).toBe(true);
+				if (single.ok) expect(single.data.activeConnections).toBe(1);
+
 				await recordIntegrationEvidence({
 					suite:
 						"btest: centrs client → CHR /tool/bandwidth-server (TCP, hostfwd)",
@@ -213,7 +249,7 @@ describeFast(
 					quickChrName: ready.name,
 					requestedChannel: started.requestedChannel,
 					requestedVersion: started.requestedVersion,
-					exampleIds: [6, 8],
+					exampleIds: [6, 8, 11],
 				});
 
 				console.log(

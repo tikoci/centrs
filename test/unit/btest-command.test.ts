@@ -111,6 +111,7 @@ describe("btest option-grammar validation (no socket opened)", () => {
 				intervals: 0,
 				durationMs: 0,
 				stopReason: "duration-elapsed",
+				activeConnections: 1,
 			}),
 		});
 		expect(env.ok).toBe(true);
@@ -140,6 +141,7 @@ describe("btest option-grammar validation (no socket opened)", () => {
 				intervals: 0,
 				durationMs: 0,
 				stopReason: "duration-elapsed",
+				activeConnections: 1,
 			}),
 		});
 		expect(env.ok).toBe(true);
@@ -171,6 +173,7 @@ describe("btest option-grammar validation (no socket opened)", () => {
 					intervals: 0,
 					durationMs: 0,
 					stopReason: "duration-elapsed",
+					activeConnections: 1,
 				};
 			},
 		});
@@ -178,7 +181,9 @@ describe("btest option-grammar validation (no socket opened)", () => {
 		expect(seen).toBe(4);
 	});
 
-	test("TCP connection-count > 1 warns the fan-out is not active (#84/#87)", async () => {
+	test("warns when realized fan-out falls short of the request (#87)", async () => {
+		// The session only opened 1 of the 8 requested connections (e.g. the server
+		// negotiated no token) — warn with the actual active count.
 		const env = await btestClient({
 			host: "192.0.2.10",
 			protocol: "tcp",
@@ -195,6 +200,7 @@ describe("btest option-grammar validation (no socket opened)", () => {
 				intervals: 0,
 				durationMs: 0,
 				stopReason: "duration-elapsed",
+				activeConnections: 1,
 			}),
 		});
 		expect(env.ok).toBe(true);
@@ -204,6 +210,35 @@ describe("btest option-grammar validation (no socket opened)", () => {
 		);
 		expect(warning).toBeDefined();
 		expect(warning?.context).toMatchObject({ requested: 8, active: 1 });
+	});
+
+	test("full fan-out (active == requested) does not warn (#87)", async () => {
+		const env = await btestClient({
+			host: "192.0.2.10",
+			protocol: "tcp",
+			direction: "transmit",
+			connectionCount: 4,
+			env: {},
+			runSession: async () => ({
+				protocol: "tcp",
+				direction: "transmit",
+				authKind: "none",
+				totalTxBytes: 0,
+				totalRxBytes: 0,
+				totalLostPackets: 0,
+				intervals: 0,
+				durationMs: 0,
+				stopReason: "duration-elapsed",
+				activeConnections: 4,
+			}),
+		});
+		expect(env.ok).toBe(true);
+		if (!env.ok) return;
+		expect(
+			env.warnings.some(
+				(w) => w.code === "routeros/btest-connection-count-single-stream",
+			),
+		).toBe(false);
 	});
 
 	test("TCP connection-count 1 does not warn (#84)", async () => {
@@ -223,6 +258,7 @@ describe("btest option-grammar validation (no socket opened)", () => {
 				intervals: 0,
 				durationMs: 0,
 				stopReason: "duration-elapsed",
+				activeConnections: 1,
 			}),
 		});
 		expect(env.ok).toBe(true);

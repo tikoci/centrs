@@ -23,9 +23,9 @@ matrix's honest grounding split (`docs/MATRIX.md`, "Peer measurement (`btest`)")
   `/tool/bandwidth-server`, over a host→guest `tcp:2000` forward
   (`test/integration/btest-client.test.ts`, CHR 7.23.1). This is what makes the
   **client** cell `CHR-passed`: centrs's EC-SRP5 **client proof** is verified by
-  RouterOS's own server verifier. TCP only — the EC-SRP5 example is run over TCP
-  receive here (the loopback variant below uses UDP); UDP client→server stays
-  loopback (README, Open questions).
+  RouterOS's own server verifier. Example **11** (TCP **multi-connection**
+  fan-out) and a TCP `direction=both` #85 regression guard are gated in the same
+  suite. TCP only — UDP client→server stays loopback (README, Open questions).
 - **Unit / loopback (client cell + codec)** — examples 6–10. centrs client ↔
   centrs server on `127.0.0.1` with injected sockets; the EC-SRP5 both-roles math
   and the pre-socket option-grammar rejects (`test/unit/btest.test.ts`). These are
@@ -113,12 +113,13 @@ contains a `transport/auth-failed` entry (the EC-SRP5 proof did not verify) and
 `data.sessions` is empty — no session opened, no throughput. The CHR side reports
 an authentication failure.
 
-### 5. Multi-connection TCP transmit
+### 5. Multi-connection TCP transmit (server-side accept)
 
-> *Designed, not yet gated* — the server's parallel-stream fan-out for
-> `connection-count > 1` is not built yet (the session token is negotiated, but
-> secondary TCP joins are not served). Documented follow-up; not part of the
-> asserted run.
+> *Designed, not yet gated* — this is the **server-side** fan-out: centrs's
+> `btest server` accepting parallel secondary joins from a client. The session
+> token is negotiated but centrs's server does not yet serve secondary TCP joins.
+> Distinct from the **client** fan-out (example 11), which **is** implemented and
+> gated. Documented follow-up; not part of the asserted run.
 
 ```bash
 centrs btest server --authenticate=false --bind 0.0.0.0 --duration 20s --format json
@@ -188,3 +189,25 @@ centrs btest client $SRV --protocol udp --local-udp-tx-size 99999
 `ok: false`, `error.code = "validation/option"` (UDP size must be `28..64000`), no
 socket opened. The same gate rejects `connection-count` outside `1..255`,
 `interval` outside `20ms..5s`, and (server) `max-sessions` outside `1..1000`.
+
+## centrs client TCP multi-connection (gated; client cell)
+
+### 11. Multi-connection TCP receive fan-out
+
+```bash
+centrs btest client <router> --protocol tcp --direction receive --connection-count 4 --duration 4s --format json
+```
+
+Against a real RouterOS `/tool/bandwidth-server` (`authenticate=no`), centrs reads
+the session token from the primary's OK and opens the 3 extra TCP data
+connections, each presenting the grounded join `[token:u16 BE][0x02][0 …]`. The
+summary is `ok: true` with `data.activeConnections: 4` and non-zero aggregate
+throughput — real RouterOS accepted all 3 secondary joins and data flowed on every
+connection (the per-connection drive is also asserted deterministically by the
+loopback unit test). The *throughput increase* multiple streams provide is a
+high-latency/WAN-link property and is **not** observable over the near-zero-latency
+SLIRP loopback (a single TCP stream already saturates it), so the gate asserts the
+fan-out itself, not a higher number. Gated in
+`test/integration/btest-client.test.ts` (CHR 7.23.1). An **authenticated**
+`--connection-count > 1` run instead stays single-stream (`activeConnections: 1`)
+and carries a `routeros/btest-connection-count-single-stream` warning.

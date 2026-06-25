@@ -534,3 +534,120 @@ describe("btest loopback data engine", () => {
 		expect(err.code).toBe("transport/connection-refused");
 	});
 });
+
+describe("btest TCP multi-connection fan-out (client, #87)", () => {
+	const hex = (b: Uint8Array): string =>
+		[...b].map((x) => x.toString(16).padStart(2, "0")).join(" ");
+
+	/**
+	 * A minimal multi-connection btest server: HELLO on every connection, a session
+	 * token in the primary's OK, and it accepts secondaries that present the token.
+	 * It counts bulk bytes received per connection so a `direction=transmit` fan-out
+	 * can be asserted (the client drives data on every connection). Models exactly the
+	 * RouterOS behavior grounded in the btest-session.ts header.
+	 */
+	function multiConnServer(token: number): {
+		port: Promise<number>;
+		connections: () => { joins: string[]; bytesByConn: number[] };
+		close: () => void;
+	} {
+		const joins: string[] = [];
+		const bytesByConn: number[] = [];
+		let seq = 0;
+		const okWithToken = Uint8Array.of(
+			0x01,
+			(token >> 8) & 0xff,
+			token & 0xff,
+			0x00,
+		);
+		const srv = createServer((socket) => {
+			const index = seq++;
+			bytesByConn[index] = 0;
+			socket.write(Uint8Array.of(0x01, 0x00, 0x00, 0x00)); // HELLO
+			let handshakeDone = false;
+			let buf = Buffer.alloc(0);
+			socket.on("data", (chunk: Buffer) => {
+				if (!handshakeDone) {
+					buf = Buffer.concat([buf, chunk]);
+					if (buf.length >= 16) {
+						handshakeDone = true;
+						const first16 = buf.subarray(0, 16);
+						if (index > 0) {
+							// Secondary join: like RouterOS, send no pre-data ack — the
+							// client must not block waiting for one.
+							joins.push(hex(first16));
+						} else {
+							socket.write(okWithToken); // primary OK carries the token
+						}
+						const rest = buf.subarray(16);
+						bytesByConn[index] = (bytesByConn[index] ?? 0) + rest.length;
+					}
+					return;
+				}
+				bytesByConn[index] = (bytesByConn[index] ?? 0) + chunk.length;
+			});
+			socket.on("error", () => {});
+		});
+		const port = new Promise<number>((resolve) =>
+			srv.listen(0, "127.0.0.1", () =>
+				resolve((srv.address() as AddressInfo).port),
+			),
+		);
+		return {
+			port,
+			connections: () => ({ joins, bytesByConn }),
+			close: () => srv.close(),
+		};
+	}
+
+	test("opens connection-count data connections and drives data on all", async () => {
+		const TOKEN = 0x0100;
+		const server = multiConnServer(TOKEN);
+		const port = await server.port;
+		try {
+			const summary = await runBtestClientSession({
+				host: "127.0.0.1",
+				controlPort: port,
+				protocol: "tcp",
+				direction: "transmit",
+				tcpConnectionCount: 3,
+				durationMs: 300,
+				statusIntervalMs: 40,
+			});
+			// The realized fan-out is 1 primary + 2 secondaries.
+			expect(summary.activeConnections).toBe(3);
+			const { joins, bytesByConn } = server.connections();
+			// Two secondaries, each presenting the grounded join `[token BE][0x02][0]`.
+			expect(joins.length).toBe(2);
+			for (const join of joins) {
+				expect(join).toBe("01 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00");
+			}
+			// Every connection (primary + both secondaries) carried bulk client→server.
+			expect(bytesByConn.length).toBe(3);
+			for (const bytes of bytesByConn) expect(bytes).toBeGreaterThan(0);
+			expect(summary.totalTxBytes).toBeGreaterThan(0);
+		} finally {
+			server.close();
+		}
+	});
+
+	test("a single connection request opens no secondaries", async () => {
+		const server = multiConnServer(0x0100);
+		const port = await server.port;
+		try {
+			const summary = await runBtestClientSession({
+				host: "127.0.0.1",
+				controlPort: port,
+				protocol: "tcp",
+				direction: "transmit",
+				tcpConnectionCount: 1,
+				durationMs: 200,
+				statusIntervalMs: 40,
+			});
+			expect(summary.activeConnections).toBe(1);
+			expect(server.connections().joins.length).toBe(0);
+		} finally {
+			server.close();
+		}
+	});
+});
