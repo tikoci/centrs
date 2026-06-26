@@ -8,6 +8,10 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+## 0.1.2 — 2026-06-26
+
+Patch release. `@tikoci/centrs@0.1.2`.
+
 ### Added
 
 - **`btest` TCP multi-connection fan-out is `CHR-passed`.** `centrs btest
