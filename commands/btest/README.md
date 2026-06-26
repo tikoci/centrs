@@ -85,7 +85,7 @@ centrs btest server [--authenticate[=false]] [--user U] [--password P] \
 | `--direction <receive\|transmit\|both>` | `direction`, default `receive` | `receive` = download (server→client), `transmit` = upload. |
 | `--duration <dur>` | `duration` | Bounds the run; reuses `parseDuration`. Omit for open-ended (Ctrl-C). |
 | `--interval <dur>` | `interval`, default `1s` | Report cadence (`20ms`..`5s`). One report frame per interval. |
-| `--connection-count <n>` | `connection-count` (1..255) | **TCP only.** Parallel TCP data connections. |
+| `--connection-count <n>` | `connection-count` (1..255) | **TCP only.** Parallel TCP data connections. The count is sent to the server's command packet, but centrs still drives a single data stream — the parallel-stream fan-out is a follow-up (#87), so a count > 1 emits a `routeros/btest-connection-count-single-stream` warning and does not yet scale throughput. |
 | `--local-udp-tx-size <n>` | `local-udp-tx-size` (28..64000) | **UDP only.** Client→server packet size. |
 | `--remote-udp-tx-size <n>` | `remote-udp-tx-size` (28..64000) | **UDP only.** Server→client packet size. |
 | `--local-tx-speed <bps>` | `local-tx-speed` | Cap on client→server rate (bits/sec). |
@@ -123,7 +123,14 @@ matching RouterOS accounting). For multi-connection TCP the server's OK response
 carries a 2-byte **session token**; the extra connections reconnect and present
 that token to join the same test (no re-auth). Throughput and CPU are exchanged
 once per `interval` as a 12-byte **status message** on the TCP channel
-(`[0x07][0x80|cpu][00 00][seq u32 LE][bytesReceived u32 LE]`).
+(`[0x07][0x80|cpu][00 00][seq u32 LE][bytesReceived u32 LE]`). The receiver of a
+transmit (server for `transmit`, both peers for `both`) sends this so the
+transmitter paces from the peer's `bytesReceived`. For `direction=both` the
+status frames are **interleaved into the bulk data stream** (no length framing),
+so the client demuxes them out of its receive loop by their structural marker —
+without that feedback the client's TX saturates the link and starves
+server→client RX. RouterOS clears the CPU high bit the centrs client sets, so the
+marker matches on the two reserved zero bytes, not the high bit.
 
 ### Authentication (EC-SRP5)
 

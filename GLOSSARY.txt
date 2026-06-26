@@ -89,6 +89,8 @@ datagram
 davidanson
 DDNS
 defconf
+demux
+demuxes
 dogtail
 donny
 dotenv
@@ -146,6 +148,7 @@ quickchr
 RAML
 readcdb
 remotehub
+retarget
 restraml
 romon
 ros
