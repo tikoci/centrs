@@ -142,10 +142,13 @@ describe("btest timing + accounting", () => {
 		expect(speedFeedbackBps(0xffffffff)).toBe(0xffffffff);
 	});
 
-	// #85: in TCP `direction=both` the server interleaves 12-byte status frames into
-	// the bulk RX stream; the client must demux them and pace its TX, or its TX
-	// saturates the link and starves server→client RX. `applyEmbeddedStatus` is that
-	// demux. A frame is `[0x07][cpu][0x00][0x00][seq LE][bytesReceived LE]`.
+	// Regression guard for issue #85: in TCP `direction=both`, the server embeds
+	// 12-byte status frames in the bulk RX stream. The original bug was that the
+	// client did not reliably strip/interpret these frames, so client TX ran
+	// unpaced, saturated the link, and starved server→client throughput. This test
+	// documents and verifies the required demux+pacing behavior via
+	// `applyEmbeddedStatus`. A frame is
+	// `[0x07][cpu][0x00][0x00][seq LE][bytesReceived LE]`.
 	const embeddedStatusFrame = (
 		cpu: number,
 		seq: number,
