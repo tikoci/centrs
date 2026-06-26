@@ -1422,13 +1422,18 @@ export async function runBtestClientSession(
 		negotiated.sessionToken !== undefined &&
 		(options.tcpConnectionCount ?? 1) > 1
 	) {
+		// Dial secondaries at the **same peer** the primary control socket resolved
+		// to, not a fresh `options.host` lookup: a hostname that load-balances across
+		// addresses could otherwise land a secondary on a different RouterOS, where
+		// the session token is unknown and the join fails.
+		const secondaryHost = channel.remoteAddress ?? options.host;
 		const extra = (options.tcpConnectionCount as number) - 1;
 		for (let i = 0; i < extra; i += 1) {
 			try {
 				secondaryChannels.push(
 					await openSecondaryConnection(
 						connect,
-						options.host,
+						secondaryHost,
 						controlPort,
 						negotiated.sessionToken,
 					),
@@ -1453,19 +1458,25 @@ export async function runBtestClientSession(
 		),
 	);
 
-	const [stopReason] = await Promise.all([
-		driveSession(ctx, dirs, "client", {
-			...(options.durationMs !== undefined
-				? { durationMs: options.durationMs }
-				: {}),
-			...(options.signal ? { signal: options.signal } : {}),
-		}),
-		...secondaryLoops,
-	]);
-
-	udp?.close();
-	channel.close();
-	for (const secondaryChannel of secondaryChannels) secondaryChannel.close();
+	// Close every socket even if a loop throws — a rejected Promise.all must not leak
+	// the UDP socket or any open TCP channel.
+	let stopReason: BtestStopReason;
+	try {
+		const [primaryStopReason] = await Promise.all([
+			driveSession(ctx, dirs, "client", {
+				...(options.durationMs !== undefined
+					? { durationMs: options.durationMs }
+					: {}),
+				...(options.signal ? { signal: options.signal } : {}),
+			}),
+			...secondaryLoops,
+		]);
+		stopReason = primaryStopReason;
+	} finally {
+		udp?.close();
+		channel.close();
+		for (const secondaryChannel of secondaryChannels) secondaryChannel.close();
+	}
 
 	const sum = counters.summary();
 	const summary: BtestRunSummary = {

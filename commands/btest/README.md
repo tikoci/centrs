@@ -259,18 +259,15 @@ still single-stream.
   command's NDJSON-stream-of-envelopes contract yet; v1 streams `text` / `csv` and
   returns a single summary envelope for `json` / `yaml`. Revisit a streaming-JSON
   shape — ideally shared with `stream` — once that contract is settled.
-- **UDP receive/both through SLIRP is unproven.** Before the integration suite
-  relies on server→guest UDP, a **one-shot CHR smoke test** must confirm the path
-  works — i.e. that the RouterOS client originates an initial UDP/NAT probe that
-  opens the SLIRP reverse mapping. Until then the gated UDP coverage is
-  **transmit** (guest→host); TCP already covers both directions.
-- **UDP client receive/both is now gated (#88).** The client cell
+- **UDP client receive/both is gated (#88).** The client cell
   (`test/integration/btest-client.test.ts`) lands real UDP server→client throughput:
   the return rides the guest→host SLIRP gateway (`10.0.2.2:clientUdpPort`), needing
-  no UDP forward and no quickchr change — it works because the client socket is
-  unconnected (#86). The remaining unproven UDP edge is the **server cell's**
-  server→guest direction (host→guest, the bullet above), which *would* need a UDP
-  hostfwd; `btest.exe` (wine) is the coding-time grounding peer, not CI.
+  no UDP forward and no quickchr change — it works because the client socket is left
+  unconnected (#86).
+- **Only the server-cell host→guest UDP direction stays unproven.** The server cell
+  gates UDP *transmit* (guest→host, which SLIRP NATs cleanly); the reverse (centrs
+  server → CHR client, host→guest) would need a UDP hostfwd for the data ports, so it
+  is not yet asserted. `btest.exe` (wine) is the coding-time grounding peer, not CI.
 - **Authenticated multi-connection stays single-stream.** Fan-out negotiates the
   session token from the unauthenticated OK; capturing the EC-SRP5 post-auth token
   to fan out authenticated tests is a follow-up. centrs warns
