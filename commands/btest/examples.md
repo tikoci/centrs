@@ -121,7 +121,7 @@ an authentication failure.
 > `btest server` accepting parallel secondary joins from a client. The session
 > token is negotiated but centrs's server does not yet serve secondary TCP joins.
 > Distinct from the **client** fan-out (example 11), which **is** implemented and
-> gated. Documented follow-up; not part of the asserted run.
+> gated. Tracked as a follow-up (#100); not part of the asserted run.
 
 ```bash
 centrs btest server --authenticate=false --bind 0.0.0.0 --duration 20s --format json

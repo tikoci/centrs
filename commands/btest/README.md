@@ -270,9 +270,10 @@ still single-stream.
   is not yet asserted. `btest.exe` (wine) is the coding-time grounding peer, not CI.
 - **Authenticated multi-connection stays single-stream.** Fan-out negotiates the
   session token from the unauthenticated OK; capturing the EC-SRP5 post-auth token
-  to fan out authenticated tests is a follow-up. centrs warns
+  to fan out authenticated tests is a follow-up (#103). centrs warns
   (`routeros/btest-connection-count-single-stream`) when the realized connection
-  count falls short of the request.
+  count falls short of the request. The **server-side** secondary-accept is its own
+  follow-up (#100).
 
 ## Out of scope (v1)
 
