@@ -44,6 +44,7 @@ describe("btest command packet", () => {
 
 	test("UDP receive matches the captured example", () => {
 		// docs/protocol.md: "UDP receive: 00 02 01 00 DC 05 00 00 00 00 00 00 00 00 00 00"
+		// 00020100dc05 = UDP/receive command prefix (00 02 01 00 DC 05); remaining bytes are zero padding to 16 bytes.
 		const cmd = encodeCommand({ protocol: "udp", direction: "receive" });
 		expect(hex(cmd)).toBe("00020100dc05".padEnd(32, "0"));
 	});
