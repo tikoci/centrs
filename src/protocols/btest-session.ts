@@ -1018,10 +1018,16 @@ function applyStatusFeedback(ctx: RunContext, status: BtestStatus): void {
  */
 /**
  * Sanity ceiling for an embedded-status sequence number. Status frames are emitted
- * once per `statusIntervalMs` (≥ 20 ms), so even a multi-hour run stays far below
- * this; a random 32-bit value from a false marker match almost always exceeds it.
+ * once per `statusIntervalMs` (≥ 20 ms). We bound plausibility to a conservative
+ * long-session window: 6 hours at the minimum 20 ms cadence yields
+ * `(6 * 60 * 60 * 1000) / 20 = 1_080_000` frames, so any candidate sequence above
+ * that is treated as random-noise fallout from a false marker match.
  */
-const BTEST_STATUS_SEQ_SANE_MAX = 1 << 20;
+const BTEST_STATUS_MIN_INTERVAL_MS = 20;
+const BTEST_STATUS_MAX_RUN_HOURS = 6;
+const BTEST_STATUS_SEQ_SANE_MAX = Math.ceil(
+	(BTEST_STATUS_MAX_RUN_HOURS * 60 * 60 * 1000) / BTEST_STATUS_MIN_INTERVAL_MS,
+);
 
 /**
  * Validate a candidate embedded-status window before trusting it. The structural
@@ -1146,6 +1152,8 @@ async function udpTxLoop(
 	// yields the event loop every iteration (sleep, or setImmediate when
 	// unlimited), so a slot's prior send has flushed long before we cycle back to
 	// it. The first allocation also runs encodeUdpPacket's size guard (≥ 4 bytes).
+	// Keep 8 slots so each buffer is only reused after multiple pace() yields;
+	// this gives node:dgram ample time to flush queued sends before a slot cycles.
 	const RING = 8;
 	const ring = Array.from({ length: RING }, (_, i) => {
 		const buf =
