@@ -186,9 +186,10 @@ The wire codec, the EC-SRP5 session/handshake (shared core byte-identical with
 mac-telnet's MTWEI, plus the net-new server role), the TCP/UDP data engines, the
 orchestrator + CLI, and the honest grounding caveat (the server gets direct CHR
 evidence over the QEMU SLIRP gateway `10.0.2.2`; the client gets direct CHR
-evidence over a host→guest `tcp:2000` forward — TCP only; UDP-receive was
-previously a soft smoke test because the SLIRP reverse path blocks real
-validation and a `connect()` socket filter was silently dropping all received
+evidence over a host→guest `tcp:2000` forward (the forward carries TCP; UDP rides
+the guest→host gateway instead, below); UDP-receive was
+previously a soft smoke test because the SLIRP reverse path was believed to block
+real validation and a `connect()` socket filter was silently dropping all received
 datagrams — RouterOS sends UDP data **from a different source port** than the
 negotiated `serverUdpPort`, so the BSD receive filter rejected every packet;
 fixed by removing `connect()` and addressing sends explicitly, validated against
