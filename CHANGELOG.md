@@ -8,6 +8,48 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Added
+
+- **`btest` TCP multi-connection fan-out is `CHR-passed`.** `centrs btest
+  --connection-count N` now realizes the full fan-out: the client reads the
+  session token from the primary's OK handshake and opens `N-1` additional TCP
+  data connections, each sending the grounded secondary-join
+  (`[token:u16 BE][0x02][0…]`). All connections drive into one shared
+  `BandwidthCounters` so throughput aggregates. Wire format confirmed
+  byte-for-byte against RouterOS 7.23.1 (the server sends a 4-byte HELLO per
+  connection then waits for all to join before streaming — sequential opens must
+  not block on a reply, or the first secondary deadlocks the server). Unauthenticated
+  TCP fan-out works end-to-end; authenticated (EC-SRP5) sessions stay single-stream
+  and warn when the realized `activeConnections` falls short of the requested count.
+  `BtestRunSummary` / `BtestClientData` gain an `activeConnections` field.
+  Grounded via unit tests (secondary-join byte format, loopback fan-out) and
+  integration example 11 on real CHR (4 connections open, data flows on each).
+
+### Fixed
+
+- **`btest` UDP client receive reported 0 bps.** The UDP socket was bound with
+  `connect()` (filtering by remote address/port), which dropped the
+  bandwidth-server's probe packets because they arrive from the server's data
+  port, not the control port. The socket is now unconnected; `--remote-udp-tx-size`
+  emits a warning when unset (needed by the server-push direction only).
+  UDP `receive` and `both` cycles are now CHR-gated on real RouterOS (rx ≈ 474 KB
+  in CI).
+- **`btest --connection-count` was silently ignored.** The count was validated and
+  accepted but never encoded into command byte 3 of the client hello, so RouterOS
+  always saw `count=0` and opened a single stream. The value is now threaded through
+  `BtestClientSessionOptions` → `clientHandshake`. A
+  `routeros/btest-connection-count-single-stream` warning fires for
+  `connection-count > 1` sessions that fall back to one stream (e.g. EC-SRP5 auth).
+- **`btest direction=both` TX was unbounded, starving RX.** In TCP `both` the client
+  ran no status reader, so TX had no feedback, saturated the link, and collapsed
+  server→client RX. The `tcpRxLoop` now demuxes embedded 12-byte status frames
+  in-place by their structural marker (`0x07 ?? 00 00`) and passes them through the
+  shared `applyStatusFeedback` / `adaptTxFromStatus` gate used by
+  `tcpStatusReaderLoop`. A per-frame plausibility guard (CPU byte ≤ 100; sane
+  sequence ceiling) filters false matches from `--random-data` bulk streams.
+  Grounded: a CHR `both` run fires 5 feedback events (server bytesReceived
+  78840 → 643860) and paces TX; RX is sustained instead of collapsing.
+
 ## 0.1.1 — 2026-06-22
 
 Patch release. `@tikoci/centrs@0.1.1`.
