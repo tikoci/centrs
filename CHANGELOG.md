@@ -260,8 +260,8 @@ First published pre-release (odd minor → npm `next`). `@tikoci/centrs@0.1.0`.
     result envelope, error model + URL scheme, settings precedence, identity,
     protocol selection, done = CHR-passed).
   - `docs/MATRIX.md` — command×protocol grid; the only status surface.
-  - `commands/<name>/{README,examples}.md` — per-command design and
-    executable example list that gates "done."
+  - `commands/<name>/README.md` and `commands/<name>/examples.md` —
+    per-command design and executable example list that gates "done."
 - Done definition codified in
   `.github/instructions/done-definition.instructions.md`: a feature is done
   when its examples are green on real CHR via `bun run test:integration`.
