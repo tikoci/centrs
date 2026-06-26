@@ -114,7 +114,7 @@ First published pre-release (odd minor → npm `next`). `@tikoci/centrs@0.1.0`.
   `qa.yaml`'s channel axis is now resolved per run by a `resolve-matrix` pre-flight
   job (`scripts/qa-active-channels.ts`) instead of a hard-coded list: it asks
   quickchr 0.4.2's public version/channel API (`resolveAllVersions` /
-  `selectActiveChannels`, with the suffix-aware `compareRouterOsVersion` that
+  `selectActiveChannels`, with the suffix-aware `compareRouterOSVersion` that
   finally orders `7.24beta2 < 7.24rc1 < 7.24`) for the channels *worth booting* —
   the released channels (stable, long-term) always, plus any pre-release (testing,
   development) at or ahead of stable. This closes the `testing` blind spot and
