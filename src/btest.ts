@@ -138,6 +138,8 @@ export interface BtestClientData {
 	stopReason: BtestStopReason;
 	serverUdpPort?: number;
 	clientUdpPort?: number;
+	/** TCP data connections actually driven (1 + joined secondaries). */
+	activeConnections: number;
 }
 
 export interface BtestClientOperationMeta {
@@ -246,23 +248,6 @@ export async function btestClient(
 			});
 		}
 
-		// --connection-count now reaches RouterOS in the command packet (byte 3), but
-		// the centrs client still drives a single TCP data stream: the parallel
-		// secondary-connection fan-out is not built yet (#87). Warn so a user passing
-		// e.g. --connection-count 20 knows the extra streams are not yet active and
-		// throughput will not multiply, rather than silently believing they are.
-		if (
-			protocol === "tcp" &&
-			request.connectionCount !== undefined &&
-			request.connectionCount > 1
-		) {
-			warnings.push({
-				code: "routeros/btest-connection-count-single-stream",
-				message: `--connection-count (${request.connectionCount}) is sent to the server, but centrs still drives a single TCP data stream; multi-stream fan-out is not yet implemented, so throughput will not scale with the count. Run several clients in parallel to approximate parallel streams.`,
-				context: { requested: request.connectionCount, active: 1 },
-			});
-		}
-
 		const cdbResolution = await resolveCdb(
 			{
 				targetInput: request.targetInput,
@@ -349,12 +334,39 @@ export async function btestClient(
 			txTotalAvgBps: secs > 0 ? (summary.totalTxBytes * 8) / secs : 0,
 			rxTotalAvgBps: secs > 0 ? (summary.totalRxBytes * 8) / secs : 0,
 			stopReason: summary.stopReason,
+			activeConnections: summary.activeConnections,
 		};
 		if (summary.username !== undefined) data.user = summary.username;
 		if (summary.serverUdpPort !== undefined)
 			data.serverUdpPort = summary.serverUdpPort;
 		if (summary.clientUdpPort !== undefined)
 			data.clientUdpPort = summary.clientUdpPort;
+
+		// TCP multi-connection: centrs now opens the negotiated extra data
+		// connections (fan-out). It still degrades to a single stream when the server
+		// negotiates no session token — notably authenticated (EC-SRP5) sessions,
+		// whose post-auth token centrs does not yet capture. Warn only when the
+		// realized fan-out fell short of the request, with the actual count.
+		if (
+			protocol === "tcp" &&
+			request.connectionCount !== undefined &&
+			request.connectionCount > 1 &&
+			summary.activeConnections < request.connectionCount
+		) {
+			const single = summary.activeConnections === 1;
+			warnings.push({
+				code: "routeros/btest-connection-count-single-stream",
+				message: `--connection-count (${request.connectionCount}) requested, but ${summary.activeConnections} TCP data connection(s) are active${
+					single && summary.authKind !== "none"
+						? " — authenticated multi-connection is not yet supported"
+						: ""
+				}; throughput will not scale to the full count.`,
+				context: {
+					requested: request.connectionCount,
+					active: summary.activeConnections,
+				},
+			});
+		}
 
 		return {
 			ok: true,

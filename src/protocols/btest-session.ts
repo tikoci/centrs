@@ -24,9 +24,15 @@
  * client↔server matrix is loopback-testable without a router; the CHR
  * integration test (`test/integration/btest.test.ts`) is the real-RouterOS gate.
  *
- * Scope: single TCP data connection + UDP. TCP multi-connection
- * (`connection-count > 1`) negotiates its session token here but the parallel
- * data-stream fan-out is owned by the orchestrator (a follow-up).
+ * Scope: UDP, plus TCP single- **and** multi-connection. For `connection-count > 1`
+ * the client reads the session token from the primary's OK, opens the extra data
+ * connections (each: read the server HELLO, send the 16-byte join
+ * `[token:u16 BE][0x02][0 …]`, then bulk data flows — the server sends **no** ack
+ * before data), and drives them into one shared `BandwidthCounters` so throughput
+ * aggregates. The secondary-join format is grounded byte-for-byte against RouterOS
+ * 7.23.1 (captured all directions; the `0x02` marker is direction-independent).
+ * Authenticated (EC-SRP5) multi-connection is not yet supported — the post-auth
+ * token is not captured — so those sessions stay single-stream.
  */
 
 import { createSocket } from "node:dgram";
@@ -55,6 +61,7 @@ import {
 	encodeClientHello,
 	encodeCommand,
 	encodeConfirmation,
+	encodeSecondaryJoin,
 	encodeServerChallenge,
 	encodeStatus,
 	encodeUdpPacket,
@@ -887,6 +894,51 @@ function serverDirections(command: BtestCommand): RoleDirections {
 	};
 }
 
+/**
+ * Open one secondary TCP data connection that joins an existing multi-connection
+ * test. Grounded against RouterOS 7.23.1: the server sends the 4-byte HELLO, the
+ * client replies with the 16-byte join `[token:u16 BE][0x02][0 …]`
+ * ({@link encodeSecondaryJoin}), and bulk data then flows. The server sends **no**
+ * acknowledgement before the data — it waits for *all* connections to join before
+ * streaming — so the join must not block on a reply read, or the sequential opens
+ * would deadlock (the server stalls waiting for the rest while the client stalls
+ * waiting for a reply that never comes, and the server eventually drops the
+ * connection). The caller drives the returned channel into the primary session's
+ * shared counters so throughput aggregates across all streams.
+ */
+async function openSecondaryConnection(
+	connect: (host: string, port: number) => Promise<BtestControlChannel>,
+	host: string,
+	port: number,
+	token: number,
+): Promise<BtestControlChannel> {
+	const channel = await connect(host, port);
+	try {
+		await channel.readExact(4); // server HELLO (01 00 00 00)
+		await channel.write(encodeSecondaryJoin(token));
+		return channel;
+	} catch (error) {
+		channel.close();
+		throw error;
+	}
+}
+
+/**
+ * Run the bulk TX/RX loops for a secondary data connection. No status or report
+ * loops — the primary connection owns those; a secondary only moves bulk bytes
+ * into the shared counters. TX paces from the shared `counters.txSpeed` the primary
+ * adapts from server feedback.
+ */
+async function runSecondaryDataLoops(
+	ctx: RunContext,
+	dirs: RoleDirections,
+): Promise<void> {
+	const tasks: Promise<void>[] = [];
+	if (dirs.shouldTx) tasks.push(tcpTxLoop(ctx, false));
+	if (dirs.shouldRx) tasks.push(tcpRxLoop(ctx));
+	await Promise.all(tasks);
+}
+
 /** Bulk TCP send loop: writes `txSize` zero/random payloads until stopped. */
 async function tcpTxLoop(ctx: RunContext, sendStatus: boolean): Promise<void> {
 	await sleep(100);
@@ -1253,6 +1305,12 @@ export interface BtestRunSummary {
 	stopReason: BtestStopReason;
 	serverUdpPort?: number;
 	clientUdpPort?: number;
+	/**
+	 * TCP data connections actually driven (1 primary + joined secondaries). For a
+	 * `connection-count > 1` request this is the realized fan-out; it stays 1 when
+	 * the server negotiates no session token (e.g. authenticated sessions).
+	 */
+	activeConnections: number;
 }
 
 /** Run a full btest **client** session and return its aggregate summary. */
@@ -1351,15 +1409,74 @@ export async function runBtestClientSession(
 		...(options.onInterval ? { onInterval: options.onInterval } : {}),
 	};
 
-	const stopReason = await driveSession(ctx, dirs, "client", {
-		...(options.durationMs !== undefined
-			? { durationMs: options.durationMs }
-			: {}),
-		...(options.signal ? { signal: options.signal } : {}),
-	});
+	// TCP multi-connection fan-out: the server negotiated a session token, so open
+	// the requested extra data connections and drive them into the **shared**
+	// counters, concurrently with the primary, so throughput aggregates across all
+	// streams (grounded against RouterOS 7.23.1). A secondary that fails to open
+	// degrades to fewer streams rather than failing the test — the primary already
+	// carries the session. They share `counters.running`, so the primary's
+	// duration/abort stop unblocks them too.
+	const secondaryChannels: BtestControlChannel[] = [];
+	if (
+		options.protocol === "tcp" &&
+		negotiated.sessionToken !== undefined &&
+		(options.tcpConnectionCount ?? 1) > 1
+	) {
+		// Dial secondaries at the **same peer** the primary control socket resolved
+		// to, not a fresh `options.host` lookup: a hostname that load-balances across
+		// addresses could otherwise land a secondary on a different RouterOS, where
+		// the session token is unknown and the join fails.
+		const secondaryHost = channel.remoteAddress ?? options.host;
+		const extra = (options.tcpConnectionCount as number) - 1;
+		for (let i = 0; i < extra; i += 1) {
+			try {
+				secondaryChannels.push(
+					await openSecondaryConnection(
+						connect,
+						secondaryHost,
+						controlPort,
+						negotiated.sessionToken,
+					),
+				);
+			} catch {
+				break;
+			}
+		}
+	}
+	const secondaryLoops = secondaryChannels.map((secondaryChannel) =>
+		runSecondaryDataLoops(
+			{
+				channel: secondaryChannel,
+				command: negotiated.command,
+				counters,
+				txSize,
+				txSpeed: options.localTxSpeed ?? 0,
+				randomData: options.randomData ?? false,
+				statusIntervalMs: options.statusIntervalMs ?? BTEST_STATUS_INTERVAL_MS,
+			},
+			dirs,
+		),
+	);
 
-	udp?.close();
-	channel.close();
+	// Close every socket even if a loop throws — a rejected Promise.all must not leak
+	// the UDP socket or any open TCP channel.
+	let stopReason: BtestStopReason;
+	try {
+		const [primaryStopReason] = await Promise.all([
+			driveSession(ctx, dirs, "client", {
+				...(options.durationMs !== undefined
+					? { durationMs: options.durationMs }
+					: {}),
+				...(options.signal ? { signal: options.signal } : {}),
+			}),
+			...secondaryLoops,
+		]);
+		stopReason = primaryStopReason;
+	} finally {
+		udp?.close();
+		channel.close();
+		for (const secondaryChannel of secondaryChannels) secondaryChannel.close();
+	}
 
 	const sum = counters.summary();
 	const summary: BtestRunSummary = {
@@ -1372,6 +1489,7 @@ export async function runBtestClientSession(
 		intervals: sum.intervals,
 		durationMs: Date.now() - start,
 		stopReason,
+		activeConnections: 1 + secondaryChannels.length,
 	};
 	if (negotiated.username !== undefined) summary.username = negotiated.username;
 	if (negotiated.serverUdpPort !== undefined)

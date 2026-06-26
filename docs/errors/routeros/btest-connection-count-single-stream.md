@@ -1,19 +1,22 @@
 # `routeros/btest-connection-count-single-stream`
 
 A **warning** (not a failure): `centrs btest client --protocol tcp
---connection-count <n>` with `n > 1` sends the count to the bandwidth server in
-the command packet, but centrs still drives a **single** TCP data connection. The
-parallel-stream fan-out (opening the extra connections that join the test with the
-negotiated session token) is not yet implemented, so reported throughput will not
-scale with the count.
+--connection-count <n>` opened **fewer** TCP data connections than `n`. centrs
+does implement the multi-connection fan-out — it opens the extra connections that
+join the test with the server-negotiated session token — but it falls back to a
+single stream when the server negotiates **no** token. The common case is an
+**authenticated (EC-SRP5)** session: centrs does not yet capture the post-auth
+session token, so authenticated tests stay single-stream. A secondary connection
+that fails mid-handshake also reduces the realized count.
+
+The warning reports both the requested and the actually-active connection count.
 
 ## Workaround
 
-Until fan-out lands:
-
-- Drop `--connection-count` (or set it to `1`) to avoid the misleading
-  expectation — a single stream is what actually runs.
-- To approximate parallel streams, run **several `centrs btest client`
-  processes in parallel** against the same server and sum their throughput.
+- For full multi-stream throughput, run the test **unauthenticated**
+  (`/tool/bandwidth-server` with `authenticate=no`), where centrs negotiates the
+  token and opens all `n` connections.
+- Or run several `centrs btest client` processes in parallel and sum their
+  throughput.
 
 See `docs/CONSTITUTION.md` for the centrs error/warning contract.

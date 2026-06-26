@@ -186,17 +186,25 @@ The wire codec, the EC-SRP5 session/handshake (shared core byte-identical with
 mac-telnet's MTWEI, plus the net-new server role), the TCP/UDP data engines, the
 orchestrator + CLI, and the honest grounding caveat (the server gets direct CHR
 evidence over the QEMU SLIRP gateway `10.0.2.2`; the client gets direct CHR
-evidence over a host→guest `tcp:2000` forward — TCP only; UDP-receive was
-previously a soft smoke test because the SLIRP reverse path blocks real
-validation and a `connect()` socket filter was silently dropping all received
+evidence over a host→guest `tcp:2000` forward (the forward carries TCP; UDP rides
+the guest→host gateway instead, below); UDP-receive was
+previously a soft smoke test because the SLIRP reverse path was believed to block
+real validation and a `connect()` socket filter was silently dropping all received
 datagrams — RouterOS sends UDP data **from a different source port** than the
 negotiated `serverUdpPort`, so the BSD receive filter rejected every packet;
 fixed by removing `connect()` and addressing sends explicitly, validated against
-a real RouterOS device at 163–203 Mbps receive and 104 Mbps bidirectional; CI
-still validates TCP only since SLIRP blocks the UDP reverse path (#88); TCP
-`connection-count` now reaches the server's command packet (#84 fixed) but centrs
-still drives a single TCP data stream — the parallel-stream fan-out is deferred
-(#87), with a warning on counts > 1; TCP `direction=both` demuxes the server's
+a real RouterOS device at 163–203 Mbps receive and 104 Mbps bidirectional, and
+**CI now gates UDP client receive/both** — the server→client return rides the
+guest→host SLIRP gateway (`10.0.2.2:clientUdpPort`), needing no UDP forward and no
+quickchr change (#88 closed; the `connect()` filter fix in #86 is what enabled it);
+TCP
+`connection-count` reaches the server's command packet (#84) and centrs opens the
+negotiated extra TCP data connections — multi-connection **fan-out** (#87),
+grounded byte-for-byte against RouterOS 7.23.1 (secondary join
+`[token:u16 BE][0x02][0 …]`) and CHR-gated for the realized fan-out
+(`activeConnections == count`; no throughput-rise assertion — the SLIRP loopback is
+bandwidth-bound); authenticated sessions stay single-stream (warned); TCP
+`direction=both` demuxes the server's
 interleaved status frames so the client paces its TX from feedback and does not
 starve server→client RX (#85 fixed); the Windows unit tier skips UDP-loopback
 tests (#69); NDJSON is not adopted) are

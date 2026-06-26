@@ -221,7 +221,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "routeros/btest-connection-count-single-stream",
 		summary:
-			"centrs sends --connection-count to the server but still drives a single TCP stream; multi-stream fan-out is not yet implemented.",
+			"Fewer TCP data connections were opened than --connection-count requested (e.g. authenticated multi-connection is not yet supported), so throughput will not scale to the full count.",
 	},
 	{
 		code: "routeros/btest-protocol",

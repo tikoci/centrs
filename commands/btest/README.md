@@ -17,7 +17,10 @@ on the centrs **server**; `test/integration/btest-client.test.ts` runs the centr
 **client** against a real RouterOS `/tool/bandwidth-server` over a host→guest
 `tcp:2000` forward — unauthenticated TCP receive, an **EC-SRP5 client proof
 verified by RouterOS's own verifier**, and a wrong-password reject. TCP
-multi-connection (`connection-count > 1`) data fan-out is a follow-up. See
+multi-connection (`connection-count > 1`) data fan-out is implemented for
+unauthenticated tests (the client joins the negotiated extra connections; the join
+format is grounded against RouterOS 7.23.1); authenticated sessions stay
+single-stream. See
 `docs/MATRIX.md` ("Peer measurement (`btest`)") for the cell states — that is the
 only status surface. v1 scope: **both** modes (client + server), **EC-SRP5 +
 unauthenticated** auth, **TCP and UDP** tests. Legacy pre-6.43 double-MD5 is out of
@@ -85,7 +88,7 @@ centrs btest server [--authenticate[=false]] [--user U] [--password P] \
 | `--direction <receive\|transmit\|both>` | `direction`, default `receive` | `receive` = download (server→client), `transmit` = upload. |
 | `--duration <dur>` | `duration` | Bounds the run; reuses `parseDuration`. Omit for open-ended (Ctrl-C). |
 | `--interval <dur>` | `interval`, default `1s` | Report cadence (`20ms`..`5s`). One report frame per interval. |
-| `--connection-count <n>` | `connection-count` (1..255) | **TCP only.** Parallel TCP data connections. The count is sent to the server's command packet, but centrs still drives a single data stream — the parallel-stream fan-out is a follow-up (#87), so a count > 1 emits a `routeros/btest-connection-count-single-stream` warning and does not yet scale throughput. |
+| `--connection-count <n>` | `connection-count` (1..255) | **TCP only.** Parallel TCP data connections. centrs opens the negotiated extra connections (join format grounded against RouterOS 7.23.1) so throughput aggregates across streams. **Authenticated (EC-SRP5) sessions stay single-stream** — the post-auth token is not captured — and emit a `routeros/btest-connection-count-single-stream` warning. |
 | `--local-udp-tx-size <n>` | `local-udp-tx-size` (28..64000) | **UDP only.** Client→server packet size. |
 | `--remote-udp-tx-size <n>` | `remote-udp-tx-size` (28..64000) | **UDP only.** Server→client packet size. |
 | `--local-tx-speed <bps>` | `local-tx-speed` | Cap on client→server rate (bits/sec). |
@@ -120,8 +123,11 @@ test, data then flows on the server's allocated UDP ports
 from sequence gaps. For a TCP test, the bulk data rides `connection-count` TCP
 connections and goodput is measured on the data stream (TCP/IP headers excluded,
 matching RouterOS accounting). For multi-connection TCP the server's OK response
-carries a 2-byte **session token**; the extra connections reconnect and present
-that token to join the same test (no re-auth). Throughput and CPU are exchanged
+carries a 2-byte **session token**; the client opens `connection-count − 1`
+additional connections, each presenting a 16-byte join `[token:u16 BE][0x02][0 …]`
+(grounded against RouterOS 7.23.1, direction-independent) to join the same test
+without re-auth, and drives them into the shared counters so throughput aggregates.
+Throughput and CPU are exchanged
 once per `interval` as a 12-byte **status message** on the TCP channel
 (`[0x07][0x80|cpu][00 00][seq u32 LE][bytesReceived u32 LE]`). The receiver of a
 transmit (server for `transmit`, both peers for `both`) sends this so the
@@ -221,10 +227,11 @@ Decided with the user. Both cells have direct gated `CHR-passed` evidence:
   maps onto the guest bandwidth server on 2000 (the same SLIRP inbound path that
   already carries REST/SSH — no firewall change). The centrs client dials
   `127.0.0.1:<host port>` and proves **TCP receive**, unauth and **EC-SRP5** (its
-  client proof verified by RouterOS's real server verifier), plus a wrong-password
-  reject. **TCP only** — UDP would need the server's datagrams to traverse SLIRP
-  back to the host, which this forward does not provide, so UDP client→server stays
-  loopback/transitive.
+  client proof verified by RouterOS's real server verifier), a wrong-password
+  reject, **TCP multi-connection fan-out** (`connection-count=4`), and **UDP
+  receive/both**. The UDP server→client return needs no UDP forward: it rides the
+  guest→host SLIRP gateway (`10.0.2.2:clientUdpPort`, the same path the server cell
+  uses), which works because the client socket is left unconnected (#86, #88).
 
 The fast/deterministic backstop under both is **centrs client ↔ centrs server
 loopback** (`127.0.0.1`, injected sockets) covering the full client↔server matrix,
@@ -233,10 +240,18 @@ EC-SRP5 both roles, and the option-grammar rejects.
 while implementing the EC-SRP5 framing and the server-side verifier; it is **not**
 an integration test (it cannot run in CI) and **not** part of the long-term plan.
 
-**Honest grounding caveat:** both cells are now directly CHR-passed. The remaining
-transitive-only paths are **UDP client→CHR-server** (the SLIRP reverse-NAT path the
-TCP forward does not cover) and TCP **multi-connection** fan-out — both deferred,
-not yet gated.
+**Honest grounding caveat:** both cells are now directly CHR-passed, **including
+TCP multi-connection fan-out** — `test/integration/btest-client.test.ts` gates a
+centrs client opening `connection-count=4` against a real RouterOS
+`/tool/bandwidth-server`; RouterOS accepts all 3 secondary joins and data flows on
+every connection (`activeConnections: 4`). The *throughput increase* multiple
+streams give is a WAN/latency property and is not observable over the near-zero-
+latency SLIRP loopback, so the gate asserts the fan-out, not a higher number (the
+per-connection drive is asserted deterministically by the loopback unit test).
+**UDP client receive/both is now CHR-gated too** — the server→client return rides
+the guest→host SLIRP gateway, no UDP forward needed (#88). The remaining fan-out
+edge is **authenticated** multi-connection (capturing the EC-SRP5 post-auth token),
+still single-stream.
 
 ## Open questions
 
@@ -244,21 +259,24 @@ not yet gated.
   command's NDJSON-stream-of-envelopes contract yet; v1 streams `text` / `csv` and
   returns a single summary envelope for `json` / `yaml`. Revisit a streaming-JSON
   shape — ideally shared with `stream` — once that contract is settled.
-- **UDP receive/both through SLIRP is unproven.** Before the integration suite
-  relies on server→guest UDP, a **one-shot CHR smoke test** must confirm the path
-  works — i.e. that the RouterOS client originates an initial UDP/NAT probe that
-  opens the SLIRP reverse mapping. Until then the gated UDP coverage is
-  **transmit** (guest→host); TCP already covers both directions.
-- **UDP client→CHR-server and TCP multi-connection are not yet gated.** The direct
-  client→CHR-server gate (`test/integration/btest-client.test.ts`) is **TCP only**;
-  a UDP variant needs the server's datagrams to traverse SLIRP back to the host
-  (the reverse-NAT path), and `connection-count > 1` needs the parallel-stream
-  fan-out. Both remain loopback/transitive until gated. `btest.exe` (wine) is the
-  coding-time grounding peer, not CI.
+- **UDP client receive/both is gated (#88).** The client cell
+  (`test/integration/btest-client.test.ts`) lands real UDP server→client throughput:
+  the return rides the guest→host SLIRP gateway (`10.0.2.2:clientUdpPort`), needing
+  no UDP forward and no quickchr change — it works because the client socket is left
+  unconnected (#86).
+- **Only the server-cell host→guest UDP direction stays unproven.** The server cell
+  gates UDP *transmit* (guest→host, which SLIRP NATs cleanly); the reverse (centrs
+  server → CHR client, host→guest) would need a UDP hostfwd for the data ports, so it
+  is not yet asserted. `btest.exe` (wine) is the coding-time grounding peer, not CI.
+- **Authenticated multi-connection stays single-stream.** Fan-out negotiates the
+  session token from the unauthenticated OK; capturing the EC-SRP5 post-auth token
+  to fan out authenticated tests is a follow-up (#103). centrs warns
+  (`routeros/btest-connection-count-single-stream`) when the realized connection
+  count falls short of the request. The **server-side** secondary-accept is its own
+  follow-up (#100).
 
 ## Out of scope (v1)
 
-Legacy pre-6.43 double-MD5 auth; a UDP client→CHR-server gated test (TCP is gated;
-UDP needs SLIRP reverse-NAT); the ≥3-router "test-through" topology RouterOS
+Legacy pre-6.43 double-MD5 auth; the ≥3-router "test-through" topology RouterOS
 recommends for measuring a *transit* device (centrs is an endpoint peer); TUI/proxy
 btest frontends (later, over the stable core).

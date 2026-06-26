@@ -117,9 +117,12 @@ describe("btest TCP multi-connection session token", () => {
 		expect(sessionTokenFromResponse(Uint8Array.of(1, 0, 0, 0))).toBe(0);
 	});
 
-	test("a secondary join carries the token in bytes 0-1", () => {
+	test("a secondary join carries the token in bytes 0-1 + 0x02 marker", () => {
+		// Grounded against RouterOS 7.23.1: secondary connections send
+		// `[token:u16 BE][0x02][0x00 …]` (16 bytes), direction-independent.
 		const join = encodeSecondaryJoin(0xabcd);
 		expect(join.length).toBe(16);
+		expect(hex(join)).toBe("abcd0200000000000000000000000000");
 		expect(sessionTokenFromSecondary(join)).toBe(0xabcd);
 	});
 });
