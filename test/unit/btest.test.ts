@@ -98,9 +98,17 @@ describe("btest auth response classification", () => {
 
 	test("an OK response carrying a session token is still 'none'", () => {
 		// TCP multi-conn OK: 01 <tokenHi> <tokenLo> 00
-		expect(classifyAuthResponse(Uint8Array.of(0x01, 0xab, 0xcd, 0))).toBe(
-			"none",
-		);
+		const sessionToken = 0xabcd;
+		expect(
+			classifyAuthResponse(
+				Uint8Array.of(
+					0x01,
+					(sessionToken >> 8) & 0xff, // tokenHi
+					sessionToken & 0xff, // tokenLo
+					0x00,
+				),
+			),
+		).toBe("none");
 	});
 });
 
