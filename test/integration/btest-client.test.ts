@@ -190,14 +190,18 @@ describeFast(
 				if (!both.ok) return;
 				expect(both.data.totalTxBytes).toBeGreaterThan(0);
 				expect(both.data.totalRxBytes).toBeGreaterThan(0);
-				// The bug's signature was RX collapsing toward zero after the first
-				// interval while TX dominated. Guard that **every** interval carried real
-				// server→client RX — a later interval starving to 0 fails here. (A tight
-				// Mbps ratio would flake on the asymmetric SLIRP loopback; the
-				// deterministic TX-pacing proof is the `applyEmbeddedStatus` unit test.)
+				// The bug's signature was RX **collapsing** after the first interval while
+				// TX dominated. Guard the *shape*, not an absolute Mbps floor (which would
+				// flake on the asymmetric SLIRP loopback): every interval carried RX, and
+				// the worst interval is within 4x of the mean — a real collapse (RX falling
+				// to a fraction of its run average) trips this. The deterministic TX-pacing
+				// proof is the `applyEmbeddedStatus` unit test.
 				const rxIntervals = both.data.reports.map((r) => r.rxBps);
 				expect(rxIntervals.length).toBeGreaterThanOrEqual(2);
 				expect(Math.min(...rxIntervals)).toBeGreaterThan(0);
+				const meanRx =
+					rxIntervals.reduce((a, b) => a + b, 0) / rxIntervals.length;
+				expect(Math.min(...rxIntervals)).toBeGreaterThan(meanRx * 0.25);
 
 				await recordIntegrationEvidence({
 					suite:

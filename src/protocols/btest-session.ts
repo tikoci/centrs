@@ -964,31 +964,54 @@ function applyStatusFeedback(ctx: RunContext, status: BtestStatus): void {
  * adds no copy on the RX hot path. The frame bytes stay counted in `rx` (matching
  * RouterOS, which bills the overhead as stream bytes).
  */
+/**
+ * Sanity ceiling for an embedded-status sequence number. Status frames are emitted
+ * once per `statusIntervalMs` (≥ 20 ms), so even a multi-hour run stays far below
+ * this; a random 32-bit value from a false marker match almost always exceeds it.
+ */
+const BTEST_STATUS_SEQ_SANE_MAX = 1 << 20;
+
+/**
+ * Validate a candidate embedded-status window before trusting it. The structural
+ * marker `0x07 ?? 00 00` is only a 24-bit sentinel, so in a `--random-data` bulk
+ * stream it false-matches roughly once per 16 MB (~once/second at 100 Mb/s) — and a
+ * false frame would feed a garbage `bytesReceived` into `applyStatusFeedback`,
+ * rewriting `counters.txSpeed`. Two cheap, payload-independent invariants reject
+ * those: the CPU byte is a 0..100 percentage (decodeStatus *clamps* it, so check the
+ * raw byte), and the status sequence is a small monotonic counter, never a random
+ * 32-bit value (a bounded run can't reach `BTEST_STATUS_SEQ_SANE_MAX`). Together with
+ * the marker this drops the false-apply rate to negligible while leaving real frames
+ * untouched.
+ */
+function plausibleStatusFrame(frame: Uint8Array): boolean {
+	if (((frame[1] as number) & 0x7f) > 100) return false;
+	const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
+	return view.getUint32(4, true) <= BTEST_STATUS_SEQ_SANE_MAX;
+}
+
 export function applyEmbeddedStatus(ctx: RunContext, chunk: Uint8Array): void {
 	if (chunk.length < BTEST_STATUS_MSG_SIZE) return;
 	const limit = chunk.length - BTEST_STATUS_MSG_SIZE;
-	let last = -1;
+	let lastValid: BtestStatus | undefined;
 	let i = 0;
 	while (i <= limit) {
+		const frame = chunk.subarray(i, i + BTEST_STATUS_MSG_SIZE);
 		if (
 			chunk[i] === BTEST_STATUS_MSG_TYPE &&
 			chunk[i + 2] === 0 &&
-			chunk[i + 3] === 0
+			chunk[i + 3] === 0 &&
+			plausibleStatusFrame(frame)
 		) {
-			// A status frame's own seq/bytes fields can contain `0x07 ?? 00 00`
+			// A real status frame's own seq/bytes fields can contain `0x07 ?? 00 00`
 			// (e.g. seq 7), so consume the whole frame before scanning on — never
 			// re-match a matched frame's payload as a second, garbage frame.
-			last = i;
+			lastValid = decodeStatus(frame);
 			i += BTEST_STATUS_MSG_SIZE;
 		} else {
 			i += 1;
 		}
 	}
-	if (last < 0) return;
-	applyStatusFeedback(
-		ctx,
-		decodeStatus(chunk.subarray(last, last + BTEST_STATUS_MSG_SIZE)),
-	);
+	if (lastValid) applyStatusFeedback(ctx, lastValid);
 }
 
 /** Bulk TCP receive loop: counts bytes and demuxes interleaved status frames. */

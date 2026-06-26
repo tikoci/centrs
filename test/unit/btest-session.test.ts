@@ -206,6 +206,34 @@ describe("btest timing + accounting", () => {
 		expect(counters.txSpeed).toBe(speedFeedbackBps(200_000));
 	});
 
+	test("applyEmbeddedStatus rejects implausible windows (--random-data guard, #98)", () => {
+		// A random `0x07 ?? 00 00` window in --random-data bulk must not rewrite
+		// txSpeed. Reject on an impossible CPU (>100) or a non-monotonic random seq.
+		const counters = new BandwidthCounters();
+		const ctx = { counters, adaptTxFromStatus: true } as unknown as StatusCtx;
+
+		// CPU byte 0x7e = 126 (> 100) → rejected, even though the marker matches.
+		const badCpu = Uint8Array.of(0x07, 0x7e, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0);
+		applyEmbeddedStatus(ctx, bulkWithStatus(64, badCpu, 64));
+		expect(counters.txSpeed).toBe(0);
+		expect(counters.txSpeedChanged).toBe(false);
+
+		// A random-looking 32-bit seq (0x40302010) → rejected.
+		const bigSeq = embeddedStatusFrame(20, 0x40302010, 999_999, false);
+		applyEmbeddedStatus(ctx, bulkWithStatus(64, bigSeq, 64));
+		expect(counters.txSpeed).toBe(0);
+
+		// A real frame interleaved *after* a false match still wins.
+		const falseMatch = embeddedStatusFrame(20, 0x12345678, 123_456, false);
+		const real = embeddedStatusFrame(15, 5, 250_000, false);
+		const buf = new Uint8Array(falseMatch.length + 32 + real.length);
+		buf.set(falseMatch, 0);
+		buf.set(real, falseMatch.length + 32);
+		applyEmbeddedStatus(ctx, buf);
+		expect(counters.txSpeed).toBe(speedFeedbackBps(250_000));
+		expect(counters.remoteCpu).toBe(15);
+	});
+
 	test("BandwidthCounters tracks UDP sequence-gap loss", () => {
 		const c = new BandwidthCounters();
 		c.observeUdpSeq(0, 100);
