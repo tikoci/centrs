@@ -175,7 +175,7 @@ jobs:
       # Cache the downloaded CHR .img across runs to cut the stable-channel boot
       # time (quickchr caches at $HOME/.local/share/quickchr/cache; getDataDir()).
       - name: Cache CHR images
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.local/share/quickchr/cache
           key: chr-cache-${{ runner.os }}-stable-v1
