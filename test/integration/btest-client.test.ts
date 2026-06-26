@@ -143,9 +143,10 @@ describeFast(
 				//    real bidirectional bytes (the demux must not corrupt the bulk stream).
 				await ready.exec("/tool/bandwidth-server set authenticate=no");
 				const both = await runClient({ direction: "both" });
+				const txAvgBps = both.ok ? both.data.txTotalAvgBps : 0;
 				const rxOverTx =
-					both.ok && both.data.txTotalAvgBps > 0
-						? both.data.rxTotalAvgBps / both.data.txTotalAvgBps
+					both.ok && Number.isFinite(txAvgBps) && txAvgBps > 0
+						? both.data.rxTotalAvgBps / txAvgBps
 						: 0;
 				console.log(
 					`  [tcp-both] ok=${both.ok} ${
