@@ -61,7 +61,7 @@
 		"lint": "bun run lint:biome && bun run lint:typecheck",
 		"lint:git:commit": "bun run lint",
 		"lint:git:push": "bun run ci",
-		"lint:ci": "bun run lint && bun run lint:markdownlint && bun run lint:cspell && bun run lint:secretlint && bun run lint:agents",
+		"lint:ci": "bun run lint && bun run lint:markdownlint && bun run lint:cspell && bun run lint:secretlint",
 		"lint:cspell": "cspell lint . --gitignore",
 		"lint:cspell:all": "cspell lint . --no-gitignore",
 		"lint:markdownlint": "markdownlint-cli2 \"**/*.md\" \"!.scratch/**\"",

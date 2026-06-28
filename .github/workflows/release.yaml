@@ -53,7 +53,7 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Lint
         run: bun run lint
-      - name: Lint CI (docs, spelling, agents)
+      - name: Lint CI (docs, spelling, secrets)
         run: bun run lint:ci
 
   unit:

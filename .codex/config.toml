@@ -1,0 +1,22 @@
+[mcp_servers."io.github.ChromeDevTools/chrome-devtools-mcp"]
+command = "npx"
+args = [
+    "--registry",
+    "https://registry.npmjs.org",
+    "chrome-devtools-mcp",
+]
+
+[mcp_servers."io.github.github/github-mcp-server"]
+command = "gh"
+args = [
+    "mcp",
+    "serve",
+]
+
+[mcp_servers."io.github.tikoci/rosetta"]
+command = "bunx"
+args = ["@tikoci/rosetta"]
+
+[mcp_servers."microsoft/playwright-mcp"]
+command = "npx"
+args = ["@playwright/mcp@latest"]

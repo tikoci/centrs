@@ -41,6 +41,7 @@ bun run lint:ci
 | `commands/<name>/`          | Per-command README + examples (the executable spec).               |
 | `src/`                      | Bun/TypeScript source.                                             |
 | `test/`                     | Unit, integration, and fixture space.                              |
+| `.mcp.json`                 | Shared MCP server config; no secrets or credentials.               |
 | `.github/instructions/`     | Path-scoped Copilot instructions with `applyTo` metadata.          |
 | `.github/workflows/`        | CI, QA/security, release, docs, and lab automation.                |
 

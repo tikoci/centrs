@@ -1,5 +1,5 @@
 ---
-applyTo: ".vscode/**,package.json,.githooks/*,biome.json,package.json,cspell.json,tsconfig.json,bunfig.toml"
+applyTo: ".vscode/**,package.json,.githooks/*,biome.json,cspell.json,tsconfig.json,bunfig.toml"
 ---
 
 # VS Code workspace files
