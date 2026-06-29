@@ -93,11 +93,12 @@ export function isCommandNode(child: InspectChildItem, name: string): boolean {
 }
 
 /**
- * Flatten completion rows into attribute names. Reads every name-ish field a
- * RouterOS build might populate (`completion`/`name`/`value`/`text`), strips a
- * trailing `=value` suffix, and drops blanks. Returns the names in row order
- * **without** de-duplication or sorting — callers that need a stable set wrap
- * with `[...new Set(names)].sort()` (both current callers do).
+ * Flatten completion rows into attribute names. Reads every name-like field a
+ * RouterOS build might populate (`completion`/`name`/`value`/`text`), strips
+ * everything from the first `=` onward (the `name=value` completion form), and
+ * drops blanks. Returns the names in row order **without** de-duplication or
+ * sorting — callers that need a stable set wrap with `[...new Set(names)].sort()`
+ * (both current callers do).
  */
 export function extractCompletionNames(
 	rows: readonly InspectCompletionItem[],
@@ -105,8 +106,18 @@ export function extractCompletionNames(
 	return rows
 		.flatMap((row) => [row.completion, row.name, row.value, row.text])
 		.filter((value): value is string => typeof value === "string")
-		.map((value) => value.replace(/=.*$/, "").trim())
+		.map((value) => nameBeforeEquals(value).trim())
 		.filter((value) => value.length > 0);
+}
+
+/**
+ * The token before the first `=` in a RouterOS completion row. Plain string
+ * slicing (no regex) — `value.replace(/=.*$/, "")` triggers a CodeQL
+ * polynomial-ReDoS flag on this exported function's caller-supplied input.
+ */
+function nameBeforeEquals(value: string): string {
+	const eq = value.indexOf("=");
+	return eq === -1 ? value : value.slice(0, eq);
 }
 
 /** `request=child` for a token path. */

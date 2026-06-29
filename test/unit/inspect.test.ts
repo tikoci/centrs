@@ -80,7 +80,7 @@ describe("isCommandNode", () => {
 });
 
 describe("extractCompletionNames", () => {
-	test("reads every name-ish field, strips =value, trims, drops blanks", () => {
+	test("reads every name-like field, strips =value, trims, drops blanks", () => {
 		const rows: InspectCompletionItem[] = [
 			{ completion: "address=1.2.3.4" },
 			{ name: " interface " },
@@ -151,7 +151,7 @@ describe("inspectChildrenOrEmpty", () => {
 				);
 			},
 		};
-		expect(
+		await expect(
 			inspectChildrenOrEmpty(transport, ["ip", "address"]),
 		).rejects.toThrow(CentrsError);
 
@@ -160,8 +160,8 @@ describe("inspectChildrenOrEmpty", () => {
 				return Promise.reject(new Error("boom"));
 			},
 		};
-		expect(inspectChildrenOrEmpty(boom, ["ip", "address"])).rejects.toThrow(
-			"boom",
-		);
+		await expect(
+			inspectChildrenOrEmpty(boom, ["ip", "address"]),
+		).rejects.toThrow("boom");
 	});
 });

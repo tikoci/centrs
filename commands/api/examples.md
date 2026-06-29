@@ -1,12 +1,14 @@
 # api — examples
 
-Each numbered example is an executable spec, run against a CHR booted by
-`@tikoci/quickchr`: `test/integration/api.test.ts` covers the rest-api examples,
-`test/integration/api-native.test.ts` the native-api examples (N…), and
-`test/integration/api-listen.test.ts` the streaming examples (L…). Example N ↔
-assertion N. If a line here is not exercised by a test, the test file is wrong; if
-a line passes only with `--validate=false`, the implementation is wrong (see
-`docs/CONSTITUTION.md`).
+Each numbered example is an executable spec. Phase 2+ will add CHR integration
+tests (booted by `@tikoci/quickchr`) that assert them — planned as
+`test/integration/api.test.ts` (rest-api examples),
+`test/integration/api-native.test.ts` (native-api examples, N…), and
+`test/integration/api-listen.test.ts` (streaming examples, L…), with example N ↔
+assertion N. **Those test files do not exist yet**; until the runtime lands these
+examples are intent, not yet executed. Once wired: if a line here is not exercised
+by a test, the test file is wrong; if a line passes only with `--validate=false`,
+the implementation is wrong (see [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md)).
 
 `$R` is `<host>:<rest-port>` resolved by quickchr. `$A` is `<host>` and
 `$API_PORT` is the native API port (`chr.ports.api`). `$U` / `$P` are CHR

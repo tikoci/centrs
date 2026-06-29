@@ -8,7 +8,10 @@ envelope.
 
 Status: `designed`. This file describes intent and flags; see `docs/MATRIX.md`
 for the cell states (`api` rides `rest-api` and `native-api`; other transports
-are `—`).
+are `—`). Load-bearing rules — envelope, errors, settings precedence, identity,
+validation, protocol selection — live in
+[`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md); the `(constitution: …)`
+notes below point there rather than restating them.
 
 ## Where `api` sits — the verb trichotomy
 
@@ -144,5 +147,5 @@ the CDB-as-allowlist authorization model (constitution: MCP surface).
 ## Definition of done
 
 `CHR-passed` only when every example in `examples.md` runs green against a real CHR
-through `bun run test:integration`. See `docs/CONSTITUTION.md` for the full done
-rule.
+through `bun run test:integration`. See
+[`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md) for the full done rule.
