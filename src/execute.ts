@@ -9,6 +9,13 @@ import type {
 	Warning,
 } from "./core/envelope.ts";
 import { buildTip } from "./core/envelope.ts";
+import {
+	extractCompletionNames,
+	inspectChildren,
+	inspectCompletions,
+	isArgumentNode,
+	pathTokens,
+} from "./core/inspect.ts";
 import { mapRouterOsError } from "./core/routeros-errors.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import {
@@ -130,20 +137,6 @@ export interface ResolvedExecuteRequest {
 	yes: boolean;
 	verbose: boolean;
 	warnings: readonly Warning[];
-}
-
-interface InspectChildItem {
-	type?: string;
-	name?: string;
-	"node-type"?: string;
-}
-
-interface InspectCompletionItem {
-	type?: string;
-	name?: string;
-	completion?: string;
-	value?: string;
-	text?: string;
 }
 
 export async function execute(
@@ -735,24 +728,18 @@ async function inspectExecuteAttributes(
 	resolved: ResolvedExecuteRequest,
 	backend: ProtocolAdapter,
 ): Promise<string[]> {
-	const commandPath = inspectPath([
+	const commandTokens = [
 		...pathTokens(resolved.canonical.path),
 		resolved.canonical.verb,
-	]);
-	const children = (await backend.inspect(
-		"child",
-		commandPath,
-	)) as InspectChildItem[];
+	];
+	const children = await inspectChildren(backend, commandTokens);
 	const childAttributes = children
 		.filter(isArgumentNode)
 		.map((child) => child.name)
 		.filter(
 			(name): name is string => typeof name === "string" && name.length > 0,
 		);
-	const completionRows = (await backend.inspect(
-		"completion",
-		commandPath,
-	)) as InspectCompletionItem[];
+	const completionRows = await inspectCompletions(backend, commandTokens);
 	return [
 		...new Set([...childAttributes, ...extractCompletionNames(completionRows)]),
 	].sort();
@@ -1297,28 +1284,6 @@ function syntaxCause(error: unknown): unknown {
 		return error.causeData ?? error.context ?? error.toJSON();
 	}
 	return error;
-}
-
-function pathTokens(path: string): string[] {
-	return path.split("/").filter(Boolean);
-}
-
-function inspectPath(tokens: readonly string[]): string {
-	return tokens.join(",");
-}
-
-function isArgumentNode(child: InspectChildItem): boolean {
-	return child.type === "arg" || child["node-type"] === "arg";
-}
-
-function extractCompletionNames(
-	rows: readonly InspectCompletionItem[],
-): string[] {
-	return rows
-		.flatMap((row) => [row.completion, row.name, row.value, row.text])
-		.filter((value): value is string => typeof value === "string")
-		.map((value) => value.replace(/=.*$/, "").trim())
-		.filter((value) => value.length > 0);
 }
 
 function parseOutputFormat(value: string): ExecuteOutputFormat {

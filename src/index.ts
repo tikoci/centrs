@@ -42,6 +42,31 @@ export {
 	type Warning,
 } from "./core/envelope.ts";
 export {
+	FANOUT_BACKOFF_BASE_MS,
+	FANOUT_CONCURRENCY_DEFAULTS,
+	FANOUT_MAX_RETRIES,
+	FANOUT_RETRYABLE_CODES,
+	isRetryableFanoutError,
+	resolveFanoutConcurrency,
+	runBoundedPool,
+	runWithRetry,
+	summarizeFanout,
+} from "./core/fanout.ts";
+export {
+	extractCompletionNames,
+	type InspectBackend,
+	type InspectChildItem,
+	type InspectCompletionItem,
+	type InspectRequestKind,
+	inspectChildren,
+	inspectChildrenOrEmpty,
+	inspectCompletions,
+	inspectPath,
+	isArgumentNode,
+	isCommandNode,
+	pathTokens,
+} from "./core/inspect.ts";
+export {
 	encodeMndpPacket,
 	MNDP_BROADCAST_ADDRESS,
 	MNDP_IPV6_MULTICAST_ADDRESS,
@@ -262,21 +287,13 @@ export {
 } from "./retrieve.ts";
 export {
 	buildRetrieveFanoutErrorEnvelope,
-	isRetryableFanoutError,
-	RETRIEVE_FANOUT_BACKOFF_BASE_MS,
-	RETRIEVE_FANOUT_CONCURRENCY_DEFAULTS,
-	RETRIEVE_FANOUT_MAX_RETRIES,
-	RETRIEVE_FANOUT_RETRYABLE_CODES,
 	type RetrieveFanoutData,
 	type RetrieveFanoutEnvelope,
 	type RetrieveFanoutErrorEnvelope,
 	type RetrieveFanoutOperationMeta,
 	type RetrieveGroupInternals,
 	renderRetrieveFanoutEnvelope,
-	resolveFanoutConcurrency,
 	retrieveGroup,
-	runBoundedPool,
-	summarizeFanout,
 } from "./retrieve-fanout.ts";
 export {
 	buildSshTerminalArgv,
