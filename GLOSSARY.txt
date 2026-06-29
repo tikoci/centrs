@@ -25,6 +25,11 @@
 #   https://github.com/tikoci/restraml
 # %lsp-routeros-ts: RouterOS parser and language-server utilities.
 #   https://github.com/tikoci/lsp-routeros-ts
+# Language Server Protocol — the "lsp" in lsp-routeros-ts, referenced as a
+# grounding source for /console/inspect client patterns (e.g. commands/api).
+lsp
+# RouterOS maximum transmission unit property (e.g. mtu, actual-mtu).
+mtu
 # %donny: Dude/discovery grounding for RouterOS device inventories.
 #   https://github.com/tikoci/donny
 # %m2ir: protocol IR (WinBox, nova messages) + the declarative schema-as-data
@@ -421,3 +426,7 @@ trippable
 # btest integration-test fixtures.
 btestuser
 btestpass
+
+# RouterOS scripting builtin referenced in commands/api grounding notes
+# (:toarray coerces a comma string into an array; explains the inspect path form).
+toarray
