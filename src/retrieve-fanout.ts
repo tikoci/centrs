@@ -32,6 +32,13 @@ import type {
 	FanoutData,
 	FanoutSummary,
 } from "./core/envelope.ts";
+import {
+	defaultFanoutSleep,
+	resolveFanoutConcurrency,
+	runBoundedPool,
+	runWithRetry,
+	summarizeFanout,
+} from "./core/fanout.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
@@ -56,27 +63,6 @@ import {
 	toYaml,
 	validateRetrieveRequestShape,
 } from "./retrieve.ts";
-
-/** Transport-aware default worker-pool size (REST drops parallel POSTs above ~8). */
-export const RETRIEVE_FANOUT_CONCURRENCY_DEFAULTS: Record<
-	"rest-api" | "native-api",
-	number
-> = {
-	"rest-api": 8,
-	"native-api": 4,
-};
-
-/** Extra attempts after the first try (jittered backoff between them). */
-export const RETRIEVE_FANOUT_MAX_RETRIES = 2;
-
-/** Base backoff in milliseconds; doubled per attempt with up to +base jitter. */
-export const RETRIEVE_FANOUT_BACKOFF_BASE_MS = 200;
-
-/** RouterOS-style codes that are safe to retry under fanout. */
-export const RETRIEVE_FANOUT_RETRYABLE_CODES = [
-	"transport/network",
-	"transport/connection-closed",
-] as const;
 
 export interface RetrieveFanoutOperationMeta {
 	kind: "fanout";
@@ -176,7 +162,7 @@ export async function retrieveGroup(
 	}
 
 	const execute = internals.execute ?? runResolvedRetrieve;
-	const sleep = internals.sleep ?? defaultSleep;
+	const sleep = internals.sleep ?? defaultFanoutSleep;
 
 	const targets = await runBoundedPool(
 		expansion.targets,
@@ -199,7 +185,11 @@ export async function retrieveGroup(
 			} catch (error) {
 				return buildResolveFailureEnvelope(member.resolution, error);
 			}
-			return runTargetWithRetry(resolved, member.recordIndex, execute, sleep);
+			return runWithRetry<RetrieveEnvelope>(
+				() => execute(resolved, member.recordIndex),
+				(error) => buildRetrieveErrorEnvelopeFromResolved(resolved, error),
+				{ sleep },
+			);
 		},
 	);
 
@@ -251,28 +241,6 @@ export function buildRetrieveFanoutErrorEnvelope(
 	};
 }
 
-/** Resolve and validate the worker-pool size. */
-export function resolveFanoutConcurrency(
-	requested: number | undefined,
-	via: RouterOsProtocol,
-): number {
-	if (requested !== undefined) {
-		if (!Number.isInteger(requested) || requested < 1) {
-			throw new CentrsError({
-				code: "usage/invalid-concurrency",
-				summary: `--concurrency must be an integer >= 1. Received: ${requested}`,
-				remediation: "Pass a positive integer, e.g. `--concurrency 4`.",
-				context: { concurrency: requested },
-			});
-		}
-		return requested;
-	}
-	if (via === "native-api") {
-		return RETRIEVE_FANOUT_CONCURRENCY_DEFAULTS["native-api"];
-	}
-	return RETRIEVE_FANOUT_CONCURRENCY_DEFAULTS["rest-api"];
-}
-
 function resolveFanoutConcurrencyProtocol(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined>,
@@ -290,93 +258,6 @@ function resolveFanoutConcurrencyProtocol(
 		return "native-api";
 	}
 	return globalVia;
-}
-
-/**
- * Classify a per-target failure as retryable. Only the locked allowlist
- * retries: generic transport/network failures and dropped/closed connections
- * (including REST 5xx mapped to `transport/connection-closed`). Router-side
- * (`routeros/*`), validation, auth, cdb, target, input, usage, timeout, TLS,
- * connection-refused, and DNS failures are deterministic and never retried.
- */
-export function isRetryableFanoutError(error: unknown): boolean {
-	if (!(error instanceof CentrsError)) {
-		return false;
-	}
-	return (RETRIEVE_FANOUT_RETRYABLE_CODES as readonly string[]).includes(
-		error.code,
-	);
-}
-
-export function summarizeFanout(
-	targets: readonly RetrieveEnvelope[],
-): FanoutSummary {
-	let ok = 0;
-	let failed = 0;
-	for (const target of targets) {
-		if (target.ok) {
-			ok += 1;
-		} else {
-			failed += 1;
-		}
-	}
-	return { total: targets.length, ok, failed };
-}
-
-async function runTargetWithRetry(
-	resolved: ResolvedRetrieveRequest,
-	recordIndex: number,
-	execute: (
-		resolved: ResolvedRetrieveRequest,
-		recordIndex: number,
-	) => Promise<RetrieveSuccessEnvelope>,
-	sleep: (ms: number) => Promise<void>,
-): Promise<RetrieveEnvelope> {
-	let attempt = 0;
-	for (;;) {
-		try {
-			return await execute(resolved, recordIndex);
-		} catch (error) {
-			if (
-				attempt < RETRIEVE_FANOUT_MAX_RETRIES &&
-				isRetryableFanoutError(error)
-			) {
-				attempt += 1;
-				await sleep(backoffMs(attempt));
-				continue;
-			}
-			return buildRetrieveErrorEnvelopeFromResolved(resolved, error);
-		}
-	}
-}
-
-/**
- * Ordered bounded worker pool. Runs `worker` over `items` with at most
- * `concurrency` in flight, returning results in INPUT order regardless of
- * completion order.
- */
-export async function runBoundedPool<I, O>(
-	items: readonly I[],
-	concurrency: number,
-	worker: (item: I, index: number) => Promise<O>,
-): Promise<O[]> {
-	const results = new Array<O>(items.length);
-	let next = 0;
-	const width = Math.max(1, Math.min(concurrency, items.length));
-
-	async function drain(): Promise<void> {
-		for (;;) {
-			const index = next;
-			next += 1;
-			if (index >= items.length) {
-				return;
-			}
-			results[index] = await worker(items[index] as I, index);
-		}
-	}
-
-	await Promise.all(Array.from({ length: width }, () => drain()));
-	return results;
 }
 
 function buildResolveFailureEnvelope(
@@ -458,15 +339,6 @@ function commonVia(
 		}
 	}
 	return via ?? null;
-}
-
-function backoffMs(attempt: number): number {
-	const base = RETRIEVE_FANOUT_BACKOFF_BASE_MS * 2 ** (attempt - 1);
-	return base + Math.floor(Math.random() * RETRIEVE_FANOUT_BACKOFF_BASE_MS);
-}
-
-function defaultSleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

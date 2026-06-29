@@ -6,6 +6,15 @@ import type {
 	SettingSource as CoreSettingSource,
 	EnvelopeValidationMeta,
 } from "./core/envelope.ts";
+import {
+	extractCompletionNames,
+	inspectChildren,
+	inspectChildrenOrEmpty,
+	inspectCompletions,
+	isArgumentNode,
+	isCommandNode,
+	pathTokens,
+} from "./core/inspect.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import {
 	createProtocolAdapter,
@@ -100,20 +109,6 @@ export type RetrieveSuccessEnvelope = CentrsSuccessEnvelope<
 	RetrieveOperationMeta
 >;
 export type RetrieveErrorEnvelope = CentrsErrorEnvelope<RetrieveOperationMeta>;
-
-interface InspectChildItem {
-	type?: string;
-	name?: string;
-	"node-type"?: string;
-}
-
-interface InspectCompletionItem {
-	type?: string;
-	name?: string;
-	completion?: string;
-	value?: string;
-	text?: string;
-}
 
 interface RetrieveInspection {
 	command: "get" | "print";
@@ -876,41 +871,19 @@ function resolveFormat(
 }
 
 /**
- * Path-existence probe. An invalid path raises a native trap that
- * {@link mapRouterOsError} normalizes to `routeros/unknown-path` (REST instead
- * returns an empty child list). Both the legacy `routeros/api-trap` catch-all
- * and the grounded `routeros/unknown-path` classification are flattened to an
- * empty list so the orchestrator surfaces a single `validation/unknown-path`.
- * Traps during attribute/completion discovery do NOT use this probe — they
- * surface as-is.
+ * Resolve the read command (`print` vs `get`) for a path via a `request=child`
+ * existence probe. Uses {@link inspectChildrenOrEmpty} so an invalid path (a
+ * native trap, or REST's empty child list) flattens to no children and surfaces
+ * as a single `validation/unknown-path` here rather than leaking a transport
+ * trap. Attribute/completion discovery does NOT use the swallowing probe — traps
+ * there surface as-is.
  */
-async function inspectChildrenForProbe(
-	backend: ProtocolAdapter,
-	path: string,
-): Promise<unknown[]> {
-	try {
-		return await backend.inspect("child", path);
-	} catch (error) {
-		if (
-			error instanceof CentrsError &&
-			(error.code === "routeros/api-trap" ||
-				error.code === "routeros/unknown-path")
-		) {
-			return [];
-		}
-		throw error;
-	}
-}
-
 async function inspectRetrievePath(
 	resolved: ResolvedRetrieveRequest,
 	backend: ProtocolAdapter,
 ): Promise<RetrieveInspection> {
-	const pathTokens = pathTokensForInspect(resolved.path);
-	const rootChildren = (await inspectChildrenForProbe(
-		backend,
-		pathToInspectString(pathTokens),
-	)) as InspectChildItem[];
+	const tokens = pathTokens(resolved.path);
+	const rootChildren = await inspectChildrenOrEmpty(backend, tokens);
 
 	const supportsPrint = rootChildren.some((child) =>
 		isCommandNode(child, "print"),
@@ -943,21 +916,24 @@ async function inspectAttributes(
 	inspection: RetrieveInspection,
 	backend: ProtocolAdapter,
 ): Promise<string[]> {
-	const pathTokens = pathTokensForInspect(resolved.path);
+	const tokens = pathTokens(resolved.path);
 	const argument = inspection.command === "get" ? "value-name" : "proplist";
-	const completionRows = (await backend.inspect(
-		"completion",
-		pathToInspectString([...pathTokens, inspection.command, argument]),
-	)) as InspectCompletionItem[];
-	const completions = extractCompletionNames(completionRows);
+	const completionRows = await inspectCompletions(backend, [
+		...tokens,
+		inspection.command,
+		argument,
+	]);
+	const completions = [
+		...new Set(extractCompletionNames(completionRows)),
+	].sort();
 	if (completions.length > 0) {
 		return completions;
 	}
 
-	const commandChildren = (await backend.inspect(
-		"child",
-		pathToInspectString([...pathTokens, inspection.command]),
-	)) as InspectChildItem[];
+	const commandChildren = await inspectChildren(backend, [
+		...tokens,
+		inspection.command,
+	]);
 	return commandChildren
 		.filter(isArgumentNode)
 		.map((child) => child.name)
@@ -983,35 +959,6 @@ async function executeRetrieve(
 		proplist: resolved.attributes.length > 0 ? resolved.attributes : undefined,
 		detail: resolved.allAttributes,
 	});
-}
-
-function pathTokensForInspect(path: string): string[] {
-	return path.split("/").filter(Boolean);
-}
-
-function isCommandNode(
-	child: InspectChildItem,
-	name: "get" | "print",
-): boolean {
-	return (
-		child.name === name &&
-		(child.type === "cmd" || child["node-type"] === "cmd")
-	);
-}
-
-function isArgumentNode(child: InspectChildItem): boolean {
-	return child.type === "arg" || child["node-type"] === "arg";
-}
-
-function extractCompletionNames(
-	rows: readonly InspectCompletionItem[],
-): string[] {
-	const names = rows
-		.flatMap((row) => [row.completion, row.name, row.value, row.text])
-		.filter((value): value is string => typeof value === "string")
-		.map((value) => value.replace(/=.*$/, "").trim())
-		.filter((value) => value.length > 0);
-	return [...new Set(names)].sort();
 }
 
 function isKnownSingletonPath(path: string): boolean {
@@ -1120,10 +1067,6 @@ function parseOutputFormat(value: string): RetrieveOutputFormat {
 		summary: `Unsupported output format: ${value}`,
 		remediation: `Choose one of ${retrieveOutputFormats.join(", ")}.`,
 	});
-}
-
-function pathToInspectString(path: readonly string[]): string {
-	return path.join(",");
 }
 
 function countResultObjects(data: unknown): number {

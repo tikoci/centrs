@@ -24,6 +24,7 @@ A cell advances only with the matching evidence in the same change.
 | Command  | rest-api      | native-api    | ssh           | mac-telnet    | snmp          | mndp          | romon         | winbox-terminal |
 | -------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ---------------- |
 | retrieve | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | —             | —             | —                |
+| api      | `designed`    | `designed`    | —             | —             | —             | —             | —             | —                |
 | stream   | —             | `designed`    | `designed`    | —             | —             | —             | —             | —                |
 | execute  | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | `not-started`    |
 | terminal | —             | —             | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —                |
@@ -156,7 +157,7 @@ core and carry their own state, tracked here:
 
 | Surface | State | Spec | Notes |
 | ------- | ----- | ---- | ----- |
-| api (TS) | `CHR-passed` | `src/index.ts` | Root surface; everything else adapts it. |
+| ts-api | `CHR-passed` | `src/index.ts` | Root **TypeScript library** surface; everything else adapts it. (Renamed from `api (TS)` to avoid colliding with the `api` **command** row in the grid above — the command is a verb, this is the library.) |
 | cli | `coded` | `src/cli/` | `retrieve`/`execute`/`transfer`/`terminal`/`devices`/`discover`/`btest` wired. |
 | mcp | `CHR-passed` | `commands/mcp/` | Scoped-verb stdio MCP server; CDB-as-allowlist safety model. Phase 1 (explain/validate/retrieve/execute, resources) plus first Phase 2 CDB mutation (`centrs_devices add`) green on CHR 7.23 via `test/integration/mcp.test.ts`, including gated write execution. |
 | tui | `not-started` | `src/tui.ts` | Stub. |
