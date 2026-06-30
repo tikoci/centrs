@@ -312,7 +312,7 @@ export async function expandCdbGroup(
 	return { targets, warnings, empty: false };
 }
 
-function resolutionFromEntry(
+export function resolutionFromEntry(
 	entry: WinBoxCdbEntry,
 	recordIndex: number,
 ): CdbResolution {

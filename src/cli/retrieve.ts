@@ -9,6 +9,7 @@ import {
 	buildRetrieveErrorEnvelope,
 	buildRetrieveFanoutErrorEnvelope,
 	describeCentrs,
+	fanoutExitCode,
 	type RetrieveOutputFormat,
 	type RetrieveRequest,
 	renderRetrieveEnvelope,
@@ -176,7 +177,13 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 					{ verbose: request.verbose },
 				);
 		console.log(output);
-		return 0;
+		// Fan-out uses the uniform granular exit contract (0 all-ok / 2 partial /
+		// 1 all-failed); a single-target retrieve success is always 0.
+		return request.group
+			? fanoutExitCode(
+					envelope as Parameters<typeof renderRetrieveFanoutEnvelope>[0],
+				)
+			: 0;
 	} catch (error) {
 		const format = inferRequestedFormat(args, request);
 		const tips = isMissingTargetError(error)

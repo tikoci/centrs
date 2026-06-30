@@ -33,10 +33,12 @@ import type {
 	FanoutSummary,
 } from "./core/envelope.ts";
 import {
+	buildFanoutEnvelope,
+	buildFanoutResolveFailure,
+	commonVia,
 	defaultFanoutSleep,
 	resolveFanoutConcurrency,
-	runBoundedPool,
-	runWithRetry,
+	runFanout,
 	summarizeFanout,
 } from "./core/fanout.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
@@ -44,7 +46,7 @@ import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
 	type CdbGroupExpansion,
 	type CdbGroupResolveInput,
-	type CdbResolution,
+	type CdbGroupTarget,
 	expandCdbGroup,
 } from "./resolver/index.ts";
 import {
@@ -149,7 +151,7 @@ export async function retrieveGroup(
 	);
 
 	if (expansion.empty) {
-		return buildFanoutEnvelope({
+		return retrieveFanoutEnvelope({
 			group,
 			concurrency,
 			summary: { total: 0, ok: 0, failed: 0 },
@@ -164,37 +166,46 @@ export async function retrieveGroup(
 	const execute = internals.execute ?? runResolvedRetrieve;
 	const sleep = internals.sleep ?? defaultFanoutSleep;
 
-	const targets = await runBoundedPool(
-		expansion.targets,
+	const targets = await runFanout<
+		CdbGroupTarget,
+		ResolvedRetrieveRequest,
+		RetrieveEnvelope
+	>({
+		members: expansion.targets,
 		concurrency,
-		async (member): Promise<RetrieveEnvelope> => {
-			let resolved: ResolvedRetrieveRequest;
-			try {
-				const macResolution = await resolveMacForRetrieve(
-					request,
-					env,
-					member.resolution,
-				);
-				resolved = buildResolvedRetrieve(
-					request,
-					env,
-					member.resolution,
-					attributeSelections,
-					macResolution,
-				);
-			} catch (error) {
-				return buildResolveFailureEnvelope(member.resolution, error);
-			}
-			return runWithRetry<RetrieveEnvelope>(
-				() => execute(resolved, member.recordIndex),
-				(error) => buildRetrieveErrorEnvelopeFromResolved(resolved, error),
-				{ sleep },
+		resolve: async (member) => {
+			const macResolution = await resolveMacForRetrieve(
+				request,
+				env,
+				member.resolution,
+			);
+			return buildResolvedRetrieve(
+				request,
+				env,
+				member.resolution,
+				attributeSelections,
+				macResolution,
 			);
 		},
-	);
+		onResolveError: (member, error) =>
+			buildFanoutResolveFailure<RetrieveOperationMeta>({
+				error,
+				target: {
+					input: member.resolution.identity,
+					identity: member.resolution.identity,
+					recordIndex: member.resolution.recordIndex,
+				},
+				warnings: [...member.resolution.warnings],
+				summary: "Failed to resolve a fanout target.",
+			}),
+		execute: (resolved, member) => execute(resolved, member.recordIndex),
+		onExecuteError: (resolved, _member, error) =>
+			buildRetrieveErrorEnvelopeFromResolved(resolved, error),
+		sleep,
+	});
 
 	const summary = summarizeFanout(targets);
-	return buildFanoutEnvelope({
+	return retrieveFanoutEnvelope({
 		group,
 		concurrency,
 		summary,
@@ -260,35 +271,6 @@ function resolveFanoutConcurrencyProtocol(
 	return globalVia;
 }
 
-function buildResolveFailureEnvelope(
-	resolution: CdbResolution,
-	error: unknown,
-): RetrieveEnvelope {
-	const centrsError =
-		error instanceof CentrsError
-			? error
-			: new CentrsError({
-					code: "internal/unhandled",
-					summary: "Failed to resolve a fanout target.",
-					cause: error,
-				});
-	return {
-		ok: false,
-		error: serializeCentrsError(centrsError),
-		warnings: [...resolution.warnings],
-		tips: [],
-		meta: {
-			target: {
-				input: resolution.identity,
-				identity: resolution.identity,
-				recordIndex: resolution.recordIndex,
-			},
-			via: null,
-			settings: {},
-		},
-	};
-}
-
 interface FanoutEnvelopeInput {
 	group: string;
 	concurrency: number;
@@ -300,45 +282,28 @@ interface FanoutEnvelopeInput {
 	targets: readonly RetrieveEnvelope[];
 }
 
-function buildFanoutEnvelope(
+/** retrieve's outer fan-out success envelope (delegates to the shared core). */
+function retrieveFanoutEnvelope(
 	input: FanoutEnvelopeInput,
 ): RetrieveFanoutEnvelope {
-	return {
-		ok: true,
-		data: {
-			summary: input.summary,
-			targets: input.targets,
-		},
+	return buildFanoutEnvelope<
+		unknown,
+		RetrieveOperationMeta,
+		RetrieveFanoutOperationMeta
+	>({
+		summary: input.summary,
+		targets: input.targets,
 		warnings: input.warnings,
-		tips: [],
-		meta: {
-			target: {},
-			via: input.via,
-			settings: input.settings,
-			operation: {
-				kind: "fanout",
-				group: input.group,
-				concurrency: input.concurrency,
-				summary: input.summary,
-				request: input.requestSummary,
-			},
+		settings: input.settings,
+		via: input.via,
+		operation: {
+			kind: "fanout",
+			group: input.group,
+			concurrency: input.concurrency,
+			summary: input.summary,
+			request: input.requestSummary,
 		},
-	};
-}
-
-function commonVia(
-	targets: readonly RetrieveEnvelope[],
-): RouterOsProtocol | null {
-	let via: RouterOsProtocol | null | undefined;
-	for (const target of targets) {
-		const candidate = target.meta.via;
-		if (via === undefined) {
-			via = candidate;
-		} else if (via !== candidate) {
-			return null;
-		}
-	}
-	return via ?? null;
+	});
 }
 
 /**

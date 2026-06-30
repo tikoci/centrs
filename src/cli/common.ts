@@ -33,6 +33,17 @@ export function expectValue(
 	return value;
 }
 
+/**
+ * Parse a strictly-integer flag value, or `undefined` when the whole token is
+ * not an integer. Rejects numeric prefixes (`2abc` → undefined, not `2`) and
+ * decimals (`1.5`), which a bare `Number.parseInt` would silently truncate —
+ * the trap shared by `--port` / `--count` / `--concurrency`.
+ */
+export function parseStrictInteger(value: string): number | undefined {
+	const trimmed = value.trim();
+	return /^-?\d+$/.test(trimmed) ? Number.parseInt(trimmed, 10) : undefined;
+}
+
 /** Flatten an option's `flag` field ("-X / --method") into individual `-`/`--` tokens. */
 export function knownFlags(options: readonly CliCommandOption[]): string[] {
 	const flags: string[] = [];

@@ -268,6 +268,14 @@ export async function runResolvedApi(
 export async function resolveApiRequest(
 	request: ApiRequest,
 	env: Record<string, string | undefined>,
+	override?: {
+		/**
+		 * A pre-resolved CDB record, supplied by fan-out so the CDB is loaded ONCE
+		 * (not per member) and a `--default`/literal member is never re-resolved
+		 * through `resolveCdb`'s `__default__` synthetic-target fallback.
+		 */
+		cdbResolution?: CdbResolution;
+	},
 ): Promise<ResolvedApiRequest> {
 	validateApiRequestShape(request);
 	const normalized = normalizeApiEndpoint(request.endpoint);
@@ -297,14 +305,16 @@ export async function resolveApiRequest(
 	const query = buildApiQuery(request);
 	const proplist = buildApiProplist(request);
 
-	const cdbResolution = await resolveCdb(
-		{
-			targetInput: request.targetInput,
-			cdbFile: request.cdbFile,
-			cdbPassword: request.cdbPassword,
-		},
-		env,
-	);
+	const cdbResolution =
+		override?.cdbResolution ??
+		(await resolveCdb(
+			{
+				targetInput: request.targetInput,
+				cdbFile: request.cdbFile,
+				cdbPassword: request.cdbPassword,
+			},
+			env,
+		));
 	const via = resolveApiProtocol(request, env, listen, cdbResolution);
 	const format = resolveApiFormat(request, env);
 	// `--raw` forces validation off (constitution: --raw waiver); otherwise the
@@ -1122,7 +1132,7 @@ export function validateApiRequestShape(request: ApiRequest): void {
 	}
 }
 
-function parseApiMethod(method: string | undefined): ApiMethod {
+export function parseApiMethod(method: string | undefined): ApiMethod {
 	if (method === undefined) {
 		return "GET";
 	}
@@ -1136,6 +1146,35 @@ function parseApiMethod(method: string | undefined): ApiMethod {
 		remediation: `Choose one of ${apiMethods.join(", ")}.`,
 		context: { method },
 	});
+}
+
+/**
+ * Build the request-level summary (no target) for the fan-out outer meta and
+ * for an empty selection where no per-target inner envelope exists. Mirrors the
+ * summary `buildApiErrorEnvelope` assembles from a bare request.
+ */
+export function apiRequestSummaryFromRequest(
+	request: ApiRequest,
+	env: Record<string, string | undefined> = Bun.env,
+): ApiRequestSummary {
+	const normalized = normalizeApiEndpoint(request.endpoint);
+	const parsed = tryParseApiMethod(request.method);
+	const listen = (request.listen ?? false) || normalized.listen;
+	return {
+		endpoint: request.endpoint,
+		path: normalized.path,
+		id: normalized.id,
+		method: parsed ?? request.method ?? "GET",
+		verb: parsed ? mapMethodToVerb(parsed) : null,
+		write: parsed ? isApiMutating(parsed, normalized.path) : false,
+		listen,
+		yes: request.yes ?? false,
+		validate: request.raw ? false : (request.validate ?? true),
+		raw: request.raw ?? false,
+		format: resolveErrorFormat(request, env),
+		query: buildApiQuery(request),
+		proplist: buildApiProplist(request),
+	};
 }
 
 /** Parse a method without throwing: a valid {@link ApiMethod}, or `undefined` when invalid. */

@@ -145,8 +145,9 @@ describeFast("retrieve group fanout against CHR", () => {
 			]);
 			const stdout = consoleCapture.logs.slice(logsStart);
 
-			// Outer envelope is a success even though one target failed.
-			expect(exitCode).toBe(0);
+			// Outer envelope is a success (orchestration completed) even though one
+			// target failed — but the granular exit code reports the partial failure.
+			expect(exitCode).toBe(2);
 			expect(stdout).toHaveLength(1);
 			const envelope = JSON.parse(stdout[0] ?? "") as FanoutTestEnvelope;
 

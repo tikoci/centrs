@@ -4,8 +4,15 @@ import {
 	apiEnvelope,
 	apiOutputFormats,
 	buildApiErrorEnvelope,
+	normalizeApiEndpoint,
 	renderApiEnvelope,
 } from "../api.ts";
+import {
+	apiFanout,
+	buildApiFanoutErrorEnvelope,
+	renderApiFanoutEnvelope,
+} from "../api-fanout.ts";
+import { fanoutExitCode } from "../core/fanout.ts";
 import {
 	asCentrsError,
 	CentrsError,
@@ -26,6 +33,14 @@ import {
 	missingTargetError,
 	withTips,
 } from "./missing-target.ts";
+import {
+	buildTargetSelection,
+	consumeSelectionFlag,
+	emptySelectionFlags,
+	isFanoutMode,
+	type SelectionFlags,
+	selectionCommandOptions,
+} from "./selection.ts";
 
 export const apiCommand: CliCommandMetadata = {
 	name: "api",
@@ -87,6 +102,7 @@ export const apiCommand: CliCommandMetadata = {
 			valueName: "<rest-api|native-api>",
 			description: "Pin the transport; no silent downgrade. Default rest-api.",
 		},
+		...selectionCommandOptions,
 		{
 			flag: "--host",
 			valueName: "<host|url>",
@@ -160,11 +176,16 @@ interface ApiCliArgs extends ApiRequest {
 	format?: ApiOutputFormat;
 	/** Unresolved `--input` value (`-` or a path); read into `inputBody` in the runner. */
 	inputPath?: string;
+	/** Parsed target-selection flags (fan-out grammar). */
+	selectionFlags?: SelectionFlags;
+	/** Positionals before the endpoint — the fan-out target list. */
+	targetPositionals?: string[];
 }
 
 export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 	const parsed: ApiCliArgs = { endpoint: "" };
 	const positional: string[] = [];
+	const selectionFlags = emptySelectionFlags();
 
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
@@ -293,17 +314,27 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 				parsed.format = value as ApiOutputFormat;
 				break;
 			}
-			default:
+			default: {
+				const consumed = consumeSelectionFlag(args, index, selectionFlags);
+				if (consumed !== null) {
+					index = consumed;
+					break;
+				}
 				if (arg.startsWith("-")) {
 					throw unknownFlagError("api", arg, apiCommand.options);
 				}
 				positional.push(arg);
 				break;
+			}
 		}
 	}
 
-	parsed.targetInput = positional[0];
-	parsed.endpoint = positional[1] ?? "";
+	// api/retrieve positional boundary: the FINAL positional is the endpoint; every
+	// preceding positional is a fan-out target.
+	parsed.endpoint = positional.at(-1) ?? "";
+	parsed.targetPositionals = positional.slice(0, -1);
+	parsed.selectionFlags = selectionFlags;
+	parsed.targetInput = parsed.targetPositionals[0];
 	parsed.stdinIsTty = process.stdin.isTTY;
 	return parsed;
 }
@@ -315,14 +346,6 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 		if (parsed.help) {
 			console.log(renderCommandHelp(describeCentrs(), apiCommand));
 			return 0;
-		}
-		if (!parsed.targetInput) {
-			throw missingTargetError({
-				command: "api",
-				summary: "`centrs api` requires a <router> and an <endpoint>.",
-				remediation:
-					"Pass the router host/identity then the endpoint, e.g. `centrs api 192.0.2.10 ip/address`.",
-			});
 		}
 		// Resolve `--input` (file / stdin) before handing the body to the orchestrator.
 		if (parsed.inputPath !== undefined) {
@@ -342,6 +365,28 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 					cause: error,
 				});
 			}
+		}
+
+		// Fan-out mode (selector flag present, or >1 positional target) has its own
+		// envelope shape, guards, and granular exit code.
+		const selectionFlags = parsed.selectionFlags ?? emptySelectionFlags();
+		const targetPositionals = parsed.targetPositionals ?? [];
+		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
+			return await runApiFanoutCli(
+				parsed,
+				selectionFlags,
+				targetPositionals,
+				args,
+			);
+		}
+
+		if (!parsed.targetInput) {
+			throw missingTargetError({
+				command: "api",
+				summary: "`centrs api` requires a <router> and an <endpoint>.",
+				remediation:
+					"Pass the router host/identity then the endpoint, e.g. `centrs api 192.0.2.10 ip/address`.",
+			});
 		}
 
 		const envelope = await apiEnvelope(parsed);
@@ -406,6 +451,81 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 			);
 		}
 		return 1;
+	}
+}
+
+async function runApiFanoutCli(
+	parsed: ApiCliArgs,
+	selectionFlags: SelectionFlags,
+	targetPositionals: readonly string[],
+	args: readonly string[],
+): Promise<number> {
+	const selection = buildTargetSelection(selectionFlags, targetPositionals);
+	const format = inferApiFormat(args, parsed);
+	try {
+		// `--raw` strips the envelope; incompatible with per-target envelopes.
+		if (parsed.raw) {
+			throw new CentrsError({
+				code: "usage/conflicting-flags",
+				summary:
+					"`--raw` cannot combine with a multi-target selection; fan-out needs per-target envelopes.",
+				remediation:
+					"Drop `--raw` to fan out, or target a single router for the bare RouterOS body.",
+				context: { flags: ["--raw", "fanout"] },
+			});
+		}
+		// `--listen`/`--stream` is single-session.
+		const listenRequested =
+			(parsed.listen ?? false) || endpointInfersListen(parsed.endpoint);
+		if (listenRequested) {
+			throw new CentrsError({
+				code: "usage/fanout-not-supported",
+				summary:
+					"`api --stream`/`--listen` is single-session and cannot fan out across multiple targets.",
+				remediation:
+					"Follow a stream against a single router (no `--group`/`--where`/`--all`/`--default`/multiple positionals).",
+				context: { capability: "listen" },
+			});
+		}
+		const envelope = await apiFanout(
+			parsed,
+			selection,
+			Bun.env,
+			{},
+			{
+				concurrency: selectionFlags.concurrency,
+				allowAdhoc: true,
+			},
+		);
+		const resolvedFormat = envelope.meta.operation?.request.format ?? format;
+		console.log(
+			renderApiFanoutEnvelope(envelope, resolvedFormat, {
+				verbose: parsed.verbose ?? false,
+			}),
+		);
+		return fanoutExitCode(envelope);
+	} catch (error) {
+		const envelope = buildApiFanoutErrorEnvelope(
+			parsed,
+			selection,
+			error,
+			Bun.env,
+		);
+		console.error(
+			renderApiFanoutEnvelope(envelope, format, {
+				verbose: parsed.verbose ?? false,
+			}),
+		);
+		return 1;
+	}
+}
+
+/** Whether an endpoint's trailing segment infers `--listen` (without throwing). */
+function endpointInfersListen(endpoint: string): boolean {
+	try {
+		return normalizeApiEndpoint(endpoint).listen;
+	} catch {
+		return false;
 	}
 }
 

@@ -6,8 +6,8 @@ CDB / env / flags, validates the request through `/console/inspect`, runs the
 single REST or native-API operation, and returns the result in the standard
 envelope.
 
-Status: `CHR-passed` over `rest-api` and `native-api` (single-target), per
-`docs/MATRIX.md`; open-ended `--listen` streaming and multi-target fan-out are a
+Status: `CHR-passed` over `rest-api` and `native-api`, including multi-target
+fan-out, per `docs/MATRIX.md`; open-ended `--listen` streaming is the remaining
 later phase (a `--via rest-api --listen` request errors today). This file
 describes intent and flags; the matrix holds the cell states. Load-bearing
 rules — envelope, errors, settings precedence, identity, validation, protocol
@@ -68,12 +68,28 @@ when a bare-collection `POST` carries create-looking fields.
 | `--validate[=false]` | Default `true`. Gate is `/console/inspect` (see Validation). |
 | `--via <protocol>` | `rest-api` (default) or `native-api`. No silent downgrade. |
 | `--format <json\|yaml\|text>` | Output format. Defaults to `json` for `api` (machine-first); `CENTRS_FORMAT` overrides. |
+| `--group <name>` / `--where <attr>=<value>` / `--all` / `--default` / `--concurrency <n>` | Multi-target fan-out (see below). Repeatable `--group`/`--where`; the union de-dupes by CDB record index. |
 | target/auth | `--host`, `--port`, `--username`/`--user`/`-u`, `--password`, `--insecure`, `--timeout`, `--cdb-file`, `--cdb-password`, `--resolve <none\|arp>` — same single-target resolver as `retrieve`/`execute`. |
 
-Multi-target fan-out (`--group` / `--where` / `--all` / `--default` /
-`--concurrency`, reusing `src/core/fanout.ts`) lands with the `--listen`
-single-session constraint in a later phase. When it does, `--listen` is
-single-session: N>1 targets → `usage/fanout-not-supported`.
+## Fan-out (multi-target)
+
+Selecting more than one router — any selector flag (`--group` / `--where` /
+`--all` / `--default`) or more than one positional target — switches `api` into
+**fan-out mode** (`src/api-fanout.ts`, on the shared `src/core/fanout.ts` engine
+and the `src/resolver/selection.ts` grammar). A plain single-positional call
+stays the single-target envelope. Output is the locked `FanoutData` envelope
+(`data = { summary, targets[] }`; outer `ok` = orchestration success; per-target
+failures are inner `ok:false`), and the process exit code is granular: `0`
+all-ok, `2` partial, `1` orchestration error or every target failed. See
+`docs/CONSTITUTION.md` (Target selection) for the shared grammar and `--where`
+vs `--query` distinction.
+
+- **Writes fan out under `--yes`**, confirmed once up front (not per target).
+  Without `--yes`, the error names the blast radius (how many routers) and that
+  `--yes` is required.
+- **`--listen`/`--stream` is single-session** → `usage/fanout-not-supported` in
+  fan-out mode. **`--raw` strips the envelope** → `usage/conflicting-flags` in
+  fan-out mode (per-target envelopes can't be bare).
 
 ## Validation
 
