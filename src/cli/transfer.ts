@@ -6,16 +6,20 @@
  * `../cli.ts`. Mirrors the shape of `./retrieve.ts`.
  */
 
+import { fanoutExitCode } from "../core/fanout.ts";
 import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
 import {
 	buildTransferErrorEnvelope,
+	buildTransferFanoutErrorEnvelope,
 	CentrsError,
 	describeCentrs,
 	renderTransferEnvelope,
+	renderTransferFanoutEnvelope,
 	type TransferOutputFormat,
 	type TransferRequest,
 	type TransferVerb,
 	transfer,
+	transferFanout,
 	transferOutputFormats,
 	transferVerbs,
 } from "../index.ts";
@@ -32,6 +36,14 @@ import {
 	missingTargetError,
 	withTips,
 } from "./missing-target.ts";
+import {
+	buildTargetSelection,
+	consumeSelectionFlag,
+	emptySelectionFlags,
+	isFanoutMode,
+	type SelectionFlags,
+	selectionCommandOptions,
+} from "./selection.ts";
 
 /** Sub-verb aliases, resolved to canonical verbs silently (commands/AGENTS.md). */
 const VERB_ALIASES: Record<string, TransferVerb> = {
@@ -72,6 +84,18 @@ export const transferCommand: CliCommandMetadata = {
 			flag: "--force",
 			valueName: "(--overwrite)",
 			description: "Replace an existing destination. Default refuses it.",
+		},
+		...selectionCommandOptions,
+		{
+			flag: "--out-dir",
+			valueName: "<dir>",
+			description:
+				"`download` fan-out only: write one file per target into <dir>, named by CDB identity. Required when downloading across a selection.",
+		},
+		{
+			flag: "--yes",
+			description:
+				"Confirm a mutating fan-out (upload/remove/mkdir/copy) across multiple routers in non-interactive runs.",
 		},
 		{
 			flag: "--verify",
@@ -159,6 +183,17 @@ export async function runTransferCli(
 			console.log(renderCommandHelp(describeCentrs(), transferCommand));
 			return 0;
 		}
+
+		// Fan-out mode (a selector flag, or >1 positional target before the verb)
+		// has its own envelope shape, single up-front write-confirm, and exit code.
+		if (isFanoutMode(parsed.selectionFlags, parsed.targetPositionals.length)) {
+			return await runTransferFanoutCli(
+				parsed.request,
+				parsed.selectionFlags,
+				parsed.targetPositionals,
+				args,
+			);
+		}
 		request = parsed.request;
 
 		const envelope = await transfer(request);
@@ -217,6 +252,44 @@ export async function runTransferCli(
 	}
 }
 
+async function runTransferFanoutCli(
+	request: TransferRequest,
+	selectionFlags: SelectionFlags,
+	targetPositionals: readonly string[],
+	args: readonly string[],
+): Promise<number> {
+	const selection = buildTargetSelection(selectionFlags, targetPositionals);
+	const format = inferRequestedFormat(args, request);
+	try {
+		const envelope = await transferFanout(
+			{ ...request, stdinIsTty: process.stdin.isTTY },
+			selection,
+			Bun.env,
+			{},
+			{ concurrency: selectionFlags.concurrency, allowAdhoc: true },
+		);
+		console.log(
+			renderTransferFanoutEnvelope(envelope, format, {
+				verbose: request.verbose ?? false,
+			}),
+		);
+		// Granular exit contract: 0 all-ok / 2 partial / 1 all-failed.
+		return fanoutExitCode(envelope);
+	} catch (error) {
+		// Strip credentials before any renderer touches the request (stderr/CI logs).
+		const envelope = buildTransferFanoutErrorEnvelope(
+			redactTransferRequest(request) ?? request,
+			error,
+		);
+		console.error(
+			renderTransferFanoutEnvelope(envelope, format, {
+				verbose: request.verbose ?? false,
+			}),
+		);
+		return 1;
+	}
+}
+
 /**
  * Strip credential fields before a failed request is handed to the error
  * envelope/text renderers. Those outputs land on stderr (and CI logs), so the
@@ -237,13 +310,16 @@ function redactTransferRequest(
 interface ParsedTransfer {
 	help?: boolean;
 	request: TransferRequest;
+	selectionFlags: SelectionFlags;
+	targetPositionals: readonly string[];
 }
 
-function parseTransferCliArgs(
+export function parseTransferCliArgs(
 	args: readonly string[],
 	fixedVerb?: TransferVerb,
 ): ParsedTransfer {
 	const flags: Partial<TransferRequest> & { verbose?: boolean } = {};
+	const selectionFlags = emptySelectionFlags();
 	const positional: string[] = [];
 	let help = false;
 	// `--verify <mode>` and `--no-verify` both map to the single `verify` field,
@@ -326,10 +402,21 @@ function parseTransferCliArgs(
 			case "--no-validate":
 				flags.validate = false;
 				break;
+			case "--out-dir":
+				flags.outDir = expectValue(args, ++index, arg);
+				break;
+			case "--yes":
+				flags.yes = true;
+				break;
 			case "--verbose":
 				flags.verbose = true;
 				break;
-			default:
+			default: {
+				const consumed = consumeSelectionFlag(args, index, selectionFlags);
+				if (consumed !== null) {
+					index = consumed;
+					break;
+				}
 				// A lone `-` is the stdin/stdout positional (upload from / download
 				// to a pipe), not a flag.
 				if (arg !== "-" && arg.startsWith("-")) {
@@ -343,11 +430,17 @@ function parseTransferCliArgs(
 				}
 				positional.push(arg);
 				break;
+			}
 		}
 	}
 
 	if (help) {
-		return { help: true, request: { verb: fixedVerb ?? "list" } };
+		return {
+			help: true,
+			request: { verb: fixedVerb ?? "list" },
+			selectionFlags,
+			targetPositionals: [],
+		};
 	}
 
 	if (sawNoVerify && explicitVerify !== undefined && explicitVerify !== "off") {
@@ -359,67 +452,101 @@ function parseTransferCliArgs(
 		});
 	}
 
-	const request = assemblePositionals(positional, flags, fixedVerb);
-	return { request };
+	const { request, targetPositionals } = assemblePositionals(
+		positional,
+		flags,
+		selectionFlags,
+		fixedVerb,
+	);
+	return { request, selectionFlags, targetPositionals };
+}
+
+/** Whether a positional token is a transfer verb keyword (canonical or alias). */
+function isTransferVerbToken(token: string): boolean {
+	return transferVerbs.includes(token as TransferVerb) || token in VERB_ALIASES;
 }
 
 /**
- * Map positionals to the per-verb request shape. For the top-level alias the
- * verb is fixed and the first positional is `<router>`; for `centrs transfer`
- * the positionals are `<router> <verb> …`.
+ * Map positionals to the per-verb request shape and split fan-out targets. The
+ * boundary is the **verb keyword**: positionals before it are targets, the verb +
+ * paths follow. The top-level `upload`/`download` alias fixes the verb, so its
+ * positionals are paths; with a selector present, positional fan-out targets are
+ * not expressible there (fan-out comes from the selector). See
+ * `docs/CONSTITUTION.md` (Target selection).
  */
 function assemblePositionals(
 	positional: readonly string[],
 	flags: Partial<TransferRequest> & { verbose?: boolean },
+	selectionFlags: SelectionFlags,
 	fixedVerb?: TransferVerb,
-): TransferRequest {
-	let targetInput: string | undefined;
+): { request: TransferRequest; targetPositionals: readonly string[] } {
+	const hasSelector = isFanoutMode(selectionFlags, 0);
 	let verb: TransferVerb;
+	let targetPositionals: readonly string[];
 	let rest: readonly string[];
 
 	if (fixedVerb) {
-		targetInput = positional[0];
 		verb = fixedVerb;
-		rest = positional.slice(1);
-	} else {
-		targetInput = positional[0];
-		const rawVerb = positional[1];
-		// A missing target gets the tagged missing-target error (CDB picker tip);
-		// a present target with no verb is a distinct "which verb?" usage error.
-		if (!targetInput) {
-			throw missingTargetError({
-				command: "transfer",
-				summary:
-					"`centrs transfer` requires a <router> target and a verb (upload|download|list|remove|mkdir|copy).",
-				remediation:
-					"Pass the target then a verb, e.g. `centrs transfer <router> list`; run `--help` for the full shape.",
-			});
+		if (hasSelector) {
+			// alias + selector: targets come from the selector; positionals are paths.
+			targetPositionals = [];
+			rest = positional;
+		} else {
+			targetPositionals = positional[0] !== undefined ? [positional[0]] : [];
+			rest = positional.slice(1);
 		}
-		if (!rawVerb) {
+	} else {
+		const verbIndex = positional.findIndex(isTransferVerbToken);
+		if (verbIndex === -1) {
+			if (positional.length === 0 && !hasSelector) {
+				throw missingTargetError({
+					command: "transfer",
+					summary:
+						"`centrs transfer` requires a <router> target and a verb (upload|download|list|remove|mkdir|copy).",
+					remediation:
+						"Pass the target then a verb, e.g. `centrs transfer <router> list`; run `--help` for the full shape.",
+				});
+			}
 			throw new CentrsError({
 				code: "input/invalid-command",
 				summary:
-					"`centrs transfer` requires a verb after the <router> (upload|download|list|remove|mkdir|copy).",
+					"`centrs transfer` requires a verb (upload|download|list|remove|mkdir|copy).",
 				remediation:
 					"Pass a verb, e.g. `centrs transfer <router> list`; run `--help` for the full shape.",
-				context: { targetInput, verb: rawVerb },
+				context: { positionals: positional },
 			});
 		}
-		verb = canonicalVerb(rawVerb);
-		rest = positional.slice(2);
+		targetPositionals = positional.slice(0, verbIndex);
+		verb = canonicalVerb(positional[verbIndex] as string);
+		rest = positional.slice(verbIndex + 1);
 	}
 
-	if (!targetInput) {
-		throw missingTargetError({
-			command: "transfer",
-			summary: "`centrs transfer` requires a <router> target.",
-			remediation:
-				"Pass the router host/identity as the first argument; run `centrs transfer --help` for the command shape.",
-		});
+	const request: TransferRequest = { verb, ...flags };
+	applyVerbPaths(request, verb, rest);
+
+	// Single-target (not fan-out mode) needs exactly one resolved target.
+	if (!isFanoutMode(selectionFlags, targetPositionals.length)) {
+		const targetInput = targetPositionals[0];
+		if (!targetInput) {
+			throw missingTargetError({
+				command: "transfer",
+				summary: "`centrs transfer` requires a <router> target.",
+				remediation:
+					"Pass the router host/identity as the first argument; run `centrs transfer --help` for the command shape.",
+			});
+		}
+		request.targetInput = targetInput;
 	}
 
-	const request: TransferRequest = { verb, targetInput, ...flags };
+	return { request, targetPositionals };
+}
 
+/** Map the post-verb positionals onto the per-verb request fields. */
+function applyVerbPaths(
+	request: TransferRequest,
+	verb: TransferVerb,
+	rest: readonly string[],
+): void {
 	switch (verb) {
 		case "upload":
 			request.local = rest[0];
@@ -441,8 +568,6 @@ function assemblePositionals(
 			request.remoteDest = rest[1];
 			break;
 	}
-
-	return request;
 }
 
 function canonicalVerb(raw: string): TransferVerb {
