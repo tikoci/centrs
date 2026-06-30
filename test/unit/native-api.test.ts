@@ -459,3 +459,102 @@ describe("isNativeAuthFailure (grounded auth classification)", () => {
 		).toBe(false);
 	});
 });
+
+describe("native-api listen() streaming", () => {
+	test("sends the listen sentence and yields !re change frames", async () => {
+		const transport = new FakeTransport();
+		const gen = transport.apiSession.listen({
+			command: "/ip/address/listen",
+		});
+		const first = gen.next(); // an async generator is lazy: this triggers the send
+		const tag = transport.lastTag();
+		expect(transport.sent.at(-1)?.[0]).toBe("/ip/address/listen");
+
+		transport.reply([
+			"!re",
+			"=.id=*1",
+			"=address=198.51.100.1/32",
+			`.tag=${tag}`,
+		]);
+		const add = await first;
+		expect(add.done).toBe(false);
+		expect(readAttribute(add.value as ApiReply, "address")).toBe(
+			"198.51.100.1/32",
+		);
+
+		// A deletion frame carries the dead flag (CHR 7.23.1: `.dead=true`).
+		const second = gen.next();
+		transport.reply(["!re", "=.id=*1", "=.dead=true", `.tag=${tag}`]);
+		const del = await second;
+		expect(readAttribute(del.value as ApiReply, ".dead")).toBe("true");
+
+		// Stopping the consumer cancels the listen on the wire.
+		await gen.return();
+		const cancelled = transport.sent.some(
+			(words) => words[0] === "/cancel" && words.includes(`=tag=${tag}`),
+		);
+		expect(cancelled).toBe(true);
+	});
+
+	test("ends cleanly on cancel (interrupted trap then !done, no throw)", async () => {
+		const transport = new FakeTransport();
+		const gen = transport.apiSession.listen({
+			command: "/ip/address/listen",
+		});
+		const first = gen.next();
+		const tag = transport.lastTag();
+		transport.reply(["!re", "=address=198.51.100.1/32", `.tag=${tag}`]);
+		await first;
+
+		const next = gen.next();
+		transport.reply(
+			["!trap", "=category=2", "=message=interrupted", `.tag=${tag}`],
+			["!done", `.tag=${tag}`],
+		);
+		const end = await next;
+		expect(end.done).toBe(true);
+	});
+
+	test("throws when the listen command traps with a real error", async () => {
+		const transport = new FakeTransport();
+		const gen = transport.apiSession.listen({ command: "/bogus/listen" });
+		const first = gen.next();
+		const tag = transport.lastTag();
+		transport.reply(
+			["!trap", "=category=0", "=message=no such command", `.tag=${tag}`],
+			["!done", `.tag=${tag}`],
+		);
+		await expect(first).rejects.toMatchObject({ code: "routeros/api-trap" });
+	});
+
+	test("fails the stream when the transport closes", async () => {
+		const transport = new FakeTransport();
+		const gen = transport.apiSession.listen({
+			command: "/ip/address/listen",
+		});
+		const first = gen.next();
+		transport.apiSession.handleClose();
+		await expect(first).rejects.toMatchObject({
+			code: "transport/connection-closed",
+		});
+	});
+
+	test("an AbortSignal cancels the listen", async () => {
+		const transport = new FakeTransport();
+		const controller = new AbortController();
+		const gen = transport.apiSession.listen(
+			{ command: "/ip/address/listen" },
+			{ signal: controller.signal },
+		);
+		const first = gen.next();
+		const tag = transport.lastTag();
+		controller.abort();
+		transport.reply(
+			["!trap", "=category=2", "=message=interrupted", `.tag=${tag}`],
+			["!done", `.tag=${tag}`],
+		);
+		const end = await first;
+		expect(end.done).toBe(true);
+		expect(transport.sent.some((words) => words[0] === "/cancel")).toBe(true);
+	});
+});

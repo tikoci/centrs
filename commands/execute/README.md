@@ -201,9 +201,9 @@ Protocol selection: an unresolved MAC target auto-selects mac-telnet (covered by
 ## Open shape questions
 
 - ~~How to expose multi-line / async / progress output~~ — **resolved:**
-  open-ended follow/streaming reads are the separate read-only `stream` verb
-  (NDJSON stream of envelopes; see `commands/stream/README.md`). `execute` stays
-  single-shot read/write; it does not grow a follow mode.
+  open-ended follow/streaming reads are `api … --stream` (NDJSON stream of
+  envelopes; see `commands/api/README.md`). `execute` stays single-shot
+  read/write; it does not grow a follow mode.
 - ~~Whether `--strict` should reject "succeeded with stderr-like content."~~ —
   **decided:** `--strict` promotes any warning on an otherwise-successful run to
   `ok: false` (nonzero exit), like `-Werror`; the default stays lenient

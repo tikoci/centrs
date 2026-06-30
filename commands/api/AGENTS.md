@@ -187,3 +187,26 @@ green on CHR 7.23.1.
   identically over rest-api and native-api, **before** any write — no `:put
   [:parse]` involved (api input is a path, not a CLI string). A `/execute` script
   is a CLI string ⇒ `meta.validation.semantic = "not-applicable"`.
+
+## CONFIRMED ON CHR (Phase 4 `--stream` follow — CHR 7.23.1, 2026-06-30)
+
+Validated by `test/integration/api-listen.test.ts` (L1–L4) on CHR 7.23.1.
+`--stream` is the primary flag; `--listen` is an alias; a `/listen` endpoint
+infers both. Native-api only (REST's 60s cap → `transport/capability-unsupported`).
+
+- **CONFIRMED — `NativeApiSession.listen()` + `/cancel` end-to-end.** Opening
+  `/ip/address/listen` (own `.tag`) and adding an address over REST yields an
+  `!re` frame; stopping (`--count`/`--duration`/Ctrl-C) sends `/cancel =tag=<t>
+  .tag=<n>` and the listen closes via the `interrupted` trap (category 2) then
+  `!done` — the generator ends **without** throwing (the interrupted trap is the
+  normal cancel, not an error). A non-interrupted trap or transport closure does
+  throw. Re-confirms the Phase-0 spike through the real `apiListen()` path.
+- **CONFIRMED — deletion frames carry `.dead=true`.** Removing a pre-seeded
+  address over REST while listening emits a minimal `{ ".id", ".dead":"true" }`
+  `!re` (re-confirms `.dead=true`, not the docs' `=.dead=yes`).
+- **Stream shape:** each `!re` → one NDJSON envelope frame
+  (`meta.operation.stream.kind="frame"`, string values, `.dead` preserved); the
+  stream ends with a summary envelope (`stream.kind="summary"`,
+  `data.stopReason` ∈ `count-reached`/`duration-elapsed`/`interrupted`/
+  `transport-error`, plus `frames`/`durationMs`). The CLI exit code keys on
+  whether the stream *started* cleanly, not on per-frame `ok`.

@@ -141,6 +141,30 @@ export interface ApiRequestSummary {
 	proplist?: readonly string[];
 }
 
+/** Why a `--stream` follow ended. */
+export type ApiStreamStopReason =
+	| "count-reached"
+	| "duration-elapsed"
+	| "interrupted"
+	| "transport-error";
+
+/** Per-line marker on `--stream` NDJSON output: a change frame, or the terminating summary. */
+export type ApiStreamMeta =
+	| { kind: "frame"; index: number }
+	| {
+			kind: "summary";
+			stopReason: ApiStreamStopReason;
+			frames: number;
+			durationMs: number;
+	  };
+
+/** The `data` payload of the terminating summary envelope on a `--stream`. */
+export interface ApiStreamSummary {
+	stopReason: ApiStreamStopReason;
+	frames: number;
+	durationMs: number;
+}
+
 export interface ApiOperationMeta {
 	kind: "api";
 	objectCount: number;
@@ -149,6 +173,8 @@ export interface ApiOperationMeta {
 		username?: string;
 		passwordProvided: boolean;
 	};
+	/** Present only on `--stream` output: the per-frame index or the final summary. */
+	stream?: ApiStreamMeta;
 }
 
 export type ApiEnvelope = CentrsEnvelope<unknown, ApiOperationMeta>;
@@ -173,6 +199,10 @@ export interface ResolvedApiRequest {
 	query: readonly string[];
 	proplist: readonly string[];
 	raw: boolean;
+	/** `--count`: stop a `--stream` after N frames. */
+	count?: number;
+	/** `--duration` parsed to ms: stop a `--stream` after this wall-clock window. */
+	durationMs?: number;
 	via: ResolvedSetting<RouterOsProtocol>;
 	target: ResolvedTarget;
 	auth: ResolvedAuth;
@@ -263,6 +293,178 @@ export async function runResolvedApi(
 	} finally {
 		await backend.close();
 	}
+}
+
+/**
+ * The open-ended `--stream` follow path: an async generator yielding one
+ * {@link ApiEnvelope} per `/listen` change frame, then a terminating summary
+ * envelope (`data` = {@link ApiStreamSummary}). Open-ended follow is native-api
+ * only — a `rest-api` (or otherwise unresolved) transport yields a single error
+ * envelope. `--count`/`--duration` and `externalSignal` (Ctrl-C) bound it.
+ * Errors before the first frame (resolution, validation, confirmation,
+ * capability) yield one error envelope and stop — the CLI keys its exit code on
+ * that first envelope.
+ */
+export async function* apiListen(
+	request: ApiRequest,
+	env: Record<string, string | undefined> = Bun.env,
+	externalSignal?: AbortSignal,
+): AsyncGenerator<ApiEnvelope, void, void> {
+	let resolved: ResolvedApiRequest | undefined;
+	try {
+		resolved = await resolveApiRequest(request, env);
+		await assertApiWriteConfirmed(request, resolved);
+		if (resolved.via.value !== "native-api") {
+			throw new CentrsError({
+				code: "transport/capability-unsupported",
+				summary: "REST cannot follow an open-ended `--stream` (60s cap).",
+				remediation:
+					"Open-ended follow is native-api only: use `--via native-api`, or drop `--stream` for a bounded one-shot.",
+				context: { via: resolved.via.value, capability: "listen" },
+			});
+		}
+	} catch (error) {
+		yield resolved
+			? buildApiErrorEnvelopeFromResolved(resolved, error)
+			: buildApiErrorEnvelope(request, error, env);
+		return;
+	}
+	yield* streamResolvedApi(resolved, externalSignal);
+}
+
+async function* streamResolvedApi(
+	resolved: ResolvedApiRequest,
+	externalSignal?: AbortSignal,
+): AsyncGenerator<ApiEnvelope, void, void> {
+	const backend = adapterForResolved(resolved);
+
+	let validation: EnvelopeValidationMeta;
+	try {
+		validation = resolved.validate.value
+			? (await validateApiRequest(resolved, backend)).validation
+			: disabledValidationMeta();
+	} catch (error) {
+		await backend.close();
+		yield buildApiErrorEnvelopeFromResolved(resolved, error);
+		return;
+	}
+
+	const controller = new AbortController();
+	const startedAt = Date.now();
+	let frames = 0;
+	let stopReason: ApiStreamStopReason | undefined;
+	let durationTimer: ReturnType<typeof setTimeout> | undefined;
+	const onExternalAbort = (): void => {
+		stopReason ??= "interrupted";
+		controller.abort();
+	};
+	if (resolved.durationMs !== undefined) {
+		durationTimer = setTimeout(() => {
+			stopReason = "duration-elapsed";
+			controller.abort();
+		}, resolved.durationMs);
+	}
+	if (externalSignal) {
+		if (externalSignal.aborted) {
+			onExternalAbort();
+		} else {
+			externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+		}
+	}
+
+	try {
+		const protocolRequest = buildProtocolApiRequest(resolved);
+		for await (const record of backend.listen(protocolRequest, {
+			signal: controller.signal,
+		})) {
+			frames += 1;
+			yield streamFrameEnvelope(resolved, validation, record, frames);
+			if (resolved.count !== undefined && frames >= resolved.count) {
+				stopReason = "count-reached";
+				break;
+			}
+		}
+		yield streamSummaryEnvelope(
+			resolved,
+			validation,
+			stopReason ?? "interrupted",
+			frames,
+			Date.now() - startedAt,
+		);
+	} catch (error) {
+		// A mid-stream failure is itself a frame; the summary still closes the
+		// stream (the CLI's exit code keys on whether it *started* cleanly).
+		yield buildApiErrorEnvelopeFromResolved(resolved, error);
+		yield streamSummaryEnvelope(
+			resolved,
+			validation,
+			"transport-error",
+			frames,
+			Date.now() - startedAt,
+		);
+	} finally {
+		if (durationTimer !== undefined) {
+			clearTimeout(durationTimer);
+		}
+		externalSignal?.removeEventListener("abort", onExternalAbort);
+		await backend.close();
+	}
+}
+
+function streamFrameEnvelope(
+	resolved: ResolvedApiRequest,
+	validation: EnvelopeValidationMeta,
+	record: Record<string, unknown>,
+	index: number,
+): ApiSuccessEnvelope {
+	const meta = metaFromResolved(resolved, validation, record);
+	meta.operation.stream = { kind: "frame", index };
+	return { ok: true, data: record, warnings: [], tips: [], meta };
+}
+
+function streamSummaryEnvelope(
+	resolved: ResolvedApiRequest,
+	validation: EnvelopeValidationMeta,
+	stopReason: ApiStreamStopReason,
+	frames: number,
+	durationMs: number,
+): ApiSuccessEnvelope {
+	const summary: ApiStreamSummary = { stopReason, frames, durationMs };
+	const meta = metaFromResolved(resolved, validation, summary);
+	meta.operation.objectCount = frames;
+	meta.operation.stream = { kind: "summary", stopReason, frames, durationMs };
+	return {
+		ok: true,
+		data: summary,
+		warnings: [...resolved.warnings],
+		tips: [],
+		meta,
+	};
+}
+
+function adapterForResolved(resolved: ResolvedApiRequest): ProtocolAdapter {
+	return createProtocolAdapter({
+		protocol: resolved.via.value,
+		host: resolved.target.host,
+		port: resolved.target.port,
+		tls: resolved.target.tls,
+		baseUrl: resolved.target.baseUrl,
+		username: resolved.auth.username,
+		password: resolved.auth.password,
+		timeoutMs: resolved.timeoutMs.value,
+		mac: resolved.target.mac,
+		insecure: resolved.insecure.value,
+	});
+}
+
+function disabledValidationMeta(): EnvelopeValidationMeta {
+	return {
+		enabled: false,
+		source: "disabled",
+		result: "skipped",
+		syntax: false,
+		semantic: false,
+	};
 }
 
 export async function resolveApiRequest(
@@ -374,6 +576,11 @@ export async function resolveApiRequest(
 		query,
 		proplist,
 		raw,
+		count: request.count,
+		durationMs:
+			request.duration !== undefined
+				? parseDuration(request.duration)
+				: undefined,
 		via,
 		target,
 		auth,
@@ -832,10 +1039,10 @@ function assertListenCapability(resolved: ResolvedApiRequest): void {
 		});
 	}
 	throw new CentrsError({
-		code: "usage/not-implemented",
-		summary: "`api --listen` streaming over native-api is not implemented yet.",
+		code: "input/invalid-command",
+		summary: "`--stream` is an open-ended follow, not a one-shot `api` call.",
 		remediation:
-			"Open-ended `/listen` streaming lands in a later phase; use a bounded one-shot `api` call for now.",
+			"Consume the stream via `apiListen()` (library) or `centrs api … --stream` (CLI); both yield an NDJSON envelope per change frame plus a final summary.",
 		context: { via: resolved.via.value, capability: "listen" },
 	});
 }
@@ -1052,6 +1259,40 @@ export function renderApiEnvelope(
 	}
 }
 
+/**
+ * Render one `--stream` envelope as a **single line** (NDJSON for `json`/`yaml`,
+ * a concise human row for `text`). Unlike {@link renderApiEnvelope} this never
+ * pretty-prints — every frame and the summary are one line each, so a consumer
+ * can read the stream line by line.
+ */
+export function renderApiStreamLine(
+	envelope: ApiEnvelope,
+	format: ApiOutputFormat,
+	options: { raw?: boolean; verbose?: boolean } = {},
+): string {
+	if (options.raw) {
+		return envelope.ok
+			? JSON.stringify(envelope.data)
+			: JSON.stringify(rawErrorPayload(envelope.error));
+	}
+	if (format === "text") {
+		return envelope.ok
+			? renderApiStreamFrameText(envelope)
+			: renderApiErrorText(envelope, options);
+	}
+	// json / yaml stream as NDJSON: one compact envelope object per line.
+	return JSON.stringify(envelope);
+}
+
+function renderApiStreamFrameText(envelope: ApiSuccessEnvelope): string {
+	const stream = envelope.meta.operation?.stream;
+	if (stream?.kind === "summary") {
+		return `— ${stream.stopReason}: ${stream.frames} frame(s) in ${stream.durationMs}ms`;
+	}
+	const index = stream?.kind === "frame" ? stream.index : 0;
+	return `${index}\t${JSON.stringify(envelope.data)}`;
+}
+
 function rawErrorPayload(
 	error: ApiErrorEnvelope["error"],
 ): Record<string, unknown> {
@@ -1183,7 +1424,7 @@ function metaFromResolved(
 	resolved: ResolvedApiRequest,
 	validation: EnvelopeValidationMeta,
 	data?: unknown,
-): ApiEnvelope["meta"] {
+): ApiEnvelope["meta"] & { operation: ApiOperationMeta } {
 	const target = resolved.target;
 	const targetSources: Record<string, CoreSettingSource> = {};
 	for (const [field, source] of Object.entries(target.sources)) {

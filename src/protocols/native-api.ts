@@ -348,6 +348,32 @@ interface PendingCommand {
 	reject: (error: CentrsError) => void;
 }
 
+/**
+ * A long-lived `/listen` subscription. Unlike {@link PendingCommand} it never
+ * buffers to a single resolve — each `!re` is pushed to the consumer as it
+ * arrives, and the stream ends on `!done` (after a `/cancel`'s `interrupted`
+ * trap) or fails on `!fatal`/transport closure.
+ */
+interface StreamingSubscription {
+	command: string;
+	/** An `!re` change frame arrived. */
+	push: (reply: ApiReply) => void;
+	/** An `!trap` arrived (an `interrupted` trap is the normal `/cancel` path). */
+	trap: (reply: ApiReply) => void;
+	/** `!done` arrived — the listen closed. */
+	settle: () => void;
+	/** `!fatal` or transport closure — the stream cannot continue. */
+	fail: (error: CentrsError) => void;
+}
+
+/** A `/cancel`'s `interrupted` trap (category 2) is the expected end of a listen, not an error. */
+function isInterruptedTrap(trap: ApiReply): boolean {
+	const message = readAttribute(trap, "message") ?? "";
+	return (
+		/interrupted/i.test(message) || readAttribute(trap, "category") === "2"
+	);
+}
+
 export interface NativeApiSessionOptions {
 	sink: NativeApiByteSink;
 	/** Host/port label used in error envelopes. */
@@ -366,6 +392,7 @@ export class NativeApiSession {
 	private readonly endpoint: string;
 	private readonly reader = new SentenceReader();
 	private readonly pending = new Map<string, PendingCommand>();
+	private readonly subscriptions = new Map<string, StreamingSubscription>();
 	private tagCounter = 0;
 	private closed = false;
 	private closeError: CentrsError | undefined;
@@ -439,33 +466,51 @@ export class NativeApiSession {
 			return; // untagged async/system notice — no waiter to route to
 		}
 		const waiter = this.pending.get(tag);
-		if (waiter === undefined) {
-			return;
-		}
-
-		switch (reply.type) {
-			case "!re":
-				waiter.records.push(reply);
-				return;
-			case "!trap":
-				waiter.trap = reply;
-				return;
-			case "!empty":
-				return;
-			case "!done": {
-				this.pending.delete(tag);
-				if (waiter.trap) {
-					waiter.reject(this.trapToError(waiter.command, waiter.trap));
+		if (waiter !== undefined) {
+			switch (reply.type) {
+				case "!re":
+					waiter.records.push(reply);
+					return;
+				case "!trap":
+					waiter.trap = reply;
+					return;
+				case "!empty":
+					return;
+				case "!done": {
+					this.pending.delete(tag);
+					if (waiter.trap) {
+						waiter.reject(this.trapToError(waiter.command, waiter.trap));
+						return;
+					}
+					if (Object.keys(reply.attributes).length > 0) {
+						waiter.records.push(reply);
+					}
+					waiter.resolve(waiter.records);
 					return;
 				}
-				if (Object.keys(reply.attributes).length > 0) {
-					waiter.records.push(reply);
-				}
-				waiter.resolve(waiter.records);
-				return;
+				default:
+					return;
 			}
-			default:
-				return;
+		}
+
+		const subscription = this.subscriptions.get(tag);
+		if (subscription !== undefined) {
+			switch (reply.type) {
+				case "!re":
+					subscription.push(reply);
+					return;
+				case "!trap":
+					subscription.trap(reply);
+					return;
+				case "!empty":
+					return;
+				case "!done":
+					this.subscriptions.delete(tag);
+					subscription.settle();
+					return;
+				default:
+					return;
+			}
 		}
 	}
 
@@ -502,6 +547,11 @@ export class NativeApiSession {
 		this.pending.clear();
 		for (const waiter of waiters) {
 			waiter.reject(error);
+		}
+		const subscriptions = [...this.subscriptions.values()];
+		this.subscriptions.clear();
+		for (const subscription of subscriptions) {
+			subscription.fail(error);
 		}
 	}
 
@@ -574,6 +624,129 @@ export class NativeApiSession {
 	}
 
 	/**
+	 * Open a `/listen` subscription and yield each `!re` change frame as it
+	 * arrives (the open-ended follow path; the listen command never sends `!done`
+	 * on its own). The generator ends cleanly when the listen is cancelled — via
+	 * `options.signal` or the consumer breaking out of the `for await` — which
+	 * sends `/cancel` and drains the resulting `interrupted` trap + `!done`. A
+	 * non-`interrupted` trap (e.g. a bad path) or `!fatal`/transport closure
+	 * throws. CHR-grounded (7.23.1): see `commands/api/AGENTS.md`.
+	 */
+	async *listen(
+		command: NativeApiCommand,
+		options: { signal?: AbortSignal } = {},
+	): AsyncGenerator<ApiReply, void, void> {
+		if (this.closed) {
+			throw (
+				this.closeError ??
+				new CentrsError({
+					code: "transport/connection-closed",
+					summary: `The RouterOS API session to ${this.endpoint} is closed.`,
+					remediation: "Open a new connection before listening.",
+				})
+			);
+		}
+		const tag = this.nextTag();
+		const words = this.buildWords(command, tag);
+
+		const queue: ApiReply[] = [];
+		let wake: (() => void) | undefined;
+		let ended = false;
+		let failure: CentrsError | undefined;
+		let trap: ApiReply | undefined;
+		const signalWake = (): void => {
+			const resume = wake;
+			wake = undefined;
+			resume?.();
+		};
+
+		this.subscriptions.set(tag, {
+			command: command.command,
+			push: (reply) => {
+				queue.push(reply);
+				signalWake();
+			},
+			trap: (reply) => {
+				trap = reply;
+			},
+			settle: () => {
+				ended = true;
+				signalWake();
+			},
+			fail: (error) => {
+				failure = error;
+				ended = true;
+				signalWake();
+			},
+		});
+
+		try {
+			this.sink.write(encodeSentence(words));
+		} catch (error) {
+			this.subscriptions.delete(tag);
+			throw error instanceof CentrsError
+				? error
+				: new CentrsError({
+						code: "transport/network",
+						summary: `Failed to open a listen on the RouterOS API connection to ${this.endpoint}.`,
+						remediation: "Retry; confirm the connection is still open.",
+						cause: error,
+					});
+		}
+
+		const onAbort = (): void => this.cancel(tag);
+		if (options.signal) {
+			if (options.signal.aborted) {
+				this.cancel(tag);
+			} else {
+				options.signal.addEventListener("abort", onAbort, { once: true });
+			}
+		}
+
+		try {
+			for (;;) {
+				while (queue.length > 0) {
+					yield queue.shift() as ApiReply;
+				}
+				if (ended) {
+					break;
+				}
+				await new Promise<void>((resolve) => {
+					wake = resolve;
+				});
+			}
+			if (failure) {
+				throw failure;
+			}
+			if (trap && !isInterruptedTrap(trap)) {
+				throw this.trapToError(command.command, trap);
+			}
+		} finally {
+			options.signal?.removeEventListener("abort", onAbort);
+			this.subscriptions.delete(tag);
+			// Consumer broke out early (e.g. --count reached): tell the router to stop.
+			if (!ended && !this.closed) {
+				this.cancel(tag);
+			}
+		}
+	}
+
+	/** Cancel an in-flight `/listen` by its tag (`/cancel =tag=<tag> .tag=<new>`). */
+	private cancel(tag: string): void {
+		if (this.closed) {
+			return;
+		}
+		const cancelTag = this.nextTag();
+		try {
+			this.sink.write(
+				encodeSentence(["/cancel", `=tag=${tag}`, `.tag=${cancelTag}`]),
+			);
+		} catch {
+			// Best effort — the connection may already be gone.
+		}
+	}
+
+	/**
 	 * Authenticate. Uses the combined approach: send name+password; if the
 	 * router answers with a legacy `=ret=` challenge, compute the MD5 response
 	 * and send the second `/login`. Resolves on success, rejects on bad auth.
@@ -607,16 +780,20 @@ export class NativeApiSession {
 		try {
 			this.sink.close();
 		} finally {
+			const closeError = new CentrsError({
+				code: "transport/connection-closed",
+				summary: `The RouterOS API session to ${this.endpoint} was closed by the caller.`,
+				remediation: "Open a new connection before sending more commands.",
+			});
 			const waiters = [...this.pending.values()];
 			this.pending.clear();
 			for (const waiter of waiters) {
-				waiter.reject(
-					new CentrsError({
-						code: "transport/connection-closed",
-						summary: `The RouterOS API session to ${this.endpoint} was closed by the caller.`,
-						remediation: "Open a new connection before sending more commands.",
-					}),
-				);
+				waiter.reject(closeError);
+			}
+			const subscriptions = [...this.subscriptions.values()];
+			this.subscriptions.clear();
+			for (const subscription of subscriptions) {
+				subscription.fail(closeError);
 			}
 		}
 	}
