@@ -1,5 +1,9 @@
 # retrieve
 
+Status: `CHR-passed` over `rest-api` and `native-api`, including multi-target
+fan-out (see **Target selection**). `snmp` is `not-started`. Matches
+`docs/MATRIX.md`.
+
 Read RouterOS state. RouterOS menu reads model `<path>/<verb>` where the verb
 is `print`-style (`print`, `get`, and async POST-shaped reads as they're
 added). SNMP reads use `retrieve <router> snmp <oid|MIB name>` and resolve

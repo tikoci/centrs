@@ -4,7 +4,11 @@
  * unchanged from the former monolithic `cli.ts`.
  */
 
-import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
+import {
+	asCentrsError,
+	CentrsError,
+	formatCentrsErrorText,
+} from "../errors.ts";
 import {
 	buildRetrieveErrorEnvelope,
 	buildRetrieveFanoutErrorEnvelope,
@@ -392,9 +396,14 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 
 	if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 		if (positional.length === 0 || path.length === 0) {
-			throw new Error(
-				"`centrs retrieve` fan-out requires a <routeros-path> after the selectors/targets.",
-			);
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary:
+					"`centrs retrieve` fan-out requires a <routeros-path> after the selectors/targets.",
+				remediation:
+					"Add the RouterOS menu path as the final positional, e.g. `centrs retrieve --group prod /system/resource`.",
+				context: { command: "retrieve", missingPath: true },
+			});
 		}
 		return request;
 	}
