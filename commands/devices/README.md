@@ -184,20 +184,22 @@ split lands.)
 Any command may receive multiple positional targets, one or more `--group`
 flags, `--all`, `--default`, and/or `--where <attr>=<value>` (device-class) — see
 `docs/CONSTITUTION.md` (Target selection grammar). The resolved member set is
-de-duplicated by CDB record index.
+de-duplicated by CDB record index (ad-hoc literal targets by host), and members
+are reassembled in record-index order regardless of completion order, so repeated
+runs produce stable diffs.
 
-- Each member runs in parallel up to `--concurrency` (default
-  `max(1, floor(os.cpus().length / 2))`).
-- `--fail-fast` aborts pending members on the first failure.
-- The outer envelope's `data` is an array of inner envelopes, one per member,
-  in the resolved member order (CDB record index — see `devices` group
-  expansion), not completion order, so repeated runs produce stable diffs.
-  Members still execute in parallel and may *complete* out of order; progress
-  is surfaced via `meta`, but the `data` array is always reassembled in the
-  deterministic resolved order. `ok` of the outer envelope is `true` iff every
-  inner envelope is `ok: true`.
-- Commands that are not safe to fan out (e.g. `terminal`) reject N > 1 with
-  `usage/fanout-not-supported`.
+- Each member runs in parallel up to `--concurrency` (transport-aware defaults:
+  `rest-api` 8, `native-api` 4).
+- Output is the locked `FanoutData` envelope with the granular `0`/`2`/`1` exit
+  code. The envelope shape (outer `ok` = orchestration success; a per-target
+  failure is an inner `ok: false`) and the exit-code contract are defined once in
+  [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md) (Target selection) — not
+  restated here.
+- A multi-target **write** is gated by `--yes`, confirmed once up front (not per
+  target); without it the error/tip names the blast radius (how many routers).
+  `--force` stays scoped to destructive `devices` CDB mutations.
+- Commands that are not safe to fan out (`terminal`, and `api --stream` /
+  `--listen`) reject a multi-target selection with `usage/fanout-not-supported`.
 
 ## Subcommands
 

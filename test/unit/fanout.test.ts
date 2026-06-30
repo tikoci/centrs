@@ -1,17 +1,34 @@
 import { describe, expect, test } from "bun:test";
+import type { CentrsEnvelope } from "../../src/core/envelope.ts";
 import {
+	buildFanoutEnvelope,
+	buildFanoutResolveFailure,
+	commonVia,
 	FANOUT_CONCURRENCY_DEFAULTS,
 	FANOUT_MAX_RETRIES,
 	fanoutBackoffMs,
+	fanoutExitCode,
 	isRetryableFanoutError,
 	resolveFanoutConcurrency,
 	runBoundedPool,
+	runFanout,
 	runWithRetry,
 	summarizeFanout,
 } from "../../src/core/fanout.ts";
 import { CentrsError } from "../../src/errors.ts";
 
 const noopSleep = (): Promise<void> => Promise.resolve();
+
+/** A minimal inner success envelope for the generic-helper tests. */
+function okEnvelope(via: "rest-api" | "native-api" | null): CentrsEnvelope {
+	return {
+		ok: true,
+		data: { n: 1 },
+		warnings: [],
+		tips: [],
+		meta: { target: {}, via, settings: {} },
+	};
+}
 
 describe("resolveFanoutConcurrency", () => {
 	test("uses transport-aware defaults when unset", () => {
@@ -173,6 +190,157 @@ describe("runWithRetry", () => {
 			{ sleep: noopSleep, maxRetries: 0 },
 		);
 		expect(attempts).toBe(1);
+	});
+});
+
+describe("fanoutExitCode", () => {
+	const summaryEnvelope = (
+		ok: number,
+		failed: number,
+	): {
+		ok: true;
+		data: { summary: { total: number; ok: number; failed: number } };
+	} => ({
+		ok: true,
+		data: { summary: { total: ok + failed, ok, failed } },
+	});
+
+	test("0 when every target ok or the selection is empty", () => {
+		expect(fanoutExitCode(summaryEnvelope(3, 0))).toBe(0);
+		expect(fanoutExitCode(summaryEnvelope(0, 0))).toBe(0);
+	});
+
+	test("2 on a partial failure", () => {
+		expect(fanoutExitCode(summaryEnvelope(1, 1))).toBe(2);
+		expect(fanoutExitCode(summaryEnvelope(2, 5))).toBe(2);
+	});
+
+	test("1 when every target failed", () => {
+		expect(fanoutExitCode(summaryEnvelope(0, 4))).toBe(1);
+	});
+
+	test("1 on an orchestration error (outer ok:false)", () => {
+		expect(fanoutExitCode({ ok: false })).toBe(1);
+	});
+});
+
+describe("commonVia", () => {
+	test("collapses agreeing protocols, null on disagreement", () => {
+		expect(commonVia([okEnvelope("rest-api"), okEnvelope("rest-api")])).toBe(
+			"rest-api",
+		);
+		expect(commonVia([okEnvelope("rest-api"), okEnvelope("native-api")])).toBe(
+			null,
+		);
+		expect(commonVia([])).toBe(null);
+	});
+});
+
+describe("buildFanoutEnvelope", () => {
+	test("wraps targets in the locked FanoutData shape", () => {
+		const targets = [okEnvelope("rest-api")];
+		const envelope = buildFanoutEnvelope({
+			summary: { total: 1, ok: 1, failed: 0 },
+			targets,
+			warnings: [],
+			settings: {},
+			via: "rest-api",
+			operation: { kind: "fanout" as const, count: 1 },
+		});
+		expect(envelope.ok).toBe(true);
+		expect(envelope.data.summary).toEqual({ total: 1, ok: 1, failed: 0 });
+		expect(envelope.data.targets).toBe(targets);
+		expect(envelope.meta.operation).toEqual({ kind: "fanout", count: 1 });
+		expect(envelope.meta.via).toBe("rest-api");
+	});
+});
+
+describe("buildFanoutResolveFailure", () => {
+	test("produces an inner ok:false envelope carrying target meta", () => {
+		const envelope = buildFanoutResolveFailure({
+			error: new CentrsError({ code: "target/unresolved", summary: "no host" }),
+			target: { input: "r1", identity: "r1", recordIndex: 2 },
+			warnings: [],
+		});
+		expect(envelope.ok).toBe(false);
+		if (!envelope.ok) {
+			expect(envelope.error.code).toBe("target/unresolved");
+			expect(envelope.meta.target.recordIndex).toBe(2);
+		}
+	});
+
+	test("wraps a non-CentrsError as internal/unhandled", () => {
+		const envelope = buildFanoutResolveFailure({
+			error: new Error("boom"),
+			target: {},
+		});
+		expect(envelope.ok).toBe(false);
+		if (!envelope.ok) {
+			expect(envelope.error.code).toBe("internal/unhandled");
+		}
+	});
+});
+
+describe("runFanout", () => {
+	test("orders results by input index and recovers per-target failures", async () => {
+		const members = [
+			{ id: "a", fail: false },
+			{ id: "b", fail: "resolve" as const },
+			{ id: "c", fail: "execute" as const },
+		];
+		const results = await runFanout<
+			(typeof members)[number],
+			{ id: string },
+			{ ok: boolean; tag: string }
+		>({
+			members,
+			concurrency: 3,
+			resolve: (member) => {
+				if (member.fail === "resolve") {
+					throw new CentrsError({ code: "target/unresolved", summary: "x" });
+				}
+				return { id: member.id };
+			},
+			onResolveError: (member) => ({ ok: false, tag: `resolve:${member.id}` }),
+			execute: (resolved) => {
+				if (resolved.id === "c") {
+					return Promise.reject(
+						new CentrsError({ code: "routeros/unknown-path", summary: "x" }),
+					);
+				}
+				return Promise.resolve({ ok: true, tag: `exec:${resolved.id}` });
+			},
+			onExecuteError: (resolved) => ({
+				ok: false,
+				tag: `exec-fail:${resolved.id}`,
+			}),
+			sleep: noopSleep,
+		});
+		expect(results).toEqual([
+			{ ok: true, tag: "exec:a" },
+			{ ok: false, tag: "resolve:b" },
+			{ ok: false, tag: "exec-fail:c" },
+		]);
+	});
+
+	test("retries a retryable execute failure before recovering", async () => {
+		let attempts = 0;
+		const results = await runFanout<number, number, { ok: boolean }>({
+			members: [1],
+			concurrency: 1,
+			resolve: (member) => member,
+			onResolveError: () => ({ ok: false }),
+			execute: () => {
+				attempts += 1;
+				return Promise.reject(
+					new CentrsError({ code: "transport/network", summary: "x" }),
+				);
+			},
+			onExecuteError: () => ({ ok: false }),
+			sleep: noopSleep,
+		});
+		expect(attempts).toBe(FANOUT_MAX_RETRIES + 1);
+		expect(results).toEqual([{ ok: false }]);
 	});
 });
 

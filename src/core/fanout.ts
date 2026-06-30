@@ -11,9 +11,18 @@
  * and counting.
  */
 
-import { CentrsError } from "../errors.ts";
+import { CentrsError, serializeCentrsError } from "../errors.ts";
 import type { RouterOsProtocol } from "../protocols/index.ts";
-import type { FanoutSummary } from "./envelope.ts";
+import type {
+	CentrsEnvelope,
+	CentrsErrorEnvelope,
+	CentrsSuccessEnvelope,
+	CommonSettingsMeta,
+	EnvelopeTargetMeta,
+	FanoutData,
+	FanoutSummary,
+	Warning,
+} from "./envelope.ts";
 
 /** Transport-aware default worker-pool size (REST drops parallel POSTs above ~8). */
 export const FANOUT_CONCURRENCY_DEFAULTS: Record<
@@ -157,4 +166,136 @@ export function fanoutBackoffMs(attempt: number): number {
 /** Real timer sleep; tests inject a no-op. */
 export function defaultFanoutSleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * The per-command fan-out loop, generic over the selection member, the resolved
+ * per-target plan, and the inner envelope type. Mirrors the original
+ * `retrieveGroup` worker exactly: resolve each member (a resolve failure becomes
+ * an inner error envelope, never a throw out of the batch); run the resolved
+ * request through {@link runWithRetry} (a retryable transient drop is retried,
+ * everything else recovers to an inner error envelope). Results are returned in
+ * input (record-index) order via {@link runBoundedPool}.
+ */
+export async function runFanout<Member, Resolved, Env>(opts: {
+	members: readonly Member[];
+	concurrency: number;
+	resolve: (member: Member) => Promise<Resolved> | Resolved;
+	onResolveError: (member: Member, error: unknown) => Env;
+	execute: (resolved: Resolved, member: Member) => Promise<Env>;
+	onExecuteError: (resolved: Resolved, member: Member, error: unknown) => Env;
+	sleep?: (ms: number) => Promise<void>;
+}): Promise<Env[]> {
+	return runBoundedPool(opts.members, opts.concurrency, async (member) => {
+		let resolved: Resolved;
+		try {
+			resolved = await opts.resolve(member);
+		} catch (error) {
+			return opts.onResolveError(member, error);
+		}
+		return runWithRetry<Env>(
+			() => opts.execute(resolved, member),
+			(error) => opts.onExecuteError(resolved, member, error),
+			{ sleep: opts.sleep },
+		);
+	});
+}
+
+/**
+ * The uniform fan-out process exit code (granular 0/2/1; see
+ * `docs/CONSTITUTION.md`, Target selection). `0` = every target ok (or an empty
+ * selection); `2` = partial (some ok, some failed); `1` = orchestration error
+ * (outer `ok: false`) OR every target failed. Decoupled from the envelope's
+ * outer `ok`, which only reports orchestration success.
+ */
+export function fanoutExitCode(envelope: {
+	ok: boolean;
+	data?: { summary?: FanoutSummary };
+}): 0 | 1 | 2 {
+	if (!envelope.ok) {
+		return 1;
+	}
+	const summary = envelope.data?.summary;
+	if (!summary || summary.total === 0 || summary.failed === 0) {
+		return 0;
+	}
+	if (summary.ok === 0) {
+		return 1;
+	}
+	return 2;
+}
+
+/** Collapse per-target `via` to one value, or `null` when targets disagree. */
+export function commonVia(
+	targets: readonly { meta: { via: RouterOsProtocol | null } }[],
+): RouterOsProtocol | null {
+	let via: RouterOsProtocol | null | undefined;
+	for (const target of targets) {
+		const candidate = target.meta.via;
+		if (via === undefined) {
+			via = candidate;
+		} else if (via !== candidate) {
+			return null;
+		}
+	}
+	return via ?? null;
+}
+
+/**
+ * Assemble the locked fan-out success envelope: `data = { summary, targets }`,
+ * outer `ok: true` = orchestration succeeded. The command owns its outer
+ * `operation` meta shape and passes it in.
+ */
+export function buildFanoutEnvelope<Data, Op, OuterOp>(input: {
+	summary: FanoutSummary;
+	targets: readonly CentrsEnvelope<Data, Op>[];
+	warnings: readonly Warning[];
+	settings: CommonSettingsMeta;
+	via: RouterOsProtocol | null;
+	operation: OuterOp;
+}): CentrsSuccessEnvelope<FanoutData<Data, Op>, OuterOp> {
+	return {
+		ok: true,
+		data: { summary: input.summary, targets: input.targets },
+		warnings: input.warnings,
+		tips: [],
+		meta: {
+			target: {},
+			via: input.via,
+			settings: input.settings,
+			operation: input.operation,
+		},
+	};
+}
+
+/**
+ * Build an INNER per-target error envelope for a member that failed to resolve
+ * (before any transport attempt). Carries the member's target meta so the
+ * fan-out output identifies which device failed.
+ */
+export function buildFanoutResolveFailure<Op = unknown>(input: {
+	error: unknown;
+	target: EnvelopeTargetMeta;
+	warnings?: readonly Warning[];
+	summary?: string;
+}): CentrsErrorEnvelope<Op> {
+	const centrsError =
+		input.error instanceof CentrsError
+			? input.error
+			: new CentrsError({
+					code: "internal/unhandled",
+					summary: input.summary ?? "Failed to resolve a fanout target.",
+					cause: input.error,
+				});
+	return {
+		ok: false,
+		error: serializeCentrsError(centrsError),
+		warnings: input.warnings ?? [],
+		tips: [],
+		meta: {
+			target: input.target,
+			via: null,
+			settings: {},
+		},
+	};
 }

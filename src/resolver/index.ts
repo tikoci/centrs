@@ -23,8 +23,12 @@ export {
 	type CdbResolveInput,
 	type CommentKvOverrides,
 	coerceCommentKv,
+	DEFAULT_RECORD_TARGET,
 	expandCdbGroup,
+	identityFromComment,
+	macFromComment,
 	type ResolverWarning,
+	resolutionFromEntry,
 	resolveCdb,
 } from "./cdb.ts";
 export {
@@ -36,6 +40,7 @@ export {
 	commentKvAllowlist,
 	commentKvReservedKeys,
 	parseCommentKv,
+	parseRawCommentFacts,
 	renderCommentKvToken,
 } from "./comment-kv.ts";
 export {
@@ -51,6 +56,15 @@ export {
 	resolveMacViaArp,
 	unresolvedMacError,
 } from "./mac.ts";
+export {
+	type CdbSelectionExpansion,
+	type CdbSelectionMember,
+	type CdbSelectionResolveInput,
+	expandCdbSelection,
+	isDefaultRecordTarget,
+	type SelectionWhereClause,
+	type TargetSelection,
+} from "./selection.ts";
 export {
 	type CommentKvLayer,
 	parseBoolean,

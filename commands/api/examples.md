@@ -1,11 +1,13 @@
 # api — examples
 
-Each numbered example is an executable spec, asserted by CHR integration tests
-(booted by `@tikoci/quickchr`): `test/integration/api.test.ts` (rest-api
-examples), `test/integration/api-native.test.ts` (native-api examples, N…), and
-`test/integration/api-listen.test.ts` (streaming examples, L…), with example N ↔
-assertion N. If a line here is not exercised by a test, the test file is wrong; if
-a line passes only with `--validate=false`, the implementation is wrong (see
+Each numbered example is an executable spec asserted by CHR integration tests
+(booted by `@tikoci/quickchr`), example N ↔ assertion N:
+`test/integration/api.test.ts` (rest-api examples),
+`test/integration/api-native.test.ts` (native-api examples, N…),
+`test/integration/api-listen.test.ts` (streaming examples, L…), and
+`test/integration/api-fanout.test.ts` (fan-out examples, F…). If a line here is not
+exercised by a test, the test file is wrong; if a line passes only with
+`--validate=false`, the implementation is wrong (see
 [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md)).
 
 `$R` is `<host>:<rest-port>` resolved by quickchr. `$A` is `<host>` and
@@ -323,3 +325,104 @@ centrs api $A ip/address --stream --duration 2s --via native-api --port $API_POR
 
 With no change during the window, the stream ends after ~2 s with a summary
 envelope whose `data.stopReason=duration-elapsed`. Exit code 0.
+
+## fanout (multi-target, F…)
+
+These run against a CDB fixture with two records sharing group `$G`: record 0 is
+the live CHR (comment `board=chr`), record 1 is an unreachable host (comment
+`board=dead`). Fan-out output is the locked `FanoutData` envelope
+(`data = { summary, targets[] }`; outer `ok` = orchestration success; per-target
+failures are inner `ok:false`), with the granular exit code (0 all-ok / 2 partial /
+1 all-failed or orchestration error). See `test/integration/api-fanout.test.ts`.
+The `--raw`/`--listen` + fan-out guards are network-free and validated in
+`test/integration/cli-smoke.test.ts`.
+
+### F1. `--group` fans a GET out; a dead target is an inner failure
+
+```bash
+centrs api --group $G ip/address --cdb-file $CDB --json
+```
+
+`ok: true`, `data.summary = { total: 2, ok: 1, failed: 1 }`, `data.targets[]` in
+record-index order (`[0, 1]`): target 0 is an inner success (`meta.via=rest-api`),
+target 1 is inner `ok:false` with `error.code=transport/connection-refused`.
+`meta.operation.kind=fanout`. Exit code 2.
+
+### F2. `--where` selects only the matching device
+
+```bash
+centrs api --where board=chr ip/address --cdb-file $CDB --json
+```
+
+The device-class selector matches only record 0, so `data.summary = { total: 1,
+ok: 1, failed: 0 }`, one inner success. Exit code 0.
+
+### F3. An empty selection is `ok:true` with summary 0/0/0
+
+```bash
+centrs api --group no-such-group ip/address --cdb-file $CDB --json
+```
+
+`ok: true`, `data.summary = { total: 0, ok: 0, failed: 0 }`, `data.targets = []`,
+and a `cdb/empty-group` warning. Exit code 0.
+
+### F4. A mutating fan-out without `--yes` is rejected, naming the blast radius
+
+```bash
+centrs api -X PUT ip/address -f address=10.99.0.1/32 -f interface=ether1 --group $G --cdb-file $CDB --json
+```
+
+Non-interactive and unconfirmed: outer `ok:false`,
+`error.code=usage/confirmation-required`, and the message names the router count
+(`2 router(s)`) and that `--yes` is required. No write is attempted. Exit code 1.
+
+### F5. A mutating fan-out with `--yes` writes across the selected devices
+
+```bash
+centrs api -X PUT ip/address -f address=10.99.0.7/32 -f interface=ether1 --where board=chr --yes --cdb-file $CDB --json
+```
+
+Confirmed once up front; the add runs on record 0 only (selected by `--where`).
+`data.summary = { total: 1, ok: 1, failed: 0 }`, the inner success carries the
+created `.id`. Exit code 0.
+
+The fixture for F6–F9 adds record 2 — the reserved `__default__` credential record.
+
+### F6. `--all` fans across every record except `__default__`
+
+```bash
+centrs api --all ip/address --cdb-file $CDB --json
+```
+
+`data.summary = { total: 2, ok: 1, failed: 1 }`, `data.targets[]` record indices
+`[0, 1]` (record 2 `__default__` is excluded). Exit code 2.
+
+### F7. A positional + `--group` union de-dupes by record index
+
+```bash
+centrs api $R0 --group $G ip/address --cdb-file $CDB --json
+```
+
+`$R0` is record 0's target, also a member of `$G`; the union is `{0, 1}` — record
+indices `[0, 1]`, `total = 2` (not 3). Exit code 2.
+
+### F8. `--concurrency` bounds the worker pool
+
+```bash
+centrs api --group $G --concurrency 1 ip/address --cdb-file $CDB --json
+```
+
+Runs one target at a time; `meta.operation.concurrency = 1`, still
+`data.summary = { total: 2, ok: 1, failed: 1 }`. (`--concurrency 2abc` / `1.5` are
+rejected at parse time with `usage/invalid-concurrency`.) Exit code 2.
+
+### F9. `--default` selects `__default__`, which fails the connectable guard
+
+```bash
+centrs api --default ip/address --cdb-file $CDB --json
+```
+
+The reserved record is a credential fallback, not a connectable router, so its one
+target fails deterministically: inner `ok:false` with
+`error.code=target/unresolved` (never a `transport/dns` attempt on `"__default__"`).
+`data.summary = { total: 1, ok: 0, failed: 1 }`. Exit code 1 (every target failed).

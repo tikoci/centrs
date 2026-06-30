@@ -500,6 +500,14 @@ function disabledValidationMeta(): EnvelopeValidationMeta {
 export async function resolveApiRequest(
 	request: ApiRequest,
 	env: Record<string, string | undefined>,
+	override?: {
+		/**
+		 * A pre-resolved CDB record, supplied by fan-out so the CDB is loaded ONCE
+		 * (not per member) and a `--default`/literal member is never re-resolved
+		 * through `resolveCdb`'s `__default__` synthetic-target fallback.
+		 */
+		cdbResolution?: CdbResolution;
+	},
 ): Promise<ResolvedApiRequest> {
 	validateApiRequestShape(request);
 	const normalized = normalizeApiEndpoint(request.endpoint);
@@ -529,14 +537,16 @@ export async function resolveApiRequest(
 	const query = buildApiQuery(request);
 	const proplist = buildApiProplist(request);
 
-	const cdbResolution = await resolveCdb(
-		{
-			targetInput: request.targetInput,
-			cdbFile: request.cdbFile,
-			cdbPassword: request.cdbPassword,
-		},
-		env,
-	);
+	const cdbResolution =
+		override?.cdbResolution ??
+		(await resolveCdb(
+			{
+				targetInput: request.targetInput,
+				cdbFile: request.cdbFile,
+				cdbPassword: request.cdbPassword,
+			},
+			env,
+		));
 	const via = resolveApiProtocol(request, env, listen, cdbResolution);
 	const format = resolveApiFormat(request, env);
 	// `--raw` forces validation off (constitution: --raw waiver); otherwise the
@@ -1102,24 +1112,36 @@ function resolveApiProtocol(
 			remediation: "Report this bug; api should default to rest-api.",
 		});
 	}
-	if (!plannedProtocols.includes(via.value as RouterOsProtocol)) {
+	assertApiProtocolSupported(via.value);
+	return via as ResolvedSetting<RouterOsProtocol>;
+}
+
+/**
+ * Reject a protocol identifier `api` cannot run over. Throws `settings/invalid-via`
+ * for an unknown protocol and `routeros/protocol-not-implemented` for a known
+ * transport (e.g. ssh / mac-telnet) that `api` does not support. Shared so a
+ * globally-pinned `--via` / `CENTRS_VIA` can be rejected as an orchestration
+ * pre-flight error in fan-out (`api-fanout.ts`) rather than degrading into N
+ * identical per-target resolve failures.
+ */
+export function assertApiProtocolSupported(via: string): void {
+	if (!plannedProtocols.includes(via as RouterOsProtocol)) {
 		throw new CentrsError({
 			code: "settings/invalid-via",
-			summary: `Unsupported protocol identifier: ${via.value}`,
+			summary: `Unsupported protocol identifier: ${via}`,
 			remediation: "`api` runs over `rest-api` (default) or `native-api`.",
-			context: { via: via.value },
+			context: { via },
 		});
 	}
-	if (via.value !== "rest-api" && via.value !== "native-api") {
+	if (via !== "rest-api" && via !== "native-api") {
 		throw new CentrsError({
 			code: "routeros/protocol-not-implemented",
-			summary: `api over ${via.value} is not supported.`,
+			summary: `api over ${via} is not supported.`,
 			remediation:
 				"Use `--via rest-api` (default) or `--via native-api`. Console transports (ssh/mac-telnet) run through `execute`/`terminal`.",
-			context: { via: via.value, capability: "execute" },
+			context: { via, capability: "execute" },
 		});
 	}
-	return via as ResolvedSetting<RouterOsProtocol>;
 }
 
 function resolveApiFormat(
@@ -1402,7 +1424,7 @@ export function validateApiRequestShape(request: ApiRequest): void {
 	}
 }
 
-function parseApiMethod(method: string | undefined): ApiMethod {
+export function parseApiMethod(method: string | undefined): ApiMethod {
 	if (method === undefined) {
 		return "GET";
 	}
@@ -1416,6 +1438,35 @@ function parseApiMethod(method: string | undefined): ApiMethod {
 		remediation: `Choose one of ${apiMethods.join(", ")}.`,
 		context: { method },
 	});
+}
+
+/**
+ * Build the request-level summary (no target) for the fan-out outer meta and
+ * for an empty selection where no per-target inner envelope exists. Mirrors the
+ * summary `buildApiErrorEnvelope` assembles from a bare request.
+ */
+export function apiRequestSummaryFromRequest(
+	request: ApiRequest,
+	env: Record<string, string | undefined> = Bun.env,
+): ApiRequestSummary {
+	const normalized = normalizeApiEndpoint(request.endpoint);
+	const parsed = tryParseApiMethod(request.method);
+	const listen = (request.listen ?? false) || normalized.listen;
+	return {
+		endpoint: request.endpoint,
+		path: normalized.path,
+		id: normalized.id,
+		method: parsed ?? request.method ?? "GET",
+		verb: parsed ? mapMethodToVerb(parsed) : null,
+		write: parsed ? isApiMutating(parsed, normalized.path) : false,
+		listen,
+		yes: request.yes ?? false,
+		validate: request.raw ? false : (request.validate ?? true),
+		raw: request.raw ?? false,
+		format: resolveErrorFormat(request, env),
+		query: buildApiQuery(request),
+		proplist: buildApiProplist(request),
+	};
 }
 
 /** Parse a method without throwing: a valid {@link ApiMethod}, or `undefined` when invalid. */

@@ -61,15 +61,22 @@ command is the structured one-command-per-operation surface (the verb trichotomy
 in `commands/api/README.md`); it can also write. See `docs/CONSTITUTION.md`
 (protocol selection).
 
-`api` is `CHR-passed` for `rest-api` and `native-api` (single-target): endpoint
-normalization, the method→verb map, the `/console/inspect` gate, write
-confirmation, `.query`/`.proplist`, `-f`/`-d`/`--input` bodies, `--raw`,
-`/execute` script-run (`=as-string=` for sync output on both transports), and
-open-ended `--stream` follow (native-api only — `NativeApiSession.listen()` +
-`/cancel`, NDJSON envelope frames with a terminating summary; `--via rest-api
---stream` errors `transport/capability-unsupported`), green on CHR 7.23.1 via
-`test/integration/api.test.ts` + `api-native.test.ts` + `api-listen.test.ts`.
-Still deferred (own phase): multi-target fan-out (`--stream` is single-session).
+`api` is `CHR-passed` for `rest-api` and `native-api`: endpoint normalization, the
+method→verb map, the `/console/inspect` gate, write confirmation, `.query`/
+`.proplist`, `-f`/`-d`/`--input` bodies, `--raw`, `/execute` script-run
+(`=as-string=` for sync output on both transports), **multi-target fan-out**
+(`--group`/`--where`/`--all`/`--default`/positionals over the shared
+`src/resolver/selection.ts` grammar + `src/core/fanout.ts` engine: locked
+`FanoutData` envelope, granular `0/2/1` exit code, `--yes`-once write confirm with
+a blast-radius message, `--listen`/`--raw` fan-out guards), **and** open-ended
+`--stream` follow (native-api only — `NativeApiSession.listen()` + `/cancel`,
+NDJSON envelope frames with a terminating summary; `--via rest-api --stream`
+errors `transport/capability-unsupported`; single-session, so N>1 targets →
+`usage/fanout-not-supported`). Green on CHR 7.23.1 via
+`test/integration/api.test.ts` + `api-native.test.ts` + `api-fanout.test.ts` (F1–F9:
+group, `--where`, empty, write-reject, write, `--all`, positional+group union,
+`--concurrency`, `--default` guard) + `api-listen.test.ts` and the `cli-smoke`
+guards. No remaining deferrals for `api`.
 
 `api` **absorbs** the former `stream` command (folded — no separate row): the
 read-only follow surface is `api <router> <endpoint> --stream` (alias `--listen`;

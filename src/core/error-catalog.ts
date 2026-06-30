@@ -54,6 +54,10 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "The named CDB group contains no records.",
 	},
 	{
+		code: "cdb/empty-selection",
+		summary: "The target selection matched no CDB records.",
+	},
+	{
 		code: "cdb/invalid-option",
 		summary: "A comment kv-soup option carried an invalid value.",
 	},
@@ -424,6 +428,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "usage/invalid-concurrency",
 		summary: "The --concurrency value must be an integer >= 1.",
+	},
+	{
+		code: "usage/fanout-not-supported",
+		summary:
+			"The command or mode cannot fan out across multiple targets (e.g. terminal, --listen/--stream).",
 	},
 	{
 		code: "usage/invalid-method",

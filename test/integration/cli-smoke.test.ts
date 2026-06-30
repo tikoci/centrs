@@ -265,6 +265,27 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		expect(envelope.error?.code).toBe("usage/conflicting-flags");
 	});
 
+	test("api fan-out + --listen is usage/fanout-not-supported (no network)", async () => {
+		// The single-session guard fires before any CDB/transport I/O — hermetic.
+		const res = await runCliProcess({
+			args: ["api", "--group", "prod", "ip/address", "--listen", "--json"],
+		});
+		expect(res.exitCode).toBe(1);
+		const envelope = parseEnvelope(res.stderrText);
+		expect(envelope.ok).toBe(false);
+		expect(envelope.error?.code).toBe("usage/fanout-not-supported");
+	});
+
+	test("api fan-out + --raw is usage/conflicting-flags (no network)", async () => {
+		const res = await runCliProcess({
+			args: ["api", "--group", "prod", "ip/address", "--raw", "--json"],
+		});
+		expect(res.exitCode).toBe(1);
+		const envelope = parseEnvelope(res.stderrText);
+		expect(envelope.ok).toBe(false);
+		expect(envelope.error?.code).toBe("usage/conflicting-flags");
+	});
+
 	test("api with no <router> tips toward discover/devices", async () => {
 		const home = await mkdtemp(join(tmpdir(), "centrs-smoke-home-"));
 		try {

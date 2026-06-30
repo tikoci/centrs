@@ -221,15 +221,32 @@ must round-trip through the same envelope.
 
 One grammar across every non-terminal command. A call selects targets from any
 mix of: `<router>` positionals (one or more), repeatable `--group <name>`,
-`--all` (every CDB record), `--default` (the `__default__` record), and
-repeatable `--where <attr>=<value>` — a **device-class** selector that matches
-CDB-stored facts/comment-kv (e.g. `--where board=RB5009`), AND-combined across
-repeats. The union is **de-duped by CDB record index** and run through the same
-per-target pipeline; the `data` array is reassembled in resolved record order,
-not completion order, so repeated runs diff cleanly. Destructive multi-target
-operations (e.g. `devices remove` across a group) require `--force`. `terminal`
-and a single-session `api --stream` follow are not fan-out surfaces and reject
-N>1 with `usage/fanout-not-supported`.
+`--all` (every CDB record, **excluding** the reserved `__default__` record),
+`--default` (the `__default__` record), and repeatable `--where <attr>=<value>` —
+a **device-class** selector that matches CDB-stored facts/comment-kv **plus core
+record fields** (`target`/`identity`/`group`/`mac`; core fields win so a comment
+token cannot spoof them), AND-combined across repeats. A call is in **fan-out
+mode** when any selector flag is present **or** more than one positional target is
+given; a plain single-positional call stays single-target. The union is
+**de-duped by CDB record index** (ad-hoc literal targets by host) and run through
+the same per-target pipeline.
+
+Fan-out output is the locked **`FanoutData`** envelope: `data = { summary, targets[]
+}`, where the outer `ok` reports **orchestration** success and a per-target failure
+is an inner `ok:false` envelope (output, not metadata). `targets[]` is reassembled
+in resolved record order, not completion order, so repeated runs diff cleanly. The
+**process exit code** is granular and uniform across fan-out commands: `0` every
+target ok (or an empty selection), `2` partial (some ok, some failed), `1`
+orchestration error or every target failed.
+
+A multi-target **RouterOS write** (e.g. `execute` / `api` add/set/remove across a
+selection) is gated by **`--yes`**, confirmed **once** up front; when it is missing
+the error names the blast radius (how many routers). The separate **`--force`**
+gate is scoped to destructive **`devices` CDB mutations** (e.g. `devices remove`
+across a group), not RouterOS writes. `terminal` and single-session `stream` /
+`api --stream` are not fan-out surfaces and reject N>1 with
+`usage/fanout-not-supported`; `api --raw` is rejected in fan-out mode with
+`usage/conflicting-flags` (it strips the per-target envelope).
 
 `--where` filters *which devices* by CDB-stored facts; keep it distinct from
 `retrieve`/`execute`'s `--query`/`--filter`, which filter *RouterOS rows* in the

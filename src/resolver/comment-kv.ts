@@ -242,6 +242,28 @@ export function parseCommentKv(comment: string): CommentKvResult {
 }
 
 /**
+ * Read EVERY well-formed `key=value` token from a comment as raw facts —
+ * **no allowlist filter, no warnings, no setting coercion**. This is the
+ * device-class selector surface (`--where`): derived facts a record carries in
+ * its comment (e.g. `board=RB5009`, `version=7.23.1`) are real selectors here,
+ * even though they are NOT settings (so {@link parseCommentKv} drops them with a
+ * `cdb/unknown-option` warning). Last token wins on a duplicate bare key. Core
+ * CDB fields (`target`/`identity`/`group`/`mac`) are layered ON TOP of this map
+ * by the selector and win, so a hand-written `group=`/`target=` comment token
+ * can never spoof a first-class field.
+ */
+export function parseRawCommentFacts(comment: string): Record<string, string> {
+	const facts: Record<string, string> = {};
+	for (const word of tokenize(comment)) {
+		const kv = splitKv(word);
+		if (kv) {
+			facts[kv.key] = kv.value;
+		}
+	}
+	return facts;
+}
+
+/**
  * A single comment kv-soup mutation. `value: null` removes every token whose
  * bare key matches; any other value upserts `key=value` (the value is quoted
  * when needed so it survives re-tokenization as one token).

@@ -6,17 +6,18 @@ CDB / env / flags, validates the request through `/console/inspect`, runs the
 single REST or native-API operation, and returns the result in the standard
 envelope.
 
-Status: `CHR-passed` over `rest-api` and `native-api` (single-target),
-including open-ended `--stream` follow (native-api only), per `docs/MATRIX.md`;
-multi-target fan-out is a later phase. This file describes intent and flags; the
-matrix holds the cell states. Load-bearing rules — envelope, errors, settings
-precedence, identity, validation, protocol selection — live in
+Status: `CHR-passed` over `rest-api` and `native-api`, including multi-target
+fan-out and open-ended `--stream` follow (native-api only), per
+`docs/MATRIX.md`. This file describes intent and flags; the matrix holds the
+cell states. Load-bearing rules — envelope, errors, settings precedence,
+identity, validation, protocol selection — live in
 [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md); the `(constitution: …)`
 notes below point there rather than restating them.
 
 `api` absorbs the former `stream` command: open-ended follow is `api <router>
 <endpoint> --stream` (or the `/listen` endpoint form). `--listen` is an accepted
-alias of `--stream`.
+alias of `--stream`. Streaming is single-session — it cannot combine with
+multi-target fan-out (see below).
 
 ## Where `api` sits — the verb trichotomy
 
@@ -72,11 +73,28 @@ when a bare-collection `POST` carries create-looking fields.
 | `--validate[=false]` | Default `true`. Gate is `/console/inspect` (see Validation). |
 | `--via <protocol>` | `rest-api` (default) or `native-api`. No silent downgrade. |
 | `--format <json\|yaml\|text>` | Output format. Defaults to `json` for `api` (machine-first); `CENTRS_FORMAT` overrides. Under `--stream`, `json`/`yaml` emit one compact envelope per line (NDJSON); `text` emits a concise row per frame. |
+| `--group <name>` / `--where <attr>=<value>` / `--all` / `--default` / `--concurrency <n>` | Multi-target fan-out (see below). Repeatable `--group`/`--where`; the union de-dupes by CDB record index. |
 | target/auth | `--host`, `--port`, `--username`/`--user`/`-u`, `--password`, `--insecure`, `--timeout`, `--cdb-file`, `--cdb-password`, `--resolve <none\|arp>` — same single-target resolver as `retrieve`/`execute`. |
 
-Multi-target fan-out (`--group` / `--where` / `--all` / `--default` /
-`--concurrency`, reusing `src/core/fanout.ts`) lands in a later phase. When it
-does, `--stream` is single-session: N>1 targets → `usage/fanout-not-supported`.
+## Fan-out (multi-target)
+
+Selecting more than one router — any selector flag (`--group` / `--where` /
+`--all` / `--default`) or more than one positional target — switches `api` into
+**fan-out mode** (`src/api-fanout.ts`, on the shared `src/core/fanout.ts` engine
+and the `src/resolver/selection.ts` grammar). A plain single-positional call
+stays the single-target envelope. Output is the locked `FanoutData` envelope
+(`data = { summary, targets[] }`; outer `ok` = orchestration success; per-target
+failures are inner `ok:false`), and the process exit code is granular: `0`
+all-ok, `2` partial, `1` orchestration error or every target failed. See
+`docs/CONSTITUTION.md` (Target selection) for the shared grammar and `--where`
+vs `--query` distinction.
+
+- **Writes fan out under `--yes`**, confirmed once up front (not per target).
+  Without `--yes`, the error names the blast radius (how many routers) and that
+  `--yes` is required.
+- **`--listen`/`--stream` is single-session** → `usage/fanout-not-supported` in
+  fan-out mode. **`--raw` strips the envelope** → `usage/conflicting-flags` in
+  fan-out mode (per-target envelopes can't be bare).
 
 ## Validation
 
