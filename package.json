@@ -57,10 +57,10 @@
 	"scripts": {
 		"ci": "bun run lint && bun run test && bun run build",
 		"git:pre-commit": "bun run lint",
-		"git:pre-push": "bun run lint:ci && bun run test && bun run build",
+		"git:pre-push": "bun run lint:git:push",
 		"lint": "bun run lint:biome && bun run lint:typecheck",
 		"lint:git:commit": "bun run lint",
-		"lint:git:push": "bun run ci",
+		"lint:git:push": "bun run lint:ci && bun run test && bun run build",
 		"lint:ci": "bun run lint && bun run lint:markdownlint && bun run lint:cspell && bun run lint:secretlint",
 		"lint:cspell": "cspell lint . --gitignore",
 		"lint:cspell:all": "cspell lint . --no-gitignore",

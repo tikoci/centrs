@@ -107,14 +107,26 @@ describe("parseApiCliArgs", () => {
 		);
 	});
 
-	test("--port must be an integer", () => {
+	test("--port must be a whole integer (no numeric prefixes)", () => {
 		expect(parseApiCliArgs(["r", "x", "--port", "8728"]).port).toBe(8728);
 		expect(() => parseApiCliArgs(["r", "x", "--port", "abc"])).toThrow(
 			"must be an integer",
 		);
+		// `Number.parseInt` would accept these prefixes; the parser must not.
+		expect(() => parseApiCliArgs(["r", "x", "--port", "8728ms"])).toThrow(
+			"must be an integer",
+		);
+		expect(() => parseApiCliArgs(["r", "x", "--count", "10abc"])).toThrow(
+			"must be an integer",
+		);
 	});
 
-	test("an unknown flag is rejected", () => {
+	test("an unknown flag is rejected with a closest-match suggestion", () => {
+		// A near-miss surfaces the canonical match (commands/AGENTS.md "Did you mean?").
+		expect(() => parseApiCliArgs(["r", "x", "--users"])).toThrow(
+			"Did you mean --user",
+		);
+		// A far-off flag still errors clearly, naming the command.
 		expect(() => parseApiCliArgs(["r", "x", "--bogus"])).toThrow(
 			"Unknown api flag",
 		);

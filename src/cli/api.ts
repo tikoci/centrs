@@ -6,12 +6,17 @@ import {
 	buildApiErrorEnvelope,
 	renderApiEnvelope,
 } from "../api.ts";
-import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
+import {
+	asCentrsError,
+	CentrsError,
+	formatCentrsErrorText,
+} from "../errors.ts";
 import { describeCentrs } from "../index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
 	renderCommandHelp,
+	unknownFlagError,
 } from "./common.ts";
 import {
 	buildTargetSelectionTips,
@@ -290,7 +295,7 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 			}
 			default:
 				if (arg.startsWith("-")) {
-					throw new Error(`Unknown api flag: ${arg}`);
+					throw unknownFlagError("api", arg, apiCommand.options);
 				}
 				positional.push(arg);
 				break;
@@ -321,10 +326,22 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 		}
 		// Resolve `--input` (file / stdin) before handing the body to the orchestrator.
 		if (parsed.inputPath !== undefined) {
-			parsed.inputBody =
-				parsed.inputPath === "-"
-					? await Bun.stdin.text()
-					: await Bun.file(parsed.inputPath).text();
+			const inputPath = parsed.inputPath;
+			try {
+				parsed.inputBody =
+					inputPath === "-"
+						? await Bun.stdin.text()
+						: await Bun.file(inputPath).text();
+			} catch (error) {
+				throw new CentrsError({
+					code: "input/local-file-not-found",
+					summary: `Cannot read the --input body from ${inputPath === "-" ? "stdin" : inputPath}.`,
+					remediation:
+						"Check the path and read permissions, or pipe the JSON body into `--input -`.",
+					context: { input: inputPath },
+					cause: error,
+				});
+			}
 		}
 
 		const envelope = await apiEnvelope(parsed);
@@ -354,7 +371,18 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 					env: Bun.env,
 				})
 			: [];
-		if (!parsed?.raw && (format === "json" || format === "yaml")) {
+		if (parsed?.raw) {
+			// `--raw` defines a compact JSON error contract (code/message → stderr);
+			// keep that machine shape on the pre-envelope failure path too (e.g. a
+			// missing `--input` file) instead of falling back to plain text.
+			const envelope = withTips(buildApiErrorEnvelope(parsed, error), tips);
+			console.error(
+				renderApiEnvelope(envelope, format, {
+					raw: true,
+					verbose: parsed.verbose ?? false,
+				}),
+			);
+		} else if (format === "json" || format === "yaml") {
 			const envelope = withTips(
 				buildApiErrorEnvelope(parsed ?? { endpoint: "" }, error),
 				tips,
@@ -401,16 +429,27 @@ function inferApiFormat(
 			return value as ApiOutputFormat;
 		}
 	}
+	// Honor CENTRS_FORMAT on the parse-time error path so the catch render matches
+	// buildApiErrorEnvelope's env-aware `meta.operation.request.format`. CLI flags
+	// above still win.
+	const envFormat = Bun.env["CENTRS_FORMAT"];
+	if (
+		envFormat !== undefined &&
+		apiOutputFormats.includes(envFormat as ApiOutputFormat)
+	) {
+		return envFormat as ApiOutputFormat;
+	}
 	// api is machine-first: default to the structured json envelope, not text.
 	return "json";
 }
 
 function parseIntegerFlag(value: string, flag: string): number {
-	const parsed = Number.parseInt(value, 10);
-	if (!Number.isInteger(parsed)) {
+	// Validate the whole token: `Number.parseInt` would silently accept prefixes
+	// like `8728ms` / `10abc` and send a request to the wrong port/count.
+	if (!/^-?\d+$/.test(value.trim())) {
 		throw new Error(`${flag} must be an integer; got ${value}.`);
 	}
-	return parsed;
+	return Number.parseInt(value, 10);
 }
 
 function parseBooleanFlag(value: string, flag: string): boolean {

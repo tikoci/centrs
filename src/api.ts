@@ -127,8 +127,10 @@ export interface ApiRequestSummary {
 	endpoint: string;
 	path: string;
 	id?: string;
-	method: ApiMethod;
-	verb: ApiVerb;
+	/** The method reported back: a valid {@link ApiMethod}, or the raw string when an invalid `-X` could not be parsed (error path). */
+	method: ApiMethod | string;
+	/** `null` when the method was invalid and no verb could be mapped (error path). */
+	verb: ApiVerb | null;
 	write: boolean;
 	listen: boolean;
 	yes: boolean;
@@ -272,7 +274,24 @@ export async function resolveApiRequest(
 	const method = parseApiMethod(request.method);
 	const verb = mapMethodToVerb(method);
 	const listen = (request.listen ?? false) || normalized.listen;
-	const scriptMode = pathTokens(normalized.path).at(-1) === "execute";
+	// `/execute` (root, single token) run via POST is the script surface — a CLI
+	// string, not a menu path. A GET, a nested path, or any other menu that merely
+	// ends in `execute` stays a normal path request validated through inspect.
+	const tokens = pathTokens(normalized.path);
+	const scriptMode =
+		method === "POST" && tokens.length === 1 && tokens[0] === "execute";
+	// PATCH/DELETE (set/remove) address one row; without an id the REST URL would
+	// carry a `/undefined` segment and native would send an empty `=.id=`. Reject
+	// it here with an actionable error instead of issuing a malformed request.
+	if ((verb === "set" || verb === "remove") && normalized.id === undefined) {
+		throw new CentrsError({
+			code: "input/invalid-path",
+			summary: `A ${method} request must address one row by id (e.g. ${normalized.path}/*1).`,
+			remediation:
+				"Append the row's `.id` to the endpoint, such as `ip/address/*1`; find ids with a GET of the collection.",
+			context: { method, path: normalized.path },
+		});
+	}
 	const raw = request.raw ?? false;
 	const body = buildApiBody(request);
 	const query = buildApiQuery(request);
@@ -542,7 +561,25 @@ export function buildProtocolApiRequest(
 		request.id = resolved.id;
 	}
 	if (resolved.scriptMode) {
-		request.script = resolved.body["script"] ?? "";
+		const { script, ...extra } = resolved.body;
+		if (typeof script !== "string" || script.trim().length === 0) {
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary: "`/execute` requires a non-empty `script` field.",
+				remediation:
+					"Pass the script with `-f script='...'`, `-d '{\"script\":\"...\"}'`, or `--input`.",
+			});
+		}
+		if (Object.keys(extra).length > 0) {
+			throw new CentrsError({
+				code: "usage/conflicting-flags",
+				summary: "`/execute` accepts only the `script` body field.",
+				remediation:
+					"Remove the extra fields, or target a concrete RouterOS command path instead of `/execute`.",
+				context: { extraFields: Object.keys(extra) },
+			});
+		}
+		request.script = script;
 		return request;
 	}
 	if (
@@ -623,6 +660,35 @@ async function validateApiRequest(
 					"RouterOS creates with PUT (`-X PUT`), not POST. Use PUT to add a row; centrs never rewrites your method.",
 				),
 			);
+		}
+		// When the terminal is a real command carrying arguments, validate them the
+		// same way add/set do — so a mistyped command argument is caught preflight.
+		// Only reject when inspect actually surfaced the command's arguments; if it
+		// returns none, skip rather than false-reject a valid command.
+		if (isCommand && Object.keys(resolved.body).length > 0) {
+			const available = await inspectApiAttributes(backend, tokens);
+			if (available.length > 0) {
+				const requested = Object.keys(resolved.body);
+				const missing = requested.filter(
+					(attribute) => attribute !== ".id" && !available.includes(attribute),
+				);
+				if (missing.length > 0) {
+					throw new CentrsError({
+						code: "validation/unknown-attribute",
+						summary: `Unknown RouterOS argument ${missing.join(", ")} for ${resolved.path}.`,
+						remediation:
+							"Check the command arguments against `/console/inspect`, or use `--validate=false` only when intentionally probing an undocumented RouterOS edge.",
+						context: {
+							path: resolved.path,
+							verb: resolved.verb,
+							attribute: missing[0],
+							requestedAttributes: requested,
+							availableAttributes: available,
+							validationSource: "/console/inspect request=child+completion",
+						},
+					});
+				}
+			}
 		}
 		return {
 			validation: {
@@ -884,7 +950,10 @@ export function buildApiErrorEnvelope(
 	)
 		? (request.via as RouterOsProtocol)
 		: null;
-	const method = safeParseMethod(request.method);
+	// Preserve the caller's raw method on the error path rather than fabricating a
+	// valid GET/print: an invalid `-X` should report what was actually asked.
+	const parsedMethod = tryParseApiMethod(request.method);
+	const reportedPath = safeNormalizePath(request.endpoint);
 	return {
 		ok: false,
 		error: serializeCentrsError(centrsError),
@@ -899,10 +968,12 @@ export function buildApiErrorEnvelope(
 				objectCount: 0,
 				request: {
 					endpoint: request.endpoint,
-					path: safeNormalizePath(request.endpoint),
-					method,
-					verb: mapMethodToVerb(method),
-					write: false,
+					path: reportedPath,
+					method: parsedMethod ?? request.method ?? "GET",
+					verb: parsedMethod ? mapMethodToVerb(parsedMethod) : null,
+					write: parsedMethod
+						? isApiMutating(parsedMethod, reportedPath)
+						: false,
 					listen: request.listen ?? false,
 					yes: request.yes ?? false,
 					validate: request.raw ? false : (request.validate ?? true),
@@ -1067,12 +1138,15 @@ function parseApiMethod(method: string | undefined): ApiMethod {
 	});
 }
 
-function safeParseMethod(method: string | undefined): ApiMethod {
-	try {
-		return parseApiMethod(method);
-	} catch {
+/** Parse a method without throwing: a valid {@link ApiMethod}, or `undefined` when invalid. */
+function tryParseApiMethod(method: string | undefined): ApiMethod | undefined {
+	if (method === undefined) {
 		return "GET";
 	}
+	const upper = method.toUpperCase();
+	return (apiMethods as readonly string[]).includes(upper)
+		? (upper as ApiMethod)
+		: undefined;
 }
 
 function safeNormalizePath(endpoint: string): string {

@@ -63,7 +63,7 @@ function idOf(data: unknown): string {
 }
 
 describeFast("api against CHR (rest-api)", () => {
-	test("runs rest-api examples 1-20", async () => {
+	test("runs rest-api examples 1-21", async () => {
 		const started = await startIntegrationChr();
 		const chr = started.chr;
 		try {
@@ -364,6 +364,26 @@ describeFast("api against CHR (rest-api)", () => {
 			// `.section` is a literal key, not a `toHaveProperty` dot-path.
 			expect(Object.keys(sections[0] ?? {})).toContain(".section");
 
+			// 21. GET one row by id WITH --proplist: id + projection together still
+			// returns a single projected object (id folds into `.query`, routed via
+			// POST /print, then unwrapped — matching native's `?.id=` read).
+			const projectedById = expectApiSuccess(
+				await apiEnvelope({
+					...base,
+					endpoint: `ip/address/${dataId}`,
+					proplist: ["address"],
+				}),
+				"rest-api",
+			);
+			const projectedRow = projectedById.data as Record<string, unknown>;
+			// Single object (unwrapped), the unique address of the id-filtered row, and
+			// only the projected property (RouterOS omits `.id` unless it is in proplist).
+			expect(Array.isArray(projectedRow)).toBe(false);
+			expect(projectedRow["address"]).toBe("198.51.100.11/32");
+			for (const key of Object.keys(projectedRow)) {
+				expect(["address", ".id"]).toContain(key);
+			}
+
 			// Clean up the rows added above.
 			for (const cleanupId of [dataId, inputId]) {
 				await apiEnvelope({
@@ -382,7 +402,7 @@ describeFast("api against CHR (rest-api)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(20),
+				exampleIds: exampleIds(21),
 			});
 		} finally {
 			await chr.destroy();

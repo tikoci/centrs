@@ -249,25 +249,29 @@ class RestAdapter implements ProtocolAdapter {
 		const base = request.path.replace(/\/$/, "");
 		switch (request.verb) {
 			case "print": {
-				if (request.id) {
+				const hasQuery = (request.query?.length ?? 0) > 0;
+				const hasProplist = (request.proplist?.length ?? 0) > 0;
+				if (request.id && !hasQuery && !hasProplist) {
 					// GET one by id: RouterOS REST addresses a single object in the URL.
 					return {
 						data: await this.requestRest("GET", `${base}/${request.id}`),
 					};
 				}
-				if (
-					(request.query?.length ?? 0) > 0 ||
-					(request.proplist?.length ?? 0) > 0
-				) {
-					// A GET cannot carry a body, so `.query`/`.proplist` projection rides a
-					// POST to the `/print` sub-endpoint (the documented REST idiom).
-					return {
-						data: await this.requestRest(
-							"POST",
-							`${base}/print`,
-							restQueryBody(request),
-						),
-					};
+				if (request.id || hasQuery || hasProplist) {
+					// A GET cannot carry a body, so `.query`/`.proplist` projection (and an
+					// id, folded into `.query` as `.id=`) rides a POST to the `/print`
+					// sub-endpoint — the documented REST idiom, matching native's `?`-words.
+					const data = await this.requestRest(
+						"POST",
+						`${base}/print`,
+						restQueryBody(request),
+					);
+					// An id addresses one row → unwrap to a single object, matching the
+					// GET-by-id shape and native's `?.id=` read.
+					if (request.id && Array.isArray(data)) {
+						return { data: data[0] ?? null };
+					}
+					return { data };
 				}
 				return { data: await this.requestRest("GET", base) };
 			}
@@ -966,8 +970,14 @@ class SshExecAdapter implements ProtocolAdapter {
 /** REST `.query` / `.proplist` projection body for a POST `/print`. */
 function restQueryBody(request: ProtocolApiRequest): Record<string, unknown> {
 	const body: Record<string, unknown> = {};
-	if (request.query && request.query.length > 0) {
-		body[".query"] = request.query;
+	// Fold an id into `.query` as `.id=<id>` so id+query/proplist reads work over
+	// REST exactly as they do over native (`?.id=` plus the `?`-words).
+	const query = [
+		...(request.id ? [`.id=${request.id}`] : []),
+		...(request.query ?? []),
+	];
+	if (query.length > 0) {
+		body[".query"] = query;
 	}
 	if (request.proplist && request.proplist.length > 0) {
 		body[".proplist"] = request.proplist;

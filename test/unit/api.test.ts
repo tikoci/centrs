@@ -3,6 +3,7 @@ import {
 	type ApiOutputFormat,
 	apiEnvelope,
 	buildApiBody,
+	buildApiErrorEnvelope,
 	buildApiQuery,
 	buildProtocolApiRequest,
 	isApiMutating,
@@ -207,7 +208,7 @@ describe("buildProtocolApiRequest", () => {
 		});
 	});
 
-	test("script mode carries the script, ignoring the rest", () => {
+	test("script mode carries the script", () => {
 		expect(
 			buildProtocolApiRequest(
 				resolved({
@@ -218,6 +219,27 @@ describe("buildProtocolApiRequest", () => {
 				}),
 			),
 		).toEqual({ verb: "run", path: "/execute", script: ":put 1" });
+	});
+
+	test("script mode requires a non-empty script", () => {
+		expect(() =>
+			buildProtocolApiRequest(
+				resolved({ verb: "run", path: "/execute", scriptMode: true, body: {} }),
+			),
+		).toThrow("non-empty `script`");
+	});
+
+	test("script mode rejects extra body fields", () => {
+		expect(() =>
+			buildProtocolApiRequest(
+				resolved({
+					verb: "run",
+					path: "/execute",
+					scriptMode: true,
+					body: { script: ":put 1", extra: "x" },
+				}),
+			),
+		).toThrow("only the `script`");
 	});
 });
 
@@ -259,6 +281,29 @@ describe("apiEnvelope usage errors (no I/O)", () => {
 		if (!envelope.ok) {
 			expect(envelope.error.code).toBe("input/invalid-command");
 		}
+	});
+
+	test("PATCH/DELETE without a row id is input/invalid-path (no request issued)", async () => {
+		for (const method of ["PATCH", "DELETE"]) {
+			const envelope = await apiEnvelope(
+				{ endpoint: "ip/address", targetInput: "192.0.2.1", method },
+				{},
+			);
+			expect(envelope.ok).toBe(false);
+			if (!envelope.ok) {
+				expect(envelope.error.code).toBe("input/invalid-path");
+			}
+		}
+	});
+
+	test("an invalid -X is reported verbatim on the error envelope, not rewritten to GET", () => {
+		const envelope = buildApiErrorEnvelope(
+			{ endpoint: "ip/address", method: "HEAD" },
+			new Error("boom"),
+			{},
+		);
+		expect(envelope.meta.operation?.request.method).toBe("HEAD");
+		expect(envelope.meta.operation?.request.verb).toBeNull();
 	});
 });
 
