@@ -401,9 +401,12 @@ async function* streamResolvedApi(
 			Date.now() - startedAt,
 		);
 	} catch (error) {
-		// A mid-stream failure is itself a frame; the summary still closes the
-		// stream (the CLI's exit code keys on whether it *started* cleanly).
-		yield buildApiErrorEnvelopeFromResolved(resolved, error);
+		// A mid-stream failure is itself a frame, tagged `stream.kind="frame"` so
+		// consumers that key off `meta.operation.stream` still see it in the stream
+		// (not as a stray non-stream envelope); the summary then closes with
+		// `transport-error` (the CLI's exit code keys on whether it *started*
+		// cleanly).
+		yield streamErrorFrameEnvelope(resolved, error, frames + 1);
 		yield streamSummaryEnvelope(
 			resolved,
 			validation,
@@ -429,6 +432,24 @@ function streamFrameEnvelope(
 	const meta = metaFromResolved(resolved, validation, record);
 	meta.operation.stream = { kind: "frame", index };
 	return { ok: true, data: record, warnings: [], tips: [], meta };
+}
+
+/**
+ * A mid-stream failure rendered as a stream frame: the error envelope carries
+ * `meta.operation.stream.kind="frame"` (index after the last good frame) so
+ * stream consumers can place it on the timeline rather than mistaking it for a
+ * non-stream envelope.
+ */
+function streamErrorFrameEnvelope(
+	resolved: ResolvedApiRequest,
+	error: unknown,
+	index: number,
+): ApiErrorEnvelope {
+	const envelope = buildApiErrorEnvelopeFromResolved(resolved, error);
+	if (envelope.meta.operation) {
+		envelope.meta.operation.stream = { kind: "frame", index };
+	}
+	return envelope;
 }
 
 function streamSummaryEnvelope(
@@ -1269,10 +1290,12 @@ export function renderApiEnvelope(
 }
 
 /**
- * Render one `--stream` envelope as a **single line** (NDJSON for `json`/`yaml`,
- * a concise human row for `text`). Unlike {@link renderApiEnvelope} this never
- * pretty-prints — every frame and the summary are one line each, so a consumer
- * can read the stream line by line.
+ * Render one `--stream` envelope as a **single line**: compact NDJSON (one JSON
+ * object per line) for both `json` and `yaml`, and a concise human row for
+ * `text`. `yaml` deliberately falls back to NDJSON here — YAML's multi-line
+ * document form is incompatible with line-delimited streaming. Unlike
+ * {@link renderApiEnvelope} this never pretty-prints — every frame and the
+ * summary are one line each, so a consumer can read the stream line by line.
  */
 export function renderApiStreamLine(
 	envelope: ApiEnvelope,
@@ -1295,7 +1318,8 @@ export function renderApiStreamLine(
 			? `[${error.code}] ${error.summary} — Fix: ${error.remediation}`
 			: `[${error.code}] ${error.summary}`;
 	}
-	// json / yaml stream as NDJSON: one compact envelope object per line.
+	// json and yaml both stream as NDJSON: one compact envelope object per line.
+	// (yaml falls back to JSON — a multi-line YAML doc can't be one stream line.)
 	return JSON.stringify(envelope);
 }
 

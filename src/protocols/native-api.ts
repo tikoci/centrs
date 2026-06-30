@@ -713,15 +713,23 @@ export class NativeApiSession {
 
 		try {
 			for (;;) {
-				while (queue.length > 0) {
-					yield queue.shift() as ApiReply;
-				}
-				if (ended) {
+				if (queue.length > 0) {
+					// Drain the whole batch at once: repeated `shift()` is O(n) per frame
+					// (it shifts every remaining element), so a high-volume listen would
+					// be O(n²). New
+					// frames pushed while we yield land in the freshly emptied queue and
+					// drain on the next pass.
+					const batch = queue.splice(0, queue.length);
+					for (const reply of batch) {
+						yield reply;
+					}
+				} else if (ended) {
 					break;
+				} else {
+					await new Promise<void>((resolve) => {
+						wake = resolve;
+					});
 				}
-				await new Promise<void>((resolve) => {
-					wake = resolve;
-				});
 			}
 			if (failure) {
 				throw failure;
