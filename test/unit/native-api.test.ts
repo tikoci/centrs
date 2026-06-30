@@ -557,4 +557,24 @@ describe("native-api listen() streaming", () => {
 		expect(end.done).toBe(true);
 		expect(transport.sent.some((words) => words[0] === "/cancel")).toBe(true);
 	});
+
+	test("onListening fires once the listen sentence is on the wire", async () => {
+		const transport = new FakeTransport();
+		let listening = false;
+		const gen = transport.apiSession.listen(
+			{ command: "/ip/address/listen" },
+			{ onListening: () => (listening = true) },
+		);
+		// Lazy generator: nothing is sent (or signalled) until the first pull.
+		expect(listening).toBe(false);
+		const first = gen.next();
+		// The async-generator body runs on a microtask; let it reach the listen write.
+		await Bun.sleep(10);
+		expect(listening).toBe(true);
+		expect(transport.sent.at(-1)?.[0]).toBe("/ip/address/listen");
+		// End the listen cleanly so the generator unwinds (no dangling subscription).
+		const tag = transport.lastTag();
+		transport.reply(["!done", `.tag=${tag}`]);
+		expect((await first).done).toBe(true);
+	});
 });

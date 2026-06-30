@@ -42,22 +42,33 @@ function idOf(data: unknown): string {
 }
 
 /**
- * Run a `--stream` follow in the background, fire `trigger` once the listen has
- * had a moment to establish, and collect every yielded envelope (frames +
- * summary). The generator ends on its own bound (`--count` / `--duration`).
+ * Run a `--stream` follow in the background, fire `trigger` only once the listen
+ * is actually established on the wire (the `onListening` barrier, not a blind
+ * timer — so slow CHR startup can't make this miss the first change), and collect
+ * every yielded envelope (frames + summary). The generator ends on its own bound
+ * (`--count` / `--duration`).
  */
 async function streamWithTrigger(
 	listenRequest: Parameters<typeof apiListen>[0],
 	trigger: () => Promise<void>,
 ): Promise<ApiEnvelope[]> {
 	const envelopes: ApiEnvelope[] = [];
+	let signalReady: () => void = () => {};
+	const ready = new Promise<void>((resolve) => {
+		signalReady = resolve;
+	});
 	const consumed = (async () => {
-		for await (const envelope of apiListen(listenRequest)) {
+		for await (const envelope of apiListen(
+			listenRequest,
+			Bun.env,
+			undefined,
+			() => signalReady(),
+		)) {
 			envelopes.push(envelope);
 		}
 	})();
-	// Let the listen connect + register on the freshly booted CHR before the change.
-	await Bun.sleep(900);
+	await ready; // the listen sentence is on the wire (connect + login + write done)
+	await Bun.sleep(150); // small margin for the router to register the subscription
 	await trigger();
 	await consumed;
 	return envelopes;
@@ -91,9 +102,17 @@ describeFast("api --stream against CHR (native-api)", () => {
 				apiEnvelope({ ...nativeBase, endpoint: "ip/address" }),
 			);
 
-			// L1. A change frame, then a count-reached summary.
+			// L1. A change frame, then a count-reached summary. The duration is only a
+			// safety net so a (never-expected) missed frame fails fast, not at the
+			// 180s test timeout — the barrier above makes the count path reliable.
 			const l1 = await streamWithTrigger(
-				{ ...nativeBase, endpoint: "ip/address", listen: true, count: 1 },
+				{
+					...nativeBase,
+					endpoint: "ip/address",
+					listen: true,
+					count: 1,
+					duration: "10s",
+				},
 				async () => {
 					await apiEnvelope({
 						...restBase,
@@ -154,6 +173,7 @@ describeFast("api --stream against CHR (native-api)", () => {
 					password: auth.password,
 					endpoint: "ip/address/listen",
 					count: 1,
+					duration: "10s",
 				},
 				async () => {
 					await apiEnvelope({

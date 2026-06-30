@@ -146,6 +146,12 @@ export interface ProtocolApiResult {
 export interface ProtocolListenOptions {
 	/** Abort the listen (sends `/cancel`); the generator then ends cleanly. */
 	signal?: AbortSignal;
+	/**
+	 * Fired once the subscription is on the wire (connection up, listen sentence
+	 * written) — a real "listening" barrier for callers/tests that must act only
+	 * after the follow is established, instead of a blind timer.
+	 */
+	onListening?: () => void;
 }
 
 /**
@@ -707,6 +713,11 @@ class NativeApiAdapter implements ProtocolAdapter {
 		// A listen can filter which changes it follows with the same `?`-words /
 		// `=.proplist=` as print (REST `.query` word == native `?`-word minus `?`).
 		const queries = (request.query ?? []).map((word) => `?${word}`);
+		// An addressed row (`ip/address/*1 --stream`) follows just that row, the
+		// same `?.id=` mapping one-shot native reads use.
+		if (request.id) {
+			queries.push(`?.id=${request.id}`);
+		}
 		if (queries.length > 0) {
 			command.queries = queries;
 		}

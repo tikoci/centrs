@@ -323,6 +323,3 @@ centrs api $A ip/address --stream --duration 2s --via native-api --port $API_POR
 
 With no change during the window, the stream ends after ~2 s with a summary
 envelope whose `data.stopReason=duration-elapsed`. Exit code 0.
-
-After ~2s the stream ends with a summary envelope whose
-`data.stopReason=duration-elapsed`. Exit code 0.

@@ -303,17 +303,24 @@ export async function runResolvedApi(
  * envelope. `--count`/`--duration` and `externalSignal` (Ctrl-C) bound it.
  * Errors before the first frame (resolution, validation, confirmation,
  * capability) yield one error envelope and stop — the CLI keys its exit code on
- * that first envelope.
+ * that first envelope. `onListening` fires once the follow is established on the
+ * wire (a real barrier for callers that must act only after that point).
  */
 export async function* apiListen(
 	request: ApiRequest,
 	env: Record<string, string | undefined> = Bun.env,
 	externalSignal?: AbortSignal,
+	onListening?: () => void,
 ): AsyncGenerator<ApiEnvelope, void, void> {
+	// `apiListen` is inherently the streaming surface, so force `listen` on the
+	// request: otherwise a caller that omits it (and the `/listen` endpoint form)
+	// would resolve `via` to the rest-api default and be rejected. An explicit
+	// `--via rest-api` still surfaces capability-unsupported below.
+	const streamRequest: ApiRequest = { ...request, listen: true };
 	let resolved: ResolvedApiRequest | undefined;
 	try {
-		resolved = await resolveApiRequest(request, env);
-		await assertApiWriteConfirmed(request, resolved);
+		resolved = await resolveApiRequest(streamRequest, env);
+		await assertApiWriteConfirmed(streamRequest, resolved);
 		if (resolved.via.value !== "native-api") {
 			throw new CentrsError({
 				code: "transport/capability-unsupported",
@@ -326,15 +333,16 @@ export async function* apiListen(
 	} catch (error) {
 		yield resolved
 			? buildApiErrorEnvelopeFromResolved(resolved, error)
-			: buildApiErrorEnvelope(request, error, env);
+			: buildApiErrorEnvelope(streamRequest, error, env);
 		return;
 	}
-	yield* streamResolvedApi(resolved, externalSignal);
+	yield* streamResolvedApi(resolved, externalSignal, onListening);
 }
 
 async function* streamResolvedApi(
 	resolved: ResolvedApiRequest,
 	externalSignal?: AbortSignal,
+	onListening?: () => void,
 ): AsyncGenerator<ApiEnvelope, void, void> {
 	const backend = adapterForResolved(resolved);
 
@@ -376,6 +384,7 @@ async function* streamResolvedApi(
 		const protocolRequest = buildProtocolApiRequest(resolved);
 		for await (const record of backend.listen(protocolRequest, {
 			signal: controller.signal,
+			onListening,
 		})) {
 			frames += 1;
 			yield streamFrameEnvelope(resolved, validation, record, frames);
@@ -1032,9 +1041,9 @@ function assertListenCapability(resolved: ResolvedApiRequest): void {
 	if (resolved.via.value === "rest-api") {
 		throw new CentrsError({
 			code: "transport/capability-unsupported",
-			summary: "REST cannot follow an open-ended `--listen` stream (60s cap).",
+			summary: "REST cannot follow an open-ended `--stream` (60s cap).",
 			remediation:
-				"Open-ended follow is native-api only: use `--via native-api`, or drop `--listen` for a bounded one-shot.",
+				"Open-ended follow is native-api only: use `--via native-api`, or drop `--stream` for a bounded one-shot.",
 			context: { via: resolved.via.value, capability: "listen" },
 		});
 	}
@@ -1276,9 +1285,15 @@ export function renderApiStreamLine(
 			: JSON.stringify(rawErrorPayload(envelope.error));
 	}
 	if (format === "text") {
-		return envelope.ok
-			? renderApiStreamFrameText(envelope)
-			: renderApiErrorText(envelope, options);
+		if (envelope.ok) {
+			return renderApiStreamFrameText(envelope);
+		}
+		// A streamed error must stay one line too — never the verbose blank-line +
+		// pretty-printed context block that `renderApiErrorText` emits.
+		const error = envelope.error;
+		return error.remediation
+			? `[${error.code}] ${error.summary} — Fix: ${error.remediation}`
+			: `[${error.code}] ${error.summary}`;
 	}
 	// json / yaml stream as NDJSON: one compact envelope object per line.
 	return JSON.stringify(envelope);

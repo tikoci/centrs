@@ -626,15 +626,19 @@ export class NativeApiSession {
 	/**
 	 * Open a `/listen` subscription and yield each `!re` change frame as it
 	 * arrives (the open-ended follow path; the listen command never sends `!done`
-	 * on its own). The generator ends cleanly when the listen is cancelled — via
-	 * `options.signal` or the consumer breaking out of the `for await` — which
-	 * sends `/cancel` and drains the resulting `interrupted` trap + `!done`. A
-	 * non-`interrupted` trap (e.g. a bad path) or `!fatal`/transport closure
+	 * on its own). The generator ends cleanly when the listen is cancelled:
+	 * - via `options.signal` aborting — the subscription stays registered, so the
+	 *   resulting `interrupted` trap + `!done` are drained and the loop ends
+	 *   without throwing;
+	 * - via the consumer breaking out of the `for await` — `finally` sends
+	 *   `/cancel` best-effort (the subscription is already torn down, so the
+	 *   trap/`!done` are not awaited) and the generator returns.
+	 * A non-`interrupted` trap (e.g. a bad path) or `!fatal`/transport closure
 	 * throws. CHR-grounded (7.23.1): see `commands/api/AGENTS.md`.
 	 */
 	async *listen(
 		command: NativeApiCommand,
-		options: { signal?: AbortSignal } = {},
+		options: { signal?: AbortSignal; onListening?: () => void } = {},
 	): AsyncGenerator<ApiReply, void, void> {
 		if (this.closed) {
 			throw (
@@ -693,6 +697,10 @@ export class NativeApiSession {
 						cause: error,
 					});
 		}
+
+		// The subscription is on the wire — signal "listening established" so callers
+		// can act on a real barrier rather than a blind timer.
+		options.onListening?.();
 
 		const onAbort = (): void => this.cancel(tag);
 		if (options.signal) {
