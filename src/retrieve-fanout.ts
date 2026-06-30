@@ -1,28 +1,33 @@
 /**
- * Group fanout for `retrieve`.
+ * Multi-target fan-out for `retrieve`.
  *
- * A `--group <name>` selector expands a CDB group into N targets and runs each
- * through the single-target retrieve tail (`runResolvedRetrieve`), collecting a
+ * A target selection (`--group` / `--where` / `--all` / `--default` / multiple
+ * positionals) expands to N members and runs each through the single-target
+ * retrieve tail (`buildResolvedRetrieve` → `runResolvedRetrieve`), collecting a
  * per-target inner `CentrsEnvelope` into the LOCKED `FanoutData` shape from
  * `src/core/envelope.ts`. The outer envelope's `ok` means the orchestration
  * produced a complete per-target result set; a per-target failure is an INNER
  * `ok: false` envelope, never an outer failure and never a thrown error out of
  * the batch.
  *
- * Design rules implemented here (see `commands/retrieve/README.md`):
- *   - The CDB is loaded + decrypted ONCE for the whole fanout (group expansion).
- *   - Each target is resolved + validated independently (validation is
- *     per-target via live `/console/inspect`; schemas differ by version).
+ * Boundaries (see `commands/retrieve/README.md`, `docs/CONSTITUTION.md`), shared
+ * with `api-fanout.ts`:
+ *   - The CDB is loaded + decrypted ONCE (`expandCdbSelection`); a cdb member is
+ *     resolved with its pre-resolved record, so `resolveCdb`'s `__default__`
+ *     synthetic fallback never collides ad-hoc literals.
+ *   - A `--default` / `__default__` member is guarded from being dialed as the
+ *     literal hostname `"__default__"` — it fails that one target deterministically
+ *     with `target/unresolved`.
+ *   - Each target is resolved + validated independently (validation is per-target
+ *     via live `/console/inspect`; schemas differ by version).
  *   - Concurrency is a bounded worker pool; defaults are transport-aware
  *     (REST 8, native-api 4) and overridable with `--concurrency`.
- *   - Transient drops are retried with jittered backoff on an allowlisted
- *     retryable-code set only; router-side and client-side errors are not.
- *   - `data.targets[]` is ordered by CDB `recordIndex` regardless of completion
- *     order; `summary` counts are derived from inner `ok`.
+ *   - `data.targets[]` is ordered by CDB `recordIndex` (literals appended in
+ *     positional order); `summary` counts are derived from inner `ok`.
  *
- * Outer `ok: false` is reserved for fanout failing BEFORE reliable per-target
+ * Outer `ok: false` is reserved for fan-out failing BEFORE reliable per-target
  * results exist (bad request shape, CDB decrypt failure); those throw out of
- * {@link retrieveGroup} and the CLI renders them with
+ * {@link retrieveFanout} and the CLI renders them with
  * {@link buildRetrieveFanoutErrorEnvelope}.
  */
 
@@ -44,10 +49,12 @@ import {
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
-	type CdbGroupExpansion,
-	type CdbGroupResolveInput,
-	type CdbGroupTarget,
-	expandCdbGroup,
+	type CdbSelectionExpansion,
+	type CdbSelectionMember,
+	type CdbSelectionResolveInput,
+	expandCdbSelection,
+	isDefaultRecordTarget,
+	type TargetSelection,
 } from "./resolver/index.ts";
 import {
 	buildResolvedRetrieve,
@@ -61,17 +68,27 @@ import {
 	type RetrieveSuccessEnvelope,
 	resolveMacForRetrieve,
 	resolveRetrieveGlobalContext,
+	resolveRetrieveRequest,
 	runResolvedRetrieve,
 	toYaml,
 	validateRetrieveRequestShape,
 } from "./retrieve.ts";
 
+/** Compact description of the selector that produced the fan-out. */
+export interface RetrieveSelectionSummary {
+	groups: readonly string[];
+	where: readonly string[];
+	all: boolean;
+	default: boolean;
+	positionals: readonly string[];
+}
+
 export interface RetrieveFanoutOperationMeta {
 	kind: "fanout";
-	group: string;
 	concurrency: number;
 	summary: FanoutSummary;
 	request: RetrieveRequestSummary;
+	selection: RetrieveSelectionSummary;
 }
 
 export type RetrieveFanoutData = FanoutData<unknown, RetrieveOperationMeta>;
@@ -83,58 +100,103 @@ export type RetrieveFanoutErrorEnvelope =
 	CentrsErrorEnvelope<RetrieveFanoutOperationMeta>;
 
 /** Test/override seams; production callers pass nothing. */
-export interface RetrieveGroupInternals {
+export interface RetrieveFanoutInternals {
 	/** Per-target executor (attempts; throws on failure). Defaults to the live tail. */
 	execute?: (
 		resolved: ResolvedRetrieveRequest,
-		recordIndex: number,
 	) => Promise<RetrieveSuccessEnvelope>;
-	/** Group expansion. Defaults to the real CDB-backed expansion. */
+	/** Selection expansion. Defaults to the real CDB-backed expansion. */
 	expand?: (
-		input: CdbGroupResolveInput,
+		selection: TargetSelection,
+		input: CdbSelectionResolveInput,
 		env: Record<string, string | undefined>,
-	) => Promise<CdbGroupExpansion>;
+	) => Promise<CdbSelectionExpansion>;
 	/** Backoff sleeper. Defaults to a real timer; tests pass a no-op. */
 	sleep?: (ms: number) => Promise<void>;
 }
 
+export interface RetrieveFanoutOptions {
+	concurrency?: number;
+	/** CLI: true (literal positionals allowed). MCP: false (CDB is the allowlist). */
+	allowAdhoc?: boolean;
+}
+
+function summarizeSelection(
+	selection: TargetSelection,
+): RetrieveSelectionSummary {
+	return {
+		groups: selection.groups,
+		where: selection.where.map((clause) => `${clause.key}=${clause.value}`),
+		all: selection.all,
+		default: selection.default,
+		positionals: selection.positionals,
+	};
+}
+
+function memberTargetMeta(member: CdbSelectionMember): {
+	input?: string;
+	identity?: string;
+	recordIndex?: number;
+} {
+	if (member.kind === "cdb") {
+		return {
+			input: member.resolution.identity,
+			identity: member.resolution.identity,
+			recordIndex: member.recordIndex,
+		};
+	}
+	return { input: member.input };
+}
+
 /**
- * Run a `retrieve` group fanout. Always returns a success envelope when the
+ * Ad-hoc literal targets have no CDB record. `resolveRetrieveRequest` may borrow
+ * the `__default__` record's index when filling fallback creds, so the inner
+ * envelope would carry that borrowed `recordIndex` — making distinct literals
+ * collide on one index. Drop it for literal members and stamp the caller's `input`
+ * so the target stays identifiable in renderers (mirrors `api-fanout.ts`).
+ */
+function relabelAdhocMember(
+	envelope: RetrieveEnvelope,
+	member: CdbSelectionMember,
+): RetrieveEnvelope {
+	if (member.kind !== "literal") {
+		return envelope;
+	}
+	const { recordIndex: _borrowed, ...target } = envelope.meta.target;
+	return {
+		...envelope,
+		meta: { ...envelope.meta, target: { ...target, input: member.input } },
+	};
+}
+
+/**
+ * Run a `retrieve` fan-out. Always returns a success envelope when the
  * orchestration completes (even if every target failed); throws only for
  * pre-flight failures (bad request shape, CDB decrypt) the caller renders as an
  * outer error.
  */
-export async function retrieveGroup(
+export async function retrieveFanout(
 	request: RetrieveRequest,
+	selection: TargetSelection,
 	env: Record<string, string | undefined> = Bun.env,
-	internals: RetrieveGroupInternals = {},
+	internals: RetrieveFanoutInternals = {},
+	options: RetrieveFanoutOptions = {},
 ): Promise<RetrieveFanoutEnvelope> {
-	const group = request.group;
-	if (group === undefined || group.length === 0) {
-		throw new CentrsError({
-			code: "usage/missing-group",
-			summary: "retrieve group fanout requires a non-empty `--group` value.",
-			remediation:
-				"Pass `--group <name>` matching a CDB group, e.g. `centrs retrieve --group prod /system/resource`.",
-		});
-	}
-
 	const attributeSelections = validateRetrieveRequestShape(request);
 	const global = resolveRetrieveGlobalContext(
 		request,
 		env,
 		attributeSelections,
 	);
-	if (request.concurrency !== undefined) {
-		resolveFanoutConcurrency(request.concurrency, global.via);
-	}
+	const selectionSummary = summarizeSelection(selection);
 
-	const expand = internals.expand ?? expandCdbGroup;
+	const expand = internals.expand ?? expandCdbSelection;
 	const expansion = await expand(
+		selection,
 		{
-			group,
 			cdbFile: request.cdbFile,
 			cdbPassword: request.cdbPassword,
+			allowAdhoc: options.allowAdhoc ?? true,
 		},
 		env,
 	);
@@ -146,13 +208,13 @@ export async function retrieveGroup(
 		expansion,
 	);
 	const concurrency = resolveFanoutConcurrency(
-		request.concurrency,
+		options.concurrency ?? request.concurrency,
 		concurrencyVia,
 	);
 
 	if (expansion.empty) {
 		return retrieveFanoutEnvelope({
-			group,
+			selection: selectionSummary,
 			concurrency,
 			summary: { total: 0, ok: 0, failed: 0 },
 			requestSummary: global.summary,
@@ -167,53 +229,101 @@ export async function retrieveGroup(
 	const sleep = internals.sleep ?? defaultFanoutSleep;
 
 	const targets = await runFanout<
-		CdbGroupTarget,
+		CdbSelectionMember,
 		ResolvedRetrieveRequest,
 		RetrieveEnvelope
 	>({
 		members: expansion.targets,
 		concurrency,
 		resolve: async (member) => {
-			const macResolution = await resolveMacForRetrieve(
-				request,
+			if (member.kind === "cdb") {
+				if (isDefaultRecordTarget(member.resolution.target)) {
+					throw new CentrsError({
+						code: "target/unresolved",
+						summary:
+							"The `__default__` record is a credential fallback, not a connectable router.",
+						remediation:
+							"Select real devices with `--group` / `--where` / `--all` or a positional; `--default` cannot be a RouterOS target.",
+						context: { target: member.resolution.target },
+					});
+				}
+				const macResolution = await resolveMacForRetrieve(
+					request,
+					env,
+					member.resolution,
+				);
+				return buildResolvedRetrieve(
+					request,
+					env,
+					member.resolution,
+					attributeSelections,
+					macResolution,
+				);
+			}
+			// Ad-hoc literal: full single-target resolution (CDB load → `__default__`
+			// fallback creds), mirroring single-target `retrieve`.
+			return resolveRetrieveRequest(
+				{ ...request, targetInput: member.input },
 				env,
-				member.resolution,
-			);
-			return buildResolvedRetrieve(
-				request,
-				env,
-				member.resolution,
-				attributeSelections,
-				macResolution,
 			);
 		},
 		onResolveError: (member, error) =>
 			buildFanoutResolveFailure<RetrieveOperationMeta>({
 				error,
-				target: {
-					input: member.resolution.identity,
-					identity: member.resolution.identity,
-					recordIndex: member.resolution.recordIndex,
-				},
-				warnings: [...member.resolution.warnings],
+				target: memberTargetMeta(member),
+				warnings: member.kind === "cdb" ? [...member.resolution.warnings] : [],
 				summary: "Failed to resolve a fanout target.",
 			}),
-		execute: (resolved, member) => execute(resolved, member.recordIndex),
-		onExecuteError: (resolved, _member, error) =>
-			buildRetrieveErrorEnvelopeFromResolved(resolved, error),
+		execute: async (resolved, member) =>
+			relabelAdhocMember(await execute(resolved), member),
+		onExecuteError: (resolved, member, error) =>
+			relabelAdhocMember(
+				buildRetrieveErrorEnvelopeFromResolved(resolved, error),
+				member,
+			),
 		sleep,
 	});
 
-	const summary = summarizeFanout(targets);
 	return retrieveFanoutEnvelope({
-		group,
+		selection: selectionSummary,
 		concurrency,
-		summary,
+		summary: summarizeFanout(targets),
 		requestSummary: global.summary,
 		settings: global.settings,
 		via: commonVia(targets),
 		warnings: expansion.warnings,
 		targets,
+	});
+}
+
+/**
+ * Back-compat shim for the `--group`-only fan-out: builds a single-group
+ * {@link TargetSelection} and delegates to {@link retrieveFanout}. Kept for the
+ * MCP `centrs_retrieve` tool, whose surface exposes only `group`.
+ */
+export async function retrieveGroup(
+	request: RetrieveRequest,
+	env: Record<string, string | undefined> = Bun.env,
+	internals: RetrieveFanoutInternals = {},
+): Promise<RetrieveFanoutEnvelope> {
+	const group = request.group;
+	if (group === undefined || group.length === 0) {
+		throw new CentrsError({
+			code: "usage/missing-group",
+			summary: "retrieve group fanout requires a non-empty `--group` value.",
+			remediation:
+				"Pass `--group <name>` matching a CDB group, e.g. `centrs retrieve --group prod /system/resource`.",
+		});
+	}
+	const selection: TargetSelection = {
+		positionals: [],
+		groups: [group],
+		all: false,
+		default: false,
+		where: [],
+	};
+	return retrieveFanout(request, selection, env, internals, {
+		concurrency: request.concurrency,
 	});
 }
 
@@ -227,7 +337,7 @@ export function buildRetrieveFanoutErrorEnvelope(
 			? error
 			: new CentrsError({
 					code: "internal/unhandled",
-					summary: "retrieve group fanout failed with an unexpected error.",
+					summary: "retrieve fan-out failed with an unexpected error.",
 					remediation:
 						"Re-run with `--format json` to capture the structured error details for debugging.",
 					cause: error,
@@ -256,14 +366,16 @@ function resolveFanoutConcurrencyProtocol(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined>,
 	globalVia: RouterOsProtocol,
-	expansion: CdbGroupExpansion,
+	expansion: CdbSelectionExpansion,
 ): RouterOsProtocol {
 	if (request.via !== undefined || env["CENTRS_VIA"] !== undefined) {
 		return globalVia;
 	}
 	if (
 		expansion.targets.some(
-			(target) => target.resolution.overrides.via?.value === "native-api",
+			(member) =>
+				member.kind === "cdb" &&
+				member.resolution.overrides.via?.value === "native-api",
 		)
 	) {
 		return "native-api";
@@ -272,7 +384,7 @@ function resolveFanoutConcurrencyProtocol(
 }
 
 interface FanoutEnvelopeInput {
-	group: string;
+	selection: RetrieveSelectionSummary;
 	concurrency: number;
 	summary: FanoutSummary;
 	requestSummary: RetrieveRequestSummary;
@@ -298,10 +410,10 @@ function retrieveFanoutEnvelope(
 		via: input.via,
 		operation: {
 			kind: "fanout",
-			group: input.group,
 			concurrency: input.concurrency,
 			summary: input.summary,
 			request: input.requestSummary,
+			selection: input.selection,
 		},
 	});
 }
@@ -341,12 +453,16 @@ function renderFanoutText(
 	const operation = envelope.meta.operation;
 	const { total, ok, failed } = envelope.data.summary;
 	const lines: string[] = [
-		`group ${operation?.group ?? "?"}: ${ok}/${total} ok, ${failed} failed (concurrency ${operation?.concurrency ?? "?"})`,
+		`retrieve ${operation?.request.path ?? "?"}: ${ok}/${total} ok, ${failed} failed (concurrency ${operation?.concurrency ?? "?"})`,
 	];
 
 	for (const target of envelope.data.targets) {
 		const meta = target.meta;
-		const label = meta.target.identity ?? meta.target.host ?? "(unknown)";
+		const label =
+			meta.target.identity ??
+			meta.target.host ??
+			meta.target.input ??
+			"(unknown)";
 		const index = meta.target.recordIndex ?? "-";
 		if (target.ok) {
 			lines.push(

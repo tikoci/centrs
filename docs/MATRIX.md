@@ -84,6 +84,14 @@ the `/listen` endpoint form infers it), native-api only, since REST's 60s cap
 cannot follow. `centrs stream`/`centrs tail` now error with a pointer to
 `api --stream`.
 
+`retrieve` consumes the **same** shared selection grammar over rest-api/native-api
+(`--group`/`--where`/`--all`/`--default`/multi-positional union via
+`src/resolver/selection.ts` + `src/retrieve-fanout.ts`), with the locked
+`FanoutData` envelope and the granular `0/2/1` exit code; a single-positional
+`retrieve <router> <path>` call stays single-target. Green on CHR 7.23.1 via
+`test/integration/fanout-retrieve.test.ts` (F1 group, F2 empty/unknown, F3
+`--where` subset, F4 `--all`, F5 positional union of ad-hoc literals).
+
 `transfer` is `CHR-passed` for `rest-api`/`native-api` and for **sftp** (the
 `ssh` column's first method): `src/transfer.ts` + `src/cli/transfer.ts`
 (size/direction-aware method selection, leading-slash normalization, the

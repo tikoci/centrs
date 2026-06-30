@@ -1,15 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { CentrsError } from "../../src/errors.ts";
 import type {
-	CdbGroupExpansion,
 	CdbResolution,
+	CdbSelectionExpansion,
 	ResolvedRetrieveRequest,
 	RetrieveRequest,
 	RetrieveSuccessEnvelope,
+	TargetSelection,
 } from "../../src/index.ts";
 import {
 	isRetryableFanoutError,
 	resolveFanoutConcurrency,
+	retrieveFanout,
 	retrieveGroup,
 	runBoundedPool,
 	summarizeFanout,
@@ -27,11 +29,12 @@ function fakeResolution(recordIndex: number): CdbResolution {
 	};
 }
 
-function fakeExpansion(count: number): CdbGroupExpansion {
+function fakeExpansion(count: number): CdbSelectionExpansion {
 	return {
 		empty: false,
 		warnings: [],
 		targets: Array.from({ length: count }, (_, index) => ({
+			kind: "cdb",
 			recordIndex: index,
 			resolution: fakeResolution(index),
 		})),
@@ -149,7 +152,7 @@ describe("retrieve fanout orchestration", () => {
 		expect(envelope.data.targets).toHaveLength(0);
 		expect(envelope.warnings.map((w) => w.code)).toContain("cdb/empty-group");
 		expect(envelope.meta.operation?.kind).toBe("fanout");
-		expect(envelope.meta.operation?.group).toBe("prod");
+		expect(envelope.meta.operation?.selection.groups).toEqual(["prod"]);
 	});
 
 	test("retries only retryable codes, up to the max attempt count", async () => {
@@ -230,6 +233,96 @@ describe("retrieve fanout orchestration", () => {
 		expect(maxInFlight).toBe(concurrency);
 		expect(envelope.meta.operation?.concurrency).toBe(concurrency);
 	});
+
+	test("summarizes the selection (groups/where/all/default) in the operation meta", async () => {
+		const selection: TargetSelection = {
+			positionals: [],
+			groups: ["prod", "edge"],
+			all: false,
+			default: false,
+			where: [{ key: "board", value: "RB5009" }],
+		};
+		const envelope = await retrieveFanout(
+			baseRequest,
+			selection,
+			{},
+			{
+				expand: async () => fakeExpansion(1),
+				sleep: noSleep,
+				execute: async (resolved) => fakeSuccess(resolved),
+			},
+		);
+		expect(envelope.meta.operation?.selection).toEqual({
+			groups: ["prod", "edge"],
+			where: ["board=RB5009"],
+			all: false,
+			default: false,
+			positionals: [],
+		});
+	});
+
+	test("a __default__ member fails that one target deterministically", async () => {
+		const defaultResolution: CdbResolution = {
+			...fakeResolution(0),
+			target: "__default__",
+		};
+		const envelope = await retrieveFanout(
+			baseRequest,
+			{ positionals: [], groups: [], all: false, default: true, where: [] },
+			{},
+			{
+				expand: async () => ({
+					empty: false,
+					warnings: [],
+					targets: [
+						{ kind: "cdb", recordIndex: 0, resolution: fakeResolution(0) },
+						{ kind: "cdb", recordIndex: 3, resolution: defaultResolution },
+					],
+				}),
+				sleep: noSleep,
+				execute: async (resolved) => fakeSuccess(resolved),
+			},
+		);
+		const failed = envelope.data.targets.find(
+			(t) => t.meta.target.recordIndex === 3,
+		);
+		expect(failed && !failed.ok && failed.error.code).toBe("target/unresolved");
+		// The real target still succeeded — partial.
+		expect(envelope.data.summary).toEqual({ total: 2, ok: 1, failed: 1 });
+	});
+
+	test("a literal (ad-hoc) member drops a borrowed __default__ recordIndex and keeps its input", async () => {
+		const envelope = await retrieveFanout(
+			{ path: "/system/resource", username: "admin", password: "pw" },
+			{
+				positionals: ["1.2.3.4"],
+				groups: [],
+				all: false,
+				default: false,
+				where: [],
+			},
+			{ HOME: "/nonexistent-centrs-home" },
+			{
+				expand: async () => ({
+					empty: false,
+					warnings: [],
+					targets: [{ kind: "literal", input: "1.2.3.4" }],
+				}),
+				// Simulate the resolver borrowing the __default__ record's index (3).
+				execute: async (resolved) => {
+					const base = fakeSuccess(resolved);
+					return {
+						...base,
+						meta: { ...base.meta, target: { host: "1.2.3.4", recordIndex: 3 } },
+					};
+				},
+				sleep: noSleep,
+			},
+		);
+		const target = envelope.data.targets[0];
+		expect(target?.meta.target.recordIndex).toBeUndefined();
+		expect(target?.meta.target.input).toBe("1.2.3.4");
+	});
 });
 
 describe("retrieve fanout retry classification", () => {
@@ -303,7 +396,7 @@ describe("retrieve fanout helpers", () => {
 				expand: async () => ({
 					empty: false,
 					warnings: [],
-					targets: [{ recordIndex: 0, resolution }],
+					targets: [{ kind: "cdb", recordIndex: 0, resolution }],
 				}),
 				sleep: noSleep,
 				execute: async (resolved) => fakeSuccess(resolved),

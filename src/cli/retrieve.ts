@@ -4,7 +4,11 @@
  * unchanged from the former monolithic `cli.ts`.
  */
 
-import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
+import {
+	asCentrsError,
+	CentrsError,
+	formatCentrsErrorText,
+} from "../errors.ts";
 import {
 	buildRetrieveErrorEnvelope,
 	buildRetrieveFanoutErrorEnvelope,
@@ -15,13 +19,14 @@ import {
 	renderRetrieveEnvelope,
 	renderRetrieveFanoutEnvelope,
 	retrieve,
-	retrieveGroup,
+	retrieveFanout,
 	retrieveOutputFormats,
 } from "../index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
 	renderCommandHelp,
+	unknownFlagError,
 } from "./common.ts";
 import {
 	buildTargetSelectionTips,
@@ -31,11 +36,19 @@ import {
 	missingTargetError,
 	withTips,
 } from "./missing-target.ts";
+import {
+	buildTargetSelection,
+	consumeSelectionFlag,
+	emptySelectionFlags,
+	isFanoutMode,
+	type SelectionFlags,
+	selectionCommandOptions,
+} from "./selection.ts";
 
 export const retrieveCommand: CliCommandMetadata = {
 	name: "retrieve",
 	usage:
-		"centrs retrieve <target> <routeros-path> [flags] | centrs retrieve --group <name> <routeros-path> [flags]",
+		"centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <target...> <routeros-path> [flags] | centrs retrieve --group <name> <routeros-path> [flags]",
 	summary:
 		"Read RouterOS values through the shared core using the selected protocol.",
 	options: [
@@ -45,18 +58,7 @@ export const retrieveCommand: CliCommandMetadata = {
 			description:
 				"Pin the protocol selector. Defaults to `rest-api` for retrieve.",
 		},
-		{
-			flag: "--group",
-			valueName: "<name>",
-			description:
-				"Fan out over every CDB record in the group. Replaces the <target> positional.",
-		},
-		{
-			flag: "--concurrency",
-			valueName: "<n>",
-			description:
-				"Bounded worker-pool size for `--group` fanout (REST 8, native-api 4 by default).",
-		},
+		...selectionCommandOptions,
 		{
 			flag: "--host",
 			valueName: "<host|url>",
@@ -146,44 +148,51 @@ export const retrieveCommand: CliCommandMetadata = {
 	],
 };
 
+type RetrieveCliArgs = RetrieveRequest & {
+	help?: boolean;
+	selectionFlags?: SelectionFlags;
+	targetPositionals?: readonly string[];
+};
+
 export async function runRetrieveCli(args: readonly string[]): Promise<number> {
-	let request: RetrieveRequest | undefined;
+	let request: RetrieveCliArgs | undefined;
 
 	try {
 		request = parseRetrieveCliArgs(args);
-		if ((request as { help?: boolean }).help) {
+		if (request.help) {
 			console.log(renderCommandHelp(describeCentrs(), retrieveCommand));
 			return 0;
 		}
 
-		const envelope = request.group
-			? await retrieveGroup(request)
-			: await retrieve(request);
+		// Fan-out mode (a selector flag present, or >1 positional target) has its own
+		// envelope shape and granular exit code; a plain single-target call keeps the
+		// single-target envelope.
+		const selectionFlags = request.selectionFlags ?? emptySelectionFlags();
+		const targetPositionals = request.targetPositionals ?? [];
+		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
+			return await runRetrieveFanoutCli(
+				request,
+				selectionFlags,
+				targetPositionals,
+				args,
+			);
+		}
+
+		const envelope = await retrieve(request);
 		const resolvedFormat =
 			(
 				envelope.meta.operation as {
 					request?: { format?: RetrieveOutputFormat };
 				}
 			)?.request?.format ?? "text";
-		const output = request.group
-			? renderRetrieveFanoutEnvelope(
-					envelope as Parameters<typeof renderRetrieveFanoutEnvelope>[0],
-					resolvedFormat,
-					{ verbose: request.verbose },
-				)
-			: renderRetrieveEnvelope(
-					envelope as Parameters<typeof renderRetrieveEnvelope>[0],
-					resolvedFormat,
-					{ verbose: request.verbose },
-				);
-		console.log(output);
-		// Fan-out uses the uniform granular exit contract (0 all-ok / 2 partial /
-		// 1 all-failed); a single-target retrieve success is always 0.
-		return request.group
-			? fanoutExitCode(
-					envelope as Parameters<typeof renderRetrieveFanoutEnvelope>[0],
-				)
-			: 0;
+		console.log(
+			renderRetrieveEnvelope(
+				envelope as Parameters<typeof renderRetrieveEnvelope>[0],
+				resolvedFormat,
+				{ verbose: request.verbose },
+			),
+		);
+		return 0;
 	} catch (error) {
 		const format = inferRequestedFormat(args, request);
 		const tips = isMissingTargetError(error)
@@ -193,29 +202,19 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 				})
 			: [];
 		if (format === "json" || format === "yaml") {
-			if (request?.group) {
-				const envelope = buildRetrieveFanoutErrorEnvelope(request, error);
-				console.error(
-					renderRetrieveFanoutEnvelope(envelope, format, {
-						verbose: request?.verbose ?? false,
-					}),
-				);
-			} else {
-				// When parsing failed before a request existed, build the error
-				// envelope from an empty request rather than reconstructing positionals
-				// from raw args — a credential value (e.g. the token after
-				// `--password` / `--cdb-password`) would otherwise be echoed as
-				// `meta.target.input`.
-				const envelope = withTips(
-					buildRetrieveErrorEnvelope(request ?? { path: "" }, error),
-					tips,
-				);
-				console.error(
-					renderRetrieveEnvelope(envelope, format, {
-						verbose: request?.verbose ?? false,
-					}),
-				);
-			}
+			// When parsing failed before a request existed, build the error envelope
+			// from an empty request rather than reconstructing positionals from raw
+			// args — a credential value (e.g. the token after `--password` /
+			// `--cdb-password`) would otherwise be echoed as `meta.target.input`.
+			const envelope = withTips(
+				buildRetrieveErrorEnvelope(request ?? { path: "" }, error),
+				tips,
+			);
+			console.error(
+				renderRetrieveEnvelope(envelope, format, {
+					verbose: request?.verbose ?? false,
+				}),
+			);
 		} else {
 			console.error(
 				formatCentrsErrorText(
@@ -235,12 +234,49 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 	}
 }
 
-function parseRetrieveCliArgs(args: readonly string[]): RetrieveRequest & {
-	help?: boolean;
-} {
-	const request: RetrieveRequest & { help?: boolean } = {
+async function runRetrieveFanoutCli(
+	request: RetrieveCliArgs,
+	selectionFlags: SelectionFlags,
+	targetPositionals: readonly string[],
+	args: readonly string[],
+): Promise<number> {
+	const selection = buildTargetSelection(selectionFlags, targetPositionals);
+	const format = inferRequestedFormat(args, request);
+	try {
+		const envelope = await retrieveFanout(
+			request,
+			selection,
+			Bun.env,
+			{},
+			{
+				concurrency: selectionFlags.concurrency,
+				allowAdhoc: true,
+			},
+		);
+		const resolvedFormat = envelope.meta.operation?.request.format ?? format;
+		console.log(
+			renderRetrieveFanoutEnvelope(envelope, resolvedFormat, {
+				verbose: request.verbose ?? false,
+			}),
+		);
+		// Granular exit contract: 0 all-ok / 2 partial / 1 all-failed.
+		return fanoutExitCode(envelope);
+	} catch (error) {
+		const envelope = buildRetrieveFanoutErrorEnvelope(request, error);
+		console.error(
+			renderRetrieveFanoutEnvelope(envelope, format, {
+				verbose: request.verbose ?? false,
+			}),
+		);
+		return 1;
+	}
+}
+
+function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
+	const request: RetrieveCliArgs = {
 		path: "",
 	};
+	const selectionFlags = emptySelectionFlags();
 	const positional: string[] = [];
 
 	for (let index = 0; index < args.length; index += 1) {
@@ -321,15 +357,6 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveRequest & {
 			case "--resolve":
 				request.resolve = expectValue(args, ++index, arg);
 				break;
-			case "--group":
-				request.group = expectValue(args, ++index, arg);
-				break;
-			case "--concurrency":
-				request.concurrency = Number.parseInt(
-					expectValue(args, ++index, arg),
-					10,
-				);
-				break;
 			case "--validate":
 				request.validate = true;
 				break;
@@ -339,35 +366,49 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveRequest & {
 			case "--verbose":
 				request.verbose = true;
 				break;
-			default:
+			default: {
+				const consumed = consumeSelectionFlag(args, index, selectionFlags);
+				if (consumed !== null) {
+					index = consumed;
+					break;
+				}
 				if (arg.startsWith("-")) {
-					throw new Error(`Unknown retrieve flag: ${arg}`);
+					throw unknownFlagError("retrieve", arg, retrieveCommand.options);
 				}
 				positional.push(arg);
 				break;
+			}
 		}
 	}
+
+	request.selectionFlags = selectionFlags;
 
 	if (request.help) {
 		return request;
 	}
 
-	if (request.group !== undefined) {
-		if (positional.length < 1) {
-			throw new Error(
-				"`centrs retrieve --group <name>` requires a <routeros-path>.",
-			);
+	// api/retrieve positional boundary: the FINAL positional is the routeros-path;
+	// every preceding positional is a fan-out target.
+	const path = positional.at(-1) ?? "";
+	const targetPositionals = positional.slice(0, -1);
+	request.path = path;
+	request.targetPositionals = targetPositionals;
+
+	if (isFanoutMode(selectionFlags, targetPositionals.length)) {
+		if (positional.length === 0 || path.length === 0) {
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary:
+					"`centrs retrieve` fan-out requires a <routeros-path> after the selectors/targets.",
+				remediation:
+					"Add the RouterOS menu path as the final positional, e.g. `centrs retrieve --group prod /system/resource`.",
+				context: { command: "retrieve", missingPath: true },
+			});
 		}
-		if (positional.length > 1) {
-			throw new Error(
-				"`centrs retrieve --group <name>` takes only a <routeros-path>; the group replaces the <target> positional.",
-			);
-		}
-		request.path = positional[0] ?? "";
 		return request;
 	}
 
-	if (positional.length === 0) {
+	if (positional.length === 0 || targetPositionals.length === 0) {
 		throw missingTargetError({
 			command: "retrieve",
 			summary: "`centrs retrieve` requires a <target> and a <routeros-path>.",
@@ -375,14 +416,8 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveRequest & {
 				"Pass the router host/identity then the RouterOS path, e.g. `centrs retrieve 192.0.2.10 /system/resource`.",
 		});
 	}
-	if (positional.length < 2) {
-		throw new Error(
-			"`centrs retrieve` requires a <routeros-path> after the <target>.",
-		);
-	}
-
-	request.targetInput = positional[0];
-	request.path = positional[1] ?? "";
+	// Single-target: exactly one target positional (more would be fan-out mode).
+	request.targetInput = targetPositionals[0];
 	return request;
 }
 

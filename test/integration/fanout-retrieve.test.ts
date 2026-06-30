@@ -29,7 +29,12 @@ interface InnerEnvelope {
 	error?: { code?: string; summary?: string };
 	meta: {
 		via?: string | null;
-		target: { recordIndex?: number; name?: string; host?: string };
+		target: {
+			recordIndex?: number;
+			name?: string;
+			host?: string;
+			input?: string;
+		};
 		operation?: { kind?: string };
 	};
 }
@@ -45,7 +50,13 @@ interface FanoutTestEnvelope {
 		via?: string | null;
 		operation?: {
 			kind?: string;
-			group?: string;
+			selection?: {
+				groups?: string[];
+				where?: string[];
+				all?: boolean;
+				default?: boolean;
+				positionals?: string[];
+			};
 			concurrency?: number;
 			summary?: { total: number; ok: number; failed: number };
 		};
@@ -97,7 +108,9 @@ async function writeFanoutCdb(
 			user: username,
 			password,
 			group: FANOUT_GROUP,
-			comment: "quickchr fanout fixture (reachable)",
+			// `role=edge` is a raw comment fact (not a settings key) so `--where
+			// role=edge` selects ONLY this record — exercising the device-class selector.
+			comment: "quickchr fanout fixture (reachable) role=edge",
 			profile: "<own>",
 			savedPassword: true,
 		}),
@@ -107,7 +120,7 @@ async function writeFanoutCdb(
 			user: username,
 			password,
 			group: FANOUT_GROUP,
-			comment: "fanout fixture (unreachable)",
+			comment: "fanout fixture (unreachable) role=core",
 			profile: "<own>",
 			savedPassword: true,
 		}),
@@ -154,7 +167,9 @@ describeFast("retrieve group fanout against CHR", () => {
 			expect(envelope.ok).toBe(true);
 			expect(envelope.data.summary).toEqual({ total: 2, ok: 1, failed: 1 });
 			expect(envelope.meta.operation?.kind).toBe("fanout");
-			expect(envelope.meta.operation?.group).toBe(FANOUT_GROUP);
+			expect(envelope.meta.operation?.selection?.groups).toEqual([
+				FANOUT_GROUP,
+			]);
 			expect(envelope.meta.operation?.summary).toEqual({
 				total: 2,
 				ok: 1,
@@ -178,6 +193,82 @@ describeFast("retrieve group fanout against CHR", () => {
 			expect(unreachable?.error?.code).toBe("transport/connection-refused");
 			expect(unreachable?.meta.target.recordIndex).toBe(1);
 
+			// F3: `--where role=edge` (a raw comment fact) selects ONLY the reachable
+			// record — a subset selection, exit 0.
+			const whereStart = consoleCapture.logs.length;
+			const whereExit = await runCli([
+				"retrieve",
+				"--where",
+				"role=edge",
+				"/system/resource",
+				"--cdb-file",
+				fixture.cdbPath,
+				"--json",
+			]);
+			const whereEnvelope = JSON.parse(
+				consoleCapture.logs.slice(whereStart)[0] ?? "",
+			) as FanoutTestEnvelope;
+			expect(whereExit).toBe(0);
+			expect(whereEnvelope.data.summary).toEqual({
+				total: 1,
+				ok: 1,
+				failed: 0,
+			});
+			expect(whereEnvelope.meta.operation?.selection?.where).toEqual([
+				"role=edge",
+			]);
+			expect(whereEnvelope.data.targets[0]?.ok).toBe(true);
+
+			// F4: `--all` fans across every CDB record (excludes `__default__`) — here
+			// both, so the same partial outcome as `--group`, exit 2.
+			const allStart = consoleCapture.logs.length;
+			const allExit = await runCli([
+				"retrieve",
+				"--all",
+				"/system/resource",
+				"--cdb-file",
+				fixture.cdbPath,
+				"--json",
+			]);
+			const allEnvelope = JSON.parse(
+				consoleCapture.logs.slice(allStart)[0] ?? "",
+			) as FanoutTestEnvelope;
+			expect(allExit).toBe(2);
+			expect(allEnvelope.data.summary).toEqual({ total: 2, ok: 1, failed: 1 });
+			expect(allEnvelope.meta.operation?.selection?.all).toBe(true);
+
+			// F5: two positional targets fan out as ad-hoc literals (no CDB), labeled
+			// by input with no borrowed recordIndex.
+			const unionStart = consoleCapture.logs.length;
+			const unionExit = await runCli([
+				"retrieve",
+				chr.restUrl,
+				UNREACHABLE_TARGET,
+				"/system/resource",
+				"--username",
+				auth.username,
+				"--password",
+				auth.password,
+				"--json",
+			]);
+			const unionEnvelope = JSON.parse(
+				consoleCapture.logs.slice(unionStart)[0] ?? "",
+			) as FanoutTestEnvelope;
+			expect(unionExit).toBe(2);
+			expect(unionEnvelope.data.summary).toEqual({
+				total: 2,
+				ok: 1,
+				failed: 1,
+			});
+			expect(
+				unionEnvelope.data.targets.map((t) => t.meta.target.input),
+			).toEqual([chr.restUrl, UNREACHABLE_TARGET]);
+			expect(
+				unionEnvelope.data.targets.every(
+					(t) => t.meta.target.recordIndex === undefined,
+				),
+			).toBe(true);
+
 			const resourceVersion =
 				typeof chr.state.version === "string" ? chr.state.version : undefined;
 			await recordIntegrationEvidence({
@@ -188,7 +279,7 @@ describeFast("retrieve group fanout against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(2),
+				exampleIds: exampleIds(5),
 			});
 		} finally {
 			consoleCapture.restore();

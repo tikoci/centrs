@@ -162,15 +162,16 @@ Call succeeds with a `cdb/password-not-needed` warning in `meta.warnings`.
 centrs retrieve $R /system/resource --cdb-file $CDB --cdb-password ignored --json
 ```
 
-## Group fanout
+## Target selection (fan-out)
 
-These are exercised by `test/integration/fanout-retrieve.test.ts` when CHR
-integration is enabled.
+These exercise the shared target-selection grammar
+([`docs/CONSTITUTION.md` → Target selection grammar](../../docs/CONSTITUTION.md#target-selection-grammar)).
+`test/integration/fanout-retrieve.test.ts` runs them when CHR integration is
+enabled. `$CDB` contains two records in group `fanout-chr`: record 0 is the live
+CHR (comment fact `role=edge`) and record 1 is an unreachable REST URL (comment
+fact `role=core`).
 
-### F1. Group fanout with one inner success and one inner failure
-
-`$CDB` contains two records in group `fanout-chr`: record 0 is the live CHR and
-record 1 is an unreachable REST URL.
+### F1. Group fan-out with one inner success and one inner failure
 
 ```bash
 centrs retrieve --group fanout-chr /system/resource --cdb-file $CDB --json
@@ -179,7 +180,7 @@ centrs retrieve --group fanout-chr /system/resource --cdb-file $CDB --json
 Outer envelope: `ok: true`, `data.summary = { total: 2, ok: 1, failed: 1 }`,
 `data.targets` is ordered by CDB `recordIndex`, and `meta.operation.kind` is
 `fanout`. The unreachable target is an inner `ok: false` envelope with
-`transport/connection-refused`.
+`transport/connection-refused`. Process exit `2` (partial).
 
 ### F2. Empty / unknown group
 
@@ -188,7 +189,37 @@ centrs retrieve --group no-such-group /system/resource --cdb-file $CDB --json
 ```
 
 Envelope: `ok: true`, `data.summary = { total: 0, ok: 0, failed: 0 }`,
-`data.targets = []`, and warnings include `cdb/empty-group`.
+`data.targets = []`, and warnings include `cdb/empty-group`. Exit `0`.
+
+### F3. `--where` device-class selector (subset)
+
+```bash
+centrs retrieve --where role=edge /system/resource --cdb-file $CDB --json
+```
+
+`--where` matches the raw comment fact, selecting only record 0:
+`data.summary = { total: 1, ok: 1, failed: 0 }`,
+`meta.operation.selection.where = ["role=edge"]`, exit `0`.
+
+### F4. `--all` (every CDB record)
+
+```bash
+centrs retrieve --all /system/resource --cdb-file $CDB --json
+```
+
+`--all` fans across every record (excluding `__default__`) — here both, so
+`data.summary = { total: 2, ok: 1, failed: 1 }`,
+`meta.operation.selection.all = true`, exit `2`.
+
+### F5. Multiple positional targets (ad-hoc literals)
+
+```bash
+centrs retrieve $REACHABLE_URL $UNREACHABLE_URL /system/resource --username $U --password $P --json
+```
+
+More than one positional target is fan-out mode without any selector flag. With
+no `--cdb-file`, both are ad-hoc literals, labeled by `meta.target.input` with no
+`recordIndex`: `data.summary = { total: 2, ok: 1, failed: 1 }`, exit `2`.
 
 ## Format
 
