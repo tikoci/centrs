@@ -247,6 +247,7 @@ export {
 	canonicalizeExecuteCommand,
 	type ExecuteEnvelope,
 	type ExecuteErrorEnvelope,
+	type ExecuteGlobalContext,
 	type ExecuteOperationMeta,
 	type ExecuteOutputFormat,
 	type ExecuteRequest,
@@ -257,10 +258,23 @@ export {
 	executeOutputFormats,
 	isWriteShaped,
 	renderExecuteEnvelope,
+	resolveExecuteGlobalContext,
 	resolveExecuteRequest,
 	runResolvedExecute,
 	validateExecuteRequestShape,
 } from "./execute.ts";
+export {
+	buildExecuteFanoutErrorEnvelope,
+	type ExecuteFanoutData,
+	type ExecuteFanoutEnvelope,
+	type ExecuteFanoutErrorEnvelope,
+	type ExecuteFanoutInternals,
+	type ExecuteFanoutOperationMeta,
+	type ExecuteFanoutOptions,
+	type ExecuteSelectionSummary,
+	executeFanout,
+	renderExecuteFanoutEnvelope,
+} from "./execute-fanout.ts";
 export {
 	type ApiVerb,
 	createProtocolAdapter,

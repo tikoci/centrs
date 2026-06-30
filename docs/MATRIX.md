@@ -92,6 +92,17 @@ cannot follow. `centrs stream`/`centrs tail` now error with a pointer to
 `test/integration/fanout-retrieve.test.ts` (F1 group, F2 empty/unknown, F3
 `--where` subset, F4 `--all`, F5 positional union of ad-hoc literals).
 
+`execute` runs the **same** command across the shared selection grammar over its
+transports (`src/execute-fanout.ts`). Its positional boundary is **`--`** (targets
+before, command after — `execute r1 r2 -- /system/reboot`), since an execute
+command is itself many tokens; a single positional target with no selector stays
+single-target. A **write-shaped** fan-out (add/set/remove) is gated by `--yes`,
+confirmed once up front with a blast-radius message (execute is the primary write
+path); write-ness is target-independent (`canonicalizeExecuteCommand` +
+`isWriteShaped`). Green on CHR 7.23.1 via `test/integration/execute-fanout.test.ts`
+(F1 group read, F2 empty, F3 `--where` subset, F4 `--all`, F5 write-confirm gate,
+F6 positional union of ad-hoc literals over `--`).
+
 `transfer` is `CHR-passed` for `rest-api`/`native-api` and for **sftp** (the
 `ssh` column's first method): `src/transfer.ts` + `src/cli/transfer.ts`
 (size/direction-aware method selection, leading-slash normalization, the

@@ -337,6 +337,73 @@ centrs execute 127.0.0.1 '/ip/address/add address=198.51.100.51/32 interface=eth
 Envelope: `ok: false`, `error.code=validation/unknown-attribute`, `meta.via=ssh`,
 and no address is added — the console `:parse` gate catches `bogus` pre-mutation.
 
+## Target selection (fan-out)
+
+These exercise the shared target-selection grammar
+([`docs/CONSTITUTION.md` → Target selection grammar](../../docs/CONSTITUTION.md#target-selection-grammar)),
+run by `test/integration/execute-fanout.test.ts` when CHR integration is enabled.
+`$CDB` has two records in group `fanout-chr`: record 0 is the live CHR (comment
+fact `role=edge`) and record 1 is an unreachable REST URL (`role=core`). Note the
+execute `--` boundary: targets/selectors come before it, the command after.
+
+### F1. Group fan-out of a read command
+
+```bash
+centrs execute --group fanout-chr --via rest-api --cdb-file $CDB --json -- /system/resource/print
+```
+
+`ok: true`, `data.summary = { total: 2, ok: 1, failed: 1 }`, targets ordered by
+`recordIndex`, `meta.operation.kind = fanout`; the unreachable target is an inner
+`ok: false` (`transport/connection-refused`). Process exit `2`.
+
+### F2. Empty / unknown group
+
+```bash
+centrs execute --group no-such-group --via rest-api --cdb-file $CDB --json -- /system/resource/print
+```
+
+`ok: true`, `data.summary = { total: 0, ok: 0, failed: 0 }`,
+`warnings` include `cdb/empty-group`. Exit `0`.
+
+### F3. `--where` device-class selector (subset)
+
+```bash
+centrs execute --where role=edge --via rest-api --cdb-file $CDB --json -- /system/resource/print
+```
+
+Selects only record 0: `data.summary = { total: 1, ok: 1, failed: 0 }`,
+`meta.operation.selection.where = ["role=edge"]`, exit `0`.
+
+### F4. `--all` (every CDB record)
+
+```bash
+centrs execute --all --via rest-api --cdb-file $CDB --json -- /system/resource/print
+```
+
+`data.summary = { total: 2, ok: 1, failed: 1 }`,
+`meta.operation.selection.all = true`, exit `2`.
+
+### F5. Write-shaped fan-out without `--yes` is refused (blast radius)
+
+```bash
+centrs execute --group fanout-chr --via rest-api --cdb-file $CDB --json -- /system/identity/set name=fanout-blast
+```
+
+A write-shaped fan-out is gated once up front: `ok: false`,
+`error.code = usage/confirmation-required`, the summary names the blast radius
+(`2 router(s)`), exit `1`. Nothing is mutated. Add `--yes` to fan the write out.
+
+### F6. Multiple positional targets (ad-hoc literals) before `--`
+
+```bash
+centrs execute $REACHABLE_URL $UNREACHABLE_URL --via rest-api --username $U --password $P --json -- /system/resource/print
+```
+
+More than one positional target is fan-out mode (the `--` separates them from the
+command). With no `--cdb-file`, both are ad-hoc literals, labeled by
+`meta.target.input` with no `recordIndex`: `data.summary = { total: 2, ok: 1,
+failed: 1 }`, exit `2`.
+
 ## Protocol selection notes
 
 For an unresolved MAC target, execute auto-selection defaults to mac-telnet
