@@ -1,14 +1,12 @@
 # api — examples
 
-Each numbered example is an executable spec. Phase 2+ will add CHR integration
-tests (booted by `@tikoci/quickchr`) that assert them — planned as
-`test/integration/api.test.ts` (rest-api examples),
-`test/integration/api-native.test.ts` (native-api examples, N…), and
+Each numbered example is an executable spec, asserted by CHR integration tests
+(booted by `@tikoci/quickchr`): `test/integration/api.test.ts` (rest-api
+examples), `test/integration/api-native.test.ts` (native-api examples, N…), and
 `test/integration/api-listen.test.ts` (streaming examples, L…), with example N ↔
-assertion N. **Those test files do not exist yet**; until the runtime lands these
-examples are intent, not yet executed. Once wired: if a line here is not exercised
-by a test, the test file is wrong; if a line passes only with `--validate=false`,
-the implementation is wrong (see [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md)).
+assertion N. If a line here is not exercised by a test, the test file is wrong; if
+a line passes only with `--validate=false`, the implementation is wrong (see
+[`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md)).
 
 `$R` is `<host>:<rest-port>` resolved by quickchr. `$A` is `<host>` and
 `$API_PORT` is the native API port (`chr.ports.api`). `$U` / `$P` are CHR
@@ -280,43 +278,48 @@ centrs api $A execute -X POST -f script=':put [/system/identity/get name]' --via
 
 Envelope: `ok: true`, `data` contains the CHR identity.
 
-## listen (native-api only)
+## listen / `--stream` (native-api only)
 
-### L1. `--listen` streams a change as an NDJSON frame, then a summary
+Open-ended follow. `--stream` is the primary flag; `--listen` is an accepted
+alias and a trailing `/listen` endpoint segment infers it. Output is NDJSON: one
+envelope per change frame, then a terminating summary envelope.
+
+### L1. `--stream` streams a change as an NDJSON frame, then a summary
 
 ```bash
-centrs api $A ip/address --listen --count 1 --via native-api --port $API_PORT --username $U --password $P
+centrs api $A ip/address --stream --count 1 --via native-api --port $API_PORT --username $U --password $P
 ```
 
 While listening, the harness adds an address over REST. stdout is NDJSON: at least
-one envelope frame for the new row, then a final summary envelope
-(`data.stopReason=count-reached`, `data.frames>=1`). Exit code 0 (stream started
+one envelope frame for the new row (`meta.operation.stream.kind=frame`), then a
+final summary envelope (`meta.operation.stream.kind=summary`,
+`data.stopReason=count-reached`, `data.frames>=1`). Exit code 0 (stream started
 cleanly).
 
 ### L2. A deletion frame carries `.dead`
 
 ```bash
-centrs api $A ip/address --listen --count 1 --via native-api --port $API_PORT --username $U --password $P
+centrs api $A ip/address --stream --duration 3s --via native-api --port $API_PORT --username $U --password $P
 ```
 
-The harness removes a pre-seeded address; the emitted frame's record carries
+The harness removes a pre-seeded address; an emitted frame's record carries
 `.dead=true` (a minimal `{ ".id", ".dead" }` record, per the CHR-grounded
 `commands/api/AGENTS.md`).
 
 ### L3. `/listen` endpoint infers native + streaming
 
 ```bash
-centrs api $A "ip/address/listen" --count 1 --username $U --password $P
+centrs api $A "ip/address/listen" --count 1 --port $API_PORT --username $U --password $P
 ```
 
-No `--listen` / `--via` given; the `/listen` endpoint infers `--listen` and
-`--via native-api`. Same NDJSON shape as L1.
+No `--stream` / `--via` given; the `/listen` endpoint infers `--stream` and
+`--via native-api` (`meta.via=native-api`). Same NDJSON shape as L1.
 
 ### L4. Bounded `--duration` reports its stop reason
 
 ```bash
-centrs api $A ip/address --listen --duration 2s --via native-api --port $API_PORT --username $U --password $P
+centrs api $A ip/address --stream --duration 2s --via native-api --port $API_PORT --username $U --password $P
 ```
 
-After ~2s the stream ends with a summary envelope whose
-`data.stopReason=duration-elapsed`. Exit code 0.
+With no change during the window, the stream ends after ~2 s with a summary
+envelope whose `data.stopReason=duration-elapsed`. Exit code 0.

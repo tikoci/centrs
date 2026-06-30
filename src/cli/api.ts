@@ -2,9 +2,12 @@ import {
 	type ApiOutputFormat,
 	type ApiRequest,
 	apiEnvelope,
+	apiListen,
 	apiOutputFormats,
 	buildApiErrorEnvelope,
+	normalizeApiEndpoint,
 	renderApiEnvelope,
+	renderApiStreamLine,
 } from "../api.ts";
 import {
 	asCentrsError,
@@ -81,6 +84,22 @@ export const apiCommand: CliCommandMetadata = {
 			flag: "--yes",
 			description:
 				"Confirm a mutating (non-read) request in non-interactive runs.",
+		},
+		{
+			flag: "--stream / --listen",
+			description:
+				"Follow changes as an NDJSON envelope stream (native-api only; the `/listen` endpoint infers it). Ends with a summary envelope.",
+		},
+		{
+			flag: "--count",
+			valueName: "<n>",
+			description: "Stop a `--stream` after N change frames.",
+		},
+		{
+			flag: "--duration",
+			valueName: "<dur>",
+			description:
+				"Stop a `--stream` after this wall-clock window (e.g. `5s`).",
 		},
 		{
 			flag: "--via",
@@ -192,6 +211,7 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 			case "--raw":
 				parsed.raw = true;
 				break;
+			case "--stream":
 			case "--listen":
 				parsed.listen = true;
 				break;
@@ -344,6 +364,16 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 			}
 		}
 
+		// Open-ended follow (`--stream`/`--listen`, or a `/listen` endpoint) consumes
+		// the NDJSON envelope stream instead of a single one-shot envelope.
+		const streaming =
+			parsed.listen === true ||
+			(parsed.endpoint.length > 0 &&
+				normalizeApiEndpoint(parsed.endpoint).listen);
+		if (streaming) {
+			return await runApiListenCli(parsed, args);
+		}
+
 		const envelope = await apiEnvelope(parsed);
 		const resolvedFormat =
 			(
@@ -407,6 +437,49 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 		}
 		return 1;
 	}
+}
+
+/**
+ * Consume the open-ended `--stream` follow: print one line per change frame
+ * (NDJSON under `json`, human rows under `text`), then the terminating summary.
+ * Ctrl-C (SIGINT) cancels the listen and still emits the summary. The exit code
+ * reflects whether the stream *started* cleanly — a failure before the first
+ * frame is `1`; a mid-stream error frame leaves a started stream at `0`.
+ */
+async function runApiListenCli(
+	parsed: ApiCliArgs,
+	args: readonly string[],
+): Promise<number> {
+	const format = inferApiFormat(args, parsed);
+	const controller = new AbortController();
+	const onSigint = (): void => controller.abort();
+	process.on("SIGINT", onSigint);
+	let exitCode = 0;
+	let first = true;
+	try {
+		for await (const envelope of apiListen(
+			parsed,
+			Bun.env,
+			controller.signal,
+		)) {
+			const line = renderApiStreamLine(envelope, format, {
+				raw: parsed.raw,
+				verbose: parsed.verbose,
+			});
+			if (envelope.ok) {
+				console.log(line);
+			} else {
+				console.error(line);
+				if (first) {
+					exitCode = 1;
+				}
+			}
+			first = false;
+		}
+	} finally {
+		process.off("SIGINT", onSigint);
+	}
+	return exitCode;
 }
 
 function inferApiFormat(

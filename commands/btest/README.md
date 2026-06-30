@@ -154,7 +154,7 @@ will not offer EC-SRP5 against an `authenticate=yes` server) maps to
 
 btest runs over time, so it emits **live records** during the run plus a final
 **summary**. v1 keeps the formats simple and **defers a broader JSON-streaming
-decision** — it does *not* adopt the `stream` command's NDJSON-stream-of-envelopes
+decision** — it does *not* adopt `api --stream`'s NDJSON-stream-of-envelopes
 contract yet (see Open questions):
 
 - **`text`** (default) — human-readable live reports during the run
@@ -255,10 +255,10 @@ still single-stream.
 
 ## Open questions
 
-- **JSON streaming is deliberately deferred.** btest does not adopt the `stream`
-  command's NDJSON-stream-of-envelopes contract yet; v1 streams `text` / `csv` and
-  returns a single summary envelope for `json` / `yaml`. Revisit a streaming-JSON
-  shape — ideally shared with `stream` — once that contract is settled.
+- **JSON streaming is deliberately deferred.** btest does not adopt
+  `api --stream`'s NDJSON-stream-of-envelopes contract yet; v1 streams `text` /
+  `csv` and returns a single summary envelope for `json` / `yaml`. Revisit a
+  streaming-JSON shape — ideally shared with `api --stream` — once it has settled.
 - **UDP client receive/both is gated (#88).** The client cell
   (`test/integration/btest-client.test.ts`) lands real UDP server→client throughput:
   the return rides the guest→host SLIRP gateway (`10.0.2.2:clientUdpPort`), needing
