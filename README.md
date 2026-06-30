@@ -34,6 +34,7 @@ product; without them this would just be a worse `curl`.
 | `retrieve` | Read RouterOS state over REST/native API and SNMP OID/MIB values. |
 | `stream`   | Follow live RouterOS output (`print follow`/monitor/sniffer) as an NDJSON stream of envelopes. |
 | `execute`  | Run RouterOS CLI-shaped read/write commands (add/set/remove) over native API/REST/L2 surfaces. |
+| `api`      | Structured RouterOS API passthrough (gh-api style): one command per operation, structured in/out, can write, over REST or native API. |
 | `terminal` | Open an interactive console, primarily SSH or MAC-Telnet. |
 | `check`    | Probe reachability and management protocol availability. |
 | `devices`  | View and maintain the CDB-backed device registry (the only writer). |

@@ -187,12 +187,27 @@ raw words are passed through verbatim as `.query` (REST) / `?` words (native).
 ### 20. Bounded `duration=` command returns a `.section` array (not a stream)
 
 ```bash
-centrs api $R interface/monitor-traffic -f interface=ether1 -f duration=5s --username $U --password $P
+centrs api $R interface/monitor-traffic -X POST -f interface=ether1 -f duration=5s --username $U --password $P --yes
 ```
 
 Envelope: `ok: true`, `data` is an **array** of `.section`-keyed records (one per
 ~second), `meta.via=rest-api`. This is an ordinary bounded call — no `--listen`,
-no NDJSON. (REST bounds it at the 60 s cap; native has no cap.)
+no NDJSON. `monitor-traffic` is a command (not `print`/`get`), so it is a
+`POST` and write-classed (needs `--yes`); centrs never relaxes that to read-only.
+(REST bounds it at the 60 s cap; native has no cap.)
+
+### 21. GET one row by id together with `--proplist`
+
+```bash
+centrs api $R ip/address/$ID --proplist address --username $U --password $P
+```
+
+Envelope: `ok: true`, `data` is a **single object** (not an array) carrying only
+the projected property `address` (RouterOS omits `.id` unless it is in the
+proplist). Combining an id with `--query`/`--proplist` folds the id into the REST
+`.query` (`.id=$ID`) and rides a `POST …/print`, then unwraps the one row —
+matching the native `?.id=` read. (Plain id-only reads still use the `GET …/$ID`
+URL form; see example 5's re-read.)
 
 ## native-api (`--via native-api`)
 

@@ -6,12 +6,13 @@ CDB / env / flags, validates the request through `/console/inspect`, runs the
 single REST or native-API operation, and returns the result in the standard
 envelope.
 
-Status: `designed`. This file describes intent and flags; see `docs/MATRIX.md`
-for the cell states (`api` rides `rest-api` and `native-api`; other transports
-are `—`). Load-bearing rules — envelope, errors, settings precedence, identity,
-validation, protocol selection — live in
-[`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md); the `(constitution: …)`
-notes below point there rather than restating them.
+Status: `CHR-passed` over `rest-api` and `native-api` (single-target), per
+`docs/MATRIX.md`; open-ended `--listen` streaming and multi-target fan-out are a
+later phase (a `--via rest-api --listen` request errors today). This file
+describes intent and flags; the matrix holds the cell states. Load-bearing
+rules — envelope, errors, settings precedence, identity, validation, protocol
+selection — live in [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md); the
+`(constitution: …)` notes below point there rather than restating them.
 
 ## Where `api` sits — the verb trichotomy
 
@@ -62,14 +63,17 @@ when a bare-collection `POST` carries create-looking fields.
 | `--attribute` / `--proplist <a,b>` | Property projection → `.proplist`. |
 | `--raw` | Strip the envelope; emit bare RouterOS JSON. Implies `--validate=false`; does **not** imply `--yes`. |
 | `--yes` | Confirm a mutating (non-read) request in non-interactive runs. |
-| `--listen` | Native-api-only follow → NDJSON stream of envelopes. Inferred from a `/listen` endpoint. |
-| `--duration <dur>` / `--count <n>` | Bound a `--listen` stream. |
+| `--listen` *(later phase)* | Native-api-only follow → NDJSON stream of envelopes. Inferred from a `/listen` endpoint. Streaming is not implemented yet: `--via rest-api --listen` errors `transport/capability-unsupported`; native `--listen` errors `usage/not-implemented`. |
+| `--duration <dur>` / `--count <n>` *(later phase)* | Bound a `--listen` stream. |
 | `--validate[=false]` | Default `true`. Gate is `/console/inspect` (see Validation). |
 | `--via <protocol>` | `rest-api` (default) or `native-api`. No silent downgrade. |
 | `--format <json\|yaml\|text>` | Output format. Defaults to `json` for `api` (machine-first); `CENTRS_FORMAT` overrides. |
-| target/auth/transport | `--host`, `--port`, `--username`/`--user`/`-u`, `--password`, `--insecure`, `--timeout`, `--cdb-file`, `--cdb-password`, `--group`, `--where`, `--all`, `--default`, `--concurrency` — same semantics as `retrieve`/`execute` (shared resolver + fan-out core). |
+| target/auth | `--host`, `--port`, `--username`/`--user`/`-u`, `--password`, `--insecure`, `--timeout`, `--cdb-file`, `--cdb-password`, `--resolve <none\|arp>` — same single-target resolver as `retrieve`/`execute`. |
 
-`--listen` is single-session: N>1 targets → `usage/fanout-not-supported`.
+Multi-target fan-out (`--group` / `--where` / `--all` / `--default` /
+`--concurrency`, reusing `src/core/fanout.ts`) lands with the `--listen`
+single-session constraint in a later phase. When it does, `--listen` is
+single-session: N>1 targets → `usage/fanout-not-supported`.
 
 ## Validation
 

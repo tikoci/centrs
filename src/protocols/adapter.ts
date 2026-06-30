@@ -107,6 +107,42 @@ export interface ProtocolExecuteResult {
 }
 
 /**
+ * RouterOS verb the `api` orchestrator resolved from the HTTP method (the gh-api
+ * `-X` map: `GET`→print, `PUT`→add, `PATCH`→set, `DELETE`→remove, `POST`→run).
+ * `print` covers list, get-singleton, and get-one (disambiguated by `id`).
+ */
+export type ApiVerb = "print" | "add" | "set" | "remove" | "run";
+
+/**
+ * A normalized `api` request the orchestrator hands to a transport. It is
+ * transport-agnostic: the REST adapter maps the verb to an HTTP method + URL
+ * (id-in-path, `.query`/`.proplist` body), the native adapter maps it to a
+ * tagged `talk` (`=.id=`, `?`-prefixed queries, `=.proplist=`). The orchestrator
+ * owns method→verb, validation, and the write gate; the adapter only executes.
+ */
+export interface ProtocolApiRequest {
+	verb: ApiVerb;
+	/** Slash path without id, e.g. `/ip/address`. For `run`, the command target (`/interface/monitor-traffic`); ignored when `script` is set. */
+	path: string;
+	/** Object id (`*1`) for get-one/set/remove — REST puts it in the URL, native in `=.id=`. */
+	id?: string;
+	/** Body fields (string values), the JSON object for add/set or the args for a `run` command. */
+	attributes?: Record<string, string>;
+	/** Row filter in REST `.query` form (no leading `?`), e.g. `["type=ether", "#!"]`; native prefixes each with `?`. */
+	query?: readonly string[];
+	/** Property projection → REST `.proplist` / native `=.proplist=`. */
+	proplist?: readonly string[];
+	/** Raw console line for the `/execute` script form (`run`); when set, `path`/`attributes` are ignored. */
+	script?: string;
+}
+
+/** Result of an `apiRequest` round-trip: the response body shaped for the envelope. */
+export interface ProtocolApiResult {
+	/** REST returns the body verbatim (array / object / scalar); native re-maps `!re` records to the same rest-style shape. */
+	data: unknown;
+}
+
+/**
  * Runtime transport seam. The orchestrator drives validation and data fetch
  * through these operations so REST and native-api share the same pipeline and
  * envelope shape.
@@ -124,6 +160,8 @@ export interface ProtocolAdapter {
 	list(path: string, options: RetrieveListOptions): Promise<unknown[]>;
 	/** Run a CLI-shaped command (WP-1c write surface). */
 	execute(request: ProtocolExecuteRequest): Promise<ProtocolExecuteResult>;
+	/** Run a normalized structured `api` request (the gh-api passthrough surface). */
+	apiRequest(request: ProtocolApiRequest): Promise<ProtocolApiResult>;
 	/** Release any underlying connection. Safe to call when never connected. */
 	close(): Promise<void>;
 }
@@ -207,8 +245,91 @@ class RestAdapter implements ProtocolAdapter {
 		return normalizeRestExecute(data);
 	}
 
+	async apiRequest(request: ProtocolApiRequest): Promise<ProtocolApiResult> {
+		const base = request.path.replace(/\/$/, "");
+		switch (request.verb) {
+			case "print": {
+				const hasQuery = (request.query?.length ?? 0) > 0;
+				const hasProplist = (request.proplist?.length ?? 0) > 0;
+				if (request.id && !hasQuery && !hasProplist) {
+					// GET one by id: RouterOS REST addresses a single object in the URL.
+					return {
+						data: await this.requestRest("GET", `${base}/${request.id}`),
+					};
+				}
+				if (request.id || hasQuery || hasProplist) {
+					// A GET cannot carry a body, so `.query`/`.proplist` projection (and an
+					// id, folded into `.query` as `.id=`) rides a POST to the `/print`
+					// sub-endpoint — the documented REST idiom, matching native's `?`-words.
+					const data = await this.requestRest(
+						"POST",
+						`${base}/print`,
+						restQueryBody(request),
+					);
+					// An id addresses one row → unwrap to a single object, matching the
+					// GET-by-id shape and native's `?.id=` read.
+					if (request.id && Array.isArray(data)) {
+						return { data: data[0] ?? null };
+					}
+					return { data };
+				}
+				return { data: await this.requestRest("GET", base) };
+			}
+			case "add":
+				return {
+					data: await this.requestRest("PUT", base, request.attributes ?? {}),
+				};
+			case "set":
+				return {
+					data: await this.requestRest(
+						"PATCH",
+						`${base}/${request.id}`,
+						request.attributes ?? {},
+					),
+				};
+			case "remove":
+				return {
+					data: await this.requestRest("DELETE", `${base}/${request.id}`),
+				};
+			case "run": {
+				if (request.script !== undefined) {
+					// Sync script run: `as-string` makes `/rest/execute` block and return the
+					// captured output rather than scheduling an async job (CHR-grounded).
+					const body = await this.requestRest("POST", "/execute", {
+						script: request.script,
+						"as-string": "",
+					});
+					const result = normalizeRestExecute(body);
+					return { data: result.ret ?? result.records };
+				}
+				return {
+					data: await this.requestRest("POST", base, request.attributes ?? {}),
+				};
+			}
+			default:
+				return exhaustiveApiVerb(request.verb);
+		}
+	}
+
 	async close(): Promise<void> {
 		// REST is stateless; nothing to release.
+	}
+
+	private async requestRest(
+		method: string,
+		path: string,
+		body?: Record<string, unknown>,
+	): Promise<unknown> {
+		const init: RequestInit =
+			body === undefined
+				? { method }
+				: {
+						method,
+						body: JSON.stringify(body),
+						headers: { "Content-Type": "application/json" },
+					};
+		const response = await this.fetchRest(path, init);
+		return response.data;
 	}
 
 	private async restGet(path: string): Promise<unknown> {
@@ -472,6 +593,83 @@ class NativeApiAdapter implements ProtocolAdapter {
 		return { records: repliesToRecords(replies) };
 	}
 
+	async apiRequest(request: ProtocolApiRequest): Promise<ProtocolApiResult> {
+		const base = request.path.replace(/\/$/, "");
+		switch (request.verb) {
+			case "print": {
+				const command: NativeApiCommand = { command: `${base}/print` };
+				const queries: string[] = [];
+				// REST `.query` words map 1:1 to native `?`-prefixed words (CHR-grounded).
+				for (const word of request.query ?? []) {
+					queries.push(`?${word}`);
+				}
+				// No native get-one-by-id shorthand: address a single row with `?.id=`.
+				if (request.id) {
+					queries.push(`?.id=${request.id}`);
+				}
+				if (queries.length > 0) {
+					command.queries = queries;
+				}
+				if (request.proplist && request.proplist.length > 0) {
+					command.proplist = request.proplist;
+				}
+				const records = repliesToRecords(await this.talk(command));
+				return { data: request.id ? (records[0] ?? null) : records };
+			}
+			case "add": {
+				const records = repliesToRecords(
+					await this.talk({
+						command: `${base}/add`,
+						attributes: request.attributes ?? {},
+					}),
+				);
+				return { data: restStyleMutationData(records) };
+			}
+			case "set": {
+				const records = repliesToRecords(
+					await this.talk({
+						command: `${base}/set`,
+						attributes: {
+							...(request.attributes ?? {}),
+							".id": request.id ?? "",
+						},
+					}),
+				);
+				return { data: restStyleMutationData(records) };
+			}
+			case "remove": {
+				const records = repliesToRecords(
+					await this.talk({
+						command: `${base}/remove`,
+						attributes: { ".id": request.id ?? "" },
+					}),
+				);
+				return { data: restStyleMutationData(records) };
+			}
+			case "run": {
+				if (request.script !== undefined) {
+					// `as-string` makes `/execute` run synchronously and return the captured
+					// output; without it the native API schedules a job and returns its id
+					// (CHR-grounded — mirrors REST `/rest/execute`).
+					const records = repliesToRecords(
+						await this.talk({
+							command: "/execute",
+							attributes: { script: request.script, "as-string": "" },
+						}),
+					);
+					return { data: restStyleRunData(records) };
+				}
+				const command: NativeApiCommand = { command: base };
+				if (request.attributes && Object.keys(request.attributes).length > 0) {
+					command.attributes = request.attributes;
+				}
+				return { data: repliesToRecords(await this.talk(command)) };
+			}
+			default:
+				return exhaustiveApiVerb(request.verb);
+		}
+	}
+
 	async close(): Promise<void> {
 		this.session?.close();
 		this.session = undefined;
@@ -612,6 +810,10 @@ class MacTelnetAdapter implements ProtocolAdapter {
 		const console = await this.open();
 		const { output } = await console.run(cli);
 		return { records: [], ret: output };
+	}
+
+	apiRequest(): Promise<ProtocolApiResult> {
+		return Promise.reject(this.unsupported("structured api requests"));
 	}
 
 	async close(): Promise<void> {
@@ -756,9 +958,64 @@ class SshExecAdapter implements ProtocolAdapter {
 		return { records: [], ret: output };
 	}
 
+	apiRequest(): Promise<ProtocolApiResult> {
+		return Promise.reject(this.unsupported("structured api requests"));
+	}
+
 	close(): Promise<void> {
 		return Promise.resolve();
 	}
+}
+
+/** REST `.query` / `.proplist` projection body for a POST `/print`. */
+function restQueryBody(request: ProtocolApiRequest): Record<string, unknown> {
+	const body: Record<string, unknown> = {};
+	// Fold an id into `.query` as `.id=<id>` so id+query/proplist reads work over
+	// REST exactly as they do over native (`?.id=` plus the `?`-words).
+	const query = [
+		...(request.id ? [`.id=${request.id}`] : []),
+		...(request.query ?? []),
+	];
+	if (query.length > 0) {
+		body[".query"] = query;
+	}
+	if (request.proplist && request.proplist.length > 0) {
+		body[".proplist"] = request.proplist;
+	}
+	return body;
+}
+
+/**
+ * Re-map a native add/set/remove reply to the rest-style shape. `add` returns the
+ * new id in `=ret=`; surface it as `{".id": ret}` (REST returns the created
+ * object with `.id`). `set`/`remove` reply with a bare `!done` (no records) → no
+ * meaningful body, mirrored as `null`.
+ */
+function restStyleMutationData(
+	records: readonly Record<string, string>[],
+): unknown {
+	if (records.length === 0) {
+		return null;
+	}
+	const record = records[0] ?? {};
+	const ret = record["ret"];
+	if (typeof ret === "string" && /^\*[0-9A-F]+$/i.test(ret)) {
+		return { ".id": ret };
+	}
+	return records.length === 1 ? record : records;
+}
+
+/** Re-map a native `/execute` reply: prefer the captured `ret` string, else the records. */
+function restStyleRunData(records: readonly Record<string, string>[]): unknown {
+	const ret = records.length === 1 ? records[0]?.["ret"] : undefined;
+	if (typeof ret === "string") {
+		return ret;
+	}
+	return records.length === 1 ? records[0] : records;
+}
+
+function exhaustiveApiVerb(verb: never): never {
+	throw new Error(`Unhandled api verb: ${String(verb)}`);
 }
 
 function normalizeRestExecute(data: unknown): ProtocolExecuteResult {

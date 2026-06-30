@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { apiCommand, runApiCli } from "./cli/api.ts";
 import { btestCommand, runBtestCli } from "./cli/btest.ts";
 import { devicesCommand, runDevicesCli } from "./cli/devices.ts";
 import { discoverCommand, runDiscoverCli } from "./cli/discover.ts";
@@ -14,6 +15,7 @@ import { describeCentrs, plannedProtocols, plannedSurfaces } from "./index.ts";
 const commandSummaries: ReadonlyArray<{ name: string; summary: string }> = [
 	retrieveCommand,
 	executeCommand,
+	apiCommand,
 	transferCommand,
 	terminalCommand,
 	devicesCommand,
@@ -53,6 +55,9 @@ export async function runCli(
 		}
 		if (command === "execute") {
 			return await runExecuteCli(rest);
+		}
+		if (command === "api") {
+			return await runApiCli(rest);
 		}
 		if (command === "transfer") {
 			return await runTransferCli(rest);
