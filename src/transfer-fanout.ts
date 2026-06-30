@@ -215,6 +215,28 @@ function relabelAdhocMember(
 }
 
 /**
+ * Stamp the member's identity onto a per-target ENVELOPE. `buildTransferErrorEnvelope`
+ * only knows `request.targetInput`, so a failed cdb member would otherwise lose its
+ * `recordIndex`/`identity` (breaking record-index ordering). Literals are relabeled
+ * to drop a borrowed `__default__` index; cdb members get their record meta restored.
+ */
+function applyMemberMeta(
+	envelope: TransferEnvelope,
+	member: CdbSelectionMember,
+): TransferEnvelope {
+	if (member.kind === "literal") {
+		return relabelAdhocMember(envelope, member);
+	}
+	return {
+		...envelope,
+		meta: {
+			...envelope.meta,
+			target: { ...envelope.meta.target, ...memberTargetMeta(member) },
+		},
+	};
+}
+
+/**
  * Run a `transfer` fan-out. Returns a success envelope when the orchestration
  * completes (even if every target failed); throws only for pre-flight failures
  * (bad request shape, missing `--out-dir`, CDB decrypt, unconfirmed write) the
@@ -338,7 +360,7 @@ export async function transferFanout(
 		execute: async (resolved, member) =>
 			relabelAdhocMember(await execute(resolved.request, member), member),
 		onExecuteError: (resolved, member, error) =>
-			relabelAdhocMember(
+			applyMemberMeta(
 				buildTransferErrorEnvelope(resolved.request, error),
 				member,
 			),
