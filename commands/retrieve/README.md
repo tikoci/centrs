@@ -64,7 +64,9 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
 | `--cdb-file` / `--cdb-password`     | Override CDB file location / decrypt password.                                            |
 | `--ros-version <version>`           | SNMP MIB lookup only: pin the MikroTik MIB version to cache/download.                     |
 | `--ros-channel <channel>`           | SNMP MIB lookup only: `stable`, `long-term`, `testing`, or `development`; default `stable`. |
-| `--group <name>`                    | Fan out across every CDB target in WinBox group `<name>`. Repeatable, and combinable with `<router>` positionals plus `--all`/`--default`; the union is de-duped by CDB record index. See **Group fanout**. |
+| `--group <name>`                    | Fan out across every CDB target in WinBox group `<name>`. Repeatable, and combinable with `<router>` positionals plus `--all`/`--default`; the union is de-duped by CDB record index. See **Target selection**. |
+| `--all`                             | Fan out across every CDB record (excludes the reserved `__default__`). See **Target selection**. |
+| `--default`                         | Select the reserved `__default__` record. See **Target selection**. |
 | `--concurrency <n>`                 | Max in-flight targets during fanout (integer ≥ 1). Defaults are transport-aware: `rest-api` 8, `native-api` 4. Rejected with `usage/invalid-concurrency` otherwise. |
 
 ## Validation
@@ -137,55 +139,32 @@ warning entry — it is not an error. (Earlier text said a byte overflow returns
 *error* with the needed size; superseded — truncation is an `ok: true` footnote so
 partial data stays usable.)
 
-## Group fanout
+## Target selection
 
-`--group <name>` loads the CDB once, expands every matching WinBox record in
-that group, de-dupes by CDB record index, and runs the same per-target retrieve
-pipeline for each target. Per the shared target-selector grammar, `--group` is
-repeatable and combines freely with one or more `<router>` positionals, `--all`
-(every CDB record), and `--default` (the `__default__` record); the union is
-de-duped by CDB record index. (Earlier drafts made `--group` mutually exclusive
-with a positional — superseded by the liberal selector model.)
+retrieve fans out over the **shared target-selection grammar** — multiple
+`<router>` positionals, repeatable `--group`/`--where`, `--all`, and `--default`,
+combined as a set and de-duped by CDB record index. The grammar, the locked `FanoutData`
+envelope (`data = { summary, targets[] }`, outer `ok` = orchestration success,
+per-target failure is an inner `ok:false`), the record-order reassembly, and the
+granular **0/2/1 exit code** are all normative in
+[`docs/CONSTITUTION.md` → Target selection grammar](../../docs/CONSTITUTION.md#target-selection-grammar).
+The boundary is intent-keyed: a plain single-positional `retrieve <router> <path>`
+stays the single-target envelope; a selector flag or a second positional target
+switches to fan-out.
 
-Fanout output is one outer envelope whose `ok` reports orchestration success:
-`ok: false` is reserved for failures before reliable per-target results exist
-(for example invalid flags or CDB decrypt failure). Per-target success/failure
-is data, not metadata:
+retrieve-specific behavior on top of the shared engine:
 
-```ts
-{
-  ok: true,
-  data: {
-    summary: { total: 2, ok: 1, failed: 1 },
-    targets: [
-      { ok: true, data: { ... }, meta: { target: { recordIndex: 0 }, ... } },
-      { ok: false, error: { code: "transport/connection-refused", ... }, meta: { target: { recordIndex: 1 }, ... } }
-    ]
-  },
-  warnings: [],
-  meta: {
-    target: {},
-    via: "rest-api", // null if inner targets disagree on protocol
-    settings: { ... },
-    operation: {
-      kind: "fanout",
-      group: "prod-edge",
-      concurrency: 8,
-      summary: { total: 2, ok: 1, failed: 1 },
-      request: { path: "/system/resource", validate: true, format: "json", ... }
-    }
-  }
-}
-```
-
-An empty or unknown group is `ok: true` with
-`data.summary = { total: 0, ok: 0, failed: 0 }`, `data.targets = []`, and a
-`cdb/empty-group` warning. Validation runs per target because RouterOS schemas
-can differ by version. Fanout retries each target up to two times only for
-`transport/network` and `transport/connection-closed`; REST 5xx failures are
-mapped to `transport/connection-closed`. It does not retry `routeros/*`,
-`validation/*`, `auth/*`, `cdb/*`, `target/*`, timeouts, DNS, TLS, or refused
-connections.
+- The CDB is loaded + decrypted **once** for the whole fan-out; each target is
+  then resolved and **validated independently**, because RouterOS schemas can
+  differ by version (`/console/inspect` runs per target).
+- An empty or unknown selection is `ok: true` with
+  `data.summary = { total: 0, ok: 0, failed: 0 }`, `data.targets = []`, a
+  `cdb/empty-group` / `cdb/empty-selection` warning, and exit `0`.
+- Each target retries up to two times **only** for `transport/network` and
+  `transport/connection-closed` (REST 5xx is mapped to
+  `transport/connection-closed`). It does **not** retry `routeros/*`,
+  `validation/*`, `auth/*`, `cdb/*`, `target/*`, timeouts, DNS, TLS, or refused
+  connections.
 
 ## Definition of done
 

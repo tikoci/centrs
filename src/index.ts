@@ -353,9 +353,12 @@ export {
 	type RetrieveFanoutData,
 	type RetrieveFanoutEnvelope,
 	type RetrieveFanoutErrorEnvelope,
+	type RetrieveFanoutInternals,
 	type RetrieveFanoutOperationMeta,
-	type RetrieveGroupInternals,
+	type RetrieveFanoutOptions,
+	type RetrieveSelectionSummary,
 	renderRetrieveFanoutEnvelope,
+	retrieveFanout,
 	retrieveGroup,
 } from "./retrieve-fanout.ts";
 export {
