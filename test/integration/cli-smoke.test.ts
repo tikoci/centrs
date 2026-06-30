@@ -190,6 +190,39 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		expect(res.exitCode).toBe(0);
 		expect(res.stdoutText).toContain("api <router> <endpoint>");
 		expect(res.stdoutText).toContain("--method");
+		// The folded follow surface shows up in help.
+		expect(res.stdoutText).toContain("--stream");
+	});
+
+	test("the folded `stream` command points at `api --stream` (no network)", async () => {
+		for (const command of ["stream", "tail"]) {
+			const res = await runCliProcess({
+				args: [command, "edge1", "ip/address"],
+			});
+			expect(res.exitCode).toBe(1);
+			expect(res.stderrText).toContain("api");
+			expect(res.stderrText).toContain("--stream");
+		}
+	});
+
+	test("--via rest-api --stream is rejected as capability-unsupported (no network)", async () => {
+		// apiListen rejects a non-native transport before any connection, so this
+		// is hermetic: REST cannot follow an open-ended stream.
+		const res = await runCliProcess({
+			args: [
+				"api",
+				"192.0.2.1",
+				"ip/address",
+				"--stream",
+				"--via",
+				"rest-api",
+				"--json",
+			],
+		});
+		expect(res.exitCode).toBe(1);
+		const envelope = parseEnvelope(res.stdoutText || res.stderrText);
+		expect(envelope.ok).toBe(false);
+		expect(envelope.error?.code).toBe("transport/capability-unsupported");
 	});
 
 	test("api lists in the top-level command index", async () => {

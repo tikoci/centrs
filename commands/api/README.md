@@ -7,12 +7,17 @@ single REST or native-API operation, and returns the result in the standard
 envelope.
 
 Status: `CHR-passed` over `rest-api` and `native-api`, including multi-target
-fan-out, per `docs/MATRIX.md`; open-ended `--listen` streaming is the remaining
-later phase (a `--via rest-api --listen` request errors today). This file
-describes intent and flags; the matrix holds the cell states. Load-bearing
-rules — envelope, errors, settings precedence, identity, validation, protocol
-selection — live in [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md); the
-`(constitution: …)` notes below point there rather than restating them.
+fan-out and open-ended `--stream` follow (native-api only), per
+`docs/MATRIX.md`. This file describes intent and flags; the matrix holds the
+cell states. Load-bearing rules — envelope, errors, settings precedence,
+identity, validation, protocol selection — live in
+[`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md); the `(constitution: …)`
+notes below point there rather than restating them.
+
+`api` absorbs the former `stream` command: open-ended follow is `api <router>
+<endpoint> --stream` (or the `/listen` endpoint form). `--listen` is an accepted
+alias of `--stream`. Streaming is single-session — it cannot combine with
+multi-target fan-out (see below).
 
 ## Where `api` sits — the verb trichotomy
 
@@ -42,7 +47,7 @@ centrs api <router> <endpoint> [flags]
   `ip/address`, `/ip/address`, `rest/ip/address`, `/rest/ip/address`,
   `"ip address"`, `'ip address'` canonicalize to `/ip/address`. A trailing id
   segment (`ip/address/*1`) addresses one row. A trailing `/listen` segment
-  infers `--listen` + `--via native-api`.
+  infers `--stream` + `--via native-api`.
 
 The HTTP method (`-X`, default `GET`) is honored **literally** against RouterOS's
 REST mapping — `GET`→print/get, **`PUT`→add**, `PATCH`→set, `DELETE`→remove,
@@ -63,11 +68,11 @@ when a bare-collection `POST` carries create-looking fields.
 | `--attribute` / `--proplist <a,b>` | Property projection → `.proplist`. |
 | `--raw` | Strip the envelope; emit bare RouterOS JSON. Implies `--validate=false`; does **not** imply `--yes`. |
 | `--yes` | Confirm a mutating (non-read) request in non-interactive runs. |
-| `--listen` *(later phase)* | Native-api-only follow → NDJSON stream of envelopes. Inferred from a `/listen` endpoint. Streaming is not implemented yet: `--via rest-api --listen` errors `transport/capability-unsupported`; native `--listen` errors `usage/not-implemented`. |
-| `--duration <dur>` / `--count <n>` *(later phase)* | Bound a `--listen` stream. |
+| `--stream` (alias `--listen`) | Native-api-only open-ended follow → NDJSON stream of envelopes, ending with a summary envelope. Inferred from a `/listen` endpoint. `--via rest-api --stream` errors `transport/capability-unsupported` (REST's 60 s cap cannot follow). |
+| `--duration <dur>` / `--count <n>` | Bound a `--stream`: stop after a wall-clock window / after N frames. |
 | `--validate[=false]` | Default `true`. Gate is `/console/inspect` (see Validation). |
 | `--via <protocol>` | `rest-api` (default) or `native-api`. No silent downgrade. |
-| `--format <json\|yaml\|text>` | Output format. Defaults to `json` for `api` (machine-first); `CENTRS_FORMAT` overrides. |
+| `--format <json\|yaml\|text>` | Output format. Defaults to `json` for `api` (machine-first); `CENTRS_FORMAT` overrides. Under `--stream`, `json`/`yaml` emit one compact envelope per line (NDJSON); `text` emits a concise row per frame. |
 | `--group <name>` / `--where <attr>=<value>` / `--all` / `--default` / `--concurrency <n>` | Multi-target fan-out (see below). Repeatable `--group`/`--where`; the union de-dupes by CDB record index. |
 | target/auth | `--host`, `--port`, `--username`/`--user`/`-u`, `--password`, `--insecure`, `--timeout`, `--cdb-file`, `--cdb-password`, `--resolve <none\|arp>` — same single-target resolver as `retrieve`/`execute`. |
 
@@ -117,7 +122,7 @@ confirmation (`--yes` non-interactively, or a TTY prompt) → otherwise
 - A `POST …/print` paged read does **not** prompt (keyed on the verb, not the
   wire HTTP method).
 - Streaming does **not** imply read-only: an async-but-mutating command like
-  `/system/license/renew --listen` still confirms.
+  `/system/license/renew --stream` still confirms.
 
 `--raw` does not bypass this gate.
 
@@ -145,14 +150,15 @@ RouterOS produces multi-frame output two ways, and `api` treats them differently
   returns a `.section` array. REST bounds these at the **60 s** cap (a longer
   `duration=` terminates early with an error); native has no cap. This is **not**
   NDJSON.
-- **Open-ended follow is `--listen`, native-api only.** Only the native API
-  `/listen` command follows indefinitely (REST cannot — the 60 s cap). Each `!re`
-  becomes one rest-style envelope frame (one NDJSON line; a deletion's `.dead=true`
-  flag is preserved); the stream ends with a summary envelope (frame count,
-  duration, stop reason). `--duration`/`--count` bound it; Ctrl-C stops and still
-  emits the summary. `--via rest-api --listen` → `transport/capability-unsupported`.
-  The `--listen` exit code reflects whether the stream *started* cleanly, not
-  whether every frame was `ok`.
+- **Open-ended follow is `--stream` (alias `--listen`), native-api only.** Only
+  the native API `/listen` command follows indefinitely (REST cannot — the 60 s
+  cap). Each `!re` becomes one rest-style envelope frame (one NDJSON line; a
+  deletion's `.dead=true` flag is preserved); the stream ends with a summary
+  envelope (`data.stopReason` ∈ `count-reached`/`duration-elapsed`/`interrupted`/
+  `transport-error`, plus `frames` and `durationMs`). `--duration`/`--count`
+  bound it; Ctrl-C stops and still emits the summary. `--via rest-api --stream` →
+  `transport/capability-unsupported`. The exit code reflects whether the stream
+  *started* cleanly, not whether every frame was `ok`.
 
 ## MCP (deferred — forward guidance)
 

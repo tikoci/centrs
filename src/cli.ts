@@ -85,6 +85,23 @@ export async function runCli(
 		if (command === "mcp") {
 			return await runMcpCli(rest);
 		}
+		// `stream` (and the `tail` shorthand) folded into `api --stream`.
+		if (command === "stream" || command === "tail") {
+			console.error(
+				formatCentrsErrorText(
+					asCentrsError(
+						new Error(`\`centrs ${command}\` has been folded into \`api\`.`),
+						{
+							code: "input/invalid-command",
+							summary: `\`centrs ${command}\` is no longer a command — open-ended follow is now \`api … --stream\`.`,
+							remediation:
+								"Use `centrs api <router> <endpoint> --stream` (native-api only), e.g. `centrs api edge1 ip/address --stream`.",
+						},
+					),
+				),
+			);
+			return 1;
+		}
 
 		console.error(
 			formatCentrsErrorText(

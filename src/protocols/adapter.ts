@@ -142,6 +142,18 @@ export interface ProtocolApiResult {
 	data: unknown;
 }
 
+/** Options for an open-ended `listen` follow. */
+export interface ProtocolListenOptions {
+	/** Abort the listen (sends `/cancel`); the generator then ends cleanly. */
+	signal?: AbortSignal;
+	/**
+	 * Fired once the subscription is on the wire (connection up, listen sentence
+	 * written) — a real "listening" barrier for callers/tests that must act only
+	 * after the follow is established, instead of a blind timer.
+	 */
+	onListening?: () => void;
+}
+
 /**
  * Runtime transport seam. The orchestrator drives validation and data fetch
  * through these operations so REST and native-api share the same pipeline and
@@ -162,6 +174,16 @@ export interface ProtocolAdapter {
 	execute(request: ProtocolExecuteRequest): Promise<ProtocolExecuteResult>;
 	/** Run a normalized structured `api` request (the gh-api passthrough surface). */
 	apiRequest(request: ProtocolApiRequest): Promise<ProtocolApiResult>;
+	/**
+	 * Open-ended `/listen` follow (native-api only). Yields one rest-style change
+	 * record per `!re` frame (deletions carry `.dead`), until cancelled via
+	 * `options.signal` or the consumer stopping. REST and console transports
+	 * reject with `transport/capability-unsupported`.
+	 */
+	listen(
+		request: ProtocolApiRequest,
+		options: ProtocolListenOptions,
+	): AsyncIterable<Record<string, unknown>>;
 	/** Release any underlying connection. Safe to call when never connected. */
 	close(): Promise<void>;
 }
@@ -309,6 +331,18 @@ class RestAdapter implements ProtocolAdapter {
 			default:
 				return exhaustiveApiVerb(request.verb);
 		}
+	}
+
+	// REST cannot hold an open-ended follow (the 60s cap); listen is native-only.
+	// biome-ignore lint/correctness/useYield: a throw-only async generator yields nothing.
+	async *listen(): AsyncGenerator<Record<string, unknown>> {
+		throw new CentrsError({
+			code: "transport/capability-unsupported",
+			summary: "REST cannot follow an open-ended `--stream` (60s cap).",
+			remediation:
+				"Open-ended follow is native-api only: use `--via native-api`, or drop `--stream` for a bounded one-shot.",
+			context: { protocol: this.protocol, capability: "listen" },
+		});
 	}
 
 	async close(): Promise<void> {
@@ -670,6 +704,33 @@ class NativeApiAdapter implements ProtocolAdapter {
 		}
 	}
 
+	async *listen(
+		request: ProtocolApiRequest,
+		options: ProtocolListenOptions,
+	): AsyncGenerator<Record<string, unknown>> {
+		const base = request.path.replace(/\/$/, "");
+		const command: NativeApiCommand = { command: `${base}/listen` };
+		// A listen can filter which changes it follows with the same `?`-words /
+		// `=.proplist=` as print (REST `.query` word == native `?`-word minus `?`).
+		const queries = (request.query ?? []).map((word) => `?${word}`);
+		// An addressed row (`ip/address/*1 --stream`) follows just that row, the
+		// same `?.id=` mapping one-shot native reads use.
+		if (request.id) {
+			queries.push(`?.id=${request.id}`);
+		}
+		if (queries.length > 0) {
+			command.queries = queries;
+		}
+		if (request.proplist && request.proplist.length > 0) {
+			command.proplist = request.proplist;
+		}
+		const session = await this.connect();
+		for await (const reply of session.listen(command, options)) {
+			// Each `!re` becomes a rest-style record (string values; `.dead` preserved).
+			yield { ...reply.attributes };
+		}
+	}
+
 	async close(): Promise<void> {
 		this.session?.close();
 		this.session = undefined;
@@ -816,6 +877,11 @@ class MacTelnetAdapter implements ProtocolAdapter {
 		return Promise.reject(this.unsupported("structured api requests"));
 	}
 
+	// biome-ignore lint/correctness/useYield: a reject-only async generator yields nothing.
+	async *listen(): AsyncGenerator<Record<string, unknown>> {
+		throw this.unsupported("open-ended listen streaming");
+	}
+
 	async close(): Promise<void> {
 		this.console?.close();
 		this.transport?.close();
@@ -960,6 +1026,11 @@ class SshExecAdapter implements ProtocolAdapter {
 
 	apiRequest(): Promise<ProtocolApiResult> {
 		return Promise.reject(this.unsupported("structured api requests"));
+	}
+
+	// biome-ignore lint/correctness/useYield: a reject-only async generator yields nothing.
+	async *listen(): AsyncGenerator<Record<string, unknown>> {
+		throw this.unsupported("open-ended listen streaming");
 	}
 
 	close(): Promise<void> {

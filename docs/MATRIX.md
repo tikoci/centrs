@@ -25,7 +25,6 @@ A cell advances only with the matching evidence in the same change.
 | -------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ---------------- |
 | retrieve | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | —             | —             | —                |
 | api      | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —             | —                |
-| stream   | —             | `designed`    | `designed`    | —             | —             | —             | —             | —                |
 | execute  | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | `not-started`    |
 | terminal | —             | —             | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —                |
 | transfer | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —                |
@@ -65,22 +64,25 @@ in `commands/api/README.md`); it can also write. See `docs/CONSTITUTION.md`
 `api` is `CHR-passed` for `rest-api` and `native-api`: endpoint normalization, the
 method→verb map, the `/console/inspect` gate, write confirmation, `.query`/
 `.proplist`, `-f`/`-d`/`--input` bodies, `--raw`, `/execute` script-run
-(`=as-string=` for sync output on both transports), **and multi-target fan-out**
+(`=as-string=` for sync output on both transports), **multi-target fan-out**
 (`--group`/`--where`/`--all`/`--default`/positionals over the shared
 `src/resolver/selection.ts` grammar + `src/core/fanout.ts` engine: locked
 `FanoutData` envelope, granular `0/2/1` exit code, `--yes`-once write confirm with
-a blast-radius message, `--listen`/`--raw` fan-out guards), green on CHR 7.23.1 via
+a blast-radius message, `--listen`/`--raw` fan-out guards), **and** open-ended
+`--stream` follow (native-api only — `NativeApiSession.listen()` + `/cancel`,
+NDJSON envelope frames with a terminating summary; `--via rest-api --stream`
+errors `transport/capability-unsupported`; single-session, so N>1 targets →
+`usage/fanout-not-supported`). Green on CHR 7.23.1 via
 `test/integration/api.test.ts` + `api-native.test.ts` + `api-fanout.test.ts` (F1–F9:
 group, `--where`, empty, write-reject, write, `--all`, positional+group union,
-`--concurrency`, `--default` guard) and the `cli-smoke` guards. Still deferred (own phase): open-ended `--listen`
-streaming (native-api only) — `--via rest-api --listen` already errors
-`transport/capability-unsupported`, and the `stream` command folds into
-`api --listen` then.
+`--concurrency`, `--default` guard) + `api-listen.test.ts` and the `cli-smoke`
+guards. No remaining deferrals for `api`.
 
-`stream` is `designed` (no code yet): the read-only follow surface (NDJSON
-stream-of-envelopes; native-api/ssh only — REST's 60s cap cannot follow) is
-specified in `commands/stream/README.md`. The native-api streaming reader it will
-consume already exists (`src/protocols/native-api.ts`).
+`api` **absorbs** the former `stream` command (folded — no separate row): the
+read-only follow surface is `api <router> <endpoint> --stream` (alias `--listen`;
+the `/listen` endpoint form infers it), native-api only, since REST's 60s cap
+cannot follow. `centrs stream`/`centrs tail` now error with a pointer to
+`api --stream`.
 
 `transfer` is `CHR-passed` for `rest-api`/`native-api` and for **sftp** (the
 `ssh` column's first method): `src/transfer.ts` + `src/cli/transfer.ts`

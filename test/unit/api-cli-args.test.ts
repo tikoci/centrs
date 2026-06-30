@@ -81,6 +81,11 @@ describe("parseApiCliArgs", () => {
 		expect(parsed.insecure).toBe(true);
 	});
 
+	test("--stream is the primary follow flag; --listen is an alias", () => {
+		expect(parseApiCliArgs(["r", "ip/address", "--stream"]).listen).toBe(true);
+		expect(parseApiCliArgs(["r", "ip/address", "--listen"]).listen).toBe(true);
+	});
+
 	test("--validate=false and --no-validate both disable validation", () => {
 		expect(parseApiCliArgs(["r", "x", "--validate=false"]).validate).toBe(
 			false,

@@ -18,8 +18,9 @@ README's "Status" line must agree with it.
 
 ## Verb vocabulary
 
-Commands are centrs **verbs** (`retrieve`, `stream`, `execute`, `api`, `devices`,
-`discover`, `check`, `terminal`, `settings`), never one tool per RouterOS command. Sub-verbs and their
+Commands are centrs **verbs** (`retrieve`, `execute`, `api`, `devices`,
+`discover`, `check`, `terminal`, `settings`), never one tool per RouterOS command. Open-ended follow
+is folded into `api --stream` (no separate `stream` verb). Sub-verbs and their
 aliases are canonical across CLI / API / MCP:
 
 | Canonical | Aliases          | Meaning                                  |

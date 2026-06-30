@@ -283,7 +283,7 @@ Per-operation preferences, downgrade order in parens:
 | Operation | Preferred | Downgrade order |
 | --------- | --------- | --------------- |
 | retrieve  | rest-api, native-api; snmp for OID/MIB reads (future) | rest-api, native-api |
-| stream    | native-api, ssh | (REST cannot follow — 60s cap; bounded or rejected) |
+| api       | rest-api, native-api; `--stream` follow native-api only | rest-api, native-api (no silent downgrade) |
 | execute   | native-api → rest-api → mac-telnet | native-api, rest-api, mac-telnet, ssh, romon, winbox-terminal |
 | terminal  | ssh | mac-telnet (L2 only when ssh fails or MAC given) |
 | transfer  | size/direction-aware: rest-api/native-api for ≤60 KB writes & all reads (chunked), sftp for large uploads | sftp ⇄ rest/native by size; scp · fetch · ftp explicit-only |
@@ -305,9 +305,9 @@ Rules:
   access needs explicit ARP opt-in.
 - **`measure` (btest) is explicit-only** — never in the auto-select/downgrade
   chain, never a substitute, and no other command rides it.
-- Per-command selection **depth** lives in the command READMEs: `stream`'s
-  follow/NDJSON contract and the REST-cannot-follow constraint
-  (`commands/stream/README.md`), `transfer`'s size/direction-aware method
+- Per-command selection **depth** lives in the command READMEs: `api`'s
+  `--stream` follow/NDJSON contract and the REST-cannot-follow constraint
+  (`commands/api/README.md`), `transfer`'s size/direction-aware method
   selection and the explicit-only `scp`/`ftp`/`fetch`
   (`commands/transfer/README.md`), SNMP's MIB-cache
   (`commands/retrieve/README.md`), and btest's port/auth

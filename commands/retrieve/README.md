@@ -45,7 +45,7 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
 | `--attributes <a,b,c>`              | Alias for `--attribute` with comma-separated input.                                       |
 | `--all-attributes`                  | Equivalent to RouterOS `details=true`. Mutually exclusive with `--attribute(s)`.          |
 | `--list-attributes` (alias `--list`) | Return the available attribute names for the path. No `print`/`get` is run.              |
-| `--once`                            | Bounded single read of a monitor-style menu (RouterOS `once`): returns **one** envelope and never follows. Open-ended follow is the separate `stream` verb. See constitution: protocol selection. |
+| `--once`                            | Bounded single read of a monitor-style menu (RouterOS `once`): returns **one** envelope and never follows. Open-ended follow is `api … --stream`. See constitution: protocol selection. |
 | `--query <expr>`                    | RouterOS-side **row** filter (maps to `.query`), repeatable; returns matching rows as an **array**. This is how you read one row by name (`--query name=ether1`). **Not Implemented** yet — returns `validation/not-implemented`. |
 | `--filter <expr>`                   | RouterOS row filter; same `.query` mapping and not-implemented handling as `--query`.       |
 | `--where <attr>=<value>`            | Device-class selector: fan out across CDB records whose stored fact/comment-kv matches (e.g. `--where board=RB5009`). Repeatable (AND). Filters *which devices*, not RouterOS rows. See constitution: target selection. |
