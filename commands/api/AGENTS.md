@@ -153,3 +153,37 @@ for native.
   path; see the COMMA-path finding above). Independently, `isApiMutating` keys the
   write gate on the method/verb, so even an async/streamable write like
   `/system/license/renew` confirms regardless.
+
+## CONFIRMED ON CHR (Phase 2+3 integration — CHR 7.23.1, 2026-06-29)
+
+Validated by `test/integration/api.test.ts` (rest, examples 1–20, 98 assertions)
+and `test/integration/api-native.test.ts` (native, N1–N8, 31 assertions), both
+green on CHR 7.23.1.
+
+- **CONFIRMED — native `/execute` supports `=as-string=` for synchronous output.**
+  Native `talk /execute =script=…` **without** `as-string` is **fire-and-forget**:
+  it schedules a job and returns the **job id** in `=ret=` (observed `"*31"`), not
+  the script output — exactly the REST behavior. Adding `=as-string=` (empty value)
+  makes it run synchronously and return the captured output, identical to REST
+  `/rest/execute {as-string}`. **This corrects `src/execute.ts`'s long-standing
+  assumption that native script mode is unsupported** (execute still blocks it; the
+  `api` path proves native `/execute =as-string=` works). `api` always sends
+  `as-string` for a script run on both transports.
+- **CONFIRMED — native CRUD re-mapping to rest-style.** `add` returns the new id
+  only in the `!done` `=ret=` word → centrs re-maps it to `{".id": ret}` (REST PUT
+  returns the full created object with `.id`; native gives just the id). `set`/
+  `remove` reply with a bare `!done` (no `!re`) → no body → centrs surfaces `null`.
+  get-one is `print ?.id=<id>` → exactly one record → returned as a single object
+  (not a 1-element array). All grounded in `restStyleMutationData` /
+  `restStyleRunData` (`src/protocols/adapter.ts`).
+- **CONFIRMED — REST `monitor-traffic` over the `api` path returns a `.section`
+  array.** `POST /rest/interface/monitor-traffic {interface,duration}` →
+  `[{".section":"0",…}, {".section":"1",…}]` (re-confirms the spike-2 finding via
+  the real `api` REST adapter). It is a command (terminal verb `monitor-traffic`,
+  not `print`/`get`), so it is a `POST` and **write-classed** → needs `--yes`.
+- **CONFIRMED — the inspect gate over both transports.** Path existence
+  (`request=child` empty ⇒ `validation/unknown-path`) and add/set attribute
+  validity (`request=child`+`completion` ⇒ `validation/unknown-attribute`) fire
+  identically over rest-api and native-api, **before** any write — no `:put
+  [:parse]` involved (api input is a path, not a CLI string). A `/execute` script
+  is a CLI string ⇒ `meta.validation.semantic = "not-applicable"`.

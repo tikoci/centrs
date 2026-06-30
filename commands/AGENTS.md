@@ -18,7 +18,7 @@ README's "Status" line must agree with it.
 
 ## Verb vocabulary
 
-Commands are centrs **verbs** (`retrieve`, `stream`, `execute`, `devices`,
+Commands are centrs **verbs** (`retrieve`, `stream`, `execute`, `api`, `devices`,
 `discover`, `check`, `terminal`, `settings`), never one tool per RouterOS command. Sub-verbs and their
 aliases are canonical across CLI / API / MCP:
 

@@ -806,7 +806,9 @@ async function assertWriteConfirmed(
 	});
 }
 
-async function promptForWriteConfirmation(prompt: string): Promise<boolean> {
+export async function promptForWriteConfirmation(
+	prompt: string,
+): Promise<boolean> {
 	process.stderr.write(prompt);
 	for await (const chunk of Bun.stdin.stream()) {
 		const answer = new TextDecoder().decode(chunk).trim().toLowerCase();

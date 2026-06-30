@@ -24,7 +24,7 @@ A cell advances only with the matching evidence in the same change.
 | Command  | rest-api      | native-api    | ssh           | mac-telnet    | snmp          | mndp          | romon         | winbox-terminal |
 | -------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ---------------- |
 | retrieve | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | —             | —             | —                |
-| api      | `designed`    | `designed`    | —             | —             | —             | —             | —             | —                |
+| api      | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —             | —                |
 | stream   | —             | `designed`    | `designed`    | —             | —             | —             | —             | —                |
 | execute  | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | —             | `not-started` | `not-started`    |
 | terminal | —             | —             | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —                |
@@ -57,8 +57,20 @@ verbose REST `board-name`), and the L2 validation policy are documented in
 `commands/discover/README.md`.
 
 There is no `update` command: `execute` is the single read/write surface for
-RouterOS add/set/remove, and `retrieve` stays read-only. See
-`docs/CONSTITUTION.md` (protocol selection).
+RouterOS *CLI-shaped* add/set/remove, and `retrieve` stays read-only. The `api`
+command is the structured one-command-per-operation surface (the verb trichotomy
+in `commands/api/README.md`); it can also write. See `docs/CONSTITUTION.md`
+(protocol selection).
+
+`api` is `CHR-passed` for `rest-api` and `native-api` (single-target): endpoint
+normalization, the method→verb map, the `/console/inspect` gate, write
+confirmation, `.query`/`.proplist`, `-f`/`-d`/`--input` bodies, `--raw`, and
+`/execute` script-run (`=as-string=` for sync output on both transports), green
+on CHR 7.23.1 via `test/integration/api.test.ts` + `api-native.test.ts`. Still
+deferred (own phase): open-ended `--listen` streaming (native-api only) and
+multi-target fan-out — `--via rest-api --listen` already errors
+`transport/capability-unsupported`, and the `stream` command folds into
+`api --listen` then.
 
 `stream` is `designed` (no code yet): the read-only follow surface (NDJSON
 stream-of-envelopes; native-api/ssh only — REST's 60s cap cannot follow) is

@@ -430,3 +430,7 @@ btestpass
 # RouterOS scripting builtin referenced in commands/api grounding notes
 # (:toarray coerces a comma string into an array; explains the inspect path form).
 toarray
+
+# Logic shorthand ("if and only if") used in api write-gate doc comments; cspell's
+# markdown dictionary knows it but the TypeScript one does not.
+iff

@@ -57,7 +57,7 @@
 	"scripts": {
 		"ci": "bun run lint && bun run test && bun run build",
 		"git:pre-commit": "bun run lint",
-		"git:pre-push": "bun run ci",
+		"git:pre-push": "bun run lint:ci && bun run test && bun run build",
 		"lint": "bun run lint:biome && bun run lint:typecheck",
 		"lint:git:commit": "bun run lint",
 		"lint:git:push": "bun run ci",

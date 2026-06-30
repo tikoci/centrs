@@ -118,6 +118,11 @@ describeFast("CHR smoke (single boot, core paths)", () => {
 				"version",
 			);
 
+			// 4b. api — a structured GET round-trip over the new passthrough surface.
+			const apiList = await ok(["api", chr.restUrl, "ip/address", ...restBase]);
+			expect(apiList.meta.via).toBe("rest-api");
+			expect(Array.isArray(apiList.data)).toBe(true);
+
 			// 4. execute — a read-only `:put` script proves the validate → run path
 			//    end-to-end (the returned value is the live identity, not a constant).
 			//    Uses the programmatic executeEnvelope (as execute.test.ts does) so the
@@ -136,7 +141,7 @@ describeFast("CHR smoke (single boot, core paths)", () => {
 
 			await recordIntegrationEvidence({
 				suite: "CHR smoke (single boot, core paths)",
-				command: "retrieve+execute",
+				command: "retrieve+execute+api",
 				protocol: "rest-api+native-api",
 				routerosVersion:
 					typeof version === "string" ? version : chr.state.version,
@@ -144,7 +149,7 @@ describeFast("CHR smoke (single boot, core paths)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(4),
+				exampleIds: exampleIds(5),
 			});
 		} finally {
 			capture.restore();

@@ -426,6 +426,10 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "The --concurrency value must be an integer >= 1.",
 	},
 	{
+		code: "usage/invalid-method",
+		summary: "The -X/--method value is not a supported HTTP method.",
+	},
+	{
 		code: "usage/missing-group",
 		summary: "The operation requires a non-empty --group value.",
 	},

@@ -185,6 +185,65 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		}
 	});
 
+	test("api command-level help is reachable", async () => {
+		const res = await runCliProcess({ args: ["api", "--help"] });
+		expect(res.exitCode).toBe(0);
+		expect(res.stdoutText).toContain("api <router> <endpoint>");
+		expect(res.stdoutText).toContain("--method");
+	});
+
+	test("api lists in the top-level command index", async () => {
+		const res = await runCliProcess({ args: ["--help"] });
+		expect(res.exitCode).toBe(0);
+		expect(res.stdoutText).toContain("api");
+	});
+
+	test("an unsupported -X method is usage/invalid-method (no network)", async () => {
+		// parseApiMethod rejects before any transport/CDB I/O, so this is hermetic.
+		// HEAD is a real HTTP method centrs does not map to a RouterOS verb.
+		const res = await runCliProcess({
+			args: ["api", "192.0.2.1", "ip/address", "-X", "HEAD", "--json"],
+		});
+		expect(res.exitCode).toBe(1);
+		const envelope = parseEnvelope(res.stderrText);
+		expect(envelope.ok).toBe(false);
+		expect(envelope.error?.code).toBe("usage/invalid-method");
+	});
+
+	test("combining -f and -d is usage/conflicting-flags (no network)", async () => {
+		const res = await runCliProcess({
+			args: [
+				"api",
+				"192.0.2.1",
+				"ip/address",
+				"-X",
+				"PUT",
+				"-f",
+				"address=1.2.3.4/32",
+				"-d",
+				"{}",
+				"--yes",
+				"--json",
+			],
+		});
+		expect(res.exitCode).toBe(1);
+		const envelope = parseEnvelope(res.stderrText);
+		expect(envelope.ok).toBe(false);
+		expect(envelope.error?.code).toBe("usage/conflicting-flags");
+	});
+
+	test("api with no <router> tips toward discover/devices", async () => {
+		const home = await mkdtemp(join(tmpdir(), "centrs-smoke-home-"));
+		try {
+			const res = await runCliProcess({ args: ["api"], env: { HOME: home } });
+			expect(res.exitCode).toBe(1);
+			expect(res.stderrText).toContain("requires a <router>");
+			expect(res.stderrText).toContain("tip/no-devices");
+		} finally {
+			await rm(home, { recursive: true, force: true });
+		}
+	});
+
 	test("a missing <router> tips toward discover/devices (terminal, JG-?)", async () => {
 		// Empty HOME ⇒ empty registry ⇒ the tip points at `discover --save`. This is
 		// the text path, so it exercises the `Tips:` footer the error renderer adds.
