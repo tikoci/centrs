@@ -5,7 +5,11 @@ import {
 	apiRequestSummaryFromRequest,
 	type ResolvedApiRequest,
 } from "../../src/api.ts";
-import { type ApiFanoutInternals, apiFanout } from "../../src/api-fanout.ts";
+import {
+	type ApiFanoutInternals,
+	apiFanout,
+	renderApiFanoutEnvelope,
+} from "../../src/api-fanout.ts";
 import { parseApiCliArgs } from "../../src/cli/api.ts";
 import { isFanoutMode } from "../../src/cli/selection.ts";
 import { fanoutExitCode } from "../../src/core/fanout.ts";
@@ -115,11 +119,11 @@ describe("parseApiCliArgs — positional boundary", () => {
 		expect(parsed.selectionFlags?.concurrency).toBe(3);
 	});
 
-	test("--concurrency rejects numeric prefixes / decimals (strict integer)", () => {
-		for (const bad of ["2abc", "1.5", "abc"]) {
+	test("--concurrency rejects numeric prefixes / decimals / < 1 (strict integer >= 1)", () => {
+		for (const bad of ["2abc", "1.5", "abc", "0", "-1"]) {
 			expect(() =>
 				parseApiCliArgs(["--group", "g", "--concurrency", bad, "ip/address"]),
-			).toThrow(/--concurrency must be an integer/);
+			).toThrow(/--concurrency must be an integer >= 1/);
 		}
 	});
 });
@@ -237,5 +241,43 @@ describe("apiFanout", () => {
 		);
 		// The other target still succeeded — partial.
 		expect(envelope.data.summary).toEqual({ total: 2, ok: 1, failed: 1 });
+	});
+
+	test("a literal (ad-hoc) member drops a borrowed __default__ recordIndex and keeps its input", async () => {
+		const internals: ApiFanoutInternals = {
+			expand: async () => expansionOf([{ kind: "literal", input: "1.2.3.4" }]),
+			// Simulate resolveApiRequest borrowing the __default__ record's index (3)
+			// for fallback creds on an ad-hoc literal — distinct literals would
+			// otherwise collide on that one index.
+			execute: async (resolved) => {
+				const base = fakeSuccess(
+					{ endpoint: "ip/address", stdinIsTty: false },
+					resolved,
+				);
+				return {
+					...base,
+					meta: { ...base.meta, target: { host: "1.2.3.4", recordIndex: 3 } },
+				};
+			},
+			sleep: async () => {},
+		};
+		const envelope = await apiFanout(
+			{
+				endpoint: "ip/address",
+				stdinIsTty: false,
+				username: "admin",
+				password: "pw",
+			},
+			selection({ groups: [], positionals: ["1.2.3.4"] }),
+			{ HOME: "/nonexistent-centrs-home" },
+			internals,
+		);
+		const target = envelope.data.targets[0];
+		expect(target?.meta.target.recordIndex).toBeUndefined();
+		expect(target?.meta.target.input).toBe("1.2.3.4");
+		// The text renderer labels an ad-hoc target by its input, not "(unknown)".
+		const text = renderApiFanoutEnvelope(envelope, "text");
+		expect(text).toContain("1.2.3.4");
+		expect(text).not.toContain("(unknown)");
 	});
 });

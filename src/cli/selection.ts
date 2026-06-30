@@ -120,7 +120,7 @@ export function consumeSelectionFlag(
 		case "--concurrency": {
 			const raw = expectValue(args, index + 1, arg);
 			const parsed = parseStrictInteger(raw);
-			if (parsed === undefined) {
+			if (parsed === undefined || parsed < 1) {
 				throw new CentrsError({
 					code: "usage/invalid-concurrency",
 					summary: `--concurrency must be an integer >= 1. Received: ${raw}`,

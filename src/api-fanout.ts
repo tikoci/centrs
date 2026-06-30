@@ -150,6 +150,27 @@ function memberTargetMeta(member: CdbSelectionMember): {
 }
 
 /**
+ * Ad-hoc literal targets have no CDB record. `resolveApiRequest` may borrow the
+ * `__default__` record's index when filling fallback creds, so the inner envelope
+ * would carry that borrowed `recordIndex` — making distinct literals collide on one
+ * index. Drop it for literal members and stamp the caller's `input` so the target
+ * stays identifiable in renderers (see {@link renderApiFanoutEnvelope}).
+ */
+function relabelAdhocMember(
+	envelope: ApiEnvelope,
+	member: CdbSelectionMember,
+): ApiEnvelope {
+	if (member.kind !== "literal") {
+		return envelope;
+	}
+	const { recordIndex: _borrowed, ...target } = envelope.meta.target;
+	return {
+		...envelope,
+		meta: { ...envelope.meta, target: { ...target, input: member.input } },
+	};
+}
+
+/**
  * Run an `api` fan-out. Returns a success envelope when the orchestration
  * completes (even if every target failed); throws only for pre-flight failures
  * (invalid method, CDB decrypt, unconfirmed write) the caller renders as an
@@ -235,9 +256,13 @@ export async function apiFanout(
 				target: memberTargetMeta(member),
 				warnings: member.kind === "cdb" ? [...member.resolution.warnings] : [],
 			}),
-		execute: (resolved) => execute(resolved),
-		onExecuteError: (resolved, _member, error) =>
-			buildApiErrorEnvelopeFromResolved(resolved, error),
+		execute: async (resolved, member) =>
+			relabelAdhocMember(await execute(resolved), member),
+		onExecuteError: (resolved, member, error) =>
+			relabelAdhocMember(
+				buildApiErrorEnvelopeFromResolved(resolved, error),
+				member,
+			),
 		sleep,
 	});
 
@@ -382,7 +407,11 @@ export function renderApiFanoutEnvelope(
 	];
 	for (const target of envelope.data.targets) {
 		const meta = target.meta;
-		const label = meta.target.identity ?? meta.target.host ?? "(unknown)";
+		const label =
+			meta.target.identity ??
+			meta.target.host ??
+			meta.target.input ??
+			"(unknown)";
 		const index = meta.target.recordIndex ?? "-";
 		if (target.ok) {
 			lines.push(

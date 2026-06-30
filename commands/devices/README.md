@@ -190,16 +190,11 @@ runs produce stable diffs.
 
 - Each member runs in parallel up to `--concurrency` (transport-aware defaults:
   `rest-api` 8, `native-api` 4).
-- The outer envelope carries the locked `FanoutData` shape:
-  `data = { summary: { total, ok, failed }, targets: [...] }`, one inner
-  envelope per member in record-index order. The outer `ok` means the
-  **orchestration** produced a complete result set; a per-target failure is an
-  inner `ok: false` envelope (output, not metadata), so the outer `ok` stays
-  `true`. Outer `ok: false` is reserved for failures before per-target results
-  exist (bad flags, CDB decrypt).
-- The **process exit code** is granular and uniform: `0` all targets ok (or an
-  empty selection), `2` partial (some ok, some failed), `1` orchestration error
-  or every target failed. (Decoupled from the envelope's outer `ok`.)
+- Output is the locked `FanoutData` envelope with the granular `0`/`2`/`1` exit
+  code. The envelope shape (outer `ok` = orchestration success; a per-target
+  failure is an inner `ok: false`) and the exit-code contract are defined once in
+  [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md) (Target selection) — not
+  restated here.
 - A multi-target **write** is gated by `--yes`, confirmed once up front (not per
   target); without it the error/tip names the blast radius (how many routers).
   `--force` stays scoped to destructive `devices` CDB mutations.
