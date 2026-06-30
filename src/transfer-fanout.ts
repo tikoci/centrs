@@ -21,6 +21,7 @@
  *     target/identity into the directory.
  */
 
+import { basename, extname, join } from "node:path";
 import type {
 	CentrsErrorEnvelope,
 	CentrsSuccessEnvelope,
@@ -148,18 +149,10 @@ function memberTargetMeta(member: CdbSelectionMember): {
 
 /** Sanitize a device label into a single safe filename segment. */
 function sanitizeFilename(label: string): string {
+	// Character-class replaces (no backtracking); strip leading dots so a label
+	// cannot produce a hidden / traversal-looking name.
 	const cleaned = label.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^\.+/, "");
 	return cleaned.length > 0 ? cleaned : "target";
-}
-
-function basename(path: string): string {
-	const segments = path.split(/[/\\]/).filter((segment) => segment.length > 0);
-	return segments.at(-1) ?? "";
-}
-
-function extension(name: string): string {
-	const dot = name.lastIndexOf(".");
-	return dot > 0 ? name.slice(dot) : "";
 }
 
 /**
@@ -172,7 +165,7 @@ function planDownloadPaths(
 	remote: string,
 	members: readonly CdbSelectionMember[],
 ): Map<CdbSelectionMember, string> {
-	const ext = extension(basename(remote));
+	const ext = extname(basename(remote));
 	const used = new Set<string>();
 	const paths = new Map<CdbSelectionMember, string>();
 	members.forEach((member, index) => {
@@ -189,7 +182,7 @@ function planDownloadPaths(
 			}
 		}
 		used.add(name);
-		paths.set(member, `${outDir.replace(/\/+$/, "")}/${name}`);
+		paths.set(member, join(outDir, name));
 	});
 	return paths;
 }
