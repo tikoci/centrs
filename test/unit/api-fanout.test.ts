@@ -243,6 +243,37 @@ describe("apiFanout", () => {
 		expect(envelope.data.summary).toEqual({ total: 2, ok: 1, failed: 1 });
 	});
 
+	test("a globally-invalid --via is an outer pre-flight throw, not N per-target failures", async () => {
+		let expanded = false;
+		const internals: ApiFanoutInternals = {
+			expand: async () => {
+				expanded = true;
+				return expansionOf([cdbMember("10.0.0.1", 0)]);
+			},
+			execute: async (resolved) => fakeSuccess(base, resolved),
+			sleep: async () => {},
+		};
+		await expect(
+			apiFanout({ ...base, via: "ssh" }, selection(), {}, internals),
+		).rejects.toMatchObject({ code: "routeros/protocol-not-implemented" });
+		await expect(
+			apiFanout({ ...base, via: "bogus" }, selection(), {}, internals),
+		).rejects.toMatchObject({ code: "settings/invalid-via" });
+		// The throw is pre-flight: selection never expanded.
+		expect(expanded).toBe(false);
+	});
+
+	test("an invalid CENTRS_VIA (env-pinned) is rejected up front too", async () => {
+		const internals: ApiFanoutInternals = {
+			expand: async () => expansionOf([cdbMember("10.0.0.1", 0)]),
+			execute: async (resolved) => fakeSuccess(base, resolved),
+			sleep: async () => {},
+		};
+		await expect(
+			apiFanout(base, selection(), { CENTRS_VIA: "bogus" }, internals),
+		).rejects.toMatchObject({ code: "settings/invalid-via" });
+	});
+
 	test("a literal (ad-hoc) member drops a borrowed __default__ recordIndex and keeps its input", async () => {
 		const internals: ApiFanoutInternals = {
 			expand: async () => expansionOf([{ kind: "literal", input: "1.2.3.4" }]),

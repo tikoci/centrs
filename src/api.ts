@@ -1112,24 +1112,36 @@ function resolveApiProtocol(
 			remediation: "Report this bug; api should default to rest-api.",
 		});
 	}
-	if (!plannedProtocols.includes(via.value as RouterOsProtocol)) {
+	assertApiProtocolSupported(via.value);
+	return via as ResolvedSetting<RouterOsProtocol>;
+}
+
+/**
+ * Reject a protocol identifier `api` cannot run over. Throws `settings/invalid-via`
+ * for an unknown protocol and `routeros/protocol-not-implemented` for a known
+ * transport (e.g. ssh / mac-telnet) that `api` does not support. Shared so a
+ * globally-pinned `--via` / `CENTRS_VIA` can be rejected as an orchestration
+ * pre-flight error in fan-out (`api-fanout.ts`) rather than degrading into N
+ * identical per-target resolve failures.
+ */
+export function assertApiProtocolSupported(via: string): void {
+	if (!plannedProtocols.includes(via as RouterOsProtocol)) {
 		throw new CentrsError({
 			code: "settings/invalid-via",
-			summary: `Unsupported protocol identifier: ${via.value}`,
+			summary: `Unsupported protocol identifier: ${via}`,
 			remediation: "`api` runs over `rest-api` (default) or `native-api`.",
-			context: { via: via.value },
+			context: { via },
 		});
 	}
-	if (via.value !== "rest-api" && via.value !== "native-api") {
+	if (via !== "rest-api" && via !== "native-api") {
 		throw new CentrsError({
 			code: "routeros/protocol-not-implemented",
-			summary: `api over ${via.value} is not supported.`,
+			summary: `api over ${via} is not supported.`,
 			remediation:
 				"Use `--via rest-api` (default) or `--via native-api`. Console transports (ssh/mac-telnet) run through `execute`/`terminal`.",
-			context: { via: via.value, capability: "execute" },
+			context: { via, capability: "execute" },
 		});
 	}
-	return via as ResolvedSetting<RouterOsProtocol>;
 }
 
 function resolveApiFormat(

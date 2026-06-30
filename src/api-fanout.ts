@@ -26,6 +26,7 @@ import {
 	type ApiRequestSummary,
 	type ApiSuccessEnvelope,
 	apiRequestSummaryFromRequest,
+	assertApiProtocolSupported,
 	buildApiErrorEnvelopeFromResolved,
 	parseApiMethod,
 	type ResolvedApiRequest,
@@ -190,6 +191,15 @@ export async function apiFanout(
 	const method = parseApiMethod(request.method);
 	const requestSummary = apiRequestSummaryFromRequest(request, env);
 	const selectionSummary = summarizeSelection(selection);
+
+	// A globally-pinned `--via` / `CENTRS_VIA` outranks every per-target CDB
+	// override (explicit/env > comment-kv in `resolveStringSetting`), so an invalid
+	// one fails every target identically. Reject it ONCE up front as an outer error,
+	// matching single-target `resolveApiProtocol`, instead of N per-target failures.
+	const pinnedVia = request.via ?? env["CENTRS_VIA"];
+	if (pinnedVia !== undefined) {
+		assertApiProtocolSupported(pinnedVia);
+	}
 
 	const expand = internals.expand ?? expandCdbSelection;
 	const expansion = await expand(
