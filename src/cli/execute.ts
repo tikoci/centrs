@@ -1,3 +1,4 @@
+import { fanoutExitCode } from "../core/fanout.ts";
 import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
 import {
 	buildExecuteErrorEnvelope,
@@ -7,11 +8,17 @@ import {
 	executeOutputFormats,
 	renderExecuteEnvelope,
 } from "../execute.ts";
+import {
+	buildExecuteFanoutErrorEnvelope,
+	executeFanout,
+	renderExecuteFanoutEnvelope,
+} from "../execute-fanout.ts";
 import { describeCentrs } from "../index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
 	renderCommandHelp,
+	unknownFlagError,
 } from "./common.ts";
 import {
 	buildTargetSelectionTips,
@@ -21,10 +28,19 @@ import {
 	missingTargetError,
 	withTips,
 } from "./missing-target.ts";
+import {
+	buildTargetSelection,
+	consumeSelectionFlag,
+	emptySelectionFlags,
+	isFanoutMode,
+	type SelectionFlags,
+	selectionCommandOptions,
+} from "./selection.ts";
 
 export const executeCommand: CliCommandMetadata = {
 	name: "execute",
-	usage: "centrs execute <target> <command> [flags]",
+	usage:
+		"centrs execute <target> <command> [flags] | centrs execute <target...> -- <command> [flags] | centrs execute --group <name> <command> [flags]",
 	summary:
 		"Run a RouterOS read or write command via native API, REST, or mac-telnet.",
 	options: [
@@ -34,6 +50,7 @@ export const executeCommand: CliCommandMetadata = {
 			description:
 				"Pin the protocol selector; no silent downgrade when set. A bare MAC target defaults to mac-telnet.",
 		},
+		...selectionCommandOptions,
 		{
 			flag: "--host",
 			valueName: "<host|url>",
@@ -127,11 +144,15 @@ export const executeCommand: CliCommandMetadata = {
 interface ExecuteCliArgs extends ExecuteRequest {
 	help?: boolean;
 	format?: ExecuteOutputFormat;
+	selectionFlags?: SelectionFlags;
+	targetPositionals?: readonly string[];
 }
 
 export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 	const parsed: ExecuteCliArgs = { command: "" };
+	const selectionFlags = emptySelectionFlags();
 	const positional: string[] = [];
+	const afterDashDash: string[] = [];
 	let endOfOptions = false;
 
 	for (let index = 0; index < args.length; index += 1) {
@@ -144,7 +165,7 @@ export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 		// tokens like `--` / `-foo` (or a value that looks like a flag) without the
 		// parser claiming them. `--` itself is consumed, not added to the command.
 		if (endOfOptions) {
-			positional.push(arg);
+			afterDashDash.push(arg);
 			continue;
 		}
 		if (arg === "--") {
@@ -226,17 +247,42 @@ export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 				parsed.format = value as ExecuteOutputFormat;
 				break;
 			}
-			default:
+			default: {
+				const consumed = consumeSelectionFlag(args, index, selectionFlags);
+				if (consumed !== null) {
+					index = consumed;
+					break;
+				}
 				if (arg.startsWith("-")) {
-					throw new Error(`Unknown execute flag: ${arg}`);
+					throw unknownFlagError("execute", arg, executeCommand.options);
 				}
 				positional.push(arg);
 				break;
+			}
 		}
 	}
 
-	parsed.targetInput = positional[0];
-	parsed.command = positional.slice(1).join(" ");
+	parsed.selectionFlags = selectionFlags;
+	// Positional boundary for execute (see `docs/CONSTITUTION.md` → Target selection):
+	//   - `--` present: targets are the positionals BEFORE it, command is AFTER it.
+	//   - selector flag present, no `--`: every positional is the command (targets
+	//     come from the selector).
+	//   - otherwise (no `--`, no selector): legacy single-target split — first
+	//     positional is the target, the rest is the command. Multiple positional
+	//     targets therefore REQUIRE `--`.
+	const hasSelector = isFanoutMode(selectionFlags, 0);
+	if (endOfOptions) {
+		parsed.targetPositionals = positional;
+		parsed.command = afterDashDash.join(" ");
+	} else if (hasSelector) {
+		parsed.targetPositionals = [];
+		parsed.command = positional.join(" ");
+	} else {
+		parsed.targetPositionals =
+			positional[0] !== undefined ? [positional[0]] : [];
+		parsed.command = positional.slice(1).join(" ");
+	}
+	parsed.targetInput = parsed.targetPositionals[0];
 	parsed.stdinIsTty = process.stdin.isTTY;
 	return parsed;
 }
@@ -249,6 +295,20 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 			console.log(renderCommandHelp(describeCentrs(), executeCommand));
 			return 0;
 		}
+
+		// Fan-out mode (a selector flag, or >1 positional target before `--`) has its
+		// own envelope shape, single up-front write-confirm, and granular exit code.
+		const selectionFlags = parsed.selectionFlags ?? emptySelectionFlags();
+		const targetPositionals = parsed.targetPositionals ?? [];
+		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
+			return await runExecuteFanoutCli(
+				parsed,
+				selectionFlags,
+				targetPositionals,
+				args,
+			);
+		}
+
 		// No positional at all: lead with the missing-target guidance (CDB picker /
 		// discover) rather than the missing-command error — there is nothing to run
 		// without a device. A lone positional is treated as the target, so the
@@ -313,6 +373,44 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 				) + formatTipsText(tips),
 			);
 		}
+		return 1;
+	}
+}
+
+async function runExecuteFanoutCli(
+	parsed: ExecuteCliArgs,
+	selectionFlags: SelectionFlags,
+	targetPositionals: readonly string[],
+	args: readonly string[],
+): Promise<number> {
+	const selection = buildTargetSelection(selectionFlags, targetPositionals);
+	const format = inferExecuteFormat(args, parsed);
+	try {
+		const envelope = await executeFanout(
+			parsed,
+			selection,
+			Bun.env,
+			{},
+			{
+				concurrency: selectionFlags.concurrency,
+				allowAdhoc: true,
+			},
+		);
+		const resolvedFormat = envelope.meta.operation?.request.format ?? format;
+		console.log(
+			renderExecuteFanoutEnvelope(envelope, resolvedFormat, {
+				verbose: parsed.verbose ?? false,
+			}),
+		);
+		// Granular exit contract: 0 all-ok / 2 partial / 1 all-failed.
+		return fanoutExitCode(envelope);
+	} catch (error) {
+		const envelope = buildExecuteFanoutErrorEnvelope(parsed, error);
+		console.error(
+			renderExecuteFanoutEnvelope(envelope, format, {
+				verbose: parsed.verbose ?? false,
+			}),
+		);
 		return 1;
 	}
 }

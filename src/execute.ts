@@ -277,17 +277,22 @@ export async function runResolvedExecute(
 export async function resolveExecuteRequest(
 	request: ExecuteRequest,
 	env: Record<string, string | undefined>,
+	options: { cdbResolution?: CdbResolution } = {},
 ): Promise<ResolvedExecuteRequest> {
 	validateExecuteRequestShape(request);
 	const canonical = canonicalizeExecuteCommand(request.command);
-	const cdbResolution = await resolveCdb(
-		{
-			targetInput: request.targetInput,
-			cdbFile: request.cdbFile,
-			cdbPassword: request.cdbPassword,
-		},
-		env,
-	);
+	// Fan-out passes the pre-resolved CDB record for a member (the CDB is loaded
+	// once in `expandCdbSelection`); single-target resolves it here.
+	const cdbResolution =
+		options.cdbResolution ??
+		(await resolveCdb(
+			{
+				targetInput: request.targetInput,
+				cdbFile: request.cdbFile,
+				cdbPassword: request.cdbPassword,
+			},
+			env,
+		));
 	const via = resolveExecuteProtocol(request, env, cdbResolution);
 	const format = resolveFormat(request, env);
 	const validate = resolveBooleanSetting(
@@ -363,6 +368,68 @@ export async function resolveExecuteRequest(
 		yes: request.yes ?? false,
 		verbose: request.verbose ?? false,
 		warnings: cdbResolution?.warnings ?? [],
+	};
+}
+
+export interface ExecuteGlobalContext {
+	via: RouterOsProtocol;
+	write: boolean;
+	summary: ExecuteRequestSummary;
+	settings: CommonSettingsMeta;
+}
+
+/**
+ * Resolve the target-independent settings (protocol, format, validate, timeout,
+ * max-results) for a fan-out's outer `meta.operation.request` summary and its
+ * transport-aware concurrency default. No CDB record is consulted; the global
+ * `--via` (default `native-api`) decides the summary and concurrency base. Also
+ * canonicalizes the command once so write-ness is known before any target runs.
+ */
+export function resolveExecuteGlobalContext(
+	request: ExecuteRequest,
+	env: Record<string, string | undefined>,
+): ExecuteGlobalContext {
+	validateExecuteRequestShape(request);
+	const canonical = canonicalizeExecuteCommand(request.command);
+	const via = resolveExecuteProtocol(request, env);
+	const format = resolveFormat(request, env);
+	const validate = resolveBooleanSetting(
+		request.validate,
+		env,
+		"CENTRS_VALIDATE",
+		true,
+		"validate",
+	);
+	const timeoutMs = resolveTimeoutSetting(request.timeout, env, via.value);
+	const maxResultsBytes = resolveOptionalIntegerSetting(
+		request.maxResultsBytes,
+		env,
+		"CENTRS_MAX_RESULTS",
+		"max-results",
+	);
+	return {
+		via: via.value,
+		write: isWriteShaped(canonical),
+		summary: {
+			command: request.command,
+			canonical,
+			write: isWriteShaped(canonical),
+			yes: request.yes ?? false,
+			validate: validate.value,
+			verbose: request.verbose ?? false,
+			timeoutMs: timeoutMs.value,
+			format: format.value,
+			maxResultsBytes: maxResultsBytes?.value,
+		},
+		settings: {
+			via: toCoreSource(via.source),
+			timeoutMs: toCoreSource(timeoutMs.source),
+			format: toCoreSource(format.source),
+			validate: toCoreSource(validate.source),
+			maxResultsBytes: maxResultsBytes
+				? toCoreSource(maxResultsBytes.source)
+				: undefined,
+		},
 	};
 }
 

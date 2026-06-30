@@ -7,7 +7,8 @@ CLI-shaped commands — there is no separate `update` command.
 Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
 `docs/MATRIX.md` and `commands/execute/examples.md`, examples 1–11 over REST,
 12–18 over the native API, 19–21 over mac-telnet, and S1–S4 over ssh, green via
-`bun run test:integration`). `romon` and `winbox-terminal` remain
+`bun run test:integration`), including multi-target fan-out (see **Target
+selection**, examples F1–F5). `romon` and `winbox-terminal` remain
 `not-started`. SNMP is retrieve-only and rejects `execute`.
 
 ## Intent
@@ -117,8 +118,12 @@ Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
 | `--yes`                         | Confirm write-shaped add/set/remove commands in non-interactive runs.                  |
 | `--max-bytes <n>`               | Byte budget for the rendered envelope; excess output is truncated with a warning + `meta.truncated` (not an error), matching `retrieve`. (Renamed from `--max-results`.) |
 | `--format <text\|json\|yaml>`   | Output format (alias `--json`). Defaults to `text`; `CENTRS_FORMAT` sets the default.  |
+| `--group <name>`                | Run across every CDB record in WinBox group `<name>`. Repeatable, combinable with `<target>` positionals plus `--where`/`--all`/`--default`; de-duped by record index. See **Target selection**. |
 | `--where <attr>=<value>`        | Device-class selector — run across every CDB record whose stored fact/comment-kv matches (e.g. `--where board=RB5009 /system/package/check-for-updates`). Repeatable (AND). See constitution: target selection. |
-| `--`                            | End-of-options marker. Every token after `--` is taken as the literal RouterOS command, even flag-shaped ones — e.g. `centrs execute $R -- /interface print where disabled=yes`. Use it when the command contains tokens that would otherwise be claimed as centrs flags; otherwise the command must be quoted as a single argument. |
+| `--all`                         | Run across every CDB record (excludes the reserved `__default__`). See **Target selection**. |
+| `--default`                     | Select the reserved `__default__` record. See **Target selection**. |
+| `--concurrency <n>`             | Max in-flight targets during fan-out (integer ≥ 1). Transport-aware default: `rest-api` 8, others 4. |
+| `--`                            | End-of-options marker. Every token after `--` is taken as the literal RouterOS command, even flag-shaped ones — e.g. `centrs execute $R -- /interface print where disabled=yes`. In fan-out, positional targets come BEFORE `--` and the command AFTER it (`centrs execute r1 r2 -- /system/reboot`). Use it when the command contains tokens that would otherwise be claimed as centrs flags; otherwise the command must be quoted as a single argument. |
 
 ## SSH key selection
 
@@ -146,6 +151,33 @@ contents, and any inline key material are always sensitive and must be listed in
 `error.redactable_fields` if they appear in structured error data; key paths are
 redacted only if the caller marks them sensitive or the error couples them with
 key material.
+
+## Target selection
+
+`execute` runs the **same** RouterOS command across a multi-target selection over
+the shared grammar (multiple `<target>` positionals, repeatable `--group`/
+`--where`, `--all`, `--default`). The grammar, the locked `FanoutData` envelope,
+the record-order reassembly, and the granular **0/2/1 exit code** are normative in
+[`docs/CONSTITUTION.md` → Target selection grammar](../../docs/CONSTITUTION.md#target-selection-grammar).
+
+execute's positional **boundary is `--`** (it differs from `api`/`retrieve`,
+whose last positional is the operation arg, because an execute command is itself
+many tokens):
+
+- `execute r1 r2 -- /system/reboot` — targets `[r1, r2]` before `--`, command
+  after. **More than one positional target requires `--`.**
+- `execute --group prod /system/resource/print` — selector-only: targets come
+  from the selector and every positional is the command (no `--` needed).
+- `execute r1 /system/resource/print` — a single positional target with no
+  selector stays **single-target** (legacy split: first positional is the target,
+  the rest is the command), never `FanoutData`.
+
+Because `execute` is the primary **write** path, a write-shaped fan-out
+(add/set/remove) is gated by **`--yes`**, confirmed **once** up front; without it
+the error names the blast radius (how many routers). Write-ness is determined from
+the command alone (`canonicalizeExecuteCommand` + `isWriteShaped`), so the gate
+fires before any target is dialed. Per-target validation still runs because
+RouterOS schemas can differ by version.
 
 ## mac-telnet L2 validation
 
