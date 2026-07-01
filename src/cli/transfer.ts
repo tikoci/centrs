@@ -276,9 +276,10 @@ async function runTransferFanoutCli(
 		// Granular exit contract: 0 all-ok / 2 partial / 1 all-failed.
 		return fanoutExitCode(envelope);
 	} catch (error) {
-		// Strip credentials before any renderer touches the request (stderr/CI logs).
+		// Strip credentials before any renderer touches the request (stderr/CI logs):
+		// pass an explicitly redacted request, with no raw-request fallback path.
 		const envelope = buildTransferFanoutErrorEnvelope(
-			redactTransferRequest(request) ?? request,
+			{ ...request, password: undefined, cdbPassword: undefined },
 			error,
 		);
 		console.error(
