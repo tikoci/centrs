@@ -25,8 +25,13 @@ const args = process.argv.slice(2);
 const fullCoverage = args.includes("--full-coverage");
 const testArgs = args.filter((arg) => arg !== "--full-coverage");
 
-const report = await $`bun test --coverage ${testArgs} 2>&1`.nothrow().text();
+const result = await $`bun test --coverage ${testArgs} 2>&1`.nothrow().quiet();
+const report = result.stdout.toString();
 const lines = report.split("\n");
+// `bun test` can exit non-zero (a crash, bad args, a config error) without
+// ever printing a `(fail)` line — trust the process exit code, not just the
+// line count, or a real failure would still print a false ✅.
+const failed = result.exitCode !== 0;
 
 const failLines = lines.filter((line) => line.includes("(fail)"));
 const countLines = lines.filter((line) =>
@@ -37,9 +42,7 @@ const tableStart = lines.findIndex((line) => /^-{5,}\|/.test(line));
 const allFilesRow = lines.find((line) => line.startsWith("All files"));
 
 console.log(
-	failLines.length > 0
-		? `❌ ${failLines.length} failing`
-		: "✅ all tests passed",
+	failed ? `❌ failing (exit ${result.exitCode})` : "✅ all tests passed",
 );
 for (const line of countLines) console.log(line.trim());
 if (summaryLine) console.log(summaryLine.trim());
@@ -47,6 +50,11 @@ if (summaryLine) console.log(summaryLine.trim());
 if (failLines.length > 0) {
 	console.log("\nFailing tests:");
 	for (const line of failLines) console.log(`  ${line.trim()}`);
+} else if (failed) {
+	console.log(
+		"\nbun test exited non-zero with no `(fail)` lines — dumping full output:\n",
+	);
+	console.log(report);
 }
 
 if (tableStart >= 0) {
@@ -61,4 +69,4 @@ if (tableStart >= 0) {
 	}
 }
 
-process.exit(failLines.length > 0 ? 1 : 0);
+process.exit(failed ? 1 : 0);
