@@ -17,6 +17,7 @@ sftp-seeded >60 KB file) — confirming the `/file`
 RouterOS. Unit coverage is `test/unit/transfer.test.ts`. **sftp** is the first SSH
 consumer — a self-contained SFTP transfer client over the host OpenSSH `sftp`
 subsystem. `scp` and `fetch` are **designed but deferred** past this pass.
+Multi-target fan-out is built (see **Target selection**, examples F1–F5).
 
 ## Intent
 
@@ -160,7 +161,8 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 | `--verify <size\|checksum\|off>` | Post-transfer integrity check. Default `size` (compare the byte count centrs sent/received against the settled `/file` size). `off` (alias `--no-verify`) skips it. See *Integrity*. |
 | `--type <file\|directory\|disk\|package>` | `list` only: filter by `/file` row type. |
 | `--name <glob>` | `list` only: filter by file name glob. |
-| `--out-dir <dir>` | `download` fanout only *(deferred — fanout not built yet)*: write one file per target into `<dir>` (named by CDB target), since N devices cannot share one local path. |
+| `--out-dir <dir>` | `download` fan-out only: write one file per target into `<dir>` (named by CDB identity, collision-safe, keeping the remote extension), since N devices cannot share one local path. **Required** for a `download` across a selection. See **Target selection**. |
+| `--yes` | Confirm a mutating fan-out (`upload`/`remove`/`mkdir`/`copy`) across multiple routers in non-interactive runs (confirmed once up front). See **Target selection**. |
 | `--advertise-host <host>` / `--advertise-port <n>` / `--bind <addr>` | `fetch` only *(deferred)*: the host/IP/port centrs advertises in the fetch URL and the local bind address. Default: auto-detect the local IP on the route to the router; ephemeral port; single-use random URL token. |
 | `--resolve <none\|arp>` | *(deferred — not parsed yet)* Resolve a MAC-address target to an IP via the host ARP cache. Default `none`. |
 | `--format text` (default) | Human summary: method, bytes, duration, verified. Errors print `[code] summary` + `Fix:` lines. |
@@ -172,7 +174,34 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 | `--ssh-key <path>` | `sftp` (and future `scp`): explicit private-key path. Same `sshKey` setting as `terminal`/`execute` (`CENTRS_SSH_KEY`, CDB `ssh-key=`). When unset, the ssh-agent / `~/.ssh/config` is used. See `commands/terminal/README.md`. |
 | `--insecure` | Accept a self-signed TLS cert (`https`/`api-ssl`) or a new SSH host key (TOFU). Default verifies; see constitution: transport trust. Adds a `transport/insecure-trust` warning. |
 | `--cdb-file` / `--cdb-password` | Override CDB file location / decrypt password. |
-| `--group <name>` / `--where <attr>=<value>` / `--all` / `--default` / `--concurrency <n>` | *(deferred — fanout not built for `transfer` yet)* Fan out across CDB targets (e.g. push one firmware file to a fleet). Same selector grammar and per-target envelope as `retrieve` (constitution: target selection). `download` fanout requires `--out-dir`; `remove`/`mkdir`/`copy`/`upload` fan out directly. |
+| `--group <name>` / `--where <attr>=<value>` / `--all` / `--default` / `--concurrency <n>` | Fan out across CDB targets (e.g. push one firmware file to a fleet). Same selector grammar and per-target envelope as `retrieve`/`execute` (constitution: target selection). `download` fan-out requires `--out-dir`; `remove`/`mkdir`/`copy`/`upload` fan out directly and are `--yes`-gated. See **Target selection**. |
+
+## Target selection
+
+`transfer` runs the **same** verb across a multi-target selection over the shared
+grammar (multiple `<router>` positionals, repeatable `--group`/`--where`, `--all`,
+`--default`). The grammar, the locked `FanoutData` envelope, the record-order
+reassembly, and the granular **0/2/1 exit code** are normative in
+[`docs/CONSTITUTION.md` → Target selection grammar](../../docs/CONSTITUTION.md#target-selection-grammar).
+
+The positional **boundary is the verb keyword** (`upload`/`download`/`list`/
+`remove`/`mkdir`/`copy` or an alias): positionals **before** it are fan-out
+targets, the verb and its paths follow (`transfer r1 r2 download /flash/log.txt
+--out-dir ./logs`). A single positional target with no selector stays
+single-target. On the top-level `upload`/`download` alias the verb is fixed, so
+its positionals are paths — positional fan-out targets are not expressible there;
+fan-out comes from a selector flag.
+
+Two transfer-specific rules:
+
+- **`download` fan-out requires `--out-dir <dir>`.** N devices cannot share one
+  local path, so each target's file is written into the directory, named by its
+  CDB identity (collision-safe — same-label targets are disambiguated by record
+  index — and keeping the remote file's extension). Each inner envelope records
+  its per-target local path.
+- **`upload`/`remove`/`mkdir`/`copy` are device writes**, so a fan-out of them is
+  gated by **`--yes`**, confirmed once up front; without it the error names the
+  blast radius (how many routers). `download`/`list` only read the device.
 
 ## Integrity
 

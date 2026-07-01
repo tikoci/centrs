@@ -6,7 +6,11 @@
  * `process.*`); the core relay in `../terminal.ts` stays io-agnostic.
  */
 
-import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
+import {
+	asCentrsError,
+	CentrsError,
+	formatCentrsErrorText,
+} from "../errors.ts";
 import {
 	buildTerminalErrorEnvelope,
 	describeCentrs,
@@ -28,6 +32,7 @@ import {
 	missingTargetError,
 	withTips,
 } from "./missing-target.ts";
+import { selectionFlagTokens } from "./selection.ts";
 
 export const terminalCommand: CliCommandMetadata = {
 	name: "terminal",
@@ -205,7 +210,7 @@ interface ParsedTerminal {
 	request: TerminalRequest;
 }
 
-function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
+export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 	const flags: TerminalRequest = {};
 	const positional: string[] = [];
 	let help = false;
@@ -268,6 +273,18 @@ function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 				flags.verbose = true;
 				break;
 			default:
+				// A single interactive session cannot fan out: reject a target-selection
+				// flag with the shared `usage/fanout-not-supported` (mirrors `api --stream`).
+				if ((selectionFlagTokens as readonly string[]).includes(arg)) {
+					throw new CentrsError({
+						code: "usage/fanout-not-supported",
+						summary:
+							"`centrs terminal` is a single interactive session and cannot fan out across a multi-target selection.",
+						remediation:
+							"Open a terminal to one router at a time; use `execute` / `api` for multi-target commands.",
+						context: { flag: arg, capability: "terminal" },
+					});
+				}
 				if (arg.startsWith("-")) {
 					throw asCentrsError(new Error(`Unknown terminal flag: ${arg}`), {
 						code: "input/invalid-command",

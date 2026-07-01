@@ -115,7 +115,15 @@ sftp `S1`–`S5` round-trip, the stdin/stdout forms via the subprocess harness
 The method-selection grammar, the SFTP-vs-SCP rationale, the `--verify` behavior
 (sftp trusts the transfer guarantee; rest/native re-read the `/file` size), and the
 deferred `scp`/`fetch`/`ftp` methods are documented in
-`commands/transfer/README.md`.
+`commands/transfer/README.md`. `transfer` also runs the shared selection grammar
+(`src/transfer-fanout.ts`); its positional boundary is the **verb keyword** (targets
+precede `upload`/`download`/`list`/`remove`/`mkdir`/`copy`). **`download` fan-out
+requires `--out-dir`** (one collision-safe file per target, named by CDB identity);
+the mutating verbs (`upload`/`remove`/`mkdir`/`copy`) are `--yes`-gated once up front
+with a blast-radius message. Green on CHR 7.23.1 via
+`test/integration/transfer-fanout.test.ts` (F1 group list, F2 empty, F3 `--where`
+subset, F4 `download`→`--out-dir` to disk, F5 mutating-verb `--yes` gate, F6
+`download` without `--out-dir` rejected).
 
 `execute / ssh` is `CHR-passed` (the second SSH consumer): a per-command batch
 client (`SshExecClient` in `src/protocols/ssh.ts` — one `ssh user@host "<cmd>"`

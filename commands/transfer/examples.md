@@ -336,6 +336,72 @@ centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $U --ssh-key $K
 Both `ok: true`. On-device `copy` has no SFTP primitive — `--via sftp copy` returns
 `transport/unsupported-operation` (it stays on rest/native).
 
+## Target selection (fan-out)
+
+These exercise the shared target-selection grammar
+([`docs/CONSTITUTION.md` → Target selection grammar](../../docs/CONSTITUTION.md#target-selection-grammar)),
+run by `test/integration/transfer-fanout.test.ts`. `$CDB` has two records in group
+`fanout-chr`: record 0 is the live CHR (comment fact `role=edge`, seeded with
+`fanout-test.txt`) and record 1 is an unreachable REST URL (`role=core`). Note the
+**verb-keyword boundary**: targets/selectors precede the verb.
+
+### F1. Group fan-out of a read verb (`list`)
+
+```bash
+centrs transfer --group fanout-chr list --via rest --cdb-file $CDB --json
+```
+
+`ok: true`, `data.summary = { total: 2, ok: 1, failed: 1 }`, targets ordered by
+`recordIndex`, `meta.operation.kind = fanout`; the unreachable target is an inner
+`ok: false`. Exit `2`.
+
+### F2. Empty / unknown group
+
+```bash
+centrs transfer --group no-such-group list --via rest --cdb-file $CDB --json
+```
+
+`ok: true`, `data.summary = { total: 0, ok: 0, failed: 0 }`,
+`warnings` include `cdb/empty-group`. Exit `0`.
+
+### F3. `--where` device-class selector (subset)
+
+```bash
+centrs transfer --where role=edge list --via rest --cdb-file $CDB --json
+```
+
+Selects only record 0: `data.summary = { total: 1, ok: 1, failed: 0 }`,
+`meta.operation.selection.where = ["role=edge"]`, exit `0`.
+
+### F4. `download` fan-out into `--out-dir`
+
+```bash
+centrs transfer --group fanout-chr download fanout-test.txt --out-dir ./downloads --via rest --cdb-file $CDB --json
+```
+
+Each reachable target writes one file into `./downloads`, named by its CDB identity
+(collision-safe, keeping the remote extension). `data.summary = { total: 2, ok: 1,
+failed: 1 }`, exit `2`; the ok target's inner `data.local` is the written path.
+
+### F5. Mutating fan-out (`remove`) without `--yes` is refused
+
+```bash
+centrs transfer --group fanout-chr remove fanout-test.txt --via rest --cdb-file $CDB --json
+```
+
+A mutating fan-out is gated once up front: `ok: false`,
+`error.code = usage/confirmation-required`, the summary names the blast radius
+(`2 router(s)`), exit `1`. Nothing is removed. Add `--yes` to fan the write out.
+
+### F6. `download` fan-out without `--out-dir` is refused
+
+```bash
+centrs transfer --group fanout-chr download fanout-test.txt --via rest --cdb-file $CDB --json
+```
+
+N devices cannot share one local path: `ok: false`,
+`error.code = usage/conflicting-flags`, exit `1`. Pass `--out-dir <dir>`.
+
 ## Pending transports (contract defined; flips when the transport lands)
 
 ### P2. `--via scp` (follow-on pass after sftp)

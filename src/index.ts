@@ -387,6 +387,7 @@ export {
 export {
 	buildTransferErrorEnvelope,
 	FILE_READ_CHUNK_BYTES,
+	isTransferWriteVerb,
 	normalizeRemotePath,
 	REST_FILE_WRITE_CAP_BYTES,
 	renderTransferEnvelope,
@@ -409,6 +410,19 @@ export {
 	transferVerbs,
 	validateTransferRequestShape,
 } from "./transfer.ts";
+export {
+	buildTransferFanoutErrorEnvelope,
+	renderTransferFanoutEnvelope,
+	type TransferFanoutData,
+	type TransferFanoutEnvelope,
+	type TransferFanoutErrorEnvelope,
+	type TransferFanoutInternals,
+	type TransferFanoutOperationMeta,
+	type TransferFanoutOptions,
+	type TransferFanoutRequestSummary,
+	type TransferSelectionSummary,
+	transferFanout,
+} from "./transfer-fanout.ts";
 
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 

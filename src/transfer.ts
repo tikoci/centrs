@@ -67,6 +67,20 @@ export const transferVerbs = [
 export type TransferVerb = (typeof transferVerbs)[number];
 
 /**
+ * Verbs that mutate the device (write path) — gated by `--yes` once up front in a
+ * fan-out. `download`/`list` only read the device (a download writes the *local*
+ * filesystem, not the router).
+ */
+export function isTransferWriteVerb(verb: TransferVerb): boolean {
+	return (
+		verb === "upload" ||
+		verb === "remove" ||
+		verb === "mkdir" ||
+		verb === "copy"
+	);
+}
+
+/**
  * `--via` method names. These are transfer *methods*, finer than the grid
  * transport: `rest`/`native` ride rest-api/native-api; `sftp`/`scp` ride ssh;
  * `fetch` rides rest-api/native-api plus an inbound HTTP server; `ftp` is gated.
@@ -120,6 +134,14 @@ export interface TransferRequest {
 	name?: string;
 	cdbFile?: string;
 	cdbPassword?: string;
+	/** `download` fan-out: directory to write one file per target into. */
+	outDir?: string;
+	/** Fan-out write gate: confirm a mutating fan-out (upload/remove/mkdir/copy). */
+	yes?: boolean;
+	/** Fan-out TTY detection seam (defaults to `process.stdin.isTTY`). */
+	stdinIsTty?: boolean;
+	/** Fan-out confirmation prompt seam (defaults to the shared TTY prompt). */
+	confirm?: (prompt: string) => Promise<boolean>;
 }
 
 export type TransferOp = TransferVerb;
@@ -190,8 +212,9 @@ interface ResolvedTransferRequest {
 export async function transfer(
 	request: TransferRequest,
 	env: Record<string, string | undefined> = Bun.env,
+	options: { cdbResolution?: CdbResolution } = {},
 ): Promise<TransferSuccessEnvelope> {
-	const resolved = await resolveTransferRequest(request, env);
+	const resolved = await resolveTransferRequest(request, env, options);
 	const backend = createFileBackend(resolved);
 	try {
 		return await runResolvedTransfer(resolved, backend);
@@ -778,6 +801,7 @@ function verifyReadSize(
 export async function resolveTransferRequest(
 	request: TransferRequest,
 	env: Record<string, string | undefined>,
+	options: { cdbResolution?: CdbResolution } = {},
 ): Promise<ResolvedTransferRequest> {
 	validateTransferRequestShape(request);
 
@@ -791,14 +815,18 @@ export async function resolveTransferRequest(
 		env,
 	);
 
-	const cdbResolution = await resolveCdb(
-		{
-			targetInput: request.targetInput,
-			cdbFile: request.cdbFile,
-			cdbPassword: request.cdbPassword,
-		},
-		env,
-	);
+	// Fan-out passes the pre-resolved CDB record for a member (the CDB is loaded
+	// once in `expandCdbSelection`); single-target resolves it here.
+	const cdbResolution =
+		options.cdbResolution ??
+		(await resolveCdb(
+			{
+				targetInput: request.targetInput,
+				cdbFile: request.cdbFile,
+				cdbPassword: request.cdbPassword,
+			},
+			env,
+		));
 
 	const format = resolveTransferFormat(request, env);
 	const validate = resolveBooleanSetting(

@@ -2,6 +2,12 @@
 
 Open an interactive RouterOS console.
 
+`terminal` is **single-session**: it is not a fan-out surface. A target-selection
+flag (`--group` / `--where` / `--all` / `--default` / `--concurrency`) is rejected
+with `usage/fanout-not-supported` — open a console to one router at a time; use
+`execute` / `api` for multi-target commands. See `docs/CONSTITUTION.md`
+(Target selection grammar).
+
 Status: `terminal / mac-telnet` **and** `terminal / ssh` are both **`CHR-passed`**
 (see `docs/MATRIX.md` and `examples.md` T1–T3 / TS1–TS2). The two transports take
 different paths: **mac-telnet** is the in-process raw passthrough over

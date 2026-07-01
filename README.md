@@ -113,7 +113,14 @@ see *why* a given port or transport was chosen.
 
 - **Groups** are CDB-native: an entry's `group` field is just a string, and
   `--group prod-edge` fans a single command out to every entry that shares it.
-  There is no separate group-definition file.
+  There is no separate group-definition file. Groups are one selector in a
+  **uniform fan-out grammar** shared by `api`, `retrieve`, `execute`, and
+  `transfer`: mix `<router>` positionals, repeatable `--group`/`--where
+  <attr>=<value>`, `--all`, and `--default` (de-duped by CDB record index). Every
+  fan-out returns the locked `FanoutData` envelope (per-target results, not
+  metadata) with a granular exit code (`0` all ok / `2` partial / `1` all failed);
+  a multi-target write is gated once by `--yes` naming the blast radius. See
+  `docs/CONSTITUTION.md` (Target selection grammar).
 - **Discovery** writes back into the CDB: `discover --save` records MNDP
   neighbors as new entries tagged `group=discovered` with a `source=mndp`
   marker — hints to curate, not authoritative inventory.
