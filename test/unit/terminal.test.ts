@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { parseTerminalCliArgs } from "../../src/cli/terminal.ts";
 import { CentrsError } from "../../src/errors.ts";
 import {
 	buildSshTerminalArgv,
@@ -8,6 +9,26 @@ import {
 
 const MAC = "aa:bb:cc:dd:ee:ff";
 const noEnv: Record<string, string | undefined> = {};
+
+describe("terminal rejects a multi-target selection (single-session)", () => {
+	for (const flag of [
+		"--group",
+		"--where",
+		"--all",
+		"--default",
+		"--concurrency",
+	]) {
+		test(`\`terminal ${flag}\` → usage/fanout-not-supported`, () => {
+			try {
+				parseTerminalCliArgs(["r1", flag, "x"]);
+				throw new Error("expected a throw");
+			} catch (error) {
+				expect(error).toBeInstanceOf(CentrsError);
+				expect((error as CentrsError).code).toBe("usage/fanout-not-supported");
+			}
+		});
+	}
+});
 
 /**
  * The transport gate is evaluated before any CDB load, so these assertions are
