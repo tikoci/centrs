@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { sep } from "node:path";
 import { isFanoutMode } from "../../src/cli/selection.ts";
 import { parseTransferCliArgs } from "../../src/cli/transfer.ts";
 import { fanoutExitCode } from "../../src/core/fanout.ts";
@@ -251,7 +252,9 @@ describe("transferFanout", () => {
 		expect(seen).toHaveLength(2);
 		expect(new Set(seen).size).toBe(2);
 		for (const path of seen) {
-			expect(path).toMatch(/^\/tmp\/out\/router.*\.npk$/);
+			// path.join uses the OS separator (backslash on Windows); normalize
+			// to forward slashes so the pattern is platform-independent.
+			expect(path?.split(sep).join("/")).toMatch(/^\/tmp\/out\/router.*\.npk$/);
 		}
 	});
 

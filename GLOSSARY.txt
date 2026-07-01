@@ -434,3 +434,20 @@ toarray
 # Logic shorthand ("if and only if") used in api write-gate doc comments; cspell's
 # markdown dictionary knows it but the TypeScript one does not.
 iff
+
+# GitHub Pages build vocabulary (scripts/build-pages-site.ts, pages.yaml)
+# typedoc/pandoc: the API-reference generator and the markdown->HTML converter
+#   the Pages build chains together. gfm: GitHub-Flavored Markdown, pandoc's
+#   input format for the error pages. larr: the "&larr;" left-arrow HTML entity
+#   in the back-to-docs link. nojekyll: the marker file that disables GitHub
+#   Pages' Jekyll processing for an Actions-deployed artifact. extensionless:
+#   describes the `details_url` contract (docs/errors/README.md) — no `.html`.
+typedoc
+pandoc
+gfm
+larr
+nojekyll
+extensionless
+# nothrow: Bun Shell's `$` method to disable throwing on a non-zero exit
+# (scripts/agent-check.ts), so the caller can inspect output either way.
+nothrow
