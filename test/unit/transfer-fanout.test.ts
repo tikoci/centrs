@@ -184,6 +184,12 @@ describe("transferFanout", () => {
 		);
 		expect(envelope.data.summary).toEqual({ total: 2, ok: 1, failed: 1 });
 		expect(fanoutExitCode(envelope)).toBe(2);
+		// The inner FAILURE keeps its per-target identity: `buildTransferErrorEnvelope`
+		// only knows `targetInput`, so `applyMemberMeta` restores recordIndex/identity
+		// (without it, record-index ordering breaks — a real bug the CHR test caught).
+		const failed = envelope.data.targets.find((t) => !t.ok);
+		expect(failed?.meta.target.recordIndex).toBe(1);
+		expect(failed?.meta.target.identity).toBe("10.0.0.2");
 	});
 
 	test("an empty selection is ok:true, 0/0/0, exit 0", async () => {
