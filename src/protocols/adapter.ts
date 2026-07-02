@@ -610,7 +610,7 @@ class NativeApiAdapter implements ProtocolAdapter {
 	async execute(
 		request: ProtocolExecuteRequest,
 	): Promise<ProtocolExecuteResult> {
-		if (request.script) {
+		if (request.script !== undefined) {
 			return normalizeNativeExecute(await this.executeScript(request.script));
 		}
 		const command: NativeApiCommand = {
