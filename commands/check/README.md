@@ -33,8 +33,10 @@ experiment measures the cost that justifies it.
 
 ## Where `check` sits
 
-`check` is the read-only **diagnostic** verb. It never writes RouterOS
-(`--save` reconciles centrs's own CDB, never the device — see [`--save`](#--save)).
+The built-in `check` battery is **read-only** — it never writes RouterOS. The
+lone exception is `--check-script*`, a **trusted** escape hatch that *can* mutate
+the router (see [Custom check script](#custom-check-script)); `--save` reconciles
+centrs's own CDB, never the device (see [`--save`](#--save)).
 Think `doctor`: a list of self-describing checks runs, each yields the standard
 finding channels, and configuration lets a caller silence known-and-accepted
 findings to reach a green result. Its probe machinery is deliberately reusable —
@@ -91,8 +93,9 @@ pays session setup. So the orchestrator batches per **round**, not per check:
    output is what the capability pre-flight needs (below).
 2. **Round 1.** All selected static reads are issued together. Over an
    execute-transport centrs composes them into **one consolidated `:put`-JSON
-   script** (the `$tojson` / `:serialize to=json` pattern) that returns a single
-   object in one session; over rest/native they pipeline as individual calls.
+   script** (one `:serialize to=json` object — the `tojson` helper in the
+   grounding sample) that returns a single object in one session; over
+   rest/native they pipeline as individual calls.
 3. **Round 2 (only if triggered).** Progressive checks (`cpu-detail`,
    `certificates`, …) whose predicate fired are collected and issued as **one**
    additional batched round — never a round-trip per triggered check.
@@ -117,30 +120,30 @@ Finding codes are slash-namespaced (constitution: error model):
 `check/<checkId>/<slug>` for errors/warnings, `tip/<checkId>/<slug>` for tips —
 so a caller can suppress one finding, or a whole check's findings, by code.
 
-**Verdict and `ok`.** `check` computes `data.verdict` ∈ `pass` / `tip` / `warn`
-/ `fail` (the max finding severity present after suppression). `ok` is `true`
-while the verdict stays **below** the `--fail-on` threshold:
+**Verdict, `ok`, and exit code.** `check` computes `data.verdict` ∈ `pass` /
+`tip` / `warn` / `fail` (the max finding severity after suppression). A run that
+reached a transport and executed the battery is **`ok: true`** and always carries
+`data` — an unhealthy device is a *finding*, not a command failure. Only a genuine
+failure (no transport reachable, auth fails on every transport, orchestration
+error) is `ok: false` (`error`, no data), matching the shared envelope.
 
-- `--fail-on <error|warning|tip|never>` (default `error`) is the threshold that
-  flips `ok:false`. At the default, warnings and tips are "success with
-  footnotes" (`ok:true`); `--fail-on warning` fails on a warning; `--fail-on
-  never` forces a pure report.
-- A verdict-driven `ok:false` still returns the **full battery** — an aggregate
-  `check/verdict-failed` error carries the counts while `data.checks[]` /
-  `data.profile` / `data.verdict` are retained (constitution: result envelope,
-  the diagnostic carve-out). No data is lost on a red result; exit stays `0` iff
-  `ok`, so CI/agents get a gate.
-- `--ignore <code|checkId>` (repeatable) suppresses matching findings so a
-  known-and-accepted condition stops counting against the threshold and stops
-  cluttering output. `--ignore <checkId>` mutes a check's *findings* but still
-  collects its metadata; use `--skip <checkId>` to not run it at all.
+Health gates **the exit code**, derived from the verdict vs `--fail-on` — a
+per-command rule, like fan-out's granular codes:
 
-Suppression persists beyond one call, on the standard precedence chain
-(constitution: settings precedence): `--ignore` arg → `CENTRS_CHECK_IGNORE=code1,code2`
-env → per-device CDB `check-ignore="code1 code2"` comment-kv → default. The CDB
-override lets a caller durably accept findings for a device without re-passing
-flags (adding `check-ignore=` to the comment-kv allowlist is a follow-up against
-`commands/devices/README.md`).
+- `--fail-on <error|warning|tip|never>` (default `error`) is the threshold.
+- Exit `0` when the verdict is **below** it (at the default, warnings and tips are
+  footnotes → `0`); exit `2` when the run is `ok:true` but the verdict
+  **met/exceeded** it (reachable, but unhealthy per the chosen bar); exit `1` on
+  an `ok:false` command failure. `--fail-on never` forces exit `0`.
+
+`--ignore <code|checkId>` (repeatable) suppresses matching findings so a
+known-and-accepted condition stops counting toward the verdict and stops
+cluttering output; `--ignore <checkId>` mutes a check's *findings* but keeps its
+metadata, while `--skip <checkId>` doesn't run it at all. Suppression follows the
+normal settings precedence (constitution): `--ignore` arg → `CENTRS_CHECK_IGNORE`
+env → per-device CDB `check-ignore=` comment-kv. The CDB override lets a caller
+durably accept findings without re-passing flags (adding `check-ignore=` to the
+comment-kv allowlist is a follow-up against `commands/devices/README.md`).
 
 ### Metadata is allowlisted, not raw
 
@@ -157,13 +160,13 @@ from this allowlist — that is part of why it is a trusted, gated path.
 
 ## Check catalog (first cut)
 
-Grounded in the RouterOS command set in the notebook that accompanies this spec.
-`default`: `on` runs in the smart battery; `trig` runs only when a dependency
-flags it; `off` runs only when named/preset.
+Grounded in the RouterOS command set surveyed for this spec — each row's `reads`
+column names its source command. `default`: `on` runs in the smart battery;
+`trig` runs only when a dependency flags it; `off` runs only when named/preset.
 
 | id             | phase  | default | emits          | reads                              |
 | -------------- | ------ | ------- | -------------- | ---------------------------------- |
-| `reach`        | reach  | on      | error/meta     | TCP + auth per protocol; host→router RTT; ARP presence; port map; MNDP-fact enrichment on auth-fail |
+| `reach`        | reach  | on      | error/tip/meta | TCP + auth per protocol; host→router RTT; ARP presence; port map; MNDP-fact enrichment on auth-fail; tips `credentials-needed` when creds are absent |
 | `resource`     | health | on¹     | warn/tip/meta  | `/system/resource` — version vs long-term, arch/board (**foundational, runs first**), cpu/mem/disk vs limits, disk < 16 MB, short uptime |
 | `services`     | health | on      | warn/tip/meta  | `/ip/service` — ports, `vrf`, `allowed-address`, disabled/invalid, `www-ssl` off, telnet/ftp on, reverse-proxy on 443, **CDB `port=` mismatch** |
 | `cloud`        | health | on      | tip/meta       | `/ip/cloud` — ddns-name, `ddns-enabled=auto` semantics; Back To Home fields may be absent on stock/trial CHR |
@@ -202,7 +205,7 @@ triggered/enrichment checks; `--fast` suppresses progressive triggers.
 | `--tag <t>` | Restrict to checks carrying tag `t` (repeatable). |
 | `--deep` / `--fast` | Force / suppress progressive (triggered) checks. |
 | `--list-checks` | Print the catalog with descriptions; no network IO. |
-| `--fail-on <severity>` | Severity threshold that sets `ok:false`. Default `error`. |
+| `--fail-on <severity>` | Verdict threshold that gates the **exit code** (`0`/`2`), not `ok`. Default `error`. |
 | `--ignore <code\|checkId>` | Suppress matching findings (repeatable). |
 | `--check-timeout <dur>` | Per-check timeout. Default `8s`. |
 | `--save` | Reconcile the CDB from what was probed (write-shaped, gated). |
@@ -281,7 +284,11 @@ Plain `check` (no `--save`) writes nothing.
 / `api` (constitution: target selection). Any selector (`--group` / `--where` /
 `--all` / `--default`) or more than one positional switches to the locked
 `FanoutData` envelope (`data = { summary, targets[] }`) with the granular
-`0`/`2`/`1` exit code. A multi-target `--save` is a write and needs `--yes`. This
+`0`/`2`/`1` exit code. Because an unhealthy device is now `ok:true` per target,
+the fan-out exit code tracks **orchestration** (inner `ok`), not health — so the
+`summary` aggregates per-target verdicts (a `verdicts` tally) and each target's
+`data.verdict` stays in its inner envelope, which is how #149's IP-scan reads
+per-host health. A multi-target `--save` is a write and needs `--yes`. This
 per-host fan-out is exactly the machinery `discover`'s IP-scan (#149) will drive.
 
 ## Output
@@ -289,7 +296,8 @@ per-host fan-out is exactly the machinery `discover`'s IP-scan (#149) will drive
 Standard envelope (constitution: result envelope). `data` has three parts:
 
 - `data.verdict` — `pass` / `tip` / `warn` / `fail`, the max finding severity after
-  suppression (drives `ok` via `--fail-on`).
+  suppression (gates the **exit code** via `--fail-on`; `ok` stays `true` when the
+  command ran).
 - `data.checks[]` — per-check detail: `{ id, ran, skipReason?, verdict, findings[], metadata, timing }`.
 - `data.profile` — a consolidated, flat **device profile** (board, arch, version,
   channel, identity, ddns-name, license-level, `ports{}`, latency, reachable
@@ -347,8 +355,10 @@ against a real CHR through `bun run test:integration`. See
 - **Default breadth = smart battery** (reach + on-by-default health +
   progressive), biased against slow/hang via `--check-timeout`. "Smart"
   triggering thresholds are a first cut to tune against devices.
-- **Red-verdict envelope** = `ok:false` with `data` retained + aggregate
-  `check/verdict-failed` (constitution carve-out added).
+- **Red-verdict model** = `ok:true` with `data` retained; the health verdict
+  (`data.verdict`) gates the **exit code** (`0` pass / `2` unhealthy / `1` command
+  failure), like fan-out's granular codes. No envelope carve-out — the shared
+  discriminated-union envelope is unchanged.
 - **Reach latency = host→router RTT** (+ ARP presence); router→internet health is
   the `dns` check's job.
 - **`exposure` (not `security`) is a rollup preset** — no extra reads, no

@@ -98,13 +98,6 @@ Every API/CLI call returns the same shape, regardless of transport:
 Notes:
 
 - "Success with footnotes" is supported: `ok: true` may carry warnings.
-- `ok: false` normally means no `data`. One narrow exception: a **diagnostic**
-  verb (`check`) whose run *succeeded* but whose health **verdict** crossed
-  `--fail-on` returns `ok: false` with the aggregate `check/verdict-failed`
-  error **and** `data` retained (the full battery output + `data.verdict`), so a
-  red result never discards what it measured. The distinguishing signal is the
-  error `code`: a `check/verdict-failed` carries data; a `transport/*` / plumbing
-  failure does not.
 - `warnings` and `tips` are both always present (`[]` when empty) so consumers
   never branch on existence. They are distinct on purpose: a **warning** is a
   non-fatal anomaly about *this* result (stale cache, unused `--cdb-password`); a

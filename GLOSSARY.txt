@@ -455,8 +455,8 @@ nothrow
 # check-command spec vocabulary (commands/check/README.md, examples.md)
 # TikTOML: centrs-owned readable device-inventory format (#137); check's
 #   metadata feeds it. routerboard: RouterBOARD firmware/hardware menu
-#   (/system/routerboard). rscmd: tikbook RouterOS command-notebook file
-#   extension (.rscmd) for the check grounding sample.
+#   (/system/routerboard). rscmd: the tikbook RouterOS command-notebook file
+#   extension (.rscmd), the format the check spec was grounded against.
 TikTOML
 routerboard
 rscmd
