@@ -211,6 +211,7 @@ triggered/enrichment checks; `--fast` suppresses progressive triggers.
 | `--save` | Reconcile the CDB from what was probed (write-shaped, gated). |
 | `--check-script <str>` / `--check-script-file <file>` | Custom check; both **repeatable** (see below). Requires `--yes`. |
 | `--via <protocol>` | Pin the battery transport. No silent downgrade (constitution). |
+| `--l2` | Opt into L2 (mac-telnet / ARP) probing in the reach phase even when IP paths answer. Off by default — L2 is opt-in (see [L2 timing experiment](#l2-timing-experiment)); also implied by a bare-MAC target or `--via mac-telnet`. |
 | `--group` / `--where` / `--all` / `--default` / `--concurrency` | Fan-out (see below). |
 | target/auth | `--host`, `--port`, `--username`/`-u`, `--password`, `--insecure`, `--timeout`, `--resolve`, `--cdb-file`, `--cdb-password` — same resolver as `retrieve`/`execute`. |
 
@@ -312,19 +313,16 @@ Check-level warnings/tips also roll up into the top envelope's `warnings[]` /
 
 ## L2 timing experiment
 
-Required evidence for this spec (issue #136), re-scoped to the new model. **To
-run** on a real CHR via `@tikoci/quickchr` (mac-telnet needs the `socket-connect`
+Required evidence for this spec (issue #136), re-scoped to the new model and
+**run** on a real CHR via `@tikoci/quickchr` (mac-telnet uses the `socket-connect`
 host-side L2 bridge that `discover` / mac-telnet cells already use — see
 `commands/discover/README.md`, L2 validation policy):
 
-- **Measure:** mac-telnet session setup + a representative health-battery round
+- **Measured:** mac-telnet session setup + a representative health-battery round
   (the consolidated `resource` + `services` script) vs the same battery over
   rest-api / native-api on the same CHR.
-- **Decide:** whether L2 is cheap enough to belong in the *default* reach sweep,
-  or stays opt-in (enabled by a MAC target, `--via mac-telnet`, or `--l2`). The
-  expectation is that the opt-in default is preserved — mac-telnet is
-  L2-adjacency-bound and slower, which matters most for #149's per-host sweep —
-  but the number is recorded here rather than assumed.
+- **Decided:** whether L2 is cheap enough to belong in the *default* reach sweep,
+  or stays opt-in (enabled by a MAC target, `--via mac-telnet`, or `--l2`).
 
 Findings, run 2026-07-02 against quickchr CHR `7.23.1 (stable)` on local macOS
 x86_64. Each row is five measured samples after one warm-up; each sample creates

@@ -162,7 +162,10 @@ centrs check $R --username $U --password $P --checks traffic --check-timeout 2s 
 
 Two policy scripts, one inline and one from a fixture the test will add (the path
 shown is its planned location), both required to `:put` an
-`{errors,warnings,tips,metadata}` JSON envelope:
+`{errors,warnings,tips,metadata}` JSON envelope. An unset channel is
+`[:toarray ""]`, which RouterOS serializes as an empty array `[]` (not `[""]`) —
+grounded on CHR 7.24rc1, where three `[:toarray ""]`-initialized channels
+serialized as `[]`:
 
 ```bash
 centrs check $R --username $U --password $P --yes --json \
@@ -320,7 +323,7 @@ Precondition: a custom script that emits an `error` finding (as in example 14).
 
 ```bash
 centrs check $R --username $U --password $P --yes --fail-on never --json \
-  --check-script '{:put [:serialize to=json {"errors"={"policy breach"};"warnings"=[:toarray ""];"tips"=[:toarray ""];"metadata"={}}]}'
+  --check-script '{:put [:serialize to=json {"errors"=[:toarray "policy breach"];"warnings"=[:toarray ""];"tips"=[:toarray ""];"metadata"={}}]}'
 ```
 
 `data.verdict = "fail"` but exit `0`; the error finding is still reported. This is
