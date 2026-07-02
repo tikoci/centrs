@@ -18,11 +18,11 @@ them. It does **not** hide RouterOS behind helpers like `createVlanOnBridge()`
 product; without them this would just be a worse `curl`.
 
 > **Status:** early npm preview, active development. `@tikoci/centrs` is
-> published on npm (`latest` 0.1.0, `next` 0.1.2 as of 2026-07-02), but command
-> flags and envelopes may still change before a stable release. The library,
-> device registry, and first MCP server phases are CHR-verified; the CLI is wired
-> (`coded`); encrypted-CDB writes are still blocked, and the TUI/proxy frontends
-> are planned.
+> published on npm, but command flags and envelopes may still change before a
+> stable release. Check current dist-tags with
+> `npm view @tikoci/centrs dist-tags --json`. The library, device registry, and
+> first MCP server phases are CHR-verified; the CLI is wired (`coded`);
+> encrypted-CDB writes are still blocked, and the TUI/proxy frontends are planned.
 > `docs/MATRIX.md` is the single source of truth for what works today — treat
 > anything not green there as not-yet-shipped.
 
