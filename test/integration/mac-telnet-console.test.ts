@@ -12,7 +12,7 @@
  *   B. the **product command path** — `executeEnvelope()` over the resolver →
  *      `MacTelnetAdapter` → `createUdpMacTelnetTransport` (a real UDP socket) —
  *      with the bridge's UDP relay standing in for the L2 segment. This is the
- *      `commands/execute/examples.md` mac-telnet evidence (examples 19–21).
+ *      `commands/execute/examples.md` mac-telnet evidence (examples 20–22).
  *
  * All grounded on stock CHR 7.23.1 (see `mac-telnet-console.ts` and
  * `commands/execute/README.md`). REST is the source of truth for cross-checks.
@@ -172,7 +172,7 @@ describeFast("execute over mac-telnet (console reader + command path)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [19, 20, 21],
+				exampleIds: [20, 21, 22],
 			});
 		} finally {
 			cons?.close();

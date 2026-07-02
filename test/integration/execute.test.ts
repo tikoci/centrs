@@ -304,7 +304,7 @@ describeFast("execute against CHR", () => {
 		}
 	}, 120_000);
 
-	test("runs native-api execute examples 12-18", async () => {
+	test("runs native-api execute examples 12-19", async () => {
 		const started = await startIntegrationChr();
 		const chr = started.chr;
 		try {
@@ -399,6 +399,25 @@ describeFast("execute against CHR", () => {
 				"usage/confirmation-required",
 			);
 
+			// Cross-transport parity (example 19): the native-api script-mode path
+			// must fall through to `/execute` with `as-string`, exactly like the
+			// REST fallback exercised in example 4 above, instead of being refused
+			// or silently dropping captured output.
+			const script = expectExecuteSuccess(
+				await executeEnvelope({
+					...base,
+					command: ":put [/system/identity/get name]",
+				}),
+				"native-api",
+			);
+			const liveIdentity =
+				((await chr.rest("/system/identity")) as Record<string, string>)[
+					"name"
+				] ?? "";
+			expect(liveIdentity.length).toBeGreaterThan(0);
+			expect(JSON.stringify(script.data)).toContain(liveIdentity);
+			expect(script.meta.validation?.syntax).toBe(true);
+
 			await recordIntegrationEvidence({
 				suite: "execute against CHR",
 				command: "execute",
@@ -407,7 +426,7 @@ describeFast("execute against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(18).slice(11),
+				exampleIds: exampleIds(19).slice(11),
 			});
 		} finally {
 			await chr.destroy();

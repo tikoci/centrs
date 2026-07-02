@@ -610,21 +610,37 @@ class NativeApiAdapter implements ProtocolAdapter {
 	async execute(
 		request: ProtocolExecuteRequest,
 	): Promise<ProtocolExecuteResult> {
-		const command: NativeApiCommand = request.script
-			? { command: "/execute", attributes: { script: request.script } }
-			: { command: `${request.path.replace(/\/$/, "")}/${request.command}` };
-		if (
-			!request.script &&
-			request.attributes &&
-			Object.keys(request.attributes).length > 0
-		) {
+		if (request.script) {
+			return normalizeNativeExecute(await this.executeScript(request.script));
+		}
+		const command: NativeApiCommand = {
+			command: `${request.path.replace(/\/$/, "")}/${request.command}`,
+		};
+		if (request.attributes && Object.keys(request.attributes).length > 0) {
 			command.attributes = request.attributes;
 		}
-		if (!request.script && request.queries && request.queries.length > 0) {
+		if (request.queries && request.queries.length > 0) {
 			command.queries = request.queries;
 		}
 		const replies = await this.talk(command);
 		return { records: repliesToRecords(replies) };
+	}
+
+	/**
+	 * Run a script through native `/execute` with `as-string`, the sole shared
+	 * path for both the CLI-shaped `execute` command and the `api` run+script
+	 * verb: without `as-string` the native API schedules a background job and
+	 * returns only its id rather than the captured output (CHR-grounded —
+	 * mirrors REST `/rest/execute`).
+	 */
+	private async executeScript(
+		script: string,
+	): Promise<Record<string, string>[]> {
+		const replies = await this.talk({
+			command: "/execute",
+			attributes: { script, "as-string": "" },
+		});
+		return repliesToRecords(replies);
 	}
 
 	async apiRequest(request: ProtocolApiRequest): Promise<ProtocolApiResult> {
@@ -682,15 +698,7 @@ class NativeApiAdapter implements ProtocolAdapter {
 			}
 			case "run": {
 				if (request.script !== undefined) {
-					// `as-string` makes `/execute` run synchronously and return the captured
-					// output; without it the native API schedules a job and returns its id
-					// (CHR-grounded — mirrors REST `/rest/execute`).
-					const records = repliesToRecords(
-						await this.talk({
-							command: "/execute",
-							attributes: { script: request.script, "as-string": "" },
-						}),
-					);
+					const records = await this.executeScript(request.script);
 					return { data: restStyleRunData(records) };
 				}
 				const command: NativeApiCommand = { command: base };
@@ -1087,6 +1095,18 @@ function restStyleRunData(records: readonly Record<string, string>[]): unknown {
 
 function exhaustiveApiVerb(verb: never): never {
 	throw new Error(`Unhandled api verb: ${String(verb)}`);
+}
+
+/** Re-map an `as-string` native `/execute` reply into `ProtocolExecuteResult`,
+ * mirroring `normalizeRestExecute`'s `ret`-vs-records split. */
+function normalizeNativeExecute(
+	records: readonly Record<string, string>[],
+): ProtocolExecuteResult {
+	const ret = records.length === 1 ? records[0]?.["ret"] : undefined;
+	if (typeof ret === "string") {
+		return { records: [], ret };
+	}
+	return { records: [...records] };
 }
 
 function normalizeRestExecute(data: unknown): ProtocolExecuteResult {
