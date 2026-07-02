@@ -4,6 +4,12 @@
 CLI (with MCP, TUI, and HTTP proxy frontends planned) for talking to MikroTik
 RouterOS devices through a regularized, validated interface.
 
+Preview builds are published on npm. To inspect the CLI without installing it:
+
+```bash
+bunx @tikoci/centrs --help
+```
+
 It is a **friendly conduit**, not a high-level configuration abstraction. It
 helps humans and agents reach RouterOS over the right protocol, with the right
 credentials and ports, and validates RouterOS-shaped commands before running
@@ -11,9 +17,12 @@ them. It does **not** hide RouterOS behind helpers like `createVlanOnBridge()`
 — you still speak RouterOS. Validation and structured diagnostics are the
 product; without them this would just be a worse `curl`.
 
-> **Status:** early and in active development. The library, device registry, and
-> first MCP server phases are CHR-verified; the CLI is wired (`coded`); encrypted-CDB
-> writes are still blocked, and the TUI/proxy frontends are planned.
+> **Status:** early npm preview, active development. `@tikoci/centrs` is
+> published on npm (`latest` 0.1.0, `next` 0.1.2 as of 2026-07-02), but command
+> flags and envelopes may still change before a stable release. The library,
+> device registry, and first MCP server phases are CHR-verified; the CLI is wired
+> (`coded`); encrypted-CDB writes are still blocked, and the TUI/proxy frontends
+> are planned.
 > `docs/MATRIX.md` is the single source of truth for what works today — treat
 > anything not green there as not-yet-shipped.
 

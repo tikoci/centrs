@@ -45,6 +45,40 @@ bun run lint:ci
 | `.github/instructions/`     | Path-scoped Copilot instructions with `applyTo` metadata.          |
 | `.github/workflows/`        | CI, QA/security, release, docs, and lab automation.                |
 
+## Instruction map
+
+Copilot reads `.github/instructions/*.instructions.md`; Codex and Claude do not.
+When an issue names one of those files as required context, read it directly.
+Otherwise, use this index to find the path-scoped rule that may apply:
+
+| File | Governs |
+| ---- | ------- |
+| `actionable-errors.instructions.md` | Error shape, details pages, and actionable diagnostics. |
+| `ci-test-tiers-and-release-versioning.instructions.md` | CI tiers, release channels, and versioning workflow files. |
+| `cspell-glossary.instructions.md` | Project spelling dictionary and glossary maintenance. |
+| `descriptive-prose-file-names.instructions.md` | Prose filename conventions for docs and scratch notes. |
+| `directory-agents.instructions.md` | Root and directory `AGENTS.md` conventions. |
+| `done-definition.instructions.md` | CHR-backed done definition and integration-test procedure. |
+| `generated-docs.instructions.md` | Generated docs ownership and drift rules. |
+| `git-hooks.instructions.md` | Git hook and CI gate wiring. |
+| `github-actions-dispatch.instructions.md` | Manual workflow dispatch inputs. |
+| `github-actions-rich-data.instructions.md` | GitHub Actions summaries and machine-readable output. |
+| `github-security-quality.instructions.md` | Security scanning, credentials, and quality-sensitive surfaces. |
+| `instruction-scopes.instructions.md` | Narrow `applyTo` scopes and instruction-source ownership. |
+| `linting.instructions.md` | Lint, typecheck, spelling, markdown, and secretlint gates. |
+| `python-uv.instructions.md` | Python and uv conventions when Python files are touched. |
+| `readme-cli-manual.instructions.md` | README as the temporary CLI manual. |
+| `readme-dependencies.instructions.md` | README dependency and install notes. |
+| `routeros-grounding.instructions.md` | RouterOS fact grounding and promotion targets. |
+| `scratch-directory.instructions.md` | `.scratch/` limits and non-authoritative status. |
+| `use-bun.instructions.md` | Bun-first TypeScript and test workflow. |
+| `vscode-files.instructions.md` | VS Code workspace files and related tool config. |
+
+For new durable instructions, prefer the nearest directory `AGENTS.md` when the
+rule must be portable across harnesses. Edit an existing `.github/instructions/`
+file only when the rule is Copilot-specific or when keeping an existing
+path-scoped pointer in sync.
+
 ## Rules of thumb
 
 - Prefer `rosetta` MCP tools for RouterOS facts before web search.
