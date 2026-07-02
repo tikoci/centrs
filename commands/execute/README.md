@@ -6,7 +6,7 @@ CLI-shaped commands — there is no separate `update` command.
 
 Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
 `docs/MATRIX.md` and `commands/execute/examples.md`, examples 1–11 over REST,
-12–18 over the native API, 19–21 over mac-telnet, and S1–S4 over ssh, green via
+12–19 over the native API, 20–22 over mac-telnet, and S1–S4 over ssh, green via
 `bun run test:integration`), including multi-target fan-out (see **Target
 selection**, examples F1–F5). `romon` and `winbox-terminal` remain
 `not-started`. SNMP is retrieve-only and rejects `execute`.
@@ -194,7 +194,7 @@ macOS needs `SO_REUSEPORT`; mcast works on Linux/CI). Grounding: quickchr
 
 `execute / mac-telnet` is now **`CHR-passed`** end to end over real L2 against
 stock CHR 7.23.1 (`test/integration/mac-telnet-console.test.ts` +
-`mactelnet-l2-bridge.ts`, examples 19–21): `executeEnvelope` resolves a MAC
+`mactelnet-l2-bridge.ts`, examples 20–22): `executeEnvelope` resolves a MAC
 target, the `MacTelnetAdapter` opens a `MacTelnetConsole` over a UDP datagram
 transport, and reads, writes (REST-verified), and validation-rejects all work.
 

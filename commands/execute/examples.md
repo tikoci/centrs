@@ -2,8 +2,8 @@
 
 Each numbered example is an executable spec, run against a CHR 7.23 router booted
 by `@tikoci/quickchr`: `test/integration/execute.test.ts` covers examples 1–11
-over REST and 12–18 over the native API; `test/integration/mac-telnet-console.test.ts`
-covers examples 19–21 over mac-telnet (real L2 via the `socket-connect` bridge).
+over REST and 12–19 over the native API; `test/integration/mac-telnet-console.test.ts`
+covers examples 20–22 over mac-telnet (real L2 via the `socket-connect` bridge).
 If a line here is not exercised by a test, the test file is wrong; if a line
 passes only with `validate=false`, the **implementation** is wrong (see
 `docs/CONSTITUTION.md`).
@@ -242,6 +242,23 @@ centrs execute $A '/ip/address/add address=198.51.100.23/32 interface=ether1 com
 Envelope: `ok: false`, `error.code=usage/confirmation-required`,
 `meta.via=native-api`, no validation command is sent, and no address is added.
 
+### 19. Script-mode command runs through `/execute` with `as-string` (parity with REST)
+
+A non-path-shaped console expression over native-api falls through to
+`/execute` the same way REST does (example 4), instead of being refused.
+`as-string` makes native `/execute` block and return the captured output
+rather than scheduling a background job and returning only its id.
+
+```bash
+centrs execute $A ':put [/system/identity/get name]' --via native-api --port $API_PORT --username $U --password $P
+```
+
+Envelope: `ok: true`, `data.ret` is a string containing the CHR identity (same
+shape and cross-transport value as example 4 over REST), `meta.via=native-api`,
+and `meta.validation.syntax=true`. Regression coverage for the bug where the
+native adapter sent `/execute` without `as-string`, silently discarding
+captured output.
+
 ## mac-telnet (`--via mac-telnet`)
 
 Layer-2 execute over the RouterOS interactive console (UDP/20561). `$MAC` is the
@@ -252,11 +269,11 @@ is a **single console `:put [:parse …]`** — it reports both `syntax error` a
 at once (no `/console/inspect` table parsing). The console opens through a
 first-login license screen (auto-answered) and a ~10s terminal-negotiation stall;
 **a successful write prints nothing** over the console (no `.id`/`ret`, unlike
-REST/native). Examples 19–21 are green via `bun run test:integration`
+REST/native). Examples 20–22 are green via `bun run test:integration`
 (`test/integration/mac-telnet-console.test.ts`, CHR 7.23.1) over the real L2
 bridge; the console reader is also exercised directly in the same test.
 
-### 19. Read a command over mac-telnet
+### 20. Read a command over mac-telnet
 
 ```bash
 centrs execute $MAC '/system/identity/print' --via mac-telnet --host $MT_HOST --port $MT_PORT --username $U --password $P
@@ -266,7 +283,7 @@ Envelope: `ok: true`, `meta.via=mac-telnet`, `data.ret` is the console output an
 contains the device identity (cross-checked against REST). `meta.validation.source`
 is `:put [:parse ...] over mac-telnet`.
 
-### 20. Write (add) over mac-telnet
+### 21. Write (add) over mac-telnet
 
 ```bash
 centrs execute $MAC '/ip/address/add address=198.51.100.40/32 interface=ether1' --via mac-telnet --host $MT_HOST --port $MT_PORT --username $U --password $P --yes
@@ -276,7 +293,7 @@ Envelope: `ok: true`, `meta.via=mac-telnet`, `data.ret` is empty (a successful
 console write prints nothing — there is no `.id` to return). A subsequent REST
 read of `/ip/address` shows `198.51.100.40`.
 
-### 21. Validation rejects an unknown attribute over mac-telnet
+### 22. Validation rejects an unknown attribute over mac-telnet
 
 ```bash
 centrs execute $MAC '/ip/address/add address=198.51.100.41/32 interface=ether1 no-such-arg=x' --via mac-telnet --host $MT_HOST --port $MT_PORT --username $U --password $P --yes

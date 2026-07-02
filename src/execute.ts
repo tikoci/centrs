@@ -823,16 +823,6 @@ async function runCommand(
 		return backend.execute({ path: "", command: "", script: resolved.command });
 	}
 	if (resolved.canonical.mode === "script") {
-		if (resolved.via.value === "native-api") {
-			throw new CentrsError({
-				code: "transport/unsupported-operation",
-				summary:
-					"The native API execute path requires a slash-prefixed RouterOS command.",
-				remediation:
-					"Use a path-shaped command such as `/system/identity/set name=x`, or pin `--via rest-api` for `/rest/execute` script mode.",
-				context: { via: resolved.via.value, command: resolved.command },
-			});
-		}
 		return backend.execute({ path: "", command: "", script: resolved.command });
 	}
 	return backend.execute({
