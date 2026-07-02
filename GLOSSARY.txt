@@ -451,3 +451,19 @@ extensionless
 # nothrow: Bun Shell's `$` method to disable throwing on a non-zero exit
 # (scripts/agent-check.ts), so the caller can inspect output either way.
 nothrow
+
+# check-command spec vocabulary (commands/check/README.md, examples.md)
+# TikTOML: centrs-owned readable device-inventory format (#137); check's
+#   metadata feeds it. routerboard: RouterBOARD firmware/hardware menu
+#   (/system/routerboard). rscmd: tikbook RouterOS command-notebook file
+#   extension (.rscmd) for the check grounding sample.
+TikTOML
+routerboard
+rscmd
+# RTT: round-trip time, the host->router connect-latency reach signal. tojson: the
+#   /system/script helper (:serialize to=json) the batched execute reads reuse.
+#   qrcode: the /ip/cloud vpn-wireguard-client-config-qrcode field token (redacted
+#   by the cloud check, referenced when documenting redaction).
+RTT
+tojson
+qrcode
