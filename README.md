@@ -113,10 +113,10 @@ CDB tags, and `devices set` refuses to put them there. Unknown keys produce a
 `cdb/unknown-option` warning and are ignored, so a stray `=` in human prose
 never breaks anything.
 
-Settings resolve lowest-to-highest: **built-in defaults → project config →
-comment-kv → `CENTRS_*` env → CLI flag / API arg.** Every result envelope
-reports which source won each setting under `meta.settings`, so you can always
-see *why* a given port or transport was chosen.
+Settings resolve lowest-to-highest: **built-in defaults → user config file
+(`centrs.env`) → comment-kv → `CENTRS_*` env → CLI flag / API arg.** Every
+result envelope reports which source won each setting under `meta.settings`,
+so you can always see *why* a given port or transport was chosen.
 
 ### Groups, discovery, and the MCP allowlist all ride on the CDB
 

@@ -128,9 +128,9 @@ Rules:
   is no current need to store a literally-empty value; revisit if one arises.
 - `commentMirror` is kept in sync with `comment` on every write.
 
-Precedence (lowest → highest): built-in defaults → project config →
-comment-kv → env (`CENTRS_*`) → CLI flag / API arg. `meta.settings` reports
-the winner and source per setting.
+Precedence (lowest → highest): built-in defaults → user config file
+(`centrs.env`) → comment-kv → env (`CENTRS_*`) → CLI flag / API arg.
+`meta.settings` reports the winner and source per setting.
 
 ### Derived facts (queryable, may be stale)
 

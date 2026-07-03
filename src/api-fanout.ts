@@ -58,6 +58,7 @@ import {
 	type CdbSelectionResolveInput,
 	expandCdbSelection,
 	isDefaultRecordTarget,
+	loadEnvFileDefaults,
 	type TargetSelection,
 } from "./resolver/index.ts";
 import { toYaml } from "./retrieve.ts";
@@ -93,6 +94,7 @@ export interface ApiFanoutInternals {
 		selection: TargetSelection,
 		input: CdbSelectionResolveInput,
 		env: Record<string, string | undefined>,
+		config?: Record<string, string | undefined>,
 	) => Promise<CdbSelectionExpansion>;
 	execute?: (resolved: ResolvedApiRequest) => Promise<ApiSuccessEnvelope>;
 	sleep?: (ms: number) => Promise<void>;
@@ -120,6 +122,8 @@ function fanoutVia(
 	env: Record<string, string | undefined>,
 	expansion: CdbSelectionExpansion,
 ): RouterOsProtocol {
+	// Deliberately CLI/env only, not `config` — see the note above this
+	// function's caller.
 	const pinned = request.via ?? env["CENTRS_VIA"];
 	if (
 		pinned !== undefined &&
@@ -188,6 +192,7 @@ export async function apiFanout(
 	// missing endpoint or an invalid `-X` is an outer error regardless of how many
 	// targets the selection resolves to (so an empty selection cannot mask it).
 	validateApiRequestShape(request);
+	const config = await loadEnvFileDefaults(env);
 	const method = parseApiMethod(request.method);
 	const requestSummary = apiRequestSummaryFromRequest(request, env);
 	const selectionSummary = summarizeSelection(selection);
@@ -196,6 +201,9 @@ export async function apiFanout(
 	// override (explicit/env > comment-kv in `resolveStringSetting`), so an invalid
 	// one fails every target identically. Reject it ONCE up front as an outer error,
 	// matching single-target `resolveApiProtocol`, instead of N per-target failures.
+	// Deliberately CLI/env only, not `config` — see the identical note in
+	// `retrieve-fanout.ts`'s `resolveFanoutConcurrencyProtocol`: a `centrs.env`
+	// default is the weakest tier and must not be treated as a hard pin.
 	const pinnedVia = request.via ?? env["CENTRS_VIA"];
 	if (pinnedVia !== undefined) {
 		assertApiProtocolSupported(pinnedVia);
@@ -210,6 +218,7 @@ export async function apiFanout(
 			allowAdhoc: options.allowAdhoc ?? true,
 		},
 		env,
+		config,
 	);
 
 	const via = fanoutVia(request, env, expansion);
@@ -255,10 +264,12 @@ export async function apiFanout(
 				return resolveApiRequest(
 					{ ...request, targetInput: member.resolution.target },
 					env,
-					{ cdbResolution: member.resolution },
+					{ cdbResolution: member.resolution, config },
 				);
 			}
-			return resolveApiRequest({ ...request, targetInput: member.input }, env);
+			return resolveApiRequest({ ...request, targetInput: member.input }, env, {
+				config,
+			});
 		},
 		onResolveError: (member, error) =>
 			buildFanoutResolveFailure<ApiOperationMeta>({

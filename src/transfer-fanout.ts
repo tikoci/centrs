@@ -47,6 +47,7 @@ import {
 	type CdbSelectionResolveInput,
 	expandCdbSelection,
 	isDefaultRecordTarget,
+	loadEnvFileDefaults,
 	type TargetSelection,
 } from "./resolver/index.ts";
 import { toYaml } from "./retrieve.ts";
@@ -102,6 +103,7 @@ export interface TransferFanoutInternals {
 		selection: TargetSelection,
 		input: CdbSelectionResolveInput,
 		env: Record<string, string | undefined>,
+		config?: Record<string, string | undefined>,
 	) => Promise<CdbSelectionExpansion>;
 	execute?: (
 		request: TransferRequest,
@@ -243,6 +245,7 @@ export async function transferFanout(
 	options: TransferFanoutOptions = {},
 ): Promise<TransferFanoutEnvelope> {
 	validateTransferRequestShape(request);
+	const config = await loadEnvFileDefaults(env);
 	const selectionSummary = summarizeSelection(selection);
 	const requestSummary: TransferFanoutRequestSummary = {
 		verb: request.verb,
@@ -274,6 +277,7 @@ export async function transferFanout(
 			allowAdhoc: options.allowAdhoc ?? true,
 		},
 		env,
+		config,
 	);
 
 	const concurrency = resolveFanoutConcurrency(options.concurrency, "rest-api");

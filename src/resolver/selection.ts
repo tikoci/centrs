@@ -134,17 +134,20 @@ export async function expandCdbSelection(
 	selection: TargetSelection,
 	input: CdbSelectionResolveInput,
 	env: Record<string, string | undefined>,
+	config: Record<string, string | undefined> = {},
 ): Promise<CdbSelectionExpansion> {
 	const settings = resolveDevicesSettings({
 		cdbFile: input.cdbFile,
 		cdbPassword: input.cdbPassword,
 		env,
+		config,
 	});
 	const explicitCdb =
 		input.cdbFile !== undefined ||
 		input.cdbPassword !== undefined ||
 		env[ENV_CDB_FILE] !== undefined ||
-		env[ENV_CDB_PASSWORD] !== undefined;
+		env[ENV_CDB_PASSWORD] !== undefined ||
+		config[ENV_CDB_FILE] !== undefined;
 	const emptyCdb = (): LoadedCdb => ({
 		entries: [],
 		warnings: [],
@@ -162,6 +165,7 @@ export async function expandCdbSelection(
 				cdbFile: input.cdbFile,
 				cdbPassword: input.cdbPassword,
 				env,
+				config,
 			});
 		} catch (error) {
 			if (

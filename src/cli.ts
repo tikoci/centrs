@@ -7,6 +7,7 @@ import { discoverCommand, runDiscoverCli } from "./cli/discover.ts";
 import { executeCommand, runExecuteCli } from "./cli/execute.ts";
 import { mcpCommand, runMcpCli } from "./cli/mcp.ts";
 import { retrieveCommand, runRetrieveCli } from "./cli/retrieve.ts";
+import { runSettingsCli, settingsCommand } from "./cli/settings.ts";
 import { runTerminalCli, terminalCommand } from "./cli/terminal.ts";
 import { runTransferCli, transferCommand } from "./cli/transfer.ts";
 import { asCentrsError, formatCentrsErrorText } from "./errors.ts";
@@ -22,6 +23,7 @@ const commandSummaries: ReadonlyArray<{ name: string; summary: string }> = [
 	discoverCommand,
 	btestCommand,
 	mcpCommand,
+	settingsCommand,
 ].map((command) => ({ name: command.name, summary: command.summary }));
 
 export function renderCliHelp(): string {
@@ -84,6 +86,9 @@ export async function runCli(
 		}
 		if (command === "mcp") {
 			return await runMcpCli(rest);
+		}
+		if (command === "settings") {
+			return await runSettingsCli(rest);
 		}
 		// `stream` (and the `tail` shorthand) folded into `api --stream`.
 		if (command === "stream" || command === "tail") {

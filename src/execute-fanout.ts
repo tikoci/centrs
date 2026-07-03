@@ -57,6 +57,7 @@ import {
 	type CdbSelectionResolveInput,
 	expandCdbSelection,
 	isDefaultRecordTarget,
+	loadEnvFileDefaults,
 	type TargetSelection,
 } from "./resolver/index.ts";
 import { toYaml } from "./retrieve.ts";
@@ -92,6 +93,7 @@ export interface ExecuteFanoutInternals {
 		selection: TargetSelection,
 		input: CdbSelectionResolveInput,
 		env: Record<string, string | undefined>,
+		config?: Record<string, string | undefined>,
 	) => Promise<CdbSelectionExpansion>;
 	execute?: (
 		resolved: ResolvedExecuteRequest,
@@ -124,6 +126,8 @@ function fanoutVia(
 	globalVia: RouterOsProtocol,
 	expansion: CdbSelectionExpansion,
 ): RouterOsProtocol {
+	// Deliberately CLI/env only, not `config` — see the identical note in
+	// `retrieve-fanout.ts`'s `resolveFanoutConcurrencyProtocol`.
 	if (request.via !== undefined || env["CENTRS_VIA"] !== undefined) {
 		return globalVia;
 	}
@@ -187,7 +191,8 @@ export async function executeFanout(
 	// Validate + canonicalize the command ONCE, before selection expansion: a bad
 	// command shape is an outer error regardless of how many targets resolve, and
 	// write-ness is target-independent.
-	const global = resolveExecuteGlobalContext(request, env);
+	const config = await loadEnvFileDefaults(env);
+	const global = resolveExecuteGlobalContext(request, env, config);
 	const selectionSummary = summarizeSelection(selection);
 
 	const expand = internals.expand ?? expandCdbSelection;
@@ -199,6 +204,7 @@ export async function executeFanout(
 			allowAdhoc: options.allowAdhoc ?? true,
 		},
 		env,
+		config,
 	);
 
 	const via = fanoutVia(request, env, global.via, expansion);
@@ -245,12 +251,13 @@ export async function executeFanout(
 				return resolveExecuteRequest(
 					{ ...request, targetInput: member.resolution.target },
 					env,
-					{ cdbResolution: member.resolution },
+					{ cdbResolution: member.resolution, config },
 				);
 			}
 			return resolveExecuteRequest(
 				{ ...request, targetInput: member.input },
 				env,
+				{ config },
 			);
 		},
 		onResolveError: (member, error) =>

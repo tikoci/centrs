@@ -39,6 +39,7 @@ import type { RouterOsProtocol } from "./protocols/index.ts";
 import { SftpClient } from "./protocols/sftp.ts";
 import {
 	type CdbResolution,
+	loadEnvFileDefaults,
 	parseDuration,
 	type ResolvedAuth,
 	type ResolvedSetting,
@@ -804,6 +805,7 @@ export async function resolveTransferRequest(
 	options: { cdbResolution?: CdbResolution } = {},
 ): Promise<ResolvedTransferRequest> {
 	validateTransferRequestShape(request);
+	const config = await loadEnvFileDefaults(env);
 
 	const direction: TransferDirection =
 		request.verb === "upload" ? "upload" : "download";
@@ -813,6 +815,7 @@ export async function resolveTransferRequest(
 		direction,
 		sizeHint,
 		env,
+		config,
 	);
 
 	// Fan-out passes the pre-resolved CDB record for a member (the CDB is loaded
@@ -826,9 +829,10 @@ export async function resolveTransferRequest(
 				cdbPassword: request.cdbPassword,
 			},
 			env,
+			config,
 		));
 
-	const format = resolveTransferFormat(request, env);
+	const format = resolveTransferFormat(request, env, config);
 	const validate = resolveBooleanSetting(
 		request.validate,
 		env,
@@ -836,6 +840,7 @@ export async function resolveTransferRequest(
 		true,
 		"validate",
 		cdbResolution?.overrides.validate,
+		config,
 	);
 	const insecure = resolveBooleanSetting(
 		request.insecure,
@@ -844,12 +849,14 @@ export async function resolveTransferRequest(
 		false,
 		"insecure",
 		cdbResolution?.overrides.insecure,
+		config,
 	);
 	const timeoutMs = resolveTransferTimeout(
 		request.timeout,
 		env,
 		protocol,
 		cdbResolution,
+		config,
 	);
 	const target = resolveTarget(
 		{
@@ -860,6 +867,7 @@ export async function resolveTransferRequest(
 		env,
 		protocol,
 		cdbResolution,
+		config,
 	);
 	const auth = resolveAuth(
 		{
@@ -869,6 +877,7 @@ export async function resolveTransferRequest(
 		},
 		env,
 		cdbResolution,
+		config,
 	);
 
 	const warnings: Warning[] = [
@@ -928,6 +937,7 @@ export function selectTransferMethod(
 	direction: TransferDirection,
 	uploadBytes: number | undefined,
 	env: Record<string, string | undefined>,
+	config: Record<string, string | undefined> = {},
 ): {
 	method: TransferMethod;
 	protocol: RouterOsProtocol;
@@ -939,6 +949,9 @@ export function selectTransferMethod(
 		"CENTRS_TRANSFER_VIA",
 		"auto",
 		"via",
+		undefined,
+		undefined,
+		config,
 	) as ResolvedSetting<string>;
 	const requested = via.value;
 
@@ -1090,6 +1103,7 @@ function parseVerifyMode(
 function resolveTransferFormat(
 	request: TransferRequest,
 	env: Record<string, string | undefined>,
+	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<TransferOutputFormat> {
 	return resolveStringSetting(
 		request.format,
@@ -1107,6 +1121,8 @@ function resolveTransferFormat(
 				remediation: `Choose one of ${transferOutputFormats.join(", ")}.`,
 			});
 		},
+		undefined,
+		config,
 	) as ResolvedSetting<TransferOutputFormat>;
 }
 
@@ -1115,6 +1131,7 @@ function resolveTransferTimeout(
 	env: Record<string, string | undefined>,
 	protocol: RouterOsProtocol,
 	cdb?: CdbResolution,
+	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<number> {
 	const resolved = resolveStringSetting(
 		timeout === undefined ? undefined : String(timeout),
@@ -1134,6 +1151,7 @@ function resolveTransferTimeout(
 			return parsed;
 		},
 		cdb?.overrides.timeoutMs,
+		config,
 	) as ResolvedSetting<number>;
 
 	if (protocol === "rest-api" && resolved.value > 60_000) {
@@ -1184,7 +1202,11 @@ function writeLocalSink(
 		process.stdout.write(bytes);
 		return;
 	}
-	writeFileSync(local, bytes);
+	// Downloaded RouterOS artifacts (backups/exports) can carry credentials,
+	// so a newly created destination file gets owner-only permissions
+	// instead of the process umask default. Mode only applies on creation —
+	// an existing destination keeps its current permissions.
+	writeFileSync(local, bytes, { mode: 0o600 });
 }
 
 function localLabel(resolved: ResolvedTransferRequest): string {

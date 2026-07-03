@@ -31,6 +31,7 @@ import {
 	type CdbResolution,
 	isIpTransport,
 	isMacAddress,
+	loadEnvFileDefaults,
 	parseResolvePolicy,
 	type ResolvedAuth,
 	type ResolvedTarget,
@@ -147,6 +148,7 @@ export async function resolveTerminalRequest(
 	if (preliminaryVia !== undefined) {
 		gateTerminalVia(preliminaryVia);
 	}
+	const config = await loadEnvFileDefaults(env);
 	const cdb = await resolveCdb(
 		{
 			targetInput: request.targetInput,
@@ -154,6 +156,7 @@ export async function resolveTerminalRequest(
 			cdbPassword: request.cdbPassword,
 		},
 		env,
+		config,
 	);
 	// A MAC target defaults to the L2 console (mac-telnet); any other target
 	// (host / IP / CDB identity) defaults to ssh — the IP-level terminal transport.
@@ -168,6 +171,7 @@ export async function resolveTerminalRequest(
 		"via",
 		undefined,
 		cdb?.overrides.via,
+		config,
 	);
 	const viaValue = via?.value ?? defaultVia;
 	// Re-gate on the fully resolved value to catch a CDB comment-kv `via=` override.
@@ -183,7 +187,10 @@ export async function resolveTerminalRequest(
 				targetInput: request.targetInput,
 				cdbTarget: cdb?.target,
 				env,
-				policy: parseResolvePolicy(request.resolve ?? env["CENTRS_RESOLVE"]),
+				config,
+				policy: parseResolvePolicy(
+					request.resolve ?? env["CENTRS_RESOLVE"] ?? config["CENTRS_RESOLVE"],
+				),
 				operation: "terminal",
 			})
 		: undefined;
@@ -197,6 +204,7 @@ export async function resolveTerminalRequest(
 		env,
 		viaValue === "ssh" ? "ssh" : "mac-telnet",
 		cdb,
+		config,
 	);
 	const auth = resolveAuth(
 		{
@@ -206,6 +214,7 @@ export async function resolveTerminalRequest(
 		},
 		env,
 		cdb,
+		config,
 	);
 	const insecure = resolveBooleanSetting(
 		request.insecure,
@@ -214,6 +223,7 @@ export async function resolveTerminalRequest(
 		false,
 		"insecure",
 		cdb?.overrides.insecure,
+		config,
 	);
 	return {
 		via: viaValue,

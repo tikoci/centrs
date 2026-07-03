@@ -42,7 +42,7 @@ section short enough that the grid remains the status surface.
 - `devices` is transport-less, so its row stays `—`; command state is
   `CHR-passed` by fixture-backed integration tests in `test/integration/devices.test.ts`.
 - `settings` is transport-less, so its row stays `—`; command state is
-  `designed` in `commands/settings/README.md`.
+  `CHR-passed` by fixture-backed integration tests in `test/integration/settings.test.ts`.
 - `retrieve`, `api`, `execute`, and `transfer` share the target-selection and
   fan-out contracts from `docs/CONSTITUTION.md`; command-specific boundaries and
   evidence are in their command READMEs and integration tests.

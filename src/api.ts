@@ -47,6 +47,7 @@ import {
 import {
 	type CdbResolution,
 	isIpTransport,
+	loadEnvFileDefaults,
 	parseDuration,
 	parseResolvePolicy,
 	type ResolvedAuth,
@@ -507,9 +508,13 @@ export async function resolveApiRequest(
 		 * through `resolveCdb`'s `__default__` synthetic-target fallback.
 		 */
 		cdbResolution?: CdbResolution;
+		/** A pre-loaded `centrs.env` config tier, supplied by fan-out so the file
+		 * is read ONCE (not per member). */
+		config?: Record<string, string | undefined>;
 	},
 ): Promise<ResolvedApiRequest> {
 	validateApiRequestShape(request);
+	const config = override?.config ?? (await loadEnvFileDefaults(env));
 	const normalized = normalizeApiEndpoint(request.endpoint);
 	const method = parseApiMethod(request.method);
 	const verb = mapMethodToVerb(method);
@@ -546,9 +551,10 @@ export async function resolveApiRequest(
 				cdbPassword: request.cdbPassword,
 			},
 			env,
+			config,
 		));
-	const via = resolveApiProtocol(request, env, listen, cdbResolution);
-	const format = resolveApiFormat(request, env);
+	const via = resolveApiProtocol(request, env, listen, cdbResolution, config);
+	const format = resolveApiFormat(request, env, config);
 	// `--raw` forces validation off (constitution: --raw waiver); otherwise the
 	// inspect gate is on by default.
 	const validate: ResolvedSetting<boolean> = raw
@@ -560,12 +566,14 @@ export async function resolveApiRequest(
 				true,
 				"validate",
 				cdbResolution?.overrides.validate,
+				config,
 			);
 	const timeoutMs = resolveApiTimeout(
 		request.timeout,
 		env,
 		via.value,
 		cdbResolution?.overrides.timeoutMs,
+		config,
 	);
 	const macResolution = isIpTransport(via.value)
 		? await resolveMacTarget({
@@ -573,7 +581,10 @@ export async function resolveApiRequest(
 				targetInput: request.targetInput,
 				cdbTarget: cdbResolution?.target,
 				env,
-				policy: parseResolvePolicy(request.resolve ?? env["CENTRS_RESOLVE"]),
+				config,
+				policy: parseResolvePolicy(
+					request.resolve ?? env["CENTRS_RESOLVE"] ?? config["CENTRS_RESOLVE"],
+				),
 				// api has no Layer-2 transport (rest-api/native-api only), so MAC
 				// remediation matches retrieve's (no mac-telnet suggestion).
 				operation: "retrieve",
@@ -589,11 +600,13 @@ export async function resolveApiRequest(
 		env,
 		via.value,
 		cdbResolution,
+		config,
 	);
 	const auth = resolveAuth(
 		{ username: request.username, password: request.password },
 		env,
 		cdbResolution,
+		config,
 	);
 	const insecure = resolveBooleanSetting(
 		request.insecure,
@@ -602,6 +615,7 @@ export async function resolveApiRequest(
 		false,
 		"insecure",
 		cdbResolution?.overrides.insecure,
+		config,
 	);
 
 	return {
@@ -1092,6 +1106,7 @@ function resolveApiProtocol(
 	env: Record<string, string | undefined>,
 	listen: boolean,
 	cdb?: CdbResolution,
+	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<RouterOsProtocol> {
 	// A `/listen` endpoint (or `--listen`) infers native-api when `--via` is unset;
 	// REST stays the default for one-shot calls.
@@ -1104,6 +1119,7 @@ function resolveApiProtocol(
 		"via",
 		undefined,
 		cdb?.overrides.via,
+		config,
 	);
 	if (!via) {
 		throw new CentrsError({
@@ -1147,6 +1163,7 @@ export function assertApiProtocolSupported(via: string): void {
 function resolveApiFormat(
 	request: ApiRequest,
 	env: Record<string, string | undefined>,
+	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<ApiOutputFormat> {
 	return resolveStringSetting(
 		request.format,
@@ -1155,6 +1172,8 @@ function resolveApiFormat(
 		"json",
 		"format",
 		parseApiOutputFormat,
+		undefined,
+		config,
 	) as ResolvedSetting<ApiOutputFormat>;
 }
 
@@ -1163,6 +1182,7 @@ function resolveApiTimeout(
 	env: Record<string, string | undefined>,
 	via: RouterOsProtocol,
 	commentKv?: ResolvedSetting<number>,
+	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<number> {
 	const resolved = resolveStringSetting(
 		timeout === undefined ? undefined : String(timeout),
@@ -1183,6 +1203,7 @@ function resolveApiTimeout(
 			return parsed;
 		},
 		commentKv,
+		config,
 	);
 	if (!resolved) {
 		throw new Error("timeout resolution produced no value");

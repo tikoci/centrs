@@ -50,7 +50,8 @@ Codes are slash-namespaced `family/slug`. The families and where they originate:
 - `routeros/*` — RouterOS-surfaced faults mapped by the grounded vocabulary in
   `src/core/routeros-errors.ts` (REST `detail` and native-api `!trap`, identical
   on CHR 7.23).
-- `settings/*` — settings/value parsing (`src/resolver/settings.ts`).
+- `settings/*` — settings/value parsing (`src/resolver/settings.ts`) and the
+  `centrs settings` command's own registry/refusal rules (`src/settings.ts`).
 - `target/*` — turning a `<router>` into a transport endpoint.
 - `transport/*` — connection, TLS, DNS, and timeout plumbing.
 - `usage/*` — how a command was invoked (arity, conflicting flags, confirmation).

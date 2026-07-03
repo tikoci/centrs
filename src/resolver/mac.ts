@@ -132,17 +132,25 @@ export function parseResolvePolicy(value: string | undefined): ResolvePolicy {
 
 /**
  * Compute the effective host candidate using the same precedence as
- * {@link resolveTarget}: explicit host > `CENTRS_HOST` > CDB target > the bare
- * `<router>` positional.
+ * {@link resolveTarget}: explicit host > `CENTRS_HOST` > config-file
+ * `CENTRS_HOST` > CDB target > the bare `<router>` positional. Must stay in
+ * sync with `resolveTarget`'s own `CENTRS_HOST` ladder — this exists
+ * separately because MAC detection has to happen before `resolveTarget`
+ * builds the final `ResolvedTarget`, not because the precedence differs.
  */
 export function effectiveHostCandidate(opts: {
 	host?: string;
 	targetInput?: string;
 	cdbTarget?: string;
 	env: Record<string, string | undefined>;
+	config?: Record<string, string | undefined>;
 }): string | undefined {
 	const candidate =
-		opts.host ?? opts.env["CENTRS_HOST"] ?? opts.cdbTarget ?? opts.targetInput;
+		opts.host ??
+		opts.env["CENTRS_HOST"] ??
+		opts.config?.["CENTRS_HOST"] ??
+		opts.cdbTarget ??
+		opts.targetInput;
 	return candidate?.trim() ? candidate.trim() : undefined;
 }
 
@@ -159,6 +167,7 @@ export async function resolveMacTarget(opts: {
 	targetInput?: string;
 	cdbTarget?: string;
 	env: Record<string, string | undefined>;
+	config?: Record<string, string | undefined>;
 	policy: ResolvePolicy;
 	operation: "retrieve" | "execute" | "terminal";
 	runArp?: (cmd: string[]) => Promise<string>;
