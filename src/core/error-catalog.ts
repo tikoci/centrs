@@ -186,6 +186,10 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "A native-API word length could not be encoded.",
 	},
 	{
+		code: "internal/settings-failed",
+		summary: "The settings command failed with an unexpected internal error.",
+	},
+	{
 		code: "internal/unhandled",
 		summary: "An unexpected internal error occurred (this is a centrs bug).",
 	},
@@ -300,6 +304,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 
 	// settings/*
 	{
+		code: "settings/consequential-value",
+		summary:
+			"`settings set` accepted a syntactically valid value with a real, non-obvious consequence (e.g. a global --insecure default, or a transfer-via value gated elsewhere).",
+	},
+	{
 		code: "settings/invalid-boolean",
 		summary: "A boolean-like setting received a non-boolean value.",
 	},
@@ -318,6 +327,21 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "settings/invalid-via",
 		summary: "An unsupported protocol identifier was supplied to --via.",
+	},
+	{
+		code: "settings/reserved-key",
+		summary:
+			"`settings set`/`reset` refused a credential-shaped or self-referential CENTRS_* key.",
+	},
+	{
+		code: "settings/skip-env-file-active",
+		summary:
+			"`settings print` ran under --skip-env-file; the shown centrs.env values would not apply to other commands run in the same environment.",
+	},
+	{
+		code: "settings/unknown-key",
+		summary:
+			"`settings get`/`set` received a token that is not a recognized CENTRS_*-shaped setting.",
 	},
 	{
 		code: "settings/unsafe-protocol-blocked",
