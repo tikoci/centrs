@@ -20,6 +20,7 @@ import {
 	type CliCommandMetadata,
 	expectValue,
 	renderCommandHelp,
+	unknownFlagError,
 } from "./common.ts";
 
 export const discoverCommand: CliCommandMetadata = {
@@ -134,7 +135,7 @@ function parseDiscoverCliArgs(args: readonly string[]): DiscoverCliArgs {
 				break;
 			default:
 				if (arg.startsWith("-")) {
-					throw new Error(`Unknown discover flag: ${arg}`);
+					throw unknownFlagError("discover", arg, discoverCommand.options);
 				}
 				throw new Error(
 					`\`centrs discover\` does not accept positional arguments; got: ${arg}.`,

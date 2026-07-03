@@ -105,3 +105,50 @@ describe("runCli dispatch", () => {
 		expect(out).toContain("Commands:");
 	});
 });
+
+// #111: the shared `unknownFlagError` "Did you mean?" contract, once wired into
+// the `api` parser in PR #110, is now rolled out to every parser. Each parser
+// must name the command and surface the closest known flag, not a bare throw.
+// cspell:ignore formt resolv protcol binde jsonn filee
+describe("unknown flags surface a 'Did you mean?' suggestion (#111)", () => {
+	const nearMisses: ReadonlyArray<{
+		name: string;
+		args: string[];
+		suggestion: string;
+	}> = [
+		{ name: "transfer", args: ["transfer", "--formt"], suggestion: "--format" },
+		{
+			name: "terminal",
+			args: ["terminal", "--resolv"],
+			suggestion: "--resolve",
+		},
+		{
+			name: "btest client",
+			args: ["btest", "client", "127.0.0.1", "--protcol"],
+			suggestion: "--protocol",
+		},
+		{
+			name: "btest server",
+			args: ["btest", "server", "--binde"],
+			suggestion: "--bind",
+		},
+		{
+			name: "devices",
+			args: ["devices", "show", "--jsonn"],
+			suggestion: "--json",
+		},
+		{ name: "discover", args: ["discover", "--formt"], suggestion: "--format" },
+		{ name: "mcp", args: ["mcp", "--cdb-filee"], suggestion: "--cdb-file" },
+	];
+	for (const { name, args, suggestion } of nearMisses) {
+		const command = args[0];
+		test(`${name}: names the command and suggests ${suggestion}`, async () => {
+			const { code, err } = await run(args);
+			expect(code).toBe(1);
+			expect(err).toContain(`Unknown ${command} flag:`);
+			expect(err).toContain(`Did you mean ${suggestion}`);
+			// Structured, actionable — not a raw stack.
+			expect(err).not.toMatch(/\n\s+at\s/);
+		});
+	}
+});

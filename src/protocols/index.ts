@@ -7,6 +7,11 @@
  * Status per protocol is the implementation reality (`implemented` flag).
  * Per-cell status across commands is in `docs/MATRIX.md`. Selection rules
  * are in `docs/CONSTITUTION.md` (protocol selection).
+ *
+ * Contract with MATRIX (asserted by `test/unit/protocol-registry.test.ts`):
+ * every `CHR-passed` cell in the `docs/MATRIX.md` grid implies its protocol
+ * here is `implemented: true` and lists the matching capability. MATRIX stays
+ * the only status surface; this registry must never under-claim against it.
  */
 
 export type ProtocolCapability =
@@ -35,7 +40,7 @@ export const protocolPlans = [
 	},
 	{
 		id: "native-api",
-		capabilities: ["retrieve", "execute", "proxy"],
+		capabilities: ["retrieve", "execute", "transfer", "proxy"],
 		notes:
 			"Binary API (TCP 8728 / TLS 8729). Transport base implemented in native-api.ts (word/sentence codec, login, tagged talk); command wiring tracked in docs/MATRIX.md.",
 		implemented: true,
@@ -44,8 +49,8 @@ export const protocolPlans = [
 		id: "ssh",
 		capabilities: ["execute", "terminal", "transfer"],
 		notes:
-			"Reuses host ssh client. Important execute/terminal path after grounding.",
-		implemented: false,
+			"Reuses host ssh client. execute/terminal/transfer all CHR-passed (docs/MATRIX.md); facts in ssh.ts, sftp.ts, terminal.ts.",
+		implemented: true,
 	},
 	{
 		id: "snmp",
@@ -56,8 +61,9 @@ export const protocolPlans = [
 	{
 		id: "mndp",
 		capabilities: ["discover"],
-		notes: "Passive hint source only; not authoritative inventory.",
-		implemented: false,
+		notes:
+			"Passive hint source only; not authoritative inventory. discover CHR-passed (docs/MATRIX.md); facts in src/data/mndp.ts.",
+		implemented: true,
 	},
 	{
 		id: "mac-telnet",

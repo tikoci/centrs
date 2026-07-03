@@ -23,6 +23,7 @@ import {
 	type CliCommandMetadata,
 	expectValue,
 	renderCommandHelp,
+	unknownFlagError,
 } from "./common.ts";
 import {
 	buildTargetSelectionTips,
@@ -286,12 +287,7 @@ export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 					});
 				}
 				if (arg.startsWith("-")) {
-					throw asCentrsError(new Error(`Unknown terminal flag: ${arg}`), {
-						code: "input/invalid-command",
-						summary: `Unknown terminal flag: ${arg}`,
-						remediation:
-							"Remove the flag or run `centrs terminal --help` for the supported options.",
-					});
+					throw unknownFlagError("terminal", arg, terminalCommand.options);
 				}
 				positional.push(arg);
 				break;

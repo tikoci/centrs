@@ -27,6 +27,7 @@ import {
 	type CliCommandMetadata,
 	expectValue,
 	renderCommandHelp,
+	unknownFlagError,
 } from "./common.ts";
 import {
 	buildTargetSelectionTips,
@@ -421,13 +422,7 @@ export function parseTransferCliArgs(
 				// A lone `-` is the stdin/stdout positional (upload from / download
 				// to a pipe), not a flag.
 				if (arg !== "-" && arg.startsWith("-")) {
-					throw new CentrsError({
-						code: "input/invalid-command",
-						summary: `Unknown transfer flag: ${arg}`,
-						remediation:
-							"Remove the flag or run `centrs transfer --help` for the supported options.",
-						context: { flag: arg },
-					});
+					throw unknownFlagError("transfer", arg, transferCommand.options);
 				}
 				positional.push(arg);
 				break;

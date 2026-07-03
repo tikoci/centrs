@@ -31,6 +31,7 @@ import {
 	type CliCommandMetadata,
 	expectValue,
 	renderCommandHelp,
+	unknownFlagError,
 } from "./common.ts";
 import {
 	buildTargetSelectionTips,
@@ -276,7 +277,7 @@ function parseClientArgs(args: readonly string[]): ClientCliArgs {
 				break;
 			default:
 				if (arg.startsWith("-"))
-					throw new Error(`Unknown btest client flag: ${arg}`);
+					throw unknownFlagError("btest", arg, btestCommand.options);
 				if (request.targetInput !== undefined)
 					throw new Error(`Unexpected extra argument: ${arg}`);
 				request.targetInput = arg;
@@ -341,7 +342,7 @@ function parseServerArgs(args: readonly string[]): ServerCliArgs {
 				break;
 			default:
 				if (arg.startsWith("-"))
-					throw new Error(`Unknown btest server flag: ${arg}`);
+					throw unknownFlagError("btest", arg, btestCommand.options);
 				throw new Error(
 					`\`centrs btest server\` takes no positional arguments; got: ${arg}.`,
 				);
