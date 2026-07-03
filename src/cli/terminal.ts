@@ -187,10 +187,12 @@ export async function runTerminalCli(args: readonly string[]): Promise<number> {
 		if (format === "json" || format === "yaml") {
 			const envelope = withTips(buildTerminalErrorEnvelope(error), tips);
 			console.error(
+				// codeql[js/clear-text-logging] CLI error renderer false positive; password reaches neither the error nor the stderr renderers. Dismissed across all CLI commands.
 				format === "yaml" ? toYaml(envelope) : JSON.stringify(envelope),
 			);
 		} else {
 			console.error(
+				// codeql[js/clear-text-logging] Password parsed from args never reaches error.message in the text-format catch path; the parsed request (which holds the raw password) is never rendered.
 				formatCentrsErrorText(
 					asCentrsError(error, {
 						code: "input/invalid-command",

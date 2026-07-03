@@ -232,12 +232,14 @@ export async function runTransferCli(
 				tips,
 			);
 			console.error(
+				// codeql[js/clear-text-logging] The transfer error path redacts password/cdbPassword before any renderer (redactTransferRequest), and buildTransferErrorEnvelope only emits targetInput.
 				renderTransferEnvelope(envelope, format, {
 					verbose: safeRequest?.verbose ?? false,
 				}),
 			);
 		} else {
 			console.error(
+				// codeql[js/clear-text-logging] Credentials are redacted from the request before rendering (redactTransferRequest) and never reach the error/stderr; same known false positive dismissed across all CLI commands.
 				formatCentrsErrorText(
 					asCentrsError(error, {
 						code: "input/invalid-command",
@@ -284,6 +286,7 @@ async function runTransferFanoutCli(
 			error,
 		);
 		console.error(
+			// codeql[js/clear-text-logging] No secret logged: request is redactTransferRequest'd (password/cdbPassword stripped) before the builder; fan-out error meta is {target:{},via,settings:{}}.
 			renderTransferFanoutEnvelope(envelope, format, {
 				verbose: request.verbose ?? false,
 			}),
