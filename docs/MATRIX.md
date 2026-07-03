@@ -30,7 +30,7 @@ A cell advances only with the matching evidence in the same change.
 | transfer | `CHR-passed`  | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —                |
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
 | discover | —             | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
-| check    | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started` | `not-started`    |
+| check    | `designed`    | `designed`    | `designed`    | `designed`    | `not-started` | `not-started` | `not-started` | `not-started`    |
 | settings | —             | —             | —             | —             | —             | —             | —             | —                |
 
 ## Status pointers
@@ -53,6 +53,12 @@ section short enough that the grid remains the status surface.
 - `discover / mndp` is grounded by `commands/discover/README.md`,
   `src/data/mndp.ts`, `src/data/mndp-cache.ts`, and
   `test/integration/discover.test.ts`.
+- `check` is `designed` (`commands/check/README.md`): a reach + health battery
+  whose reads ride the execute-capable transports (rest-api/native-api/ssh/
+  mac-telnet), so those four cells are `designed`; `snmp` and `romon`/
+  `winbox-terminal` stay `not-started`. Its per-host fan-out is the machinery the
+  IP-scan discovery (#149) will iterate; the L2-default timing evidence (#136) is
+  recorded in the README before the cells advance past `designed`.
 - `transfer / ssh` means the SFTP-backed transfer method. Deferred file-transfer
   methods such as `scp`, `fetch`, and `ftp` are tracked in
   `commands/transfer/README.md`; `fetch` is not a grid column.
