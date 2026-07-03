@@ -128,7 +128,10 @@ function parseSettingsCliArgs(args: readonly string[]): SettingsCliArgs {
 				format = "json";
 				break;
 			default:
-				if (arg.startsWith("-")) {
+				// A negative-integer value (e.g. `settings set max-results -1`) looks
+				// like a flag but is a legitimate positional — `settings` has no flag
+				// shaped like a bare negative number, so this is unambiguous.
+				if (arg.startsWith("-") && !/^-\d+$/.test(arg)) {
 					throw unknownFlagError("settings", arg, settingsCommand.options);
 				}
 				positional.push(arg);

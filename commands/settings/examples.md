@@ -31,10 +31,10 @@ XDG_CONFIG_HOME=$SETTINGS_DIR centrs settings print
 ```
 
 No `centrs.env` exists yet. `data` lists every settings-managed key with
-`source: "default"`. For `format`, since the built-in default varies per
-command, `data.format = { value: null, source: "default", perCommandDefault:
-{ retrieve: "text", execute: "text", transfer: "text", api: "json" } }`
-instead of a single scalar.
+`source: { kind: "default", key: <attr> }`. For `format`, since the built-in
+default varies per command, `data.format = { value: null, source: { kind:
+"default", key: "format" }, perCommandDefault: { retrieve: "text", execute:
+"text", transfer: "text", api: "json" } }` instead of a single scalar.
 
 ### 2. Print after a value is set
 
@@ -98,10 +98,10 @@ would not see these values.
 XDG_CONFIG_HOME=$SETTINGS_DIR centrs settings get format
 ```
 
-Fresh file. `data.value = null`, `data.source = { kind: "default" }`,
-`data.perCommandDefault` populated as in example 1 above. This is `get`'s one
-deliberate exception to "returns one value" — there truly isn't one until an
-override exists.
+Fresh file. `data.value = null`, `data.source = { kind: "default", key:
+"format" }`, `data.perCommandDefault` populated as in example 1 above. This
+is `get`'s one deliberate exception to "returns one value" — there truly
+isn't one until an override exists.
 
 ### 8. Get after set returns the resolved value
 
@@ -144,11 +144,12 @@ XDG_CONFIG_HOME=$SETTINGS_DIR centrs settings get via
 
 `ok: true`. `data = { value: "ssh", source: { kind: "config", key:
 "CENTRS_VIA" } }` — fully validated and managed like any other key (see
-README: there is no second-class "unmanaged" tier). `meta.note` (informational,
-not a warning) mentions that a device's own `via=` comment-kv override, if
-set, takes precedence over this global default — since `settings` has no
-target/device context here, it cannot say whether any specific device
-actually has one.
+README: there is no second-class "unmanaged" tier). `tips` (the envelope's
+existing informational channel, not `warnings`) carries a
+`tip/comment-kv-may-override` entry noting that a device's own `via=`
+comment-kv override, if set, takes precedence over this global default —
+since `settings` has no target/device context here, it cannot say whether
+any specific device actually has one.
 
 ## set
 
