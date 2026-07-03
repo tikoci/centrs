@@ -1,0 +1,74 @@
+name: "[pilot] CodeQL house-rules query"
+run-name: CodeQL house-rules pilot • ${{ github.ref_name }}
+
+# Experimental, manual-only. NOT part of the default CodeQL run (.github/workflows/codeql.yaml)
+# and does not upload to the Security tab — see issue #119. Runs only the custom
+# pack in .github/codeql-house-rules, not the security-and-quality suite, so
+# the summary shows just the house-rule findings.
+#
+# Delete this workflow (and .github/codeql-house-rules) if the pilot doesn't
+# pan out; promote into codeql.yaml's `queries:` config if it does.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  pilot:
+    name: Analyze (house rules only)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Initialize CodeQL (custom pack only, no default suite)
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          queries: ./.github/codeql-house-rules
+
+      - name: Run analysis (local SARIF only, no Security-tab upload)
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: house-rules-pilot
+          upload: never
+          output: house-rules-results
+
+      - name: Summarize findings in the job summary
+        run: |
+          {
+            echo "## House-rules pilot findings"
+            echo
+            shopt -s nullglob
+            files=(house-rules-results/*.sarif)
+            if [ ${#files[@]} -eq 0 ]; then
+              echo "_No SARIF output found — check the analyze step logs._"
+            else
+              any=0
+              for f in "${files[@]}"; do
+                count=$(jq '[.runs[].results[]?] | length' "$f")
+                if [ "$count" -gt 0 ]; then
+                  any=1
+                  jq -r '.runs[].results[]? |
+                    "- **" + .ruleId + "** " +
+                    (.locations[0].physicalLocation.artifactLocation.uri // "?") + ":" +
+                    ((.locations[0].physicalLocation.region.startLine // 0) | tostring) +
+                    " — " + .message.text' "$f"
+                fi
+              done
+              if [ "$any" -eq 0 ]; then
+                echo "No findings — every required gate call is present."
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload SARIF as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: house-rules-sarif
+          path: house-rules-results/
+          retention-days: 14

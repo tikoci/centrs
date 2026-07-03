@@ -139,6 +139,7 @@ MNDP
 NAND # NAND flash memory; write-back caches file writes up to ~40s on some MikroTik boards
 netmiko # [Multi-vendor library to simplify Paramiko SSH connections to network devices](https://github.com/ktbyers/netmiko)
 netwatch
+nullglob # bash shopt that makes an unmatched glob expand to zero words instead of the literal pattern
 npk # MikroTik package format
 nvme-over-tcp # supported by RouterOS **with** rose-storage.npk extra-package
 OID
@@ -166,6 +167,7 @@ SARIF # Static Analysis Results Interchange Format; CodeQL's code-scanning analy
 scp
 scriptability
 scriptable
+shopt # bash builtin for toggling shell options (e.g. nullglob)
 Sikuli
 SikuliX
 skillcheck
@@ -186,6 +188,7 @@ TIKOCI
 tiktui
 TLV
 traceroute
+tostring # jq builtin filter that renders a value as its JSON string representation
 tsc
 tzsp
 TZSP
