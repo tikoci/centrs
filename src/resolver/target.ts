@@ -84,6 +84,7 @@ export function resolveTarget(
 	env: Record<string, string | undefined>,
 	via: RouterOsProtocol,
 	cdb?: CdbResolution,
+	config: Record<string, string | undefined> = {},
 ): ResolvedTarget {
 	const hostSetting = resolveStringSetting(
 		input.host,
@@ -91,6 +92,9 @@ export function resolveTarget(
 		ENV_HOST,
 		cdb?.target ?? input.targetInput,
 		"host",
+		undefined,
+		undefined,
+		config,
 	);
 
 	if (!hostSetting || hostSetting.value.trim().length === 0) {
@@ -137,6 +141,9 @@ export function resolveTarget(
 			ENV_HOST,
 			undefined,
 			"host",
+			undefined,
+			undefined,
+			config,
 		);
 		const macPortSetting = resolveOptionalIntegerSetting(
 			input.port,
@@ -144,6 +151,7 @@ export function resolveTarget(
 			ENV_PORT,
 			"port",
 			cdb?.overrides.port,
+			config,
 		);
 		// The device identity is the MAC (positional or CDB), NOT --host/CENTRS_HOST,
 		// which are only the UDP delivery endpoint. Attribute meta.target.source to
@@ -217,6 +225,7 @@ export function resolveTarget(
 		ENV_PORT,
 		"port",
 		cdb?.overrides.port,
+		config,
 	);
 	const scheme = parsedUrl.protocol === "https:" ? "https" : "http";
 
@@ -320,7 +329,14 @@ export function resolveAuth(
 	credentials: { username?: string; password?: string; sshKey?: string },
 	env: Record<string, string | undefined>,
 	cdb?: CdbResolution,
+	config: Record<string, string | undefined> = {},
 ): ResolvedAuth {
+	// `CENTRS_USERNAME`/`CENTRS_PASSWORD` are deliberately NOT threaded through
+	// the `config` tier: `settings` refuses to write either (constitution: the
+	// `__default__` CDB record is the credential store), and the config-file
+	// loader itself does not surface them even when hand-added to the file —
+	// a stronger defense than read-time redaction alone, since a hand-edited
+	// credential line in `centrs.env` then can't function as a live source.
 	const username = resolveStringSetting(
 		credentials.username,
 		env,
@@ -328,8 +344,9 @@ export function resolveAuth(
 		undefined,
 		"username",
 	);
-	// SSH key path: --ssh-key → CENTRS_SSH_KEY → CDB `ssh-key=` comment-kv → unset.
-	// Path only; the SFTP/SSH transport reads the file, centrs never stores material.
+	// SSH key path: --ssh-key → CENTRS_SSH_KEY → CDB `ssh-key=` comment-kv →
+	// config → unset. Path only; the SFTP/SSH transport reads the file, centrs
+	// never stores material.
 	const sshKey = resolveStringSetting(
 		credentials.sshKey,
 		env,
@@ -338,6 +355,7 @@ export function resolveAuth(
 		"ssh-key",
 		undefined,
 		cdb?.overrides.sshKey,
+		config,
 	);
 	const password = resolveStringSetting(
 		credentials.password,

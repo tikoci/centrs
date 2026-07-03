@@ -46,16 +46,26 @@ export interface ResolveMcpConfigArgs {
 	cdbPassword?: string;
 	allowAdhocTargets?: boolean;
 	env?: Record<string, string | undefined>;
+	/**
+	 * The `centrs.env` config tier (`src/resolver/config-file.ts`), loaded by
+	 * the caller — `resolveMcpConfig` itself stays synchronous so it can keep
+	 * serving as a default-parameter value (`server.ts`). `CENTRS_CDB_PASSWORD`
+	 * deliberately never reads it, same as `resolveAuth`'s credential fields.
+	 */
+	config?: Record<string, string | undefined>;
 }
 
 export function resolveMcpConfig(
 	args: ResolveMcpConfigArgs = {},
 ): CentrsMcpConfig {
 	const env = args.env ?? Bun.env;
-	const explicitPath = args.cdbFile ?? env[ENV_CDB_FILE] ?? undefined;
+	const config = args.config ?? {};
+	const explicitPath =
+		args.cdbFile ?? env[ENV_CDB_FILE] ?? config[ENV_CDB_FILE] ?? undefined;
 	const cdbFile = explicitPath ?? defaultCdbPath(env);
 	const allowAdhocTargets =
-		args.allowAdhocTargets ?? env[ENV_ALLOW_ADHOC] === "1";
+		args.allowAdhocTargets ??
+		(env[ENV_ALLOW_ADHOC] ?? config[ENV_ALLOW_ADHOC]) === "1";
 	return {
 		cdbFile,
 		cdbFileExplicit: explicitPath !== undefined,

@@ -11,6 +11,7 @@ import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
 import { describeCentrs } from "../index.ts";
 import { resolveMcpConfig } from "../mcp/config.ts";
 import { runMcpStdio } from "../mcp/server.ts";
+import { loadEnvFileDefaults } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
@@ -94,6 +95,7 @@ export async function runMcpCli(args: readonly string[]): Promise<number> {
 			cdbFile: parsed.cdbFile,
 			cdbPassword: parsed.cdbPassword,
 			allowAdhocTargets: parsed.allowAdhocTargets,
+			config: await loadEnvFileDefaults(),
 		});
 		await runMcpStdio(config);
 		return 0;

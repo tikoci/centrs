@@ -126,6 +126,13 @@ export interface LoadCdbOptions {
 	cdbFile?: string;
 	cdbPassword?: string;
 	env?: Record<string, string | undefined>;
+	/**
+	 * The `centrs.env` config tier (`src/resolver/config-file.ts`). Only
+	 * `CENTRS_CDB_FILE` reads it — `CENTRS_CDB_PASSWORD` deliberately never
+	 * does, same reasoning as `CENTRS_USERNAME`/`CENTRS_PASSWORD` in
+	 * `resolver/target.ts`'s `resolveAuth`.
+	 */
+	config?: Record<string, string | undefined>;
 }
 
 export interface LoadedCdb {
@@ -154,6 +161,11 @@ export function resolveDevicesSettings(
 	const env = options.env ?? {};
 	let cdbFileSource: SettingSource = { kind: "default", key: "default" };
 	let cdbFile = defaultCdbPath(env);
+	const configCdbFile = options.config?.[ENV_CDB_FILE];
+	if (configCdbFile) {
+		cdbFile = configCdbFile;
+		cdbFileSource = { kind: "config", key: ENV_CDB_FILE };
+	}
 	const envCdbFile = env[ENV_CDB_FILE];
 	if (envCdbFile) {
 		cdbFile = envCdbFile;

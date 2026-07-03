@@ -9,6 +9,9 @@
  * Layers:
  *   - `./settings.ts` — precedence primitives (default < config < comment-kv <
  *     env < cli) and source coercion to the core envelope union.
+ *   - `./config-file.ts` — the `config` tier itself: loads `centrs.env`
+ *     (`commands/settings/README.md`) into the flat map every command passes
+ *     as the `config` argument to `./settings.ts`'s resolvers.
  *   - `./cdb.ts`      — CDB identity + comment-kv parse/coerce/provenance.
  *   - `./target.ts`   — host/port/baseUrl identity + credentials + per-field
  *     provenance map.
@@ -43,6 +46,13 @@ export {
 	parseRawCommentFacts,
 	renderCommentKvToken,
 } from "./comment-kv.ts";
+export {
+	defaultSettingsPath,
+	loadEnvFileDefaults,
+	parseEnvFileDefaults,
+	readSettingsFileRaw,
+	type SettingsFileContents,
+} from "./config-file.ts";
 export {
 	type ArpEntry,
 	effectiveHostCandidate,

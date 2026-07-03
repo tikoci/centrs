@@ -61,9 +61,9 @@ export function toCoreSource(source: ResolverSettingSource): CoreSettingSource {
 /**
  * Resolve a string-valued setting across the precedence ladder.
  *
- * Order checked (highest first): explicit/cli → env → comment-kv → default.
- * `normalize` runs only against explicit/env/default raw strings; the
- * comment-kv layer is already coerced to `T`.
+ * Order checked (highest first): explicit/cli → env → comment-kv → config →
+ * default. `normalize` runs against explicit/env/config/default raw strings;
+ * the comment-kv layer is already coerced to `T`.
  */
 export function resolveStringSetting<T = string>(
 	explicit: string | undefined,
@@ -73,6 +73,7 @@ export function resolveStringSetting<T = string>(
 	key: string,
 	normalize?: (value: string) => T,
 	commentKv?: CommentKvLayer<T>,
+	config?: Record<string, string | undefined>,
 ): ResolvedSetting<T> | undefined {
 	if (explicit !== undefined) {
 		return {
@@ -99,6 +100,14 @@ export function resolveStringSetting<T = string>(
 		return commentKv;
 	}
 
+	const configValue = config?.[envName];
+	if (configValue !== undefined) {
+		return {
+			value: normalize ? normalize(configValue) : (configValue as T),
+			source: { kind: "config", key: envName },
+		};
+	}
+
 	if (defaultValue !== undefined) {
 		return {
 			value: normalize ? normalize(defaultValue) : (defaultValue as T),
@@ -114,7 +123,7 @@ export function resolveStringSetting<T = string>(
 
 /**
  * Resolve a boolean-valued setting. Order: explicit → env → comment-kv →
- * default.
+ * config → default.
  */
 export function resolveBooleanSetting(
 	explicit: boolean | undefined,
@@ -123,6 +132,7 @@ export function resolveBooleanSetting(
 	defaultValue: boolean,
 	key: string,
 	commentKv?: CommentKvLayer<boolean>,
+	config?: Record<string, string | undefined>,
 ): ResolvedSetting<boolean> {
 	if (explicit !== undefined) {
 		return { value: explicit, source: { kind: "explicit", key } };
@@ -140,12 +150,20 @@ export function resolveBooleanSetting(
 		return commentKv;
 	}
 
+	const configValue = config?.[envName];
+	if (configValue !== undefined) {
+		return {
+			value: parseBoolean(configValue, envName),
+			source: { kind: "config", key: envName },
+		};
+	}
+
 	return { value: defaultValue, source: { kind: "default", key } };
 }
 
 /**
  * Resolve an optional positive-integer setting (no built-in default). Order:
- * explicit → env → comment-kv → unset.
+ * explicit → env → comment-kv → config → unset.
  */
 export function resolveOptionalIntegerSetting(
 	explicit: number | undefined,
@@ -153,6 +171,7 @@ export function resolveOptionalIntegerSetting(
 	envName: string,
 	key: string,
 	commentKv?: CommentKvLayer<number>,
+	config?: Record<string, string | undefined>,
 ): ResolvedSetting<number> | undefined {
 	if (explicit !== undefined) {
 		if (!Number.isInteger(explicit) || explicit <= 0) {
@@ -180,6 +199,19 @@ export function resolveOptionalIntegerSetting(
 
 	if (commentKv !== undefined) {
 		return commentKv;
+	}
+
+	const configValue = config?.[envName];
+	if (configValue !== undefined) {
+		const parsed = Number.parseInt(configValue, 10);
+		if (!Number.isInteger(parsed) || parsed <= 0) {
+			throw new CentrsError({
+				code: "settings/invalid-integer",
+				summary: `${envName} must be a positive integer. Received: ${configValue}`,
+				remediation: `Set ${envName} to a positive integer value in centrs.env.`,
+			});
+		}
+		return { value: parsed, source: { kind: "config", key: envName } };
 	}
 
 	return undefined;

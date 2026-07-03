@@ -35,6 +35,7 @@ import {
 	effectiveHostCandidate,
 	isIpTransport,
 	isMacAddress,
+	loadEnvFileDefaults,
 	parseDuration,
 	parseResolvePolicy,
 	type ResolvedAuth,
@@ -277,10 +278,14 @@ export async function runResolvedExecute(
 export async function resolveExecuteRequest(
 	request: ExecuteRequest,
 	env: Record<string, string | undefined>,
-	options: { cdbResolution?: CdbResolution } = {},
+	options: {
+		cdbResolution?: CdbResolution;
+		config?: Record<string, string | undefined>;
+	} = {},
 ): Promise<ResolvedExecuteRequest> {
 	validateExecuteRequestShape(request);
 	const canonical = canonicalizeExecuteCommand(request.command);
+	const config = options.config ?? (await loadEnvFileDefaults(env));
 	// Fan-out passes the pre-resolved CDB record for a member (the CDB is loaded
 	// once in `expandCdbSelection`); single-target resolves it here.
 	const cdbResolution =
@@ -292,9 +297,10 @@ export async function resolveExecuteRequest(
 				cdbPassword: request.cdbPassword,
 			},
 			env,
+			config,
 		));
-	const via = resolveExecuteProtocol(request, env, cdbResolution);
-	const format = resolveFormat(request, env);
+	const via = resolveExecuteProtocol(request, env, cdbResolution, config);
+	const format = resolveFormat(request, env, config);
 	const validate = resolveBooleanSetting(
 		request.validate,
 		env,
@@ -302,18 +308,22 @@ export async function resolveExecuteRequest(
 		true,
 		"validate",
 		cdbResolution?.overrides.validate,
+		config,
 	);
 	const timeoutMs = resolveTimeoutSetting(
 		request.timeout,
 		env,
 		via.value,
 		cdbResolution?.overrides.timeoutMs,
+		config,
 	);
 	const maxResultsBytes = resolveOptionalIntegerSetting(
 		request.maxResultsBytes,
 		env,
 		"CENTRS_MAX_RESULTS",
 		"max-results",
+		undefined,
+		config,
 	);
 	const macResolution = isIpTransport(via.value)
 		? await resolveMacTarget({
@@ -321,7 +331,10 @@ export async function resolveExecuteRequest(
 				targetInput: request.targetInput,
 				cdbTarget: cdbResolution?.target,
 				env,
-				policy: parseResolvePolicy(request.resolve ?? env["CENTRS_RESOLVE"]),
+				config,
+				policy: parseResolvePolicy(
+					request.resolve ?? env["CENTRS_RESOLVE"] ?? config["CENTRS_RESOLVE"],
+				),
 				operation: "execute",
 			})
 		: undefined;
@@ -335,6 +348,7 @@ export async function resolveExecuteRequest(
 		env,
 		via.value,
 		cdbResolution,
+		config,
 	);
 	const auth = resolveAuth(
 		{
@@ -344,6 +358,7 @@ export async function resolveExecuteRequest(
 		},
 		env,
 		cdbResolution,
+		config,
 	);
 	const insecure = resolveBooleanSetting(
 		request.insecure,
@@ -352,6 +367,7 @@ export async function resolveExecuteRequest(
 		false,
 		"insecure",
 		cdbResolution?.overrides.insecure,
+		config,
 	);
 
 	return {
@@ -388,24 +404,35 @@ export interface ExecuteGlobalContext {
 export function resolveExecuteGlobalContext(
 	request: ExecuteRequest,
 	env: Record<string, string | undefined>,
+	config: Record<string, string | undefined> = {},
 ): ExecuteGlobalContext {
 	validateExecuteRequestShape(request);
 	const canonical = canonicalizeExecuteCommand(request.command);
-	const via = resolveExecuteProtocol(request, env);
-	const format = resolveFormat(request, env);
+	const via = resolveExecuteProtocol(request, env, undefined, config);
+	const format = resolveFormat(request, env, config);
 	const validate = resolveBooleanSetting(
 		request.validate,
 		env,
 		"CENTRS_VALIDATE",
 		true,
 		"validate",
+		undefined,
+		config,
 	);
-	const timeoutMs = resolveTimeoutSetting(request.timeout, env, via.value);
+	const timeoutMs = resolveTimeoutSetting(
+		request.timeout,
+		env,
+		via.value,
+		undefined,
+		config,
+	);
 	const maxResultsBytes = resolveOptionalIntegerSetting(
 		request.maxResultsBytes,
 		env,
 		"CENTRS_MAX_RESULTS",
 		"max-results",
+		undefined,
+		config,
 	);
 	return {
 		via: via.value,
@@ -878,8 +905,9 @@ function resolveExecuteProtocol(
 	request: ExecuteRequest,
 	env: Record<string, string | undefined>,
 	cdb?: CdbResolution,
+	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<RouterOsProtocol> {
-	const defaultVia = isUnresolvedMacTarget(request, env, cdb)
+	const defaultVia = isUnresolvedMacTarget(request, env, cdb, config)
 		? "mac-telnet"
 		: "native-api";
 	const via = resolveStringSetting(
@@ -890,6 +918,7 @@ function resolveExecuteProtocol(
 		"via",
 		undefined,
 		cdb?.overrides.via,
+		config,
 	);
 	if (!via) {
 		throw new CentrsError({
@@ -934,8 +963,13 @@ function isUnresolvedMacTarget(
 	request: ExecuteRequest,
 	env: Record<string, string | undefined>,
 	cdb?: CdbResolution,
+	config: Record<string, string | undefined> = {},
 ): boolean {
-	if (request.via !== undefined || env["CENTRS_VIA"] !== undefined) {
+	if (
+		request.via !== undefined ||
+		env["CENTRS_VIA"] !== undefined ||
+		config["CENTRS_VIA"] !== undefined
+	) {
 		return false;
 	}
 	// Decide the default transport from the *effective* target (host >
@@ -947,6 +981,7 @@ function isUnresolvedMacTarget(
 		targetInput: request.targetInput,
 		cdbTarget: cdb?.target,
 		env,
+		config,
 	});
 	return candidate ? isMacAddress(candidate) : false;
 }
@@ -954,6 +989,7 @@ function isUnresolvedMacTarget(
 function resolveFormat(
 	request: ExecuteRequest,
 	env: Record<string, string | undefined>,
+	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<ExecuteOutputFormat> {
 	return resolveStringSetting(
 		request.format,
@@ -962,6 +998,8 @@ function resolveFormat(
 		"text",
 		"format",
 		parseOutputFormat,
+		undefined,
+		config,
 	) as ResolvedSetting<ExecuteOutputFormat>;
 }
 
@@ -987,6 +1025,7 @@ function resolveTimeoutSetting(
 	env: Record<string, string | undefined>,
 	via: RouterOsProtocol,
 	commentKv?: ResolvedSetting<number>,
+	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<number> {
 	const resolved = resolveStringSetting(
 		timeout === undefined ? undefined : String(timeout),
@@ -1007,6 +1046,7 @@ function resolveTimeoutSetting(
 			return parsed;
 		},
 		commentKv,
+		config,
 	);
 	if (!resolved) {
 		throw new Error("timeout resolution produced no value");

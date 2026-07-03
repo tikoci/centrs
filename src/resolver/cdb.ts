@@ -153,6 +153,7 @@ function warningFromDevices(warning: DevicesWarning): ResolverWarning {
 export async function resolveCdb(
 	input: CdbResolveInput,
 	env: Record<string, string | undefined>,
+	config: Record<string, string | undefined> = {},
 ): Promise<CdbResolution | undefined> {
 	if (!input.targetInput) {
 		return undefined;
@@ -162,12 +163,18 @@ export async function resolveCdb(
 		cdbFile: input.cdbFile,
 		cdbPassword: input.cdbPassword,
 		env,
+		config,
 	});
+	// A user-configured `centrs.env` default CDB path counts as explicit, same
+	// as an env var: it is an intentional choice, not the built-in fallback,
+	// so a missing file there should surface as a real error rather than
+	// silently degrading to "no CDB in play".
 	const explicitCdb =
 		input.cdbFile !== undefined ||
 		input.cdbPassword !== undefined ||
 		env[ENV_CDB_FILE] !== undefined ||
-		env[ENV_CDB_PASSWORD] !== undefined;
+		env[ENV_CDB_PASSWORD] !== undefined ||
+		config[ENV_CDB_FILE] !== undefined;
 	if (!explicitCdb && !(await Bun.file(settings.cdbFile.value).exists())) {
 		return undefined;
 	}
@@ -178,6 +185,7 @@ export async function resolveCdb(
 			cdbFile: input.cdbFile,
 			cdbPassword: input.cdbPassword,
 			env,
+			config,
 		});
 	} catch (error) {
 		if (

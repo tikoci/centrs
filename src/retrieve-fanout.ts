@@ -54,6 +54,7 @@ import {
 	type CdbSelectionResolveInput,
 	expandCdbSelection,
 	isDefaultRecordTarget,
+	loadEnvFileDefaults,
 	type TargetSelection,
 } from "./resolver/index.ts";
 import {
@@ -110,6 +111,7 @@ export interface RetrieveFanoutInternals {
 		selection: TargetSelection,
 		input: CdbSelectionResolveInput,
 		env: Record<string, string | undefined>,
+		config?: Record<string, string | undefined>,
 	) => Promise<CdbSelectionExpansion>;
 	/** Backoff sleeper. Defaults to a real timer; tests pass a no-op. */
 	sleep?: (ms: number) => Promise<void>;
@@ -183,10 +185,12 @@ export async function retrieveFanout(
 	options: RetrieveFanoutOptions = {},
 ): Promise<RetrieveFanoutEnvelope> {
 	const attributeSelections = validateRetrieveRequestShape(request);
+	const config = await loadEnvFileDefaults(env);
 	const global = resolveRetrieveGlobalContext(
 		request,
 		env,
 		attributeSelections,
+		config,
 	);
 	const selectionSummary = summarizeSelection(selection);
 
@@ -199,6 +203,7 @@ export async function retrieveFanout(
 			allowAdhoc: options.allowAdhoc ?? true,
 		},
 		env,
+		config,
 	);
 
 	const concurrencyVia = resolveFanoutConcurrencyProtocol(
@@ -251,6 +256,7 @@ export async function retrieveFanout(
 					request,
 					env,
 					member.resolution,
+					config,
 				);
 				return buildResolvedRetrieve(
 					request,
@@ -258,6 +264,7 @@ export async function retrieveFanout(
 					member.resolution,
 					attributeSelections,
 					macResolution,
+					config,
 				);
 			}
 			// Ad-hoc literal: full single-target resolution (CDB load → `__default__`
@@ -368,6 +375,10 @@ function resolveFanoutConcurrencyProtocol(
 	globalVia: RouterOsProtocol,
 	expansion: CdbSelectionExpansion,
 ): RouterOsProtocol {
+	// Deliberately CLI/env only, not `config` — a `centrs.env` default is the
+	// weakest precedence tier and must not be treated as a hard pin the way an
+	// explicit `--via`/`CENTRS_VIA` is; doing so would defeat per-target CDB
+	// `via=` overrides for members that disagree with the global default.
 	if (request.via !== undefined || env["CENTRS_VIA"] !== undefined) {
 		return globalVia;
 	}

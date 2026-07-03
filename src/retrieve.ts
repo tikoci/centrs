@@ -28,6 +28,7 @@ import {
 import {
 	type CdbResolution,
 	isIpTransport,
+	loadEnvFileDefaults,
 	parseDuration,
 	parseResolvePolicy,
 	type ResolvedAuth,
@@ -618,9 +619,10 @@ export function buildResolvedRetrieve(
 	cdbResolution: CdbResolution | undefined,
 	attributeSelections: readonly string[],
 	macResolution?: { mac: string; ip: string },
+	config: Record<string, string | undefined> = {},
 ): ResolvedRetrieveRequest {
-	const via = resolveProtocol(request, env, cdbResolution);
-	const format = resolveFormat(request, env);
+	const via = resolveProtocol(request, env, cdbResolution, config);
+	const format = resolveFormat(request, env, config);
 	const validate = resolveBooleanSetting(
 		request.validate,
 		env,
@@ -628,18 +630,22 @@ export function buildResolvedRetrieve(
 		true,
 		"validate",
 		cdbResolution?.overrides.validate,
+		config,
 	);
 	const timeoutMs = resolveTimeoutSetting(
 		request.timeout,
 		env,
 		via.value,
 		cdbResolution?.overrides.timeoutMs,
+		config,
 	);
 	const maxResultsBytes = resolveOptionalIntegerSetting(
 		request.maxResultsBytes,
 		env,
 		"CENTRS_MAX_RESULTS",
 		"max-results",
+		undefined,
+		config,
 	);
 	const target = resolveTarget(
 		{
@@ -691,22 +697,33 @@ export function resolveRetrieveGlobalContext(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined>,
 	attributeSelections: readonly string[],
+	config: Record<string, string | undefined> = {},
 ): RetrieveGlobalContext {
-	const via = resolveProtocol(request, env);
-	const format = resolveFormat(request, env);
+	const via = resolveProtocol(request, env, undefined, config);
+	const format = resolveFormat(request, env, config);
 	const validate = resolveBooleanSetting(
 		request.validate,
 		env,
 		"CENTRS_VALIDATE",
 		true,
 		"validate",
+		undefined,
+		config,
 	);
-	const timeoutMs = resolveTimeoutSetting(request.timeout, env, via.value);
+	const timeoutMs = resolveTimeoutSetting(
+		request.timeout,
+		env,
+		via.value,
+		undefined,
+		config,
+	);
 	const maxResultsBytes = resolveOptionalIntegerSetting(
 		request.maxResultsBytes,
 		env,
 		"CENTRS_MAX_RESULTS",
 		"max-results",
+		undefined,
+		config,
 	);
 
 	return {
@@ -739,6 +756,7 @@ export async function resolveRetrieveRequest(
 	env: Record<string, string | undefined>,
 ): Promise<ResolvedRetrieveRequest> {
 	const attributeSelections = validateRetrieveRequestShape(request);
+	const config = await loadEnvFileDefaults(env);
 
 	const cdbResolution = await resolveCdb(
 		{
@@ -747,12 +765,14 @@ export async function resolveRetrieveRequest(
 			cdbPassword: request.cdbPassword,
 		},
 		env,
+		config,
 	);
 
 	const macResolution = await resolveMacForRetrieve(
 		request,
 		env,
 		cdbResolution,
+		config,
 	);
 
 	return buildResolvedRetrieve(
@@ -761,6 +781,7 @@ export async function resolveRetrieveRequest(
 		cdbResolution,
 		attributeSelections,
 		macResolution,
+		config,
 	);
 }
 
@@ -774,8 +795,9 @@ export async function resolveMacForRetrieve(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined>,
 	cdb?: CdbResolution,
+	config: Record<string, string | undefined> = {},
 ): Promise<{ mac: string; ip: string } | undefined> {
-	if (!isIpTransport(resolveProtocol(request, env, cdb).value)) {
+	if (!isIpTransport(resolveProtocol(request, env, cdb, config).value)) {
 		return undefined;
 	}
 	return resolveMacTarget({
@@ -783,7 +805,10 @@ export async function resolveMacForRetrieve(
 		targetInput: request.targetInput,
 		cdbTarget: cdb?.target,
 		env,
-		policy: parseResolvePolicy(request.resolve ?? env["CENTRS_RESOLVE"]),
+		config,
+		policy: parseResolvePolicy(
+			request.resolve ?? env["CENTRS_RESOLVE"] ?? config["CENTRS_RESOLVE"],
+		),
 		operation: "retrieve",
 	});
 }
@@ -792,6 +817,7 @@ function resolveProtocol(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined>,
 	cdb?: CdbResolution,
+	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<RouterOsProtocol> {
 	const via = resolveStringSetting(
 		request.via,
@@ -801,6 +827,7 @@ function resolveProtocol(
 		"via",
 		undefined,
 		cdb?.overrides.via,
+		config,
 	);
 	if (!via) {
 		throw new CentrsError({
@@ -859,6 +886,7 @@ function resolveProtocol(
 function resolveFormat(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined>,
+	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<RetrieveOutputFormat> {
 	return resolveStringSetting(
 		request.format,
@@ -867,6 +895,8 @@ function resolveFormat(
 		"text",
 		"format",
 		parseOutputFormat,
+		undefined,
+		config,
 	) as ResolvedSetting<RetrieveOutputFormat>;
 }
 
@@ -990,6 +1020,7 @@ function resolveTimeoutSetting(
 	env: Record<string, string | undefined>,
 	via: RouterOsProtocol,
 	commentKv?: ResolvedSetting<number>,
+	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<number> {
 	const resolved = resolveStringSetting(
 		timeout === undefined ? undefined : String(timeout),
@@ -1010,6 +1041,7 @@ function resolveTimeoutSetting(
 			return parsed;
 		},
 		commentKv,
+		config,
 	);
 	if (!resolved) {
 		throw new Error("timeout resolution produced no value");

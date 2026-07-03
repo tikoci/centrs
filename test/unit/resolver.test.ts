@@ -156,13 +156,15 @@ describe("resolver ssh-key resolution", () => {
 
 describe("resolver settings precedence", () => {
 	// Constitution order, lowest → highest: default < config < comment-kv < env
-	// < cli. (No config-file layer is implemented yet; it is a documented seam.)
+	// < cli. The `config` tier is the loaded `centrs.env` map
+	// (`src/resolver/config-file.ts`); every resolver helper takes it as the
+	// last argument, checked between comment-kv and the built-in default.
 	const commentKv = {
 		value: "comment-host",
 		source: { kind: "comment-kv" as const, key: "record:0:host" },
 	};
 
-	test("cli beats env beats comment-kv beats default", () => {
+	test("cli beats env beats comment-kv beats config beats default", () => {
 		const cli = resolveStringSetting(
 			"cli-host",
 			{ CENTRS_HOST: "env-host" },
@@ -171,6 +173,7 @@ describe("resolver settings precedence", () => {
 			"host",
 			undefined,
 			commentKv,
+			{ CENTRS_HOST: "config-host" },
 		);
 		expect(cli?.value).toBe("cli-host");
 
@@ -182,6 +185,7 @@ describe("resolver settings precedence", () => {
 			"host",
 			undefined,
 			commentKv,
+			{ CENTRS_HOST: "config-host" },
 		);
 		expect(env?.value).toBe("env-host");
 		expect(env?.source.kind).toBe("env");
@@ -194,9 +198,23 @@ describe("resolver settings precedence", () => {
 			"host",
 			undefined,
 			commentKv,
+			{ CENTRS_HOST: "config-host" },
 		);
 		expect(comment?.value).toBe("comment-host");
 		expect(comment?.source.kind).toBe("comment-kv");
+
+		const config = resolveStringSetting(
+			undefined,
+			EMPTY_ENV,
+			"CENTRS_HOST",
+			"default-host",
+			"host",
+			undefined,
+			undefined,
+			{ CENTRS_HOST: "config-host" },
+		);
+		expect(config?.value).toBe("config-host");
+		expect(config?.source).toEqual({ kind: "config", key: "CENTRS_HOST" });
 
 		const fallback = resolveStringSetting(
 			undefined,
@@ -209,7 +227,7 @@ describe("resolver settings precedence", () => {
 		expect(fallback?.source.kind).toBe("default");
 	});
 
-	test("boolean precedence places comment-kv above the built-in default", () => {
+	test("boolean precedence places comment-kv above config above the built-in default", () => {
 		const fromComment = resolveBooleanSetting(
 			undefined,
 			EMPTY_ENV,
@@ -220,6 +238,7 @@ describe("resolver settings precedence", () => {
 				value: false,
 				source: { kind: "comment-kv", key: "record:0:validate" },
 			},
+			{ CENTRS_VALIDATE: "0" },
 		);
 		expect(fromComment.value).toBe(false);
 		expect(fromComment.source.kind).toBe("comment-kv");
@@ -234,21 +253,49 @@ describe("resolver settings precedence", () => {
 				value: false,
 				source: { kind: "comment-kv", key: "record:0:validate" },
 			},
+			{ CENTRS_VALIDATE: "0" },
 		);
 		expect(fromEnv.value).toBe(true);
 		expect(fromEnv.source.kind).toBe("env");
+
+		const fromConfig = resolveBooleanSetting(
+			undefined,
+			EMPTY_ENV,
+			"CENTRS_VALIDATE",
+			true,
+			"validate",
+			undefined,
+			{ CENTRS_VALIDATE: "0" },
+		);
+		expect(fromConfig.value).toBe(false);
+		expect(fromConfig.source).toEqual({
+			kind: "config",
+			key: "CENTRS_VALIDATE",
+		});
 	});
 
-	test("optional integer precedence honors the comment-kv layer", () => {
+	test("optional integer precedence honors the comment-kv and config layers", () => {
 		const fromComment = resolveOptionalIntegerSetting(
 			undefined,
 			EMPTY_ENV,
 			"CENTRS_PORT",
 			"port",
 			{ value: 8080, source: { kind: "comment-kv", key: "record:0:port" } },
+			{ CENTRS_PORT: "9090" },
 		);
 		expect(fromComment?.value).toBe(8080);
 		expect(fromComment?.source.kind).toBe("comment-kv");
+
+		const fromConfig = resolveOptionalIntegerSetting(
+			undefined,
+			EMPTY_ENV,
+			"CENTRS_PORT",
+			"port",
+			undefined,
+			{ CENTRS_PORT: "9090" },
+		);
+		expect(fromConfig?.value).toBe(9090);
+		expect(fromConfig?.source).toEqual({ kind: "config", key: "CENTRS_PORT" });
 
 		const fromCli = resolveOptionalIntegerSetting(
 			443,
