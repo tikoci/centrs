@@ -545,10 +545,13 @@ describe("centrs settings __default__ boundary", () => {
 
 	test("example 32: print with no __default__ record", async () => {
 		const dir = await freshDir("default-device-absent");
-		const result = await runSettings(
-			["print", "--cdb-file", "/tmp/does-not-exist.cdb"],
-			dir,
-		);
+		// Sandboxed under `dir` (not a raw "/tmp/..." literal): CodeQL's
+		// js/insecure-temporary-file source model treats any string matching
+		// `/tmp/%` as an os-temp-dir source, which taints every unguarded
+		// fs-write sink reachable from CLI argv. Nothing here needs a real
+		// temp dir — the file is never created.
+		const cdbFile = join(dir, "does-not-exist.cdb");
+		const result = await runSettings(["print", "--cdb-file", cdbFile], dir);
 		expect(result.exitCode).toBe(0);
 		const body = JSON.parse(result.stdout);
 		expect(body.data.defaultDevice).toEqual({ configured: false });

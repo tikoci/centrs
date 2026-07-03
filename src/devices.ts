@@ -209,10 +209,12 @@ function isAlreadyExistsError(cause: unknown): boolean {
  * Create an empty open CDB at `path` without clobbering an existing file.
  * Uses an exclusive-create open (`wx`) so a concurrent writer's CDB is never
  * overwritten; the caller treats EEXIST as "another process created it".
+ * Mode `0o600` keeps the CDB (device credentials) unreadable by other local
+ * users instead of falling back to the process umask default.
  */
 async function createEmptyCdbNoClobber(path: string): Promise<void> {
 	await mkdir(dirname(path), { recursive: true });
-	const handle = await open(path, "wx");
+	const handle = await open(path, "wx", 0o600);
 	try {
 		await handle.write(encodeOpenWinBoxCdb([]));
 		await handle.sync();

@@ -1202,7 +1202,11 @@ function writeLocalSink(
 		process.stdout.write(bytes);
 		return;
 	}
-	writeFileSync(local, bytes);
+	// Downloaded RouterOS artifacts (backups/exports) can carry credentials,
+	// so a newly created destination file gets owner-only permissions
+	// instead of the process umask default. Mode only applies on creation —
+	// an existing destination keeps its current permissions.
+	writeFileSync(local, bytes, { mode: 0o600 });
 }
 
 function localLabel(resolved: ResolvedTransferRequest): string {

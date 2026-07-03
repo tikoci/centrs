@@ -148,6 +148,7 @@ PRGA
 proplist
 pywinauto
 QML
+qll # CodeQL library file extension (.qll), e.g. CleartextLoggingCustomizations.qll
 qmljsdebugger
 quickchr
 RAML
@@ -161,6 +162,7 @@ rosetta
 routeros
 routeros-skills
 rsc # RouterOS script / export file extension (.rsc)
+SARIF # Static Analysis Results Interchange Format; CodeQL's code-scanning analysis download format
 scp
 scriptability
 scriptable
