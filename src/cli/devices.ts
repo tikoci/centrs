@@ -507,8 +507,10 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 			centrsError,
 		);
 		if (format === "json" || format === "yaml") {
+			// codeql[js/clear-text-logging] password reaches here only as SettingSource provenance ({kind,key}), never the value — see CommonSettingsMeta.password in src/core/envelope.ts.
 			console.error(renderDevicesEnvelope(envelope, format));
 		} else {
+			// codeql[js/clear-text-logging] password reaches here only as SettingSource provenance ({kind,key}), never the value — see CommonSettingsMeta.password in src/core/envelope.ts.
 			console.error(formatCentrsErrorText(centrsError));
 		}
 		return 1;

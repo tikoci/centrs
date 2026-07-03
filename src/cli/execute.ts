@@ -356,12 +356,14 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 				tips,
 			);
 			console.error(
+				// codeql[js/clear-text-logging] No secret reaches this sink. The tainted 'password' flows in only as provenance (SettingSource={kind,key}), never the value — see CommonSettingsMeta.password in src/core/envelope.ts.
 				renderExecuteEnvelope(envelope, format, {
 					verbose: parsed?.verbose ?? false,
 				}),
 			);
 		} else {
 			console.error(
+				// codeql[js/clear-text-logging] Same false-positive pattern: password parsed from args never reaches error.message in the text-format catch path.
 				formatCentrsErrorText(
 					asCentrsError(error, {
 						code: "input/invalid-command",
@@ -407,6 +409,7 @@ async function runExecuteFanoutCli(
 	} catch (error) {
 		const envelope = buildExecuteFanoutErrorEnvelope(parsed, error);
 		console.error(
+			// codeql[js/clear-text-logging] Twin of #80/#81/#83/#84. No secret logged: buildExecuteFanoutErrorEnvelope meta is {target:{},via,settings:{}}; CodeQL taints the whole request object but the builder projects the password away.
 			renderExecuteFanoutEnvelope(envelope, format, {
 				verbose: parsed.verbose ?? false,
 			}),

@@ -211,12 +211,14 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 				tips,
 			);
 			console.error(
+				// codeql[js/clear-text-logging] Twin of the established redacted-request dismissals: error builders carry only targetInput (host)+via (protocol); the raw password never reaches this render.
 				renderRetrieveEnvelope(envelope, format, {
 					verbose: request?.verbose ?? false,
 				}),
 			);
 		} else {
 			console.error(
+				// codeql[js/clear-text-logging] Same false-positive pattern: password parsed from args never reaches error.message in the text-format catch path.
 				formatCentrsErrorText(
 					asCentrsError(error, {
 						code: "input/invalid-command",
@@ -264,6 +266,7 @@ async function runRetrieveFanoutCli(
 	} catch (error) {
 		const envelope = buildRetrieveFanoutErrorEnvelope(request, error);
 		console.error(
+			// codeql[js/clear-text-logging] Twin of #80/#81/#83. No secret logged: error builders carry only targetInput (host)+via (protocol); serializeCentrsError holds code/summary/remediation/context.
 			renderRetrieveFanoutEnvelope(envelope, format, {
 				verbose: request.verbose ?? false,
 			}),

@@ -207,6 +207,7 @@ export async function runDiscoverCli(args: readonly string[]): Promise<number> {
 			remediation:
 				"Use `centrs discover --help` to inspect the supported flags.",
 		});
+		// codeql[js/clear-text-logging] password reaches here only as SettingSource provenance ({kind,key}), never the value — see CommonSettingsMeta.password in src/core/envelope.ts.
 		console.error(formatCentrsErrorText(centrsError));
 		return 1;
 	}

@@ -452,6 +452,7 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 			// missing `--input` file) instead of falling back to plain text.
 			const envelope = withTips(buildApiErrorEnvelope(parsed, error), tips);
 			console.error(
+				// codeql[js/clear-text-logging] CLI catch-block error render. No secret logged: envelope stores only passwordProvided (boolean) and target.input (router, not the password).
 				renderApiEnvelope(envelope, format, {
 					raw: true,
 					verbose: parsed.verbose ?? false,
@@ -463,12 +464,14 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 				tips,
 			);
 			console.error(
+				// codeql[js/clear-text-logging] CLI catch-block error render. No secret logged: envelope stores only passwordProvided (boolean) and target.input (router, not the password).
 				renderApiEnvelope(envelope, format, {
 					verbose: parsed?.verbose ?? false,
 				}),
 			);
 		} else {
 			console.error(
+				// codeql[js/clear-text-logging] CLI catch-block error render. No secret logged: envelope stores only passwordProvided (boolean) and target.input (router, not the password).
 				formatCentrsErrorText(
 					asCentrsError(error, {
 						code: "input/invalid-command",
@@ -542,6 +545,7 @@ async function runApiFanoutCli(
 			Bun.env,
 		);
 		console.error(
+			// codeql[js/clear-text-logging] Fan-out CLI catch-block error render — twin of #80/#81. No secret logged: the error envelope's request summary, selection and target carry no auth fields; serializeCentrsError holds only code/summary/remediation/context.
 			renderApiFanoutEnvelope(envelope, format, {
 				verbose: parsed.verbose ?? false,
 			}),

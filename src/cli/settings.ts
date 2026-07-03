@@ -244,6 +244,7 @@ export async function runSettingsCli(args: readonly string[]): Promise<number> {
 		}
 
 		const format = parsed.format ?? "text";
+		// codeql[js/clear-text-logging] passwordSet is a has-password boolean, never the secret; the property-NAME heuristic (maybePassword) matches the field name, not its value type.
 		console.log(renderSettingsEnvelope(envelope, format));
 		return 0;
 	} catch (error) {
@@ -262,8 +263,10 @@ export async function runSettingsCli(args: readonly string[]): Promise<number> {
 			centrsError,
 		);
 		if (format === "json" || format === "yaml") {
+			// codeql[js/clear-text-logging] sink renders only a literal error string (e.g. "Missing value for --password."), never the real value; CodeQL over-taints via shared expectValue/CentrsError code.
 			console.error(renderSettingsEnvelope(envelope, format));
 		} else {
+			// codeql[js/clear-text-logging] sink renders only a literal error string (e.g. "Missing value for --password."), never the real value; CodeQL over-taints via shared expectValue/CentrsError code.
 			console.error(formatCentrsErrorText(centrsError));
 		}
 		return 1;
