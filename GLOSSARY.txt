@@ -171,6 +171,7 @@ shopt # bash builtin for toggling shell options (e.g. nullglob)
 Sikuli
 SikuliX
 skillcheck
+startswith # jq builtin filter that tests whether a string begins with a given prefix
 SNMP
 SPI
 SRP

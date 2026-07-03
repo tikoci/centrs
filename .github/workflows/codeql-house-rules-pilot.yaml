@@ -29,7 +29,7 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
-          queries: ./.github/codeql-house-rules
+          config-file: ./.github/codeql-house-rules/pilot-config.yml
 
       - name: Run analysis (local SARIF only, no Security-tab upload)
         uses: github/codeql-action/analyze@v4
@@ -50,10 +50,12 @@ jobs:
             else
               any=0
               for f in "${files[@]}"; do
-                count=$(jq '[.runs[].results[]?] | length' "$f")
+                # Defense in depth: only ever report our own rule IDs here, even if a
+                # future edit accidentally re-enables the default suite.
+                count=$(jq '[.runs[].results[]? | select(.ruleId | startswith("centrs/"))] | length' "$f")
                 if [ "$count" -gt 0 ]; then
                   any=1
-                  jq -r '.runs[].results[]? |
+                  jq -r '.runs[].results[]? | select(.ruleId | startswith("centrs/")) |
                     "- **" + .ruleId + "** " +
                     (.locations[0].physicalLocation.artifactLocation.uri // "?") + ":" +
                     ((.locations[0].physicalLocation.region.startLine // 0) | tostring) +
