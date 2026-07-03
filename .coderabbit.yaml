@@ -5,9 +5,20 @@
 #   - review only when a PR is marked ready-for-review (skip drafts)
 #   - one review per ready PR; no automatic per-commit incremental re-reviews
 #   - re-review on demand with an `@coderabbitai review` PR comment
+# Terse/no-decoration policy (issue #143): reviews.in_progress_fortune
+# defaults to true and was the actual source of the "art" the maintainer
+# flagged — reviews.poem already defaults to false but is set explicitly
+# below for clarity.
 language: en-US
+tone_instructions: >
+  Terse and actionable. No poems, jokes, or decorative filler. State the
+  finding, the file/line, and the fix. Skip praise and preamble.
 reviews:
   auto_review:
     enabled: true
     drafts: false
     auto_incremental_review: false
+  poem: false
+  in_progress_fortune: false
+  path_filters:
+    - "!.scratch/**"

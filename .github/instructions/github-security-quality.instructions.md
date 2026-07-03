@@ -1,5 +1,5 @@
 ---
-applyTo: "SECURITY.md,.github/workflows/codeql.yaml,.github/workflows/qa.yaml,.github/codeql-config.yml,.github/dependabot.yaml,src/**,package.json,bun.lock"
+applyTo: "SECURITY.md,.github/workflows/codeql.yaml,.github/workflows/qa.yaml,.github/codeql-config.yml,.github/codeql-house-rules/**,.github/dependabot.yaml,src/**,package.json,bun.lock"
 ---
 
 # GitHub security and quality scanning
@@ -7,6 +7,23 @@ applyTo: "SECURITY.md,.github/workflows/codeql.yaml,.github/workflows/qa.yaml,.g
 Use `SECURITY.md` as the source-of-truth summary for scanning posture.
 
 - Keep CodeQL configured with the `security-and-quality` suite for public tikoci repos unless a spec says otherwise.
+- `.github/codeql-house-rules/` is a small custom query pack layered on top of
+  `security-and-quality` via `codeql-config.yml`'s `queries:` list (not a
+  separate workflow) — it runs on every PR/push like everything else in
+  `codeql.yaml` and uploads real Security-tab alerts under its own
+  `centrs/*` rule IDs. Each rule is structural (existence-of-a-call), not
+  taint-tracked — this repo's own ~33 dismissed `js/clear-text-logging`
+  findings are first-party evidence that taint analysis over-approximates
+  through shared helpers here, so a house rule deliberately trades recall
+  (it only catches "the gate call is missing," not "the gate runs after the
+  sink") for not falling into that trap. Currently one rule
+  (`centrs/missing-required-gate`), scoped to `apiFanout` only, because
+  that's the one command with named single-purpose gate functions today.
+  Adding a rule for another command needs the same treatment: a named gate
+  function to check for, not a general taint query. A verify-before-promote
+  discipline applies to any new rule here — confirm both true-negative *and*
+  true-positive (deliberately break the invariant on a throwaway branch, dispatch
+  `codeql.yaml`, confirm the finding fires) before it goes in `codeql-config.yml`.
 - Treat the GitHub Security tab as the live alert state and aim for 0 open findings.
 - AI findings are noisy; address each finding on its merits or dismiss false positives in the GitHub UI (or `gh api .../code-scanning/alerts/{n} -X PATCH`) with a written justification — this is still the right first move for a *new* finding, since the UI dismissal is the audit-log record.
 - For a false positive that keeps reopening at the same site across unrelated PRs, an in-code suppression comment **is honored by CodeQL's analysis** — confirmed against this repo's own scan history (`src/cli/btest.ts`: two suppression comments added 2026-06-22, zero recurrence across 8+ subsequent `main` scans as of 2026-07-03; grammar verified against the actual `AlertSuppression.qll` query library). Placement differs by syntax: `// codeql[<rule-id>]` must be a standalone comment on its own line immediately before the flagged line; the legacy `// lgtm[<rule-id>]` is more flexible and also works as a trailing same-line comment (the form actually used at `src/cli/btest.ts:510`/`:513`). Use the same justification text the UI dismissal would carry. A `.github/codeql-config.yml` query-filter is the blunter, rule-wide alternative when even per-site suppression is too fine-grained.

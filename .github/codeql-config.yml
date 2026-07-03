@@ -1,4 +1,10 @@
 name: centrs CodeQL security and quality configuration
 
+# The house-rules pack (.github/codeql-house-rules/) is a small set of
+# structural, repo-specific checks (see the comment atop each .ql file for
+# what it encodes and why it isn't taint-tracked). Verified true-positive
+# and confirmed it doesn't break the `actions`-language job before being added
+# here — see .github/instructions/github-security-quality.instructions.md.
 queries:
   - uses: security-and-quality
+  - uses: ./.github/codeql-house-rules

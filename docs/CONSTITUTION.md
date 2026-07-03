@@ -298,7 +298,11 @@ Rules:
 - **Never silently downgrade across `--via`.** If the caller pinned a transport
   that cannot do the operation, error out with a `transport/*` code.
   Auto-selection (no `--via`) may downgrade *within* the table, but every hop is
-  reported in `meta.warnings` with its reason.
+  reported in `meta.warnings` with its reason. For `api`'s fan-out path, this
+  and "Validation is the product" above are also checked structurally by
+  CodeQL (`.github/codeql-house-rules/missing-required-gate.ql` —
+  `apiFanout` must call `assertApiProtocolSupported`/`validateApiRequestShape`;
+  scoped to `apiFanout` only today).
 - **Execute vs retrieve surfaces:** native-api, rest-api, ssh, mac-telnet (and
   later RoMON / WinBox Terminal) are execute surfaces; SNMP is **retrieve-only**.
   mac-telnet is the default execute path for an unresolved-MAC target — IP-level
