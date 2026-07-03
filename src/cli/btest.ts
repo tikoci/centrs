@@ -29,8 +29,10 @@ import type { BtestDirection, BtestProtocol } from "../protocols/btest.ts";
 import { toYaml } from "../retrieve.ts";
 import {
 	type CliCommandMetadata,
+	type CliCommandOption,
 	expectValue,
 	renderCommandHelp,
+	unknownFlagError,
 } from "./common.ts";
 import {
 	buildTargetSelectionTips,
@@ -135,6 +137,22 @@ export const btestCommand: CliCommandMetadata = {
 		{ flag: "--csv", description: "Shortcut for `--format csv`." },
 	],
 };
+
+/**
+ * btest's single option list documents both subcommands. Scope "did you mean?"
+ * hints to the active mode so a client typo never suggests a server-only flag
+ * (and vice versa). Shared flags carry no `(client)`/`(server)` marker, so they
+ * stay in both; if a marker is ever dropped the flag just widens to both
+ * modes — it degrades to the old behavior, never a crash.
+ */
+function btestOptionsFor(
+	mode: "client" | "server",
+): readonly CliCommandOption[] {
+	const other = mode === "client" ? "(server)" : "(client)";
+	return btestCommand.options.filter(
+		(option) => !option.description.includes(other),
+	);
+}
 
 /** Parse a bandwidth value: a bare integer or a `K`/`M`/`G` suffix (bits/sec). */
 function parseBandwidth(value: string, flag: string): number {
@@ -276,7 +294,7 @@ function parseClientArgs(args: readonly string[]): ClientCliArgs {
 				break;
 			default:
 				if (arg.startsWith("-"))
-					throw new Error(`Unknown btest client flag: ${arg}`);
+					throw unknownFlagError("btest", arg, btestOptionsFor("client"));
 				if (request.targetInput !== undefined)
 					throw new Error(`Unexpected extra argument: ${arg}`);
 				request.targetInput = arg;
@@ -341,7 +359,7 @@ function parseServerArgs(args: readonly string[]): ServerCliArgs {
 				break;
 			default:
 				if (arg.startsWith("-"))
-					throw new Error(`Unknown btest server flag: ${arg}`);
+					throw unknownFlagError("btest", arg, btestOptionsFor("server"));
 				throw new Error(
 					`\`centrs btest server\` takes no positional arguments; got: ${arg}.`,
 				);

@@ -15,6 +15,7 @@ import {
 	type CliCommandMetadata,
 	expectValue,
 	renderCommandHelp,
+	unknownFlagError,
 } from "./common.ts";
 
 export const mcpCommand: CliCommandMetadata = {
@@ -55,6 +56,9 @@ export function parseMcpCliArgs(args: readonly string[]): McpCliArgs {
 	const parsed: McpCliArgs = {};
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
+		if (arg === undefined) {
+			continue;
+		}
 		switch (arg) {
 			case "start":
 				// Optional verb; `centrs mcp` and `centrs mcp start` are equivalent.
@@ -73,7 +77,7 @@ export function parseMcpCliArgs(args: readonly string[]): McpCliArgs {
 				parsed.allowAdhocTargets = true;
 				break;
 			default:
-				throw new Error(`Unknown flag for centrs mcp: ${arg}`);
+				throw unknownFlagError("mcp", arg, mcpCommand.options);
 		}
 	}
 	return parsed;

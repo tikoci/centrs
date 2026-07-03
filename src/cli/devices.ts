@@ -30,6 +30,7 @@ import {
 	type CliCommandMetadata,
 	expectValue,
 	renderCommandHelp,
+	unknownFlagError,
 } from "./common.ts";
 
 export const devicesCommand: CliCommandMetadata = {
@@ -263,7 +264,7 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			default:
 				if (arg.startsWith("-")) {
-					throw new Error(`Unknown devices flag: ${arg}`);
+					throw unknownFlagError("devices", arg, devicesCommand.options);
 				}
 				positional.push(arg);
 				break;
