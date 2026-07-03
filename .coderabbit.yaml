@@ -9,6 +9,14 @@
 # defaults to true and was the actual source of the "art" the maintainer
 # flagged — reviews.poem already defaults to false but is set explicitly
 # below for clarity.
+#
+# CodeRabbit ignores .coderabbit.yaml changes made *within* an open-source PR
+# ("only the configuration from the base branch is applied") — confirmed on
+# PR #167, which still got a poem despite this file disabling it, because the
+# review ran against `main`'s pre-#167 config. Any edit here only takes
+# effect starting with the PR opened *after* this file's change merges to
+# `main` — never trust "the PR that adds the setting" as the setting's own
+# verification.
 language: en-US
 tone_instructions: >
   Terse and actionable. No poems, jokes, or decorative filler. State the
