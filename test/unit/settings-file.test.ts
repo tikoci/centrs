@@ -89,6 +89,23 @@ describe("settingsSet file mechanics", () => {
 		});
 	});
 
+	test("a valid new value overwrites an already-malformed hand-edited previous value", async () => {
+		await withTempDir(async (dir) => {
+			const path = centrsEnvPath(dir);
+			await mkdir(join(dir, "tikoci"), { recursive: true });
+			await Bun.write(path, "CENTRS_PORT=not-a-number\n");
+			const result = await settingsSet({
+				attr: "port",
+				value: "8080",
+				env: { XDG_CONFIG_HOME: dir },
+			});
+			expect(result.data.previous).toBe("not-a-number");
+			expect(result.data.value).toBe(8080);
+			const contents = await readFile(path, "utf8");
+			expect(contents).toBe("CENTRS_PORT=8080\n");
+		});
+	});
+
 	test("a file with no trailing newline still round-trips without accumulating blank lines", async () => {
 		await withTempDir(async (dir) => {
 			const path = centrsEnvPath(dir);

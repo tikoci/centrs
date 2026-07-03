@@ -1,6 +1,6 @@
 # `settings/unknown-key`
 
-`settings get`/`set` received a token that is not a recognized CENTRS_*-shaped setting.
+`settings get`/`set`/`reset` received a token that is not a recognized CENTRS_*-shaped setting.
 
 ## Fix
 

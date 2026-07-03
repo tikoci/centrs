@@ -175,4 +175,26 @@ describe("loadEnvFileDefaults", () => {
 			await rm(dir, { recursive: true, force: true });
 		}
 	});
+
+	test("strips credential/self-referential keys even if hand-added to the file", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "centrs-settings-"));
+		try {
+			await mkdir(join(dir, "tikoci"), { recursive: true });
+			await Bun.write(
+				join(dir, "tikoci", "centrs.env"),
+				[
+					"CENTRS_FORMAT=json",
+					"CENTRS_PASSWORD=hunter2",
+					"CENTRS_USERNAME=admin",
+					"CENTRS_CDB_PASSWORD=hunter2",
+					"CENTRS_SKIP_ENV_FILE=0",
+					"CENTRS_RUN_FAST_INTEGRATION=1",
+				].join("\n"),
+			);
+			const result = await loadEnvFileDefaults({ XDG_CONFIG_HOME: dir });
+			expect(result).toEqual({ CENTRS_FORMAT: "json" });
+		} finally {
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
 });

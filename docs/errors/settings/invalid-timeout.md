@@ -10,8 +10,8 @@ match the shared duration grammar (`parseDuration` in
 with a `ms`/`s`/`m` suffix — `500ms`, `5s`, `1m`. Anything else, like
 `not-a-duration` (example 22 in `commands/settings/examples.md`), fails.
 `settings.ts` layers one more rule on top for `timeout` specifically: even a
-syntactically valid duration that parses to `0` or a negative number is
-rejected — a zero or negative timeout isn't a meaningful value to set.
+syntactically valid duration that parses to `0` is rejected — a zero timeout
+isn't a meaningful value to set.
 
 Like the other typed-value codes here, this isn't `settings`-exclusive:
 `parseDuration` backs `CENTRS_TIMEOUT` and every command's own `--timeout`

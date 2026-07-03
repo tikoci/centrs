@@ -48,6 +48,23 @@ export interface ResolvedSetting<T> {
 /** A pre-coerced comment-kv override layer (sits below env, above config). */
 export type CommentKvLayer<T> = ResolvedSetting<T> | undefined;
 
+/**
+ * Env keys that must never flow through the `config` (`centrs.env`) tier,
+ * even if a user hand-adds them to the file — credential-shaped or
+ * self-referential keys. Kept here (not in `src/settings.ts`, which owns the
+ * human-facing refused-key registry with its remediation text) so
+ * `resolver/config-file.ts` can filter on it without a resolver → top-level
+ * command import cycle; `test/unit/settings-registry.test.ts` asserts this
+ * list stays in sync with `settingsRefusedKeys`' `envKey` values.
+ */
+export const REFUSED_CONFIG_ENV_KEYS: readonly string[] = [
+	"CENTRS_PASSWORD",
+	"CENTRS_USERNAME",
+	"CENTRS_CDB_PASSWORD",
+	"CENTRS_SKIP_ENV_FILE",
+	"CENTRS_RUN_FAST_INTEGRATION",
+];
+
 export function toCoreSource(source: ResolverSettingSource): CoreSettingSource {
 	switch (source.kind) {
 		case "explicit":

@@ -191,6 +191,23 @@ describe("centrs settings print", () => {
 		expect(bareBody.data.unrecognized).toBeUndefined();
 	});
 
+	test("print --all also surfaces a hand-added refused/credential line, redacted", async () => {
+		const dir = await freshDir("print-all-refused");
+		await writeCentrsEnv(
+			dir,
+			"CENTRS_PASSWORD=hunter2\nCENTRS_USERNAME=admin\n",
+		);
+
+		const result = await runSettings(["print", "--all"], dir);
+		const body = JSON.parse(result.stdout);
+		expect(body.data.unrecognized).toEqual(
+			expect.arrayContaining([
+				{ key: "CENTRS_PASSWORD", value: "(redacted)" },
+				{ key: "CENTRS_USERNAME", value: "admin" },
+			]),
+		);
+	});
+
 	test("example 4: print a single attribute", async () => {
 		const dir = await freshDir("print-single");
 		const result = await runSettings(["print", "max-results"], dir);

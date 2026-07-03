@@ -463,6 +463,21 @@ async function writeSettingsFileLines(
 		await unlink(tempPath).catch(() => undefined);
 		throw error;
 	}
+	await syncDirectory(dir);
+}
+
+/** Best-effort directory fsync so the rename is durable across a crash. */
+async function syncDirectory(dir: string): Promise<void> {
+	let handle: Awaited<ReturnType<typeof open>> | undefined;
+	try {
+		handle = await open(dir, "r");
+		await handle.sync();
+	} catch {
+		// Directory fsync is unsupported on some platforms; the rename itself is
+		// still atomic, so this is best-effort durability only.
+	} finally {
+		await handle?.close();
+	}
 }
 
 // ── print ────────────────────────────────────────────────────────────────────
@@ -568,13 +583,33 @@ function buildPrintEntryTolerant(
 	}
 }
 
+/**
+ * Parse a raw on-disk value for reporting as `set`'s `previous`, tolerating a
+ * malformed value rather than throwing — a hand-edited file with garbage in
+ * it (e.g. `CENTRS_PORT=abc`) must not block `set` from overwriting it with a
+ * valid one. Mirrors {@link buildPrintEntryTolerant}'s tolerance.
+ */
+function parsePreviousTolerant(
+	def: SettingsKeyDef,
+	raw: string,
+): SettingsValue {
+	try {
+		return def.parse(raw, def.envKey).value;
+	} catch {
+		return raw;
+	}
+}
+
 function collectUnrecognized(
 	lines: readonly string[],
 ): readonly SettingsUnrecognizedEntry[] {
-	const knownKeys = new Set<string>([
-		...settingsManagedKeys.map((def) => def.envKey),
-		...settingsRefusedKeys.map((def) => def.envKey),
-	]);
+	// Only managed keys are "known" here — refused keys (e.g. a hand-added
+	// CENTRS_PASSWORD line) deliberately fall through to this listing so
+	// `print --all` still surfaces them (redacted via secretKeys below)
+	// instead of silently hiding them because they're recognized-but-refused.
+	const knownKeys = new Set<string>(
+		settingsManagedKeys.map((def) => def.envKey),
+	);
 	const secretKeys = new Set(
 		settingsRefusedKeys.filter((def) => def.secret).map((def) => def.envKey),
 	);
@@ -822,7 +857,7 @@ export async function settingsSet(
 	const index = findLineIndex(lines, def.envKey);
 	const previousRaw = index >= 0 ? rawValueAtLine(lines, index) : undefined;
 	const previous =
-		previousRaw !== undefined ? def.parse(previousRaw, def.envKey).value : null;
+		previousRaw !== undefined ? parsePreviousTolerant(def, previousRaw) : null;
 
 	const newLine = `${def.envKey}=${parsed.write}`;
 	if (index >= 0) {

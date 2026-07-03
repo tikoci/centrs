@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CentrsError } from "../../src/errors.ts";
+import { REFUSED_CONFIG_ENV_KEYS } from "../../src/resolver/index.ts";
 import {
 	settingsGet,
 	settingsManagedKeys,
@@ -90,6 +91,14 @@ describe("settingsRefusedKeys registry", () => {
 			.map((def) => def.attr)
 			.sort();
 		expect(secret).toEqual(["cdb-password", "password"].sort());
+	});
+
+	test("resolver/config-file.ts's REFUSED_CONFIG_ENV_KEYS stays in sync", () => {
+		// Duplicated (not imported) in resolver/config-file.ts to avoid a
+		// resolver -> top-level-command import cycle — this guards drift.
+		expect([...REFUSED_CONFIG_ENV_KEYS].sort()).toEqual(
+			settingsRefusedKeys.map((def) => def.envKey).sort(),
+		);
 	});
 });
 

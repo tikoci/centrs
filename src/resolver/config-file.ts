@@ -20,7 +20,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { parseBoolean } from "./settings.ts";
+import { parseBoolean, REFUSED_CONFIG_ENV_KEYS } from "./settings.ts";
 
 const ENV_XDG_CONFIG_HOME = "XDG_CONFIG_HOME";
 const ENV_HOME = "HOME";
@@ -112,6 +112,13 @@ export function parseEnvFileDefaults(
  * (`{}`) when the file is absent or `CENTRS_SKIP_ENV_FILE` is active — never
  * throws, since a missing or foreign-content file is not an error for
  * anything but `settings` itself.
+ *
+ * Credential/self-referential keys ({@link REFUSED_CONFIG_ENV_KEYS}) are
+ * stripped even if a hand-edited file contains them: most resolvers already
+ * never consult `config` for these, but dropping them here means the shared
+ * `config` map itself never carries a secret, rather than relying on every
+ * call site to keep excluding it. `parseEnvFileDefaults` is left unfiltered
+ * so `settings print --all` can still inspect/redact a hand-added line.
  */
 export async function loadEnvFileDefaults(
 	env: Record<string, string | undefined> = Bun.env,
@@ -121,5 +128,9 @@ export async function loadEnvFileDefaults(
 	}
 	const path = defaultSettingsPath(env);
 	const { lines } = await readSettingsFileRaw(path);
-	return parseEnvFileDefaults(lines);
+	const parsed = parseEnvFileDefaults(lines);
+	for (const key of REFUSED_CONFIG_ENV_KEYS) {
+		delete parsed[key];
+	}
+	return parsed;
 }
