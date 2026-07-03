@@ -1,6 +1,9 @@
 /**
- * PILOT / UNVERIFIED — see issue #119. Not run yet against real CodeQL
- * analysis; expect to need at least one tuning pass once real output exists.
+ * Part of the default `codeql.yaml` run (`.github/codeql-config.yml`) since
+ * 2026-07-03 — every PR/push to `main`, not a side-channel pilot. Both
+ * true-negative (0 findings on current code) and true-positive (fires when
+ * the gate call is removed, verified on a throwaway branch before promotion)
+ * are confirmed; see issue #119.
  *
  * Structural check, not data-flow: "named entry-point function must contain
  * a call to its named gate function." Deliberately per-function/existence-only

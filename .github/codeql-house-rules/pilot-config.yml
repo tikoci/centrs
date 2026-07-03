@@ -1,4 +1,0 @@
-name: centrs house-rules pilot config (workflow_dispatch only — see codeql-house-rules-pilot.yaml)
-disable-default-queries: true
-queries:
-  - uses: ./.github/codeql-house-rules
