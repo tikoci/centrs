@@ -109,7 +109,7 @@ describe("runCli dispatch", () => {
 // #111: the shared `unknownFlagError` "Did you mean?" contract, once wired into
 // the `api` parser in PR #110, is now rolled out to every parser. Each parser
 // must name the command and surface the closest known flag, not a bare throw.
-// cspell:ignore formt resolv protcol binde jsonn filee
+// cspell:ignore formt resolv protcol binde bindd jsonn filee
 describe("unknown flags surface a 'Did you mean?' suggestion (#111)", () => {
 	const nearMisses: ReadonlyArray<{
 		name: string;
@@ -151,4 +151,18 @@ describe("unknown flags surface a 'Did you mean?' suggestion (#111)", () => {
 			expect(err).not.toMatch(/\n\s+at\s/);
 		});
 	}
+
+	// btest shares one option list across client + server; the hint must be
+	// scoped to the active mode so a typo never suggests the other mode's flag.
+	test("btest scopes suggestions to the active subcommand", async () => {
+		// `--protocol` is client-only: a server-mode typo must not surface it.
+		const server = await run(["btest", "server", "--protcol"]);
+		expect(server.code).toBe(1);
+		expect(server.err).toContain("Unknown btest flag:");
+		expect(server.err).not.toContain("Did you mean --protocol");
+		// `--bind` is server-only: a client-mode typo must not surface it.
+		const client = await run(["btest", "client", "127.0.0.1", "--bindd"]);
+		expect(client.code).toBe(1);
+		expect(client.err).not.toContain("Did you mean --bind");
+	});
 });
