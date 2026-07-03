@@ -3,11 +3,14 @@
 Read and write centrs's own settings — the global `centrs.env` preferences and
 the `__default__` fallback record — and run first-time setup.
 
-Status: `designed`. This file describes intent and flags; no implementation yet.
+Status: `CHR-passed` for the surface described by `examples.md` (fixture-backed
+integration tests — `settings` performs no network IO, so no CHR is needed).
 See `docs/MATRIX.md` for the cell state. `settings` is the front-end to the
 settings the constitution defines (Settings precedence: the `centrs.env` config
 file at tier 2; `__default__` fallback creds): it does not invent new settings,
-only edits the ones already specified.
+only edits the ones already specified. The interactive first-time-setup flow
+(bare `centrs settings` under a TTY) remains a deferred later slice — see
+"Surface" below.
 
 ## Why
 
@@ -136,18 +139,17 @@ centrs settings set <attr> <value>             # write one value to centrs.env
 centrs settings reset [<attr>]                 # clear one/all back to built-in default
 ```
 
-- **Interactive (`centrs settings`, TTY):** prompts (clack-style, like
-  `@tikoci/quickchr`) to optionally collect a default `user`/`password`
-  (written to the `__default__` record so a fresh CDB "starts useful"),
-  confirm/update global preferences, and report where the `centrs.env` lives.
-  Non-TTY runs of bare `settings` print the resolved settings instead of
-  prompting (same output as `settings print`).
-  **Implementation prerequisite:** centrs has no prompt-library dependency
-  today (`package.json` lists only `zod` and the MCP SDK) — this slice needs
-  one added (`@clack/prompts`, matching the `@tikoci/quickchr` reference).
-  Consistent with the issue's own phasing, this is explicitly a **later
-  slice**; the non-interactive surface below does not depend on it and should
-  ship first.
+- **Interactive (`centrs settings`, TTY) — deferred later slice, not built.**
+  Eventually: prompts (clack-style, like `@tikoci/quickchr`) to optionally
+  collect a default `user`/`password` (written to the `__default__` record so
+  a fresh CDB "starts useful"), confirm/update global preferences, and report
+  where the `centrs.env` lives. **Implementation prerequisite:** centrs has no
+  prompt-library dependency today (`package.json` lists only `zod` and the MCP
+  SDK) — this slice needs one added (`@clack/prompts`, matching the
+  `@tikoci/quickchr` reference). Until it ships, bare `centrs settings`
+  behaves identically to `settings print` **regardless of TTY** — matching
+  the issue's own phasing, which explicitly said not to block the
+  non-interactive surface (built below) on this later slice.
 - **Non-interactive (`set`/`get`/`reset`/`print`):** scriptable edits to
   `centrs.env`. Exit code `0` on success, `1` on a validation/refusal error —
   matching the plain (non-fan-out) CLI error convention already used
@@ -217,27 +219,27 @@ canonical `CENTRS_FORMAT=` line. It is **user-global only** — the single XDG
 path above; there is no project-local config file discovered from the working
 directory.
 
-**Implementation prerequisite — a real `config` precedence layer, not a
-merged default.** `src/resolver/settings.ts` (the shared precedence-ladder
-module every command resolver calls) currently checks `explicit → env →
-comment-kv → default` — there is no slot for a loaded `centrs.env` file
-anywhere in that chain today, and nothing under `src/` reads the file at all.
-The core envelope's `SettingSourceKind` (`src/core/envelope.ts`) already
-defines a `"config"` member for exactly this ("Precedence (low → high) is
-config < comment-kv < env < cli") — it's declared but never produced. The fix
-is **not** to fold a loaded value into the existing `defaultValue` parameter
-(that would report it with `source: "default"`, losing provenance — an
-earlier draft of this README suggested exactly that and it was wrong). It
-needs a genuine new layer: each `resolveXSetting` helper gains a `config`
-argument (parallel to the existing `commentKv` argument) checked *between*
-`comment-kv` and `default`, returning `{ value, source: { kind: "config", key:
-"CENTRS_FORMAT" } }` when the file supplies it. This is a small,
-self-contained addition — a `loadEnvFileDefaults()` producing a
-`Record<string, string>` that command entry points pass as the new `config`
-argument — but it must land in the same change that builds `settings`, or
-`settings print`'s source column has nothing truthful to report, and every
-other command's `meta.settings.*.source` stays permanently unable to say
-`"config"` even after a user sets something in `centrs.env`.
+**The `config` precedence layer** — `src/resolver/config-file.ts` resolves
+`${XDG_CONFIG_HOME:-~/.config}/tikoci/centrs.env` (injectable `env` map,
+mirroring `defaultCdbPath`) and `loadEnvFileDefaults()` parses it into a flat
+`Record<string, string>`. `resolveStringSetting`/`resolveBooleanSetting`/
+`resolveOptionalIntegerSetting` (`src/resolver/settings.ts`) each take this as
+a `config` argument, checked *between* `comment-kv` and the built-in default,
+producing `{ value, source: { kind: "config", key: "CENTRS_FORMAT" } }` — a
+genuine new layer, not a value folded into the existing `defaultValue`
+parameter (which would have reported it with `source: "default"`, losing
+provenance). Every command that resolves a managed key (`retrieve`, `execute`,
+`api`, `transfer`, `terminal`, plus `resolveCdb`/`expandCdbSelection` for
+`CENTRS_CDB_FILE` and `mcp/config.ts` for `CENTRS_CDB_FILE`/
+`CENTRS_MCP_ALLOW_ADHOC`) threads this `config` argument through, so a value
+set via `centrs settings set` actually takes effect everywhere, not just in
+`settings print`'s own report. `CENTRS_USERNAME`/`CENTRS_PASSWORD`/
+`CENTRS_CDB_PASSWORD` deliberately never read this tier, even if hand-added to
+the file — a stronger defense than read-time redaction alone, since a
+hand-edited credential line then cannot function as a live source. Fan-out
+via-pinning guards (`retrieve`/`execute`/`api`) also deliberately exclude
+`config` — a `centrs.env` default is the weakest precedence tier and must not
+override a per-device comment-kv `via=` across a mixed fan-out.
 
 Write strategy (new; the current file is silent on this):
 
@@ -293,44 +295,39 @@ happen to agree on the same three values), `print` should show the
 defaults rather than a single misleading "default: text" — e.g. `default:
 text (api: json)`.
 
-## Testability: no override path exists yet
+## Testability
 
-`devices` is fixture-testable because `--cdb-file` / `CENTRS_CDB_FILE` (and
-`defaultCdbPath`'s injectable `env` map, honoring an `ENV_HOME` override)
-already let a test point the CDB at a per-test temp path without touching a
-real user's file. `centrs.env` has no equivalent today: the path is
-`${XDG_CONFIG_HOME:-~/.config}/tikoci/centrs.env`, and nothing reads
-`XDG_CONFIG_HOME` from an injectable `env` map the way `defaultCdbPath` does —
-it would need to read `Bun.env` directly, which is untestable in-process.
-**Prerequisite:** the file-path resolver for `centrs.env` must take the same
-injectable `env: Record<string, string | undefined>` shape `defaultCdbPath`
-does, so `test/integration/settings.test.ts` can set `XDG_CONFIG_HOME` (or an
-explicit override) to a per-test temp directory — exactly like `$CDB` in the
-`devices` fixtures — instead of mutating `~/.config/tikoci/centrs.env` on the
-machine running the tests. Without this, `settings` cannot be fixture-tested
-at all, which contradicts the issue's own acceptance criteria ("fixture-backed
-like `devices` — no CHR needed").
+`settings` is fixture-testable the same way `devices` is: `defaultSettingsPath`
+(`src/resolver/config-file.ts`) takes an injectable
+`env: Record<string, string | undefined>` map and reads `XDG_CONFIG_HOME`
+from it (falling back to `HOME`, then `os.homedir()`) — mirroring
+`defaultCdbPath`'s pattern. `test/integration/settings.test.ts` sets
+`XDG_CONFIG_HOME` to a per-test temp directory (exactly like `$CDB` in the
+`devices` fixtures), so no test ever touches a real user's
+`~/.config/tikoci/centrs.env`.
 
-## Open questions
+## Error and warning codes
 
-| Question | Notes |
-| --- | --- |
-| Exact wording/UX for `CENTRS_INSECURE` and `CENTRS_TRANSFER_VIA=ftp`'s "one-line reminder" on `set` — a warning in `meta.warnings`, or an interactive confirm even in non-TTY mode? | Security-adjacent; pick the pattern already used for other consequential toggles once one exists. Leaning `meta.warnings` (non-blocking) since an interactive confirm in non-TTY mode isn't meaningful and would break scripting. |
-
-## New error codes this issue must add
-
-`src/core/error-catalog.ts` has no entries yet for the refusal/unknown-key
-paths this spec requires. Per the contributor contract in
-`docs/errors/README.md`, each needs a catalog entry **and** a
-`docs/errors/<code>.md` page in the same change that introduces it:
+Per the contributor contract in `docs/errors/README.md`, every code below has
+a catalog entry (`src/core/error-catalog.ts`) and a `docs/errors/<code>.md`
+page:
 
 - `settings/reserved-key` — `set`/`reset` refused a credential or
   self-referential key (see Scope boundary table).
 - `settings/unknown-key` — `get`/`set` received a token that is not a
   recognized `CENTRS_*`-shaped name at all — e.g. a typo. (Not needed for
   reads via `print --all`, which tags-and-shows rather than rejecting.)
+- `settings/consequential-value` — a non-fatal `set` warning (resolves the
+  former open question below) for exactly two keys: `insecure=true` and
+  `transfer-via=ftp`. `meta.warnings`, not an interactive confirm — a confirm
+  prompt in non-TTY mode isn't meaningful and would break scripting.
+- `settings/skip-env-file-active` — a non-fatal `print` warning noting that
+  `--skip-env-file` is active for this invocation only; `settings` itself
+  always reads the real file regardless.
+- `internal/settings-failed` — generic internal-error fallback, left as an
+  unenriched stub matching the sibling `internal/devices-failed`.
 - `settings/invalid-boolean`, `settings/invalid-integer`,
   `settings/invalid-timeout`, `settings/invalid-via`, `settings/invalid-format`,
-  `settings/unsafe-protocol-blocked` (used by example 24's `transfer-via=ftp`
-  warning) already exist in the catalog (shared with other commands' resolvers) and
-  apply unchanged here.
+  `settings/unsafe-protocol-blocked` (referenced by the `consequential-value`
+  warning for `transfer-via=ftp`) already existed in the catalog (shared with
+  other commands' resolvers) and apply unchanged here.

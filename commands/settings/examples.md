@@ -12,15 +12,8 @@ Some examples also reference `$CDB` (a fixture WinBox CDB, built the same way
 as `devices`' fixtures) to exercise the `__default__` boundary between the two
 files.
 
-> **Prerequisite not yet built:** these examples assume (a) the `centrs.env`
-> loader described in the README's "Precedence" and "Testability" sections
-> exists, and (b) `src/resolver/settings.ts` has a genuine `config` layer in
-> its precedence chain — a `{ kind: "config", key: "CENTRS_FORMAT" }` source,
-> not a value folded into the existing `defaultValue` parameter (that would
-> lose provenance). Neither exists yet — see `commands/settings/README.md`
-> for what must land alongside the CLI wiring. Do not mark any example here
-> green against a `settings` implementation that skips those pieces; `print`
-> would have nothing truthful to report.
+Every example below is a named test in `test/integration/settings.test.ts`
+("example N: ..."), green via `bun run test:integration:settings`.
 
 ## print
 
