@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { loadCdb } from "../../src/devices.ts";
+import { defaultMndpReusePort } from "../../src/discover.ts";
 import { resolveMcpConfig } from "../../src/mcp/config.ts";
 import {
 	handleDevices,
@@ -12,11 +13,13 @@ import {
 import { makeMcpTestCdb } from "./mcp-cdb-fixture.ts";
 import { udpLoopbackSupported } from "./udp-loopback.ts";
 
-// A *confirmed* discover save runs the real MNDP listener, which binds a UDP
-// socket with reusePort; skip it where that bind is unsupported (Windows
-// SO_REUSEPORT → ENOTSUP). The confirmation-*gate* test bails before binding, so
-// it stays covered. The listen path itself is exercised by CHR integration. (#69)
-const UDP_LOOPBACK = await udpLoopbackSupported();
+// A *confirmed* discover save runs the real MNDP listener. Mirror MNDP's
+// production bind default: Windows avoids SO_REUSEPORT, while platforms that use
+// it skip only when that exact bind is unsupported. The confirmation gate test
+// bails before binding and stays covered. (#69)
+const MNDP_LOOPBACK = await udpLoopbackSupported({
+	reusePort: defaultMndpReusePort(),
+});
 
 interface ExplainData {
 	path?: string;
@@ -470,7 +473,7 @@ describe("handleDiscover (CDB save gate)", () => {
 		}
 	});
 
-	test.skipIf(!UDP_LOOPBACK)(
+	test.skipIf(!MNDP_LOOPBACK)(
 		"runs a confirmed save path without returning credentials",
 		async () => {
 			const { path, cleanup } = await makeMcpTestCdb([]);

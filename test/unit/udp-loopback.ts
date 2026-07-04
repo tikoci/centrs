@@ -1,20 +1,16 @@
 import { createSocket } from "node:dgram";
 
 /**
- * Probe whether this host can bind a udp4 socket to `127.0.0.1` with the same
- * options the real listeners use — specifically `reusePort: true` (`SO_REUSEPORT`).
+ * Probe whether this host can bind a udp4 socket to `127.0.0.1` with the
+ * requested listener options.
  *
  * Windows has no `SO_REUSEPORT`, so a bind with `reusePort: true` throws
- * `bind ENOTSUP 127.0.0.1`. The MNDP listener (`src/discover.ts`) and the btest
- * UDP data engine bind that way, so on `windows-latest` those unit tests
- * hard-fail. That loopback data path is also covered by the gated CHR
- * integration tests, so those unit tests skip gracefully on such a runner via
- * `describe.skipIf` / `test.skipIf` rather than failing (issue #69). TCP loopback
- * is unaffected, so TCP-based tests are not gated.
+ * `bind ENOTSUP 127.0.0.1`. MNDP uses SO_REUSEPORT where the platform supports
+ * it; btest's UDP data engine does not. Keep those probes separate so Windows
+ * can still run plain UDP loopback tests instead of over-skipping them (#69).
  *
- * The probe MUST mirror the real bind options — a bare `reusePort:false` bind
- * succeeds on Windows and would falsely report the path as supported, so the
- * skip guards never fire and the real (reusePort) binds ENOTSUP-fail instead.
+ * Callers MUST mirror the real bind options for the path being tested. A bare
+ * UDP bind can succeed on Windows while a `reusePort:true` bind fails.
  *
  * Skip only for the *known-unsupported* bind errors — Windows lacks
  * `SO_REUSEPORT` → `ENOTSUP`; a runner with no IPv4 stack → `EAFNOSUPPORT`. Any
@@ -26,12 +22,20 @@ import { createSocket } from "node:dgram";
  */
 const UNSUPPORTED_BIND_CODES = new Set(["ENOTSUP", "EAFNOSUPPORT"]);
 
-export async function udpLoopbackSupported(): Promise<boolean> {
+export interface UdpLoopbackProbeOptions {
+	reusePort?: boolean;
+}
+
+export async function udpLoopbackSupported(
+	options: UdpLoopbackProbeOptions = {},
+): Promise<boolean> {
 	return new Promise<boolean>((resolve) => {
 		const socket = createSocket({
 			type: "udp4",
 			reuseAddr: true,
-			reusePort: true,
+			...(options.reusePort !== undefined
+				? { reusePort: options.reusePort }
+				: {}),
 		});
 		let settled = false;
 		const finish = (ok: boolean) => {

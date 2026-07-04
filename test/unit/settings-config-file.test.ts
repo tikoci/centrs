@@ -12,17 +12,17 @@ import {
 describe("defaultSettingsPath", () => {
 	test("honors XDG_CONFIG_HOME when set", () => {
 		const path = defaultSettingsPath({ XDG_CONFIG_HOME: "/xdg/config" });
-		expect(path).toBe("/xdg/config/tikoci/centrs.env");
+		expect(path).toBe(join("/xdg/config", "tikoci", "centrs.env"));
 	});
 
 	test("falls back to $HOME/.config when XDG_CONFIG_HOME is unset", () => {
 		const path = defaultSettingsPath({ HOME: "/home/alice" });
-		expect(path).toBe("/home/alice/.config/tikoci/centrs.env");
+		expect(path).toBe(join("/home/alice", ".config", "tikoci", "centrs.env"));
 	});
 
 	test("falls back to os.homedir() when neither is set", () => {
 		const path = defaultSettingsPath({});
-		expect(path.endsWith("/.config/tikoci/centrs.env")).toBe(true);
+		expect(path.endsWith(join(".config", "tikoci", "centrs.env"))).toBe(true);
 	});
 });
 

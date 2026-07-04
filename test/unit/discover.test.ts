@@ -14,6 +14,7 @@ import {
 import { loadCdb, showDevice } from "../../src/devices.ts";
 import {
 	type DiscoverEnvelope,
+	defaultMndpReusePort,
 	discover,
 	type ListenMndpResult,
 	listenMndp,
@@ -22,9 +23,20 @@ import {
 import { parseCommentKv } from "../../src/resolver/comment-kv.ts";
 import { udpLoopbackSupported } from "./udp-loopback.ts";
 
-// Skip the loopback listener tests where the runner rejects a UDP loopback bind
-// (ENOTSUP on some Windows CI instances); the path is covered by CHR integration.
-const UDP_LOOPBACK = await udpLoopbackSupported();
+// Mirror MNDP's production bind default. On Windows that avoids SO_REUSEPORT;
+// on platforms that use SO_REUSEPORT, skip only when that exact bind is
+// unavailable. The real L2 path remains covered by CHR integration. (#69)
+const MNDP_LOOPBACK = await udpLoopbackSupported({
+	reusePort: defaultMndpReusePort(),
+});
+
+describe("defaultMndpReusePort", () => {
+	test("disables SO_REUSEPORT by default on Windows only", () => {
+		expect(defaultMndpReusePort("win32")).toBe(false);
+		expect(defaultMndpReusePort("darwin")).toBe(true);
+		expect(defaultMndpReusePort("linux")).toBe(true);
+	});
+});
 
 function neighbor(
 	mac: string,
@@ -86,7 +98,7 @@ function seedRecord(target: string): WinBoxCdbRecord {
 	});
 }
 
-describe.skipIf(!UDP_LOOPBACK)("listenMndp (loopback)", () => {
+describe.skipIf(!MNDP_LOOPBACK)("listenMndp (loopback)", () => {
 	test("decodes crafted packets and ends after the timeout window", async () => {
 		const packets = [
 			encodeMndpPacket(
