@@ -24,7 +24,11 @@ interface Entry {
 
 // Record index 0..4 (the order matters: selection reassembles by record index).
 const ENTRIES: readonly Entry[] = [
-	{ target: "10.0.0.1", group: "prod", comment: "board=RB5009 identity=edge1" },
+	{
+		target: "10.0.0.1",
+		group: "prod",
+		comment: "board=RB5009 identity=edge1 lat=37.774900 lon=-122.419400",
+	},
 	{ target: "10.0.0.2", group: "prod", comment: "board=hAP version=7.23.1" },
 	{ target: "10.0.0.3", group: "lab", comment: "identity=lab-host" },
 	{ target: "__default__", comment: "" },
@@ -156,6 +160,26 @@ describe("expandCdbSelection — selectors", () => {
 		const fake = await expand({ where: [{ key: "group", value: "fake" }] });
 		expect(fake.indices).toEqual([]);
 		expect(fake.empty).toBe(true);
+	});
+
+	test("--where matches a stored lat= fact exactly, verbatim as typed", async () => {
+		// Record 0's comment carries `lat=37.774900` — deliberately padded with a
+		// trailing zero that a round-trip through Number() would drop. The exact
+		// stored string must still match (issue #146: values are stored
+		// verbatim-as-typed, not reformatted; see src/resolver/geo.ts).
+		const exact = await expand({
+			where: [{ key: "lat", value: "37.774900" }],
+		});
+		expect(exact.indices).toEqual([0]);
+
+		// A numerically-equal but reformatted value (dropped trailing zero) must
+		// NOT match — parseRawCommentFacts -> entryFacts -> matchesWhere is a raw
+		// string compare, never a numeric/parsed one.
+		const reformatted = await expand({
+			where: [{ key: "lat", value: "37.7749" }],
+		});
+		expect(reformatted.indices).toEqual([]);
+		expect(reformatted.empty).toBe(true);
 	});
 
 	test("repeated --where is AND-combined", async () => {

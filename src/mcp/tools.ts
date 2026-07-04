@@ -33,6 +33,7 @@ import {
 	isWriteShaped,
 	validateExecuteEnvelope,
 } from "../execute.ts";
+import type { CommentKvUpdate } from "../resolver/comment-kv.ts";
 import { parseDuration } from "../resolver/settings.ts";
 import { buildRetrieveErrorEnvelope, retrieve } from "../retrieve.ts";
 import {
@@ -454,6 +455,30 @@ export const devicesInputShape = {
 		.boolean()
 		.optional()
 		.describe("For op=set, reject comment keys outside the allowlist."),
+	lat: z
+		.number()
+		.optional()
+		.describe(
+			"Latitude in decimal degrees (-90..90) for op=add/set; a comment-kv fact, paired with lon (issue #146).",
+		),
+	lon: z
+		.number()
+		.optional()
+		.describe(
+			"Longitude in decimal degrees (-180..180) for op=add/set; a comment-kv fact, paired with lat.",
+		),
+	altitude: z
+		.number()
+		.optional()
+		.describe(
+			"Altitude in meters for op=add/set (may be negative); a comment-kv fact.",
+		),
+	altitudeType: z
+		.enum(["MSL", "AGL"])
+		.optional()
+		.describe(
+			"Vertical datum for altitude, op=add/set (default MSL when altitude is set).",
+		),
 	confirm: z
 		.boolean()
 		.optional()
@@ -476,6 +501,30 @@ function requireDevicesTarget(
 		remediation:
 			"Pass the CDB target to mutate, or use op=list to enumerate registered targets.",
 	});
+}
+
+/**
+ * Lower the typed `lat`/`lon`/`altitude`/`altitudeType` MCP args into comment-kv
+ * updates — the same core surface the CLI's `--lat`/`--lon`/`--gps` flags lower
+ * into (`src/cli/devices.ts`). Light touch: no alias handling here (the MCP
+ * schema only exposes the canonical field names), range/enum/pairing
+ * validation happens once in `validateCommentKvUpdates` (`src/devices.ts`).
+ */
+function buildGeoUpdates(args: DevicesArgs): CommentKvUpdate[] {
+	const updates: CommentKvUpdate[] = [];
+	if (args.lat !== undefined) {
+		updates.push({ key: "lat", value: String(args.lat) });
+	}
+	if (args.lon !== undefined) {
+		updates.push({ key: "lon", value: String(args.lon) });
+	}
+	if (args.altitude !== undefined) {
+		updates.push({ key: "altitude", value: String(args.altitude) });
+	}
+	if (args.altitudeType !== undefined) {
+		updates.push({ key: "altitude-type", value: args.altitudeType });
+	}
+	return updates;
 }
 
 function resolveRecordType(recordType: string | undefined): number | undefined {
@@ -527,6 +576,7 @@ export async function handleDevices(
 						profile: args.profile,
 						session: args.session,
 						comment: args.comment,
+						commentKvUpdates: buildGeoUpdates(args),
 						savedPassword: args.savedPassword,
 						force: args.force,
 					}),
@@ -542,7 +592,7 @@ export async function handleDevices(
 					await setDevice({
 						cdb,
 						target,
-						updates: args.updates,
+						updates: [...buildGeoUpdates(args), ...(args.updates ?? [])],
 						user: args.user,
 						password: args.password,
 						group: args.group,

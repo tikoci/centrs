@@ -17,9 +17,12 @@
  *   token (which may have been quoted).
  * - Free-form text outside well-formed `key=value` tokens is inert: no value,
  *   no warning.
- * - Allowlisted keys populate `values`. First-class CDB keys are rejected with
- *   a `cdb/reserved-option` warning (they have dedicated CDB tags and must not
- *   live in the comment). Any other key emits `cdb/unknown-option`.
+ * - Allowlisted keys populate `values`; lookup keys (`identity`/`mac`/`ip`)
+ *   populate `lookups`; geo facts (`lat`/`lon`/`altitude`/`altitude-type`,
+ *   issue #146 Slice 1) populate `geo` — all three are recognized (no warning).
+ *   First-class CDB keys are rejected with a `cdb/reserved-option` warning
+ *   (they have dedicated CDB tags and must not live in the comment). Any other
+ *   key emits `cdb/unknown-option`.
  *
  * This module is intentionally pure: it returns raw string values. Type
  * coercion (`validate` -> boolean, `timeout`/`port` -> integer) and settings
@@ -53,6 +56,23 @@ export const commentKvLookupKeys = ["identity", "mac", "ip"] as const;
 export type CommentKvLookupKey = (typeof commentKvLookupKeys)[number];
 
 /**
+ * Device GPS facts (issue #146 Slice 1): recognized comment-kv keys that are
+ * **facts, not settings** — queryable via `--where` and surfaced in `devices
+ * show`/`list`'s `location` block, but never coerced into resolver settings
+ * (distinct from both the override allowlist above and the lookup keys below).
+ * See `commands/devices/README.md` (Location / GPS) and `src/resolver/geo.ts`
+ * for parsing/validation.
+ */
+export const commentKvGeoKeys = [
+	"lat",
+	"lon",
+	"altitude",
+	"altitude-type",
+] as const;
+
+export type CommentKvGeoKey = (typeof commentKvGeoKeys)[number];
+
+/**
  * First-class CDB fields. These have dedicated CDB tags and must never be
  * expressed through the comment kv-soup; `devices set` refuses to write them
  * and the parser refuses to read them.
@@ -76,6 +96,8 @@ export interface CommentKvResult {
 	values: Partial<Record<CommentKvKey, string>>;
 	/** Lookup keys (identity/mac/ip), last-wins, raw string values. */
 	lookups: Partial<Record<CommentKvLookupKey, string>>;
+	/** Geo facts (lat/lon/altitude/altitude-type), last-wins, raw string values. */
+	geo: Partial<Record<CommentKvGeoKey, string>>;
 	warnings: CommentKvWarning[];
 }
 
@@ -95,6 +117,7 @@ const BARE_KEY = /^[A-Za-z][A-Za-z0-9_-]*$/;
 const allowSet = new Set<string>(commentKvAllowlist);
 const reservedSet = new Set<string>(commentKvReservedKeys);
 const lookupSet = new Set<string>(commentKvLookupKeys);
+const geoSet = new Set<string>(commentKvGeoKeys);
 
 function isAllowlistKey(key: string): key is CommentKvKey {
 	return allowSet.has(key);
@@ -102,6 +125,10 @@ function isAllowlistKey(key: string): key is CommentKvKey {
 
 function isLookupKey(key: string): key is CommentKvLookupKey {
 	return lookupSet.has(key);
+}
+
+function isGeoKey(key: string): key is CommentKvGeoKey {
+	return geoSet.has(key);
 }
 
 /**
@@ -208,6 +235,7 @@ function splitKv(word: ShellWord): { key: string; value: string } | undefined {
 export function parseCommentKv(comment: string): CommentKvResult {
 	const values: Partial<Record<CommentKvKey, string>> = {};
 	const lookups: Partial<Record<CommentKvLookupKey, string>> = {};
+	const geo: Partial<Record<CommentKvGeoKey, string>> = {};
 	const warnings: CommentKvWarning[] = [];
 
 	for (const word of tokenize(comment)) {
@@ -217,6 +245,10 @@ export function parseCommentKv(comment: string): CommentKvResult {
 		}
 		if (isLookupKey(kv.key)) {
 			lookups[kv.key] = kv.value;
+			continue;
+		}
+		if (isGeoKey(kv.key)) {
+			geo[kv.key] = kv.value;
 			continue;
 		}
 		if (isAllowlistKey(kv.key)) {
@@ -238,7 +270,7 @@ export function parseCommentKv(comment: string): CommentKvResult {
 		});
 	}
 
-	return { values, lookups, warnings };
+	return { values, lookups, geo, warnings };
 }
 
 /**

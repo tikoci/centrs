@@ -38,10 +38,19 @@ import {
 	applyCommentKv,
 	type CommentKvUpdate,
 	commentKvAllowlist,
+	commentKvGeoKeys,
 	commentKvLookupKeys,
 	commentKvReservedKeys,
 	parseCommentKv,
+	parseRawCommentFacts,
 } from "./resolver/comment-kv.ts";
+import {
+	type DeviceLocation,
+	deviceLocation,
+	parseAltitude,
+	parseAltitudeType,
+	parseLatLon,
+} from "./resolver/geo.ts";
 import { normalizeMac } from "./resolver/mac.ts";
 
 export type { SettingSource, SettingSourceKind };
@@ -66,6 +75,8 @@ export interface DevicesListItem {
 	cdbRecordIndex: number;
 	source?: string;
 	sources?: Record<string, SettingSource>;
+	/** GPS location, parsed from the `lat`/`lon`/`altitude`/`altitude-type` comment facts (issue #146). */
+	location?: DeviceLocation;
 }
 
 export interface DevicesShowItem extends DevicesListItem {
@@ -448,9 +459,49 @@ function credentialsMissingTips(
 	];
 }
 
+/** One `--where attr=value` device-class clause for `devices list` (exact-match, AND-combined). */
+export interface DevicesWhereClause {
+	key: string;
+	value: string;
+}
+
+/**
+ * The device-class facts a `devices list --where` clause matches against: every
+ * raw comment-kv token (issue #146's `lat`/`lon`/etc. included, unfiltered —
+ * same source `--where` uses everywhere else), plus core fields layered on top
+ * so a hand-written comment token can never spoof `target`/`group`/`identity`/
+ * `mac`. Mirrors `entryFacts` in `src/resolver/selection.ts` (the general
+ * fan-out `--where` grammar); duplicated rather than imported to avoid a
+ * circular import (`selection.ts` already imports CDB primitives from this
+ * file). Keep the two in sync if either changes.
+ */
+function listWhereFacts(entry: WinBoxCdbEntry): Record<string, string> {
+	const facts = parseRawCommentFacts(entry.comment);
+	facts["target"] = entry.target;
+	facts["group"] = entry.group;
+	const parsed = parseCommentKv(entry.comment);
+	facts["identity"] = parsed.lookups.identity ?? entry.target;
+	const mac =
+		normalizeMac(parsed.lookups.mac ?? "") ?? normalizeMac(entry.target);
+	if (mac !== undefined) {
+		facts["mac"] = mac;
+	}
+	return facts;
+}
+
+function matchesListWhere(
+	entry: WinBoxCdbEntry,
+	where: readonly DevicesWhereClause[],
+): boolean {
+	const facts = listWhereFacts(entry);
+	return where.every((clause) => facts[clause.key] === clause.value);
+}
+
 export interface ListDevicesArgs {
 	cdb: LoadedCdb;
 	group?: string;
+	/** Repeatable `--where attr=value`, AND-combined (constitution: target selection grammar). */
+	where?: readonly DevicesWhereClause[];
 }
 
 export function listDevices(
@@ -478,6 +529,20 @@ export function listDevices(
 				context: { group: wanted },
 			});
 		}
+	}
+
+	if (args.where && args.where.length > 0) {
+		const where = args.where;
+		const filtered: { entry: WinBoxCdbEntry; index: number }[] = [];
+		for (let position = 0; position < entries.length; position += 1) {
+			const entry = entries[position];
+			const index = indices[position] ?? -1;
+			if (entry && matchesListWhere(entry, where)) {
+				filtered.push({ entry, index });
+			}
+		}
+		entries = filtered.map((item) => item.entry);
+		indices = filtered.map((item) => item.index);
 	}
 
 	const data: DevicesListItem[] = entries.map((entry, position) =>
@@ -691,6 +756,10 @@ function entryToListItem(
 			key: `record:${cdbRecordIndex}:source`,
 		};
 	}
+	const location = deviceLocation(parseRawCommentFacts(entry.comment));
+	if (location !== undefined) {
+		item.location = location;
+	}
 	return item;
 }
 
@@ -819,7 +888,7 @@ function entryToShowItem(
 	entry: WinBoxCdbEntry,
 	cdbRecordIndex: number,
 ): DevicesShowItem {
-	return {
+	const item: DevicesShowItem = {
 		target: entry.target,
 		recordType: entry.recordType,
 		recordTypeName: recordTypeName(entry.recordType),
@@ -835,6 +904,11 @@ function entryToShowItem(
 		flags: entry.flags,
 		cdbRecordIndex,
 	};
+	const location = deviceLocation(parseRawCommentFacts(entry.comment));
+	if (location !== undefined) {
+		item.location = location;
+	}
+	return item;
 }
 
 export interface ListGroupsArgs {
@@ -1108,6 +1182,7 @@ async function persistRecords(
 const ALLOWLIST_SET = new Set<string>(commentKvAllowlist);
 const RESERVED_SET = new Set<string>(commentKvReservedKeys);
 const LOOKUP_SET = new Set<string>(commentKvLookupKeys);
+const GEO_SET = new Set<string>(commentKvGeoKeys);
 
 /**
  * The `usage/not-implemented` error raised by `devices edit`, whose interactive
@@ -1125,18 +1200,91 @@ export function editInteractiveOnlyError(): CentrsError {
 }
 
 /**
+ * Validate + (for the one enum field) normalize a single geo update's value.
+ * `lat`/`lon`/`altitude` are validated but returned verbatim (stored exactly
+ * as typed); `altitude-type` is validated AND canonicalized to upper case,
+ * since it is a closed two-value enum rather than a freeform/numeric field
+ * (see `src/resolver/geo.ts`). Throws `input/invalid-coordinate` /
+ * `input/invalid-altitude` on a bad value; a `value: null` removal passes
+ * through untouched (nothing to validate).
+ */
+function normalizeGeoUpdate(update: CommentKvUpdate): CommentKvUpdate {
+	if (update.value === null) {
+		return update;
+	}
+	switch (update.key) {
+		case "lat":
+			parseLatLon(update.value, "lat");
+			return update;
+		case "lon":
+			parseLatLon(update.value, "lon");
+			return update;
+		case "altitude":
+			parseAltitude(update.value);
+			return update;
+		case "altitude-type":
+			return { key: update.key, value: parseAltitudeType(update.value) };
+		default:
+			return update;
+	}
+}
+
+/**
+ * `lat`/`lon` must land together: setting one without the other, when the
+ * other is not already on the record, is `input/incomplete-gps` (also catches
+ * removing one half of an existing pair). Checked against the MERGE of
+ * `baseComment` (the record's existing comment for `set`, or the base
+ * `--comment` for `add`) and `updates`, so an already-complete record editing
+ * an unrelated key never trips this.
+ */
+function validateGeoPairing(
+	baseComment: string,
+	updates: readonly CommentKvUpdate[],
+	target: string,
+): void {
+	const priorFacts = parseRawCommentFacts(baseComment);
+	let lat = priorFacts["lat"];
+	let lon = priorFacts["lon"];
+	for (const update of updates) {
+		if (update.key === "lat") {
+			lat = update.value === null ? undefined : update.value;
+		} else if (update.key === "lon") {
+			lon = update.value === null ? undefined : update.value;
+		}
+	}
+	const hasLat = lat !== undefined;
+	const hasLon = lon !== undefined;
+	if (hasLat === hasLon) {
+		return;
+	}
+	throw new CentrsError({
+		code: "input/incomplete-gps",
+		summary: `Target "${target}" would end up with only ${hasLat ? "lat" : "lon"} set; lat and lon must be set together.`,
+		remediation:
+			"Pass both --lat and --lon (or lat=... and lon=... together), or use --gps <lat>,<lon>[,<altitude>[,<altitude-type>]] to set both at once.",
+		context: { target, hasLat, hasLon },
+	});
+}
+
+/**
  * Validate the `k=v` comment positionals shared by `add` and `set`. First-class
  * CDB fields are reserved and throw `cdb/reserved-key` (use the matching flag);
- * tokens outside the recognized override + lookup keys throw `cdb/unknown-option`
- * under `strict`, else append a `cdb/unknown-option` warning. Recognized keys
- * (allowlist overrides + `identity`/`mac`/`ip` lookups) pass silently.
+ * tokens outside the recognized override + lookup + geo keys throw
+ * `cdb/unknown-option` under `strict`, else append a `cdb/unknown-option`
+ * warning. Recognized keys (allowlist overrides, `identity`/`mac`/`ip`
+ * lookups, `lat`/`lon`/`altitude`/`altitude-type` geo facts) pass silently.
+ * Geo values are further validated (range/enum) and checked for `lat`/`lon`
+ * pairing via `src/resolver/geo.ts`; returns the updates with `altitude-type`
+ * normalized to its canonical upper-case form (the only geo field that is not
+ * stored verbatim — see `normalizeGeoUpdate`).
  */
 function validateCommentKvUpdates(
 	updates: readonly CommentKvUpdate[],
 	target: string,
 	strict: boolean | undefined,
 	warnings: DevicesWarning[],
-): void {
+	baseComment = "",
+): CommentKvUpdate[] {
 	const reserved = updates
 		.map((update) => update.key)
 		.filter((key) => RESERVED_SET.has(key));
@@ -1144,12 +1292,17 @@ function validateCommentKvUpdates(
 		throw new CentrsError({
 			code: "cdb/reserved-key",
 			summary: `Comment kv-soup cannot carry first-class CDB field(s): ${reserved.join(", ")}.`,
-			remediation: `Set ${reserved.join(", ")} with the matching --flag; the comment kv-soup is for ${commentKvAllowlist.join(", ")} plus identity/mac/ip.`,
+			remediation: `Set ${reserved.join(", ")} with the matching --flag; the comment kv-soup is for ${commentKvAllowlist.join(", ")} plus identity/mac/ip/${commentKvGeoKeys.join("/")}.`,
 			context: { target, reservedKeys: reserved },
 		});
 	}
+
+	const normalized = updates.map((update) =>
+		GEO_SET.has(update.key) ? normalizeGeoUpdate(update) : update,
+	);
+
 	for (const key of updates.map((update) => update.key)) {
-		if (ALLOWLIST_SET.has(key) || LOOKUP_SET.has(key)) {
+		if (ALLOWLIST_SET.has(key) || LOOKUP_SET.has(key) || GEO_SET.has(key)) {
 			continue;
 		}
 		if (strict) {
@@ -1166,6 +1319,9 @@ function validateCommentKvUpdates(
 			context: { target, key },
 		});
 	}
+
+	validateGeoPairing(baseComment, normalized, target);
+	return normalized;
 }
 
 export interface AddDeviceArgs {
@@ -1206,8 +1362,13 @@ export async function addDevice(
 	}
 
 	const warnings: DevicesWarning[] = [...args.cdb.warnings];
-	const updates = args.commentKvUpdates ?? [];
-	validateCommentKvUpdates(updates, args.target, args.strict, warnings);
+	const updates = validateCommentKvUpdates(
+		args.commentKvUpdates ?? [],
+		args.target,
+		args.strict,
+		warnings,
+		args.comment ?? "",
+	);
 	const comment =
 		updates.length > 0 || args.comment !== undefined
 			? applyCommentKv(args.comment ?? "", updates)
@@ -1295,11 +1456,16 @@ export async function setDevice(
 	args: SetDeviceArgs,
 ): Promise<DevicesMutationEnvelope> {
 	const match = requireSingleMatch(args.cdb.entries, args.target, args.match);
-	const updates = args.updates ?? [];
-	const warnings: DevicesWarning[] = [...args.cdb.warnings];
-	validateCommentKvUpdates(updates, args.target, args.strict, warnings);
-
 	const prior = match.entry;
+	const warnings: DevicesWarning[] = [...args.cdb.warnings];
+	const updates = validateCommentKvUpdates(
+		args.updates ?? [],
+		args.target,
+		args.strict,
+		warnings,
+		prior.comment,
+	);
+
 	const comment = applyCommentKv(prior.comment, updates);
 	const carried = extraFields(prior.record);
 
@@ -1683,6 +1849,14 @@ function renderShowText(lines: string[], data: DevicesShowEnvelopeData): void {
 	lines.push(`profile:       ${entry.profile || "-"}`);
 	lines.push(`session:       ${entry.session || "-"}`);
 	lines.push(`comment:       ${entry.comment || "-"}`);
+	if (entry.location) {
+		const { lat, lon, altitude, altitudeType } = entry.location;
+		const altitudePart =
+			altitude !== undefined
+				? ` altitude=${altitude}${altitudeType ? ` (${altitudeType})` : ""}`
+				: "";
+		lines.push(`location:      lat=${lat} lon=${lon}${altitudePart}`);
+	}
 	if (entry.romonAgent) {
 		lines.push(`romon-agent:   ${entry.romonAgent}`);
 	}

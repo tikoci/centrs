@@ -134,8 +134,21 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 
 	// input/*
 	{
+		code: "input/incomplete-gps",
+		summary:
+			"lat/lon (or --gps/--near/--bbox) were not given as a complete pair.",
+	},
+	{
+		code: "input/invalid-altitude",
+		summary: "The altitude is not a number, or altitude-type is not MSL/AGL.",
+	},
+	{
 		code: "input/invalid-command",
 		summary: "The request shape was invalid (bad or missing arguments).",
+	},
+	{
+		code: "input/invalid-coordinate",
+		summary: "The latitude or longitude is not a number in its valid range.",
 	},
 	{
 		code: "input/invalid-match",

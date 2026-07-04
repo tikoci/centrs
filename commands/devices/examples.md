@@ -486,3 +486,92 @@ Each alias produces the same envelope as its canonical verb — `meta.operation`
 reports the canonical command (`list`/`show`/`remove`), never the alias. An
 unknown verb still errors with `input/invalid-command`, and the error lists the
 canonical verbs plus the accepted aliases.
+
+## Location / GPS
+
+Slice 1 of issue #146: `lat`/`lon`/`altitude`/`altitude-type` are recognized
+comment-kv facts (see `README.md`, Location / GPS) — stored, queryable via
+`--where`, and returned as a `location` block in `devices show`/`list` output.
+Coordinate order is **lat-first everywhere**: `--gps <lat>,<lon>[,…]`.
+
+### 42. `add --gps` sets lat/lon/altitude; `show` returns a `location` block
+
+```bash
+centrs devices add 198.51.100.40 --user admin --password p \
+  --gps 37.7749,-122.4194,16 --cdb-file $CDB
+```
+
+`ok: true`. Re-reading via `show` returns
+`data.entry.location = { lat: 37.7749, lon: -122.4194, altitude: 16, altitudeType: "MSL" }`
+(the 3-part `--gps` form defaults the missing altitude-type to `MSL`).
+
+### 43. Discrete `--lat`/`--lon` round-trip the same way as `--gps`
+
+```bash
+centrs devices set 192.0.2.5 --lat 51.5072 --lon -0.1276 --cdb-file $CDB
+```
+
+`ok: true`. `devices show 192.0.2.5` returns
+`data.entry.location = { lat: 51.5072, lon: -0.1276 }` (no `altitude` key —
+altitude was never set on this record).
+
+### 44. `--altitude` alone defaults `altitudeType` to `MSL` in the envelope
+
+```bash
+centrs devices set 192.0.2.6 --lat 48.8566 --lon 2.3522 --altitude 35 \
+  --cdb-file $CDB
+```
+
+`ok: true`. `altitude-type` was never written to the comment (only
+`--altitude` was passed), but `devices show 192.0.2.6` still returns
+`data.entry.location.altitudeType = "MSL"` — the metadata-only default applied
+at read time (`deviceLocation` in `src/resolver/geo.ts`).
+
+### 45. Setting `lat` without `lon` errors with `input/incomplete-gps`
+
+```bash
+centrs devices set 198.51.100.1 --lat 10 --cdb-file $CDB
+```
+
+Errors with `input/incomplete-gps` (target `198.51.100.1` carries no prior
+`lon`). No write; no backup written.
+
+### 46. An out-of-range `--lat` errors with `input/invalid-coordinate`
+
+```bash
+centrs devices set 192.0.2.5 --lat 200 --lon 0 --cdb-file $CDB
+```
+
+Errors with `input/invalid-coordinate`. No write; no backup written.
+
+### 47. An invalid `--altitude-type` errors with `input/invalid-altitude`
+
+```bash
+centrs devices set 192.0.2.5 --lat 10 --lon 10 --altitude-type wgs84 \
+  --cdb-file $CDB
+```
+
+Errors with `input/invalid-altitude`. No write; no backup written.
+
+### 48. Alias flags canonicalize to the stored key; no more `cdb/unknown-option`
+
+```bash
+centrs devices set 192.0.2.5 --latitude 10 --lng 20 --cdb-file $CDB
+```
+
+`ok: true`, **no** `cdb/unknown-option` warning — `--latitude`/`--lng` are
+canonicalized to `lat`/`lon` in one place (`canonicalizeGeoKey`,
+`src/resolver/geo.ts`) before storage. `devices show 192.0.2.5` returns
+`data.entry.comment` containing `lat=10` and `lon=20` (the canonical keys), and
+`data.entry.location = { lat: 10, lon: 20 }`.
+
+### 49. `list --where lat=<verbatim>` matches the exact stored string
+
+```bash
+centrs devices list --where lat=37.774900 --cdb-file $CDB
+```
+
+`ok: true`; matches only the record whose stored `lat` fact is the exact
+string `37.774900` (values are stored verbatim as typed, never reformatted —
+see `README.md`, Location / GPS). `--where lat=37.7749` (numerically equal,
+reformatted) matches nothing.

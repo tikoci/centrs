@@ -89,22 +89,29 @@ when it actually selected between candidates.
 ## Comment kv-soup (per-device overrides)
 
 The CDB `comment` field is free text. centrs additionally parses tokens
-shaped like `key=value` out of it. Recognized keys (allowlist) fall in two
+shaped like `key=value` out of it. Recognized keys (allowlist) fall in three
 groups: **lookup keys** affect how `<router>` resolves (see "Identity model");
-**override keys** are per-device defaults for centrs settings.
+**override keys** are per-device defaults for centrs settings; **geo keys**
+(issue #146) are facts, not settings — queryable via `--where` and returned in
+the `location` block (see "Location / GPS" below), but never coerced into
+resolver settings.
 
-| Key        | Group    | Effect                                                                  |
-| ---------- | -------- | ---------------------------------------------------------------------- |
-| `identity` | lookup   | Device `/system/identity`; a resolvable handle. May repeat across records. |
-| `mac`      | lookup   | A MAC, when `target` is not the MAC.                                    |
-| `ip`       | lookup   | An IP, when `target` is not the IP.                                     |
-| `via`      | override | Default transport for this device (`rest-api`, `native-api`, `ssh`, …). |
-| `validate` | override | `true` / `false`. `false` is the escape hatch; CLI overrides.           |
-| `timeout`  | override | Default request timeout in ms. Per-transport caps still apply.          |
-| `port`     | override | Non-default transport port. Omitted when equal to the protocol default. |
-| `ssh-key`  | override | Per-device private key file path for SSH transports.                    |
-| `source`   | override | Provenance marker for discovered/imported records (`mndp`, `dude`, …).  |
-| `mcp`      | override | MCP write policy for this device: `ro` (default) or `rw`. See `commands/mcp/`. |
+| Key             | Group    | Effect                                                                  |
+| --------------- | -------- | ---------------------------------------------------------------------- |
+| `identity`      | lookup   | Device `/system/identity`; a resolvable handle. May repeat across records. |
+| `mac`           | lookup   | A MAC, when `target` is not the MAC.                                    |
+| `ip`            | lookup   | An IP, when `target` is not the IP.                                     |
+| `via`           | override | Default transport for this device (`rest-api`, `native-api`, `ssh`, …). |
+| `validate`      | override | `true` / `false`. `false` is the escape hatch; CLI overrides.           |
+| `timeout`       | override | Default request timeout in ms. Per-transport caps still apply.          |
+| `port`          | override | Non-default transport port. Omitted when equal to the protocol default. |
+| `ssh-key`       | override | Per-device private key file path for SSH transports.                    |
+| `source`        | override | Provenance marker for discovered/imported records (`mndp`, `dude`, …).  |
+| `mcp`           | override | MCP write policy for this device: `ro` (default) or `rw`. See `commands/mcp/`. |
+| `lat`           | geo      | Latitude, decimal degrees (`-90..90`). See "Location / GPS".            |
+| `lon`           | geo      | Longitude, decimal degrees (`-180..180`). Paired with `lat`.             |
+| `altitude`      | geo      | Meters, may be negative. Metadata-only (not a fan-out query predicate). |
+| `altitude-type` | geo      | `MSL`\|`AGL` (default `MSL`). Normalized to upper case for storage.     |
 
 Rules:
 
@@ -147,7 +154,86 @@ a device); `license-id` is convenience metadata to match by hand against
 MikroTik's CHR licensing page. The `--where` selector plus this derived-fact
 allowlist are the planned home for "operate on a class of devices," distinct from
 `group`. (Promoting these keys to the comment-kv allowlist is a tracked code
-follow-up.)
+follow-up; `lat`/`lon`/`altitude`/`altitude-type` — see "Location / GPS" below —
+are the first keys promoted this way, issue #146.)
+
+## Location / GPS
+
+Per-device GPS (issue #146, Slice 1 of 2) is a **fact, not a setting**:
+recognized (`devices set lat=…` no longer warns `cdb/unknown-option`), stored,
+queryable via `--where`, and returned as a `location` block in `devices show`/
+`list` output — but never coerced into resolver settings. Slice 2 (a later PR)
+adds `--near`/`--bbox` fan-out query predicates over these same facts; this
+section covers what Slice 1 ships (storage, flags, validation, envelope).
+
+### Storage keys
+
+See the comment-kv table above for `lat`/`lon`/`altitude`/`altitude-type`.
+Values are stored **verbatim as typed** (validated, not reformatted), so an
+exact `--where lat=<value>` still matches what was written — `altitude-type` is
+the one exception, since it's a closed two-value enum, so it is normalized to
+upper case (`msl` -> `MSL`) before storage. `lat`/`lon` must be written as a
+pair: setting one without the other, when the other is not already on the
+record, errors `input/incomplete-gps`.
+
+### Flags
+
+`devices add`/`set` accept:
+
+- `--lat <deg>` (alias `--latitude`)
+- `--lon <deg>` (aliases `--lng`, `--longitude`, `--long`)
+- `--altitude <meters>` (aliases `--alt`, `--elevation`)
+- `--altitude-type <MSL|AGL>` (alias `--alt-type`), case-insensitive
+- `--gps <lat>,<lon>[,<altitude>[,<altitude-type>]]` — combined convenience;
+  minimum `--gps <lat>,<lon>`; a missing altitude-type in the 3-part form
+  defaults to `MSL`.
+
+Bare `k=v` positionals also work (`lat=…`, `lon=…`, `altitude=…`,
+`altitude-type=…`), through the same validation as the flags above. Aliases are
+canonicalized to their table form in one place before storage/validation, so
+the canonical key is always what lands in the comment and the envelope; typos
+beyond the alias list are caught by the existing "Did you mean?" flag
+suggester (`closestFlags`/`unknownFlagError`).
+
+Validation errors reuse the `input/` arg-validation family:
+`input/invalid-coordinate` (lat/lon NaN or out of range),
+`input/invalid-altitude` (altitude NaN, or a bad altitude-type), and
+`input/incomplete-gps` (lat/lon not paired, or `--gps` wrong arity).
+
+### Coordinate order is lat-first
+
+`--gps 37.7749,-122.4194` is `lat,lon` — **latitude first, everywhere** —
+matching ISO 6709 / EPSG:4326 authority order (and Google Maps / Leaflet /
+most GPS devices), not GeoJSON's lon-first order. RFC 7946 (GeoJSON) describes
+its own order as the opposite of "most GPS coordinates" and calls swapping them
+"the most common GeoJSON bug"; lat-first is both what an agent guesses from the
+`--gps` name and the standards-backed (ISO 6709) choice. A future GeoJSON
+(lon-first) input path is deliberately out of scope here — it would ride a
+structurally-typed shape (a real GeoJSON object / TikTOML import), never a bare
+CSV.
+
+### Altitude is metadata-only
+
+`altitude`/`altitude-type` are stored and returned in `devices show`/`list`
+output, but are **not** part of any fan-out query predicate — the planned
+`--near`/`--bbox` geo selectors (Slice 2) are 2-D lat/lon only.
+
+### Envelope
+
+`devices show`/`list` add an optional `location` block to each entry that
+carries a well-formed `lat`+`lon` pair, parsed from the comment facts:
+
+```json
+{ "lat": 37.7749, "lon": -122.4194, "altitude": 16, "altitudeType": "MSL" }
+```
+
+A record with no (or malformed) `lat`/`lon` simply omits `location`.
+
+### Group-level GPS defers to #137
+
+CDB groups are a bare string field on each entry — there is no
+group-definition record to hang a group-level GPS or lat/lon inheritance on.
+That needs TikTOML (#137); not doable in the CDB today.
 
 ## Groups
 
@@ -204,7 +290,7 @@ runs produce stable diffs.
 ## Subcommands
 
 ```text
-centrs devices list [--group G] [--format json|yaml|text]
+centrs devices list [--group G] [--where attr=value] [--format json|yaml|text]
 centrs devices show <target> [--explain] [--via <protocol>] [--match <type>]
 centrs devices groups [--members]
 centrs devices discover [--timeout 15s] [--group G]      # = discover --save (save implied)
@@ -212,9 +298,13 @@ centrs devices add <target> [--user U] [--password P] [--new-group G]
                              [--profile P|--profile-none|--profile-own]
                              [--session S] [--comment "text k=v"]
                              [--record-type ipAdmin|ipUser|macTarget|...]
+                             [--gps lat,lon[,altitude[,altitude-type]]]
+                             [--lat D] [--lon D] [--altitude M] [--altitude-type MSL|AGL]
 centrs devices set  <selector…> [--user U] [--password P] [--new-group G]
                              [--profile P|--profile-none|--profile-own]
                              [--session S] [k=v ...]
+                             [--gps lat,lon[,altitude[,altitude-type]]]
+                             [--lat D] [--lon D] [--altitude M] [--altitude-type MSL|AGL]
 centrs devices remove <selector…>
 centrs devices edit <target>            # future: clack/TUI wizard
 ```
@@ -228,7 +318,10 @@ field-editing verb, and invoking it today returns `usage/not-implemented`. There
 is no `update`.
 
 - `list` (alias `print`) shows resolved targets, their record type, group, and
-  a one-line provenance summary. No network IO.
+  a one-line provenance summary. No network IO. `--where attr=value`
+  (repeatable, AND-combined) filters by CDB-stored facts/comment-kv plus core
+  record fields (`target`/`group`/`identity`/`mac`) — e.g. `--where
+  lat=37.7749` (see "Location / GPS").
 - `show` (alias `get`) returns a single resolved target with the full per-field
   source map in `meta.target`. `--explain` adds the raw CDB record dump under
   `data.record`; `--via <protocol>` reports the protocol that would be selected
