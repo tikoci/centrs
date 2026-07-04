@@ -89,14 +89,17 @@ export function canonicalizeGeoKey(key: string): string {
  * digits, and an optional dotted fraction — the decimal-degrees / meters grammar
  * the GPS fields document (`docs/CONSTITUTION.md`). Returns `undefined` for blank
  * input and for forms a bare `Number()` would silently accept but the spec does
- * not: hex (`0x10`), scientific (`1e2`), `Infinity`, or a leading `+`.
+ * not: hex (`0x10`), scientific (`1e2`), or a leading `+`. Also rejects a value
+ * that overflows to `±Infinity` (e.g. a 400-digit integer) — `parseAltitude` has
+ * no range clamp, so the finite guard is what keeps `Infinity` out of it.
  */
 function parseDecimal(value: string): number | undefined {
 	const trimmed = value.trim();
 	if (!/^-?[0-9]+(?:\.[0-9]+)?$/.test(trimmed)) {
 		return undefined;
 	}
-	return Number(trimmed);
+	const parsed = Number(trimmed);
+	return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 const COORDINATE_RANGE: Readonly<

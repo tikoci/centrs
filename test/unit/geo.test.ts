@@ -125,6 +125,15 @@ describe("parseAltitude", () => {
 		expectCode(() => parseAltitude("0x10"), "input/invalid-altitude");
 		expectCode(() => parseAltitude("1e2"), "input/invalid-altitude");
 	});
+
+	test("rejects a value that overflows to Infinity (altitude has no range clamp)", () => {
+		// A 401-digit integer matches the decimal grammar but Number()s to
+		// Infinity; without the finite guard it would slip past unclamped altitude.
+		const huge = `1${"0".repeat(400)}`;
+		expect(Number(huge)).toBe(Number.POSITIVE_INFINITY);
+		expectCode(() => parseAltitude(huge), "input/invalid-altitude");
+		expectCode(() => parseAltitude(`-${huge}`), "input/invalid-altitude");
+	});
 });
 
 describe("parseAltitudeType", () => {

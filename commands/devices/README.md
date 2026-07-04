@@ -179,10 +179,17 @@ an unrelated `set timeout=…` on a record that already carries a lone `lat` is
 left untouched.
 
 `lat`/`lon`/`altitude` accept **strict decimal** only (optional leading `-`,
-digits, optional dotted fraction); hex (`0x10`) and scientific (`1e2`) notation
-are rejected with `input/invalid-coordinate` / `input/invalid-altitude` even
-though `Number()` would accept them, because the fields are decimal degrees /
-meters.
+digits, optional dotted fraction); hex (`0x10`), scientific (`1e2`), and values
+that overflow to `Infinity` are rejected with `input/invalid-coordinate` /
+`input/invalid-altitude` even though `Number()` would accept them, because the
+fields are decimal degrees / meters.
+
+GPS validation (range, strict-decimal, pairing, `altitude-type` enum) applies to
+the **setter flags** (`--lat`/`--lon`/`--altitude`/`--gps`) and to **bare `k=v`
+update tokens** (`lat=…`, `lon=…`). It does **not** re-parse arbitrary base
+`--comment` text: `devices add <t> --comment "lat=91"` is a freeform escape hatch
+that stores the comment as-is (such a value simply won't resolve to a `location`
+on read). Use the flags or `k=v` tokens when you want validated GPS.
 
 ### Flags
 
