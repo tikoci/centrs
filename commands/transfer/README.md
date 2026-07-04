@@ -179,8 +179,9 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 ## Target selection
 
 `transfer` runs the **same** verb across a multi-target selection over the shared
-grammar (multiple `<router>` positionals, repeatable `--group`/`--where`, `--all`,
-`--default`). The grammar, the locked `FanoutData` envelope, the record-order
+grammar (multiple `<router>` positionals, repeatable `--group`/`--where`, the geo
+selectors `--near`/`--bbox`, `--all`, `--default`). The grammar, the locked
+`FanoutData` envelope, the record-order
 reassembly, and the granular **0/2/1 exit code** are normative in
 [`docs/CONSTITUTION.md` → Target selection grammar](../../docs/CONSTITUTION.md#target-selection-grammar).
 

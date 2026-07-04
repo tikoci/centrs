@@ -1316,7 +1316,15 @@ function validateCommentKvUpdates(
 		});
 	}
 
-	validateGeoPairing(baseComment, normalized, target);
+	// Only enforce lat/lon pairing when THIS update actually touches a coordinate
+	// (add or remove). Otherwise an unrelated `set timeout=…` on a record that
+	// already carries a legacy/hand-edited incomplete pair would spuriously fail
+	// with `input/incomplete-gps`; leave a pre-existing pair untouched.
+	if (
+		normalized.some((update) => update.key === "lat" || update.key === "lon")
+	) {
+		validateGeoPairing(baseComment, normalized, target);
+	}
 	return normalized;
 }
 

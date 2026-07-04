@@ -1926,4 +1926,53 @@ describe("centrs devices (read-only)", () => {
 		};
 		expect(envelope.error.code).toBe("input/invalid-command");
 	});
+
+	test("example 53 an unrelated set on a record with a lone lat does not fail", async () => {
+		const cdbPath = await copyCdbFixture("example-53-pairing-gate");
+		// A freeform --comment can carry a lone `lat` (no pairing check on the
+		// comment escape hatch); a later unrelated update must not fail.
+		const add = await runWithCapture([
+			"devices",
+			"add",
+			"203.0.113.7",
+			"--user",
+			"u",
+			"--password",
+			"p",
+			"--comment",
+			"lat=37.7749",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(add.exitCode).toBe(0);
+
+		const set = await runWithCapture([
+			"devices",
+			"set",
+			"203.0.113.7",
+			"timeout=5000",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(set.exitCode).toBe(0);
+
+		// Touching lat/lon DOES re-enable the pairing check: setting only lon on a
+		// record with no lat leaves an incomplete pair, which must fail.
+		const badPair = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.6",
+			"lon=-122.4194",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(badPair.exitCode).toBe(1);
+		const envelope = JSON.parse(badPair.stdout || badPair.stderr) as {
+			error: { code: string };
+		};
+		expect(envelope.error.code).toBe("input/incomplete-gps");
+	});
 });

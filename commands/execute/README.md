@@ -158,7 +158,8 @@ key material.
 
 `execute` runs the **same** RouterOS command across a multi-target selection over
 the shared grammar (multiple `<target>` positionals, repeatable `--group`/
-`--where`, `--all`, `--default`). The grammar, the locked `FanoutData` envelope,
+`--where`, the geo selectors `--near`/`--bbox`, `--all`, `--default`). The
+grammar, the locked `FanoutData` envelope,
 the record-order reassembly, and the granular **0/2/1 exit code** are normative in
 [`docs/CONSTITUTION.md` → Target selection grammar](../../docs/CONSTITUTION.md#target-selection-grammar).
 

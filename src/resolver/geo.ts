@@ -8,8 +8,9 @@
  * `docs/CONSTITUTION.md`. This module owns:
  *
  *   - alias canonicalization ({@link canonicalizeGeoKey}: `lng`/`longitude`/
- *     `long` -> `lon`, `latitude` -> `lat`, `alt`/`elevation` -> `altitude`) so
- *     the canonical key is what lands in the comment and the envelope,
+ *     `long` -> `lon`, `latitude` -> `lat`, `alt`/`ele`/`elevation` ->
+ *     `altitude`, and mixed-case `altitude-type`) so the canonical key is what
+ *     lands in the comment and the envelope,
  *   - range/enum validation (`input/invalid-coordinate`,
  *     `input/invalid-altitude`), and
  *   - the `--gps <lat>,<lon>[,<altitude>[,<altitude-type>]]` combined-flag
@@ -49,13 +50,17 @@ export interface DeviceLocation {
 }
 
 /**
- * Alias -> canonical key map for the geo comment-kv fields. `altitude-type`
- * has no alias (only its flag does, `--alt-type`, which maps directly to the
- * canonical key at the CLI layer). Applied in ONE place —
- * {@link canonicalizeGeoKey} — so both `--flag` lowering and bare `k=v`
- * positionals agree on the canonical key that lands in storage.
+ * Alias -> canonical key map for the geo comment-kv fields. Applied in ONE
+ * place — {@link canonicalizeGeoKey} — so both `--flag` lowering and bare `k=v`
+ * positionals agree on the canonical key that lands in storage. `altitude` stays
+ * the canonical field (the ISO 6709 / EPSG / IETF `geo:` / W3C-Geolocation term);
+ * `elevation`/`ele` are GPX-muscle-memory aliases only, never a rename. Every
+ * canonical key also maps to itself so a mixed-case bare token (`LAT=`,
+ * `ALTITUDE-TYPE=`) canonicalizes by case too.
  */
-const GEO_KEY_ALIASES: Readonly<Record<string, "lat" | "lon" | "altitude">> = {
+const GEO_KEY_ALIASES: Readonly<
+	Record<string, "lat" | "lon" | "altitude" | "altitude-type">
+> = {
 	lat: "lat",
 	latitude: "lat",
 	lon: "lon",
@@ -64,7 +69,10 @@ const GEO_KEY_ALIASES: Readonly<Record<string, "lat" | "lon" | "altitude">> = {
 	long: "lon",
 	altitude: "altitude",
 	alt: "altitude",
+	ele: "altitude",
 	elevation: "altitude",
+	"altitude-type": "altitude-type",
+	"alt-type": "altitude-type",
 };
 
 /**
@@ -76,14 +84,19 @@ export function canonicalizeGeoKey(key: string): string {
 	return GEO_KEY_ALIASES[key.toLowerCase()] ?? key;
 }
 
-/** Parse a raw string to a finite number, or `undefined` for NaN/empty/whitespace-only input. */
-function toFiniteNumber(value: string): number | undefined {
+/**
+ * Parse a **strict decimal** number string: an optional leading `-`, one or more
+ * digits, and an optional dotted fraction — the decimal-degrees / meters grammar
+ * the GPS fields document (`docs/CONSTITUTION.md`). Returns `undefined` for blank
+ * input and for forms a bare `Number()` would silently accept but the spec does
+ * not: hex (`0x10`), scientific (`1e2`), `Infinity`, or a leading `+`.
+ */
+function parseDecimal(value: string): number | undefined {
 	const trimmed = value.trim();
-	if (trimmed.length === 0) {
+	if (!/^-?[0-9]+(?:\.[0-9]+)?$/.test(trimmed)) {
 		return undefined;
 	}
-	const parsed = Number(trimmed);
-	return Number.isFinite(parsed) ? parsed : undefined;
+	return Number(trimmed);
 }
 
 const COORDINATE_RANGE: Readonly<
@@ -101,7 +114,7 @@ const COORDINATE_RANGE: Readonly<
  */
 export function parseLatLon(value: string, kind: "lat" | "lon"): number {
 	const range = COORDINATE_RANGE[kind];
-	const parsed = toFiniteNumber(value);
+	const parsed = parseDecimal(value);
 	if (parsed === undefined || parsed < range.min || parsed > range.max) {
 		const label = kind === "lat" ? "latitude" : "longitude";
 		throw new CentrsError({
@@ -119,7 +132,7 @@ export function parseLatLon(value: string, kind: "lat" | "lon"): number {
 
 /** Validate an altitude (meters, may be negative), throwing `input/invalid-altitude` on NaN. */
 export function parseAltitude(value: string): number {
-	const parsed = toFiniteNumber(value);
+	const parsed = parseDecimal(value);
 	if (parsed === undefined) {
 		throw new CentrsError({
 			code: "input/invalid-altitude",
@@ -237,8 +250,8 @@ export function deviceLocation(
 	if (rawLat === undefined || rawLon === undefined) {
 		return undefined;
 	}
-	const lat = toFiniteNumber(rawLat);
-	const lon = toFiniteNumber(rawLon);
+	const lat = parseDecimal(rawLat);
+	const lon = parseDecimal(rawLon);
 	if (
 		lat === undefined ||
 		lon === undefined ||
@@ -252,7 +265,7 @@ export function deviceLocation(
 	const location: DeviceLocation = { lat, lon };
 	const rawAltitude = facts["altitude"];
 	if (rawAltitude !== undefined) {
-		const altitude = toFiniteNumber(rawAltitude);
+		const altitude = parseDecimal(rawAltitude);
 		if (altitude !== undefined) {
 			location.altitude = altitude;
 			const rawType = facts["altitude-type"];

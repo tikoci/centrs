@@ -14,7 +14,11 @@
  */
 
 import { parseCommentKv, parseRawCommentFacts } from "./comment-kv.ts";
-import { type DeviceLocation, deviceLocation } from "./geo.ts";
+import {
+	canonicalizeGeoKey,
+	type DeviceLocation,
+	deviceLocation,
+} from "./geo.ts";
 import { normalizeMac } from "./mac.ts";
 
 /** One exact-match device-class clause (`attr=value`), AND-combined by callers. */
@@ -47,12 +51,21 @@ export function entryFacts(
 	return facts;
 }
 
-/** True when every `--where` clause matches the entry's facts (exact, AND-combined). */
+/**
+ * True when every `--where` clause matches the entry's facts (exact,
+ * AND-combined). The clause key is run through {@link canonicalizeGeoKey} here —
+ * the single seam — so a geo alias (`--where latitude=…`/`lng=…`/`elevation=…`)
+ * matches the canonical `lat`/`lon`/`altitude` fact the write side stores, on
+ * BOTH `devices list` and every fan-out command's `--where`. A no-op for
+ * non-geo keys.
+ */
 export function matchesWhere(
 	facts: Record<string, string>,
 	where: readonly WhereClause[],
 ): boolean {
-	return where.every((clause) => facts[clause.key] === clause.value);
+	return where.every(
+		(clause) => facts[canonicalizeGeoKey(clause.key)] === clause.value,
+	);
 }
 
 /**

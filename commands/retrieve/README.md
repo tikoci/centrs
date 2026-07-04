@@ -148,8 +148,9 @@ partial data stays usable.)
 ## Target selection
 
 retrieve fans out over the **shared target-selection grammar** — multiple
-`<router>` positionals, repeatable `--group`/`--where`, `--all`, and `--default`,
-combined as a set and de-duped by CDB record index. The grammar, the locked `FanoutData`
+`<router>` positionals, repeatable `--group`/`--where`, the geo selectors
+`--near`/`--bbox`, `--all`, and `--default`, combined as a set and de-duped by
+CDB record index. The grammar, the locked `FanoutData`
 envelope (`data = { summary, targets[] }`, outer `ok` = orchestration success,
 per-target failure is an inner `ok:false`), the record-order reassembly, and the
 granular **0/2/1 exit code** are all normative in

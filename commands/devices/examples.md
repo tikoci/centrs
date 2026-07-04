@@ -617,3 +617,20 @@ centrs devices set 192.0.2.5 --near 37.7749,-122.4194,50km --cdb-file $CDB
 Errors with `input/invalid-command`: `--where`/`--near`/`--bbox` *select*
 records for `list`; `add`/`set` name the `<target>` directly. Store GPS with
 `--gps`/`--lat`/`--lon` instead.
+
+### 53. An unrelated `set` on a record with a lone `lat` does not fail
+
+The lat/lon pairing check fires only when the write actually touches a
+coordinate. A record that already carries a lone `lat` (e.g. a hand-edited or
+imported comment) can still take unrelated updates.
+
+```bash
+centrs devices add 203.0.113.7 --user u --password p \
+  --comment "lat=37.7749" --cdb-file $CDB
+centrs devices set 203.0.113.7 timeout=5000 --cdb-file $CDB
+```
+
+Both succeed: the `add` stores the freeform comment verbatim, and the later
+`set timeout=5000` does **not** raise `input/incomplete-gps` even though the
+record's GPS pair is incomplete. Touching `lat`/`lon` (e.g. `set lat=…`) would
+re-enable the pairing check.

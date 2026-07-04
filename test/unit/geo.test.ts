@@ -66,6 +66,14 @@ describe("parseLatLon", () => {
 		expect(() => parseLatLon("abc", "lat")).toThrow(CentrsError);
 	});
 
+	test("rejects hex and scientific notation (strict decimal degrees only)", () => {
+		// Number("0x10")===16 and Number("1e2")===100 would silently pass a bare
+		// Number() parse; decimal degrees must reject both.
+		expectCode(() => parseLatLon("0x10", "lat"), "input/invalid-coordinate");
+		expectCode(() => parseLatLon("1e2", "lon"), "input/invalid-coordinate");
+		expectCode(() => parseLatLon("+45", "lat"), "input/invalid-coordinate");
+	});
+
 	test("rejects an empty string rather than treating it as 0", () => {
 		// Number("") === 0 in JS; the parser must not silently accept a cleared
 		// value as a valid coordinate.
@@ -112,6 +120,11 @@ describe("parseAltitude", () => {
 	test("rejects an empty string rather than treating it as 0", () => {
 		expect(() => parseAltitude("")).toThrow(CentrsError);
 	});
+
+	test("rejects hex and scientific notation (strict decimal meters only)", () => {
+		expectCode(() => parseAltitude("0x10"), "input/invalid-altitude");
+		expectCode(() => parseAltitude("1e2"), "input/invalid-altitude");
+	});
 });
 
 describe("parseAltitudeType", () => {
@@ -149,8 +162,9 @@ describe("canonicalizeGeoKey", () => {
 		expect(canonicalizeGeoKey("lat")).toBe("lat");
 	});
 
-	test("canonicalizes altitude aliases", () => {
+	test("canonicalizes altitude aliases (incl. ele/elevation GPX muscle memory)", () => {
 		expect(canonicalizeGeoKey("alt")).toBe("altitude");
+		expect(canonicalizeGeoKey("ele")).toBe("altitude");
 		expect(canonicalizeGeoKey("elevation")).toBe("altitude");
 		expect(canonicalizeGeoKey("altitude")).toBe("altitude");
 	});
@@ -160,8 +174,11 @@ describe("canonicalizeGeoKey", () => {
 		expect(canonicalizeGeoKey("Latitude")).toBe("lat");
 	});
 
-	test("altitude-type has no alias and passes through unchanged", () => {
+	test("altitude-type canonicalizes by case and via --alt-type spelling", () => {
 		expect(canonicalizeGeoKey("altitude-type")).toBe("altitude-type");
+		// A bare mixed-case token must land on the canonical key, not pass through.
+		expect(canonicalizeGeoKey("ALTITUDE-TYPE")).toBe("altitude-type");
+		expect(canonicalizeGeoKey("alt-type")).toBe("altitude-type");
 	});
 
 	test("a non-geo key passes through unchanged, original casing preserved", () => {

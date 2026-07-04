@@ -174,7 +174,15 @@ exact `--where lat=<value>` still matches what was written — `altitude-type` i
 the one exception, since it's a closed two-value enum, so it is normalized to
 upper case (`msl` -> `MSL`) before storage. `lat`/`lon` must be written as a
 pair: setting one without the other, when the other is not already on the
-record, errors `input/incomplete-gps`.
+record, errors `input/incomplete-gps`. Only the pairing rule fires per-write —
+an unrelated `set timeout=…` on a record that already carries a lone `lat` is
+left untouched.
+
+`lat`/`lon`/`altitude` accept **strict decimal** only (optional leading `-`,
+digits, optional dotted fraction); hex (`0x10`) and scientific (`1e2`) notation
+are rejected with `input/invalid-coordinate` / `input/invalid-altitude` even
+though `Number()` would accept them, because the fields are decimal degrees /
+meters.
 
 ### Flags
 
@@ -182,7 +190,9 @@ record, errors `input/incomplete-gps`.
 
 - `--lat <deg>` (alias `--latitude`)
 - `--lon <deg>` (aliases `--lng`, `--longitude`, `--long`)
-- `--altitude <meters>` (aliases `--alt`, `--elevation`)
+- `--altitude <meters>` (aliases `--alt`, `--ele`, `--elevation`) — `altitude`
+  stays the canonical field (the ISO 6709 / EPSG / IETF `geo:` / W3C-Geolocation
+  term); `ele`/`elevation` are GPX-muscle-memory aliases, not a rename
 - `--altitude-type <MSL|AGL>` (alias `--alt-type`), case-insensitive
 - `--gps <lat>,<lon>[,<altitude>[,<altitude-type>]]` — combined convenience;
   minimum `--gps <lat>,<lon>`; a missing altitude-type in the 3-part form

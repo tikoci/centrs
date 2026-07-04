@@ -262,6 +262,58 @@ describe("handleDevices (offline registry reads)", () => {
 			await cleanup();
 		}
 	});
+
+	test("op=list supports where/near query selectors (mirrors the CLI)", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([
+			{ target: "sf", comment: "board=RB5009 lat=37.7749 lon=-122.4194" },
+			{ target: "ny", comment: "board=hAP lat=40.7128 lon=-74.0060" },
+			{ target: "plain", comment: "board=RB5009" },
+		]);
+		try {
+			const near = await handleDevices(
+				{ op: "list", near: "37.7749,-122.4194,50km" },
+				config(path),
+			);
+			expect(near.ok).toBe(true);
+			if (near.ok) {
+				expect(
+					(near.data as ReadonlyArray<{ target: string }>).map((d) => d.target),
+				).toEqual(["sf"]);
+			}
+
+			// A geo alias key must canonicalize (latitude -> lat) on the MCP surface too.
+			const where = await handleDevices(
+				{ op: "list", where: ["latitude=40.7128"] },
+				config(path),
+			);
+			expect(where.ok).toBe(true);
+			if (where.ok) {
+				expect(
+					(where.data as ReadonlyArray<{ target: string }>).map(
+						(d) => d.target,
+					),
+				).toEqual(["ny"]);
+			}
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("query selectors are rejected outside op=list", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([{ target: "a" }]);
+		try {
+			const env = await handleDevices(
+				{ op: "show", target: "a", near: "37.7749,-122.4194,50km" },
+				config(path),
+			);
+			expect(env.ok).toBe(false);
+			if (!env.ok) {
+				expect(env.error.code).toBe("input/invalid-command");
+			}
+		} finally {
+			await cleanup();
+		}
+	});
 });
 
 describe("handleDevices (CDB mutations)", () => {

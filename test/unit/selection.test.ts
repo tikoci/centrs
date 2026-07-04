@@ -192,6 +192,20 @@ describe("expandCdbSelection — selectors", () => {
 		});
 		expect(out.indices).toEqual([0, 4]);
 	});
+
+	test("--where canonicalizes a geo alias key so fan-out matches like devices list", async () => {
+		// Record 0 stores `lat=37.774900`; the shared resolver must match a
+		// `latitude=`/`lng=` alias too (centralized in matchesWhere), so
+		// retrieve/execute/api/transfer --where behaves like `devices list`.
+		const byAlias = await expand({
+			where: [{ key: "latitude", value: "37.774900" }],
+		});
+		expect(byAlias.indices).toEqual([0]);
+		const byLngAlias = await expand({
+			where: [{ key: "lon", value: "-122.419400" }],
+		});
+		expect(byLngAlias.indices).toEqual([0]);
+	});
 });
 
 describe("expandCdbSelection — geo predicates (--near / --bbox)", () => {

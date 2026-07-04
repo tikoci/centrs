@@ -485,7 +485,10 @@ qrcode
 #   --bbox may not cross in v1. GEOSEARCH: the Redis command whose m/km/mi/ft
 #   radius-unit vocabulary --near borrows. IUGG: the geodesy union whose mean
 #   Earth radius the haversine uses. SFO/OAK: airports used as a known-distance
-#   haversine fixture in tests.
+#   haversine fixture in tests. ele/GPX: `ele` is GPX's altitude element, kept as
+#   an input alias for `altitude` (GPX = the GPS Exchange Format). Geolocation:
+#   the W3C Geolocation API, cited (with ISO 6709 / EPSG / IETF geo:) for why
+#   `altitude` — not `elevation` — is the canonical field name.
 MSL
 msl
 AGL
@@ -499,3 +502,6 @@ GEOSEARCH
 IUGG
 SFO
 sfo
+ele
+GPX
+Geolocation

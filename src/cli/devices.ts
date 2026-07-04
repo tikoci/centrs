@@ -158,7 +158,7 @@ export const devicesCommand: CliCommandMetadata = {
 				"`add`,`set` — longitude in decimal degrees (-180..180); a comment-kv fact, paired with --lat.",
 		},
 		{
-			flag: "--altitude / --alt / --elevation",
+			flag: "--altitude / --alt / --ele / --elevation",
 			valueName: "<meters>",
 			description:
 				"`add`,`set` — altitude in meters (may be negative); a comment-kv fact.",
@@ -334,6 +334,7 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			case "--altitude":
 			case "--alt":
+			case "--ele":
 			case "--elevation":
 				parsed.altitude = expectValue(args, ++index, arg);
 				break;
@@ -472,10 +473,10 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
  * Parse a `--where attr=value` token for `devices list` (constitution: target
  * selection grammar). Mirrors `src/cli/selection.ts` `parseWhereClause`: a
  * structured `input/invalid-command` (not a bare `Error`) so the surfaced error
- * keeps its remediation/context, consistent with every other CLI surface. The
- * key is run through `canonicalizeGeoKey` so a geo alias (`--where latitude=…`/
- * `lng=…`/`elevation=…`) matches the canonical `lat`/`lon`/`altitude` fact the
- * write side stores (a no-op for every non-geo key).
+ * keeps its remediation/context, consistent with every other CLI surface. Geo
+ * alias canonicalization (`latitude=`→`lat=`) is NOT done here — it happens once,
+ * centrally, in `matchesWhere` (`src/resolver/facts.ts`), so `devices list` and
+ * every fan-out command's `--where` behave identically.
  */
 function parseWhereClause(token: string): DevicesWhereClause {
 	const eq = token.indexOf("=");
@@ -489,7 +490,7 @@ function parseWhereClause(token: string): DevicesWhereClause {
 		});
 	}
 	return {
-		key: canonicalizeGeoKey(token.slice(0, eq)),
+		key: token.slice(0, eq),
 		value: token.slice(eq + 1),
 	};
 }

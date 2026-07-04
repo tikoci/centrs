@@ -34,6 +34,7 @@ import {
 	validateExecuteEnvelope,
 } from "../execute.ts";
 import type { CommentKvUpdate } from "../resolver/comment-kv.ts";
+import { parseBbox, parseNear } from "../resolver/geo.ts";
 import { parseDuration } from "../resolver/settings.ts";
 import { buildRetrieveErrorEnvelope, retrieve } from "../retrieve.ts";
 import {
@@ -417,6 +418,24 @@ export const devicesInputShape = {
 		.describe(
 			"Group filter for op=list; first-class group field for op=add/set.",
 		),
+	where: z
+		.array(z.string())
+		.optional()
+		.describe(
+			"op=list device-class filters `attr=value` (repeatable, AND-combined; e.g. board=RB5009 or lat=37.7749).",
+		),
+	near: z
+		.string()
+		.optional()
+		.describe(
+			"op=list geo filter `<lat>,<lon>,<radius>` (lat-first; radius m/km/mi/ft, bare = km).",
+		),
+	bbox: z
+		.string()
+		.optional()
+		.describe(
+			"op=list geo filter `<south>,<west>,<north>,<east>` (lat-first bounding box).",
+		),
 	user: z.string().optional().describe("CDB username for op=add/set."),
 	password: z
 		.string()
@@ -527,6 +546,32 @@ function buildGeoUpdates(args: DevicesArgs): CommentKvUpdate[] {
 	return updates;
 }
 
+/**
+ * Parse the MCP `where` array (`["attr=value", …]`) into device-class clauses
+ * for op=list. Geo-alias canonicalization happens centrally in `matchesWhere`
+ * (`src/resolver/facts.ts`), so this only splits on the first `=`.
+ */
+function parseMcpWhereClauses(
+	where: readonly string[] | undefined,
+): { key: string; value: string }[] | undefined {
+	if (where === undefined) {
+		return undefined;
+	}
+	return where.map((clause) => {
+		const eq = clause.indexOf("=");
+		if (eq <= 0) {
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary: `where clause must be \`attr=value\`; received: ${clause}`,
+				remediation:
+					"Pass device-class filters like `board=RB5009` or `lat=37.7749`.",
+				context: { where: clause },
+			});
+		}
+		return { key: clause.slice(0, eq), value: clause.slice(eq + 1) };
+	});
+}
+
 function resolveRecordType(recordType: string | undefined): number | undefined {
 	if (recordType === undefined) {
 		return undefined;
@@ -551,7 +596,8 @@ export async function handleDevices(
 ): Promise<McpEnvelope> {
 	try {
 		const cdb = await loadAllowlistCdb(config);
-		// GPS fields write via add/set only; reject them for read/other ops
+		// GPS *setter* fields write via add/set only; the *query* selectors
+		// (where/near/bbox) select via list only. Reject the wrong-op combination
 		// instead of silently dropping the caller's input (mirrors the CLI's
 		// per-subcommand flag guard in src/cli/devices.ts).
 		if (
@@ -570,9 +616,29 @@ export async function handleDevices(
 				context: { op: args.op },
 			});
 		}
+		if (
+			args.op !== "list" &&
+			(args.where !== undefined ||
+				args.near !== undefined ||
+				args.bbox !== undefined)
+		) {
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary: `Query selectors (where/near/bbox) are only valid for op="list", not op="${args.op}".`,
+				remediation:
+					"Use op=list with where/near/bbox to query the registry; for op=show name a target directly.",
+				context: { op: args.op },
+			});
+		}
 		switch (args.op) {
 			case "list":
-				return listDevices({ cdb, group: args.group });
+				return listDevices({
+					cdb,
+					group: args.group,
+					where: parseMcpWhereClauses(args.where),
+					near: args.near !== undefined ? parseNear(args.near) : undefined,
+					bbox: args.bbox !== undefined ? parseBbox(args.bbox) : undefined,
+				});
 			case "groups":
 				return listGroups({ cdb, withMembers: true });
 			case "show": {
