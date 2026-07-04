@@ -1834,4 +1834,96 @@ describe("centrs devices (read-only)", () => {
 		};
 		expect(reformattedEnvelope.data).toEqual([]);
 	});
+
+	test("example 50 list --near selects in-radius devices; far + geo-less are excluded", async () => {
+		const cdbPath = await copyCdbFixture("example-50-near");
+		// 192.0.2.5 in San Francisco, 192.0.2.6 in New York; the other three
+		// records carry no GPS.
+		const sf = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"--gps",
+			"37.7749,-122.4194",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(sf.exitCode).toBe(0);
+		const ny = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.6",
+			"--gps",
+			"40.7128,-74.0060",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(ny.exitCode).toBe(0);
+
+		const near = await runWithCapture([
+			"devices",
+			"list",
+			"--near",
+			"37.7749,-122.4194,50km",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(near.exitCode).toBe(0);
+		const envelope = JSON.parse(near.stdout) as {
+			data: Array<{ target: string }>;
+		};
+		expect(envelope.data.map((entry) => entry.target)).toEqual(["192.0.2.5"]);
+	});
+
+	test("example 51 list --bbox selects devices inside the lat-first box", async () => {
+		const cdbPath = await copyCdbFixture("example-51-bbox");
+		const sf = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"--gps",
+			"37.7749,-122.4194",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(sf.exitCode).toBe(0);
+
+		const bbox = await runWithCapture([
+			"devices",
+			"list",
+			"--bbox",
+			"37.70,-122.52,37.83,-122.35",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(bbox.exitCode).toBe(0);
+		const envelope = JSON.parse(bbox.stdout) as {
+			data: Array<{ target: string }>;
+		};
+		expect(envelope.data.map((entry) => entry.target)).toEqual(["192.0.2.5"]);
+	});
+
+	test("example 52 --near is list-only; using it on set errors with input/invalid-command", async () => {
+		const cdbPath = await copyCdbFixture("example-52-near-guard");
+		const result = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"--near",
+			"37.7749,-122.4194,50km",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(1);
+		const envelope = JSON.parse(result.stdout || result.stderr) as {
+			error: { code: string };
+		};
+		expect(envelope.error.code).toBe("input/invalid-command");
+	});
 });

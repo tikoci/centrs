@@ -4,9 +4,14 @@
  * unchanged from the former monolithic `cli.ts`.
  */
 
-import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
+import {
+	asCentrsError,
+	CentrsError,
+	formatCentrsErrorText,
+} from "../errors.ts";
 import {
 	addDevice,
+	type BboxPredicate,
 	buildDevicesErrorEnvelope,
 	type CommentKvUpdate,
 	canonicalizeGeoKey,
@@ -20,7 +25,10 @@ import {
 	listDevices,
 	listGroups,
 	loadCdb,
+	type NearPredicate,
+	parseBbox,
 	parseGpsTuple,
+	parseNear,
 	recordTypeFromName,
 	removeDevice,
 	renderDevicesEnvelope,
@@ -71,6 +79,18 @@ export const devicesCommand: CliCommandMetadata = {
 			valueName: "<attr=value>",
 			description:
 				"`list` only — repeatable device-class filter over CDB facts (AND-combined), e.g. `--where lat=37.7749`.",
+		},
+		{
+			flag: "--near",
+			valueName: "<lat>,<lon>,<radius>",
+			description:
+				"`list` only — GPS filter: devices within radius (m/km/mi/ft; bare number = km). Lat-first.",
+		},
+		{
+			flag: "--bbox",
+			valueName: "<south>,<west>,<north>,<east>",
+			description:
+				"`list` only — GPS filter: devices inside the lat-first bounding box.",
 		},
 		{
 			flag: "--members",
@@ -227,6 +247,8 @@ interface DevicesCliArgs {
 	altitude?: string;
 	altitudeType?: string;
 	gps?: string;
+	near?: NearPredicate;
+	bbox?: BboxPredicate;
 }
 
 function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
@@ -257,6 +279,12 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 					...(parsed.where ?? []),
 					expectValue(args, ++index, arg),
 				];
+				break;
+			case "--near":
+				parsed.near = parseNear(expectValue(args, ++index, arg));
+				break;
+			case "--bbox":
+				parsed.bbox = parseBbox(expectValue(args, ++index, arg));
 				break;
 			case "--via":
 				parsed.via = expectValue(args, ++index, arg);
@@ -372,6 +400,48 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	}
 	parsed.subcommand = sub;
 
+	// Reject flags that don't apply to the resolved subcommand instead of
+	// silently ignoring the user's input: `--where`/`--near`/`--bbox` select
+	// records for `list`; the GPS *setter* flags write via `add`/`set`.
+	const selectorFlag =
+		(parsed.where?.length ?? 0) > 0
+			? "--where"
+			: parsed.near !== undefined
+				? "--near"
+				: parsed.bbox !== undefined
+					? "--bbox"
+					: undefined;
+	if (selectorFlag !== undefined && sub !== "list") {
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary: `\`${selectorFlag}\` is not supported by \`centrs devices ${sub}\`.`,
+			remediation:
+				"`--where`/`--near`/`--bbox` select records for `centrs devices list`. For `add`/`set`, name the `<target>` directly.",
+			context: { subcommand: sub, flag: selectorFlag },
+		});
+	}
+	const geoFlag =
+		parsed.lat !== undefined
+			? "--lat"
+			: parsed.lon !== undefined
+				? "--lon"
+				: parsed.altitude !== undefined
+					? "--altitude"
+					: parsed.altitudeType !== undefined
+						? "--altitude-type"
+						: parsed.gps !== undefined
+							? "--gps"
+							: undefined;
+	if (geoFlag !== undefined && sub !== "add" && sub !== "set") {
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary: `GPS flag \`${geoFlag}\` is not supported by \`centrs devices ${sub}\`.`,
+			remediation:
+				"Store GPS with `centrs devices add`/`set` (e.g. `--gps <lat>,<lon>`); query it with `centrs devices list --where lat=…` / `--near`.",
+			context: { subcommand: sub, flag: geoFlag },
+		});
+	}
+
 	if (sub === "show" || sub === "edit" || sub === "remove") {
 		if (rest.length !== 1) {
 			throw new Error(
@@ -398,13 +468,30 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	return parsed;
 }
 
-/** Parse a `--where attr=value` token for `devices list` (constitution: target selection grammar). */
+/**
+ * Parse a `--where attr=value` token for `devices list` (constitution: target
+ * selection grammar). Mirrors `src/cli/selection.ts` `parseWhereClause`: a
+ * structured `input/invalid-command` (not a bare `Error`) so the surfaced error
+ * keeps its remediation/context, consistent with every other CLI surface. The
+ * key is run through `canonicalizeGeoKey` so a geo alias (`--where latitude=…`/
+ * `lng=…`/`elevation=…`) matches the canonical `lat`/`lon`/`altitude` fact the
+ * write side stores (a no-op for every non-geo key).
+ */
 function parseWhereClause(token: string): DevicesWhereClause {
 	const eq = token.indexOf("=");
 	if (eq <= 0) {
-		throw new Error(`Invalid --where clause "${token}"; expected attr=value.`);
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary: `--where must be \`<attr>=<value>\`; received: ${token}`,
+			remediation:
+				"Pass a device-class selector like `--where board=RB5009` (matches a CDB fact or core field).",
+			context: { where: token },
+		});
 	}
-	return { key: token.slice(0, eq), value: token.slice(eq + 1) };
+	return {
+		key: canonicalizeGeoKey(token.slice(0, eq)),
+		value: token.slice(eq + 1),
+	};
 }
 
 function parseKvArg(token: string): CommentKvUpdate {
@@ -531,6 +618,8 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 					cdb,
 					group: parsed.group,
 					where: (parsed.where ?? []).map(parseWhereClause),
+					near: parsed.near,
+					bbox: parsed.bbox,
 				});
 				break;
 			case "show":

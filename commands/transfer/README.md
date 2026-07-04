@@ -174,7 +174,7 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 | `--ssh-key <path>` | `sftp` (and future `scp`): explicit private-key path. Same `sshKey` setting as `terminal`/`execute` (`CENTRS_SSH_KEY`, CDB `ssh-key=`). When unset, the ssh-agent / `~/.ssh/config` is used. See `commands/terminal/README.md`. |
 | `--insecure` | Accept a self-signed TLS cert (`https`/`api-ssl`) or a new SSH host key (TOFU). Default verifies; see constitution: transport trust. Adds a `transport/insecure-trust` warning. |
 | `--cdb-file` / `--cdb-password` | Override CDB file location / decrypt password. |
-| `--group <name>` / `--where <attr>=<value>` / `--all` / `--default` / `--concurrency <n>` | Fan out across CDB targets (e.g. push one firmware file to a fleet). Same selector grammar and per-target envelope as `retrieve`/`execute` (constitution: target selection). `download` fan-out requires `--out-dir`; `remove`/`mkdir`/`copy`/`upload` fan out directly and are `--yes`-gated. See **Target selection**. |
+| `--group <name>` / `--where <attr>=<value>` / `--near <lat>,<lon>,<radius>` / `--bbox <south>,<west>,<north>,<east>` / `--all` / `--default` / `--concurrency <n>` | Fan out across CDB targets (e.g. push one firmware file to a fleet). Same selector grammar and per-target envelope as `retrieve`/`execute` (constitution: target selection). `--near`/`--bbox` select by device GPS (lat-first). `download` fan-out requires `--out-dir`; `remove`/`mkdir`/`copy`/`upload` fan out directly and are `--yes`-gated. See **Target selection**. |
 
 ## Target selection
 

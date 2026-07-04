@@ -57,14 +57,22 @@ export {
 } from "./config-file.ts";
 export {
 	type AltitudeType,
+	type BboxPredicate,
 	canonicalizeGeoKey,
 	type DeviceLocation,
 	deviceLocation,
+	haversineMeters,
+	matchesBbox,
+	matchesNear,
+	type NearPredicate,
 	type ParsedGpsTuple,
 	parseAltitude,
 	parseAltitudeType,
+	parseBbox,
 	parseGpsTuple,
 	parseLatLon,
+	parseNear,
+	parseRadius,
 } from "./geo.ts";
 export {
 	type ArpEntry,

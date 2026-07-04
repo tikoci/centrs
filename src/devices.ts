@@ -44,9 +44,14 @@ import {
 	parseCommentKv,
 	parseRawCommentFacts,
 } from "./resolver/comment-kv.ts";
+import { entryFacts, entryLocation, matchesWhere } from "./resolver/facts.ts";
 import {
+	type BboxPredicate,
 	type DeviceLocation,
 	deviceLocation,
+	matchesBbox,
+	matchesNear,
+	type NearPredicate,
 	parseAltitude,
 	parseAltitudeType,
 	parseLatLon,
@@ -465,43 +470,15 @@ export interface DevicesWhereClause {
 	value: string;
 }
 
-/**
- * The device-class facts a `devices list --where` clause matches against: every
- * raw comment-kv token (issue #146's `lat`/`lon`/etc. included, unfiltered —
- * same source `--where` uses everywhere else), plus core fields layered on top
- * so a hand-written comment token can never spoof `target`/`group`/`identity`/
- * `mac`. Mirrors `entryFacts` in `src/resolver/selection.ts` (the general
- * fan-out `--where` grammar); duplicated rather than imported to avoid a
- * circular import (`selection.ts` already imports CDB primitives from this
- * file). Keep the two in sync if either changes.
- */
-function listWhereFacts(entry: WinBoxCdbEntry): Record<string, string> {
-	const facts = parseRawCommentFacts(entry.comment);
-	facts["target"] = entry.target;
-	facts["group"] = entry.group;
-	const parsed = parseCommentKv(entry.comment);
-	facts["identity"] = parsed.lookups.identity ?? entry.target;
-	const mac =
-		normalizeMac(parsed.lookups.mac ?? "") ?? normalizeMac(entry.target);
-	if (mac !== undefined) {
-		facts["mac"] = mac;
-	}
-	return facts;
-}
-
-function matchesListWhere(
-	entry: WinBoxCdbEntry,
-	where: readonly DevicesWhereClause[],
-): boolean {
-	const facts = listWhereFacts(entry);
-	return where.every((clause) => facts[clause.key] === clause.value);
-}
-
 export interface ListDevicesArgs {
 	cdb: LoadedCdb;
 	group?: string;
 	/** Repeatable `--where attr=value`, AND-combined (constitution: target selection grammar). */
 	where?: readonly DevicesWhereClause[];
+	/** `--near <lat>,<lon>,<radius>`: keep devices whose GPS is within radius. */
+	near?: NearPredicate;
+	/** `--bbox <south>,<west>,<north>,<east>`: keep devices whose GPS is in the box. */
+	bbox?: BboxPredicate;
 }
 
 export function listDevices(
@@ -511,18 +488,27 @@ export function listDevices(
 	let entries = args.cdb.entries;
 	let indices = entries.map((_, index) => index);
 
-	if (args.group !== undefined) {
-		const wanted = args.group;
+	// Each selector narrows the working (entries, indices) pair (AND-combined —
+	// `devices list` is a *filter* surface, distinct from the fan-out resolver's
+	// union). `--where` uses the shared `entryFacts`/`matchesWhere` from
+	// `src/resolver/facts.ts`, so the list filter and the fan-out selector match
+	// against identical device-class facts.
+	const narrow = (keep: (entry: WinBoxCdbEntry) => boolean): void => {
 		const filtered: { entry: WinBoxCdbEntry; index: number }[] = [];
-		for (let index = 0; index < entries.length; index += 1) {
-			const entry = entries[index];
-			if (entry && entry.group === wanted) {
-				filtered.push({ entry, index });
+		for (let position = 0; position < entries.length; position += 1) {
+			const entry = entries[position];
+			if (entry && keep(entry)) {
+				filtered.push({ entry, index: indices[position] ?? -1 });
 			}
 		}
 		entries = filtered.map((item) => item.entry);
 		indices = filtered.map((item) => item.index);
-		if (filtered.length === 0) {
+	};
+
+	if (args.group !== undefined) {
+		const wanted = args.group;
+		narrow((entry) => entry.group === wanted);
+		if (entries.length === 0) {
 			warnings.push({
 				code: "cdb/empty-group",
 				message: `No entries matched group "${wanted}".`,
@@ -533,16 +519,26 @@ export function listDevices(
 
 	if (args.where && args.where.length > 0) {
 		const where = args.where;
-		const filtered: { entry: WinBoxCdbEntry; index: number }[] = [];
-		for (let position = 0; position < entries.length; position += 1) {
-			const entry = entries[position];
-			const index = indices[position] ?? -1;
-			if (entry && matchesListWhere(entry, where)) {
-				filtered.push({ entry, index });
+		narrow((entry) =>
+			matchesWhere(entryFacts(entry.comment, entry.target, entry.group), where),
+		);
+	}
+
+	if (args.near !== undefined || args.bbox !== undefined) {
+		const { near, bbox } = args;
+		// Geo predicates union among themselves (near OR bbox, like the fan-out
+		// resolver), then AND-compose with group/where above. A geo-less device
+		// carries no location and is silently excluded (not an error).
+		narrow((entry) => {
+			const loc = entryLocation(entry.comment);
+			if (loc === undefined) {
+				return false;
 			}
-		}
-		entries = filtered.map((item) => item.entry);
-		indices = filtered.map((item) => item.index);
+			return (
+				(near !== undefined && matchesNear(loc, near)) ||
+				(bbox !== undefined && matchesBbox(loc, bbox))
+			);
+		});
 	}
 
 	const data: DevicesListItem[] = entries.map((entry, position) =>

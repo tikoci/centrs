@@ -159,12 +159,12 @@ are the first keys promoted this way, issue #146.)
 
 ## Location / GPS
 
-Per-device GPS (issue #146, Slice 1 of 2) is a **fact, not a setting**:
-recognized (`devices set lat=…` no longer warns `cdb/unknown-option`), stored,
-queryable via `--where`, and returned as a `location` block in `devices show`/
-`list` output — but never coerced into resolver settings. Slice 2 (a later PR)
-adds `--near`/`--bbox` fan-out query predicates over these same facts; this
-section covers what Slice 1 ships (storage, flags, validation, envelope).
+Per-device GPS (issue #146) is a **fact, not a setting**: recognized
+(`devices set lat=…` no longer warns `cdb/unknown-option`), stored, queryable via
+`--where` (exact) and `--near`/`--bbox` (geo), and returned as a `location` block
+in `devices show`/`list` output — but never coerced into resolver settings. This
+section covers storage/flags/validation/envelope; the geo query predicates are in
+"Geo query" below.
 
 ### Storage keys
 
@@ -215,8 +215,31 @@ CSV.
 ### Altitude is metadata-only
 
 `altitude`/`altitude-type` are stored and returned in `devices show`/`list`
-output, but are **not** part of any fan-out query predicate — the planned
-`--near`/`--bbox` geo selectors (Slice 2) are 2-D lat/lon only.
+output, but are **not** part of any fan-out query predicate — the `--near`/
+`--bbox` geo selectors are 2-D lat/lon only.
+
+### Geo query (`--near` / `--bbox`)
+
+Two geo selectors filter/select by device GPS. On `devices list` they filter the
+listing; on every non-terminal fan-out command (`execute`/`retrieve`/`api`/
+`transfer`) they are union selector terms in the shared target-selection grammar
+(`docs/CONSTITUTION.md`, Target selection). Coordinates are lat-first (above); a
+geo-less device carries no location and is silently excluded (never an error).
+
+- `--near <lat>,<lon>,<radius>` — devices within a great-circle (haversine)
+  radius of the point. `radius` takes a unit suffix `m`/`km`/`mi`/`ft`
+  (case-insensitive); a bare number is kilometers. A malformed/negative radius is
+  `input/invalid-radius`; wrong arity is `input/invalid-command`.
+- `--bbox <south>,<west>,<north>,<east>` — devices inside the axis-aligned box
+  (`minLat,minLon,maxLat,maxLon`, edges inclusive). Requires `south <= north` and
+  `west <= east` (an antimeridian-crossing box is not supported in v1), else
+  `input/invalid-bbox`.
+
+On `devices list`, `--group`/`--where`/`--near`/`--bbox` AND-narrow the listing
+(a filter surface); `--near` and `--bbox` union with each other. In the fan-out
+grammar every selector unions (see the constitution). `--near`/`--bbox` are
+rejected on `add`/`set`/`show`/`remove` with `input/invalid-command` — they
+select, they do not store.
 
 ### Envelope
 
@@ -268,8 +291,10 @@ split lands.)
 ## Fanout (multi-target invocations)
 
 Any command may receive multiple positional targets, one or more `--group`
-flags, `--all`, `--default`, and/or `--where <attr>=<value>` (device-class) — see
-`docs/CONSTITUTION.md` (Target selection grammar). The resolved member set is
+flags, `--all`, `--default`, `--where <attr>=<value>` (device-class), and/or the
+geo selectors `--near <lat>,<lon>,<radius>` / `--bbox <south>,<west>,<north>,<east>`
+(see "Geo query" above) — see `docs/CONSTITUTION.md` (Target selection grammar).
+The resolved member set is
 de-duplicated by CDB record index (ad-hoc literal targets by host), and members
 are reassembled in record-index order regardless of completion order, so repeated
 runs produce stable diffs.
@@ -290,7 +315,9 @@ runs produce stable diffs.
 ## Subcommands
 
 ```text
-centrs devices list [--group G] [--where attr=value] [--format json|yaml|text]
+centrs devices list [--group G] [--where attr=value]
+                    [--near lat,lon,radius] [--bbox south,west,north,east]
+                    [--format json|yaml|text]
 centrs devices show <target> [--explain] [--via <protocol>] [--match <type>]
 centrs devices groups [--members]
 centrs devices discover [--timeout 15s] [--group G]      # = discover --save (save implied)
@@ -321,7 +348,8 @@ is no `update`.
   a one-line provenance summary. No network IO. `--where attr=value`
   (repeatable, AND-combined) filters by CDB-stored facts/comment-kv plus core
   record fields (`target`/`group`/`identity`/`mac`) — e.g. `--where
-  lat=37.7749` (see "Location / GPS").
+  lat=37.7749`. `--near lat,lon,radius` and `--bbox south,west,north,east`
+  filter by device GPS (see "Geo query"). All three are `list`-only.
 - `show` (alias `get`) returns a single resolved target with the full per-field
   source map in `meta.target`. `--explain` adds the raw CDB record dump under
   `data.record`; `--via <protocol>` reports the protocol that would be selected

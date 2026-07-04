@@ -479,10 +479,13 @@ qrcode
 #   datums (mean sea level / above ground level); stored case-insensitively but
 #   normalized to upper case. EPSG: the geodetic coordinate-reference-system
 #   registry (EPSG:4326 = WGS84 lat/lon), cited for the lat-first ordering
-#   rationale. bbox: the planned #146-Slice-2 --bbox geo selector (bounding
-#   box), named here so its follow-up PR doesn't need a fresh cspell entry.
-#   wgs: WGS84, the geodetic datum GPS coordinates use; appears only as a
-#   deliberately-invalid --altitude-type value in tests/examples.
+#   rationale. bbox: the --bbox geo selector (bounding box). wgs: WGS84, the
+#   geodetic datum GPS coordinates use; appears only as a deliberately-invalid
+#   --altitude-type value in tests/examples. antimeridian: the 180° meridian a
+#   --bbox may not cross in v1. GEOSEARCH: the Redis command whose m/km/mi/ft
+#   radius-unit vocabulary --near borrows. IUGG: the geodesy union whose mean
+#   Earth radius the haversine uses. SFO/OAK: airports used as a known-distance
+#   haversine fixture in tests.
 MSL
 msl
 AGL
@@ -491,3 +494,8 @@ Agl
 EPSG
 bbox
 wgs
+antimeridian
+GEOSEARCH
+IUGG
+SFO
+sfo

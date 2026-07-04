@@ -551,6 +551,25 @@ export async function handleDevices(
 ): Promise<McpEnvelope> {
 	try {
 		const cdb = await loadAllowlistCdb(config);
+		// GPS fields write via add/set only; reject them for read/other ops
+		// instead of silently dropping the caller's input (mirrors the CLI's
+		// per-subcommand flag guard in src/cli/devices.ts).
+		if (
+			args.op !== "add" &&
+			args.op !== "set" &&
+			(args.lat !== undefined ||
+				args.lon !== undefined ||
+				args.altitude !== undefined ||
+				args.altitudeType !== undefined)
+		) {
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary: `GPS fields (lat/lon/altitude/altitudeType) are not valid for op="${args.op}".`,
+				remediation:
+					"Store GPS with op=add or op=set; drop the GPS fields for list/show/groups/edit/remove.",
+				context: { op: args.op },
+			});
+		}
 		switch (args.op) {
 			case "list":
 				return listDevices({ cdb, group: args.group });

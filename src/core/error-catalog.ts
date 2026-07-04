@@ -135,12 +135,16 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	// input/*
 	{
 		code: "input/incomplete-gps",
-		summary:
-			"lat/lon (or --gps/--near/--bbox) were not given as a complete pair.",
+		summary: "lat/lon (or a --gps tuple) were not given as a complete pair.",
 	},
 	{
 		code: "input/invalid-altitude",
 		summary: "The altitude is not a number, or altitude-type is not MSL/AGL.",
+	},
+	{
+		code: "input/invalid-bbox",
+		summary:
+			"The --bbox is not four lat-first corners with south<=north and west<=east.",
 	},
 	{
 		code: "input/invalid-command",
@@ -159,6 +163,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "input/invalid-path",
 		summary:
 			"A file path contains a character the transport cannot quote (e.g. a quote or newline).",
+	},
+	{
+		code: "input/invalid-radius",
+		summary:
+			"The --near radius is not a number with an optional m/km/mi/ft suffix.",
 	},
 	{
 		code: "input/invalid-routeros-path",

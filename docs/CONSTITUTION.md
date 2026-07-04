@@ -250,7 +250,11 @@ across a group), not RouterOS writes. `terminal` and single-session `stream` /
 
 `--where` filters *which devices* by CDB-stored facts; keep it distinct from
 `retrieve`/`execute`'s `--query`/`--filter`, which filter *RouterOS rows* in the
-response. Two layers, two flag families.
+response. Two layers, two flag families. `--near <lat>,<lon>,<radius>` and
+`--bbox <south>,<west>,<north>,<east>` are geo union predicates over device GPS
+(**lat-first, decimal degrees**; radius units `m`/`km`/`mi`/`ft`, bare = km);
+geo-less devices never match. They join the same union — a device matches when it
+falls in `--near`'s radius **or** `--bbox`.
 
 `--group` is purely a **selector** in this grammar; the group *field* is written
 by a distinct `--new-group` flag on `devices add`/`set`, so record selection and

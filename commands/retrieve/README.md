@@ -71,6 +71,8 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
 | `--group <name>`                    | Fan out across every CDB target in WinBox group `<name>`. Repeatable, and combinable with `<router>` positionals plus `--all`/`--default`; the union is de-duped by CDB record index. See **Target selection**. |
 | `--all`                             | Fan out across every CDB record (excludes the reserved `__default__`). See **Target selection**. |
 | `--default`                         | Select the reserved `__default__` record. See **Target selection**. |
+| `--near <lat>,<lon>,<radius>`       | Geo selector: fan out across CDB records whose GPS is within the great-circle radius (units `m`/`km`/`mi`/`ft`; bare = km). Lat-first. Union predicate; geo-less devices never match. See **Target selection**. |
+| `--bbox <south>,<west>,<north>,<east>` | Geo selector: fan out across CDB records whose GPS is inside the lat-first bounding box. Union predicate. See **Target selection**. |
 | `--concurrency <n>`                 | Max in-flight targets during fanout (integer ≥ 1). Defaults are transport-aware: `rest-api` 8, `native-api` 4. Rejected with `usage/invalid-concurrency` otherwise. |
 
 ## Validation

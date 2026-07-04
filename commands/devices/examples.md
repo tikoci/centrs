@@ -575,3 +575,45 @@ centrs devices list --where lat=37.774900 --cdb-file $CDB
 string `37.774900` (values are stored verbatim as typed, never reformatted —
 see `README.md`, Location / GPS). `--where lat=37.7749` (numerically equal,
 reformatted) matches nothing.
+
+## Geo query (`list --near` / `list --bbox`)
+
+`--near`/`--bbox` filter `devices list` by device GPS (great-circle radius or a
+lat-first bounding box). Coordinates are lat-first everywhere (see `README.md`,
+Location / GPS); a geo-less device carries no location and is silently excluded.
+The same predicates ride the shared fan-out grammar on every non-terminal
+command (`execute`/`retrieve`/`api`/`transfer`) — see `docs/CONSTITUTION.md`
+(Target selection).
+
+### 50. `list --near <lat>,<lon>,<radius>` selects in-radius devices
+
+`192.0.2.5` is in San Francisco and `192.0.2.6` in New York (set via `--gps`);
+the other records carry no GPS.
+
+```bash
+centrs devices list --near 37.7749,-122.4194,50km --cdb-file $CDB
+```
+
+`ok: true`; `data` holds only `192.0.2.5`. New York is ~4100 km away (outside the
+50 km radius) and the geo-less records never match. The radius unit is one of
+`m`/`km`/`mi`/`ft`; a bare number is kilometers.
+
+### 51. `list --bbox <south>,<west>,<north>,<east>` selects devices in the box
+
+```bash
+centrs devices list --bbox 37.70,-122.52,37.83,-122.35 --cdb-file $CDB
+```
+
+`ok: true`; `data` holds only the device whose GPS falls inside the lat-first
+box (edges inclusive). The box must satisfy `south <= north` and `west <= east`
+(no antimeridian wrap), else `input/invalid-bbox`.
+
+### 52. `--near`/`--bbox` are `list`-only
+
+```bash
+centrs devices set 192.0.2.5 --near 37.7749,-122.4194,50km --cdb-file $CDB
+```
+
+Errors with `input/invalid-command`: `--where`/`--near`/`--bbox` *select*
+records for `list`; `add`/`set` name the `<target>` directly. Store GPS with
+`--gps`/`--lat`/`--lon` instead.

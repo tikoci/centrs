@@ -30,8 +30,9 @@
  * it is validated in `src/devices.ts` (`validateCommentKvUpdates`), which
  * calls the pure primitives here; this module has no CDB/record awareness.
  *
- * Slice 2 (`--near`/`--bbox`, haversine/bbox query predicates) adds the query
- * helpers to this same file; they are out of scope here.
+ * Slice 2 (`--near`/`--bbox`, haversine/bbox query predicates) lives at the
+ * bottom of this file; it is pure geo math over parsed {@link DeviceLocation}s,
+ * with the CDB-entry composition in `src/resolver/facts.ts`.
  */
 
 import { CentrsError } from "../errors.ts";
@@ -261,4 +262,173 @@ export function deviceLocation(
 		}
 	}
 	return location;
+}
+
+// --- Slice 2: geo query predicates (`--near` / `--bbox`) ---------------------
+//
+// Pure geo math + predicate parsing. These operate on already-parsed
+// {@link DeviceLocation}s (altitude is ignored — the query is 2-D lat/lon). The
+// CDB-entry composition (read a record's location, union/AND into a selection)
+// lives in `src/resolver/facts.ts` and the callers; this file stays free of any
+// CDB/record awareness.
+
+/** A `--near <lat>,<lon>,<radius>` predicate, radius already resolved to meters. */
+export interface NearPredicate {
+	lat: number;
+	lon: number;
+	radiusMeters: number;
+}
+
+/** A `--bbox <south>,<west>,<north>,<east>` predicate (lat-first, decimal degrees). */
+export interface BboxPredicate {
+	south: number;
+	west: number;
+	north: number;
+	east: number;
+}
+
+/**
+ * Radius unit suffixes (Redis GEOSEARCH vocabulary), case-insensitive. A bare
+ * number with no suffix defaults to **km** (the common operator/agent unit for
+ * "devices within N of here").
+ */
+const RADIUS_UNIT_METERS: Readonly<Record<string, number>> = {
+	m: 1,
+	km: 1000,
+	mi: 1609.344,
+	ft: 0.3048,
+};
+
+/**
+ * Parse a radius like `50km` / `500m` / `10mi` / `2000ft` (or a bare number,
+ * defaulting to km) to meters. Throws `input/invalid-radius` on a malformed
+ * value, an unknown unit, or a negative magnitude.
+ */
+export function parseRadius(value: string): number {
+	const match = /^(-?[0-9]*\.?[0-9]+)\s*([a-z]+)?$/i.exec(value.trim());
+	const unitKey = match?.[2]?.toLowerCase() ?? "km";
+	const perUnit = RADIUS_UNIT_METERS[unitKey];
+	const magnitude = match ? Number(match[1]) : Number.NaN;
+	if (!match || perUnit === undefined || !Number.isFinite(magnitude)) {
+		throw new CentrsError({
+			code: "input/invalid-radius",
+			summary: `Invalid radius "${value}"; expected a number with an optional m/km/mi/ft suffix.`,
+			remediation:
+				"Pass a positive radius like `50km`, `500m`, `10mi`, or `2000ft` (a bare number is kilometers).",
+			context: { value },
+		});
+	}
+	const meters = magnitude * perUnit;
+	if (meters < 0) {
+		throw new CentrsError({
+			code: "input/invalid-radius",
+			summary: `Invalid radius "${value}"; must not be negative.`,
+			remediation: "Pass a positive radius, e.g. `50km`.",
+			context: { value },
+		});
+	}
+	return meters;
+}
+
+/** IUGG mean Earth radius (meters) — the standard sphere for haversine. */
+const EARTH_RADIUS_METERS = 6_371_008.8;
+
+const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
+
+/**
+ * Great-circle distance in meters between two lat/lon points (haversine on a
+ * sphere of {@link EARTH_RADIUS_METERS}). Accurate to well under 1% for the
+ * fleet-proximity distances centrs cares about; not a geodesic on the ellipsoid.
+ */
+export function haversineMeters(
+	a: { lat: number; lon: number },
+	b: { lat: number; lon: number },
+): number {
+	const dLat = toRadians(b.lat - a.lat);
+	const dLon = toRadians(b.lon - a.lon);
+	const lat1 = toRadians(a.lat);
+	const lat2 = toRadians(b.lat);
+	const h =
+		Math.sin(dLat / 2) ** 2 +
+		Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+	return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * Parse `--near <lat>,<lon>,<radius>` (lat-first — see module doc-comment).
+ * Requires exactly three non-empty comma parts (`input/invalid-command` on wrong
+ * arity); the radius is resolved to meters ({@link parseRadius}).
+ */
+export function parseNear(value: string): NearPredicate {
+	const parts = value.split(",").map((part) => part.trim());
+	if (parts.length !== 3 || parts.some((part) => part.length === 0)) {
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary: `--near "${value}" must be <lat>,<lon>,<radius>.`,
+			remediation:
+				"Pass a center and radius, e.g. --near 37.7749,-122.4194,50km (lat,lon first, radius last).",
+			context: { near: value },
+		});
+	}
+	const [rawLat, rawLon, rawRadius] = parts as [string, string, string];
+	return {
+		lat: parseLatLon(rawLat, "lat"),
+		lon: parseLatLon(rawLon, "lon"),
+		radiusMeters: parseRadius(rawRadius),
+	};
+}
+
+/** True when `loc` is within `near`'s radius (great-circle). Altitude ignored. */
+export function matchesNear(loc: DeviceLocation, near: NearPredicate): boolean {
+	return haversineMeters(loc, near) <= near.radiusMeters;
+}
+
+/**
+ * Parse `--bbox <south>,<west>,<north>,<east>` (= minLat,minLon,maxLat,maxLon,
+ * lat-first). Requires four non-empty parts and `south <= north`,
+ * `west <= east` (no antimeridian wrap in v1) — else `input/invalid-bbox`.
+ */
+export function parseBbox(value: string): BboxPredicate {
+	const parts = value.split(",").map((part) => part.trim());
+	if (parts.length !== 4 || parts.some((part) => part.length === 0)) {
+		throw new CentrsError({
+			code: "input/invalid-bbox",
+			summary: `--bbox "${value}" must be <south>,<west>,<north>,<east>.`,
+			remediation:
+				"Pass a lat-first box, e.g. --bbox 37.70,-122.52,37.83,-122.35 (south,west,north,east).",
+			context: { bbox: value },
+		});
+	}
+	const [rawSouth, rawWest, rawNorth, rawEast] = parts as [
+		string,
+		string,
+		string,
+		string,
+	];
+	const box: BboxPredicate = {
+		south: parseLatLon(rawSouth, "lat"),
+		west: parseLatLon(rawWest, "lon"),
+		north: parseLatLon(rawNorth, "lat"),
+		east: parseLatLon(rawEast, "lon"),
+	};
+	if (box.south > box.north || box.west > box.east) {
+		throw new CentrsError({
+			code: "input/invalid-bbox",
+			summary: `--bbox "${value}" must have south <= north and west <= east.`,
+			remediation:
+				"Order corners south,west,north,east; an antimeridian-crossing box is not supported.",
+			context: { bbox: value },
+		});
+	}
+	return box;
+}
+
+/** True when `loc` falls inside the axis-aligned `box` (inclusive edges). */
+export function matchesBbox(loc: DeviceLocation, box: BboxPredicate): boolean {
+	return (
+		loc.lat >= box.south &&
+		loc.lat <= box.north &&
+		loc.lon >= box.west &&
+		loc.lon <= box.east
+	);
 }

@@ -9,6 +9,7 @@ import {
 	winBoxCdbRecordType,
 } from "../../src/data/winbox-cdb.ts";
 import { parseRawCommentFacts } from "../../src/resolver/comment-kv.ts";
+import { parseBbox, parseNear } from "../../src/resolver/geo.ts";
 import {
 	type CdbSelectionMember,
 	expandCdbSelection,
@@ -190,6 +191,44 @@ describe("expandCdbSelection — selectors", () => {
 			],
 		});
 		expect(out.indices).toEqual([0, 4]);
+	});
+});
+
+describe("expandCdbSelection — geo predicates (--near / --bbox)", () => {
+	// Only record 0 carries GPS (SF: lat=37.774900 lon=-122.419400); the other
+	// records are geo-less and must never be selected by --near/--bbox.
+	test("--near selects the in-radius GPS record; geo-less records are excluded", async () => {
+		const out = await expand({ near: parseNear("37.7749,-122.4194,5km") });
+		expect(out.indices).toEqual([0]);
+	});
+
+	test("--near whose radius excludes the only GPS record matches nothing", async () => {
+		// New York is ~4100 km from the SF record — outside a 50 km radius.
+		const out = await expand({ near: parseNear("40.7128,-74.0060,50km") });
+		expect(out.indices).toEqual([]);
+		expect(out.empty).toBe(true);
+		expect(out.warningCodes).toContain("cdb/empty-selection");
+	});
+
+	test("--bbox selects the GPS record inside the box; geo-less records are excluded", async () => {
+		const out = await expand({
+			bbox: parseBbox("37.70,-122.52,37.83,-122.35"),
+		});
+		expect(out.indices).toEqual([0]);
+	});
+
+	test("--bbox that does not contain the GPS record matches nothing", async () => {
+		const out = await expand({ bbox: parseBbox("40.0,-75.0,41.0,-74.0") });
+		expect(out.indices).toEqual([]);
+	});
+
+	test("geo predicates OR-union with other selectors (--group lab OR --near SF)", async () => {
+		// group lab = record 2; near SF = record 0. Union, ordered by record index.
+		const out = await expand({
+			groups: ["lab"],
+			near: parseNear("37.7749,-122.4194,5km"),
+		});
+		expect(out.indices).toEqual([0, 2]);
 	});
 });
 

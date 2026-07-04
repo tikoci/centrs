@@ -73,13 +73,13 @@ when a bare-collection `POST` carries create-looking fields.
 | `--validate[=false]` | Default `true`. Gate is `/console/inspect` (see Validation). |
 | `--via <protocol>` | `rest-api` (default) or `native-api`. No silent downgrade. |
 | `--format <json\|yaml\|text>` | Output format. Defaults to `json` for `api` (machine-first); `CENTRS_FORMAT` overrides. Under `--stream`, `json`/`yaml` emit one compact envelope per line (NDJSON); `text` emits a concise row per frame. |
-| `--group <name>` / `--where <attr>=<value>` / `--all` / `--default` / `--concurrency <n>` | Multi-target fan-out (see below). Repeatable `--group`/`--where`; the union de-dupes by CDB record index. |
+| `--group <name>` / `--where <attr>=<value>` / `--near <lat>,<lon>,<radius>` / `--bbox <south>,<west>,<north>,<east>` / `--all` / `--default` / `--concurrency <n>` | Multi-target fan-out (see below). Repeatable `--group`/`--where`; `--near`/`--bbox` select by device GPS (lat-first; see constitution: target selection). The union de-dupes by CDB record index. |
 | target/auth | `--host`, `--port`, `--username`/`--user`/`-u`, `--password`, `--insecure`, `--timeout`, `--cdb-file`, `--cdb-password`, `--resolve <none\|arp>` — same single-target resolver as `retrieve`/`execute`. |
 
 ## Fan-out (multi-target)
 
 Selecting more than one router — any selector flag (`--group` / `--where` /
-`--all` / `--default`) or more than one positional target — switches `api` into
+`--near` / `--bbox` / `--all` / `--default`) or more than one positional target — switches `api` into
 **fan-out mode** (`src/api-fanout.ts`, on the shared `src/core/fanout.ts` engine
 and the `src/resolver/selection.ts` grammar). A plain single-positional call
 stays the single-target envelope. Output is the locked `FanoutData` envelope
