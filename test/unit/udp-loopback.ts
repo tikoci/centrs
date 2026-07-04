@@ -2,15 +2,15 @@ import { createSocket } from "node:dgram";
 
 /**
  * Probe whether this host can bind a udp4 socket to `127.0.0.1` with the
- * requested listener options.
+ * listener's requested `reusePort` setting.
  *
  * Windows has no `SO_REUSEPORT`, so a bind with `reusePort: true` throws
  * `bind ENOTSUP 127.0.0.1`. MNDP uses SO_REUSEPORT where the platform supports
  * it; btest's UDP data engine does not. Keep those probes separate so Windows
  * can still run plain UDP loopback tests instead of over-skipping them (#69).
  *
- * Callers MUST mirror the real bind options for the path being tested. A bare
- * UDP bind can succeed on Windows while a `reusePort:true` bind fails.
+ * Callers MUST mirror the real `reusePort` setting for the path being tested. A
+ * bare UDP bind can succeed on Windows while a `reusePort:true` bind fails.
  *
  * Skip only for the *known-unsupported* bind errors — Windows lacks
  * `SO_REUSEPORT` → `ENOTSUP`; a runner with no IPv4 stack → `EAFNOSUPPORT`. Any
