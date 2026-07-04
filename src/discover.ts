@@ -50,6 +50,11 @@ export const DISCOVER_DEFAULT_REFRESH_INTERVAL_MS = 5_000;
 /** Default CDB group assigned to saved neighbors. */
 export const DISCOVER_DEFAULT_GROUP = "discovered";
 
+/** MNDP uses SO_REUSEPORT where available; Windows does not support it. */
+export function defaultMndpReusePort(platform = process.platform): boolean {
+	return platform !== "win32";
+}
+
 export interface ListenMndpOptions {
 	/** Listen window in ms before the listener resolves. Default 15000. */
 	timeoutMs?: number;
@@ -69,7 +74,7 @@ export interface ListenMndpOptions {
 	refreshIntervalMs?: number;
 	/** Enable `SO_REUSEADDR`. Default true. */
 	reuseAddr?: boolean;
-	/** Enable `SO_REUSEPORT` for coexistence with other MNDP listeners. Default true. */
+	/** Enable `SO_REUSEPORT` for coexistence with other MNDP listeners. Default true except on Windows. */
 	reusePort?: boolean;
 	/** Called once with the actually-bound port (useful with `port: 0`). */
 	onBound?: (port: number) => void;
@@ -180,7 +185,7 @@ export function listenMndp(
 		const socket = createSocket({
 			type: "udp4",
 			reuseAddr: options.reuseAddr ?? true,
-			reusePort: options.reusePort ?? true,
+			reusePort: options.reusePort ?? defaultMndpReusePort(),
 		});
 		let settled = false;
 		let boundPort = requestedPort;

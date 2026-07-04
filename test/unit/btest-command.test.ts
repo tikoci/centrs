@@ -22,9 +22,9 @@ import { udpLoopbackSupported } from "./udp-loopback.ts";
 
 const EC_SRP5_TIMEOUT_MS = 30000;
 
-// The UDP orchestrator run binds a UDP socket on 127.0.0.1; skip it where the
-// runner rejects a UDP loopback bind (ENOTSUP on some Windows CI instances). The
-// TCP loopback runs are unaffected and stay covered. (issue #69)
+// The UDP orchestrator run uses btest's plain UDP loopback path (no
+// SO_REUSEPORT). Skip only when that plain UDP bind is unavailable; the TCP
+// loopback runs are unaffected and stay covered. (issue #69)
 const UDP_LOOPBACK = await udpLoopbackSupported();
 
 /** Start a loopback server on an ephemeral port; returns the port + a stopper. */

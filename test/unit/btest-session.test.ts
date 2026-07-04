@@ -31,9 +31,9 @@ import {
 } from "../../src/protocols/btest-session.ts";
 import { udpLoopbackSupported } from "./udp-loopback.ts";
 
-// The UDP data-engine runs bind a UDP socket on 127.0.0.1; skip them where the
-// runner rejects a UDP loopback bind (ENOTSUP on some Windows CI instances). The
-// TCP runs and the (TCP-only) handshakes are unaffected. (issue #69)
+// The UDP data-engine runs use btest's plain UDP loopback path (no
+// SO_REUSEPORT). Skip only when that plain UDP bind is unavailable; TCP runs and
+// TCP-only handshakes remain covered. (issue #69)
 const UDP_LOOPBACK = await udpLoopbackSupported();
 
 /**
