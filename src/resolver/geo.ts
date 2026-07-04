@@ -305,7 +305,10 @@ const RADIUS_UNIT_METERS: Readonly<Record<string, number>> = {
  * value, an unknown unit, or a negative magnitude.
  */
 export function parseRadius(value: string): number {
-	const match = /^(-?[0-9]*\.?[0-9]+)\s*([a-z]+)?$/i.exec(value.trim());
+	// Unambiguous number grammar (integer part then an optional dotted fraction),
+	// so there are no adjacent same-class quantifiers to backtrack over — avoids
+	// the polynomial-ReDoS a `[0-9]*\.?[0-9]+` shape would allow on long digit runs.
+	const match = /^(-?[0-9]+(?:\.[0-9]+)?)\s*([a-z]+)?$/i.exec(value.trim());
 	const unitKey = match?.[2]?.toLowerCase() ?? "km";
 	const perUnit = RADIUS_UNIT_METERS[unitKey];
 	const magnitude = match ? Number(match[1]) : Number.NaN;
