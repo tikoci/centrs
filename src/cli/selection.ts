@@ -12,9 +12,13 @@
  */
 
 import { CentrsError } from "../errors.ts";
-import type {
-	SelectionWhereClause,
-	TargetSelection,
+import {
+	type BboxPredicate,
+	type NearPredicate,
+	parseBbox,
+	parseNear,
+	type SelectionWhereClause,
+	type TargetSelection,
 } from "../resolver/index.ts";
 import {
 	type CliCommandOption,
@@ -42,6 +46,18 @@ export const selectionCommandOptions: readonly CliCommandOption[] = [
 			"Device-class selector over CDB facts + core fields (repeatable, AND-combined).",
 	},
 	{
+		flag: "--near",
+		valueName: "<lat>,<lon>,<radius>",
+		description:
+			"Geo selector: devices whose GPS is within radius (m/km/mi/ft; bare number = km). Lat-first.",
+	},
+	{
+		flag: "--bbox",
+		valueName: "<south>,<west>,<north>,<east>",
+		description:
+			"Geo selector: devices whose GPS is inside the lat-first bounding box.",
+	},
+	{
 		flag: "--all",
 		description: "Fan out across every CDB record (excludes `__default__`).",
 	},
@@ -61,6 +77,8 @@ export const selectionCommandOptions: readonly CliCommandOption[] = [
 export interface SelectionFlags {
 	groups: string[];
 	where: SelectionWhereClause[];
+	near?: NearPredicate;
+	bbox?: BboxPredicate;
 	all: boolean;
 	default: boolean;
 	concurrency?: number;
@@ -74,6 +92,8 @@ export function emptySelectionFlags(): SelectionFlags {
 export const selectionFlagTokens = [
 	"--group",
 	"--where",
+	"--near",
+	"--bbox",
 	"--all",
 	"--default",
 	"--concurrency",
@@ -117,6 +137,12 @@ export function consumeSelectionFlag(
 		case "--where":
 			acc.where.push(parseWhereClause(expectValue(args, index + 1, arg)));
 			return index + 1;
+		case "--near":
+			acc.near = parseNear(expectValue(args, index + 1, arg));
+			return index + 1;
+		case "--bbox":
+			acc.bbox = parseBbox(expectValue(args, index + 1, arg));
+			return index + 1;
 		case "--concurrency": {
 			const raw = expectValue(args, index + 1, arg);
 			const parsed = parseStrictInteger(raw);
@@ -147,6 +173,8 @@ export function buildTargetSelection(
 		all: flags.all,
 		default: flags.default,
 		where: flags.where,
+		near: flags.near,
+		bbox: flags.bbox,
 	};
 }
 
@@ -165,6 +193,8 @@ export function isFanoutMode(
 		flags.default ||
 		flags.groups.length > 0 ||
 		flags.where.length > 0 ||
+		flags.near !== undefined ||
+		flags.bbox !== undefined ||
 		targetPositionalCount > 1
 	);
 }

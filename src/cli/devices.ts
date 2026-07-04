@@ -4,20 +4,31 @@
  * unchanged from the former monolithic `cli.ts`.
  */
 
-import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
+import {
+	asCentrsError,
+	CentrsError,
+	formatCentrsErrorText,
+} from "../errors.ts";
 import {
 	addDevice,
+	type BboxPredicate,
 	buildDevicesErrorEnvelope,
 	type CommentKvUpdate,
+	canonicalizeGeoKey,
 	type DevicesCommand,
 	type DevicesEnvelope,
 	type DevicesOutputFormat,
+	type DevicesWhereClause,
 	describeCentrs,
 	devicesOutputFormats,
 	editInteractiveOnlyError,
 	listDevices,
 	listGroups,
 	loadCdb,
+	type NearPredicate,
+	parseBbox,
+	parseGpsTuple,
+	parseNear,
 	recordTypeFromName,
 	removeDevice,
 	renderDevicesEnvelope,
@@ -62,6 +73,24 @@ export const devicesCommand: CliCommandMetadata = {
 			valueName: "<name>",
 			description:
 				"`list` filter / `add`,`edit` first-class group field for the target entry.",
+		},
+		{
+			flag: "--where",
+			valueName: "<attr=value>",
+			description:
+				"`list` only — repeatable device-class filter over CDB facts (AND-combined), e.g. `--where lat=37.7749`.",
+		},
+		{
+			flag: "--near",
+			valueName: "<lat>,<lon>,<radius>",
+			description:
+				"`list` only — GPS filter: devices within radius (m/km/mi/ft; bare number = km). Lat-first.",
+		},
+		{
+			flag: "--bbox",
+			valueName: "<south>,<west>,<north>,<east>",
+			description:
+				"`list` only — GPS filter: devices inside the lat-first bounding box.",
 		},
 		{
 			flag: "--members",
@@ -117,6 +146,36 @@ export const devicesCommand: CliCommandMetadata = {
 			description: "`add` only — record type (default `ipAdmin`).",
 		},
 		{
+			flag: "--lat / --latitude",
+			valueName: "<deg>",
+			description:
+				"`add`,`set` — latitude in decimal degrees (-90..90); a comment-kv fact, paired with --lon.",
+		},
+		{
+			flag: "--lon / --lng / --longitude / --long",
+			valueName: "<deg>",
+			description:
+				"`add`,`set` — longitude in decimal degrees (-180..180); a comment-kv fact, paired with --lat.",
+		},
+		{
+			flag: "--altitude / --alt / --ele / --elevation",
+			valueName: "<meters>",
+			description:
+				"`add`,`set` — altitude in meters (may be negative); a comment-kv fact.",
+		},
+		{
+			flag: "--altitude-type / --alt-type",
+			valueName: "<MSL|AGL>",
+			description:
+				"`add`,`set` — vertical datum for --altitude (default MSL); case-insensitive.",
+		},
+		{
+			flag: "--gps",
+			valueName: "<lat>,<lon>[,<altitude>[,<altitude-type>]]",
+			description:
+				"`add`,`set` — combined lat,lon[,altitude[,altitude-type]] convenience (lat-first; missing altitude-type defaults MSL).",
+		},
+		{
 			flag: "--force",
 			description: "`add` only — overwrite the existing (target, user) entry.",
 		},
@@ -165,6 +224,7 @@ interface DevicesCliArgs {
 	cdbFile?: string;
 	cdbPassword?: string;
 	group?: string;
+	where?: string[];
 	via?: string;
 	members?: boolean;
 	explain?: boolean;
@@ -182,6 +242,13 @@ interface DevicesCliArgs {
 	format?: DevicesOutputFormat;
 	target?: string;
 	kvArgs?: string[];
+	lat?: string;
+	lon?: string;
+	altitude?: string;
+	altitudeType?: string;
+	gps?: string;
+	near?: NearPredicate;
+	bbox?: BboxPredicate;
 }
 
 function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
@@ -206,6 +273,18 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			case "--group":
 				parsed.group = expectValue(args, ++index, arg);
+				break;
+			case "--where":
+				parsed.where = [
+					...(parsed.where ?? []),
+					expectValue(args, ++index, arg),
+				];
+				break;
+			case "--near":
+				parsed.near = parseNear(expectValue(args, ++index, arg));
+				break;
+			case "--bbox":
+				parsed.bbox = parseBbox(expectValue(args, ++index, arg));
 				break;
 			case "--via":
 				parsed.via = expectValue(args, ++index, arg);
@@ -242,6 +321,29 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 				break;
 			case "--record-type":
 				parsed.recordType = expectValue(args, ++index, arg);
+				break;
+			case "--lat":
+			case "--latitude":
+				parsed.lat = expectValue(args, ++index, arg);
+				break;
+			case "--lon":
+			case "--lng":
+			case "--longitude":
+			case "--long":
+				parsed.lon = expectValue(args, ++index, arg);
+				break;
+			case "--altitude":
+			case "--alt":
+			case "--ele":
+			case "--elevation":
+				parsed.altitude = expectValue(args, ++index, arg);
+				break;
+			case "--altitude-type":
+			case "--alt-type":
+				parsed.altitudeType = expectValue(args, ++index, arg);
+				break;
+			case "--gps":
+				parsed.gps = expectValue(args, ++index, arg);
 				break;
 			case "--force":
 				parsed.force = true;
@@ -299,6 +401,48 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	}
 	parsed.subcommand = sub;
 
+	// Reject flags that don't apply to the resolved subcommand instead of
+	// silently ignoring the user's input: `--where`/`--near`/`--bbox` select
+	// records for `list`; the GPS *setter* flags write via `add`/`set`.
+	const selectorFlag =
+		(parsed.where?.length ?? 0) > 0
+			? "--where"
+			: parsed.near !== undefined
+				? "--near"
+				: parsed.bbox !== undefined
+					? "--bbox"
+					: undefined;
+	if (selectorFlag !== undefined && sub !== "list") {
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary: `\`${selectorFlag}\` is not supported by \`centrs devices ${sub}\`.`,
+			remediation:
+				"`--where`/`--near`/`--bbox` select records for `centrs devices list`. For `add`/`set`, name the `<target>` directly.",
+			context: { subcommand: sub, flag: selectorFlag },
+		});
+	}
+	const geoFlag =
+		parsed.lat !== undefined
+			? "--lat"
+			: parsed.lon !== undefined
+				? "--lon"
+				: parsed.altitude !== undefined
+					? "--altitude"
+					: parsed.altitudeType !== undefined
+						? "--altitude-type"
+						: parsed.gps !== undefined
+							? "--gps"
+							: undefined;
+	if (geoFlag !== undefined && sub !== "add" && sub !== "set") {
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary: `GPS flag \`${geoFlag}\` is not supported by \`centrs devices ${sub}\`.`,
+			remediation:
+				"Store GPS with `centrs devices add`/`set` (e.g. `--gps <lat>,<lon>`); query it with `centrs devices list --where lat=…` / `--near`.",
+			context: { subcommand: sub, flag: geoFlag },
+		});
+	}
+
 	if (sub === "show" || sub === "edit" || sub === "remove") {
 		if (rest.length !== 1) {
 			throw new Error(
@@ -325,6 +469,32 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	return parsed;
 }
 
+/**
+ * Parse a `--where attr=value` token for `devices list` (constitution: target
+ * selection grammar). Mirrors `src/cli/selection.ts` `parseWhereClause`: a
+ * structured `input/invalid-command` (not a bare `Error`) so the surfaced error
+ * keeps its remediation/context, consistent with every other CLI surface. Geo
+ * alias canonicalization (`latitude=`→`lat=`) is NOT done here — it happens once,
+ * centrally, in `matchesWhere` (`src/resolver/facts.ts`), so `devices list` and
+ * every fan-out command's `--where` behave identically.
+ */
+function parseWhereClause(token: string): DevicesWhereClause {
+	const eq = token.indexOf("=");
+	if (eq <= 0) {
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary: `--where must be \`<attr>=<value>\`; received: ${token}`,
+			remediation:
+				"Pass a device-class selector like `--where board=RB5009` (matches a CDB fact or core field).",
+			context: { where: token },
+		});
+	}
+	return {
+		key: token.slice(0, eq),
+		value: token.slice(eq + 1),
+	};
+}
+
 function parseKvArg(token: string): CommentKvUpdate {
 	const eq = token.indexOf("=");
 	if (eq <= 0) {
@@ -332,7 +502,51 @@ function parseKvArg(token: string): CommentKvUpdate {
 			`Invalid kv override "${token}"; expected key=value (use key= to clear a value).`,
 		);
 	}
-	return { key: token.slice(0, eq), value: parseKvValue(token.slice(eq + 1)) };
+	// Alias canonicalization happens in ONE place (`canonicalizeGeoKey`) so a
+	// bare `lng=…`/`latitude=…`/`elevation=…` positional lands under the same
+	// canonical key a `--lon`/`--lat`/`--altitude` flag would use. A no-op for
+	// every non-geo key.
+	const key = canonicalizeGeoKey(token.slice(0, eq));
+	return { key, value: parseKvValue(token.slice(eq + 1)) };
+}
+
+/**
+ * Lower the per-device GPS flags (`--lat`/`--lon`/`--altitude`/
+ * `--altitude-type` and their aliases, plus the combined `--gps`) into
+ * comment-kv updates. These are CLI conveniences only — no new first-class CDB
+ * tag — so they merge into the same `CommentKvUpdate[]` as bare `k=v`
+ * positionals; range/enum/pairing validation happens once, in
+ * `validateCommentKvUpdates` (`src/devices.ts`), regardless of which flag
+ * produced the update. `--gps` is expanded first so a discrete `--lat`/`--lon`/
+ * `--altitude`/`--altitude-type` flag passed alongside it wins (applied later
+ * in the array).
+ */
+function buildGeoUpdates(parsed: DevicesCliArgs): CommentKvUpdate[] {
+	const updates: CommentKvUpdate[] = [];
+	if (parsed.gps !== undefined) {
+		const gps = parseGpsTuple(parsed.gps);
+		updates.push({ key: "lat", value: gps.raw.lat });
+		updates.push({ key: "lon", value: gps.raw.lon });
+		if (gps.raw.altitude !== undefined) {
+			updates.push({ key: "altitude", value: gps.raw.altitude });
+		}
+		if (gps.raw.altitudeType !== undefined) {
+			updates.push({ key: "altitude-type", value: gps.raw.altitudeType });
+		}
+	}
+	if (parsed.lat !== undefined) {
+		updates.push({ key: "lat", value: parsed.lat });
+	}
+	if (parsed.lon !== undefined) {
+		updates.push({ key: "lon", value: parsed.lon });
+	}
+	if (parsed.altitude !== undefined) {
+		updates.push({ key: "altitude", value: parsed.altitude });
+	}
+	if (parsed.altitudeType !== undefined) {
+		updates.push({ key: "altitude-type", value: parsed.altitudeType });
+	}
+	return updates;
 }
 
 function parseKvValue(value: string): string {
@@ -401,7 +615,13 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 		let envelope: DevicesEnvelope<unknown>;
 		switch (parsed.subcommand) {
 			case "list":
-				envelope = listDevices({ cdb, group: parsed.group });
+				envelope = listDevices({
+					cdb,
+					group: parsed.group,
+					where: (parsed.where ?? []).map(parseWhereClause),
+					near: parsed.near,
+					bbox: parsed.bbox,
+				});
 				break;
 			case "show":
 				if (!parsed.target) {
@@ -442,7 +662,10 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 					profile: resolveProfile(parsed),
 					session: parsed.session,
 					comment: parsed.comment,
-					commentKvUpdates: (parsed.kvArgs ?? []).map(parseKvArg),
+					commentKvUpdates: [
+						...buildGeoUpdates(parsed),
+						...(parsed.kvArgs ?? []).map(parseKvArg),
+					],
 					force: parsed.force,
 					strict: parsed.strict,
 				});
@@ -460,7 +683,10 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 					cdb,
 					target: parsed.target,
 					match: parsed.match,
-					updates: (parsed.kvArgs ?? []).map(parseKvArg),
+					updates: [
+						...buildGeoUpdates(parsed),
+						...(parsed.kvArgs ?? []).map(parseKvArg),
+					],
 					user: parsed.user,
 					password: parsed.password,
 					group: parsed.group,

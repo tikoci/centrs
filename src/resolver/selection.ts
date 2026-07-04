@@ -37,12 +37,16 @@ import { CentrsError } from "../errors.ts";
 import {
 	type CdbResolution,
 	DEFAULT_RECORD_TARGET,
-	identityFromComment,
-	macFromComment,
 	type ResolverWarning,
 	resolutionFromEntry,
 } from "./cdb.ts";
-import { parseRawCommentFacts } from "./comment-kv.ts";
+import { entryFacts, entryLocation, matchesWhere } from "./facts.ts";
+import {
+	type BboxPredicate,
+	matchesBbox,
+	matchesNear,
+	type NearPredicate,
+} from "./geo.ts";
 
 /** One `--where attr=value` device-class clause (exact-match, AND-combined). */
 export interface SelectionWhereClause {
@@ -62,6 +66,10 @@ export interface TargetSelection {
 	default: boolean;
 	/** Repeatable `--where attr=value`, AND-combined. */
 	where: readonly SelectionWhereClause[];
+	/** `--near <lat>,<lon>,<radius>`: a geo union predicate (device GPS within radius). */
+	near?: NearPredicate;
+	/** `--bbox <south>,<west>,<north>,<east>`: a geo union predicate (device GPS in box). */
+	bbox?: BboxPredicate;
 }
 
 export interface CdbSelectionResolveInput {
@@ -87,31 +95,6 @@ export interface CdbSelectionExpansion {
 /** True when a resolved target is the reserved credential-fallback record. */
 export function isDefaultRecordTarget(target: string): boolean {
 	return target === DEFAULT_RECORD_TARGET;
-}
-
-function entryFacts(
-	comment: string,
-	target: string,
-	group: string,
-): Record<string, string> {
-	// Raw comment tokens first, then core fields ON TOP so a hand-written
-	// `group=`/`target=` comment token cannot spoof a first-class field.
-	const facts = parseRawCommentFacts(comment);
-	facts["target"] = target;
-	facts["identity"] = identityFromComment(comment, target);
-	facts["group"] = group;
-	const mac = macFromComment(comment, target);
-	if (mac !== undefined) {
-		facts["mac"] = mac;
-	}
-	return facts;
-}
-
-function matchesWhere(
-	facts: Record<string, string>,
-	where: readonly SelectionWhereClause[],
-): boolean {
-	return where.every((clause) => facts[clause.key] === clause.value);
 }
 
 const ENV_CDB_FILE = "CENTRS_CDB_FILE";
@@ -209,6 +192,20 @@ export async function expandCdbSelection(
 			)
 		) {
 			indices.add(index);
+			continue;
+		}
+		// Geo predicates are additional OR-union terms (like `--group`/`--where`):
+		// an entry matches when its GPS falls in `--near`'s radius OR `--bbox`.
+		// Geo-less entries carry no location, so they never match (not an error).
+		if (selection.near !== undefined || selection.bbox !== undefined) {
+			const loc = entryLocation(entry.comment);
+			if (
+				loc !== undefined &&
+				((selection.near !== undefined && matchesNear(loc, selection.near)) ||
+					(selection.bbox !== undefined && matchesBbox(loc, selection.bbox)))
+			) {
+				indices.add(index);
+			}
 		}
 	}
 
@@ -276,7 +273,9 @@ export async function expandCdbSelection(
 			selection.positionals.length === 0 &&
 			!selection.all &&
 			!selection.default &&
-			selection.where.length === 0;
+			selection.where.length === 0 &&
+			selection.near === undefined &&
+			selection.bbox === undefined;
 		warnings.push(
 			groupOnly
 				? {
@@ -292,6 +291,8 @@ export async function expandCdbSelection(
 							all: selection.all,
 							default: selection.default,
 							where: selection.where.length,
+							near: selection.near !== undefined,
+							bbox: selection.bbox !== undefined,
 							positionals: selection.positionals.length,
 						},
 					},

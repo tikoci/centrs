@@ -1552,4 +1552,427 @@ describe("centrs devices (read-only)", () => {
 		expect(envelope.error.code).toBe("input/invalid-command");
 		expect(envelope.error.summary).toContain("print, get, rm, delete");
 	});
+
+	test("example 42 add --gps sets lat/lon/altitude; show returns a location block", async () => {
+		const cdbPath = await copyCdbFixture("example-42-add-gps");
+		const added = await runWithCapture([
+			"devices",
+			"add",
+			"198.51.100.40",
+			"--user",
+			"admin",
+			"--password",
+			"p",
+			"--gps",
+			"37.7749,-122.4194,16",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(added.exitCode).toBe(0);
+
+		const show = await runWithCapture([
+			"devices",
+			"show",
+			"198.51.100.40",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(show.exitCode).toBe(0);
+		const shown = JSON.parse(show.stdout) as {
+			data: {
+				entry: {
+					location?: {
+						lat: number;
+						lon: number;
+						altitude?: number;
+						altitudeType?: string;
+					};
+				};
+			};
+		};
+		expect(shown.data.entry.location).toEqual({
+			lat: 37.7749,
+			lon: -122.4194,
+			altitude: 16,
+			altitudeType: "MSL",
+		});
+	});
+
+	test("example 43 discrete --lat/--lon round-trip the same way as --gps", async () => {
+		const cdbPath = await copyCdbFixture("example-43-lat-lon");
+		const result = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"--lat",
+			"51.5072",
+			"--lon",
+			"-0.1276",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(0);
+
+		const show = await runWithCapture([
+			"devices",
+			"show",
+			"192.0.2.5",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		const shown = JSON.parse(show.stdout) as {
+			data: { entry: { location?: { lat: number; lon: number } } };
+		};
+		expect(shown.data.entry.location).toEqual({ lat: 51.5072, lon: -0.1276 });
+	});
+
+	test("example 44 --altitude alone defaults altitudeType to MSL in the envelope", async () => {
+		const cdbPath = await copyCdbFixture("example-44-altitude-default");
+		const result = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.6",
+			"--lat",
+			"48.8566",
+			"--lon",
+			"2.3522",
+			"--altitude",
+			"35",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(0);
+
+		const show = await runWithCapture([
+			"devices",
+			"show",
+			"192.0.2.6",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		const shown = JSON.parse(show.stdout) as {
+			data: {
+				entry: {
+					comment: string;
+					location?: {
+						lat: number;
+						lon: number;
+						altitude?: number;
+						altitudeType?: string;
+					};
+				};
+			};
+		};
+		// altitude-type was never written to the comment...
+		expect(shown.data.entry.comment).not.toContain("altitude-type");
+		// ...but the envelope still reports the metadata-only MSL default.
+		expect(shown.data.entry.location).toEqual({
+			lat: 48.8566,
+			lon: 2.3522,
+			altitude: 35,
+			altitudeType: "MSL",
+		});
+	});
+
+	test("example 45 setting lat without lon errors with input/incomplete-gps", async () => {
+		const cdbPath = await copyCdbFixture("example-45-incomplete-gps");
+		const before = await readFile(cdbPath);
+		const result = await runWithCapture([
+			"devices",
+			"set",
+			"198.51.100.1",
+			"--lat",
+			"10",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(1);
+		const envelope = JSON.parse(result.stderr) as { error: { code: string } };
+		expect(envelope.error.code).toBe("input/incomplete-gps");
+		expect(await readFile(cdbPath)).toEqual(before);
+		expect(await listBackups(cdbPath)).toEqual([]);
+	});
+
+	test("example 46 an out-of-range --lat errors with input/invalid-coordinate", async () => {
+		const cdbPath = await copyCdbFixture("example-46-invalid-coordinate");
+		const before = await readFile(cdbPath);
+		const result = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"--lat",
+			"200",
+			"--lon",
+			"0",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(1);
+		const envelope = JSON.parse(result.stderr) as { error: { code: string } };
+		expect(envelope.error.code).toBe("input/invalid-coordinate");
+		expect(await readFile(cdbPath)).toEqual(before);
+		expect(await listBackups(cdbPath)).toEqual([]);
+	});
+
+	test("example 47 an invalid --altitude-type errors with input/invalid-altitude", async () => {
+		const cdbPath = await copyCdbFixture("example-47-invalid-altitude-type");
+		const before = await readFile(cdbPath);
+		const result = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"--lat",
+			"10",
+			"--lon",
+			"10",
+			"--altitude-type",
+			"wgs84",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(1);
+		const envelope = JSON.parse(result.stderr) as { error: { code: string } };
+		expect(envelope.error.code).toBe("input/invalid-altitude");
+		expect(await readFile(cdbPath)).toEqual(before);
+		expect(await listBackups(cdbPath)).toEqual([]);
+	});
+
+	test("example 48 alias flags canonicalize to the stored key; no cdb/unknown-option", async () => {
+		const cdbPath = await copyCdbFixture("example-48-alias-flags");
+		const result = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"--latitude",
+			"10",
+			"--lng",
+			"20",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(0);
+		const envelope = JSON.parse(result.stdout) as {
+			warnings: Array<{ code: string }>;
+		};
+		expect(envelope.warnings.some((w) => w.code === "cdb/unknown-option")).toBe(
+			false,
+		);
+
+		const show = await runWithCapture([
+			"devices",
+			"show",
+			"192.0.2.5",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		const shown = JSON.parse(show.stdout) as {
+			data: {
+				entry: { comment: string; location?: { lat: number; lon: number } };
+			};
+		};
+		expect(shown.data.entry.comment).toContain("lat=10");
+		expect(shown.data.entry.comment).toContain("lon=20");
+		expect(shown.data.entry.location).toEqual({ lat: 10, lon: 20 });
+	});
+
+	test("example 49 list --where lat=<verbatim> matches the exact stored string", async () => {
+		const cdbPath = await copyCdbFixture("example-49-where-lat");
+		const set = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"lat=37.774900",
+			"lon=-122.419400",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(set.exitCode).toBe(0);
+
+		const exact = await runWithCapture([
+			"devices",
+			"list",
+			"--where",
+			"lat=37.774900",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(exact.exitCode).toBe(0);
+		const exactEnvelope = JSON.parse(exact.stdout) as {
+			data: Array<{ target: string }>;
+		};
+		expect(exactEnvelope.data.map((entry) => entry.target)).toEqual([
+			"192.0.2.5",
+		]);
+
+		// A numerically-equal but reformatted value (dropped trailing zero) must
+		// not match.
+		const reformatted = await runWithCapture([
+			"devices",
+			"list",
+			"--where",
+			"lat=37.7749",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(reformatted.exitCode).toBe(0);
+		const reformattedEnvelope = JSON.parse(reformatted.stdout) as {
+			data: unknown[];
+		};
+		expect(reformattedEnvelope.data).toEqual([]);
+	});
+
+	test("example 50 list --near selects in-radius devices; far + geo-less are excluded", async () => {
+		const cdbPath = await copyCdbFixture("example-50-near");
+		// 192.0.2.5 in San Francisco, 192.0.2.6 in New York; the other three
+		// records carry no GPS.
+		const sf = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"--gps",
+			"37.7749,-122.4194",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(sf.exitCode).toBe(0);
+		const ny = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.6",
+			"--gps",
+			"40.7128,-74.0060",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(ny.exitCode).toBe(0);
+
+		const near = await runWithCapture([
+			"devices",
+			"list",
+			"--near",
+			"37.7749,-122.4194,50km",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(near.exitCode).toBe(0);
+		const envelope = JSON.parse(near.stdout) as {
+			data: Array<{ target: string }>;
+		};
+		expect(envelope.data.map((entry) => entry.target)).toEqual(["192.0.2.5"]);
+	});
+
+	test("example 51 list --bbox selects devices inside the lat-first box", async () => {
+		const cdbPath = await copyCdbFixture("example-51-bbox");
+		const sf = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"--gps",
+			"37.7749,-122.4194",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(sf.exitCode).toBe(0);
+
+		const bbox = await runWithCapture([
+			"devices",
+			"list",
+			"--bbox",
+			"37.70,-122.52,37.83,-122.35",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(bbox.exitCode).toBe(0);
+		const envelope = JSON.parse(bbox.stdout) as {
+			data: Array<{ target: string }>;
+		};
+		expect(envelope.data.map((entry) => entry.target)).toEqual(["192.0.2.5"]);
+	});
+
+	test("example 52 --near is list-only; using it on set errors with input/invalid-command", async () => {
+		const cdbPath = await copyCdbFixture("example-52-near-guard");
+		const result = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.5",
+			"--near",
+			"37.7749,-122.4194,50km",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(result.exitCode).toBe(1);
+		const envelope = JSON.parse(result.stdout || result.stderr) as {
+			error: { code: string };
+		};
+		expect(envelope.error.code).toBe("input/invalid-command");
+	});
+
+	test("example 53 an unrelated set on a record with a lone lat does not fail", async () => {
+		const cdbPath = await copyCdbFixture("example-53-pairing-gate");
+		// A freeform --comment can carry a lone `lat` (no pairing check on the
+		// comment escape hatch); a later unrelated update must not fail.
+		const add = await runWithCapture([
+			"devices",
+			"add",
+			"203.0.113.7",
+			"--user",
+			"u",
+			"--password",
+			"p",
+			"--comment",
+			"lat=37.7749",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(add.exitCode).toBe(0);
+
+		const set = await runWithCapture([
+			"devices",
+			"set",
+			"203.0.113.7",
+			"timeout=5000",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(set.exitCode).toBe(0);
+
+		// Touching lat/lon DOES re-enable the pairing check: setting only lon on a
+		// record with no lat leaves an incomplete pair, which must fail.
+		const badPair = await runWithCapture([
+			"devices",
+			"set",
+			"192.0.2.6",
+			"lon=-122.4194",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(badPair.exitCode).toBe(1);
+		const envelope = JSON.parse(badPair.stdout || badPair.stderr) as {
+			error: { code: string };
+		};
+		expect(envelope.error.code).toBe("input/incomplete-gps");
+	});
 });

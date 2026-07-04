@@ -33,6 +33,8 @@ import {
 	isWriteShaped,
 	validateExecuteEnvelope,
 } from "../execute.ts";
+import type { CommentKvUpdate } from "../resolver/comment-kv.ts";
+import { parseBbox, parseNear } from "../resolver/geo.ts";
 import { parseDuration } from "../resolver/settings.ts";
 import { buildRetrieveErrorEnvelope, retrieve } from "../retrieve.ts";
 import {
@@ -416,6 +418,24 @@ export const devicesInputShape = {
 		.describe(
 			"Group filter for op=list; first-class group field for op=add/set.",
 		),
+	where: z
+		.array(z.string())
+		.optional()
+		.describe(
+			"op=list device-class filters `attr=value` (repeatable, AND-combined; e.g. board=RB5009 or lat=37.7749).",
+		),
+	near: z
+		.string()
+		.optional()
+		.describe(
+			"op=list geo filter `<lat>,<lon>,<radius>` (lat-first; radius m/km/mi/ft, bare = km).",
+		),
+	bbox: z
+		.string()
+		.optional()
+		.describe(
+			"op=list geo filter `<south>,<west>,<north>,<east>` (lat-first bounding box).",
+		),
 	user: z.string().optional().describe("CDB username for op=add/set."),
 	password: z
 		.string()
@@ -454,6 +474,30 @@ export const devicesInputShape = {
 		.boolean()
 		.optional()
 		.describe("For op=set, reject comment keys outside the allowlist."),
+	lat: z
+		.number()
+		.optional()
+		.describe(
+			"Latitude in decimal degrees (-90..90) for op=add/set; a comment-kv fact, paired with lon (issue #146).",
+		),
+	lon: z
+		.number()
+		.optional()
+		.describe(
+			"Longitude in decimal degrees (-180..180) for op=add/set; a comment-kv fact, paired with lat.",
+		),
+	altitude: z
+		.number()
+		.optional()
+		.describe(
+			"Altitude in meters for op=add/set (may be negative); a comment-kv fact.",
+		),
+	altitudeType: z
+		.enum(["MSL", "AGL"])
+		.optional()
+		.describe(
+			"Vertical datum for altitude, op=add/set (default MSL when altitude is set).",
+		),
 	confirm: z
 		.boolean()
 		.optional()
@@ -475,6 +519,56 @@ function requireDevicesTarget(
 		summary: `op=${operation} requires a \`target\`.`,
 		remediation:
 			"Pass the CDB target to mutate, or use op=list to enumerate registered targets.",
+	});
+}
+
+/**
+ * Lower the typed `lat`/`lon`/`altitude`/`altitudeType` MCP args into comment-kv
+ * updates — the same core surface the CLI's `--lat`/`--lon`/`--gps` flags lower
+ * into (`src/cli/devices.ts`). Light touch: no alias handling here (the MCP
+ * schema only exposes the canonical field names), range/enum/pairing
+ * validation happens once in `validateCommentKvUpdates` (`src/devices.ts`).
+ */
+function buildGeoUpdates(args: DevicesArgs): CommentKvUpdate[] {
+	const updates: CommentKvUpdate[] = [];
+	if (args.lat !== undefined) {
+		updates.push({ key: "lat", value: String(args.lat) });
+	}
+	if (args.lon !== undefined) {
+		updates.push({ key: "lon", value: String(args.lon) });
+	}
+	if (args.altitude !== undefined) {
+		updates.push({ key: "altitude", value: String(args.altitude) });
+	}
+	if (args.altitudeType !== undefined) {
+		updates.push({ key: "altitude-type", value: args.altitudeType });
+	}
+	return updates;
+}
+
+/**
+ * Parse the MCP `where` array (`["attr=value", …]`) into device-class clauses
+ * for op=list. Geo-alias canonicalization happens centrally in `matchesWhere`
+ * (`src/resolver/facts.ts`), so this only splits on the first `=`.
+ */
+function parseMcpWhereClauses(
+	where: readonly string[] | undefined,
+): { key: string; value: string }[] | undefined {
+	if (where === undefined) {
+		return undefined;
+	}
+	return where.map((clause) => {
+		const eq = clause.indexOf("=");
+		if (eq <= 0) {
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary: `where clause must be \`attr=value\`; received: ${clause}`,
+				remediation:
+					"Pass device-class filters like `board=RB5009` or `lat=37.7749`.",
+				context: { where: clause },
+			});
+		}
+		return { key: clause.slice(0, eq), value: clause.slice(eq + 1) };
 	});
 }
 
@@ -502,9 +596,49 @@ export async function handleDevices(
 ): Promise<McpEnvelope> {
 	try {
 		const cdb = await loadAllowlistCdb(config);
+		// GPS *setter* fields write via add/set only; the *query* selectors
+		// (where/near/bbox) select via list only. Reject the wrong-op combination
+		// instead of silently dropping the caller's input (mirrors the CLI's
+		// per-subcommand flag guard in src/cli/devices.ts).
+		if (
+			args.op !== "add" &&
+			args.op !== "set" &&
+			(args.lat !== undefined ||
+				args.lon !== undefined ||
+				args.altitude !== undefined ||
+				args.altitudeType !== undefined)
+		) {
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary: `GPS fields (lat/lon/altitude/altitudeType) are not valid for op="${args.op}".`,
+				remediation:
+					"Store GPS with op=add or op=set; drop the GPS fields for list/show/groups/edit/remove.",
+				context: { op: args.op },
+			});
+		}
+		if (
+			args.op !== "list" &&
+			(args.where !== undefined ||
+				args.near !== undefined ||
+				args.bbox !== undefined)
+		) {
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary: `Query selectors (where/near/bbox) are only valid for op="list", not op="${args.op}".`,
+				remediation:
+					"Use op=list with where/near/bbox to query the registry; for op=show name a target directly.",
+				context: { op: args.op },
+			});
+		}
 		switch (args.op) {
 			case "list":
-				return listDevices({ cdb, group: args.group });
+				return listDevices({
+					cdb,
+					group: args.group,
+					where: parseMcpWhereClauses(args.where),
+					near: args.near !== undefined ? parseNear(args.near) : undefined,
+					bbox: args.bbox !== undefined ? parseBbox(args.bbox) : undefined,
+				});
 			case "groups":
 				return listGroups({ cdb, withMembers: true });
 			case "show": {
@@ -527,6 +661,7 @@ export async function handleDevices(
 						profile: args.profile,
 						session: args.session,
 						comment: args.comment,
+						commentKvUpdates: buildGeoUpdates(args),
 						savedPassword: args.savedPassword,
 						force: args.force,
 					}),
@@ -542,7 +677,7 @@ export async function handleDevices(
 					await setDevice({
 						cdb,
 						target,
-						updates: args.updates,
+						updates: [...buildGeoUpdates(args), ...(args.updates ?? [])],
 						user: args.user,
 						password: args.password,
 						group: args.group,

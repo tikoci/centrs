@@ -36,11 +36,13 @@ export {
 } from "./cdb.ts";
 export {
 	applyCommentKv,
+	type CommentKvGeoKey,
 	type CommentKvKey,
 	type CommentKvResult,
 	type CommentKvUpdate,
 	type CommentKvWarning,
 	commentKvAllowlist,
+	commentKvGeoKeys,
 	commentKvReservedKeys,
 	parseCommentKv,
 	parseRawCommentFacts,
@@ -53,6 +55,25 @@ export {
 	readSettingsFileRaw,
 	type SettingsFileContents,
 } from "./config-file.ts";
+export {
+	type AltitudeType,
+	type BboxPredicate,
+	canonicalizeGeoKey,
+	type DeviceLocation,
+	deviceLocation,
+	haversineMeters,
+	matchesBbox,
+	matchesNear,
+	type NearPredicate,
+	type ParsedGpsTuple,
+	parseAltitude,
+	parseAltitudeType,
+	parseBbox,
+	parseGpsTuple,
+	parseLatLon,
+	parseNear,
+	parseRadius,
+} from "./geo.ts";
 export {
 	type ArpEntry,
 	effectiveHostCandidate,
