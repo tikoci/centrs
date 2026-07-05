@@ -160,3 +160,7 @@
 {"run_date":"2026-07-05T19:39:52.961Z","channel":"long-term","requested_version":null,"resolved_version":"7.21.4","outcome":"fail","suites":22,"examples":170,"commit_sha":"d54750d54eece8c139b12aeeead8e6cd5be7475e"}
 {"run_date":"2026-07-05T19:39:31.054Z","channel":"stable","requested_version":null,"resolved_version":"7.23.1","outcome":"pass","suites":23,"examples":173,"commit_sha":"d54750d54eece8c139b12aeeead8e6cd5be7475e"}
 {"run_date":"2026-07-05T19:39:31.752Z","channel":"testing","requested_version":null,"resolved_version":"7.24rc1","outcome":"pass","suites":23,"examples":173,"commit_sha":"d54750d54eece8c139b12aeeead8e6cd5be7475e"}
+{"run_date":"2026-07-05T23:33:59.183Z","channel":"development","requested_version":null,"resolved_version":"7.24beta3","outcome":"pass","suites":23,"examples":173,"commit_sha":"99e27e81e3849e2a1025706f76b8947c4763fcc7"}
+{"run_date":"2026-07-05T23:34:51.826Z","channel":"long-term","requested_version":null,"resolved_version":"7.21.4","outcome":"pass","suites":23,"examples":173,"commit_sha":"99e27e81e3849e2a1025706f76b8947c4763fcc7"}
+{"run_date":"2026-07-05T23:33:26.784Z","channel":"stable","requested_version":null,"resolved_version":"7.23.1","outcome":"pass","suites":23,"examples":173,"commit_sha":"99e27e81e3849e2a1025706f76b8947c4763fcc7"}
+{"run_date":"2026-07-05T23:32:58.404Z","channel":"testing","requested_version":null,"resolved_version":"7.24rc1","outcome":"pass","suites":23,"examples":173,"commit_sha":"99e27e81e3849e2a1025706f76b8947c4763fcc7"}
