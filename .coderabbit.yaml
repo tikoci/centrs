@@ -39,7 +39,7 @@ reviews:
   tools:
     github-checks:
       enabled: true
-      timeout_ms: 900000
+      timeout_ms: 420000
   poem: false
   in_progress_fortune: false
   path_filters:
