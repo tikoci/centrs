@@ -8,6 +8,65 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+## 0.1.3 — 2026-07-06
+
+Patch release. `@tikoci/centrs@0.1.3`.
+
+### Added
+
+- **`api` command over rest-api + native-api is `CHR-passed`.** `centrs api`
+  brings a `gh api`-style structured passthrough to both transports, and folds
+  the old standalone `stream` command into `api --stream` (native-api only,
+  `--listen` alias): a `NativeApiSession.listen()` reader with `/cancel`
+  support emits NDJSON frames plus a run summary. Grounded against real CHR
+  7.23.1.
+- **Multi-target fan-out is uniform across `api`, `retrieve`, `execute`, and
+  `transfer`.** A shared `expandCdbSelection` + `runFanout` + `fanoutExitCode`
+  core (extracted once, consumed by all four commands) lets any command take a
+  CDB selector and run over every matching device. The positional boundary
+  that ends the selector differs per command (final positional for
+  `api`/`retrieve`, `--` for `execute`, the verb keyword for `transfer`);
+  `terminal` and `api --stream` explicitly reject `N > 1` selections since
+  neither has a sane multi-target framing.
+- **`settings` command (`print` / `get` / `set` / `reset`).** A managed-key
+  registry for the real `CENTRS_*` environment keys backs an atomic
+  `centrs.env` writer: `set` validates per key, canonicalizes booleans to
+  `1`/`0` on disk, warns (never blocks) on consequential values
+  (`insecure=true`, `transfer-via=ftp`), and never partially writes on a
+  validation failure; `reset` deletes the managed line rather than blanking it
+  (a blank value would itself mean "set to empty" for a bash-sourced file) and
+  leaves foreign lines/comments untouched. Bare `centrs settings` behaves like
+  `print` regardless of TTY. Four new error/warning codes
+  (`settings/reserved-key`, `settings/unknown-key`,
+  `settings/consequential-value`, `settings/skip-env-file-active`) plus
+  `internal/settings-failed`, all cataloged. `CHR-passed` via 32
+  fixture-backed integration examples.
+- **Device GPS: lat/lon/altitude storage + `--near` / `--bbox` geo
+  predicates.** `centrs devices` now stores GPS coordinates per device
+  (lat-first ordering, chosen so agents guess the field order correctly) and
+  supports proximity
+  (`--near`) and bounding-box (`--bbox`) selection predicates. `CHR-passed`
+  via fixture-backed integration coverage.
+- **Registry⇄MATRIX drift guard + "did you mean?" flag errors.** A CI-checked
+  guard keeps the command/protocol registry and `docs/MATRIX.md` from
+  silently drifting apart; unrecognized CLI flags now suggest the closest
+  known flag instead of a bare rejection.
+- **GitHub Pages: published API reference + error catalog.** `typedoc` output
+  and the generated error-code catalog now publish to GitHub Pages on push.
+
+### Fixed
+
+- **Windows unit-test portability for `settings` and MNDP.** Path-separator
+  and related platform assumptions in the `settings` and MNDP unit suites are
+  now Windows-safe (#170).
+- **A real CodeQL-caught ReDoS in the device GPS geo-predicate parser**, fixed
+  rather than suppressed.
+
+### Changed
+
+- **CodeQL house-rules pack promoted to the default run**, alongside CodeRabbit
+  review-tone tuning and a reduced GitHub-checks timeout (15 → 7 minutes).
+
 ## 0.1.2 — 2026-06-26
 
 Patch release. `@tikoci/centrs@0.1.2`.
