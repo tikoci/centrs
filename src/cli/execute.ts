@@ -29,9 +29,11 @@ import {
 	withTips,
 } from "./missing-target.ts";
 import {
+	assertQuickchrExclusive,
 	buildTargetSelection,
 	consumeSelectionFlag,
 	emptySelectionFlags,
+	hasTargetSelector,
 	isFanoutMode,
 	type SelectionFlags,
 	selectionCommandOptions,
@@ -265,12 +267,12 @@ export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 	parsed.selectionFlags = selectionFlags;
 	// Positional boundary for execute (see `docs/CONSTITUTION.md` → Target selection):
 	//   - `--` present: targets are the positionals BEFORE it, command is AFTER it.
-	//   - selector flag present, no `--`: every positional is the command (targets
-	//     come from the selector).
+	//   - selector flag (or `--quickchr`) present, no `--`: every positional is the
+	//     command (targets come from the flag).
 	//   - otherwise (no `--`, no selector): legacy single-target split — first
 	//     positional is the target, the rest is the command. Multiple positional
 	//     targets therefore REQUIRE `--`.
-	const hasSelector = isFanoutMode(selectionFlags, 0);
+	const hasSelector = hasTargetSelector(selectionFlags);
 	if (endOfOptions) {
 		parsed.targetPositionals = positional;
 		parsed.command = afterDashDash.join(" ");
@@ -300,6 +302,7 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 		// own envelope shape, single up-front write-confirm, and granular exit code.
 		const selectionFlags = parsed.selectionFlags ?? emptySelectionFlags();
 		const targetPositionals = parsed.targetPositionals ?? [];
+		assertQuickchrExclusive(selectionFlags, targetPositionals.length);
 		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 			return await runExecuteFanoutCli(
 				parsed,
@@ -308,12 +311,17 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 				args,
 			);
 		}
+		// A single `--quickchr <name>` is single-target mode: the machine name is
+		// the target (resolved from the live descriptor inside the resolver).
+		if (selectionFlags.quickchr.length === 1) {
+			parsed.quickchr = selectionFlags.quickchr[0];
+		}
 
 		// No positional at all: lead with the missing-target guidance (CDB picker /
 		// discover) rather than the missing-command error — there is nothing to run
 		// without a device. A lone positional is treated as the target, so the
 		// "requires a command" path still fires for `execute <target>`.
-		if (!parsed.targetInput) {
+		if (!parsed.targetInput && parsed.quickchr === undefined) {
 			throw missingTargetError({
 				command: "execute",
 				summary: "`centrs execute` requires a <target> and a RouterOS command.",

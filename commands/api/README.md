@@ -74,6 +74,7 @@ when a bare-collection `POST` carries create-looking fields.
 | `--via <protocol>` | `rest-api` (default) or `native-api`. No silent downgrade. |
 | `--format <json\|yaml\|text>` | Output format. Defaults to `json` for `api` (machine-first); `CENTRS_FORMAT` overrides. Under `--stream`, `json`/`yaml` emit one compact envelope per line (NDJSON); `text` emits a concise row per frame. |
 | `--group <name>` / `--where <attr>=<value>` / `--near <lat>,<lon>,<radius>` / `--bbox <south>,<west>,<north>,<east>` / `--all` / `--default` / `--concurrency <n>` | Multi-target fan-out (see below). Repeatable `--group`/`--where`; `--near`/`--bbox` select by device GPS (lat-first; see constitution: target selection). The union de-dupes by CDB record index. |
+| `--quickchr <name>`     | Target a running quickchr-managed CHR VM by name: host/port/auth come from the live descriptor (`@tikoci/quickchr` 0.4.4+, optional dependency), bypassing CDB/env resolution for those fields. Repeatable — repeating fans out. Exclusive of `<router>` positionals and CDB selectors; conflicts with `--host`/`--port`/`--username`/`--password` (constitution: resolution providers). |
 | target/auth | `--host`, `--port`, `--username`/`--user`/`-u`, `--password`, `--insecure`, `--timeout`, `--cdb-file`, `--cdb-password`, `--resolve <none\|arp>` — same single-target resolver as `retrieve`/`execute`. |
 
 ## Fan-out (multi-target)

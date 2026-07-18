@@ -88,7 +88,10 @@ export {
 	unresolvedMacError,
 } from "./mac.ts";
 export {
+	assertNoQuickchrOverrideConflict,
+	type QuickchrConnection,
 	type QuickchrResolution,
+	quickchrConnection,
 	resolveQuickchrTarget,
 	SUPPORTED_DESCRIPTOR_VERSION,
 } from "./quickchr-provider.ts";

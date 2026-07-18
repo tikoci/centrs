@@ -26,7 +26,11 @@ import { plannedProtocols, type RouterOsProtocol } from "../protocols/index.ts";
 import type {
 	AnyServiceEndpoint,
 	ServiceEndpointMap,
+	SshEndpointAuth,
 } from "./service-endpoint.ts";
+import { isEndpointAvailable } from "./service-endpoint.ts";
+import type { ResolvedAuth, ResolvedTarget } from "./target.ts";
+import { formatHostForUrl } from "./target.ts";
 
 /** Highest quickchr descriptor schema version this centrs understands. */
 export const SUPPORTED_DESCRIPTOR_VERSION = 1;
@@ -324,5 +328,245 @@ export async function resolveQuickchrTarget(
 		packageVersion: descriptor.quickchr?.packageVersion,
 		routerOsVersion: descriptor.version,
 		arch: descriptor.arch,
+	};
+}
+
+/**
+ * The `--quickchr` ↔ direct-override conflict (#134 "Initial override rule"):
+ * a named-live-provider owns its ephemeral endpoint, so explicit `--host` /
+ * `--port` / `--username` / `--password` / `--ssh-key` values have nothing to
+ * override and are rejected up front rather than silently ignored. Env/config
+ * values for the same fields are NOT a conflict — the provider simply bypasses
+ * the settings ladder for connection facts (`docs/CONSTITUTION.md` →
+ * Resolution providers).
+ */
+export function assertNoQuickchrOverrideConflict(
+	request: {
+		host?: string;
+		port?: number;
+		username?: string;
+		password?: string;
+		sshKey?: string;
+	},
+	machine: string,
+): void {
+	const conflicts: string[] = [];
+	if (request.host !== undefined) {
+		conflicts.push("--host");
+	}
+	if (request.port !== undefined) {
+		conflicts.push("--port");
+	}
+	if (request.username !== undefined) {
+		conflicts.push("--username");
+	}
+	if (request.password !== undefined) {
+		conflicts.push("--password");
+	}
+	if (request.sshKey !== undefined) {
+		conflicts.push("--ssh-key");
+	}
+	if (conflicts.length === 0) {
+		return;
+	}
+	throw new CentrsError({
+		code: "usage/conflicting-flags",
+		summary: `\`--quickchr ${machine}\` supplies host/port/auth from the live VM descriptor and cannot be combined with ${conflicts.join(", ")}.`,
+		remediation:
+			"Drop the override flag(s) and let quickchr supply the connection facts, or drop `--quickchr` and target the device directly.",
+		context: { machine, conflicts },
+	});
+}
+
+/** The connection facts a chosen `--via` extracts from a quickchr resolution. */
+export interface QuickchrConnection {
+	target: ResolvedTarget;
+	auth: ResolvedAuth;
+	/**
+	 * True when centrs must relax peer verification to use the endpoint: the
+	 * descriptor prefers the VM's TLS forwards (https / api-ssl), whose
+	 * certificate is the CHR's own self-signed one, and an SSH endpoint's host
+	 * key is ephemeral (regenerated per VM). The endpoint is trusted **by
+	 * provenance** — quickchr vouches for its loopback-forwarded port — so the
+	 * command resolver applies `insecure` with `provider` provenance and surfaces
+	 * {@link warnings} rather than demanding `--insecure` for every lab call.
+	 */
+	insecure: boolean;
+	/** Envelope warnings the consuming resolver must carry (provider-trust note). */
+	warnings: readonly { code: string; message: string }[];
+}
+
+function unsupportedVia(
+	resolution: QuickchrResolution,
+	via: RouterOsProtocol,
+	detail: string,
+	context: Record<string, unknown> = {},
+): CentrsError {
+	const available = (
+		Object.entries(resolution.services) as [
+			RouterOsProtocol,
+			AnyServiceEndpoint,
+		][]
+	)
+		.filter(([, endpoint]) => endpoint.available)
+		.map(([id]) => id);
+	return new CentrsError({
+		code: "quickchr/unsupported-via",
+		summary: `quickchr machine "${resolution.name}" cannot serve \`--via ${via}\`: ${detail}.`,
+		remediation:
+			available.length > 0
+				? `Pick one of the machine's live services with \`--via ${available.join("` / `--via ")}\`, or target the device directly without \`--quickchr\`.`
+				: `The machine reports no live services; check it with \`quickchr inspect ${resolution.name}\`.`,
+		context: {
+			machine: resolution.name,
+			via,
+			availableServices: available,
+			...context,
+		},
+	});
+}
+
+/**
+ * Materialize the connection facts for one chosen `--via` from a resolved
+ * quickchr machine — the named-live-provider consumption seam (#134 Phase 4).
+ * Substitutes for `resolveTarget`/`resolveAuth`: host/port/TLS/auth come ONLY
+ * from the descriptor's per-service endpoint (never the CDB, env, or the
+ * `__default__` ladder), stamped with `provider` provenance.
+ *
+ * Failure modes are all `quickchr/unsupported-via`, never a silent fallback:
+ * a `--via` the descriptor does not forward (quickchr v1 forwards
+ * `rest-api`/`native-api`/`ssh` only), an endpoint quickchr marked
+ * unavailable, or an SSH endpoint with no batch-capable (non-interactive)
+ * auth — centrs must not password-prompt mid-fan-out.
+ */
+export function quickchrConnection(
+	resolution: QuickchrResolution,
+	via: RouterOsProtocol,
+): QuickchrConnection {
+	const endpoint = resolution.services[via];
+	if (endpoint === undefined) {
+		throw unsupportedVia(
+			resolution,
+			via,
+			"the descriptor does not forward that service (quickchr v1 forwards rest-api/native-api/ssh)",
+		);
+	}
+	return buildConnection(resolution, via, endpoint);
+}
+
+function buildConnection(
+	resolution: QuickchrResolution,
+	via: RouterOsProtocol,
+	endpoint: AnyServiceEndpoint,
+): QuickchrConnection {
+	if (!isEndpointAvailable(endpoint)) {
+		throw unsupportedVia(
+			resolution,
+			via,
+			`the service is not available (${endpoint.unavailableReason})`,
+			{ unavailableReason: endpoint.unavailableReason },
+		);
+	}
+
+	const source = {
+		kind: "provider" as const,
+		key: `quickchr:${resolution.name}`,
+	};
+	const hostForUrl = formatHostForUrl(endpoint.host);
+	let baseUrl: string;
+	let scheme: "http" | "https";
+	if (via === "ssh") {
+		scheme = "http";
+		baseUrl = `ssh://${hostForUrl}:${endpoint.port}`;
+	} else if (via === "native-api") {
+		scheme = endpoint.tls ? "https" : "http";
+		baseUrl = `${endpoint.tls ? "api-ssl" : "api"}://${hostForUrl}:${endpoint.port}`;
+	} else {
+		scheme = endpoint.tls ? "https" : "http";
+		baseUrl = `${scheme}://${hostForUrl}:${endpoint.port}/rest`;
+	}
+
+	const target: ResolvedTarget = {
+		input: resolution.name,
+		host: endpoint.host,
+		port: endpoint.port,
+		scheme,
+		tls: endpoint.tls,
+		baseUrl,
+		identity: resolution.name,
+		source,
+		hostSource: source,
+		portSource: source,
+		sources: { host: source, port: source },
+	};
+
+	// Trust-by-provenance: a TLS endpoint presents the CHR's self-signed cert
+	// and an SSH endpoint an ephemeral host key, and the descriptor carries no
+	// trust material — so the provider's voucher for its loopback forward is the
+	// trust anchor, surfaced as a warning (see QuickchrConnection.insecure).
+	const insecure = via === "ssh" || endpoint.tls;
+	const warnings = insecure
+		? [
+				{
+					code: "transport/provider-trust",
+					message:
+						via === "ssh"
+							? `quickchr machine "${resolution.name}": strict SSH host-key checking is relaxed for the ephemeral VM (loopback forward vouched by the provider).`
+							: `quickchr machine "${resolution.name}": the ${via} endpoint uses the VM's self-signed TLS certificate; peer verification is relaxed (loopback forward vouched by the provider).`,
+				},
+			]
+		: [];
+
+	if (via === "ssh") {
+		// The contract guarantees `auth` on an available SSH endpoint; treat a
+		// malformed descriptor (missing auth / batchModes) as batch-incapable
+		// rather than crashing on a field access.
+		const auth = endpoint.auth as SshEndpointAuth | undefined;
+		if (auth === undefined || (auth.batchModes ?? []).length === 0) {
+			throw unsupportedVia(
+				resolution,
+				via,
+				"the SSH endpoint has no batch-capable (non-interactive) auth mode, and centrs never password-prompts for a provider target",
+				{ modes: auth?.modes ?? [] },
+			);
+		}
+		return {
+			target,
+			auth: {
+				username: auth.username,
+				usernameSource: { ...source, key: `${source.key}:username` },
+				password: "",
+				passwordProvided: false,
+				sshKey: auth.privateKeyPath,
+				sshKeySource:
+					auth.privateKeyPath !== undefined
+						? { ...source, key: `${source.key}:ssh-key` }
+						: undefined,
+			},
+			insecure,
+			warnings,
+		};
+	}
+
+	const auth = endpoint.auth as
+		| { username: string; password?: string }
+		| undefined;
+	return {
+		target,
+		auth: {
+			username: auth?.username,
+			usernameSource:
+				auth?.username !== undefined
+					? { ...source, key: `${source.key}:username` }
+					: undefined,
+			password: auth?.password ?? "",
+			passwordProvided: auth?.password !== undefined,
+			passwordSource:
+				auth?.password !== undefined
+					? { ...source, key: `${source.key}:password` }
+					: undefined,
+		},
+		insecure,
+		warnings,
 	};
 }

@@ -175,6 +175,7 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 | `--insecure` | Accept a self-signed TLS cert (`https`/`api-ssl`) or a new SSH host key (TOFU). Default verifies; see constitution: transport trust. Adds a `transport/insecure-trust` warning. |
 | `--cdb-file` / `--cdb-password` | Override CDB file location / decrypt password. |
 | `--group <name>` / `--where <attr>=<value>` / `--near <lat>,<lon>,<radius>` / `--bbox <south>,<west>,<north>,<east>` / `--all` / `--default` / `--concurrency <n>` | Fan out across CDB targets (e.g. push one firmware file to a fleet). Same selector grammar and per-target envelope as `retrieve`/`execute` (constitution: target selection). `--near`/`--bbox` select by device GPS (lat-first). `download` fan-out requires `--out-dir`; `remove`/`mkdir`/`copy`/`upload` fan out directly and are `--yes`-gated. See **Target selection**. |
+| `--quickchr <name>` | Target a running quickchr-managed CHR VM by name: host/port/auth come from the live descriptor (`@tikoci/quickchr` 0.4.4+, optional dependency), bypassing CDB/env resolution for those fields. Repeatable — repeating fans out. Exclusive of `<router>` positionals and CDB selectors; conflicts with `--host`/`--port`/`--username`/`--password`/`--ssh-key`. `--via sftp`/`scp` additionally requires the descriptor's SSH endpoint to advertise a batch-capable auth mode, else `quickchr/unsupported-via` (never a password prompt). See **Target selection**. |
 
 ## Target selection
 

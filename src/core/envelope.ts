@@ -27,7 +27,9 @@ import type { RouterOsProtocol } from "../protocols/index.ts";
 /**
  * Where a resolved setting/identity field came from. Precedence (low → high)
  * is config < comment-kv < env < cli; `cdb` and `arp` describe identity
- * resolution rather than settings precedence.
+ * resolution rather than settings precedence, and `provider` marks a field a
+ * named-live-provider supplied (e.g. `--quickchr`), which bypasses the ladder
+ * entirely (`docs/CONSTITUTION.md` → Resolution providers).
  */
 export type SettingSourceKind =
 	| "default"
@@ -36,7 +38,8 @@ export type SettingSourceKind =
 	| "env"
 	| "cli"
 	| "cdb"
-	| "arp";
+	| "arp"
+	| "provider";
 
 export interface SettingSource {
 	kind: SettingSourceKind;

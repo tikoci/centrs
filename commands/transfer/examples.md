@@ -432,3 +432,30 @@ centrs transfer $R upload $SRC centrs-up.txt --via ftp --username $U --password 
 Envelope: `ok: false`, the error reports the protocol is gated (the cleartext-FTP
 opt-in is absent). When `ALLOW_UNSAFE_PROTOCOLS=ftp` is set but the method is not
 yet built, it is `usage/not-implemented` instead.
+
+## quickchr targets (#134)
+
+`$NAME` is the machine name of a running quickchr-managed CHR. Host/port/auth
+come from the live descriptor. Covered by
+`test/integration/quickchr-target.test.ts`.
+
+### Q1. `list` over the descriptor's REST service
+
+```bash
+centrs transfer --quickchr $NAME list --json
+```
+
+Envelope: `ok: true`, `meta.target.source.kind=provider`.
+
+### Q2. `--via sftp` gates on the SSH endpoint's batch auth
+
+```bash
+centrs transfer --quickchr $NAME list --via sftp --json
+```
+
+When the descriptor's SSH endpoint advertises a batch-capable auth mode
+(`batchModes` non-empty — quickchr has a verified key), the list succeeds over
+sftp with `meta.target.source.kind=provider` and the key path handed off as
+`sshKey`. Otherwise the envelope is `ok: false` with
+`error.code=quickchr/unsupported-via` — a typed gate, **never** a password
+prompt and never a silent fallback to REST.

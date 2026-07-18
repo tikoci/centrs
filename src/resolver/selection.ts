@@ -70,6 +70,13 @@ export interface TargetSelection {
 	near?: NearPredicate;
 	/** `--bbox <south>,<west>,<north>,<east>`: a geo union predicate (device GPS in box). */
 	bbox?: BboxPredicate;
+	/**
+	 * Repeatable `--quickchr <name>`: quickchr machine names (the named-live-
+	 * provider, #134). Exclusive in v1 — a selection targets quickchr machines OR
+	 * CDB/literals, never both; the CLI enforces the usage error before expansion
+	 * and {@link expandSelection} re-asserts it.
+	 */
+	quickchr?: readonly string[];
 }
 
 export interface SelectionResolveInput {
@@ -83,15 +90,17 @@ export interface SelectionResolveInput {
  * One resolved selection member: a CDB record or an ad-hoc literal target.
  *
  * This is the connection-fact origin ("Axis B") the fan-out callers consume. The
- * two arms today are the selector-source (CDB) and literal cases, whose single
- * endpoint is materialized later by `./target.ts`. A named-live-provider arm
- * (`kind: "quickchr"`, #134) will join this union carrying a populated
- * {@link ./service-endpoint.ts | ServiceEndpointMap} instead of a lazily-resolved
- * single endpoint — see `docs/CONSTITUTION.md` → Resolution providers.
+ * selector-source (CDB) and literal arms carry a single endpoint materialized
+ * later by `./target.ts`. The `quickchr` arm is the named-live-provider (#134):
+ * it carries only the machine NAME here — the live descriptor is resolved in the
+ * per-member fan-out `resolve()` path (via `resolveQuickchrTarget`), so a
+ * stopped/unknown machine is an inner per-target failure, not an expansion
+ * error — see `docs/CONSTITUTION.md` → Resolution providers.
  */
 export type SelectionMember =
 	| { kind: "cdb"; resolution: CdbResolution; recordIndex: number }
-	| { kind: "literal"; input: string };
+	| { kind: "literal"; input: string }
+	| { kind: "quickchr"; name: string };
 
 export interface SelectionExpansion {
 	/** Members ordered by record index; literals appended in positional order. */
@@ -128,6 +137,10 @@ export async function expandSelection(
 	env: Record<string, string | undefined>,
 	config: Record<string, string | undefined> = {},
 ): Promise<SelectionExpansion> {
+	const quickchrNames = selection.quickchr ?? [];
+	if (quickchrNames.length > 0) {
+		return expandQuickchrSelection(selection, input, quickchrNames);
+	}
 	const settings = resolveDevicesSettings({
 		cdbFile: input.cdbFile,
 		cdbPassword: input.cdbPassword,
@@ -310,4 +323,69 @@ export async function expandSelection(
 	}
 
 	return { targets, warnings, empty: false };
+}
+
+/**
+ * Expand a quickchr-only selection. No CDB is loaded — a named-live-provider
+ * member never touches the registry, the `__default__` ladder, or the selector
+ * grammar. Members carry only the machine name (de-duped by exact name, flag
+ * order preserved); the live descriptor resolves per member inside the fan-out.
+ *
+ * Two guards are load-bearing:
+ *   - Exclusivity (v1): mixing `--quickchr` with selectors/positionals is a
+ *     usage error. The CLI throws first with flag-level wording; this re-assert
+ *     protects library/MCP callers that build a {@link TargetSelection} directly.
+ *   - `allowAdhoc: false` (the MCP surface) rejects quickchr members entirely:
+ *     the CDB is the MCP allowlist, and a live provider must not widen it (#134
+ *     non-goal).
+ */
+function expandQuickchrSelection(
+	selection: TargetSelection,
+	input: SelectionResolveInput,
+	names: readonly string[],
+): SelectionExpansion {
+	if (!input.allowAdhoc) {
+		throw new CentrsError({
+			code: "cdb/target-not-registered",
+			summary:
+				"quickchr targets are not available on this surface; the CDB is the allowlist.",
+			remediation:
+				"Register the device with `centrs devices add` and select it by identity, or use the CLI for `--quickchr` targets.",
+			context: { quickchr: [...names] },
+		});
+	}
+	if (
+		selection.positionals.length > 0 ||
+		selection.groups.length > 0 ||
+		selection.all ||
+		selection.default ||
+		selection.where.length > 0 ||
+		selection.near !== undefined ||
+		selection.bbox !== undefined
+	) {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary:
+				"`--quickchr` is exclusive: a command targets quickchr machines or CDB/literal targets, not both.",
+			remediation:
+				"Drop the positional/selector (or the `--quickchr` flag) so the selection has one target source.",
+			context: {
+				quickchr: [...names],
+				positionals: selection.positionals.length,
+				groups: selection.groups.length,
+				all: selection.all,
+				default: selection.default,
+				where: selection.where.length,
+			},
+		});
+	}
+	const seen = new Set<string>();
+	const targets: SelectionMember[] = [];
+	for (const name of names) {
+		if (!seen.has(name)) {
+			seen.add(name);
+			targets.push({ kind: "quickchr", name });
+		}
+	}
+	return { targets, warnings: [], empty: false };
 }

@@ -281,7 +281,10 @@ Sources fall into two kinds, and the distinction is normative:
   **ephemeral** endpoint it also **bypasses** the settings/`__default__` ladder and
   **conflicts** with `--host`/`--port`/`--username`/`--password`/`--ssh-key`. These
   are properties of *live/ephemeral* providers, not of any one provider. **quickchr**
-  (`--quickchr <name>`, #134) is the first.
+  (`--quickchr <name>`, #134) is the first. A named-live-provider selection is
+  **exclusive** (v1): mixing it with `<router>` positionals or selector flags is
+  `usage/conflicting-flags` — one flag stays single-target, repeating it fans
+  out. Relaxing exclusivity later is additive.
 
 Connection facts resolve into one neutral **per-service endpoint map**
 (`src/resolver/service-endpoint.ts`: `via → ServiceEndpoint`, each carrying

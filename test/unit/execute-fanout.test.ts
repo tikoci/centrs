@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { parseExecuteCliArgs } from "../../src/cli/execute.ts";
-import { isFanoutMode } from "../../src/cli/selection.ts";
+import {
+	assertQuickchrExclusive,
+	isFanoutMode,
+} from "../../src/cli/selection.ts";
 import { fanoutExitCode } from "../../src/core/fanout.ts";
 import { CentrsError } from "../../src/errors.ts";
 import type {
@@ -85,7 +88,7 @@ const READ = "/system/resource/print";
 const WRITE = "/ip/address/add address=198.51.100.1/32 interface=ether1";
 
 function emptyFlags() {
-	return { groups: [], where: [], all: false, default: false };
+	return { groups: [], where: [], all: false, default: false, quickchr: [] };
 }
 
 describe("parseExecuteCliArgs — `--` boundary + selectors", () => {
@@ -132,6 +135,62 @@ describe("parseExecuteCliArgs — `--` boundary + selectors", () => {
 		expect(parsed.targetPositionals).toEqual(["r1"]);
 		expect(parsed.command).toBe("/interface print");
 		expect(isFanoutMode(parsed.selectionFlags ?? emptyFlags(), 1)).toBe(false);
+	});
+
+	test("`--quickchr` claims the target slots: positionals are the command, single stays single-target", () => {
+		const parsed = parseExecuteCliArgs([
+			"--quickchr",
+			"lab",
+			"/system/resource/print",
+		]);
+		expect(parsed.targetPositionals).toEqual([]);
+		expect(parsed.command).toBe("/system/resource/print");
+		expect(parsed.selectionFlags?.quickchr).toEqual(["lab"]);
+		// One --quickchr is single-target mode (like a lone positional).
+		expect(isFanoutMode(parsed.selectionFlags ?? emptyFlags(), 0)).toBe(false);
+	});
+
+	test("repeated `--quickchr` is fan-out mode", () => {
+		const parsed = parseExecuteCliArgs([
+			"--quickchr",
+			"lab",
+			"--quickchr",
+			"edge",
+			"/system/resource/print",
+		]);
+		expect(parsed.selectionFlags?.quickchr).toEqual(["lab", "edge"]);
+		expect(parsed.command).toBe("/system/resource/print");
+		expect(isFanoutMode(parsed.selectionFlags ?? emptyFlags(), 0)).toBe(true);
+	});
+
+	test("`--quickchr` + a positional target before `--` is a usage conflict", () => {
+		const parsed = parseExecuteCliArgs([
+			"--quickchr",
+			"lab",
+			"r1",
+			"--",
+			"/system/resource/print",
+		]);
+		expect(parsed.targetPositionals).toEqual(["r1"]);
+		expect(() =>
+			assertQuickchrExclusive(
+				parsed.selectionFlags ?? emptyFlags(),
+				parsed.targetPositionals?.length ?? 0,
+			),
+		).toThrow(/exclusive/);
+	});
+
+	test("`--quickchr` + a CDB selector is a usage conflict", () => {
+		const parsed = parseExecuteCliArgs([
+			"--quickchr",
+			"lab",
+			"--group",
+			"prod",
+			"/system/resource/print",
+		]);
+		expect(() =>
+			assertQuickchrExclusive(parsed.selectionFlags ?? emptyFlags(), 0),
+		).toThrow(/exclusive/);
 	});
 });
 
@@ -224,6 +283,58 @@ describe("executeFanout", () => {
 		);
 		expect(envelope.data.summary.ok).toBe(2);
 		expect(envelope.meta.operation?.request.write).toBe(true);
+	});
+
+	test("a quickchr member with a direct override flag fails inner with usage/conflicting-flags", async () => {
+		// The conflict assert runs before the dynamic quickchr import, so this is
+		// deterministic without a quickchr machine registry.
+		const internals: ExecuteFanoutInternals = {
+			expand: async () =>
+				expansionOf([
+					{ kind: "quickchr", name: "lab" },
+					{ kind: "quickchr", name: "edge" },
+				]),
+			sleep: async () => {},
+		};
+		const envelope = await executeFanout(
+			{ command: READ, host: "192.0.2.1", stdinIsTty: false },
+			selection({ groups: [], quickchr: ["lab", "edge"] }),
+			{},
+			internals,
+		);
+		expect(envelope.ok).toBe(true);
+		expect(envelope.data.summary).toEqual({ total: 2, ok: 0, failed: 2 });
+		for (const target of envelope.data.targets) {
+			expect(target.ok).toBe(false);
+			expect(!target.ok && target.error.code).toBe("usage/conflicting-flags");
+		}
+		// The member meta identifies the machine even though resolution failed.
+		expect(envelope.data.targets.map((t) => t.meta.target.identity)).toEqual([
+			"lab",
+			"edge",
+		]);
+		expect(fanoutExitCode(envelope)).toBe(1);
+	});
+
+	test("an unknown quickchr machine is an inner quickchr/* failure, not an outer error", async () => {
+		const internals: ExecuteFanoutInternals = {
+			expand: async () =>
+				expansionOf([
+					{ kind: "quickchr", name: "centrs-test-no-such-machine" },
+				]),
+			sleep: async () => {},
+		};
+		const envelope = await executeFanout(
+			{ command: READ, stdinIsTty: false },
+			selection({ groups: [], quickchr: ["centrs-test-no-such-machine"] }),
+			{},
+			internals,
+		);
+		expect(envelope.ok).toBe(true);
+		expect(envelope.data.summary.failed).toBe(1);
+		const failed = envelope.data.targets[0];
+		// machine-not-found with quickchr installed; package-unavailable without.
+		expect(failed && !failed.ok && failed.error.code).toMatch(/^quickchr\//);
 	});
 
 	test("a __default__ member fails that one target deterministically", async () => {

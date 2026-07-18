@@ -66,6 +66,12 @@ export const selectionCommandOptions: readonly CliCommandOption[] = [
 		description: "Select the reserved `__default__` record.",
 	},
 	{
+		flag: "--quickchr",
+		valueName: "<name>",
+		description:
+			"Target a running quickchr-managed CHR VM by name (repeatable; fans out when repeated). Exclusive of positional targets and CDB selectors; conflicts with --host/--port/--username/--password/--ssh-key.",
+	},
+	{
 		flag: "--concurrency",
 		valueName: "<n>",
 		description:
@@ -81,11 +87,13 @@ export interface SelectionFlags {
 	bbox?: BboxPredicate;
 	all: boolean;
 	default: boolean;
+	/** Repeatable `--quickchr <name>` (named-live-provider; exclusive in v1). */
+	quickchr: string[];
 	concurrency?: number;
 }
 
 export function emptySelectionFlags(): SelectionFlags {
-	return { groups: [], where: [], all: false, default: false };
+	return { groups: [], where: [], all: false, default: false, quickchr: [] };
 }
 
 /** The selection flag tokens, for a command's `--help` table + unknown-flag suggestions. */
@@ -96,6 +104,7 @@ export const selectionFlagTokens = [
 	"--bbox",
 	"--all",
 	"--default",
+	"--quickchr",
 	"--concurrency",
 ] as const;
 
@@ -143,6 +152,9 @@ export function consumeSelectionFlag(
 		case "--bbox":
 			acc.bbox = parseBbox(expectValue(args, index + 1, arg));
 			return index + 1;
+		case "--quickchr":
+			acc.quickchr.push(expectValue(args, index + 1, arg));
+			return index + 1;
 		case "--concurrency": {
 			const raw = expectValue(args, index + 1, arg);
 			const parsed = parseStrictInteger(raw);
@@ -175,26 +187,74 @@ export function buildTargetSelection(
 		where: flags.where,
 		near: flags.near,
 		bbox: flags.bbox,
+		quickchr: flags.quickchr,
 	};
 }
 
-/**
- * Fan-out mode is keyed on INTENT, not resolved count: any selector flag, or more
- * than one positional target. A plain single-positional call stays single-target
- * (never `FanoutData`); a selector that resolves to one/zero members is still
- * fan-out mode. See `docs/CONSTITUTION.md` (Target selection).
- */
-export function isFanoutMode(
-	flags: SelectionFlags,
-	targetPositionalCount: number,
-): boolean {
+/** True when any CDB selector flag is present (quickchr and positionals excluded). */
+function hasCdbSelector(flags: SelectionFlags): boolean {
 	return (
 		flags.all ||
 		flags.default ||
 		flags.groups.length > 0 ||
 		flags.where.length > 0 ||
 		flags.near !== undefined ||
-		flags.bbox !== undefined ||
+		flags.bbox !== undefined
+	);
+}
+
+/**
+ * `--quickchr` exclusivity (v1, `docs/CONSTITUTION.md` → Resolution providers):
+ * a command targets quickchr machines OR CDB/literal targets, never both.
+ * Commands call this after splitting positionals, in both single-target and
+ * fan-out mode; relaxing it later is additive.
+ */
+export function assertQuickchrExclusive(
+	flags: SelectionFlags,
+	targetPositionalCount: number,
+): void {
+	if (flags.quickchr.length === 0) {
+		return;
+	}
+	if (hasCdbSelector(flags) || targetPositionalCount > 0) {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary:
+				"`--quickchr` is exclusive: a command targets quickchr machines or CDB/literal targets, not both.",
+			remediation:
+				"Drop the positional target / CDB selector (or the `--quickchr` flag) so the selection has one target source.",
+			context: {
+				quickchr: [...flags.quickchr],
+				positionals: targetPositionalCount,
+			},
+		});
+	}
+}
+
+/**
+ * True when any target-taking flag is present, so positionals are operation
+ * args, not targets. Superset of {@link isFanoutMode}'s flag term: a single
+ * `--quickchr` names the target (like a lone positional, still single-target
+ * mode) but already claims the positional slots.
+ */
+export function hasTargetSelector(flags: SelectionFlags): boolean {
+	return hasCdbSelector(flags) || flags.quickchr.length > 0;
+}
+
+/**
+ * Fan-out mode is keyed on INTENT, not resolved count: any selector flag, more
+ * than one positional target, or a repeated `--quickchr`. A plain
+ * single-positional call — and a single `--quickchr <name>` — stays
+ * single-target (never `FanoutData`); a selector that resolves to one/zero
+ * members is still fan-out mode. See `docs/CONSTITUTION.md` (Target selection).
+ */
+export function isFanoutMode(
+	flags: SelectionFlags,
+	targetPositionalCount: number,
+): boolean {
+	return (
+		hasCdbSelector(flags) ||
+		flags.quickchr.length > 1 ||
 		targetPositionalCount > 1
 	);
 }

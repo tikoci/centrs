@@ -455,6 +455,6 @@ export function defaultPortForScheme(scheme: "http" | "https"): number {
 	return scheme === "https" ? 443 : 80;
 }
 
-function formatHostForUrl(host: string): string {
+export function formatHostForUrl(host: string): string {
 	return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }

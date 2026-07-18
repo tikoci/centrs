@@ -71,6 +71,8 @@ export interface TransferSelectionSummary {
 	all: boolean;
 	default: boolean;
 	positionals: readonly string[];
+	/** quickchr machine names (`--quickchr`, repeatable; exclusive of the rest). */
+	quickchr?: readonly string[];
 }
 
 export interface TransferFanoutRequestSummary {
@@ -127,11 +129,15 @@ function summarizeSelection(
 		all: selection.all,
 		default: selection.default,
 		positionals: selection.positionals,
+		quickchr: selection.quickchr,
 	};
 }
 
 function memberLabel(member: SelectionMember): string {
-	return member.kind === "cdb" ? member.resolution.identity : member.input;
+	if (member.kind === "cdb") {
+		return member.resolution.identity;
+	}
+	return member.kind === "quickchr" ? member.name : member.input;
 }
 
 function memberTargetMeta(member: SelectionMember): {
@@ -145,6 +151,9 @@ function memberTargetMeta(member: SelectionMember): {
 			identity: member.resolution.identity,
 			recordIndex: member.recordIndex,
 		};
+	}
+	if (member.kind === "quickchr") {
+		return { input: member.name, identity: member.name };
 	}
 	return { input: member.input };
 }
@@ -339,9 +348,17 @@ export async function transferFanout(
 					context: { target: member.resolution.target },
 				});
 			}
-			const targetInput =
-				member.kind === "cdb" ? member.resolution.target : member.input;
-			const perRequest: TransferRequest = { ...request, targetInput };
+			// A quickchr member carries the machine name in `quickchr` (resolved live
+			// inside `resolveTransferRequest`, so a stopped machine is an inner
+			// per-target failure), never as a `targetInput`.
+			const perRequest: TransferRequest =
+				member.kind === "quickchr"
+					? { ...request, targetInput: undefined, quickchr: member.name }
+					: {
+							...request,
+							targetInput:
+								member.kind === "cdb" ? member.resolution.target : member.input,
+						};
 			if (downloadPaths !== undefined) {
 				perRequest.local = downloadPaths.get(member);
 			}

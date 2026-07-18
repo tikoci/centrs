@@ -37,6 +37,7 @@ import {
 	withTips,
 } from "./missing-target.ts";
 import {
+	assertQuickchrExclusive,
 	buildTargetSelection,
 	consumeSelectionFlag,
 	emptySelectionFlags,
@@ -396,6 +397,7 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 	const targetPositionals = positional.slice(0, -1);
 	request.path = path;
 	request.targetPositionals = targetPositionals;
+	assertQuickchrExclusive(selectionFlags, targetPositionals.length);
 
 	if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 		if (positional.length === 0 || path.length === 0) {
@@ -408,6 +410,23 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 				context: { command: "retrieve", missingPath: true },
 			});
 		}
+		return request;
+	}
+
+	// A single `--quickchr <name>` is single-target mode: the machine name is the
+	// target (resolved from the live descriptor inside the resolver); the lone
+	// positional is the routeros-path.
+	if (selectionFlags.quickchr.length === 1) {
+		if (positional.length === 0 || path.length === 0) {
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary: "`centrs retrieve --quickchr` requires a <routeros-path>.",
+				remediation:
+					"Add the RouterOS menu path as the final positional, e.g. `centrs retrieve --quickchr lab /system/resource`.",
+				context: { command: "retrieve", missingPath: true },
+			});
+		}
+		request.quickchr = selectionFlags.quickchr[0];
 		return request;
 	}
 

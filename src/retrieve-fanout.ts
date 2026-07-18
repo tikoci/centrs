@@ -82,6 +82,8 @@ export interface RetrieveSelectionSummary {
 	all: boolean;
 	default: boolean;
 	positionals: readonly string[];
+	/** quickchr machine names (`--quickchr`, repeatable; exclusive of the rest). */
+	quickchr?: readonly string[];
 }
 
 export interface RetrieveFanoutOperationMeta {
@@ -132,6 +134,7 @@ function summarizeSelection(
 		all: selection.all,
 		default: selection.default,
 		positionals: selection.positionals,
+		quickchr: selection.quickchr,
 	};
 }
 
@@ -146,6 +149,9 @@ function memberTargetMeta(member: SelectionMember): {
 			identity: member.resolution.identity,
 			recordIndex: member.recordIndex,
 		};
+	}
+	if (member.kind === "quickchr") {
+		return { input: member.name, identity: member.name };
 	}
 	return { input: member.input };
 }
@@ -265,6 +271,14 @@ export async function retrieveFanout(
 					attributeSelections,
 					macResolution,
 					config,
+				);
+			}
+			if (member.kind === "quickchr") {
+				// The live descriptor resolves here, per member — a stopped/unknown
+				// machine is an inner per-target failure, not an expansion error.
+				return resolveRetrieveRequest(
+					{ ...request, targetInput: undefined, quickchr: member.name },
+					env,
 				);
 			}
 			// Ad-hoc literal: full single-target resolution (CDB load → `__default__`

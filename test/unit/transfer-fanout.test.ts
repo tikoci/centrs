@@ -138,6 +138,33 @@ describe("parseTransferCliArgs — verb-keyword boundary", () => {
 		expect(parsed.targetPositionals).toEqual([]);
 		expect(isFanoutMode(parsed.selectionFlags, 0)).toBe(true);
 	});
+
+	test("`--quickchr <name>` + verb: single-target with the machine on the request", () => {
+		const parsed = parseTransferCliArgs(["--quickchr", "lab", "list"]);
+		expect(parsed.request.verb).toBe("list");
+		expect(parsed.request.quickchr).toBe("lab");
+		expect(parsed.request.targetInput).toBeUndefined();
+		expect(parsed.targetPositionals).toEqual([]);
+		expect(isFanoutMode(parsed.selectionFlags, 0)).toBe(false);
+	});
+
+	test("`--quickchr` + top-level alias: positionals are paths", () => {
+		const parsed = parseTransferCliArgs(
+			["--quickchr", "lab", "local.npk", "/remote.npk"],
+			"upload",
+		);
+		expect(parsed.request.verb).toBe("upload");
+		expect(parsed.request.local).toBe("local.npk");
+		expect(parsed.request.remote).toBe("/remote.npk");
+		expect(parsed.request.quickchr).toBe("lab");
+		expect(parsed.targetPositionals).toEqual([]);
+	});
+
+	test("`--quickchr` + positional target is a usage conflict", () => {
+		expect(() =>
+			parseTransferCliArgs(["--quickchr", "lab", "r1", "list"]),
+		).toThrow(/exclusive/);
+	});
 });
 
 describe("transferFanout", () => {

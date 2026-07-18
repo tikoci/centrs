@@ -31,6 +31,7 @@ import {
 	parseScriptFor,
 } from "./protocols/mac-telnet-console.ts";
 import {
+	assertNoQuickchrOverrideConflict,
 	type CdbResolution,
 	effectiveHostCandidate,
 	isIpTransport,
@@ -38,6 +39,7 @@ import {
 	loadEnvFileDefaults,
 	parseDuration,
 	parseResolvePolicy,
+	quickchrConnection,
 	type ResolvedAuth,
 	type ResolvedSetting,
 	type ResolvedTarget,
@@ -46,6 +48,7 @@ import {
 	resolveCdb,
 	resolveMacTarget,
 	resolveOptionalIntegerSetting,
+	resolveQuickchrTarget,
 	resolveStringSetting,
 	resolveTarget,
 	toCoreSource,
@@ -57,6 +60,12 @@ export type ExecuteOutputFormat = (typeof executeOutputFormats)[number];
 
 export interface ExecuteRequest {
 	targetInput?: string;
+	/**
+	 * quickchr machine name (`--quickchr <name>`): resolve host/port/auth from
+	 * the live VM descriptor instead of CDB/env (`docs/CONSTITUTION.md` →
+	 * Resolution providers). Conflicts with host/port/username/password/sshKey.
+	 */
+	quickchr?: string;
 	command: string;
 	via?: string;
 	host?: string;
@@ -286,19 +295,30 @@ export async function resolveExecuteRequest(
 	validateExecuteRequestShape(request);
 	const canonical = canonicalizeExecuteCommand(request.command);
 	const config = options.config ?? (await loadEnvFileDefaults(env));
+	// A quickchr target is a named-live-provider: it supplies host/port/auth from
+	// the live descriptor and bypasses CDB/env resolution for those fields
+	// entirely (no CDB load, no `__default__` ladder, no MAC resolution).
+	let quickchrResolution: Awaited<
+		ReturnType<typeof resolveQuickchrTarget>
+	> | null = null;
+	if (request.quickchr !== undefined) {
+		assertNoQuickchrOverrideConflict(request, request.quickchr);
+		quickchrResolution = await resolveQuickchrTarget(request.quickchr);
+	}
 	// Fan-out passes the pre-resolved CDB record for a member (the CDB is loaded
 	// once in `expandSelection`); single-target resolves it here.
-	const cdbResolution =
-		options.cdbResolution ??
-		(await resolveCdb(
-			{
-				targetInput: request.targetInput,
-				cdbFile: request.cdbFile,
-				cdbPassword: request.cdbPassword,
-			},
-			env,
-			config,
-		));
+	const cdbResolution = quickchrResolution
+		? undefined
+		: (options.cdbResolution ??
+			(await resolveCdb(
+				{
+					targetInput: request.targetInput,
+					cdbFile: request.cdbFile,
+					cdbPassword: request.cdbPassword,
+				},
+				env,
+				config,
+			)));
 	const via = resolveExecuteProtocol(request, env, cdbResolution, config);
 	const format = resolveFormat(request, env, config);
 	const validate = resolveBooleanSetting(
@@ -325,50 +345,72 @@ export async function resolveExecuteRequest(
 		undefined,
 		config,
 	);
-	const macResolution = isIpTransport(via.value)
-		? await resolveMacTarget({
-				host: request.host,
-				targetInput: request.targetInput,
-				cdbTarget: cdbResolution?.target,
+	const macResolution =
+		quickchrResolution === null && isIpTransport(via.value)
+			? await resolveMacTarget({
+					host: request.host,
+					targetInput: request.targetInput,
+					cdbTarget: cdbResolution?.target,
+					env,
+					config,
+					policy: parseResolvePolicy(
+						request.resolve ??
+							env["CENTRS_RESOLVE"] ??
+							config["CENTRS_RESOLVE"],
+					),
+					operation: "execute",
+				})
+			: undefined;
+	const connection = quickchrResolution
+		? quickchrConnection(quickchrResolution, via.value)
+		: null;
+	const target = connection
+		? connection.target
+		: resolveTarget(
+				{
+					targetInput: request.targetInput,
+					host: request.host,
+					port: request.port,
+					macResolution,
+				},
 				env,
+				via.value,
+				cdbResolution,
 				config,
-				policy: parseResolvePolicy(
-					request.resolve ?? env["CENTRS_RESOLVE"] ?? config["CENTRS_RESOLVE"],
-				),
-				operation: "execute",
-			})
-		: undefined;
-	const target = resolveTarget(
-		{
-			targetInput: request.targetInput,
-			host: request.host,
-			port: request.port,
-			macResolution,
-		},
-		env,
-		via.value,
-		cdbResolution,
-		config,
-	);
-	const auth = resolveAuth(
-		{
-			username: request.username,
-			password: request.password,
-			sshKey: request.sshKey,
-		},
-		env,
-		cdbResolution,
-		config,
-	);
-	const insecure = resolveBooleanSetting(
-		request.insecure,
-		env,
-		"CENTRS_INSECURE",
-		false,
-		"insecure",
-		cdbResolution?.overrides.insecure,
-		config,
-	);
+			);
+	const auth = connection
+		? connection.auth
+		: resolveAuth(
+				{
+					username: request.username,
+					password: request.password,
+					sshKey: request.sshKey,
+				},
+				env,
+				cdbResolution,
+				config,
+			);
+	// A quickchr TLS/SSH endpoint is trusted by provenance (self-signed VM cert /
+	// ephemeral host key) — `insecure` is forced with provider provenance and the
+	// provider-trust warning rides the envelope (see QuickchrConnection.insecure).
+	const insecure =
+		connection?.insecure === true
+			? {
+					value: true,
+					source: {
+						kind: "provider" as const,
+						key: `quickchr:${request.quickchr}`,
+					},
+				}
+			: resolveBooleanSetting(
+					request.insecure,
+					env,
+					"CENTRS_INSECURE",
+					false,
+					"insecure",
+					cdbResolution?.overrides.insecure,
+					config,
+				);
 
 	return {
 		command: request.command,
@@ -383,7 +425,9 @@ export async function resolveExecuteRequest(
 		maxResultsBytes,
 		yes: request.yes ?? false,
 		verbose: request.verbose ?? false,
-		warnings: cdbResolution?.warnings ?? [],
+		warnings: connection
+			? [...connection.warnings]
+			: (cdbResolution?.warnings ?? []),
 	};
 }
 

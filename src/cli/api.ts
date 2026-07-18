@@ -36,6 +36,7 @@ import {
 	withTips,
 } from "./missing-target.ts";
 import {
+	assertQuickchrExclusive,
 	buildTargetSelection,
 	consumeSelectionFlag,
 	emptySelectionFlags,
@@ -391,6 +392,7 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 		// `--stream`/`--listen` + fan-out itself (single-session is exclusive).
 		const selectionFlags = parsed.selectionFlags ?? emptySelectionFlags();
 		const targetPositionals = parsed.targetPositionals ?? [];
+		assertQuickchrExclusive(selectionFlags, targetPositionals.length);
 		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 			return await runApiFanoutCli(
 				parsed,
@@ -398,6 +400,11 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 				targetPositionals,
 				args,
 			);
+		}
+		// A single `--quickchr <name>` is single-target mode (streaming included):
+		// the machine name is the target, resolved from the live descriptor.
+		if (selectionFlags.quickchr.length === 1) {
+			parsed.quickchr = selectionFlags.quickchr[0];
 		}
 
 		// Open-ended follow (`--stream`/`--listen`, or a `/listen` endpoint) consumes
@@ -410,7 +417,7 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 			return await runApiListenCli(parsed, args);
 		}
 
-		if (!parsed.targetInput) {
+		if (!parsed.targetInput && parsed.quickchr === undefined) {
 			throw missingTargetError({
 				command: "api",
 				summary: "`centrs api` requires a <router> and an <endpoint>.",
