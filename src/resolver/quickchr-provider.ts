@@ -121,17 +121,34 @@ function malformedDescriptor(
 
 /**
  * Distinguish a *missing* optional package from one that is installed but failed
- * to evaluate. Only the former is `quickchr/package-unavailable`; a load-time
- * throw from an installed package is a real fault we must not mislabel as
- * "not installed" (Bun/Node signal not-found via `code` or a "cannot find" message).
+ * to evaluate. Only a failure to resolve `@tikoci/quickchr` **itself** is
+ * `quickchr/package-unavailable`; an installed quickchr whose own transitive
+ * import is missing carries the same `ERR_MODULE_NOT_FOUND` code but names a
+ * different specifier — that is a real load fault (→ `quickchr/unsupported`,
+ * cause preserved), not a missing optional dep. Mislabeling it would send the
+ * user to reinstall the wrong package.
  */
 function isModuleNotFound(cause: unknown): boolean {
-	const code = quickchrErrorCode(cause);
-	if (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") {
-		return true;
-	}
 	const message = cause instanceof Error ? cause.message : String(cause);
-	return /cannot find (module|package)/i.test(message);
+	// The loader quotes the specifier it could not resolve, e.g.
+	// `Cannot find module '@tikoci/quickchr'` (top-level, missing) vs
+	// `Cannot find package 'left-pad' imported from …/@tikoci/quickchr/…` (transitive).
+	const missing = message.match(
+		/cannot find (?:module|package)\s+['"]([^'"]+)['"]/i,
+	)?.[1];
+	if (missing !== undefined) {
+		return missing === QUICKCHR_MODULE;
+	}
+	// No parseable specifier: fall back to the not-found code, but only when the
+	// message references our module and not a nested (`imported from`) resolution.
+	const code = quickchrErrorCode(cause);
+	const isNotFoundCode =
+		code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND";
+	return (
+		isNotFoundCode &&
+		message.includes(QUICKCHR_MODULE) &&
+		!/imported from|from\s+['"]/i.test(message)
+	);
 }
 
 /**

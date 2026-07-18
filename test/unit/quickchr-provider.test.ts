@@ -211,4 +211,32 @@ describe("resolveQuickchrTarget", () => {
 			"quickchr/unsupported",
 		);
 	});
+
+	test("installed quickchr with a missing *transitive* import → quickchr/unsupported (not package-unavailable)", async () => {
+		// Same ERR_MODULE_NOT_FOUND code, but the missing specifier is a transitive
+		// dep of an installed quickchr — must not be mislabeled "not installed".
+		await expectCode(
+			resolveQuickchrTarget("lab", async () => {
+				throw Object.assign(
+					new Error(
+						"Cannot find package 'left-pad' imported from /node_modules/@tikoci/quickchr/src/index.ts",
+					),
+					{ code: "ERR_MODULE_NOT_FOUND" },
+				);
+			}),
+			"quickchr/unsupported",
+		);
+	});
+
+	test("quickchr itself not resolvable (ERR_MODULE_NOT_FOUND for the package) → quickchr/package-unavailable", async () => {
+		await expectCode(
+			resolveQuickchrTarget("lab", async () => {
+				throw Object.assign(
+					new Error("Cannot find package '@tikoci/quickchr'"),
+					{ code: "ERR_MODULE_NOT_FOUND" },
+				);
+			}),
+			"quickchr/package-unavailable",
+		);
+	});
 });
