@@ -59,8 +59,13 @@ export function parseRouterOsVersion(
 	// unbounded `\d+` here is a polynomial-ReDoS vector on strings of many
 	// repeated digits (CodeQL js/polynomial-redos). RouterOS version numbers
 	// never approach four digits per field, so the bound is free.
+	//
+	// The `(?<![\d.])` / `(?!\d)` token boundaries keep the (unanchored) match
+	// from latching onto a *fragment* of a larger number: without them
+	// `"12345.67"` matched `"2345.67"` and `"127.0.0.1"` matched `"127.0"`.
+	// They still allow legitimately noisy strings ("7.23.2 (stable)", "v7.23").
 	const match = raw.match(
-		/(\d{1,4})\.(\d{1,4})(?:\.(\d{1,4}))?(?:(beta|rc)(\d{1,4}))?/i,
+		/(?<![\d.])(\d{1,4})\.(\d{1,4})(?:\.(\d{1,4}))?(?:(beta|rc)(\d{1,4}))?(?![\d.])/i,
 	);
 	if (!match) {
 		return undefined;

@@ -52,6 +52,16 @@ describe("parseRouterOsVersion", () => {
 		expect(parseRouterOsVersion("garbage")).toBeUndefined();
 		expect(parseRouterOsVersion("")).toBeUndefined();
 	});
+
+	test("does not latch onto a fragment of a larger number", () => {
+		// Token boundaries keep the unanchored match from parsing a suffix of an
+		// over-long numeric run or an IP-shaped string as a bogus version, which
+		// would make malformed CDB `version=` facts look parseable.
+		expect(parseRouterOsVersion("12345.67")).toBeUndefined();
+		expect(parseRouterOsVersion("10000.1")).toBeUndefined();
+		expect(parseRouterOsVersion("127.0.0.1")).toBeUndefined();
+		expect(parseRouterOsVersion("7.234567")).toBeUndefined();
+	});
 });
 
 describe("compareRouterOsVersion", () => {

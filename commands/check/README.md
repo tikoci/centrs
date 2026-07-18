@@ -243,7 +243,7 @@ RouterOS commands vary by version and arch, so a check must not blow up on a
 device that lacks the path it reads. `resource` runs first and yields the **live**
 version / arch / board; the orchestrator pre-flights each remaining check's
 `requires` paths against that live value (falling back to the stored
-`routeros_version` derived fact, or one batched `/console/inspect` when neither is
+`version` derived fact, or one batched `/console/inspect` when neither is
 conclusive), and marks an unsupported check `ran:false` with
 `skipReason:"unsupported-on-<version>"` — a graceful skip, not a raw protocol
 error. Grounding is offline-first against restraml's historic `inspect.json`
