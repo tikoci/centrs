@@ -505,3 +505,6 @@ sfo
 ele
 GPX
 Geolocation
+unparseable
+Unparseable
+versionless

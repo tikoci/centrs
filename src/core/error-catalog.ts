@@ -323,6 +323,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "routeros/unsupported-capability",
 		summary: "The chosen protocol does not support this command capability.",
 	},
+	{
+		code: "routeros/version-unsupported",
+		summary:
+			"The device's RouterOS version does not provide the operation this command needs.",
+	},
 
 	// settings/*
 	{
