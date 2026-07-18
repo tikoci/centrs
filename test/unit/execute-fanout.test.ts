@@ -13,12 +13,12 @@ import {
 	renderExecuteFanoutEnvelope,
 } from "../../src/execute-fanout.ts";
 import type {
-	CdbSelectionExpansion,
-	CdbSelectionMember,
+	SelectionExpansion,
+	SelectionMember,
 	TargetSelection,
 } from "../../src/resolver/selection.ts";
 
-function cdbMember(target: string, recordIndex: number): CdbSelectionMember {
+function cdbMember(target: string, recordIndex: number): SelectionMember {
 	return {
 		kind: "cdb",
 		recordIndex,
@@ -66,9 +66,7 @@ function fakeSuccess(resolved: ResolvedExecuteRequest): ExecuteSuccessEnvelope {
 	};
 }
 
-function expansionOf(
-	members: readonly CdbSelectionMember[],
-): CdbSelectionExpansion {
+function expansionOf(members: readonly SelectionMember[]): SelectionExpansion {
 	return { targets: members, warnings: [], empty: false };
 }
 

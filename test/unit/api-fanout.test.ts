@@ -15,12 +15,12 @@ import { isFanoutMode } from "../../src/cli/selection.ts";
 import { fanoutExitCode } from "../../src/core/fanout.ts";
 import { CentrsError } from "../../src/errors.ts";
 import type {
-	CdbSelectionExpansion,
-	CdbSelectionMember,
+	SelectionExpansion,
+	SelectionMember,
 	TargetSelection,
 } from "../../src/resolver/selection.ts";
 
-function cdbMember(target: string, recordIndex: number): CdbSelectionMember {
+function cdbMember(target: string, recordIndex: number): SelectionMember {
 	return {
 		kind: "cdb",
 		recordIndex,
@@ -63,9 +63,7 @@ function fakeSuccess(
 	};
 }
 
-function expansionOf(
-	members: readonly CdbSelectionMember[],
-): CdbSelectionExpansion {
+function expansionOf(members: readonly SelectionMember[]): SelectionExpansion {
 	return { targets: members, warnings: [], empty: false };
 }
 

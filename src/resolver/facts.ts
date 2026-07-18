@@ -1,6 +1,6 @@
 /**
  * Device-class fact extraction + selector matching, shared by the fan-out
- * resolver ({@link ../resolver/selection.ts | expandCdbSelection}) and
+ * resolver ({@link ../resolver/selection.ts | expandSelection}) and
  * `devices list` (`src/devices.ts`) so **both surfaces match `--where` /
  * `--near` / `--bbox` against identical semantics**.
  *

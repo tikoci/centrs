@@ -287,7 +287,7 @@ export async function resolveExecuteRequest(
 	const canonical = canonicalizeExecuteCommand(request.command);
 	const config = options.config ?? (await loadEnvFileDefaults(env));
 	// Fan-out passes the pre-resolved CDB record for a member (the CDB is loaded
-	// once in `expandCdbSelection`); single-target resolves it here.
+	// once in `expandSelection`); single-target resolves it here.
 	const cdbResolution =
 		options.cdbResolution ??
 		(await resolveCdb(

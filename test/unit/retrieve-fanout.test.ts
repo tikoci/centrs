@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { CentrsError } from "../../src/errors.ts";
 import type {
 	CdbResolution,
-	CdbSelectionExpansion,
 	ResolvedRetrieveRequest,
 	RetrieveRequest,
 	RetrieveSuccessEnvelope,
+	SelectionExpansion,
 	TargetSelection,
 } from "../../src/index.ts";
 import {
@@ -29,7 +29,7 @@ function fakeResolution(recordIndex: number): CdbResolution {
 	};
 }
 
-function fakeExpansion(count: number): CdbSelectionExpansion {
+function fakeExpansion(count: number): SelectionExpansion {
 	return {
 		empty: false,
 		warnings: [],

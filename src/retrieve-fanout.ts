@@ -12,7 +12,7 @@
  *
  * Boundaries (see `commands/retrieve/README.md`, `docs/CONSTITUTION.md`), shared
  * with `api-fanout.ts`:
- *   - The CDB is loaded + decrypted ONCE (`expandCdbSelection`); a cdb member is
+ *   - The CDB is loaded + decrypted ONCE (`expandSelection`); a cdb member is
  *     resolved with its pre-resolved record, so `resolveCdb`'s `__default__`
  *     synthetic fallback never collides ad-hoc literals.
  *   - A `--default` / `__default__` member is guarded from being dialed as the
@@ -49,12 +49,12 @@ import {
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
-	type CdbSelectionExpansion,
-	type CdbSelectionMember,
-	type CdbSelectionResolveInput,
-	expandCdbSelection,
+	expandSelection,
 	isDefaultRecordTarget,
 	loadEnvFileDefaults,
+	type SelectionExpansion,
+	type SelectionMember,
+	type SelectionResolveInput,
 	type TargetSelection,
 } from "./resolver/index.ts";
 import {
@@ -109,10 +109,10 @@ export interface RetrieveFanoutInternals {
 	/** Selection expansion. Defaults to the real CDB-backed expansion. */
 	expand?: (
 		selection: TargetSelection,
-		input: CdbSelectionResolveInput,
+		input: SelectionResolveInput,
 		env: Record<string, string | undefined>,
 		config?: Record<string, string | undefined>,
-	) => Promise<CdbSelectionExpansion>;
+	) => Promise<SelectionExpansion>;
 	/** Backoff sleeper. Defaults to a real timer; tests pass a no-op. */
 	sleep?: (ms: number) => Promise<void>;
 }
@@ -135,7 +135,7 @@ function summarizeSelection(
 	};
 }
 
-function memberTargetMeta(member: CdbSelectionMember): {
+function memberTargetMeta(member: SelectionMember): {
 	input?: string;
 	identity?: string;
 	recordIndex?: number;
@@ -159,7 +159,7 @@ function memberTargetMeta(member: CdbSelectionMember): {
  */
 function relabelAdhocMember(
 	envelope: RetrieveEnvelope,
-	member: CdbSelectionMember,
+	member: SelectionMember,
 ): RetrieveEnvelope {
 	if (member.kind !== "literal") {
 		return envelope;
@@ -194,7 +194,7 @@ export async function retrieveFanout(
 	);
 	const selectionSummary = summarizeSelection(selection);
 
-	const expand = internals.expand ?? expandCdbSelection;
+	const expand = internals.expand ?? expandSelection;
 	const expansion = await expand(
 		selection,
 		{
@@ -234,7 +234,7 @@ export async function retrieveFanout(
 	const sleep = internals.sleep ?? defaultFanoutSleep;
 
 	const targets = await runFanout<
-		CdbSelectionMember,
+		SelectionMember,
 		ResolvedRetrieveRequest,
 		RetrieveEnvelope
 	>({
@@ -373,7 +373,7 @@ function resolveFanoutConcurrencyProtocol(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined>,
 	globalVia: RouterOsProtocol,
-	expansion: CdbSelectionExpansion,
+	expansion: SelectionExpansion,
 ): RouterOsProtocol {
 	// Deliberately CLI/env only, not `config` — a `centrs.env` default is the
 	// weakest precedence tier and must not be treated as a hard pin the way an

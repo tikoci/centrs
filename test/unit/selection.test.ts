@@ -11,9 +11,9 @@ import {
 import { parseRawCommentFacts } from "../../src/resolver/comment-kv.ts";
 import { parseBbox, parseNear } from "../../src/resolver/geo.ts";
 import {
-	type CdbSelectionMember,
-	expandCdbSelection,
+	expandSelection,
 	isDefaultRecordTarget,
+	type SelectionMember,
 	type TargetSelection,
 } from "../../src/resolver/selection.ts";
 
@@ -77,11 +77,11 @@ async function expand(
 ): Promise<{
 	indices: number[];
 	literals: string[];
-	members: readonly CdbSelectionMember[];
+	members: readonly SelectionMember[];
 	empty: boolean;
 	warningCodes: string[];
 }> {
-	const result = await expandCdbSelection(
+	const result = await expandSelection(
 		selection(overrides),
 		{ cdbFile: cdbPath, allowAdhoc },
 		{},
@@ -127,7 +127,7 @@ describe("isDefaultRecordTarget", () => {
 	});
 });
 
-describe("expandCdbSelection — selectors", () => {
+describe("expandSelection — selectors", () => {
 	test("--group matches members in record-index order", async () => {
 		const out = await expand({ groups: ["prod"] });
 		expect(out.indices).toEqual([0, 1, 4]);
@@ -208,7 +208,7 @@ describe("expandCdbSelection — selectors", () => {
 	});
 });
 
-describe("expandCdbSelection — geo predicates (--near / --bbox)", () => {
+describe("expandSelection — geo predicates (--near / --bbox)", () => {
 	// Only record 0 carries GPS (SF: lat=37.774900 lon=-122.419400); the other
 	// records are geo-less and must never be selected by --near/--bbox.
 	test("--near selects the in-radius GPS record; geo-less records are excluded", async () => {
@@ -246,7 +246,7 @@ describe("expandCdbSelection — geo predicates (--near / --bbox)", () => {
 	});
 });
 
-describe("expandCdbSelection — positionals & union", () => {
+describe("expandSelection — positionals & union", () => {
 	test("a positional matching a record by target resolves to that record", async () => {
 		const out = await expand({ positionals: ["10.0.0.3"] });
 		expect(out.indices).toEqual([2]);
@@ -266,7 +266,7 @@ describe("expandCdbSelection — positionals & union", () => {
 
 	test("a non-matching positional is rejected when MCP-style (no adhoc)", async () => {
 		await expect(
-			expandCdbSelection(
+			expandSelection(
 				selection({ positionals: ["1.2.3.4"] }),
 				{ cdbFile: cdbPath, allowAdhoc: false },
 				{},
@@ -290,7 +290,7 @@ describe("expandCdbSelection — positionals & union", () => {
 	});
 });
 
-describe("expandCdbSelection — empty selection", () => {
+describe("expandSelection — empty selection", () => {
 	test("an unknown group is empty with cdb/empty-group", async () => {
 		const out = await expand({ groups: ["nope"] });
 		expect(out.empty).toBe(true);
@@ -305,10 +305,10 @@ describe("expandCdbSelection — empty selection", () => {
 	});
 });
 
-describe("expandCdbSelection — no CDB present", () => {
+describe("expandSelection — no CDB present", () => {
 	test("literal positionals fan out over an absent (implicit) CDB", async () => {
 		// No cdbFile, and an empty HOME so the default CDB path does not exist.
-		const result = await expandCdbSelection(
+		const result = await expandSelection(
 			selection({ positionals: ["10.9.9.1", "10.9.9.2"] }),
 			{ allowAdhoc: true },
 			{ HOME: "/nonexistent-centrs-home" },
@@ -322,7 +322,7 @@ describe("expandCdbSelection — no CDB present", () => {
 	test("an absent default CDB is NOT created on read (mirrors resolveCdb)", async () => {
 		const home = await mkdtemp(join(tmpdir(), "centrs-selection-home-"));
 		try {
-			const result = await expandCdbSelection(
+			const result = await expandSelection(
 				selection({ groups: ["nope"] }),
 				{ allowAdhoc: true },
 				{ HOME: home },

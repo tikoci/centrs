@@ -9,7 +9,7 @@
  *
  * Boundaries (see `commands/execute/README.md`, `docs/CONSTITUTION.md`), shared
  * with `api-fanout.ts` / `retrieve-fanout.ts`:
- *   - The CDB is loaded ONCE (`expandCdbSelection`); a cdb member is resolved with
+ *   - The CDB is loaded ONCE (`expandSelection`); a cdb member is resolved with
  *     its pre-resolved record, so `resolveCdb`'s `__default__` synthetic fallback
  *     never collides ad-hoc literals.
  *   - A `--default` / `__default__` member is guarded from being dialed as the
@@ -52,12 +52,12 @@ import {
 } from "./execute.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
-	type CdbSelectionExpansion,
-	type CdbSelectionMember,
-	type CdbSelectionResolveInput,
-	expandCdbSelection,
+	expandSelection,
 	isDefaultRecordTarget,
 	loadEnvFileDefaults,
+	type SelectionExpansion,
+	type SelectionMember,
+	type SelectionResolveInput,
 	type TargetSelection,
 } from "./resolver/index.ts";
 import { toYaml } from "./retrieve.ts";
@@ -91,10 +91,10 @@ export type ExecuteFanoutErrorEnvelope =
 export interface ExecuteFanoutInternals {
 	expand?: (
 		selection: TargetSelection,
-		input: CdbSelectionResolveInput,
+		input: SelectionResolveInput,
 		env: Record<string, string | undefined>,
 		config?: Record<string, string | undefined>,
-	) => Promise<CdbSelectionExpansion>;
+	) => Promise<SelectionExpansion>;
 	execute?: (
 		resolved: ResolvedExecuteRequest,
 	) => Promise<ExecuteSuccessEnvelope>;
@@ -124,7 +124,7 @@ function fanoutVia(
 	request: ExecuteRequest,
 	env: Record<string, string | undefined>,
 	globalVia: RouterOsProtocol,
-	expansion: CdbSelectionExpansion,
+	expansion: SelectionExpansion,
 ): RouterOsProtocol {
 	// Deliberately CLI/env only, not `config` — see the identical note in
 	// `retrieve-fanout.ts`'s `resolveFanoutConcurrencyProtocol`.
@@ -139,7 +139,7 @@ function fanoutVia(
 	return anyNative ? "native-api" : globalVia;
 }
 
-function memberTargetMeta(member: CdbSelectionMember): {
+function memberTargetMeta(member: SelectionMember): {
 	input?: string;
 	identity?: string;
 	recordIndex?: number;
@@ -163,7 +163,7 @@ function memberTargetMeta(member: CdbSelectionMember): {
  */
 function relabelAdhocMember(
 	envelope: ExecuteEnvelope,
-	member: CdbSelectionMember,
+	member: SelectionMember,
 ): ExecuteEnvelope {
 	if (member.kind !== "literal") {
 		return envelope;
@@ -195,7 +195,7 @@ export async function executeFanout(
 	const global = resolveExecuteGlobalContext(request, env, config);
 	const selectionSummary = summarizeSelection(selection);
 
-	const expand = internals.expand ?? expandCdbSelection;
+	const expand = internals.expand ?? expandSelection;
 	const expansion = await expand(
 		selection,
 		{
@@ -230,7 +230,7 @@ export async function executeFanout(
 	const sleep = internals.sleep ?? defaultFanoutSleep;
 
 	const targets = await runFanout<
-		CdbSelectionMember,
+		SelectionMember,
 		ResolvedExecuteRequest,
 		ExecuteEnvelope
 	>({
@@ -292,7 +292,7 @@ export async function executeFanout(
 async function assertFanoutWriteConfirmed(
 	request: ExecuteRequest,
 	summary: ExecuteRequestSummary,
-	expansion: CdbSelectionExpansion,
+	expansion: SelectionExpansion,
 ): Promise<void> {
 	if (!summary.write || request.yes) {
 		return;
@@ -323,7 +323,7 @@ interface ExecuteFanoutEnvelopeInput {
 	requestSummary: ExecuteRequestSummary;
 	settings: CommonSettingsMeta;
 	via: RouterOsProtocol | null;
-	warnings: CdbSelectionExpansion["warnings"];
+	warnings: SelectionExpansion["warnings"];
 	targets: readonly ExecuteEnvelope[];
 }
 
