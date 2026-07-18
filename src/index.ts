@@ -119,6 +119,24 @@ export {
 	pathTokens,
 } from "./core/inspect.ts";
 export {
+	assertCapability,
+	type CapabilityRequirement,
+	checkCapability,
+	compareRouterOsVersion,
+	type DeviceVersion,
+	type DeviceVersionSource,
+	type PreflightState,
+	type PreflightVerdict,
+	parseRouterOsVersion,
+	probeDeviceVersion,
+	type RouterOsVersionParts,
+	type RouterOsVersionRange,
+	renderSupportedRanges,
+	routerOsVersionAtLeast,
+	versionFactFromComment,
+	versionInRange,
+} from "./core/preflight.ts";
+export {
 	encodeMndpPacket,
 	MNDP_BROADCAST_ADDRESS,
 	MNDP_IPV6_MULTICAST_ADDRESS,

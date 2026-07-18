@@ -1,4 +1,5 @@
 import { appendFile } from "node:fs/promises";
+import { routerOsVersionAtLeast } from "../../src/core/preflight.ts";
 
 type Channel = "stable" | "long-term" | "testing" | "development";
 
@@ -129,34 +130,11 @@ export const VALIDATION_REJECT_CODES: readonly string[] = [
  * version-gate features that only exist on newer RouterOS — e.g. the `/file/copy`
  * REST endpoint, first seen in 7.23beta2 (so a 7.23beta1 testing build must gate
  * out). A release with no suffix sorts above any beta/rc of the same x.y.
+ * Promoted to `src/core/preflight.ts` (#129); this wrapper stays for the
+ * existing integration-test callers.
  */
 export function routerOsAtLeast(running: string, target: string): boolean {
-	const parts = (raw: string): [number, number, number, number, number] => {
-		const match = raw.match(/(\d+)\.(\d+)(?:\.(\d+))?(?:(beta|rc)(\d+))?/i);
-		if (!match) {
-			return [0, 0, 0, 2, 0];
-		}
-		// Stage rank: release (no beta/rc) sorts above rc, which sorts above beta.
-		const stage = match[4]?.toLowerCase();
-		const stageRank = stage === undefined ? 2 : stage === "rc" ? 1 : 0;
-		return [
-			Number(match[1]),
-			Number(match[2]),
-			Number(match[3] ?? 0),
-			stageRank,
-			Number(match[5] ?? 0),
-		];
-	};
-	const a = parts(running);
-	const b = parts(target);
-	for (let index = 0; index < a.length; index += 1) {
-		const left = a[index] ?? 0;
-		const right = b[index] ?? 0;
-		if (left !== right) {
-			return left > right;
-		}
-	}
-	return true;
+	return routerOsVersionAtLeast(running, target);
 }
 
 function asChannel(value: string | undefined): Channel {
