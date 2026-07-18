@@ -28,6 +28,12 @@ interface WireParityCase {
 	nativeReplies: readonly ScriptedReply[];
 	/** Expected op count on each transport (default 1). */
 	wireOps?: number;
+	/**
+	 * Attributes the (single-op) normalized wire op MUST carry, asserted on both
+	 * transports independently. Guards against a vacuous pass where both adapters
+	 * drop a required word (e.g. `as-string`) and still compare equal.
+	 */
+	requireAttributes?: Record<string, string | true>;
 }
 
 const wireCases: readonly WireParityCase[] = [
@@ -82,6 +88,7 @@ const wireCases: readonly WireParityCase[] = [
 			}),
 		restResponses: [{ ret: "" }],
 		nativeReplies: [[["!done", "=ret="]]],
+		requireAttributes: { "as-string": true },
 	},
 	{
 		name: "apiRequest print (id + query + proplist)",
@@ -136,6 +143,7 @@ const wireCases: readonly WireParityCase[] = [
 			}),
 		restResponses: [{ ret: "1" }],
 		nativeReplies: [[["!done", "=ret=1"]]],
+		requireAttributes: { "as-string": true },
 	},
 	{
 		name: "apiRequest run (structured command)",
@@ -165,6 +173,16 @@ describe("wire parity: rest-api and native-api emit the same logical op", () => 
 				const restOp = logicalFromRest(rest.calls[index] as never);
 				const nativeOp = logicalFromNative(native.sentences[index] as never);
 				expect(restOp).toEqual(nativeOp as LogicalOp);
+				if (parityCase.requireAttributes && expected === 1) {
+					for (const [key, value] of Object.entries(
+						parityCase.requireAttributes,
+					)) {
+						// Assert on BOTH sides, not just via equality: if both adapters
+						// dropped the word they would still compare equal (a vacuous pass).
+						expect(restOp.attributes[key]).toEqual(value);
+						expect(nativeOp.attributes[key]).toEqual(value);
+					}
+				}
 			}
 		});
 	}

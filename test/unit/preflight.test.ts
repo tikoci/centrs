@@ -106,12 +106,35 @@ describe("versionInRange", () => {
 		expect(versionInRange("7.21.5", window)).toBe(true);
 		expect(versionInRange("7.21.3", window)).toBe(false);
 		expect(versionInRange("7.22", window)).toBe(false);
+		// Prereleases sort below their release, so `7.22beta1` is still inside a
+		// `maxExclusive: "7.22"` window. This is intentional: a `.x` backport bound
+		// is expressed at release granularity. A consumer whose capability differs
+		// across the 7.22 prerelease line must set an explicit prerelease bound
+		// (e.g. `maxExclusive: "7.22beta1"`) at its definition site.
 		expect(versionInRange("7.22beta1", window)).toBe(true);
+		expect(
+			versionInRange("7.22beta1", { min: "7.21.4", maxExclusive: "7.22beta1" }),
+		).toBe(false);
 	});
 
 	test("open-ended range has no upper bound", () => {
 		expect(versionInRange("8.1", { min: "7.22.2" })).toBe(true);
 		expect(versionInRange("7.22.1", { min: "7.22.2" })).toBe(false);
+	});
+
+	test("a malformed range throws instead of failing open", () => {
+		// An unparseable min would otherwise sort below every real version and mark
+		// everything supported — a silent, dangerous fail-open. It is a definition
+		// bug in the CapabilityRequirement, so it must be loud.
+		expect(() => versionInRange("7.23", { min: "not-a-version" })).toThrow(
+			/Invalid capability range min/,
+		);
+		expect(() =>
+			versionInRange("7.23", { min: "7.21.4", maxExclusive: "oops" }),
+		).toThrow(/Invalid capability range maxExclusive/);
+		expect(() =>
+			versionInRange("7.23", { min: "7.22", maxExclusive: "7.21" }),
+		).toThrow(/Invalid capability range maxExclusive/);
 	});
 });
 

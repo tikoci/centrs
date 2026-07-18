@@ -174,10 +174,21 @@ export async function captureNative<T>(
 	});
 	try {
 		const result = await op(adapter);
+		if (server.sentences.length !== replies.length) {
+			throw new Error(
+				`native capture consumed ${server.sentences.length} command sentence(s) ` +
+					`but ${replies.length} scripted ${replies.length === 1 ? "reply was" : "replies were"} supplied; ` +
+					"an op with the wrong sentence count leaves replies unused or falls back to a default `!done`. " +
+					`Sentences: ${JSON.stringify(server.sentences)}`,
+			);
+		}
 		return { sentences: server.sentences, result };
 	} finally {
-		await adapter.close();
-		server.close();
+		try {
+			await adapter.close();
+		} finally {
+			server.close();
+		}
 	}
 }
 
@@ -291,6 +302,13 @@ export async function captureRest<T>(
 		});
 		const result = await op(adapter);
 		await adapter.close();
+		if (calls.length !== responses.length) {
+			throw new Error(
+				`REST capture made ${calls.length} call(s) but ${responses.length} ` +
+					`canned response(s) were supplied; an op with the wrong call count ` +
+					`leaves responses unused. Calls: ${JSON.stringify(calls)}`,
+			);
+		}
 		return { calls, result };
 	} finally {
 		globalThis.fetch = originalFetch;

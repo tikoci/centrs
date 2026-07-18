@@ -55,7 +55,13 @@ export interface RouterOsVersionParts {
 export function parseRouterOsVersion(
 	raw: string,
 ): RouterOsVersionParts | undefined {
-	const match = raw.match(/(\d+)\.(\d+)(?:\.(\d+))?(?:(beta|rc)(\d+))?/i);
+	// Bounded digit runs ({1,4}) keep this linear on adversarial input — an
+	// unbounded `\d+` here is a polynomial-ReDoS vector on strings of many
+	// repeated digits (CodeQL js/polynomial-redos). RouterOS version numbers
+	// never approach four digits per field, so the bound is free.
+	const match = raw.match(
+		/(\d{1,4})\.(\d{1,4})(?:\.(\d{1,4}))?(?:(beta|rc)(\d{1,4}))?/i,
+	);
 	if (!match) {
 		return undefined;
 	}
@@ -112,11 +118,32 @@ export interface RouterOsVersionRange {
 	maxExclusive?: string;
 }
 
-/** True when `version` falls inside `range`. */
+/**
+ * True when `version` falls inside `range`. A malformed range is a definition
+ * bug in a {@link CapabilityRequirement}, not a device condition, so it throws
+ * rather than failing open (an unparseable `min` would otherwise sort below
+ * every real version and mark everything supported).
+ */
 export function versionInRange(
 	version: string,
 	range: RouterOsVersionRange,
 ): boolean {
+	if (parseRouterOsVersion(range.min) === undefined) {
+		throw new TypeError(
+			`Invalid capability range min ${JSON.stringify(range.min)}; ` +
+				"set CapabilityRequirement.supported[].min to a RouterOS major.minor[.patch] version.",
+		);
+	}
+	if (
+		range.maxExclusive !== undefined &&
+		(parseRouterOsVersion(range.maxExclusive) === undefined ||
+			compareRouterOsVersion(range.min, range.maxExclusive) >= 0)
+	) {
+		throw new TypeError(
+			`Invalid capability range maxExclusive ${JSON.stringify(range.maxExclusive)}; ` +
+				"set CapabilityRequirement.supported[].maxExclusive to a RouterOS version greater than min.",
+		);
+	}
 	if (!routerOsVersionAtLeast(version, range.min)) {
 		return false;
 	}
