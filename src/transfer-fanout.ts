@@ -8,7 +8,7 @@
  *
  * Boundaries (see `commands/transfer/README.md`, `docs/CONSTITUTION.md`), shared
  * with `api`/`retrieve`/`execute` fan-out:
- *   - The CDB is loaded ONCE (`expandCdbSelection`); a cdb member is resolved with
+ *   - The CDB is loaded ONCE (`expandSelection`); a cdb member is resolved with
  *     its pre-resolved record, so `resolveCdb`'s `__default__` synthetic fallback
  *     never collides ad-hoc literals.
  *   - A `--default` / `__default__` member fails that one target deterministically
@@ -42,12 +42,12 @@ import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { promptForWriteConfirmation } from "./execute.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
-	type CdbSelectionExpansion,
-	type CdbSelectionMember,
-	type CdbSelectionResolveInput,
-	expandCdbSelection,
+	expandSelection,
 	isDefaultRecordTarget,
 	loadEnvFileDefaults,
+	type SelectionExpansion,
+	type SelectionMember,
+	type SelectionResolveInput,
 	type TargetSelection,
 } from "./resolver/index.ts";
 import { toYaml } from "./retrieve.ts";
@@ -101,13 +101,13 @@ export type TransferFanoutErrorEnvelope =
 export interface TransferFanoutInternals {
 	expand?: (
 		selection: TargetSelection,
-		input: CdbSelectionResolveInput,
+		input: SelectionResolveInput,
 		env: Record<string, string | undefined>,
 		config?: Record<string, string | undefined>,
-	) => Promise<CdbSelectionExpansion>;
+	) => Promise<SelectionExpansion>;
 	execute?: (
 		request: TransferRequest,
-		member: CdbSelectionMember,
+		member: SelectionMember,
 	) => Promise<TransferSuccessEnvelope>;
 	sleep?: (ms: number) => Promise<void>;
 }
@@ -130,11 +130,11 @@ function summarizeSelection(
 	};
 }
 
-function memberLabel(member: CdbSelectionMember): string {
+function memberLabel(member: SelectionMember): string {
 	return member.kind === "cdb" ? member.resolution.identity : member.input;
 }
 
-function memberTargetMeta(member: CdbSelectionMember): {
+function memberTargetMeta(member: SelectionMember): {
 	input?: string;
 	identity?: string;
 	recordIndex?: number;
@@ -165,11 +165,11 @@ function sanitizeFilename(label: string): string {
 function planDownloadPaths(
 	outDir: string,
 	remote: string,
-	members: readonly CdbSelectionMember[],
-): Map<CdbSelectionMember, string> {
+	members: readonly SelectionMember[],
+): Map<SelectionMember, string> {
 	const ext = extname(basename(remote));
 	const used = new Set<string>();
-	const paths = new Map<CdbSelectionMember, string>();
+	const paths = new Map<SelectionMember, string>();
 	members.forEach((member, index) => {
 		const label = sanitizeFilename(memberLabel(member));
 		let name = `${label}${ext}`;
@@ -197,7 +197,7 @@ function planDownloadPaths(
  */
 function relabelAdhocMember(
 	envelope: TransferEnvelope,
-	member: CdbSelectionMember,
+	member: SelectionMember,
 ): TransferEnvelope {
 	if (member.kind !== "literal") {
 		return envelope;
@@ -217,7 +217,7 @@ function relabelAdhocMember(
  */
 function applyMemberMeta(
 	envelope: TransferEnvelope,
-	member: CdbSelectionMember,
+	member: SelectionMember,
 ): TransferEnvelope {
 	if (member.kind === "literal") {
 		return relabelAdhocMember(envelope, member);
@@ -268,7 +268,7 @@ export async function transferFanout(
 		});
 	}
 
-	const expand = internals.expand ?? expandCdbSelection;
+	const expand = internals.expand ?? expandSelection;
 	const expansion = await expand(
 		selection,
 		{
@@ -310,7 +310,7 @@ export async function transferFanout(
 
 	const execute =
 		internals.execute ??
-		((req: TransferRequest, member: CdbSelectionMember) =>
+		((req: TransferRequest, member: SelectionMember) =>
 			transfer(req, env, {
 				// cdb members carry their pre-resolved record (CDB loaded once);
 				// literals fall through to single-target resolution.
@@ -319,8 +319,8 @@ export async function transferFanout(
 	const sleep = internals.sleep ?? defaultFanoutSleep;
 
 	const targets = await runFanout<
-		CdbSelectionMember,
-		{ request: TransferRequest; member: CdbSelectionMember },
+		SelectionMember,
+		{ request: TransferRequest; member: SelectionMember },
 		TransferEnvelope
 	>({
 		members: expansion.targets,
@@ -377,7 +377,7 @@ export async function transferFanout(
 
 async function assertFanoutWriteConfirmed(
 	request: TransferRequest,
-	expansion: CdbSelectionExpansion,
+	expansion: SelectionExpansion,
 ): Promise<void> {
 	if (request.yes) {
 		return;
@@ -407,7 +407,7 @@ interface TransferFanoutEnvelopeInput {
 	summary: FanoutSummary;
 	requestSummary: TransferFanoutRequestSummary;
 	via: RouterOsProtocol | string | null;
-	warnings: CdbSelectionExpansion["warnings"];
+	warnings: SelectionExpansion["warnings"];
 	targets: readonly TransferEnvelope[];
 }
 

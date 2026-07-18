@@ -260,6 +260,40 @@ falls in `--near`'s radius **or** `--bbox`.
 by a distinct `--new-group` flag on `devices add`/`set`, so record selection and
 field-setting never collide on one flag.
 
+#### Resolution providers
+
+Target resolution has **two independent axes**, and centrs keeps them separate so
+the resolver is generalized **once**, not per source (the umbrella plan is #174):
+
+- **Axis A — selection** ("which devices"): the target-selection grammar above.
+- **Axis B — connection-fact origin** ("where host/port/auth for a member come
+  from"): what a resolved member yields. Today: a **CDB record** or an ad-hoc
+  **literal** (+ the `__default__` ladder). Tomorrow: a live descriptor or an
+  inventory entry.
+
+Sources fall into two kinds, and the distinction is normative:
+
+- **Selector-source** — participates in the Axis-A grammar. **CDB** (now), and
+  **TikTOML** next (#137). Multiple selector-sources union into one selection;
+  the split-brain precedence between them is #137's problem, not resolved here.
+- **Named-live-provider** — addressed *only* by an explicit named flag, **never**
+  matched by a selector; fanned out by repeating the flag. Because it owns an
+  **ephemeral** endpoint it also **bypasses** the settings/`__default__` ladder and
+  **conflicts** with `--host`/`--port`/`--username`/`--password`/`--ssh-key`. These
+  are properties of *live/ephemeral* providers, not of any one provider. **quickchr**
+  (`--quickchr <name>`, #134) is the first.
+
+Connection facts resolve into one neutral **per-service endpoint map**
+(`src/resolver/service-endpoint.ts`: `via → ServiceEndpoint`, each carrying
+availability, host, port, TLS, auth, and provenance). A **selector-source** is the
+*degenerate single-endpoint* case — one record materialized lazily once `--via` is
+known. A **named-live-provider** populates the map directly, since it genuinely
+exposes different facts per transport. Providers must **not** be flattened to a
+single host/port: that shape is the contract quickchr's descriptor and TikTOML's
+`services` block both map onto, and flattening it forces exactly the re-plumb #174
+exists to prevent. A `--via` whose service key a provider does not supply is a
+typed unsupported-provider error, never a silent fallback.
+
 ### MCP surface: the CDB is the allowlist
 
 The MCP frontend (`commands/mcp/`) is an adapter over this core, not a new set of

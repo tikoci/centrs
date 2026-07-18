@@ -47,6 +47,9 @@ Codes are slash-namespaced `family/slug`. The families and where they originate:
 - `input/*` — malformed caller input (paths, MACs, arguments).
 - `internal/*` — centrs bugs / unreachable states.
 - `mndp/*` — MNDP wire codec and listener (`src/data/mndp.ts`).
+- `quickchr/*` — the quickchr named-live-provider (`--quickchr <name>`): optional
+  package availability, descriptor version support, and machine lookup/liveness
+  (`src/resolver/quickchr-provider.ts`).
 - `routeros/*` — RouterOS-surfaced faults mapped by the grounded vocabulary in
   `src/core/routeros-errors.ts` (REST `detail` and native-api `!trap`, identical
   on CHR 7.23).

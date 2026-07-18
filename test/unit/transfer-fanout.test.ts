@@ -5,8 +5,8 @@ import { parseTransferCliArgs } from "../../src/cli/transfer.ts";
 import { fanoutExitCode } from "../../src/core/fanout.ts";
 import { CentrsError } from "../../src/errors.ts";
 import type {
-	CdbSelectionExpansion,
-	CdbSelectionMember,
+	SelectionExpansion,
+	SelectionMember,
 	TargetSelection,
 } from "../../src/resolver/selection.ts";
 import type {
@@ -22,7 +22,7 @@ function cdbMember(
 	target: string,
 	recordIndex: number,
 	identity = target,
-): CdbSelectionMember {
+): SelectionMember {
 	return {
 		kind: "cdb",
 		recordIndex,
@@ -77,9 +77,7 @@ function fakeSuccess(request: TransferRequest): TransferSuccessEnvelope {
 	};
 }
 
-function expansionOf(
-	members: readonly CdbSelectionMember[],
-): CdbSelectionExpansion {
+function expansionOf(members: readonly SelectionMember[]): SelectionExpansion {
 	return { targets: members, warnings: [], empty: false };
 }
 

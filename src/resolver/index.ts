@@ -88,14 +88,30 @@ export {
 	unresolvedMacError,
 } from "./mac.ts";
 export {
-	type CdbSelectionExpansion,
-	type CdbSelectionMember,
-	type CdbSelectionResolveInput,
-	expandCdbSelection,
+	type QuickchrResolution,
+	resolveQuickchrTarget,
+	SUPPORTED_DESCRIPTOR_VERSION,
+} from "./quickchr-provider.ts";
+export {
+	expandSelection,
 	isDefaultRecordTarget,
+	type SelectionExpansion,
+	type SelectionMember,
+	type SelectionResolveInput,
 	type SelectionWhereClause,
 	type TargetSelection,
 } from "./selection.ts";
+export {
+	type AnyServiceEndpoint,
+	isEndpointAvailable,
+	type ServiceEndpoint,
+	type ServiceEndpointAuth,
+	type ServiceEndpointMap,
+	type ServiceEndpointSource,
+	type SshEndpointAuth,
+	type SshServiceEndpoint,
+	type UnavailableEndpoint,
+} from "./service-endpoint.ts";
 export {
 	type CommentKvLayer,
 	parseBoolean,

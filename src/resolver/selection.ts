@@ -54,7 +54,7 @@ export interface SelectionWhereClause {
 	value: string;
 }
 
-/** The parsed target selection a command hands to {@link expandCdbSelection}. */
+/** The parsed target selection a command hands to {@link expandSelection}. */
 export interface TargetSelection {
 	/** Literal/lookup positionals (NOT operation args — the caller splits those). */
 	positionals: readonly string[];
@@ -72,21 +72,30 @@ export interface TargetSelection {
 	bbox?: BboxPredicate;
 }
 
-export interface CdbSelectionResolveInput {
+export interface SelectionResolveInput {
 	cdbFile?: string;
 	cdbPassword?: string;
 	/** CLI: true (literal positionals allowed). MCP: false (CDB is the allowlist). */
 	allowAdhoc: boolean;
 }
 
-/** One resolved selection member: a CDB record or an ad-hoc literal target. */
-export type CdbSelectionMember =
+/**
+ * One resolved selection member: a CDB record or an ad-hoc literal target.
+ *
+ * This is the connection-fact origin ("Axis B") the fan-out callers consume. The
+ * two arms today are the selector-source (CDB) and literal cases, whose single
+ * endpoint is materialized later by `./target.ts`. A named-live-provider arm
+ * (`kind: "quickchr"`, #134) will join this union carrying a populated
+ * {@link ./service-endpoint.ts | ServiceEndpointMap} instead of a lazily-resolved
+ * single endpoint — see `docs/CONSTITUTION.md` → Resolution providers.
+ */
+export type SelectionMember =
 	| { kind: "cdb"; resolution: CdbResolution; recordIndex: number }
 	| { kind: "literal"; input: string };
 
-export interface CdbSelectionExpansion {
+export interface SelectionExpansion {
 	/** Members ordered by record index; literals appended in positional order. */
-	targets: readonly CdbSelectionMember[];
+	targets: readonly SelectionMember[];
 	warnings: readonly ResolverWarning[];
 	/** True when nothing matched (an empty/unknown selection is not an error). */
 	empty: boolean;
@@ -113,12 +122,12 @@ const ENV_CDB_PASSWORD = "CENTRS_CDB_PASSWORD";
  * literal host when no CDB is present). An explicit `--cdb-file` that is missing
  * still throws.
  */
-export async function expandCdbSelection(
+export async function expandSelection(
 	selection: TargetSelection,
-	input: CdbSelectionResolveInput,
+	input: SelectionResolveInput,
 	env: Record<string, string | undefined>,
 	config: Record<string, string | undefined> = {},
-): Promise<CdbSelectionExpansion> {
+): Promise<SelectionExpansion> {
 	const settings = resolveDevicesSettings({
 		cdbFile: input.cdbFile,
 		cdbPassword: input.cdbPassword,
@@ -224,7 +233,7 @@ export async function expandCdbSelection(
 		}
 	}
 
-	const literals: CdbSelectionMember[] = [];
+	const literals: SelectionMember[] = [];
 	const seenLiteral = new Set<string>();
 	for (const positional of selection.positionals) {
 		try {
@@ -255,7 +264,7 @@ export async function expandCdbSelection(
 		}
 	}
 
-	const cdbMembers: CdbSelectionMember[] = [...indices]
+	const cdbMembers: SelectionMember[] = [...indices]
 		.sort((a, b) => a - b)
 		.map((index) => ({
 			kind: "cdb",
