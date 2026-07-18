@@ -234,6 +234,26 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "A received MNDP datagram could not be decoded.",
 	},
 
+	// quickchr/*
+	{
+		code: "quickchr/package-unavailable",
+		summary: "The optional `@tikoci/quickchr` package is not installed.",
+	},
+	{
+		code: "quickchr/unsupported",
+		summary:
+			"The installed `@tikoci/quickchr` is too old or speaks a newer descriptor version than centrs understands.",
+	},
+	{
+		code: "quickchr/machine-not-found",
+		summary: "No quickchr machine is registered under that name.",
+	},
+	{
+		code: "quickchr/machine-stopped",
+		summary:
+			"The quickchr machine is not running, so it has no live connection facts.",
+	},
+
 	// routeros/*
 	{
 		code: "routeros/api-fatal",

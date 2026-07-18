@@ -22,6 +22,7 @@ const KNOWN_FAMILIES = new Set([
 	"input",
 	"internal",
 	"mndp",
+	"quickchr",
 	"routeros",
 	"settings",
 	"target",

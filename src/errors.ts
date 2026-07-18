@@ -13,6 +13,7 @@ export type CentrsErrorCode =
 	| `input/${string}`
 	| `internal/${string}`
 	| `mndp/${string}`
+	| `quickchr/${string}`
 	| `routeros/${string}`
 	| `settings/${string}`
 	| `target/${string}`

@@ -51,7 +51,7 @@ describe("ServiceEndpointMap", () => {
 				tls: true,
 				url: "https://127.0.0.1:44300",
 				source: { provider: "quickchr", portMappingName: "https" },
-				auth: { username: "admin", password: "s3cret" },
+				auth: { username: "admin", password: "secret" },
 			},
 			"native-api": {
 				available: true,
@@ -60,7 +60,7 @@ describe("ServiceEndpointMap", () => {
 				transport: "tcp",
 				tls: true,
 				source: { provider: "quickchr", portMappingName: "api-ssl" },
-				auth: { username: "admin", password: "s3cret" },
+				auth: { username: "admin", password: "secret" },
 			},
 			ssh: {
 				available: true,

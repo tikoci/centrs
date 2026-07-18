@@ -88,6 +88,11 @@ export {
 	unresolvedMacError,
 } from "./mac.ts";
 export {
+	type QuickchrResolution,
+	resolveQuickchrTarget,
+	SUPPORTED_DESCRIPTOR_VERSION,
+} from "./quickchr-provider.ts";
+export {
 	expandSelection,
 	isDefaultRecordTarget,
 	type SelectionExpansion,
