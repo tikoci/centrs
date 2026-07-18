@@ -84,13 +84,11 @@ describe("ServiceEndpointMap", () => {
 		expect(Object.keys(map).sort()).toEqual(["native-api", "rest-api", "ssh"]);
 
 		const ssh = map.ssh;
-		if (
-			ssh &&
-			isEndpointAvailable(ssh) &&
-			ssh.auth &&
-			"batchModes" in ssh.auth
-		) {
-			// batchModes is the gate centrs enforces for --via ssh / transfer --via sftp.
+		if (ssh && isEndpointAvailable(ssh)) {
+			// The per-key map keeps `map.ssh` an SshServiceEndpoint, so the guard
+			// narrows to the available arm where `auth: SshEndpointAuth` is required —
+			// no `"batchModes" in` probe needed. batchModes is the gate centrs
+			// enforces for --via ssh / transfer --via sftp.
 			expect(ssh.auth.batchModes).toContain("private-key");
 		}
 	});

@@ -39,7 +39,9 @@ const QUICKCHR_MODULE = "@tikoci/quickchr";
  * out of `tsc`; the shapes mirror `@tikoci/quickchr` `docs/centrs-interface.md`.
  */
 interface QuickChrInstance {
-	descriptor(): Promise<QuickchrDescriptor>;
+	// The descriptor crosses an optional-dependency boundary, so it is `unknown`
+	// until validated by `validateDescriptor()` — never trust its runtime shape.
+	descriptor(): Promise<unknown>;
 }
 
 interface QuickChrModule {
@@ -102,6 +104,89 @@ function packageUnavailable(cause: unknown): CentrsError {
 	});
 }
 
+/** A `quickchr/unsupported` for an old/malformed descriptor the provider can't trust. */
+function malformedDescriptor(
+	name: string,
+	detail: string,
+	extra?: { context?: Record<string, unknown>; cause?: unknown },
+): CentrsError {
+	return new CentrsError({
+		code: "quickchr/unsupported",
+		summary: `quickchr described machine "${name}" with a descriptor centrs cannot use: ${detail}.`,
+		remediation: `Upgrade to a \`${QUICKCHR_MODULE}\` release that emits descriptor v${SUPPORTED_DESCRIPTOR_VERSION} (0.4.4+); check the machine with \`quickchr inspect ${name}\`.`,
+		context: { module: QUICKCHR_MODULE, machine: name, ...extra?.context },
+		cause: extra?.cause,
+	});
+}
+
+/**
+ * Distinguish a *missing* optional package from one that is installed but failed
+ * to evaluate. Only the former is `quickchr/package-unavailable`; a load-time
+ * throw from an installed package is a real fault we must not mislabel as
+ * "not installed" (Bun/Node signal not-found via `code` or a "cannot find" message).
+ */
+function isModuleNotFound(cause: unknown): boolean {
+	const code = quickchrErrorCode(cause);
+	if (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") {
+		return true;
+	}
+	const message = cause instanceof Error ? cause.message : String(cause);
+	return /cannot find (module|package)/i.test(message);
+}
+
+/**
+ * Validate the untrusted descriptor an optional-dependency call returned into the
+ * shape centrs reads. Every malformed/old/newer case becomes an actionable
+ * `quickchr/unsupported` — never a raw `TypeError` from a later field access, and
+ * never a silent empty `services` map (that would hide a provider contract
+ * violation and defer the failure to a `--via` lookup).
+ */
+function validateDescriptor(raw: unknown, name: string): QuickchrDescriptor {
+	if (typeof raw !== "object" || raw === null) {
+		throw malformedDescriptor(
+			name,
+			"quickchr returned a non-object descriptor",
+		);
+	}
+	const d = raw as Partial<QuickchrDescriptor>;
+	if (typeof d.descriptorVersion !== "number") {
+		throw malformedDescriptor(
+			name,
+			"it has no numeric `descriptorVersion` (pre-v1 or malformed)",
+		);
+	}
+	if (d.descriptorVersion > SUPPORTED_DESCRIPTOR_VERSION) {
+		throw new CentrsError({
+			code: "quickchr/unsupported",
+			summary: `quickchr emitted descriptor v${d.descriptorVersion}, but this centrs understands only v${SUPPORTED_DESCRIPTOR_VERSION}.`,
+			remediation:
+				"Upgrade centrs to a release that supports the newer quickchr descriptor version.",
+			context: {
+				machine: name,
+				descriptorVersion: d.descriptorVersion,
+				supported: SUPPORTED_DESCRIPTOR_VERSION,
+			},
+		});
+	}
+	if (typeof d.services !== "object" || d.services === null) {
+		throw malformedDescriptor(
+			name,
+			"it has no `services` map (the quickchr contract requires one)",
+		);
+	}
+	if (
+		typeof d.name !== "string" ||
+		typeof d.version !== "string" ||
+		typeof d.arch !== "string"
+	) {
+		throw malformedDescriptor(
+			name,
+			"it is missing required `name`/`version`/`arch` fields",
+		);
+	}
+	return d as QuickchrDescriptor;
+}
+
 /**
  * Map quickchr's `services` map onto the neutral {@link ServiceEndpointMap}. Only
  * keys that are known centrs `--via` protocols are carried; unknown future service
@@ -117,7 +202,12 @@ function mapServices(
 	const known = new Set<string>(plannedProtocols);
 	for (const [key, endpoint] of Object.entries(services)) {
 		if (known.has(key)) {
-			map[key as RouterOsProtocol] = endpoint;
+			// The per-key map narrows `ssh` to SshServiceEndpoint; the provider-supplied
+			// endpoint is structurally correct per the descriptor contract, so assign
+			// through a widened view rather than re-validating each field here.
+			(map as Record<RouterOsProtocol, AnyServiceEndpoint>)[
+				key as RouterOsProtocol
+			] = endpoint;
 		}
 	}
 	return map;
@@ -137,12 +227,22 @@ export async function resolveQuickchrTarget(
 	try {
 		mod = await load();
 	} catch (cause) {
-		// A CentrsError from the loader (or downstream) passes through unchanged; any
-		// other load failure means we could not obtain the module → package-unavailable.
+		// A CentrsError from the loader (or downstream) passes through unchanged.
 		if (cause instanceof CentrsError) {
 			throw cause;
 		}
-		throw packageUnavailable(cause);
+		// Only a genuine module-not-found is "package not installed"; an installed
+		// package that throws while loading is a real fault, not a missing optional dep.
+		if (isModuleNotFound(cause)) {
+			throw packageUnavailable(cause);
+		}
+		throw new CentrsError({
+			code: "quickchr/unsupported",
+			summary: `The \`${QUICKCHR_MODULE}\` package is installed but failed to load.`,
+			remediation: `Reinstall it (\`bun add ${QUICKCHR_MODULE}\`) or inspect the underlying load error; target the device with \`--host\`/a CDB record to bypass \`--quickchr\`.`,
+			context: { module: QUICKCHR_MODULE },
+			cause,
+		});
 	}
 	if (typeof mod?.QuickCHR?.get !== "function") {
 		throw new CentrsError({
@@ -164,9 +264,9 @@ export async function resolveQuickchrTarget(
 		});
 	}
 
-	let descriptor: QuickchrDescriptor;
+	let raw: unknown;
 	try {
-		descriptor = await instance.descriptor();
+		raw = await instance.descriptor();
 	} catch (cause) {
 		const code = quickchrErrorCode(cause);
 		if (code === "MACHINE_STOPPED") {
@@ -198,18 +298,7 @@ export async function resolveQuickchrTarget(
 		});
 	}
 
-	if (descriptor.descriptorVersion > SUPPORTED_DESCRIPTOR_VERSION) {
-		throw new CentrsError({
-			code: "quickchr/unsupported",
-			summary: `quickchr emitted descriptor v${descriptor.descriptorVersion}, but this centrs understands only v${SUPPORTED_DESCRIPTOR_VERSION}.`,
-			remediation:
-				"Upgrade centrs to a release that supports the newer quickchr descriptor version.",
-			context: {
-				descriptorVersion: descriptor.descriptorVersion,
-				supported: SUPPORTED_DESCRIPTOR_VERSION,
-			},
-		});
-	}
+	const descriptor = validateDescriptor(raw, name);
 
 	return {
 		name: descriptor.name,

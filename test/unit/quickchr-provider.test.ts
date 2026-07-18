@@ -160,4 +160,55 @@ describe("resolveQuickchrTarget", () => {
 			"quickchr/unsupported",
 		);
 	});
+
+	test("pre-v1 descriptor without descriptorVersion → quickchr/unsupported (not a raw TypeError)", async () => {
+		// An old-shaped descriptor with no descriptorVersion and no `services` must
+		// be rejected with a typed error, never crash on `Object.entries(undefined)`.
+		await expectCode(
+			resolveQuickchrTarget(
+				"lab",
+				moduleWith(() => ({
+					descriptor: async () => ({
+						name: "lab",
+						version: "7.23.1",
+						arch: "x86_64",
+					}),
+				})),
+			),
+			"quickchr/unsupported",
+		);
+	});
+
+	test("v1 descriptor missing services map → quickchr/unsupported (no silent empty map)", async () => {
+		await expectCode(
+			resolveQuickchrTarget(
+				"lab",
+				moduleWith((name) => {
+					const { services: _drop, ...rest } = descriptorFor(name);
+					return { descriptor: async () => rest };
+				}),
+			),
+			"quickchr/unsupported",
+		);
+	});
+
+	test("non-object descriptor → quickchr/unsupported", async () => {
+		await expectCode(
+			resolveQuickchrTarget(
+				"lab",
+				moduleWith(() => ({ descriptor: async () => null })),
+			),
+			"quickchr/unsupported",
+		);
+	});
+
+	test("installed package that throws on load → quickchr/unsupported (not package-unavailable)", async () => {
+		// A module-evaluation failure is a real fault, not a missing optional dep.
+		await expectCode(
+			resolveQuickchrTarget("lab", async () => {
+				throw new Error("boom during module evaluation");
+			}),
+			"quickchr/unsupported",
+		);
+	});
 });

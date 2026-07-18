@@ -117,6 +117,16 @@ export type SshServiceEndpoint =
 export type AnyServiceEndpoint = ServiceEndpoint | SshServiceEndpoint;
 
 /**
+ * The endpoint type for a given `--via` id. `ssh` carries the SSH-specific
+ * {@link SshServiceEndpoint} (its available form guarantees `auth: SshEndpointAuth`
+ * with `batchModes`, the gate Phase 4 enforces for `--via ssh`/`transfer --via
+ * sftp`); every other transport uses the shared credential {@link ServiceEndpoint}.
+ */
+export type ServiceEndpointFor<K extends RouterOsProtocol> = K extends "ssh"
+	? SshServiceEndpoint
+	: ServiceEndpoint;
+
+/**
  * A member's per-service connection facts, keyed by centrs `--via` id.
  *
  * Partial by design: a provider may cover only a subset of the eight protocols
@@ -124,16 +134,22 @@ export type AnyServiceEndpoint = ServiceEndpoint | SshServiceEndpoint;
  * absent is a typed unsupported-provider error at consume time, not a silent
  * fallback. CDB never populates this map (its single endpoint is materialized by
  * `./target.ts`); only named-live-providers do.
+ *
+ * Keyed by service so per-`--via` precision survives: `map.ssh` is a
+ * {@link SshServiceEndpoint}, not a widened `AnyServiceEndpoint`, so a consumer
+ * reading `map.ssh` keeps the SSH `auth`/`batchModes` guarantee without a cast.
  */
-export type ServiceEndpointMap = Partial<
-	Record<RouterOsProtocol, AnyServiceEndpoint>
->;
+export type ServiceEndpointMap = {
+	[K in RouterOsProtocol]?: ServiceEndpointFor<K>;
+};
 
-/** Narrow an endpoint to its available form (the only form safe to dial). */
-export function isEndpointAvailable(
-	endpoint: AnyServiceEndpoint,
-): endpoint is AvailableEndpointBase & {
-	auth?: ServiceEndpointAuth | SshEndpointAuth;
-} {
+/**
+ * Narrow an endpoint to its available form (the only form safe to dial). Generic
+ * so the caller's precise union is preserved: an {@link SshServiceEndpoint} narrows
+ * to its available arm (`auth: SshEndpointAuth` required), not the widened base.
+ */
+export function isEndpointAvailable<T extends AnyServiceEndpoint>(
+	endpoint: T,
+): endpoint is Extract<T, { available: true }> {
 	return endpoint.available;
 }
