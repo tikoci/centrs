@@ -26,11 +26,14 @@ import {
 	type RouterOsProtocol,
 } from "./protocols/index.ts";
 import {
+	assertNoQuickchrOverrideConflict,
 	type CdbResolution,
 	isIpTransport,
 	loadEnvFileDefaults,
 	parseDuration,
 	parseResolvePolicy,
+	type QuickchrResolution,
+	quickchrConnection,
 	type ResolvedAuth,
 	type ResolvedSetting,
 	type ResolvedTarget,
@@ -39,6 +42,7 @@ import {
 	resolveCdb,
 	resolveMacTarget,
 	resolveOptionalIntegerSetting,
+	resolveQuickchrTarget,
 	resolveStringSetting,
 	resolveTarget,
 	toCoreSource,
@@ -49,6 +53,12 @@ export type RetrieveOutputFormat = (typeof retrieveOutputFormats)[number];
 
 export interface RetrieveRequest {
 	targetInput?: string;
+	/**
+	 * quickchr machine name (`--quickchr <name>`): resolve host/port/auth from
+	 * the live VM descriptor instead of CDB/env (`docs/CONSTITUTION.md` →
+	 * Resolution providers). Conflicts with host/port/username/password.
+	 */
+	quickchr?: string;
 	path: string;
 	via?: string;
 	host?: string;
@@ -123,6 +133,14 @@ export interface ResolvedRetrieveRequest {
 	timeoutMs: ResolvedSetting<number>;
 	format: ResolvedSetting<RetrieveOutputFormat>;
 	validate: ResolvedSetting<boolean>;
+	/**
+	 * Relax TLS peer verification. retrieve has no `--insecure` flag; this is set
+	 * only by the quickchr provider (trust-by-provenance for the VM's self-signed
+	 * TLS forward — see `src/resolver/quickchr-provider.ts`), so when present its
+	 * source is always `provider` and it is surfaced as `meta.settings.insecure`
+	 * for auditability.
+	 */
+	insecure?: ResolvedSetting<boolean>;
 	maxResultsBytes?: ResolvedSetting<number>;
 	attributes: readonly string[];
 	allAttributes: boolean;
@@ -161,6 +179,7 @@ export async function runResolvedRetrieve(
 		username: resolved.auth.username,
 		password: resolved.auth.password,
 		timeoutMs: resolved.timeoutMs.value,
+		insecure: resolved.insecure?.value,
 	});
 
 	try {
@@ -462,6 +481,9 @@ function metaFromResolved(
 			timeoutMs: toCoreSource(resolved.timeoutMs.source),
 			format: toCoreSource(resolved.format.source),
 			validate: toCoreSource(resolved.validate.source),
+			insecure: resolved.insecure
+				? toCoreSource(resolved.insecure.source)
+				: undefined,
 			maxResultsBytes: resolved.maxResultsBytes
 				? toCoreSource(resolved.maxResultsBytes.source)
 				: undefined,
@@ -620,6 +642,7 @@ export function buildResolvedRetrieve(
 	attributeSelections: readonly string[],
 	macResolution?: { mac: string; ip: string },
 	config: Record<string, string | undefined> = {},
+	quickchrResolution?: QuickchrResolution,
 ): ResolvedRetrieveRequest {
 	const via = resolveProtocol(request, env, cdbResolution, config);
 	const format = resolveFormat(request, env, config);
@@ -647,22 +670,33 @@ export function buildResolvedRetrieve(
 		undefined,
 		config,
 	);
-	const target = resolveTarget(
-		{
-			targetInput: request.targetInput,
-			host: request.host,
-			port: request.port,
-			macResolution,
-		},
-		env,
-		via.value,
-		cdbResolution,
-	);
-	const auth = resolveAuth(
-		{ username: request.username, password: request.password },
-		env,
-		cdbResolution,
-	);
+	// A quickchr member substitutes the live descriptor's per-`--via` endpoint
+	// for the CDB/env target+auth path (`docs/CONSTITUTION.md` → Resolution
+	// providers); everything else (via/format/validate/timeout) resolved above
+	// stays on the normal ladder.
+	const connection = quickchrResolution
+		? quickchrConnection(quickchrResolution, via.value)
+		: null;
+	const target = connection
+		? connection.target
+		: resolveTarget(
+				{
+					targetInput: request.targetInput,
+					host: request.host,
+					port: request.port,
+					macResolution,
+				},
+				env,
+				via.value,
+				cdbResolution,
+			);
+	const auth = connection
+		? connection.auth
+		: resolveAuth(
+				{ username: request.username, password: request.password },
+				env,
+				cdbResolution,
+			);
 
 	return {
 		path: request.path,
@@ -672,12 +706,24 @@ export function buildResolvedRetrieve(
 		timeoutMs,
 		format,
 		validate,
+		insecure:
+			connection?.insecure === true && quickchrResolution
+				? {
+						value: true,
+						source: {
+							kind: "provider" as const,
+							key: `quickchr:${quickchrResolution.name}`,
+						},
+					}
+				: undefined,
 		maxResultsBytes,
 		attributes: attributeSelections,
 		allAttributes: request.allAttributes ?? false,
 		listAttributes: request.listAttributes ?? false,
 		verbose: request.verbose ?? false,
-		warnings: cdbResolution?.warnings ?? [],
+		warnings: connection
+			? [...connection.warnings]
+			: (cdbResolution?.warnings ?? []),
 	};
 }
 
@@ -757,6 +803,22 @@ export async function resolveRetrieveRequest(
 ): Promise<ResolvedRetrieveRequest> {
 	const attributeSelections = validateRetrieveRequestShape(request);
 	const config = await loadEnvFileDefaults(env);
+
+	// A quickchr target bypasses CDB and MAC resolution entirely — the live
+	// descriptor is the only connection-fact source for those fields.
+	if (request.quickchr !== undefined) {
+		assertNoQuickchrOverrideConflict(request, request.quickchr);
+		const quickchrResolution = await resolveQuickchrTarget(request.quickchr);
+		return buildResolvedRetrieve(
+			request,
+			env,
+			undefined,
+			attributeSelections,
+			undefined,
+			config,
+			quickchrResolution,
+		);
+	}
 
 	const cdbResolution = await resolveCdb(
 		{

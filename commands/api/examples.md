@@ -426,3 +426,18 @@ The reserved record is a credential fallback, not a connectable router, so its o
 target fails deterministically: inner `ok:false` with
 `error.code=target/unresolved` (never a `transport/dns` attempt on `"__default__"`).
 `data.summary = { total: 1, ok: 0, failed: 1 }`. Exit code 1 (every target failed).
+
+## quickchr targets (#134)
+
+`$NAME` is the machine name of a running quickchr-managed CHR. Host/port/auth
+come from the live descriptor (see `commands/retrieve/examples.md` Q-series).
+Covered by `test/integration/quickchr-target.test.ts`.
+
+### Q1. GET against a quickchr target
+
+```bash
+centrs api --quickchr $NAME system/resource --json
+```
+
+Envelope: `ok: true`, `data` is the resource object,
+`meta.target.source.kind=provider`.

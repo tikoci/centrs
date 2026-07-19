@@ -21,6 +21,7 @@ import {
 	formatCentrsErrorText,
 } from "../errors.ts";
 import { describeCentrs } from "../index.ts";
+import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
@@ -36,6 +37,7 @@ import {
 	withTips,
 } from "./missing-target.ts";
 import {
+	assertQuickchrExclusive,
 	buildTargetSelection,
 	consumeSelectionFlag,
 	emptySelectionFlags,
@@ -366,6 +368,20 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 			console.log(renderCommandHelp(describeCentrs(), apiCommand));
 			return 0;
 		}
+		// Selection-shape usage errors fire before `--input` is read: a bad
+		// `--quickchr` combination must not block on stdin (`--input -`) or
+		// degrade into per-member fan-out failures. The resolver re-checks the
+		// override conflict for library callers.
+		const selectionFlags = parsed.selectionFlags ?? emptySelectionFlags();
+		const targetPositionals = parsed.targetPositionals ?? [];
+		assertQuickchrExclusive(selectionFlags, targetPositionals.length);
+		if (selectionFlags.quickchr.length > 0) {
+			assertNoQuickchrOverrideConflict(
+				parsed,
+				selectionFlags.quickchr[0] ?? "",
+			);
+		}
+
 		// Resolve `--input` (file / stdin) before handing the body to the orchestrator.
 		if (parsed.inputPath !== undefined) {
 			const inputPath = parsed.inputPath;
@@ -389,8 +405,6 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 		// Fan-out mode (selector flag present, or >1 positional target) has its own
 		// envelope shape, guards, and granular exit code. It runs first and rejects
 		// `--stream`/`--listen` + fan-out itself (single-session is exclusive).
-		const selectionFlags = parsed.selectionFlags ?? emptySelectionFlags();
-		const targetPositionals = parsed.targetPositionals ?? [];
 		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 			return await runApiFanoutCli(
 				parsed,
@@ -398,6 +412,11 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 				targetPositionals,
 				args,
 			);
+		}
+		// A single `--quickchr <name>` is single-target mode (streaming included):
+		// the machine name is the target, resolved from the live descriptor.
+		if (selectionFlags.quickchr.length === 1) {
+			parsed.quickchr = selectionFlags.quickchr[0];
 		}
 
 		// Open-ended follow (`--stream`/`--listen`, or a `/listen` endpoint) consumes
@@ -410,7 +429,7 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 			return await runApiListenCli(parsed, args);
 		}
 
-		if (!parsed.targetInput) {
+		if (!parsed.targetInput && parsed.quickchr === undefined) {
 			throw missingTargetError({
 				command: "api",
 				summary: "`centrs api` requires a <router> and an <endpoint>.",

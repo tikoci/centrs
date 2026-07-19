@@ -101,6 +101,26 @@ describe("parseApiCliArgs — positional boundary", () => {
 		expect(isFanoutMode(parsed.selectionFlags ?? emptyFlags(), 1)).toBe(false);
 	});
 
+	test("`--quickchr <name>` + endpoint: no positional target, single stays single-target", () => {
+		const parsed = parseApiCliArgs(["--quickchr", "lab", "ip/address"]);
+		expect(parsed.targetPositionals).toEqual([]);
+		expect(parsed.endpoint).toBe("ip/address");
+		expect(parsed.selectionFlags?.quickchr).toEqual(["lab"]);
+		expect(isFanoutMode(parsed.selectionFlags ?? emptyFlags(), 0)).toBe(false);
+	});
+
+	test("repeated `--quickchr` is fan-out mode", () => {
+		const parsed = parseApiCliArgs([
+			"--quickchr",
+			"lab",
+			"--quickchr",
+			"edge",
+			"ip/address",
+		]);
+		expect(parsed.selectionFlags?.quickchr).toEqual(["lab", "edge"]);
+		expect(isFanoutMode(parsed.selectionFlags ?? emptyFlags(), 0)).toBe(true);
+	});
+
 	test("--where / --all / --concurrency parse into selection flags", () => {
 		const parsed = parseApiCliArgs([
 			"--where",
@@ -127,7 +147,7 @@ describe("parseApiCliArgs — positional boundary", () => {
 });
 
 function emptyFlags() {
-	return { groups: [], where: [], all: false, default: false };
+	return { groups: [], where: [], all: false, default: false, quickchr: [] };
 }
 
 describe("apiFanout", () => {

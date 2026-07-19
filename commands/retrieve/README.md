@@ -74,6 +74,7 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
 | `--near <lat>,<lon>,<radius>`       | Geo selector: fan out across CDB records whose GPS is within the great-circle radius (units `m`/`km`/`mi`/`ft`; bare = km). Lat-first. Union predicate; geo-less devices never match. See **Target selection**. |
 | `--bbox <south>,<west>,<north>,<east>` | Geo selector: fan out across CDB records whose GPS is inside the lat-first bounding box. Union predicate. See **Target selection**. |
 | `--concurrency <n>`                 | Max in-flight targets during fanout (integer ≥ 1). Defaults are transport-aware: `rest-api` 8, `native-api` 4. Rejected with `usage/invalid-concurrency` otherwise. |
+| `--quickchr <name>`                 | Target a running quickchr-managed CHR VM by name: host/port/auth come from the live descriptor (`@tikoci/quickchr` 0.4.5+, optional dependency), bypassing CDB/env resolution for those fields. Repeatable — repeating fans out. Exclusive of `<router>` positionals and CDB selectors; conflicts with `--host`/`--port`/`--username`/`--password`. See **Target selection**. |
 
 ## Validation
 
@@ -157,7 +158,10 @@ granular **0/2/1 exit code** are all normative in
 [`docs/CONSTITUTION.md` → Target selection grammar](../../docs/CONSTITUTION.md#target-selection-grammar).
 The boundary is intent-keyed: a plain single-positional `retrieve <router> <path>`
 stays the single-target envelope; a selector flag or a second positional target
-switches to fan-out.
+switches to fan-out. `--quickchr <name>` (the named-live-provider) behaves like a
+lone positional: one flag stays single-target, repeating it fans out, and mixing
+it with positionals or CDB selectors is `usage/conflicting-flags` (constitution:
+resolution providers).
 
 retrieve-specific behavior on top of the shared engine:
 

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { CentrsError, type CentrsErrorCode } from "../../src/errors.ts";
 import {
+	assertNoQuickchrOverrideConflict,
 	isEndpointAvailable,
+	quickchrConnection,
 	resolveQuickchrTarget,
 } from "../../src/resolver/index.ts";
 
@@ -238,5 +240,173 @@ describe("resolveQuickchrTarget", () => {
 			}),
 			"quickchr/package-unavailable",
 		);
+	});
+});
+
+async function resolutionFor(name = "lab") {
+	return resolveQuickchrTarget(
+		name,
+		moduleWith((machine) => ({
+			descriptor: async () => descriptorFor(machine),
+		})),
+	);
+}
+
+function expectThrowCode(
+	fn: () => unknown,
+	code: CentrsErrorCode,
+): CentrsError {
+	try {
+		fn();
+	} catch (error) {
+		expect(error).toBeInstanceOf(CentrsError);
+		expect((error as CentrsError).code).toBe(code);
+		return error as CentrsError;
+	}
+	throw new Error(`expected a CentrsError ${code}, but it returned`);
+}
+
+describe("quickchrConnection (per-`--via` consumption, #134 Phase 4)", () => {
+	test("rest-api: endpoint → ResolvedTarget/ResolvedAuth with provider provenance", async () => {
+		const { target, auth } = quickchrConnection(
+			await resolutionFor(),
+			"rest-api",
+		);
+		expect(target.host).toBe("127.0.0.1");
+		expect(target.port).toBe(44300);
+		expect(target.tls).toBe(true);
+		expect(target.baseUrl).toBe("https://127.0.0.1:44300/rest");
+		expect(target.identity).toBe("lab");
+		expect(target.input).toBe("lab");
+		// No CDB was consulted, so no record index may leak into the envelope.
+		expect(target.recordIndex).toBeUndefined();
+		expect(target.source).toEqual({ kind: "provider", key: "quickchr:lab" });
+		expect(target.sources["host"]).toEqual({
+			kind: "provider",
+			key: "quickchr:lab",
+		});
+		expect(auth.username).toBe("admin");
+		expect(auth.password).toBe("secret");
+		expect(auth.passwordProvided).toBe(true);
+		expect(auth.usernameSource?.kind).toBe("provider");
+	});
+
+	test("ssh: batch-capable endpoint → sshKey from privateKeyPath, never a password", async () => {
+		const { target, auth } = quickchrConnection(await resolutionFor(), "ssh");
+		expect(target.port).toBe(22000);
+		expect(target.tls).toBe(false);
+		expect(target.baseUrl).toBe("ssh://127.0.0.1:22000");
+		expect(auth.username).toBe("admin");
+		expect(auth.sshKey).toBe("/tmp/quickchr/lab/id_ed25519");
+		expect(auth.sshKeySource?.kind).toBe("provider");
+		expect(auth.passwordProvided).toBe(false);
+		expect(auth.password).toBe("");
+	});
+
+	test("unavailable service → quickchr/unsupported-via with the provider's reason", async () => {
+		const resolution = await resolutionFor();
+		const error = expectThrowCode(
+			() => quickchrConnection(resolution, "native-api"),
+			"quickchr/unsupported-via",
+		);
+		expect(error.context?.["unavailableReason"]).toBe("api-ssl not forwarded");
+		// The remediation names the machine's live services.
+		expect(error.context?.["availableServices"]).toEqual(["rest-api", "ssh"]);
+	});
+
+	test("service the descriptor does not forward (mac-telnet) → quickchr/unsupported-via", async () => {
+		const resolution = await resolutionFor();
+		expectThrowCode(
+			() => quickchrConnection(resolution, "mac-telnet"),
+			"quickchr/unsupported-via",
+		);
+	});
+
+	test("ssh with no batch-capable auth mode → quickchr/unsupported-via (sftp gate)", async () => {
+		const descriptor = descriptorFor("lab");
+		(
+			descriptor.services.ssh as { auth: { batchModes: string[] } }
+		).auth.batchModes = [];
+		const resolution = await resolveQuickchrTarget(
+			"lab",
+			moduleWith(() => ({ descriptor: async () => descriptor })),
+		);
+		const error = expectThrowCode(
+			() => quickchrConnection(resolution, "ssh"),
+			"quickchr/unsupported-via",
+		);
+		// The alternatives never re-suggest the `--via` that just failed.
+		expect(error.context?.["availableServices"]).toEqual(["rest-api"]);
+	});
+
+	test("ssh private-key batch mode WITHOUT a key path → quickchr/unsupported-via (no ambient fallback)", async () => {
+		const descriptor = descriptorFor("lab");
+		const sshAuth = descriptor.services.ssh as {
+			auth: { privateKeyPath?: string; batchModes: string[] };
+		};
+		// A `private-key` batch mode with no path would let the SSH client fall
+		// back to whatever ambient agent/config offers — reject it as unusable.
+		sshAuth.auth.privateKeyPath = undefined;
+		sshAuth.auth.batchModes = ["private-key"];
+		const resolution = await resolveQuickchrTarget(
+			"lab",
+			moduleWith(() => ({ descriptor: async () => descriptor })),
+		);
+		const error = expectThrowCode(
+			() => quickchrConnection(resolution, "ssh"),
+			"quickchr/unsupported-via",
+		);
+		// The unusable ssh endpoint is not advertised as an alternative either.
+		expect(error.context?.["availableServices"]).toEqual(["rest-api"]);
+	});
+
+	test("ssh batch-capable via agent-or-config only → connection without sshKey", async () => {
+		const descriptor = descriptorFor("lab");
+		const sshAuth = descriptor.services.ssh as {
+			auth: { privateKeyPath?: string; batchModes: string[] };
+		};
+		sshAuth.auth.privateKeyPath = undefined;
+		sshAuth.auth.batchModes = ["agent-or-config"];
+		const resolution = await resolveQuickchrTarget(
+			"lab",
+			moduleWith(() => ({ descriptor: async () => descriptor })),
+		);
+		const { auth } = quickchrConnection(resolution, "ssh");
+		expect(auth.sshKey).toBeUndefined();
+		expect(auth.username).toBe("admin");
+	});
+});
+
+describe("assertNoQuickchrOverrideConflict (#134 override rule)", () => {
+	test("no overrides → passes", () => {
+		expect(() => assertNoQuickchrOverrideConflict({}, "lab")).not.toThrow();
+	});
+
+	test("each direct override flag conflicts", () => {
+		for (const request of [
+			{ host: "192.0.2.1" },
+			{ port: 8729 },
+			{ username: "admin" },
+			{ password: "x" },
+			{ sshKey: "/tmp/key" },
+		]) {
+			const error = expectThrowCode(
+				() => assertNoQuickchrOverrideConflict(request, "lab"),
+				"usage/conflicting-flags",
+			);
+			expect(error.summary).toContain("--quickchr lab");
+		}
+	});
+
+	test("lists every conflicting flag at once", () => {
+		const error = expectThrowCode(
+			() =>
+				assertNoQuickchrOverrideConflict(
+					{ host: "192.0.2.1", password: "x" },
+					"lab",
+				),
+			"usage/conflicting-flags",
+		);
+		expect(error.context?.["conflicts"]).toEqual(["--host", "--password"]);
 	});
 });

@@ -91,7 +91,7 @@ async function expand(
 	for (const member of result.targets) {
 		if (member.kind === "cdb") {
 			indices.push(member.recordIndex);
-		} else {
+		} else if (member.kind === "literal") {
 			literals.push(member.input);
 		}
 	}
@@ -334,5 +334,54 @@ describe("expandSelection — no CDB present", () => {
 		} finally {
 			await rm(home, { recursive: true, force: true });
 		}
+	});
+});
+
+describe("expandSelection — quickchr members (#134)", () => {
+	test("quickchr names expand to kind:'quickchr' members, de-duped, flag order", async () => {
+		const result = await expandSelection(
+			selection({ quickchr: ["lab", "edge", "lab"] }),
+			{ cdbFile: cdbPath, allowAdhoc: true },
+			{},
+		);
+		expect(result.empty).toBe(false);
+		expect(result.warnings).toEqual([]);
+		expect(result.targets).toEqual([
+			{ kind: "quickchr", name: "lab" },
+			{ kind: "quickchr", name: "edge" },
+		]);
+	});
+
+	test("quickchr never touches the CDB (a missing explicit CDB file is fine)", async () => {
+		const result = await expandSelection(
+			selection({ quickchr: ["lab"] }),
+			{ cdbFile: join(cdbDir, "does-not-exist.cdb"), allowAdhoc: true },
+			{},
+		);
+		expect(result.targets).toEqual([{ kind: "quickchr", name: "lab" }]);
+	});
+
+	test("mixing quickchr with selectors/positionals → usage/conflicting-flags", async () => {
+		for (const overrides of [
+			{ quickchr: ["lab"], positionals: ["10.0.0.1"] },
+			{ quickchr: ["lab"], groups: ["prod"] },
+			{ quickchr: ["lab"], all: true },
+			{ quickchr: ["lab"], default: true },
+			{ quickchr: ["lab"], where: [{ key: "board", value: "RB5009" }] },
+		] satisfies Partial<TargetSelection>[]) {
+			expect(
+				expandSelection(selection(overrides), { allowAdhoc: true }, {}),
+			).rejects.toMatchObject({ code: "usage/conflicting-flags" });
+		}
+	});
+
+	test("allowAdhoc: false (the MCP surface) rejects quickchr targets entirely", async () => {
+		expect(
+			expandSelection(
+				selection({ quickchr: ["lab"] }),
+				{ cdbFile: cdbPath, allowAdhoc: false },
+				{},
+			),
+		).rejects.toMatchObject({ code: "cdb/target-not-registered" });
 	});
 });

@@ -253,6 +253,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary:
 			"The quickchr machine is not running, so it has no live connection facts.",
 	},
+	{
+		code: "quickchr/unsupported-via",
+		summary:
+			"The chosen `--via` has no usable service on the quickchr machine (not forwarded, unavailable, or SSH without batch-capable auth).",
+	},
 
 	// routeros/*
 	{
@@ -459,6 +464,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "transport/insecure-trust",
 		summary:
 			"Peer verification was disabled via --insecure (TLS / SSH host-key checks skipped).",
+	},
+	{
+		code: "transport/provider-trust",
+		summary:
+			"Peer verification is relaxed for a named-live-provider endpoint (a quickchr VM's self-signed TLS cert / ephemeral SSH host key), trusted by the provider's loopback-forward voucher.",
 	},
 	{
 		code: "transport/local-tool-missing",

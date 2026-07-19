@@ -23,6 +23,7 @@ import {
 	transferOutputFormats,
 	transferVerbs,
 } from "../index.ts";
+import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
@@ -38,6 +39,7 @@ import {
 	withTips,
 } from "./missing-target.ts";
 import {
+	assertQuickchrExclusive,
 	buildTargetSelection,
 	consumeSelectionFlag,
 	emptySelectionFlags,
@@ -479,7 +481,10 @@ function assemblePositionals(
 	selectionFlags: SelectionFlags,
 	fixedVerb?: TransferVerb,
 ): { request: TransferRequest; targetPositionals: readonly string[] } {
-	const hasSelector = isFanoutMode(selectionFlags, 0);
+	// Any target-taking flag (CDB selector or `--quickchr`) claims the target
+	// slots, so every positional belongs to the verb/paths.
+	const hasSelector =
+		isFanoutMode(selectionFlags, 0) || selectionFlags.quickchr.length > 0;
 	let verb: TransferVerb;
 	let targetPositionals: readonly string[];
 	let rest: readonly string[];
@@ -522,9 +527,21 @@ function assemblePositionals(
 
 	const request: TransferRequest = { verb, ...flags };
 	applyVerbPaths(request, verb, rest);
+	assertQuickchrExclusive(selectionFlags, targetPositionals.length);
+	// Direct connection overrides conflict with `--quickchr` globally: reject at
+	// parse time so a repeated `--quickchr` gets one usage error (exit 1), never
+	// per-member failures. The resolver re-checks for library callers.
+	if (selectionFlags.quickchr.length > 0) {
+		assertNoQuickchrOverrideConflict(request, selectionFlags.quickchr[0] ?? "");
+	}
 
-	// Single-target (not fan-out mode) needs exactly one resolved target.
+	// Single-target (not fan-out mode) needs exactly one resolved target: one
+	// positional, or one `--quickchr <name>` (the named-live-provider).
 	if (!isFanoutMode(selectionFlags, targetPositionals.length)) {
+		if (selectionFlags.quickchr.length === 1) {
+			request.quickchr = selectionFlags.quickchr[0];
+			return { request, targetPositionals };
+		}
 		const targetInput = targetPositionals[0];
 		if (!targetInput) {
 			throw missingTargetError({

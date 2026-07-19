@@ -335,3 +335,19 @@ centrs retrieve $A /system/resource --attribute bogus-attr --via native-api --po
 ```bash
 centrs retrieve $A /system/resource --via native-api --port $API_PORT --username wrong --password wrong
 ```
+
+## quickchr targets (#134)
+
+`$NAME` is the machine name of a running quickchr-managed CHR
+(`quickchr list`). No `$R`/`$U`/`$P` — host/port/auth come from the live
+descriptor. Covered by `test/integration/quickchr-target.test.ts`.
+
+### Q1. `--quickchr <name>` resolves the VM's REST endpoint
+
+```bash
+centrs retrieve --quickchr $NAME /system/resource --json
+```
+
+Envelope: `ok: true`, `meta.via=rest-api` (normal default; quickchr does not
+change protocol selection), `meta.target.source.kind=provider`,
+`meta.target.identity=$NAME`, no `recordIndex` (the CDB was never consulted).

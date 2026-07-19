@@ -125,6 +125,7 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
 | `--near <lat>,<lon>,<radius>`   | Geo selector — run across CDB records whose GPS is within the great-circle radius (units `m`/`km`/`mi`/`ft`; bare = km). Lat-first. Union predicate; geo-less devices never match. See **Target selection**. |
 | `--bbox <south>,<west>,<north>,<east>` | Geo selector — run across CDB records whose GPS is inside the lat-first bounding box. Union predicate. See **Target selection**. |
 | `--concurrency <n>`             | Max in-flight targets during fan-out (integer ≥ 1). Transport-aware default: `rest-api` 8, others 4. |
+| `--quickchr <name>`             | Target a running quickchr-managed CHR VM by name: host/port/auth come from the live descriptor (`@tikoci/quickchr` 0.4.5+, optional dependency), bypassing CDB/env resolution for those fields. Repeatable — repeating fans out. Exclusive of `<target>` positionals and CDB selectors; conflicts with `--host`/`--port`/`--username`/`--password`/`--ssh-key`. See **Target selection**. |
 | `--`                            | End-of-options marker. Every token after `--` is taken as the literal RouterOS command, even flag-shaped ones — e.g. `centrs execute $R -- /interface print where disabled=yes`. In fan-out, positional targets come BEFORE `--` and the command AFTER it (`centrs execute r1 r2 -- /system/reboot`). Use it when the command contains tokens that would otherwise be claimed as centrs flags; otherwise the command must be quoted as a single argument. |
 
 ## SSH key selection
@@ -174,6 +175,11 @@ many tokens):
 - `execute r1 /system/resource/print` — a single positional target with no
   selector stays **single-target** (legacy split: first positional is the target,
   the rest is the command), never `FanoutData`.
+- `execute --quickchr lab /system/resource/print` — the quickchr
+  named-live-provider claims the target slots like a selector (positionals are
+  the command; no `--` needed). One `--quickchr` stays single-target; repeating
+  it fans out; mixing it with positionals or CDB selectors is
+  `usage/conflicting-flags` (constitution: resolution providers).
 
 Because `execute` is the primary **write** path, a write-shaped fan-out
 (add/set/remove) is gated by **`--yes`**, confirmed **once** up front; without it

@@ -435,3 +435,39 @@ Envelope: `meta.via=mac-telnet` when `$MAC` is not resolved from CDB and no
 `--host`/`--port`). If the caller wants IP-level REST or native API execution,
 they must opt into MAC-to-IP resolution (`--resolve arp` + `--via …`) before
 protocol selection.
+
+## quickchr targets (#134)
+
+`$NAME` is the machine name of a running quickchr-managed CHR. Host/port/auth
+come from the live descriptor — the CDB, `CENTRS_HOST`-style env, and the
+`__default__` ladder are bypassed for those fields. Covered by
+`test/integration/quickchr-target.test.ts`.
+
+### Q1. Run a command on a quickchr target (native API default)
+
+```bash
+centrs execute --quickchr $NAME ':put [/system/identity/get name]' --json
+```
+
+Envelope: `ok: true`, `meta.via=native-api` (execute's normal default),
+`meta.target.source.kind=provider`, `meta.target.identity=$NAME`.
+
+### Q2. A `--via` the descriptor does not forward → `quickchr/unsupported-via`
+
+```bash
+centrs execute --quickchr $NAME ':put 1' --via mac-telnet --json
+```
+
+Envelope: `ok: false`, `error.code=quickchr/unsupported-via` — quickchr v1
+forwards `rest-api`/`native-api`/`ssh` only; centrs never falls back to another
+transport.
+
+### Q3. Repeated `--quickchr` fans out; an unknown machine is an inner failure
+
+```bash
+centrs execute --quickchr $NAME --quickchr no-such-machine -- ':put 1' --json
+```
+
+Envelope: outer `ok: true`, `data.summary = { total: 2, ok: 1, failed: 1 }`;
+the unknown machine's inner error is `quickchr/machine-not-found`. Exit code 2
+(partial).

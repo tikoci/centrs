@@ -38,15 +38,18 @@ import {
 import type { RouterOsProtocol } from "./protocols/index.ts";
 import { SftpClient } from "./protocols/sftp.ts";
 import {
+	assertNoQuickchrOverrideConflict,
 	type CdbResolution,
 	loadEnvFileDefaults,
 	parseDuration,
+	quickchrConnection,
 	type ResolvedAuth,
 	type ResolvedSetting,
 	type ResolvedTarget,
 	resolveAuth,
 	resolveBooleanSetting,
 	resolveCdb,
+	resolveQuickchrTarget,
 	resolveStringSetting,
 	resolveTarget,
 	toCoreSource,
@@ -104,6 +107,12 @@ export const FILE_READ_CHUNK_BYTES = 32_768;
 export interface TransferRequest {
 	verb: TransferVerb;
 	targetInput?: string;
+	/**
+	 * quickchr machine name (`--quickchr <name>`): resolve host/port/auth from
+	 * the live VM descriptor instead of CDB/env (`docs/CONSTITUTION.md` →
+	 * Resolution providers). Conflicts with host/port/username/password/sshKey.
+	 */
+	quickchr?: string;
 	/** Local path (or `-` for stdin/stdout). Present for upload/download. */
 	local?: string;
 	/** RouterOS file path. Present for upload/download/remove/mkdir and copy source. */
@@ -818,19 +827,31 @@ export async function resolveTransferRequest(
 		config,
 	);
 
+	// A quickchr target is a named-live-provider: host/port/auth come from the
+	// live descriptor, bypassing CDB and the `__default__` ladder. For
+	// `--via sftp`/`scp`, `quickchrConnection` additionally gates on the SSH
+	// endpoint's batch-capable auth modes (typed error, never a password prompt).
+	let quickchrResolution: Awaited<
+		ReturnType<typeof resolveQuickchrTarget>
+	> | null = null;
+	if (request.quickchr !== undefined) {
+		assertNoQuickchrOverrideConflict(request, request.quickchr);
+		quickchrResolution = await resolveQuickchrTarget(request.quickchr);
+	}
 	// Fan-out passes the pre-resolved CDB record for a member (the CDB is loaded
 	// once in `expandSelection`); single-target resolves it here.
-	const cdbResolution =
-		options.cdbResolution ??
-		(await resolveCdb(
-			{
-				targetInput: request.targetInput,
-				cdbFile: request.cdbFile,
-				cdbPassword: request.cdbPassword,
-			},
-			env,
-			config,
-		));
+	const cdbResolution = quickchrResolution
+		? undefined
+		: (options.cdbResolution ??
+			(await resolveCdb(
+				{
+					targetInput: request.targetInput,
+					cdbFile: request.cdbFile,
+					cdbPassword: request.cdbPassword,
+				},
+				env,
+				config,
+			)));
 
 	const format = resolveTransferFormat(request, env, config);
 	const validate = resolveBooleanSetting(
@@ -842,15 +863,6 @@ export async function resolveTransferRequest(
 		cdbResolution?.overrides.validate,
 		config,
 	);
-	const insecure = resolveBooleanSetting(
-		request.insecure,
-		env,
-		"CENTRS_INSECURE",
-		false,
-		"insecure",
-		cdbResolution?.overrides.insecure,
-		config,
-	);
 	const timeoutMs = resolveTransferTimeout(
 		request.timeout,
 		env,
@@ -858,30 +870,59 @@ export async function resolveTransferRequest(
 		cdbResolution,
 		config,
 	);
-	const target = resolveTarget(
-		{
-			targetInput: request.targetInput,
-			host: request.host,
-			port: request.port,
-		},
-		env,
-		protocol,
-		cdbResolution,
-		config,
-	);
-	const auth = resolveAuth(
-		{
-			username: request.username,
-			password: request.password,
-			sshKey: request.sshKey,
-		},
-		env,
-		cdbResolution,
-		config,
-	);
+	const connection = quickchrResolution
+		? quickchrConnection(quickchrResolution, protocol)
+		: null;
+	// A quickchr TLS/SSH endpoint is trusted by provenance (self-signed VM cert /
+	// ephemeral host key) — `insecure` is forced with provider provenance and the
+	// provider-trust warning replaces the generic `--insecure` anomaly warning.
+	const insecure =
+		connection?.insecure === true
+			? {
+					value: true,
+					source: {
+						kind: "provider" as const,
+						key: `quickchr:${request.quickchr}`,
+					},
+				}
+			: resolveBooleanSetting(
+					request.insecure,
+					env,
+					"CENTRS_INSECURE",
+					false,
+					"insecure",
+					cdbResolution?.overrides.insecure,
+					config,
+				);
+	const target = connection
+		? connection.target
+		: resolveTarget(
+				{
+					targetInput: request.targetInput,
+					host: request.host,
+					port: request.port,
+				},
+				env,
+				protocol,
+				cdbResolution,
+				config,
+			);
+	const auth = connection
+		? connection.auth
+		: resolveAuth(
+				{
+					username: request.username,
+					password: request.password,
+					sshKey: request.sshKey,
+				},
+				env,
+				cdbResolution,
+				config,
+			);
 
 	const warnings: Warning[] = [
 		...((cdbResolution?.warnings ?? []) as readonly Warning[]),
+		...(connection?.warnings ?? []),
 	];
 	// Report the auto hop: a large upload cannot ride the REST family's 60 KB
 	// `/file/set` cap, so auto-selection moved it to sftp.
@@ -892,8 +933,10 @@ export async function resolveTransferRequest(
 				"Large upload (>60 KB) auto-selected sftp; the REST family cannot write past the 60 KB `/file/set` cap.",
 		});
 	}
-	// A self-signed-accepting run is an anomaly worth surfacing on every transport.
-	if (insecure.value) {
+	// A self-signed-accepting run is an anomaly worth surfacing on every
+	// transport — unless the trust came from the provider, whose own
+	// provider-trust warning already rides above.
+	if (insecure.value && connection?.insecure !== true) {
 		warnings.push({
 			code: "transport/insecure-trust",
 			message:
