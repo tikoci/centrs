@@ -39,8 +39,10 @@ product; without them this would just be a worse `curl`.
   SSH / MAC-Telnet / RoMON / WinBox Terminal for interactive and L2 execute;
   MNDP for discovery. centrs picks the protocol for you (and lets you pin one
   with `via=` or `--via`).
-- **Commands:** every command resolves a *target* — a router you name on the
-  CLI — to a real address, credentials, and a protocol, then runs.
+- **Commands:** every router-facing command resolves a *target* — a router you
+  name on the CLI — to a real address, credentials, and a protocol, then runs.
+  (Local commands — `devices`, `settings`, `discover`, and `explain`'s offline
+  mode — need no router.)
 
 | Command    | Purpose |
 | ---------- | ------- |
@@ -49,6 +51,7 @@ product; without them this would just be a worse `curl`.
 | `api`      | Structured RouterOS API passthrough (gh-api style): one command per operation, structured in/out, can write, over REST or native API. Open-ended follow is `api … --stream` (native API; NDJSON). |
 | `terminal` | Open an interactive console, primarily SSH or MAC-Telnet. |
 | `check`    | Probe reachability and management protocol availability. |
+| `explain`  | Analyze a RouterOS command before running it: canonical form, syntax diagnostics, and what is valid at a path — offline or against a live device (designed). |
 | `devices`  | View and maintain the CDB-backed device registry (the only writer). |
 | `discover` | Discover MNDP neighbors and optionally save them into the CDB. |
 | `settings` | Manage centrs's own settings (`centrs.env`, `__default__`) and run first-time setup. |
