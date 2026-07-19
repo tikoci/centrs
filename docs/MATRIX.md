@@ -61,12 +61,15 @@ section short enough that the grid remains the status surface.
   IP-scan discovery (#149) will iterate; the L2-default timing evidence (#136) is
   recorded in the README before the cells advance past `designed`.
 - `explain` is `designed` (`commands/explain/README.md`): the explain →
-  validate → run knowledge tier — canonical form, LSP-like spans/diagnostics,
-  schema and completion facts. Its offline mode is transport-less (evidence
-  will be unit/fixture tests); the live probes (`/console/inspect` + `:parse`)
-  ride rest-api/native-api, so those two cells are `designed`. The spec is a
-  strawman with surface options still open (#90); cells advance only after the
-  design round locks the surface and examples go green per the done rule.
+  validate → run knowledge tier — canonical structure, LSP-like
+  spans/diagnostics, transport classification (api-able vs execute, `curl`
+  rendering), and live schema/completion facts. Its offline mode is the
+  canonicalizer only, transport-less (evidence will be unit/fixture tests);
+  the live probes (`/console/inspect` + `:parse`) ride rest-api/native-api,
+  so those two cells are `designed`. The surface was decided in the
+  2026-07-19 design round (#90) but the spec is **not ratified**: a
+  canonicalization grounding pass (staging phase 0) gates ratification, and
+  cells advance only after that plus green examples per the done rule.
 - `transfer / ssh` means the SFTP-backed transfer method. Deferred file-transfer
   methods such as `scp`, `fetch`, and `ftp` are tracked in
   `commands/transfer/README.md`; `fetch` is not a grid column.
