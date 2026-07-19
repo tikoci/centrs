@@ -35,8 +35,10 @@ product; without them this would just be a worse `curl`.
   SSH / MAC-Telnet / RoMON / WinBox Terminal for interactive and L2 execute;
   MNDP for discovery. centrs picks the protocol for you (and lets you pin one
   with `via=` or `--via`).
-- **Commands:** every command resolves a *target* — a router you name on the
-  CLI — to a real address, credentials, and a protocol, then runs.
+- **Commands:** every router-facing command resolves a *target* — a router you
+  name on the CLI — to a real address, credentials, and a protocol, then runs.
+  (Local commands — `devices`, `settings`, `discover`, and `explain`'s offline
+  mode — need no router.)
 
 | Command    | Purpose |
 | ---------- | ------- |

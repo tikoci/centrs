@@ -92,12 +92,25 @@ today's path/verb/args split and script-vs-structured gate:
   `/ip/address remove [find comment=defconf]`, the inner `find` carries the
   enclosing path (`ip,address`); the canonical structure exposes that inner
   command with its resolved path rather than treating `[…]` as an opaque blob.
-- **Transport classification.** For each statement, say how it would actually
-  run: representable as a structured `api` operation (and if so, the REST
-  method/path/body), or `execute`-required (script mode, expressions,
-  sub-commands). This is how `explain` teaches the caller the right runner —
-  including rendering a ready-to-use `curl` form for REST-able commands and
-  the `centrs execute`/`centrs api` invocation for either.
+- **Transport classification — fail-closed.** For each statement, say how it
+  would actually run: `api-candidate` (representable as a structured `api`
+  operation, with the REST method/path/body), `execute` (script mode,
+  expressions, sub-commands), or `unknown` — each with a stated basis. The
+  canonicalizer alone cannot *prove* a REST mapping (the syntax-inspection map
+  keeps CLI→REST conversion separate from source parsing), so a ready-to-run
+  `curl` renders **only** where an explicit, tested mapping rule covers the
+  command family; anything else classifies `unknown` rather than promoting a
+  heuristic into executable output. The `centrs execute`/`centrs api`
+  invocation renders for either classified case.
+- **Mutation analysis is separate from the gate.** The execute gate's verdict
+  (`mode`, `writeShaped`) is reproduced **unchanged** — a bracketed
+  sub-command selector stays `mode: "script"` / `writeShaped: false`, exactly
+  as `canonicalizeExecuteCommand` and its anchor tests
+  (`test/unit/execute-canonicalize-contract.test.ts`) pin it. Richer
+  explain-only inference (an inner `remove` detected in structure) lands in a
+  **distinct** field (`structure.containsWrite`, basis `heuristic`) — never by
+  widening *or* reinterpreting `writeShaped`, so agents cannot mistake an
+  explain inference for a guard `execute` actually applies.
 - **Heuristics owned and labeled.** Offline conclusions are canonicalizer
   facts (provenance `canonicalizer`, basis `heuristic`/`derived`) — never
   presented as device or schema truth.
@@ -125,7 +138,17 @@ touching `execute` / `api` / `retrieve`:
      name a verb for its args);
    - `/ip/address/set` → the settable arguments;
    - `/ip/address/print` → special-cased to the `.proplist` value set, i.e.
-     what the output *can* contain.
+     what the output *can* contain. (The probe recipe this needs — completion
+     around a value position — overlaps the upstream `completion-tricks`
+     research that is still open; phase 0 must ground it, and the fallback is
+     the plainer `child`/`syntax` facts.)
+
+Positions matter more than tokens: the same word can be a verb or an argument
+(`/ip/address comment …` is the `comment` *verb*; `/ip/address/add comment=…`
+is the `comment` *argument* of `add`), and a probe at a value position (input
+ending in `=`) asks for value candidates or type info rather than names. The
+canonicalizer resolves the role offline where it can and labels the basis;
+live completion is the authority.
 
 Offline, `explain` answers with canonicalizer facts only (structure, gate,
 transport shape). Enumerating what a device accepts — verbs, args, enums,
@@ -153,20 +176,38 @@ and rejects selectors with `usage/fanout-not-supported`, like `terminal`.
 
 Implementation-normative safety rules (evidence in the skill/LSP references):
 per-probe timeouts always; skip scripting-keyword paths for `syntax`/
-`completion` on ≤ 7.20.8 (REST-server deadlock, fixed 7.21.4, SUP-127641);
+`completion` on versions **before 7.21.4** — the REST-server deadlock is
+measured through 7.20.8 and 7.21.4 is the first version proven fixed
+(SUP-127641), so the conservative skip covers the untested gap between;
 route input past the 32,767-byte highlight cap to `:parse` or report
 truncation — never analyze a silent prefix; offsets are **UTF-8 byte** offsets
 over ASCII-normalized input and the normalization is recorded; `[]`, timeout,
 and transport failure stay distinct outcomes.
 
+One caveat splits the two live cells: **how `:parse` surfaces its error is
+transport-specific** (constitution: validation — grounded on CHR 7.23.1).
+Only a console transport *prints* the `:parse` result; the native API returns
+an opaque `*NN` handle, and the REST/native gate today runs `:parse` without
+reading its message. So the line/column diagnostic is guaranteed only where
+the transport surfaces the parser text; the native-api cell needs its
+degraded readout (or a grounded alternative) specified, with
+protocol-specific examples, before it advances past `designed`.
+
 ## Surface (Option A — decided)
 
 ```bash
-centrs explain "<input>" [<router>] [flags]
+centrs explain '<input>' [flags]              # offline
+centrs explain <router> '<input>' [flags]     # live — target-first
 ```
 
 `<input>` is a command, a script fragment (`--file` / stdin for scripts), or a
-bare menu path. One verb serves all three intents; the accepted risk is that
+bare menu path. The positional grammar stays **target-first like every other
+router-taking command** (amended in PR review — the shared resolver/selection
+helpers assume it): one positional means offline and it *is* the input; two
+positionals mean live with the router first; `--` is accepted before the
+input; `--file`/stdin replace the input positional in either form. Adding a
+router therefore never reinterprets a previously valid offline invocation.
+One verb serves all three intents; the accepted risk is that
 the refined "broad query → broader results" scheme adds complexity to one
 surface rather than splitting into sub-verbs. (Option B — sub-verbs
 `explain check|complete|path` — and Option C — folding into the runners — were
@@ -186,7 +227,7 @@ name TBD — lifts the size limits regardless of result size.
 | *(base)* | canonical structure, spans, diagnostics, transport classification | offline: pure canonicalizer; live: + highlight + `:parse` |
 | `--complete [--cursor <byte>]` | continuation candidates at the cursor (default: end of input) | live evidence; offline emits the live-target tip |
 | `--schema` | path enumeration: verbs, args, types, enums, `.proplist` | live evidence; offline emits the live-target tip |
-| `--curl` | rendered REST call (`curl …`) for `api`-able statements, plus the equivalent `centrs api`/`centrs execute` invocation | offline-capable; uses a placeholder host when no router is given |
+| `--curl` | rendered REST call (`curl …`) for `api-candidate` statements covered by a tested mapping rule, plus the equivalent `centrs api`/`centrs execute` invocation | offline-capable; placeholder host + elided credentials when no router is given; `unknown` classifications render no curl |
 | `--full` *(name TBD)* | lift smart-sizing limits | — |
 
 Rendering stays separate: `--format`/`--json` remain the settings-vocabulary
@@ -204,23 +245,46 @@ Standard envelope (constitution: result envelope); `data` sketch:
 ```json
 {
   "input": { "bytes": 58, "normalized": false, "truncated": false },
+  "verdict": "warn",
   "canonical": { "path": "/ip/route", "verb": "add", "args": { "dst-address": "10.9.0.0/16", "blackhole": "yes" }, "mode": "structured", "writeShaped": true },
-  "structure": { "statements": 1, "blocks": [], "subcommands": [ { "path": "/ip/address", "verb": "find", "span": { "start": 19, "end": 42 } } ] },
-  "transport": { "runner": "api", "rest": { "method": "PUT", "path": "/rest/ip/route" }, "curl": "curl -u … https://<router>/rest/ip/route …", "centrs": "centrs api <router> …" },
-  "spans": [ { "start": 0, "end": 9, "class": "path" } ],
-  "diagnostics": [ { "severity": "warning", "code": "explain/canonicalizer/ambiguous-verb", "span": { "start": 42, "end": 55 }, "message": "…", "source": "canonicalizer" } ],
-  "schema": { "path": "/ip/address", "verbs": [ { "name": "set", "argCount": 9 } ], "truncated": false },
-  "completion": [ { "value": "chain", "kind": "argument", "source": "live-inspect" } ],
-  "target": { "resolved": "chr1", "version": "7.23.1" },
+  "structure": { "statements": 1, "blocks": [], "containsWrite": true, "subcommands": [ { "path": "/ip/address", "verb": "find", "span": { "start": 19, "end": 42 } } ] },
+  "transport": { "classification": "api-candidate", "rest": { "method": "PUT", "path": "/rest/ip/route" }, "curl": "curl -u … https://<router>/rest/ip/route …", "centrs": "centrs api <router> …", "ev": "e0" },
+  "spans": [ { "start": 0, "end": 9, "class": "path", "ev": "e1" } ],
+  "diagnostics": [ { "severity": "warning", "code": "explain/canonicalizer/ambiguous-verb", "span": { "start": 42, "end": 55 }, "message": "…", "ev": "e0" } ],
+  "schema": { "path": "/ip/address", "verbs": [ { "name": "set", "argCount": 9 } ], "truncated": false, "ev": "e2" },
+  "completion": [ { "value": "chain", "kind": "argument", "ev": "e2" } ],
+  "evidence": [
+    { "id": "e0", "source": "canonicalizer", "basis": "heuristic", "outcome": "ok" },
+    { "id": "e1", "source": "live-inspect", "probe": "highlight", "basis": "direct-response", "outcome": "ok", "routerosVersion": "7.23.1" },
+    { "id": "e2", "source": "live-inspect", "probe": "completion", "basis": "direct-response", "outcome": "ok", "routerosVersion": "7.23.1" }
+  ],
   "runtimeAcceptance": "not-proven"
 }
 ```
 
-- **Every derived fact keeps provenance** — source (`canonicalizer` vs
-  `live-inspect`), basis (direct response vs derived vs heuristic), version
-  stamp when live, normalization, truncation, outcome. The
-  `RouterOsSyntaxEvidence` contract in lsp-routeros-ts
-  `docs/syntax-inspection-map.md` is the adaptation source.
+- **Every derived fact keeps provenance via `evidence[]`** — facts reference
+  a stable evidence id (`ev`), and the evidence entry carries source
+  (`canonicalizer` vs `live-inspect`), probe, basis (direct response vs
+  derived vs heuristic), outcome (`ok`/`empty`/`timeout`/`transport-error`),
+  and the RouterOS version stamp. A single global version field is *not*
+  enough: facts in one result can come from different probes with partial
+  failures. The `RouterOsSyntaxEvidence` contract in lsp-routeros-ts
+  `docs/syntax-inspection-map.md` is the adaptation source. Resolved target
+  identity lives in the envelope's `meta.target` (constitution) — `data`
+  grows no competing identity surface.
+- **Envelope semantics mirror `check`**: an analysis that ran is `ok: true`
+  even when the input is riddled with errors — the diagnostics *are* the
+  data, summarized by `data.verdict` (max severity after analysis). Exit
+  codes derive from the verdict vs `--fail-on`; `ok: false` is reserved for
+  genuine command failure (unresolvable target, usage error, probe transport
+  failure). This lets the library and MCP reproduce the same decision without
+  a process exit code.
+- **Coordinates are contracted, not implied**: probe offsets are UTF-8 byte
+  offsets over the *analyzed* (ASCII-normalized) input with `end` exclusive,
+  and the normalization map back to the original input is part of the result.
+  The library surface additionally provides original-document positions
+  (line + UTF-16 character) for LSP consumers; `--cursor <byte>` stays a
+  wire-level CLI convenience.
 - **Spans use a centrs-owned vocabulary** (decision): raw RouterOS highlight
   classes are not the default surface. The centrs vocabulary must be at least
   as rich as the RouterOS token classes, and centrs maintains the mapping —
@@ -244,7 +308,11 @@ Standard envelope (constitution: result envelope); `data` sketch:
   **following the CLI scheme** (decision): same facets, same envelope-shaped
   data as the CLI's `--json`, optionally a CDB-resolved target for live
   evidence. The no-CDB offline path must survive, and the MCP adapter must
-  not widen the structured gate.
+  not widen the structured gate. The current flat `centrs_explain` shape
+  (`{ input, mode, path, verb, attributes, queries, writeShaped }`) is
+  **superseded** when this lands — a deliberate pre-1.0 breaking change, with
+  `commands/mcp/` examples and integration tests updated in the same change;
+  no dual-shape compatibility layer is planned.
 - Library (sketch): `explainCommand(input, opts)` pure/offline;
   `explainCommand(input, { target, facets })` live. `lsp-routeros-ts` and
   tikbook are the intended external consumers (hover/diagnostics/completion/
@@ -316,6 +384,25 @@ Decided this round (details inline above; recorded in #90):
   per-statement transport classification (execute vs api, `curl` rendering)
   is part of the base output.
 
+Amendments from the PR review pass (Codex/CodeRabbit/Copilot on #184, same
+round):
+
+- **Positional grammar is target-first** when live (`explain <router>
+  '<input>'`); one positional = offline input. Matches every other
+  router-taking command and the shared selection helpers.
+- **Transport classification is fail-closed** (`api-candidate` / `execute` /
+  `unknown`); `curl` renders only from explicit, tested mapping rules.
+- **The gate verdict is reproduced verbatim**; explain-only mutation
+  inference lives in `structure.containsWrite`, never in `writeShaped`.
+- **Per-fact provenance is an `evidence[]` table** with stable ids; target
+  identity stays in `meta.target`.
+- **Envelope mirrors `check`** (`ok: true` + `data.verdict` for analyzed
+  input); coordinate contract (byte offsets, exclusive `end`,
+  original-document mapping for LSP) is explicit.
+- **`:parse` readout is transport-specific** (constitution): the native-api
+  cell needs its degraded readout specified before advancing.
+- **MCP shape change is a deliberate pre-1.0 break**, migrated in one change.
+
 Still open (for the next round / the grounding lab):
 
 1. Final flag names (`--full`, `--curl`, facet names) and the smart-sizing
@@ -323,9 +410,11 @@ Still open (for the next round / the grounding lab):
 2. The centrs span vocabulary itself: class list, mapping table from RouterOS
    highlight classes (and their colors), and how unknown/new upstream classes
    degrade.
-3. `curl` rendering scope: REST only (native-api has no curl analogue) —
-   confirm placeholder-host behavior offline and credential elision rules.
+3. Which command families get tested `curl`/REST mapping rules first (curl is
+   REST-only — native-api has no curl analogue), plus placeholder-host and
+   credential-elision details.
 4. The exact question list for the phase-0 grounding lab, and which spec
-   claims it must confirm before ratification.
+   claims it must confirm before ratification — now explicitly including the
+   `.proplist` probe recipe and the native-api `:parse` readout.
 5. Whether the live describe ladder needs result caching per target+version
    (probe cost vs freshness) — likely deferred to implementation evidence.
