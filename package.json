@@ -46,6 +46,7 @@
 	"files": [
 		"src/",
 		"commands/",
+		"docs/CLI.md",
 		"docs/CONSTITUTION.md",
 		"docs/MATRIX.md",
 		"docs/errors/",
@@ -61,7 +62,7 @@
 		"lint": "bun run lint:biome && bun run lint:typecheck",
 		"lint:git:commit": "bun run lint",
 		"lint:git:push": "bun run lint:ci && bun run test && bun run build",
-		"lint:ci": "bun run lint && bun run lint:markdownlint && bun run lint:cspell && bun run lint:secretlint",
+		"lint:ci": "bun run lint && bun run docs:cli:check && bun run lint:markdownlint && bun run lint:cspell && bun run lint:secretlint",
 		"lint:cspell": "cspell lint . --gitignore",
 		"lint:cspell:all": "cspell lint . --no-gitignore",
 		"lint:markdownlint": "markdownlint-cli2 \"**/*.md\" \"!.scratch/**\"",
@@ -85,6 +86,8 @@
 		"check:agent": "bun run scripts/agent-check.ts",
 		"build": "bun build src/index.ts src/cli.ts src/mcp.ts src/tui.ts src/webproxy.ts src/protocols/index.ts --outdir dist --target bun",
 		"build:doc:api": "typedoc --out docs/api src/index.ts",
+		"docs:cli": "bun run scripts/gen-cli-docs.ts",
+		"docs:cli:check": "bun run scripts/gen-cli-docs.ts --check",
 		"docs:errors": "bun run scripts/gen-error-pages.ts",
 		"security": "bun run lint:secretlint && bun run lint:markdownlint"
 	},

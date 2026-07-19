@@ -108,9 +108,9 @@ export const executeCommand: CliCommandMetadata = {
 			description: "Per-request timeout (for REST, max 60s).",
 		},
 		{
-			flag: "--validate[=false]",
+			flag: "--validate / --no-validate",
 			description:
-				"Run RouterOS :parse and /console/inspect validation before execution (default true).",
+				"Run RouterOS :parse and /console/inspect validation before execution (default true; `--validate=false` also accepted).",
 		},
 		{
 			flag: "--yes",

@@ -7,6 +7,11 @@ Each `commands/<name>/` holds the **executable spec** for one command:
   the matching `test/integration/<name>.test.ts`; example N ↔ assertion N. This
   is what `CHR-passed` is measured against.
 
+**Implemented** flags are generated from `CliCommandMetadata` into
+`docs/CLI.md` (`bun run docs:cli`; drift-gated in CI) — a command README keeps
+behavior prose plus a "Designed, not implemented" table for spec-only flags,
+never a duplicate table of implemented flags.
+
 Do not restate the constitution here or in a command README — link to
 `docs/CONSTITUTION.md` for envelope, errors, settings precedence, target
 selection, and protocol selection. The identity/CDB **resolution depth** (lookup

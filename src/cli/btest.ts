@@ -95,8 +95,14 @@ export const btestCommand: CliCommandMetadata = {
 		},
 		{ flag: "--random-data", description: "(client) Incompressible payload." },
 		{
-			flag: "--authenticate[=false]",
-			description: "(server) Require EC-SRP5 auth. Default true.",
+			flag: "--nat-mode",
+			description:
+				"(client, UDP only) Originate an outbound datagram first so server→client data can traverse NAT. Automatic when the test receives.",
+		},
+		{
+			flag: "--authenticate / --no-authenticate",
+			description:
+				"(server) Require EC-SRP5 auth. Default true; `--authenticate=false` also accepted.",
 		},
 		{
 			flag: "--bind",
@@ -128,6 +134,16 @@ export const btestCommand: CliCommandMetadata = {
 			flag: "--port",
 			valueName: "<port>",
 			description: "Control port. Default 2000.",
+		},
+		{
+			flag: "--cdb-file",
+			valueName: "<path>",
+			description: "(client) Read target credentials from a WinBox CDB file.",
+		},
+		{
+			flag: "--cdb-password",
+			valueName: "<password>",
+			description: "(client) Decrypt an encrypted WinBox CDB file.",
 		},
 		{
 			flag: "--format",

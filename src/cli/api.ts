@@ -59,7 +59,7 @@ export const apiCommand: CliCommandMetadata = {
 				"HTTP method, default GET (case-insensitive). GET→print, PUT→add, PATCH→set, DELETE→remove, POST→run.",
 		},
 		{
-			flag: "-f",
+			flag: "-f / --field",
 			valueName: "<key=value>",
 			description:
 				"Body field, repeatable; assembled into the JSON body (verbatim string values).",
@@ -170,9 +170,9 @@ export const apiCommand: CliCommandMetadata = {
 			description: "Per-request timeout (for REST, max 60s).",
 		},
 		{
-			flag: "--validate[=false]",
+			flag: "--validate / --no-validate",
 			description:
-				"Run `/console/inspect` validation before the request (default true).",
+				"Run `/console/inspect` validation before the request (default true; `--validate=false` also accepted).",
 		},
 		{
 			flag: "--format",

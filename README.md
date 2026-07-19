@@ -10,6 +10,10 @@ Preview builds are published on npm. To inspect the CLI without installing it:
 bunx @tikoci/centrs --help
 ```
 
+The full flag reference for every command is generated from the CLI metadata
+into [`docs/CLI.md`](docs/CLI.md); per-command behavior lives in
+`commands/<name>/README.md`.
+
 It is a **friendly conduit**, not a high-level configuration abstraction. It
 helps humans and agents reach RouterOS over the right protocol, with the right
 credentials and ports, and validates RouterOS-shaped commands before running

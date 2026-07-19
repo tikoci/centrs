@@ -2,6 +2,7 @@
 
 import { apiCommand, runApiCli } from "./cli/api.ts";
 import { btestCommand, runBtestCli } from "./cli/btest.ts";
+import type { CliCommandMetadata } from "./cli/common.ts";
 import { devicesCommand, runDevicesCli } from "./cli/devices.ts";
 import { discoverCommand, runDiscoverCli } from "./cli/discover.ts";
 import { executeCommand, runExecuteCli } from "./cli/execute.ts";
@@ -13,7 +14,8 @@ import { runTransferCli, transferCommand } from "./cli/transfer.ts";
 import { asCentrsError, formatCentrsErrorText } from "./errors.ts";
 import { describeCentrs, plannedProtocols, plannedSurfaces } from "./index.ts";
 
-const commandSummaries: ReadonlyArray<{ name: string; summary: string }> = [
+/** Every CLI command's metadata, in help/docs order. `scripts/gen-cli-docs.ts` renders `docs/CLI.md` from this. */
+export const cliCommands: ReadonlyArray<CliCommandMetadata> = [
 	retrieveCommand,
 	executeCommand,
 	apiCommand,
@@ -24,7 +26,13 @@ const commandSummaries: ReadonlyArray<{ name: string; summary: string }> = [
 	btestCommand,
 	mcpCommand,
 	settingsCommand,
-].map((command) => ({ name: command.name, summary: command.summary }));
+];
+
+const commandSummaries: ReadonlyArray<{ name: string; summary: string }> =
+	cliCommands.map((command) => ({
+		name: command.name,
+		summary: command.summary,
+	}));
 
 export function renderCliHelp(): string {
 	return [

@@ -103,9 +103,15 @@ export const retrieveCommand: CliCommandMetadata = {
 			description: "Request the RouterOS detail/all-attributes shape.",
 		},
 		{
-			flag: "--list-attributes",
+			flag: "--list-attributes / --list",
 			description:
 				"List inspect-derived attributes without running the data call.",
+		},
+		{
+			flag: "--query / --filter",
+			valueName: "<expr>",
+			description:
+				"RouterOS-side row filter (maps to `.query`). Not implemented yet — returns `validation/not-implemented`.",
 		},
 		{
 			flag: "--format",

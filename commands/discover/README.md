@@ -53,17 +53,11 @@ tested without a router (crafted packet fixtures + a loopback socket).
 
 ## Flags and defaults
 
-| Flag             | Default       | Meaning                                              |
-| ---------------- | ------------- | ---------------------------------------------------- |
-| `--timeout`      | `15s`         | Listen window before results are returned. First refresh is sent immediately. |
-| `--save`         | off           | Persist discovered neighbors into the CDB.           |
-| `--group`        | `discovered`  | First-class CDB group assigned to saved entries.     |
-| `--port`         | `5678`        | UDP port to bind for MNDP.                            |
-| `--cdb-file`     | resolved CDB  | CDB path override for `--save`.                      |
-| `--cdb-password` | env/none      | Decrypt an encrypted CDB; also used to re-encrypt on `--save`. |
-| `--format`       | `text`        | `text`, `json`, or `yaml`; renders the same envelope. |
-
-`--save` without `--timeout` uses the default 15s window.
+Implemented flags (with their defaults) are generated from the CLI metadata
+into [`docs/CLI.md` → discover](../../docs/CLI.md#discover); this file does
+not duplicate that table. The first refresh is sent immediately, so the
+`--timeout` listen window (default 15s) bounds the wait, and `--save` without
+`--timeout` uses the same default window.
 
 Bare `centrs discover` is **read-only** — it returns the envelope and never
 writes the (WinBox-shared) CDB; `--save` is the explicit opt-in. When it finds
