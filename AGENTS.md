@@ -67,6 +67,7 @@ Otherwise, use this index to find the path-scoped rule that may apply:
 | `.github/instructions/github-security-quality.instructions.md` | Security scanning, credentials, and quality-sensitive surfaces. |
 | `.github/instructions/instruction-scopes.instructions.md` | Narrow `applyTo` scopes and instruction-source ownership. |
 | `.github/instructions/linting.instructions.md` | Lint, typecheck, spelling, markdown, and secretlint gates. |
+| `.github/instructions/pr-review-bots.instructions.md` | How Copilot/CodeRabbit/Codex reviews surface and how to resolve threads before merge. |
 | `.github/instructions/python-uv.instructions.md` | Python and uv conventions when Python files are touched. |
 | `.github/instructions/readme-cli-manual.instructions.md` | README as the temporary CLI manual. |
 | `.github/instructions/readme-dependencies.instructions.md` | README dependency and install notes. |

@@ -270,6 +270,9 @@ choco
 coderabbit
 coderabbitai
 
+# GitHub account Codex review threads are authored under (see pr-review-bots).
+mobileskyfi
+
 # centrs domain vocabulary
 # %identity: the device /system/identity; a centrs CDB comment *lookup key*
 #   (`identity=`) used to resolve `<router>`. Human handle, deliberately may
