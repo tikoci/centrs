@@ -25,13 +25,24 @@ function flagTokens(flag: string): string[] {
 		.filter((part) => part.startsWith("-"));
 }
 
+/**
+ * Whether `token` appears in the reference as a standalone flag rather than a
+ * substring of a longer one. A raw `includes()` false-passes short aliases —
+ * `-f` occurs inside `--cdb-file` — so the token must be bounded by non-flag
+ * characters (flags are `[\w-]`) on both sides.
+ */
+function tokenPresent(reference: string, token: string): boolean {
+	const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	return new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`).test(reference);
+}
+
 describe("docs/CLI.md does not drift from the CLI metadata", () => {
 	for (const command of cliCommands) {
 		test(`${command.name}: every flag appears in docs/CLI.md`, () => {
 			const missing: string[] = [];
 			for (const option of command.options) {
 				for (const token of flagTokens(option.flag)) {
-					if (!CLI_REFERENCE.includes(token)) {
+					if (!tokenPresent(CLI_REFERENCE, token)) {
 						missing.push(token);
 					}
 				}

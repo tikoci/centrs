@@ -33,29 +33,29 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 | ---- | ----- | ----------- |
 | `--via` | `<protocol>` | Pin the protocol selector. Defaults to `rest-api` for retrieve. |
 | `--group` | `<name>` | Fan out across every CDB record in the group (repeatable; de-duped by record index). |
-| `--where` | `<attr>=<value>` | Device-class selector over CDB facts + core fields (repeatable, AND-combined). |
-| `--near` | `<lat>,<lon>,<radius>` | Geo selector: devices whose GPS is within radius (m/km/mi/ft; bare number = km). Lat-first. |
-| `--bbox` | `<south>,<west>,<north>,<east>` | Geo selector: devices whose GPS is inside the lat-first bounding box. |
+| `--where` | `<attr>`=`<value>` | Device-class selector over CDB facts + core fields (repeatable, AND-combined). |
+| `--near` | `<lat>`,`<lon>`,`<radius>` | Geo selector: devices whose GPS is within radius (m/km/mi/ft; bare number = km). Lat-first. |
+| `--bbox` | `<south>`,`<west>`,`<north>`,`<east>` | Geo selector: devices whose GPS is inside the lat-first bounding box. |
 | `--all` |  | Fan out across every CDB record (excludes `__default__`). |
 | `--default` |  | Select the reserved `__default__` record. |
 | `--quickchr` | `<name>` | Target a running quickchr-managed CHR VM by name (repeatable; fans out when repeated). Exclusive of positional targets and CDB selectors; conflicts with direct connection overrides (--host/--port/--username/--password, and --ssh-key where the command has it). |
 | `--concurrency` | `<n>` | Max in-flight targets during fan-out (transport-aware default: rest-api 8, native-api 4). |
-| `--host` | `<host\|url>` | Override the resolved host or base URL for the target. |
+| `--host` | &lt;host\|url&gt; | Override the resolved host or base URL for the target. |
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases `--user`, `-u`). Falls back to `CENTRS_USERNAME`. |
 | `--password` | `<secret>` | RouterOS password. Falls back to `CENTRS_PASSWORD`. |
-| `--timeout` | `<ms\|5s>` | Operation timeout. REST currently rejects values above 60s. |
+| `--timeout` | &lt;ms\|5s&gt; | Operation timeout. REST currently rejects values above 60s. |
 | `--attribute` | `<name>` | Project one attribute. May be repeated. |
 | `--attributes` | `<a,b>` | Project a comma-separated attribute list. |
 | `--all-attributes` |  | Request the RouterOS detail/all-attributes shape. |
 | `--list-attributes / --list` |  | List inspect-derived attributes without running the data call. |
 | `--query / --filter` | `<expr>` | RouterOS-side row filter (maps to `.query`). Not implemented yet — returns `validation/not-implemented`. |
-| `--format` | `<text\|json\|yaml>` | Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope. |
+| `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope. |
 | `--json` |  | Shortcut for `--format json`. |
 | `--max-results` | `<bytes>` | Fail instead of printing output larger than the given byte budget. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
-| `--resolve` | `<none\|arp>` | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
+| `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--validate / --no-validate` |  | Enable or disable inspect-backed preflight validation. |
 | `--verbose` |  | Show resolved setting sources in text output. |
 
@@ -69,16 +69,16 @@ Usage: centrs execute <target> <command> [flags] | centrs execute <target...> --
 
 | Flag | Value | Description |
 | ---- | ----- | ----------- |
-| `--via` | `<native-api\|rest-api\|mac-telnet>` | Pin the protocol selector; no silent downgrade when set. A bare MAC target defaults to mac-telnet. |
+| `--via` | &lt;native-api\|rest-api\|mac-telnet&gt; | Pin the protocol selector; no silent downgrade when set. A bare MAC target defaults to mac-telnet. |
 | `--group` | `<name>` | Fan out across every CDB record in the group (repeatable; de-duped by record index). |
-| `--where` | `<attr>=<value>` | Device-class selector over CDB facts + core fields (repeatable, AND-combined). |
-| `--near` | `<lat>,<lon>,<radius>` | Geo selector: devices whose GPS is within radius (m/km/mi/ft; bare number = km). Lat-first. |
-| `--bbox` | `<south>,<west>,<north>,<east>` | Geo selector: devices whose GPS is inside the lat-first bounding box. |
+| `--where` | `<attr>`=`<value>` | Device-class selector over CDB facts + core fields (repeatable, AND-combined). |
+| `--near` | `<lat>`,`<lon>`,`<radius>` | Geo selector: devices whose GPS is within radius (m/km/mi/ft; bare number = km). Lat-first. |
+| `--bbox` | `<south>`,`<west>`,`<north>`,`<east>` | Geo selector: devices whose GPS is inside the lat-first bounding box. |
 | `--all` |  | Fan out across every CDB record (excludes `__default__`). |
 | `--default` |  | Select the reserved `__default__` record. |
 | `--quickchr` | `<name>` | Target a running quickchr-managed CHR VM by name (repeatable; fans out when repeated). Exclusive of positional targets and CDB selectors; conflicts with direct connection overrides (--host/--port/--username/--password, and --ssh-key where the command has it). |
 | `--concurrency` | `<n>` | Max in-flight targets during fan-out (transport-aware default: rest-api 8, native-api 4). |
-| `--host` | `<host\|url>` | Override the resolved host or base URL for the target. |
+| `--host` | &lt;host\|url&gt; | Override the resolved host or base URL for the target. |
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases `--user`, `-u`). Falls back to `CENTRS_USERNAME`. |
 | `--password` | `<secret>` | RouterOS password. Falls back to `CENTRS_PASSWORD`. |
@@ -86,12 +86,12 @@ Usage: centrs execute <target> <command> [flags] | centrs execute <target...> --
 | `--insecure` |  | Disable SSH host-key verification (`--via ssh`: accepts changed/impersonated keys, not just new) or accept a self-signed `api-ssl` TLS cert. Default verifies. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
-| `--resolve` | `<none\|arp>` | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
+| `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
 | `--validate / --no-validate` |  | Run RouterOS :parse and /console/inspect validation before execution (default true; `--validate=false` also accepted). |
 | `--yes` |  | Confirm write-shaped add/set/remove commands in non-interactive runs. |
 | `--max-results` | `<bytes>` | Fail if the rendered envelope exceeds this byte budget. |
-| `--format` | `<text\|json\|yaml>` | Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope. |
+| `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope. |
 | `--json` |  | Shortcut for `--format json`. |
 | `--verbose` |  | Include additional context in text output. |
 | `--` |  | End centrs option parsing: every following token is the literal RouterOS command, even flag-shaped ones (e.g. `-- /interface print where disabled=yes`). |
@@ -109,7 +109,7 @@ Usage: centrs api <router> <endpoint> [flags]
 | `-X / --method` | `<verb>` | HTTP method, default GET (case-insensitive). GET→print, PUT→add, PATCH→set, DELETE→remove, POST→run. |
 | `-f / --field` | `<key=value>` | Body field, repeatable; assembled into the JSON body (verbatim string values). |
 | `-d / --data` | `<json>` | Raw JSON request body. Conflicts with `-f` / `--input`. |
-| `--input` | `<file\|->` | Read the raw JSON body from a file or stdin (`-`). |
+| `--input` | &lt;file\|-&gt; | Read the raw JSON body from a file or stdin (`-`). |
 | `--query / --filter` | `<expr>` | RouterOS-side row filter, AND-combined, repeatable: name=value, name!=value, name>value, name<value, name. |
 | `--raw-query` | `<word>` | Verbatim RouterOS query word (repeatable) for OR / absence / stack expressions. |
 | `--attribute / --proplist` | `<a,b>` | Property projection → `.proplist`. |
@@ -118,26 +118,26 @@ Usage: centrs api <router> <endpoint> [flags]
 | `--stream / --listen` |  | Follow changes as an NDJSON envelope stream (native-api only; the `/listen` endpoint infers it). Ends with a summary envelope. |
 | `--count` | `<n>` | Stop a `--stream` after N change frames. |
 | `--duration` | `<dur>` | Stop a `--stream` after this wall-clock window (e.g. `5s`). |
-| `--via` | `<rest-api\|native-api>` | Pin the transport; no silent downgrade. Default rest-api. |
+| `--via` | &lt;rest-api\|native-api&gt; | Pin the transport; no silent downgrade. Default rest-api. |
 | `--group` | `<name>` | Fan out across every CDB record in the group (repeatable; de-duped by record index). |
-| `--where` | `<attr>=<value>` | Device-class selector over CDB facts + core fields (repeatable, AND-combined). |
-| `--near` | `<lat>,<lon>,<radius>` | Geo selector: devices whose GPS is within radius (m/km/mi/ft; bare number = km). Lat-first. |
-| `--bbox` | `<south>,<west>,<north>,<east>` | Geo selector: devices whose GPS is inside the lat-first bounding box. |
+| `--where` | `<attr>`=`<value>` | Device-class selector over CDB facts + core fields (repeatable, AND-combined). |
+| `--near` | `<lat>`,`<lon>`,`<radius>` | Geo selector: devices whose GPS is within radius (m/km/mi/ft; bare number = km). Lat-first. |
+| `--bbox` | `<south>`,`<west>`,`<north>`,`<east>` | Geo selector: devices whose GPS is inside the lat-first bounding box. |
 | `--all` |  | Fan out across every CDB record (excludes `__default__`). |
 | `--default` |  | Select the reserved `__default__` record. |
 | `--quickchr` | `<name>` | Target a running quickchr-managed CHR VM by name (repeatable; fans out when repeated). Exclusive of positional targets and CDB selectors; conflicts with direct connection overrides (--host/--port/--username/--password, and --ssh-key where the command has it). |
 | `--concurrency` | `<n>` | Max in-flight targets during fan-out (transport-aware default: rest-api 8, native-api 4). |
-| `--host` | `<host\|url>` | Override the resolved host or base URL for the target. |
+| `--host` | &lt;host\|url&gt; | Override the resolved host or base URL for the target. |
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username. Falls back to `CENTRS_USERNAME`. |
 | `--password` | `<secret>` | RouterOS password. Falls back to `CENTRS_PASSWORD`. |
 | `--insecure` |  | Accept a self-signed `api-ssl`/REST TLS cert. Default verifies. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
-| `--resolve` | `<none\|arp>` | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
+| `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
 | `--validate / --no-validate` |  | Run `/console/inspect` validation before the request (default true; `--validate=false` also accepted). |
-| `--format` | `<json\|yaml\|text>` | Output format. Defaults to json for api; `CENTRS_FORMAT` overrides. |
+| `--format` | &lt;json\|yaml\|text&gt; | Output format. Defaults to json for api; `CENTRS_FORMAT` overrides. |
 | `--json` |  | Shortcut for `--format json`. |
 | `--verbose` |  | Include additional context in text output. |
 
@@ -156,24 +156,24 @@ Usage: centrs transfer <router> upload <local> [remote] | download <remote> [loc
 | `--insecure` |  | Accept a self-signed TLS cert (https/api-ssl) or a new SSH host key. Default verifies. |
 | `--force / --overwrite` |  | Replace an existing destination. Default refuses it. |
 | `--group` | `<name>` | Fan out across every CDB record in the group (repeatable; de-duped by record index). |
-| `--where` | `<attr>=<value>` | Device-class selector over CDB facts + core fields (repeatable, AND-combined). |
-| `--near` | `<lat>,<lon>,<radius>` | Geo selector: devices whose GPS is within radius (m/km/mi/ft; bare number = km). Lat-first. |
-| `--bbox` | `<south>,<west>,<north>,<east>` | Geo selector: devices whose GPS is inside the lat-first bounding box. |
+| `--where` | `<attr>`=`<value>` | Device-class selector over CDB facts + core fields (repeatable, AND-combined). |
+| `--near` | `<lat>`,`<lon>`,`<radius>` | Geo selector: devices whose GPS is within radius (m/km/mi/ft; bare number = km). Lat-first. |
+| `--bbox` | `<south>`,`<west>`,`<north>`,`<east>` | Geo selector: devices whose GPS is inside the lat-first bounding box. |
 | `--all` |  | Fan out across every CDB record (excludes `__default__`). |
 | `--default` |  | Select the reserved `__default__` record. |
 | `--quickchr` | `<name>` | Target a running quickchr-managed CHR VM by name (repeatable; fans out when repeated). Exclusive of positional targets and CDB selectors; conflicts with direct connection overrides (--host/--port/--username/--password, and --ssh-key where the command has it). |
 | `--concurrency` | `<n>` | Max in-flight targets during fan-out (transport-aware default: rest-api 8, native-api 4). |
 | `--out-dir` | `<dir>` | `download` fan-out only: write one file per target into `<dir>`, named by CDB identity. Required when downloading across a selection. |
 | `--yes` |  | Confirm a mutating fan-out (upload/remove/mkdir/copy) across multiple routers in non-interactive runs. |
-| `--verify / --no-verify` | `<size\|checksum\|off>` | Post-transfer integrity check. Default size; `--no-verify` skips. |
-| `--type` | `<file\|directory\|disk\|package>` | list filter: RouterOS /file row type. |
+| `--verify / --no-verify` | &lt;size\|checksum\|off&gt; | Post-transfer integrity check. Default size; `--no-verify` skips. |
+| `--type` | &lt;file\|directory\|disk\|package&gt; | list filter: RouterOS /file row type. |
 | `--name` | `<glob>` | list filter: file-name glob. |
-| `--host` | `<host\|url>` | Override the resolved host or base URL. |
+| `--host` | &lt;host\|url&gt; | Override the resolved host or base URL. |
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases --user, -u). Falls back to CENTRS_USERNAME. |
 | `--password` | `<secret>` | RouterOS password. Falls back to CENTRS_PASSWORD. |
-| `--timeout` | `<ms\|5s>` | Operation timeout. REST rejects values above 60s. |
-| `--format` | `<text\|json\|yaml>` | Output format. Defaults to text; --json / --yaml shortcuts. |
+| `--timeout` | &lt;ms\|5s&gt; | Operation timeout. REST rejects values above 60s. |
+| `--format` | &lt;text\|json\|yaml&gt; | Output format. Defaults to text; --json / --yaml shortcuts. |
 | `--json` |  | Shortcut for --format json. |
 | `--yaml` |  | Shortcut for --format yaml. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
@@ -201,8 +201,8 @@ Usage: centrs terminal <router> [flags]
 | `--insecure` |  | `--via ssh`: disable host-key verification (accepts changed/impersonated keys). Default verifies. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
-| `--resolve` | `<none\|arp>` | `--via ssh` only: turn a MAC target into an IP. CDB-first; `arp` opts into the host ARP cache (default none). The mac-telnet default ignores it. |
-| `--format` | `<text\|json\|yaml>` | Error-envelope format on failure. --json / --yaml shortcuts. |
+| `--resolve` | &lt;none\|arp&gt; | `--via ssh` only: turn a MAC target into an IP. CDB-first; `arp` opts into the host ARP cache (default none). The mac-telnet default ignores it. |
+| `--format` | &lt;text\|json\|yaml&gt; | Error-envelope format on failure. --json / --yaml shortcuts. |
 | `--json` |  | Shortcut for --format json. |
 | `--yaml` |  | Shortcut for --format yaml. |
 | `--verbose` |  | Verbose error output. |
@@ -222,11 +222,11 @@ Usage: centrs devices <list|show|groups|add|edit|set|remove> [args] [flags]
 | `--via` | `<protocol>` | Resolve and report the protocol source for provenance examples; no network IO is performed. |
 | `--group` | `<name>` | `list` filter / `add`,`edit` first-class group field for the target entry. |
 | `--where` | `<attr=value>` | `list` only — repeatable device-class filter over CDB facts (AND-combined), e.g. `--where lat=37.7749`. |
-| `--near` | `<lat>,<lon>,<radius>` | `list` only — GPS filter: devices within radius (m/km/mi/ft; bare number = km). Lat-first. |
-| `--bbox` | `<south>,<west>,<north>,<east>` | `list` only — GPS filter: devices inside the lat-first bounding box. |
+| `--near` | `<lat>`,`<lon>`,`<radius>` | `list` only — GPS filter: devices within radius (m/km/mi/ft; bare number = km). Lat-first. |
+| `--bbox` | `<south>`,`<west>`,`<north>`,`<east>` | `list` only — GPS filter: devices inside the lat-first bounding box. |
 | `--members` |  | `groups` only — expand each group's membership. |
 | `--explain` |  | `show` only — include the raw `WinBoxCdbRecord` in `data.record`. |
-| `--match` | `<user=…\|target=…\|record-type>` | `show` — disambiguate when `<router>` matches several records: `user=<name>`, `target=<addr>`, or a record-type token. |
+| `--match` | &lt;user=…\|target=…\|record-type&gt; | `show` — disambiguate when `<router>` matches several records: `user=<name>`, `target=<addr>`, or a record-type token. |
 | `--user` | `<name>` | `add`,`set` — first-class CDB user field. |
 | `--password` | `<secret>` | `add`,`set` — first-class CDB password field. |
 | `--profile` | `<name>` | `add`,`set` — named WinBox profile (Workspace). |
@@ -234,15 +234,15 @@ Usage: centrs devices <list|show|groups|add|edit|set|remove> [args] [flags]
 | `--profile-own` |  | `add`,`set` — write the WinBox `<own>` profile sentinel. |
 | `--session` | `<name>` | `add`,`set` — first-class CDB session field. |
 | `--comment` | `<text>` | `add` only — base free-form comment (may include kv-soup). |
-| `--record-type` | `<macTarget\|ipAdmin\|ipUser\|romonNeighbor\|romonTarget>` | `add` only — record type (default `ipAdmin`). |
+| `--record-type` | &lt;macTarget\|ipAdmin\|ipUser\|romonNeighbor\|romonTarget&gt; | `add` only — record type (default `ipAdmin`). |
 | `--lat / --latitude` | `<deg>` | `add`,`set` — latitude in decimal degrees (-90..90); a comment-kv fact, paired with --lon. |
 | `--lon / --lng / --longitude / --long` | `<deg>` | `add`,`set` — longitude in decimal degrees (-180..180); a comment-kv fact, paired with --lat. |
 | `--altitude / --alt / --ele / --elevation` | `<meters>` | `add`,`set` — altitude in meters (may be negative); a comment-kv fact. |
-| `--altitude-type / --alt-type` | `<MSL\|AGL>` | `add`,`set` — vertical datum for --altitude (default MSL); case-insensitive. |
-| `--gps` | `<lat>,<lon>[,<altitude>[,<altitude-type>]]` | `add`,`set` — combined lat,lon[,altitude[,altitude-type]] convenience (lat-first; missing altitude-type defaults MSL). |
+| `--altitude-type / --alt-type` | &lt;MSL\|AGL&gt; | `add`,`set` — vertical datum for --altitude (default MSL); case-insensitive. |
+| `--gps` | `<lat>`,`<lon>`[,`<altitude>`[,`<altitude-type>`]] | `add`,`set` — combined lat,lon[,altitude[,altitude-type]] convenience (lat-first; missing altitude-type defaults MSL). |
 | `--force` |  | `add` only — overwrite the existing (target, user) entry. |
 | `--strict` |  | `add`,`set` — reject unknown comment kv keys instead of warning. |
-| `--format` | `<text\|json\|yaml>` | Output format for the CLI response. |
+| `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
 | `--json` |  | Shortcut for `--format json`. |
 
 ## discover
@@ -255,13 +255,13 @@ Usage: centrs discover [--timeout 15s] [--save] [flags]
 
 | Flag | Value | Description |
 | ---- | ----- | ----------- |
-| `--timeout` | `<ms\|15s>` | Listen window before results are returned. Default 15s. |
+| `--timeout` | &lt;ms\|15s&gt; | Listen window before results are returned. Default 15s. |
 | `--save` |  | Persist discovered neighbors into the CDB (`group=discovered`, `source=mndp`). |
 | `--group` | `<name>` | `--save` group for new entries. Default `discovered`. |
 | `--port` | `<port>` | UDP port to bind for MNDP. Default 5678. |
 | `--cdb-file` | `<path>` | `--save` CDB path override (default `~/.config/tikoci/winbox.cdb`). |
 | `--cdb-password` | `<secret>` | `--save` password for an encrypted CDB. Used to decrypt the existing CDB and re-encrypt on write. |
-| `--format` | `<text\|json\|yaml>` | Output format for the CLI response. |
+| `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
 | `--json` |  | Shortcut for `--format json`. |
 
 ## btest
@@ -274,8 +274,8 @@ Usage: centrs btest <client <router>|server> [flags]
 
 | Flag | Value | Description |
 | ---- | ----- | ----------- |
-| `--protocol` | `<udp\|tcp>` | (client) Transport. Default udp. |
-| `--direction` | `<receive\|transmit\|both>` | (client) Test direction. Default receive. |
+| `--protocol` | &lt;udp\|tcp&gt; | (client) Transport. Default udp. |
+| `--direction` | &lt;receive\|transmit\|both&gt; | (client) Test direction. Default receive. |
 | `--duration` | `<dur>` | Bound the run (e.g. 15s). Omit for open-ended (Ctrl-C). |
 | `--interval` | `<dur>` | Report cadence (20ms..5s). Default 1s. |
 | `--connection-count` | `<n>` | (client, TCP only) Parallel TCP data connections (1..255). |
@@ -294,7 +294,7 @@ Usage: centrs btest <client <router>|server> [flags]
 | `--port` | `<port>` | Control port. Default 2000. |
 | `--cdb-file` | `<path>` | (client) Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | (client) Decrypt an encrypted WinBox CDB file. |
-| `--format` | `<text\|csv\|json\|yaml>` | Output format. Default text. |
+| `--format` | &lt;text\|csv\|json\|yaml&gt; | Output format. Default text. |
 | `--csv` |  | Shortcut for `--format csv`. |
 
 ## mcp
@@ -326,6 +326,6 @@ Usage: centrs settings [print|get|set|reset] [args] [flags]
 | `--cdb-file` | `<path>` | `print` only — CDB to probe for the `__default__` record summary (falls back to normal CDB resolution; never centrs.env). |
 | `--cdb-password` | `<secret>` | `print` only — decrypt password for the probed CDB. |
 | `--skip-env-file` |  | `print` only — note that other commands in this environment would not see centrs.env (settings itself always reads the real file). |
-| `--format` | `<text\|json\|yaml>` | Output format for the CLI response. |
+| `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
 | `--json` |  | Shortcut for `--format json`. |
 | `--help` |  | Show this help. |

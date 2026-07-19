@@ -20,29 +20,54 @@ import { cliCommands } from "../src/cli.ts";
 const OUTPUT_PATH = join(import.meta.dir, "..", "docs", "CLI.md");
 
 /**
- * Make text safe inside a GFM table cell: escape `|` (GFM honors `\|` even
- * inside code spans) and wrap bare `<placeholder>` tokens in code spans so
- * markdownlint's inline-HTML rule (MD033) doesn't read them as tags. Segments
- * already inside backticks are left as-is apart from pipe escaping.
+ * Encode one bare `<placeholder>` token (including its angle brackets) for a
+ * GFM table cell. A plain placeholder is wrapped in a code span so it reads as
+ * monospace and markdownlint's inline-HTML rule (MD033) doesn't treat it as a
+ * tag. A *pipe union* like `<host|url>` cannot use a code span: GFM's `\|`
+ * table escape renders the backslash literally inside code spans, so the union
+ * is emitted with `&lt;…&gt;` entities (MD033-safe, no code span) and the
+ * interior pipes escaped as `\|`, which resolves to a literal `|` on render.
+ */
+function encodePlaceholder(token: string): string {
+	if (token.includes("|")) {
+		return `&lt;${token.slice(1, -1).replaceAll("|", "\\|")}&gt;`;
+	}
+	return `\`${token}\``;
+}
+
+/**
+ * Make text safe inside a GFM table cell. Segments already inside backticks are
+ * left as-is apart from pipe escaping; outside segments get their bare
+ * `<placeholder>` tokens encoded (see `encodePlaceholder`) and any remaining
+ * stray pipes escaped so they don't split the column.
  */
 function tableCell(text: string): string {
 	return text
 		.split("`")
-		.map((segment, index) =>
-			// Odd indexes are inside a code span; only even (outside) segments get
-			// their <...> tokens code-spanned.
-			index % 2 === 0
-				? segment.replace(/<[^<>\s]+>/g, (token) => `\`${token}\``)
-				: segment,
-		)
-		.join("`")
-		.replaceAll("|", "\\|");
+		.map((segment, index) => {
+			// Odd indexes are inside a code span: only pipe-escape (GFM honors `\|`
+			// there without splitting the column).
+			if (index % 2 === 1) {
+				return segment.replaceAll("|", "\\|");
+			}
+			// Outside a code span: encode <...> tokens (which handle their own
+			// interior pipes) and escape stray pipes in the surrounding text.
+			return segment
+				.split(/(<[^<>\s]+>)/)
+				.map((part, partIndex) =>
+					partIndex % 2 === 1
+						? encodePlaceholder(part)
+						: part.replaceAll("|", "\\|"),
+				)
+				.join("");
+		})
+		.join("`");
 }
 
 function renderCommand(command: (typeof cliCommands)[number]): string {
 	const rows = command.options.map((option) => {
 		const flag = tableCell(`\`${option.flag}\``);
-		const value = option.valueName ? tableCell(`\`${option.valueName}\``) : "";
+		const value = option.valueName ? tableCell(option.valueName) : "";
 		return `| ${flag} | ${value} | ${tableCell(option.description)} |`;
 	});
 	return [
