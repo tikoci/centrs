@@ -84,8 +84,7 @@ export const transferCommand: CliCommandMetadata = {
 				"Accept a self-signed TLS cert (https/api-ssl) or a new SSH host key. Default verifies.",
 		},
 		{
-			flag: "--force",
-			valueName: "(--overwrite)",
+			flag: "--force / --overwrite",
 			description: "Replace an existing destination. Default refuses it.",
 		},
 		...selectionCommandOptions,
@@ -101,10 +100,10 @@ export const transferCommand: CliCommandMetadata = {
 				"Confirm a mutating fan-out (upload/remove/mkdir/copy) across multiple routers in non-interactive runs.",
 		},
 		{
-			flag: "--verify",
+			flag: "--verify / --no-verify",
 			valueName: "<size|checksum|off>",
 			description:
-				"Post-transfer integrity check. Default size; --no-verify skips.",
+				"Post-transfer integrity check. Default size; `--no-verify` skips.",
 		},
 		{
 			flag: "--type",
@@ -149,6 +148,7 @@ export const transferCommand: CliCommandMetadata = {
 				"Output format. Defaults to text; --json / --yaml shortcuts.",
 		},
 		{ flag: "--json", description: "Shortcut for --format json." },
+		{ flag: "--yaml", description: "Shortcut for --format yaml." },
 		{
 			flag: "--cdb-file",
 			valueName: "<path>",

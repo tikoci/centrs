@@ -154,28 +154,35 @@ is an explicit `--via scp` escape hatch. The reason is capability, not taste:
 
 ## Flags
 
-| Flag | Behavior |
-| ---- | -------- |
-| `--via <method>` | Pin the method: `sftp` (built; secure default for large transfers), `rest`, `native`, or `scp` *(deferred)* / `fetch` *(deferred)* / `ftp` *(gated)*. No silent downgrade. See *Method selection* and constitution: protocol selection. |
-| `--force` (alias `--overwrite`) | Replace an existing target. Default **refuses** an existing target with `usage/target-exists` (mirrors how `add` refuses an existing record). Applies to the destination side: the local file for `download`, the remote file for `upload`. |
-| `--verify <size\|checksum\|off>` | Post-transfer integrity check. Default `size` (compare the byte count centrs sent/received against the settled `/file` size). `off` (alias `--no-verify`) skips it. See *Integrity*. |
-| `--type <file\|directory\|disk\|package>` | `list` only: filter by `/file` row type. |
-| `--name <glob>` | `list` only: filter by file name glob. |
-| `--out-dir <dir>` | `download` fan-out only: write one file per target into `<dir>` (named by CDB identity, collision-safe, keeping the remote extension), since N devices cannot share one local path. **Required** for a `download` across a selection. See **Target selection**. |
-| `--yes` | Confirm a mutating fan-out (`upload`/`remove`/`mkdir`/`copy`) across multiple routers in non-interactive runs (confirmed once up front). See **Target selection**. |
+Implemented flags are generated from the CLI metadata into
+[`docs/CLI.md` → transfer](../../docs/CLI.md#transfer); this file does not
+duplicate that table. Behavior notes the generated reference cannot carry:
+
+- `--force`/`--overwrite` applies to the destination side (the local file for
+  `download`, the remote file for `upload`); the default refuses an existing
+  target with `usage/target-exists` (see *Validation*).
+- `--verify` details and the sftp size caveat are in *Integrity*.
+- `--timeout`: `rest`/`native` are per-request ≤ 60000 ms (a chunked read is
+  many short requests, each capped); `sftp` accepts longer for a single large
+  transfer.
+- `--ssh-key` is the same `sshKey` setting as `terminal`/`execute`
+  (`CENTRS_SSH_KEY`, CDB `ssh-key=`); when unset, the ssh-agent /
+  `~/.ssh/config` is used. See `commands/terminal/README.md`.
+- `--insecure` adds a `transport/insecure-trust` warning (constitution:
+  transport trust).
+- `--quickchr` resolves host/port/auth from the live `@tikoci/quickchr`
+  (0.4.5+, optional dependency) descriptor. `--via sftp` additionally
+  requires the descriptor's SSH endpoint to advertise a batch-capable auth
+  mode, else `quickchr/unsupported-via` (never a password prompt).
+
+### Designed, not implemented
+
+Spec-tier flags with no implementation yet — today they fail as unknown flags:
+
+| Flag | Designed behavior |
+| ---- | ----------------- |
 | `--advertise-host <host>` / `--advertise-port <n>` / `--bind <addr>` | `fetch` only *(deferred)*: the host/IP/port centrs advertises in the fetch URL and the local bind address. Default: auto-detect the local IP on the route to the router; ephemeral port; single-use random URL token. |
-| `--resolve <none\|arp>` | *(deferred — not parsed yet)* Resolve a MAC-address target to an IP via the host ARP cache. Default `none`. |
-| `--format text` (default) | Human summary: method, bytes, duration, verified. Errors print `[code] summary` + `Fix:` lines. |
-| `--format json` (alias `--json`) / `--format yaml` (alias `--yaml`) | Structured envelope. `CENTRS_FORMAT=json` makes JSON the default. |
-| `--validate=false` | Escape hatch; default `true`. See constitution: validation is the product. |
-| `--timeout <ms>` | Request timeout. `rest`/`native` per-request ≤ 60000 (a chunked read is many short requests, each capped); `sftp`/`scp`/`fetch` accept longer for a single large transfer. |
-| `--username` / `--password` | Override CDB-resolved or env credentials. |
-| `--host <host\|url>` / `--port <n>` | Override the resolved host / transport port. |
-| `--ssh-key <path>` | `sftp` (and future `scp`): explicit private-key path. Same `sshKey` setting as `terminal`/`execute` (`CENTRS_SSH_KEY`, CDB `ssh-key=`). When unset, the ssh-agent / `~/.ssh/config` is used. See `commands/terminal/README.md`. |
-| `--insecure` | Accept a self-signed TLS cert (`https`/`api-ssl`) or a new SSH host key (TOFU). Default verifies; see constitution: transport trust. Adds a `transport/insecure-trust` warning. |
-| `--cdb-file` / `--cdb-password` | Override CDB file location / decrypt password. |
-| `--group <name>` / `--where <attr>=<value>` / `--near <lat>,<lon>,<radius>` / `--bbox <south>,<west>,<north>,<east>` / `--all` / `--default` / `--concurrency <n>` | Fan out across CDB targets (e.g. push one firmware file to a fleet). Same selector grammar and per-target envelope as `retrieve`/`execute` (constitution: target selection). `--near`/`--bbox` select by device GPS (lat-first). `download` fan-out requires `--out-dir`; `remove`/`mkdir`/`copy`/`upload` fan out directly and are `--yes`-gated. See **Target selection**. |
-| `--quickchr <name>` | Target a running quickchr-managed CHR VM by name: host/port/auth come from the live descriptor (`@tikoci/quickchr` 0.4.5+, optional dependency), bypassing CDB/env resolution for those fields. Repeatable — repeating fans out. Exclusive of `<router>` positionals and CDB selectors; conflicts with `--host`/`--port`/`--username`/`--password`/`--ssh-key`. `--via sftp`/`scp` additionally requires the descriptor's SSH endpoint to advertise a batch-capable auth mode, else `quickchr/unsupported-via` (never a password prompt). See **Target selection**. |
+| `--resolve <none\|arp>` | Resolve a MAC-address target to an IP via the host ARP cache. Default `none`. |
 
 ## Target selection
 

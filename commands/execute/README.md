@@ -102,31 +102,30 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
 
 ## Flags
 
-| Flag                            | Behavior                                                                              |
+Implemented flags are generated from the CLI metadata into
+[`docs/CLI.md` → execute](../../docs/CLI.md#execute); this file does not
+duplicate that table. Behavior notes the generated reference cannot carry:
+
+- `--validate` is transport-appropriate: REST/native use `:parse` +
+  `/console/inspect`; mac-telnet and ssh use a single console `:parse`
+  (covers syntax + unknown-attribute).
+- `--format` defaults to `text`; `CENTRS_FORMAT` sets the default.
+- `--quickchr` resolves host/port/auth from the live `@tikoci/quickchr`
+  (0.4.5+, optional dependency) descriptor, bypassing CDB/env resolution for
+  those fields.
+- `--` — use it when the command contains tokens that would otherwise be
+  claimed as centrs flags; otherwise the command must be quoted as a single
+  argument. In fan-out, positional targets come BEFORE `--` and the command
+  AFTER it (see **Target selection**).
+
+### Designed, not implemented
+
+Spec-tier flags with no implementation yet — today they fail as unknown flags:
+
+| Flag                            | Designed behavior                                                                      |
 | ------------------------------- | ------------------------------------------------------------------------------------- |
-| `--via <protocol>`              | Pin the transport (`native-api`, `rest-api`, `ssh`, or `mac-telnet`). No silent downgrade. A bare MAC target defaults to `mac-telnet`. |
-| `--host <host\|url>`            | Override the resolved host or base URL for the target.                                 |
-| `--port <n>`                    | Override the resolved management port.                                                 |
-| `--username` (alias `--user`, `-u`) / `--password` | RouterOS credentials; fall back to `CENTRS_USERNAME` / `CENTRS_PASSWORD`.              |
-| `--ssh-key <path>`              | `--via ssh`: explicit private-key path. Falls back to `CENTRS_SSH_KEY` / the ssh-agent. |
-| `--insecure`                    | Accept a new SSH host key (`--via ssh`) or a self-signed `api-ssl` TLS cert. Default verifies. |
-| `--cdb-file` / `--cdb-password` | Read target credentials from (and decrypt) a WinBox CDB file.                          |
-| `--resolve <none\|arp>`         | Resolve a MAC-address target to an IP via the host ARP cache. Default `none`.          |
-| `--timeout <duration>`          | Per-request timeout. REST: ≤ 60s; other transports may allow longer.                  |
-| `--validate[=false]`            | Run transport-appropriate preflight validation before execution (default `true`): REST/native use `:parse` + `/console/inspect`; mac-telnet and ssh use a single console `:parse` (covers syntax + unknown-attribute). |
 | `--strict`                      | Treat any warning on a successful run as an error (`ok: false`, nonzero exit), like `-Werror`. Default is lenient (`ok: true` + `warnings`). |
-| `--yes`                         | Confirm write-shaped add/set/remove commands in non-interactive runs.                  |
-| `--max-bytes <n>`               | Byte budget for the rendered envelope; excess output is truncated with a warning + `meta.truncated` (not an error), matching `retrieve`. (Renamed from `--max-results`.) |
-| `--format <text\|json\|yaml>`   | Output format (alias `--json`). Defaults to `text`; `CENTRS_FORMAT` sets the default.  |
-| `--group <name>`                | Run across every CDB record in WinBox group `<name>`. Repeatable, combinable with `<target>` positionals plus `--where`/`--all`/`--default`; de-duped by record index. See **Target selection**. |
-| `--where <attr>=<value>`        | Device-class selector — run across every CDB record whose stored fact/comment-kv matches (e.g. `--where board=RB5009 /system/package/check-for-updates`). Repeatable (AND). See constitution: target selection. |
-| `--all`                         | Run across every CDB record (excludes the reserved `__default__`). See **Target selection**. |
-| `--default`                     | Select the reserved `__default__` record. See **Target selection**. |
-| `--near <lat>,<lon>,<radius>`   | Geo selector — run across CDB records whose GPS is within the great-circle radius (units `m`/`km`/`mi`/`ft`; bare = km). Lat-first. Union predicate; geo-less devices never match. See **Target selection**. |
-| `--bbox <south>,<west>,<north>,<east>` | Geo selector — run across CDB records whose GPS is inside the lat-first bounding box. Union predicate. See **Target selection**. |
-| `--concurrency <n>`             | Max in-flight targets during fan-out (integer ≥ 1). Transport-aware default: `rest-api` 8, others 4. |
-| `--quickchr <name>`             | Target a running quickchr-managed CHR VM by name: host/port/auth come from the live descriptor (`@tikoci/quickchr` 0.4.5+, optional dependency), bypassing CDB/env resolution for those fields. Repeatable — repeating fans out. Exclusive of `<target>` positionals and CDB selectors; conflicts with `--host`/`--port`/`--username`/`--password`/`--ssh-key`. See **Target selection**. |
-| `--`                            | End-of-options marker. Every token after `--` is taken as the literal RouterOS command, even flag-shaped ones — e.g. `centrs execute $R -- /interface print where disabled=yes`. In fan-out, positional targets come BEFORE `--` and the command AFTER it (`centrs execute r1 r2 -- /system/reboot`). Use it when the command contains tokens that would otherwise be claimed as centrs flags; otherwise the command must be quoted as a single argument. |
+| `--max-bytes <n>`               | Byte budget for the rendered envelope; excess output is truncated with a warning + `meta.truncated` (not an error), matching `retrieve`. (Will replace the implemented `--max-results`, which fails instead of truncating.) |
 
 ## SSH key selection
 
@@ -249,7 +248,7 @@ Protocol selection: an unresolved MAC target auto-selects mac-telnet (covered by
   **decided:** `--strict` promotes any warning on an otherwise-successful run to
   `ok: false` (nonzero exit), like `-Werror`; the default stays lenient
   (`ok: true` with the warning in the `warnings` channel). Tracked code
-  follow-up; the flag is in the table above.
+  follow-up; the flag is under **Designed, not implemented** above.
 
 These are deferred refinements to the already-grounded single-shot envelope,
 not blockers for the `rest-api`/`native-api` cells.

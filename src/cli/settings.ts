@@ -36,7 +36,7 @@ export const settingsCommand: CliCommandMetadata = {
 	name: "settings",
 	usage: "centrs settings [print|get|set|reset] [args] [flags]",
 	summary:
-		"Manage centrs's own global preferences (centrs.env) and inspect the __default__ CDB record.",
+		"Manage centrs's own global preferences (`centrs.env`) and inspect the `__default__` CDB record.",
 	options: [
 		{
 			flag: "--all",
@@ -47,7 +47,7 @@ export const settingsCommand: CliCommandMetadata = {
 			flag: "--cdb-file",
 			valueName: "<path>",
 			description:
-				"`print` only — CDB to probe for the __default__ record summary (falls back to normal CDB resolution; never centrs.env).",
+				"`print` only — CDB to probe for the `__default__` record summary (falls back to normal CDB resolution; never centrs.env).",
 		},
 		{
 			flag: "--cdb-password",

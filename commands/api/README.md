@@ -57,25 +57,25 @@ when a bare-collection `POST` carries create-looking fields.
 
 ## Flags
 
-| Flag | Behavior |
-| ---- | -------- |
-| `-X` / `--method <verb>` | HTTP method, default `GET`, case-insensitive. |
-| `-f <key=value>` | String field, repeatable; assembled into the JSON body. Values pass through verbatim (no type-guessing). |
-| `-d` / `--data <json>` | Raw JSON request body. Collides with `-f` → `usage/conflicting-flags`. |
-| `--input <file\|->` | Read the raw JSON body from a file or stdin (`-`). |
-| `--query` / `--filter <expr>` | RouterOS-side row filter, AND-combined, repeatable. `name=value` (eq), `name!=value` (ne), `name>value`/`name<value` (cmp), `name` (has-property). Maps to REST `.query` words / native `?` words. |
-| `--raw-query <word>` | Verbatim RouterOS query word (repeatable) for OR / absence / stack expressions — e.g. `--raw-query type=ether --raw-query type=vlan --raw-query '#\|'` (OR). Emitted as-is; the caller owns the stack. |
-| `--attribute` / `--proplist <a,b>` | Property projection → `.proplist`. |
-| `--raw` | Strip the envelope; emit bare RouterOS JSON. Implies `--validate=false`; does **not** imply `--yes`. |
-| `--yes` | Confirm a mutating (non-read) request in non-interactive runs. |
-| `--stream` (alias `--listen`) | Native-api-only open-ended follow → NDJSON stream of envelopes, ending with a summary envelope. Inferred from a `/listen` endpoint. `--via rest-api --stream` errors `transport/capability-unsupported` (REST's 60 s cap cannot follow). |
-| `--duration <dur>` / `--count <n>` | Bound a `--stream`: stop after a wall-clock window / after N frames. |
-| `--validate[=false]` | Default `true`. Gate is `/console/inspect` (see Validation). |
-| `--via <protocol>` | `rest-api` (default) or `native-api`. No silent downgrade. |
-| `--format <json\|yaml\|text>` | Output format. Defaults to `json` for `api` (machine-first); `CENTRS_FORMAT` overrides. Under `--stream`, `json`/`yaml` emit one compact envelope per line (NDJSON); `text` emits a concise row per frame. |
-| `--group <name>` / `--where <attr>=<value>` / `--near <lat>,<lon>,<radius>` / `--bbox <south>,<west>,<north>,<east>` / `--all` / `--default` / `--concurrency <n>` | Multi-target fan-out (see below). Repeatable `--group`/`--where`; `--near`/`--bbox` select by device GPS (lat-first; see constitution: target selection). The union de-dupes by CDB record index. |
-| `--quickchr <name>`     | Target a running quickchr-managed CHR VM by name: host/port/auth come from the live descriptor (`@tikoci/quickchr` 0.4.5+, optional dependency), bypassing CDB/env resolution for those fields. Repeatable — repeating fans out. Exclusive of `<router>` positionals and CDB selectors; conflicts with `--host`/`--port`/`--username`/`--password` (constitution: resolution providers). |
-| target/auth | `--host`, `--port`, `--username`/`--user`/`-u`, `--password`, `--insecure`, `--timeout`, `--cdb-file`, `--cdb-password`, `--resolve <none\|arp>` — same single-target resolver as `retrieve`/`execute`. |
+Implemented flags are generated from the CLI metadata into
+[`docs/CLI.md` → api](../../docs/CLI.md#api); this file does not duplicate
+that table, and `api` has no designed-but-unimplemented flags. Behavior notes
+the generated reference cannot carry:
+
+- `-f` values pass through verbatim (no type-guessing); `-d`/`--input`
+  collide with `-f` → `usage/conflicting-flags`.
+- `--query`/`--filter` map to REST `.query` words / native `?` words.
+- `--raw-query` is emitted as-is; the caller owns the stack — e.g.
+  `--raw-query type=ether --raw-query type=vlan --raw-query '#|'` (OR).
+- `--via rest-api --stream` errors `transport/capability-unsupported`
+  (REST's 60 s cap cannot follow).
+- Under `--stream`, `--format json`/`yaml` emit one compact envelope per
+  line (NDJSON); `text` emits a concise row per frame.
+- The target/auth flags (`--host`, `--port`, `--username`, `--password`,
+  `--insecure`, `--timeout`, `--cdb-file`, `--cdb-password`, `--resolve`)
+  use the same single-target resolver as `retrieve`/`execute`; `--quickchr`
+  resolves host/port/auth from the live `@tikoci/quickchr` descriptor
+  instead (constitution: resolution providers).
 
 ## Fan-out (multi-target)
 

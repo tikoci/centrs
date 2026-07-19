@@ -80,38 +80,27 @@ centrs btest server [--authenticate[=false]] [--user U] [--password P] \
 
 ## Flags
 
-### `btest client <router>`
+Implemented flags are generated from the CLI metadata into
+[`docs/CLI.md` → btest](../../docs/CLI.md#btest) — one table for both
+subcommands, with `(client)`/`(server)` markers scoping each flag; "did you
+mean?" hints are scoped to the active mode. This file does not duplicate that
+table. Behavior notes the generated reference cannot carry:
 
-| Flag | RouterOS analog / default | Notes |
-| ---- | ------------------------- | ----- |
-| `--protocol <udp\|tcp>` | `protocol`, default `udp` | UDP measures raw throughput + loss; TCP measures goodput. |
-| `--direction <receive\|transmit\|both>` | `direction`, default `receive` | `receive` = download (server→client), `transmit` = upload. |
-| `--duration <dur>` | `duration` | Bounds the run; reuses `parseDuration`. Omit for open-ended (Ctrl-C). |
-| `--interval <dur>` | `interval`, default `1s` | Report cadence (`20ms`..`5s`). One report frame per interval. |
-| `--connection-count <n>` | `connection-count` (1..255) | **TCP only.** Parallel TCP data connections. centrs opens the negotiated extra connections (join format grounded against RouterOS 7.23.1) so throughput aggregates across streams. **Authenticated (EC-SRP5) sessions stay single-stream** — the post-auth token is not captured — and emit a `routeros/btest-connection-count-single-stream` warning. |
-| `--local-udp-tx-size <n>` | `local-udp-tx-size` (28..64000) | **UDP only.** Client→server packet size. |
-| `--remote-udp-tx-size <n>` | `remote-udp-tx-size` (28..64000) | **UDP only.** Server→client packet size. |
-| `--local-tx-speed <bps>` | `local-tx-speed` | Cap on client→server rate (bits/sec). |
-| `--remote-tx-speed <bps>` | `remote-tx-speed` | Cap on server→client rate (bits/sec). |
-| `--random-data` | `random-data`, default off | Incompressible payload (defeats link compression; CPU-heavier). |
-| `--user` / `--password` | `user` / `password` | Fall back to CDB / `CENTRS_*`. Required when the server has `authenticate=yes`. |
-| `--port <n>` | — (default `2000`) | Control port override. |
-| `--format <text\|csv\|json\|yaml>` | — (default `text`) | `text` = live human reports; `csv` = streaming CSV records; `json`/`yaml` = final summary envelope. |
-| `--csv` | — | Shortcut for `--format csv`. |
-
-### `btest server`
-
-| Flag | RouterOS analog / default | Notes |
-| ---- | ------------------------- | ----- |
-| `--authenticate[=false]` | `authenticate`, **default `true`** | Require EC-SRP5 auth; `--authenticate=false` accepts anonymous clients. |
-| `--user` / `--password` | — | The accepted credential when `authenticate=true` (v1: one user). Falls back to `CENTRS_*`. |
-| `--bind <addr>` | **centrs-only** | Listen address; **default `127.0.0.1`**. Use `0.0.0.0` to expose on the LAN. |
-| `--port <n>` | — (default `2000`) | Control-connection port. |
-| `--allocate-udp-ports-from <n>` | `allocate-udp-ports-from` | Base of the UDP data-port range; default `2001` (just above the TCP/2000 control port). |
-| `--max-sessions <n>` | `max-sessions` (1..1000), default `100` | Concurrent test cap; further clients get `routeros/btest-too-many-sessions`. |
-| `--duration <dur>` | — | Optional auto-stop; otherwise runs until Ctrl-C. |
-| `--format <text\|csv\|json\|yaml>` | — (default `text`) | `text` = human session log; `csv` = streaming CSV records; `json`/`yaml` = final summary envelope. |
-| `--csv` | — | Shortcut for `--format csv`. |
+- Flag names mirror the RouterOS analogs verbatim (`protocol`, `direction`,
+  `local-udp-tx-size`, `connection-count`, `authenticate`,
+  `allocate-udp-ports-from`, …); centrs-only additions are `--bind`, `--port`,
+  the shared `--format`/`--csv`, and the CDB credential flags.
+- `--direction receive` = download (server→client), `transmit` = upload.
+- `--connection-count` is TCP-only; **authenticated (EC-SRP5) sessions stay
+  single-stream** — the post-auth token is not captured — and emit a
+  `routeros/btest-connection-count-single-stream` warning (see Open
+  questions).
+- `--user`/`--password` fall back to CDB / `CENTRS_*`; required when the
+  server has `authenticate=yes`. On the server they are the accepted
+  credential (v1: one user).
+- Option ranges (`28..64000` UDP sizes, `1..255` connections, `20ms..5s`
+  interval, `1..1000` sessions) are validated before any socket opens (see
+  Errors).
 
 ## How it works
 

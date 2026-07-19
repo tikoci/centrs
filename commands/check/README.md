@@ -197,6 +197,11 @@ triggered/enrichment checks; `--fast` suppresses progressive triggers.
 
 ## Flags
 
+The whole command is spec-tier (`designed` — nothing is implemented yet), so
+this table is the design, not a reference; once `check` lands, its
+implemented flags will be generated into `docs/CLI.md` like every other
+command's.
+
 | Flag | Behavior |
 | ---- | -------- |
 | `--preset <name>` | `reach` / `health` (default) / `exposure` / `full`. |

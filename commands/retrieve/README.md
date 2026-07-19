@@ -43,38 +43,32 @@ centrs retrieve <router> snmp <oid|MIB name> [flags]
 
 ## Flags
 
-| Flag                                | Behavior                                                                                  |
+Implemented flags are generated from the CLI metadata into
+[`docs/CLI.md` → retrieve](../../docs/CLI.md#retrieve); this file does not
+duplicate that table. Behavior notes the generated reference cannot carry:
+
+- `--format json` (shortcut `--json`): set `CENTRS_FORMAT=json` to make the
+  structured envelope the default. `--format yaml` renders the same envelope.
+- `--port`: native-api defaults to 8728; `--port 8729` selects TLS `api-ssl`.
+- `--query`/`--filter` are RouterOS **row** filters and always return an
+  array (see Synopsis); `--where` filters *which devices* fan out, not rows.
+- `--all-attributes` conflicts with `--attribute(s)` (see Validation).
+- `--quickchr` resolves host/port/auth from the live `@tikoci/quickchr`
+  (0.4.5+, optional dependency) descriptor, bypassing CDB/env resolution for
+  those fields.
+
+### Designed, not implemented
+
+Spec-tier flags with no implementation yet — today they fail as unknown flags:
+
+| Flag                                | Designed behavior                                                                          |
 | ----------------------------------- | ----------------------------------------------------------------------------------------- |
-| `--attribute <name>`                | Project a single attribute. Repeatable, or comma-separated.                               |
-| `--attributes <a,b,c>`              | Alias for `--attribute` with comma-separated input.                                       |
-| `--all-attributes`                  | Equivalent to RouterOS `details=true`. Mutually exclusive with `--attribute(s)`.          |
-| `--list-attributes` (alias `--list`) | Return the available attribute names for the path. No `print`/`get` is run.              |
 | `--once`                            | Bounded single read of a monitor-style menu (RouterOS `once`): returns **one** envelope and never follows. Open-ended follow is `api … --stream`. See constitution: protocol selection. |
-| `--query <expr>`                    | RouterOS-side **row** filter (maps to `.query`), repeatable; returns matching rows as an **array**. This is how you read one row by name (`--query name=ether1`). **Not Implemented** yet — returns `validation/not-implemented`. |
-| `--filter <expr>`                   | RouterOS row filter; same `.query` mapping and not-implemented handling as `--query`.       |
-| `--where <attr>=<value>`            | Device-class selector: fan out across CDB records whose stored fact/comment-kv matches (e.g. `--where board=RB5009`). Repeatable (AND). Filters *which devices*, not RouterOS rows. See constitution: target selection. |
-| `--max-bytes <n>`                   | Byte budget for the rendered payload. If the response would exceed it, centrs truncates to fit, keeps `ok: true`, and adds a warning + `meta.truncated`. Not an error. (Renamed from `--max-results`; the legacy flag still parses until the code split lands.) |
+| `--max-bytes <n>`                   | Byte budget for the rendered payload. If the response would exceed it, centrs truncates to fit, keeps `ok: true`, and adds a warning + `meta.truncated`. Not an error. (Will replace the implemented `--max-results`, which fails instead of truncating.) |
 | `--max-rows <n>`                    | Maximum row count for list reads. Excess rows are clipped; `ok: true` with a warning + `meta.truncated`.                                    |
-| `--format text` (default)           | Human-readable rendering (default). Errors print `[code] summary` + `Fix:` lines. |
-| `--format json` (alias `--json`)    | Structured JSON envelope (set `CENTRS_FORMAT=json` to make it the default).               |
-| `--format yaml` (alias `--yaml`)    | YAML rendering of the same envelope.                                                      |
-| `--resolve <none\|arp>`             | Resolve a MAC-address target to an IP via the host ARP cache. Default `none`.             |
-| `--via <protocol>`                  | Pin the transport (`rest-api` default, or `native-api`). No silent downgrade. See constitution: protocol selection. |
-| `--validate=false`                  | Escape hatch; default is `true`. See constitution: validation is the product.             |
-| `--timeout <ms>`                    | Request timeout. REST: ≤ 60000. native-api allows longer.                                 |
-| `--username` (alias `--user`, `-u`) / `--password` | Override CDB-resolved or env credentials.                                                 |
-| `--host <host\|url>`                 | Override the resolved host or base URL for the target.                                     |
-| `--port <n>`                        | Override the transport port. native-api defaults to 8728 (TLS api-ssl when `--port 8729`).|
-| `--cdb-file` / `--cdb-password`     | Override CDB file location / decrypt password.                                            |
+| `--yaml`                            | Shortcut for `--format yaml`.                                                             |
 | `--ros-version <version>`           | SNMP MIB lookup only: pin the MikroTik MIB version to cache/download.                     |
 | `--ros-channel <channel>`           | SNMP MIB lookup only: `stable`, `long-term`, `testing`, or `development`; default `stable`. |
-| `--group <name>`                    | Fan out across every CDB target in WinBox group `<name>`. Repeatable, and combinable with `<router>` positionals plus `--all`/`--default`; the union is de-duped by CDB record index. See **Target selection**. |
-| `--all`                             | Fan out across every CDB record (excludes the reserved `__default__`). See **Target selection**. |
-| `--default`                         | Select the reserved `__default__` record. See **Target selection**. |
-| `--near <lat>,<lon>,<radius>`       | Geo selector: fan out across CDB records whose GPS is within the great-circle radius (units `m`/`km`/`mi`/`ft`; bare = km). Lat-first. Union predicate; geo-less devices never match. See **Target selection**. |
-| `--bbox <south>,<west>,<north>,<east>` | Geo selector: fan out across CDB records whose GPS is inside the lat-first bounding box. Union predicate. See **Target selection**. |
-| `--concurrency <n>`                 | Max in-flight targets during fanout (integer ≥ 1). Defaults are transport-aware: `rest-api` 8, `native-api` 4. Rejected with `usage/invalid-concurrency` otherwise. |
-| `--quickchr <name>`                 | Target a running quickchr-managed CHR VM by name: host/port/auth come from the live descriptor (`@tikoci/quickchr` 0.4.5+, optional dependency), bypassing CDB/env resolution for those fields. Repeatable — repeating fans out. Exclusive of `<router>` positionals and CDB selectors; conflicts with `--host`/`--port`/`--username`/`--password`. See **Target selection**. |
 
 ## Validation
 
