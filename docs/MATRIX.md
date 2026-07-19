@@ -31,6 +31,7 @@ A cell advances only with the matching evidence in the same change.
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
 | discover | —             | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
 | check    | `designed`    | `designed`    | `designed`    | `designed`    | `not-started` | `not-started` | `not-started` | `not-started`    |
+| explain  | `designed`    | `designed`    | —             | —             | —             | —             | —             | —                |
 | settings | —             | —             | —             | —             | —             | —             | —             | —                |
 
 ## Status pointers
@@ -59,6 +60,13 @@ section short enough that the grid remains the status surface.
   `winbox-terminal` stay `not-started`. Its per-host fan-out is the machinery the
   IP-scan discovery (#149) will iterate; the L2-default timing evidence (#136) is
   recorded in the README before the cells advance past `designed`.
+- `explain` is `designed` (`commands/explain/README.md`): the explain →
+  validate → run knowledge tier — canonical form, LSP-like spans/diagnostics,
+  schema and completion facts. Its offline mode is transport-less (evidence
+  will be unit/fixture tests); the live probes (`/console/inspect` + `:parse`)
+  ride rest-api/native-api, so those two cells are `designed`. The spec is a
+  strawman with surface options still open (#90); cells advance only after the
+  design round locks the surface and examples go green per the done rule.
 - `transfer / ssh` means the SFTP-backed transfer method. Deferred file-transfer
   methods such as `scp`, `fetch`, and `ftp` are tracked in
   `commands/transfer/README.md`; `fetch` is not a grid column.
