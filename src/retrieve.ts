@@ -136,9 +136,11 @@ export interface ResolvedRetrieveRequest {
 	/**
 	 * Relax TLS peer verification. retrieve has no `--insecure` flag; this is set
 	 * only by the quickchr provider (trust-by-provenance for the VM's self-signed
-	 * TLS forward — see `src/resolver/quickchr-provider.ts`).
+	 * TLS forward — see `src/resolver/quickchr-provider.ts`), so when present its
+	 * source is always `provider` and it is surfaced as `meta.settings.insecure`
+	 * for auditability.
 	 */
-	insecure?: boolean;
+	insecure?: ResolvedSetting<boolean>;
 	maxResultsBytes?: ResolvedSetting<number>;
 	attributes: readonly string[];
 	allAttributes: boolean;
@@ -177,7 +179,7 @@ export async function runResolvedRetrieve(
 		username: resolved.auth.username,
 		password: resolved.auth.password,
 		timeoutMs: resolved.timeoutMs.value,
-		insecure: resolved.insecure,
+		insecure: resolved.insecure?.value,
 	});
 
 	try {
@@ -479,6 +481,9 @@ function metaFromResolved(
 			timeoutMs: toCoreSource(resolved.timeoutMs.source),
 			format: toCoreSource(resolved.format.source),
 			validate: toCoreSource(resolved.validate.source),
+			insecure: resolved.insecure
+				? toCoreSource(resolved.insecure.source)
+				: undefined,
 			maxResultsBytes: resolved.maxResultsBytes
 				? toCoreSource(resolved.maxResultsBytes.source)
 				: undefined,
@@ -701,7 +706,16 @@ export function buildResolvedRetrieve(
 		timeoutMs,
 		format,
 		validate,
-		insecure: connection?.insecure === true ? true : undefined,
+		insecure:
+			connection?.insecure === true && quickchrResolution
+				? {
+						value: true,
+						source: {
+							kind: "provider" as const,
+							key: `quickchr:${quickchrResolution.name}`,
+						},
+					}
+				: undefined,
 		maxResultsBytes,
 		attributes: attributeSelections,
 		allAttributes: request.allAttributes ?? false,

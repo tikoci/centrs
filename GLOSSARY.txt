@@ -93,6 +93,7 @@ cwd
 datagram
 davidanson
 DDNS
+dialable # an endpoint a client can actually connect to (advertised AND reachable)
 defconf
 demux
 demuxes

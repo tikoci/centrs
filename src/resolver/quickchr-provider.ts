@@ -117,7 +117,7 @@ function malformedDescriptor(
 	return new CentrsError({
 		code: "quickchr/unsupported",
 		summary: `quickchr described machine "${name}" with a descriptor centrs cannot use: ${detail}.`,
-		remediation: `Upgrade to a \`${QUICKCHR_MODULE}\` release that emits descriptor v${SUPPORTED_DESCRIPTOR_VERSION} (0.4.4+); check the machine with \`quickchr inspect ${name}\`.`,
+		remediation: `Upgrade to a \`${QUICKCHR_MODULE}\` release that emits descriptor v${SUPPORTED_DESCRIPTOR_VERSION} (0.4.5+); check the machine with \`quickchr inspect ${name}\`.`,
 		context: { module: QUICKCHR_MODULE, machine: name, ...extra?.context },
 		cause: extra?.cause,
 	});
@@ -269,7 +269,7 @@ export async function resolveQuickchrTarget(
 		throw new CentrsError({
 			code: "quickchr/unsupported",
 			summary: `The installed \`${QUICKCHR_MODULE}\` does not expose the \`QuickCHR.get()\` descriptor API centrs needs.`,
-			remediation: `Upgrade to a \`${QUICKCHR_MODULE}\` release that ships descriptor v${SUPPORTED_DESCRIPTOR_VERSION} (0.4.4+).`,
+			remediation: `Upgrade to a \`${QUICKCHR_MODULE}\` release that ships descriptor v${SUPPORTED_DESCRIPTOR_VERSION} (0.4.5+).`,
 			context: { module: QUICKCHR_MODULE },
 		});
 	}
@@ -396,19 +396,43 @@ export interface QuickchrConnection {
 	warnings: readonly { code: string; message: string }[];
 }
 
+/**
+ * True when the SSH endpoint's advertised auth can actually complete a batch
+ * (non-interactive) handoff: `agent-or-config`, or `private-key` **with** a
+ * `privateKeyPath` to hand to the client. A bare `private-key` batch mode with
+ * no path would silently fall back to whatever ambient agent/config offers —
+ * an unintended trust widening — so it does not count as usable.
+ */
+function hasUsableSshAuth(auth: SshEndpointAuth | undefined): boolean {
+	const batchModes = auth?.batchModes ?? [];
+	return (
+		batchModes.includes("agent-or-config") ||
+		(batchModes.includes("private-key") && auth?.privateKeyPath !== undefined)
+	);
+}
+
 function unsupportedVia(
 	resolution: QuickchrResolution,
 	via: RouterOsProtocol,
 	detail: string,
 	context: Record<string, unknown> = {},
 ): CentrsError {
+	// Alternatives must be actually dialable: never re-suggest the `--via` that
+	// just failed, and only advertise `ssh` when its auth passes the same batch
+	// gate {@link buildConnection} enforces.
 	const available = (
 		Object.entries(resolution.services) as [
 			RouterOsProtocol,
 			AnyServiceEndpoint,
 		][]
 	)
-		.filter(([, endpoint]) => endpoint.available)
+		.filter(
+			([id, endpoint]) =>
+				id !== via &&
+				endpoint.available &&
+				(id !== "ssh" ||
+					hasUsableSshAuth(endpoint.auth as SshEndpointAuth | undefined)),
+		)
 		.map(([id]) => id);
 	return new CentrsError({
 		code: "quickchr/unsupported-via",
@@ -519,15 +543,16 @@ function buildConnection(
 
 	if (via === "ssh") {
 		// The contract guarantees `auth` on an available SSH endpoint; treat a
-		// malformed descriptor (missing auth / batchModes) as batch-incapable
-		// rather than crashing on a field access.
+		// malformed descriptor (missing auth / batchModes / a `private-key` batch
+		// mode with no key path) as batch-incapable rather than crashing on a
+		// field access or letting the SSH client fall back to ambient config.
 		const auth = endpoint.auth as SshEndpointAuth | undefined;
-		if (auth === undefined || (auth.batchModes ?? []).length === 0) {
+		if (auth === undefined || !hasUsableSshAuth(auth)) {
 			throw unsupportedVia(
 				resolution,
 				via,
-				"the SSH endpoint has no batch-capable (non-interactive) auth mode, and centrs never password-prompts for a provider target",
-				{ modes: auth?.modes ?? [] },
+				"the SSH endpoint has no usable batch-capable (non-interactive) auth mode, and centrs never password-prompts for a provider target",
+				{ modes: auth?.modes ?? [], batchModes: auth?.batchModes ?? [] },
 			);
 		}
 		return {

@@ -559,3 +559,77 @@ describe("resolveMacForRetrieve (shared by single + fanout paths)", () => {
 		}
 	});
 });
+
+describe("retrieve --quickchr trust-by-provenance (#134)", () => {
+	test("a TLS provider endpoint forces provider-sourced insecure with the audit trail", async () => {
+		const { buildResolvedRetrieve } = await import("../../src/retrieve.ts");
+		const resolution = {
+			name: "lab",
+			descriptorVersion: 1,
+			routerOsVersion: "7.23.1",
+			arch: "x86_64",
+			services: {
+				"rest-api": {
+					available: true,
+					host: "127.0.0.1",
+					port: 44300,
+					transport: "tcp",
+					tls: true,
+					source: { provider: "quickchr" },
+					auth: { username: "admin", password: "secret" },
+				},
+			},
+		} as Parameters<typeof buildResolvedRetrieve>[6] & object;
+		const resolved = buildResolvedRetrieve(
+			{ path: "/system/resource", quickchr: "lab" },
+			{},
+			undefined,
+			[],
+			undefined,
+			{},
+			resolution,
+		);
+		// `insecure` is a ResolvedSetting so `meta.settings.insecure` can report
+		// the provider provenance (trust-by-provenance is auditable, not silent).
+		expect(resolved.insecure?.value).toBe(true);
+		expect(resolved.insecure?.source.kind).toBe("provider");
+		expect(resolved.insecure?.source.key).toBe("quickchr:lab");
+		expect(
+			resolved.warnings.some((w) => w.code === "transport/provider-trust"),
+		).toBe(true);
+	});
+
+	test("a plain provider endpoint leaves insecure unset (no warning, no relaxation)", async () => {
+		const { buildResolvedRetrieve } = await import("../../src/retrieve.ts");
+		const resolution = {
+			name: "lab",
+			descriptorVersion: 1,
+			routerOsVersion: "7.23.1",
+			arch: "x86_64",
+			services: {
+				"rest-api": {
+					available: true,
+					host: "127.0.0.1",
+					port: 41080,
+					transport: "tcp",
+					tls: false,
+					source: { provider: "quickchr" },
+					auth: { username: "admin", password: "secret" },
+				},
+			},
+		} as Parameters<typeof buildResolvedRetrieve>[6] & object;
+		const resolved = buildResolvedRetrieve(
+			{ path: "/system/resource", quickchr: "lab" },
+			{},
+			undefined,
+			[],
+			undefined,
+			{},
+			resolution,
+		);
+		expect(resolved.insecure).toBeUndefined();
+		expect(
+			resolved.warnings.some((w) => w.code === "transport/provider-trust"),
+		).toBe(false);
+	});
+});

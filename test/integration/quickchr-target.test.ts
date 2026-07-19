@@ -31,6 +31,7 @@ interface Envelope {
 			source?: { kind?: string; key?: string };
 			host?: string;
 		};
+		settings?: Record<string, { kind?: string; key?: string } | undefined>;
 	};
 }
 
@@ -173,10 +174,10 @@ describeFast("--quickchr targets against CHR (#134)", () => {
 			expect(tq1Env.ok).toBe(true);
 			expect(tq1Env.meta.target.source?.kind).toBe("provider");
 
-			// transfer Q2: the sftp gate. Either the descriptor advertises a
-			// batch-capable SSH auth mode and the list succeeds over sftp, or the
-			// gate fails typed (quickchr/unsupported-via) — never a prompt, never a
-			// silent fallback to REST.
+			// transfer Q2: the sftp gate. Either the descriptor advertises a usable
+			// batch-capable SSH auth mode and the list actually runs over sftp
+			// (never a silent fallback to REST, never a dropped key), or the gate
+			// fails typed (quickchr/unsupported-via, exit 1) — never a prompt.
 			const tq2 = await run([
 				"transfer",
 				"--quickchr",
@@ -189,8 +190,18 @@ describeFast("--quickchr targets against CHR (#134)", () => {
 			if (tq2.exit === 0) {
 				const tq2Env = parse(tq2.out);
 				expect(tq2Env.ok).toBe(true);
+				expect(tq2Env.meta.via).toBe("sftp");
 				expect(tq2Env.meta.target.source?.kind).toBe("provider");
+				// Trust-by-provenance: the SSH endpoint forces `insecure` with
+				// provider provenance; the key (when the descriptor hands one over,
+				// vs agent-or-config) must carry provider provenance too.
+				expect(tq2Env.meta.settings?.["insecure"]?.kind).toBe("provider");
+				const sshKeySource = tq2Env.meta.settings?.["sshKey"];
+				if (sshKeySource !== undefined) {
+					expect(sshKeySource.kind).toBe("provider");
+				}
 			} else {
+				expect(tq2.exit).toBe(1);
 				const tq2Env = parse(tq2.err);
 				expect(tq2Env.ok).toBe(false);
 				expect(tq2Env.error?.code).toBe("quickchr/unsupported-via");

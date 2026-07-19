@@ -69,7 +69,7 @@ export const selectionCommandOptions: readonly CliCommandOption[] = [
 		flag: "--quickchr",
 		valueName: "<name>",
 		description:
-			"Target a running quickchr-managed CHR VM by name (repeatable; fans out when repeated). Exclusive of positional targets and CDB selectors; conflicts with --host/--port/--username/--password/--ssh-key.",
+			"Target a running quickchr-managed CHR VM by name (repeatable; fans out when repeated). Exclusive of positional targets and CDB selectors; conflicts with direct connection overrides (--host/--port/--username/--password, and --ssh-key where the command has it).",
 	},
 	{
 		flag: "--concurrency",

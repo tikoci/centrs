@@ -12,8 +12,9 @@ install without it works for every non-quickchr path and only fails here.
 
 ## Fix
 
-- Install the package: `bun add @tikoci/quickchr` (0.4.4+ ships the descriptor
-  v1 API centrs reads).
+- Install the package: `bun add @tikoci/quickchr` (0.4.5+ — 0.4.4 introduced
+  the descriptor v1 API but advertises dead TLS endpoints on a stock CHR;
+  see quickchr#95).
 - Or bypass quickchr entirely and target the device directly with `--host`
   (plus `--username`/`--password`/`--ssh-key` or a CDB record).
 

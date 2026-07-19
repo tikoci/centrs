@@ -25,7 +25,8 @@ Any of:
 ## Fix
 
 - Upgrade quickchr to a release that emits descriptor v1: `bun add
-  @tikoci/quickchr` (0.4.4+).
+  @tikoci/quickchr` (0.4.5+ — 0.4.4 has the API but a descriptor endpoint
+  bug, quickchr#95).
 - If the descriptor looks wrong, inspect the machine directly with `quickchr
   inspect <name>` — it may be in a transient state.
 - If the descriptor is newer than centrs supports, upgrade centrs.

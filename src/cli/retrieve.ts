@@ -22,6 +22,7 @@ import {
 	retrieveFanout,
 	retrieveOutputFormats,
 } from "../index.ts";
+import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
@@ -398,6 +399,12 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 	request.path = path;
 	request.targetPositionals = targetPositionals;
 	assertQuickchrExclusive(selectionFlags, targetPositionals.length);
+	// Direct connection overrides conflict with `--quickchr` globally: reject at
+	// parse time so a repeated `--quickchr` gets one usage error (exit 1), never
+	// per-member failures. The resolver re-checks for library callers.
+	if (selectionFlags.quickchr.length > 0) {
+		assertNoQuickchrOverrideConflict(request, selectionFlags.quickchr[0] ?? "");
+	}
 
 	if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 		if (positional.length === 0 || path.length === 0) {

@@ -14,6 +14,7 @@ import {
 	renderExecuteFanoutEnvelope,
 } from "../execute-fanout.ts";
 import { describeCentrs } from "../index.ts";
+import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
@@ -303,6 +304,16 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 		const selectionFlags = parsed.selectionFlags ?? emptySelectionFlags();
 		const targetPositionals = parsed.targetPositionals ?? [];
 		assertQuickchrExclusive(selectionFlags, targetPositionals.length);
+		// Direct connection overrides conflict with `--quickchr` globally: reject
+		// before fan-out dispatch so a repeated `--quickchr` gets one usage error
+		// (exit 1), never per-member failures. The resolver re-checks for library
+		// callers.
+		if (selectionFlags.quickchr.length > 0) {
+			assertNoQuickchrOverrideConflict(
+				parsed,
+				selectionFlags.quickchr[0] ?? "",
+			);
+		}
 		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 			return await runExecuteFanoutCli(
 				parsed,

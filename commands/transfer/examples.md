@@ -453,9 +453,11 @@ Envelope: `ok: true`, `meta.target.source.kind=provider`.
 centrs transfer --quickchr $NAME list --via sftp --json
 ```
 
-When the descriptor's SSH endpoint advertises a batch-capable auth mode
-(`batchModes` non-empty — quickchr has a verified key), the list succeeds over
-sftp with `meta.target.source.kind=provider` and the key path handed off as
-`sshKey`. Otherwise the envelope is `ok: false` with
-`error.code=quickchr/unsupported-via` — a typed gate, **never** a password
-prompt and never a silent fallback to REST.
+When the descriptor's SSH endpoint advertises a **usable** batch-capable auth
+mode (`agent-or-config`, or `private-key` together with a verified
+`privateKeyPath` — a bare `private-key` mode with no path does not count), the
+list succeeds over sftp: `meta.via=sftp`, `meta.target.source.kind=provider`,
+`meta.settings.insecure` provider-sourced, and the key path (when one is
+handed over) carried as a provider-sourced `sshKey`. Otherwise the envelope is
+`ok: false` with `error.code=quickchr/unsupported-via` and exit code 1 — a
+typed gate, **never** a password prompt and never a silent fallback to REST.

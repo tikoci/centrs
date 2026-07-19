@@ -166,3 +166,54 @@ describe("unknown flags surface a 'Did you mean?' suggestion (#111)", () => {
 		expect(client.err).not.toContain("Did you mean --bind");
 	});
 });
+
+// `--quickchr` + a direct connection override is a GLOBAL usage error: it must
+// exit 1 before any input read or fan-out dispatch (never exit 2 with the same
+// error repeated per member), and it needs no quickchr machine registry — the
+// check fires before the dynamic quickchr import.
+describe("--quickchr override conflicts fail globally, pre-fan-out", () => {
+	const conflicts: ReadonlyArray<{ name: string; args: string[] }> = [
+		{
+			name: "retrieve",
+			args: prefixQuickchrConflict(["retrieve"], ["/system/resource"]),
+		},
+		{
+			name: "execute",
+			args: prefixQuickchrConflict(["execute"], ["--", ":put 1"]),
+		},
+		{
+			name: "api",
+			args: prefixQuickchrConflict(["api"], ["system/resource"]),
+		},
+		{
+			name: "transfer",
+			args: prefixQuickchrConflict(["transfer"], ["list"]),
+		},
+	];
+	function prefixQuickchrConflict(
+		command: string[],
+		operation: string[],
+	): string[] {
+		return [
+			...command,
+			"--quickchr",
+			"lab-a",
+			"--quickchr",
+			"lab-b",
+			"--host",
+			"192.0.2.1",
+			...operation,
+		];
+	}
+	for (const { name, args } of conflicts) {
+		test(`${name}: repeated --quickchr with --host is one exit-1 usage error`, async () => {
+			const { code, err } = await run(args);
+			expect(code).toBe(1);
+			// One typed error (text `[code]` or a single json error envelope) ...
+			expect(err).toContain("usage/conflicting-flags");
+			expect(err).toContain("--host");
+			// ... not a fan-out envelope of per-member failures.
+			expect(err).not.toContain('"targets"');
+		});
+	}
+});

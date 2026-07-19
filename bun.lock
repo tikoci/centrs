@@ -20,7 +20,7 @@
         "typedoc": "^0.28.19",
       },
       "optionalDependencies": {
-        "@tikoci/quickchr": "^0.4.4",
+        "@tikoci/quickchr": "^0.4.5",
       },
       "peerDependencies": {
         "typescript": "^6.0.3",
@@ -258,7 +258,7 @@
 
     "@textlint/types": ["@textlint/types@15.7.1", "", { "dependencies": { "@textlint/ast-node-types": "15.7.1" } }, "sha512-Vye/GmFNBTgVzZFtIFJTmLB+s2A7oIADxNG6r9UhfPuY+Czv0z5G3xeyFZZudPlfxURsKUyPIU5XsjOFqVp33A=="],
 
-    "@tikoci/quickchr": ["@tikoci/quickchr@0.4.4", "", { "dependencies": { "@clack/prompts": "^0.11.0", "fflate": "^0.8.2", "typescript": "^5" }, "bin": { "quickchr": "src/cli/index.ts" } }, "sha512-7s1GRVrlN/Sb2jbfmwBL5uF2f2U0duf8OG4d6s3t8Jco/Nr6hMZs81/Ox//D8gLP0ZLj+q9hlDFYLKWBnvoCCA=="],
+    "@tikoci/quickchr": ["@tikoci/quickchr@0.4.5", "", { "dependencies": { "@clack/prompts": "^0.11.0", "fflate": "^0.8.2", "typescript": "^5" }, "bin": { "quickchr": "src/cli/index.ts" } }, "sha512-JL/DPhw7NskSm/vS6OSm/3D62kDOCYxIog58bcRu3WgME3DGubYHM3GcDly/BThh5XYeYn58352GPaWIQVJZvQ=="],
 
     "@types/bun": ["@types/bun@1.3.13", "", { "dependencies": { "bun-types": "1.3.13" } }, "sha512-9fqXWk5YIHGGnUau9TEi+qdlTYDAnOj+xLCmSTwXfAIqXr2x4tytJb43E9uCvt09zJURKXwAtkoH4nLQfzeTXw=="],
 

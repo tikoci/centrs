@@ -23,6 +23,7 @@ import {
 	transferOutputFormats,
 	transferVerbs,
 } from "../index.ts";
+import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
@@ -527,6 +528,12 @@ function assemblePositionals(
 	const request: TransferRequest = { verb, ...flags };
 	applyVerbPaths(request, verb, rest);
 	assertQuickchrExclusive(selectionFlags, targetPositionals.length);
+	// Direct connection overrides conflict with `--quickchr` globally: reject at
+	// parse time so a repeated `--quickchr` gets one usage error (exit 1), never
+	// per-member failures. The resolver re-checks for library callers.
+	if (selectionFlags.quickchr.length > 0) {
+		assertNoQuickchrOverrideConflict(request, selectionFlags.quickchr[0] ?? "");
+	}
 
 	// Single-target (not fan-out mode) needs exactly one resolved target: one
 	// positional, or one `--quickchr <name>` (the named-live-provider).

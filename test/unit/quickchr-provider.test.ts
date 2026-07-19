@@ -331,10 +331,33 @@ describe("quickchrConnection (per-`--via` consumption, #134 Phase 4)", () => {
 			"lab",
 			moduleWith(() => ({ descriptor: async () => descriptor })),
 		);
-		expectThrowCode(
+		const error = expectThrowCode(
 			() => quickchrConnection(resolution, "ssh"),
 			"quickchr/unsupported-via",
 		);
+		// The alternatives never re-suggest the `--via` that just failed.
+		expect(error.context?.["availableServices"]).toEqual(["rest-api"]);
+	});
+
+	test("ssh private-key batch mode WITHOUT a key path → quickchr/unsupported-via (no ambient fallback)", async () => {
+		const descriptor = descriptorFor("lab");
+		const sshAuth = descriptor.services.ssh as {
+			auth: { privateKeyPath?: string; batchModes: string[] };
+		};
+		// A `private-key` batch mode with no path would let the SSH client fall
+		// back to whatever ambient agent/config offers — reject it as unusable.
+		sshAuth.auth.privateKeyPath = undefined;
+		sshAuth.auth.batchModes = ["private-key"];
+		const resolution = await resolveQuickchrTarget(
+			"lab",
+			moduleWith(() => ({ descriptor: async () => descriptor })),
+		);
+		const error = expectThrowCode(
+			() => quickchrConnection(resolution, "ssh"),
+			"quickchr/unsupported-via",
+		);
+		// The unusable ssh endpoint is not advertised as an alternative either.
+		expect(error.context?.["availableServices"]).toEqual(["rest-api"]);
 	});
 
 	test("ssh batch-capable via agent-or-config only → connection without sshKey", async () => {
