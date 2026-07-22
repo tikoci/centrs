@@ -44,10 +44,12 @@ re-validate-server-side. Validation is not optional polish.
   `/execute` returns the same `ret` text when `as-string` is present; the opaque
   `*NN` value is only the asynchronous job handle returned when `as-string` is
   omitted. centrs's REST/native syntax gate sends `as-string` but does not yet
-  interpret the `ret`, so for those transports the unknown-attribute catch comes
-  from the separate **`/console/inspect`** semantic gate (or the server's own
-  write re-validation); the current `:parse` round-trip there mainly backstops
-  transport errors and the local quote preflight. Over **mac-telnet** the
+  interpret the `ret`, so **on REST/native today a `:parse`-reported `syntax
+  error`/`bad parameter` is not itself raised as a validation failure** — the
+  `:parse` round-trip there mainly backstops transport errors and pairs with the
+  local quote preflight, while the unknown-attribute (and other semantic) catch
+  comes from the separate **`/console/inspect`** gate or the server's own write
+  re-validation. Over **mac-telnet** the
   interactive console *prints* the `:parse` result, so centrs reads it and a
   single console `:parse` covers both syntax and the unknown-attribute
   (semantic) gate — no

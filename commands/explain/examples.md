@@ -3,7 +3,7 @@
 Each numbered example is an executable spec. Once `explain` is implemented,
 offline examples run under `test/unit/explain.test.ts` and live examples under
 `test/integration/explain.test.ts` (rest-api) and
-`test/integration/explain-native.test.ts` (native-api) against a CHR booted by
+`test/integration/native-api-explain.test.ts` (native-api) against a CHR booted by
 `@tikoci/quickchr` — one assertion per example (example N ↔ assertion N).
 Until then these are the **target**: the cells are `designed`, nothing here is
 green yet, and flag and field names track the ratified surface in `README.md`.

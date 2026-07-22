@@ -309,6 +309,7 @@ Standard envelope (constitution: result envelope); `data` sketch:
       {
         "span": { "start": 0, "end": 51 },
         "resolution": "resolved",
+        "kind": "command",
         "command": { "path": "/ip/route", "verb": "add", "args": { "dst-address": "10.9.0.0/16", "blackhole": "yes" } },
         "transport": { "classification": "api-candidate", "rest": { "method": "PUT", "path": "/rest/ip/route" }, "curl": "curl -u … https://<router>/rest/ip/route …", "centrs": "centrs api <router> …" },
         "ev": "e0"
