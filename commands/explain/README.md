@@ -183,7 +183,7 @@ touching `execute` / `api` / `retrieve`:
      version-flat 7.23.2/7.24rc2): `completion input="<menu>/print proplist="`
      with rows filtered `show === "true"` yields the property-name set (a
      superset of the keys a `GET` returns). Two device traps are pinned — the
-     console spelling is the dot-free `proplist=` (the REST body key `.proplist=`
+     console spelling is the dot-free `proplist=` (the REST body key `.proplist` returns generic value metadata, not the set), and the row filter is
      returns generic value metadata, not the set), and the row filter is
      `show=true` (the `style` field is `none`, not `arg`). The `child`/`syntax`
      fallback is needed only for singleton settings menus that expose no
