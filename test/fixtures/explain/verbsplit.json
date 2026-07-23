@@ -36,7 +36,7 @@
 			"input": "/ip/address",
 			"resolution": "ambiguous",
 			"truth": "/ip/address",
-			"rule": "bare path, nothing follows"
+			"rule": "bare path, nothing follows — navigation or no-arg command?"
 		},
 		{
 			"name": "space-written menu — only the vocabulary recovers this",
@@ -56,7 +56,7 @@
 			"verb": "remove",
 			"verbAt": 3,
 			"truth": "/interface/bridge/port/remove",
-			"rule": "vocabulary hit `remove` — `[` ends the run"
+			"rule": "vocabulary hit `remove`"
 		},
 		{
 			"name": "flag after the verb stays out of the run",
@@ -105,7 +105,7 @@
 			"verb": "info",
 			"verbAt": 1,
 			"truth": "/log/info",
-			"rule": "`:log <level>`"
+			"rule": "`:log <level>` — the one sub-menu directive"
 		},
 		{
 			"name": "numeric operand is not a run token — `:put 1`",
@@ -142,14 +142,14 @@
 			"input": "/ip firewall filter",
 			"resolution": "ambiguous",
 			"truth": "/ip/firewall/filter",
-			"rule": "bare path, nothing follows"
+			"rule": "bare path, nothing follows — navigation or no-arg command?"
 		},
 		{
 			"name": "cascade twin — a CMD with the same text shape as `/ip/address`",
 			"input": "/system/reboot",
 			"resolution": "ambiguous",
 			"truth": "/system/reboot",
-			"rule": "bare path, nothing follows"
+			"rule": "bare path, nothing follows — navigation or no-arg command?"
 		}
 	],
 	"branches": [
@@ -179,7 +179,7 @@
 			"path": "/",
 			"verb": "set",
 			"verbAt": 0,
-			"rule": "R10: a directive's operand is positional (beats the `set` vocabulary entry)"
+			"rule": "R10: a directive's operand is positional"
 		},
 		{
 			"name": "single-token `:log` is NOT the sub-menu case — that needs a second token",
@@ -191,16 +191,16 @@
 			"rule": "R10: a directive's operand is positional"
 		},
 		{
-			"name": "KNOWN LIMIT — a bare-word positional arg is absorbed into the run → V4 ambiguous",
+			"name": "KNOWN LIMIT — a bare-word positional arg is absorbed into the run → V4 ambiguous (offline cannot tell `myscript` from a deeper menu; the Q6 residual, cf. the SUT's `enable www-ssl`)",
 			"input": "/system/script run myscript",
 			"resolution": "ambiguous",
-			"rule": "offline cannot tell a positional arg (`myscript`) from a deeper menu without a schema; the whole run is a bare path (V4). The Q6 residual, stated in the SUT (`enable www-ssl`)."
+			"rule": "bare path, nothing follows — navigation or no-arg command?"
 		},
 		{
-			"name": "`..` navigation is pathresolve.isNav's domain, not this module's — unknown here",
+			"name": "`..` navigation is pathresolve.isNav's domain, not this module's — unknown here (a bare `..` is not BARE_WORD-shaped)",
 			"input": "..",
 			"resolution": "unknown",
-			"rule": "no leading path token (a bare `..` is not BARE_WORD-shaped)"
+			"rule": "no leading path token"
 		}
 	],
 	"contextual": [

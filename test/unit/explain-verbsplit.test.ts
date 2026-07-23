@@ -68,6 +68,8 @@ const fixtures: {
 function assertCorner(c: Case): void {
 	const got = resolveVerb(c.input, c.context ?? "/");
 	expect(got.resolution).toBe(c.resolution);
+	// The fixture `rule` is the exact provenance string — lock it against drift.
+	expect(got.why).toBe(c.rule);
 	if (c.resolution === "resolved") {
 		expect(got.kind).toBe("command");
 		expect(got.path).toBe(c.path ?? null);
@@ -168,6 +170,14 @@ describe("run tokenizing preserves separators (V1)", () => {
 		expect(runTokens("remove [find]").map((t) => t.name)).toEqual(["remove"]);
 		expect(runTokens('print where="x"').map((t) => t.name)).toEqual(["print"]);
 		expect(runTokens("$x print").map((t) => t.name)).toEqual([]);
+	});
+
+	test("a `:`-prefixed token ends the run via BARE_WORD, not as a V3 opener", () => {
+		// `:` is not in RUN_TERMINATOR — a colon-led token is rejected as a path
+		// segment, which ends the run just the same. RouterOS never places a bare
+		// `:`-token mid-statement outside a scripting directive.
+		expect(runTokens("put :next").map((t) => t.name)).toEqual(["put"]);
+		expect(runTokens(":global x").map((t) => t.name)).toEqual([]);
 	});
 });
 

@@ -49,8 +49,14 @@ import { resolveStatements } from "./pathresolve.ts";
 
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
-/** A word that ends the leading run: it carries `=` (V2) or opens a group/string/var (V3). */
-const RUN_TERMINATOR = /^[[({"$:]/;
+/**
+ * A word that ends the leading run: it carries `=` (V2) or opens a group /
+ * string / variable (V3). `:` is deliberately NOT here — RouterOS uses it only
+ * to start a scripting directive, not as a mid-statement opener, and a
+ * `:`-prefixed token is already rejected by `BARE_WORD` below, so it ends the
+ * run regardless.
+ */
+const RUN_TERMINATOR = /^[[({"$]/;
 
 function isAsciiWhitespace(char: string | undefined): boolean {
 	return char === " " || char === "\t" || char === "\r" || char === "\n";
@@ -319,10 +325,11 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 	const { run, directive, whole } = describeStatement(text);
 	if (run.length === 0) return unknownSplit("no leading path token");
 
-	const bareDirective =
-		!t.startsWith(":") && !t.startsWith("/") && scopeBodies(t).length > 0;
-	const base =
-		t.startsWith(":") || t.startsWith("/") || bareDirective ? "/" : context;
+	// `directive` already folds in the bare-directive case (`isDirective`), so it
+	// stands in for the `:`-prefixed and `x do={…}` readings — no second
+	// `scopeBodies` scan. A directive or an absolute (`/`) statement resolves at
+	// the root; everything else inherits `context`.
+	const base = directive || t.startsWith("/") ? "/" : context;
 
 	const candidates: string[] = [];
 	for (let k = 1; k <= run.length; k++)
