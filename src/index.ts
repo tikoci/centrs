@@ -305,6 +305,11 @@ export {
 	SUB,
 } from "./explain/coordinates.ts";
 export {
+	type Segment,
+	type SegmentResult,
+	segmentStatements,
+} from "./explain/segment.ts";
+export {
 	type ApiVerb,
 	createProtocolAdapter,
 	getProtocolPlan,

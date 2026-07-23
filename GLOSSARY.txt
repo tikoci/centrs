@@ -512,3 +512,11 @@ Geolocation
 unparseable
 Unparseable
 versionless
+
+# explain canonicalizer (phase-0 lab #185, commands/explain) vocabulary.
+#   SUT: "system under test" — the phase-0 lab's throwaway parser, scored
+#   against a `:parse` IL / highlight oracle; the ratified behavior is what the
+#   production modules under src/explain promote. CJK: the Chinese/Japanese/
+#   Korean Unicode range, used as a non-ASCII coordinate/segmentation fixture.
+SUT
+CJK
