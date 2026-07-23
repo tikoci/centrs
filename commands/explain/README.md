@@ -182,12 +182,12 @@ touching `execute` / `api` / `retrieve`:
      what the output *can* contain. **The probe recipe is grounded** (Q10,
      version-flat 7.23.2/7.24rc2): `completion input="<menu>/print proplist="`
      with rows filtered `show === "true"` yields the property-name set (a
-     superset of the keys a `GET` returns). Two device traps are pinned — the
-     console spelling is the dot-free `proplist=` (the REST body key `.proplist` returns generic value metadata, not the set), and the row filter is
-     returns generic value metadata, not the set), and the row filter is
-     `show=true` (the `style` field is `none`, not `arg`). The `child`/`syntax`
-     fallback is needed only for singleton settings menus that expose no
-     `.proplist`.
+     superset of the keys a `GET` returns). Two device traps are pinned:
+     (1) the console word is the dot-free `proplist=` — the REST body key
+     `.proplist` returns generic value metadata, not the set; and (2) the rows
+     are selected by `show=true`, not by `style` (whose value here is `none`,
+     not `arg`). The `child`/`syntax` fallback is needed only for singleton
+     settings menus that expose no `.proplist`.
 
 Positions matter more than tokens: the same word can be a verb or an argument
 (`/ip/address comment …` is the `comment` *verb*; `/ip/address/add comment=…`
@@ -503,7 +503,7 @@ examples gate via unit/fixture tests and each live cell advances to
 `bun run test:integration` (constitution: done definition). Suggested staging
 (sequence, not schedule):
 
-0. **Canonicalization grounding lab — COMPLETE (#185).** Experiments (corpus +
+- **Phase 0 — canonicalization grounding lab — COMPLETE (#185).** Experiments (corpus +
    CHR cross-checks against `:parse`/highlight) established what offline parsing
    can actually achieve: statement segmentation, block/scope resolution,
    sub-command path re-constitution, stateful-per-document path context, symbol
@@ -512,7 +512,7 @@ examples gate via unit/fixture tests and each live cell advances to
    answered with cited evidence; the findings are folded into the surface above
    and summarized in [Phase-0 ratification](#phase-0-ratification-185). This
    spec is ratified on that basis.
-1. **Phase 0.5 — product contract fixtures.** Before implementation, promote a
+- **Phase 0.5 — product contract fixtures.** Before implementation, promote a
    minimal, reviewed subset of the lab into product-owned tests; do not import
    or execute `.scratch/` code. The suite must include representative frozen
    holdout and constructed corners from Q1–Q4/Q6/Q13/Q16, all Q14 recovery
@@ -524,17 +524,17 @@ examples gate via unit/fixture tests and each live cell advances to
    deterministic/well-formed spans, bounded depth, no throw, and roughly linear
    scaling. The fixture-selection/disposition work is tracked in #186; the
    76-file lab framework and its large raw streams do not move into mainline.
-2. **Phase 1 — offline core** — the grown canonicalizer: structure + gate
+- **Phase 1 — offline core** — the grown canonicalizer: structure + gate
    verdict + per-statement resolution and transport classification +
    diagnostics (+ `--curl` rendering). Phase 0.5 tests turn green here.
-3. **Phase 2 — live probes** — highlight + `:parse` (+
+- **Phase 2 — live probes** — highlight + `:parse` (+
    completion/child/syntax facets) over rest-api/native-api with the safety rules
    above, including the
    broad-query describe ladder, smart sizing, and CHR-backed anchors for Q6,
    Q8, Q10, and Q11.
-4. **Phase 3 — facet polish** — `--complete`/`--schema` ergonomics, truncation
+- **Phase 3 — facet polish** — `--complete`/`--schema` ergonomics, truncation
    counts/hints, `--full`.
-5. **Phase 4 — library/LSP alignment** — export shape hardened against a real
+- **Phase 4 — library/LSP alignment** — export shape hardened against a real
    lsp-routeros-ts consumption spike (semantic tokens via the centrs span
    vocabulary + color map).
 
