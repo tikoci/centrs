@@ -38,17 +38,21 @@ re-validate-server-side. Validation is not optional polish.
   is the verb) is part of the validator contract.
 - `execute` and other CLI-shaped calls validate with `:put [:parse "..."]` plus
   a semantic gate. **How `:parse` surfaces an error is transport-specific**
-  (grounded on CHR 7.23.1): `:parse` *does* reject an unknown attribute
-  (`bad parameter <name>`) and malformed CLI (`syntax error`), but over REST that
-  text rides the **HTTP-200 `ret` value** (no error status), and over the
-  **native API** `:put [:parse]` returns an opaque `*NN` handle that reveals
-  nothing at all. centrs's REST/native syntax gate runs `:parse` but does not
-  read the `ret`, so for those transports the unknown-attribute catch comes from
-  the separate **`/console/inspect`** semantic gate (or the server's own
-  write re-validation); the `:parse` round-trip there mainly backstops transport
-  errors and the local quote preflight. Over **mac-telnet** the interactive
-  console *prints* the `:parse` result, so centrs reads it and a single console
-  `:parse` covers both syntax and the unknown-attribute (semantic) gate — no
+  (grounded on CHR 7.23.2 and 7.24rc2): `:parse` *does* reject an unknown
+  attribute (`bad parameter <name>`) and malformed CLI (`syntax error`), but over
+  REST that text rides the **HTTP-200 `ret` value** (no error status). Native API
+  `/execute` returns the same `ret` text when `as-string` is present; the opaque
+  `*NN` value is only the asynchronous job handle returned when `as-string` is
+  omitted. centrs's REST/native syntax gate sends `as-string` but does not yet
+  interpret the `ret`, so **on REST/native today a `:parse`-reported `syntax
+  error`/`bad parameter` is not itself raised as a validation failure** — the
+  `:parse` round-trip there mainly backstops transport errors and pairs with the
+  local quote preflight, while the unknown-attribute (and other semantic) catch
+  comes from the separate **`/console/inspect`** gate or the server's own write
+  re-validation. Over **mac-telnet** the
+  interactive console *prints* the `:parse` result, so centrs reads it and a
+  single console `:parse` covers both syntax and the unknown-attribute
+  (semantic) gate — no
   `/console/inspect` table needed. In every case a clean parse is necessary, not
   sufficient on its own; semantic validation is a distinct, transport-appropriate
   step (`/console/inspect`, the console `:parse` text, or server re-validation).
@@ -477,3 +481,9 @@ canonicalization only, never the structured-mode predicate. The gate contract,
 its pinning test, and the parser-vendoring preconditions are documented in
 `commands/execute/README.md` and the `canonicalizeExecuteCommand` doc-comment
 (`src/execute.ts`).
+
+Richer schema-free analysis must distinguish **ambiguous** (multiple plausible
+readings) from **unknown** (no safe reading) and abstain in both cases rather than
+inventing a command, path, symbol class, or transport mapping. These explain-only
+verdicts never widen or reinterpret the execution gate's `mode` or `writeShaped`
+decision.

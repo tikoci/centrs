@@ -13,9 +13,14 @@ Status: `designed` over `rest-api` and `native-api` — the transports the live
 inspection probes ride; every other cell is `—`. The offline mode is
 transport-less. See `docs/MATRIX.md` for the row. A first design round
 (2026-07-19, recorded in #90) settled the surface shape and the offline model;
-**the spec is not yet ratified** — ratification waits on a canonicalization
-grounding pass (see [Staging](#definition-of-done-and-staging)), and every
-flag/field name here is still provisional.
+the **phase-0 canonicalization grounding lab (#185) is complete and this spec
+is now ratified** — every ratification-gating question was answered with cited
+evidence (see [Phase-0 ratification](#phase-0-ratification-185)). The findings
+folded in below; a few of them **amend** the surface (tristate `containsWrite`,
+an `ambiguous` canonicalizer verdict, a defect-region diagnostics contract, a
+byte-count-preserving coordinate rule, the native-api `:parse` readout). Flag
+names and sizing thresholds stay provisional — those are implementation opens,
+not ratification blockers.
 Load-bearing rules — envelope, errors, settings precedence, identity,
 validation, protocol selection — live in
 [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md).
@@ -92,6 +97,12 @@ today's path/verb/args split and script-vs-structured gate:
   `/ip/address remove [find comment=defconf]`, the inner `find` carries the
   enclosing path (`ip,address`); the canonical structure exposes that inner
   command with its resolved path rather than treating `[…]` as an opaque blob.
+- **Symbol scopes follow RouterOS scope identity, not brace depth alone.** Names
+  are case-sensitive. Control-flow `do={…}` bodies share the enclosing scope,
+  but a named-function definition (`:local F do={…}` / `:global F do={…}`)
+  starts a closure: outer locals become parameters there, and a global must be
+  re-imported inside the body. If the parser cannot establish which body owns a
+  binding, it abstains instead of assigning a confident symbol class (Q13).
 - **Transport classification — fail-closed.** For each statement, say how it
   would actually run: `api-candidate` (representable as a structured `api`
   operation, with the REST method/path/body), `execute` (script mode,
@@ -101,23 +112,53 @@ today's path/verb/args split and script-vs-structured gate:
   `curl` renders **only** where an explicit, tested mapping rule covers the
   command family; anything else classifies `unknown` rather than promoting a
   heuristic into executable output. The `centrs execute`/`centrs api`
-  invocation renders for either classified case.
+  invocation renders for either classified case. In particular, selector-based
+  writes route to `execute`, while selector-less `set` is `unknown` offline:
+  without a schema, `/ip/dns set …` (a singleton) and
+  `/ip/firewall/filter set …` (an id-bearing table) have the same shape. Live
+  evidence may lift the singleton case; offline never guesses it.
 - **Mutation analysis is separate from the gate.** The execute gate's verdict
   (`mode`, `writeShaped`) is reproduced **unchanged** — a bracketed
   sub-command selector stays `mode: "script"` / `writeShaped: false`, exactly
   as `canonicalizeExecuteCommand` and its anchor tests
   (`test/unit/execute-canonicalize-contract.test.ts`) pin it. Richer
   explain-only inference (an inner `remove` detected in structure) lands in a
-  **distinct** field (`structure.containsWrite`, basis `heuristic`) — never by
+  **distinct** field, `structure.containsWrite` (basis `heuristic`) — never by
   widening *or* reinterpreting `writeShaped`, so agents cannot mistake an
-  explain inference for a guard `execute` actually applies.
+  explain inference for a guard `execute` actually applies. **`containsWrite`
+  is three-valued `true | false | unknown`, not a boolean** (Q16, ratified): a
+  curated write-verb table covers ~93% of command nodes and is near-immune to
+  version drift (~0.07% of nodes per minor version), but ~6–7% of nodes carry a
+  write-shaped verb *outside* any small table (`reboot`, `format`, `delete`,
+  `reset-configuration`, …), so a two-valued field would have to call
+  `/disk format-drive` a non-write. The field therefore **fails closed to
+  `unknown`** for any verb it cannot confirm, with a **hard requirement of zero
+  false negatives on statically obvious writes** and `unknown` reported
+  separately from `false`. Dynamic execution (`:parse`, stored scripts,
+  variable/function invocation) is `unknown` by construction.
 - **Heuristics owned and labeled.** Offline conclusions are canonicalizer
   facts (provenance `canonicalizer`, basis `heuristic`/`derived`) — never
   presented as device or schema truth.
+- **Fail-closed with an `ambiguous` verdict.** Schema-free analysis has a hard
+  floor: a statement that is *nothing but a path* (`/ip/route` is a directory,
+  `/system/reboot` is a command, and the text is identical) cannot be resolved
+  offline without a schema. The canonicalizer must abstain there — a distinct
+  **`ambiguous`** verdict, separate from "unresolved" — rather than guess. Four
+  ratification questions reached this floor independently (Q6 verb/menu
+  boundary, Q3 absolute inner paths, Q13 `variable-undefined`, Q14 bare-word
+  recovery), so it is a **structural property of schema-free canonicalization**,
+  not a per-case wart; the fail-closed rule is promoted to the constitution's
+  canonicalizer-ownership section. The measured cost is small: the shipped
+  no-schema verb/menu rule scores **99.9%
+  precision on decided at ~3% abstention**, and a static snapshot would recover
+  only ~2.3pp of that abstention while churning ~9% of tree nodes per minor
+  version — which is why **decision 3 (no offline schema snapshot) ratifies
+  unchanged**.
 
 There are real unknowns in how far offline parsing can go (expression
 grammar, scope fidelity vs `:parse`, `[]`-nesting corner cases). Grounding
-those unknowns is **phase 0** below and gates ratifying this spec.
+those unknowns was **phase 0** (#185); its findings are folded in throughout
+this spec and summarized in [Phase-0 ratification](#phase-0-ratification-185).
 
 ## Three questions, one pipeline
 
@@ -138,10 +179,15 @@ touching `execute` / `api` / `retrieve`:
      name a verb for its args);
    - `/ip/address/set` → the settable arguments;
    - `/ip/address/print` → special-cased to the `.proplist` value set, i.e.
-     what the output *can* contain. (The probe recipe this needs — completion
-     around a value position — overlaps the upstream `completion-tricks`
-     research that is still open; phase 0 must ground it, and the fallback is
-     the plainer `child`/`syntax` facts.)
+     what the output *can* contain. **The probe recipe is grounded** (Q10,
+     version-flat 7.23.2/7.24rc2): `completion input="<menu>/print proplist="`
+     with rows filtered `show === "true"` yields the property-name set (a
+     superset of the keys a `GET` returns). Two device traps are pinned:
+     (1) the console word is the dot-free `proplist=` — the REST body key
+     `.proplist` returns generic value metadata, not the set; and (2) the rows
+     are selected by `show=true`, not by `style` (whose value here is `none`,
+     not `arg`). The `child`/`syntax` fallback is needed only for singleton
+     settings menus that expose no `.proplist`.
 
 Positions matter more than tokens: the same word can be a verb or an argument
 (`/ip/address comment …` is the `comment` *verb*; `/ip/address/add comment=…`
@@ -181,17 +227,22 @@ measured through 7.20.8 and 7.21.4 is the first version proven fixed
 (SUP-127641), so the conservative skip covers the untested gap between;
 route input past the 32,767-byte highlight cap to `:parse` or report
 truncation — never analyze a silent prefix; offsets are **UTF-8 byte** offsets
-over ASCII-normalized input and the normalization is recorded; `[]`, timeout,
-and transport failure stay distinct outcomes.
+over ASCII-normalized input and the normalization is recorded (the exact
+normalization rule is pinned under [Result shape](#result-shape-sketch), Q15);
+`[]`, timeout, and transport failure stay distinct outcomes.
 
-One caveat splits the two live cells: **how `:parse` surfaces its error is
-transport-specific** (constitution: validation — grounded on CHR 7.23.1).
-Only a console transport *prints* the `:parse` result; the native API returns
-an opaque `*NN` handle, and the REST/native gate today runs `:parse` without
-reading its message. So the line/column diagnostic is guaranteed only where
-the transport surfaces the parser text; the native-api cell needs its
-degraded readout (or a grounded alternative) specified, with
-protocol-specific examples, before it advances past `designed`.
+The **native-api `:parse` readout is grounded, and the cell is *not* degraded**
+(Q11, version-flat 7.23.2/7.24rc2): `:put [:parse "<input>"]` invoked over the
+native API's `/execute` **with `as-string=""`** returns the parser text —
+including the `(line N column M)` diagnostic on a syntax error — byte-identical
+to what a console transport prints. The opaque `*NN` value seen otherwise is the
+**no-`as-string` job handle**, not a `:parse` limitation; the readout rule is
+"pass `as-string` and interpret `ret`". The existing execute gate already passes
+`as-string` but currently discards `ret`; phase 2 must extract/fix that shared
+readout rather than copy the omission. `/console/inspect`
+(highlight/syntax/completion) works over the native API's `talk` framing too. So
+the line/column diagnostic is available on both live cells — the earlier caveat
+that only a console transport surfaces the parser text is retired.
 
 ## Surface (Option A — decided)
 
@@ -244,24 +295,56 @@ Standard envelope (constitution: result envelope); `data` sketch:
 
 ```json
 {
-  "input": { "bytes": 58, "normalized": false, "truncated": false },
-  "verdict": "warn",
+  "input": {
+    "bytes": 51,
+    "normalized": false,
+    "truncated": false,
+    "positionMap": [ { "analyzed": { "start": 0, "end": 51 }, "originalUtf16": { "start": 0, "end": 51 } } ]
+  },
+  "verdict": "pass",
   "canonical": { "path": "/ip/route", "verb": "add", "args": { "dst-address": "10.9.0.0/16", "blackhole": "yes" }, "mode": "structured", "writeShaped": true },
-  "structure": { "statements": 1, "blocks": [], "containsWrite": true, "subcommands": [ { "path": "/ip/address", "verb": "find", "span": { "start": 19, "end": 42 } } ] },
-  "transport": { "classification": "api-candidate", "rest": { "method": "PUT", "path": "/rest/ip/route" }, "curl": "curl -u … https://<router>/rest/ip/route …", "centrs": "centrs api <router> …", "ev": "e0" },
-  "spans": [ { "start": 0, "end": 9, "class": "path", "ev": "e1" } ],
-  "diagnostics": [ { "severity": "warning", "code": "explain/canonicalizer/ambiguous-verb", "span": { "start": 42, "end": 55 }, "message": "…", "ev": "e0" } ],
-  "schema": { "path": "/ip/address", "verbs": [ { "name": "set", "argCount": 9 } ], "truncated": false, "ev": "e2" },
-  "completion": [ { "value": "chain", "kind": "argument", "ev": "e2" } ],
+  "structure": {
+    "statementCount": 1,
+    "statements": [
+      {
+        "span": { "start": 0, "end": 51 },
+        "resolution": "resolved",
+        "kind": "command",
+        "command": { "path": "/ip/route", "verb": "add", "args": { "dst-address": "10.9.0.0/16", "blackhole": "yes" } },
+        "transport": { "classification": "api-candidate", "rest": { "method": "PUT", "path": "/rest/ip/route" }, "curl": "curl -u … https://<router>/rest/ip/route …", "centrs": "centrs api <router> …" },
+        "ev": "e0"
+      }
+    ],
+    "blocks": [],
+    "containsWrite": true,
+    "subcommands": []
+  },
+  "spans": [ { "start": 0, "end": 9, "class": "path", "ev": "e0" } ],
+  "diagnostics": [],
   "evidence": [
-    { "id": "e0", "source": "canonicalizer", "basis": "heuristic", "outcome": "ok" },
-    { "id": "e1", "source": "live-inspect", "probe": "highlight", "basis": "direct-response", "outcome": "ok", "routerosVersion": "7.23.1" },
-    { "id": "e2", "source": "live-inspect", "probe": "completion", "basis": "direct-response", "outcome": "ok", "routerosVersion": "7.23.1" }
+    { "id": "e0", "source": "canonicalizer", "basis": "heuristic", "outcome": "ok" }
   ],
   "runtimeAcceptance": "not-proven"
 }
 ```
 
+- **The two verdicts are separate.** `data.verdict` is the maximum diagnostic
+  severity (`pass` / `warn` / `fail`) and drives `--fail-on` only. Each entry in
+  `structure.statements[]` has a canonicalizer `resolution` of `resolved`,
+  `ambiguous`, or `unknown`. `ambiguous` means the input has multiple valid
+  schema-free readings (for example a bare path may be a menu or a no-argument
+  command); `unknown` means analysis cannot safely recover a reading. Neither is
+  silently collapsed to a diagnostic severity or to a guessed command. A
+  resolved statement also carries `kind: "menu" | "command"`; `command` is
+  present only for the latter.
+- **Whole-input gate and per-statement analysis stay distinct.** `canonical`
+  reproduces the existing execute gate's whole-input fields unchanged, including
+  its `mode` and `writeShaped` decision. `structure.statements[]` is the
+  addressable rich surface for script-scale input: every statement carries its
+  source span, resolution, resolved command when available, transport
+  classification, and evidence id. This is where multi-statement scripts and
+  partial recovery live; a single top-level transport object cannot represent
+  them.
 - **Every derived fact keeps provenance via `evidence[]`** — facts reference
   a stable evidence id (`ev`), and the evidence entry carries source
   (`canonicalizer` vs `live-inspect`), probe, basis (direct response vs
@@ -281,10 +364,26 @@ Standard envelope (constitution: result envelope); `data` sketch:
   a process exit code.
 - **Coordinates are contracted, not implied**: probe offsets are UTF-8 byte
   offsets over the *analyzed* (ASCII-normalized) input with `end` exclusive,
-  and the normalization map back to the original input is part of the result.
+  and `input.positionMap[]` maps half-open analyzed-byte runs to half-open
+  original UTF-16 runs. Identity runs are retained, so consumers never need a
+  separate coordinate contract for normalized and unnormalized input.
   The library surface additionally provides original-document positions
   (line + UTF-16 character) for LSP consumers; `--cursor <byte>` stays a
-  wire-level CLI convenience.
+  wire-level CLI convenience. **The ASCII-normalization is byte-count-preserving**
+  (Q15, ratified): each non-ASCII byte is replaced by a single placeholder byte
+  one-for-one (a multi-byte character becomes N placeholder bytes, never
+  collapsed to one), so an analyzed byte offset **equals** the device's UTF-8 /
+  `highlight` byte offset identically and offline spans and highlight spans share
+  one coordinate system with no fixup. A reference mapper validated the required
+  invariants at 100% over ASCII / BMP / astral-surrogate / combining-mark / tab /
+  LF-CRLF / lone-surrogate fixtures: every span in bounds; original↔analyzed
+  round-trips at boundaries; slicing the original range yields the intended
+  token; `end === len` is the legal end-of-input cursor; a cursor interior to a
+  multi-byte character snaps to that character's boundary. centrs does not
+  NFC-fold — a combining mark is its own position — and `\r\n` counts as one line
+  advance while a lone `\r` is not a line break. The production parser runs on the
+  analyzed string directly (it is pure ASCII, so its JS index *is* the byte
+  offset) and this mapper converts to original line/UTF-16 positions.
 - **Spans use a centrs-owned vocabulary** (decision): raw RouterOS highlight
   classes are not the default surface. The centrs vocabulary must be at least
   as rich as the RouterOS token classes, and centrs maintains the mapping —
@@ -295,7 +394,25 @@ Standard envelope (constitution: result envelope); `data` sketch:
   provenance/debug output.
 - Diagnostics are slash-namespaced (`explain/<source>/<slug>`), carry byte
   spans (or line/column from `:parse`), and follow the standard error-model
-  severity channels.
+  severity channels. **Malformed input carries a defect *region*** (Q14): each
+  diagnostic points at the byte span of its defect, and the detectable classes
+  are {unbalanced delimiter, unterminated string, stray mid-token delimiter,
+  invalid escape, BOM, non-ASCII, truncation, over-depth nesting}. Two hard
+  recovery rules follow from the phase-0 mutation suite, both **fail-closed**:
+  (a) corruption may only degrade a command to `ambiguous`/`unknown`, **never
+  invent a confident one** after a defect region — the same fail-closed floor as
+  the canonicalizer's `ambiguous` verdict, and the direct fix for the measured
+  case where a stray `;` inside a value splits off a garbage fragment that
+  offline would otherwise resolve to a bogus path; (b) a **bare-word-headed
+  statement** resolved against document context degrades to `unknown` when the
+  context is uncertain (an upstream defect can poison it), because a bare word is
+  Q4's cascade residual. Deeply nested delimiters emit an over-depth diagnostic
+  rather than recursing (Q17 measured stack-overflow and O(n²) blow-up in a naive
+  recursive walker; the product parser bounds depth and scans single-pass).
+  Offline `--complete` detects trailing-`=` and open-delimiter continuation but
+  cannot distinguish a truncated *complete-looking* token from a finished one
+  without a schema — so it surfaces the detectable continuation state and defers
+  candidate generation to a live target.
 - `runtimeAcceptance: "not-proven"` is structural, not boilerplate: it is the
   inspect-vs-runtime gap made machine-readable.
 - Live-state token classes (disabled/dynamic/inactive object references)
@@ -318,7 +435,7 @@ Standard envelope (constitution: result envelope); `data` sketch:
   tikbook are the intended external consumers (hover/diagnostics/completion/
   semantic tokens over these calls); an LSP *protocol* surface on centrs
   stays out of scope (#90) — but the export shape is validated against a real
-  LSP consumption spike before it hardens (staging phase 5).
+  LSP consumption spike before it hardens (staging phase 4).
 
 ## Non-goals
 
@@ -334,6 +451,50 @@ Standard envelope (constitution: result envelope); `data` sketch:
   synthetic-probe recipes (still open research in lsp-routeros-ts
   `BACKLOG.md`) — candidates are labeled as observed, not closed sets.
 
+## Phase-0 ratification (#185)
+
+The phase-0 canonicalization grounding lab (#185, rev 2) is complete. It scored
+a schema-free offline parser against device truth — `:parse` IL and
+`/console/inspect` highlight, cross-checked on CHR 7.23.2 and 7.24rc2 — over a
+frozen train/holdout split of the 913-script lsp-routeros-ts corpus, plus
+constructed corner and mutation suites. Each question below names the spec claim
+it gated and links its exit artifact (the artifact carries the fixture/split
+hashes, RouterOS versions, oracle source, per-class precision/recall/abstention,
+and disagreement samples). Probes are throwaway (`.scratch/`, non-authoritative);
+the findings here are the deliverable, promoted per
+`.github/instructions/routeros-grounding.instructions.md`.
+
+**Ratified as designed:** Q1 statement segmentation · Q2 block topology · Q3
+`[]` sub-command path re-constitution · Q4 stateful-per-document path context ·
+Q6 no-schema verb/menu boundary (**decision 3 unchanged**) · Q8 tested REST
+mapping rules + fail-closed boundary · Q10 `.proplist` recipe · Q13 symbol scope
+classes.
+
+**Amended the surface (folded in above):**
+
+| Finding | Amendment | Exit artifact |
+| ------- | --------- | ------------- |
+| **Q16** write-shape | `structure.containsWrite` is three-valued `true \| false \| unknown` (boolean rejected as unsafe); zero false negatives on obvious writes; `unknown` separate from `false` | [#5027578882](https://github.com/tikoci/centrs/issues/185#issuecomment-5027578882) |
+| **Q6/Q3/Q13/Q14** schema-free floor | a distinct **`ambiguous`** canonicalizer verdict; fail-closed rule promoted to the constitution | [#5025480566](https://github.com/tikoci/centrs/issues/185#issuecomment-5025480566) |
+| **Q14** malformed/partial | diagnostics carry a **defect region**; fail-closed recovery (no invented commands after a defect; bare-word heads → `unknown`); `--complete` bounded offline | [#5048400737](https://github.com/tikoci/centrs/issues/185#issuecomment-5048400737) |
+| **Q15** coordinates | ASCII-normalization is **byte-count-preserving** (non-ASCII byte → placeholder, one-for-one) so analyzed offsets ≡ highlight byte offsets; invariants validated 100% | [#5048304595](https://github.com/tikoci/centrs/issues/185#issuecomment-5048304595) |
+| **Q11** native-api readout | the cell is **not** degraded — `:put [:parse …]` over native `/execute` with `as-string` returns line/column; the old console-only caveat is retired | [#5046924529](https://github.com/tikoci/centrs/issues/185#issuecomment-5046924529) |
+| **Q17** robustness | product parser bounds nesting depth (over-depth diagnostic) and scans single-pass; determinism + well-formed span trees are property tests | [#5040370326](https://github.com/tikoci/centrs/issues/185#issuecomment-5040370326) |
+
+**Pre-registered thresholds — outcomes:** `api-candidate`/write-shape precision
+and coordinate invariants met; the **one hard-0 threshold that was *not* met is
+Q14's "no fabrication after the first defect"** — the throwaway lab walker
+invents a command in 3 of 76 mutants, which is exactly why the fail-closed
+bare-word rule (b) above is a **hard product requirement**, not a nicety. The lab
+probes were left unpatched by design; the guard belongs in the product parser.
+
+**Non-blocking / deferred (not ratification-gating):** Q5 expression depth, Q7
+tokenizer corners, Q9 potential-command taxonomy, Q12 span-vocabulary draft —
+these refine the surface during implementation but did not gate ratification.
+The probe framework's disposition (reuse of the mutation suite, coordinate
+fixtures, and adversarial generators as product test fixtures) is tracked in
+issue #186 rather than carried into mainline.
+
 ## Definition of done and staging
 
 `designed` on the strength of this README. When implementation starts, offline
@@ -342,20 +503,38 @@ examples gate via unit/fixture tests and each live cell advances to
 `bun run test:integration` (constitution: done definition). Suggested staging
 (sequence, not schedule):
 
-0. **Canonicalization grounding lab** — experiments (corpus + CHR
-   cross-checks against `:parse`/highlight) that establish what offline
-   parsing can actually achieve: expression structure, block/scope
-   resolution, sub-command path re-constitution, transport classification
-   edge cases. **Ratifying this spec waits on this phase** — its findings are
-   expected to refine the surface above.
-1. **Offline core** — the grown canonicalizer: structure + gate verdict +
-   transport classification + diagnostics (+ `--curl` rendering).
-2. **Live probes** — highlight + `:parse` (+ completion/child/syntax facets)
-   over rest-api/native-api with the safety rules above, including the
-   broad-query describe ladder and smart sizing.
-3. **Facet polish** — `--complete`/`--schema` ergonomics, truncation
+- **Phase 0 — canonicalization grounding lab — COMPLETE (#185).** Experiments (corpus +
+   CHR cross-checks against `:parse`/highlight) established what offline parsing
+   can actually achieve: statement segmentation, block/scope resolution,
+   sub-command path re-constitution, stateful-per-document path context, symbol
+   scope, transport classification, write-shape, malformed-input recovery,
+   coordinates, and stress invariants. Every ratification-gating question was
+   answered with cited evidence; the findings are folded into the surface above
+   and summarized in [Phase-0 ratification](#phase-0-ratification-185). This
+   spec is ratified on that basis.
+- **Phase 0.5 — product contract fixtures.** Before implementation, promote a
+   minimal, reviewed subset of the lab into product-owned tests; do not import
+   or execute `.scratch/` code. The suite must include representative frozen
+   holdout and constructed corners from Q1–Q4/Q6/Q13/Q16, all Q14 recovery
+   operators, Q15's coordinate categories and invariants, and Q17's adversarial
+   generators. Freeze their inputs and expected outcomes first; phase 1 wires
+   them only to exported production interfaces. They pin the ratified
+   thresholds: no confident command invented after a defect, zero false
+   negatives on statically obvious writes, 100% coordinate invariants,
+   deterministic/well-formed spans, bounded depth, no throw, and roughly linear
+   scaling. The fixture-selection/disposition work is tracked in #186; the
+   76-file lab framework and its large raw streams do not move into mainline.
+- **Phase 1 — offline core** — the grown canonicalizer: structure + gate
+   verdict + per-statement resolution and transport classification +
+   diagnostics (+ `--curl` rendering). Phase 0.5 tests turn green here.
+- **Phase 2 — live probes** — highlight + `:parse` (+
+   completion/child/syntax facets) over rest-api/native-api with the safety rules
+   above, including the
+   broad-query describe ladder, smart sizing, and CHR-backed anchors for Q6,
+   Q8, Q10, and Q11.
+- **Phase 3 — facet polish** — `--complete`/`--schema` ergonomics, truncation
    counts/hints, `--full`.
-4. **Library/LSP alignment** — export shape hardened against a real
+- **Phase 4 — library/LSP alignment** — export shape hardened against a real
    lsp-routeros-ts consumption spike (semantic tokens via the centrs span
    vocabulary + color map).
 
@@ -399,22 +578,35 @@ round):
 - **Envelope mirrors `check`** (`ok: true` + `data.verdict` for analyzed
   input); coordinate contract (byte offsets, exclusive `end`,
   original-document mapping for LSP) is explicit.
-- **`:parse` readout is transport-specific** (constitution): the native-api
-  cell needs its degraded readout specified before advancing.
+- **`:parse` readout is transport-specific** (constitution); native API uses
+  `/execute as-string` and returns the same parser text as REST/console, while
+  omitting `as-string` returns only the job handle (Q11).
 - **MCP shape change is a deliberate pre-1.0 break**, migrated in one change.
 
-Still open (for the next round / the grounding lab):
+Still open (implementation opens — none block ratification):
 
 1. Final flag names (`--full`, `--curl`, facet names) and the smart-sizing
    thresholds (what counts as "cheap", what triggers truncation).
 2. The centrs span vocabulary itself: class list, mapping table from RouterOS
    highlight classes (and their colors), and how unknown/new upstream classes
-   degrade.
-3. Which command families get tested `curl`/REST mapping rules first (curl is
-   REST-only — native-api has no curl analogue), plus placeholder-host and
-   credential-elision details.
-4. The exact question list for the phase-0 grounding lab, and which spec
-   claims it must confirm before ratification — now explicitly including the
-   `.proplist` probe recipe and the native-api `:parse` readout.
-5. Whether the live describe ladder needs result caching per target+version
-   (probe cost vs freshness) — likely deferred to implementation evidence.
+   degrade. Phase 0 pinned the raw inputs (Q13's per-occurrence highlight-class
+   corpus; the observed 19 classes on 7.23.2 plus drift on 7.24rc2) but the
+   centrs-owned class list and color map are a **draft** (lab question Q12,
+   non-ratification-gating); they harden in staging phase 4 against the real
+   lsp-routeros-ts consumption spike.
+3. Whether the live describe ladder needs result caching per target+version
+   (probe cost vs freshness) — deferred to implementation evidence.
+
+Resolved during phase 0:
+
+- **First CLI→REST families (Q8).** Nine mapping rules are
+   runtime-exercised (2xx on 7.23.2 and 7.24rc2): `add`→`PUT`, `print`→`GET`,
+   `get`→`GET/<id>`, `set`→`PATCH/<id>`, `remove`→`DELETE/<id>`,
+   `run`→`POST/<command>`, and `proplist`/`query`→`POST/<path>/print`. Selector
+   writes (`set`/`remove [find …]`), singleton-menu `set`, and non-CRUD actions
+   fail closed to `execute`/`unknown` (no `curl`). Placeholder-host and
+   credential-elision rendering details stay an implementation open; `curl` is
+   REST-only (native-api has no curl analogue).
+- **Ratification question list (#185).** The phase-0 question list and the spec
+  claims each gated were the deliverable of #185; every ratification-gating
+  question is answered.

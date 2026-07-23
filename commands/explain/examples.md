@@ -2,20 +2,19 @@
 
 Each numbered example is an executable spec. Once `explain` is implemented,
 offline examples run under `test/unit/explain.test.ts` and live examples under
-`test/integration/explain.test.ts` against a CHR booted by `@tikoci/quickchr`
-— one assertion per example (example N ↔ assertion N). Until then these are
-the **target**: the cells are `designed`, nothing here is green yet, and flag
-and field names track the decided-but-unratified surface in `README.md` — the
-phase-0 grounding lab may still reshape them, and this file changes with the
-spec.
+`test/integration/explain.test.ts` (rest-api) and
+`test/integration/native-api-explain.test.ts` (native-api) against a CHR booted by
+`@tikoci/quickchr` — one assertion per example (example N ↔ assertion N).
+Until then these are the **target**: the cells are `designed`, nothing here is
+green yet, and flag and field names track the ratified surface in `README.md`.
 
-`$R` is `<host>:<rest-port>` resolved by quickchr; `$U` / `$P` are CHR
+`$R` is `<host>:<rest-port>` resolved by quickchr; `$A` is `<host>` and
+`$API_PORT` is the native API port (`chr.ports.api`); `$U` / `$P` are CHR
 credentials from the harness. Live examples are **target-first**
 (`explain <router> '<input>'`); RouterOS input is single-quoted so the shell
 never expands `$vars` or splits on `>`. Envelope-asserting examples pass
-`--json`; live examples here ride **rest-api** — the native-api cell needs its
-own protocol-pinned examples (see README, `:parse` transport caveat) before it
-advances.
+`--json`; live examples ride **rest-api** unless they explicitly pin
+`--via native-api`.
 
 ## Offline (no router, no CDB — canonicalizer only)
 
@@ -27,9 +26,10 @@ centrs explain '/ip/route add dst-address=10.9.0.0/16 gateway=192.0.2.1' --json
 
 `ok: true`; `data.canonical` is
 `{ path: "/ip/route", verb: "add", mode: "structured", writeShaped: true }`
-with the args split out; `data.transport.classification` is `"api-candidate"`
-(the statement is covered by a tested REST mapping rule); `data.verdict` is
-`pass`; exit `0`.
+with the args split out; `data.structure.statements[0].resolution` is
+`"resolved"` and its `transport.classification` is `"api-candidate"` (the
+statement is covered by a tested REST mapping rule); `data.verdict` is `pass`;
+exit `0`.
 
 ### 2. Script mode is reported, not widened — and routes to execute
 
@@ -39,8 +39,9 @@ centrs explain ':foreach i in=[/ip/address find] do={ :put $i }' --json
 
 `data.canonical.mode` is `"script"` and `writeShaped` reflects the gate's
 conservative verdict — the same answer `execute` would act on.
-`data.transport.classification` is `"execute"` with the `centrs execute`
-invocation rendered, so the right runner surfaces even for script input.
+Each resolved command under `data.structure.statements[]` classifies
+`"execute"` with the `centrs execute` invocation rendered, so the right runner
+surfaces even for script input.
 
 ### 3. Sub-command paths are re-constituted; the gate verdict is untouched
 
@@ -85,11 +86,12 @@ when a router is provided.
 centrs explain '/ip/address print' --curl --json
 ```
 
-`data.transport.rest` carries the method + `/rest/ip/address` mapping and
-`data.transport.curl` renders a ready-to-edit `curl` command using a
-placeholder host (no router was given) and elided credentials; the equivalent
-`centrs api` invocation is rendered alongside. A statement *not* covered by a
-tested mapping rule classifies `"unknown"` and renders no curl.
+The first statement's `transport.rest` carries the method +
+`/rest/ip/address` mapping and its `transport.curl` renders a ready-to-edit
+`curl` command using a placeholder host (no router was given) and elided
+credentials; the equivalent `centrs api` invocation is rendered alongside. A
+statement *not* covered by a tested mapping rule classifies `"unknown"` and
+renders no curl.
 
 ## Live (CHR target, rest-api)
 
@@ -113,17 +115,16 @@ centrs explain $R /ip/address/set -u $U -p $P --schema --json
 `data.schema` enumerates the settable arguments of `set` (`address`,
 `interface`, `disabled`, …) with types where the device reports them.
 
-### 9. Describe print: the proplist special case (phase-0 gated)
+### 9. Describe print: the proplist special case
 
 ```bash
 centrs explain $R /ip/address/print -u $U -p $P --schema --json
 ```
 
 `data.schema` returns the `.proplist` value set — what the output *can*
-contain — rather than treating `print` like a plain verb. **Gated:** the
-value-position probe recipe this needs overlaps the still-open upstream
-`completion-tricks` research; phase 0 must ground it, and if it cannot, this
-example weakens to the `child`/`syntax` facts for `print`.
+contain — rather than treating `print` like a plain verb. The grounded probe is
+`completion input="/ip/address/print proplist="` (dot-free console spelling),
+filtered to rows with `show=true`; each returned fact cites that live evidence.
 
 ### 10. Smart sizing truncates with counts, `--full` lifts it
 
@@ -145,7 +146,7 @@ centrs explain $R '/ip/address add address=bogus interface=' -u $U -p $P --json
 vocabulary (not raw RouterOS highlight classes); the first hard error's byte
 offset appears in a diagnostic citing `live-inspect` evidence.
 
-### 12. Structure via :parse (transport-specific readout)
+### 12. Structure via :parse
 
 ```bash
 centrs explain $R ':if (1 > 2) do={ :put x' -u $U -p $P --json
@@ -153,9 +154,8 @@ centrs explain $R ':if (1 > 2) do={ :put x' -u $U -p $P --json
 
 The unclosed block yields a `:parse`-derived diagnostic; no partial structure
 is fabricated past the first hard error. The line/column detail is asserted
-here over a transport that surfaces the parser text (constitution: `:parse`
-error surfacing is transport-specific); the native-api degraded readout is
-specified separately before that cell advances.
+here over rest-api; example 24 asserts the same readout over native API using
+`/execute as-string`.
 
 ### 13. Completion: partial argument name
 
@@ -204,3 +204,92 @@ centrs explain --group lab '/ip/route print' --json
 
 `ok: false` with `usage/fanout-not-supported`; `explain` takes at most one
 router.
+
+## Phase-0-derived contract anchors
+
+These examples are the product-facing subset of the phase-0 findings. The
+larger mutation, coordinate, and stress matrices live as product-owned fixture
+tests per README phase 0.5; no test imports `.scratch/` code.
+
+### 18. A bare path is ambiguous offline
+
+```bash
+centrs explain '/ip/route' --json
+```
+
+The first statement has `resolution: "ambiguous"`: without a schema, the same
+shape can be a menu (`/ip/route`) or a no-argument command
+(`/system/reboot`). It carries no invented `command`, its transport
+classification is `"unknown"`, and a canonicalizer diagnostic explains the
+menu-vs-command ambiguity. `data.verdict` remains the independent diagnostic
+severity summary; it is not the statement-resolution field.
+
+### 19. Live evidence resolves the same bare path as a menu
+
+```bash
+centrs explain $R '/ip/route' -u $U -p $P --json
+```
+
+`/console/inspect` completion and highlight agree that the terminal token is a
+`dir`; the first statement is `resolution: "resolved"`, `kind: "menu"`, and
+has no runnable transport rendering. The evidence entry is version-stamped and
+the probe never executes the path.
+
+### 20. Explain-only write detection is three-valued
+
+```bash
+centrs explain '/ip/address add address=198.51.100.10/32 interface=ether1' --json
+centrs explain '/ip/address print' --json
+centrs explain '/disk format-drive disk1' --json
+```
+
+`data.structure.containsWrite` is respectively `true`, `false`, and
+`"unknown"`. The third result must not become `false`: `format-drive` is
+write-shaped but outside the small, version-stable write table. These values do
+not alter the execute gate's `canonical.writeShaped` verdict.
+
+### 21. A defect cannot fabricate a following command
+
+```bash
+centrs explain '/interface bridge add name=br;0 protocol-mode=none' --json
+```
+
+The injected `;` has RouterOS statement-separator semantics. A diagnostic
+carries its defect byte region; the tail statement beginning `0` resolves
+`"unknown"`, with no confident `/r0` command or runnable transport rendered.
+The analysis itself is `ok: true`; `data.verdict` and `--fail-on` report the
+diagnostic.
+
+### 22. Normalization preserves device byte offsets and LSP positions
+
+```bash
+centrs explain '/system identity set name="router-🚀"' --json
+```
+
+`data.input.normalized` is `true`; the four UTF-8 bytes of `🚀` occupy four
+analyzed bytes and map to its two original UTF-16 code units through
+`data.input.positionMap[]`. Every span remains half-open and in bounds,
+`end === input.bytes` is legal, and a cursor inside those four bytes snaps to
+the character boundary rather than splitting the original character.
+
+### 23. Selector-less set fails closed offline
+
+```bash
+centrs explain '/ip/dns set use-doh-server=https://resolver.example/dns-query' --curl --json
+```
+
+The statement's transport classification is `"unknown"` and no curl is
+rendered. Offline cannot prove that `/ip/dns` is a singleton; the same shape on
+an id-bearing table requires an id. Live schema evidence may lift this case to
+`api-candidate`.
+
+### 24. Native API returns the same parse diagnostic
+
+```bash
+centrs explain $A ':if (1 > 2) do={ :put x' --via native-api --port $API_PORT --username $U --password $P --json
+```
+
+`meta.via` is `native-api`; `:put [:parse …]` runs through `/execute` with
+`as-string`, and the diagnostic carries the RouterOS line/column text rather
+than an opaque job handle. The corresponding evidence entry names `:parse`,
+is version-stamped, and no command is executed.
