@@ -1,0 +1,251 @@
+{
+	"_source": "Promoted from the phase-0 lab corners .scratch/explain-lab-q6-corners.ts (Q6, #185). Each case pins the ratified `proposed` boundary arm; the other six A/B arms stayed in the lab. `truth` is the fully-qualified device path the corner was cross-checked against on the 7.22.1 command tree (the oracle), where the tree can speak. Cases are scored offline with `/` context unless `context` is given. resolution ∈ resolved|ambiguous|unknown; for `resolved`, `path` is the menu and `verb` the verb token; `ambiguous`/`unknown` carry neither.",
+	"cases": [
+		{
+			"name": "slash menu + space verb — punctuation carries the boundary",
+			"input": "/ip/firewall/filter add chain=input",
+			"resolution": "resolved",
+			"path": "/ip/firewall/filter",
+			"verb": "add",
+			"verbAt": 3,
+			"truth": "/ip/firewall/filter/add",
+			"rule": "vocabulary hit `add`"
+		},
+		{
+			"name": "canonical print",
+			"input": "/ip/address print",
+			"resolution": "resolved",
+			"path": "/ip/address",
+			"verb": "print",
+			"verbAt": 2,
+			"truth": "/ip/address/print",
+			"rule": "vocabulary hit `print`"
+		},
+		{
+			"name": "all-slash CMD — only the vocabulary recovers the verb",
+			"input": "/system/identity/print",
+			"resolution": "resolved",
+			"path": "/system/identity",
+			"verb": "print",
+			"verbAt": 2,
+			"truth": "/system/identity/print",
+			"rule": "vocabulary hit `print`"
+		},
+		{
+			"name": "bare menu path — V4: indistinguishable from a no-arg command",
+			"input": "/ip/address",
+			"resolution": "ambiguous",
+			"truth": "/ip/address",
+			"rule": "bare path, nothing follows"
+		},
+		{
+			"name": "space-written menu — only the vocabulary recovers this",
+			"input": "/ip firewall filter add chain=input",
+			"resolution": "resolved",
+			"path": "/ip/firewall/filter",
+			"verb": "add",
+			"verbAt": 3,
+			"truth": "/ip/firewall/filter/add",
+			"rule": "vocabulary hit `add`"
+		},
+		{
+			"name": "vocabulary hit at run end",
+			"input": "/interface bridge port remove [find]",
+			"resolution": "resolved",
+			"path": "/interface/bridge/port",
+			"verb": "remove",
+			"verbAt": 3,
+			"truth": "/interface/bridge/port/remove",
+			"rule": "vocabulary hit `remove` — `[` ends the run"
+		},
+		{
+			"name": "flag after the verb stays out of the run",
+			"input": "/ip route print detail",
+			"resolution": "resolved",
+			"path": "/ip/route",
+			"verb": "print",
+			"verbAt": 2,
+			"truth": "/ip/route/print",
+			"rule": "vocabulary hit `print`"
+		},
+		{
+			"name": "`comment=` is an ARG — `=` ends the run (V2)",
+			"input": "/ip/firewall/filter add comment=x",
+			"resolution": "resolved",
+			"path": "/ip/firewall/filter",
+			"verb": "add",
+			"verbAt": 3,
+			"truth": "/ip/firewall/filter/add",
+			"rule": "vocabulary hit `add`"
+		},
+		{
+			"name": "same word as a VERB — bare, so the vocabulary claims it",
+			"input": "/ip/firewall/filter comment 0 x",
+			"resolution": "resolved",
+			"path": "/ip/firewall/filter",
+			"verb": "comment",
+			"verbAt": 3,
+			"truth": "/ip/firewall/filter/comment",
+			"rule": "vocabulary hit `comment`"
+		},
+		{
+			"name": "directive positional operand — `:global myvar`",
+			"input": ":global myvar",
+			"resolution": "resolved",
+			"path": "/",
+			"verb": "global",
+			"verbAt": 0,
+			"rule": "R10: a directive's operand is positional"
+		},
+		{
+			"name": "the one sub-menu directive — `:log info`",
+			"input": ":log info \"hello\"",
+			"resolution": "resolved",
+			"path": "/log",
+			"verb": "info",
+			"verbAt": 1,
+			"truth": "/log/info",
+			"rule": "`:log <level>`"
+		},
+		{
+			"name": "numeric operand is not a run token — `:put 1`",
+			"input": ":put 1",
+			"resolution": "resolved",
+			"path": "/",
+			"verb": "put",
+			"verbAt": 0,
+			"rule": "R10: a directive's operand is positional"
+		},
+		{
+			"name": "bracket ends the run — `:put [/ip/address print]`",
+			"input": ":put [/ip/address print]",
+			"resolution": "resolved",
+			"path": "/",
+			"verb": "put",
+			"verbAt": 0,
+			"rule": "R10: a directive's operand is positional"
+		},
+		{
+			"name": "no run at all — a bare variable",
+			"input": "$myvar",
+			"resolution": "unknown",
+			"rule": "dynamic or substitution-headed statement"
+		},
+		{
+			"name": "variable segment truncates the run before the verb",
+			"input": "/ip/address/$name print",
+			"resolution": "unknown",
+			"rule": "no leading path token"
+		},
+		{
+			"name": "space-written navigation — V4 refuses (the Q4 cascade case)",
+			"input": "/ip firewall filter",
+			"resolution": "ambiguous",
+			"truth": "/ip/firewall/filter",
+			"rule": "bare path, nothing follows"
+		},
+		{
+			"name": "cascade twin — a CMD with the same text shape as `/ip/address`",
+			"input": "/system/reboot",
+			"resolution": "ambiguous",
+			"truth": "/system/reboot",
+			"rule": "bare path, nothing follows"
+		}
+	],
+	"branches": [
+		{
+			"_note": "Offline-behavior anchors — they pin ratified `proposed`-arm code paths the oracle corners above do not reach. No device `truth` is asserted: `path` is the rule's DEFINITIONAL output (menu = run before the verb), not a command-tree claim.",
+			"name": "punctuation first-space token, no vocabulary hit — `[` ends the run",
+			"input": "/system/script run [find]",
+			"resolution": "resolved",
+			"path": "/system/script",
+			"verb": "run",
+			"verbAt": 2,
+			"rule": "first space token after 2 slash-joined"
+		},
+		{
+			"name": "punctuation last segment, no vocabulary hit — all slash-joined, arguments follow",
+			"input": "/tool/e-mail/send to=x",
+			"resolution": "resolved",
+			"path": "/tool/e-mail",
+			"verb": "send",
+			"verbAt": 2,
+			"rule": "no space token, arguments follow — last segment"
+		},
+		{
+			"name": "directive precedence over vocabulary — `:set` is positional, not a CRUD verb",
+			"input": ":set x 1",
+			"resolution": "resolved",
+			"path": "/",
+			"verb": "set",
+			"verbAt": 0,
+			"rule": "R10: a directive's operand is positional (beats the `set` vocabulary entry)"
+		},
+		{
+			"name": "single-token `:log` is NOT the sub-menu case — that needs a second token",
+			"input": ":log",
+			"resolution": "resolved",
+			"path": "/",
+			"verb": "log",
+			"verbAt": 0,
+			"rule": "R10: a directive's operand is positional"
+		},
+		{
+			"name": "KNOWN LIMIT — a bare-word positional arg is absorbed into the run → V4 ambiguous",
+			"input": "/system/script run myscript",
+			"resolution": "ambiguous",
+			"rule": "offline cannot tell a positional arg (`myscript`) from a deeper menu without a schema; the whole run is a bare path (V4). The Q6 residual, stated in the SUT (`enable www-ssl`)."
+		},
+		{
+			"name": "`..` navigation is pathresolve.isNav's domain, not this module's — unknown here",
+			"input": "..",
+			"resolution": "unknown",
+			"rule": "no leading path token (a bare `..` is not BARE_WORD-shaped)"
+		}
+	],
+	"contextual": [
+		{
+			"name": "relative command inherits the persistent nav context",
+			"input": "/ip route\nadd gateway=1.1.1.1",
+			"expect": [
+				{ "resolution": "ambiguous" },
+				{
+					"resolution": "resolved",
+					"path": "/ip/route",
+					"verb": "add",
+					"verbAt": 0
+				}
+			],
+			"rule": "R4 context carries into the bare `add`; V4 makes the nav line itself ambiguous"
+		},
+		{
+			"name": "relative print after a slash-nav",
+			"input": "/interface/bridge\nprint",
+			"expect": [
+				{ "resolution": "ambiguous" },
+				{
+					"resolution": "resolved",
+					"path": "/interface/bridge",
+					"verb": "print",
+					"verbAt": 0
+				}
+			],
+			"rule": "vocabulary hit `print` in inherited context"
+		},
+		{
+			"name": "one document, all three verdicts — resolved, ambiguous, unknown",
+			"input": "/ip route add gateway=1.1.1.1\n/ip/address\n$dynamic",
+			"expect": [
+				{
+					"resolution": "resolved",
+					"path": "/ip/route",
+					"verb": "add",
+					"verbAt": 2
+				},
+				{ "resolution": "ambiguous" },
+				{ "resolution": "unknown" }
+			],
+			"rule": "the fail-closed floor and the ambiguous verdict coexist with resolved commands in a single walk"
+		}
+	]
+}

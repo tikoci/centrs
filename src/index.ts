@@ -330,6 +330,22 @@ export {
 	segmentStatements,
 } from "./explain/segment.ts";
 export {
+	describeStatement,
+	isDirective,
+	type RunToken,
+	resolveVerb,
+	resolveVerbs,
+	runTokens,
+	type Sep,
+	type Split,
+	SUBMENU_DIRECTIVES,
+	splitRun,
+	VERBS,
+	type VerbAnalysis,
+	type VerbResolution,
+	type VerbSplit,
+} from "./explain/verbsplit.ts";
+export {
 	type ApiVerb,
 	createProtocolAdapter,
 	getProtocolPlan,
