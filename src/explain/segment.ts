@@ -33,6 +33,13 @@
  *   H7  A statement that is only a `{…}` group (optionally behind a bare menu
  *       path) is a CONTAINER: IL flattens its children into siblings, so its
  *       children are segmented in its place.
+ *
+ * H7 is intentionally depth-bounded. Container flattening is recursive today,
+ * and `explain` accepts untrusted editor/MCP input, so deeply nested containers
+ * must make analysis abstain instead of consuming the JS stack. When the limit
+ * is reached the innermost remainder stays as one segment and `notes` carries
+ * `over-depth:<analyzed-byte-offset>`. This keeps the result deterministic and
+ * repairable until the later full walker replaces H7 with an index-based scan.
  */
 
 import {
@@ -73,6 +80,20 @@ export interface SegmentResult {
 const isSpace = (c: string): boolean => c === " " || c === "\t" || c === "\r";
 
 /**
+ * Defensive limit for the recursive H7 promotion.
+ *
+ * This is not a RouterOS grammar limit. It is an implementation guard derived
+ * from the Q17 stress finding: the lab walker overflowed the JS stack around
+ * 32k nested containers. 256 preserves far more nesting than normal scripts
+ * use while bounding both stack usage and the current repeated scans.
+ */
+const MAX_CONTAINER_DEPTH = 256;
+
+interface SegmentScanState {
+	overDepthOffsets: number[];
+}
+
+/**
  * Segment `original` into top-level statements. Spans are analyzed-byte offsets
  * (see module header); `text` is the original substring for each span.
  */
@@ -80,13 +101,21 @@ export function segmentStatements(original: string): SegmentResult {
 	const analysis = analyzeCoordinates(original);
 	// `analyzed` is pure ASCII, so a string built from it has index === byte.
 	const ascii = new TextDecoder().decode(analysis.analyzed);
-	const raw = segmentAscii(ascii);
+	const state: SegmentScanState = { overDepthOffsets: [] };
+	const raw = segmentAscii(ascii, 0, 0, state);
 	// Recover the human-readable `text` for each segment from the original.
 	const segments = raw.segments.map((s) => ({
 		...s,
 		text: originalSlice(analysis, s.start, s.end),
 	}));
-	return { segments, comments: raw.comments, notes: raw.notes };
+	return {
+		segments,
+		comments: raw.comments,
+		notes: [
+			...raw.notes,
+			...state.overDepthOffsets.map((offset) => `over-depth:${offset}`),
+		],
+	};
 }
 
 /** Original substring for an analyzed-byte span (boundaries are char-aligned). */
@@ -104,21 +133,40 @@ function utf16At(a: CoordinateAnalysis, byte: number): number {
 	return runAtByte(a, byte).utf16Start;
 }
 
-/** Segment a pure-ASCII string; offsets are byte === string indices. */
-function segmentAscii(text: string): SegmentResult {
+/**
+ * Segment a pure-ASCII string; local offsets are byte === string indices.
+ * `absoluteBase` locates those offsets in the full analyzed input for guard
+ * notes.
+ */
+function segmentAscii(
+	text: string,
+	absoluteBase: number,
+	containerDepth: number,
+	state: SegmentScanState,
+): SegmentResult {
 	const raw = segmentRaw(text);
 	// H7 — expand bare `{…}` container statements in place.
 	const segments: Segment[] = [];
 	for (const s of raw.segments) {
 		const open = containerOpen(s.text);
 		if (open >= 0) {
+			if (containerDepth >= MAX_CONTAINER_DEPTH) {
+				state.overDepthOffsets.push(absoluteBase + s.start + open);
+				segments.push(s);
+				continue;
+			}
 			const prefix = s.text.slice(0, open).trim();
 			const body = s.text.slice(open + 1, -1);
 			// Only `inner.segments` is new: the outer `segmentRaw` pass already
 			// records comments (H4, every depth) and notes at every depth, so
 			// re-merging `inner.comments`/`inner.notes` would double-count them.
-			const inner = segmentAscii(body);
-			const base = s.start + open + 1;
+			const inner = segmentAscii(
+				body,
+				absoluteBase + s.start + open + 1,
+				containerDepth + 1,
+				state,
+			);
+			const childBase = s.start + open + 1;
 			if (inner.segments.length > 0) {
 				if (prefix.length > 0)
 					segments.push({
@@ -129,7 +177,11 @@ function segmentAscii(text: string): SegmentResult {
 						menuOnly: isMenuOnly(prefix),
 					});
 				for (const c of inner.segments)
-					segments.push({ ...c, start: c.start + base, end: c.end + base });
+					segments.push({
+						...c,
+						start: c.start + childBase,
+						end: c.end + childBase,
+					});
 				continue;
 			}
 		}

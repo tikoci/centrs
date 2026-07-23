@@ -165,6 +165,63 @@ test("non-ASCII statement text is recovered as the original, not SUB", () => {
 	expect(r.segments[1]?.start).toBe(a.analyzed.length - ":put ok".length);
 });
 
+test("deep H7 containers abstain before recursion can overflow", () => {
+	const depth = 10_000;
+	const input = `${"{".repeat(depth)}:put ok${"}".repeat(depth)}`;
+	const r = segmentStatements(input);
+
+	expect(r.notes).toEqual(["over-depth:256"]);
+	expect(r.segments).toHaveLength(1);
+	const segment = r.segments[0] as Segment;
+	expect(segment.start).toBe(256);
+	expect(segment.end).toBe(input.length - 256);
+	expect(input.slice(segment.start, segment.end)).toBe(segment.text);
+});
+
+test("over-depth notes use analyzed-byte offsets with non-ASCII prefixes", () => {
+	const prefix = "/路 ";
+	const input = `${prefix}${"{".repeat(257)}x${"}".repeat(257)}`;
+	const expectedOffset =
+		new TextEncoder().encode(prefix).length + "{".repeat(256).length;
+
+	expect(segmentStatements(input).notes).toEqual([
+		`over-depth:${expectedOffset}`,
+	]);
+});
+
+test("adversarial shape families stay deterministic with ordered, bounded spans", () => {
+	const generators = [
+		(n: number) => "a".repeat(n),
+		(n: number) => "/ip route add;".repeat(Math.ceil(n / 14)),
+		(n: number) => "/ip route add\n".repeat(Math.ceil(n / 14)),
+		(n: number) => ";".repeat(n),
+		(n: number) => "{}".repeat(Math.ceil(n / 2)),
+		(n: number) => "# c\n".repeat(Math.ceil(n / 4)),
+		(n: number) => '{[($";=\\'.repeat(Math.ceil(n / 8)),
+	];
+
+	for (const n of [0, 1, 31, 1_000, 4_000]) {
+		for (const generate of generators) {
+			const input = generate(n);
+			const first = segmentStatements(input);
+			expect(segmentStatements(input)).toEqual(first);
+
+			for (const spans of [first.segments, first.comments]) {
+				let previousStart = -1;
+				for (const span of spans) {
+					expect(Number.isInteger(span.start)).toBeTrue();
+					expect(Number.isInteger(span.end)).toBeTrue();
+					expect(span.start).toBeGreaterThanOrEqual(previousStart);
+					expect(span.start).toBeGreaterThanOrEqual(0);
+					expect(span.end).toBeGreaterThanOrEqual(span.start);
+					expect(span.end).toBeLessThanOrEqual(input.length);
+					previousStart = span.start;
+				}
+			}
+		}
+	}
+});
+
 test("segmenter is re-exported from the library barrel", () => {
 	expect(centrs.segmentStatements).toBe(segmentStatements);
 });
