@@ -3,23 +3,21 @@
  *
  * Ratified by the phase-0 lab, question Q2 (#185) and promoted from the
  * throwaway probe `.scratch/explain-lab-blocktree.ts`. Q2 asks: can an offline,
- * schema-free brace tracker reproduce the `do=`/`else=`/`on-error=` block tree
- * that `:parse` IL adjacency shows? The sharp corner is a `name={…}` LITERAL
- * value versus a `{…}` SCOPE — the case prior art (canonicalize-audit #8 / H5)
- * gets wrong by descending into a literal body as if it held statements.
+ * schema-free brace tracker tell a `{…}` SCOPE (`do=`/`else=`/`on-error=`, which
+ * IL lowers to `name=;(evl …)`) from a `name={…}` LITERAL value (braces
+ * stripped, body kept as RAW text, never lowered)? Descending into a literal
+ * body as if it held statements is the prior-art bug (canonicalize-audit #8/H5).
  *
- * The device settles it: a scope lowers to `name=;(evl …)`, while a literal has
- * its braces stripped and its body kept as RAW text, never lowered. Harvested
- * across the 913-script corpus, the source-visible scope set is a small CLOSED
- * set, so the distinction is schema-free — it reads the argument name (and, for
- * the one head-dependent case, the leading directive) off the statement itself.
+ * The source-visible scope set is a small CLOSED set harvested across the
+ * 913-script corpus, so the distinction is schema-free — it reads the argument
+ * name (and, for the one head-dependent case, the leading directive) off the
+ * statement itself.
  *
- * This stage sits on top of the Q1 segmenter: `blockTree` segments the input
- * with `segmentStatements` and then, per statement, finds its depth-0 scope
- * braces and recurses into their bodies. A literal `{…}` is never descended.
+ * This module ships only the (single-pass, non-recursive) classification
+ * primitives the path resolver needs. The recursive block *tree* / topology
+ * surface stays in the lab until it can be promoted with a bounded, index-based
+ * traversal of its own.
  */
-
-import { segmentStatements } from "./segment.ts";
 
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
 
@@ -82,64 +80,10 @@ export const DIRECTIVE_BODY: Record<string, string> = {
 	onerror: "in",
 };
 
-/** One scope block: its IL/source name and the statements it contains. */
-export interface Block {
+/** One depth-0 scope block found in a statement: its name and raw body text. */
+export interface ScopeBlock {
 	name: string;
-	children: Node[];
-}
-
-/** One statement and the scope blocks attached to it. */
-export interface Node {
-	text: string;
-	blocks: Block[];
-}
-
-/** Statement texts of `text`, via the Q1 segmenter. */
-function statementTexts(text: string): string[] {
-	return segmentStatements(text).segments.map((s) => s.text);
-}
-
-/**
- * The offline block tree: each top-level statement, with its scope blocks (and
- * their nested statements) resolved. Literal `{…}` values are not descended.
- */
-export function blockTree(text: string): Node[] {
-	return statementTexts(text).map((t) => ({ text: t, blocks: findBlocks(t) }));
-}
-
-function findBlocks(text: string): Block[] {
-	const blocks: Block[] = [];
-	let depth = 0;
-	for (let i = 0; i < text.length; i++) {
-		const c = text[i] as string;
-		if (c === '"') {
-			i++;
-			while (i < text.length && text[i] !== '"') i += text[i] === "\\" ? 2 : 1;
-			continue;
-		}
-		if (c === "[" || c === "(") {
-			depth++;
-			continue;
-		}
-		if (c === "]" || c === ")") {
-			depth--;
-			continue;
-		}
-		if (c === "{") {
-			const end = matchBrace(text, i);
-			if (depth === 0) {
-				const name = scopeNameAt(text, i);
-				if (name !== null)
-					blocks.push({ name, children: blockTree(text.slice(i + 1, end)) });
-			}
-			// A literal `{…}` is NOT descended into: its contents are a value, and
-			// treating them as statements is exactly the audit's #8/H5 bug.
-			i = end;
-			continue;
-		}
-		if (c === "}") depth--;
-	}
-	return blocks;
+	body: string;
 }
 
 /**
@@ -175,9 +119,14 @@ export function isScopeBrace(text: string, open: number): boolean {
 	return scopeNameAt(text, open) !== null;
 }
 
-/** Bodies of the depth-0 scope `{…}` in a statement (for block recursion). */
-export function scopeBodies(text: string): string[] {
-	const bodies: string[] = [];
+/**
+ * The depth-0 scope `{…}` in a statement, with names and raw body text. A
+ * single left-to-right pass (no recursion): each scope's body is returned raw
+ * for the caller to segment/recurse under its own depth budget. Literal `{…}`
+ * values are skipped, not descended.
+ */
+export function scopeBlocks(text: string): ScopeBlock[] {
+	const blocks: ScopeBlock[] = [];
 	let depth = 0;
 	for (let i = 0; i < text.length; i++) {
 		const c = text[i];
@@ -187,15 +136,25 @@ export function scopeBodies(text: string): string[] {
 			continue;
 		}
 		if (c === "[" || c === "(") depth++;
-		else if (c === "]" || c === ")") depth--;
-		else if (c === "{") {
+		else if (c === "]" || c === ")") {
+			if (depth > 0) depth--;
+		} else if (c === "{") {
 			const end = matchBrace(text, i);
-			if (depth === 0 && isScopeBrace(text, i))
-				bodies.push(text.slice(i + 1, end));
+			if (depth === 0) {
+				const name = scopeNameAt(text, i);
+				if (name !== null) blocks.push({ name, body: text.slice(i + 1, end) });
+			}
 			i = end;
+		} else if (c === "}") {
+			if (depth > 0) depth--;
 		}
 	}
-	return bodies;
+	return blocks;
+}
+
+/** Bodies of the depth-0 scope `{…}` in a statement (for block recursion). */
+export function scopeBodies(text: string): string[] {
+	return scopeBlocks(text).map((b) => b.body);
 }
 
 /** Index of the `}` matching the `{` at `open`, honoring strings. */
@@ -215,24 +174,4 @@ export function matchBrace(text: string, open: number): number {
 		}
 	}
 	return text.length;
-}
-
-/**
- * Canonical structural fingerprint: block names and nesting, no leaf text.
- * Sibling blocks are emitted in NAME order because IL stores arguments in
- * (alphabetized) KV-array order, so `on-error={…} command={…}` comes back as
- * `command…on-error…`; source order is not recoverable from that oracle, so
- * the fingerprint does not encode it.
- */
-export function topology(nodes: Node[]): string {
-	const byName = (a: Block, b: Block): number =>
-		a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
-	return nodes
-		.map((n) =>
-			[...n.blocks]
-				.sort(byName)
-				.map((b) => `${b.name}[${topology(b.children)}]`)
-				.join(""),
-		)
-		.join(",");
 }

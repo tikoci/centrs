@@ -77,6 +77,52 @@ function isAbsolutePathToken(token: string): boolean {
 	return parts.length > 0 && parts.every((part) => BARE_WORD.test(part));
 }
 
+/**
+ * Defensive recursion bound. `explain` accepts untrusted editor/MCP input, so
+ * deeply nested substitutions/blocks must make the analysis ABSTAIN (an
+ * `over-depth` note) rather than consume the JS stack. Matches the segmenter's
+ * `MAX_CONTAINER_DEPTH`; far beyond any real script. The single-pass
+ * index-based rewrite is tracked in #190.
+ */
+const MAX_DEPTH = 256;
+
+/**
+ * True when a statement's own delimiters are not well-formed — unbalanced
+ * `()`/`[]`/`{}` or an unterminated string. Q14 fail-closed floor: a malformed
+ * statement must never yield a confident command, so the resolver degrades it
+ * to `unresolved` and does not descend into it. Statement-local; the
+ * segmenter's document-level notes are surfaced separately on the envelope.
+ */
+function structuralDefect(text: string): boolean {
+	const openOf: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
+	const stack: string[] = [];
+	for (let i = 0; i < text.length; i++) {
+		const c = text[i];
+		if (c === '"') {
+			i++;
+			let closed = false;
+			while (i < text.length) {
+				if (text[i] === "\\") {
+					i += 2;
+					continue;
+				}
+				if (text[i] === '"') {
+					closed = true;
+					break;
+				}
+				i++;
+			}
+			if (!closed) return true;
+			continue;
+		}
+		if (c === "(" || c === "[" || c === "{") stack.push(c);
+		else if (c === ")" || c === "]" || c === "}") {
+			if (stack.pop() !== openOf[c]) return true;
+		}
+	}
+	return stack.length > 0;
+}
+
 /** A re-constituted `[…]` command substitution (Q3). */
 export interface Resolution {
 	/** Raw text inside the brackets. */
@@ -118,19 +164,43 @@ export interface StatementResolution {
 	unresolved?: string;
 }
 
+/** Q3 result: bracket resolutions plus any structural / over-depth notes. */
+export interface DocumentAnalysis {
+	resolutions: Resolution[];
+	/**
+	 * Diagnostics surfaced from the segmenter (`unclosed:…`, `unbalanced-close:…`,
+	 * `unterminated-string`) plus `over-depth` when a bounded traversal abstained.
+	 * A caller must not treat resolutions as confident while notes are non-empty.
+	 */
+	notes: string[];
+}
+
+/** Q4 result: per-statement resolutions plus structural / over-depth notes. */
+export interface StatementAnalysis {
+	statements: StatementResolution[];
+	notes: string[];
+}
+
 /** Statement texts of `text`, via the Q1 segmenter. */
 function statementTexts(text: string): string[] {
 	return segmentStatements(text).segments.map((s) => s.text);
 }
 
 /** Q3 — resolve every `[…]` command substitution in `text`. */
-export function resolveDocument(text: string): Resolution[] {
-	const out: Resolution[] = [];
-	walk(statementTexts(text), "/", out);
-	return out;
+export function resolveDocument(text: string): DocumentAnalysis {
+	const notes = new Set(segmentStatements(text).notes);
+	const resolutions: Resolution[] = [];
+	walk(statementTexts(text), "/", resolutions, 0, notes);
+	return { resolutions, notes: [...notes] };
 }
 
-function walk(segments: string[], context: string, out: Resolution[]): void {
+function walk(
+	segments: string[],
+	context: string,
+	out: Resolution[],
+	blockDepth: number,
+	notes: Set<string>,
+): void {
 	let ctx = context;
 	for (const text of segments) {
 		// R4 — a menu-navigation statement moves the document context.
@@ -139,26 +209,37 @@ function walk(segments: string[], context: string, out: Resolution[]): void {
 			ctx = nav;
 			continue;
 		}
+		// Q14 fail-closed — a structurally malformed statement yields no confident
+		// bracket path and is not descended.
+		if (structuralDefect(text)) continue;
 		// R3 — the statement's own path is the context its brackets see.
 		const stmtCtx = statementPath(text, ctx);
-		collectBrackets(text, stmtCtx, 0, out);
+		collectBrackets(text, stmtCtx, 0, out, notes);
 		// R5 — block bodies inherit the context in force here.
-		for (const body of scopeBodies(text))
-			walk(statementTexts(body), stmtCtx, out);
+		for (const body of scopeBodies(text)) {
+			if (blockDepth >= MAX_DEPTH) {
+				notes.add("over-depth");
+				continue;
+			}
+			walk(statementTexts(body), stmtCtx, out, blockDepth + 1, notes);
+		}
 	}
 }
 
 /** Q4 — canonical path of every statement in source order. */
-export function resolveStatements(text: string): StatementResolution[] {
-	const out: StatementResolution[] = [];
-	walkStatements(statementTexts(text), "/", out);
-	return out;
+export function resolveStatements(text: string): StatementAnalysis {
+	const notes = new Set(segmentStatements(text).notes);
+	const statements: StatementResolution[] = [];
+	walkStatements(statementTexts(text), "/", statements, 0, notes);
+	return { statements, notes: [...notes] };
 }
 
 function walkStatements(
 	segments: string[],
 	context: string,
 	out: StatementResolution[],
+	blockDepth: number,
+	notes: Set<string>,
 ): void {
 	let ctx = context;
 	for (const text of segments) {
@@ -168,12 +249,29 @@ function walkStatements(
 			ctx = nav;
 			continue;
 		}
+		// Q14 fail-closed — a malformed statement degrades to unresolved and is
+		// not descended; it does not move the context either.
+		if (structuralDefect(text)) {
+			out.push({
+				text,
+				isNav: false,
+				context: ctx,
+				path: null,
+				unresolved: "structural defect: unbalanced delimiter or string",
+			});
+			continue;
+		}
 		out.push({ text, isNav: false, context: ctx, ...canonicalPath(text, ctx) });
 		// A block body's statements are the parent's siblings after flattening,
 		// and R5 gives them the context in force here.
 		const stmtCtx = statementPath(text, ctx);
-		for (const body of scopeBodies(text))
-			walkStatements(statementTexts(body), stmtCtx, out);
+		for (const body of scopeBodies(text)) {
+			if (blockDepth >= MAX_DEPTH) {
+				notes.add("over-depth");
+				continue;
+			}
+			walkStatements(statementTexts(body), stmtCtx, out, blockDepth + 1, notes);
+		}
 	}
 }
 
@@ -193,8 +291,8 @@ function menuNavPath(text: string, ctx: string): string | null {
 		if (!tokens.every((token) => token === "..")) return null;
 		return joinPath(ctx, tokens.join("/"));
 	}
-	if (!text.startsWith("/")) return null;
-	if (/[=[({"$]/.test(text)) return null;
+	if (!trimmed.startsWith("/")) return null;
+	if (/[=[({"$]/.test(trimmed)) return null;
 	const tokens = asciiWords(trimmed);
 	if (
 		!tokens.every((token, i) =>
@@ -308,7 +406,14 @@ function collectBrackets(
 	ctx: string,
 	depth: number,
 	out: Resolution[],
+	notes: Set<string>,
 ): void {
+	// Bound the recursion (bracket nesting AND literal-brace descent) so
+	// untrusted deeply nested input abstains instead of overflowing the stack.
+	if (depth >= MAX_DEPTH) {
+		notes.add("over-depth");
+		return;
+	}
 	for (let i = 0; i < text.length; i++) {
 		const c = text[i];
 		if (c === '"') {
@@ -316,7 +421,7 @@ function collectBrackets(
 			// substitution: `:put "$[:pick $ip 0 $n]"` lowers with `/pick` inside
 			// (topic-…/post-0003-snippet-01 @ 7.22.1).
 			const strEnd = stringEnd(text, i);
-			scanInterpolations(text.slice(i + 1, strEnd), ctx, depth, out);
+			scanInterpolations(text.slice(i + 1, strEnd), ctx, depth, out, notes);
 			i = strEnd;
 			continue;
 		}
@@ -326,7 +431,7 @@ function collectBrackets(
 			// brackets only; scope bodies are walked by walk().
 			const end = matchDelim(text, i, "{", "}");
 			if (!isScopeBrace(text, i))
-				collectBrackets(text.slice(i + 1, end), ctx, depth, out);
+				collectBrackets(text.slice(i + 1, end), ctx, depth + 1, out, notes);
 			i = end;
 			continue;
 		}
@@ -336,7 +441,7 @@ function collectBrackets(
 		out.push(resolveInner(inner, ctx, depth));
 		// R6 — nested brackets inherit from this one's resolution.
 		const nestedCtx = out[out.length - 1]?.path ?? ctx;
-		collectBrackets(inner, nestedCtx, depth + 1, out);
+		collectBrackets(inner, nestedCtx, depth + 1, out, notes);
 		i = end;
 	}
 }
@@ -354,13 +459,20 @@ function scanInterpolations(
 	ctx: string,
 	depth: number,
 	out: Resolution[],
+	notes: Set<string>,
 ): void {
 	for (let i = 0; i < body.length - 1; i++) {
 		if (body[i] !== "$" || body[i + 1] !== "[") continue;
 		const end = matchDelim(body, i + 1, "[", "]");
 		const inner = trimAscii(body.slice(i + 2, end));
 		out.push(resolveInner(inner, ctx, depth));
-		collectBrackets(inner, out[out.length - 1]?.path ?? ctx, depth + 1, out);
+		collectBrackets(
+			inner,
+			out[out.length - 1]?.path ?? ctx,
+			depth + 1,
+			out,
+			notes,
+		);
 		i = end;
 	}
 }

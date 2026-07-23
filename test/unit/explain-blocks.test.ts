@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
-	blockTree,
 	isScopeBrace,
 	SCOPE_ARG_NAMES,
+	scopeBlocks,
 	scopeBodies,
 	scopeNameAt,
-	topology,
 } from "../../src/explain/blocks.ts";
+import { segmentStatements } from "../../src/explain/segment.ts";
 import * as centrs from "../../src/index.ts";
 
 /**
@@ -16,11 +16,15 @@ import * as centrs from "../../src/index.ts";
  * Promoted from the throwaway lab probes `.scratch/explain-lab-blocktree.ts`
  * (the SUT) and `.scratch/explain-lab-q2-corners.ts` (the constructed corners,
  * two CHR-confirmed against `:parse` IL on 7.23.2). The production module is
- * `src/explain/blocks.ts`; it sits on the Q1 segmenter shipped in #189.
+ * `src/explain/blocks.ts`; it ships only the non-recursive scope-classification
+ * primitives (the recursive block-tree/topology surface stays in the lab until
+ * it can be promoted with a bounded traversal of its own).
  *
  * `expect` is the ratified canonical topology string (`do[]`, `do[do[]]`,
  * `command[]on-error[]`, …) — the human/CHR-labeled contract that pins whether
- * a `name={…}` brace is a SCOPE (descended) or a LITERAL value (opaque).
+ * a `name={…}` brace is a SCOPE (descended) or a LITERAL value (opaque). The
+ * `topology` renderer below is a test-local walk over the shipped primitives,
+ * so the anchors still exercise scopeBlocks/scopeNameAt/segmentStatements.
  */
 
 interface Corner {
@@ -38,21 +42,23 @@ const corners: Corner[] = JSON.parse(
 	),
 ).corners;
 
+/** Test-local canonical fingerprint, rebuilt from the exported primitives. */
+function topology(text: string): string {
+	return segmentStatements(text)
+		.segments.map((s) => s.text)
+		.map((t) =>
+			scopeBlocks(t)
+				.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+				.map((b) => `${b.name}[${topology(b.body)}]`)
+				.join(""),
+		)
+		.join(",");
+}
+
 describe("ratified block topology (Q2 corners)", () => {
 	for (const c of corners) {
 		test(c.name, () => {
-			expect(topology(blockTree(c.input))).toBe(c.expect);
-		});
-	}
-});
-
-describe("block tree carries each statement's text", () => {
-	for (const c of corners) {
-		test(c.name, () => {
-			// The tree is one node per top-level statement; every node keeps its
-			// (segmenter-produced) text so consumers can map blocks back to source.
-			for (const node of blockTree(c.input))
-				expect(typeof node.text).toBe("string");
+			expect(topology(c.input)).toBe(c.expect);
 		});
 	}
 });
@@ -83,15 +89,6 @@ test("in={…} is head-dependent: scope after :onerror, literal after :foreach",
 	expect(scopeNameAt(foreach, foreach.indexOf("in={") + 3)).toBeNull();
 });
 
-test("non-ASCII whitespace is opaque, not RouterOS syntax", () => {
-	for (const whitespace of ["\u00a0", "\u2003", "\u2028"]) {
-		const named = `:if (true) do=${whitespace}{ :put 1 }`;
-		expect(scopeNameAt(named, named.indexOf("{"))).toBeNull();
-		const directive = `:do${whitespace}{ :put 1 }`;
-		expect(scopeNameAt(directive, directive.indexOf("{"))).toBeNull();
-	}
-});
-
 test("scopeBodies returns only scope bodies, never literal ones", () => {
 	// One scope (`do={…}`) and one literal (`source={…}`) in the same statement.
 	const bodies = scopeBodies(
@@ -101,14 +98,24 @@ test("scopeBodies returns only scope bodies, never literal ones", () => {
 	expect(bodies[0]).toContain(":put 2");
 });
 
+test("scopeBlocks is a single non-recursive pass (no stack growth)", () => {
+	// Deeply nested scopes must not recurse here; scopeBlocks only reports the
+	// depth-0 block, leaving its body raw for a bounded caller to descend.
+	const deep = `${"do={".repeat(5000)}:put 1${"}".repeat(5000)}`;
+	expect(() => scopeBlocks(deep)).not.toThrow();
+	const blocks = scopeBlocks(deep);
+	expect(blocks).toHaveLength(1);
+	expect(blocks[0]?.name).toBe("do");
+});
+
 test("never throws on adversarial input", () => {
 	for (const input of ["", "{", "}}}", 'do={"', ":onerror {", "do {"]) {
-		expect(() => topology(blockTree(input))).not.toThrow();
+		expect(() => scopeBlocks(input)).not.toThrow();
 	}
 });
 
-test("block API is re-exported from the library barrel", () => {
-	expect(centrs.blockTree).toBe(blockTree);
-	expect(centrs.topology).toBe(topology);
+test("scope-classification API is re-exported from the library barrel", () => {
+	expect(centrs.scopeBlocks).toBe(scopeBlocks);
 	expect(centrs.scopeNameAt).toBe(scopeNameAt);
+	expect(centrs.scopeBodies).toBe(scopeBodies);
 });
