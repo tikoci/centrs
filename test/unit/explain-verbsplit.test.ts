@@ -172,6 +172,16 @@ describe("run tokenizing preserves separators (V1)", () => {
 		expect(runTokens("$x print").map((t) => t.name)).toEqual([]);
 	});
 
+	test("LF and CRLF line continuations are removed before tokenizing", () => {
+		for (const newline of ["\n", "\r\n"]) {
+			expect(runTokens(`/ip/route \\${newline}add gateway=1.1.1.1`)).toEqual([
+				{ name: "ip", sep: "start" },
+				{ name: "route", sep: "slash" },
+				{ name: "add", sep: "space" },
+			]);
+		}
+	});
+
 	test("a `:`-prefixed token ends the run via BARE_WORD, not as a V3 opener", () => {
 		// `:` is not in RUN_TERMINATOR — a colon-led token is rejected as a path
 		// segment, which ends the run just the same. RouterOS never places a bare
@@ -250,6 +260,28 @@ test("Q14 fail-closed — a resolver-refused statement stays unknown", () => {
 		expect(s.resolution).not.toBe("resolved");
 		expect(s.verb).not.toBe("add");
 	}
+});
+
+test("Q14 fail-closed — bare-word garbage tails never become contextual commands", () => {
+	for (const [input, context] of [
+		["0 protocol-mode=none", "/interface/bridge"],
+		["es # harden", "/ip/service"],
+		["ghost source={ :put x }", "/system/script"],
+	] as const) {
+		const got = resolveVerb(input, context);
+		expect(got.resolution).toBe("unknown");
+		expect(got.kind).toBeNull();
+		expect(got.path).toBeNull();
+		expect(got.verb).toBeNull();
+	}
+});
+
+test("a known CRUD verb still resolves against an explicitly supplied context", () => {
+	expect(resolveVerb("add name=x", "/interface/bridge")).toMatchObject({
+		resolution: "resolved",
+		path: "/interface/bridge",
+		verb: "add",
+	});
 });
 
 test("never throws on adversarial input", () => {

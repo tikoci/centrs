@@ -201,6 +201,28 @@
 			"input": "..",
 			"resolution": "unknown",
 			"rule": "no leading path token"
+		},
+		{
+			"name": "Q14 garbage tail — a non-CRUD bare-word head cannot become a confident contextual command",
+			"input": "es # harden",
+			"context": "/ip/service",
+			"resolution": "unknown",
+			"rule": "bare-word head is not a known verb"
+		},
+		{
+			"name": "Q6 residual — a colon-less directive without a scope block fails closed",
+			"input": "global myvar",
+			"resolution": "unknown",
+			"rule": "bare-word head is not a known verb"
+		},
+		{
+			"name": "Q1 line continuation before the verb preserves the Q6 boundary",
+			"input": "/ip/route \\\nadd gateway=1.1.1.1",
+			"resolution": "resolved",
+			"path": "/ip/route",
+			"verb": "add",
+			"verbAt": 2,
+			"rule": "vocabulary hit `add`"
 		}
 	],
 	"contextual": [

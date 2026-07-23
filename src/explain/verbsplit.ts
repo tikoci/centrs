@@ -71,7 +71,10 @@ function trimAscii(text: string): string {
 }
 
 function asciiWords(text: string): string[] {
-	const trimmed = trimAscii(text);
+	// H5 from the Q1 segmenter: a backslash-newline is removed before RouterOS
+	// parses the continued line. Keep any surrounding spaces intact so the
+	// writer's slash/space boundary signal remains observable.
+	const trimmed = trimAscii(text.replace(/\\\r?\n/g, ""));
 	return trimmed.length === 0 ? [] : trimmed.split(ASCII_WHITESPACE);
 }
 
@@ -286,7 +289,7 @@ export interface VerbSplit {
 	verb: string | null;
 	/** Index of the verb within the run; null unless `resolved`. */
 	verbAt: number | null;
-	/** Context, then context extended by each run prefix — the path readings. */
+	/** Context extended by each run prefix — the path readings. */
 	candidates: string[];
 	/** The rule that fired, for provenance. */
 	why: string;
@@ -324,6 +327,13 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 
 	const { run, directive, whole } = describeStatement(text);
 	if (run.length === 0) return unknownSplit("no leading path token");
+	if (
+		!directive &&
+		!t.startsWith("/") &&
+		!t.startsWith(":") &&
+		!VERBS.has((run[0] as RunToken).name)
+	)
+		return unknownSplit("bare-word head is not a known verb");
 
 	// `directive` already folds in the bare-directive case (`isDirective`), so it
 	// stands in for the `:`-prefixed and `x do={…}` readings — no second
