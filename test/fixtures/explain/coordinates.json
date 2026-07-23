@@ -1,0 +1,244 @@
+{
+	"fixtures": [
+		{
+			"name": "ascii-command",
+			"tag": "ASCII",
+			"text": "/ip route add dst-address=10.9.0.0/16 blackhole=yes",
+			"expect": {
+				"u8Length": 51,
+				"runCount": 51,
+				"lineCount": 1,
+				"firstNonAscii": null
+			}
+		},
+		{
+			"name": "ascii-multiline",
+			"tag": "ASCII+LF",
+			"text": "/ip address\nadd address=1.2.3.4/24\nprint",
+			"expect": {
+				"u8Length": 40,
+				"runCount": 40,
+				"lineCount": 3,
+				"firstNonAscii": null
+			}
+		},
+		{
+			"name": "bmp-latin1",
+			"tag": "BMP non-ASCII",
+			"text": "/system identity set name=\"café-router\"",
+			"expect": {
+				"u8Length": 40,
+				"runCount": 39,
+				"lineCount": 1,
+				"firstNonAscii": {
+					"codePoint": 233,
+					"utf16Start": 30,
+					"utf16Len": 1,
+					"byteStart": 30,
+					"byteLen": 2,
+					"line": 0,
+					"col": 30
+				}
+			}
+		},
+		{
+			"name": "bmp-cjk",
+			"tag": "BMP non-ASCII",
+			"text": "/system note set note=\"路由器\"",
+			"expect": {
+				"u8Length": 33,
+				"runCount": 27,
+				"lineCount": 1,
+				"firstNonAscii": {
+					"codePoint": 36335,
+					"utf16Start": 23,
+					"utf16Len": 1,
+					"byteStart": 23,
+					"byteLen": 3,
+					"line": 0,
+					"col": 23
+				}
+			}
+		},
+		{
+			"name": "bmp-cyrillic-comment",
+			"tag": "BMP non-ASCII",
+			"text": "# маршрутизатор\n/ip route print",
+			"expect": {
+				"u8Length": 44,
+				"runCount": 31,
+				"lineCount": 2,
+				"firstNonAscii": {
+					"codePoint": 1084,
+					"utf16Start": 2,
+					"utf16Len": 1,
+					"byteStart": 2,
+					"byteLen": 2,
+					"line": 0,
+					"col": 2
+				}
+			}
+		},
+		{
+			"name": "astral-emoji",
+			"tag": "astral/surrogate",
+			"text": "/system identity set name=\"rtr-🚀\"",
+			"expect": {
+				"u8Length": 36,
+				"runCount": 33,
+				"lineCount": 1,
+				"firstNonAscii": {
+					"codePoint": 128640,
+					"utf16Start": 31,
+					"utf16Len": 2,
+					"byteStart": 31,
+					"byteLen": 4,
+					"line": 0,
+					"col": 31
+				}
+			}
+		},
+		{
+			"name": "astral-mathbold",
+			"tag": "astral/surrogate",
+			"text": "/interface comment=\"𝐀𝐁\"",
+			"expect": {
+				"u8Length": 29,
+				"runCount": 23,
+				"lineCount": 1,
+				"firstNonAscii": {
+					"codePoint": 119808,
+					"utf16Start": 20,
+					"utf16Len": 2,
+					"byteStart": 20,
+					"byteLen": 4,
+					"line": 0,
+					"col": 20
+				}
+			}
+		},
+		{
+			"name": "combining-marks",
+			"tag": "combining marks",
+			"text": "/system note set note=\"éà\"",
+			"expect": {
+				"u8Length": 30,
+				"runCount": 28,
+				"lineCount": 1,
+				"firstNonAscii": {
+					"codePoint": 769,
+					"utf16Start": 24,
+					"utf16Len": 1,
+					"byteStart": 24,
+					"byteLen": 2,
+					"line": 0,
+					"col": 24
+				}
+			}
+		},
+		{
+			"name": "tabs",
+			"tag": "tabs",
+			"text": "/ip\tfirewall\tfilter\tadd\tchain=input",
+			"expect": {
+				"u8Length": 35,
+				"runCount": 35,
+				"lineCount": 1,
+				"firstNonAscii": null
+			}
+		},
+		{
+			"name": "crlf",
+			"tag": "LF/CRLF",
+			"text": "/ip address\r\nadd address=1.2.3.4/24\r\nprint",
+			"expect": {
+				"u8Length": 42,
+				"runCount": 42,
+				"lineCount": 3,
+				"firstNonAscii": null
+			}
+		},
+		{
+			"name": "mixed-eol",
+			"tag": "LF/CRLF",
+			"text": "a\nb\r\nc\rd\n",
+			"expect": {
+				"u8Length": 9,
+				"runCount": 9,
+				"lineCount": 4,
+				"firstNonAscii": null
+			}
+		},
+		{
+			"name": "lone-surrogate",
+			"tag": "normalization replacement",
+			"text": "x=\"\ud800\"y",
+			"expect": {
+				"u8Length": 8,
+				"runCount": 6,
+				"lineCount": 1,
+				"firstNonAscii": {
+					"codePoint": 65533,
+					"utf16Start": 3,
+					"utf16Len": 1,
+					"byteStart": 3,
+					"byteLen": 3,
+					"line": 0,
+					"col": 3
+				}
+			}
+		},
+		{
+			"name": "trailing-newline",
+			"tag": "cursor positions",
+			"text": "/ip route print\n",
+			"expect": {
+				"u8Length": 16,
+				"runCount": 16,
+				"lineCount": 2,
+				"firstNonAscii": null
+			}
+		},
+		{
+			"name": "empty",
+			"tag": "exclusive end",
+			"text": "",
+			"expect": {
+				"u8Length": 0,
+				"runCount": 0,
+				"lineCount": 1,
+				"firstNonAscii": null
+			}
+		},
+		{
+			"name": "single-char",
+			"tag": "exclusive end",
+			"text": "/",
+			"expect": {
+				"u8Length": 1,
+				"runCount": 1,
+				"lineCount": 1,
+				"firstNonAscii": null
+			}
+		},
+		{
+			"name": "astral-then-ascii",
+			"tag": "cursor positions",
+			"text": "🚀add",
+			"expect": {
+				"u8Length": 7,
+				"runCount": 4,
+				"lineCount": 1,
+				"firstNonAscii": {
+					"codePoint": 128640,
+					"utf16Start": 0,
+					"utf16Len": 2,
+					"byteStart": 0,
+					"byteLen": 4,
+					"line": 0,
+					"col": 0
+				}
+			}
+		}
+	]
+}

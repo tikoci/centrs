@@ -295,6 +295,16 @@ export {
 	renderExecuteFanoutEnvelope,
 } from "./execute-fanout.ts";
 export {
+	analyzeCoordinates,
+	byteToPosition,
+	type CharRun,
+	type CoordinateAnalysis,
+	type Position,
+	positionToByte,
+	runAtByte,
+	SUB,
+} from "./explain/coordinates.ts";
+export {
 	type ApiVerb,
 	createProtocolAdapter,
 	getProtocolPlan,
