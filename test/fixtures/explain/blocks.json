@@ -1,0 +1,108 @@
+{
+	"corners": [
+		{
+			"name": "source-brace-is-a-literal-value",
+			"input": "/system/script/add name=x source={ :return \"http://example.com\" } dont-require-permissions=yes",
+			"expect": "",
+			"why": "IL strips the braces and keeps the body RAW, never lowering it to (evl …). topic-174102/post-0009-snippet-01 @ 7.22.1"
+		},
+		{
+			"name": "source-literal-containing-brace-and-semicolon",
+			"input": "/system/script add name=x source={ :if (true) do={ :put \"a;b\" } }",
+			"expect": "",
+			"why": "a literal body may itself contain scope-looking text; descending into it is the audit's #8/H5 bug",
+			"verified": "CHR 7.23.2: IL keeps the whole source={…} (nested braces + inner `;`) RAW, braces stripped, never lowered to (evl …)."
+		},
+		{
+			"name": "script-brace-is-a-literal-value",
+			"input": "/system/scheduler add name=x script={ :put 1 }",
+			"expect": "",
+			"why": "`script` never appears as a lowered block anywhere in the corpus"
+		},
+		{
+			"name": "do-is-a-scope",
+			"input": ":if (true) do={ :put 1 }",
+			"expect": "do[]",
+			"why": "do → `do=;(evl …)`, 5623 corpus occurrences"
+		},
+		{
+			"name": "do-else-are-sibling-scopes",
+			"input": ":if (true) do={ :put 1 } else={ :put 2 }",
+			"expect": "do[]else[]",
+			"why": "both lower to blocks; serialized in name order per N4"
+		},
+		{
+			"name": "on-error-is-a-scope",
+			"input": ":do { :put 1 } on-error={ :put \"err\" }",
+			"expect": "command[]on-error[]",
+			"why": "`:do {` body lowers under the IL name `command`; sorted before `on-error` by N4"
+		},
+		{
+			"name": "command-written-explicitly-is-a-scope",
+			"input": ":retry delay=1s max=3 on-error={:put \"gave up\"} command={:put \"trying\"}",
+			"expect": "command[]on-error[]",
+			"why": "users write `command=` directly. topic-169237/post-0021-snippet-01 @ 7.22.1"
+		},
+		{
+			"name": "nested-scopes-nest",
+			"input": ":if (true) do={ :foreach i in=[find] do={ :put $i } }",
+			"expect": "do[do[]]",
+			"why": "block bodies segment recursively"
+		},
+		{
+			"name": "in-brace-after-foreach-is-an-array-literal",
+			"input": ":foreach t in={ \"p12\"; \"pem\" } do={ :put $t }",
+			"expect": "do[]",
+			"why": "lowers to the LIST `in=p12;pem`, not a block. eworm/check-certificates.rsc @ 7.22.1"
+		},
+		{
+			"name": "in-brace-after-onerror-is-a-scope",
+			"input": ":onerror e in={ /file/remove [find name~\"x\"] } do={ :put \"ignoring: $e\" }",
+			"expect": "do[]in[]",
+			"why": "lowers to `in=;(evl …)`. topic-267709/post-0001-snippet-17 @ 7.22.1"
+		},
+		{
+			"name": "onerror-bare-body-is-a-scope",
+			"input": ":onerror Err { :put 1; :put 2 }",
+			"expect": "in[,]",
+			"why": "`:onerror V { … }` lowers to `error=$V;in=;(evl …)`. eworm/backup-cloud.rsc @ 7.22.1"
+		},
+		{
+			"name": "do-without-colon-opens-a-body",
+			"input": "do {\n:local RED do={/terminal style error}\n}",
+			"expect": "command[do[]]",
+			"why": "topic-142687/post-0010-snippet-01 @ 7.22.1 lowers a bare `do {` to `command`"
+		},
+		{
+			"name": "array-literal-value-is-not-a-scope",
+			"input": ":local arr {1;2;3}",
+			"expect": "",
+			"why": "an array literal is a value; Q1's container rule already refuses to expand it"
+		},
+		{
+			"name": "array-literal-with-named-keys-is-not-a-scope",
+			"input": ":local chalk {black={\"30\"}; red={\"31\"}}",
+			"expect": "",
+			"why": "`black=`/`red=` are dictionary keys, observed only as literals. topic-168093/post-0001-snippet-02"
+		},
+		{
+			"name": "scope-inside-a-bracket-substitution-is-not-a-top-level-block",
+			"input": ":put [:tostr [find where x=1]]",
+			"expect": "",
+			"why": "`[…]` is Q3's question, not a block"
+		},
+		{
+			"name": "brace-inside-a-string-is-neither",
+			"input": ":put \"do={ not a block }\"",
+			"expect": "",
+			"why": "string contents are opaque"
+		},
+		{
+			"name": "literal-then-scope-in-one-statement",
+			"input": "/system/script add name=x source={ :put 1 } comment=y",
+			"expect": "",
+			"why": "a literal does not become a scope by sitting next to other arguments",
+			"verified": "CHR 7.23.2: IL keeps source literal even beside comment=y (args alphabetized, source body raw)."
+		}
+	]
+}
