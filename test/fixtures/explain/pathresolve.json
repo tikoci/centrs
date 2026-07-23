@@ -1,0 +1,199 @@
+{
+	"document": [
+		{
+			"name": "R3 bracket inherits its own statement's path",
+			"input": "/ip route remove [find where comment=WAN1]",
+			"expect": ["/ip/route"],
+			"rule": "R3 — the enclosing context of a `[…]` is the STATEMENT's path, not the document's"
+		},
+		{
+			"name": "R1 absolute inner path ignores context",
+			"input": "/ip address\n:foreach i in=[/ip route find] do={ :put $i }",
+			"expect": ["/ip/route"],
+			"rule": "R1 — a leading `/` resets to root"
+		},
+		{
+			"name": "R4 menu navigation persists to later statements",
+			"input": "/ip firewall address-list\nremove [find list=blocked]",
+			"expect": ["/ip/firewall/address-list"],
+			"rule": "R4 — document context is set by a menu-nav statement"
+		},
+		{
+			"name": "R4 absolute navigation REPLACES, never appends",
+			"input": "/system package update\n/system reboot\n/interface lte\nfirmware-upgrade [find] upgrade=yes",
+			"expect": ["/interface/lte"],
+			"rule": "R4 — `/system reboot` after `/system package update` is `/system/reboot`, not the two concatenated"
+		},
+		{
+			"name": "menu paths may be space- or slash-separated or mixed",
+			"input": "/ip firewall address-list\nremove [find]\n/ip/firewall/filter\nremove [find]",
+			"expect": ["/ip/firewall/address-list", "/ip/firewall/filter"],
+			"rule": "R4 — `/ip route` and `/ip/route` are the same path"
+		},
+		{
+			"name": "R5 block body inherits the context in force",
+			"input": "/interface/list/member {\n:foreach i in=[find where list=ListA] do={ set $i list=ListB }\n}",
+			"expect": ["/interface/list/member"],
+			"rule": "R5 — a block body inherits its enclosing context"
+		},
+		{
+			"name": "R6 nested brackets inherit from the enclosing bracket",
+			"input": "/ip route remove [find where gateway=[/ip address get 0 address]]",
+			"expect": ["/ip/route", "/ip/address"],
+			"viaCandidates": true,
+			"rule": "R6 — the inner bracket resolves against the outer one's path, R1 still wins for an absolute inner. Via candidates: the single best guess is `/ip/address/get/0` because an absolute inner path followed by POSITIONAL args gives offline no way to tell where the menu stops (Q6)."
+		},
+		{
+			"name": "absolute inner path with positional args cannot be pinned offline",
+			"input": "/ip route remove [/ip address get 0 address]",
+			"expect": ["/ip/address"],
+			"viaCandidates": true,
+			"rule": "the true path is in the candidate set but is not the best single guess — offline must present candidates or abstain, not assert"
+		},
+		{
+			"name": "scripting directive is always at the root",
+			"input": "/ip address\n:put [:tostr 1]",
+			"expect": ["/"],
+			"rule": "a `:` directive ignores menu context entirely — IL lowers `[:tostr $x]` to `/tostr`"
+		},
+		{
+			"name": "bracket inside an array literal is still a substitution",
+			"input": ":put [:convert from=byte-array to=raw {[/terminal/inkey]}]",
+			"expect": ["/", "/terminal"],
+			"rule": "a literal `{…}` body is not statements (Q2) but may still contain substitutions. topic-…/post-0036-snippet-01 @ 7.22.1"
+		},
+		{
+			"name": "$[ … ] inside a string is a substitution",
+			"input": "/ip address\n:put \"value is $[:tostr 1]\"",
+			"expect": ["/"],
+			"rule": "string interpolation lowers a real inner command. topic-…/post-0003-snippet-01 @ 7.22.1"
+		},
+		{
+			"name": "variable path segment is unresolved",
+			"input": "/ip route remove [$myFinder]",
+			"expect": [null],
+			"rule": "R7 — a dynamic invocation has no statically knowable path"
+		},
+		{
+			"name": "pasted CLI prompt is not a substitution",
+			"input": "[admin@Router] > /ip address print",
+			"expect": [null],
+			"rule": "a terminal transcript brackets the prompt exactly like a substitution; abstain rather than manufacture a command",
+			"verified": "CHR 7.23.2: `:parse` returns `syntax error (line 1 column 7)` — the device rejects the pasted prompt as not a command, so offline abstaining (null) is correct."
+		}
+	],
+	"statements": [
+		{
+			"name": "R4 navigation persists to the next statement",
+			"input": "/ip firewall address-list\nadd list=blocked address=10.0.0.1",
+			"expect": ["/ip/firewall/address-list", "/ip/firewall/address-list/add"],
+			"rule": "R4 — statement N's path depends on N-1; this is the whole question"
+		},
+		{
+			"name": "R4 navigation persists across several statements",
+			"input": "/ip route\nadd dst-address=0.0.0.0/0 gateway=1.1.1.1\nprint\nremove [find]",
+			"expect": [
+				"/ip/route",
+				"/ip/route/add",
+				"/ip/route/print",
+				"/ip/route/remove"
+			],
+			"rule": "R4 — context is document state, not a one-statement effect"
+		},
+		{
+			"name": "R4 absolute navigation REPLACES the context",
+			"input": "/system package update\n/interface lte\nfirmware-upgrade upgrade=yes",
+			"expect": [
+				"/system/package/update",
+				"/interface/lte",
+				"/interface/lte/firmware-upgrade"
+			],
+			"rule": "R4 — a leading `/` resets to root before descending; it never appends"
+		},
+		{
+			"name": "KNOWN LIMIT — a bare-path COMMAND line is misread as navigation",
+			"input": "/ip route\n/system identity print\nadd dst-address=8.8.8.8/32 gateway=1.1.1.1",
+			"expect": [
+				"/ip/route",
+				"/system/identity/print",
+				"/system/identity/print/add"
+			],
+			"rule": "offline calls every bare-path line navigation (right 97.5%); when wrong it CASCADES into following relative statements. The honest response is a diagnostic, not a silent guess — this fixture pins what offline DOES, and the 3rd path is wrong.",
+			"verified": "CHR 7.23.2 + 7.24rc2 (identical): IL `/ip/route/;(evl /system/identity/print);(evl /ip/route/add …)` — the absolute COMMAND did NOT move context. Cascade confirmed; offline's 3rd path is wrong exactly as pinned."
+		},
+		{
+			"name": "R5 a block body inherits the context in force",
+			"input": "/ip firewall filter\n:foreach r in=[find] do={ remove $r }",
+			"expect": [
+				"/ip/firewall/filter",
+				"/foreach",
+				"/ip/firewall/filter/remove"
+			],
+			"rule": "R5 — the body's statements inherit the context, and the directive itself is at root"
+		},
+		{
+			"name": "R11 a bare directive is at the root, not in the context",
+			"input": "/terminal cuu\nwhile (true) do={ :put 1 }",
+			"expect": ["/terminal/cuu", "/while", "/put"],
+			"rule": "R11 — `while` without its colon still lowers to `/while`; the schema-free tell is the `do=` scope block"
+		},
+		{
+			"name": "R11 propagates to the context a bare directive hands its body",
+			"input": "/ip route\nfor i from=1 to=2 do={ :put $i }",
+			"expect": ["/ip/route", "/for", "/put"],
+			"rule": "R11 — applying R11 to the statement but not the context it propagates leaked `/ip/route/put` into the body"
+		},
+		{
+			"name": "R10 a scripting directive takes its operand positionally",
+			"input": ":global myVar 5\n:local other 6",
+			"expect": ["/global", "/local"],
+			"rule": "R10 — `:global myVar` is `/global` with an argument, not `/global/myVar`"
+		},
+		{
+			"name": "R10 a menu command spells its menu out",
+			"input": "/ip firewall filter add chain=input action=drop",
+			"expect": ["/ip/firewall/filter/add"],
+			"rule": "R10 — the other half of the split: for a menu command the whole leading run is path"
+		},
+		{
+			"name": "a non-identifier token ends the path",
+			"input": ":put 9",
+			"expect": ["/put"],
+			"rule": "a bare `9` is a positional argument, never a menu segment — the one part of the boundary that needs no schema"
+		},
+		{
+			"name": "`..` ascends one level",
+			"input": "/ip firewall filter\n..\nadd chain=forward",
+			"expect": ["/ip/firewall/filter", "/ip/firewall", "/ip/firewall/add"],
+			"rule": "R8 — `..` is one of only two relative navigation forms offline can recognize",
+			"verified": "CHR 7.23.2: `/ip route` ⏵ `..` → IL `/ip/route/;/ip/` — `..` ascends one level. Valid in :parse."
+		},
+		{
+			"name": "`..` twice ascends two levels",
+			"input": "/ip firewall filter\n.. ..\nprint",
+			"expect": ["/ip/firewall/filter", "/ip", "/ip/print"],
+			"rule": "R8 — `..` composes",
+			"verified": "CHR 7.23.2: `.. ..` → IL menuctx `/ip/` (two levels up from /ip/firewall/filter)."
+		},
+		{
+			"name": "`..` followed by bare words abstains instead of inventing navigation",
+			"input": "/ip firewall filter\n.. filter print\nadd chain=input",
+			"expect": ["/ip/firewall/filter", null, "/ip/firewall/filter/add"],
+			"rule": "R8 — only one or more standalone `..` tokens are recognized as relative navigation; trailing bare words cross the schema-free menu-vs-command boundary, so the statement is unresolved and cannot move context."
+		},
+		{
+			"name": "bare `/` returns to the root",
+			"input": "/ip firewall filter\n/\n:put 1",
+			"expect": ["/ip/firewall/filter", "/", "/put"],
+			"rule": "R8 — a bare `/` resets the context",
+			"verified": "CHR 7.23.2: `/ip firewall filter` ⏵ `/` → IL `…/;/;(evl /put …)` — the lone `/` resets context."
+		},
+		{
+			"name": "a bare word alone is NOT recognized as navigation",
+			"input": "/ip firewall\nfilter\nadd chain=input",
+			"expect": ["/ip/firewall", "/ip/firewall/filter", "/ip/firewall/add"],
+			"rule": "R8 — offline cannot tell the submenu `filter` from a no-argument command without a schema, so it does NOT treat a bare word as navigation. The device DOES descend it, so the 3rd path is wrong — the known limit, reported not papered over.",
+			"verified": "CHR 7.23.2 + 7.24rc2 (identical): IL `/ip/firewall/;/ip/firewall/filter/;(evl /ip/firewall/filter/add …)` — the device descends bare `filter` into the submenu, so the true 3rd path is /ip/firewall/filter/add. Offline stays at /ip/firewall/add. Diagnostic-not-guess."
+		}
+	]
+}

@@ -518,5 +518,16 @@ versionless
 #   against a `:parse` IL / highlight oracle; the ratified behavior is what the
 #   production modules under src/explain promote. CJK: the Chinese/Japanese/
 #   Korean Unicode range, used as a non-ASCII coordinate/segmentation fixture.
+#   pathresolve / blocktree: the Q3-Q4 / Q2 lab probe names, carried into the
+#   src/explain module + fixture names. klass: `class` is reserved, so the
+#   resolution feature-class field is `klass`. tostr / tostrvalue: the RouterOS
+#   `:tostr` directive and its IL-lowered form `/tostrvalue`. eworm: a corpus
+#   script author (eworm/*.rsc) cited as grounding for scope-name findings.
 SUT
 CJK
+pathresolve
+blocktree
+klass
+tostr
+tostrvalue
+eworm

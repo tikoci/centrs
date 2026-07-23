@@ -295,6 +295,17 @@ export {
 	renderExecuteFanoutEnvelope,
 } from "./execute-fanout.ts";
 export {
+	DIRECTIVE_BODY,
+	HEAD_SCOPED_ARG_NAMES,
+	isScopeBrace,
+	matchBrace,
+	SCOPE_ARG_NAMES,
+	type ScopeBlock,
+	scopeBlocks,
+	scopeBodies,
+	scopeNameAt,
+} from "./explain/blocks.ts";
+export {
 	analyzeCoordinates,
 	byteToPosition,
 	type CharRun,
@@ -305,6 +316,15 @@ export {
 	SUB,
 } from "./explain/coordinates.ts";
 export {
+	type DocumentAnalysis,
+	type Resolution,
+	resolveDocument,
+	resolveStatements,
+	type StatementAnalysis,
+	type StatementResolution,
+} from "./explain/pathresolve.ts";
+export {
+	maskComments,
 	type Segment,
 	type SegmentResult,
 	segmentStatements,
