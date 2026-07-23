@@ -176,6 +176,12 @@
 			"verified": "CHR 7.23.2: `.. ..` → IL menuctx `/ip/` (two levels up from /ip/firewall/filter)."
 		},
 		{
+			"name": "`..` followed by bare words abstains instead of inventing navigation",
+			"input": "/ip firewall filter\n.. filter print\nadd chain=input",
+			"expect": ["/ip/firewall/filter", null, "/ip/firewall/filter/add"],
+			"rule": "R8 — only one or more standalone `..` tokens are recognized as relative navigation; trailing bare words cross the schema-free menu-vs-command boundary, so the statement is unresolved and cannot move context."
+		},
+		{
 			"name": "bare `/` returns to the root",
 			"input": "/ip firewall filter\n/\n:put 1",
 			"expect": ["/ip/firewall/filter", "/", "/put"],

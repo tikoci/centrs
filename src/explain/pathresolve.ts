@@ -46,6 +46,26 @@ import { isScopeBrace, scopeBodies } from "./blocks.ts";
 import { segmentStatements } from "./segment.ts";
 
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
+const ASCII_WHITESPACE = /[ \t\r\n]+/;
+
+function trimAscii(text: string): string {
+	return text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
+}
+
+function trimAsciiStart(text: string): string {
+	return text.replace(/^[ \t\r\n]+/, "");
+}
+
+function asciiWords(text: string): string[] {
+	const trimmed = trimAscii(text);
+	return trimmed.length === 0 ? [] : trimmed.split(ASCII_WHITESPACE);
+}
+
+function isAbsolutePathToken(token: string): boolean {
+	if (!token.startsWith("/")) return false;
+	const parts = token.split("/").filter(Boolean);
+	return parts.length > 0 && parts.every((part) => BARE_WORD.test(part));
+}
 
 /** A re-constituted `[…]` command substitution (Q3). */
 export interface Resolution {
@@ -156,23 +176,20 @@ function walkStatements(
  * REPLACES the context rather than extending it.
  */
 function menuNavPath(text: string, ctx: string): string | null {
-	const trimmed = text.trim();
+	const trimmed = trimAscii(text);
 	if (trimmed === "/") return "/";
-	if (/^\.\.(\s|$)/.test(trimmed)) {
-		const tokens = trimmed.split(/\s+/);
-		if (
-			!tokens.every((t, i) =>
-				i === 0 ? t === ".." : t === ".." || BARE_WORD.test(t),
-			)
-		)
-			return null;
+	if (/^\.\.(?:[ \t\r\n]|$)/.test(trimmed)) {
+		const tokens = asciiWords(trimmed);
+		if (!tokens.every((token) => token === "..")) return null;
 		return joinPath(ctx, tokens.join("/"));
 	}
 	if (!text.startsWith("/")) return null;
 	if (/[=[({"$]/.test(text)) return null;
-	const tokens = trimmed.split(/\s+/);
+	const tokens = asciiWords(trimmed);
 	if (
-		!tokens.every((t, i) => (i === 0 ? t.startsWith("/") : BARE_WORD.test(t)))
+		!tokens.every((token, i) =>
+			i === 0 ? isAbsolutePathToken(token) : BARE_WORD.test(token),
+		)
 	)
 		return null;
 	return joinPath("/", tokens.join("/"));
@@ -182,7 +199,7 @@ function canonicalPath(
 	text: string,
 	ctx: string,
 ): { path: string | null; candidates?: string[]; unresolved?: string } {
-	const t = text.trim();
+	const t = trimAscii(text);
 	if (t.startsWith("$") || t.startsWith("[") || t.startsWith("("))
 		return {
 			path: null,
@@ -225,7 +242,7 @@ function canonicalPath(
  */
 function statementRun(text: string): string[] {
 	const out: string[] = [];
-	for (const t of text.trim().split(/\s+/)) {
+	for (const t of asciiWords(text)) {
 		if (t.includes("=") || /^[[({"$:]/.test(t)) break;
 		const parts = t.split("/").filter((p) => p.length > 0);
 		if (parts.length === 0) continue;
@@ -241,7 +258,7 @@ function statementRun(text: string): string[] {
  * which is the verb (Q6's reading, right ~93.7% of the time).
  */
 function statementPath(text: string, ctx: string): string {
-	const t = text.trimStart();
+	const t = trimAsciiStart(text);
 	// R11 — a bare directive is at the root, so the context it hands its body is
 	// the root too, not `<ctx>/while`.
 	if (!t.startsWith(":") && !t.startsWith("/") && scopeBodies(t).length > 0)
@@ -255,7 +272,7 @@ function statementPath(text: string, ctx: string): string {
 /** Leading bare/path tokens, stopping at the first argument or group. */
 function leadingRun(text: string): string[] {
 	const out: string[] = [];
-	for (const t of text.trim().split(/\s+/)) {
+	for (const t of asciiWords(text)) {
 		if (t.includes("=") || /^[[({"$:]/.test(t)) break;
 		for (const part of t.split("/")) if (part.length > 0) out.push(part);
 		if (out.length === 0 && t === "/") out.push("");
@@ -305,7 +322,7 @@ function collectBrackets(
 		}
 		if (c !== "[") continue;
 		const end = matchDelim(text, i, "[", "]");
-		const inner = text.slice(i + 1, end).trim();
+		const inner = trimAscii(text.slice(i + 1, end));
 		out.push(resolveInner(inner, ctx, depth));
 		// R6 — nested brackets inherit from this one's resolution.
 		const nestedCtx = out[out.length - 1]?.path ?? ctx;
@@ -331,7 +348,7 @@ function scanInterpolations(
 	for (let i = 0; i < body.length - 1; i++) {
 		if (body[i] !== "$" || body[i + 1] !== "[") continue;
 		const end = matchDelim(body, i + 1, "[", "]");
-		const inner = body.slice(i + 2, end).trim();
+		const inner = trimAscii(body.slice(i + 2, end));
 		out.push(resolveInner(inner, ctx, depth));
 		collectBrackets(inner, out[out.length - 1]?.path ?? ctx, depth + 1, out);
 		i = end;
@@ -354,7 +371,7 @@ function resolveInner(inner: string, ctx: string, depth: number): Resolution {
 		};
 	// A `:` scripting directive is ALWAYS at the root — `[:tostr $x]` lowers to
 	// `(evl (evl /tostrvalue=$x))`, path `/`, whatever context is in force.
-	if (inner.trimStart().startsWith(":"))
+	if (trimAsciiStart(inner).startsWith(":"))
 		return {
 			inner,
 			context: ctx,
@@ -413,13 +430,13 @@ function resolveInner(inner: string, ctx: string, depth: number): Resolution {
 // inner commands from any pasted session, which matters because `explain` takes
 // editor and MCP input. `user@host` with no command shape is the tell; the
 // resolver abstains rather than inventing a path.
-const CLI_PROMPT_RE = /^[^\s@/[\]]+@[^\s@/[\]]+$/;
+const CLI_PROMPT_RE = /^[^ \t\r\n@/[\]]+@[^ \t\r\n@/[\]]+$/;
 
 function classify(inner: string, absolute: boolean, depth: number): string {
-	if (CLI_PROMPT_RE.test(inner.trim())) return "cli-prompt-artifact";
+	if (CLI_PROMPT_RE.test(trimAscii(inner))) return "cli-prompt-artifact";
 	if (depth > 0) return "nested-bracket";
 	if (absolute) return "absolute-inner-path";
-	const head = (inner.trim().split(/\s+/)[0] ?? "").toLowerCase();
+	const head = (asciiWords(inner)[0] ?? "").toLowerCase();
 	if (head.startsWith("$")) return "dynamic-invocation";
 	if (head.startsWith(":")) return "scripting-directive";
 	if (head === "find") return "bare-find";

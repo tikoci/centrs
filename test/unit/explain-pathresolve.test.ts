@@ -103,6 +103,15 @@ test("resolveStatements marks navigation statements as nav", () => {
 	expect(res.map((s) => s.path)).toEqual(["/ip/route", "/ip/route/add"]);
 });
 
+test("non-ASCII whitespace is opaque, not a path separator", () => {
+	for (const whitespace of ["\u00a0", "\u2003", "\u2028"]) {
+		const res = resolveStatements(`/ip${whitespace}route\nadd`);
+		expect(res.map((s) => s.isNav)).toEqual([false, false]);
+		expect(res.map((s) => s.path)).toEqual([null, "/add"]);
+		expect(res[0]?.unresolved).toBeDefined();
+	}
+});
+
 test("never throws on adversarial input", () => {
 	const nasty = [
 		"",

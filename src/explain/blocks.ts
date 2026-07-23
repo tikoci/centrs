@@ -21,6 +21,13 @@
 
 import { segmentStatements } from "./segment.ts";
 
+const ASCII_WHITESPACE = /[ \t\r\n]+/;
+
+function asciiWords(text: string): string[] {
+	const trimmed = text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
+	return trimmed.length === 0 ? [] : trimmed.split(ASCII_WHITESPACE);
+}
+
 /**
  * Source-visible argument names whose `{…}` is a scope. Closed set, harvested
  * from every projected corpus capture (`do` 5623, `else` 720, `command` 177,
@@ -131,20 +138,20 @@ function findBlocks(text: string): Block[] {
  */
 export function scopeNameAt(text: string, open: number): string | null {
 	const before = text.slice(0, open);
-	const named = before.match(/([A-Za-z][A-Za-z0-9.-]*)=\s*$/);
+	const named = before.match(/([A-Za-z][A-Za-z0-9.-]*)=[ \t\r\n]*$/);
 	if (named) {
 		const name = (named[1] as string).toLowerCase();
 		if (SCOPE_ARG_NAMES.has(name)) return name;
 		const heads = HEAD_SCOPED_ARG_NAMES[name];
 		if (heads !== undefined) {
-			const head = (text.trim().split(/\s+/)[0] ?? "").toLowerCase();
+			const head = (asciiWords(text)[0] ?? "").toLowerCase();
 			return heads.has(head) ? name : null;
 		}
 		return null;
 	}
 	// `:do {`, `:retry {`, `:onerror Err {` — the directive may carry one bare
 	// word (the error variable) between itself and the brace.
-	const words = before.trim().split(/\s+/);
+	const words = asciiWords(before);
 	const first = (words[0] ?? "").toLowerCase();
 	const body = DIRECTIVE_BODY[first];
 	if (body === undefined) return null;

@@ -83,6 +83,15 @@ test("in={…} is head-dependent: scope after :onerror, literal after :foreach",
 	expect(scopeNameAt(foreach, foreach.indexOf("in={") + 3)).toBeNull();
 });
 
+test("non-ASCII whitespace is opaque, not RouterOS syntax", () => {
+	for (const whitespace of ["\u00a0", "\u2003", "\u2028"]) {
+		const named = `:if (true) do=${whitespace}{ :put 1 }`;
+		expect(scopeNameAt(named, named.indexOf("{"))).toBeNull();
+		const directive = `:do${whitespace}{ :put 1 }`;
+		expect(scopeNameAt(directive, directive.indexOf("{"))).toBeNull();
+	}
+});
+
 test("scopeBodies returns only scope bodies, never literal ones", () => {
 	// One scope (`do={…}`) and one literal (`source={…}`) in the same statement.
 	const bodies = scopeBodies(
