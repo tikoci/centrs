@@ -1,0 +1,561 @@
+{
+	"corners": [
+		{
+			"name": "semicolon-separates",
+			"input": "/ip address print; /ip route print",
+			"expect": ["/ip address print", "/ip route print"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 17,
+						"terminator": ";",
+						"menuOnly": true
+					},
+					{
+						"start": 19,
+						"end": 34,
+						"terminator": "eof",
+						"menuOnly": true
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "newline-separates",
+			"input": "/ip address print\n/ip route print",
+			"expect": ["/ip address print", "/ip route print"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 17,
+						"terminator": "newline",
+						"menuOnly": true
+					},
+					{
+						"start": 18,
+						"end": 33,
+						"terminator": "eof",
+						"menuOnly": true
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "crlf-separates",
+			"input": "/ip address print\r\n/ip route print\r\n",
+			"expect": ["/ip address print", "/ip route print"],
+			"verified": "CHR 7.23.2: IL (evl /ip/address/print);(evl /ip/route/print) — CRLF separates into 2 statements.",
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 17,
+						"terminator": "newline",
+						"menuOnly": true
+					},
+					{
+						"start": 19,
+						"end": 34,
+						"terminator": "newline",
+						"menuOnly": true
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "crlf-does-not-leak-into-statement-text",
+			"input": ":put 1\r\n:put 2",
+			"expect": [":put 1", ":put 2"],
+			"verified": "CHR 7.23.2: IL (evl /put message=1);(evl /put message=2) — no CR leaked.",
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 6,
+						"terminator": "newline",
+						"menuOnly": false
+					},
+					{
+						"start": 8,
+						"end": 14,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "empty-statements-collapse",
+			"input": ";;\n\n:put 1;;\n;",
+			"expect": [":put 1"],
+			"golden": {
+				"segments": [
+					{
+						"start": 4,
+						"end": 10,
+						"terminator": ";",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "trailing-separator",
+			"input": ":put 1;",
+			"expect": [":put 1"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 6,
+						"terminator": ";",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "semicolon-inside-quotes",
+			"input": ":put \"a;b\"; :put 2",
+			"expect": [":put \"a;b\"", ":put 2"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 10,
+						"terminator": ";",
+						"menuOnly": false
+					},
+					{
+						"start": 12,
+						"end": 18,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "newline-inside-quotes-still-separates-nothing",
+			"input": ":put \"a\nb\"",
+			"expect": [":put \"a\nb\""],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 10,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "escaped-quote-does-not-close",
+			"input": ":put \"a\\\";b\"; :put 2",
+			"expect": [":put \"a\\\";b\"", ":put 2"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 12,
+						"terminator": ";",
+						"menuOnly": false
+					},
+					{
+						"start": 14,
+						"end": 20,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "brace-inside-quotes-does-not-nest",
+			"input": ":put \"{\"; :put 2",
+			"expect": [":put \"{\"", ":put 2"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 8,
+						"terminator": ";",
+						"menuOnly": false
+					},
+					{
+						"start": 10,
+						"end": 16,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "leading-comment-drops",
+			"input": "# a comment\n:put 1",
+			"expect": [":put 1"],
+			"golden": {
+				"segments": [
+					{
+						"start": 12,
+						"end": 18,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [
+					{
+						"start": 0,
+						"end": 11
+					}
+				],
+				"notes": []
+			}
+		},
+		{
+			"name": "comment-only-input",
+			"input": "# nothing but a comment\n",
+			"expect": [],
+			"golden": {
+				"segments": [],
+				"comments": [
+					{
+						"start": 0,
+						"end": 23
+					}
+				],
+				"notes": []
+			}
+		},
+		{
+			"name": "comment-inside-block",
+			"input": ":if (true) do={\n  # inner comment\n  :put 1\n}",
+			"expect": [":if (true) do={\n  # inner comment\n  :put 1\n}"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 44,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [
+					{
+						"start": 18,
+						"end": 33
+					}
+				],
+				"notes": []
+			}
+		},
+		{
+			"name": "hash-inside-quotes-is-not-a-comment",
+			"input": ":put \"#notacomment\"; :put 2",
+			"expect": [":put \"#notacomment\"", ":put 2"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 19,
+						"terminator": ";",
+						"menuOnly": false
+					},
+					{
+						"start": 21,
+						"end": 27,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "hash-mid-statement-is-not-statement-leading",
+			"input": "/ip address add comment=#tag",
+			"expect": ["/ip address add comment=#tag"],
+			"verified": "CHR 7.23.2: IL (evl /ip/address/add comment=#tag) — mid-statement #tag is the VALUE (H4 negative half).",
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 28,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "backslash-continuation-crlf-is-asserted",
+			"input": "/ip address add \\\r\n  address=1.2.3.4/24\n:put x",
+			"expect": ["/ip address add \\\r\n  address=1.2.3.4/24", ":put x"],
+			"verified": "CHR 7.23.2: \\<CRLF> continued line 1; 2 statements.",
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 39,
+						"terminator": "newline",
+						"menuOnly": false
+					},
+					{
+						"start": 40,
+						"end": 46,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "newline-inside-braces-continues",
+			"input": ":if (true) do={\n:put 1\n:put 2\n}",
+			"expect": [":if (true) do={\n:put 1\n:put 2\n}"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 31,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "semicolon-inside-brackets-continues",
+			"input": "/ip route remove [find where gateway=1.1.1.1]; :put done",
+			"expect": ["/ip route remove [find where gateway=1.1.1.1]", ":put done"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 45,
+						"terminator": ";",
+						"menuOnly": false
+					},
+					{
+						"start": 47,
+						"end": 56,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "array-literal-is-a-value-not-a-container",
+			"input": ":local arr {1;2}\n:put $arr",
+			"expect": [":local arr {1;2}", ":put $arr"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 16,
+						"terminator": "newline",
+						"menuOnly": false
+					},
+					{
+						"start": 17,
+						"end": 26,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "whole-input-brace-wrapper-expands",
+			"input": "{\n:local a 1\n:put $a\n}",
+			"expect": [":local a 1", ":put $a"],
+			"golden": {
+				"segments": [
+					{
+						"start": 2,
+						"end": 12,
+						"terminator": "newline",
+						"menuOnly": false
+					},
+					{
+						"start": 13,
+						"end": 20,
+						"terminator": "newline",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "menu-block-expands-with-its-path",
+			"input": "/routing rule {\nadd action=lookup table=main\nadd action=lookup table=x\n}",
+			"expect": [
+				"/routing rule",
+				"add action=lookup table=main",
+				"add action=lookup table=x"
+			],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 13,
+						"terminator": "newline",
+						"menuOnly": true
+					},
+					{
+						"start": 16,
+						"end": 44,
+						"terminator": "newline",
+						"menuOnly": false
+					},
+					{
+						"start": 45,
+						"end": 70,
+						"terminator": "newline",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "backslash-continuation-joins",
+			"input": "/ip address add \\\n  address=1.2.3.4/24\n:put done",
+			"expect": ["/ip address add \\\n  address=1.2.3.4/24", ":put done"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 38,
+						"terminator": "newline",
+						"menuOnly": false
+					},
+					{
+						"start": 39,
+						"end": 48,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "backslash-continuation-crlf",
+			"input": "/ip address add \\\r\n  address=1.2.3.4/24",
+			"expect": ["/ip address add \\\r\n  address=1.2.3.4/24"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 39,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "unterminated-string-notes",
+			"input": ":put \"unterminated",
+			"expect": [":put \"unterminated"],
+			"notes": ["unterminated-string"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 18,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": ["unterminated-string"]
+			}
+		},
+		{
+			"name": "unclosed-brace-notes",
+			"input": ":if (true) do={\n:put 1",
+			"expect": [":if (true) do={\n:put 1"],
+			"notes": ["unclosed:{"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 22,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": ["unclosed:{"]
+			}
+		},
+		{
+			"name": "stray-close-notes",
+			"input": ":put 1}\n:put 2",
+			"expect": [":put 1}", ":put 2"],
+			"notes": ["unbalanced-close:}"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 7,
+						"terminator": "newline",
+						"menuOnly": false
+					},
+					{
+						"start": 8,
+						"end": 14,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": ["unbalanced-close:}"]
+			}
+		}
+	]
+}
