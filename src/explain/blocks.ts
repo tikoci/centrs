@@ -23,8 +23,20 @@ import { segmentStatements } from "./segment.ts";
 
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
 
+function isAsciiWhitespace(char: string | undefined): boolean {
+	return char === " " || char === "\t" || char === "\r" || char === "\n";
+}
+
+function trimAscii(text: string): string {
+	let start = 0;
+	let end = text.length;
+	while (start < end && isAsciiWhitespace(text[start])) start++;
+	while (end > start && isAsciiWhitespace(text[end - 1])) end--;
+	return text.slice(start, end);
+}
+
 function asciiWords(text: string): string[] {
-	const trimmed = text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
+	const trimmed = trimAscii(text);
 	return trimmed.length === 0 ? [] : trimmed.split(ASCII_WHITESPACE);
 }
 

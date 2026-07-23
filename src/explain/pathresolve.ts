@@ -48,12 +48,22 @@ import { segmentStatements } from "./segment.ts";
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
 
+function isAsciiWhitespace(char: string | undefined): boolean {
+	return char === " " || char === "\t" || char === "\r" || char === "\n";
+}
+
 function trimAscii(text: string): string {
-	return text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
+	let start = 0;
+	let end = text.length;
+	while (start < end && isAsciiWhitespace(text[start])) start++;
+	while (end > start && isAsciiWhitespace(text[end - 1])) end--;
+	return text.slice(start, end);
 }
 
 function trimAsciiStart(text: string): string {
-	return text.replace(/^[ \t\r\n]+/, "");
+	let start = 0;
+	while (start < text.length && isAsciiWhitespace(text[start])) start++;
+	return text.slice(start);
 }
 
 function asciiWords(text: string): string[] {
