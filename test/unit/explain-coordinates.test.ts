@@ -8,6 +8,7 @@ import {
 	runAtByte,
 	SUB,
 } from "../../src/explain/coordinates.ts";
+import * as centrs from "../../src/index.ts";
 
 /**
  * Q15 coordinate-contract anchor + property tests (phase 0.5, #185/#186).
@@ -180,6 +181,43 @@ describe("golden — frozen expected outcomes per fixture", () => {
 			}
 		});
 	}
+});
+
+describe("input validation — invalid coordinates are rejected, not silently returned", () => {
+	const a = analyzeCoordinates("/ip route add\nprint");
+	const len = a.analyzed.length;
+
+	test("byteToPosition rejects negative, fractional, NaN, and past-end offsets", () => {
+		expect(() => byteToPosition(a, -1)).toThrow();
+		expect(() => byteToPosition(a, 1.5)).toThrow();
+		expect(() => byteToPosition(a, Number.NaN)).toThrow();
+		expect(() => byteToPosition(a, len + 1)).toThrow();
+		// end-of-input IS valid and must not throw
+		expect(() => byteToPosition(a, len)).not.toThrow();
+	});
+
+	test("runAtByte rejects the exclusive end and non-integers, citing the valid range", () => {
+		expect(() => runAtByte(a, len)).toThrow(`[0, ${len})`);
+		expect(() => runAtByte(a, -1)).toThrow(`[0, ${len})`);
+		expect(() => runAtByte(a, 2.5)).toThrow();
+		expect(() => runAtByte(a, Number.NaN)).toThrow();
+	});
+
+	test("positionToByte rejects negative/fractional line or col instead of returning undefined", () => {
+		// regression: positionToByte(a, -1, 0) used to return undefined
+		expect(() => positionToByte(a, -1, 0)).toThrow();
+		expect(() => positionToByte(a, 0, -1)).toThrow();
+		expect(() => positionToByte(a, 0.5, 0)).toThrow();
+		expect(() => positionToByte(a, 0, Number.NaN)).toThrow();
+	});
+});
+
+test("coordinate API is re-exported from the library barrel", () => {
+	expect(centrs.analyzeCoordinates).toBe(analyzeCoordinates);
+	expect(centrs.byteToPosition).toBe(byteToPosition);
+	expect(centrs.positionToByte).toBe(positionToByte);
+	expect(centrs.runAtByte).toBe(runAtByte);
+	expect(centrs.SUB).toBe(SUB);
 });
 
 describe("worked examples — concrete coordinates from the spec", () => {

@@ -172,6 +172,11 @@ export function analyzeCoordinates(original: string): CoordinateAnalysis {
  * inside any run (i.e. `byte < 0` or `byte >= analyzed.length`).
  */
 export function runAtByte(a: CoordinateAnalysis, byte: number): CharRun {
+	const len = a.analyzed.length;
+	if (!Number.isInteger(byte) || byte < 0 || byte >= len)
+		throw new Error(
+			`runAtByte: ${byte} is not a valid interior byte offset; expected an integer in [0, ${len})`,
+		);
 	let lo = 0;
 	let hi = a.runs.length - 1;
 	while (lo <= hi) {
@@ -181,7 +186,8 @@ export function runAtByte(a: CoordinateAnalysis, byte: number): CharRun {
 		else if (byte >= r.byteStart + r.byteLen) lo = mid + 1;
 		else return r;
 	}
-	throw new Error(`no run at byte ${byte}`);
+	// Unreachable: a valid interior byte always lies inside exactly one run.
+	throw new Error(`runAtByte: no run contains byte ${byte} in [0, ${len})`);
 }
 
 /**
@@ -191,9 +197,12 @@ export function runAtByte(a: CoordinateAnalysis, byte: number): CharRun {
  * position just past the last character.
  */
 export function byteToPosition(a: CoordinateAnalysis, byte: number): Position {
-	if (byte < 0 || byte > a.analyzed.length)
-		throw new Error(`byte ${byte} out of [0,${a.analyzed.length}]`);
-	if (byte === a.analyzed.length) {
+	const len = a.analyzed.length;
+	if (!Number.isInteger(byte) || byte < 0 || byte > len)
+		throw new Error(
+			`byteToPosition: ${byte} is not a valid cursor offset; expected an integer in [0, ${len}]`,
+		);
+	if (byte === len) {
 		const last = a.runs.at(-1);
 		if (!last) return { line: 0, col: 0 };
 		if (last.codePoint === 0x0a) return { line: last.line + 1, col: 0 };
@@ -213,18 +222,26 @@ export function positionToByte(
 	line: number,
 	col: number,
 ): number {
+	if (!Number.isInteger(line) || !Number.isInteger(col) || line < 0 || col < 0)
+		throw new Error(
+			`positionToByte: (line ${line}, col ${col}) is not a valid position; expected non-negative integers`,
+		);
+	// Single pass: return an exact (line, col) hit immediately; otherwise keep
+	// the last run seen on the target line to resolve a just-past-the-end column.
+	let lastOnLine: CharRun | undefined;
 	for (const run of a.runs) {
-		if (run.line === line && run.col === col) return run.byteStart;
+		if (run.line !== line) continue;
+		if (run.col === col) return run.byteStart;
+		lastOnLine = run;
 	}
 	// col past the last char of the line → byte after that line's last char.
-	const onLine = a.runs.filter((r) => r.line === line);
-	if (onLine.length > 0) {
-		const last = onLine.at(-1) as CharRun;
-		if (col === last.col + last.utf16Len) return last.byteStart + last.byteLen;
-	}
+	if (lastOnLine && col === lastOnLine.col + lastOnLine.utf16Len)
+		return lastOnLine.byteStart + lastOnLine.byteLen;
 	// Empty line (only as the final position after a trailing newline) or col 0
 	// of a line with no chars → that line's start byte.
 	if (col === 0 && line < a.lineStarts.length)
 		return a.lineStarts[line] as number;
-	throw new Error(`no byte for (line ${line}, col ${col})`);
+	throw new Error(
+		`positionToByte: no character boundary at (line ${line}, col ${col})`,
+	);
 }
