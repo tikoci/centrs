@@ -458,6 +458,35 @@
 			}
 		},
 		{
+			"name": "comment-inside-flattened-container-is-not-duplicated",
+			"input": "/system {\n# c\n:put 1\n}",
+			"expect": ["/system", ":put 1"],
+			"notes": [],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 7,
+						"terminator": "newline",
+						"menuOnly": true
+					},
+					{
+						"start": 14,
+						"end": 20,
+						"terminator": "newline",
+						"menuOnly": false
+					}
+				],
+				"comments": [
+					{
+						"start": 10,
+						"end": 13
+					}
+				],
+				"notes": []
+			}
+		},
+		{
 			"name": "backslash-continuation-joins",
 			"input": "/ip address add \\\n  address=1.2.3.4/24\n:put done",
 			"expect": ["/ip address add \\\n  address=1.2.3.4/24", ":put done"],

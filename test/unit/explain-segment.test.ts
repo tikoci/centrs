@@ -112,7 +112,7 @@ describe("coordinate integration — spans resolve through the #188 mapper", () 
 	}
 });
 
-test("never throws on adversarial input; always self-reports", () => {
+test("never throws on adversarial input; malformed inputs self-report notes", () => {
 	const nasty = [
 		"",
 		";;;",
@@ -125,9 +125,32 @@ test("never throws on adversarial input; always self-reports", () => {
 		"/ip address", // non-ASCII (NBSP) → SUB, must not corrupt the stack
 		'/system note set note="路由器"; :put ok',
 	];
-	for (const input of nasty) {
-		expect(() => segmentStatements(input)).not.toThrow();
-	}
+	// Expected structural notes, parallel to `nasty`. Malformed delimiter state
+	// must surface a diagnostic; well-formed adversarial input reports none.
+	const expected: string[][] = [
+		[], // empty
+		[], // only separators
+		["unterminated-string"], // lone quote
+		["unclosed:{{{{"], // unbalanced opens
+		[
+			"unbalanced-close:}",
+			"unbalanced-close:}",
+			"unbalanced-close:}",
+			"unbalanced-close:}",
+		], // stray closes
+		["unclosed:[("], // mixed unbalanced opens
+		[], // comment with no newline
+		[], // lone backslash
+		[], // /ip address (NBSP) → SUB, no structural note
+		[], // balanced string + separator
+	];
+	nasty.forEach((input, i) => {
+		let result: ReturnType<typeof segmentStatements> | undefined;
+		expect(() => {
+			result = segmentStatements(input);
+		}).not.toThrow();
+		expect(result?.notes).toEqual(expected[i] as string[]);
+	});
 });
 
 test("non-ASCII statement text is recovered as the original, not SUB", () => {

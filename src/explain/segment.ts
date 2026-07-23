@@ -51,7 +51,13 @@ export interface Segment {
 	text: string;
 	/** the separator that ENDED this statement, for the boundary taxonomy. */
 	terminator: ";" | "newline" | "eof";
-	/** true when the trimmed text is only a menu path, e.g. `/ip address`. */
+	/**
+	 * true when the statement *looks* like pure menu navigation: a `/`-rooted
+	 * path of path-shaped tokens with no `=`, quotes, brackets, or `$`. This is
+	 * a SHAPE hint, not a verb claim — offline (schema-free) cannot tell a
+	 * trailing verb (`/ip address print`) from a deeper menu (`/ip address`), so
+	 * both are `menuOnly: true`. Q4/Q6 decide what it means. See `isMenuOnly`.
+	 */
 	menuOnly: boolean;
 }
 
@@ -108,11 +114,11 @@ function segmentAscii(text: string): SegmentResult {
 		if (open >= 0) {
 			const prefix = s.text.slice(0, open).trim();
 			const body = s.text.slice(open + 1, -1);
+			// Only `inner.segments` is new: the outer `segmentRaw` pass already
+			// records comments (H4, every depth) and notes at every depth, so
+			// re-merging `inner.comments`/`inner.notes` would double-count them.
 			const inner = segmentAscii(body);
-			for (const n of inner.notes) raw.notes.push(n);
 			const base = s.start + open + 1;
-			for (const c of inner.comments)
-				raw.comments.push({ start: c.start + base, end: c.end + base });
 			if (inner.segments.length > 0) {
 				if (prefix.length > 0)
 					segments.push({
@@ -120,7 +126,7 @@ function segmentAscii(text: string): SegmentResult {
 						end: s.start + prefix.length,
 						text: prefix,
 						terminator: "newline",
-						menuOnly: true,
+						menuOnly: isMenuOnly(prefix),
 					});
 				for (const c of inner.segments)
 					segments.push({ ...c, start: c.start + base, end: c.end + base });
@@ -141,7 +147,12 @@ function segmentAscii(text: string): SegmentResult {
  */
 function containerOpen(text: string): number {
 	if (!text.endsWith("}")) return -1;
+	const last = text.length - 1;
 	let depth = 0;
+	let groupOpen = -1; // start of the current depth-0 group
+	// Single left-to-right pass (O(n)): the trailing group is the one whose
+	// close is the final char; record where each depth-0 group opened and check
+	// only that group when depth returns to 0 at the end.
 	for (let i = 0; i < text.length; i++) {
 		const c = text[i];
 		if (c === '"') {
@@ -150,37 +161,22 @@ function containerOpen(text: string): number {
 			continue;
 		}
 		if (c === "{" || c === "[" || c === "(") {
-			if (depth === 0 && c === "{" && closesAtEnd(text, i)) {
-				const prefix = text.slice(0, i).trim();
-				if (prefix.length === 0) return i;
-				if (!prefix.startsWith("/")) return -1;
-				if (/[=[($"]/.test(prefix)) return -1;
-				return i;
-			}
+			if (depth === 0) groupOpen = i;
 			depth++;
 			continue;
 		}
-		if (c === "}" || c === "]" || c === ")") depth--;
+		if (c === "}" || c === "]" || c === ")") {
+			depth--;
+			if (depth === 0 && i === last && text[groupOpen] === "{") {
+				const prefix = text.slice(0, groupOpen).trim();
+				if (prefix.length === 0) return groupOpen;
+				if (!prefix.startsWith("/")) return -1;
+				if (/[=[($"]/.test(prefix)) return -1;
+				return groupOpen;
+			}
+		}
 	}
 	return -1;
-}
-
-function closesAtEnd(text: string, open: number): boolean {
-	let depth = 0;
-	for (let i = open; i < text.length; i++) {
-		const c = text[i];
-		if (c === '"') {
-			i++;
-			while (i < text.length && text[i] !== '"') i += text[i] === "\\" ? 2 : 1;
-			continue;
-		}
-		if (c === "{" || c === "[" || c === "(") depth++;
-		else if (c === "}" || c === "]" || c === ")") {
-			depth--;
-			if (depth === 0) return i === text.length - 1;
-		}
-	}
-	return false;
 }
 
 function segmentRaw(text: string): SegmentResult {
@@ -296,9 +292,12 @@ function segmentRaw(text: string): SegmentResult {
 }
 
 /**
- * A menu-navigation statement is a path with no verb after it: `/ip address`,
- * `/interface`, `/`. Offline cannot tell a verb from a deeper menu without a
- * schema, so this is a HINT reporting the shape; Q4/Q6 decide what it means.
+ * A menu-navigation SHAPE: a `/`-rooted path of path-shaped tokens (letters,
+ * digits, space, and `/_.-`) with no `=`, quotes, brackets, or `$` — e.g.
+ * `/ip address`, `/interface`, `/`. It is deliberately shape-only: offline
+ * cannot tell a trailing verb (`/ip address print`) from a deeper menu without
+ * a schema, so `print` still reads as menu-shaped here. A HINT for Q4/Q6, not a
+ * claim that no verb is present.
  */
 function isMenuOnly(trimmed: string): boolean {
 	if (!trimmed.startsWith("/")) return false;
