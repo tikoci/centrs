@@ -153,6 +153,25 @@ describe("Q14 fail-closed — malformed input degrades, never invents commands",
 	});
 });
 
+describe("comment-aware delimiter scanning", () => {
+	test("a `#`-comment `}` is not a real delimiter (no false malformed)", () => {
+		// `:do {\n# }\n:put 1\n}` is valid — the `}` in the comment must not make
+		// the statement look unbalanced, and the body must reach `:put 1`.
+		const { statements, notes } = resolveStatements(":do {\n# }\n:put 1\n}");
+		expect(statements.map((s) => s.path)).toEqual(["/do", "/put"]);
+		expect(statements[0]?.unresolved).toBeUndefined();
+		expect(notes).toEqual([]);
+	});
+
+	test("a bogus :onerror scope does not emit confident body paths", () => {
+		// `:onerror [find] { … }` is not a scope; the body must NOT resolve.
+		const { statements } = resolveStatements(
+			":onerror [find] { /ip route add }",
+		);
+		expect(statements.map((s) => s.path)).not.toContain("/ip/route/add");
+	});
+});
+
 describe("Q17 over-depth — bounded traversal abstains instead of overflowing", () => {
 	test("deeply nested substitutions do not overflow the stack", () => {
 		const deep = `${"[".repeat(32768)}find${"]".repeat(32768)}`;

@@ -324,6 +324,7 @@ export {
 	type StatementResolution,
 } from "./explain/pathresolve.ts";
 export {
+	maskComments,
 	type Segment,
 	type SegmentResult,
 	segmentStatements,

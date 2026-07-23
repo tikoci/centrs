@@ -80,6 +80,41 @@ export interface SegmentResult {
 const isSpace = (c: string): boolean => c === " " || c === "\t" || c === "\r";
 
 /**
+ * Blank out RouterOS comments so a later delimiter re-scan cannot be fooled by
+ * `#` text (a `}` or `[` inside a comment is not a real delimiter). A `#` starts
+ * a comment only in statement-leading position — start of input, or the first
+ * non-space after `;`, a newline, or `{` (H4) — runs to end of line, and is
+ * opaque inside strings. Comment characters become spaces; length and every
+ * non-comment offset are preserved, so indices stay valid against the original
+ * and callers can slice the original for content. Idempotent.
+ */
+export function maskComments(original: string): string {
+	const out = original.split("");
+	let atLead = true;
+	for (let i = 0; i < original.length; i++) {
+		const c = original[i];
+		if (c === '"') {
+			atLead = false;
+			i++;
+			while (i < original.length && original[i] !== '"')
+				i += original[i] === "\\" ? 2 : 1;
+			continue; // i rests on the closing quote (or past end)
+		}
+		if (c === "#" && atLead) {
+			while (i < original.length && original[i] !== "\n") {
+				out[i] = " ";
+				i++;
+			}
+			i--; // let the loop advance onto the newline (or end)
+			continue;
+		}
+		if (c === ";" || c === "\n" || c === "{") atLead = true;
+		else if (c !== " " && c !== "\t" && c !== "\r") atLead = false;
+	}
+	return out.join("");
+}
+
+/**
  * Defensive limit for the recursive H7 promotion.
  *
  * This is not a RouterOS grammar limit. It is an implementation guard derived

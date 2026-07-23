@@ -43,7 +43,7 @@
  */
 
 import { isScopeBrace, scopeBodies } from "./blocks.ts";
-import { segmentStatements } from "./segment.ts";
+import { maskComments, segmentStatements } from "./segment.ts";
 
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
@@ -94,19 +94,21 @@ const MAX_DEPTH = 256;
  * segmenter's document-level notes are surfaced separately on the envelope.
  */
 function structuralDefect(text: string): boolean {
+	// Mask comments so a `#`-comment `}`/`)` is not counted as a real delimiter.
+	const masked = maskComments(text);
 	const openOf: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
 	const stack: string[] = [];
-	for (let i = 0; i < text.length; i++) {
-		const c = text[i];
+	for (let i = 0; i < masked.length; i++) {
+		const c = masked[i];
 		if (c === '"') {
 			i++;
 			let closed = false;
-			while (i < text.length) {
-				if (text[i] === "\\") {
+			while (i < masked.length) {
+				if (masked[i] === "\\") {
 					i += 2;
 					continue;
 				}
-				if (text[i] === '"') {
+				if (masked[i] === '"') {
 					closed = true;
 					break;
 				}
@@ -414,14 +416,18 @@ function collectBrackets(
 		notes.add("over-depth");
 		return;
 	}
-	for (let i = 0; i < text.length; i++) {
-		const c = text[i];
+	// Scan a comment-masked copy so a `#`-comment `[`/`{` is not treated as a
+	// substitution or scope. Comments never hold valid inner commands (`#` mid
+	// `[…]` is not statement-leading), so masked slices equal the originals.
+	const masked = maskComments(text);
+	for (let i = 0; i < masked.length; i++) {
+		const c = masked[i];
 		if (c === '"') {
 			// A string is opaque EXCEPT for `$[ … ]` interpolation, a real command
 			// substitution: `:put "$[:pick $ip 0 $n]"` lowers with `/pick` inside
 			// (topic-…/post-0003-snippet-01 @ 7.22.1).
-			const strEnd = stringEnd(text, i);
-			scanInterpolations(text.slice(i + 1, strEnd), ctx, depth, out, notes);
+			const strEnd = stringEnd(masked, i);
+			scanInterpolations(masked.slice(i + 1, strEnd), ctx, depth, out, notes);
 			i = strEnd;
 			continue;
 		}
@@ -429,15 +435,15 @@ function collectBrackets(
 			// A literal body is a value (Q2), but can still contain command
 			// substitutions: `{[/terminal/inkey]}` lowers the bracket. Descend for
 			// brackets only; scope bodies are walked by walk().
-			const end = matchDelim(text, i, "{", "}");
-			if (!isScopeBrace(text, i))
-				collectBrackets(text.slice(i + 1, end), ctx, depth + 1, out, notes);
+			const end = matchDelim(masked, i, "{", "}");
+			if (!isScopeBrace(masked, i))
+				collectBrackets(masked.slice(i + 1, end), ctx, depth + 1, out, notes);
 			i = end;
 			continue;
 		}
 		if (c !== "[") continue;
-		const end = matchDelim(text, i, "[", "]");
-		const inner = trimAscii(text.slice(i + 1, end));
+		const end = matchDelim(masked, i, "[", "]");
+		const inner = trimAscii(masked.slice(i + 1, end));
 		out.push(resolveInner(inner, ctx, depth));
 		// R6 — nested brackets inherit from this one's resolution.
 		const nestedCtx = out[out.length - 1]?.path ?? ctx;

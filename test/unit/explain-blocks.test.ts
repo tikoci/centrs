@@ -89,6 +89,24 @@ test("in={…} is head-dependent: scope after :onerror, literal after :foreach",
 	expect(scopeNameAt(foreach, foreach.indexOf("in={") + 3)).toBeNull();
 });
 
+test("a `#`-comment `}` does not truncate a scope body", () => {
+	// The `}` inside the comment must be ignored; the body runs to the real `}`.
+	const bodies = scopeBodies(":do {\n# }\n:put 1\n}");
+	expect(bodies).toHaveLength(1);
+	expect(bodies[0]).toBe("\n# }\n:put 1\n");
+});
+
+test("a non-identifier second token is not an :onerror error variable", () => {
+	// `:onerror [find] {` is not the `:onerror V { … }` bare-body form, so the
+	// brace is a value, not a scope — offline must not descend it.
+	const bad = ":onerror [find] { /ip route add }";
+	expect(scopeNameAt(bad, bad.indexOf("{"))).toBeNull();
+	expect(scopeBodies(bad)).toEqual([]);
+	// the ratified `:onerror Err {` form still resolves.
+	const good = ":onerror Err { :put 1 }";
+	expect(scopeNameAt(good, good.indexOf("{"))).toBe("in");
+});
+
 test("scopeBodies returns only scope bodies, never literal ones", () => {
 	// One scope (`do={…}`) and one literal (`source={…}`) in the same statement.
 	const bodies = scopeBodies(

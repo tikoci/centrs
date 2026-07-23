@@ -19,7 +19,12 @@
  * traversal of its own.
  */
 
+import { maskComments } from "./segment.ts";
+
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
+
+/** Error-variable shape for `:onerror V { … }` — a bare/`$`-prefixed name. */
+const ERROR_VAR = /^\$?[A-Za-z][A-Za-z0-9._-]*$/;
 
 function isAsciiWhitespace(char: string | undefined): boolean {
 	return char === " " || char === "\t" || char === "\r" || char === "\n";
@@ -92,26 +97,33 @@ export interface ScopeBlock {
  * under the right leading directive), and a brace body directly following a
  * body-taking directive (`:do {`, `:retry {`, `:onerror Err {`).
  */
-export function scopeNameAt(text: string, open: number): string | null {
-	const before = text.slice(0, open);
+function scopeNameFromMasked(masked: string, open: number): string | null {
+	const before = masked.slice(0, open);
 	const named = before.match(/([A-Za-z][A-Za-z0-9.-]*)=[ \t\r\n]*$/);
 	if (named) {
 		const name = (named[1] as string).toLowerCase();
 		if (SCOPE_ARG_NAMES.has(name)) return name;
 		const heads = HEAD_SCOPED_ARG_NAMES[name];
 		if (heads !== undefined) {
-			const head = (asciiWords(text)[0] ?? "").toLowerCase();
+			const head = (asciiWords(masked)[0] ?? "").toLowerCase();
 			return heads.has(head) ? name : null;
 		}
 		return null;
 	}
-	// `:do {`, `:retry {`, `:onerror Err {` — the directive may carry one bare
-	// word (the error variable) between itself and the brace.
+	// `:do {`, `:retry {`, `:onerror Err {` — the directive may carry ONE bare
+	// error-variable word before the brace. A second token that is not an
+	// identifier (`:onerror [find] {`) is not this form, so the brace is a value.
 	const words = asciiWords(before);
 	const first = (words[0] ?? "").toLowerCase();
 	const body = DIRECTIVE_BODY[first];
 	if (body === undefined) return null;
-	return words.length <= 2 ? body : null;
+	if (words.length === 1) return body;
+	if (words.length === 2 && ERROR_VAR.test(words[1] as string)) return body;
+	return null;
+}
+
+export function scopeNameAt(text: string, open: number): string | null {
+	return scopeNameFromMasked(maskComments(text), open);
 }
 
 /** True when the `{` at `open` opens a scope rather than a literal value. */
@@ -126,22 +138,26 @@ export function isScopeBrace(text: string, open: number): boolean {
  * values are skipped, not descended.
  */
 export function scopeBlocks(text: string): ScopeBlock[] {
+	// Scan a comment-masked copy for structure so a `#`-comment `}`/`[` cannot
+	// truncate a body or shift depth; slice the ORIGINAL for the body text.
+	const masked = maskComments(text);
 	const blocks: ScopeBlock[] = [];
 	let depth = 0;
-	for (let i = 0; i < text.length; i++) {
-		const c = text[i];
+	for (let i = 0; i < masked.length; i++) {
+		const c = masked[i];
 		if (c === '"') {
 			i++;
-			while (i < text.length && text[i] !== '"') i += text[i] === "\\" ? 2 : 1;
+			while (i < masked.length && masked[i] !== '"')
+				i += masked[i] === "\\" ? 2 : 1;
 			continue;
 		}
 		if (c === "[" || c === "(") depth++;
 		else if (c === "]" || c === ")") {
 			if (depth > 0) depth--;
 		} else if (c === "{") {
-			const end = matchBrace(text, i);
+			const end = matchBraceInMasked(masked, i);
 			if (depth === 0) {
-				const name = scopeNameAt(text, i);
+				const name = scopeNameFromMasked(masked, i);
 				if (name !== null) blocks.push({ name, body: text.slice(i + 1, end) });
 			}
 			i = end;
@@ -157,14 +173,14 @@ export function scopeBodies(text: string): string[] {
 	return scopeBlocks(text).map((b) => b.body);
 }
 
-/** Index of the `}` matching the `{` at `open`, honoring strings. */
-export function matchBrace(text: string, open: number): number {
+function matchBraceInMasked(masked: string, open: number): number {
 	let depth = 0;
-	for (let i = open; i < text.length; i++) {
-		const c = text[i];
+	for (let i = open; i < masked.length; i++) {
+		const c = masked[i];
 		if (c === '"') {
 			i++;
-			while (i < text.length && text[i] !== '"') i += text[i] === "\\" ? 2 : 1;
+			while (i < masked.length && masked[i] !== '"')
+				i += masked[i] === "\\" ? 2 : 1;
 			continue;
 		}
 		if (c === "{") depth++;
@@ -173,5 +189,10 @@ export function matchBrace(text: string, open: number): number {
 			if (depth === 0) return i;
 		}
 	}
-	return text.length;
+	return masked.length;
+}
+
+/** Index of the `}` matching the `{` at `open`, honoring strings and comments. */
+export function matchBrace(text: string, open: number): number {
+	return matchBraceInMasked(maskComments(text), open);
 }
