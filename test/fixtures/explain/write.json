@@ -301,9 +301,23 @@
 		{
 			"id": "X7",
 			"class": "nav then write",
-			"name": "a slash-led bare path with no hyphenated segment is confirmed navigation (see the KNOWN LIMIT test — the same path clears /system/reboot)",
-			"input": "/ip/firewall/filter",
+			"name": "a bare path consumed by a following statement is confirmed navigation",
+			"input": "/ip/firewall/filter\nprint",
 			"verdict": "false"
+		},
+		{
+			"id": "X9",
+			"class": "dangling bare path",
+			"name": "a bare path with nothing after it abstains — /ip/route is a directory but /system/reboot is a write, and the text is identical (Q6 V4)",
+			"input": "/ip/firewall/filter",
+			"verdict": "unknown"
+		},
+		{
+			"id": "X10",
+			"class": "dangling bare path",
+			"name": "the case the rule exists for — a lone no-argument write must never clear",
+			"input": "/system/reboot",
+			"verdict": "unknown"
 		},
 		{
 			"id": "X8",

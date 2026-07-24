@@ -189,6 +189,22 @@ export const ROOT_CMDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The `pathresolve` refusal reasons that name no command at this level, so the
+ * statement may be classified normally instead of blocking. Deliberately an
+ * ALLOW list: an unrecognized reason is treated as a defect, so this composition
+ * fails closed when the resolver grows a new one.
+ *
+ * `no leading path token` is clearable only because `classifyStatement`'s
+ * `isPathShapedButUnread` guard catches the dangerous half of it — the run of a
+ * `/`-led statement being TRUNCATED by a variable segment (`/ip/$menu/remove`)
+ * rather than genuinely absent (`"a string"`, `=`).
+ */
+const CLEARABLE_UNRESOLVED: ReadonlySet<string> = new Set([
+	"dynamic or substitution-headed statement",
+	"no leading path token",
+]);
+
+/**
  * Whether the command itself is not statically knowable, so the verdict must
  * degrade to `unknown` rather than `false`. Checked BEFORE the navigation gate:
  * `/system/script run myscript` is entirely bare words, so the nav rule would
@@ -305,6 +321,48 @@ function isConfirmedNav(described: Described): boolean {
 	return !described.run.slice(1).some((t) => t.name.includes("-"));
 }
 
+/**
+ * A bare path with NOTHING after it in the whole document. Q6 ratified that such
+ * a statement is `ambiguous` — `/ip/route` is a directory and `/system/reboot` is
+ * a no-argument command, and the text is identical — but `isConfirmedNav` above
+ * decides at STATEMENT scale and would drop both as navigation, so a lone or
+ * trailing `/system/reboot` cleared the document to `false`. That is a false
+ * negative on a statically obvious write, the one thing Q16's hard threshold
+ * forbids, and it reproduces inside the tristate exactly the failure the tristate
+ * was ratified to prevent.
+ *
+ * Position is the one schema-free confirmation available at document scale:
+ * navigating and then ending the script is a no-op, while a no-argument command
+ * is meaningful. This is deliberately the WEAKEST rule that closes the reported
+ * case — measured over the frozen 911-script corpus it moves **zero** documents,
+ * so the ratified navigation arm's abstention (44.0% dev / 45.2% holdout) is
+ * unchanged. Every corpus bare path sits mid-document, followed by further
+ * statements; working scripts do not end on a menu path.
+ *
+ * DECLARED RESIDUAL: a bare-path COMMAND that is followed only by absolute
+ * statements (`/system/reboot` then `/log print`) still clears. Closing that too
+ * means abstaining whenever no later RELATIVE statement consumes the context,
+ * which was also measured: +1.4pp dev / +1.9pp holdout abstention across 14
+ * documents, and all 14 are genuine directories, i.e. pure precision loss on this
+ * corpus. The corpus cannot show the benefit — it is a corpus of working scripts,
+ * where a bare path is navigation — so that trade is left as a priced decision
+ * rather than taken here.
+ *
+ * The bare `/` and `..` forms are exempt: they carry no run, name no command, and
+ * Q4's CHR round confirmed them as navigation outright.
+ */
+function isDanglingBarePath(
+	described: Described,
+	statements: readonly StatementResolution[],
+	index: number,
+): boolean {
+	if (described.run.length === 0) return false;
+	for (let j = index + 1; j < statements.length; j++)
+		if ((statements[j] as StatementResolution).text.trim().length > 0)
+			return false;
+	return true;
+}
+
 /** Does the run carry a token Q6's boundary would call the verb? */
 function isCommandShaped(described: Described): boolean {
 	if (described.run.length === 0) return false;
@@ -374,7 +432,7 @@ function classifyStatement(
 		described.directive ||
 		(verb !== null && statement.context === "/" && described.run.length === 1);
 	const klass =
-		verb === null && described.run.length > 0
+		verb === null && isPathShapedButUnread(text, described)
 			? "ambiguous"
 			: classifyVerb(verb, directive);
 	return {
@@ -385,6 +443,26 @@ function classifyStatement(
 		directive,
 		klass,
 	};
+}
+
+/**
+ * Does this text name a command the run could not read? Used to decide whether
+ * a `null` verb may clear the document or must abstain.
+ *
+ * A NON-EMPTY run with no decided verb is V4's bare path — Q6's ratified
+ * `ambiguous`. An EMPTY run usually means the text names no command at this
+ * level (`[find]`, `(1)`, `"a string"`, `=`) and is safely `no-verb`: an inner
+ * `[…]` command is reached by the bracket walk instead.
+ *
+ * The exception is a `/`-led statement, where an empty run means the run was
+ * TRUNCATED rather than absent — `runTokens` stops at the first segment that is
+ * not a bare word, so `/ip/$menu/remove 0` and `/ip/$m/add address=…` yield an
+ * empty run while plainly naming a write. Clearing those is a false negative on
+ * a curated write verb, so a path-shaped statement whose path could not be read
+ * abstains.
+ */
+function isPathShapedButUnread(text: string, described: Described): boolean {
+	return described.run.length > 0 || text.startsWith("/");
 }
 
 /**
@@ -407,8 +485,10 @@ function collect(
 	brackets: DocumentAnalysis,
 ): Occurrence[] {
 	const out: Occurrence[] = [];
+	const list = statements.statements;
 
-	for (const statement of statements.statements) {
+	for (let index = 0; index < list.length; index++) {
+		const statement = list[index] as StatementResolution;
 		const t = statement.text.trim();
 		if (t.length === 0) continue;
 		// One parse per statement, threaded through every rule below: the Q6
@@ -425,12 +505,17 @@ function collect(
 			});
 			continue;
 		}
-		// Q14 floor — a structural defect means the resolver did not descend, so a
-		// write may be hiding in a body that was never walked. Other unresolved
-		// reasons are not defects: `[find]`, `(1)`, and a string head simply carry
-		// no outer verb, while their inner brackets are classified by the bracket
-		// walk below.
-		if (statement.unresolved?.startsWith("structural defect:")) {
+		// Q14 floor — the resolver refused this statement and did not descend, so
+		// a write may be hiding in a body that was never walked. Only the reasons
+		// on the safe list clear: those name no command at this level, and their
+		// inner brackets are classified by the bracket walk below. Any OTHER
+		// reason blocks, including one this list has not seen — so rewording a
+		// reason in `pathresolve` degrades to over-abstention rather than
+		// silently clearing a hidden write.
+		if (
+			statement.unresolved !== undefined &&
+			!CLEARABLE_UNRESOLVED.has(statement.unresolved)
+		) {
 			out.push({
 				kind: "statement",
 				text: t,
@@ -442,7 +527,11 @@ function collect(
 			continue;
 		}
 		if (statement.isNav && !isCommandShaped(described)) {
-			if (isConfirmedNav(described)) continue;
+			if (
+				isConfirmedNav(described) &&
+				!isDanglingBarePath(described, list, index)
+			)
+				continue;
 			out.push(classifyUnconfirmedNav(statement, t, described));
 			continue;
 		}

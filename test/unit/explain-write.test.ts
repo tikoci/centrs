@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { resolveStatements } from "../../src/explain/pathresolve.ts";
 import {
 	classifyVerb,
 	containsWrite,
@@ -217,10 +218,11 @@ describe("explain/write — finding 2: fail closed where input is discarded", ()
 
 	/** Confirmed navigation is still dropped — the abstention is not blanket. */
 	test("confirmed navigation emits no occurrence", () => {
-		expect(occurrences("/ip/firewall/filter")).toEqual([]);
-		expect(occurrences("/ip firewall")).toEqual([]);
-		expect(occurrences("/ip firewall\n/ip route")).toEqual([]);
-		// The two bare nav forms Q4's CHR round confirmed name no command.
+		expect(occurrences("/ip/firewall/filter\nprint")).toHaveLength(1);
+		expect(occurrences("/ip firewall\nprint")[0]?.klass).toBe("read");
+		expect(occurrences("/ip firewall\n/ip route\nprint")).toHaveLength(1);
+		// The two bare nav forms Q4's CHR round confirmed name no command, so
+		// they are dropped even in the trailing position.
 		expect(occurrences("/ip firewall\n..\n/")).toEqual([]);
 	});
 
@@ -239,20 +241,43 @@ describe("explain/write — finding 2: fail closed where input is discarded", ()
 	});
 
 	/**
-	 * KNOWN LIMIT, declared not fixed. A slash-led bare path with no hyphenated
-	 * segment is read as confirmed navigation and dropped — which is right for
-	 * `/ip/firewall/filter` (a directory) and wrong for `/system/reboot` (a
-	 * no-argument write). The two are the same text; only a schema separates
-	 * them, and Q6 ratified abstention there. The lab measured this as its
-	 * `overconfident` bin — 3 of 352 holdout captures, reported separately and
-	 * deliberately excluded from the precision denominator because the IL oracle
-	 * cannot decide those cells either. It is pinned here so the residual is
-	 * visible rather than latent; narrowing `isConfirmedNav` needs a corpus
-	 * re-score, not a guess.
+	 * The P1 from the Codex review round. `isConfirmedNav` decides at STATEMENT
+	 * scale, so it dropped a lone `/system/reboot` as navigation and cleared the
+	 * document to `false` — a false negative on a statically obvious write, which
+	 * reproduces inside the tristate precisely the failure the tristate was
+	 * ratified to prevent. Position is the schema-free confirmation: a bare path
+	 * with nothing after it in the document is not navigation, because navigating
+	 * and then ending the script is a no-op.
+	 *
+	 * Measured over the frozen 911-script corpus this moves ZERO documents, so the
+	 * ratified navigation arm's abstention is unchanged.
 	 */
-	test("KNOWN LIMIT: a trailing bare path clears instead of abstaining", () => {
-		expect(containsWrite("/ip/firewall/filter").verdict).toBe("false");
-		expect(containsWrite("/system/reboot").verdict).toBe("false");
+	test("a dangling bare path abstains instead of clearing", () => {
+		for (const input of ["/system/reboot", "/ip/firewall/filter", "/log"]) {
+			const got = containsWrite(input);
+			expect(got.verdict).toBe("unknown");
+			expect(got.blockers).toHaveLength(1);
+		}
+	});
+
+	/** But a bare path the document goes on to USE is still confirmed navigation. */
+	test("a consumed bare path still clears", () => {
+		expect(containsWrite("/system/reboot\nprint").verdict).toBe("false");
+		expect(containsWrite("/ip/firewall/filter\nprint").verdict).toBe("false");
+	});
+
+	/**
+	 * DECLARED RESIDUAL, priced not guessed. A bare-path COMMAND followed only by
+	 * ABSOLUTE statements still clears, because nothing relative ever consumed the
+	 * context it would have established. Closing this too means abstaining
+	 * whenever no later relative statement consumes the context, which was
+	 * measured on the same corpus: +1.4pp dev / +1.9pp holdout abstention across
+	 * 14 documents — and all 14 are genuine directories, i.e. pure precision loss
+	 * on a corpus of working scripts, which structurally cannot contain the
+	 * dangling-command shape. Left as a priced decision rather than taken blind.
+	 */
+	test("DECLARED RESIDUAL: an unconsumed bare path before an absolute statement clears", () => {
+		expect(containsWrite("/system/reboot\n/log print").verdict).toBe("false");
 	});
 
 	/**
@@ -377,6 +402,53 @@ describe("explain/write — Q14 floor and structural defects", () => {
 		const got = containsWrite(':put "unterminated');
 		expect(got.verdict).toBe("unknown");
 		expect(got.notes.length).toBeGreaterThan(0);
+	});
+
+	/**
+	 * The Q14 floor is an ALLOW list, not a defect-string match. `pathresolve` has
+	 * four statement refusal reasons and only two are safe to clear; matching the
+	 * defect prose instead would fail OPEN on the other two.
+	 */
+	test("a variable path segment cannot clear the document", () => {
+		// `runTokens` stops at the first non-bare segment, so these yield an EMPTY
+		// run while plainly naming a write. `pathresolve` calls that "no leading
+		// path token" — the same reason a harmless `"a string"` gets.
+		for (const input of [
+			"/ip/$menu/remove 0",
+			"/ip/$m/add address=1.2.3.4",
+			"/interface/$if/disable",
+			"/ip/route/$verb",
+		]) {
+			const got = containsWrite(input);
+			expect(got.verdict).toBe("unknown");
+			expect(got.blockers).toHaveLength(1);
+		}
+	});
+
+	/** The other half of that reason: text naming no command at all stays inert. */
+	test("text that names no command still clears", () => {
+		expect(containsWrite('"just a string"').verdict).toBe("false");
+		expect(containsWrite("=").verdict).toBe("false");
+		// A bracket-headed statement carries no OUTER verb; the bracket walk
+		// classifies its inner command instead of the statement abstaining.
+		expect(containsWrite("[find]").verdict).toBe("false");
+		expect(containsWrite("[/ip/route/print]").verdict).toBe("false");
+	});
+
+	/** An unrecognized refusal reason must block, so resolver drift over-abstains. */
+	test("the clearable-reason list matches what pathresolve actually emits", () => {
+		const reasons = [
+			"/ip/route/remove [find",
+			"[find]",
+			'"a string"',
+			"$f",
+		].map((t) => resolveStatements(t).statements[0]?.unresolved);
+		expect(reasons).toEqual([
+			"structural defect: unbalanced delimiter or string",
+			"dynamic or substitution-headed statement",
+			"no leading path token",
+			"dynamic or substitution-headed statement",
+		]);
 	});
 
 	test("a clean document carries no notes", () => {
