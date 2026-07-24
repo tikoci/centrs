@@ -189,27 +189,25 @@ export const ROOT_CMDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Forms whose command is not statically knowable, so no verb can be classified
- * and the verdict must degrade to `unknown` rather than to `false`. Checked
- * BEFORE the navigation gate: `/system script run myscript` is entirely bare
- * words, so the nav rule would otherwise drop the one form that is
- * by definition unknowable — the worst possible place to be confident.
+ * Whether the command itself is not statically knowable, so the verdict must
+ * degrade to `unknown` rather than `false`. Checked BEFORE the navigation gate:
+ * `/system/script run myscript` is entirely bare words, so the nav rule would
+ * otherwise drop the one form that is unknowable by definition.
+ *
+ * Read the leading run rather than searching the raw statement. A raw substring
+ * probe masks known writes whose argument merely contains `/system script run`,
+ * and separate slash/space regexes miss valid mixed spellings such as
+ * `/system/script run myscript`.
  */
-const DYNAMIC_FORMS: readonly RegExp[] = [
-	/\/system\/script\/run(\s|$)/, //  stored script, contents unknown offline
-	/\/system\s+script\s+run(\s|$)/,
-	/^\s*\$[A-Za-z_]/, //              statement head is a variable/function call
-	// Anchored, unlike the lab probe's version. Unanchored it fired on any
-	// `[$…]` ANYWHERE in the line, including a fully-known write's argument
-	// value: `/ip route add gateway=[$gw]` was masked as `dynamic` even though
-	// `add` is a curated write verb. The dynamic value does not make the write
-	// uncertain — rule 1 covers it — and the inner `$gw` still abstains on its
-	// own through the bracket walk and the anchored rule above.
-	/^\s*\[\s*\$/, //                  the text ITSELF is a `[$f]` invocation
-];
-
-function isDynamicForm(text: string): boolean {
-	return DYNAMIC_FORMS.some((re) => re.test(text));
+function isDynamicForm(text: string, described: Described): boolean {
+	if (text.startsWith("$") || /^\[\s*\$/.test(text)) return true;
+	if (!text.startsWith("/") || described.run.length < 3) return false;
+	const [system, script, run] = described.run;
+	return (
+		system?.name.toLowerCase() === "system" &&
+		script?.name.toLowerCase() === "script" &&
+		run?.name.toLowerCase() === "run"
+	);
 }
 
 /**
@@ -413,7 +411,10 @@ function collect(
 	for (const statement of statements.statements) {
 		const t = statement.text.trim();
 		if (t.length === 0) continue;
-		if (isDynamicForm(t)) {
+		// One parse per statement, threaded through every rule below: the Q6
+		// boundary reads the same run three or four times otherwise.
+		const described = describeStatement(t);
+		if (isDynamicForm(t, described)) {
 			out.push({
 				kind: "statement",
 				text: t,
@@ -424,10 +425,12 @@ function collect(
 			});
 			continue;
 		}
-		// Q14 floor — the path resolver refused this statement (unbalanced
-		// delimiter or unterminated string) and did not descend into it, so a
-		// write may be hiding in a body that was never walked.
-		if (statement.unresolved !== undefined) {
+		// Q14 floor — a structural defect means the resolver did not descend, so a
+		// write may be hiding in a body that was never walked. Other unresolved
+		// reasons are not defects: `[find]`, `(1)`, and a string head simply carry
+		// no outer verb, while their inner brackets are classified by the bracket
+		// walk below.
+		if (statement.unresolved?.startsWith("structural defect:")) {
 			out.push({
 				kind: "statement",
 				text: t,
@@ -438,9 +441,6 @@ function collect(
 			});
 			continue;
 		}
-		// One parse per statement, threaded through every rule below: the Q6
-		// boundary reads the same run three or four times otherwise.
-		const described = describeStatement(t);
 		if (statement.isNav && !isCommandShaped(described)) {
 			if (isConfirmedNav(described)) continue;
 			out.push(classifyUnconfirmedNav(statement, t, described));
@@ -452,7 +452,8 @@ function collect(
 	for (const bracket of brackets.resolutions) {
 		const inner = bracket.inner.trim();
 		if (inner.length === 0) continue;
-		if (isDynamicForm(inner)) {
+		const described = describeStatement(inner);
+		if (isDynamicForm(inner, described)) {
 			out.push({
 				kind: "bracket",
 				text: inner,
@@ -463,15 +464,18 @@ function collect(
 			});
 			continue;
 		}
-		const described = describeStatement(inner);
 		const verb = verbOfRun(described.run, described.directive, described.whole);
+		const klass =
+			verb === null && described.run.length > 0
+				? "ambiguous"
+				: classifyVerb(verb, described.directive);
 		out.push({
 			kind: "bracket",
 			text: inner,
 			context: bracket.context,
 			verb,
 			directive: described.directive,
-			klass: classifyVerb(verb, described.directive),
+			klass,
 		});
 	}
 
@@ -483,7 +487,10 @@ export interface WriteAnalysis {
 	verdict: WriteVerdict;
 	/** How many occurrences were proven writes. Agreed with IL 100% on both splits. */
 	writes: number;
-	/** The occurrences that forced `unknown`; empty unless the verdict is `unknown`. */
+	/**
+	 * Unclassifiable occurrences. These force `unknown` only when no proven write
+	 * exists; rule 1 may therefore return `true` with blockers still reported.
+	 */
 	blockers: Occurrence[];
 	occurrences: Occurrence[];
 	/** Structural notes from the segmenter / bounded traversal; any note abstains. */

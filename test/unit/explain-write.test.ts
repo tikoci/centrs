@@ -140,6 +140,44 @@ describe("explain/write — rollup rules", () => {
 		expect(containsWrite(':put "[$x]"').verdict).toBe("false");
 	});
 
+	test("stored-script detection reads the command head, not argument strings", () => {
+		expect(containsWrite(':put "/system script run backup"').verdict).toBe(
+			"false",
+		);
+		expect(containsWrite(':put "/system/script/run backup"').verdict).toBe(
+			"false",
+		);
+		const got = containsWrite(
+			'/ip route add comment="/system script run backup"',
+		);
+		expect(got.verdict).toBe("true");
+		expect(got.writes).toBe(1);
+	});
+
+	test.each([
+		"/system/script/run backup",
+		"/system/script run backup",
+		"/system script/run backup",
+		"/system script run backup",
+	])("every stored-script separator spelling abstains: %s", (input) => {
+		const got = containsWrite(input);
+		expect(got.verdict).toBe("unknown");
+		expect(got.blockers.some((b) => b.klass === "dynamic")).toBe(true);
+	});
+
+	test("every variable-reference spelling at statement head is dynamic", () => {
+		for (const input of [
+			"$myFunc",
+			'$"set-dns" 1.1',
+			["$", "{myFunc}"].join(""),
+			"$",
+		]) {
+			const got = containsWrite(input);
+			expect(got.verdict).toBe("unknown");
+			expect(got.blockers.map((b) => b.klass)).toContain("dynamic");
+		}
+	});
+
 	test("text that is itself a [$f] invocation is dynamic", () => {
 		const got = containsWrite("[$myFunc]");
 		expect(got.verdict).toBe("unknown");
@@ -343,6 +381,22 @@ describe("explain/write — Q14 floor and structural defects", () => {
 
 	test("a clean document carries no notes", () => {
 		expect(containsWrite("/ip route print").notes).toEqual([]);
+	});
+
+	test("non-command heads are not mislabeled as structural defects", () => {
+		for (const input of ["[find]", "(1)", '"literal"']) {
+			const got = containsWrite(input);
+			expect(got.verdict).toBe("false");
+			expect(got.occurrences.some((o) => o.klass === "defect")).toBe(false);
+		}
+	});
+
+	test("a bare path in a bracket retains Q6 ambiguity", () => {
+		const got = containsWrite(":put [/system/reboot]");
+		expect(got.verdict).toBe("unknown");
+		expect(got.blockers).toContainEqual(
+			expect.objectContaining({ kind: "bracket", klass: "ambiguous" }),
+		);
 	});
 });
 
