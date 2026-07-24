@@ -362,7 +362,10 @@ function scanAscii(ascii: string): {
 
 	const closeContainer = (i: number): void => {
 		const frame = frames.pop() as Frame;
-		flush(frame, i, "eof"); // the body's last statement is `}`-terminated
+		// Flush the body's last statement. Its terminator is "eof" — the end of
+		// the container body, matching the old per-body scan; the `}` itself is
+		// not a statement terminator token (only `;`/newline/actual EOF are).
+		flush(frame, i, "eof");
 		const parent = cur();
 		if (
 			!frame.structurallyInvalid &&
