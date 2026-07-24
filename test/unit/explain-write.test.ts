@@ -125,6 +125,27 @@ describe("explain/write — rollup rules", () => {
 		expect(got.occurrences.every((o) => o.klass === "read")).toBe(true);
 	});
 
+	/**
+	 * Rule 1 again, on the shape an unanchored dynamic-form probe got wrong: a
+	 * `[$f]` argument VALUE does not make a curated write verb uncertain. Only
+	 * text that is itself a `[$f]` invocation is dynamic.
+	 */
+	test("a dynamic argument value does not mask a known write", () => {
+		const got = containsWrite("/ip route add gateway=[$gw]");
+		expect(got.verdict).toBe("true");
+		expect(got.writes).toBe(1);
+	});
+
+	test("a dynamic value in an inert string stays inert", () => {
+		expect(containsWrite(':put "[$x]"').verdict).toBe("false");
+	});
+
+	test("text that is itself a [$f] invocation is dynamic", () => {
+		const got = containsWrite("[$myFunc]");
+		expect(got.verdict).toBe("unknown");
+		expect(got.blockers.some((b) => b.klass === "dynamic")).toBe(true);
+	});
+
 	/** Write counts agreed with IL 100% on both splits — pin the arithmetic. */
 	test("writes counts every proven write, at every depth", () => {
 		const got = containsWrite(
@@ -343,7 +364,7 @@ describe("explain/write — invariants", () => {
 		"/ip/route/add/".repeat(200),
 		`${"{".repeat(2048)}/ip route add${"}".repeat(2048)}`,
 		"# comment with no newline",
-		" ",
+		"\u0000\u0001",
 		"/ip route add comment=é中😀",
 	];
 

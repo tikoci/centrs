@@ -63,6 +63,9 @@ import {
 } from "./pathresolve.ts";
 import { describeStatement, type RunToken, splitRun } from "./verbsplit.ts";
 
+/** One statement's run, directive flag and V4 flag — parsed once, read by every rule. */
+type Described = ReturnType<typeof describeStatement>;
+
 /**
  * Menu verbs that mutate persistent device state. Frequency-justified against
  * the command trees, and frozen against tuning per the Q6 vocabulary discipline
@@ -196,7 +199,13 @@ const DYNAMIC_FORMS: readonly RegExp[] = [
 	/\/system\/script\/run(\s|$)/, //  stored script, contents unknown offline
 	/\/system\s+script\s+run(\s|$)/,
 	/^\s*\$[A-Za-z_]/, //              statement head is a variable/function call
-	/\[\s*\$/, //                      bracket head is a variable/function call
+	// Anchored, unlike the lab probe's version. Unanchored it fired on any
+	// `[$…]` ANYWHERE in the line, including a fully-known write's argument
+	// value: `/ip route add gateway=[$gw]` was masked as `dynamic` even though
+	// `add` is a curated write verb. The dynamic value does not make the write
+	// uncertain — rule 1 covers it — and the inner `$gw` still abstains on its
+	// own through the bracket walk and the anchored rule above.
+	/^\s*\[\s*\$/, //                  the text ITSELF is a `[$f]` invocation
 ];
 
 function isDynamicForm(text: string): boolean {
@@ -288,8 +297,7 @@ function verbOfRun(
  * verb is followed by a positional operand — and guessing wrong there costs a
  * missed write.
  */
-function isConfirmedNav(text: string): boolean {
-	const described = describeStatement(text);
+function isConfirmedNav(described: Described): boolean {
 	// Only reached for a statement the Q4 resolver already read as navigation, so
 	// an empty run means the bare `/` or `..` forms — the two Q4's CHR round
 	// confirmed as valid RouterOS navigation. They name no command at all.
@@ -300,8 +308,7 @@ function isConfirmedNav(text: string): boolean {
 }
 
 /** Does the run carry a token Q6's boundary would call the verb? */
-function isCommandShaped(text: string): boolean {
-	const described = describeStatement(text);
+function isCommandShaped(described: Described): boolean {
 	if (described.run.length === 0) return false;
 	const split = splitRun(described.run, {
 		directive: described.directive,
@@ -322,8 +329,9 @@ function isCommandShaped(text: string): boolean {
 function classifyUnconfirmedNav(
 	statement: StatementResolution,
 	text: string,
+	described: Described,
 ): Occurrence {
-	const run = describeStatement(text).run;
+	const run = described.run;
 	const candidate = (run[run.length - 1] as RunToken | undefined)?.name ?? null;
 	const klass =
 		candidate === null ? "unknown-verb" : classifyVerb(candidate, false);
@@ -358,8 +366,8 @@ function classifyUnconfirmedNav(
 function classifyStatement(
 	statement: StatementResolution,
 	text: string,
+	described: Described,
 ): Occurrence {
-	const described = describeStatement(text);
 	const verb = verbOfRun(described.run, described.directive, described.whole);
 	// A single-token command at document root is a root cmd written without its
 	// `:` sigil (`/import file-name=…`), so it reads against the root vocabulary
@@ -386,10 +394,11 @@ function classifyStatement(
  * (Q4's stateful walker) plus bracket-inner commands at every nesting depth
  * (Q3's resolver).
  *
- * Deliberately a SET, not a sequence. Both lab harness bugs corrected during
- * phase 0 were alignment bugs — a positional correspondence that silently lined
- * the wrong pair up. `containsWrite` is a rollup, so it is order-independent by
- * construction and cannot repeat that failure.
+ * The ORDER carries no meaning, even though the list is emitted in source order
+ * and repeats are significant (`writes` counts multiplicity — do not dedupe).
+ * Both lab harness bugs corrected during phase 0 were alignment bugs, where a
+ * positional correspondence silently lined the wrong pair up; `containsWrite`
+ * consumes this only as a rollup, so it cannot repeat that failure.
  */
 export function occurrences(text: string): Occurrence[] {
 	return collect(resolveStatements(text), resolveDocument(text));
@@ -429,12 +438,15 @@ function collect(
 			});
 			continue;
 		}
-		if (statement.isNav && !isCommandShaped(t)) {
-			if (isConfirmedNav(t)) continue;
-			out.push(classifyUnconfirmedNav(statement, t));
+		// One parse per statement, threaded through every rule below: the Q6
+		// boundary reads the same run three or four times otherwise.
+		const described = describeStatement(t);
+		if (statement.isNav && !isCommandShaped(described)) {
+			if (isConfirmedNav(described)) continue;
+			out.push(classifyUnconfirmedNav(statement, t, described));
 			continue;
 		}
-		out.push(classifyStatement(statement, t));
+		out.push(classifyStatement(statement, t, described));
 	}
 
 	for (const bracket of brackets.resolutions) {
