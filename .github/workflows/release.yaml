@@ -101,7 +101,7 @@ jobs:
         with:
           bun-version: 1.3.13
       - name: Setup Node (npm registry auth + provenance)
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           registry-url: https://registry.npmjs.org
       - name: Install dependencies
