@@ -185,6 +185,18 @@ interface Frame {
 	stmtStart: number;
 	/** H4 — still before the first real token of the current statement? */
 	atLead: boolean;
+	/**
+	 * A mismatched close occurred in this statement/container. A container with
+	 * a known structural defect must DISCARD rather than promote its buffered
+	 * children as confident sibling statements.
+	 */
+	structurallyInvalid: boolean;
+	/** Start/end of the prefix range already classified for H7. */
+	prefixScanStart: number;
+	prefixScanEnd: number;
+	/** Incremental equivalent of trimming and checking the H7 prefix. */
+	prefixSawNonSpace: boolean;
+	prefixValid: boolean;
 	/** statements collected here; the flattened output for a committed container. */
 	buffer: RawSegment[];
 	/** true for a container frame; false for the synthetic top level. */
@@ -216,6 +228,11 @@ function scanAscii(ascii: string): {
 	const top: Frame = {
 		stmtStart: -1,
 		atLead: true,
+		structurallyInvalid: false,
+		prefixScanStart: -1,
+		prefixScanEnd: -1,
+		prefixSawNonSpace: false,
+		prefixValid: true,
 		buffer: [],
 		container: false,
 		openIndex: -1,
@@ -234,6 +251,13 @@ function scanAscii(ascii: string): {
 
 	const ensureStmt = (f: Frame, i: number): void => {
 		if (f.stmtStart < 0) f.stmtStart = i;
+	};
+
+	const resetPrefixScan = (f: Frame): void => {
+		f.prefixScanStart = -1;
+		f.prefixScanEnd = -1;
+		f.prefixSawNonSpace = false;
+		f.prefixValid = true;
 	};
 
 	const makeSegment = (
@@ -262,16 +286,43 @@ function scanAscii(ascii: string): {
 		if (f.stmtStart < 0) return;
 		const s = makeSegment(f.stmtStart, end, terminator);
 		f.stmtStart = -1;
+		resetPrefixScan(f);
 		if (s) f.buffer.push(s);
+		// The synthetic top frame can recover at a real statement boundary. A
+		// container stays poisoned until it closes so a defect in one buffered
+		// child cannot make later children look independently trustworthy.
+		if (!f.container) f.structurallyInvalid = false;
 	};
 
 	// A container prefix is empty or a bare `/`-menu path with no `=[($"` — the
 	// same test the old `containerOpen` applied to the group's prefix.
-	const validPrefix = (start: number, end: number): boolean => {
-		const t = ascii.slice(start, end).trim();
-		if (t.length === 0) return true;
-		if (t[0] !== "/") return false;
-		return !/[=[($"]/.test(t);
+	const validPrefix = (f: Frame, start: number, end: number): boolean => {
+		if (f.prefixScanStart !== start || f.prefixScanEnd > end) {
+			resetPrefixScan(f);
+			f.prefixScanStart = start;
+			f.prefixScanEnd = start;
+		}
+		if (!f.prefixValid) {
+			f.prefixScanEnd = end;
+			return false;
+		}
+		for (let i = f.prefixScanEnd; i < end; i++) {
+			const c = ascii[i] as string;
+			if (!f.prefixSawNonSpace) {
+				if (c.trim().length === 0) continue;
+				f.prefixSawNonSpace = true;
+				if (c !== "/") {
+					f.prefixValid = false;
+					break;
+				}
+			}
+			if (/[=[($"]/.test(c)) {
+				f.prefixValid = false;
+				break;
+			}
+		}
+		f.prefixScanEnd = end;
+		return f.prefixValid;
 	};
 
 	const openContainer = (i: number): void => {
@@ -283,6 +334,11 @@ function scanAscii(ascii: string): {
 		frames.push({
 			stmtStart: -1,
 			atLead: true,
+			structurallyInvalid: parent.structurallyInvalid,
+			prefixScanStart: -1,
+			prefixScanEnd: -1,
+			prefixSawNonSpace: false,
+			prefixValid: true,
 			buffer: [],
 			container: true,
 			openIndex: i,
@@ -308,17 +364,23 @@ function scanAscii(ascii: string): {
 		const frame = frames.pop() as Frame;
 		flush(frame, i, "eof"); // the body's last statement is `}`-terminated
 		const parent = cur();
-		if (frame.buffer.length > 0 && trailingEndsStatement(i)) {
+		if (
+			!frame.structurallyInvalid &&
+			frame.buffer.length > 0 &&
+			trailingEndsStatement(i)
+		) {
 			// COMMIT: menu-prefix segment (if any), then the buffered body, replace
 			// the container in the parent stream; the parent statement is consumed.
 			const prefix = makeSegment(frame.prefixStart, frame.openIndex, "newline");
 			if (prefix) parent.buffer.push(prefix);
 			for (const s of frame.buffer) parent.buffer.push(s);
 			parent.stmtStart = -1;
+			resetPrefixScan(parent);
 		} else {
 			// DISCARD: empty body or trailing content — the parent statement absorbs
 			// the whole `{…}` verbatim by resuming from the container's prefix.
 			parent.stmtStart = frame.prefixStart;
+			parent.structurallyInvalid ||= frame.structurallyInvalid;
 		}
 		parent.atLead = false;
 	};
@@ -379,7 +441,7 @@ function scanAscii(ascii: string): {
 			if (
 				c === "{" &&
 				atContainerLevel() &&
-				validPrefix(f.stmtStart >= 0 ? f.stmtStart : i, i)
+				validPrefix(f, f.stmtStart >= 0 ? f.stmtStart : i, i)
 			) {
 				if (frames.length - 1 < MAX_CONTAINER_DEPTH) {
 					openContainer(i);
@@ -417,6 +479,7 @@ function scanAscii(ascii: string): {
 				notes.push(`unbalanced-close:${c}`);
 				ensureStmt(f, i);
 				f.atLead = false;
+				f.structurallyInvalid = true;
 			}
 			i++;
 			continue;
