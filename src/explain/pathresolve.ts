@@ -81,8 +81,10 @@ function isAbsolutePathToken(token: string): boolean {
  * Defensive recursion bound. `explain` accepts untrusted editor/MCP input, so
  * deeply nested substitutions/blocks must make the analysis ABSTAIN (an
  * `over-depth` note) rather than consume the JS stack. Matches the segmenter's
- * `MAX_CONTAINER_DEPTH`; far beyond any real script. The single-pass
- * index-based rewrite is tracked in #190.
+ * `MAX_CONTAINER_DEPTH`; far beyond any real script. Unlike the segmenter's H7
+ * flattening — now a single left-to-right pass (#190) — this resolver's descent
+ * is a genuine tree walk (block topology + bracket sub-command path
+ * re-constitution), so it stays recursive under this bound.
  */
 const MAX_DEPTH = 256;
 
