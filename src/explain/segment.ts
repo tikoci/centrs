@@ -34,12 +34,24 @@
  *       path) is a CONTAINER: IL flattens its children into siblings, so its
  *       children are segmented in its place.
  *
- * H7 is intentionally depth-bounded. Container flattening is recursive today,
- * and `explain` accepts untrusted editor/MCP input, so deeply nested containers
- * must make analysis abstain instead of consuming the JS stack. When the limit
- * is reached the innermost remainder stays as one segment and `notes` carries
- * `over-depth:<analyzed-byte-offset>`. This keeps the result deterministic and
- * repairable until the later full walker replaces H7 with an index-based scan.
+ * The scan is a single left-to-right pass (Q17, #190): one index-based walker
+ * with an explicit `frames` stack does H7 flattening inline — no per-container
+ * recursion and no re-scan of container bodies. Each open container is a frame
+ * whose inner statements accumulate in a buffer; on its closing `}` the frame
+ * either COMMITS (its buffered statements, behind an optional menu-prefix
+ * segment, replace the container) or is DISCARDED (an empty body, trailing
+ * content after the `}`, or an unclosed brace — the parent statement absorbs the
+ * whole `{…}` verbatim). This reproduces the recursive `containerOpen` +
+ * body re-scan contract the earlier version pinned, at O(n) time / O(depth)
+ * space with no stack-overflow surface.
+ *
+ * H7 stays depth-bounded even so. `explain` accepts untrusted editor/MCP input,
+ * so `MAX_CONTAINER_DEPTH` container frames is a hard cap: a `{` that would open
+ * a deeper container is treated as an opaque group instead, the innermost
+ * remainder stays one segment, and `notes` carries `over-depth:<analyzed-byte-
+ * offset>`. With recursion gone the cap is now a resource guard (bounding the
+ * `frames` array and abstention granularity), not the stack-safety boundary it
+ * once was.
  */
 
 import {
@@ -115,18 +127,17 @@ export function maskComments(original: string): string {
 }
 
 /**
- * Defensive limit for the recursive H7 promotion.
+ * Container-frame depth cap.
  *
- * This is not a RouterOS grammar limit. It is an implementation guard derived
- * from the Q17 stress finding: the lab walker overflowed the JS stack around
- * 32k nested containers. 256 preserves far more nesting than normal scripts
- * use while bounding both stack usage and the current repeated scans.
+ * Not a RouterOS grammar limit — an implementation guard derived from the Q17
+ * stress finding (the lab walker overflowed the JS stack around 32k nested
+ * containers). The single-pass scanner no longer recurses, so this is now a
+ * resource guard rather than a stack-safety boundary: 256 preserves far more
+ * nesting than normal scripts use while bounding the `frames` array. A `{` that
+ * would open frame 257 is kept as an opaque group and the analysis abstains with
+ * an `over-depth:<analyzed-byte-offset>` note.
  */
 const MAX_CONTAINER_DEPTH = 256;
-
-interface SegmentScanState {
-	overDepthOffsets: number[];
-}
 
 /**
  * Segment `original` into top-level statements. Spans are analyzed-byte offsets
@@ -136,21 +147,13 @@ export function segmentStatements(original: string): SegmentResult {
 	const analysis = analyzeCoordinates(original);
 	// `analyzed` is pure ASCII, so a string built from it has index === byte.
 	const ascii = new TextDecoder().decode(analysis.analyzed);
-	const state: SegmentScanState = { overDepthOffsets: [] };
-	const raw = segmentAscii(ascii, 0, 0, state);
+	const raw = scanAscii(ascii);
 	// Recover the human-readable `text` for each segment from the original.
 	const segments = raw.segments.map((s) => ({
 		...s,
 		text: originalSlice(analysis, s.start, s.end),
 	}));
-	return {
-		segments,
-		comments: raw.comments,
-		notes: [
-			...raw.notes,
-			...state.overDepthOffsets.map((offset) => `over-depth:${offset}`),
-		],
-	};
+	return { segments, comments: raw.comments, notes: raw.notes };
 }
 
 /** Original substring for an analyzed-byte span (boundaries are char-aligned). */
@@ -168,137 +171,234 @@ function utf16At(a: CoordinateAnalysis, byte: number): number {
 	return runAtByte(a, byte).utf16Start;
 }
 
+/** A located statement before its `text` is recovered from the original. */
+type RawSegment = Omit<Segment, "text">;
+
 /**
- * Segment a pure-ASCII string; local offsets are byte === string indices.
- * `absoluteBase` locates those offsets in the full analyzed input for guard
- * notes.
+ * One nesting level of the single-pass walker. The top level is `frames[0]`
+ * (`container: false`); each open CONTAINER `{…}` pushes a frame. Statements
+ * accumulate in the active (innermost) frame's `buffer`; a container's buffer is
+ * spliced into its parent on COMMIT and dropped on DISCARD.
  */
-function segmentAscii(
-	text: string,
-	absoluteBase: number,
-	containerDepth: number,
-	state: SegmentScanState,
-): SegmentResult {
-	const raw = segmentRaw(text);
-	// H7 — expand bare `{…}` container statements in place.
-	const segments: Segment[] = [];
-	for (const s of raw.segments) {
-		const open = containerOpen(s.text);
-		if (open >= 0) {
-			if (containerDepth >= MAX_CONTAINER_DEPTH) {
-				state.overDepthOffsets.push(absoluteBase + s.start + open);
-				segments.push(s);
-				continue;
-			}
-			const prefix = s.text.slice(0, open).trim();
-			const body = s.text.slice(open + 1, -1);
-			// Only `inner.segments` is new: the outer `segmentRaw` pass already
-			// records comments (H4, every depth) and notes at every depth, so
-			// re-merging `inner.comments`/`inner.notes` would double-count them.
-			const inner = segmentAscii(
-				body,
-				absoluteBase + s.start + open + 1,
-				containerDepth + 1,
-				state,
-			);
-			const childBase = s.start + open + 1;
-			if (inner.segments.length > 0) {
-				if (prefix.length > 0)
-					segments.push({
-						start: s.start,
-						end: s.start + prefix.length,
-						text: prefix,
-						terminator: "newline",
-						menuOnly: isMenuOnly(prefix),
-					});
-				for (const c of inner.segments)
-					segments.push({
-						...c,
-						start: c.start + childBase,
-						end: c.end + childBase,
-					});
-				continue;
-			}
-		}
-		segments.push(s);
-	}
-	return { ...raw, segments };
+interface Frame {
+	/** in-progress statement start in analyzed-byte space, or -1 (H6). */
+	stmtStart: number;
+	/** H4 — still before the first real token of the current statement? */
+	atLead: boolean;
+	/**
+	 * A mismatched close occurred in this statement/container. A container with
+	 * a known structural defect must DISCARD rather than promote its buffered
+	 * children as confident sibling statements.
+	 */
+	structurallyInvalid: boolean;
+	/** Start/end of the prefix range already classified for H7. */
+	prefixScanStart: number;
+	prefixScanEnd: number;
+	/** Incremental equivalent of trimming and checking the H7 prefix. */
+	prefixSawNonSpace: boolean;
+	prefixValid: boolean;
+	/** statements collected here; the flattened output for a committed container. */
+	buffer: RawSegment[];
+	/** true for a container frame; false for the synthetic top level. */
+	container: boolean;
+	/** analyzed-byte index of the `{` that opened this container. */
+	openIndex: number;
+	/**
+	 * Start of the statement this container belongs to — the menu prefix before
+	 * the `{`. On DISCARD the parent statement resumes from here, so the whole
+	 * `{…}` is absorbed verbatim, matching the old `containerOpen` = -1 path.
+	 */
+	prefixStart: number;
 }
 
 /**
- * Index of the `{` opening a CONTAINER group, or -1. A container is a trailing
- * `{…}` that closes at the very end of the statement, preceded by nothing or by
- * a bare menu path. The `/`-prefix requirement keeps `:local arr {1;2}` out (an
- * array literal is a VALUE, not a scope); `do={…}`/`in=[…]` are excluded by the
- * same test — their prefix carries an `=`.
+ * Single left-to-right walk of a pure-ASCII string (byte === string index),
+ * flattening H7 containers inline. Returns spans only; `segmentStatements`
+ * recovers each `text` from the original afterward.
  */
-function containerOpen(text: string): number {
-	if (!text.endsWith("}")) return -1;
-	const last = text.length - 1;
-	let depth = 0;
-	let groupOpen = -1; // start of the current depth-0 group
-	// Single left-to-right pass (O(n)): the trailing group is the one whose
-	// close is the final char; record where each depth-0 group opened and check
-	// only that group when depth returns to 0 at the end.
-	for (let i = 0; i < text.length; i++) {
-		const c = text[i];
-		if (c === '"') {
-			i++;
-			while (i < text.length && text[i] !== '"') i += text[i] === "\\" ? 2 : 1;
-			continue;
-		}
-		if (c === "{" || c === "[" || c === "(") {
-			if (depth === 0) groupOpen = i;
-			depth++;
-			continue;
-		}
-		if (c === "}" || c === "]" || c === ")") {
-			depth--;
-			if (depth === 0 && i === last && text[groupOpen] === "{") {
-				const prefix = text.slice(0, groupOpen).trim();
-				if (prefix.length === 0) return groupOpen;
-				if (!prefix.startsWith("/")) return -1;
-				if (/[=[($"]/.test(prefix)) return -1;
-				return groupOpen;
-			}
-		}
-	}
-	return -1;
-}
-
-function segmentRaw(text: string): SegmentResult {
-	const segments: Segment[] = [];
+function scanAscii(ascii: string): {
+	segments: RawSegment[];
+	comments: { start: number; end: number }[];
+	notes: string[];
+} {
 	const comments: { start: number; end: number }[] = [];
 	const notes: string[] = [];
+	const overDepth: number[] = [];
+	const delimStack: string[] = []; // H2 — every open bracket, for balance notes
+	const top: Frame = {
+		stmtStart: -1,
+		atLead: true,
+		structurallyInvalid: false,
+		prefixScanStart: -1,
+		prefixScanEnd: -1,
+		prefixSawNonSpace: false,
+		prefixValid: true,
+		buffer: [],
+		container: false,
+		openIndex: -1,
+		prefixStart: -1,
+	};
+	const frames: Frame[] = [top];
+	const cur = (): Frame => frames[frames.length - 1] as Frame;
 
-	let i = 0;
-	let stmtStart = -1;
-	let atStatementLead = true; // H4: still before the first real token?
-	const stack: string[] = []; // H2
+	// At container level when every open bracket is a container `{` — i.e. no
+	// value bracket (`[ ( ` or a non-container `{`) is open. Only then do
+	// separators split and only then can a `{` open a new container. (Container
+	// frames only open at this level, so they always sit at the bottom of
+	// `delimStack`; plain brackets sit above.)
+	const atContainerLevel = (): boolean =>
+		delimStack.length === frames.length - 1;
 
-	const flush = (end: number, terminator: Segment["terminator"]): void => {
-		if (stmtStart < 0) return;
-		const raw = text.slice(stmtStart, end);
-		const lead = raw.length - raw.trimStart().length;
+	const ensureStmt = (f: Frame, i: number): void => {
+		if (f.stmtStart < 0) f.stmtStart = i;
+	};
+
+	const resetPrefixScan = (f: Frame): void => {
+		f.prefixScanStart = -1;
+		f.prefixScanEnd = -1;
+		f.prefixSawNonSpace = false;
+		f.prefixValid = true;
+	};
+
+	const makeSegment = (
+		start: number,
+		end: number,
+		terminator: Segment["terminator"],
+	): RawSegment | null => {
+		const raw = ascii.slice(start, end);
 		const trimmed = raw.trim();
-		stmtStart = -1;
-		if (trimmed.length === 0) return; // H6
-		segments.push({
-			start: end - raw.length + lead,
-			end: end - (raw.length - lead - trimmed.length),
-			text: trimmed,
+		if (trimmed.length === 0) return null; // H6
+		const lead = raw.length - raw.trimStart().length;
+		const s = start + lead;
+		return {
+			start: s,
+			end: s + trimmed.length,
 			terminator,
 			menuOnly: isMenuOnly(trimmed),
+		};
+	};
+
+	const flush = (
+		f: Frame,
+		end: number,
+		terminator: Segment["terminator"],
+	): void => {
+		if (f.stmtStart < 0) return;
+		const s = makeSegment(f.stmtStart, end, terminator);
+		f.stmtStart = -1;
+		resetPrefixScan(f);
+		if (s) f.buffer.push(s);
+		// The synthetic top frame can recover at a real statement boundary. A
+		// container stays poisoned until it closes so a defect in one buffered
+		// child cannot make later children look independently trustworthy.
+		if (!f.container) f.structurallyInvalid = false;
+	};
+
+	// A container prefix is empty or a bare `/`-menu path with no `=[($"` — the
+	// same test the old `containerOpen` applied to the group's prefix.
+	const validPrefix = (f: Frame, start: number, end: number): boolean => {
+		if (f.prefixScanStart !== start || f.prefixScanEnd > end) {
+			resetPrefixScan(f);
+			f.prefixScanStart = start;
+			f.prefixScanEnd = start;
+		}
+		if (!f.prefixValid) {
+			f.prefixScanEnd = end;
+			return false;
+		}
+		for (let i = f.prefixScanEnd; i < end; i++) {
+			const c = ascii[i] as string;
+			if (!f.prefixSawNonSpace) {
+				if (c.trim().length === 0) continue;
+				f.prefixSawNonSpace = true;
+				if (c !== "/") {
+					f.prefixValid = false;
+					break;
+				}
+			}
+			if (/[=[($"]/.test(c)) {
+				f.prefixValid = false;
+				break;
+			}
+		}
+		f.prefixScanEnd = end;
+		return f.prefixValid;
+	};
+
+	const openContainer = (i: number): void => {
+		const parent = cur();
+		// prefixStart = the parent statement's start, or the `{` itself when the
+		// container has no prefix (so a DISCARD absorbs from the `{`).
+		const prefixStart = parent.stmtStart >= 0 ? parent.stmtStart : i;
+		delimStack.push("{");
+		frames.push({
+			stmtStart: -1,
+			atLead: true,
+			structurallyInvalid: parent.structurallyInvalid,
+			prefixScanStart: -1,
+			prefixScanEnd: -1,
+			prefixSawNonSpace: false,
+			prefixValid: true,
+			buffer: [],
+			container: true,
+			openIndex: i,
+			prefixStart,
 		});
 	};
 
-	while (i < text.length) {
-		const c = text[i] as string;
+	// A container's `}` ends the parent statement (so the group is a real trailing
+	// container) when the next non-blank char is a separator, end of input, or the
+	// `}` that closes an enclosing container. Any other trailing content means the
+	// `}` was mid-statement — the old `containerOpen` = -1 case.
+	const trailingEndsStatement = (closeIndex: number): boolean => {
+		let j = closeIndex + 1;
+		while (j < ascii.length && isSpace(ascii[j] as string)) j++;
+		if (j >= ascii.length) return true;
+		const n = ascii[j];
+		if (n === ";" || n === "\n") return true;
+		if (n === "}") return cur().container; // closes the parent container
+		return false;
+	};
 
-		// H4 — comment, only in statement-leading position.
-		if (c === "#" && atStatementLead) {
-			const nl = text.indexOf("\n", i);
-			const end = nl === -1 ? text.length : nl;
+	const closeContainer = (i: number): void => {
+		const frame = frames.pop() as Frame;
+		// Flush the body's last statement. Its terminator is "eof" — the end of
+		// the container body, matching the old per-body scan; the `}` itself is
+		// not a statement terminator token (only `;`/newline/actual EOF are).
+		flush(frame, i, "eof");
+		const parent = cur();
+		if (
+			!frame.structurallyInvalid &&
+			frame.buffer.length > 0 &&
+			trailingEndsStatement(i)
+		) {
+			// COMMIT: menu-prefix segment (if any), then the buffered body, replace
+			// the container in the parent stream; the parent statement is consumed.
+			const prefix = makeSegment(frame.prefixStart, frame.openIndex, "newline");
+			if (prefix) parent.buffer.push(prefix);
+			for (const s of frame.buffer) parent.buffer.push(s);
+			parent.stmtStart = -1;
+			resetPrefixScan(parent);
+		} else {
+			// DISCARD: empty body or trailing content — the parent statement absorbs
+			// the whole `{…}` verbatim by resuming from the container's prefix.
+			parent.stmtStart = frame.prefixStart;
+			parent.structurallyInvalid ||= frame.structurallyInvalid;
+		}
+		parent.atLead = false;
+	};
+
+	let i = 0;
+	while (i < ascii.length) {
+		const c = ascii[i] as string;
+		const f = cur();
+
+		// H4 — comment, only in statement-leading position; recorded at every
+		// depth in this one pass, so a `#` inside a block cannot leak a delimiter
+		// and comments are never double-counted.
+		if (c === "#" && f.atLead) {
+			const nl = ascii.indexOf("\n", i);
+			const end = nl === -1 ? ascii.length : nl;
 			comments.push({ start: i, end });
 			i = end;
 			continue;
@@ -306,16 +406,16 @@ function segmentRaw(text: string): SegmentResult {
 
 		// H3 — string.
 		if (c === '"') {
-			if (stmtStart < 0) stmtStart = i;
-			atStatementLead = false;
+			ensureStmt(f, i);
+			f.atLead = false;
 			i++;
 			let closed = false;
-			while (i < text.length) {
-				if (text[i] === "\\") {
+			while (i < ascii.length) {
+				if (ascii[i] === "\\") {
 					i += 2;
 					continue;
 				}
-				if (text[i] === '"') {
+				if (ascii[i] === '"') {
 					i++;
 					closed = true;
 					break;
@@ -329,37 +429,71 @@ function segmentRaw(text: string): SegmentResult {
 		// H5 — line continuation.
 		if (
 			c === "\\" &&
-			(text[i + 1] === "\n" || (text[i + 1] === "\r" && text[i + 2] === "\n"))
+			(ascii[i + 1] === "\n" ||
+				(ascii[i + 1] === "\r" && ascii[i + 2] === "\n"))
 		) {
-			if (stmtStart < 0) stmtStart = i;
-			i += text[i + 1] === "\r" ? 3 : 2;
+			ensureStmt(f, i);
+			i += ascii[i + 1] === "\r" ? 3 : 2;
 			continue;
 		}
 
-		// H2 — nesting.
+		// H2/H7 — opens. A `{` at container level with a valid prefix opens a
+		// container frame (or, past the cap, abstains); everything else is a plain
+		// group that only tracks balance and suppresses separators.
 		if (c === "{" || c === "[" || c === "(") {
-			if (stmtStart < 0) stmtStart = i;
-			atStatementLead = c === "{";
-			stack.push(c);
+			if (
+				c === "{" &&
+				atContainerLevel() &&
+				validPrefix(f, f.stmtStart >= 0 ? f.stmtStart : i, i)
+			) {
+				if (frames.length - 1 < MAX_CONTAINER_DEPTH) {
+					openContainer(i);
+				} else {
+					overDepth.push(i);
+					ensureStmt(f, i);
+					delimStack.push("{");
+					f.atLead = true;
+				}
+			} else {
+				ensureStmt(f, i);
+				delimStack.push(c);
+				f.atLead = c === "{";
+			}
 			i++;
 			continue;
 		}
+
+		// H2 — closes.
 		if (c === "}" || c === "]" || c === ")") {
 			const want = c === "}" ? "{" : c === "]" ? "[" : "(";
-			if (stack.at(-1) === want) stack.pop();
-			else notes.push(`unbalanced-close:${c}`);
-			if (stmtStart < 0) stmtStart = i;
-			atStatementLead = false;
+			if (delimStack[delimStack.length - 1] === want) {
+				const isContainerClose =
+					c === "}" &&
+					frames.length > 1 &&
+					delimStack.length === frames.length - 1;
+				delimStack.pop();
+				if (isContainerClose) {
+					closeContainer(i);
+				} else {
+					ensureStmt(f, i);
+					f.atLead = false;
+				}
+			} else {
+				notes.push(`unbalanced-close:${c}`);
+				ensureStmt(f, i);
+				f.atLead = false;
+				f.structurallyInvalid = true;
+			}
 			i++;
 			continue;
 		}
 
-		// H1 — separators. They only END a statement at depth 0, but restore
-		// statement-leading position at every depth so H4 can see a comment
-		// inside a block body.
+		// H1 — separators. They END a statement only at container level, but
+		// restore statement-leading position at every depth so H4 can see a
+		// comment inside a block body.
 		if (c === ";" || c === "\n") {
-			if (stack.length === 0) flush(i, c === ";" ? ";" : "newline");
-			atStatementLead = true;
+			if (atContainerLevel()) flush(f, i, c === ";" ? ";" : "newline");
+			f.atLead = true;
 			i++;
 			continue;
 		}
@@ -369,13 +503,28 @@ function segmentRaw(text: string): SegmentResult {
 			continue;
 		}
 
-		if (stmtStart < 0) stmtStart = i;
-		atStatementLead = false;
+		ensureStmt(f, i);
+		f.atLead = false;
 		i++;
 	}
-	flush(text.length, "eof");
-	if (stack.length > 0) notes.push(`unclosed:${stack.join("")}`);
-	return { segments, comments, notes };
+
+	// End of input: any still-open container never closed, so it never flattens —
+	// unwind each as a DISCARD (outermost open container's prefix wins), then flush
+	// the surviving top-level statement.
+	while (frames.length > 1) {
+		const frame = frames.pop() as Frame;
+		const parent = cur();
+		parent.stmtStart = frame.prefixStart;
+		parent.atLead = false;
+	}
+	flush(top, ascii.length, "eof");
+	if (delimStack.length > 0) notes.push(`unclosed:${delimStack.join("")}`);
+
+	return {
+		segments: top.buffer,
+		comments,
+		notes: [...notes, ...overDepth.map((offset) => `over-depth:${offset}`)],
+	};
 }
 
 /**

@@ -189,6 +189,29 @@ test("over-depth notes use analyzed-byte offsets with non-ASCII prefixes", () =>
 	]);
 });
 
+test("a structural defect prevents container children from being promoted", () => {
+	const cases = ["/ip { add x=1; ) ; add y=2 }", "/ip ) { add x=1 }"];
+
+	for (const input of cases) {
+		const result = segmentStatements(input);
+		expect(result.segments.map((segment) => segment.text)).toEqual([input]);
+		expect(result.notes).toContain("unbalanced-close:)");
+	}
+});
+
+test("repeated H7 prefix checks stay within a linear-scale budget", () => {
+	const input = `/ip ${"{}".repeat(250_000)}`;
+	const started = performance.now();
+	const result = segmentStatements(input);
+	const elapsedMs = performance.now() - started;
+
+	expect(result.segments.map((segment) => segment.text)).toEqual([input]);
+	// The incremental scan is normally well below 200 ms. This generous budget
+	// catches the former repeated whole-prefix scan (about 5 seconds locally)
+	// without turning ordinary CI scheduling noise into a failure.
+	expect(elapsedMs).toBeLessThan(1_500);
+});
+
 test("adversarial shape families stay deterministic with ordered, bounded spans", () => {
 	const generators = [
 		(n: number) => "a".repeat(n),

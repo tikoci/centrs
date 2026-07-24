@@ -585,6 +585,91 @@
 				"comments": [],
 				"notes": ["unbalanced-close:}"]
 			}
+		},
+		{
+			"name": "container-trailing-content-is-not-flattened",
+			"input": "/ip {\nadd x=1\n} y",
+			"expect": ["/ip {\nadd x=1\n} y"],
+			"verified": "single-pass walker (#190); differential-equivalent to the recursive #189 implementation",
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 17,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "empty-container-body-is-not-flattened",
+			"input": "/ip {}",
+			"expect": ["/ip {}"],
+			"verified": "single-pass walker (#190); differential-equivalent to the recursive #189 implementation",
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 6,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "nested-container-flattens-each-level",
+			"input": "/ip {\n/firewall {\nfilter print\n}\n}",
+			"expect": ["/ip", "/firewall", "filter print"],
+			"verified": "single-pass walker (#190); differential-equivalent to the recursive #189 implementation",
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 3,
+						"terminator": "newline",
+						"menuOnly": true
+					},
+					{
+						"start": 6,
+						"end": 15,
+						"terminator": "newline",
+						"menuOnly": true
+					},
+					{
+						"start": 18,
+						"end": 30,
+						"terminator": "newline",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "unclosed-container-is-not-flattened",
+			"input": "/ip {\nadd x=1",
+			"expect": ["/ip {\nadd x=1"],
+			"verified": "single-pass walker (#190); differential-equivalent to the recursive #189 implementation",
+			"notes": ["unclosed:{"],
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 13,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": ["unclosed:{"]
+			}
 		}
 	]
 }
