@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { resolveStatements } from "../../src/explain/pathresolve.ts";
 import {
 	describeStatement,
 	resolveVerb,
-	resolveVerbs,
 	runTokens,
 	SUBMENU_DIRECTIVES,
 	splitRun,
@@ -19,14 +17,14 @@ import * as centrs from "../../src/index.ts";
  * SUT) and its constructed corners `.scratch/explain-lab-q6-corners.ts` (each
  * cross-checked against the device command tree as oracle). The production
  * module is `src/explain/verbsplit.ts`; only the ratified `proposed` boundary
- * arm is promoted — the six A/B arms that priced it stayed in the lab. It sits
- * on the Q4 resolver (`resolveStatements`, #191) for persistent menu context.
+ * arm is promoted — the six A/B arms that priced it stayed in the lab.
  *
- * The `cases` corners assert one statement's split under `/` context; the
- * `contextual` corners assert the per-statement splits across a document, so a
- * relative command's inherited context is exercised. The flagship result is the
- * ratified **`ambiguous`** verdict: a statement that is nothing but a bare menu
- * path (`/ip/address` vs `/system/reboot`) refuses rather than guessing (V4).
+ * These exercise the SINGLE-STATEMENT boundary (`resolveVerb(text, context)`) —
+ * the Q6 question. Cases carry an explicit menu `context`; the document-scale
+ * walker and its fail-closed context taint are the Q14 slice (#192), not here.
+ * The flagship result is the ratified **`ambiguous`** verdict: a statement that
+ * is nothing but a bare menu path (`/ip/address` vs `/system/reboot`) refuses
+ * rather than guessing (V4).
  */
 
 interface Case {
@@ -41,22 +39,10 @@ interface Case {
 	rule: string;
 }
 
-interface ContextualCase {
-	name: string;
-	input: string;
-	expect: {
-		resolution: "resolved" | "ambiguous" | "unknown";
-		path?: string;
-		verb?: string;
-		verbAt?: number;
-	}[];
-	rule: string;
-}
-
 const fixtures: {
 	cases: Case[];
 	branches: Case[];
-	contextual: ContextualCase[];
+	contextual: Case[];
 } = JSON.parse(
 	readFileSync(
 		new URL("../fixtures/explain/verbsplit.json", import.meta.url),
@@ -92,21 +78,8 @@ describe("Q6 ratified-branch anchors (resolveVerb — offline behavior)", () => 
 	for (const c of fixtures.branches) test(c.name, () => assertCorner(c));
 });
 
-describe("Q6 persistent context across statements (resolveVerbs)", () => {
-	for (const c of fixtures.contextual) {
-		test(c.name, () => {
-			const { splits } = resolveVerbs(c.input);
-			expect(splits.map((s) => s.resolution)).toEqual(
-				c.expect.map((e) => e.resolution),
-			);
-			for (const [i, e] of c.expect.entries()) {
-				if (e.resolution !== "resolved") continue;
-				expect(splits[i]?.path).toBe(e.path ?? null);
-				expect(splits[i]?.verb).toBe(e.verb ?? null);
-				expect(splits[i]?.verbAt).toBe(e.verbAt ?? null);
-			}
-		});
-	}
+describe("Q6 relative statements resolve against a supplied menu context", () => {
+	for (const c of fixtures.contextual) test(c.name, () => assertCorner(c));
 });
 
 describe("the ratified vocabulary is frozen (decision 3 — no schema snapshot)", () => {
@@ -226,17 +199,16 @@ describe("robustness invariants", () => {
 		expect(got.candidates).toEqual(["/ip", "/ip/address"]);
 	});
 
-	test("resolveVerbs agrees with resolveVerb on each statement's context", () => {
-		// The document walk must not diverge from the single-statement entry point.
-		const doc = "/ip firewall filter\nadd chain=input\nprint";
-		const { statements } = resolveStatements(doc);
-		const { splits } = resolveVerbs(doc);
-		expect(splits.length).toBe(statements.length);
-		for (const [i, s] of statements.entries()) {
-			const direct = s.unresolved
-				? "unknown"
-				: resolveVerb(s.text, s.context).resolution;
-			expect(splits[i]?.resolution).toBe(direct);
+	test("the same relative command resolves identically under any certain context", () => {
+		// `add chain=input` is a verb-headed relative command; wherever context is
+		// certain, it resolves to `<context>/add`, never a fabricated menu.
+		for (const context of ["/ip/firewall/filter", "/interface/bridge", "/"]) {
+			expect(resolveVerb("add chain=input", context)).toMatchObject({
+				resolution: "resolved",
+				kind: "command",
+				path: context,
+				verb: "add",
+			});
 		}
 	});
 
@@ -252,15 +224,11 @@ describe("robustness invariants", () => {
 	});
 });
 
-test("Q14 fail-closed — a resolver-refused statement stays unknown", () => {
-	// `:if [) do={ /ip route add }` is malformed; resolveStatements refuses it,
-	// and the verb layer must not manufacture a confident command from it.
-	const { splits } = resolveVerbs(":if [) do={ /ip route add }");
-	for (const s of splits) {
-		expect(s.resolution).not.toBe("resolved");
-		expect(s.verb).not.toBe("add");
-	}
-});
+// NOTE: malformed-statement detection (unbalanced delimiters etc.) lives in the
+// Q1 segmenter / Q3-Q4 resolver, not in this single-statement boundary — a bare
+// `:if [) …` is a valid directive HEAD as far as the boundary is concerned. The
+// document-scale fail-closed floor (refuse the malformed statement, and taint
+// following context) is the Q14 walker in #192.
 
 test("Q14 fail-closed — bare-word garbage tails never become contextual commands", () => {
 	for (const [input, context] of [
@@ -299,11 +267,10 @@ test("never throws on adversarial input", () => {
 	];
 	for (const input of nasty) {
 		expect(() => resolveVerb(input, "/")).not.toThrow();
-		expect(() => resolveVerbs(input)).not.toThrow();
+		expect(() => resolveVerb(input, "/ip/route")).not.toThrow();
 	}
 });
 
 test("verb/menu API is re-exported from the library barrel", () => {
 	expect(centrs.resolveVerb).toBe(resolveVerb);
-	expect(centrs.resolveVerbs).toBe(resolveVerbs);
 });

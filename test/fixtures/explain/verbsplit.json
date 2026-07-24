@@ -227,47 +227,25 @@
 	],
 	"contextual": [
 		{
-			"name": "relative command inherits the persistent nav context",
-			"input": "/ip route\nadd gateway=1.1.1.1",
-			"expect": [
-				{ "resolution": "ambiguous" },
-				{
-					"resolution": "resolved",
-					"path": "/ip/route",
-					"verb": "add",
-					"verbAt": 0
-				}
-			],
-			"rule": "R4 context carries into the bare `add`; V4 makes the nav line itself ambiguous"
+			"_note": "Relative statements resolved against an explicit menu `context` (as a document walker would supply after a nav). The Q6 question is this single-statement split; the walker + its fail-closed context taint are the Q14 slice (#192).",
+			"name": "a bare verb-headed command inherits the supplied nav context",
+			"input": "add gateway=1.1.1.1",
+			"context": "/ip/route",
+			"resolution": "resolved",
+			"path": "/ip/route",
+			"verb": "add",
+			"verbAt": 0,
+			"rule": "vocabulary hit `add`"
 		},
 		{
-			"name": "relative print after a slash-nav",
-			"input": "/interface/bridge\nprint",
-			"expect": [
-				{ "resolution": "ambiguous" },
-				{
-					"resolution": "resolved",
-					"path": "/interface/bridge",
-					"verb": "print",
-					"verbAt": 0
-				}
-			],
-			"rule": "vocabulary hit `print` in inherited context"
-		},
-		{
-			"name": "one document, all three verdicts — resolved, ambiguous, unknown",
-			"input": "/ip route add gateway=1.1.1.1\n/ip/address\n$dynamic",
-			"expect": [
-				{
-					"resolution": "resolved",
-					"path": "/ip/route",
-					"verb": "add",
-					"verbAt": 2
-				},
-				{ "resolution": "ambiguous" },
-				{ "resolution": "unknown" }
-			],
-			"rule": "the fail-closed floor and the ambiguous verdict coexist with resolved commands in a single walk"
+			"name": "a relative `print` resolves in the supplied context",
+			"input": "print",
+			"context": "/interface/bridge",
+			"resolution": "resolved",
+			"path": "/interface/bridge",
+			"verb": "print",
+			"verbAt": 0,
+			"rule": "vocabulary hit `print`"
 		}
 	]
 }
