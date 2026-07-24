@@ -523,6 +523,10 @@ versionless
 #   resolution feature-class field is `klass`. tostr / tostrvalue: the RouterOS
 #   `:tostr` directive and its IL-lowered form `/tostrvalue`. eworm: a corpus
 #   script author (eworm/*.rsc) cited as grounding for scope-name findings.
+#   verbsplit: the Q6 verb/menu-boundary lab probe name, carried into the
+#   src/explain module + fixture names. myvar: the RouterOS example variable in
+#   the Q6 `:global myvar` collision corner (a positional operand indistinguishable
+#   from a sub-menu offline).
 SUT
 CJK
 pathresolve
@@ -531,3 +535,5 @@ klass
 tostr
 tostrvalue
 eworm
+verbsplit
+myvar
