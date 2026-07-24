@@ -1,0 +1,531 @@
+/**
+ * Offline write-shape inference for `explain` — `structure.containsWrite`.
+ *
+ * Ratified by the phase-0 lab, question Q16 (#185) and promoted from the
+ * throwaway probe `.scratch/explain-lab-q16-write.ts`. Q16 asked what shape the
+ * field should have and answered that the spec's sketched **boolean is unsafe**:
+ * a fail-closed `true | false | unknown` reaches 100% precision on what it
+ * decides (226/226 holdout, 469/469 dev) with zero false negatives, abstaining
+ * on ~35%, while a two-valued field would have to call `/disk format-drive` a
+ * non-write. The tristate is the ratified amendment; this module implements it.
+ *
+ * **This is not the execute gate.** `canonicalizeExecuteCommand`'s `mode` /
+ * `writeShaped` verdict is reproduced verbatim elsewhere and is unchanged by
+ * anything here (constitution: canonicalizer ownership). `containsWrite` is a
+ * distinct explain-only inference with basis `heuristic`, so an agent can never
+ * mistake it for a guard `execute` actually applies.
+ *
+ * **Write-ness is not device-published.** No schema artifact carries mutation
+ * semantics: `inspect.json` tags nodes `path|dir|cmd|arg` and nothing more, and
+ * restraml's `openapi.json` method assignment is rule-derived (2,844 of 3,649
+ * endpoints are a `post` catch-all), so reading it back would be circular. The
+ * table below is therefore CURATED, which makes its edges the whole question —
+ * hence `unknown` as a first-class outcome rather than a synonym for "no". The
+ * gap is standing, not staleness: a 17-name table covers 93.1% of cmd nodes on
+ * 7.24beta1 and 93.8% on 7.9.2 (flat to 0.7pp across all of 7.x, ~0.07% churn
+ * per minor version), yet 56 of the 225 uncovered verb names on 7.24beta1 are
+ * write-shaped (`reboot`, `format`, `delete`, `reset-configuration`, `sign`,
+ * `flush`, …).
+ *
+ * **Two vocabularies, measured not guessed.** Menu verbs are the CRUD verbs —
+ * every entry appears under 45+ menus in all 52 trees 7.9→7.24beta1, with none
+ * added or removed. Root cmds are RouterOS scripting directives, a CLOSED list
+ * enumerated from the tree (41 names on 7.9.2, 55 on 7.24beta1, +15/−1 over the
+ * whole 7.x series). The root list is load-bearing: `set`, `find`, `export`,
+ * `import`, `password`, `undo` and `redo` are ALL root cmds as well as menu
+ * verbs and do not mean the same thing in both places — `:set x 5` assigns a
+ * script variable, `/ip/route set …` writes the device. Write-ness genuinely
+ * depends on the menu, but only across that one boundary, which is exactly the
+ * boundary Q6 measured at 99.9% precision. Q16 composes with Q6 rather than
+ * needing a schema of its own (decision 3 stays closed).
+ *
+ * **Fail-closed is enforced where input is DISCARDED, not where it is
+ * classified** (Q16 finding 2, the part worth carrying past this module). The
+ * lab priced three navigation arms; only the ratified `failclosed` one is
+ * promoted. The two naive arms are not actually fail-closed whatever the rollup
+ * rule says: `/interface ethernet reset-counters` is bare-word-shaped, so Q4's
+ * nav rule swallows the statement, AND carries a verb outside Q6's frozen
+ * table, so the verb rule cannot rescue it — and a swallowed statement produces
+ * no occurrence, so nothing is left to abstain about and the document
+ * confidently reports "no write". The two abstention mechanisms cancelled
+ * instead of composing. A classifier can only be conservative about what it is
+ * given, so every statement that cannot be CONFIRMED as navigation emits an
+ * occurrence here. Cost on holdout: +0.8pp abstention, and the overconfident
+ * bin halves.
+ */
+
+import {
+	type DocumentAnalysis,
+	resolveDocument,
+	resolveStatements,
+	type StatementAnalysis,
+	type StatementResolution,
+} from "./pathresolve.ts";
+import { describeStatement, type RunToken, splitRun } from "./verbsplit.ts";
+
+/**
+ * Menu verbs that mutate persistent device state. Frequency-justified against
+ * the command trees, and frozen against tuning per the Q6 vocabulary discipline
+ * — this is a curated list, not a schema, and its honesty depends on it not
+ * being fitted to scoring output.
+ */
+export const WRITE_VERBS: ReadonlySet<string> = new Set([
+	"add",
+	"remove",
+	"set",
+	"unset",
+	"enable",
+	"disable",
+	"comment",
+	"move",
+	"edit",
+	"reset",
+	// Counter resets mutate device state (statistics), not configuration. They
+	// are included because this field is a SAFETY signal, and the same frequency
+	// justification applies: `reset-counters` under 29 menus and
+	// `reset-counters-all` under 18, in every tree 7.9→7.24beta1.
+	"reset-counters",
+	"reset-counters-all",
+]);
+
+/** Menu verbs that read only. `export` emits config, it does not apply it. */
+export const READ_VERBS: ReadonlySet<string> = new Set([
+	"print",
+	"get",
+	"find",
+	"export",
+	"monitor",
+]);
+
+/**
+ * Root cmds (scripting directives) that DO mutate device state. Four names, and
+ * the argument for each is that its documented effect is a configuration
+ * change, not that its name merely looked mutating:
+ *   `password`  changes the logged-in user's password
+ *   `undo`      reverts the previous configuration change
+ *   `redo`      re-applies it
+ *   `import`    applies an .rsc file to the configuration
+ * Every other root cmd is control flow, a pure function, or output.
+ */
+export const ROOT_WRITE: ReadonlySet<string> = new Set([
+	"password",
+	"undo",
+	"redo",
+	"import",
+]);
+
+/**
+ * Root cmds that run a command built at runtime. Offline cannot see what they
+ * will do, so they force `unknown` — never `false`.
+ */
+export const ROOT_DYNAMIC: ReadonlySet<string> = new Set(["execute", "parse"]);
+
+/**
+ * The closed root-cmd vocabulary, union across the 7.9.2 / 7.20.8 / 7.23rc1 /
+ * 7.24beta1 trees. Membership is what makes a root-level command classifiable
+ * at all: a root cmd NOT in this set is a directive this table has not seen, so
+ * it abstains rather than being read as harmless control flow.
+ */
+export const ROOT_CMDS: ReadonlySet<string> = new Set([
+	"beep",
+	"break",
+	"continue",
+	"convert",
+	"delay",
+	"deserialize",
+	"do",
+	"error",
+	"execute",
+	"exit",
+	"export",
+	"find",
+	"for",
+	"foreach",
+	"global",
+	"grep",
+	"if",
+	"import",
+	"jobname",
+	"len",
+	"local",
+	"lock",
+	"nothing",
+	"onerror",
+	"parse",
+	"password",
+	"pick",
+	"ping",
+	"put",
+	"quit",
+	"range",
+	"recursive-print",
+	"redo",
+	"resolve",
+	"retry",
+	"return",
+	"rndnum",
+	"rndstr",
+	"serialize",
+	"set",
+	"time",
+	"timestamp",
+	"toarray",
+	"tobool",
+	"tocrlf",
+	"toid",
+	"toip",
+	"toip6",
+	"tolf",
+	"tonsec",
+	"tonum",
+	"tostr",
+	"totime",
+	"typeof",
+	"undo",
+	"while",
+]);
+
+/**
+ * Forms whose command is not statically knowable, so no verb can be classified
+ * and the verdict must degrade to `unknown` rather than to `false`. Checked
+ * BEFORE the navigation gate: `/system script run myscript` is entirely bare
+ * words, so the nav rule would otherwise drop the one form that is
+ * by definition unknowable — the worst possible place to be confident.
+ */
+const DYNAMIC_FORMS: readonly RegExp[] = [
+	/\/system\/script\/run(\s|$)/, //  stored script, contents unknown offline
+	/\/system\s+script\s+run(\s|$)/,
+	/^\s*\$[A-Za-z_]/, //              statement head is a variable/function call
+	/\[\s*\$/, //                      bracket head is a variable/function call
+];
+
+function isDynamicForm(text: string): boolean {
+	return DYNAMIC_FORMS.some((re) => re.test(text));
+}
+
+/**
+ * The tristate. Rendered to the `structure.containsWrite` JSON field as
+ * `true | false | "unknown"`; kept as a string union here so `unknown` can
+ * never be reached by boolean coercion.
+ */
+export type WriteVerdict = "true" | "false" | "unknown";
+
+/** How one classified command occurrence bears on the rollup. */
+export type OccurrenceClass =
+	/** A curated write verb, in the vocabulary that matches its position. */
+	| "write"
+	/** A curated read verb. */
+	| "read"
+	/** A decided verb outside both curated tables — abstains. */
+	| "unknown-verb"
+	/**
+	 * A path-shaped statement whose verb/menu boundary Q6 refused — abstains.
+	 * `/system/reboot` and `/ip/address` are the same text, so a bare path may be
+	 * a no-argument WRITE. See the note on `classifyStatement`.
+	 */
+	| "ambiguous"
+	/** The command is built at runtime; offline cannot read it — abstains. */
+	| "dynamic"
+	/** A statement the path resolver refused (Q14 structural defect) — abstains. */
+	| "defect"
+	/**
+	 * The statement has no leading path run at all (it opens with `[`, `(` or a
+	 * string), so it names no command. Carries no write signal either way — an
+	 * inner `[…]` command is reached by the bracket walk instead.
+	 */
+	| "no-verb";
+
+/** One command offline can see, at any block or bracket depth. */
+export interface Occurrence {
+	kind: "statement" | "bracket";
+	/** Trimmed source text of the statement or bracket inner. */
+	text: string;
+	/** Menu context in force, `/` at document root. */
+	context: string;
+	/** The verb the Q6 boundary decided, or null. */
+	verb: string | null;
+	/** Root-level (`:foo` or a root cmd) rather than a menu command. */
+	directive: boolean;
+	klass: OccurrenceClass;
+}
+
+/** Classify one decided verb in its position. The (menu, verb) dependency. */
+export function classifyVerb(
+	verb: string | null,
+	directive: boolean,
+): OccurrenceClass {
+	if (verb === null) return "no-verb";
+	const v = verb.toLowerCase();
+	if (directive) {
+		if (ROOT_DYNAMIC.has(v)) return "dynamic";
+		if (ROOT_WRITE.has(v)) return "write";
+		if (ROOT_CMDS.has(v)) return "read";
+		return "unknown-verb";
+	}
+	if (WRITE_VERBS.has(v)) return "write";
+	if (READ_VERBS.has(v)) return "read";
+	return "unknown-verb";
+}
+
+/** The verb Q6's ratified boundary decides for a run, or null if it refuses. */
+function verbOfRun(
+	run: RunToken[],
+	directive: boolean,
+	whole: boolean,
+): string | null {
+	const split = splitRun(run, { directive, whole });
+	if (split.ambiguous || split.verbAt === null) return null;
+	return (run[split.verbAt] as RunToken | undefined)?.name ?? null;
+}
+
+/**
+ * Can this statement be CONFIRMED as pure menu navigation? Only when every token
+ * is a known menu word — which offline cannot check without a schema — so the
+ * practical test is the one thing that is decidable: a run that is not the whole
+ * statement was never navigation, and a hyphenated word ANYWHERE after the first
+ * token is verb-shaped (`reset-counters`, `format-drive`, `firmware-upgrade`).
+ * Testing only the final token would miss `/disk format-drive disk1`, where the
+ * verb is followed by a positional operand — and guessing wrong there costs a
+ * missed write.
+ */
+function isConfirmedNav(text: string): boolean {
+	const described = describeStatement(text);
+	// Only reached for a statement the Q4 resolver already read as navigation, so
+	// an empty run means the bare `/` or `..` forms — the two Q4's CHR round
+	// confirmed as valid RouterOS navigation. They name no command at all.
+	if (described.run.length === 0) return true;
+	// Argument-looking text after the run means this was never navigation.
+	if (!described.whole) return false;
+	return !described.run.slice(1).some((t) => t.name.includes("-"));
+}
+
+/** Does the run carry a token Q6's boundary would call the verb? */
+function isCommandShaped(text: string): boolean {
+	const described = describeStatement(text);
+	if (described.run.length === 0) return false;
+	const split = splitRun(described.run, {
+		directive: described.directive,
+		whole: described.whole,
+	});
+	return !split.ambiguous && split.verbAt !== null;
+}
+
+/**
+ * Classify one statement the Q4 walker read as navigation but Q6 could not
+ * confirm as a command. Reached only when every other rule has already
+ * abstained, so it falls back to Q6's `last`-token reading purely to obtain a
+ * verb CANDIDATE — and is never allowed to produce `false`: an unrecognized
+ * candidate stays `unknown-verb`, and even a recognized READ verb is downgraded
+ * to `unknown-verb`, because the reading that produced it is not trusted enough
+ * to clear the document.
+ */
+function classifyUnconfirmedNav(
+	statement: StatementResolution,
+	text: string,
+): Occurrence {
+	const run = describeStatement(text).run;
+	const candidate = (run[run.length - 1] as RunToken | undefined)?.name ?? null;
+	const klass =
+		candidate === null ? "unknown-verb" : classifyVerb(candidate, false);
+	return {
+		kind: "statement",
+		text,
+		context: statement.context,
+		verb: candidate,
+		directive: false,
+		klass: klass === "read" ? "unknown-verb" : klass,
+	};
+}
+
+/**
+ * Classify a statement that reached neither the dynamic, defect, nor
+ * navigation branch: read Q6's boundary and look the verb up in the vocabulary
+ * that matches its position.
+ *
+ * The `ambiguous` arm is where this composition departs from the lab SUT, and
+ * it is a fail-closed correction rather than a port. The lab's path resolver
+ * called any all-bare-word statement navigation, so a bare-word head reached
+ * the unconfirmed-nav fallback and was classified from its last token. The
+ * production resolver does not: `menuNavPath` requires a leading `/`, because
+ * Q4's CHR round confirmed bare-word navigation is not valid RouterOS. That
+ * correction means a statement like `reset-counters` (relative to an
+ * `/interface` context) now arrives here with V4 ambiguity and no decided verb
+ * — and clearing it would be a false negative on a curated write verb, the one
+ * thing Q16's hard threshold forbids. So an undecided boundary over a non-empty
+ * run abstains, which is Q14's rule (b) — a bare-word-headed statement degrades
+ * to `unknown` — enforced at the rollup.
+ */
+function classifyStatement(
+	statement: StatementResolution,
+	text: string,
+): Occurrence {
+	const described = describeStatement(text);
+	const verb = verbOfRun(described.run, described.directive, described.whole);
+	// A single-token command at document root is a root cmd written without its
+	// `:` sigil (`/import file-name=…`), so it reads against the root vocabulary
+	// rather than the menu one.
+	const directive =
+		described.directive ||
+		(verb !== null && statement.context === "/" && described.run.length === 1);
+	const klass =
+		verb === null && described.run.length > 0
+			? "ambiguous"
+			: classifyVerb(verb, directive);
+	return {
+		kind: "statement",
+		text,
+		context: statement.context,
+		verb,
+		directive,
+		klass,
+	};
+}
+
+/**
+ * Every command occurrence offline can see: statements at every block depth
+ * (Q4's stateful walker) plus bracket-inner commands at every nesting depth
+ * (Q3's resolver).
+ *
+ * Deliberately a SET, not a sequence. Both lab harness bugs corrected during
+ * phase 0 were alignment bugs — a positional correspondence that silently lined
+ * the wrong pair up. `containsWrite` is a rollup, so it is order-independent by
+ * construction and cannot repeat that failure.
+ */
+export function occurrences(text: string): Occurrence[] {
+	return collect(resolveStatements(text), resolveDocument(text));
+}
+
+function collect(
+	statements: StatementAnalysis,
+	brackets: DocumentAnalysis,
+): Occurrence[] {
+	const out: Occurrence[] = [];
+
+	for (const statement of statements.statements) {
+		const t = statement.text.trim();
+		if (t.length === 0) continue;
+		if (isDynamicForm(t)) {
+			out.push({
+				kind: "statement",
+				text: t,
+				context: statement.context,
+				verb: null,
+				directive: false,
+				klass: "dynamic",
+			});
+			continue;
+		}
+		// Q14 floor — the path resolver refused this statement (unbalanced
+		// delimiter or unterminated string) and did not descend into it, so a
+		// write may be hiding in a body that was never walked.
+		if (statement.unresolved !== undefined) {
+			out.push({
+				kind: "statement",
+				text: t,
+				context: statement.context,
+				verb: null,
+				directive: false,
+				klass: "defect",
+			});
+			continue;
+		}
+		if (statement.isNav && !isCommandShaped(t)) {
+			if (isConfirmedNav(t)) continue;
+			out.push(classifyUnconfirmedNav(statement, t));
+			continue;
+		}
+		out.push(classifyStatement(statement, t));
+	}
+
+	for (const bracket of brackets.resolutions) {
+		const inner = bracket.inner.trim();
+		if (inner.length === 0) continue;
+		if (isDynamicForm(inner)) {
+			out.push({
+				kind: "bracket",
+				text: inner,
+				context: bracket.context,
+				verb: null,
+				directive: false,
+				klass: "dynamic",
+			});
+			continue;
+		}
+		const described = describeStatement(inner);
+		const verb = verbOfRun(described.run, described.directive, described.whole);
+		out.push({
+			kind: "bracket",
+			text: inner,
+			context: bracket.context,
+			verb,
+			directive: described.directive,
+			klass: classifyVerb(verb, described.directive),
+		});
+	}
+
+	return out;
+}
+
+/** Q16 result: the tristate plus everything the caller needs to see why. */
+export interface WriteAnalysis {
+	verdict: WriteVerdict;
+	/** How many occurrences were proven writes. Agreed with IL 100% on both splits. */
+	writes: number;
+	/** The occurrences that forced `unknown`; empty unless the verdict is `unknown`. */
+	blockers: Occurrence[];
+	occurrences: Occurrence[];
+	/** Structural notes from the segmenter / bounded traversal; any note abstains. */
+	notes: string[];
+}
+
+const BLOCKING: ReadonlySet<OccurrenceClass> = new Set([
+	"unknown-verb",
+	"ambiguous",
+	"dynamic",
+	"defect",
+]);
+
+/**
+ * Fail-closed rollup, per the four rules ratified with the tristate:
+ *
+ * 1. A proven write wins outright — an `unknown` elsewhere cannot make a
+ *    document that definitely writes stop writing.
+ * 2. With no proven write, ANY unclassifiable occurrence yields `unknown`,
+ *    never `false`. That is the spec's zero-false-negative requirement
+ *    expressed as a rule rather than a hope.
+ * 3. Statements the parser cannot confirm as navigation emit an occurrence
+ *    rather than being dropped (enforced in `occurrences`).
+ * 4. `unknown` is reported with its blockers, so the caller can see why.
+ *
+ * A document-level structural note (unterminated string, over-depth nesting)
+ * means part of the input was never walked, so it abstains under rule 2 for the
+ * same reason a `defect` occurrence does.
+ */
+export function containsWrite(text: string): WriteAnalysis {
+	// One resolution pass each for the statement walk (Q4) and the bracket walk
+	// (Q3); both are re-entrant over the same segmentation and neither is cheap
+	// on adversarial input, so they are not re-run for the notes.
+	const statements = resolveStatements(text);
+	const brackets = resolveDocument(text);
+	const found = collect(statements, brackets);
+	const notes = [...new Set([...statements.notes, ...brackets.notes])];
+	const writes = found.filter((o) => o.klass === "write").length;
+	const blockers = found.filter((o) => BLOCKING.has(o.klass));
+	if (writes > 0)
+		return { verdict: "true", writes, blockers, occurrences: found, notes };
+	if (blockers.length > 0 || notes.length > 0)
+		return {
+			verdict: "unknown",
+			writes: 0,
+			blockers,
+			occurrences: found,
+			notes,
+		};
+	return {
+		verdict: "false",
+		writes: 0,
+		blockers: [],
+		occurrences: found,
+		notes,
+	};
+}
