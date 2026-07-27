@@ -52,6 +52,17 @@
  * given, so every statement that cannot be CONFIRMED as navigation emits an
  * occurrence here. Cost on holdout: +0.8pp abstention, and the overconfident
  * bin halves.
+ *
+ * That rule binds the BRACKET walk exactly as it binds the statement walk, and
+ * the two must be kept in step. Both fail-closed guards below — the Q14 defect
+ * floor and the path-shaped-but-unread abstention — were originally applied to
+ * statements only, so `/ip/$menu/remove 0` abstained while `:put [/ip/$menu/remove
+ * 0]` cleared the document to a confident `false`. Discarding input inside a
+ * bracket discards it just as thoroughly. Cost of closing it over the frozen
+ * 911-script corpus: +0.8pp abstention on both splits (7 documents, all
+ * `false` -> `unknown`, none off `true`), and two of the seven are pasted CLI
+ * transcripts that hide a real write behind the `[user@device]` prompt — i.e.
+ * genuine false negatives the tristate exists to prevent.
  */
 
 import {
@@ -553,9 +564,27 @@ function collect(
 			});
 			continue;
 		}
+		// The same Q14 defect floor the statement walk applies above. A bracket
+		// carries its own refusal reasons and its own vocabulary — `variable path
+		// segment` is reachable here but not at statement scale — so the ALLOW
+		// list does the same work: an unrecognized reason blocks.
+		if (
+			bracket.unresolved !== undefined &&
+			!CLEARABLE_UNRESOLVED.has(bracket.unresolved)
+		) {
+			out.push({
+				kind: "bracket",
+				text: inner,
+				context: bracket.context,
+				verb: null,
+				directive: false,
+				klass: "defect",
+			});
+			continue;
+		}
 		const verb = verbOfRun(described.run, described.directive, described.whole);
 		const klass =
-			verb === null && described.run.length > 0
+			verb === null && isPathShapedButUnread(inner, described)
 				? "ambiguous"
 				: classifyVerb(verb, described.directive);
 		out.push({

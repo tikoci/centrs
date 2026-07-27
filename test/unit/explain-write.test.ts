@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { resolveStatements } from "../../src/explain/pathresolve.ts";
+import {
+	resolveDocument,
+	resolveStatements,
+} from "../../src/explain/pathresolve.ts";
 import {
 	classifyVerb,
 	containsWrite,
@@ -469,6 +472,92 @@ describe("explain/write — Q14 floor and structural defects", () => {
 		expect(got.blockers).toContainEqual(
 			expect.objectContaining({ kind: "bracket", klass: "ambiguous" }),
 		);
+	});
+
+	/**
+	 * The bracket walk carries the SAME two fail-closed rules as the statement
+	 * walk. It did not, and the gap was reachable: the statement `/ip/$menu/remove`
+	 * abstained while the identical text inside brackets cleared the document to a
+	 * confident `false` — a false negative on a curated write verb, which is the
+	 * one thing Q16's hard-0 threshold forbids.
+	 */
+	test("a variable path segment cannot clear the document from a bracket", () => {
+		for (const input of [
+			":put [/ip/$menu/remove 0]",
+			":put [/ip/$m/add address=1.2.3.4]",
+			":local x [/system/$foo/reboot]",
+		]) {
+			const got = containsWrite(input);
+			expect(got.verdict).toBe("unknown");
+			expect(got.blockers).toContainEqual(
+				expect.objectContaining({ kind: "bracket", klass: "defect" }),
+			);
+		}
+	});
+
+	/**
+	 * The other half, and independently load-bearing: a `/`-led bracket inner whose
+	 * run was TRUNCATED by a non-bare segment yields an empty run with NO refusal
+	 * reason, so only the path-shaped guard catches it.
+	 */
+	test("a `/`-led bracket whose path could not be read abstains", () => {
+		for (const input of [
+			':put [/ip/"foo"/remove]',
+			":put [/ip/[find]/remove]",
+			":put [/(1)/remove]",
+		]) {
+			expect(containsWrite(input).verdict).toBe("unknown");
+		}
+	});
+
+	/** Neither rule may fire on a bracket that genuinely names no command. */
+	test("inert bracket inners still clear", () => {
+		for (const input of [
+			"[find]",
+			"[/ip/route/print]",
+			":put [:rndnum from=1 to=2]",
+		]) {
+			const got = containsWrite(input);
+			expect(got.verdict).toBe("false");
+			expect(got.occurrences.some((o) => o.klass === "defect")).toBe(false);
+		}
+	});
+
+	/** The bracket reason vocabulary differs from the statement one, so anchor it. */
+	test("the clearable-reason list matches what the bracket walk emits", () => {
+		const reasons = [
+			":put [/ip/$menu/remove 0]",
+			":put [$menu/remove]",
+			':put ["a string"]',
+			"[admin@MikroTik] > /ip/socks/set enabled=yes",
+		].map((t) => resolveDocument(t).resolutions[0]?.unresolved);
+		expect(reasons).toEqual([
+			// Not clearable — reachable in brackets but not at statement scale.
+			"variable path segment",
+			"no leading path token",
+			"no leading path token",
+			// Not clearable: a prompt means the line is a TRANSCRIPT, so the command
+			// after it was never walked as a statement.
+			"looks like a pasted CLI prompt, not a substitution",
+		]);
+	});
+
+	/**
+	 * The corpus shape behind the rule above. A pasted CLI transcript hides a real
+	 * write behind the prompt: the statement walk reads the whole line as starting
+	 * with `[`, so `/ip/socks/set enabled=yes` is never classified. This used to
+	 * report a confident "no write" about a document that plainly writes.
+	 */
+	test("a pasted CLI transcript does not clear a write hidden behind the prompt", () => {
+		const got = containsWrite(
+			[
+				"[admin@box] > /system/device-mode/print",
+				"       mode: enterprise",
+				"[admin@box] > /ip/socks/set enabled=yes",
+			].join("\n"),
+		);
+		expect(got.verdict).toBe("unknown");
+		expect(got.occurrences.some((o) => o.klass === "defect")).toBe(true);
 	});
 });
 
