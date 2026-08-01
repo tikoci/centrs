@@ -527,6 +527,14 @@ versionless
 #   src/explain module + fixture names. myvar: the RouterOS example variable in
 #   the Q6 `:global myvar` collision corner (a positional operand indistinguishable
 #   from a sub-menu offline).
+#   failclosed: the ratified Q16 navigation arm name (the two arms that priced it
+#   stayed in the lab). notadirective: the Q16 fixture's deliberately unseen root
+#   directive, pinning that an unknown directive abstains rather than reading as
+#   harmless control flow.
+#   RouterOS root cmds (scripting directives) enumerated from /console/inspect and
+#   frozen in src/explain/write.ts as the closed ROOT_CMDS vocabulary — jobname,
+#   rndnum, rndstr, tobool, tocrlf, toid, toip, tolf, tonsec, tonum, totime.
+#   lte: the RouterOS /interface lte menu, cited in the Q16 long-tail-verb corner.
 SUT
 CJK
 pathresolve
@@ -537,3 +545,17 @@ tostrvalue
 eworm
 verbsplit
 myvar
+failclosed
+notadirective
+jobname
+rndnum
+rndstr
+tobool
+tocrlf
+toid
+toip
+tolf
+tonsec
+tonum
+totime
+lte

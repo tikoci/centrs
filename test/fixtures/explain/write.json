@@ -1,0 +1,330 @@
+{
+	"_source": "Promoted from the phase-0 lab corners .scratch/explain-lab-q16-corners.ts (Q16, #185), all 35 of which pass. Expectations are written against the SPEC's requirement, not against observed output: zero false negatives on statically obvious writes, and `unknown` (never `false`) wherever offline cannot prove either answer. Only the ratified `failclosed` navigation arm is pinned; the two arms that priced it stayed in the lab. The corners exist because the corpus cannot reach them — either it has no instances (`source={…}` carrying a write, `:parse`-built commands, `/system/script/run`, `password`, `undo`) or the IL oracle cannot judge them (command text inside a comment or string produces no IL node either way, so `correctly ignored` and `never looked` are indistinguishable at corpus scale).",
+	"cases": [
+		{
+			"id": "W1",
+			"class": "direct write",
+			"name": "flagship add",
+			"input": "/ip/route add dst-address=10.9.0.0/16 gateway=1.1.1.1",
+			"verdict": "true"
+		},
+		{
+			"id": "W2",
+			"class": "direct write",
+			"name": "set with numeric operand",
+			"input": "/ip address set 0 disabled=yes",
+			"verdict": "true"
+		},
+		{
+			"id": "W3",
+			"class": "direct write",
+			"name": "remove + bracket selector",
+			"input": "/ip firewall filter remove [find chain=forward]",
+			"verdict": "true"
+		},
+		{
+			"id": "W4",
+			"class": "direct write",
+			"name": "bare-word operand — the naive-nav hole (finding 1)",
+			"input": "/interface disable ether1",
+			"verdict": "true"
+		},
+		{
+			"id": "W5",
+			"class": "direct write",
+			"name": "bare-word operand, 3-token path",
+			"input": "/system script remove myscript",
+			"verdict": "true"
+		},
+		{
+			"id": "W6",
+			"class": "direct write",
+			"name": "bare-word operand, enable",
+			"input": "/ip service enable www-ssl",
+			"verdict": "true"
+		},
+		{
+			"id": "W7",
+			"class": "other mutating verbs",
+			"name": "move",
+			"input": "/ip firewall filter move 3 destination=1",
+			"verdict": "true"
+		},
+		{
+			"id": "W8",
+			"class": "other mutating verbs",
+			"name": "reset-counters — frequency-justified, mutates counters, and the finding-2 shape",
+			"input": "/interface ethernet reset-counters",
+			"verdict": "true"
+		},
+		{
+			"id": "W9",
+			"class": "other mutating verbs",
+			"name": "unset",
+			"input": "/ip route unset 0 comment",
+			"verdict": "true"
+		},
+		{
+			"id": "W10",
+			"class": "other mutating verbs",
+			"name": "set under a 2-token menu",
+			"input": "/system identity set name=r1",
+			"verdict": "true"
+		},
+
+		{
+			"id": "N1",
+			"class": "nav then write",
+			"name": "menu nav then bare add",
+			"input": "/ip address\nadd address=1.2.3.4/24 interface=ether1",
+			"verdict": "true"
+		},
+		{
+			"id": "N2",
+			"class": "nav then write",
+			"name": "nav then read only",
+			"input": "/ip route\nprint",
+			"verdict": "false"
+		},
+		{
+			"id": "N3",
+			"class": "nav then write",
+			"name": "two-step nav then write",
+			"input": "/ip firewall\nfilter\nremove numbers=0",
+			"verdict": "true"
+		},
+
+		{
+			"id": "B1",
+			"class": "nested",
+			"name": "write inside a do= block",
+			"input": ":foreach i in=[/ip address find] do={ /ip address remove $i }",
+			"verdict": "true"
+		},
+		{
+			"id": "B2",
+			"class": "nested",
+			"name": "write inside the do= of an :if",
+			"input": ":if ([:len [/ip route find]] > 0) do={ /ip route remove [find] } else={ :put \"none\" }",
+			"verdict": "true"
+		},
+		{
+			"id": "B3",
+			"class": "nested",
+			"name": "write inside an :onerror in= scope",
+			"input": ":onerror e in={ /ip pool add name=p ranges=1.1.1.1-1.1.1.9 } do={ :put $e }",
+			"verdict": "true"
+		},
+		{
+			"id": "B4",
+			"class": "nested",
+			"name": "bracket find is a READ; block body reads",
+			"input": ":foreach i in=[/ip address find] do={ :put $i }",
+			"verdict": "false"
+		},
+
+		{
+			"id": "I1",
+			"class": "inert",
+			"name": "command text inside a string must not count",
+			"input": ":put \"/ip route add dst-address=0.0.0.0/0\"",
+			"verdict": "false"
+		},
+		{
+			"id": "I2",
+			"class": "inert",
+			"name": "command text inside a comment must not count",
+			"input": "# /ip route add dst-address=0.0.0.0/0\n:put \"ok\"",
+			"verdict": "false"
+		},
+		{
+			"id": "I3",
+			"class": "inert",
+			"name": "the OUTER add is a write; the literal source={…} body is not a second one",
+			"input": "/system script add name=s source={:put \"hello\"}",
+			"verdict": "true"
+		},
+		{
+			"id": "I4",
+			"class": "inert",
+			"name": "a write stored in a variable and never run",
+			"input": ":local body \"/ip route add dst-address=0.0.0.0/0\"\n:put $body",
+			"verdict": "false"
+		},
+
+		{
+			"id": "D1",
+			"class": "dynamic",
+			"name": ":parse builds a command offline cannot read",
+			"input": "[:parse \":put 1\"]",
+			"verdict": "unknown"
+		},
+		{
+			"id": "D2",
+			"class": "dynamic",
+			"name": "parsed command then invoked",
+			"input": ":local f [:parse $cmd]\n$f",
+			"verdict": "unknown"
+		},
+		{
+			"id": "D3",
+			"class": "dynamic",
+			"name": "stored script body unknown offline",
+			"input": "/system script run myscript",
+			"verdict": "unknown"
+		},
+		{
+			"id": "D4",
+			"class": "dynamic",
+			"name": "function call, body unknown",
+			"input": "$myFunc a=1",
+			"verdict": "unknown"
+		},
+		{
+			"id": "D5",
+			"class": "dynamic",
+			"name": ":execute runs a script body",
+			"input": ":execute script=\":put 1\"",
+			"verdict": "unknown"
+		},
+		{
+			"id": "D6",
+			"class": "dynamic",
+			"name": "import APPLIES config — a write even though the contents are unknown",
+			"input": "/import file-name=cfg.rsc",
+			"verdict": "true"
+		},
+
+		{
+			"id": "R1",
+			"class": "root write",
+			"name": "password changes device state",
+			"input": ":password old-password=a new-password=b",
+			"verdict": "true"
+		},
+		{
+			"id": "R2",
+			"class": "root write",
+			"name": "undo reverts a configuration change",
+			"input": ":undo",
+			"verdict": "true"
+		},
+		{
+			"id": "R3",
+			"class": "root read",
+			"name": "read-only pipeline",
+			"input": ":put [/ip route print as-value]",
+			"verdict": "false"
+		},
+		{
+			"id": "R4",
+			"class": "root read",
+			"name": ":set is a VARIABLE assignment, not a device write",
+			"input": ":local x 5\n:set x 6\n:put $x",
+			"verdict": "false"
+		},
+		{
+			"id": "R5",
+			"class": "root read",
+			"name": ":global is a variable",
+			"input": ":global g 1\n:put $g",
+			"verdict": "false"
+		},
+
+		{
+			"id": "U1",
+			"class": "unknown verb",
+			"name": "long-tail verb outside the frozen table",
+			"input": "/interface lte firmware-upgrade",
+			"verdict": "unknown"
+		},
+		{
+			"id": "U2",
+			"class": "unknown verb",
+			"name": "singleton verb, plainly mutating, not in the table",
+			"input": "/certificate sign ca-crl-host=1.1.1.1",
+			"verdict": "unknown"
+		},
+		{
+			"id": "U3",
+			"class": "unknown verb",
+			"name": "destructive singleton verb, version-scoped name",
+			"input": "/disk format-drive disk1",
+			"verdict": "unknown"
+		}
+	],
+
+	"_branches": "Behavior anchors reaching ratified code paths the oracle-checked corners do not, plus the Q14 floor the production path resolver adds on top of the lab SUT (a structurally defective statement is refused and not descended, so a write may hide in a body that was never walked — it must abstain, not clear).",
+	"branches": [
+		{
+			"id": "X1",
+			"class": "defect",
+			"name": "unbalanced delimiter hides an undescended body — abstain, never clear",
+			"input": ":if [) do={ /ip route add dst-address=0.0.0.0/0 }",
+			"verdict": "unknown"
+		},
+		{
+			"id": "X2",
+			"class": "defect",
+			"name": "unterminated string is a document-level note — abstain",
+			"input": ":put \"unterminated",
+			"verdict": "unknown"
+		},
+		{
+			"id": "X3",
+			"class": "empty",
+			"name": "empty input has no occurrence to be wrong about",
+			"input": "",
+			"verdict": "false"
+		},
+		{
+			"id": "X4",
+			"class": "empty",
+			"name": "comments only",
+			"input": "# nothing here\n# nor here",
+			"verdict": "false"
+		},
+		{
+			"id": "X5",
+			"class": "direct write",
+			"name": "a proven write wins outright over an unknown elsewhere (rule 1)",
+			"input": "/ip route add dst-address=0.0.0.0/0 gateway=1.1.1.1\n/disk format-drive disk1",
+			"verdict": "true"
+		},
+		{
+			"id": "X6",
+			"class": "unknown verb",
+			"name": "an unknown poisons an otherwise all-read document (rule 2)",
+			"input": "/ip route print\n/interface lte firmware-upgrade",
+			"verdict": "unknown"
+		},
+		{
+			"id": "X7",
+			"class": "nav then write",
+			"name": "a bare path consumed by a following statement is confirmed navigation",
+			"input": "/ip/firewall/filter\nprint",
+			"verdict": "false"
+		},
+		{
+			"id": "X9",
+			"class": "dangling bare path",
+			"name": "a bare path with nothing after it abstains — /ip/route is a directory but /system/reboot is a write, and the text is identical (Q6 V4)",
+			"input": "/ip/firewall/filter",
+			"verdict": "unknown"
+		},
+		{
+			"id": "X10",
+			"class": "dangling bare path",
+			"name": "the case the rule exists for — a lone no-argument write must never clear",
+			"input": "/system/reboot",
+			"verdict": "unknown"
+		},
+		{
+			"id": "X8",
+			"class": "root read",
+			"name": "an unknown root directive abstains rather than reading as control flow",
+			"input": ":notadirective x",
+			"verdict": "unknown"
+		}
+	]
+}

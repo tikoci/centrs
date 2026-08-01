@@ -344,6 +344,22 @@ export {
 	type VerbSplit,
 } from "./explain/verbsplit.ts";
 export {
+	classifyVerb,
+	containsWrite,
+	type Occurrence,
+	type OccurrenceClass,
+	// `occurrences` is too generic for the library root; the module-local name
+	// stays short because inside `write.ts` there is only one kind.
+	occurrences as explainOccurrences,
+	READ_VERBS,
+	ROOT_CMDS,
+	ROOT_DYNAMIC,
+	ROOT_WRITE,
+	WRITE_VERBS,
+	type WriteAnalysis,
+	type WriteVerdict,
+} from "./explain/write.ts";
+export {
 	type ApiVerb,
 	createProtocolAdapter,
 	getProtocolPlan,
