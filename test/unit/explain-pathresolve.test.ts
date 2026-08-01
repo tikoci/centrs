@@ -324,6 +324,32 @@ describe("Q14 C3b — a lost context poisons dependent statements", () => {
 		expect(kept.resolutions[0]?.contextCertain).toBe(false);
 	});
 
+	test("R6 — a nested bracket inherits its enclosing bracket's known base", () => {
+		// The enclosing inner command is ABSOLUTE, so it is anchored whatever the
+		// document context did. Propagating the document's uncertainty into it
+		// would abstain on a bracket that is in fact fully determined.
+		const res = resolveDocument(
+			"/ip) address\n:put [/ip/route/get [find default=yes] gateway]",
+		).resolutions;
+		expect(res[0]?.path).toBe("/ip/route");
+		expect(res[1]?.depth).toBe(1);
+		expect(res[1]?.path).toBe("/ip/route");
+		expect(res[1]?.contextCertain).toBe(true);
+	});
+
+	test("a RELATIVE enclosing bracket still poisons what nests inside it", () => {
+		// The other direction of the same rule: the outer bracket resolved to
+		// nothing, so the inner one has no base to inherit.
+		for (const text of [
+			"/ip) address\nremove [find [get 0 comment]]",
+			"/ip) address\n:put [$var [find]]",
+		]) {
+			const res = resolveDocument(text).resolutions;
+			expect(res[1]?.path).toBeNull();
+			expect(res[1]?.unresolved).toBe(LOST);
+		}
+	});
+
 	test("a clean document is entirely certain", () => {
 		const res = resolveStatements(
 			"/ip route\nadd gateway=1.1.1.1\n/ip firewall filter\nprint",

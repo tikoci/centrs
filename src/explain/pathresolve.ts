@@ -643,7 +643,14 @@ function collectBrackets(
 		out.push(resolveInner(inner, ctx, depth, contextCertain));
 		// R6 — nested brackets inherit from this one's resolution.
 		const nestedCtx = out[out.length - 1]?.path ?? ctx;
-		collectBrackets(inner, nestedCtx, depth + 1, out, notes, contextCertain);
+		collectBrackets(
+			inner,
+			nestedCtx,
+			depth + 1,
+			out,
+			notes,
+			nestedCertainty(out[out.length - 1], contextCertain),
+		);
 		i = end;
 	}
 }
@@ -675,10 +682,27 @@ function scanInterpolations(
 			depth + 1,
 			out,
 			notes,
-			contextCertain,
+			nestedCertainty(out[out.length - 1], contextCertain),
 		);
 		i = end;
 	}
+}
+
+/**
+ * Certainty a NESTED bracket inherits (R6). An enclosing bracket that resolved
+ * hands its own path down as a KNOWN base, even while the document context is
+ * lost: an absolute inner path (`[/ip/route/get [find …] gateway]`) and a `:`
+ * directive are context-independent, so the `[find …]` inside them is anchored
+ * regardless of what the document context did. A non-null `path` is exactly
+ * that condition — a relative inner command with a lost context resolves to
+ * `null` — so nesting recovers certainty rather than propagating abstention
+ * into brackets that are in fact anchored.
+ */
+function nestedCertainty(
+	enclosing: Resolution | undefined,
+	contextCertain: boolean,
+): boolean {
+	return contextCertain || (enclosing?.path ?? null) !== null;
 }
 
 function resolveInner(
