@@ -316,9 +316,12 @@ describe("Q14 C3b — a lost context poisons dependent statements", () => {
 		expect(lost.resolutions[0]?.path).toBeNull();
 		expect(lost.resolutions[0]?.unresolved).toBe(LOST);
 		expect(lost.resolutions[0]?.contextCertain).toBe(false);
-		// An ABSOLUTE inner path ignores the context and still resolves.
+		// An ABSOLUTE inner path ignores the context and still resolves — but the
+		// context it ignored is still reported as unknown, the bracket half of the
+		// same contract the statement walk asserts above.
 		const kept = resolveDocument("/ip) address\n:put [/ip/route/print]");
 		expect(kept.resolutions[0]?.path).toBe("/ip/route");
+		expect(kept.resolutions[0]?.contextCertain).toBe(false);
 	});
 
 	test("a clean document is entirely certain", () => {

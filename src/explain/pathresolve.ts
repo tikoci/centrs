@@ -332,9 +332,15 @@ function walk(
 		}
 		// R3 — the statement's own path is the context its brackets see.
 		const stmtCtx = statementPath(text, ctx);
+		if (isUnreadableAbsolute(text)) certain = false;
+		// Derived AFTER the poison, exactly as `walkStatements` orders it, so the
+		// two walks cannot drift. The value is the same either way — an unreadable
+		// absolute is `/`-led, so `isBodyContextIndependent` is true regardless,
+		// and the segmenter refuses to flatten a container whose menu prefix holds
+		// a `$` at all — but the contract's rule is that these walks move in
+		// lockstep, not that they happen to agree.
 		const stmtCertain = certain || isBodyContextIndependent(text);
 		collectBrackets(text, stmtCtx, 0, out, notes, stmtCertain);
-		if (isUnreadableAbsolute(text)) certain = false;
 		// R5 — block bodies inherit the context in force here.
 		for (const body of scopeBodies(text)) {
 			if (blockDepth >= MAX_DEPTH) {
@@ -496,10 +502,10 @@ function canonicalPath(
 	// R11 — a scripting directive written WITHOUT its colon is still at the root.
 	// A statement that carries a SCOPE-valued block is a directive, because no
 	// menu command takes one — a schema-free tell.
-	const bareDirective =
-		!t.startsWith(":") && !t.startsWith("/") && scopeBodies(t).length > 0;
-	const base =
-		t.startsWith(":") || t.startsWith("/") || bareDirective ? "/" : ctx;
+	const bareDirective = isBareDirective(t);
+	// The cascade contract reads this same split to decide which statements may
+	// keep resolving once the context is lost, so both must come from one place.
+	const base = isContextIndependent(t) ? "/" : ctx;
 	const tokens = statementRun(body);
 	if (tokens.length === 0)
 		return { path: null, unresolved: "no leading path token" };
@@ -546,11 +552,11 @@ function statementPath(text: string, ctx: string): string {
 	const t = trimAsciiStart(text);
 	// R11 — a bare directive is at the root, so the context it hands its body is
 	// the root too, not `<ctx>/while`.
-	if (!t.startsWith(":") && !t.startsWith("/") && scopeBodies(t).length > 0)
-		return "/";
+	if (isBareDirective(trimAscii(t))) return "/";
 	const lead = leadingRun(text);
 	if (lead.length === 0) return ctx;
-	const base = t.startsWith("/") ? "/" : ctx;
+	// Same split `isBodyContextIndependent` reports to the cascade contract.
+	const base = isBodyContextIndependent(t) ? "/" : ctx;
 	return joinPath(base, lead.slice(0, -1).join("/"));
 }
 

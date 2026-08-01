@@ -322,9 +322,18 @@ describe("resolveVerbs — document walk over the certainty contract", () => {
 		const { splits } = resolveVerbs(text);
 		const { statements } = resolveStatements(text);
 		expect(splits.length).toBe(statements.length);
+		let checked = 0;
 		for (let i = 0; i < splits.length; i++)
-			if (statements[i]?.unresolved !== undefined)
+			if (statements[i]?.unresolved !== undefined) {
+				checked++;
 				expect(splits[i]?.resolution).toBe("unknown");
+			}
+		// Without this the loop passes vacuously if the resolver ever stops
+		// refusing — which is the regression the test exists to catch. Exactly two
+		// statements refuse: the defect and the relative statement after it. The
+		// `..` further down does NOT, because the absolute `/ip firewall filter`
+		// between them re-established certainty.
+		expect(checked).toBe(2);
 	});
 
 	test("structural notes propagate onto the analysis", () => {
