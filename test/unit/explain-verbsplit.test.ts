@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { resolveStatements } from "../../src/explain/pathresolve.ts";
 import {
 	describeStatement,
 	resolveVerb,
+	resolveVerbs,
 	runTokens,
 	SUBMENU_DIRECTIVES,
 	splitRun,
@@ -271,6 +273,79 @@ test("never throws on adversarial input", () => {
 	}
 });
 
+/**
+ * The document walker, restored in the Q14 slice (#192). It was pulled from
+ * this module's own PR (#193) because it fabricated on the Q14 C3b cascade; the
+ * fix landed in `resolveStatements` (the context-certainty contract), so the
+ * walker here is unchanged in shape and inherits the floor.
+ */
+describe("resolveVerbs — document walk over the certainty contract", () => {
+	test("splits every statement in source order, carrying context", () => {
+		const { splits } = resolveVerbs("/ip route\nadd gateway=1.1.1.1\nprint");
+		expect(splits.map((s) => s.resolution)).toEqual([
+			"ambiguous",
+			"resolved",
+			"resolved",
+		]);
+		expect(splits[1]?.verb).toBe("add");
+		expect(splits[1]?.path).toBe("/ip/route");
+		expect(splits[2]?.verb).toBe("print");
+	});
+
+	test("the cascade that pulled this surface from #193 now fails closed", () => {
+		const { splits } = resolveVerbs("/ip) address\nadd address=1.2.3.4/24");
+		expect(splits[1]?.resolution).toBe("unknown");
+		expect(splits[1]?.verb).toBeNull();
+		expect(splits[1]?.path).toBeNull();
+		expect(splits[1]?.why).toBe(
+			"context lost to an earlier unreadable statement",
+		);
+	});
+
+	test("a context-neutral dynamic head does not taint the next statement", () => {
+		const { splits } = resolveVerbs(
+			"/ip route\n$dyn\nadd dst-address=0.0.0.0/0",
+		);
+		expect(splits[1]?.resolution).toBe("unknown");
+		expect(splits[2]?.resolution).toBe("resolved");
+		expect(splits[2]?.verb).toBe("add");
+		expect(splits[2]?.path).toBe("/ip/route");
+	});
+
+	test("no statement resolves against a context the resolver lost", () => {
+		// The invariant the walker exists to hold, asserted over a mixed document
+		// rather than one shape: nothing is `resolved` while its own statement was
+		// refused upstream.
+		const text =
+			"/ip) address\nadd address=1.1.1.1\n/ip/route/add gateway=2.2.2.2\n" +
+			"/ip firewall filter\nremove [find]\n..\nprint";
+		const { splits } = resolveVerbs(text);
+		const { statements } = resolveStatements(text);
+		expect(splits.length).toBe(statements.length);
+		for (let i = 0; i < splits.length; i++)
+			if (statements[i]?.unresolved !== undefined)
+				expect(splits[i]?.resolution).toBe("unknown");
+	});
+
+	test("structural notes propagate onto the analysis", () => {
+		expect(resolveVerbs("/ip) address").notes).toContain("unbalanced-close:)");
+		expect(resolveVerbs("/ip route\nprint").notes).toEqual([]);
+	});
+
+	test("never throws on adversarial input", () => {
+		for (const input of [
+			"",
+			"[",
+			"/ip route remove [find",
+			"$[",
+			":foreach x in=[find] do={",
+			`${"do={".repeat(2048)}:put 1${"}".repeat(2048)}`,
+		])
+			expect(() => resolveVerbs(input)).not.toThrow();
+	});
+});
+
 test("verb/menu API is re-exported from the library barrel", () => {
 	expect(centrs.resolveVerb).toBe(resolveVerb);
+	expect(centrs.resolveVerbs).toBe(resolveVerbs);
 });

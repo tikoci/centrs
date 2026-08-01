@@ -535,6 +535,8 @@ versionless
 #   frozen in src/explain/write.ts as the closed ROOT_CMDS vocabulary — jobname,
 #   rndnum, rndstr, tobool, tocrlf, toid, toip, tolf, tonsec, tonum, totime.
 #   lte: the RouterOS /interface lte menu, cited in the Q16 long-tail-verb corner.
+#   dyn: the `$dyn` variable in the Q14 cascade corners — a dynamic-headed
+#   statement, which is context-NEUTRAL and must not poison the menu context.
 SUT
 CJK
 pathresolve
@@ -559,3 +561,4 @@ tonsec
 tonum
 totime
 lte
+dyn

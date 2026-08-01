@@ -126,8 +126,13 @@ test("non-ASCII whitespace is opaque, not a path separator", () => {
 	for (const whitespace of [" ", " ", " "]) {
 		const res = resolveStatements(`/ip${whitespace}route\nadd`).statements;
 		expect(res.map((s) => s.isNav)).toEqual([false, false]);
-		expect(res.map((s) => s.path)).toEqual([null, "/add"]);
+		// The point of this case is that the exotic space does NOT separate path
+		// tokens, so `/ip route` stays unreadable. `add` then inherits a context
+		// that unreadable `/`-led line may or may not have moved — Q14 C3b — so it
+		// abstains rather than claiming the root command `/add`.
+		expect(res.map((s) => s.path)).toEqual([null, null]);
 		expect(res[0]?.unresolved).toBeDefined();
+		expect(res[1]?.contextCertain).toBe(false);
 	}
 });
 
@@ -207,6 +212,122 @@ test("never throws on adversarial input", () => {
 		expect(() => resolveDocument(input)).not.toThrow();
 		expect(() => resolveStatements(input)).not.toThrow();
 	}
+});
+
+/**
+ * Q14 C3b — the cascade (#192). A defect does not only ruin its own statement,
+ * it destroys the DOCUMENT CONTEXT, and every later statement that CONSUMES that
+ * context must degrade with it. Measured over the frozen phase-0 corpus: 43
+ * statements stop reporting a confident path, every one of them an out-of-domain
+ * prose paste that was manufacturing a phantom root command (`/OK`, `/Binary`,
+ * `/Calls/made/by/this`), and `containsWrite` abstention does not move at all
+ * (44.8% dev / 46.0% holdout, unchanged).
+ */
+describe("Q14 C3b — a lost context poisons dependent statements", () => {
+	const LOST = "context lost to an earlier unreadable statement";
+
+	test("the reported cascade: a relative statement after a defect abstains", () => {
+		// The exact repro that pulled `resolveVerbs` from #193: the second line was
+		// resolving to a confident `/add` against a context already admitted lost.
+		const res = resolveStatements("/ip) address\nadd address=1.2.3.4/24");
+		expect(res.statements[0]?.unresolved).toBe(
+			"structural defect: unbalanced delimiter or string",
+		);
+		expect(res.statements[1]?.path).toBeNull();
+		expect(res.statements[1]?.unresolved).toBe(LOST);
+		expect(res.statements[1]?.contextCertain).toBe(false);
+	});
+
+	test("a context-NEUTRAL unresolved statement does not poison", () => {
+		// The over-fire a crude taint would produce. A dynamic head evaluates a
+		// value; it does not navigate, so `add` keeps its context.
+		const res = resolveStatements(
+			"/ip route\n$dyn\nadd dst-address=0.0.0.0/0",
+		).statements;
+		expect(res[1]?.unresolved).toBe("dynamic or substitution-headed statement");
+		expect(res[2]?.path).toBe("/ip/route/add");
+		expect(res[2]?.contextCertain).toBe(true);
+	});
+
+	test("context-INDEPENDENT statements keep resolving while context is lost", () => {
+		const res = resolveStatements(
+			"/ip) address\n/ip/route/add gateway=1.1.1.1\n:global x 1",
+		).statements;
+		expect(res[1]?.path).toBe("/ip/route/add");
+		expect(res[2]?.path).toBe("/global");
+		// The context they ignore is still flagged as unknown.
+		expect(res[1]?.contextCertain).toBe(false);
+		expect(res[2]?.contextCertain).toBe(false);
+	});
+
+	test("an absolute navigation re-establishes certainty (R4 replaces)", () => {
+		const res = resolveStatements(
+			"/ip) address\nadd address=1.1.1.1\n/ip route\nadd gateway=2.2.2.2",
+		).statements;
+		expect(res[1]?.unresolved).toBe(LOST);
+		expect(res[3]?.path).toBe("/ip/route/add");
+		expect(res[3]?.contextCertain).toBe(true);
+	});
+
+	test("a bare `/` also re-establishes certainty", () => {
+		const res = resolveStatements("/ip) address\n/\n:put 1").statements;
+		expect(res[1]?.path).toBe("/");
+		expect(res[2]?.contextCertain).toBe(true);
+	});
+
+	test("`..` cannot be read against a lost context", () => {
+		const res = resolveStatements("/ip) address\n..").statements;
+		expect(res[1]?.isNav).toBe(true);
+		expect(res[1]?.path).toBeNull();
+		expect(res[1]?.unresolved).toBe(LOST);
+	});
+
+	test("an unreadable `/`-led statement poisons — it may have been a nav", () => {
+		// `/ip/$menu` is a navigation to a computed menu exactly as plausibly as it
+		// is a command, so what the context is afterwards is unknown.
+		const res = resolveStatements("/ip/$menu\nadd address=1.1.1.1").statements;
+		expect(res[0]?.unresolved).toBeDefined();
+		expect(res[1]?.unresolved).toBe(LOST);
+	});
+
+	test("a statement that refuses on its own terms keeps its own reason", () => {
+		const res = resolveStatements("/ip) address\n$x\n[find]").statements;
+		expect(res[1]?.unresolved).toBe("dynamic or substitution-headed statement");
+		expect(res[2]?.unresolved).toBe("dynamic or substitution-headed statement");
+	});
+
+	test("a block body inherits the certainty in force where it appears", () => {
+		const lost = resolveStatements(
+			"/ip) address\n:foreach i in=[find] do={ remove $i }",
+		).statements;
+		expect(lost.at(-1)?.unresolved).toBe(LOST);
+		// An absolute statement hands its body a ROOT-based context, which is
+		// knowable however lost the document context is.
+		const kept = resolveStatements(
+			"/ip) address\n/ip/route { add gateway=1.1.1.1 }",
+		).statements;
+		expect(kept.at(-1)?.path).toBe("/ip/route/add");
+	});
+
+	test("the bracket walk applies the same contract (lockstep)", () => {
+		// A relative `[find]` re-constitutes against the statement's menu, so it
+		// cannot be resolved once that menu is unknown.
+		const lost = resolveDocument("/ip) address\nremove [find default=yes]");
+		expect(lost.resolutions[0]?.path).toBeNull();
+		expect(lost.resolutions[0]?.unresolved).toBe(LOST);
+		expect(lost.resolutions[0]?.contextCertain).toBe(false);
+		// An ABSOLUTE inner path ignores the context and still resolves.
+		const kept = resolveDocument("/ip) address\n:put [/ip/route/print]");
+		expect(kept.resolutions[0]?.path).toBe("/ip/route");
+	});
+
+	test("a clean document is entirely certain", () => {
+		const res = resolveStatements(
+			"/ip route\nadd gateway=1.1.1.1\n/ip firewall filter\nprint",
+		).statements;
+		expect(res.every((s) => s.contextCertain)).toBe(true);
+		expect(res.some((s) => s.unresolved !== undefined)).toBe(false);
+	});
 });
 
 test("path-resolution API is re-exported from the library barrel", () => {
