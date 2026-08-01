@@ -361,17 +361,17 @@ function isConfirmedNav(described: Described): boolean {
  *
  * The bare `/` and `..` forms are exempt: they carry no run, name no command, and
  * Q4's CHR round confirmed them as navigation outright.
+ *
+ * `lastNonEmpty` is the index of the document's last non-blank statement, walked
+ * once by `collect`; a statement at or past it is followed only by blanks.
  */
 function isDanglingBarePath(
 	described: Described,
-	statements: readonly StatementResolution[],
+	lastNonEmpty: number,
 	index: number,
 ): boolean {
 	if (described.run.length === 0) return false;
-	for (let j = index + 1; j < statements.length; j++)
-		if ((statements[j] as StatementResolution).text.trim().length > 0)
-			return false;
-	return true;
+	return index >= lastNonEmpty;
 }
 
 /** Does the run carry a token Q6's boundary would call the verb? */
@@ -497,6 +497,14 @@ function collect(
 ): Occurrence[] {
 	const out: Occurrence[] = [];
 	const list = statements.statements;
+	// Walked once here rather than per statement, so the dangling-bare-path rule
+	// stays O(n) on nav-heavy documents.
+	let lastNonEmpty = -1;
+	for (let i = list.length - 1; i >= 0; i--)
+		if ((list[i] as StatementResolution).text.trim().length > 0) {
+			lastNonEmpty = i;
+			break;
+		}
 
 	for (let index = 0; index < list.length; index++) {
 		const statement = list[index] as StatementResolution;
@@ -540,7 +548,7 @@ function collect(
 		if (statement.isNav && !isCommandShaped(described)) {
 			if (
 				isConfirmedNav(described) &&
-				!isDanglingBarePath(described, list, index)
+				!isDanglingBarePath(described, lastNonEmpty, index)
 			)
 				continue;
 			out.push(classifyUnconfirmedNav(statement, t, described));
