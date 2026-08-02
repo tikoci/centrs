@@ -448,11 +448,13 @@ describe("Q14 C3b — a lost context poisons dependent statements", () => {
 		);
 	});
 
-	test("EVERY variable spelling makes a path segment unreadable", () => {
-		// RouterOS writes variables `$name`, `$"quoted"`, `${braced}` and a bare
-		// `$`. A guard that decides whether to ABSTAIN must recognize the general
-		// shape, because an unlisted spelling reads as a readable menu and fails
-		// OPEN — the same class of bug as `write.ts`'s `$"set-dns"` / `${f}` head.
+	test("EVERY `$`-headed segment is unreadable, valid spelling or not", () => {
+		// The predicate makes no claim about which spellings RouterOS accepts. Two
+		// of these are real references (`$menu`, `$"menu"`); the braced form is
+		// rejected by the device itself (at the `{`, on 7.24rc1) and a bare `$`
+		// names nothing. Offline can resolve NEITHER kind, so both must abstain —
+		// a guard that decides whether to ABSTAIN has to match the general shape,
+		// since an unlisted one reads as a readable menu and fails OPEN.
 		// The braced form is assembled rather than written literally: as a plain
 		// string it reads to the linter as a stray JS template placeholder.
 		const braced = `$${"{menu}"}`;

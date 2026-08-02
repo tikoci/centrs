@@ -87,15 +87,20 @@ const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
 /**
  * A whole path segment that is a variable reference (`$menu` in `/ip/$menu`).
  *
- * Deliberately "begins with `$`" and NOT an enumeration of name spellings.
- * RouterOS writes variables `$name`, `$"quoted name"`, `${braced}` and a bare
- * `$`, and a pattern like `\$[A-Za-z_]…` silently accepts the three it does not
- * list — which is a fail-OPEN miss, since an unrecognized segment then reads as
- * a readable menu. `write.ts` already hit this exact class at head position
- * (`$"set-dns"` / `${f}` slipping past `\$[A-Za-z_]`), and it is the same trap
- * as the unanchored-regex and prefix-match bugs earlier in this module: when a
- * guard decides whether to ABSTAIN, it must recognize the general shape and let
- * the unknown case block, never enumerate the known ones.
+ * Deliberately "begins with `$`" and NOT an enumeration of name spellings. This
+ * makes NO claim about which spellings RouterOS accepts — the point is the
+ * opposite: every `$`-headed segment is unreadable HERE, whether it is a valid
+ * reference (`$menu`, `$"quoted name"`) or something the device would itself
+ * reject (`${braced}` is rejected at the `{` on 7.24rc1; a bare `$`). Offline
+ * cannot resolve either kind, so both must abstain.
+ *
+ * A pattern like `\$[A-Za-z_]…` instead recognizes only the shapes it lists and
+ * lets every other one through as an ordinary readable menu segment, which
+ * fails OPEN. That is the same trap as the unanchored-regex and reason-prefix
+ * bugs earlier in this module: a guard that decides whether to ABSTAIN must
+ * match the general shape and let the unknown case block, never enumerate the
+ * known ones. `write.ts` reaches the same conclusion at head position, where
+ * `isDynamicForm` tests a bare `text.startsWith("$")`.
  */
 function isVariableSegment(part: string): boolean {
 	return part.startsWith("$");
