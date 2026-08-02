@@ -90,9 +90,15 @@ describe("explain/symbols — pre-registered thresholds", () => {
 			":if (someBareWord = 1) do={:put 1}",
 			"/ip route print where dst-address=0.0.0.0/0",
 			"/certificate print where (common-name or subject-alt-name)",
-			"[find running]",
+			"/interface print where running",
 		]) {
 			const bare = resolveSymbols(input).occurrences.filter((o) => !o.sigil);
+			// non-vacuous: each input must actually produce an abstaining bare word,
+			// so dropping the occurrences entirely cannot pass this test
+			expect(bare.length).toBeGreaterThan(0);
+			expect(
+				bare.filter((o) => !o.declaration && o.cls === null).length,
+			).toBeGreaterThan(0);
 			for (const o of bare) {
 				if (o.declaration) continue;
 				if (o.cls !== null) continue;
@@ -342,29 +348,35 @@ describe("explain/symbols — invariants", () => {
 
 	test("nesting is depth-bounded and reported, not thrown", () => {
 		const deep = `${"{".repeat(600)}:local v 1\n:put $v${"}".repeat(600)}`;
-		const started = Date.now();
 		const r = resolveSymbols(deep);
-		expect(Date.now() - started).toBeLessThan(2000);
 		expect(r.notes.some((n) => n.startsWith("over-depth:"))).toBe(true);
 	});
 
-	test("a large document stays within a linear time budget", () => {
+	test("a large document is resolved without loss", () => {
 		const line = ':local v 1\n:put "$v $[:tostr $v]"\n';
-		const big = line.repeat(4000);
-		const started = Date.now();
-		const r = resolveSymbols(big);
-		expect(Date.now() - started).toBeLessThan(4000);
+		const r = resolveSymbols(line.repeat(4000));
 		expect(r.occurrences.length).toBeGreaterThan(10000);
 	});
 
+	// No wall-clock assertion (shared runners): the signal is that a quadratic
+	// scan of a long SINGLE line — the shape a per-word backward paren scan blew
+	// up on — cannot finish inside the runner's per-test timeout.
+	test("a long single-line document stays linear", () => {
+		const words = Array.from({ length: 6000 }, (_, k) => `(w${k} = 1)`).join(
+			" ) ",
+		);
+		const r = resolveSymbols(`:if ${words} do={:put 1}`);
+		expect(r.occurrences.length).toBeGreaterThan(1000);
+	});
+
 	test("HIGHLIGHT_CLASS covers every class and maps to device names", () => {
-		expect(Object.values(HIGHLIGHT_CLASS).sort()).toEqual([
-			"variable-auto",
-			"variable-global",
-			"variable-local",
-			"variable-parameter",
-			"variable-undefined",
-		]);
+		expect(HIGHLIGHT_CLASS).toEqual({
+			local: "variable-local",
+			global: "variable-global",
+			auto: "variable-auto",
+			parameter: "variable-parameter",
+			undefined: "variable-undefined",
+		});
 	});
 });
 

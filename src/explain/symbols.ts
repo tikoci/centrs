@@ -208,6 +208,13 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	// `analyzed` is pure ASCII, so a string built from it has index === byte.
 	const text = new TextDecoder().decode(analysis.analyzed);
 
+	// S7's "inside a `(…)` expression" test, precomputed in one forward pass.
+	// Scanning backward per bare word was O(n²) on a long single-line script: an
+	// unmatched `)` kept the scan from stopping at the newline, so it could run
+	// back to offset 0 for every word. This table is line-scoped, which is what
+	// the rule says and what the backward scan did on balanced input.
+	const openParen = parenMap(text);
+
 	const occurrences: SymbolOccurrence[] = [];
 	const notes: string[] = [];
 	const root: Scope = { closure: false, bindings: new Map() };
@@ -607,7 +614,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			if (nextNonSpace(text, j) === "=") {
 				if (
 					filterDepth !== null ||
-					(!sigilled && !isLiteralWord(lower) && inParen(text, start))
+					(!sigilled && !isLiteralWord(lower) && openParen[start] === 1)
 				)
 					record(wordStart, j, word, null, false, FILTER_NOTE);
 				continue;
@@ -637,7 +644,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				!isValue &&
 				!isLiteralWord(lower) &&
 				depth > 0 &&
-				(filterDepth !== null || inParen(text, start))
+				(filterDepth !== null || openParen[start] === 1)
 			) {
 				const binding = lookup(word, start);
 				record(
@@ -760,19 +767,31 @@ function nextNonSpace(text: string, from: number): string | null {
 	return null;
 }
 
-/** True when `at` sits inside a `(`…`)` expression on its own line region. */
-function inParen(text: string, at: number): boolean {
-	let d = 0;
-	for (let i = at - 1; i >= 0; i--) {
+/**
+ * Per-byte flag: is this offset inside an unclosed `(` on its own line?
+ *
+ * Strings are deliberately not special-cased — the rule this feeds (S7) was
+ * scored with a paren test that counted every `(`, and this table reproduces it
+ * on any line whose parentheses balance.
+ */
+function parenMap(text: string): Uint8Array {
+	const open = new Uint8Array(text.length);
+	let depth = 0;
+	for (let i = 0; i < text.length; i++) {
 		const c = text[i];
-		if (c === "\n" && d === 0) return false;
-		if (c === ")") d++;
-		else if (c === "(") {
-			if (d === 0) return true;
-			d--;
+		if (c === "\n") {
+			depth = 0;
+			continue;
 		}
+		if (c === "(") {
+			open[i] = depth > 0 ? 1 : 0;
+			depth++;
+			continue;
+		}
+		if (c === ")" && depth > 0) depth--;
+		open[i] = depth > 0 ? 1 : 0;
 	}
-	return false;
+	return open;
 }
 
 /**
