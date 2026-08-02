@@ -330,6 +330,13 @@ export {
 	segmentStatements,
 } from "./explain/segment.ts";
 export {
+	HIGHLIGHT_CLASS,
+	resolveSymbols,
+	type SymbolAnalysis,
+	type SymbolClass,
+	type SymbolOccurrence,
+} from "./explain/symbols.ts";
+export {
 	describeStatement,
 	isDirective,
 	type RunToken,

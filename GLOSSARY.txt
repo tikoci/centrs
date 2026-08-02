@@ -541,6 +541,19 @@ versionless
 #   lte: the RouterOS /interface lte menu, cited in the Q16 long-tail-verb corner.
 #   dyn: the `$dyn` variable in the Q14 cascade corners — a dynamic-headed
 #   statement, which is context-NEUTRAL and must not poison the menu context.
+#   symbols (Q13): cls — the resolved variable-class field on a symbol occurrence
+#   (`class` is reserved, same reason as klass). sigilled: written with the `$`
+#   sigil, the schema-free tell that separates a variable from a directive or a
+#   menu-path segment. ERRVAR: the `:onerror NAME` error-variable slot (S18).
+#   unmodeled / distinguisher: the closure-scope finding — the lab left the rule
+#   unmodeled because a depth counter has no scope identity, and the statement
+#   head is the only distinguisher between a function `do={}` and a control-flow
+#   one. Corner variable names quoted from the device probes and corpus scripts:
+#   vlanid, vlanbytes, ipprefix, octive (the `$octive-1` name-vs-operator case),
+#   lppp (the device documentation's own `variable-undefined` example).
+#   lookback: the backward scan that decides whether a `{` follows `do=`; it must
+#   accept exactly the escapes the forward walker does, or the two disagree about
+#   where the argument name ends and a function body stops being a closure.
 SUT
 CJK
 pathresolve
@@ -569,3 +582,14 @@ tonum
 totime
 lte
 dyn
+cls
+sigilled
+ERRVAR
+unmodeled
+distinguisher
+vlanid
+vlanbytes
+ipprefix
+octive
+lppp
+lookback
