@@ -712,6 +712,103 @@
 			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
 		},
 		{
+			"id": "E1",
+			"class": "device-verified branch anchor",
+			"name": "a head word is only a head at STATEMENT START",
+			"input": "$fn local foo 1\n:put $foo",
+			"expect": [
+				{
+					"name": "fn",
+					"cls": "parameter"
+				},
+				{
+					"name": "foo",
+					"cls": "parameter"
+				}
+			],
+			"rule": "F3 boundary — `head === null` is not the statement-start test, because nothing before a bare word sets it. Device: `local` and the first `foo` are `none` (no declaration is made) and the later `$foo` is `variable-parameter`. Reading `local` as a head here fabricated a binding and then reported that `$foo` as a confident `local`.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "E2",
+			"class": "device-verified branch anchor",
+			"name": "a word after a bracket is not a head either",
+			"input": "[:len $x] local foo 1\n:put $foo",
+			"expect": [
+				{
+					"name": "x",
+					"cls": "parameter"
+				},
+				{
+					"name": "foo",
+					"cls": "parameter"
+				}
+			],
+			"rule": "F3 boundary — same rule, second shape. Device: `local`/`foo` `none`, `$x` and the later `$foo` `variable-parameter`.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "E3",
+			"class": "device-verified branch anchor",
+			"name": "a doubled sigil is not a scripting head",
+			"input": "//local foo 1\n:put $foo",
+			"expect": [
+				{
+					"name": "foo",
+					"cls": "parameter"
+				}
+			],
+			"rule": "F3 boundary — the sigil run must be zero or one character. Device: `//local foo 1` is an error and EVERY byte of the document reads `none`, so no declaration may be made. The trailing `$foo` reading is plain S5 on input the console rejects outright, not a claim about a binding.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "E4",
+			"class": "device-verified branch anchor",
+			"name": "a malformed escape stops the analysis",
+			"input": ":local \\\\\nfoo 1\n:put $foo",
+			"expect": [],
+			"rule": "F4 — in code a backslash is valid only before whitespace. Device: the doubled backslash errors on the FIRST one, `foo` is `none`, and nothing after is a variable. The resolver records `bad-escape:<offset>` and reports nothing further rather than continuing across a boundary the console never crossed.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
+			"notes": ["bad-escape:7"]
+		},
+		{
+			"id": "E5",
+			"class": "device-verified branch anchor",
+			"name": "a malformed escape cannot fabricate a closure",
+			"input": ":local outer 1\n:local fn do=\\{ :put $outer }",
+			"expect": [
+				{
+					"name": "outer",
+					"cls": "local"
+				},
+				{
+					"name": "fn",
+					"cls": "local"
+				}
+			],
+			"rule": "F4 + F2 — `do=\\{` is not `do={`. Device: `outer` and `fn` are `variable-local`, then the error kills the rest (`put` and the in-body `outer` read `none`). Occurrences before the defect stand (the lab's X1 rule); the body is never entered.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
+			"notes": ["bad-escape:28"]
+		},
+		{
+			"id": "E6",
+			"class": "device-verified branch anchor",
+			"name": "an escaped space is a valid escape, not a defect",
+			"input": ":local v 1\n:put \\ $v",
+			"expect": [
+				{
+					"name": "v",
+					"cls": "local"
+				},
+				{
+					"name": "v",
+					"cls": "local"
+				}
+			],
+			"rule": "F4 — CHR 7.23.2 accepts `\\ ` and `\\<tab>` in code with no error and still classes `$v` `variable-local`; only a backslash before a NON-whitespace character is malformed.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
 			"id": "X1",
 			"class": "behavior anchor",
 			"name": "empty input resolves to nothing",

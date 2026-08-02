@@ -69,6 +69,7 @@ describe("explain/symbols — frozen fixtures", () => {
 		expect(ids.filter((id) => id.startsWith("C"))).toHaveLength(22);
 		expect(ids.filter((id) => id.startsWith("F"))).toHaveLength(7);
 		expect(ids.filter((id) => id.startsWith("H"))).toHaveLength(9);
+		expect(ids.filter((id) => id.startsWith("E"))).toHaveLength(6);
 	});
 
 	test("no fixture is hand-asserted: every promoted-beyond anchor is device-verified", () => {
@@ -224,9 +225,72 @@ describe("explain/symbols — sigil-optional heads and line continuations", () =
 		}
 	});
 
+	test("a head word is only a head at statement start", () => {
+		for (const input of [
+			"$fn local foo 1\n:put $foo",
+			"[:len $x] local foo 1\n:put $foo",
+			'"text" local foo 1\n:put $foo',
+		]) {
+			const r = resolveSymbols(input);
+			expect(r.occurrences.some((o) => o.declaration)).toBe(false);
+			expect(r.occurrences.at(-1)?.cls).toBe("parameter");
+		}
+	});
+
+	test("a doubled sigil is not a scripting head", () => {
+		for (const input of ["//local foo 1", "/:local foo 1", ":/local foo 1"])
+			expect(resolveSymbols(input).occurrences.some((o) => o.declaration)).toBe(
+				false,
+			);
+	});
+
 	test("a deeper menu path is not a declaration", () => {
 		for (const input of ["/ip/local foo 1", "/interface local foo 1"])
 			expect(resolveSymbols(input).occurrences).toEqual([]);
+	});
+});
+
+describe("explain/symbols — escape validity (F4)", () => {
+	test("only whitespace and newline may follow a backslash in code", () => {
+		for (const input of [
+			":local v 1\n:put \\ $v",
+			":local v 1\n:put \\\t$v",
+			":local v 1 \\\n:put $v",
+			":local v 1 \\\r\n:put $v",
+		])
+			expect(resolveSymbols(input).notes).toEqual([]);
+	});
+
+	test("a malformed escape stops the analysis and says where", () => {
+		for (const input of [
+			":local \\\\\nfoo 1\n:put $foo",
+			":local v 1\n:put \\a $v",
+			":local v 1\n:put \\$v",
+		]) {
+			const r = resolveSymbols(input);
+			expect(r.notes.some((n) => n.startsWith("bad-escape:"))).toBe(true);
+			// nothing is reported after the defect …
+			expect(r.occurrences.some((o) => o.name === "foo")).toBe(false);
+		}
+	});
+
+	test("occurrences BEFORE a malformed escape still stand (X1)", () => {
+		const r = resolveSymbols(":local outer 1\n:local fn do=\\{ :put $outer }");
+		expect(r.occurrences.map((o) => o.cls)).toEqual(["local", "local"]);
+		expect(r.notes).toEqual(["bad-escape:28"]);
+	});
+
+	test("a malformed escape cannot fabricate a closure", () => {
+		// `do=\{` is not `do={`: the body is never entered, so no reference in it
+		// can be reported at all — let alone with a confident class
+		const r = resolveSymbols(":local outer 1\n:local fn do=\\{ :put $outer }");
+		expect(r.occurrences).toHaveLength(2);
+	});
+
+	test("an escape inside a string is unaffected", () => {
+		const r = resolveSymbols(':local a "x\\\\"\n:put $a');
+		expect(r.notes).toEqual([]);
+		expect(r.occurrences.map((o) => o.cls)).toEqual(["local", "local"]);
 	});
 });
 

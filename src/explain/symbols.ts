@@ -71,20 +71,22 @@
  *       operator (`$octive-1`); the tie is broken by the longest prefix that
  *       resolves against the document's OWN declarations.
  *
- * Two behaviors go BEYOND the lab SUT. Neither is invented: the probe declared
- * both and left them unmodeled (it was throwaway and depth-scoped), and F2 is
+ * FOUR behaviors go beyond the lab SUT. None is invented: the probe declared the
+ * first two and left them unmodeled (it was throwaway and depth-scoped), F2 is
  * required verbatim by the ratified spec — `commands/explain/README.md`, "Symbol
- * scopes follow RouterOS scope identity, not brace depth alone". Each was priced
- * against the frozen corpus streams before being shipped, then device-verified
- * per occurrence on CHR 7.23.2 (`.scratch/q13-arms.ts` + `-arms-score.ts` +
- * `-anchor-chr-probe.ts`, the Q16 re-score method):
+ * scopes follow RouterOS scope identity, not brace depth alone" — and F3/F4 are
+ * lexical facts the probe simply got wrong. Each was priced against the frozen
+ * corpus streams before being shipped, then device-verified per occurrence on
+ * CHR 7.23.2 (`.scratch/q13-arms.ts` + `-arms-score.ts` + `-anchor-chr-probe.ts`,
+ * the Q16 re-score method):
  *
  *   F1  A `$[…]` / `$(…)` substitution inside a double-quoted string is CODE
  *       (Q3 grounded the same fact in `:parse` IL). A scan that treats it as
  *       string bytes flips its quote phase on the first nested string, which
  *       silently destroys every later binding. Modeling it moved holdout
  *       precision 96.75% → 99.85% and dev 93.06% → 98.50%.
- *   F3  The SIGIL on a scripting head is optional in both directions. Q2
+ *   F3  The SIGIL on a scripting head is optional in both directions, but the
+ *       head must be at STATEMENT START and carry at most ONE sigil character. Q2
  *       grounded the colon-less form for body-taking directives (`do {` ≡
  *       `:do {`); CHR 7.23.2 extends it to every head this module reads —
  *       `local foo 1`, `global foo 1`, `foreach i in={1} …`, `for i from=1 …`
@@ -95,12 +97,18 @@
  *       word is `ip` and `local` is an `obj-inactive` menu item. Requiring the
  *       colon dropped those declarations and then reported every later use as a
  *       confident `parameter` — a false class on valid input, which is exactly
- *       what Q13's posture forbids.
- *   F4  A backslash at end of line is a CONTINUATION (Q1 H5), so the statement
- *       head, the pending declaration and `declaredHere` all survive it.
- *       Treating it as a boundary lost `:local \<nl>foo 1` outright, and — worse
- *       — reset the closure flag in `:local fn do=\<nl>{ … }`, leaking the outer
- *       scope into a function body that the device treats as a closure.
+ *       what Q13's posture forbids. The two guards matter as much as the rule:
+ *       `$fn local foo 1` makes `local` an ordinary word (device: `none`), and
+ *       `//local foo 1` is a device error, so neither may declare.
+ *   F4  A backslash in CODE is valid only before whitespace; before a newline it
+ *       is the H5 CONTINUATION, so the statement head, the pending declaration
+ *       and `declaredHere` all survive it. Treating it as a boundary lost
+ *       `:local \<nl>foo 1` outright and reset the closure flag in
+ *       `:local fn do=\<nl>{ … }`, leaking the outer scope into a body the device
+ *       treats as a closure. Every other spelling (`\a`, `\$v`, `\\ `, `\{`) is a
+ *       hard device error that classes the whole remainder `none`, so the walker
+ *       records `bad-escape:<offset>` and stops there instead of reading
+ *       `do=\{` as a closure.
  *   F2  A NAMED-FUNCTION body (`:local`/`:global NAME do={…}`) is a CLOSURE:
  *       outer names read `parameter` inside it, and a global needs an in-body
  *       `:global NAME` re-import to read `global`. A control-flow `do={…}`
@@ -116,7 +124,7 @@
  * Measured on the frozen split (`.scratch/explain-lab-partition.json`) against
  * the per-occurrence highlight streams for 7.23.2 AND 7.24rc2, byte-identical
  * across the two versions: **holdout 99.97% precision on decided (6153/6155),
- * 4.46% abstention, 19 missed; dev 99.75% (8723/8745), 6.24%.**
+ * 4.53% abstention, 15 missed; dev 99.75% (8723/8745), 6.27%.**
  *
  * The scan is a single left-to-right pass with an explicit delimiter stack (no
  * recursion, Q17 posture) and never throws; structural surprises land in
@@ -244,6 +252,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	/** `{` opens past the cap that pushed no scope; their `}` must not pop one. */
 	let suppressedScopes = 0;
 	let overDepth = false;
+	/** a malformed escape ended the analysis (the device errors out there). */
+	let defect = false;
 
 	/** lowercased leading word of the current statement. */
 	let head: string | null = null;
@@ -434,21 +444,37 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			continue;
 		}
 
-		// --- H5 line continuation ------------------------------------------------
+		// --- H5 line continuation and escape validity ---------------------------
 		//
-		// A backslash at end of line continues the statement (Q1 H5), so the
-		// pending declaration, the statement head, and `declaredHere` (which
-		// decides whether the next `do={` opens a closure) must all survive it.
-		// Treating it as a boundary lost `:local \<nl>foo 1`'s declaration outright
-		// and reported the later `$foo` as a confident `parameter`; CHR 7.23.2
-		// says `variable-local`.
+		// In CODE a backslash is valid ONLY before whitespace (CHR 7.23.2:
+		// `:put \\ $v` and `:put \\<tab>$v` are clean, `:put \\a`, `:put \\$v` and
+		// `:put \\\\ $v` all raise a hard `error`). Before a newline it is the H5
+		// CONTINUATION, so the statement head, the pending declaration and
+		// `declaredHere` — which decides whether the next `do={` opens a closure —
+		// must all survive it.
+		//
+		// Anything else is a malformed escape. The device dies there and classes
+		// every later byte `none`, so this resolver stops too: it records
+		// `bad-escape:<offset>` and reports nothing further, rather than carrying
+		// confident classes across a boundary the console never crossed. Occurrences
+		// BEFORE the defect stand (the lab's X1 rule).
 		if (c === "\\") {
-			let k = i + 1;
-			if (text[k] === "\r") k++;
-			if (text[k] === "\n") {
-				i = k;
+			const next = text[i + 1];
+			if (next === "\n") {
+				i += 1;
 				continue;
 			}
+			if (next === "\r" && text[i + 2] === "\n") {
+				i += 2;
+				continue;
+			}
+			if (next === " " || next === "\t") {
+				i += 1;
+				continue;
+			}
+			notes.push(`bad-escape:${i}`);
+			defect = true;
+			break;
 		}
 
 		// --- comments: `#` in statement-leading position (Q1 rule H4) ------------
@@ -463,6 +489,9 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			resetStatement();
 			continue;
 		}
+		// H4 bookkeeping. `leadBefore` is the value for the character ABOUT to be
+		// read, which is what decides whether a word is the statement HEAD.
+		const leadBefore = atLead;
 		if (c === ";" || c === "\n" || c === "{") atLead = true;
 		else if (c !== " " && c !== "\t" && c !== "\r") atLead = false;
 
@@ -560,7 +589,17 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			i = j - 1;
 			if (word === "") continue;
 
-			if (head === null) {
+			// A directive head must be at STATEMENT START. `head === null` alone is
+			// not that test: nothing before it sets `head`, so after a dynamic
+			// command (`$fn local foo 1`) or a bracket the next word looked like a
+			// head and fabricated a declaration. CHR 7.23.2 classes `local`/`foo`
+			// there as `none` and the later `$foo` as `variable-parameter`.
+			//
+			// The sigil run must also be zero or one character: `//local foo 1` and
+			// `/:local foo 1` are device errors (every byte `none`), not
+			// declarations.
+			const sigilRun = wordStart - start;
+			if (head === null && leadBefore && sigilRun <= 1) {
 				head = lower;
 				// The sigil on a scripting head is OPTIONAL — in BOTH directions.
 				// Q2 grounded the colon-less form for body-taking directives
@@ -714,7 +753,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		}
 	}
 
-	if (frames.length > 0) {
+	if (!defect && frames.length > 0) {
 		const open = frames.join("");
 		if (open.includes('"')) notes.push("unterminated-string");
 		const brackets = open.replace(/"/g, "");
@@ -787,10 +826,23 @@ function readRef(
 /** The `name=` immediately before the `{` at `open`, lowercased, or null. */
 function argNameBefore(text: string, open: number): string | null {
 	let i = open - 1;
-	// H5 again: `do=\<nl>{` is still `do={`, so the continuation backslash is
-	// skipped like whitespace. Without this the brace reads as a plain value and
-	// the body silently stops being a closure.
-	while (i >= 0 && (isSpace(text[i] as string) || text[i] === "\\")) i--;
+	// H5 again: `do=\<nl>{` is still `do={`, so a CONTINUATION backslash is
+	// skipped like whitespace — without this the brace reads as a plain value and
+	// the body silently stops being a closure. Only that form: a backslash before
+	// anything else is the malformed escape the walker already stopped on, and
+	// treating `do=\{` as `do={` would fabricate a closure the device never made.
+	while (i >= 0) {
+		const c = text[i] as string;
+		if (isSpace(c)) {
+			i--;
+			continue;
+		}
+		if (c === "\\" && (text[i + 1] === "\n" || text[i + 1] === "\r")) {
+			i--;
+			continue;
+		}
+		break;
+	}
 	if (text[i] !== "=") return null;
 	i--;
 	const end = i + 1;
