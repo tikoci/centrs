@@ -511,6 +511,41 @@ describe("explain/symbols — invariants", () => {
 	});
 });
 
+describe("explain/symbols — known limits (#201)", () => {
+	// Pinned so a fix flips them deliberately, in the Q16 style: each carries the
+	// device reading it does not yet reproduce.
+	test("K1 a bracket substitution is not opened as a statement context", () => {
+		// CHR 7.23.2: `[:local v 1; :put $v]` classes BOTH `v` `variable-local`,
+		// and a `$v` after the bracket reads `variable-parameter` — the bracket
+		// scopes its locals. This walker misses the declaration and falls back to
+		// S5 for the uses; it never fabricates a binding.
+		const r = resolveSymbols("[:local v 1; :put $v]\n:put $v");
+		expect(r.occurrences.map((o) => o.cls)).toEqual(["parameter", "parameter"]);
+		expect(r.occurrences.some((o) => o.declaration)).toBe(false);
+		// a `:global` inside a bracket DOES escape on the device
+		expect(
+			resolveSymbols("[:global g 1]\n:put $g").occurrences.map((o) => o.cls),
+		).toEqual(["parameter"]);
+	});
+
+	test("K2 the doubled-sigil stop is statement-leading only", () => {
+		// CHR 7.23.2 errors at the doubled separator here too, but `:put //foo`
+		// and `url=//example.com` are valid, so this needs parser context.
+		const r = resolveSymbols("/ip//address print\n:put $foo");
+		expect(r.notes).toEqual([]);
+		expect(r.occurrences.map((o) => o.cls)).toEqual(["parameter"]);
+		// the forms that MUST stay clean
+		for (const valid of [":put //foo", "/tool fetch url=//example.com"])
+			expect(resolveSymbols(valid).notes).toEqual([]);
+	});
+
+	test("a bare `//` at statement start does stop (F5, no word to carry it)", () => {
+		const r = resolveSymbols("//\n:put $foo");
+		expect(r.occurrences).toEqual([]);
+		expect(r.notes).toEqual(["bad-sigil:1"]);
+	});
+});
+
 describe("explain/symbols — public export surface", () => {
 	test("is wired through the package barrel", () => {
 		expect(centrs.resolveSymbols).toBe(resolveSymbols);

@@ -134,6 +134,23 @@
  * across the two versions: **holdout 99.97% precision on decided (6153/6155),
  * 4.53% abstention, 15 missed; dev 99.75% (8723/8745), 6.27%.**
  *
+ * TWO KNOWN LIMITS are carried as measured, each pinned by an explicit test and
+ * tracked in the lexical-boundary issue (#201) rather than patched here:
+ *
+ *   K1  A `[…]` substitution is a nested STATEMENT context on the device, and
+ *       its locals do not escape it: `[:local v 1; :put $v]` classes both `v`
+ *       `variable-local`, while a `$v` AFTER the bracket reads `variable-
+ *       parameter` (a `:global` inside a bracket does escape). This walker does
+ *       not open a statement context at `[`, so it misses the declaration and
+ *       falls back to `parameter` (S5) for the uses — under-resolution of the
+ *       same species as the declared corpus residual, never a fabricated
+ *       binding. Modeling it is a scope-extent change that needs its own corpus
+ *       re-score.
+ *   K2  The doubled-sigil stop (F5) is statement-leading only. A doubled path
+ *       separator MID-statement (`/ip//address print`) is also a hard device
+ *       error, but `:put //foo` and `url=//example.com` are valid, so telling
+ *       them apart needs parser-context awareness the lexical scan does not have.
+ *
  * The scan is a single left-to-right pass with an explicit delimiter stack (no
  * recursion, Q17 posture) and never throws; structural surprises land in
  * `notes` with the same vocabulary the segmenter uses. Scope creation is capped
@@ -590,7 +607,21 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			while (j < text.length && isIdent(text[j] as string)) j++;
 			const word = text.slice(wordStart, j);
 			const lower = word.toLowerCase();
+			const sigilRun = wordStart - start;
 			i = j - 1;
+			// A sigil RUN at statement start is a hard device error — `//local`,
+			// `::put`, `:/local` and a bare `//` all error at the second character
+			// and class every later byte `none`. Checked BEFORE the empty-word exit,
+			// because `//` on its own carries no word and would otherwise slip past.
+			// Inside a value a doubled slash is ordinary text (`url=http://example.com`,
+			// `comment=a//b`, `:put //foo`), so this is statement-leading only; the
+			// mid-path form (`/ip//address`) needs parser-context awareness and is
+			// tracked separately.
+			if (leadBefore && sigilRun > 1) {
+				notes.push(`bad-sigil:${start + 1}`);
+				defect = true;
+				break;
+			}
 			if (word === "") continue;
 
 			// A directive head must be at STATEMENT START. `head === null` alone is
@@ -602,17 +633,6 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			// The sigil run must also be zero or one character: `//local foo 1` and
 			// `/:local foo 1` are device errors (every byte `none`), not
 			// declarations.
-			const sigilRun = wordStart - start;
-			// A sigil RUN at statement start is a hard device error — `//local`,
-			// `::put` and `:/local` all error at the second character and class
-			// every later byte `none`. Inside a value it is ordinary text (`url=
-			// http://example.com` and `comment=a//b` are clean), so this is checked
-			// only in statement-leading position.
-			if (leadBefore && sigilRun > 1) {
-				notes.push(`bad-sigil:${start + 1}`);
-				defect = true;
-				break;
-			}
 			if (head === null && leadBefore && sigilRun <= 1) {
 				head = lower;
 				// The sigil on a scripting head is OPTIONAL — in BOTH directions.
