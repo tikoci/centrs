@@ -83,8 +83,22 @@ import { isScopeBrace, scopeBodies } from "./blocks.ts";
 import { maskComments, segmentStatements } from "./segment.ts";
 
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
-/** A whole path segment that is a variable reference (`$menu` in `/ip/$menu`). */
-const VARIABLE_SEGMENT = /^\$[A-Za-z_][A-Za-z0-9._-]*$/;
+/**
+ * A whole path segment that is a variable reference (`$menu` in `/ip/$menu`).
+ *
+ * Deliberately "begins with `$`" and NOT an enumeration of name spellings.
+ * RouterOS writes variables `$name`, `$"quoted name"`, `${braced}` and a bare
+ * `$`, and a pattern like `\$[A-Za-z_]…` silently accepts the three it does not
+ * list — which is a fail-OPEN miss, since an unrecognized segment then reads as
+ * a readable menu. `write.ts` already hit this exact class at head position
+ * (`$"set-dns"` / `${f}` slipping past `\$[A-Za-z_]`), and it is the same trap
+ * as the unanchored-regex and prefix-match bugs earlier in this module: when a
+ * guard decides whether to ABSTAIN, it must recognize the general shape and let
+ * the unknown case block, never enumerate the known ones.
+ */
+function isVariableSegment(part: string): boolean {
+	return part.startsWith("$");
+}
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
 
 function isAsciiWhitespace(char: string | undefined): boolean {
@@ -242,7 +256,7 @@ function isUnreadablePath(text: string): boolean {
 		for (const part of parts) {
 			if (BARE_WORD.test(part)) continue;
 			// A whole segment that is a variable is the unreadable-menu case.
-			if (VARIABLE_SEGMENT.test(part)) return true;
+			if (isVariableSegment(part)) return true;
 			// Anything else is not a path segment at all, so the run ended here and
 			// everything before it was readable. This is why the test cannot simply
 			// look for a `$` anywhere: `print where comment~[$strfind …]` and

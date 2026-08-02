@@ -448,6 +448,30 @@ describe("Q14 C3b — a lost context poisons dependent statements", () => {
 		);
 	});
 
+	test("EVERY variable spelling makes a path segment unreadable", () => {
+		// RouterOS writes variables `$name`, `$"quoted"`, `${braced}` and a bare
+		// `$`. A guard that decides whether to ABSTAIN must recognize the general
+		// shape, because an unlisted spelling reads as a readable menu and fails
+		// OPEN — the same class of bug as `write.ts`'s `$"set-dns"` / `${f}` head.
+		// The braced form is assembled rather than written literally: as a plain
+		// string it reads to the linter as a stray JS template placeholder.
+		const braced = `$${"{menu}"}`;
+		for (const segment of ["$menu", '$"menu"', braced, "$"]) {
+			const text = `/ip route/${segment}/remove [find]\nadd address=1.1.1.1`;
+			const stmts = resolveStatements(text).statements;
+			expect(stmts[0]?.unresolved).toBe("variable path segment");
+			expect(stmts[1]?.unresolved).toBe(LOST);
+			expect(resolveDocument(text).resolutions[0]?.unresolved).toBe(LOST);
+			// …and the relative spelling of the same segment, nested.
+			const nested = resolveDocument(
+				`/ip route\nremove [route/${segment} [find]]`,
+			).resolutions;
+			expect(nested[0]?.unresolved).toBe("variable path segment");
+			expect(nested[1]?.path).toBeNull();
+			expect(nested[1]?.unresolved).toBe(LOST);
+		}
+	});
+
 	test("a clean document is entirely certain", () => {
 		const res = resolveStatements(
 			"/ip route\nadd gateway=1.1.1.1\n/ip firewall filter\nprint",
