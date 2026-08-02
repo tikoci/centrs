@@ -36,7 +36,8 @@
  *
  * The rules, as ratified (S-numbers are the lab's):
  *   S1  `:local NAME` declares NAME `local` from the declaration to the end of
- *       the enclosing brace scope; an inner `:local` shadows an outer one.
+ *       the enclosing brace scope; an inner `:local` shadows an outer one. (The
+ *       `:` is optional on every head below — see F3.)
  *   S2  `:global NAME` declares NAME `global`, visible for the remainder of
  *       the document regardless of brace nesting.
  *   S3  `:foreach A[,B] in=… do={…}` / `:for I from=… do={…}` declare their
@@ -83,6 +84,23 @@
  *       string bytes flips its quote phase on the first nested string, which
  *       silently destroys every later binding. Modeling it moved holdout
  *       precision 96.75% → 99.85% and dev 93.06% → 98.50%.
+ *   F3  The SIGIL on a scripting head is optional in both directions. Q2
+ *       grounded the colon-less form for body-taking directives (`do {` ≡
+ *       `:do {`); CHR 7.23.2 extends it to every head this module reads —
+ *       `local foo 1`, `global foo 1`, `foreach i in={1} …`, `for i from=1 …`
+ *       and `set foo 2` bind exactly like their `:` twins, and so does the `/`
+ *       spelling, because these directives are also ROOT commands (`/global g 1`
+ *       → `g` = `variable-global`, the same root vocabulary `write.ts` froze as
+ *       `ROOT_CMDS`). A deeper path is untouched: in `/ip/local foo 1` the head
+ *       word is `ip` and `local` is an `obj-inactive` menu item. Requiring the
+ *       colon dropped those declarations and then reported every later use as a
+ *       confident `parameter` — a false class on valid input, which is exactly
+ *       what Q13's posture forbids.
+ *   F4  A backslash at end of line is a CONTINUATION (Q1 H5), so the statement
+ *       head, the pending declaration and `declaredHere` all survive it.
+ *       Treating it as a boundary lost `:local \<nl>foo 1` outright, and — worse
+ *       — reset the closure flag in `:local fn do=\<nl>{ … }`, leaking the outer
+ *       scope into a function body that the device treats as a closure.
  *   F2  A NAMED-FUNCTION body (`:local`/`:global NAME do={…}`) is a CLOSURE:
  *       outer names read `parameter` inside it, and a global needs an in-body
  *       `:global NAME` re-import to read `global`. A control-flow `do={…}`
@@ -97,8 +115,8 @@
  *
  * Measured on the frozen split (`.scratch/explain-lab-partition.json`) against
  * the per-occurrence highlight streams for 7.23.2 AND 7.24rc2, byte-identical
- * across the two versions: **holdout 99.97% precision on decided (6151/6153),
- * 4.23% abstention; dev 99.73% (8708/8732), 6.40%.**
+ * across the two versions: **holdout 99.97% precision on decided (6153/6155),
+ * 4.46% abstention, 19 missed; dev 99.75% (8723/8745), 6.24%.**
  *
  * The scan is a single left-to-right pass with an explicit delimiter stack (no
  * recursion, Q17 posture) and never throws; structural surprises land in
@@ -239,6 +257,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	let pendingErrVar = false;
 	/** this statement declared a name, so a `do={` it opens is a closure (F2). */
 	let declaredHere = false;
+	/** the sigil the statement head was written with: `:`, `/`, or none. */
+	let headSigil: ":" | "/" | "" = "";
 	/** H4 — still before the first real token of the current statement? */
 	let atLead = true;
 
@@ -251,6 +271,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		pendingDecl = null;
 		pendingLoopVars = false;
 		declaredHere = false;
+		headSigil = "";
 	};
 
 	/**
@@ -413,6 +434,23 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			continue;
 		}
 
+		// --- H5 line continuation ------------------------------------------------
+		//
+		// A backslash at end of line continues the statement (Q1 H5), so the
+		// pending declaration, the statement head, and `declaredHere` (which
+		// decides whether the next `do={` opens a closure) must all survive it.
+		// Treating it as a boundary lost `:local \<nl>foo 1`'s declaration outright
+		// and reported the later `$foo` as a confident `parameter`; CHR 7.23.2
+		// says `variable-local`.
+		if (c === "\\") {
+			let k = i + 1;
+			if (text[k] === "\r") k++;
+			if (text[k] === "\n") {
+				i = k;
+				continue;
+			}
+		}
+
 		// --- comments: `#` in statement-leading position (Q1 rule H4) ------------
 		//
 		// Done inline rather than through `segment.ts`'s shared `maskComments`,
@@ -524,12 +562,20 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 
 			if (head === null) {
 				head = lower;
-				if (DECL[lower] !== undefined && text[start] === ":")
-					pendingDecl = DECL[lower] as SymbolClass;
-				else if (LOOP_HEADS.has(lower) && text[start] === ":")
-					pendingLoopVars = true;
-				else if (lower === "set" && text[start] === ":")
-					pendingSetTarget = true;
+				// The sigil on a scripting head is OPTIONAL — in BOTH directions.
+				// Q2 grounded the colon-less form for body-taking directives
+				// (`do {` ≡ `:do {`), and CHR 7.23.2 classes `local foo 1`,
+				// `global foo 1`, `foreach i in={1} do={…}` and `for i from=1 …`
+				// exactly like their `:`-spelled twins. The `/` spelling binds too,
+				// because these directives ARE root commands (`/global g 1` →
+				// `g` = `variable-global`) — the same root vocabulary `write.ts`
+				// froze as ROOT_CMDS. A DEEPER path is unaffected: `/ip/local foo 1`
+				// and `/interface local foo 1` make `local` an `obj-inactive` menu
+				// item, and there the head word is `ip`/`interface`, not `local`.
+				headSigil = text[start] === ":" ? ":" : text[start] === "/" ? "/" : "";
+				if (DECL[lower] !== undefined) pendingDecl = DECL[lower] as SymbolClass;
+				else if (LOOP_HEADS.has(lower)) pendingLoopVars = true;
+				else if (lower === "set") pendingSetTarget = true;
 				else if (ERRVAR_HEADS.has(lower)) pendingErrVar = true;
 				continue;
 			}
@@ -540,6 +586,12 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			if (head === "set" && pendingSetTarget) {
 				pendingSetTarget = false;
 				const binding = lookup(word, start);
+				// Spelling decides what an unresolved target means on the device:
+				// `set foo 2` with no `foo` in scope is the MENU verb `set` and the
+				// device reports no variable at all, while `:set`/`/set` are the
+				// scripting command and report a hard `error` — not a class either,
+				// so those abstain (S10) instead of inventing one.
+				if (binding === null && headSigil === "") continue;
 				record(
 					wordStart,
 					j,
@@ -735,7 +787,10 @@ function readRef(
 /** The `name=` immediately before the `{` at `open`, lowercased, or null. */
 function argNameBefore(text: string, open: number): string | null {
 	let i = open - 1;
-	while (i >= 0 && isSpace(text[i] as string)) i--;
+	// H5 again: `do=\<nl>{` is still `do={`, so the continuation backslash is
+	// skipped like whitespace. Without this the brace reads as a plain value and
+	// the body silently stops being a closure.
+	while (i >= 0 && (isSpace(text[i] as string) || text[i] === "\\")) i--;
 	if (text[i] !== "=") return null;
 	i--;
 	const end = i + 1;

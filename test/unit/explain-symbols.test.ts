@@ -68,6 +68,7 @@ describe("explain/symbols — frozen fixtures", () => {
 		expect(new Set(ids).size).toBe(ids.length);
 		expect(ids.filter((id) => id.startsWith("C"))).toHaveLength(22);
 		expect(ids.filter((id) => id.startsWith("F"))).toHaveLength(7);
+		expect(ids.filter((id) => id.startsWith("H"))).toHaveLength(9);
 	});
 
 	test("no fixture is hand-asserted: every promoted-beyond anchor is device-verified", () => {
@@ -178,6 +179,54 @@ describe("explain/symbols — F2 closure scope", () => {
 			":local f do={ :local mid 1\n :local g do={ :put $mid } }",
 		);
 		expect(r.occurrences.at(-1)?.cls).toBe("parameter");
+	});
+});
+
+describe("explain/symbols — sigil-optional heads and line continuations", () => {
+	test("a declaration survives an escaped newline", () => {
+		const r = resolveSymbols(":local \\\nfoo 1\n:put $foo");
+		expect(r.occurrences.map((o) => o.cls)).toEqual(["local", "local"]);
+	});
+
+	test("an escaped newline before `do={` keeps the closure boundary", () => {
+		const r = resolveSymbols(
+			":local outer 1\n:local fn do=\\\n{ :put $outer }",
+		);
+		// the outer local must NOT leak into the function body
+		expect(r.occurrences.at(-1)?.cls).toBe("parameter");
+	});
+
+	test("every scripting head binds with `:`, with `/`, and bare", () => {
+		for (const [inputs, expected] of [
+			[["%local foo 1\n:put $foo"], "local"],
+			[["%global foo 1\n:put $foo"], "global"],
+			[
+				["%foreach i in={1} do={:put $i}", "%for i from=1 to=3 do={:put $i}"],
+				"auto",
+			],
+		] as const)
+			for (const template of inputs)
+				for (const sigil of [":", "/", ""]) {
+					const r = resolveSymbols(template.replace("%", sigil));
+					expect(r.occurrences.length).toBe(2);
+					for (const o of r.occurrences) expect(o.cls).toBe(expected);
+				}
+	});
+
+	test("an unresolved `set` target follows the spelling", () => {
+		// bare `set` is the MENU verb: the device reports no variable at all
+		expect(resolveSymbols("set foo 2").occurrences).toEqual([]);
+		// `:set` / `/set` are the scripting command: a hard device error, so abstain
+		for (const input of [":set foo 2", "/set foo 2"]) {
+			const [occurrence] = resolveSymbols(input).occurrences;
+			expect(occurrence?.cls).toBeNull();
+			expect(occurrence?.note).toContain(":set");
+		}
+	});
+
+	test("a deeper menu path is not a declaration", () => {
+		for (const input of ["/ip/local foo 1", "/interface local foo 1"])
+			expect(resolveSymbols(input).occurrences).toEqual([]);
 	});
 });
 

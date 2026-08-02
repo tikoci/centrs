@@ -555,6 +555,163 @@
 			"verified": "CHR 7.23.2 `/console/inspect request=highlight` (2026-08-02): `onerror Err {…} do={… $Err}` and `:onerror Err {…} do={… $Err}` produce byte-identical classes, `Err` = `variable-local` in both. Same for the `in={…} do={…}` spelling."
 		},
 		{
+			"id": "H5a",
+			"class": "device-verified branch anchor",
+			"name": "an escaped newline continues the statement, so the declaration survives",
+			"input": ":local \\\nfoo 1\n:put $foo",
+			"expect": [
+				{
+					"name": "foo",
+					"cls": "local"
+				},
+				{
+					"name": "foo",
+					"cls": "local"
+				}
+			],
+			"rule": "F4 (Q1 H5) — a `\\` at end of line is a continuation, not a boundary. Resetting statement state here dropped the declaration and then reported `$foo` as a confident `parameter`; the device says `variable-local` at both occurrences.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "H5b",
+			"class": "device-verified branch anchor",
+			"name": "an escaped newline before `do={` keeps the body a closure",
+			"input": ":local outer 1\n:local fn do=\\\n{ :put $outer }",
+			"expect": [
+				{
+					"name": "outer",
+					"cls": "local"
+				},
+				{
+					"name": "fn",
+					"cls": "local"
+				},
+				{
+					"name": "outer",
+					"cls": "parameter"
+				}
+			],
+			"rule": "F4 + F2 — the continuation must also carry `declaredHere`, or the function body stops being a closure and the outer local leaks into it. Device: the in-body `outer` is `variable-parameter`.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "H6a",
+			"class": "device-verified branch anchor",
+			"name": "a colon-less `local` head declares",
+			"input": "local foo 1\n:put $foo",
+			"expect": [
+				{
+					"name": "foo",
+					"cls": "local"
+				},
+				{
+					"name": "foo",
+					"cls": "local"
+				}
+			],
+			"rule": "F3 — the sigil is optional; requiring `:` skipped the declaration and made every later use a confident `parameter`.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "H6b",
+			"class": "device-verified branch anchor",
+			"name": "a colon-less `global` head declares",
+			"input": "global foo 1\n:put $foo",
+			"expect": [
+				{
+					"name": "foo",
+					"cls": "global"
+				},
+				{
+					"name": "foo",
+					"cls": "global"
+				}
+			],
+			"rule": "F3.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "H6c",
+			"class": "device-verified branch anchor",
+			"name": "a colon-less `foreach` head binds its loop variable",
+			"input": "foreach i in={1} do={:put $i}",
+			"expect": [
+				{
+					"name": "i",
+					"cls": "auto"
+				},
+				{
+					"name": "i",
+					"cls": "auto"
+				}
+			],
+			"rule": "F3 + S3.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "H6d",
+			"class": "device-verified branch anchor",
+			"name": "a colon-less `for` head binds its loop variable",
+			"input": "for i from=1 to=3 do={:put $i}",
+			"expect": [
+				{
+					"name": "i",
+					"cls": "auto"
+				},
+				{
+					"name": "i",
+					"cls": "auto"
+				}
+			],
+			"rule": "F3 + S3.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "H6e",
+			"class": "device-verified branch anchor",
+			"name": "a colon-less `set` targets an existing binding",
+			"input": ":local foo 1\nset foo 2\n:put $foo",
+			"expect": [
+				{
+					"name": "foo",
+					"cls": "local"
+				},
+				{
+					"name": "foo",
+					"cls": "local"
+				},
+				{
+					"name": "foo",
+					"cls": "local"
+				}
+			],
+			"rule": "F3 + S10 — the device reports all three occurrences `variable-local`.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "H6f",
+			"class": "device-verified branch anchor",
+			"name": "a colon-less `set` on an unknown name is the MENU verb — no variable",
+			"input": "set foo 2",
+			"expect": [],
+			"rule": "F3 + S10 — spelling decides: bare `set` with nothing in scope is the menu verb and the device reports NO variable, while `:set`/`/set` are the scripting command and report a hard `error`, so those abstain instead (C12).",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "H6g",
+			"class": "device-verified branch anchor",
+			"name": "a root-path head is the scripting command; a deeper path is a menu item",
+			"input": "/local foo 1",
+			"expect": [
+				{
+					"name": "foo",
+					"cls": "local"
+				}
+			],
+			"rule": "F3 — `/local` at ROOT is the scripting command and binds (device: `foo` = `variable-local`). Contrast `/ip/local foo 1` and `/interface local foo 1`, where the device makes `local` an `obj-inactive` menu item and `foo` `none`; there the head word is `ip`/`interface`, so no declaration is made either.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
 			"id": "X1",
 			"class": "behavior anchor",
 			"name": "empty input resolves to nothing",
