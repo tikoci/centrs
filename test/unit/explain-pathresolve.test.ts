@@ -399,6 +399,55 @@ describe("Q14 C3b — a lost context poisons dependent statements", () => {
 		expect(res[1]?.contextCertain).toBe(true);
 	});
 
+	test("a variable segment after a STATIC word is still unreadable (R7)", () => {
+		// Mixed space/slash menu spelling is supported, so `/ip route/$menu/remove`
+		// is the same R7 case as `/ip/$menu/remove`. `statementRun` drops the whole
+		// word carrying the variable, which left a clean truncated prefix and a
+		// confident `/ip`. Statement, bracket and cascade are all pinned here.
+		const text = "/ip route/$menu/remove [find]\nadd address=1.1.1.1";
+		const stmts = resolveStatements(text).statements;
+		expect(stmts[0]?.path).toBeNull();
+		expect(stmts[0]?.unresolved).toBe("variable path segment");
+		expect(stmts[1]?.path).toBeNull();
+		expect(stmts[1]?.unresolved).toBe(LOST);
+		const brackets = resolveDocument(text).resolutions;
+		expect(brackets[0]?.path).toBeNull();
+		expect(brackets[0]?.unresolved).toBe(LOST);
+	});
+
+	test("an unreadable RELATIVE menu poisons its nested brackets too", () => {
+		// Spelling is not what makes a menu unreadable: `[route/$verb [find]]` is
+		// the same case as the absolute `[/interface/$type/get [find]]`.
+		const res = resolveDocument(
+			"/ip route\nremove [route/$verb [find]]",
+		).resolutions;
+		expect(res[0]?.unresolved).toBe("variable path segment");
+		expect(res[1]?.depth).toBe(1);
+		expect(res[1]?.path).toBeNull();
+		expect(res[1]?.unresolved).toBe(LOST);
+	});
+
+	test("a `$` inside an ARGUMENT does not make the menu unreadable", () => {
+		// The counterweight to the two cases above, and a real corpus shape: a `~`
+		// filter means no `=` ends the run, so a naive "any `$` in the leading
+		// words" test reads these as unreadable menus and throws away two correct
+		// paths. Only a whole path SEGMENT that is a variable counts.
+		expect(
+			resolveStatements('/ppp secret print where comment~"\\$SECRET"')
+				.statements[0]?.path,
+		).toBe("/ppp/secret/print/where");
+		expect(
+			resolveStatements('print where comment~[$strfind ("abc")]').statements[0]
+				?.path,
+		).toBe("/print/where");
+		// A `$` word standing alone is a positional operand, not a path segment —
+		// so it ENDS the run (hence `/log/get`, not `/log/get/time`) rather than
+		// making the menu unreadable.
+		expect(resolveStatements("/log\nget $item time").statements[1]?.path).toBe(
+			"/log/get",
+		);
+	});
+
 	test("a clean document is entirely certain", () => {
 		const res = resolveStatements(
 			"/ip route\nadd gateway=1.1.1.1\n/ip firewall filter\nprint",

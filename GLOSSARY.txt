@@ -524,7 +524,9 @@ versionless
 #   `:tostr` directive and its IL-lowered form `/tostrvalue`. eworm: a corpus
 #   script author (eworm/*.rsc) cited as grounding for scope-name findings.
 #   rextended: another corpus script author, cited for the Q14 nested-bracket
-#   ambient-context case (a user function establishes no menu).
+#   ambient-context case (a user function establishes no menu). ppp: the RouterOS
+#   /ppp menu, in the Q14 corner proving a `$` inside a `~` FILTER argument does
+#   not make the menu unreadable. strfind: a corpus user function in that corner.
 #   verbsplit: the Q6 verb/menu-boundary lab probe name, carried into the
 #   src/explain module + fixture names. myvar: the RouterOS example variable in
 #   the Q6 `:global myvar` collision corner (a positional operand indistinguishable
@@ -548,6 +550,8 @@ tostr
 tostrvalue
 eworm
 rextended
+ppp
+strfind
 verbsplit
 myvar
 failclosed

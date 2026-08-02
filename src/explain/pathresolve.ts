@@ -83,6 +83,8 @@ import { isScopeBrace, scopeBodies } from "./blocks.ts";
 import { maskComments, segmentStatements } from "./segment.ts";
 
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
+/** A whole path segment that is a variable reference (`$menu` in `/ip/$menu`). */
+const VARIABLE_SEGMENT = /^\$[A-Za-z_][A-Za-z0-9._-]*$/;
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
 
 function isAsciiWhitespace(char: string | undefined): boolean {
@@ -203,6 +205,57 @@ function isBodyContextIndependent(text: string): boolean {
 }
 
 /**
+ * Does this text NAME a menu path that offline could not read?
+ *
+ * True when the leading run starts out path-shaped and is then TRUNCATED by a
+ * variable segment: `/ip/$menu/remove`, `/ip route/$menu/remove`, and the
+ * relative `route/$verb`. R7 says such a path is unresolved, so nothing may
+ * inherit a base derived from it.
+ *
+ * Two traps this exists to avoid, both found in review:
+ *   - `statementRun` DISCARDS the whole word carrying the variable, so after a
+ *     static word (`/ip route/$menu/…`) its output is a clean, variable-free
+ *     prefix and the statement reads as perfectly resolvable. The signal has to
+ *     be taken from the raw words, not from the collected run.
+ *   - Spelling is not the discriminator. Mixed space/slash menu spelling is a
+ *     supported contract, and a RELATIVE head is just as much a menu name, so
+ *     this must not test for a leading `/`.
+ *
+ * What it deliberately does NOT match is text that names no menu at all — a
+ * head that is a variable, group, string or directive (`$fn [get …]`,
+ * `-z "$URL"`, `iter(hip)`), and a `$` word in ARGUMENT position
+ * (`get $item time`), which is a positional operand rather than a path
+ * segment. Those establish no menu, so the ambient context still governs.
+ */
+function isUnreadablePath(text: string): boolean {
+	const t = trimAscii(text);
+	if (t.length === 0) return false;
+	// A head that is not path-shaped names no menu.
+	if (/^[$[("':]/.test(t)) return false;
+	for (const word of asciiWords(t)) {
+		// Arguments begin: everything before this was readable. A `$` word
+		// STANDING ALONE is a positional operand (`get $item time`), not a path
+		// segment — only a `$` slash-joined inside a word is a menu segment.
+		if (word.includes("=") || /^[[({"$:]/.test(word)) return false;
+		const parts = word.split("/").filter((p) => p.length > 0);
+		if (parts.length === 0) continue;
+		for (const part of parts) {
+			if (BARE_WORD.test(part)) continue;
+			// A whole segment that is a variable is the unreadable-menu case.
+			if (VARIABLE_SEGMENT.test(part)) return true;
+			// Anything else is not a path segment at all, so the run ended here and
+			// everything before it was readable. This is why the test cannot simply
+			// look for a `$` anywhere: `print where comment~[$strfind …]` and
+			// `/ppp secret print where comment~"\\$SECRET"` carry a `$` inside an
+			// ARGUMENT — the `~` means no `=` ends the run first — and both name a
+			// perfectly readable menu.
+			return false;
+		}
+	}
+	return false;
+}
+
+/**
  * A `/`-led statement whose leading run offline cannot read — a variable
  * segment truncates it (`/ip/$menu`, `/interface/$type/print`). It is a
  * navigation to a computed menu exactly as plausibly as it is a command, so the
@@ -212,6 +265,7 @@ function isBodyContextIndependent(text: string): boolean {
 function isUnreadableAbsolute(text: string): boolean {
 	const t = trimAscii(text);
 	if (!t.startsWith("/")) return false;
+	if (isUnreadablePath(t)) return true;
 	const tokens = statementRun(t);
 	return tokens.length === 0 || tokens.some((x) => x.startsWith("$"));
 }
@@ -231,7 +285,10 @@ function isUnreadableAbsolute(text: string): boolean {
  * absolute anchors nothing.
  */
 function handsKnownContext(text: string, contextCertain: boolean): boolean {
-	if (isUnreadableAbsolute(text)) return false;
+	// Either spelling of an unreadable menu anchors nothing. `statementPath`
+	// derives a base from a RELATIVE one too (`route/$verb remove [find]` yields
+	// `<ctx>/route/$verb`), so this cannot test only the absolute form.
+	if (isUnreadableAbsolute(text) || isUnreadablePath(text)) return false;
 	return contextCertain || isBodyContextIndependent(text);
 }
 
@@ -524,6 +581,12 @@ function canonicalPath(
 	// The cascade contract reads this same split to decide which statements may
 	// keep resolving once the context is lost, so both must come from one place.
 	const base = isContextIndependent(t) ? "/" : ctx;
+	// R7 — a variable segment anywhere in the leading run leaves the path
+	// unresolved, INCLUDING after a static word. `statementRun` drops the whole
+	// word carrying the variable, so `/ip route/$menu/remove` would otherwise
+	// report a confident, truncated `/ip`.
+	if (isUnreadablePath(t))
+		return { path: null, unresolved: "variable path segment" };
 	const tokens = statementRun(body);
 	if (tokens.length === 0)
 		return { path: null, unresolved: "no leading path token" };
@@ -737,7 +800,7 @@ function nestedCertainty(
 ): boolean {
 	if (enclosing === undefined) return contextCertain;
 	if (enclosing.path !== null) return true;
-	if (isUnreadableAbsolute(enclosing.inner)) return false;
+	if (isUnreadablePath(enclosing.inner)) return false;
 	return contextCertain;
 }
 
