@@ -750,16 +750,12 @@
 		{
 			"id": "E3",
 			"class": "device-verified branch anchor",
-			"name": "a doubled sigil is not a scripting head",
+			"name": "a doubled sigil at statement start is a hard error — stop there",
 			"input": "//local foo 1\n:put $foo",
-			"expect": [
-				{
-					"name": "foo",
-					"cls": "parameter"
-				}
-			],
-			"rule": "F3 boundary — the sigil run must be zero or one character. Device: `//local foo 1` is an error and EVERY byte of the document reads `none`, so no declaration may be made. The trailing `$foo` reading is plain S5 on input the console rejects outright, not a claim about a binding.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"expect": [],
+			"rule": "F3/F5 — the sigil run must be zero or one character. CHR 7.23.2 errors at the SECOND sigil (`//local` and `:/local` error at offset 1) and classes every later byte `none`, including variables on following lines. So this is not merely 'do not declare': the resolver records `bad-sigil:<offset>` and reports nothing further, the same fail-closed stop a malformed escape gets. Inside a VALUE a doubled slash is ordinary text — `url=http://example.com` and `comment=a//b` are clean on the device — so the check is statement-leading only.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
+			"notes": ["bad-sigil:1"]
 		},
 		{
 			"id": "E4",
@@ -806,6 +802,77 @@
 				}
 			],
 			"rule": "F4 — CHR 7.23.2 accepts `\\ ` and `\\<tab>` in code with no error and still classes `$v` `variable-local`; only a backslash before a NON-whitespace character is malformed.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "E7",
+			"class": "device-verified branch anchor",
+			"name": "an escaped SPACE before `do={` still opens a closure",
+			"input": ":local outer 1\n:local fn do=\\ { :put $outer }",
+			"expect": [
+				{
+					"name": "outer",
+					"cls": "local"
+				},
+				{
+					"name": "fn",
+					"cls": "local"
+				},
+				{
+					"name": "outer",
+					"cls": "parameter"
+				}
+			],
+			"rule": "F4 — `\\ ` is a valid escape, so `do=\\ {` is still `do={` and the body is a closure: the device reads the in-body `outer` as `variable-parameter`. The walker and the closure test must share one escape rule, or the scan accepts an escape the `do=` lookback does not and the body silently stops being a closure.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "E8",
+			"class": "device-verified branch anchor",
+			"name": "an escaped TAB before `do={` behaves identically",
+			"input": ":local outer 1\n:local fn do=\\\t{ :put $outer }",
+			"expect": [
+				{
+					"name": "outer",
+					"cls": "local"
+				},
+				{
+					"name": "fn",
+					"cls": "local"
+				},
+				{
+					"name": "outer",
+					"cls": "parameter"
+				}
+			],
+			"rule": "F4 — same rule, tab spelling.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "E9",
+			"class": "device-verified branch anchor",
+			"name": "a lone escaped carriage return is valid, not a defect",
+			"input": ":local v 1\n:put \\\r$v",
+			"expect": [
+				{
+					"name": "v",
+					"cls": "local"
+				},
+				{
+					"name": "v",
+					"cls": "local"
+				}
+			],
+			"rule": "F4 — `\\<cr>` with no line feed after it escapes whitespace like `\\ ` and `\\<tab>`; the device raises no error and still classes `$v` `variable-local`. Only `\\<cr><lf>` is the CONTINUATION form.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "E10",
+			"class": "device-verified branch anchor",
+			"name": "a doubled slash inside a VALUE is ordinary text",
+			"input": "/tool fetch url=http://example.com/file\n:put 1",
+			"expect": [],
+			"rule": "F5 boundary — the fail-closed sigil rule must not fire on URLs, which are the common real shape. The device raises no error here at all.",
 			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
 		},
 		{

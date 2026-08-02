@@ -551,6 +551,9 @@ versionless
 #   one. Corner variable names quoted from the device probes and corpus scripts:
 #   vlanid, vlanbytes, ipprefix, octive (the `$octive-1` name-vs-operator case),
 #   lppp (the device documentation's own `variable-undefined` example).
+#   lookback: the backward scan that decides whether a `{` follows `do=`; it must
+#   accept exactly the escapes the forward walker does, or the two disagree about
+#   where the argument name ends and a function body stops being a closure.
 SUT
 CJK
 pathresolve
@@ -589,3 +592,4 @@ vlanbytes
 ipprefix
 octive
 lppp
+lookback

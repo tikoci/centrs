@@ -69,7 +69,7 @@ describe("explain/symbols — frozen fixtures", () => {
 		expect(ids.filter((id) => id.startsWith("C"))).toHaveLength(22);
 		expect(ids.filter((id) => id.startsWith("F"))).toHaveLength(7);
 		expect(ids.filter((id) => id.startsWith("H"))).toHaveLength(9);
-		expect(ids.filter((id) => id.startsWith("E"))).toHaveLength(6);
+		expect(ids.filter((id) => id.startsWith("E"))).toHaveLength(10);
 	});
 
 	test("no fixture is hand-asserted: every promoted-beyond anchor is device-verified", () => {
@@ -278,6 +278,24 @@ describe("explain/symbols — escape validity (F4)", () => {
 		const r = resolveSymbols(":local outer 1\n:local fn do=\\{ :put $outer }");
 		expect(r.occurrences.map((o) => o.cls)).toEqual(["local", "local"]);
 		expect(r.notes).toEqual(["bad-escape:28"]);
+	});
+
+	test("every valid escape is transparent to the `do=` lookback", () => {
+		// the walker and the closure test must accept the same escapes, or a body
+		// silently stops being a closure
+		for (const separator of ["\\ ", "\\\t", "\\\n", " "]) {
+			const r = resolveSymbols(
+				`:local outer 1\n:local fn do=${separator}{ :put $outer }`,
+			);
+			expect(r.notes).toEqual([]);
+			expect(r.occurrences.at(-1)?.cls).toBe("parameter");
+		}
+	});
+
+	test("a lone escaped carriage return is whitespace, not a defect", () => {
+		const r = resolveSymbols(":local v 1\n:put \\\r$v");
+		expect(r.notes).toEqual([]);
+		expect(r.occurrences.map((o) => o.cls)).toEqual(["local", "local"]);
 	});
 
 	test("a malformed escape cannot fabricate a closure", () => {

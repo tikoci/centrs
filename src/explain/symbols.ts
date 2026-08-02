@@ -71,7 +71,7 @@
  *       operator (`$octive-1`); the tie is broken by the longest prefix that
  *       resolves against the document's OWN declarations.
  *
- * FOUR behaviors go beyond the lab SUT. None is invented: the probe declared the
+ * FIVE behaviors go beyond the lab SUT. None is invented: the probe declared the
  * first two and left them unmodeled (it was throwaway and depth-scoped), F2 is
  * required verbatim by the ratified spec — `commands/explain/README.md`, "Symbol
  * scopes follow RouterOS scope identity, not brace depth alone" — and F3/F4 are
@@ -100,6 +100,11 @@
  *       what Q13's posture forbids. The two guards matter as much as the rule:
  *       `$fn local foo 1` makes `local` an ordinary word (device: `none`), and
  *       `//local foo 1` is a device error, so neither may declare.
+ *   F5  A sigil RUN at statement start is a hard error — `//local`, `::put` and
+ *       `:/local` all error at the second character and class every later byte
+ *       `none` — so it fails closed with `bad-sigil:<offset>` like a malformed
+ *       escape. Inside a VALUE a doubled slash is ordinary text (`url=http://…`
+ *       and `comment=a//b` are clean), so the check is statement-leading only.
  *   F4  A backslash in CODE is valid only before whitespace; before a newline it
  *       is the H5 CONTINUATION, so the statement head, the pending declaration
  *       and `declaredHere` all survive it. Treating it as a boundary lost
@@ -108,7 +113,10 @@
  *       treats as a closure. Every other spelling (`\a`, `\$v`, `\\ `, `\{`) is a
  *       hard device error that classes the whole remainder `none`, so the walker
  *       records `bad-escape:<offset>` and stops there instead of reading
- *       `do=\{` as a closure.
+ *       `do=\{` as a closure. `escapeKind` is shared with the `do=` lookback on
+ *       purpose: `do=\ {`, `do=\<tab>{` and `do=\<nl>{` are all `do={` on the
+ *       device, and a scan that accepted an escape the lookback did not would
+ *       silently stop treating the body as a closure.
  *   F2  A NAMED-FUNCTION body (`:local`/`:global NAME do={…}`) is a CLOSURE:
  *       outer names read `parameter` inside it, and a global needs an in-body
  *       `:global NAME` re-import to read `global`. A control-flow `do={…}`
@@ -459,16 +467,12 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		// confident classes across a boundary the console never crossed. Occurrences
 		// BEFORE the defect stand (the lab's X1 rule).
 		if (c === "\\") {
-			const next = text[i + 1];
-			if (next === "\n") {
-				i += 1;
+			const kind = escapeKind(text, i);
+			if (kind === "continuation") {
+				i += text[i + 1] === "\r" ? 2 : 1;
 				continue;
 			}
-			if (next === "\r" && text[i + 2] === "\n") {
-				i += 2;
-				continue;
-			}
-			if (next === " " || next === "\t") {
+			if (kind === "whitespace") {
 				i += 1;
 				continue;
 			}
@@ -599,6 +603,16 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			// `/:local foo 1` are device errors (every byte `none`), not
 			// declarations.
 			const sigilRun = wordStart - start;
+			// A sigil RUN at statement start is a hard device error — `//local`,
+			// `::put` and `:/local` all error at the second character and class
+			// every later byte `none`. Inside a value it is ordinary text (`url=
+			// http://example.com` and `comment=a//b` are clean), so this is checked
+			// only in statement-leading position.
+			if (leadBefore && sigilRun > 1) {
+				notes.push(`bad-sigil:${start + 1}`);
+				defect = true;
+				break;
+			}
 			if (head === null && leadBefore && sigilRun <= 1) {
 				head = lower;
 				// The sigil on a scripting head is OPTIONAL — in BOTH directions.
@@ -826,18 +840,18 @@ function readRef(
 /** The `name=` immediately before the `{` at `open`, lowercased, or null. */
 function argNameBefore(text: string, open: number): string | null {
 	let i = open - 1;
-	// H5 again: `do=\<nl>{` is still `do={`, so a CONTINUATION backslash is
-	// skipped like whitespace — without this the brace reads as a plain value and
-	// the body silently stops being a closure. Only that form: a backslash before
-	// anything else is the malformed escape the walker already stopped on, and
-	// treating `do=\{` as `do={` would fabricate a closure the device never made.
+	// Every escape the WALKER accepts has to be transparent here too, or the two
+	// disagree about where `do=` ends: `do=\ {`, `do=\<tab>{` and `do=\<nl>{` are
+	// all `do={` on the device (the body is a closure), while `do=\{` is a hard
+	// error the walker already stopped on. Sharing `escapeKind` is what keeps the
+	// closure test and the scan from drifting apart.
 	while (i >= 0) {
 		const c = text[i] as string;
 		if (isSpace(c)) {
 			i--;
 			continue;
 		}
-		if (c === "\\" && (text[i + 1] === "\n" || text[i + 1] === "\r")) {
+		if (c === "\\" && escapeKind(text, i) !== "invalid") {
 			i--;
 			continue;
 		}
@@ -849,6 +863,27 @@ function argNameBefore(text: string, open: number): string | null {
 	while (i >= 0 && isIdent(text[i] as string)) i--;
 	const name = text.slice(i + 1, end);
 	return name === "" ? null : name.toLowerCase();
+}
+
+/**
+ * What the backslash at `at` means in CODE.
+ *
+ * Grounded on CHR 7.23.2: a backslash is valid ONLY before whitespace. Before a
+ * newline it is the H5 line continuation (`\<nl>` and `\<cr><nl>`); before a
+ * space, a tab or a lone carriage return it escapes that character and the
+ * statement carries on; before anything else (`\a`, `\$v`, `\\`, `\{`) the
+ * console raises a hard error and classes the whole remainder `none`.
+ */
+function escapeKind(
+	text: string,
+	at: number,
+): "continuation" | "whitespace" | "invalid" {
+	const next = text[at + 1];
+	if (next === "\n") return "continuation";
+	if (next === "\r")
+		return text[at + 2] === "\n" ? "continuation" : "whitespace";
+	if (next === " " || next === "\t") return "whitespace";
+	return "invalid";
 }
 
 const isSpace = (c: string): boolean =>
