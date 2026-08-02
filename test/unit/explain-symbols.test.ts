@@ -1,0 +1,348 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import {
+	analyzeCoordinates,
+	byteToPosition,
+} from "../../src/explain/coordinates.ts";
+import {
+	HIGHLIGHT_CLASS,
+	resolveSymbols,
+	type SymbolClass,
+} from "../../src/explain/symbols.ts";
+import * as centrs from "../../src/index.ts";
+
+/**
+ * Q13 symbol-scope anchor tests (phase 0.5, #185/#186).
+ *
+ * Promoted from the throwaway lab probe `.scratch/explain-lab-symbols.ts` (the
+ * SUT) and its 22 constructed corners, scored against the device's own
+ * per-occurrence highlight streams as oracle. The production module is
+ * `src/explain/symbols.ts`.
+ *
+ * The ratified answer these tests pin is an ABSTENTION rule, so the strongest
+ * assertions here are negative: the resolver never emits `undefined`, and it
+ * never asserts a class for a bare word it cannot resolve. The naive rule from
+ * the device's own documentation ("a bare identifier that resolves to nothing is
+ * undefined") measured 2.5% precision — 39 false positives against 1 true
+ * positive — which is why `cls: null` is a first-class outcome rather than a
+ * failure.
+ *
+ * Fixture provenance: `test/fixtures/explain/symbols.json`. C1-C22 are the lab
+ * corners verbatim, F1a-F2d are the branch anchors for the two behaviors
+ * promoted beyond the lab SUT (device-verified on CHR 7.23.2 before freezing),
+ * X1-X6 anchor surfaces the oracle cannot express.
+ */
+
+interface Case {
+	id: string;
+	class: string;
+	name: string;
+	input: string;
+	expect: { name: string; cls: SymbolClass | null }[];
+	rule: string;
+	verified?: string;
+	notes?: string[];
+}
+
+const fixtures: { cases: Case[] } = JSON.parse(
+	readFileSync(
+		new URL("../fixtures/explain/symbols.json", import.meta.url),
+		"utf8",
+	),
+);
+
+const observed = (input: string): { name: string; cls: SymbolClass | null }[] =>
+	resolveSymbols(input).occurrences.map((o) => ({ name: o.name, cls: o.cls }));
+
+describe("explain/symbols — frozen fixtures", () => {
+	for (const c of fixtures.cases) {
+		test(`${c.id} (${c.class}) — ${c.name}`, () => {
+			expect(observed(c.input)).toEqual(c.expect);
+			if (c.notes !== undefined)
+				expect(resolveSymbols(c.input).notes).toEqual(c.notes);
+		});
+	}
+
+	test("every fixture case is present and uniquely identified", () => {
+		const ids = fixtures.cases.map((c) => c.id);
+		expect(new Set(ids).size).toBe(ids.length);
+		expect(ids.filter((id) => id.startsWith("C"))).toHaveLength(22);
+		expect(ids.filter((id) => id.startsWith("F"))).toHaveLength(6);
+	});
+
+	test("no fixture is hand-asserted: every promoted-beyond anchor is device-verified", () => {
+		for (const c of fixtures.cases.filter((c) =>
+			c.class.includes("device-verified"),
+		))
+			expect(c.verified).toContain("CHR 7.23.2");
+	});
+});
+
+describe("explain/symbols — pre-registered thresholds", () => {
+	test("`undefined` is never emitted: the resolver abstains instead", () => {
+		for (const c of fixtures.cases)
+			for (const o of resolveSymbols(c.input).occurrences)
+				expect(o.cls).not.toBe("undefined");
+	});
+
+	test("an unresolvable bare word abstains and says why, never asserts", () => {
+		for (const input of [
+			":if (someBareWord = 1) do={:put 1}",
+			"/ip route print where dst-address=0.0.0.0/0",
+			"/certificate print where (common-name or subject-alt-name)",
+			"[find running]",
+		]) {
+			const bare = resolveSymbols(input).occurrences.filter((o) => !o.sigil);
+			for (const o of bare) {
+				if (o.declaration) continue;
+				if (o.cls !== null) continue;
+				expect(o.note).toBeDefined();
+			}
+			expect(bare.some((o) => o.cls === "undefined")).toBe(false);
+		}
+	});
+
+	test("an undeclared `$name` is `parameter`, never an error or an abstention", () => {
+		const [occurrence] = resolveSymbols(":put $surelyUndeclared").occurrences;
+		expect(occurrence?.cls).toBe("parameter");
+		expect(occurrence?.sigil).toBe(true);
+	});
+
+	test("`:set` on an undeclared name abstains — a hard device error is not a class", () => {
+		const [occurrence] = resolveSymbols(":set neverDeclared 1").occurrences;
+		expect(occurrence?.cls).toBeNull();
+		expect(occurrence?.note).toContain(":set");
+	});
+});
+
+describe("explain/symbols — F2 closure scope", () => {
+	test("a named-function body hides the enclosing local", () => {
+		const r = resolveSymbols(":local outer 1\n:local fn do={ :put $outer }");
+		expect(r.occurrences.map((o) => o.cls)).toEqual([
+			"local",
+			"local",
+			"parameter",
+		]);
+	});
+
+	test("a control-flow body shares the enclosing scope", () => {
+		for (const body of [
+			":local v 1\n:if (true) do={ :put $v }",
+			":local v 1\n:while ($v < 2) do={ :put $v }",
+			":local v 1\n:foreach i in={1} do={ :put $v }",
+		]) {
+			const refs = resolveSymbols(body).occurrences.filter(
+				(o) => o.name === "v" && !o.declaration,
+			);
+			expect(refs.length).toBeGreaterThan(0);
+			for (const o of refs) expect(o.cls).toBe("local");
+		}
+	});
+
+	test("a global reads `global` only with an in-body re-import", () => {
+		const withImport = resolveSymbols(
+			":global G 1\n:global f do={ :global G\n :put $G }",
+		);
+		expect(withImport.occurrences.at(-1)?.cls).toBe("global");
+		const without = resolveSymbols(":global G 1\n:global f do={ :put $G }");
+		expect(without.occurrences.at(-1)?.cls).toBe("parameter");
+	});
+
+	test("a declaration inside the function body is visible there", () => {
+		const r = resolveSymbols(
+			":local outer 1\n:local fn do={ :local inner 2\n :put $inner }",
+		);
+		expect(r.occurrences.at(-1)?.cls).toBe("local");
+	});
+
+	test("the closure boundary applies to `auto` bindings too", () => {
+		const r = resolveSymbols(
+			":foreach i in={1;2} do={ :put $i }\n:local fn do={ :put $i }",
+		);
+		expect(r.occurrences.map((o) => o.cls)).toEqual([
+			"auto",
+			"auto",
+			"local",
+			"parameter",
+		]);
+	});
+
+	test("a nested function body hides its parent function's locals", () => {
+		const r = resolveSymbols(
+			":local f do={ :local mid 1\n :local g do={ :put $mid } }",
+		);
+		expect(r.occurrences.at(-1)?.cls).toBe("parameter");
+	});
+});
+
+describe("explain/symbols — F1 substitutions inside strings", () => {
+	test("a nested string inside `$[…]` does not flip the scan's quote phase", () => {
+		const r = resolveSymbols(
+			':local cs ""\n:set cs "$cs$[[:parse "(\\"x\\")"]]"\n:local pos 0\n:put $pos',
+		);
+		expect(r.occurrences.at(-1)?.cls).toBe("local");
+		expect(r.notes).toEqual([]);
+	});
+
+	test("a `#` line after such a substitution is still a comment", () => {
+		const r = resolveSymbols(
+			':local a "$[[:parse "(\\"x\\")"]]"\n# :put $a\n:put $a',
+		);
+		expect(r.occurrences).toHaveLength(2);
+		expect(r.occurrences.at(-1)?.start).toBeGreaterThan(30);
+	});
+
+	test("a reference inside a substitution inside a string resolves", () => {
+		const r = resolveSymbols(':local v 1\n:put "value $[:tostr $v]"');
+		expect(r.occurrences.map((o) => o.cls)).toEqual(["local", "local"]);
+	});
+
+	test("`$(…)` substitutions are treated the same way", () => {
+		const r = resolveSymbols(':local v 1\n:put "$($v)"\n:put $v');
+		expect(r.occurrences.map((o) => o.cls)).toEqual([
+			"local",
+			"local",
+			"local",
+		]);
+	});
+});
+
+describe("explain/symbols — spans are analyzed-byte offsets", () => {
+	test("a span slices the name out of an ASCII document", () => {
+		const input = ":local vlanid 1\n:put $vlanid";
+		for (const o of resolveSymbols(input).occurrences)
+			expect(input.slice(o.start, o.end)).toBe("vlanid");
+	});
+
+	test("spans stay in byte space when the document has non-ASCII text", () => {
+		// non-ASCII written as escapes so the fixture text stays reviewable
+		const input = ':local n "\u65e5\u672c\u8a9e"\n:put $n';
+		const analysis = analyzeCoordinates(input);
+		const bytes = new TextEncoder().encode(input);
+		const reference = resolveSymbols(input).occurrences.at(-1);
+		expect(reference).toBeDefined();
+		const span = reference as NonNullable<typeof reference>;
+		expect(new TextDecoder().decode(bytes.slice(span.start, span.end))).toBe(
+			"n",
+		);
+		// and the span maps back through the contract to the second (0-based) line
+		expect(byteToPosition(analysis, span.start).line).toBe(1);
+	});
+
+	test("a quoted declaration's span includes the quotes but its name does not", () => {
+		const input = ':global "set-dns" do={:put 1}';
+		const [declaration] = resolveSymbols(input).occurrences;
+		expect(declaration?.name).toBe("set-dns");
+		expect(input.slice(declaration?.start, declaration?.end)).toBe('"set-dns"');
+	});
+
+	test("S19 stops the span at the resolving prefix, not the operator", () => {
+		const input = ":local octive 4\n:put ($octive-1)";
+		const reference = resolveSymbols(input).occurrences.at(-1);
+		expect(reference?.name).toBe("octive");
+		expect(input.slice(reference?.start, reference?.end)).toBe("octive");
+	});
+
+	test("every span is in bounds, non-empty, and ordered", () => {
+		for (const c of fixtures.cases) {
+			const bytes = new TextEncoder().encode(c.input).length;
+			let previous = -1;
+			for (const o of resolveSymbols(c.input).occurrences) {
+				expect(o.start).toBeGreaterThanOrEqual(0);
+				expect(o.end).toBeGreaterThan(o.start);
+				expect(o.end).toBeLessThanOrEqual(bytes);
+				expect(o.start).toBeGreaterThanOrEqual(previous);
+				previous = o.start;
+			}
+		}
+	});
+});
+
+describe("explain/symbols — invariants", () => {
+	const adversarial = [
+		"",
+		"\n\n\n",
+		"#",
+		'"',
+		'"unterminated $x',
+		"${",
+		"$",
+		"$$$",
+		"]]]}}}",
+		":local",
+		":local ",
+		":global\n",
+		":set",
+		":onerror",
+		":foreach",
+		"$0 $1 $99",
+		"$-",
+		"$->x",
+		"$.",
+		"$a->b.c",
+		":local a-b 1\n:put $a-b-c",
+		"/ip route print where",
+		"[find",
+		':put "$[[:parse "',
+		"$v",
+		"\u65e5\u672c\u8a9e $v",
+		":local v 1\r\n:put $v",
+	];
+
+	test("never throws", () => {
+		for (const input of [...adversarial, ...fixtures.cases.map((c) => c.input)])
+			expect(() => resolveSymbols(input)).not.toThrow();
+	});
+
+	test("is deterministic", () => {
+		for (const c of fixtures.cases)
+			expect(resolveSymbols(c.input)).toEqual(resolveSymbols(c.input));
+	});
+
+	test("every reported class is one of the five device classes", () => {
+		const known = new Set(Object.keys(HIGHLIGHT_CLASS));
+		for (const input of [...adversarial, ...fixtures.cases.map((c) => c.input)])
+			for (const o of resolveSymbols(input).occurrences)
+				if (o.cls !== null) expect(known.has(o.cls)).toBe(true);
+	});
+
+	test("declarations always carry a class; only references may abstain", () => {
+		for (const c of fixtures.cases)
+			for (const o of resolveSymbols(c.input).occurrences)
+				if (o.declaration) expect(o.cls).not.toBeNull();
+	});
+
+	test("nesting is depth-bounded and reported, not thrown", () => {
+		const deep = `${"{".repeat(600)}:local v 1\n:put $v${"}".repeat(600)}`;
+		const started = Date.now();
+		const r = resolveSymbols(deep);
+		expect(Date.now() - started).toBeLessThan(2000);
+		expect(r.notes.some((n) => n.startsWith("over-depth:"))).toBe(true);
+	});
+
+	test("a large document stays within a linear time budget", () => {
+		const line = ':local v 1\n:put "$v $[:tostr $v]"\n';
+		const big = line.repeat(4000);
+		const started = Date.now();
+		const r = resolveSymbols(big);
+		expect(Date.now() - started).toBeLessThan(4000);
+		expect(r.occurrences.length).toBeGreaterThan(10000);
+	});
+
+	test("HIGHLIGHT_CLASS covers every class and maps to device names", () => {
+		expect(Object.values(HIGHLIGHT_CLASS).sort()).toEqual([
+			"variable-auto",
+			"variable-global",
+			"variable-local",
+			"variable-parameter",
+			"variable-undefined",
+		]);
+	});
+});
+
+describe("explain/symbols — public export surface", () => {
+	test("is wired through the package barrel", () => {
+		expect(centrs.resolveSymbols).toBe(resolveSymbols);
+		expect(centrs.HIGHLIGHT_CLASS).toBe(HIGHLIGHT_CLASS);
+	});
+});

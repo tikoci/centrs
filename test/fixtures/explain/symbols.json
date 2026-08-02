@@ -1,0 +1,631 @@
+{
+	"_source": "Promoted from the phase-0 lab corners `.scratch/explain-lab-q13-corners.ts` (Q13, #185), all 22 of which pass unchanged against the shipped module — the ratified expectations, each carrying the device probe or corpus file it was read off. C1-C22 are those corners. F1a-F2d are the branch anchors for the two behaviors promoted BEYOND the lab SUT (substitution-in-string, closure scope); they were device-verified on CHR 7.23.2 before being frozen here, so no fixture in this file is hand-asserted. X1-X6 are behavior anchors for surfaces the oracle cannot express (empty input, structural notes, scan resumption). `cls: null` is an ABSTENTION and a first-class expected outcome: Q13's central finding is that offline may say what a name is bound to and must never say that a bare word is unbound.",
+	"cases": [
+		{
+			"id": "C1",
+			"class": "ratified lab corner",
+			"name": "S1 :local declares and its use resolves",
+			"input": ":local x 1; :put $x",
+			"expect": [
+				{
+					"name": "x",
+					"cls": "local"
+				},
+				{
+					"name": "x",
+					"cls": "local"
+				}
+			],
+			"rule": "S1/S4 — probe `local-variable` @7.23.2 pairs: both occurrences `variable-local`"
+		},
+		{
+			"id": "C2",
+			"class": "ratified lab corner",
+			"name": "S2 :global declares and its use resolves",
+			"input": ":global gx 2; :put $gx",
+			"expect": [
+				{
+					"name": "gx",
+					"cls": "global"
+				},
+				{
+					"name": "gx",
+					"cls": "global"
+				}
+			],
+			"rule": "S2/S4 — probe `global-variable` @7.23.2"
+		},
+		{
+			"id": "C3",
+			"class": "ratified lab corner",
+			"name": "S3 :foreach binds its loop variable as auto",
+			"input": ":foreach i in=[/ip address find] do={:put $i}",
+			"expect": [
+				{
+					"name": "i",
+					"cls": "auto"
+				},
+				{
+					"name": "i",
+					"cls": "auto"
+				}
+			],
+			"rule": "S3 — probe `foreach-counter` @7.23.2: `variable-auto` at declaration and use"
+		},
+		{
+			"id": "C4",
+			"class": "ratified lab corner",
+			"name": "S6 positional parameters are `parameter`",
+			"input": ":local f do={:put $1}; [$f \"hi\"]",
+			"expect": [
+				{
+					"name": "f",
+					"cls": "local"
+				},
+				{
+					"name": "1",
+					"cls": "parameter"
+				},
+				{
+					"name": "f",
+					"cls": "local"
+				}
+			],
+			"rule": "S6 — probe `function-parameter` @7.23.2"
+		},
+		{
+			"id": "C5",
+			"class": "ratified lab corner",
+			"name": "S5 an undeclared $name is `parameter`, NOT an error",
+			"input": ":put $surelyUndefinedVariable",
+			"expect": [
+				{
+					"name": "surelyUndefinedVariable",
+					"cls": "parameter"
+				}
+			],
+			"rule": "S5 — probe `undefined-variable` @7.23.2. The console cannot distinguish 'undeclared' from 'supplied at call time', so `parameter` is the CORRECT answer, not a fallback. An offline resolver that flagged this as an error would be wrong."
+		},
+		{
+			"id": "C6",
+			"class": "ratified lab corner",
+			"name": "S1 a local does NOT escape the function body that declared it",
+			"input": ":global f1 do={\n  :local v 1\n  :put $v\n}\n:global f2 do={\n  :put \"$v\"\n}",
+			"expect": [
+				{
+					"name": "f1",
+					"cls": "global"
+				},
+				{
+					"name": "v",
+					"cls": "local"
+				},
+				{
+					"name": "v",
+					"cls": "local"
+				},
+				{
+					"name": "f2",
+					"cls": "global"
+				},
+				{
+					"name": "v",
+					"cls": "parameter"
+				}
+			],
+			"rule": "S1 scope extent — grounded on test.rsc @pre-7.23: `vlanid` is `variable-local` inside the `pvid2array` body (offsets 959–2420) and `variable-parameter` from the `mkvlan` body onward (4231+). The device treats the second function's reference as a call-time parameter. This is the fixture that caught the reference-scan depth drift: `$v]`/`$v)` swallowed their closing bracket, nesting never unwound, and locals leaked across every function in the file."
+		},
+		{
+			"id": "C7",
+			"class": "ratified lab corner",
+			"name": "S1 an inner :local shadows an outer one",
+			"input": ":local v 1\n:if (true) do={\n  :local v 2\n  :put $v\n}\n:put $v",
+			"expect": [
+				{
+					"name": "v",
+					"cls": "local"
+				},
+				{
+					"name": "v",
+					"cls": "local"
+				},
+				{
+					"name": "v",
+					"cls": "local"
+				},
+				{
+					"name": "v",
+					"cls": "local"
+				}
+			],
+			"rule": "S4 — nearest-enclosing wins. Both resolve to `local`, so the CLASS is stable under shadowing; only the binding identity changes, which highlight cannot observe (it emits a class, not a symbol id). Recorded so the limit is explicit: this corner is class-invisible to the oracle.",
+			"verified": "CHR 7.23.2 highlight: all four `v` occurrences = `variable-local` — the CLASS is stable under shadowing (device-confirmed); the binding-identity claim remains inherently unobservable by highlight, as recorded."
+		},
+		{
+			"id": "C8",
+			"class": "ratified lab corner",
+			"name": "S2 a global stays visible inside a nested block",
+			"input": ":global g 1\n:if (true) do={\n  :put $g\n}",
+			"expect": [
+				{
+					"name": "g",
+					"cls": "global"
+				},
+				{
+					"name": "g",
+					"cls": "global"
+				}
+			],
+			"rule": "S2 — globals are recorded at depth 0 and survive brace exit"
+		},
+		{
+			"id": "C9",
+			"class": "ratified lab corner",
+			"name": "S11 a QUOTED declaration name",
+			"input": ":global \"set-dns\" do={:put 1}\n$\"set-dns\" 1.1",
+			"expect": [
+				{
+					"name": "set-dns",
+					"cls": "global"
+				},
+				{
+					"name": "set-dns",
+					"cls": "global"
+				}
+			],
+			"rule": "S11 — grounded on test.rsc: the device classes `\"set-dns\"` `variable-global` INCLUDING the quotes. Without this rule the string is skipped and the next bare word (`do`) is declared instead — which is what the first Q13 run did."
+		},
+		{
+			"id": "C10",
+			"class": "ratified lab corner",
+			"name": "S18 :onerror binds its error variable",
+			"input": ":onerror Err {\n  :put 1\n} do={\n  :put $Err\n}",
+			"expect": [
+				{
+					"name": "Err",
+					"cls": "local"
+				},
+				{
+					"name": "Err",
+					"cls": "local"
+				}
+			],
+			"rule": "S18 — grounded on eworm/backup-cloud.rsc: `:onerror Err {…} do={… $Err}` and the device's class set contains no `variable-parameter`. Q2 established the same head-directive slot for block naming."
+		},
+		{
+			"id": "C11",
+			"class": "ratified lab corner",
+			"name": "S10 :set is a reference, not a declaration",
+			"input": ":local schema 1\n:set schema 2",
+			"expect": [
+				{
+					"name": "schema",
+					"cls": "local"
+				},
+				{
+					"name": "schema",
+					"cls": "local"
+				}
+			],
+			"rule": "S10 — grounded on test.rsc: the `:set` target carries the class it was DECLARED as. `:set` never introduces a binding; on an undeclared name the device emits a hard `error` (highlight-format.md §4), so the resolver abstains there instead of inventing a class."
+		},
+		{
+			"id": "C12",
+			"class": "ratified lab corner",
+			"name": "S10 :set on an undeclared name abstains",
+			"input": ":set neverDeclared 1",
+			"expect": [
+				{
+					"name": "neverDeclared",
+					"cls": null
+				}
+			],
+			"rule": "S10 — the device's answer is a hard `error`, which is not a variable class at all. Abstaining is the only honest offline output."
+		},
+		{
+			"id": "C13",
+			"class": "ratified lab corner",
+			"name": "S14 `->` terminates a reference name",
+			"input": ":local vlanbytes 1\n:put ($vlanbytes->0)",
+			"expect": [
+				{
+					"name": "vlanbytes",
+					"cls": "local"
+				},
+				{
+					"name": "vlanbytes",
+					"cls": "local"
+				}
+			],
+			"rule": "S14 — grounded on test.rsc: the device classes `vlanbytes` `variable-local` and `->0` separately. A greedy `-`-inclusive scan yields `vlanbytes-`, fails lookup, and degrades to `parameter`."
+		},
+		{
+			"id": "C14",
+			"class": "ratified lab corner",
+			"name": "S14 `.` terminates a reference name",
+			"input": ":local ipprefix \"10.0\"\n:put \"$ipprefix.1\"",
+			"expect": [
+				{
+					"name": "ipprefix",
+					"cls": "local"
+				},
+				{
+					"name": "ipprefix",
+					"cls": "local"
+				}
+			],
+			"rule": "S14 — grounded on test.rsc. The dotted `arg-scope`/`arg-dot` form is for ARGUMENT names, not variables (highlight-format.md §3.1)."
+		},
+		{
+			"id": "C15",
+			"class": "ratified lab corner",
+			"name": "S19 `-` inside a name vs `-` as an operator",
+			"input": ":local octive 4\n:put ($octive-1)",
+			"expect": [
+				{
+					"name": "octive",
+					"cls": "local"
+				},
+				{
+					"name": "octive",
+					"cls": "local"
+				}
+			],
+			"rule": "S19 — `-` is legal inside a name (`set-dns`) AND is the operator. The document's own declarations break the tie: the full run `octive-1` does not resolve, the prefix `octive` does. Same longest-resolving-prefix move Q0 rev 3 used for fused `path+arg` slugs."
+		},
+		{
+			"id": "C16",
+			"class": "ratified lab corner",
+			"name": "S8 a menu field in a filter region is schema-dependent — abstain",
+			"input": "/ip route print where dst-address=0.0.0.0/0",
+			"expect": [
+				{
+					"name": "dst-address",
+					"cls": null
+				}
+			],
+			"rule": "S8 — the console binds the target menu's fields as locals, so a real field is `variable-local` and a typo is `variable-undefined`. Telling them apart needs the menu schema; offline abstains."
+		},
+		{
+			"id": "C17",
+			"class": "ratified lab corner",
+			"name": "S8 bare field references in a query expression also abstain",
+			"input": "/certificate print where (common-name or subject-alt-name)",
+			"expect": [
+				{
+					"name": "common-name",
+					"cls": null
+				},
+				{
+					"name": "subject-alt-name",
+					"cls": null
+				}
+			],
+			"rule": "S8 widened — grounded on eworm/check-certificates.rsc. The `field=value` form is not the only one: bare field names in a query expression are menu fields too. `or` is an operator (S17), not a symbol."
+		},
+		{
+			"id": "C18",
+			"class": "ratified lab corner",
+			"name": "S7 REVISED — a bare word in expression position is never asserted",
+			"input": ":if (someBareWord = 1) do={:put 1}",
+			"expect": [
+				{
+					"name": "someBareWord",
+					"cls": null
+				}
+			],
+			"rule": "S7 — asserting `variable-undefined` here measured 2.5% precision on the holdout (39 false positives vs 1 true positive). A bare word in expression position is far more often a menu field or a query flag than a genuine unresolved name. Abstention is the pre-registered response to that, and it is the same conclusion Q3 reached for absolute inner paths."
+		},
+		{
+			"id": "C19",
+			"class": "ratified lab corner",
+			"name": "S12 a sigilled word is a directive or path segment, never a symbol",
+			"input": ":if ([:typeof $x] = \"num\") do={:put 1}",
+			"expect": [
+				{
+					"name": "x",
+					"cls": "parameter"
+				}
+			],
+			"rule": "S12 — `:typeof` is `cmd` on the device; only `$x` is a symbol. The sigil is the schema-free tell."
+		},
+		{
+			"id": "C20",
+			"class": "ratified lab corner",
+			"name": "S16 space-separated menu path segments are not symbols",
+			"input": ":if ([:len [/interface list find name=LAN]] = 1) do={:put 1}",
+			"expect": [
+				{
+					"name": "name",
+					"cls": null
+				}
+			],
+			"rule": "S16 — grounded on test.rsc: `list` is `dir` on the device. The space-separated path form (Q3/R4) leaves later segments without a `/` sigil, so the sigil rule alone reads `list` as an identifier. `LAN` is a VALUE after `=` (S15), classified `none`."
+		},
+		{
+			"id": "C21",
+			"class": "ratified lab corner",
+			"name": "S13 bare literals are values, not symbols",
+			"input": ":if ($GlobalReady != true) do={:put 1}",
+			"expect": [
+				{
+					"name": "GlobalReady",
+					"cls": "parameter"
+				}
+			],
+			"rule": "S13 — grounded on test.rsc: `true` is `none` on the device."
+		},
+		{
+			"id": "C22",
+			"class": "ratified lab corner",
+			"name": "S9 a reference inside a double-quoted string still resolves",
+			"input": ":local n \"eth\"\n:put \"iface $n here\"",
+			"expect": [
+				{
+					"name": "n",
+					"cls": "local"
+				},
+				{
+					"name": "n",
+					"cls": "local"
+				}
+			],
+			"rule": "S9 — grounded on test.rsc: `$vlanid` inside a `:put \"…\"` string carries its scope class (offsets 2475/2746 are `variable-local`). String interpolation does NOT reset scope resolution — a hypothesis the scoring explicitly refuted before the real cause (scope extent) was found."
+		},
+		{
+			"id": "F1a",
+			"class": "device-verified branch anchor",
+			"name": "a `$[…]` substitution carrying a nested string does not break later bindings",
+			"input": ":global f do={\n    :local cs \"\"\n    :set cs \"$cs$[[:parse \"(\\\"x\\\")\"]]\"\n    :local pos 0\n    :while ($pos < 3) do={ :set pos ($pos + 1) }\n}",
+			"expect": [
+				{
+					"name": "f",
+					"cls": "global"
+				},
+				{
+					"name": "cs",
+					"cls": "local"
+				},
+				{
+					"name": "cs",
+					"cls": "local"
+				},
+				{
+					"name": "cs",
+					"cls": "local"
+				},
+				{
+					"name": "pos",
+					"cls": "local"
+				},
+				{
+					"name": "pos",
+					"cls": "local"
+				},
+				{
+					"name": "pos",
+					"cls": "local"
+				},
+				{
+					"name": "pos",
+					"cls": "local"
+				}
+			],
+			"rule": "F1 — the substitution is CODE, so its nested string closes inside it. A scan that reads it as string bytes flips its quote phase here and every later binding is lost (the lab SUT read both `pos` uses as `parameter`).",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "F1b",
+			"class": "device-verified branch anchor",
+			"name": "a `#` line after such a substitution is a comment, not string content",
+			"input": ":local a \"$[[:parse \"(\\\"x\\\")\"]]\"\n# :put $a\n:put $a",
+			"expect": [
+				{
+					"name": "a",
+					"cls": "local"
+				},
+				{
+					"name": "a",
+					"cls": "local"
+				}
+			],
+			"rule": "F1 — H4 must be decided by a scanner that models substitutions. `segment.ts`'s shared `maskComments` does not, so it leaves this comment unmasked; the device classes the whole `# :put $a` line `comment`.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "F2a",
+			"class": "device-verified branch anchor",
+			"name": "a named-function body is a closure: the outer local reads parameter",
+			"input": ":local outer 1\n:local fn do={ :put $outer }\n$fn",
+			"expect": [
+				{
+					"name": "outer",
+					"cls": "local"
+				},
+				{
+					"name": "fn",
+					"cls": "local"
+				},
+				{
+					"name": "outer",
+					"cls": "parameter"
+				},
+				{
+					"name": "fn",
+					"cls": "local"
+				}
+			],
+			"rule": "F2 — the console cannot see the enclosing binding from inside a function definition, so it falls back to `parameter` (S5). The lab SUT, being depth-scoped, said `local`.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "F2b",
+			"class": "device-verified branch anchor",
+			"name": "a control-flow do={} body SHARES the enclosing scope",
+			"input": ":local v 1\n:if (true) do={ :put $v }",
+			"expect": [
+				{
+					"name": "v",
+					"cls": "local"
+				},
+				{
+					"name": "v",
+					"cls": "local"
+				}
+			],
+			"rule": "F2 — the contrast case. `:if`/`:foreach`/`:while`/`:do` bodies are not closures, and they spell `do={` exactly like a function definition; the statement head is the only tell.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "F2c",
+			"class": "device-verified branch anchor",
+			"name": "a global needs an in-body `:global` re-import inside a function",
+			"input": ":global G 1\n:global withImport do={ :global G\n :put $G }\n:global without do={ :put $G }",
+			"expect": [
+				{
+					"name": "G",
+					"cls": "global"
+				},
+				{
+					"name": "withImport",
+					"cls": "global"
+				},
+				{
+					"name": "G",
+					"cls": "global"
+				},
+				{
+					"name": "G",
+					"cls": "global"
+				},
+				{
+					"name": "without",
+					"cls": "global"
+				},
+				{
+					"name": "G",
+					"cls": "parameter"
+				}
+			],
+			"rule": "F2 — the eworm idiom, device-confirmed: the re-imported `$G` reads `global`, the one in the body without a re-import reads `parameter`.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "F2d",
+			"class": "device-verified branch anchor",
+			"name": "a loop variable is visible in the loop body but not through a function",
+			"input": ":foreach i in={1;2} do={ :put $i }\n:local fn do={ :put $i }",
+			"expect": [
+				{
+					"name": "i",
+					"cls": "auto"
+				},
+				{
+					"name": "i",
+					"cls": "auto"
+				},
+				{
+					"name": "fn",
+					"cls": "local"
+				},
+				{
+					"name": "i",
+					"cls": "parameter"
+				}
+			],
+			"rule": "F2 + S3 — `auto` bindings obey the same closure boundary as locals.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+		},
+		{
+			"id": "X1",
+			"class": "behavior anchor",
+			"name": "empty input resolves to nothing",
+			"input": "",
+			"expect": [],
+			"rule": "Never throws, reports nothing, notes nothing."
+		},
+		{
+			"id": "X2",
+			"class": "behavior anchor",
+			"name": "a comments-only document has no symbols",
+			"input": "# :local x 1\n# :put $x\n",
+			"expect": [],
+			"rule": "S9 — a reference inside a comment is not classified."
+		},
+		{
+			"id": "X3",
+			"class": "behavior anchor",
+			"name": "an unterminated string is reported, not thrown",
+			"input": ":local n \"eth\n:put $n",
+			"expect": [
+				{
+					"name": "n",
+					"cls": "local"
+				},
+				{
+					"name": "n",
+					"cls": "local"
+				}
+			],
+			"rule": "Structural notes use the segmenter's vocabulary; classes are still reported for what was read.",
+			"notes": ["unterminated-string"]
+		},
+		{
+			"id": "X4",
+			"class": "behavior anchor",
+			"name": "a stray close is reported",
+			"input": ":local v 1}\n:put $v",
+			"expect": [
+				{
+					"name": "v",
+					"cls": "local"
+				},
+				{
+					"name": "v",
+					"cls": "local"
+				}
+			],
+			"rule": "`unbalanced-close:<char>` — same vocabulary as `segment.ts`.",
+			"notes": ["unbalanced-close:}"]
+		},
+		{
+			"id": "X5",
+			"class": "behavior anchor",
+			"name": "an unclosed scope is reported",
+			"input": ":local f do={ :local v 1",
+			"expect": [
+				{
+					"name": "f",
+					"cls": "local"
+				},
+				{
+					"name": "v",
+					"cls": "local"
+				}
+			],
+			"rule": "`unclosed:<chars>` lists the delimiters still open at end of input.",
+			"notes": ["unclosed:{"]
+		},
+		{
+			"id": "X6",
+			"class": "behavior anchor",
+			"name": "a `$name` stops ON its terminator, so nesting stays balanced",
+			"input": ":local v 1\n:put [:len $v]\n:put $v",
+			"expect": [
+				{
+					"name": "v",
+					"cls": "local"
+				},
+				{
+					"name": "v",
+					"cls": "local"
+				},
+				{
+					"name": "v",
+					"cls": "local"
+				}
+			],
+			"rule": "The `next` vs `end` distinction in `readRef`: the lab's first run consumed the `]` here and drifted depth upward across the rest of the document."
+		}
+	]
+}
