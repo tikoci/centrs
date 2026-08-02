@@ -40,12 +40,71 @@
  * resolution therefore reports a best-guess `path` AND the full `candidates`
  * set (context, then context extended by each leading token), so a consumer can
  * present alternatives rather than assert a coin flip.
+ *
+ * ## Context certainty (Q14 C3b — the cascade, #192)
+ *
+ * The Q14 floor shipped in #191 degrades a MALFORMED statement to `unresolved`
+ * and does not descend into it. That is statement-local, and the lab measured a
+ * second failure on top of it: the defect also destroys the DOCUMENT CONTEXT,
+ * and every later RELATIVE statement was still resolved confidently against the
+ * stale value. `/ip) address` + `add address=…` reported a confident `/add` —
+ * a path no device would accept, invented from a context the resolver had
+ * already admitted it could not read.
+ *
+ * So each statement now also reports `contextCertain`: whether the menu context
+ * in force BEFORE it is known. A statement that CONSUMES an unknown context
+ * degrades to `unresolved` instead of resolving; one that does not consume it
+ * is unaffected. Which is which is exactly the `base` split already used for
+ * path resolution:
+ *   - context-INDEPENDENT — an absolute (`/`-led) statement, a `:` directive,
+ *     and a bare directive (R11) all resolve against the root. They keep
+ *     resolving confidently while context is lost.
+ *   - context-DEPENDENT — a relative statement (`add address=…`) resolves
+ *     against the context, so it degrades.
+ *
+ * Only two things make the context unknown, and both are cases where the
+ * statement MIGHT have been navigation and offline cannot read where to:
+ *   - a structural defect (the text is unreadable, so it may have been a nav),
+ *   - a `/`-led statement whose leading run is unreadable (`/ip/$menu`, and
+ *     equally the mixed spelling `/ip route/$menu`), which is a navigation to a
+ *     computed menu as easily as it is a command.
+ * A dynamic-headed statement (`$x`, `[…]`, `(…)`) is context-NEUTRAL — it
+ * evaluates a value and does not navigate — so it must NOT poison; that
+ * distinction is the whole reason this lives here rather than in a caller,
+ * which sees only flattened statements. An ABSOLUTE navigation re-establishes
+ * certainty, because R4 has it REPLACE the context rather than extend it.
+ *
+ * DECLARED LIMIT: a relative statement whose run is unreadable does not poison.
+ * A bare word is already not navigation offline (R8) — the CHR-confirmed known
+ * limit that the device descends a submenu where offline reads a command — so
+ * poisoning here would re-price that limit rather than close the cascade.
  */
 
 import { isScopeBrace, scopeBodies } from "./blocks.ts";
 import { maskComments, segmentStatements } from "./segment.ts";
 
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
+/**
+ * A whole path segment that is a variable reference (`$menu` in `/ip/$menu`).
+ *
+ * Deliberately "begins with `$`" and NOT an enumeration of name spellings. This
+ * makes NO claim about which spellings RouterOS accepts — the point is the
+ * opposite: every `$`-headed segment is unreadable HERE, whether it is a valid
+ * reference (`$menu`, `$"quoted name"`) or something the device would itself
+ * reject (`${braced}` is rejected at the `{` on 7.24rc1; a bare `$`). Offline
+ * cannot resolve either kind, so both must abstain.
+ *
+ * A pattern like `\$[A-Za-z_]…` instead recognizes only the shapes it lists and
+ * lets every other one through as an ordinary readable menu segment, which
+ * fails OPEN. That is the same trap as the unanchored-regex and reason-prefix
+ * bugs earlier in this module: a guard that decides whether to ABSTAIN must
+ * match the general shape and let the unknown case block, never enumerate the
+ * known ones. `write.ts` reaches the same conclusion at head position, where
+ * `isDynamicForm` tests a bare `text.startsWith("$")`.
+ */
+function isVariableSegment(part: string): boolean {
+	return part.startsWith("$");
+}
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
 
 function isAsciiWhitespace(char: string | undefined): boolean {
@@ -127,6 +186,133 @@ function structuralDefect(text: string): boolean {
 	return stack.length > 0;
 }
 
+/**
+ * The `unresolved` reason of a statement (or bracket) that needed the document
+ * context and could not have it. Distinct from every other reason: the
+ * statement itself is perfectly readable — what failed is upstream.
+ */
+const CONTEXT_LOST = "context lost to an earlier unreadable statement";
+
+/** R11 — a directive written without its colon, told by its scope block. */
+function isBareDirective(trimmed: string): boolean {
+	return (
+		!trimmed.startsWith(":") &&
+		!trimmed.startsWith("/") &&
+		scopeBodies(trimmed).length > 0
+	);
+}
+
+/**
+ * Does this statement resolve its OWN path without consulting the document
+ * context? Mirrors `canonicalPath`'s `base` exactly — absolute, `:` directive,
+ * or bare directive (R11) all resolve at the root.
+ */
+function isContextIndependent(text: string): boolean {
+	const t = trimAscii(text);
+	return t.startsWith(":") || t.startsWith("/") || isBareDirective(t);
+}
+
+/**
+ * Does the context this statement hands its BLOCK BODIES (and its own brackets,
+ * R3) ignore the document context? Mirrors `statementPath`'s base, which is NOT
+ * the same predicate as `isContextIndependent`: a `:` directive resolves itself
+ * at the root but hands its body the context in force (R5), so `:foreach … do={
+ * add … }` still depends on an upstream context its own path does not.
+ */
+function isBodyContextIndependent(text: string): boolean {
+	const t = trimAscii(text);
+	return t.startsWith("/") || isBareDirective(t);
+}
+
+/**
+ * Does this text NAME a menu path that offline could not read?
+ *
+ * True when the leading run starts out path-shaped and is then TRUNCATED by a
+ * variable segment: `/ip/$menu/remove`, `/ip route/$menu/remove`, and the
+ * relative `route/$verb`. R7 says such a path is unresolved, so nothing may
+ * inherit a base derived from it.
+ *
+ * Two traps this exists to avoid, both found in review:
+ *   - `statementRun` DISCARDS the whole word carrying the variable, so after a
+ *     static word (`/ip route/$menu/…`) its output is a clean, variable-free
+ *     prefix and the statement reads as perfectly resolvable. The signal has to
+ *     be taken from the raw words, not from the collected run.
+ *   - Spelling is not the discriminator. Mixed space/slash menu spelling is a
+ *     supported contract, and a RELATIVE head is just as much a menu name, so
+ *     this must not test for a leading `/`.
+ *
+ * What it deliberately does NOT match is text that names no menu at all — a
+ * head that is a variable, group, string or directive (`$fn [get …]`,
+ * `-z "$URL"`, `iter(hip)`), and a `$` word in ARGUMENT position
+ * (`get $item time`), which is a positional operand rather than a path
+ * segment. Those establish no menu, so the ambient context still governs.
+ */
+function isUnreadablePath(text: string): boolean {
+	const t = trimAscii(text);
+	if (t.length === 0) return false;
+	// A head that is not path-shaped names no menu.
+	if (/^[$[("':]/.test(t)) return false;
+	for (const word of asciiWords(t)) {
+		// Arguments begin: everything before this was readable. A `$` word
+		// STANDING ALONE is a positional operand (`get $item time`), not a path
+		// segment — only a `$` slash-joined inside a word is a menu segment.
+		if (word.includes("=") || /^[[({"$:]/.test(word)) return false;
+		const parts = word.split("/").filter((p) => p.length > 0);
+		if (parts.length === 0) continue;
+		for (const part of parts) {
+			if (BARE_WORD.test(part)) continue;
+			// A whole segment that is a variable is the unreadable-menu case.
+			if (isVariableSegment(part)) return true;
+			// Anything else is not a path segment at all, so the run ended here and
+			// everything before it was readable. This is why the test cannot simply
+			// look for a `$` anywhere: `print where comment~[$strfind …]` and
+			// `/ppp secret print where comment~"\\$SECRET"` carry a `$` inside an
+			// ARGUMENT — the `~` means no `=` ends the run first — and both name a
+			// perfectly readable menu.
+			return false;
+		}
+	}
+	return false;
+}
+
+/**
+ * A `/`-led statement whose leading run offline cannot read — a variable
+ * segment truncates it (`/ip/$menu`, `/interface/$type/print`). It is a
+ * navigation to a computed menu exactly as plausibly as it is a command, so the
+ * context after it is unknown. `menuNavPath` has already claimed every readable
+ * absolute navigation before this is consulted.
+ */
+function isUnreadableAbsolute(text: string): boolean {
+	const t = trimAscii(text);
+	if (!t.startsWith("/")) return false;
+	if (isUnreadablePath(t)) return true;
+	const tokens = statementRun(t);
+	return tokens.length === 0 || tokens.some((x) => x.startsWith("$"));
+}
+
+/**
+ * Is the context this statement hands its own brackets (R3) and its block
+ * bodies (R5) KNOWN?
+ *
+ * Two conditions, and BOTH are needed. The base must be knowable — the
+ * statement is `/`-led or a bare directive, or the document context is certain.
+ * And the statement's own leading run must be READABLE: `/ip/$menu/remove` is
+ * `/`-led, so its base does not depend on the document context, but `R7` says a
+ * variable path segment leaves the path unresolved, and `statementPath` derives
+ * a menu from it anyway (`/ip/$menu`). Anchoring brackets to that hands them a
+ * fabricated base — `[find]` at a "path" containing a literal `$menu` — while
+ * `resolveStatements` refuses the very same statement. So an unreadable menu
+ * anchors nothing, in EITHER spelling: `statementPath` derives a base from a
+ * relative one too (`route/$verb remove [find]` yields `<ctx>/route/$verb`).
+ */
+function handsKnownContext(text: string, contextCertain: boolean): boolean {
+	// Either spelling of an unreadable menu anchors nothing. `statementPath`
+	// derives a base from a RELATIVE one too (`route/$verb remove [find]` yields
+	// `<ctx>/route/$verb`), so this cannot test only the absolute form.
+	if (isUnreadableAbsolute(text) || isUnreadablePath(text)) return false;
+	return contextCertain || isBodyContextIndependent(text);
+}
+
 /** A re-constituted `[…]` command substitution (Q3). */
 export interface Resolution {
 	/** Raw text inside the brackets. */
@@ -144,6 +330,12 @@ export interface Resolution {
 	/** Best single guess: the first bare token is the verb (Q1's rule). */
 	path: string | null;
 	unresolved?: string;
+	/**
+	 * Was the menu context this bracket inherited (R3) known? False once an
+	 * earlier unreadable statement destroyed it — a RELATIVE inner command is
+	 * then `unresolved` rather than resolved against a stale value.
+	 */
+	contextCertain: boolean;
 	/** Nesting depth of this bracket (0 = directly in a statement). */
 	depth: number;
 	/** Feature class, for per-class reporting. */
@@ -166,6 +358,13 @@ export interface StatementResolution {
 	/** Context extended by each prefix of the leading run, shortest first. */
 	candidates?: string[];
 	unresolved?: string;
+	/**
+	 * Was the menu context in force BEFORE this statement known? False once an
+	 * earlier unreadable statement destroyed it (Q14 C3b). A context-DEPENDENT
+	 * statement is then `unresolved`; a context-INDEPENDENT one still resolves,
+	 * so a `false` here does not by itself invalidate `path`.
+	 */
+	contextCertain: boolean;
 }
 
 /** Q3 result: bracket resolutions plus any structural / over-depth notes. */
@@ -194,7 +393,7 @@ function statementTexts(text: string): string[] {
 export function resolveDocument(text: string): DocumentAnalysis {
 	const notes = new Set(segmentStatements(text).notes);
 	const resolutions: Resolution[] = [];
-	walk(statementTexts(text), "/", resolutions, 0, notes);
+	walk(statementTexts(text), "/", resolutions, 0, notes, true);
 	return { resolutions, notes: [...notes] };
 }
 
@@ -204,28 +403,52 @@ function walk(
 	out: Resolution[],
 	blockDepth: number,
 	notes: Set<string>,
+	contextCertain: boolean,
 ): void {
 	let ctx = context;
+	let certain = contextCertain;
 	for (const text of segments) {
 		// R4 — a menu-navigation statement moves the document context.
 		const nav = menuNavPath(text, ctx);
 		if (nav !== null) {
+			const relative = trimAscii(text).startsWith("..");
+			// A `..` read against an unknown context stays unknown; an absolute
+			// navigation replaces it and re-establishes certainty.
+			if (relative && !certain) continue;
 			ctx = nav;
+			if (!relative) certain = true;
 			continue;
 		}
 		// Q14 fail-closed — a structurally malformed statement yields no confident
-		// bracket path and is not descended.
-		if (structuralDefect(text)) continue;
+		// bracket path and is not descended. It may have been a navigation, so the
+		// context after it is unknown (Q14 C3b, the same contract the statement
+		// walk applies — these two walks must move in lockstep).
+		if (structuralDefect(text)) {
+			certain = false;
+			continue;
+		}
 		// R3 — the statement's own path is the context its brackets see.
 		const stmtCtx = statementPath(text, ctx);
-		collectBrackets(text, stmtCtx, 0, out, notes);
+		// Derived BEFORE the poison, from the certainty in force at this statement:
+		// `handsKnownContext` answers about the context this statement HANDS DOWN,
+		// which its own unreadability already governs.
+		const stmtCertain = handsKnownContext(text, certain);
+		if (isUnreadableAbsolute(text)) certain = false;
+		collectBrackets(text, stmtCtx, 0, out, notes, stmtCertain);
 		// R5 — block bodies inherit the context in force here.
 		for (const body of scopeBodies(text)) {
 			if (blockDepth >= MAX_DEPTH) {
 				notes.add("over-depth");
 				continue;
 			}
-			walk(statementTexts(body), stmtCtx, out, blockDepth + 1, notes);
+			walk(
+				statementTexts(body),
+				stmtCtx,
+				out,
+				blockDepth + 1,
+				notes,
+				stmtCertain,
+			);
 		}
 	}
 }
@@ -234,7 +457,7 @@ function walk(
 export function resolveStatements(text: string): StatementAnalysis {
 	const notes = new Set(segmentStatements(text).notes);
 	const statements: StatementResolution[] = [];
-	walkStatements(statementTexts(text), "/", statements, 0, notes);
+	walkStatements(statementTexts(text), "/", statements, 0, notes, true);
 	return { statements, notes: [...notes] };
 }
 
@@ -244,17 +467,42 @@ function walkStatements(
 	out: StatementResolution[],
 	blockDepth: number,
 	notes: Set<string>,
+	contextCertain: boolean,
 ): void {
 	let ctx = context;
+	let certain = contextCertain;
 	for (const text of segments) {
 		const nav = menuNavPath(text, ctx);
 		if (nav !== null) {
-			out.push({ text, isNav: true, context: ctx, path: nav });
+			// `..` ascends FROM the context, so it cannot be read while the context
+			// is unknown. A `/`-led navigation (and a bare `/`) REPLACES it (R4) and
+			// therefore re-establishes certainty.
+			const relative = trimAscii(text).startsWith("..");
+			if (relative && !certain) {
+				out.push({
+					text,
+					isNav: true,
+					context: ctx,
+					path: null,
+					unresolved: CONTEXT_LOST,
+					contextCertain: false,
+				});
+				continue;
+			}
+			out.push({
+				text,
+				isNav: true,
+				context: ctx,
+				path: nav,
+				contextCertain: certain,
+			});
 			ctx = nav;
+			if (!relative) certain = true;
 			continue;
 		}
 		// Q14 fail-closed — a malformed statement degrades to unresolved and is
-		// not descended; it does not move the context either.
+		// not descended; it does not move the context either. It may however have
+		// BEEN a navigation, so what the context now is becomes unknown.
 		if (structuralDefect(text)) {
 			out.push({
 				text,
@@ -262,19 +510,46 @@ function walkStatements(
 				context: ctx,
 				path: null,
 				unresolved: "structural defect: unbalanced delimiter or string",
+				contextCertain: certain,
 			});
+			certain = false;
 			continue;
 		}
-		out.push({ text, isNav: false, context: ctx, ...canonicalPath(text, ctx) });
+		// Q14 C3b — the cascade. A statement that CONSUMES the context cannot be
+		// resolved against a value the resolver has already admitted it lost.
+		// Applied to the RESOLUTION, not ahead of it, so a statement that would
+		// have refused on its own terms keeps its own — more specific — reason.
+		const resolved = canonicalPath(text, ctx);
+		out.push({
+			text,
+			isNav: false,
+			context: ctx,
+			...(resolved.path !== null && !certain && !isContextIndependent(text)
+				? { path: null, unresolved: CONTEXT_LOST }
+				: resolved),
+			contextCertain: certain,
+		});
 		// A block body's statements are the parent's siblings after flattening,
-		// and R5 gives them the context in force here.
+		// and R5 gives them the context in force here — which is the ROOT, hence
+		// knowable, when the statement spells its path out or is a bare directive,
+		// and unknowable when the statement's own path could not be read. Same
+		// predicate and same order as the bracket walk, per the lockstep rule.
 		const stmtCtx = statementPath(text, ctx);
+		const bodyCertain = handsKnownContext(text, certain);
+		if (isUnreadableAbsolute(text)) certain = false;
 		for (const body of scopeBodies(text)) {
 			if (blockDepth >= MAX_DEPTH) {
 				notes.add("over-depth");
 				continue;
 			}
-			walkStatements(statementTexts(body), stmtCtx, out, blockDepth + 1, notes);
+			walkStatements(
+				statementTexts(body),
+				stmtCtx,
+				out,
+				blockDepth + 1,
+				notes,
+				bodyCertain,
+			);
 		}
 	}
 }
@@ -323,10 +598,16 @@ function canonicalPath(
 	// R11 — a scripting directive written WITHOUT its colon is still at the root.
 	// A statement that carries a SCOPE-valued block is a directive, because no
 	// menu command takes one — a schema-free tell.
-	const bareDirective =
-		!t.startsWith(":") && !t.startsWith("/") && scopeBodies(t).length > 0;
-	const base =
-		t.startsWith(":") || t.startsWith("/") || bareDirective ? "/" : ctx;
+	const bareDirective = isBareDirective(t);
+	// The cascade contract reads this same split to decide which statements may
+	// keep resolving once the context is lost, so both must come from one place.
+	const base = isContextIndependent(t) ? "/" : ctx;
+	// R7 — a variable segment anywhere in the leading run leaves the path
+	// unresolved, INCLUDING after a static word. `statementRun` drops the whole
+	// word carrying the variable, so `/ip route/$menu/remove` would otherwise
+	// report a confident, truncated `/ip`.
+	if (isUnreadablePath(t))
+		return { path: null, unresolved: "variable path segment" };
 	const tokens = statementRun(body);
 	if (tokens.length === 0)
 		return { path: null, unresolved: "no leading path token" };
@@ -373,11 +654,11 @@ function statementPath(text: string, ctx: string): string {
 	const t = trimAsciiStart(text);
 	// R11 — a bare directive is at the root, so the context it hands its body is
 	// the root too, not `<ctx>/while`.
-	if (!t.startsWith(":") && !t.startsWith("/") && scopeBodies(t).length > 0)
-		return "/";
+	if (isBareDirective(trimAscii(t))) return "/";
 	const lead = leadingRun(text);
 	if (lead.length === 0) return ctx;
-	const base = t.startsWith("/") ? "/" : ctx;
+	// Same split `isBodyContextIndependent` reports to the cascade contract.
+	const base = isBodyContextIndependent(t) ? "/" : ctx;
 	return joinPath(base, lead.slice(0, -1).join("/"));
 }
 
@@ -411,6 +692,7 @@ function collectBrackets(
 	depth: number,
 	out: Resolution[],
 	notes: Set<string>,
+	contextCertain: boolean,
 ): void {
 	// Bound the recursion (bracket nesting AND literal-brace descent) so
 	// untrusted deeply nested input abstains instead of overflowing the stack.
@@ -429,7 +711,14 @@ function collectBrackets(
 			// substitution: `:put "$[:pick $ip 0 $n]"` lowers with `/pick` inside
 			// (topic-…/post-0003-snippet-01 @ 7.22.1).
 			const strEnd = stringEnd(masked, i);
-			scanInterpolations(masked.slice(i + 1, strEnd), ctx, depth, out, notes);
+			scanInterpolations(
+				masked.slice(i + 1, strEnd),
+				ctx,
+				depth,
+				out,
+				notes,
+				contextCertain,
+			);
 			i = strEnd;
 			continue;
 		}
@@ -439,17 +728,31 @@ function collectBrackets(
 			// brackets only; scope bodies are walked by walk().
 			const end = matchDelim(masked, i, "{", "}");
 			if (!isScopeBrace(masked, i))
-				collectBrackets(masked.slice(i + 1, end), ctx, depth + 1, out, notes);
+				collectBrackets(
+					masked.slice(i + 1, end),
+					ctx,
+					depth + 1,
+					out,
+					notes,
+					contextCertain,
+				);
 			i = end;
 			continue;
 		}
 		if (c !== "[") continue;
 		const end = matchDelim(masked, i, "[", "]");
 		const inner = trimAscii(masked.slice(i + 1, end));
-		out.push(resolveInner(inner, ctx, depth));
+		out.push(resolveInner(inner, ctx, depth, contextCertain));
 		// R6 — nested brackets inherit from this one's resolution.
 		const nestedCtx = out[out.length - 1]?.path ?? ctx;
-		collectBrackets(inner, nestedCtx, depth + 1, out, notes);
+		collectBrackets(
+			inner,
+			nestedCtx,
+			depth + 1,
+			out,
+			notes,
+			nestedCertainty(out[out.length - 1], contextCertain),
+		);
 		i = end;
 	}
 }
@@ -468,24 +771,70 @@ function scanInterpolations(
 	depth: number,
 	out: Resolution[],
 	notes: Set<string>,
+	contextCertain: boolean,
 ): void {
 	for (let i = 0; i < body.length - 1; i++) {
 		if (body[i] !== "$" || body[i + 1] !== "[") continue;
 		const end = matchDelim(body, i + 1, "[", "]");
 		const inner = trimAscii(body.slice(i + 2, end));
-		out.push(resolveInner(inner, ctx, depth));
+		out.push(resolveInner(inner, ctx, depth, contextCertain));
 		collectBrackets(
 			inner,
 			out[out.length - 1]?.path ?? ctx,
 			depth + 1,
 			out,
 			notes,
+			nestedCertainty(out[out.length - 1], contextCertain),
 		);
 		i = end;
 	}
 }
 
-function resolveInner(inner: string, ctx: string, depth: number): Resolution {
+/**
+ * Certainty a NESTED bracket inherits (R6). Three cases, and the middle one is
+ * the whole subtlety:
+ *
+ *   1. The enclosing bracket RESOLVED — its path is the nested bracket's base,
+ *      so the nested one is anchored even while the document context is lost
+ *      (`[/ip/route/get [find …] gateway]` is absolute, hence independent).
+ *   2. The enclosing bracket is a MENU COMMAND WE COULD NOT READ — then the
+ *      real base is a menu we cannot name, and `collectBrackets` falls back to
+ *      the STATEMENT's context, which is a different menu. In `/ip route` +
+ *      `remove [/interface/$type/get [find]]` that fallback reports the nested
+ *      `[find]` at `/ip/route`, a context it never had. It must abstain — and
+ *      equally for a RELATIVE unreadable menu (`[route/$verb [find]]`), because
+ *      spelling is not what makes a menu unreadable.
+ *   3. The enclosing bracket is NOT A MENU COMMAND AT ALL — a user function
+ *      (`$formatDate`), a value expression, a `:` directive. It
+ *      establishes no menu, so the AMBIENT context still governs its arguments
+ *      and the fallback is correct. Corpus evidence for this being the common
+ *      shape rather than a corner: under `/log`,
+ *      `:set x "$[$formatDate [get $item time]]"` must keep resolving
+ *      `[get …]` at `/log` (rextended/topic-166898). Refusing case 3 as well
+ *      costs 12 further brackets and one document's `containsWrite` verdict,
+ *      all of them correct answers thrown away.
+ *
+ * Case 2 is told from case 3 by `isUnreadablePath`, the same test the statement
+ * walk uses: the inner NAMES a menu (a path-shaped head) whose leading run is
+ * truncated by a variable segment, in either the absolute or the relative
+ * spelling. Case 3 is text that names no menu at all.
+ */
+function nestedCertainty(
+	enclosing: Resolution | undefined,
+	contextCertain: boolean,
+): boolean {
+	if (enclosing === undefined) return contextCertain;
+	if (enclosing.path !== null) return true;
+	if (isUnreadablePath(enclosing.inner)) return false;
+	return contextCertain;
+}
+
+function resolveInner(
+	inner: string,
+	ctx: string,
+	depth: number,
+	contextCertain: boolean,
+): Resolution {
 	const absolute = inner.startsWith("/");
 	const klass = classify(inner, absolute, depth);
 	if (klass === "cli-prompt-artifact")
@@ -496,6 +845,7 @@ function resolveInner(inner: string, ctx: string, depth: number): Resolution {
 			candidates: [],
 			path: null,
 			unresolved: "looks like a pasted CLI prompt, not a substitution",
+			contextCertain,
 			depth,
 			klass,
 		};
@@ -508,6 +858,7 @@ function resolveInner(inner: string, ctx: string, depth: number): Resolution {
 			tokens: [],
 			candidates: ["/"],
 			path: "/",
+			contextCertain,
 			depth,
 			klass,
 		};
@@ -520,6 +871,7 @@ function resolveInner(inner: string, ctx: string, depth: number): Resolution {
 			candidates: [],
 			path: null,
 			unresolved: "no leading path token",
+			contextCertain,
 			depth,
 			klass,
 		};
@@ -532,6 +884,24 @@ function resolveInner(inner: string, ctx: string, depth: number): Resolution {
 			candidates: [],
 			path: null,
 			unresolved: "variable path segment",
+			contextCertain,
+			depth,
+			klass,
+		};
+	// Q14 C3b — a RELATIVE inner command inherits the statement's menu (R2/R3),
+	// so it cannot be re-constituted once that context is lost. Checked only once
+	// the inner command has been read, so a bracket that refuses on its own terms
+	// keeps its own reason; an absolute inner path and the `:` directive above are
+	// context-independent and still resolve.
+	if (!contextCertain && !absolute)
+		return {
+			inner,
+			context: ctx,
+			tokens,
+			candidates: [],
+			path: null,
+			unresolved: CONTEXT_LOST,
+			contextCertain,
 			depth,
 			klass,
 		};
@@ -549,6 +919,7 @@ function resolveInner(inner: string, ctx: string, depth: number): Resolution {
 		path: absolute
 			? joinPath(base, tokens.slice(0, -1).join("/"))
 			: joinPath(base, ""),
+		contextCertain,
 		depth,
 		klass,
 	};

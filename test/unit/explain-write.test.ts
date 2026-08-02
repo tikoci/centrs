@@ -511,6 +511,27 @@ describe("explain/write — Q14 floor and structural defects", () => {
 			"no leading path token",
 			"dynamic or substitution-headed statement",
 		]);
+		// The fifth reason is document-scale, so it needs a second statement: the
+		// Q14 C3b cascade (#192). It is deliberately NOT clearable — a statement
+		// resolved against a context the resolver lost cannot clear a document.
+		expect(
+			resolveStatements("/ip) address\nadd address=1.1.1.1").statements[1]
+				?.unresolved,
+		).toBe("context lost to an earlier unreadable statement");
+	});
+
+	/**
+	 * The cascade contract costs this module nothing measurable: over the frozen
+	 * phase-0 corpus, `containsWrite` abstention is unchanged on both splits
+	 * (44.8% dev / 46.0% holdout) and no document changes verdict, because every
+	 * statement that can poison the context already blocked on its own account.
+	 */
+	test("a poisoned document abstains rather than clearing or asserting", () => {
+		const got = containsWrite("/ip) address\nadd address=1.1.1.1");
+		expect(got.verdict).toBe("unknown");
+		expect(
+			got.blockers.some((b) => b.klass === "defect" || b.klass === "ambiguous"),
+		).toBe(true);
 	});
 
 	test("a clean document carries no notes", () => {

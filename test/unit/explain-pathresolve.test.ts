@@ -126,8 +126,13 @@ test("non-ASCII whitespace is opaque, not a path separator", () => {
 	for (const whitespace of [" ", " ", " "]) {
 		const res = resolveStatements(`/ip${whitespace}route\nadd`).statements;
 		expect(res.map((s) => s.isNav)).toEqual([false, false]);
-		expect(res.map((s) => s.path)).toEqual([null, "/add"]);
+		// The point of this case is that the exotic space does NOT separate path
+		// tokens, so `/ip route` stays unreadable. `add` then inherits a context
+		// that unreadable `/`-led line may or may not have moved — Q14 C3b — so it
+		// abstains rather than claiming the root command `/add`.
+		expect(res.map((s) => s.path)).toEqual([null, null]);
 		expect(res[0]?.unresolved).toBeDefined();
+		expect(res[1]?.contextCertain).toBe(false);
 	}
 });
 
@@ -207,6 +212,275 @@ test("never throws on adversarial input", () => {
 		expect(() => resolveDocument(input)).not.toThrow();
 		expect(() => resolveStatements(input)).not.toThrow();
 	}
+});
+
+/**
+ * Q14 C3b — the cascade (#192). A defect does not only ruin its own statement,
+ * it destroys the DOCUMENT CONTEXT, and every later statement that CONSUMES that
+ * context must degrade with it. Measured over the frozen phase-0 corpus: 43
+ * statements stop reporting a confident path, every one of them an out-of-domain
+ * prose paste that was manufacturing a phantom root command (`/OK`, `/Binary`,
+ * `/Calls/made/by/this`), and `containsWrite` abstention does not move at all
+ * (44.8% dev / 46.0% holdout, unchanged).
+ */
+describe("Q14 C3b — a lost context poisons dependent statements", () => {
+	const LOST = "context lost to an earlier unreadable statement";
+
+	test("the reported cascade: a relative statement after a defect abstains", () => {
+		// The exact repro that pulled `resolveVerbs` from #193: the second line was
+		// resolving to a confident `/add` against a context already admitted lost.
+		const res = resolveStatements("/ip) address\nadd address=1.2.3.4/24");
+		expect(res.statements[0]?.unresolved).toBe(
+			"structural defect: unbalanced delimiter or string",
+		);
+		expect(res.statements[1]?.path).toBeNull();
+		expect(res.statements[1]?.unresolved).toBe(LOST);
+		expect(res.statements[1]?.contextCertain).toBe(false);
+	});
+
+	test("a context-NEUTRAL unresolved statement does not poison", () => {
+		// The over-fire a crude taint would produce. A dynamic head evaluates a
+		// value; it does not navigate, so `add` keeps its context.
+		const res = resolveStatements(
+			"/ip route\n$dyn\nadd dst-address=0.0.0.0/0",
+		).statements;
+		expect(res[1]?.unresolved).toBe("dynamic or substitution-headed statement");
+		expect(res[2]?.path).toBe("/ip/route/add");
+		expect(res[2]?.contextCertain).toBe(true);
+	});
+
+	test("context-INDEPENDENT statements keep resolving while context is lost", () => {
+		const res = resolveStatements(
+			"/ip) address\n/ip/route/add gateway=1.1.1.1\n:global x 1",
+		).statements;
+		expect(res[1]?.path).toBe("/ip/route/add");
+		expect(res[2]?.path).toBe("/global");
+		// The context they ignore is still flagged as unknown.
+		expect(res[1]?.contextCertain).toBe(false);
+		expect(res[2]?.contextCertain).toBe(false);
+	});
+
+	test("an absolute navigation re-establishes certainty (R4 replaces)", () => {
+		const res = resolveStatements(
+			"/ip) address\nadd address=1.1.1.1\n/ip route\nadd gateway=2.2.2.2",
+		).statements;
+		expect(res[1]?.unresolved).toBe(LOST);
+		expect(res[3]?.path).toBe("/ip/route/add");
+		expect(res[3]?.contextCertain).toBe(true);
+	});
+
+	test("a bare `/` also re-establishes certainty", () => {
+		const res = resolveStatements("/ip) address\n/\n:put 1").statements;
+		expect(res[1]?.path).toBe("/");
+		expect(res[2]?.contextCertain).toBe(true);
+	});
+
+	test("`..` cannot be read against a lost context", () => {
+		const res = resolveStatements("/ip) address\n..").statements;
+		expect(res[1]?.isNav).toBe(true);
+		expect(res[1]?.path).toBeNull();
+		expect(res[1]?.unresolved).toBe(LOST);
+	});
+
+	test("an unreadable `/`-led statement poisons — it may have been a nav", () => {
+		// `/ip/$menu` is a navigation to a computed menu exactly as plausibly as it
+		// is a command, so what the context is afterwards is unknown.
+		const res = resolveStatements("/ip/$menu\nadd address=1.1.1.1").statements;
+		expect(res[0]?.unresolved).toBeDefined();
+		expect(res[1]?.unresolved).toBe(LOST);
+	});
+
+	test("a statement that refuses on its own terms keeps its own reason", () => {
+		const res = resolveStatements("/ip) address\n$x\n[find]").statements;
+		expect(res[1]?.unresolved).toBe("dynamic or substitution-headed statement");
+		expect(res[2]?.unresolved).toBe("dynamic or substitution-headed statement");
+	});
+
+	test("a block body inherits the certainty in force where it appears", () => {
+		const lost = resolveStatements(
+			"/ip) address\n:foreach i in=[find] do={ remove $i }",
+		).statements;
+		expect(lost.at(-1)?.unresolved).toBe(LOST);
+		// An absolute statement hands its body a ROOT-based context, which is
+		// knowable however lost the document context is.
+		const kept = resolveStatements(
+			"/ip) address\n/ip/route { add gateway=1.1.1.1 }",
+		).statements;
+		expect(kept.at(-1)?.path).toBe("/ip/route/add");
+	});
+
+	test("the bracket walk applies the same contract (lockstep)", () => {
+		// A relative `[find]` re-constitutes against the statement's menu, so it
+		// cannot be resolved once that menu is unknown.
+		const lost = resolveDocument("/ip) address\nremove [find default=yes]");
+		expect(lost.resolutions[0]?.path).toBeNull();
+		expect(lost.resolutions[0]?.unresolved).toBe(LOST);
+		expect(lost.resolutions[0]?.contextCertain).toBe(false);
+		// An ABSOLUTE inner path ignores the context and still resolves — but the
+		// context it ignored is still reported as unknown, the bracket half of the
+		// same contract the statement walk asserts above.
+		const kept = resolveDocument("/ip) address\n:put [/ip/route/print]");
+		expect(kept.resolutions[0]?.path).toBe("/ip/route");
+		expect(kept.resolutions[0]?.contextCertain).toBe(false);
+	});
+
+	test("R6 — a nested bracket inherits its enclosing bracket's known base", () => {
+		// The enclosing inner command is ABSOLUTE, so it is anchored whatever the
+		// document context did. Propagating the document's uncertainty into it
+		// would abstain on a bracket that is in fact fully determined.
+		const res = resolveDocument(
+			"/ip) address\n:put [/ip/route/get [find default=yes] gateway]",
+		).resolutions;
+		expect(res[0]?.path).toBe("/ip/route");
+		expect(res[1]?.depth).toBe(1);
+		expect(res[1]?.path).toBe("/ip/route");
+		expect(res[1]?.contextCertain).toBe(true);
+	});
+
+	test("a RELATIVE enclosing bracket still poisons what nests inside it", () => {
+		// The other direction of the same rule: the outer bracket resolved to
+		// nothing, so the inner one has no base to inherit.
+		for (const text of [
+			"/ip) address\nremove [find [get 0 comment]]",
+			"/ip) address\n:put [$var [find]]",
+		]) {
+			const res = resolveDocument(text).resolutions;
+			expect(res[1]?.path).toBeNull();
+			expect(res[1]?.unresolved).toBe(LOST);
+		}
+	});
+
+	test("an unreadable absolute statement anchors NOTHING (R7)", () => {
+		// `/ip/$menu/remove` is `/`-led, so its base does not depend on the document
+		// context — but R7 leaves its own path unresolved, and `statementPath`
+		// still derives `/ip/$menu` from it. Anchoring the bracket to that reports
+		// `[find]` at a "path" holding a literal `$menu`, while `resolveStatements`
+		// refuses the very same statement.
+		const doc = resolveDocument("/ip/$menu/remove [find]");
+		expect(doc.resolutions[0]?.path).toBeNull();
+		expect(doc.resolutions[0]?.unresolved).toBe(LOST);
+		expect(doc.resolutions[0]?.contextCertain).toBe(false);
+		expect(
+			resolveStatements("/ip/$menu/remove [find]").statements[0]?.path,
+		).toBeNull();
+	});
+
+	test("a nested bracket needs its ENCLOSING bracket to resolve, not the document", () => {
+		// Deliberately a CLEAN document: the context is perfectly known, and that
+		// must not rescue a nested bracket whose enclosing bracket has no path.
+		// `nestedCtx` falls back to the statement context, which is exactly the
+		// unrelated base this must refuse — `[find]` never sat at `/ip/route`.
+		const res = resolveDocument(
+			"/ip route\nremove [/interface/$type/get [find]]",
+		).resolutions;
+		expect(res[0]?.unresolved).toBe("variable path segment");
+		expect(res[1]?.depth).toBe(1);
+		expect(res[1]?.path).toBeNull();
+		expect(res[1]?.unresolved).toBe(LOST);
+		// An ABSOLUTE nested command still resolves on its own terms.
+		const absolute = resolveDocument(
+			"/ip route\nremove [/interface/$type/get [/ip/route/print]]",
+		).resolutions;
+		expect(absolute[1]?.path).toBe("/ip/route");
+	});
+
+	test("an enclosing bracket that is not a MENU at all still lets the ambient context govern", () => {
+		// The other half of the rule above, and the reason it is not simply "the
+		// enclosing bracket must resolve". A user function establishes no menu, so
+		// its arguments evaluate at the ambient context — here `/log`. Grounded in
+		// the corpus (rextended/topic-166898): refusing this shape too throws away
+		// 12 further correct bracket paths and moves a document's write verdict.
+		const res = resolveDocument(
+			'/log\n:set msg "$msg$[$formatDate [get $item time]] x"',
+		).resolutions;
+		expect(res[0]?.path).toBeNull();
+		expect(res[1]?.depth).toBe(1);
+		expect(res[1]?.path).toBe("/log");
+		expect(res[1]?.contextCertain).toBe(true);
+	});
+
+	test("a variable segment after a STATIC word is still unreadable (R7)", () => {
+		// Mixed space/slash menu spelling is supported, so `/ip route/$menu/remove`
+		// is the same R7 case as `/ip/$menu/remove`. `statementRun` drops the whole
+		// word carrying the variable, which left a clean truncated prefix and a
+		// confident `/ip`. Statement, bracket and cascade are all pinned here.
+		const text = "/ip route/$menu/remove [find]\nadd address=1.1.1.1";
+		const stmts = resolveStatements(text).statements;
+		expect(stmts[0]?.path).toBeNull();
+		expect(stmts[0]?.unresolved).toBe("variable path segment");
+		expect(stmts[1]?.path).toBeNull();
+		expect(stmts[1]?.unresolved).toBe(LOST);
+		const brackets = resolveDocument(text).resolutions;
+		expect(brackets[0]?.path).toBeNull();
+		expect(brackets[0]?.unresolved).toBe(LOST);
+	});
+
+	test("an unreadable RELATIVE menu poisons its nested brackets too", () => {
+		// Spelling is not what makes a menu unreadable: `[route/$verb [find]]` is
+		// the same case as the absolute `[/interface/$type/get [find]]`.
+		const res = resolveDocument(
+			"/ip route\nremove [route/$verb [find]]",
+		).resolutions;
+		expect(res[0]?.unresolved).toBe("variable path segment");
+		expect(res[1]?.depth).toBe(1);
+		expect(res[1]?.path).toBeNull();
+		expect(res[1]?.unresolved).toBe(LOST);
+	});
+
+	test("a `$` inside an ARGUMENT does not make the menu unreadable", () => {
+		// The counterweight to the two cases above, and a real corpus shape: a `~`
+		// filter means no `=` ends the run, so a naive "any `$` in the leading
+		// words" test reads these as unreadable menus and throws away two correct
+		// paths. Only a whole path SEGMENT that is a variable counts.
+		expect(
+			resolveStatements('/ppp secret print where comment~"\\$SECRET"')
+				.statements[0]?.path,
+		).toBe("/ppp/secret/print/where");
+		expect(
+			resolveStatements('print where comment~[$strfind ("abc")]').statements[0]
+				?.path,
+		).toBe("/print/where");
+		// A `$` word standing alone is a positional operand, not a path segment —
+		// so it ENDS the run (hence `/log/get`, not `/log/get/time`) rather than
+		// making the menu unreadable.
+		expect(resolveStatements("/log\nget $item time").statements[1]?.path).toBe(
+			"/log/get",
+		);
+	});
+
+	test("EVERY `$`-headed segment is unreadable, valid spelling or not", () => {
+		// The predicate makes no claim about which spellings RouterOS accepts. Two
+		// of these are real references (`$menu`, `$"menu"`); the braced form is
+		// rejected by the device itself (at the `{`, on 7.24rc1) and a bare `$`
+		// names nothing. Offline can resolve NEITHER kind, so both must abstain —
+		// a guard that decides whether to ABSTAIN has to match the general shape,
+		// since an unlisted one reads as a readable menu and fails OPEN.
+		// The braced form is assembled rather than written literally: as a plain
+		// string it reads to the linter as a stray JS template placeholder.
+		const braced = `$${"{menu}"}`;
+		for (const segment of ["$menu", '$"menu"', braced, "$"]) {
+			const text = `/ip route/${segment}/remove [find]\nadd address=1.1.1.1`;
+			const stmts = resolveStatements(text).statements;
+			expect(stmts[0]?.unresolved).toBe("variable path segment");
+			expect(stmts[1]?.unresolved).toBe(LOST);
+			expect(resolveDocument(text).resolutions[0]?.unresolved).toBe(LOST);
+			// …and the relative spelling of the same segment, nested.
+			const nested = resolveDocument(
+				`/ip route\nremove [route/${segment} [find]]`,
+			).resolutions;
+			expect(nested[0]?.unresolved).toBe("variable path segment");
+			expect(nested[1]?.path).toBeNull();
+			expect(nested[1]?.unresolved).toBe(LOST);
+		}
+	});
+
+	test("a clean document is entirely certain", () => {
+		const res = resolveStatements(
+			"/ip route\nadd gateway=1.1.1.1\n/ip firewall filter\nprint",
+		).statements;
+		expect(res.every((s) => s.contextCertain)).toBe(true);
+		expect(res.some((s) => s.unresolved !== undefined)).toBe(false);
+	});
 });
 
 test("path-resolution API is re-exported from the library barrel", () => {

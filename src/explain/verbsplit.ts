@@ -39,16 +39,15 @@
  * surface — `pathresolve.ts` owns `isNav`; here a bare menu path is honestly
  * `ambiguous`, even where the resolver optimistically advanced context past it.
  *
- * Like `blocks.ts`, this ships only the single-statement boundary primitives.
- * Argument parsing (`k=v` / `?query` after the verb) belongs to the phase-1
- * canonical assembly, and the document-scale walker (per-statement splits with
- * fail-closed context taint) belongs to the Q14 slice (#192) — neither is the
- * Q6 question. `resolveVerb(text, context)` takes the enclosing menu context
- * explicitly; a caller composes the walk (see the note where `resolveVerbs`
- * would live).
+ * Like `blocks.ts`, this ships only the boundary primitives. Argument parsing
+ * (`k=v` / `?query` after the verb) belongs to the phase-1 canonical assembly,
+ * not to the Q6 question. `resolveVerb(text, context)` takes the enclosing menu
+ * context explicitly; `resolveVerbs(text)` walks a whole document on top of the
+ * resolver's context-certainty contract (#192).
  */
 
 import { scopeBodies } from "./blocks.ts";
+import { resolveStatements } from "./pathresolve.ts";
 
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
@@ -381,13 +380,36 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 	};
 }
 
-// A document-scale walker (`resolveVerbs`) is deliberately NOT shipped here. A
-// correct one must fail closed on the Q14 C3b cascade — after an upstream defect
-// makes the document context uncertain, a following relative statement (even one
-// headed by a known CRUD verb) must degrade to `unknown` until context is safely
-// re-established. That taint cannot be reconstructed from the flattened
-// statements this module receives — only `resolveStatements` (the Q3/Q4 path
-// resolver) can distinguish a context-poisoning defect from a context-neutral
-// one (a dynamic `$x` head does not taint) — so it needs a context-certainty
-// contract change in that resolver. Both the contract and the walker on top of
-// it are tracked in the Q14 slice (#192).
+/** A document's per-statement verb/menu splits, plus structural notes. */
+export interface VerbAnalysis {
+	splits: VerbSplit[];
+	notes: string[];
+}
+
+/**
+ * Verb/menu split of every statement in source order, tracking the persistent
+ * menu context via the shipped Q4 resolver (`resolveStatements`).
+ *
+ * This walker was pulled from the Q6 PR (#193) because it fabricated on the
+ * Q14 C3b cascade: after an upstream defect destroyed the document context, a
+ * following relative statement headed by a known CRUD verb still resolved
+ * confidently against the stale value. It returns unchanged in shape, because
+ * the fix belonged in the resolver, not here — `resolveStatements` now degrades
+ * exactly the context-DEPENDENT statements to `unresolved` when the context is
+ * lost, while leaving a context-NEUTRAL dynamic head (`$x`) alone. So the
+ * single rule below — a statement the resolver refused stays `unknown` here —
+ * fails closed on the cascade without a local taint that would over-fire on
+ * benign statements. The distinction is only visible to the resolver; this
+ * module sees flattened statements.
+ */
+export function resolveVerbs(text: string): VerbAnalysis {
+	const { statements, notes } = resolveStatements(text);
+	return {
+		splits: statements.map((s) =>
+			s.unresolved
+				? unknownSplit(s.unresolved)
+				: resolveVerb(s.text, s.context),
+		),
+		notes,
+	};
+}

@@ -523,6 +523,10 @@ versionless
 #   resolution feature-class field is `klass`. tostr / tostrvalue: the RouterOS
 #   `:tostr` directive and its IL-lowered form `/tostrvalue`. eworm: a corpus
 #   script author (eworm/*.rsc) cited as grounding for scope-name findings.
+#   rextended: another corpus script author, cited for the Q14 nested-bracket
+#   ambient-context case (a user function establishes no menu). ppp: the RouterOS
+#   /ppp menu, in the Q14 corner proving a `$` inside a `~` FILTER argument does
+#   not make the menu unreadable. strfind: a corpus user function in that corner.
 #   verbsplit: the Q6 verb/menu-boundary lab probe name, carried into the
 #   src/explain module + fixture names. myvar: the RouterOS example variable in
 #   the Q6 `:global myvar` collision corner (a positional operand indistinguishable
@@ -535,6 +539,8 @@ versionless
 #   frozen in src/explain/write.ts as the closed ROOT_CMDS vocabulary — jobname,
 #   rndnum, rndstr, tobool, tocrlf, toid, toip, tolf, tonsec, tonum, totime.
 #   lte: the RouterOS /interface lte menu, cited in the Q16 long-tail-verb corner.
+#   dyn: the `$dyn` variable in the Q14 cascade corners — a dynamic-headed
+#   statement, which is context-NEUTRAL and must not poison the menu context.
 SUT
 CJK
 pathresolve
@@ -543,6 +549,9 @@ klass
 tostr
 tostrvalue
 eworm
+rextended
+ppp
+strfind
 verbsplit
 myvar
 failclosed
@@ -559,3 +568,4 @@ tonsec
 tonum
 totime
 lte
+dyn
