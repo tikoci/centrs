@@ -65,8 +65,9 @@
  * Only two things make the context unknown, and both are cases where the
  * statement MIGHT have been navigation and offline cannot read where to:
  *   - a structural defect (the text is unreadable, so it may have been a nav),
- *   - a `/`-led statement whose leading run is unreadable (`/ip/$menu`), which
- *     is a navigation to a computed menu as easily as it is a command.
+ *   - a `/`-led statement whose leading run is unreadable (`/ip/$menu`, and
+ *     equally the mixed spelling `/ip route/$menu`), which is a navigation to a
+ *     computed menu as easily as it is a command.
  * A dynamic-headed statement (`$x`, `[…]`, `(…)`) is context-NEUTRAL — it
  * evaluates a value and does not navigate — so it must NOT poison; that
  * distinction is the whole reason this lives here rather than in a caller,
@@ -295,8 +296,9 @@ function isUnreadableAbsolute(text: string): boolean {
  * variable path segment leaves the path unresolved, and `statementPath` derives
  * a menu from it anyway (`/ip/$menu`). Anchoring brackets to that hands them a
  * fabricated base — `[find]` at a "path" containing a literal `$menu` — while
- * `resolveStatements` refuses the very same statement. So an unreadable
- * absolute anchors nothing.
+ * `resolveStatements` refuses the very same statement. So an unreadable menu
+ * anchors nothing, in EITHER spelling: `statementPath` derives a base from a
+ * relative one too (`route/$verb remove [find]` yields `<ctx>/route/$verb`).
  */
 function handsKnownContext(text: string, contextCertain: boolean): boolean {
 	// Either spelling of an unreadable menu anchors nothing. `statementPath`
@@ -794,7 +796,9 @@ function scanInterpolations(
  *      real base is a menu we cannot name, and `collectBrackets` falls back to
  *      the STATEMENT's context, which is a different menu. In `/ip route` +
  *      `remove [/interface/$type/get [find]]` that fallback reports the nested
- *      `[find]` at `/ip/route`, a context it never had. It must abstain.
+ *      `[find]` at `/ip/route`, a context it never had. It must abstain — and
+ *      equally for a RELATIVE unreadable menu (`[route/$verb [find]]`), because
+ *      spelling is not what makes a menu unreadable.
  *   3. The enclosing bracket is NOT A MENU COMMAND AT ALL — a user function
  *      (`$formatDate`), a value expression, a `:` directive. It
  *      establishes no menu, so the AMBIENT context still governs its arguments
@@ -805,8 +809,10 @@ function scanInterpolations(
  *      costs 12 further brackets and one document's `containsWrite` verdict,
  *      all of them correct answers thrown away.
  *
- * Case 2 is told from case 3 by exactly the test the statement walk uses — the
- * inner is `/`-led with a run offline cannot read.
+ * Case 2 is told from case 3 by `isUnreadablePath`, the same test the statement
+ * walk uses: the inner NAMES a menu (a path-shaped head) whose leading run is
+ * truncated by a variable segment, in either the absolute or the relative
+ * spelling. Case 3 is text that names no menu at all.
  */
 function nestedCertainty(
 	enclosing: Resolution | undefined,
