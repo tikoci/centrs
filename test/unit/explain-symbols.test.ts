@@ -197,20 +197,20 @@ describe("explain/symbols — sigil-optional heads and line continuations", () =
 	});
 
 	test("every scripting head binds with `:`, with `/`, and bare", () => {
-		for (const [inputs, expected] of [
-			[["%local foo 1\n:put $foo"], "local"],
-			[["%global foo 1\n:put $foo"], "global"],
-			[
-				["%foreach i in={1} do={:put $i}", "%for i from=1 to=3 do={:put $i}"],
-				"auto",
-			],
-		] as const)
-			for (const template of inputs)
-				for (const sigil of [":", "/", ""]) {
-					const r = resolveSymbols(template.replace("%", sigil));
-					expect(r.occurrences.length).toBe(2);
-					for (const o of r.occurrences) expect(o.cls).toBe(expected);
-				}
+		// the head word is written by the loop, so each spelling is a real input
+		// rather than a substitution into one
+		const heads: [string, SymbolClass][] = [
+			["local foo 1\n:put $foo", "local"],
+			["global foo 1\n:put $foo", "global"],
+			["foreach i in={1} do={:put $i}", "auto"],
+			["for i from=1 to=3 do={:put $i}", "auto"],
+		];
+		for (const [statement, expected] of heads)
+			for (const sigil of [":", "/", ""]) {
+				const r = resolveSymbols(`${sigil}${statement}`);
+				expect(r.occurrences).toHaveLength(2);
+				for (const o of r.occurrences) expect(o.cls).toBe(expected);
+			}
 	});
 
 	test("an unresolved `set` target follows the spelling", () => {
