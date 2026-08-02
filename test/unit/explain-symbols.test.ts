@@ -67,7 +67,7 @@ describe("explain/symbols — frozen fixtures", () => {
 		const ids = fixtures.cases.map((c) => c.id);
 		expect(new Set(ids).size).toBe(ids.length);
 		expect(ids.filter((id) => id.startsWith("C"))).toHaveLength(22);
-		expect(ids.filter((id) => id.startsWith("F"))).toHaveLength(6);
+		expect(ids.filter((id) => id.startsWith("F"))).toHaveLength(7);
 	});
 
 	test("no fixture is hand-asserted: every promoted-beyond anchor is device-verified", () => {
@@ -204,6 +204,34 @@ describe("explain/symbols — F1 substitutions inside strings", () => {
 			"local",
 			"local",
 		]);
+	});
+});
+
+describe("explain/symbols — structural recovery", () => {
+	test("a mismatched close is reported and does NOT unwind a scope", () => {
+		const r = resolveSymbols(":local f do={ :local v 1 ]\n :put $v }");
+		expect(r.notes).toEqual(["unbalanced-close:]"]);
+		// the `]` must not pop the `do={` scope, which would drop `v` early
+		expect(r.occurrences.at(-1)?.cls).toBe("local");
+	});
+
+	test("closes past the depth cap do not unwind real scopes", () => {
+		const depth = 300;
+		const r = resolveSymbols(
+			`:local v 1\n${"{".repeat(depth)}${"}".repeat(depth)}\n:put $v`,
+		);
+		expect(r.notes.some((n) => n.startsWith("over-depth:"))).toBe(true);
+		// every suppressed open consumed its own close, so the document scope —
+		// and `v` with it — is still standing at the end
+		expect(r.occurrences.at(-1)?.cls).toBe("local");
+	});
+
+	test("a quoted reference never has its span cut inside the quotes (S19)", () => {
+		const input = ':local a 1\n:put $"a-b"';
+		const reference = resolveSymbols(input).occurrences.at(-1);
+		expect(reference?.name).toBe("a-b");
+		expect(input.slice(reference?.start, reference?.end)).toBe('"a-b"');
+		expect(reference?.cls).toBe("parameter");
 	});
 });
 

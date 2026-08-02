@@ -216,6 +216,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	const frames: ("{" | "[" | "(" | '"')[] = [];
 	/** bracket/brace nesting, strings excluded (the S8 filter region uses it). */
 	let depth = 0;
+	/** `{` opens past the cap that pushed no scope; their `}` must not pop one. */
+	let suppressedScopes = 0;
 	let overDepth = false;
 
 	/** lowercased leading word of the current statement. */
@@ -317,7 +319,11 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		// `octive` and the subtraction operator. The document's own declarations
 		// break the tie without a schema: if the full run does not resolve but a
 		// prefix ending at a `-` does, the reference is that prefix.
-		if (binding === null && name.includes("-")) {
+		// Only the bare `$name` form has span === name text; `$"quoted-name"` and
+		// `${…}` start their span on the delimiter, so a prefix cut there would
+		// land inside the quotes. Gate on the two agreeing.
+		const spanIsName = r.end - r.start === r.name.length;
+		if (binding === null && spanIsName && name.includes("-")) {
 			for (
 				let cut = name.lastIndexOf("-");
 				cut > 0;
@@ -443,6 +449,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			depth++;
 			if (c === "{") {
 				if (scopes.length >= MAX_SCOPE_DEPTH) {
+					suppressedScopes++;
 					if (!overDepth) {
 						overDepth = true;
 						notes.push(`over-depth:${i}`);
@@ -460,12 +467,20 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			continue;
 		}
 		if (c === "}" || c === "]" || c === ")") {
-			if (frames.length === 0) notes.push(`unbalanced-close:${c}`);
-			else frames.pop();
+			const want = c === "}" ? "{" : c === "]" ? "[" : "(";
+			if (frames[frames.length - 1] !== want) {
+				// A mismatched close is not a close: popping it would unwind a real
+				// enclosing scope and drop its bindings early. `segment.ts` takes the
+				// same line — report it and treat the character as content.
+				notes.push(`unbalanced-close:${c}`);
+				continue;
+			}
+			frames.pop();
 			if (filterDepth !== null && depth <= filterDepth) filterDepth = null;
 			if (c === "}") {
 				// S1 — locals declared inside this brace scope go out of view.
-				if (scopes.length > 1) scopes.pop();
+				if (suppressedScopes > 0) suppressedScopes--;
+				else if (scopes.length > 1) scopes.pop();
 				resetStatement();
 			}
 			if (depth > 0) depth--;

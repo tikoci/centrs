@@ -537,6 +537,24 @@
 			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
 		},
 		{
+			"id": "F3a",
+			"class": "device-verified branch anchor",
+			"name": "a colon-less `onerror` binds its error variable exactly like `:onerror`",
+			"input": "onerror Err {\n  :put 1\n} do={\n  :put $Err\n}",
+			"expect": [
+				{
+					"name": "Err",
+					"cls": "local"
+				},
+				{
+					"name": "Err",
+					"cls": "local"
+				}
+			],
+			"rule": "S18 + Q2's colon-optional finding (`do {` opens a body the same way `:do {` does), which `blocks.ts` already encodes in DIRECTIVE_BODY. Unlike `:local`/`:global`/`:set`, the error-variable head is deliberately NOT gated on the `:` sigil.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight` (2026-08-02): `onerror Err {…} do={… $Err}` and `:onerror Err {…} do={… $Err}` produce byte-identical classes, `Err` = `variable-local` in both. Same for the `in={…} do={…}` spelling."
+		},
+		{
 			"id": "X1",
 			"class": "behavior anchor",
 			"name": "empty input resolves to nothing",
