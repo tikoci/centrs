@@ -216,6 +216,25 @@ function isUnreadableAbsolute(text: string): boolean {
 	return tokens.length === 0 || tokens.some((x) => x.startsWith("$"));
 }
 
+/**
+ * Is the context this statement hands its own brackets (R3) and its block
+ * bodies (R5) KNOWN?
+ *
+ * Two conditions, and BOTH are needed. The base must be knowable — the
+ * statement is `/`-led or a bare directive, or the document context is certain.
+ * And the statement's own leading run must be READABLE: `/ip/$menu/remove` is
+ * `/`-led, so its base does not depend on the document context, but `R7` says a
+ * variable path segment leaves the path unresolved, and `statementPath` derives
+ * a menu from it anyway (`/ip/$menu`). Anchoring brackets to that hands them a
+ * fabricated base — `[find]` at a "path" containing a literal `$menu` — while
+ * `resolveStatements` refuses the very same statement. So an unreadable
+ * absolute anchors nothing.
+ */
+function handsKnownContext(text: string, contextCertain: boolean): boolean {
+	if (isUnreadableAbsolute(text)) return false;
+	return contextCertain || isBodyContextIndependent(text);
+}
+
 /** A re-constituted `[…]` command substitution (Q3). */
 export interface Resolution {
 	/** Raw text inside the brackets. */
@@ -332,14 +351,11 @@ function walk(
 		}
 		// R3 — the statement's own path is the context its brackets see.
 		const stmtCtx = statementPath(text, ctx);
+		// Derived BEFORE the poison, from the certainty in force at this statement:
+		// `handsKnownContext` answers about the context this statement HANDS DOWN,
+		// which its own unreadability already governs.
+		const stmtCertain = handsKnownContext(text, certain);
 		if (isUnreadableAbsolute(text)) certain = false;
-		// Derived AFTER the poison, exactly as `walkStatements` orders it, so the
-		// two walks cannot drift. The value is the same either way — an unreadable
-		// absolute is `/`-led, so `isBodyContextIndependent` is true regardless,
-		// and the segmenter refuses to flatten a container whose menu prefix holds
-		// a `$` at all — but the contract's rule is that these walks move in
-		// lockstep, not that they happen to agree.
-		const stmtCertain = certain || isBodyContextIndependent(text);
 		collectBrackets(text, stmtCtx, 0, out, notes, stmtCertain);
 		// R5 — block bodies inherit the context in force here.
 		for (const body of scopeBodies(text)) {
@@ -435,12 +451,14 @@ function walkStatements(
 				: resolved),
 			contextCertain: certain,
 		});
-		if (isUnreadableAbsolute(text)) certain = false;
 		// A block body's statements are the parent's siblings after flattening,
 		// and R5 gives them the context in force here — which is the ROOT, hence
-		// knowable, when the statement spells its path out or is a bare directive.
+		// knowable, when the statement spells its path out or is a bare directive,
+		// and unknowable when the statement's own path could not be read. Same
+		// predicate and same order as the bracket walk, per the lockstep rule.
 		const stmtCtx = statementPath(text, ctx);
-		const bodyCertain = certain || isBodyContextIndependent(text);
+		const bodyCertain = handsKnownContext(text, certain);
+		if (isUnreadableAbsolute(text)) certain = false;
 		for (const body of scopeBodies(text)) {
 			if (blockDepth >= MAX_DEPTH) {
 				notes.add("over-depth");
@@ -689,20 +707,38 @@ function scanInterpolations(
 }
 
 /**
- * Certainty a NESTED bracket inherits (R6). An enclosing bracket that resolved
- * hands its own path down as a KNOWN base, even while the document context is
- * lost: an absolute inner path (`[/ip/route/get [find …] gateway]`) and a `:`
- * directive are context-independent, so the `[find …]` inside them is anchored
- * regardless of what the document context did. A non-null `path` is exactly
- * that condition — a relative inner command with a lost context resolves to
- * `null` — so nesting recovers certainty rather than propagating abstention
- * into brackets that are in fact anchored.
+ * Certainty a NESTED bracket inherits (R6). Three cases, and the middle one is
+ * the whole subtlety:
+ *
+ *   1. The enclosing bracket RESOLVED — its path is the nested bracket's base,
+ *      so the nested one is anchored even while the document context is lost
+ *      (`[/ip/route/get [find …] gateway]` is absolute, hence independent).
+ *   2. The enclosing bracket is a MENU COMMAND WE COULD NOT READ — then the
+ *      real base is a menu we cannot name, and `collectBrackets` falls back to
+ *      the STATEMENT's context, which is a different menu. In `/ip route` +
+ *      `remove [/interface/$type/get [find]]` that fallback reports the nested
+ *      `[find]` at `/ip/route`, a context it never had. It must abstain.
+ *   3. The enclosing bracket is NOT A MENU COMMAND AT ALL — a user function
+ *      (`$formatDate`), a value expression, a `:` directive. It
+ *      establishes no menu, so the AMBIENT context still governs its arguments
+ *      and the fallback is correct. Corpus evidence for this being the common
+ *      shape rather than a corner: under `/log`,
+ *      `:set x "$[$formatDate [get $item time]]"` must keep resolving
+ *      `[get …]` at `/log` (rextended/topic-166898). Refusing case 3 as well
+ *      costs 12 further brackets and one document's `containsWrite` verdict,
+ *      all of them correct answers thrown away.
+ *
+ * Case 2 is told from case 3 by exactly the test the statement walk uses — the
+ * inner is `/`-led with a run offline cannot read.
  */
 function nestedCertainty(
 	enclosing: Resolution | undefined,
 	contextCertain: boolean,
 ): boolean {
-	return contextCertain || (enclosing?.path ?? null) !== null;
+	if (enclosing === undefined) return contextCertain;
+	if (enclosing.path !== null) return true;
+	if (isUnreadableAbsolute(enclosing.inner)) return false;
+	return contextCertain;
 }
 
 function resolveInner(

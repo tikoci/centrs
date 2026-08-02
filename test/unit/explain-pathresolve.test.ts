@@ -350,6 +350,55 @@ describe("Q14 C3b — a lost context poisons dependent statements", () => {
 		}
 	});
 
+	test("an unreadable absolute statement anchors NOTHING (R7)", () => {
+		// `/ip/$menu/remove` is `/`-led, so its base does not depend on the document
+		// context — but R7 leaves its own path unresolved, and `statementPath`
+		// still derives `/ip/$menu` from it. Anchoring the bracket to that reports
+		// `[find]` at a "path" holding a literal `$menu`, while `resolveStatements`
+		// refuses the very same statement.
+		const doc = resolveDocument("/ip/$menu/remove [find]");
+		expect(doc.resolutions[0]?.path).toBeNull();
+		expect(doc.resolutions[0]?.unresolved).toBe(LOST);
+		expect(doc.resolutions[0]?.contextCertain).toBe(false);
+		expect(
+			resolveStatements("/ip/$menu/remove [find]").statements[0]?.path,
+		).toBeNull();
+	});
+
+	test("a nested bracket needs its ENCLOSING bracket to resolve, not the document", () => {
+		// Deliberately a CLEAN document: the context is perfectly known, and that
+		// must not rescue a nested bracket whose enclosing bracket has no path.
+		// `nestedCtx` falls back to the statement context, which is exactly the
+		// unrelated base this must refuse — `[find]` never sat at `/ip/route`.
+		const res = resolveDocument(
+			"/ip route\nremove [/interface/$type/get [find]]",
+		).resolutions;
+		expect(res[0]?.unresolved).toBe("variable path segment");
+		expect(res[1]?.depth).toBe(1);
+		expect(res[1]?.path).toBeNull();
+		expect(res[1]?.unresolved).toBe(LOST);
+		// An ABSOLUTE nested command still resolves on its own terms.
+		const absolute = resolveDocument(
+			"/ip route\nremove [/interface/$type/get [/ip/route/print]]",
+		).resolutions;
+		expect(absolute[1]?.path).toBe("/ip/route");
+	});
+
+	test("an enclosing bracket that is not a MENU at all still lets the ambient context govern", () => {
+		// The other half of the rule above, and the reason it is not simply "the
+		// enclosing bracket must resolve". A user function establishes no menu, so
+		// its arguments evaluate at the ambient context — here `/log`. Grounded in
+		// the corpus (rextended/topic-166898): refusing this shape too throws away
+		// 12 further correct bracket paths and moves a document's write verdict.
+		const res = resolveDocument(
+			'/log\n:set msg "$msg$[$formatDate [get $item time]] x"',
+		).resolutions;
+		expect(res[0]?.path).toBeNull();
+		expect(res[1]?.depth).toBe(1);
+		expect(res[1]?.path).toBe("/log");
+		expect(res[1]?.contextCertain).toBe(true);
+	});
+
 	test("a clean document is entirely certain", () => {
 		const res = resolveStatements(
 			"/ip route\nadd gateway=1.1.1.1\n/ip firewall filter\nprint",
