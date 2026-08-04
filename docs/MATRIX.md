@@ -64,12 +64,17 @@ section short enough that the grid remains the status surface.
   validate → run knowledge tier — canonical structure, LSP-like
   spans/diagnostics, transport classification (api-able vs execute, `curl`
   rendering), and live schema/completion facts. Its offline mode is the
-  canonicalizer only, transport-less (evidence will be unit/fixture tests);
-  the live probes (`/console/inspect` + `:parse`) ride rest-api/native-api,
-  so those two cells are `designed`. The surface was decided in the
-  2026-07-19 design round (#90) but the spec is **not ratified**: a
-  canonicalization grounding pass (staging phase 0) gates ratification, and
-  cells advance only after that plus green examples per the done rule.
+  canonicalizer only, transport-less (evidence is unit/fixture tests); the
+  live probes (`/console/inspect` + `:parse`) ride rest-api/native-api, so
+  those two cells are `designed`. The surface was decided in the 2026-07-19
+  design round (#90) and the spec is **ratified** on the phase-0 grounding
+  lab (#185, ratification PR #187). Phase 0.5 has since promoted the ratified
+  lab logic into the library — `src/explain/{segment,blocks,coordinates,
+  pathresolve,verbsplit,write,symbols}.ts` with frozen fixtures under
+  `test/fixtures/explain/` — but there is **no `explain` command surface
+  yet** (no `src/cli/explain.ts`, and `commands/explain/examples.md` is
+  unexercised), so the row stays `designed`. Cells advance only when the
+  phase-1 offline core lands and its examples run green per the done rule.
 - `transfer / ssh` means the SFTP-backed transfer method. Deferred file-transfer
   methods such as `scp`, `fetch`, and `ftp` are tracked in
   `commands/transfer/README.md`; `fetch` is not a grid column.

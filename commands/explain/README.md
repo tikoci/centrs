@@ -491,7 +491,12 @@ probes were left unpatched by design; the guard belongs in the product parser.
 **Non-blocking / deferred (not ratification-gating):** Q5 expression depth, Q7
 tokenizer corners, Q9 potential-command taxonomy, Q12 span-vocabulary draft —
 these refine the surface during implementation but did not gate ratification.
-The probe framework's disposition (reuse of the mutation suite, coordinate
+They keep their homes in staging: **Q7** is now concrete as #201 (lexical
+boundaries — sigil spellings, escape validity, statement-start eligibility)
+and #199 (the shared scanner's `$[…]`-in-string blind spot), both raised by the
+Q13 promotion and both spanning already-promoted modules; **Q5** and **Q9** are
+phase-1 measurements; **Q12** is spec open item 2 and hardens in phase 4. The
+probe framework's disposition (reuse of the mutation suite, coordinate
 fixtures, and adversarial generators as product test fixtures) is tracked in
 issue #186 rather than carried into mainline.
 
@@ -512,21 +517,33 @@ examples gate via unit/fixture tests and each live cell advances to
    answered with cited evidence; the findings are folded into the surface above
    and summarized in [Phase-0 ratification](#phase-0-ratification-185). This
    spec is ratified on that basis.
-- **Phase 0.5 — product contract fixtures.** Before implementation, promote a
-   minimal, reviewed subset of the lab into product-owned tests; do not import
-   or execute `.scratch/` code. The suite must include representative frozen
-   holdout and constructed corners from Q1–Q4/Q6/Q13/Q16, all Q14 recovery
-   operators, Q15's coordinate categories and invariants, and Q17's adversarial
-   generators. Freeze their inputs and expected outcomes first; phase 1 wires
-   them only to exported production interfaces. They pin the ratified
-   thresholds: no confident command invented after a defect, zero false
-   negatives on statically obvious writes, 100% coordinate invariants,
+- **Phase 0.5 — product contract fixtures — SUBSTANTIALLY COMPLETE (#186).**
+   Promote a minimal, reviewed subset of the lab into product-owned tests; do
+   not import or execute `.scratch/` code. One vertical-slice PR per lab suite,
+   each landing an exported module under `src/explain/` plus frozen fixtures
+   under `test/fixtures/explain/`. Shipped: Q15 coordinates (#188 →
+   `coordinates.ts`), Q1 segmentation (#189 → `segment.ts`), Q2–Q4 path
+   resolution (#191 → `pathresolve.ts`), Q17 single-pass container walker
+   (#194 → `blocks.ts`, closing #190), Q6 verb/menu boundary (#193 →
+   `verbsplit.ts`), Q16 write-shape tristate (#195 → `write.ts`), Q14 cascade /
+   context-certainty (#197), Q13 symbol scope (#200 → `symbols.ts`). These pin
+   the ratified thresholds: no confident command invented after a defect, zero
+   false negatives on statically obvious writes, 100% coordinate invariants,
    deterministic/well-formed spans, bounded depth, no throw, and roughly linear
-   scaling. The fixture-selection/disposition work is tracked in #186; the
-   76-file lab framework and its large raw streams do not move into mainline.
+   scaling. **Remaining:** #192 (Q14 defect-*region* spans and the
+   `ambiguous`/`unknown` verdict vocabulary — the verdict half wants the phase-1
+   envelope). The 76-file lab framework and its large raw streams stay out of
+   mainline; #186 tracks the residual `.scratch/` disposition.
 - **Phase 1 — offline core** — the grown canonicalizer: structure + gate
    verdict + per-statement resolution and transport classification +
-   diagnostics (+ `--curl` rendering). Phase 0.5 tests turn green here.
+   diagnostics (+ `--curl` rendering), and the CLI/MCP surface over it. Phase
+   0.5 shipped the analysis modules as library exports only; phase 1 composes
+   them behind one entry point, adds the envelope and `src/cli/explain.ts`, and
+   turns `examples.md` green. Carried in with it: the lexical-boundary
+   hardening (#201) and the shared-scanner substitution blind spot (#199), both
+   found during Q13 and both spanning modules already promoted; plus the
+   deferred lab questions Q5 (expression depth) and Q9 (potential-command
+   taxonomy), which become focused tests as this surface hardens.
 - **Phase 2 — live probes** — highlight + `:parse` (+
    completion/child/syntax facets) over rest-api/native-api with the safety rules
    above, including the
