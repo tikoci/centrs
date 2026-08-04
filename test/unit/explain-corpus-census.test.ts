@@ -102,7 +102,30 @@ describe("explain corpus census markers", () => {
 		expect(test_(row(":local x 1\nadd address=1.2.3.4/24"))).toBe(false);
 		expect(test_(row(":put [:len $x]\nadd address=1.2.3.4/24"))).toBe(false);
 		expect(test_(row('add source=":put hello"'))).toBe(false);
-		expect(test_(row('add name=x on-event=":log info hi"'))).toBe(false);
+		// Every RouterOS script hook, not just the handful an earlier closed
+		// list happened to name. All of these appear in the corpus.
+		for (const key of [
+			"script",
+			"up-script",
+			"down-script",
+			"test-script",
+			"lease-script",
+			"on-event",
+			"on-error",
+			"on-boot",
+			"on-login",
+			"on-logout",
+			"on-master",
+			"on-backup",
+			"on-message",
+			"on-up",
+			"on-down",
+		]) {
+			expect(test_(row(`add host=1.1.1.1 ${key}=":put x"`))).toBe(false);
+		}
+		// Ordinary keys that merely resemble them stay opaque.
+		expect(test_(row('add name=x comment="on-call:24x7"'))).toBe(true);
+		expect(test_(row('add description="script:v2"'))).toBe(true);
 		expect(test_(row("add x=1; :put done"))).toBe(false);
 		expect(test_(row("/ip/address print"))).toBe(false);
 	});

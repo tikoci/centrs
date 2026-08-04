@@ -54,6 +54,12 @@
  * - `maskOpaqueQuotedValues` — position alone cannot separate
  *   `comment=":allow"` from `source=":put x"`; inside quotes they are the
  *   same shape and only the key says which is script.
+ * - `SCRIPT_BEARING_KEY` — the key list behind that mask was a closed set and
+ *   was wrong three rounds running, missing `up-script`, `down-script`,
+ *   `lease-script`, `on-boot`, `on-message`, `on-master` and `on-backup`, all
+ *   present in the corpus. It is now a shape rule over RouterOS's own naming
+ *   convention (`…script`, `on-…`), because enumerating a schema by review
+ *   round is the failure mode, not the missing entries.
  *
  * The two `terse-*` markers have no #203 baseline: they were added after the
  * tangentsoft import (35 genuine `/export … terse` device captures) showed
@@ -136,19 +142,24 @@ const CORE_SCRIPTING_DIRECTIVES =
 const SCRIPTING_COLON_TOKEN = /(?:^|[\s[{(;,"'!]):[A-Za-z]/m;
 
 /**
- * Keys whose value is RouterOS script text rather than opaque data. A closed
- * list, like `NON_EXPORT_COMMANDS`: deciding this in general needs the schema,
- * and the census only needs the handful that actually carry inline script.
+ * Keys whose value is RouterOS script text rather than opaque data.
+ *
+ * This is a **shape rule, not an enumeration**, and deliberately so: a closed
+ * list was wrong three times in a row, missing `up-script`, `down-script`,
+ * `lease-script`, `on-boot`, `on-message`, `on-master` and `on-backup` — all
+ * of which appear in the corpus today. RouterOS names these consistently:
+ *
+ * - anything ending in `script` (`source` aside): `script`, `up-script`,
+ *   `down-script`, `test-script`, `lease-script`;
+ * - anything beginning `on-`, the event-hook convention: `on-event`,
+ *   `on-error`, `on-boot`, `on-login`, `on-logout`, `on-master`, `on-backup`,
+ *   `on-up`, `on-down`, `on-message`.
+ *
+ * A hook may hold a script *name* rather than inline code, which is
+ * indistinguishable offline — treating both as script is the safe direction
+ * for this marker, since it errs toward "this document contains script".
  */
-const SCRIPT_BEARING_KEYS = new Set([
-	"source",
-	"script",
-	"on-event",
-	"on-error",
-	"on-up",
-	"on-down",
-	"on-login",
-]);
+const SCRIPT_BEARING_KEY = /(?:^source$|script$|^on-)/;
 
 /** A quoted value, with backslash escapes, captured together with its key. */
 const KEYED_QUOTED_VALUE = /([A-Za-z][\w-]*)=("(?:\\.|[^"\\])*")/g;
@@ -162,7 +173,7 @@ function maskOpaqueQuotedValues(text: string): string {
 	return text.replace(
 		KEYED_QUOTED_VALUE,
 		(match, key: string, value: string) =>
-			SCRIPT_BEARING_KEYS.has(key.toLowerCase())
+			SCRIPT_BEARING_KEY.test(key.toLowerCase())
 				? match
 				: `${key}=${" ".repeat(value.length)}`,
 	);
