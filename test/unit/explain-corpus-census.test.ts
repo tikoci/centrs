@@ -88,16 +88,21 @@ describe("explain corpus census markers", () => {
 		expect(
 			test_(row("/ip/dhcp-server/lease\nadd client-id=1:c0:25:67:99:a3")),
 		).toBe(true);
-		// A colon inside an ordinary value is not a directive either — content
-		// alone cannot tell them apart, only position can.
+		// A colon inside an ordinary value is not a directive — and position
+		// alone cannot see that, because inside quotes `comment=":allow"` and
+		// `source=":put x"` are the same shape. Only the key separates them.
 		expect(
 			test_(row('/ip firewall filter\nadd chain=input comment="policy:allow"')),
 		).toBe(true);
+		expect(test_(row('add chain=input comment=":allow"'))).toBe(true);
+		expect(test_(row('add chain=input comment="policy :allow"'))).toBe(true);
 		expect(test_(row('/system note\nset note="see http://wiki/x"'))).toBe(true);
-		// Real scripting still excludes the file, including inside a string.
+		// Real scripting still excludes the file, including inside a string
+		// under a key that genuinely carries script text.
 		expect(test_(row(":local x 1\nadd address=1.2.3.4/24"))).toBe(false);
 		expect(test_(row(":put [:len $x]\nadd address=1.2.3.4/24"))).toBe(false);
 		expect(test_(row('add source=":put hello"'))).toBe(false);
+		expect(test_(row('add name=x on-event=":log info hi"'))).toBe(false);
 		expect(test_(row("add x=1; :put done"))).toBe(false);
 		expect(test_(row("/ip/address print"))).toBe(false);
 	});
@@ -129,6 +134,45 @@ describe("explain corpus census markers", () => {
 		expect(terse(row("/ip firewall filter print add"))).toBe(false);
 		// The genuine shape still registers.
 		expect(terse(row("/system script add name=add source=x"))).toBe(true);
+	});
+
+	test("RouterOS separator spellings tokenize identically", () => {
+		const terse = markerTest("terse-statement");
+		const doc = markerTest("terse-export-doc");
+		const idiom = markerTest("export-idiom");
+		// `/` and whitespace are interchangeable separators, so a command word
+		// hidden inside a slash-joined path must still end the path. Splitting on
+		// whitespace alone sees `/system/script/run` as one opaque token.
+		for (const line of [
+			"/system script run add",
+			"/system/script/run add",
+			"/system script/run add",
+			"/system/script run add",
+		]) {
+			expect(terse(row(line))).toBe(false);
+			expect(doc(row(line))).toBe(false);
+		}
+		for (const menu of [
+			"/system resource print",
+			"/system/resource/print",
+			"/system resource/print",
+			"/system/resource print",
+		]) {
+			expect(idiom(row(`${menu}\nadd name=x`))).toBe(false);
+		}
+		// And the genuine statement is recognized in every spelling, including
+		// the fully slash-joined form the whitespace-only split used to miss.
+		for (const line of [
+			"/ip address add address=1.2.3.4/24",
+			"/ip/address add address=1.2.3.4/24",
+			"/ip/address/add address=1.2.3.4/24",
+			"/file/add name=x",
+		]) {
+			expect(terse(row(line))).toBe(true);
+		}
+		// A slash inside an argument value is not a path separator.
+		expect(terse(row("/ip/address add address=1.2.3.4/24"))).toBe(true);
+		expect(terse(row("/ip/address"))).toBe(false);
 	});
 
 	test("terse-export-doc requires every statement to be a one-liner", () => {

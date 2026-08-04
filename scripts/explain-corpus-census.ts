@@ -29,15 +29,31 @@
  *   Treating the two conditions as an unordered conjunction gives 40;
  *   allowing indented pastes gives 45.
  *
- * Three detector defects were found by review *after* those figures were
- * first published, all of which reproduce on hand-written input and none of
- * which occurs anywhere in the 948-script corpus (verified per marker), so
- * every figure here is unchanged by their repair. They are fixed anyway, and
- * carry regressions: the corpus is well-formed and one genre, so a detector
- * being corpus-green is not evidence it is right — the same lesson #201 drew,
- * and #203 exists to widen exactly this input distribution. See
- * `isTerseStatement` (verb-shaped positional operands), `SCRIPTING_COLON_TOKEN`
- * (colons inside ordinary values), and `isBareMenuLine` (slash-led commands).
+ * Review found five detector defects after those figures were first
+ * published. All five reproduce on hand-written input; the three baseline
+ * markers above were unaffected by every one of them, but the `terse-*`
+ * markers were **not** — see below. The corpus is well-formed and one genre,
+ * so a detector being corpus-green is not evidence it is right (the lesson
+ * #201 drew, and the reason #203 exists), and each fix carries a regression:
+ *
+ * - `isTerseStatement` — a verb-shaped *positional operand* read as a verb
+ *   (`/system script run add` runs a script named `add`).
+ * - `isBareMenuLine` — a slash-led *command* accepted as navigation
+ *   (`/system resource print`).
+ * - `SCRIPTING_COLON_TOKEN` — a colon inside an ordinary value read as a
+ *   directive (`comment="policy:allow"`).
+ * - `pathSegments` — the two path detectors split on whitespace only, hiding
+ *   a command word inside a slash-joined path. RouterOS treats `/` and
+ *   whitespace as interchangeable, so all four spellings of
+ *   `/system script run` must tokenize alike. **This one moved the numbers:**
+ *   it was also under-counting the fully slash-joined statement form
+ *   (`/file/add name=x`, the eworm style), taking `terse-statement`
+ *   100 -> 141 and `terse-export-doc` 19 -> 29 on the frozen corpus. Both are
+ *   corrected under-counts, verified file by file; `eworm` moves 0 -> 7 on
+ *   `terse-statement` and stays 0 on `terse-export-doc`.
+ * - `maskOpaqueQuotedValues` — position alone cannot separate
+ *   `comment=":allow"` from `source=":put x"`; inside quotes they are the
+ *   same shape and only the key says which is script.
  *
  * The two `terse-*` markers have no #203 baseline: they were added after the
  * tangentsoft import (35 genuine `/export … terse` device captures) showed
@@ -109,10 +125,52 @@ const CORE_SCRIPTING_DIRECTIVES =
 // Any colon-prefixed identifier — `:put`, `[:deserialize`, `:toarray`. What
 // separates a directive from a colon inside a *value* is position, not
 // content: a directive only ever opens a token. Matching on content alone
-// (even with a hex-digit guard for `02:23:06:EB` and `2001:db8::a`) still
-// counts `comment="policy:allow"` as scripting and under-counts config. Quotes
-// are included as openers so a directive inside `source="…"` still registers.
+// (even with a hex-digit guard for `02:23:06:EB` and `2001:db8::a`) counts
+// `comment="policy:allow"` as scripting and under-counts config.
+//
+// Position alone is not sufficient either. Inside quotes, `comment=":allow"`
+// and `source=":put x"` are the same shape, and only the *key* says which is
+// script text. So quoted values are masked first unless their key carries
+// script (below), and the position rule runs over what is left — quotes stay
+// openers so a directive at the very start of a `source="…"` still registers.
 const SCRIPTING_COLON_TOKEN = /(?:^|[\s[{(;,"'!]):[A-Za-z]/m;
+
+/**
+ * Keys whose value is RouterOS script text rather than opaque data. A closed
+ * list, like `NON_EXPORT_COMMANDS`: deciding this in general needs the schema,
+ * and the census only needs the handful that actually carry inline script.
+ */
+const SCRIPT_BEARING_KEYS = new Set([
+	"source",
+	"script",
+	"on-event",
+	"on-error",
+	"on-up",
+	"on-down",
+	"on-login",
+]);
+
+/** A quoted value, with backslash escapes, captured together with its key. */
+const KEYED_QUOTED_VALUE = /([A-Za-z][\w-]*)=("(?:\\.|[^"\\])*")/g;
+
+/**
+ * Blank out quoted values that cannot be script, so a colon inside ordinary
+ * prose (`comment="policy :allow"`) is not read as a directive. Length is
+ * preserved so nothing else shifts.
+ */
+function maskOpaqueQuotedValues(text: string): string {
+	return text.replace(
+		KEYED_QUOTED_VALUE,
+		(match, key: string, value: string) =>
+			SCRIPT_BEARING_KEYS.has(key.toLowerCase())
+				? match
+				: `${key}=${" ".repeat(value.length)}`,
+	);
+}
+
+function hasScriptingColonToken(text: string): boolean {
+	return SCRIPTING_COLON_TOKEN.test(maskOpaqueQuotedValues(text));
+}
 
 /**
  * RouterOS commands that are not export verbs. Their presence proves a line is
@@ -142,15 +200,39 @@ const NON_EXPORT_COMMANDS = new Set([
 ]);
 
 /**
+ * Split a statement's leading path into segments. RouterOS accepts `/` and
+ * whitespace interchangeably as separators, so `/system script run`,
+ * `/system/script/run` and the mixed `/system script/run` are the same path
+ * and must tokenize the same way — splitting on whitespace alone hides a
+ * command word inside a slash-joined path.
+ *
+ * Splitting stops at the first argument, because values legitimately contain
+ * slashes (`address=1.2.3.4/24`).
+ */
+function pathSegments(line: string): string[] {
+	const segments: string[] = [];
+	for (const token of line.trim().split(/\s+/)) {
+		if (token.includes("=")) break;
+		for (const segment of token.split("/")) {
+			if (segment !== "") segments.push(segment);
+		}
+	}
+	return segments;
+}
+
+/**
  * A menu path on its own line at column 0 — the `compact`/`verbose` shape.
- * `/system resource print` is a command, not a menu, so it is not one.
+ * `/system resource print` is a command, not a menu, so it is not one, in any
+ * of its separator spellings.
  */
 function isBareMenuLine(line: string): boolean {
 	if (line.length <= 1 || !line.startsWith("/") || line.includes("=")) {
 		return false;
 	}
 	if (line.trimEnd() !== line) return false;
-	return !line.split(/\s+/).some((token) => NON_EXPORT_COMMANDS.has(token));
+	return !pathSegments(line).some((segment) =>
+		NON_EXPORT_COMMANDS.has(segment),
+	);
 }
 
 /**
@@ -177,20 +259,18 @@ const EXPORT_VERBS = new Set(["add", "set", "remove", "unset"]);
  * A `terse` export statement: absolute path and verb on one line, e.g.
  * `/ip address add address=192.168.88.1/24` or `/port set 0 name=serial0`.
  *
- * The verb must be the first token after the path — anything else means the
- * word is an operand, not the command. `/system script run add` runs a script
- * *named* `add`, and scanning past `run` for a verb-looking token anywhere on
- * the line would read it as an export statement.
+ * The verb must be the first path segment that is not a menu name — anything
+ * later means the word is an operand, not the command. `/system script run
+ * add` runs a script *named* `add`, in every separator spelling.
  */
 function isTerseStatement(line: string): boolean {
-	const trimmed = line.trim();
-	if (!trimmed.startsWith("/")) return false;
-	const tokens = trimmed.split(/\s+/);
-	for (let i = 1; i < tokens.length; i++) {
-		const token = tokens[i] as string;
-		// Arguments have started, or a command already claimed the line.
-		if (token.includes("=") || NON_EXPORT_COMMANDS.has(token)) return false;
-		if (EXPORT_VERBS.has(token)) return true;
+	if (!line.trim().startsWith("/")) return false;
+	const segments = pathSegments(line);
+	for (let i = 1; i < segments.length; i++) {
+		const segment = segments[i] as string;
+		// A command already claimed the line, so no verb can follow.
+		if (NON_EXPORT_COMMANDS.has(segment)) return false;
+		if (EXPORT_VERBS.has(segment)) return true;
 	}
 	return false;
 }
@@ -251,7 +331,7 @@ export const MARKERS: readonly Marker[] = [
 		label: "pure `add`/`set` config, zero scripting directives",
 		baseline: 23,
 		test: (row) =>
-			ADD_OR_SET_LINE.test(row.text) && !SCRIPTING_COLON_TOKEN.test(row.text),
+			ADD_OR_SET_LINE.test(row.text) && !hasScriptingColonToken(row.text),
 	},
 	{
 		key: "eworm-shebang",
