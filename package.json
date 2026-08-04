@@ -22,7 +22,7 @@
 		"typedoc": "^0.28.19"
 	},
 	"optionalDependencies": {
-		"@tikoci/quickchr": "^0.4.5"
+		"@tikoci/quickchr": "^0.4.7"
 	},
 	"peerDependencies": {
 		"typescript": "^6.0.3"
