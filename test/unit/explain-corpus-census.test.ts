@@ -69,6 +69,11 @@ describe("explain corpus census markers", () => {
 		expect(test_(row("  /ip/address\n  add address=1.2.3.4/24"))).toBe(false);
 		expect(test_(row("add address=1.2.3.4/24"))).toBe(false);
 		expect(test_(row("/ip/address print"))).toBe(false);
+		// A slash-led *command* is not a menu line, so what follows it is not
+		// the export idiom — leading `/` and no `=` is not enough to call a
+		// line navigation.
+		expect(test_(row("/system resource print\nadd name=x"))).toBe(false);
+		expect(test_(row("/system script run\nadd name=x"))).toBe(false);
 	});
 
 	test("pure-config ignores hex-colon literals, which are not scripting directives", () => {
@@ -83,9 +88,17 @@ describe("explain corpus census markers", () => {
 		expect(
 			test_(row("/ip/dhcp-server/lease\nadd client-id=1:c0:25:67:99:a3")),
 		).toBe(true);
-		// Real scripting still excludes the file.
+		// A colon inside an ordinary value is not a directive either — content
+		// alone cannot tell them apart, only position can.
+		expect(
+			test_(row('/ip firewall filter\nadd chain=input comment="policy:allow"')),
+		).toBe(true);
+		expect(test_(row('/system note\nset note="see http://wiki/x"'))).toBe(true);
+		// Real scripting still excludes the file, including inside a string.
 		expect(test_(row(":local x 1\nadd address=1.2.3.4/24"))).toBe(false);
 		expect(test_(row(":put [:len $x]\nadd address=1.2.3.4/24"))).toBe(false);
+		expect(test_(row('add source=":put hello"'))).toBe(false);
+		expect(test_(row("add x=1; :put done"))).toBe(false);
 		expect(test_(row("/ip/address print"))).toBe(false);
 	});
 
@@ -101,6 +114,21 @@ describe("explain corpus census markers", () => {
 		expect(test_(row("/ip/address comment=add"))).toBe(false);
 		// The multi-line idiom is deliberately not a terse statement.
 		expect(test_(row("/ip/address\nadd address=1.2.3.4/24"))).toBe(false);
+	});
+
+	test("a verb-shaped positional operand is not an export verb", () => {
+		const terse = markerTest("terse-statement");
+		const doc = markerTest("terse-export-doc");
+		// `add` here is the *name of the script being run*, not a write verb —
+		// scanning the whole line for a verb-looking token would read this as an
+		// export statement and inflate the export strata.
+		expect(terse(row("/system script run add"))).toBe(false);
+		expect(doc(row("/system script run add"))).toBe(false);
+		expect(terse(row("/system script run set"))).toBe(false);
+		// A command claims the line even when a verb-shaped word follows later.
+		expect(terse(row("/ip firewall filter print add"))).toBe(false);
+		// The genuine shape still registers.
+		expect(terse(row("/system script add name=add source=x"))).toBe(true);
 	});
 
 	test("terse-export-doc requires every statement to be a one-liner", () => {

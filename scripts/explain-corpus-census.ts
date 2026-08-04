@@ -22,13 +22,22 @@
  *   as any `:` before a letter, which also excludes MAC addresses
  *   (`02:23:06:EB`), IPv6 literals (`2001:db8::a`) and DHCP client-ids
  *   (`1:c0:25:…`) — i.e. it systematically under-counts exactly the config
- *   genre #203 is about, giving 17. `SCRIPTING_COLON_TOKEN` below ignores a
- *   colon preceded by a hex digit or another colon, which is the intended
- *   reading and lands at 21.
+ *   genre #203 is about, giving 17. `SCRIPTING_COLON_TOKEN` below keys on
+ *   *position* instead, which is the intended reading and lands at 21.
  * - **`export-idiom` 37, issue 35.** "Bare menu line **then** `add`/`set`" is
  *   read here as genuine adjacency at column 0 (the shape a device emits).
  *   Treating the two conditions as an unordered conjunction gives 40;
  *   allowing indented pastes gives 45.
+ *
+ * Three detector defects were found by review *after* those figures were
+ * first published, all of which reproduce on hand-written input and none of
+ * which occurs anywhere in the 948-script corpus (verified per marker), so
+ * every figure here is unchanged by their repair. They are fixed anyway, and
+ * carry regressions: the corpus is well-formed and one genre, so a detector
+ * being corpus-green is not evidence it is right — the same lesson #201 drew,
+ * and #203 exists to widen exactly this input distribution. See
+ * `isTerseStatement` (verb-shaped positional operands), `SCRIPTING_COLON_TOKEN`
+ * (colons inside ordinary values), and `isBareMenuLine` (slash-led commands).
  *
  * The two `terse-*` markers have no #203 baseline: they were added after the
  * tangentsoft import (35 genuine `/export … terse` device captures) showed
@@ -97,21 +106,51 @@ const ADD_OR_SET_LINE = /^(?:add|set)\b/m;
 const CORE_SCRIPTING_DIRECTIVES =
 	/:(?:local|global|if|foreach|while|do|for|function|execute)\b/;
 
-// Any colon-prefixed identifier — `:put`, `[:deserialize`, `:toarray` — but
-// not a colon inside a hex-colon literal. `02:23:06:EB` (MAC), `2001:db8::a`
-// (IPv6) and `1:c0:25:…` (DHCP client-id) all put a letter after a colon and
-// are not scripting at all; the lookbehind rejects a colon preceded by a hex
-// digit or by another colon, which is what distinguishes them.
-const SCRIPTING_COLON_TOKEN = /(?<![0-9A-Fa-f:]):[A-Za-z]/;
+// Any colon-prefixed identifier — `:put`, `[:deserialize`, `:toarray`. What
+// separates a directive from a colon inside a *value* is position, not
+// content: a directive only ever opens a token. Matching on content alone
+// (even with a hex-digit guard for `02:23:06:EB` and `2001:db8::a`) still
+// counts `comment="policy:allow"` as scripting and under-counts config. Quotes
+// are included as openers so a directive inside `source="…"` still registers.
+const SCRIPTING_COLON_TOKEN = /(?:^|[\s[{(;,"'!]):[A-Za-z]/m;
 
-/** A menu path on its own line at column 0 — the `compact`/`verbose` shape. */
+/**
+ * RouterOS commands that are not export verbs. Their presence proves a line is
+ * doing something other than navigating or writing configuration, so they end
+ * a path: in `/system script run add`, `add` is the script's *name*, and in
+ * `/system resource print` the line is a command, not a menu.
+ *
+ * Offline this is a heuristic — telling a path segment from a command word is
+ * Q6's irreducible ambiguity — but a closed list of common commands removes
+ * the cases a census would otherwise miscount.
+ */
+const NON_EXPORT_COMMANDS = new Set([
+	"print",
+	"run",
+	"get",
+	"find",
+	"monitor",
+	"export",
+	"import",
+	"reset",
+	"enable",
+	"disable",
+	"move",
+	"edit",
+	"scan",
+	"check-installation",
+]);
+
+/**
+ * A menu path on its own line at column 0 — the `compact`/`verbose` shape.
+ * `/system resource print` is a command, not a menu, so it is not one.
+ */
 function isBareMenuLine(line: string): boolean {
-	return (
-		line.length > 1 &&
-		line.startsWith("/") &&
-		!line.includes("=") &&
-		line.trimEnd() === line
-	);
+	if (line.length <= 1 || !line.startsWith("/") || line.includes("=")) {
+		return false;
+	}
+	if (line.trimEnd() !== line) return false;
+	return !line.split(/\s+/).some((token) => NON_EXPORT_COMMANDS.has(token));
 }
 
 /**
@@ -137,7 +176,11 @@ const EXPORT_VERBS = new Set(["add", "set", "remove", "unset"]);
 /**
  * A `terse` export statement: absolute path and verb on one line, e.g.
  * `/ip address add address=192.168.88.1/24` or `/port set 0 name=serial0`.
- * The verb must appear among the path-like tokens, before arguments start.
+ *
+ * The verb must be the first token after the path — anything else means the
+ * word is an operand, not the command. `/system script run add` runs a script
+ * *named* `add`, and scanning past `run` for a verb-looking token anywhere on
+ * the line would read it as an export statement.
  */
 function isTerseStatement(line: string): boolean {
 	const trimmed = line.trim();
@@ -145,7 +188,8 @@ function isTerseStatement(line: string): boolean {
 	const tokens = trimmed.split(/\s+/);
 	for (let i = 1; i < tokens.length; i++) {
 		const token = tokens[i] as string;
-		if (token.includes("=")) return false;
+		// Arguments have started, or a command already claimed the line.
+		if (token.includes("=") || NON_EXPORT_COMMANDS.has(token)) return false;
 		if (EXPORT_VERBS.has(token)) return true;
 	}
 	return false;
