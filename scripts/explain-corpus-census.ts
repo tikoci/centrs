@@ -49,9 +49,12 @@
  *
  * The corpus lives in the sibling `lsp-routeros-ts` repo, not in centrs — see
  * `docs/CONSTITUTION.md` / #203 "Longer term" for the corpus-ownership split.
+ * It is resolved as a sibling of this checkout; `CENTRS_CORPUS_DB` or `--db`
+ * point elsewhere.
  */
 
 import { Database } from "bun:sqlite";
+import { resolve } from "node:path";
 
 export interface CorpusRow {
 	path: string;
@@ -371,19 +374,37 @@ export function renderMarkdown(
 	return out.join("\n");
 }
 
-function flag(args: readonly string[], name: string): string | undefined {
+export function flag(
+	args: readonly string[],
+	name: string,
+): string | undefined {
 	const index = args.indexOf(name);
-	return index >= 0 ? args[index + 1] : undefined;
+	if (index < 0) return undefined;
+	const value = args[index + 1];
+	// A missing value would otherwise swallow the next option and report it as
+	// a missing corpus — `--db --json` must not read as "no corpus at --json".
+	if (value === undefined || value.startsWith("--")) {
+		throw new Error(`${name} requires a value`);
+	}
+	return value;
 }
 
 function has(args: readonly string[], name: string): boolean {
 	return args.includes(name);
 }
 
-function defaultDbPath(): string {
-	const home = Bun.env["HOME"];
-	if (!home) throw new Error("HOME is not set; pass --db <path> explicitly");
-	return `${home}/GitHub/lsp-routeros-ts/test-data/corpus.sqlite`;
+/**
+ * The corpus lives in the sibling `lsp-routeros-ts` checkout. Resolve it from
+ * this file rather than from `$HOME/GitHub`, so any clone layout works as long
+ * as the two repos are siblings. `CENTRS_CORPUS_DB` and `--db` override.
+ */
+export function defaultDbPath(): string {
+	const override = Bun.env["CENTRS_CORPUS_DB"];
+	if (override) return override;
+	return resolve(
+		import.meta.dir,
+		"../../lsp-routeros-ts/test-data/corpus.sqlite",
+	);
 }
 
 function loadRows(dbPath: string): CorpusRow[] {

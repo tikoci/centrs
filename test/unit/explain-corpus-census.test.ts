@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
 import {
 	BASELINE_TOTAL,
 	type CorpusRow,
 	census,
+	defaultDbPath,
+	flag,
 	MARKERS,
 	renderMarkdown,
 } from "../../scripts/explain-corpus-census.ts";
@@ -198,6 +201,37 @@ describe("census aggregation", () => {
 		expect(md).toContain("## By genre marker");
 		expect(md).toContain("## Genre marker by collection");
 		expect(md).not.toContain("#203 baseline");
+	});
+
+	test("--db without a value is a usage error, not a silent fallback", () => {
+		expect(flag(["--db", "/tmp/corpus.sqlite"], "--db")).toBe(
+			"/tmp/corpus.sqlite",
+		);
+		expect(flag(["--json"], "--db")).toBeUndefined();
+		// Would otherwise open a file named "--json" and report a missing corpus.
+		expect(() => flag(["--db", "--json"], "--db")).toThrow(
+			"--db requires a value",
+		);
+		expect(() => flag(["--compare", "--db"], "--db")).toThrow(
+			"--db requires a value",
+		);
+	});
+
+	test("the corpus resolves as a sibling of this checkout, not from $HOME", () => {
+		const previous = Bun.env["CENTRS_CORPUS_DB"];
+		delete Bun.env["CENTRS_CORPUS_DB"];
+		try {
+			// test/unit/ -> repo root -> the directory holding both checkouts.
+			const siblingRoot = resolve(import.meta.dir, "../..", "..");
+			expect(defaultDbPath()).toBe(
+				resolve(siblingRoot, "lsp-routeros-ts/test-data/corpus.sqlite"),
+			);
+			Bun.env["CENTRS_CORPUS_DB"] = "/elsewhere/corpus.sqlite";
+			expect(defaultDbPath()).toBe("/elsewhere/corpus.sqlite");
+		} finally {
+			if (previous === undefined) delete Bun.env["CENTRS_CORPUS_DB"];
+			else Bun.env["CENTRS_CORPUS_DB"] = previous;
+		}
 	});
 
 	test("renderMarkdown --compare adds baseline/delta columns and a size caveat", () => {
