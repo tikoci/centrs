@@ -287,6 +287,10 @@ describe("census aggregation", () => {
 		expect(() => flag(["--compare", "--db"], "--db")).toThrow(
 			"--db requires a value",
 		);
+		// Single-dash options are options too.
+		expect(() => flag(["--db", "-x"], "--db")).toThrow("--db requires a value");
+		// A relative path is a perfectly good value.
+		expect(flag(["--db", "./corpus.sqlite"], "--db")).toBe("./corpus.sqlite");
 	});
 
 	test("the corpus resolves as a sibling of this checkout, not from $HOME", () => {

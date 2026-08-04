@@ -507,7 +507,7 @@ export function flag(
 	const value = args[index + 1];
 	// A missing value would otherwise swallow the next option and report it as
 	// a missing corpus — `--db --json` must not read as "no corpus at --json".
-	if (value === undefined || value.startsWith("--")) {
+	if (value === undefined || value.startsWith("-")) {
 		throw new Error(`${name} requires a value`);
 	}
 	return value;
