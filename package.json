@@ -89,6 +89,7 @@
 		"docs:cli": "bun run scripts/gen-cli-docs.ts",
 		"docs:cli:check": "bun run scripts/gen-cli-docs.ts --check",
 		"docs:errors": "bun run scripts/gen-error-pages.ts",
+		"explain:corpus-census": "bun run scripts/explain-corpus-census.ts",
 		"security": "bun run lint:secretlint && bun run lint:markdownlint"
 	},
 	"type": "module",
