@@ -4,19 +4,42 @@
  *
  * The corpus (`lsp-routeros-ts/test-data/corpus.sqlite`, `source_scripts`
  * table) is a self-selected subset of forum-scraped scripts — 96.8% from two
- * forum authors, genuine `/export` output only 0.9%. That bias is load-bearing
- * on every module promoted out of the phase-0.5 lab, and #203 requires it be
+ * forum authors, genuine `/export` output ~1%. That bias is load-bearing on
+ * every module promoted out of the phase-0.5 lab, and #203 requires it be
  * re-derivable from a checked-in script rather than re-discovered from an
  * ad-hoc regex pass. This is that script.
  *
- * Markers are independent booleans (a file can trip several), matching the
- * table in #203. Ten of eleven were reproduced exactly against the corpus at
- * the time #203 was filed; the "pure add/set, zero directives" and "export
- * idiom" markers depend on how loosely "bare menu line" and "zero directive"
- * are read, and land within 1-5 files of the issue's manually-eyeballed
- * figures (`--compare` prints the delta — see the comments on each marker's
- * regex for the reading it encodes). Re-deriving is the point: this script is
- * the new source of truth, not a replica of the issue's prose.
+ * Markers are independent booleans (a file can trip several). Against the
+ * frozen 913-script corpus #203 was filed on, eight of the eleven baseline
+ * markers reproduce the issue's manually-eyeballed figures exactly. The other
+ * three differ, and in two of them the script — not the issue — is right:
+ *
+ * - **`export-banner` 9, issue 8.** The issue's own correction says a naive
+ *   `# … by RouterOS` pass returns 22 and that 13 of those are eworm `#!rsc`
+ *   shebangs. 22 − 13 = 9, so the "8" was an arithmetic slip. Both the naive
+ *   22 and the shebang 13 reproduce exactly here.
+ * - **`pure-config` 21, issue 23.** The first cut read "zero `:` directives"
+ *   as any `:` before a letter, which also excludes MAC addresses
+ *   (`02:23:06:EB`), IPv6 literals (`2001:db8::a`) and DHCP client-ids
+ *   (`1:c0:25:…`) — i.e. it systematically under-counts exactly the config
+ *   genre #203 is about, giving 17. `SCRIPTING_COLON_TOKEN` below ignores a
+ *   colon preceded by a hex digit or another colon, which is the intended
+ *   reading and lands at 21.
+ * - **`export-idiom` 37, issue 35.** "Bare menu line **then** `add`/`set`" is
+ *   read here as genuine adjacency at column 0 (the shape a device emits).
+ *   Treating the two conditions as an unordered conjunction gives 40;
+ *   allowing indented pastes gives 45.
+ *
+ * The two `terse-*` markers have no #203 baseline: they were added after the
+ * tangentsoft import (35 genuine `/export … terse` device captures) showed
+ * that every baseline config marker scores **zero** on one-line-per-statement
+ * export output, because `export-idiom` and `pure-config` both assume the
+ * multi-line `compact`/`verbose` shape where the menu path sits on its own
+ * line. A census blind to a whole serialization of the genre it exists to
+ * measure would have reported "the import changed nothing".
+ *
+ * Re-deriving is the point: this script is the source of truth, not a replica
+ * of the issue's prose.
  *
  * Usage:
  *   bun run explain:corpus-census              # markdown report to stdout
@@ -40,20 +63,30 @@ export interface CorpusRow {
 export interface Marker {
 	key: string;
 	label: string;
-	/** Baseline count from the #203 issue table, for `--compare`. */
-	baseline: number;
+	/**
+	 * Count from the #203 issue table, for `--compare`. Absent for markers
+	 * added after the issue was filed — those have nothing to compare against.
+	 */
+	baseline?: number;
 	test: (row: CorpusRow) => boolean;
 }
+
+/**
+ * Total scripts in the frozen corpus #203's baseline figures were measured on.
+ * `--compare` deltas are only marker-vs-marker when the corpus still has this
+ * many rows; past that, part of every delta is corpus growth.
+ */
+export const BASELINE_TOTAL = 913;
 
 function firstLine(text: string): string {
 	const newline = text.indexOf("\n");
 	return newline === -1 ? text : text.slice(0, newline);
 }
 
-// A bare menu-path line: starts with `/`, carries no `=` (pure navigation, not
-// a command with arguments). Matches both slash-joined ("/ip/address") and
-// legacy space-joined ("/ip address") forms.
-const BARE_MENU_LINE = /^\/[^\n=]*$/m;
+function lines(text: string): string[] {
+	return text.split(/\r?\n/);
+}
+
 const ADD_OR_SET_LINE = /^(?:add|set)\b/m;
 
 // The nine control-flow/declaration keywords that reproduce the issue's 491
@@ -61,9 +94,67 @@ const ADD_OR_SET_LINE = /^(?:add|set)\b/m;
 const CORE_SCRIPTING_DIRECTIVES =
 	/:(?:local|global|if|foreach|while|do|for|function|execute)\b/;
 
-// Any colon-prefixed identifier at all (broader than the core set above) —
-// the reading of "zero : directives" used for the pure-add/set marker.
-const ANY_COLON_TOKEN = /:[A-Za-z]/;
+// Any colon-prefixed identifier — `:put`, `[:deserialize`, `:toarray` — but
+// not a colon inside a hex-colon literal. `02:23:06:EB` (MAC), `2001:db8::a`
+// (IPv6) and `1:c0:25:…` (DHCP client-id) all put a letter after a colon and
+// are not scripting at all; the lookbehind rejects a colon preceded by a hex
+// digit or by another colon, which is what distinguishes them.
+const SCRIPTING_COLON_TOKEN = /(?<![0-9A-Fa-f:]):[A-Za-z]/;
+
+/** A menu path on its own line at column 0 — the `compact`/`verbose` shape. */
+function isBareMenuLine(line: string): boolean {
+	return (
+		line.length > 1 &&
+		line.startsWith("/") &&
+		!line.includes("=") &&
+		line.trimEnd() === line
+	);
+}
+
+/**
+ * The `compact`/`verbose` export idiom: a bare menu line whose next statement
+ * (blank lines and comments skipped) is a relative `add`/`set`.
+ */
+function hasExportIdiom(text: string): boolean {
+	const all = lines(text);
+	for (let i = 0; i < all.length - 1; i++) {
+		if (!isBareMenuLine(all[i] as string)) continue;
+		for (let j = i + 1; j < all.length; j++) {
+			const next = all[j] as string;
+			if (next.trim() === "" || next.trimStart().startsWith("#")) continue;
+			if (ADD_OR_SET_LINE.test(next)) return true;
+			break;
+		}
+	}
+	return false;
+}
+
+const EXPORT_VERBS = new Set(["add", "set", "remove", "unset"]);
+
+/**
+ * A `terse` export statement: absolute path and verb on one line, e.g.
+ * `/ip address add address=192.168.88.1/24` or `/port set 0 name=serial0`.
+ * The verb must appear among the path-like tokens, before arguments start.
+ */
+function isTerseStatement(line: string): boolean {
+	const trimmed = line.trim();
+	if (!trimmed.startsWith("/")) return false;
+	const tokens = trimmed.split(/\s+/);
+	for (let i = 1; i < tokens.length; i++) {
+		const token = tokens[i] as string;
+		if (token.includes("=")) return false;
+		if (EXPORT_VERBS.has(token)) return true;
+	}
+	return false;
+}
+
+/** A document whose every non-blank, non-comment line is a terse statement. */
+function isTerseExportDocument(text: string): boolean {
+	const body = lines(text)
+		.map((line) => line.trim())
+		.filter((line) => line !== "" && !line.startsWith("#"));
+	return body.length > 0 && body.every(isTerseStatement);
+}
 
 export const MARKERS: readonly Marker[] = [
 	{
@@ -87,24 +178,33 @@ export const MARKERS: readonly Marker[] = [
 		test: (row) => row.hasCliPrompt,
 	},
 	{
+		key: "terse-statement",
+		label: "carries a `terse` one-line statement (`/ip address add …`)",
+		test: (row) => lines(row.text).some(isTerseStatement),
+	},
+	{
 		key: "line-continuation",
 		label: "line continuation (`\\` at EOL)",
 		baseline: 63,
 		test: (row) => /\\\r?\n/.test(row.text),
 	},
 	{
+		key: "terse-export-doc",
+		label: "wholly `terse` export document (every statement a one-liner)",
+		test: (row) => isTerseExportDocument(row.text),
+	},
+	{
 		key: "export-idiom",
 		label: "bare menu line then `add`/`set` (the export idiom)",
 		baseline: 35,
-		test: (row) =>
-			BARE_MENU_LINE.test(row.text) && ADD_OR_SET_LINE.test(row.text),
+		test: (row) => hasExportIdiom(row.text),
 	},
 	{
 		key: "pure-config",
-		label: "pure `add`/`set` config, zero `:` directives",
+		label: "pure `add`/`set` config, zero scripting directives",
 		baseline: 23,
 		test: (row) =>
-			ADD_OR_SET_LINE.test(row.text) && !ANY_COLON_TOKEN.test(row.text),
+			ADD_OR_SET_LINE.test(row.text) && !SCRIPTING_COLON_TOKEN.test(row.text),
 	},
 	{
 		key: "eworm-shebang",
@@ -140,10 +240,21 @@ export const MARKERS: readonly Marker[] = [
 	},
 ];
 
+export interface MarkerResult {
+	key: string;
+	label: string;
+	baseline?: number;
+	files: number;
+	/** Files tripping this marker, per collection — #203 deliverable 2 forbids
+	 * quoting a blended figure, so the strata are always carried. */
+	byCollection: Record<string, number>;
+}
+
 export interface CensusResult {
 	total: number;
+	baselineTotal: number;
 	byCollection: { collection: string; files: number }[];
-	byMarker: { key: string; label: string; baseline: number; files: number }[];
+	byMarker: MarkerResult[];
 }
 
 export function census(rows: readonly CorpusRow[]): CensusResult {
@@ -156,16 +267,35 @@ export function census(rows: readonly CorpusRow[]): CensusResult {
 	}
 	const byCollection = [...byCollectionMap.entries()]
 		.map(([collection, files]) => ({ collection, files }))
-		.sort((a, b) => b.files - a.files);
+		.sort(
+			(a, b) => b.files - a.files || a.collection.localeCompare(b.collection),
+		);
 
-	const byMarker = MARKERS.map((marker) => ({
-		key: marker.key,
-		label: marker.label,
-		baseline: marker.baseline,
-		files: rows.filter((row) => marker.test(row)).length,
-	}));
+	const byMarker = MARKERS.map((marker) => {
+		const strata: Record<string, number> = {};
+		for (const { collection } of byCollection) strata[collection] = 0;
+		let files = 0;
+		for (const row of rows) {
+			if (!marker.test(row)) continue;
+			files++;
+			strata[row.collection] = (strata[row.collection] ?? 0) + 1;
+		}
+		const result: MarkerResult = {
+			key: marker.key,
+			label: marker.label,
+			files,
+			byCollection: strata,
+		};
+		if (marker.baseline !== undefined) result.baseline = marker.baseline;
+		return result;
+	});
 
-	return { total: rows.length, byCollection, byMarker };
+	return {
+		total: rows.length,
+		baselineTotal: BASELINE_TOTAL,
+		byCollection,
+		byMarker,
+	};
 }
 
 function pct(n: number, total: number): string {
@@ -176,7 +306,7 @@ export function renderMarkdown(
 	result: CensusResult,
 	opts: { compare: boolean },
 ): string {
-	const lines: string[] = [
+	const out: string[] = [
 		"# explain corpus genre census",
 		"",
 		`Total scripts: ${result.total}`,
@@ -187,32 +317,58 @@ export function renderMarkdown(
 		"| ------ | ------- | ----- |",
 	];
 	for (const { collection, files } of result.byCollection) {
-		lines.push(
-			`| \`${collection}\` | ${files} | ${pct(files, result.total)} |`,
-		);
+		out.push(`| \`${collection}\` | ${files} | ${pct(files, result.total)} |`);
 	}
 
-	lines.push("", "## By genre marker", "");
+	out.push("", "## By genre marker", "");
 	if (opts.compare) {
-		lines.push(
+		if (result.total !== result.baselineTotal) {
+			out.push(
+				`> The #203 baseline was measured on ${result.baselineTotal} scripts,`,
+				`> this corpus has ${result.total}. Deltas below mix marker drift with`,
+				"> corpus growth — read them with the per-collection table.",
+				"",
+			);
+		}
+		out.push(
 			"| Marker | Files | Share | #203 baseline | Delta |",
 			"| ------ | ----- | ----- | -------------- | ----- |",
 		);
 		for (const { label, files, baseline } of result.byMarker) {
-			const delta = files - baseline;
-			const deltaStr = delta === 0 ? "0" : delta > 0 ? `+${delta}` : `${delta}`;
-			lines.push(
-				`| ${label} | ${files} | ${pct(files, result.total)} | ${baseline} | ${deltaStr} |`,
+			const cells =
+				baseline === undefined
+					? "— | —"
+					: `${baseline} | ${files - baseline > 0 ? `+${files - baseline}` : `${files - baseline}`}`;
+			out.push(
+				`| ${label} | ${files} | ${pct(files, result.total)} | ${cells} |`,
 			);
 		}
 	} else {
-		lines.push("| Marker | Files | Share |", "| ------ | ----- | ----- |");
+		out.push("| Marker | Files | Share |", "| ------ | ----- | ----- |");
 		for (const { label, files } of result.byMarker) {
-			lines.push(`| ${label} | ${files} | ${pct(files, result.total)} |`);
+			out.push(`| ${label} | ${files} | ${pct(files, result.total)} |`);
 		}
 	}
-	lines.push("");
-	return lines.join("\n");
+
+	out.push(
+		"",
+		"## Genre marker by collection",
+		"",
+		"Per #203 deliverable 2, never quote a marker as one blended figure.",
+		"",
+	);
+	const collections = result.byCollection.map((c) => c.collection);
+	out.push(
+		`| Marker | ${collections.join(" | ")} |`,
+		`| ------ | ${collections.map(() => "---").join(" | ")} |`,
+	);
+	for (const marker of result.byMarker) {
+		const cells = collections.map((c) => String(marker.byCollection[c] ?? 0));
+		out.push(`| ${marker.label} | ${cells.join(" | ")} |`);
+	}
+
+	out.push("");
+	return out.join("\n");
 }
 
 function flag(args: readonly string[], name: string): string | undefined {

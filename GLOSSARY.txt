@@ -554,6 +554,10 @@ versionless
 #   lookback: the backward scan that decides whether a `{` follows `do=`; it must
 #   accept exactly the escapes the forward walker does, or the two disagree about
 #   where the argument name ends and a function body stops being a closure.
+#   tangentsoft: the maintainer/site (tangentsoft.com/mikrotik) behind the third
+#   corpus collection — 35 genuine `/export show-sensitive terse` device captures
+#   imported for the #203 genre census, and the corpus's only wholly-terse
+#   export stratum.
 SUT
 CJK
 pathresolve
@@ -563,6 +567,7 @@ tostr
 tostrvalue
 eworm
 rextended
+tangentsoft
 ppp
 strfind
 verbsplit

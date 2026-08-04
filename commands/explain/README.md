@@ -491,15 +491,28 @@ probes were left unpatched by design; the guard belongs in the product parser.
 **Corpus coverage caveat (#203).** Every figure above was measured on the
 913-script corpus, which is **96.8% two forum authors** (`amm0` 630,
 `rextended` 254) and **53.8% scripting-directive-bearing**. Pure `add`/`set`
-configuration is **2.5%**, genuine device-emitted `/export` output is **0.9%**
-(8 files), and the three `/export` serializations — `compact`, `terse`,
-`verbose` — have never been captured. Nearly every file also opens with a
-harness-injected `# Source: …` line the device never wrote (884 of 913). The
-ratified answers hold for what was measured; they are **not** evidence of
-coverage over device configuration, which is the genre most likely to be handed
-to `explain` and the one that concentrates Q4 path context and Q6's
-bare-path ambiguity. Quote phase-0 numbers per genre, never as one blended
+configuration is **2.3%** (21 files), genuine device-emitted `/export` output
+is **1.0%** (9 files), and the three `/export` serializations — `compact`,
+`terse`, `verbose` — were never captured at phase 0. Nearly every file also
+opens with a harness-injected `# Source: …` line the device never wrote (884
+of 913). The ratified answers hold for what was measured; they are **not**
+evidence of coverage over device configuration, which is the genre most likely
+to be handed to `explain` and the one that concentrates Q4 path context and
+Q6's bare-path ambiguity. Quote phase-0 numbers per genre, never as one blended
 figure. #203 tracks the capture and the re-score.
+
+Those figures are re-derivable, not eyeballed: `bun run explain:corpus-census`
+(`scripts/explain-corpus-census.ts`) reproduces the whole genre table from
+`corpus.sqlite`, with a per-collection stratum breakdown, and is the source of
+truth over #203's prose where the two disagree — it corrects the issue's
+export-banner count (9, not 8: the issue's own 22 − 13 shebangs) and its
+pure-config count (21, not 23: the first pass counted MAC addresses, IPv6
+literals, and DHCP client-ids as `:` directives, which under-counts exactly the
+config genre in question). Since phase 0 the corpus has grown to 948 with a
+`tangentsoft` stratum of 35 genuine `/export … terse` device captures, taking
+export-banner share to 4.6%; **that stratum is not part of any phase-0 figure
+above**, and no promoted module has been scored against it yet (#203
+deliverable 2).
 
 **Non-blocking / deferred (not ratification-gating):** Q5 expression depth, Q7
 tokenizer corners, Q9 potential-command taxonomy, Q12 span-vocabulary draft —

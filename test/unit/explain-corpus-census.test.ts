@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	BASELINE_TOTAL,
 	type CorpusRow,
 	census,
 	MARKERS,
@@ -48,19 +49,80 @@ describe("explain corpus census markers", () => {
 		expect(test_(row("add address=1.2.3.4/24 comment=x\\y"))).toBe(false);
 	});
 
-	test("export-idiom requires both a bare menu line and an add/set line", () => {
+	test("export-idiom requires the add/set to actually follow the menu line", () => {
 		const test_ = markerTest("export-idiom");
 		expect(test_(row("/ip/address\nadd address=1.2.3.4/24"))).toBe(true);
 		expect(test_(row("/ip address\nadd address=1.2.3.4/24"))).toBe(true);
+		// Blank lines and comments between the two do not break the idiom.
+		expect(test_(row("/ip/address\n\n# note\nadd address=1.2.3.4/24"))).toBe(
+			true,
+		);
+		// Both conditions present but unordered is NOT the idiom: this is the
+		// reading that inflated the first cut of the #203 table from 37 to 40.
+		expect(test_(row("add address=1.2.3.4/24\n:put x\n/system clock"))).toBe(
+			false,
+		);
+		// Indented pastes are not device-emitted export shape.
+		expect(test_(row("  /ip/address\n  add address=1.2.3.4/24"))).toBe(false);
 		expect(test_(row("add address=1.2.3.4/24"))).toBe(false);
 		expect(test_(row("/ip/address print"))).toBe(false);
 	});
 
-	test("pure-config excludes any file carrying a scripting colon token", () => {
+	test("pure-config ignores hex-colon literals, which are not scripting directives", () => {
 		const test_ = markerTest("pure-config");
 		expect(test_(row("/ip/address\nadd address=1.2.3.4/24"))).toBe(true);
+		// The three literal families the first cut misread as `:` directives —
+		// the systematic under-count of the config genre #203 is about.
+		expect(
+			test_(row("/interface/bridge/host\nadd mac-address=02:23:06:EB:D1:A5")),
+		).toBe(true);
+		expect(test_(row("/ipv6/address\nadd address=2001:db8::a/64"))).toBe(true);
+		expect(
+			test_(row("/ip/dhcp-server/lease\nadd client-id=1:c0:25:67:99:a3")),
+		).toBe(true);
+		// Real scripting still excludes the file.
 		expect(test_(row(":local x 1\nadd address=1.2.3.4/24"))).toBe(false);
+		expect(test_(row(":put [:len $x]\nadd address=1.2.3.4/24"))).toBe(false);
 		expect(test_(row("/ip/address print"))).toBe(false);
+	});
+
+	test("terse-statement sees the one-line export shape the other config markers miss", () => {
+		const test_ = markerTest("terse-statement");
+		expect(test_(row("/ip address add address=192.168.88.1/24"))).toBe(true);
+		expect(test_(row("/port set 0 name=serial0"))).toBe(true);
+		expect(test_(row("/ip/firewall/filter add chain=forward"))).toBe(true);
+		// A bare menu line carries no verb; a print is not an export verb.
+		expect(test_(row("/ip/address"))).toBe(false);
+		expect(test_(row("/ip/address print"))).toBe(false);
+		// The verb must precede the arguments, not appear inside a value.
+		expect(test_(row("/ip/address comment=add"))).toBe(false);
+		// The multi-line idiom is deliberately not a terse statement.
+		expect(test_(row("/ip/address\nadd address=1.2.3.4/24"))).toBe(false);
+	});
+
+	test("terse-export-doc requires every statement to be a one-liner", () => {
+		const test_ = markerTest("terse-export-doc");
+		expect(
+			test_(
+				row(
+					"# 1970-01-01 00:00:00 by RouterOS 7.15.3\n/port set 0 name=serial0\n/ip address add address=192.168.88.1/24\n",
+				),
+			),
+		).toBe(true);
+		// One multi-line-idiom statement disqualifies the document.
+		expect(
+			test_(
+				row(
+					"/ip address add address=1.2.3.4/24\n/ip/route\nadd gateway=1.2.3.1",
+				),
+			),
+		).toBe(false);
+		// A scripted section disqualifies it too.
+		expect(test_(row("/ip address add address=1.2.3.4/24\n:put done"))).toBe(
+			false,
+		);
+		// Comments alone are not a document.
+		expect(test_(row("# just a comment\n"))).toBe(false);
 	});
 
 	test("eworm-shebang and export-banner are disjoint (the #203 conflation fix)", () => {
@@ -84,6 +146,13 @@ describe("explain corpus census markers", () => {
 		expect(inBrace(row("add source={ /ip/address print }"))).toBe(true);
 		expect(inString(row("add source={ /ip/address print }"))).toBe(false);
 	});
+
+	test("markers added after #203 carry no baseline to compare against", () => {
+		const withoutBaseline = MARKERS.filter((m) => m.baseline === undefined).map(
+			(m) => m.key,
+		);
+		expect(withoutBaseline).toEqual(["terse-statement", "terse-export-doc"]);
+	});
 });
 
 describe("census aggregation", () => {
@@ -95,6 +164,7 @@ describe("census aggregation", () => {
 		];
 		const result = census(rows);
 		expect(result.total).toBe(3);
+		expect(result.baselineTotal).toBe(BASELINE_TOTAL);
 		expect(result.byCollection).toEqual([
 			{ collection: "a", files: 2 },
 			{ collection: "b", files: 1 },
@@ -107,18 +177,35 @@ describe("census aggregation", () => {
 		expect(directives?.files).toBe(1);
 	});
 
-	test("renderMarkdown emits a collection table and a marker table", () => {
+	test("every marker carries a per-collection stratum, zeros included", () => {
+		const rows: CorpusRow[] = [
+			row("/ip address add address=1.2.3.4/24", { collection: "exports" }),
+			row(":local x 1", { collection: "scripts" }),
+		];
+		const result = census(rows);
+		const terse = result.byMarker.find((m) => m.key === "terse-statement");
+		expect(terse?.byCollection).toEqual({ exports: 1, scripts: 0 });
+		const directives = result.byMarker.find(
+			(m) => m.key === "scripting-directives",
+		);
+		expect(directives?.byCollection).toEqual({ exports: 0, scripts: 1 });
+	});
+
+	test("renderMarkdown emits collection, marker, and stratum tables", () => {
 		const result = census([row("/ip/address\nadd address=1.2.3.4/24")]);
 		const md = renderMarkdown(result, { compare: false });
 		expect(md).toContain("## By collection");
 		expect(md).toContain("## By genre marker");
+		expect(md).toContain("## Genre marker by collection");
 		expect(md).not.toContain("#203 baseline");
 	});
 
-	test("renderMarkdown --compare adds the baseline and delta columns", () => {
+	test("renderMarkdown --compare adds baseline/delta columns and a size caveat", () => {
 		const result = census([row("/ip/address\nadd address=1.2.3.4/24")]);
 		const md = renderMarkdown(result, { compare: true });
 		expect(md).toContain("#203 baseline");
 		expect(md).toContain("Delta");
+		// 1 row != the 913-script baseline corpus, so the caveat must appear.
+		expect(md).toContain("mix marker drift with");
 	});
 });
