@@ -158,34 +158,28 @@
  *       term (`(:local v 1)` classes the `:local` text itself
  *       `variable-undefined`), so no statement context opens there.
  *
- *       Modeling it moved holdout abstention 4.53% → 4.25% and missed 15 → 14,
- *       and dev 6.27% → 5.40% and 56 → 34, at no precision cost — holdout rose
- *       99.97% → 99.98%. Two rules had to move to the HEAD branch to hold that:
- *       a `/`-sigilled head opens a menu path (S16) and a `find`/`where` head
- *       opens a filter region (S8). Both were previously written only on the
- *       general word path, and were unreachable from a head only because a
- *       bracket used to inherit its head from the enclosing statement; without
- *       them `[find comment=$tag]`, the corpus's commonest bracket, stopped
- *       reporting its field. That is #201's "one rule, one implementation"
- *       exactly, and it is why this change needed the corpus, not just corners.
+ *       Modeling it moved holdout abstention 4.53% → 4.25% and dev 6.27% →
+ *       5.40%, at no precision cost. Two rules had to move to the HEAD branch to
+ *       hold that: a `/`-sigilled head opens a menu path (S16) and a
+ *       `find`/`where` head opens a filter region (S8). Both were previously
+ *       written only on the general word path, and were unreachable from a head
+ *       only because a bracket used to inherit its head from the enclosing
+ *       statement; without them `[find comment=$tag]`, the corpus's commonest
+ *       bracket, stopped reporting its field. That is #201's "one rule, one
+ *       implementation" exactly.
  *
  *       F6 also composes with H4: the first position inside a `[` is
  *       statement-leading, so a `#` there opens a COMMENT — which then swallows
  *       the `]` and runs to the newline. CHR 7.23.2 agrees (`[# c<nl>…` classes
  *       `# c<nl>` `comment` in both spellings, while a mid-statement `#` is a
- *       hard `error`), so the declarations that follow such a `]` are real. That
- *       composition came out of a 1M-case differential fuzz against the
- *       pre-change walker (`.scratch/explain-201-k1-fuzz.ts`, #201 method item
- *       2): zero throws, zero span-invariant violations, and every disagreement
- *       either contains a `[` or is a head-position `find` — which the device
- *       also confirms (`/ip route<nl>find comment=x` reads `comment`
- *       `variable-local`).
+ *       hard `error`), so the declarations that follow such a `]` are real. The
+ *       head-position `find` is device-grounded the same way
+ *       (`/ip route<nl>find comment=x` reads `comment` `variable-local`).
  *
  * Measured on the frozen split (`.scratch/explain-lab-partition.json`) against
  * the per-occurrence highlight streams for 7.23.2 AND 7.24rc2: **holdout 99.98%
  * precision on decided (6155/6156), 4.25% abstention, 14 missed; dev 99.75%
- * (8729/8751), 5.40%, 34 missed.** Both versions agree on precision and
- * abstention; they differ by two occurrences in the dev `missed` tail.
+ * (8729/8751), 5.40%, 34 missed.**
  *
  * TWO KNOWN LIMITS are carried as measured, each pinned by an explicit test and
  * tracked in the lexical-boundary issue (#201) rather than patched here:
@@ -194,14 +188,15 @@
  *       separator MID-statement (`/ip//address print`) is also a hard device
  *       error, but `:put //foo` and `url=//example.com` are valid, so telling
  *       them apart needs parser-context awareness the lexical scan does not have.
- *   S3  An earlier `:global NAME` outranks a LATER `:local NAME` at the same
+ *   K3  An earlier `:global NAME` outranks a LATER `:local NAME` at the same
  *       scope: CHR 7.23.2 reads the trailing use in `:global v 1` + `:local v 2`
  *       + `:put $v` as `variable-global`, where `lookup` takes the nearest
  *       preceding binding and says `local`. Found as the CONTROL case while
  *       probing F6 — it is the reason a `:global`-shadowed name cannot be used
  *       to measure scope extent. Its own extent is not probed (same scope only? a
  *       precedence rule or a rejected redeclaration?), so it is carried rather
- *       than guessed at.
+ *       than guessed at. (Numbered in the K series, not the S series: `S3` is
+ *       already the loop-variable rule above.)
  *
  * The scan is a single left-to-right pass with an explicit delimiter stack (no
  * recursion, Q17 posture) and never throws; structural surprises land in

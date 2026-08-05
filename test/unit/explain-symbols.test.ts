@@ -595,7 +595,7 @@ describe("explain/symbols — invariants", () => {
  *     and the `]` resumes the interrupted statement rather than starting one.
  *
  * The `:global`-shadowed variants that looked like the sharpest evidence are NOT
- * usable as scope probes — see the S3 known limit below for why.
+ * usable as scope probes — see the K3 known limit below for why.
  */
 describe("explain/symbols — F6 bracket statement context (#201)", () => {
 	const classes = (input: string): (string | null)[] =>
@@ -786,7 +786,7 @@ describe("explain/symbols — F6 bracket statement context (#201)", () => {
 describe("explain/symbols — known limits (#201)", () => {
 	// Pinned so a fix flips them deliberately, in the Q16 style: each carries the
 	// device reading it does not yet reproduce.
-	test("S3 a document `:local` after a `:global` of the same name", () => {
+	test("K3 a document `:local` after a `:global` of the same name", () => {
 		// CHR 7.23.2: `:global v 1\n:local v 2\n:put $v` reads the trailing use
 		// `variable-global` — the earlier global outranks the later local at the
 		// same scope, where this resolver takes the nearest preceding binding and
