@@ -304,6 +304,24 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 		expect(scanQuotedString(t, 0)).toEqual({ end: t.length, closed: false });
 	});
 
+	test("frame depth is capped, and the cap fails closed", () => {
+		// MAX_STRING_FRAME_DEPTH is 256 frames (the string plus 255 substitutions);
+		// the corpus peaks at 8. Past the cap the scan stops and reports the string
+		// UNCLOSED even though the brackets balance, so the caller degrades the
+		// statement instead of trusting a scan it did not finish.
+		const nested = (n: number): string => `"${"$[".repeat(n)}${"]".repeat(n)}"`;
+		expect(scanQuotedString(nested(255), 0).closed).toBeTrue();
+		expect(scanQuotedString(nested(256), 0)).toEqual({
+			end: nested(256).length,
+			closed: false,
+		});
+		// The cap bounds work, not just memory: an unclosed run exits early.
+		const hostile = `"${"$[".repeat(500_000)}`;
+		const started = performance.now();
+		expect(scanQuotedString(hostile, 0).closed).toBeFalse();
+		expect(performance.now() - started).toBeLessThan(250);
+	});
+
 	test("an unterminated string reports the end of input", () => {
 		expect(scanQuotedString('"abc', 0)).toEqual({ end: 4, closed: false });
 	});

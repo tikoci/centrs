@@ -94,6 +94,19 @@ export interface SegmentResult {
 
 const isSpace = (c: string): boolean => c === " " || c === "\t" || c === "\r";
 
+/**
+ * Frame-stack cap for `scanQuotedString` — the string-scan twin of
+ * `MAX_CONTAINER_DEPTH`, and the same kind of guard: a resource bound on
+ * untrusted input, not a RouterOS grammar limit. Without it a crafted string of
+ * unclosed substitutions (`"$[$[$[…`) grows one frame per two bytes; measured on
+ * a 1 MB input that is ~19 MB of array churn, against ~9 MB for the
+ * `original.split("")` `maskComments` already allocates for the same text. 256
+ * is far past any real script — the frozen 913-script corpus peaks at 8, and
+ * 866 of 913 files never pass 3 — and it turns that worst case into an early,
+ * O(1) exit. Raised on the PR #214 review.
+ */
+const MAX_STRING_FRAME_DEPTH = 256;
+
 /** Where a double-quoted string ends, and whether it was closed at all. */
 export interface QuotedStringScan {
 	/** index just past the closing `"`, or `text.length` when unterminated. */
@@ -122,11 +135,20 @@ export interface QuotedStringScan {
  * Iterative, so deeply nested input cannot overflow the stack. Escapes and
  * comments inside the substitution are NOT interpreted here: the whole string,
  * substitutions included, stays opaque to the caller — only its END moves.
+ *
+ * Frame depth is capped for the same reason `MAX_CONTAINER_DEPTH` is: `explain`
+ * accepts untrusted editor/MCP input. Past `MAX_STRING_FRAME_DEPTH` the scan
+ * stops and reports the string UNCLOSED — fail-closed, the direction every
+ * caller already handles (`unterminated-string` → `structuralDefect` →
+ * `unresolved`). Only an input that opens that many frames without closing them
+ * can reach it, which is malformed by construction; sequential substitutions
+ * (`"$[a]$[b]…"`) pop and never accumulate.
  */
 export function scanQuotedString(text: string, open: number): QuotedStringScan {
 	const frames: string[] = ['"'];
 	let i = open + 1;
 	while (i < text.length) {
+		if (frames.length > MAX_STRING_FRAME_DEPTH) break;
 		const top = frames[frames.length - 1] as string;
 		const c = text[i] as string;
 		if (top === '"') {
