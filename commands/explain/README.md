@@ -514,6 +514,41 @@ export-banner share to 4.6%; **that stratum is not part of any phase-0 figure
 above**, and no promoted module has been scored against it yet (#203
 deliverable 2).
 
+**All three export serializations parse clean offline (#203 deliverable 2,
+re-scored after #207).** Every one of the 120 CHR captures — `compact`, `terse`
+and `verbose` × `hide-sensitive` / `show-sensitive` × both pinned versions —
+runs through the promoted modules with **zero segmenter structural notes, 100%
+Q4 path resolution, and 0.0% Q16 abstention with no blockers anywhere in the
+stratum**. The last figure is new: before #207's baked menu table, the
+`isConfirmedNav` hyphen rule abstained on 25 distinct genuine menus. This is
+the coverage claim that matters for `explain`, and it holds.
+
+One seam remains: `write.ts` consumes `menus.ts`, but `verbsplit.ts` does not,
+so Q6 still returns **38.8–40.5% `ambiguous`** on `compact`/`verbose` for
+bare-path lines the menu table could decide. Terse is 0% by construction (it
+never emits a bare menu line). That gap becomes user-visible in #202, which
+renders per-statement output.
+
+**Importability was also measured, and is a weaker, narrower result than it
+first appears (#203 deliverable 4).** On CHR, none of the six root `/export`
+documents imports into a blank same-version CHR; per-menu exports do, and
+round-trip byte-exactly including continuation-wrapped comments. RouterOS
+`/import` is fail-fast, so it aborts at the first error and every later
+statement silently never runs. But **all four failure causes are semantic or
+device-state rejections, not syntax**: a duplicate object, a built-in object,
+a missing mandatory value, and a name collision. That was verified rather than
+assumed — each blocker statement was replayed through `:put [:parse …]` and
+`/console/inspect request=highlight` on both versions and **accepted every
+time**, with controls (`no-such-attr=`, an unterminated string, a nonexistent
+menu) correctly rejected. So these results carry **no** implication about
+whether `explain` can parse the forms, and they do not license claims about the
+export styles in general: the captures come from one synthetic configuration on
+CHR, which has a single NIC and no switch or wireless hardware, so its defconf
+and its available menus differ from any real device's. Treat the provenance
+label as **L1-emitted, L2-refuted for these captures on CHR**. Harness and
+per-document results: `.scratch/explain-lab-q203-import-verify.ts`;
+validity check: `.scratch/q203-blocker-validity.ts`.
+
 **Non-blocking / deferred (not ratification-gating):** Q5 expression depth, Q7
 tokenizer corners, Q9 potential-command taxonomy, Q12 span-vocabulary draft —
 these refine the surface during implementation but did not gate ratification.

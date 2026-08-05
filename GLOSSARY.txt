@@ -615,3 +615,4 @@ pptp
 sstp
 wlan
 zerotier
+importability # whether a document RouterOS emitted can be re-imported (#203 oracle level L2)
