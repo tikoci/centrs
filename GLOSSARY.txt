@@ -615,3 +615,10 @@ pptp
 sstp
 wlan
 zerotier
+cuu # `/terminal cuu` (cursor up) — a RouterOS command that reads as a bare menu path, so the table refuses it (#210)
+
+# explain ANALYSIS/ORACLE vocabulary — not RouterOS menu names. These name the
+# lab's measurement machinery and the properties it measures, and belong apart
+# from the menu block above even though both arrived with the explain work.
+importability # whether a document RouterOS emitted can be re-imported (#203 oracle level L2)
+menuctx # the IL (`:parse`) statement type for menu navigation, as against `cmd` — the native nav-vs-command oracle (#210)

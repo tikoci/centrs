@@ -1,5 +1,5 @@
 {
-	"_source": "Promoted from the phase-0 lab corners .scratch/explain-lab-q6-corners.ts (Q6, #185). Each case pins the ratified `proposed` boundary arm; the other six A/B arms stayed in the lab. `truth` is the fully-qualified device path the corner was cross-checked against on the 7.22.1 command tree (the oracle), where the tree can speak. Cases are scored offline with `/` context unless `context` is given. resolution ∈ resolved|ambiguous|unknown; for `resolved`, `path` is the menu and `verb` the verb token; `ambiguous`/`unknown` carry neither.",
+	"_source": "Promoted from the phase-0 lab corners .scratch/explain-lab-q6-corners.ts (Q6, #185). Each case pins the ratified `proposed` boundary arm; the other six A/B arms stayed in the lab. `truth` is the fully-qualified device path the corner was cross-checked against on the 7.22.1 command tree (the oracle), where the tree can speak. Cases are scored offline with `/` context unless `context` is given. resolution ∈ resolved|navigation|ambiguous|unknown; for `resolved`, `path` is the menu and `verb` the verb token; for `navigation` (#210 — a bare path the baked container table confirms) `path` is the menu and there is no verb; `ambiguous`/`unknown` carry neither.",
 	"cases": [
 		{
 			"name": "slash menu + space verb — punctuation carries the boundary",
@@ -32,11 +32,12 @@
 			"rule": "vocabulary hit `print`"
 		},
 		{
-			"name": "bare menu path — V4: indistinguishable from a no-arg command",
+			"name": "bare menu path — V4 refused, the container table decides it (#210)",
 			"input": "/ip/address",
-			"resolution": "ambiguous",
+			"resolution": "navigation",
 			"truth": "/ip/address",
-			"rule": "bare path, nothing follows — navigation or no-arg command?"
+			"rule": "bare path, and a known RouterOS menu — navigation",
+			"path": "/ip/address"
 		},
 		{
 			"name": "space-written menu — only the vocabulary recovers this",
@@ -138,14 +139,15 @@
 			"rule": "no leading path token"
 		},
 		{
-			"name": "space-written navigation — V4 refuses (the Q4 cascade case)",
+			"name": "space-written navigation — the table decides it in either spelling (#210)",
 			"input": "/ip firewall filter",
-			"resolution": "ambiguous",
+			"resolution": "navigation",
 			"truth": "/ip/firewall/filter",
-			"rule": "bare path, nothing follows — navigation or no-arg command?"
+			"rule": "bare path, and a known RouterOS menu — navigation",
+			"path": "/ip/firewall/filter"
 		},
 		{
-			"name": "cascade twin — a CMD with the same text shape as `/ip/address`",
+			"name": "cascade twin — same text shape as `/ip/address`, but NOT a menu, so still ambiguous",
 			"input": "/system/reboot",
 			"resolution": "ambiguous",
 			"truth": "/system/reboot",

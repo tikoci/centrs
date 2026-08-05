@@ -35,9 +35,23 @@
  * (R10) with the one measured sub-menu exception (`:log <level>`); then a
  * FROZEN 13-verb CRUD vocabulary; then punctuation (the maximal slash-joined
  * prefix is menu, the first space token is the verb); and abstention ONLY at
- * V4's bare path. Confident menu NAVIGATION (`/`, `..`) is not this module's
- * surface — `pathresolve.ts` owns `isNav`; here a bare menu path is honestly
- * `ambiguous`, even where the resolver optimistically advanced context past it.
+ * V4's bare path.
+ *
+ * **V4 is now decidable where the baked container table reaches it (#210).**
+ * `splitRun` below still implements `proposed` exactly as ratified — it is the
+ * schema-free rule, and it stays that way so its abstention rate remains an
+ * honest price for decision 3. `resolveVerb` then reads that `ambiguous`
+ * verdict and, for the bare-path case ONLY, asks `menus.ts` whether the path
+ * the statement names is a known RouterOS container; if it is, the statement is
+ * `navigation` rather than a refusal. `/ip/address` is in the table and
+ * `/system/reboot` is not, which is precisely the twin V4 could not separate.
+ * A path the table does not carry stays `ambiguous` — the table is a floor, so
+ * absence is not evidence of a command (see `menus.ts`).
+ *
+ * That makes confident menu navigation this module's surface after all, but on
+ * a firmer basis than `pathresolve.ts`'s `isNav`, which claims navigation for
+ * every `/`-led bare path unconditionally and so reports `/system/reboot` as a
+ * menu (#211). Where the two disagree, this module is the narrower answer.
  *
  * Like `blocks.ts`, this ships only the boundary primitives. Argument parsing
  * (`k=v` / `?query` after the verb) belongs to the phase-1 canonical assembly,
@@ -47,6 +61,7 @@
  */
 
 import { scopeBodies } from "./blocks.ts";
+import { isMenuPath } from "./menus.ts";
 import { resolveStatements } from "./pathresolve.ts";
 
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
@@ -201,7 +216,12 @@ export function describeStatement(text: string): {
 export interface Split {
 	/** Index of the verb inside the run, or null for "no verb decided". */
 	verbAt: number | null;
-	/** True when the run is genuinely undecidable offline (V4's bare path). */
+	/**
+	 * True when the schema-free rule cannot decide the run (V4's bare path).
+	 * `resolveVerb` upgrades this to `navigation` when the container table
+	 * recognizes the path; here it stays a refusal, so `splitRun`'s abstention
+	 * rate keeps pricing `proposed` on its own terms.
+	 */
 	ambiguous: boolean;
 	/** The rule that fired, for provenance. */
 	why: string;
@@ -274,18 +294,35 @@ export function splitRun(
 			};
 }
 
-/** Whether a schema-free reading was decided, or refused. */
-export type VerbResolution = "resolved" | "ambiguous" | "unknown";
+/** Whether a reading was decided, or refused. */
+export type VerbResolution =
+	| "resolved"
+	| "navigation"
+	| "ambiguous"
+	| "unknown";
 
 /** The verb/menu split of one statement, context applied. */
 export interface VerbSplit {
 	resolution: VerbResolution;
 	/**
-	 * `command` for a decided verb; `null` for `ambiguous`/`unknown`. Confident
-	 * menu NAVIGATION is `pathresolve.isNav`, not a kind this module emits.
+	 * `command` for a decided verb, `menu` for a bare path the container table
+	 * confirms as navigation, `null` for `ambiguous`/`unknown`. These are the
+	 * ratified envelope's two kinds (`commands/explain/README.md`), so phase 1
+	 * renders them without inventing a third word for the same concept — the
+	 * `navigation` resolution above maps to envelope `resolved` + `kind: "menu"`.
+	 *
+	 * This is **fully derived** from `resolution` and carries no independent
+	 * information: `resolution` says what the analyzer did, `kind` says what the
+	 * statement is. It is kept because it is the envelope's vocabulary and the
+	 * field phase 1 renders, and the mapping is pinned in both directions by a
+	 * test so the two can never drift apart.
 	 */
-	kind: "command" | null;
-	/** Menu path (context + the run before the verb); null unless `resolved`. */
+	kind: "command" | "menu" | null;
+	/**
+	 * The menu path: context + the run before the verb when `resolved`, and the
+	 * whole run when `navigation` (a navigation statement names only a menu).
+	 * Null for `ambiguous`/`unknown`.
+	 */
 	path: string | null;
 	/** The verb token; null unless `resolved`. */
 	verb: string | null;
@@ -353,7 +390,23 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 		);
 
 	const split = splitRun(run, { directive, whole });
-	if (split.ambiguous)
+	if (split.ambiguous) {
+		// V4's bare path, the one case `proposed` refuses — and the one the baked
+		// container table can answer (#210). The lookup reads the LAST candidate,
+		// which is the whole run with `base` already applied, so it stays correct
+		// under a non-root context instead of relying on the (currently true)
+		// property that only `/`-led statements reach here.
+		const full = candidates[candidates.length - 1] as string;
+		if (isMenuPath(full.split("/").filter(Boolean)))
+			return {
+				resolution: "navigation",
+				kind: "menu",
+				path: full,
+				verb: null,
+				verbAt: null,
+				candidates,
+				why: "bare path, and a known RouterOS menu — navigation",
+			};
 		return {
 			resolution: "ambiguous",
 			kind: null,
@@ -363,6 +416,7 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 			candidates,
 			why: split.why,
 		};
+	}
 	if (split.verbAt === null) return unknownSplit(split.why);
 
 	const j = split.verbAt;
