@@ -197,6 +197,75 @@ describe("explain/symbols — sigil-optional heads and line continuations", () =
 		expect(r.occurrences.at(-1)?.cls).toBe("parameter");
 	});
 
+	test("an immediate continuation comment preserves a pending declaration", () => {
+		// #215, CHR 7.23.3: `# $ghost` is one comment line, `foo` is then still the
+		// name the pending `:local` declares (`variable-local`), and so is `$foo`.
+		expect(
+			resolveSymbols(":local \\\n# $ghost\nfoo 1\n:put $foo").occurrences.map(
+				(o) => [o.name, o.cls],
+			),
+		).toEqual([
+			["foo", "local"],
+			["foo", "local"],
+		]);
+		// Consecutive comment lines, and an indented CONTENT line after one, are
+		// both still inside the statement.
+		expect(
+			resolveSymbols(
+				":local \\\n# one\n# two\nfoo 1\n:put $foo",
+			).occurrences.map((o) => [o.name, o.cls]),
+		).toEqual([
+			["foo", "local"],
+			["foo", "local"],
+		]);
+		expect(
+			resolveSymbols(":local \\\n# x\n   foo 1\n:put $foo").occurrences.map(
+				(o) => [o.name, o.cls],
+			),
+		).toEqual([
+			["foo", "local"],
+			["foo", "local"],
+		]);
+	});
+
+	test("a blank line after a continuation comment ends the declaration", () => {
+		// The reach of the `\` run is spent by the comment line: the device classes
+		// `foo` `obj-inactive` (a new statement's head) and the later `$foo` an
+		// unresolved `variable-parameter`. Directly after the `\`, the same blank
+		// line keeps the statement alive — both readings are pinned here.
+		expect(
+			resolveSymbols(
+				":local \\\n# one\n# two\n   \nfoo 1\n:put $foo",
+			).occurrences.map((o) => [o.name, o.cls]),
+		).toEqual([["foo", "parameter"]]);
+		expect(
+			resolveSymbols(":local \\\n   \nfoo 1\n:put $foo").occurrences.map(
+				(o) => [o.name, o.cls],
+			),
+		).toEqual([
+			["foo", "local"],
+			["foo", "local"],
+		]);
+	});
+
+	test("a continuation does not move statement-leading position", () => {
+		// device: `do={\<nl>:local x 1` still reads `:local` as the head and binds
+		// `x` `variable-local` — with or without a comment line in between.
+		for (const t of [
+			":if (true) do={\\\n:local x 1\n:put $x\n}",
+			":if (true) do={\\\n# c\n:local x 1\n:put $x\n}",
+			"\\\n:local x 1\n:put $x",
+			"\\\n# c\n:local x 1\n:put $x",
+		]) {
+			expect(resolveSymbols(t).occurrences.map((o) => [o.name, o.cls])).toEqual(
+				[
+					["x", "local"],
+					["x", "local"],
+				],
+			);
+		}
+	});
+
 	test("every scripting head binds with `:`, with `/`, and bare", () => {
 		// the head word is written by the loop, so each spelling is a real input
 		// rather than a substitution into one

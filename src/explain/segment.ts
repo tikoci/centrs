@@ -26,12 +26,25 @@
  *       not opaque to the NEXT quote, though: a `$[…]`/`$(…)` substitution
  *       inside it is code that may carry strings of its own, so where a string
  *       ends is decided by the one shared `scanQuotedString` (#199).
- *   H4  `#` starts a comment ONLY in statement-leading position (start of
- *       input, or the first non-space after `;`, a newline, or an opening `{`),
- *       runs to end of line, and produces no statement. Recognized at every
- *       nesting depth, so a `#` line inside a `do={…}` body cannot leak an
+ *   H4  `#` starts a comment in statement-leading position (start of input, or
+ *       the first non-space after `;`, a newline, or an opening `{`) — and, per
+ *       H5 below, at the immediate start of a line that a continuation carried
+ *       into. It runs to end of line and produces no statement. Recognized at
+ *       every nesting depth, so a `#` line inside a `do={…}` body cannot leak an
  *       apostrophe or stray brace into the delimiter stack.
- *   H5  A backslash at end of line is a continuation: it does not separate.
+ *   H5  A backslash at end of line is a continuation: it does not separate. Its
+ *       reach is wider than one line, and was measured on CHR 7.23.3 (#215):
+ *         - blank and whitespace-only lines right after the `\` are part of the
+ *           continuation (the device classes the whole run `escaped`);
+ *         - a `#` at the IMMEDIATE start of such a line is a comment, and the
+ *           comment line does not end the pending statement — `:local \` +
+ *           newline + `# c` + newline + `foo 1` still declares `foo`;
+ *         - after a continuation COMMENT line the reach is spent: the next
+ *           blank line ENDS the statement (where directly after the `\` it
+ *           would not), while ordinary content simply continues it;
+ *         - a continuation never moves statement-leading position. `do={\` +
+ *           newline + `:local x 1` still reads `:local` as the head, and an
+ *           indented `#` is a comment there (lead) but content mid-statement.
  *   H6  Empty statements (`;;`, blank lines) produce nothing.
  *   H7  A statement that is only a `{…}` group (optionally behind a bare menu
  *       path) is a CONTAINER: IL flattens its children into siblings, so its
@@ -189,30 +202,87 @@ export function scanQuotedString(text: string, open: number): QuotedStringScan {
 }
 
 /**
+ * How far a H5 `\<newline>` continuation still reaches (#215, CHR 7.23.3).
+ *
+ *   "none"    — no continuation pending.
+ *   "escape"  — inside the `\<newline>` run itself. Blank and whitespace-only
+ *               lines stay inside it (the device classes them `escaped`).
+ *   "comment" — the run was ended by a continuation COMMENT line, which does
+ *               not end the pending statement but does spend the run's reach:
+ *               a following blank line now terminates.
+ *
+ * `Continuation` and the `lineStart` flag beside it are the vocabulary the
+ * three parallel walkers (`maskComments`, `scanAscii`, `symbols.ts`) share, so
+ * a change to the rule can be made in the same shape in each. #199 was two of
+ * them drifting apart; this state is where the third one can.
+ */
+export type Continuation = "none" | "escape" | "comment";
+
+/**
  * Blank out RouterOS comments so a later delimiter re-scan cannot be fooled by
  * `#` text (a `}` or `[` inside a comment is not a real delimiter). A `#` starts
- * a comment only in statement-leading position — start of input, or the first
- * non-space after `;`, a newline, or `{` (H4) — runs to end of line, and is
- * opaque inside strings. Comment characters become spaces; length and every
- * non-comment offset are preserved, so indices stay valid against the original
- * and callers can slice the original for content. Idempotent.
+ * a comment in statement-leading position (H4) or at the immediate start of a
+ * line a continuation carried into (H5); any intervening space or tab makes it
+ * content rather than a comment. Comments are opaque inside strings. Comment
+ * characters become spaces; length and every non-comment offset are preserved,
+ * so indices stay valid against the original and callers can slice the original
+ * for content. Idempotent.
  */
 export function maskComments(original: string): string {
 	const out = original.split("");
 	let atLead = true;
+	let cont: Continuation = "none";
+	let contLineStart = false;
 	for (let i = 0; i < original.length; i++) {
 		const c = original[i];
+		const inCont = cont !== "none";
+		const contComment = c === "#" && inCont && contLineStart;
+		if (inCont && !contComment) {
+			if (c === " " || c === "\t" || c === "\r") {
+				contLineStart = false;
+			} else if (c === "\n" && cont === "escape") {
+				contLineStart = true;
+				continue; // a blank line inside the `\` run is still the run
+			} else {
+				// Real content, or the blank line that spends a comment run's reach.
+				cont = "none";
+				contLineStart = false;
+			}
+		}
 		if (c === '"') {
 			atLead = false;
 			i = scanQuotedString(original, i).end - 1;
 			continue; // i rests on the closing quote (or past end)
 		}
-		if (c === "#" && atLead) {
+		// H4 is unchanged and H5 only ADDS the immediate-line-start case: an
+		// indented `#` is a comment when the statement is still empty (`do={\` +
+		// newline + `  # c`) and content when it is not (`:put a\` + newline +
+		// `  # x`, which the device classes `error`) — exactly what `atLead` says.
+		if (c === "#" && (atLead || contComment)) {
 			while (i < original.length && original[i] !== "\n") {
 				out[i] = " ";
 				i++;
 			}
+			if (contComment) {
+				// The comment line does not end the statement: step over its newline
+				// (the loop's i++) with the continuation still pending.
+				cont = "comment";
+				contLineStart = true;
+				continue;
+			}
 			i--; // let the loop advance onto the newline (or end)
+			continue;
+		}
+		if (
+			c === "\\" &&
+			(original[i + 1] === "\n" ||
+				(original[i + 1] === "\r" && original[i + 2] === "\n"))
+		) {
+			// H5 leaves `atLead` alone: `do={\` + newline + `:local x 1` still reads
+			// `:local` as the statement head on the device.
+			cont = "escape";
+			contLineStart = true;
+			i += original[i + 1] === "\r" ? 2 : 1;
 			continue;
 		}
 		if (c === ";" || c === "\n" || c === "{") atLead = true;
@@ -280,6 +350,10 @@ interface Frame {
 	stmtStart: number;
 	/** H4 — still before the first real token of the current statement? */
 	atLead: boolean;
+	/** H5 — how far the pending `\<newline>` continuation still reaches. */
+	cont: Continuation;
+	/** H5 — at the immediate start of a line the continuation carried into? */
+	contLineStart: boolean;
 	/**
 	 * A mismatched close occurred in this statement/container. A container with
 	 * a known structural defect must DISCARD rather than promote its buffered
@@ -323,6 +397,8 @@ function scanAscii(ascii: string): {
 	const top: Frame = {
 		stmtStart: -1,
 		atLead: true,
+		cont: "none",
+		contLineStart: false,
 		structurallyInvalid: false,
 		prefixScanStart: -1,
 		prefixScanEnd: -1,
@@ -429,6 +505,8 @@ function scanAscii(ascii: string): {
 		frames.push({
 			stmtStart: -1,
 			atLead: true,
+			cont: "none",
+			contLineStart: false,
 			structurallyInvalid: parent.structurallyInvalid,
 			prefixScanStart: -1,
 			prefixScanEnd: -1,
@@ -488,15 +566,42 @@ function scanAscii(ascii: string): {
 		const c = ascii[i] as string;
 		const f = cur();
 
-		// H4 — comment, only in statement-leading position; recorded at every
-		// depth in this one pass, so a `#` inside a block cannot leak a delimiter
-		// and comments are never double-counted.
-		if (c === "#" && f.atLead) {
+		// H4/H5 — a comment is statement-leading, or at the immediate start of a
+		// line a continuation carried into. Both are decided from state as it
+		// stands BEFORE the continuation bookkeeping below, so an indented `#`
+		// mid-continuation stays content.
+		const inCont = f.cont !== "none";
+		const contComment = c === "#" && inCont && f.contLineStart;
+		if (c === "#" && (f.atLead || contComment)) {
 			const nl = ascii.indexOf("\n", i);
 			const end = nl === -1 ? ascii.length : nl;
 			comments.push({ start: i, end });
-			i = end;
+			if (contComment) {
+				// The comment line does not end the statement — step over its newline
+				// rather than letting the separator branch flush there.
+				f.cont = "comment";
+				f.contLineStart = true;
+				i = nl === -1 ? end : end + 1;
+			} else {
+				i = end;
+			}
 			continue;
+		}
+
+		if (inCont) {
+			if (c === " " || c === "\t" || c === "\r") {
+				f.contLineStart = false;
+			} else if (c === "\n" && f.cont === "escape") {
+				// A blank line inside the `\` run is still the run: no flush.
+				f.contLineStart = true;
+				i++;
+				continue;
+			} else {
+				// Real content, or the blank line that spends a comment run's reach
+				// and so falls through to the separator branch below.
+				f.cont = "none";
+				f.contLineStart = false;
+			}
 		}
 
 		// H3 — string.
@@ -515,7 +620,11 @@ function scanAscii(ascii: string): {
 			(ascii[i + 1] === "\n" ||
 				(ascii[i + 1] === "\r" && ascii[i + 2] === "\n"))
 		) {
+			// `atLead` deliberately survives: `do={\` + newline + `:local x 1` still
+			// reads `:local` as the statement head on the device (#215).
 			ensureStmt(f, i);
+			f.cont = "escape";
+			f.contLineStart = true;
 			i += ascii[i + 1] === "\r" ? 3 : 2;
 			continue;
 		}
