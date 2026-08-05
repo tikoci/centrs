@@ -71,7 +71,7 @@
  *       operator (`$octive-1`); the tie is broken by the longest prefix that
  *       resolves against the document's OWN declarations.
  *
- * FIVE behaviors go beyond the lab SUT. None is invented: the probe declared the
+ * SIX behaviors go beyond the lab SUT. None is invented: the probe declared the
  * first two and left them unmodeled (it was throwaway and depth-scoped), F2 is
  * required verbatim by the ratified spec — `commands/explain/README.md`, "Symbol
  * scopes follow RouterOS scope identity, not brace depth alone" — and F3/F4 are
@@ -133,27 +133,70 @@
  *       instead — measured 100.00% / 99.76% but at +1.7pp / +2.9pp abstention,
  *       so modeling won on the trade.
  *
+ *   F6  A `[…]` substitution is a nested STATEMENT context, and the two
+ *       positions it can appear in differ in SCOPE EXTENT (#201, was K1). The
+ *       claim K1 carried was measured from a mid-statement bracket and
+ *       generalized; CHR 7.23.2 splits them:
+ *
+ *         - a statement-LEADING `[` is TRANSPARENT. `[:local b 1]` + `:put $b`
+ *           reads `local` — the declaration escapes, and so does a `:global`.
+ *           "Leading" survives indentation, a preceding `;`, and the lead of a
+ *           `do={` body, and it composes: a lead bracket nested in a
+ *           mid-statement one escapes INTO that bracket, not past it.
+ *         - a MID-statement `[` CONFINES what it declares — `:put [:local b 1]`
+ *           + `:put $b` reads `parameter`. Globals are confined too, which is
+ *           where K1 was most wrong (`:put [:global g 1]` does NOT escape; only
+ *           the statement-leading spelling does), so `bind` writes a global to
+ *           the innermost open bracket rather than always to the document.
+ *
+ *       Either way the bracket SHARES the enclosing bindings — it is not a
+ *       closure — and the `]` RESUMES the interrupted statement instead of
+ *       starting one (`:put [:put 1] :local v 1` declares nothing), which is why
+ *       the statement state is saved and restored rather than reset. A `$[…]` in
+ *       a string is the same context and can never be leading. `(` is NOT this:
+ *       the device reads a directive inside parens as an ordinary expression
+ *       term (`(:local v 1)` classes the `:local` text itself
+ *       `variable-undefined`), so no statement context opens there.
+ *
+ *       Modeling it moved holdout abstention 4.53% → 4.25% and dev 6.27% →
+ *       5.40%, at no precision cost. Two rules had to move to the HEAD branch to
+ *       hold that: a `/`-sigilled head opens a menu path (S16) and a
+ *       `find`/`where` head opens a filter region (S8). Both were previously
+ *       written only on the general word path, and were unreachable from a head
+ *       only because a bracket used to inherit its head from the enclosing
+ *       statement; without them `[find comment=$tag]`, the corpus's commonest
+ *       bracket, stopped reporting its field. That is #201's "one rule, one
+ *       implementation" exactly.
+ *
+ *       F6 also composes with H4: the first position inside a `[` is
+ *       statement-leading, so a `#` there opens a COMMENT — which then swallows
+ *       the `]` and runs to the newline. CHR 7.23.2 agrees (`[# c<nl>…` classes
+ *       `# c<nl>` `comment` in both spellings, while a mid-statement `#` is a
+ *       hard `error`), so the declarations that follow such a `]` are real. The
+ *       head-position `find` is device-grounded the same way
+ *       (`/ip route<nl>find comment=x` reads `comment` `variable-local`).
+ *
  * Measured on the frozen split (`.scratch/explain-lab-partition.json`) against
- * the per-occurrence highlight streams for 7.23.2 AND 7.24rc2, byte-identical
- * across the two versions: **holdout 99.97% precision on decided (6153/6155),
- * 4.53% abstention, 15 missed; dev 99.75% (8723/8745), 6.27%.**
+ * the per-occurrence highlight streams for 7.23.2 AND 7.24rc2: **holdout 99.98%
+ * precision on decided (6155/6156), 4.25% abstention, 14 missed; dev 99.75%
+ * (8729/8751), 5.40%, 34 missed.**
  *
  * TWO KNOWN LIMITS are carried as measured, each pinned by an explicit test and
  * tracked in the lexical-boundary issue (#201) rather than patched here:
  *
- *   K1  A `[…]` substitution is a nested STATEMENT context on the device, and
- *       its locals do not escape it: `[:local v 1; :put $v]` classes both `v`
- *       `variable-local`, while a `$v` AFTER the bracket reads `variable-
- *       parameter` (a `:global` inside a bracket does escape). This walker does
- *       not open a statement context at `[`, so it misses the declaration and
- *       falls back to `parameter` (S5) for the uses — under-resolution of the
- *       same species as the declared corpus residual, never a fabricated
- *       binding. Modeling it is a scope-extent change that needs its own corpus
- *       re-score.
  *   K2  The doubled-sigil stop (F5) is statement-leading only. A doubled path
  *       separator MID-statement (`/ip//address print`) is also a hard device
  *       error, but `:put //foo` and `url=//example.com` are valid, so telling
  *       them apart needs parser-context awareness the lexical scan does not have.
+ *   K3  An earlier `:global NAME` outranks a LATER `:local NAME` at the same
+ *       scope: CHR 7.23.2 reads the trailing use in `:global v 1` + `:local v 2`
+ *       + `:put $v` as `variable-global`, where `lookup` takes the nearest
+ *       preceding binding and says `local`. Found as the CONTROL case while
+ *       probing F6 — it is the reason a `:global`-shadowed name cannot be used
+ *       to measure scope extent. Its own extent is not probed (same scope only? a
+ *       precedence rule or a rejected redeclaration?), so it is carried rather
+ *       than guessed at. (Numbered in the K series, not the S series: `S3` is
+ *       already the loop-variable rule above.)
  *
  * The scan is a single left-to-right pass with an explicit delimiter stack (no
  * recursion, Q17 posture) and never throws; structural surprises land in
@@ -230,6 +273,31 @@ interface Scope {
 	bindings: Map<string, Binding[]>;
 }
 
+/**
+ * Statement state saved at a `[`, restored at its `]` (F6).
+ *
+ * A bracket is a nested STATEMENT context, so the walk resets the statement
+ * bookkeeping on the way in; the enclosing statement has to survive that, since
+ * a `]` resumes it rather than starting a new one.
+ */
+interface BracketFrame {
+	head: string | null;
+	filterDepth: number | null;
+	inMenuPath: boolean;
+	pendingSetTarget: boolean;
+	pendingErrVar: boolean;
+	pendingDecl: SymbolClass | null;
+	pendingLoopVars: boolean;
+	declaredHere: boolean;
+	headSigil: ":" | "/" | "";
+	cont: Continuation;
+	contLineStart: boolean;
+	/** the scope this bracket pushed, or null when it is transparent (F6). */
+	scope: Scope | null;
+	/** where a `:global` inside this bracket binds (F6). */
+	globalHome: Scope;
+}
+
 /** Heads that declare a name in their next word. */
 const DECL: Record<string, SymbolClass> = { local: "local", global: "global" };
 /** Heads whose leading words are loop variables (S3). */
@@ -275,6 +343,14 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	const notes: string[] = [];
 	const root: Scope = { closure: false, bindings: new Map() };
 	const scopes: Scope[] = [root];
+	/** F6 — saved statement state per open `[`, innermost last. */
+	const brackets: BracketFrame[] = [];
+	/**
+	 * F6 — where a `:global` binds. Document scope normally (S2), but a
+	 * mid-statement bracket confines its globals just like its locals, so it is
+	 * that bracket's scope while one is open.
+	 */
+	let globalHome: Scope = root;
 	/** open delimiters, innermost last; `"` is a string frame. */
 	const frames: ("{" | "[" | "(" | '"')[] = [];
 	/** bracket/brace nesting, strings excluded (the S8 filter region uses it). */
@@ -364,8 +440,73 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		// at the document scope no matter where it was written. It is ALSO
 		// recorded in the current scope, which is how an in-body `:global NAME`
 		// re-import stays visible inside a closure that hides the outer one (F2).
-		bindIn(root, name, cls, from);
-		if (inner !== root) bindIn(inner, name, cls, from);
+		// `globalHome` IS the document scope unless a mid-statement bracket is
+		// open, which confines a global to itself exactly as it does a local (F6).
+		bindIn(globalHome, name, cls, from);
+		if (inner !== globalHome) bindIn(inner, name, cls, from);
+	};
+
+	/**
+	 * F6 — enter a `[`. Saves the enclosing statement, opens a nested statement
+	 * context, and pushes a scope only for a MID-statement bracket; a
+	 * statement-LEADING `[` is transparent, so its declarations escape.
+	 */
+	const openBracket = (lead: boolean, at: number): void => {
+		const frame: BracketFrame = {
+			head,
+			filterDepth,
+			inMenuPath,
+			pendingSetTarget,
+			pendingErrVar,
+			pendingDecl,
+			pendingLoopVars,
+			declaredHere,
+			headSigil,
+			cont,
+			contLineStart,
+			scope: null,
+			globalHome,
+		};
+		if (!lead) {
+			if (scopes.length >= MAX_SCOPE_DEPTH) {
+				if (!overDepth) {
+					overDepth = true;
+					notes.push(`over-depth:${at}`);
+				}
+			} else {
+				const scope: Scope = { closure: false, bindings: new Map() };
+				scopes.push(scope);
+				frame.scope = scope;
+				globalHome = scope;
+			}
+		}
+		brackets.push(frame);
+		resetStatement();
+	};
+
+	/**
+	 * F6 — leave a `]`. `atLead` is deliberately NOT restored: the H4 bookkeeping
+	 * already cleared it for this character, and the device agrees that a `]`
+	 * resumes the enclosing statement rather than starting one (`:put [:put 1]
+	 * :local v 1` declares nothing).
+	 */
+	const closeBracket = (): void => {
+		const frame = brackets.pop();
+		if (frame === undefined) return;
+		if (frame.scope !== null && scopes[scopes.length - 1] === frame.scope)
+			scopes.pop();
+		head = frame.head;
+		filterDepth = frame.filterDepth;
+		inMenuPath = frame.inMenuPath;
+		pendingSetTarget = frame.pendingSetTarget;
+		pendingErrVar = frame.pendingErrVar;
+		pendingDecl = frame.pendingDecl;
+		pendingLoopVars = frame.pendingLoopVars;
+		declaredHere = frame.declaredHere;
+		headSigil = frame.headSigil;
+		cont = frame.cont;
+		contLineStart = frame.contLineStart;
+		globalHome = frame.globalHome;
 	};
 
 	/** Record a `$`-sigilled reference, applying S5/S6/S19. */
@@ -467,6 +608,13 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					// binding after it.
 					frames.push(next);
 					depth++;
+					if (next === "[") {
+						// F6 — and it is a statement context like any other `[`. A `$[`
+						// can never be statement-LEADING (a string opened it), so it is
+						// always the confining, mid-statement form.
+						openBracket(false, i + 1);
+						atLead = true;
+					}
 					i++;
 					continue;
 				}
@@ -559,7 +707,11 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		// H4 bookkeeping. `leadBefore` is the value for the character ABOUT to be
 		// read, which is what decides whether a word is the statement HEAD.
 		const leadBefore = atLead;
-		if (c === ";" || c === "\n" || c === "{") atLead = true;
+		// F6 — a `[` opens a nested statement context, so the word after it is a
+		// HEAD. `(` does not: the device reads a directive there as an ordinary
+		// expression term (`(:local v 1)` classes `:local` itself
+		// `variable-undefined`), which is why only the bracket is listed here.
+		if (c === ";" || c === "\n" || c === "{" || c === "[") atLead = true;
 		else if (c !== " " && c !== "\t" && c !== "\r") atLead = false;
 
 		if (c === '"') {
@@ -588,6 +740,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		if (c === "{" || c === "[" || c === "(") {
 			frames.push(c);
 			depth++;
+			if (c === "[") openBracket(leadBefore, i);
 			if (c === "{") {
 				if (scopes.length >= MAX_SCOPE_DEPTH) {
 					suppressedScopes++;
@@ -618,6 +771,10 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			}
 			frames.pop();
 			if (filterDepth !== null && depth <= filterDepth) filterDepth = null;
+			// F6 — restore the statement the `[` interrupted, and drop the bracket's
+			// scope. Ordered after the `filterDepth` clear on purpose: the saved
+			// value is the enclosing region, which outlives this bracket.
+			if (c === "]") closeBracket();
 			if (c === "}") {
 				// S1 — locals declared inside this brace scope go out of view.
 				if (suppressedScopes > 0) suppressedScopes--;
@@ -692,10 +849,24 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				// and `/interface local foo 1` make `local` an `obj-inactive` menu
 				// item, and there the head word is `ip`/`interface`, not `local`.
 				headSigil = text[start] === ":" ? ":" : text[start] === "/" ? "/" : "";
+				// S16 — a `/`-sigilled HEAD opens a menu path just as a `/`-sigilled
+				// later word does, so the space-separated segments after it are `dir`,
+				// not symbols. The rule lived only on the non-head path below, which
+				// was invisible while a bracket inherited its head from the enclosing
+				// statement; once `[` opens its own statement context (F6) the first
+				// word inside IS the head, and `[/interface list find …]` started
+				// abstaining on `list`.
+				if (headSigil === "/") inMenuPath = true;
 				if (DECL[lower] !== undefined) pendingDecl = DECL[lower] as SymbolClass;
 				else if (LOOP_HEADS.has(lower)) pendingLoopVars = true;
 				else if (lower === "set") pendingSetTarget = true;
 				else if (ERRVAR_HEADS.has(lower)) pendingErrVar = true;
+				// S8 — `find`/`where` open a filter region from HEAD position too.
+				// `[find comment=$tag]` is the commonest shape of the whole corpus and
+				// its `find` only became a head once `[` started a statement context
+				// (F6); before that the bracket inherited the enclosing head, so this
+				// branch never saw a filter word and the region was opened below.
+				else if (FILTER_WORDS.has(lower)) filterDepth = depth;
 				continue;
 			}
 
