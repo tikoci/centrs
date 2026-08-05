@@ -616,3 +616,7 @@ sstp
 wlan
 zerotier
 importability # whether a document RouterOS emitted can be re-imported (#203 oracle level L2)
+
+# --- #210, the Q6 bare-path/menu seam -------------------------------------
+menuctx # the IL (`:parse`) statement type for menu navigation, vs `cmd` — the nav-vs-command oracle
+cuu # `/terminal cuu` (cursor up), a RouterOS terminal command that reads as a bare menu path

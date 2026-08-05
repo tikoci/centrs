@@ -33,7 +33,7 @@ interface Case {
 	name: string;
 	input: string;
 	context?: string;
-	resolution: "resolved" | "ambiguous" | "unknown";
+	resolution: "resolved" | "navigation" | "ambiguous" | "unknown";
 	path?: string;
 	verb?: string;
 	verbAt?: number;
@@ -63,6 +63,13 @@ function assertCorner(c: Case): void {
 		expect(got.path).toBe(c.path ?? null);
 		expect(got.verb).toBe(c.verb ?? null);
 		expect(got.verbAt).toBe(c.verbAt ?? null);
+	} else if (c.resolution === "navigation") {
+		// A navigation statement names a menu and no verb — so it carries a path,
+		// but nothing that could be read as a command (#210).
+		expect(got.kind).toBe("menu");
+		expect(got.path).toBe(c.path ?? null);
+		expect(got.verb).toBeNull();
+		expect(got.verbAt).toBeNull();
 	} else {
 		// ambiguous and unknown decide nothing — no menu, no verb, no index.
 		expect(got.kind).toBeNull();
@@ -192,13 +199,125 @@ describe("splitRun ordering — vocabulary beats V4", () => {
 	});
 });
 
+/**
+ * #210 — V4's bare path is the one case the ratified `proposed` rule refuses,
+ * and the baked container table (`menus.ts`, #207) answers exactly that
+ * question. Measured over the frozen partition and the #203 export stratum,
+ * this takes Q6 abstention from 37.6–38.4% to **0.0%** on device-emitted
+ * `compact`/`verbose` export, and from 4.0%/1.2% to 1.4%/0.5% on corpus
+ * dev/holdout. Precision was checked against the device parser, not asserted:
+ * over 1,689 IL projections the table never calls a menu what `:parse` read as
+ * a command, in the whole table or in the 104 paths this rule flips.
+ */
+describe("#210 — the container table decides V4's bare path", () => {
+	test("splitRun itself is UNCHANGED — the schema-free rule still refuses", () => {
+		// The layering that keeps this change off `write.ts` and out of Q16's
+		// numbers: the table is consulted in `resolveVerb`, never in `splitRun`,
+		// so `proposed`'s abstention rate still prices decision 3 honestly.
+		for (const menu of ["/ip/address", "/ip firewall filter", "/log"]) {
+			expect(
+				splitRun(runTokens(menu), { directive: false, whole: true }),
+			).toMatchObject({ verbAt: null, ambiguous: true });
+		}
+	});
+
+	test("the V4 twin pair is separated — the whole point of the table", () => {
+		expect(resolveVerb("/ip/address", "/")).toMatchObject({
+			resolution: "navigation",
+			// The ratified envelope's word, not a third synonym — phase 1 renders
+			// this as `resolution: "resolved", kind: "menu"`.
+			kind: "menu",
+			path: "/ip/address",
+			verb: null,
+			verbAt: null,
+		});
+		expect(resolveVerb("/system/reboot", "/")).toMatchObject({
+			resolution: "ambiguous",
+			path: null,
+		});
+	});
+
+	test("both spellings of one menu reach the same verdict", () => {
+		for (const text of ["/ip/firewall/filter", "/ip firewall filter"])
+			expect(resolveVerb(text, "/")).toMatchObject({
+				resolution: "navigation",
+				path: "/ip/firewall/filter",
+			});
+	});
+
+	test("the lookup is case-insensitive, like the table", () => {
+		expect(resolveVerb("/IP/Address", "/").resolution).toBe("navigation");
+	});
+
+	test("a path the table does not carry stays ambiguous (it is a FLOOR)", () => {
+		// Every one of these is a genuine no-argument COMMAND drawn from the
+		// corpus-dev residual this rule leaves behind — the residual is the right
+		// residual. Absence from the table is not evidence either way, so refusing
+		// is the fail-closed answer, not a missing table entry.
+		for (const command of [
+			"/system/reboot",
+			"/quit",
+			"/container/start",
+			"/tool/speed-test",
+			"/system/routerboard/upgrade",
+			"/certificate/create-certificate-request",
+			"/terminal/cuu",
+		])
+			expect(resolveVerb(command, "/").resolution).toBe("ambiguous");
+	});
+
+	test("an ABBREVIATED menu stays ambiguous — the table carries full names", () => {
+		// `/ip fire conn` is valid RouterOS and reaches `/ip/firewall/connection`,
+		// but the table cannot confirm it, so the answer is a refusal rather than a
+		// guess at which menu was meant.
+		expect(resolveVerb("/ip fire conn", "/").resolution).toBe("ambiguous");
+		expect(resolveVerb("/ip firewall layer7", "/").resolution).toBe(
+			"ambiguous",
+		);
+	});
+
+	test("the Q6 KNOWN LIMIT is preserved — a positional operand is not a menu", () => {
+		// `/system/script run myscript` absorbs the operand into the run, and the
+		// table does not carry the result, so this stays the documented ambiguity
+		// rather than being silently decided in either direction.
+		expect(resolveVerb("/system/script run myscript", "/")).toMatchObject({
+			resolution: "ambiguous",
+			why: "bare path, nothing follows — navigation or no-arg command?",
+		});
+	});
+
+	test("a vocabulary hit still wins — the table is only consulted on a refusal", () => {
+		expect(resolveVerb("/ip/address/print", "/")).toMatchObject({
+			resolution: "resolved",
+			kind: "command",
+			path: "/ip/address",
+			verb: "print",
+		});
+	});
+
+	test("a relative bare path is still `unknown`, never navigation", () => {
+		// The table lookup reads the context-applied candidate, so it would be
+		// correct under a non-root base — but a relative bare-word head is refused
+		// before it can reach that branch, and must stay refused: `address` in
+		// `/ip` is indistinguishable from a no-argument command (R8).
+		expect(resolveVerb("address", "/ip")).toMatchObject({
+			resolution: "unknown",
+			why: "bare-word head is not a known verb",
+		});
+	});
+});
+
 describe("robustness invariants", () => {
-	test("an ambiguous bare path still exposes both path readings as candidates", () => {
-		// `/ip/address` decides nothing, but a consumer must be able to offer the
-		// menu-vs-command readings rather than a coin flip.
-		const got = resolveVerb("/ip/address", "/");
-		expect(got.resolution).toBe("ambiguous");
-		expect(got.candidates).toEqual(["/ip", "/ip/address"]);
+	test("a bare path exposes every path reading as a candidate, decided or not", () => {
+		// A consumer must be able to offer the readings rather than a coin flip —
+		// and that holds whichever way the bare path lands, so both arms of #210's
+		// table lookup are asserted here.
+		const nav = resolveVerb("/ip/address", "/");
+		expect(nav.resolution).toBe("navigation");
+		expect(nav.candidates).toEqual(["/ip", "/ip/address"]);
+		const ambiguous = resolveVerb("/system/reboot", "/");
+		expect(ambiguous.resolution).toBe("ambiguous");
+		expect(ambiguous.candidates).toEqual(["/system", "/system/reboot"]);
 	});
 
 	test("the same relative command resolves identically under any certain context", () => {
@@ -283,10 +402,11 @@ describe("resolveVerbs — document walk over the certainty contract", () => {
 	test("splits every statement in source order, carrying context", () => {
 		const { splits } = resolveVerbs("/ip route\nadd gateway=1.1.1.1\nprint");
 		expect(splits.map((s) => s.resolution)).toEqual([
-			"ambiguous",
+			"navigation",
 			"resolved",
 			"resolved",
 		]);
+		expect(splits[0]?.path).toBe("/ip/route");
 		expect(splits[1]?.verb).toBe("add");
 		expect(splits[1]?.path).toBe("/ip/route");
 		expect(splits[2]?.verb).toBe("print");

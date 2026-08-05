@@ -142,7 +142,7 @@ today's path/verb/args split and script-vs-structured gate:
 - **Fail-closed with an `ambiguous` verdict.** Schema-free analysis has a hard
   floor: a statement that is *nothing but a path* (`/ip/route` is a directory,
   `/system/reboot` is a command, and the text is identical) cannot be resolved
-  offline without a schema. The canonicalizer must abstain there — a distinct
+  by a text rule alone. The canonicalizer must abstain there — a distinct
   **`ambiguous`** verdict, separate from "unresolved" — rather than guess. Four
   ratification questions reached this floor independently (Q6 verb/menu
   boundary, Q3 absolute inner paths, Q13 `variable-undefined`, Q14 bare-word
@@ -154,6 +154,15 @@ today's path/verb/args split and script-vs-structured gate:
   only ~2.3pp of that abstention while churning ~9% of tree nodes per minor
   version — which is why **decision 3 (no offline schema snapshot) ratifies
   unchanged**.
+
+  The *container* half of that pair is since decidable, and decision 3 still
+  holds. `src/explain/menus.ts` (#207) bakes only the menu-vs-command node type
+  — not a schema — and it is version-less because the pinned trees show no
+  `dir`↔`cmd` flip across 7.10.2 → 7.24rc2 or across architectures. So
+  `/ip/route` now resolves as `navigation` while `/system/reboot` still abstains
+  (#210). The floor is unmoved: the table is deliberately incomplete, absence
+  from it decides nothing, and every rule above it still refuses rather than
+  guesses.
 
 There are real unknowns in how far offline parsing can go (expression
 grammar, scope fidelity vs `:parse`, `[]`-nesting corner cases). Grounding
@@ -336,7 +345,12 @@ Standard envelope (constitution: result envelope); `data` sketch:
   command); `unknown` means analysis cannot safely recover a reading. Neither is
   silently collapsed to a diagnostic severity or to a guessed command. A
   resolved statement also carries `kind: "menu" | "command"`; `command` is
-  present only for the latter.
+  present only for the latter. The library reports the two kinds as *separate
+  resolutions* — `src/explain/verbsplit.ts` returns `navigation` (with
+  `kind: "menu"`) beside `resolved` (with `kind: "command"`), so `resolved`
+  keeps meaning "a verb was decided" for its callers. Phase 1 folds `navigation`
+  into this envelope's `resolved` + `kind: "menu"`; the envelope vocabulary here
+  is unchanged.
 - **Whole-input gate and per-statement analysis stay distinct.** `canonical`
   reproduces the existing execute gate's whole-input fields unchanged, including
   its `mode` and `writeShaped` decision. `structure.statements[]` is the
@@ -523,11 +537,33 @@ stratum**. The last figure is new: before #207's baked menu table, the
 `isConfirmedNav` hyphen rule abstained on 25 distinct genuine menus. This is
 the coverage claim that matters for `explain`, and it holds.
 
-One seam remains: `write.ts` consumes `menus.ts`, but `verbsplit.ts` does not,
-so Q6 still returns **38.8–40.5% `ambiguous`** on `compact`/`verbose` for
-bare-path lines the menu table could decide. Terse is 0% by construction (it
-never emits a bare menu line). That gap becomes user-visible in #202, which
-renders per-statement output.
+**Q6's bare-path abstention is closed on the same table (#210).** `verbsplit.ts`
+originally did not consume `menus.ts`, so Q6 kept returning `ambiguous` on
+`compact`/`verbose` for exactly the bare-path lines the container table can
+decide. It now reads that table at V4 — the one case the ratified `proposed`
+rule refuses — and emits a `navigation` resolution when the path is a known
+menu. Abstention on device-emitted export goes to **0.0% on every stratum**
+(from 37.6–38.4% on `compact`/`verbose`; `terse` was already 0% by
+construction, since it never emits a bare menu line), and on the frozen corpus
+from 4.0% → **1.4%** dev and 1.2% → **0.5%** holdout.
+
+The table is consulted in `resolveVerb`, never in `splitRun`, so the ratified
+schema-free rule still prices decision 3 on its own terms and Q16's abstention
+is unchanged to the decimal (44.8% dev / 46.0% holdout). Precision was checked
+against the device parser rather than asserted: over 1,689 IL (`:parse`)
+projections — which distinguish `menuctx` from `cmd` natively — the table never
+calls a menu what the device read as a command, neither across the whole table
+nor across the 104 paths this rule flips. The residual is the right residual:
+`/system/reboot`, `/quit`, `/tool/speed-test` and abbreviated forms like
+`/ip fire conn` stay `ambiguous`, because the table is a floor and absence from
+it is not evidence of a command.
+
+What remains is the *other* half of the seam, filed as #211: `pathresolve.ts`
+still claims **every** `/`-led bare path is navigation, so it reports
+`/system/reboot` as a menu and resolves a following `print` to the fabricated
+`/system/reboot/print` — and on 34 dev / 13 holdout statements it directly
+contradicts `verbsplit`, which resolves the same text as a verb. That
+contradiction becomes user-visible in #202, which renders per-statement output.
 
 **Importability was also measured, and is a weaker, narrower result than it
 first appears (#203 deliverable 4).** On CHR, none of the six root `/export`

@@ -32,11 +32,12 @@
 			"rule": "vocabulary hit `print`"
 		},
 		{
-			"name": "bare menu path — V4: indistinguishable from a no-arg command",
+			"name": "bare menu path — V4 refused, the container table decides it (#210)",
 			"input": "/ip/address",
-			"resolution": "ambiguous",
+			"resolution": "navigation",
 			"truth": "/ip/address",
-			"rule": "bare path, nothing follows — navigation or no-arg command?"
+			"rule": "bare path, and a known RouterOS menu — navigation",
+			"path": "/ip/address"
 		},
 		{
 			"name": "space-written menu — only the vocabulary recovers this",
@@ -138,14 +139,15 @@
 			"rule": "no leading path token"
 		},
 		{
-			"name": "space-written navigation — V4 refuses (the Q4 cascade case)",
+			"name": "space-written navigation — the table decides it in either spelling (#210)",
 			"input": "/ip firewall filter",
-			"resolution": "ambiguous",
+			"resolution": "navigation",
 			"truth": "/ip/firewall/filter",
-			"rule": "bare path, nothing follows — navigation or no-arg command?"
+			"rule": "bare path, and a known RouterOS menu — navigation",
+			"path": "/ip/firewall/filter"
 		},
 		{
-			"name": "cascade twin — a CMD with the same text shape as `/ip/address`",
+			"name": "cascade twin — same text shape as `/ip/address`, but NOT a menu, so still ambiguous",
 			"input": "/system/reboot",
 			"resolution": "ambiguous",
 			"truth": "/system/reboot",
