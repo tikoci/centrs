@@ -10,6 +10,7 @@
 		"coverage",
 		"dist",
 		"docs/api",
+		"src/explain/menus.ts",
 		"test/fixtures",
 		"GLOSSARY.txt",
 		".claude/settings*.json"

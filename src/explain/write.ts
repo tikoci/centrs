@@ -65,6 +65,7 @@
  * genuine false negatives the tristate exists to prevent.
  */
 
+import { isMenuPath } from "./menus.ts";
 import {
 	type DocumentAnalysis,
 	resolveDocument,
@@ -313,14 +314,50 @@ function verbOfRun(
 }
 
 /**
- * Can this statement be CONFIRMED as pure menu navigation? Only when every token
- * is a known menu word — which offline cannot check without a schema — so the
- * practical test is the one thing that is decidable: a run that is not the whole
- * statement was never navigation, and a hyphenated word ANYWHERE after the first
- * token is verb-shaped (`reset-counters`, `format-drive`, `firmware-upgrade`).
- * Testing only the final token would miss `/disk format-drive disk1`, where the
- * verb is followed by a positional operand — and guessing wrong there costs a
- * missed write.
+ * Can this statement be CONFIRMED as pure menu navigation? Only when the path it
+ * names is a known menu — which is now decidable offline, against the baked
+ * container table in `menus.ts`.
+ *
+ * **What this replaced, and why (#207).** The original rule read token SHAPE: a
+ * hyphenated word anywhere after the first token is verb-shaped
+ * (`reset-counters`, `format-drive`, `firmware-upgrade`), and testing only the
+ * final token would miss `/disk format-drive disk1`, where the verb carries a
+ * positional operand. The reasoning was sound; the premise was not. Hyphenated
+ * MENU segments are ordinary on a real device, so the rule fired on genuine
+ * navigation constantly — measured on the #203 export stratum (120 captures,
+ * pinned 7.23.2 and 7.24rc2), **every Q16 abstention in the entire stratum was
+ * this one rule**, across 25 distinct menus, at a 100% false-positive rate.
+ *
+ * The corpus could not have shown it: the rule fires on 2.97% of documents and
+ * changes the verdict of three, because the corpus is 96.8% two forum authors
+ * writing scripts, and bare-path navigation into a hyphenated menu is an
+ * *export* idiom. Corpus-green was not evidence the rule was right.
+ *
+ * **Why shape cannot be fixed.** `/interface wireless reset-configuration wlan1`
+ * is a command, `/ip dhcp-server network` and `/tool mac-server mac-winbox` are
+ * menus, and no token-shape rule separates them — the distinction is semantic.
+ * `menus.ts` supplies it as a baked constant rather than a live lookup, so this
+ * module stays offline. See that file for the source pin.
+ *
+ * **Still fail-closed, and in both directions.** A path the table does not carry
+ * is not confirmed navigation, so it emits an occurrence and abstains — the
+ * pre-#207 behaviour for an unrecognized menu, and the reason a pinned,
+ * deliberately incomplete table is safe. Going the other way, a bare-path
+ * COMMAND is no longer confirmed as navigation at all: `/system reboot` used to
+ * pass this rule (no hyphen) and be dropped mid-document, clearing the document
+ * to `false` on a statically obvious write. That was the exact false negative
+ * Q16's hard threshold forbids, and only `isDanglingBarePath` below caught the
+ * end-of-document case. It is closed here.
+ *
+ * Measured over the frozen 911-script corpus: abstention **unchanged** at 44.8%
+ * dev / 46.0% holdout, and exactly two documents move, in opposite directions.
+ * One gains an abstention (a pasted `/system/gps/monitor once` transcript, where
+ * the abstention is correct). One loses one — a rextended snippet whose elided
+ * `... script=… ...` line names no command, so its `unknown` was reached only
+ * *via* this bug misreading `/ip dhcp-client`; the residual question of how
+ * elided pastes should classify belongs to #192, not here. On the export stratum
+ * abstention drops from 3.8% compact / 11.2–11.6% verbose to **0.0% on every
+ * stratum**, with no document changing verdict.
  */
 function isConfirmedNav(described: Described): boolean {
 	// Only reached for a statement the Q4 resolver already read as navigation, so
@@ -329,7 +366,7 @@ function isConfirmedNav(described: Described): boolean {
 	if (described.run.length === 0) return true;
 	// Argument-looking text after the run means this was never navigation.
 	if (!described.whole) return false;
-	return !described.run.slice(1).some((t) => t.name.includes("-"));
+	return isMenuPath(described.run.map((t) => t.name));
 }
 
 /**
@@ -342,7 +379,7 @@ function isConfirmedNav(described: Described): boolean {
  * forbids, and it reproduces inside the tristate exactly the failure the tristate
  * was ratified to prevent.
  *
- * Position is the one schema-free confirmation available at document scale:
+ * Position was the one schema-free confirmation available at document scale:
  * navigating and then ending the script is a no-op, while a no-argument command
  * is meaningful. This is deliberately the WEAKEST rule that closes the reported
  * case — measured over the frozen 911-script corpus it moves **zero** documents,
@@ -350,14 +387,15 @@ function isConfirmedNav(described: Described): boolean {
  * unchanged. Every corpus bare path sits mid-document, followed by further
  * statements; working scripts do not end on a menu path.
  *
- * DECLARED RESIDUAL: a bare-path COMMAND that is followed only by absolute
- * statements (`/system/reboot` then `/log print`) still clears. Closing that too
- * means abstaining whenever no later RELATIVE statement consumes the context,
- * which was also measured: +1.4pp dev / +1.9pp holdout abstention across 14
- * documents, and all 14 are genuine directories, i.e. pure precision loss on this
- * corpus. The corpus cannot show the benefit — it is a corpus of working scripts,
- * where a bare path is navigation — so that trade is left as a priced decision
- * rather than taken here.
+ * **#207 narrowed what this rule is for.** `isConfirmedNav` now knows whether the
+ * path is a menu, so `/system/reboot` is refused there — at any position, and
+ * without the +1.4pp / +1.9pp abstention that closing it positionally would have
+ * cost. What is left here is a document-scale hedge over paths the table DOES
+ * carry: a known menu that ends the document is still suspicious, since a
+ * trailing no-op is not what working scripts do, and the table is version-less
+ * so a name can be a menu on one RouterOS and a command on another the pinned
+ * trees never saw. Retained on that basis; it fires on no corpus document and no
+ * export capture.
  *
  * The bare `/` and `..` forms are exempt: they carry no run, name no command, and
  * Q4's CHR round confirmed them as navigation outright.
