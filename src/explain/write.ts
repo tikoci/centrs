@@ -39,6 +39,15 @@
  * boundary Q6 measured at 99.9% precision. Q16 composes with Q6 rather than
  * needing a schema of its own (decision 3 stays closed).
  *
+ * **What #207 changed, and what it did NOT.** This module now reads one baked
+ * artifact, `menus.ts` — the `dir`/`path` node set, i.e. exactly the
+ * `path|dir|cmd|arg` tagging named above as carrying no mutation semantics. It
+ * still carries none, and nothing here infers write-ness from it. It answers a
+ * strictly narrower question that Q6 leaves open: whether a bare path is a
+ * MENU or a no-argument command. Decision 3 stays closed — the two vocabularies
+ * above are unchanged, still curated, still frozen against tuning — and the
+ * module stays offline, because a baked constant is not a lookup.
+ *
  * **Fail-closed is enforced where input is DISCARDED, not where it is
  * classified** (Q16 finding 2, the part worth carrying past this module). The
  * lab priced three navigation arms; only the ratified `failclosed` one is

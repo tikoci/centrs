@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { isMenuPath } from "../../src/explain/menus.ts";
 import {
 	resolveDocument,
 	resolveStatements,
@@ -254,13 +255,30 @@ describe("explain/write — finding 2: fail closed where input is discarded", ()
 	 *
 	 * Measured over the frozen 911-script corpus this moves ZERO documents, so the
 	 * ratified navigation arm's abstention is unchanged.
+	 *
+	 * #207 SPLIT this test, because it had quietly stopped testing one thing.
+	 * `/system/reboot` now abstains upstream, in `isConfirmedNav`, because the
+	 * menu table knows it is a `cmd` — position never gets consulted. Only the
+	 * two genuine MENUS still reach `isDanglingBarePath`, so asserting all three
+	 * together would report the position rule as covered while the case actually
+	 * exercising it was the one that changed mechanism. They are separated below
+	 * so each rule has an anchor that fails for its own reason.
 	 */
-	test("a dangling bare path abstains instead of clearing", () => {
-		for (const input of ["/system/reboot", "/ip/firewall/filter", "/log"]) {
+	test("a dangling bare MENU abstains instead of clearing — the position rule", () => {
+		for (const input of ["/ip/firewall/filter", "/log"]) {
+			expect(isMenuPath(input.replace(/^\//, "").split("/"))).toBe(true);
 			const got = containsWrite(input);
 			expect(got.verdict).toBe("unknown");
 			expect(got.blockers).toHaveLength(1);
 		}
+	});
+
+	/** The same input shape, but a command — refused before position is reached. */
+	test("a dangling bare COMMAND abstains via the menu table, not position", () => {
+		expect(isMenuPath(["system", "reboot"])).toBe(false);
+		const got = containsWrite("/system/reboot");
+		expect(got.verdict).toBe("unknown");
+		expect(got.blockers).toHaveLength(1);
 	});
 
 	/** But a bare MENU path the document goes on to USE is still confirmed navigation. */
