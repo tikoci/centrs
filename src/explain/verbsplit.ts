@@ -310,6 +310,12 @@ export interface VerbSplit {
 	 * ratified envelope's two kinds (`commands/explain/README.md`), so phase 1
 	 * renders them without inventing a third word for the same concept — the
 	 * `navigation` resolution above maps to envelope `resolved` + `kind: "menu"`.
+	 *
+	 * This is **fully derived** from `resolution` and carries no independent
+	 * information: `resolution` says what the analyzer did, `kind` says what the
+	 * statement is. It is kept because it is the envelope's vocabulary and the
+	 * field phase 1 renders, and the mapping is pinned in both directions by a
+	 * test so the two can never drift apart.
 	 */
 	kind: "command" | "menu" | null;
 	/**

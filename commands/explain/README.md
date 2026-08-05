@@ -142,8 +142,12 @@ today's path/verb/args split and script-vs-structured gate:
 - **Fail-closed with an `ambiguous` verdict.** Schema-free analysis has a hard
   floor: a statement that is *nothing but a path* (`/ip/route` is a directory,
   `/system/reboot` is a command, and the text is identical) cannot be resolved
-  by a text rule alone. The canonicalizer must abstain there — a distinct
-  **`ambiguous`** verdict, separate from "unresolved" — rather than guess. Four
+  by a text rule alone. The canonicalizer must abstain wherever nothing but the
+  text is available to decide — a distinct **`ambiguous`** verdict, separate
+  from "unresolved" — rather than guess. Since #210 the baked container floor
+  answers this one pair where it can confirm the path, so the requirement binds
+  on everything the floor does *not* carry, which is most of it; the paragraph
+  below that scopes it is normative, not a footnote. Four
   ratification questions reached this floor independently (Q6 verb/menu
   boundary, Q3 absolute inner paths, Q13 `variable-undefined`, Q14 bare-word
   recovery), so it is a **structural property of schema-free canonicalization**,

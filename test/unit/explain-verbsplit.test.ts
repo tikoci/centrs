@@ -295,6 +295,41 @@ describe("#210 — the container table decides V4's bare path", () => {
 		});
 	});
 
+	test("`kind` is DERIVED from `resolution` and cannot drift from it", () => {
+		// The two fields carry the same fact in two vocabularies: `resolution` says
+		// what the analyzer did, `kind` says what the statement is, and phase 1
+		// renders `kind`. They can therefore never legitimately disagree — so pin
+		// the mapping in both directions rather than leaving two fields free to
+		// diverge, since nothing else would catch it if they did.
+		const inputs = [
+			"/ip/firewall/filter add chain=input",
+			"/ip/address",
+			"/ip firewall filter",
+			"/system/reboot",
+			"/system/script run myscript",
+			':log info "x"',
+			"print",
+			"$dyn",
+			"[find]",
+			"",
+		];
+		const expected = {
+			resolved: "command",
+			navigation: "menu",
+			ambiguous: null,
+			unknown: null,
+		} as const;
+		for (const context of ["/", "/ip/route"])
+			for (const input of inputs) {
+				const got = resolveVerb(input, context);
+				expect({ input, context, kind: got.kind }).toEqual({
+					input,
+					context,
+					kind: expected[got.resolution],
+				});
+			}
+	});
+
 	test("a relative bare path is still `unknown`, never navigation", () => {
 		// The table lookup reads the context-applied candidate, so it would be
 		// correct under a non-root base — but a relative bare-word head is refused
