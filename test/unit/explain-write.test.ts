@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { isMenuPath } from "../../src/explain/menus.ts";
 import {
 	resolveDocument,
 	resolveStatements,
@@ -254,33 +255,54 @@ describe("explain/write — finding 2: fail closed where input is discarded", ()
 	 *
 	 * Measured over the frozen 911-script corpus this moves ZERO documents, so the
 	 * ratified navigation arm's abstention is unchanged.
+	 *
+	 * #207 SPLIT this test, because it had quietly stopped testing one thing.
+	 * `/system/reboot` now abstains upstream, in `isConfirmedNav`, because the
+	 * menu table knows it is a `cmd` — position never gets consulted. Only the
+	 * two genuine MENUS still reach `isDanglingBarePath`, so asserting all three
+	 * together would report the position rule as covered while the case actually
+	 * exercising it was the one that changed mechanism. They are separated below
+	 * so each rule has an anchor that fails for its own reason.
 	 */
-	test("a dangling bare path abstains instead of clearing", () => {
-		for (const input of ["/system/reboot", "/ip/firewall/filter", "/log"]) {
+	test("a dangling bare MENU abstains instead of clearing — the position rule", () => {
+		for (const input of ["/ip/firewall/filter", "/log"]) {
+			expect(isMenuPath(input.replace(/^\//, "").split("/"))).toBe(true);
 			const got = containsWrite(input);
 			expect(got.verdict).toBe("unknown");
 			expect(got.blockers).toHaveLength(1);
 		}
 	});
 
-	/** But a bare path the document goes on to USE is still confirmed navigation. */
-	test("a consumed bare path still clears", () => {
-		expect(containsWrite("/system/reboot\nprint").verdict).toBe("false");
+	/** The same input shape, but a command — refused before position is reached. */
+	test("a dangling bare COMMAND abstains via the menu table, not position", () => {
+		expect(isMenuPath(["system", "reboot"])).toBe(false);
+		const got = containsWrite("/system/reboot");
+		expect(got.verdict).toBe("unknown");
+		expect(got.blockers).toHaveLength(1);
+	});
+
+	/** But a bare MENU path the document goes on to USE is still confirmed navigation. */
+	test("a consumed bare menu path still clears", () => {
 		expect(containsWrite("/ip/firewall/filter\nprint").verdict).toBe("false");
 	});
 
 	/**
-	 * DECLARED RESIDUAL, priced not guessed. A bare-path COMMAND followed only by
-	 * ABSOLUTE statements still clears, because nothing relative ever consumed the
-	 * context it would have established. Closing this too means abstaining
-	 * whenever no later relative statement consumes the context, which was
-	 * measured on the same corpus: +1.4pp dev / +1.9pp holdout abstention across
-	 * 14 documents — and all 14 are genuine directories, i.e. pure precision loss
-	 * on a corpus of working scripts, which structurally cannot contain the
-	 * dangling-command shape. Left as a priced decision rather than taken blind.
+	 * The residual this test used to declare is CLOSED by #207. A bare-path
+	 * COMMAND followed only by ABSOLUTE statements used to clear the document:
+	 * nothing relative ever consumed the context it would have established, so
+	 * `isDanglingBarePath` — a position rule — could not see it, and the old
+	 * shape-based `isConfirmedNav` swallowed `/system/reboot` because it carries
+	 * no hyphen. Closing it was priced at +1.4pp dev / +1.9pp holdout abstention
+	 * *as a position rule*, and was not taken for that reason.
+	 *
+	 * The menu table closes it for free instead, because it answers the question
+	 * position was standing in for: `/system/reboot` is a `cmd`, not a `dir`, so
+	 * it was never navigation whatever follows it. Corpus abstention is unchanged
+	 * (44.8% dev / 46.0% holdout) rather than up 1.4–1.9pp.
 	 */
-	test("DECLARED RESIDUAL: an unconsumed bare path before an absolute statement clears", () => {
-		expect(containsWrite("/system/reboot\n/log print").verdict).toBe("false");
+	test("a bare-path COMMAND abstains even when only absolute statements follow", () => {
+		expect(containsWrite("/system/reboot\n/log print").verdict).toBe("unknown");
+		expect(containsWrite("/system/reboot\nprint").verdict).toBe("unknown");
 	});
 
 	/**

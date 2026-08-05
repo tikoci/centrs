@@ -598,3 +598,20 @@ ipprefix
 octive
 lppp
 lookback
+
+# RouterOS menu vocabulary reached by the explain menu table (#207).
+# The generated table itself (src/explain/menus.ts) is cspell-ignored; these are
+# the terms that also appear in hand-written prose and tests.
+# %cliref: docs-derived RouterOS command reference in rosetta
+#   (experiments/cliref.db). A second opinion on node types, NOT a source for
+#   the menu table: its paths interleave the docs slug with the CLI path.
+cliref
+hotspot
+igmp
+ipfix
+keymat
+pmp
+pptp
+sstp
+wlan
+zerotier
