@@ -73,7 +73,7 @@
  *       operator (`$octive-1`); the tie is broken by the longest prefix that
  *       resolves against the document's OWN declarations.
  *
- * SEVEN behaviors go beyond the lab SUT. None is invented: the probe declared the
+ * EIGHT behaviors go beyond the lab SUT. None is invented: the probe declared the
  * first two and left them unmodeled (it was throwaway and depth-scoped), F2 is
  * required verbatim by the ratified spec — `commands/explain/README.md`, "Symbol
  * scopes follow RouterOS scope identity, not brace depth alone" — and F3/F4 are
@@ -106,7 +106,8 @@
  *       `:/local` all error at the second character and class every later byte
  *       `none` — so it fails closed with `bad-sigil:<offset>` like a malformed
  *       escape. Inside a VALUE a doubled slash is ordinary text (`url=http://…`
- *       and `comment=a//b` are clean), so the check is statement-leading only.
+ *       and `comment=a//b` are clean). F8 extends the same stop past the
+ *       statement lead.
  *   F4  A backslash in CODE is valid only before whitespace; before a newline it
  *       is the H5 CONTINUATION, so the statement head, the pending declaration
  *       and `declaredHere` all survive it. Treating it as a boundary lost
@@ -227,18 +228,46 @@
  *       against the pre-change module shows 4 changed occurrences on dev, all 4
  *       toward the device, none away, none dropped.
  *
+ *   F8  A sigil is a DEFECT in menu-PATH position, not only at the statement
+ *       lead (#201, was the K2 known limit). `/ip//address print` is a hard
+ *       device error exactly like `//local foo 1`, and the walker now stops on
+ *       both. Three device readings fix the shape:
+ *
+ *         - The region ENDS AT THE COMMAND, and the device does not end it at a
+ *           verb. `/ip address zzzz //foo` is as clean as
+ *           `/ip address print //foo`, while `/ip address //foo` — nothing
+ *           having ended the path — errors. So the question is "is this word
+ *           still a submenu?", which `menus.ts` (#207) answers; K2 read it as
+ *           needing parser context that did not exist, when what it needed was
+ *           the baked table.
+ *         - WHICH BYTE errors depends on the sigil. A `/` is a legal separator
+ *           when it is ADJACENT to the segment before it, so a doubled one errors
+ *           on the second (`/ip//address` → offset 4); after a space it is
+ *           already wrong, so `/ip /address` errors on the first (offset 4 too,
+ *           for a different reason). A `:` is never legal in a path and errors on
+ *           itself, doubled or not (`/ip:address` → offset 3).
+ *         - A `:`-spelled head is a scripting directive and opens no path at all
+ *           (`:put //foo`, `:put ::foo`, `:put :/foo` are clean), and so is a
+ *           colon-less head the table does not know (`put //foo`).
+ *
+ *       `menus.ts` being a FLOOR is the safe direction: an unlisted menu closes
+ *       the region and the defect goes unreported, rather than a valid script
+ *       being truncated. Measured that way — 71/73 device rows, **0 false
+ *       positives and 0 wrong offsets** (the 2 remaining are the device's
+ *       SEPARATE "argument before a command" error, which lands on the `=`), and
+ *       over the whole 913-script frozen corpus **no file where this stops and
+ *       the device is clean**. The corpus moves no occurrence at all: the 14
+ *       files it newly stops in are non-RouterOS snippets (YAML, log text) that
+ *       the device already rejects earlier, so they were past a cliff already.
+ *
  * Measured on the frozen split (`.scratch/explain-lab-partition.json`) against
  * the per-occurrence highlight streams for 7.23.2 AND 7.24rc2: **holdout 99.98%
  * precision on decided (6155/6156), 4.25% abstention, 14 missed; dev 99.79%
  * (8733/8751), 5.40%, 34 missed.**
  *
- * TWO KNOWN LIMITS are carried as measured, each pinned by an explicit test and
- * tracked in the lexical-boundary issue (#201) rather than patched here:
+ * ONE KNOWN LIMIT is carried as measured, pinned by an explicit test and tracked
+ * in the lexical-boundary issue (#201) rather than patched here:
  *
- *   K2  The doubled-sigil stop (F5) is statement-leading only. A doubled path
- *       separator MID-statement (`/ip//address print`) is also a hard device
- *       error, but `:put //foo` and `url=//example.com` are valid, so telling
- *       them apart needs parser-context awareness the lexical scan does not have.
  *   K4  A BARE `$name-with-hyphen` reference never carries the hyphen on the
  *       device, whatever the document declared. `:global "set-dns" 1` +
  *       `:put $set-dns` ERRORS at the `-` and reads only `$set`
@@ -257,6 +286,7 @@
  */
 
 import { analyzeCoordinates } from "./coordinates.ts";
+import { isMenuPath } from "./menus.ts";
 import type { Continuation } from "./segment.ts";
 
 /** The five variable classes the console assigns. */
@@ -353,6 +383,9 @@ interface BracketFrame {
 	scope: Scope | null;
 	/** statement-LEADING: its claims are PROMOTED to the enclosing scope (F7). */
 	lead: boolean;
+	/** F8 — the enclosing statement's menu-path state. */
+	pathSegments: string[];
+	pathOpen: boolean;
 }
 
 /**
@@ -438,6 +471,17 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	let pendingLoopVars = false;
 	/** inside a space-separated menu path run, where bare words are `dir` (S16). */
 	let inMenuPath = false;
+	/**
+	 * F8 — the menu-path segments read so far in this statement, and whether the
+	 * console would still be reading the PATH at this point.
+	 *
+	 * Deliberately NOT `inMenuPath`, which answers a different question (is this
+	 * bare word a symbol?) and stays true past the verb to the end of the
+	 * statement. The defect rule needs the narrower region that ENDS at the
+	 * command, so it accumulates segments and asks `menus.ts`.
+	 */
+	let pathSegments: string[] = [];
+	let pathOpen = false;
 	let pendingSetTarget = false;
 	let pendingErrVar = false;
 	/** this statement declared a name, so a `do={` it opens is a closure (F2). */
@@ -497,6 +541,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		headSigil = "";
 		cont = "none";
 		contLineStart = false;
+		pathSegments = [];
+		pathOpen = false;
 	};
 
 	/**
@@ -565,6 +611,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			contLineStart,
 			scope: null,
 			lead,
+			pathSegments,
+			pathOpen,
 		};
 		if (scopes.length >= MAX_SCOPE_DEPTH) {
 			if (!overDepth) {
@@ -614,6 +662,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		headSigil = frame.headSigil;
 		cont = frame.cont;
 		contLineStart = frame.contLineStart;
+		pathSegments = frame.pathSegments;
+		pathOpen = frame.pathOpen;
 	};
 
 	/** Record a `$`-sigilled reference, applying S5/S6/S19. */
@@ -959,6 +1009,26 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				defect = true;
 				break;
 			}
+			// F8 — the same failure MID-statement, now that the walker can tell
+			// path position from the rest. Only inside the path region (see
+			// `pathOpen`), and the offending byte differs by which sigil it is:
+			// a `/` is a legal SEPARATOR when it is adjacent to the segment before
+			// it, so the error lands on the second one; after a space it is already
+			// wrong, so it lands on the first. A `:` is never legal in a path.
+			if (pathOpen && sigilRun > 0) {
+				const adjacent = start > 0 && !/\s/.test(text[start - 1] as string);
+				const at =
+					text[start] === ":" || !adjacent
+						? start
+						: sigilRun > 1
+							? start + 1
+							: -1;
+				if (at >= 0) {
+					notes.push(`bad-sigil:${at}`);
+					defect = true;
+					break;
+				}
+			}
 			if (word === "") continue;
 
 			// A directive head must be at STATEMENT START. `head === null` alone is
@@ -991,6 +1061,17 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				// word inside IS the head, and `[/interface list find …]` started
 				// abstaining on `list`.
 				if (headSigil === "/") inMenuPath = true;
+				// F8 — the DEFECT region opens only on a head the baked menu table
+				// recognizes, whatever its sigil. A `:`-spelled head is a scripting
+				// directive, never a path (`:put //foo` and `:put ::foo` are clean on
+				// the device), and a `/`-spelled head that is not a known menu — the
+				// `/global g 1` form F3 grounds — is a command, not navigation. The
+				// table being a FLOOR is the safe direction here: an unlisted menu
+				// closes the region and the defect simply goes unreported.
+				if (headSigil !== ":" && isMenuPath([lower])) {
+					pathSegments = [lower];
+					pathOpen = true;
+				}
 				if (DECL[lower] !== undefined) pendingDecl = DECL[lower] as SymbolClass;
 				else if (LOOP_HEADS.has(lower)) pendingLoopVars = true;
 				else if (lower === "set") pendingSetTarget = true;
@@ -1002,6 +1083,24 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				// branch never saw a filter word and the region was opened below.
 				else if (FILTER_WORDS.has(lower)) filterDepth = depth;
 				continue;
+			}
+
+			const prevChar = prevNonSpace(text, start);
+			const isValue = prevChar === "=" || prevChar === ",";
+			const sigilled = wordStart > start;
+
+			// F8 — extend or CLOSE the path region. The device ends it at the first
+			// word that is not a known submenu of the path so far, whether or not
+			// that word is a verb: `/ip address zzzz //foo` is clean exactly like
+			// `/ip address print //foo`, while `/ip address //foo` — nothing having
+			// ended the path — is a hard error. An `arg=value` also ends it (the
+			// device rejects an argument before a command outright), which keeps
+			// the `://` inside a `url=` value out of path position no matter how the
+			// menu table reads the words before it.
+			if (pathOpen) {
+				if (isValue || nextNonSpace(text, j) === "=") pathOpen = false;
+				else if (isMenuPath([...pathSegments, lower])) pathSegments.push(lower);
+				else pathOpen = false;
 			}
 
 			// S10 — `:set NAME` is a REFERENCE carrying the class NAME was declared
@@ -1076,10 +1175,6 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				filterDepth = depth;
 				continue;
 			}
-
-			const prevChar = prevNonSpace(text, start);
-			const isValue = prevChar === "=" || prevChar === ",";
-			const sigilled = wordStart > start;
 
 			// S8 — inside a filter/query region EVERY bare identifier is a menu
 			// field, not only the `field=value` form: `[find … !ca (common-name or
