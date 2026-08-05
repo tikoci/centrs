@@ -38,12 +38,14 @@
  *   S1  `:local NAME` declares NAME `local` from the declaration to the end of
  *       the enclosing brace scope; an inner `:local` shadows an outer one. (The
  *       `:` is optional on every head below — see F3.)
- *   S2  `:global NAME` declares NAME `global`, visible for the remainder of
- *       the document regardless of brace nesting.
+ *   S2  `:global NAME` declares NAME `global`. (As ratified this said "visible
+ *       for the remainder of the document regardless of brace nesting"; the
+ *       device disagrees — see F7, which supersedes the extent half of it.)
  *   S3  `:foreach A[,B] in=… do={…}` / `:for I from=… do={…}` declare their
- *       loop variables `auto`.
+ *       loop variables `auto`. (Their EXTENT is F7's statement scope.)
  *   S4  A reference resolves to the nearest enclosing declaration and takes
- *       its class.
+ *       its class. (Within one scope, "nearest" is F7's claim, not the nearest
+ *       preceding declaration.)
  *   S5  `$NAME` with no visible declaration is `parameter` (see above).
  *   S6  `$0`, `$1`, … are `parameter`.
  *   S7  A bare identifier in expression position is NOT asserted `undefined`;
@@ -66,12 +68,12 @@
  *   S15 A bare word right after `=` or `,` is a VALUE.
  *   S16 A bare word continuing a space-separated menu path is a path segment.
  *   S17 `or` / `and` / `not` / `in` are operators, not symbols.
- *   S18 `:onerror NAME` binds NAME `local`.
+ *   S18 `:onerror NAME` binds NAME `local` (in TWO places — see F7).
  *   S19 `-` is both legal inside a name (`$set-dns`) and the subtraction
  *       operator (`$octive-1`); the tie is broken by the longest prefix that
  *       resolves against the document's OWN declarations.
  *
- * SIX behaviors go beyond the lab SUT. None is invented: the probe declared the
+ * SEVEN behaviors go beyond the lab SUT. None is invented: the probe declared the
  * first two and left them unmodeled (it was throwaway and depth-scoped), F2 is
  * required verbatim by the ratified spec — `commands/explain/README.md`, "Symbol
  * scopes follow RouterOS scope identity, not brace depth alone" — and F3/F4 are
@@ -138,16 +140,18 @@
  *       claim K1 carried was measured from a mid-statement bracket and
  *       generalized; CHR 7.23.2 splits them:
  *
- *         - a statement-LEADING `[` is TRANSPARENT. `[:local b 1]` + `:put $b`
- *           reads `local` — the declaration escapes, and so does a `:global`.
- *           "Leading" survives indentation, a preceding `;`, and the lead of a
- *           `do={` body, and it composes: a lead bracket nested in a
- *           mid-statement one escapes INTO that bracket, not past it.
+ *         - a statement-LEADING `[` lets what it declares ESCAPE. `[:local b 1]`
+ *           + `:put $b` reads `local`, and so does a `:global`. "Leading"
+ *           survives indentation, a preceding `;`, and the lead of a `do={`
+ *           body, and it composes: a lead bracket nested in a mid-statement one
+ *           escapes INTO that bracket, not past it. (F6 called this TRANSPARENT.
+ *           F7 corrects the mechanism: the bracket has its own scope and
+ *           PROMOTES it outwards at the `]`. The two are indistinguishable until
+ *           the enclosing scope already claims the name.)
  *         - a MID-statement `[` CONFINES what it declares — `:put [:local b 1]`
  *           + `:put $b` reads `parameter`. Globals are confined too, which is
  *           where K1 was most wrong (`:put [:global g 1]` does NOT escape; only
- *           the statement-leading spelling does), so `bind` writes a global to
- *           the innermost open bracket rather than always to the document.
+ *           the statement-leading spelling does).
  *
  *       Either way the bracket SHARES the enclosing bindings — it is not a
  *       closure — and the `]` RESUMES the interrupted statement instead of
@@ -176,10 +180,57 @@
  *       head-position `find` is device-grounded the same way
  *       (`/ip route<nl>find comment=x` reads `comment` `variable-local`).
  *
+ *   F7  The FIRST declaration written directly in a scope CLAIMS the name for
+ *       that scope (#201, was the K3 known limit). A later redeclaration in the
+ *       same scope binds nothing — its own span still reads its own head's
+ *       class, but every reference keeps the first one's:
+ *
+ *         :global v 1 / :local v 2 / :put $v   ->  the use is GLOBAL
+ *         :local v 1 / :global v 2 / :put $v   ->  the use is LOCAL
+ *
+ *       K3 read the first row as "an earlier `:global` outranks a later
+ *       `:local`". The second row shows it is not a precedence between the
+ *       classes at all. Probing the extent of the real rule overturned three
+ *       more things, all measured on CHR 7.23.2 AND 7.24rc2, which agreed on
+ *       every row of the deciding round:
+ *
+ *         - A `:global` does NOT escape the `{…}` it was written in. S2 as
+ *           ratified says it is visible for the remainder of the document;
+ *           `:if (1=1) do={:global v 1}` + `:put $v` reads PARAMETER. `:global`
+ *           and `:local` have IDENTICAL lexical visibility and differ only in
+ *           the class they emit, so `bind` writes to the current scope and
+ *           nowhere else. This is the only rule here the CORPUS reaches: it
+ *           moved 4 dev occurrences, all onto the device's reading (a `:global`
+ *           re-import inside a named-function body that used to leak out of it).
+ *         - A statement-LEADING `[` PROMOTES rather than being transparent (see
+ *           F6). Promotion is subject to the claim rule, which is the only thing
+ *           that distinguishes the two: with `:global x 1` in force,
+ *           `[:local x 2; :put $x]` reads the in-bracket use LOCAL and the use
+ *           after the `]` GLOBAL.
+ *         - Loop variables (S3) and the `:onerror` error variable (S18) bind in
+ *           a STATEMENT scope that wraps the rest of the statement, body
+ *           included. Neither the enclosing scope nor the body scope can hold
+ *           them: an enclosing claim would swallow the binding (`:global i 1` +
+ *           a loop over `i` still reads `auto` inside the body), and the body's
+ *           own `:local i` has to be able to shadow it. `:onerror` ALSO claims
+ *           the enclosing scope, which a loop variable does not — the device
+ *           reads `$e` after `:onerror e …` as `local` but `$i` after
+ *           `:foreach i …` as `parameter`.
+ *
+ *       The control that made all of this measurable: `request=highlight` is
+ *       purely LEXICAL. Inspecting `:global zzz 1` does not change how a later
+ *       inspect reads `$zzz`, and `/system/script/environment` stays empty
+ *       throughout, so none of these readings are probe-ordering artifacts.
+ *
+ *       Modeling it moved dev precision 99.75% → 99.79% at unchanged abstention
+ *       and unchanged `missed`, with holdout unchanged; a per-offset corpus diff
+ *       against the pre-change module shows 4 changed occurrences on dev, all 4
+ *       toward the device, none away, none dropped.
+ *
  * Measured on the frozen split (`.scratch/explain-lab-partition.json`) against
  * the per-occurrence highlight streams for 7.23.2 AND 7.24rc2: **holdout 99.98%
- * precision on decided (6155/6156), 4.25% abstention, 14 missed; dev 99.75%
- * (8729/8751), 5.40%, 34 missed.**
+ * precision on decided (6155/6156), 4.25% abstention, 14 missed; dev 99.79%
+ * (8733/8751), 5.40%, 34 missed.**
  *
  * TWO KNOWN LIMITS are carried as measured, each pinned by an explicit test and
  * tracked in the lexical-boundary issue (#201) rather than patched here:
@@ -188,15 +239,16 @@
  *       separator MID-statement (`/ip//address print`) is also a hard device
  *       error, but `:put //foo` and `url=//example.com` are valid, so telling
  *       them apart needs parser-context awareness the lexical scan does not have.
- *   K3  An earlier `:global NAME` outranks a LATER `:local NAME` at the same
- *       scope: CHR 7.23.2 reads the trailing use in `:global v 1` + `:local v 2`
- *       + `:put $v` as `variable-global`, where `lookup` takes the nearest
- *       preceding binding and says `local`. Found as the CONTROL case while
- *       probing F6 — it is the reason a `:global`-shadowed name cannot be used
- *       to measure scope extent. Its own extent is not probed (same scope only? a
- *       precedence rule or a rejected redeclaration?), so it is carried rather
- *       than guessed at. (Numbered in the K series, not the S series: `S3` is
- *       already the loop-variable rule above.)
+ *   K4  A BARE `$name-with-hyphen` reference never carries the hyphen on the
+ *       device, whatever the document declared. `:global "set-dns" 1` +
+ *       `:put $set-dns` ERRORS at the `-` and reads only `$set`
+ *       (`variable-parameter`); the quoted spelling `$"set-dns"` is the one that
+ *       resolves. S19 tries the FULL run first and so reports a confident
+ *       `global` where the device errors. Pre-existing — the same rows fail
+ *       identically on the pre-F7 module — and it belongs to S19/S11 rather than
+ *       to scope resolution, so it is carried here and tracked on its own issue.
+ *       (Numbered in the K series, not the S series: `S3` and `S4` are already
+ *       taken by the rules above.)
  *
  * The scan is a single left-to-right pass with an explicit delimiter stack (no
  * recursion, Q17 posture) and never throws; structural surprises land in
@@ -270,7 +322,12 @@ interface Binding {
 interface Scope {
 	/** true for a named-function body: a closure boundary (F2). */
 	closure: boolean;
-	bindings: Map<string, Binding[]>;
+	/**
+	 * At most ONE binding per name: the FIRST declaration written directly in
+	 * this scope CLAIMS the name and no later one in the same scope rebinds it
+	 * (F7).
+	 */
+	bindings: Map<string, Binding>;
 }
 
 /**
@@ -292,10 +349,26 @@ interface BracketFrame {
 	headSigil: ":" | "/" | "";
 	cont: Continuation;
 	contLineStart: boolean;
-	/** the scope this bracket pushed, or null when it is transparent (F6). */
+	/** the scope this bracket pushed, or null when the depth cap refused one. */
 	scope: Scope | null;
-	/** where a `:global` inside this bracket binds (F6). */
-	globalHome: Scope;
+	/** statement-LEADING: its claims are PROMOTED to the enclosing scope (F7). */
+	lead: boolean;
+}
+
+/**
+ * F7 — `:foreach`/`:for` loop variables and the `:onerror` error variable bind
+ * in a scope of their own that wraps the rest of the STATEMENT, body included,
+ * and pops with it.
+ *
+ * Neither the enclosing scope nor the body scope can hold them: an enclosing
+ * claim would swallow the binding (`:global i 1` + a loop over `i` still reads
+ * `auto` inside the body), and the body's own `:local i` has to be able to
+ * shadow it (`:foreach i … do={:local i 9; :put $i}` reads `local`).
+ */
+interface StatementScope {
+	scope: Scope;
+	/** delimiter depth of the binding head; the scope pops at a reset back here. */
+	depth: number;
 }
 
 /** Heads that declare a name in their next word. */
@@ -345,12 +418,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	const scopes: Scope[] = [root];
 	/** F6 — saved statement state per open `[`, innermost last. */
 	const brackets: BracketFrame[] = [];
-	/**
-	 * F6 — where a `:global` binds. Document scope normally (S2), but a
-	 * mid-statement bracket confines its globals just like its locals, so it is
-	 * that bracket's scope while one is open.
-	 */
-	let globalHome: Scope = root;
+	/** F7 — open statement scopes (loop / error variables), innermost last. */
+	const statementScopes: StatementScope[] = [];
 	/** open delimiters, innermost last; `"` is a string frame. */
 	const frames: ("{" | "[" | "(" | '"')[] = [];
 	/** bracket/brace nesting, strings excluded (the S8 filter region uses it). */
@@ -382,7 +451,41 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	/** H5 — at the immediate start of a line the continuation carried into? */
 	let contLineStart = false;
 
+	/**
+	 * F7 — drop every statement scope whose statement cannot still be running at
+	 * the current depth. A reset INSIDE the body (its newlines, its `{`) must not
+	 * take one down, which is why the depth of the binding head is what decides.
+	 */
+	const unwindStatementScopes = (): void => {
+		while (statementScopes.length > 0) {
+			const top = statementScopes[statementScopes.length - 1] as StatementScope;
+			if (top.depth < depth) return;
+			statementScopes.pop();
+			if (scopes[scopes.length - 1] === top.scope) scopes.pop();
+		}
+	};
+
+	/**
+	 * F7 — open the scope a statement binds its own variables in, once per
+	 * statement (`:foreach k,v in=…` shares one).
+	 */
+	const openStatementScope = (at: number): void => {
+		const top = statementScopes[statementScopes.length - 1];
+		if (top !== undefined && top.depth === depth) return;
+		if (scopes.length >= MAX_SCOPE_DEPTH) {
+			if (!overDepth) {
+				overDepth = true;
+				notes.push(`over-depth:${at}`);
+			}
+			return;
+		}
+		const scope: Scope = { closure: false, bindings: new Map() };
+		scopes.push(scope);
+		statementScopes.push({ scope, depth });
+	};
+
 	const resetStatement = (): void => {
+		unwindStatementScopes();
 		head = null;
 		filterDepth = null;
 		inMenuPath = false;
@@ -404,52 +507,48 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	const lookup = (name: string, at: number): Binding | null => {
 		for (let s = scopes.length - 1; s >= 0; s--) {
 			const scope = scopes[s] as Scope;
-			const list = scope.bindings.get(name);
-			if (list !== undefined) {
-				let best: Binding | null = null;
-				for (const b of list)
-					if (b.from <= at && (best === null || b.from > best.from)) best = b;
-				if (best !== null) return best;
-			}
+			const b = scope.bindings.get(name);
+			// A claim that has not been reached yet does not hide the enclosing
+			// binding: in `:global v 1` + `{:put $v; :local v 2; :put $v}` the device
+			// reads the first in-body use `global` and the second `local`.
+			if (b !== undefined && b.from <= at) return b;
 			if (scope.closure) return null;
 		}
 		return null;
 	};
 
-	const bindIn = (
+	/**
+	 * F7 — the FIRST declaration written directly in a scope claims the name.
+	 * Returns false when the scope already had it, which is not an error: the
+	 * declaration's own span still records its own head's class, it just binds
+	 * nothing.
+	 */
+	const claim = (
 		scope: Scope,
 		name: string,
 		cls: SymbolClass,
 		from: number,
-	): void => {
-		const list = scope.bindings.get(name);
-		if (list === undefined) scope.bindings.set(name, [{ cls, from }]);
-		else list.push({ cls, from });
+	): boolean => {
+		if (scope.bindings.has(name)) return false;
+		scope.bindings.set(name, { cls, from });
+		return true;
 	};
 
 	// Case matters: RouterOS variable resolution is CASE-SENSITIVE (`:local
 	// UserName` then `$username` reads `parameter` on the device, not local), so
 	// binding keys are never folded.
+	//
+	// F7 — `:global` and `:local` bind IDENTICALLY: current scope, from here on,
+	// not escaping the enclosing `{…}`. Only the class they emit differs.
 	const bind = (name: string, cls: SymbolClass, from: number): void => {
-		const inner = scopes[scopes.length - 1] as Scope;
-		if (cls !== "global") {
-			bindIn(inner, name, cls, from);
-			return;
-		}
-		// S2 — a global is visible for the rest of the document, so it is recorded
-		// at the document scope no matter where it was written. It is ALSO
-		// recorded in the current scope, which is how an in-body `:global NAME`
-		// re-import stays visible inside a closure that hides the outer one (F2).
-		// `globalHome` IS the document scope unless a mid-statement bracket is
-		// open, which confines a global to itself exactly as it does a local (F6).
-		bindIn(globalHome, name, cls, from);
-		if (inner !== globalHome) bindIn(inner, name, cls, from);
+		claim(scopes[scopes.length - 1] as Scope, name, cls, from);
 	};
 
 	/**
-	 * F6 — enter a `[`. Saves the enclosing statement, opens a nested statement
-	 * context, and pushes a scope only for a MID-statement bracket; a
-	 * statement-LEADING `[` is transparent, so its declarations escape.
+	 * F6/F7 — enter a `[`. Saves the enclosing statement, opens a nested
+	 * statement context, and pushes a scope. EVERY bracket gets one: a
+	 * statement-LEADING bracket differs only in what happens at the `]`, where
+	 * its claims are promoted outwards.
 	 */
 	const openBracket = (lead: boolean, at: number): void => {
 		const frame: BracketFrame = {
@@ -465,36 +564,45 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			cont,
 			contLineStart,
 			scope: null,
-			globalHome,
+			lead,
 		};
-		if (!lead) {
-			if (scopes.length >= MAX_SCOPE_DEPTH) {
-				if (!overDepth) {
-					overDepth = true;
-					notes.push(`over-depth:${at}`);
-				}
-			} else {
-				const scope: Scope = { closure: false, bindings: new Map() };
-				scopes.push(scope);
-				frame.scope = scope;
-				globalHome = scope;
+		if (scopes.length >= MAX_SCOPE_DEPTH) {
+			if (!overDepth) {
+				overDepth = true;
+				notes.push(`over-depth:${at}`);
 			}
+		} else {
+			const scope: Scope = { closure: false, bindings: new Map() };
+			scopes.push(scope);
+			frame.scope = scope;
 		}
 		brackets.push(frame);
 		resetStatement();
 	};
 
 	/**
-	 * F6 — leave a `]`. `atLead` is deliberately NOT restored: the H4 bookkeeping
-	 * already cleared it for this character, and the device agrees that a `]`
-	 * resumes the enclosing statement rather than starting one (`:put [:put 1]
-	 * :local v 1` declares nothing).
+	 * F6/F7 — leave a `]`. `atLead` is deliberately NOT restored: the H4
+	 * bookkeeping already cleared it for this character, and the device agrees
+	 * that a `]` resumes the enclosing statement rather than starting one
+	 * (`:put [:put 1] :local v 1` declares nothing).
 	 */
 	const closeBracket = (): void => {
 		const frame = brackets.pop();
 		if (frame === undefined) return;
-		if (frame.scope !== null && scopes[scopes.length - 1] === frame.scope)
+		if (frame.scope !== null && scopes[scopes.length - 1] === frame.scope) {
 			scopes.pop();
+			// F7 — a statement-LEADING bracket runs at the enclosing level, so what
+			// it declared escapes: each claim is re-offered outwards, and the claim
+			// rule decides. A name the enclosing scope already holds keeps its
+			// class, which is the whole lead-vs-mid difference once a conflict
+			// exists (`:global x 1` + `[:local x 2; :put $x]` reads the in-bracket
+			// use `local` and the one after the `]` `global`).
+			if (frame.lead) {
+				const outer = scopes[scopes.length - 1] as Scope;
+				for (const [name, b] of frame.scope.bindings)
+					claim(outer, name, b.cls, b.from);
+			}
+		}
 		head = frame.head;
 		filterDepth = frame.filterDepth;
 		inMenuPath = frame.inMenuPath;
@@ -506,7 +614,6 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		headSigil = frame.headSigil;
 		cont = frame.cont;
 		contLineStart = frame.contLineStart;
-		globalHome = frame.globalHome;
 	};
 
 	/** Record a `$`-sigilled reference, applying S5/S6/S19. */
@@ -762,6 +869,10 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		}
 		if (c === "}" || c === "]" || c === ")") {
 			const want = c === "}" ? "{" : c === "]" ? "[" : "(";
+			// F7 — a statement scope opened INSIDE this delimiter ends with it, and
+			// it sits above the scope this close is about to pop, so it comes down
+			// first. `depth` is still the inner value here (it decrements below).
+			if (frames[frames.length - 1] === want) unwindStatementScopes();
 			if (frames[frames.length - 1] !== want) {
 				// A mismatched close is not a close: popping it would unwind a real
 				// enclosing scope and drop its bindings early. `segment.ts` takes the
@@ -898,6 +1009,17 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			// S18 — the error variable of `:onerror NAME {…}`.
 			if (pendingErrVar) {
 				pendingErrVar = false;
+				// F7 — it binds TWICE, and the two are separable on the device: a
+				// statement scope makes it `local` inside the body even when the
+				// enclosing scope already claims the name (`:global e 1` + `:onerror
+				// e … do={:put $e}` reads the use `local`), while a claim on the
+				// enclosing scope is what keeps it visible AFTER the statement
+				// (`:onerror e …` + `:put $e` reads `local`, where the same shape
+				// with a loop variable reads `parameter`). Order matters: the claim
+				// is offered to the ENCLOSING scope, before the statement scope
+				// exists.
+				claim(scopes[scopes.length - 1] as Scope, word, "local", wordStart);
+				openStatementScope(wordStart);
 				bind(word, "local", wordStart);
 				record(wordStart, j, word, "local", true);
 				continue;
@@ -919,6 +1041,9 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					pendingLoopVars = false;
 					continue;
 				}
+				// F7 — loop variables get a scope of their own, wrapping the rest of
+				// the statement including its body.
+				openStatementScope(wordStart);
 				bind(word, "auto", wordStart);
 				record(wordStart, j, word, "auto", true);
 				continue;
