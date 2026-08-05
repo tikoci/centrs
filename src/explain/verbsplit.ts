@@ -63,6 +63,7 @@
 import { scopeBodies } from "./blocks.ts";
 import { isMenuPath } from "./menus.ts";
 import { resolveStatements } from "./pathresolve.ts";
+import { SUBMENU_DIRECTIVES, VERBS } from "./verbs.ts";
 
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
@@ -96,39 +97,11 @@ function asciiWords(text: string): string[] {
 }
 
 /**
- * Root menus idiomatically written with a `:` sigil that take a SUB-MENU rather
- * than a positional operand. Measured, not guessed: over the frozen dev split,
- * directive statements with a 2+ token run split 2,088 at run[0] against 18 at
- * run[1], and every one of the 18 is `:log <level>`. `log` has been a root
- * directory since 7.9.2 (checked against the 7.9.2 / 7.20.8 / 7.23rc1 trees),
- * so the exception is version-stable. It is one word, not a schema — a second
- * entry would mean decision 3's fixed-vocabulary claim needs re-examining.
+ * The frozen vocabulary lives in the leaf `verbs.ts` because `pathresolve.ts`
+ * needs it too (R9, #211) and this module already imports that one. Re-exported
+ * here so the vocabulary still reads as part of the Q6 surface.
  */
-export const SUBMENU_DIRECTIVES: ReadonlySet<string> = new Set(["log"]);
-
-/**
- * FROZEN universal-verb vocabulary: thirteen console CRUD verbs that exist at
- * essentially every configuration menu and have not changed across 7.x. This is
- * deliberately NOT a schema — no menu structure, no per-menu verb list, no
- * version. Do not tune it against scoring output; the whole point is to price a
- * fixed list honestly (it is what ratifies decision 3, "no offline schema
- * snapshot").
- */
-export const VERBS: ReadonlySet<string> = new Set([
-	"add",
-	"comment",
-	"disable",
-	"edit",
-	"enable",
-	"export",
-	"find",
-	"get",
-	"move",
-	"print",
-	"remove",
-	"set",
-	"unset",
-]);
+export { SUBMENU_DIRECTIVES, VERBS } from "./verbs.ts";
 
 /** Separator that precedes a run token (V1). */
 export type Sep = "start" | "slash" | "space";

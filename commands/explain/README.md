@@ -562,12 +562,28 @@ nor across the 104 paths this rule flips. The residual is the right residual:
 `/ip fire conn` stay `ambiguous`, because the table is a floor and absence from
 it is not evidence of a command.
 
-What remains is the *other* half of the seam, filed as #211: `pathresolve.ts`
-still claims **every** `/`-led bare path is navigation, so it reports
-`/system/reboot` as a menu and resolves a following `print` to the fabricated
-`/system/reboot/print` — and on 34 dev / 13 holdout statements it directly
-contradicts `verbsplit`, which resolves the same text as a verb. That
-contradiction becomes user-visible in #202, which renders per-statement output.
+**The contradicting half of that seam is closed too (#211 B1).**
+`pathresolve.ts` claimed **every** `/`-led bare path was navigation, with no
+check that the path is a menu, so `/ip address print` navigated to the
+non-existent `/ip/address/print` while `verbsplit` read the identical text as
+verb `print` at `/ip/address` — two promoted modules, contradictory answers,
+34 dev / 13 holdout statements, `verbsplit` right in every one. `menuNavPath`
+now consults the same frozen `VERBS` set (R9), which takes those statements to
+**0 dev / 0 holdout** at no abstention cost: they were already decided, just
+decided wrongly. The vocabulary moved to the leaf `verbs.ts` so both modules
+share one object and cannot drift apart, and the invariant — a
+`verbsplit`-`resolved` statement is never `isNav` — is pinned in
+`test/unit/explain-pathresolve.test.ts` alongside R9's premise: no path in the
+generated `MENU_PATHS` table carries a verb segment. That premise is scoped to
+the table, not to RouterOS — `menus.ts` is a floor, so it cannot rule out an
+unlisted menu named `.../print`, which R9 would read as a command.
+
+R9 leaves the harder half open (**#211 B2**): a bare path with *no* verb
+(`/system/reboot`, `/quit`, `/terminal/cuu`) is still read as navigation and
+still cascades, because the table is a floor and absence from it is not
+evidence of a command. The remaining fabrication is pinned as a KNOWN LIMIT
+fixture rather than assumed closed. The contradiction that #202 would have
+rendered is gone.
 
 **Importability was also measured, and is a weaker, narrower result than it
 first appears (#203 deliverable 4).** On CHR, none of the six root `/export`

@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { MENU_PATHS } from "../../src/explain/menus.ts";
 import {
 	resolveDocument,
 	resolveStatements,
 } from "../../src/explain/pathresolve.ts";
+import { VERBS } from "../../src/explain/verbs.ts";
+import { resolveVerbs } from "../../src/explain/verbsplit.ts";
 import * as centrs from "../../src/index.ts";
 
 /**
@@ -480,6 +483,85 @@ describe("Q14 C3b — a lost context poisons dependent statements", () => {
 		).statements;
 		expect(res.every((s) => s.contextCertain)).toBe(true);
 		expect(res.some((s) => s.unresolved !== undefined)).toBe(false);
+	});
+});
+
+/**
+ * R9 (#211 B1) — the two promoted modules may not answer the same statement
+ * differently. `pathresolve` used to call every `/`-led bare path navigation, so
+ * `/ip address print` was a navigation to the non-existent `/ip/address/print`
+ * while `verbsplit` read the identical text as verb `print` at `/ip/address`:
+ * 34 dev / 13 holdout statements on the frozen partition, `verbsplit` right in
+ * every one. The seam is closed by both modules consulting one `VERBS` object,
+ * so what is pinned here is the PROPERTY, not the sample.
+ */
+describe("R9 — pathresolve and verbsplit cannot contradict each other", () => {
+	test("a statement verbsplit RESOLVES to a verb is never navigation", () => {
+		const texts = [
+			"/ip address print",
+			"/ip/address/print",
+			"/system device-mode print",
+			"/routing route print detail",
+			"/app disable myapp",
+			"/disk print detail",
+			"/interface lte export",
+			"/ip hotspot user remove a",
+			"/ip cloud back-to-home-file print",
+		];
+		for (const text of texts) {
+			const split = resolveVerbs(text).splits[0];
+			const stmt = resolveStatements(text).statements[0];
+			expect(split?.resolution).toBe("resolved");
+			expect(stmt?.isNav).toBe(false);
+			// …and the two agree on where the menu ends: pathresolve's `path` is the
+			// greedy menu-AND-verb reading, so the split's menu is one of its
+			// candidates, and the verb is the segment that follows it.
+			expect(stmt?.candidates).toContain(split?.path as string);
+		}
+	});
+
+	test("a statement verbsplit calls NAVIGATION is navigation here too", () => {
+		for (const text of ["/ip address", "/system script", "/interface bridge"]) {
+			expect(resolveVerbs(text).splits[0]?.resolution).toBe("navigation");
+			expect(resolveStatements(text).statements[0]?.isNav).toBe(true);
+		}
+	});
+
+	test("no path in the generated table carries a verb segment", () => {
+		// R9's premise, stated at the scope it is actually checked. If a menu were
+		// named `.../print`, R9 would refuse to navigate into it. Asserted over the
+		// whole generated table so a regeneration that introduced one fails here —
+		// which is a claim about `MENU_PATHS`, not about RouterOS: the table is a
+		// floor (#207), so this cannot rule out an unlisted menu of that shape.
+		const offenders = [...MENU_PATHS].filter((path) =>
+			path
+				.split("/")
+				.filter(Boolean)
+				.some((segment) => VERBS.has(segment)),
+		);
+		expect(offenders).toEqual([]);
+	});
+
+	test("the verb lookup is the SAME object on both sides of the seam", () => {
+		// Two copies of the vocabulary could drift apart and re-open the seam, so
+		// `verbs.ts` is a shared leaf and `verbsplit` merely re-exports it.
+		expect(centrs.VERBS).toBe(VERBS);
+	});
+
+	test("KNOWN LIMIT (#211 B2) — a verb-free bare path is still read as navigation", () => {
+		// R9 only removes the statements the frozen vocabulary already decided.
+		// `reboot` is not a verb and `MENU_PATHS` is a floor, so offline still
+		// claims navigation into a menu that does not exist and cascades. Pinned
+		// so the remaining limit stays visible rather than being quietly assumed
+		// closed by R9.
+		const stmts = resolveStatements(
+			"/ip route\n/system reboot\nadd x=1",
+		).statements;
+		expect(stmts[1]?.isNav).toBe(true);
+		expect(resolveVerbs("/system reboot").splits[0]?.resolution).toBe(
+			"ambiguous",
+		);
+		expect(stmts[2]?.path).toBe("/system/reboot/add");
 	});
 });
 
