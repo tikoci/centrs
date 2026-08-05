@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
 	isScopeBrace,
+	matchBrace,
 	SCOPE_ARG_NAMES,
 	scopeBlocks,
 	scopeBodies,
@@ -94,6 +95,15 @@ test("a `#`-comment `}` does not truncate a scope body", () => {
 	const bodies = scopeBodies(":do {\n# }\n:put 1\n}");
 	expect(bodies).toHaveLength(1);
 	expect(bodies[0]).toBe("\n# }\n:put 1\n");
+});
+
+test("a `}` inside a substitution's nested string does not truncate a body", () => {
+	// #199 — the `}` sits in the string that `$[…]` opens INSIDE the outer
+	// string, so it is not a brace at all. The pre-fix scanner stopped at the
+	// first nested `"`, read `}` as code, and cut the body there.
+	const text = ':if (true) do={ :put "$[:pick "}" 0 1]"; :put 2 }';
+	expect(scopeBodies(text)).toEqual([' :put "$[:pick "}" 0 1]"; :put 2 ']);
+	expect(matchBrace(text, text.indexOf("do={") + 3)).toBe(text.length - 1);
 });
 
 test("a non-identifier second token is not an :onerror error variable", () => {
