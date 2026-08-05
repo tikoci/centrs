@@ -325,8 +325,10 @@ export {
 } from "./explain/pathresolve.ts";
 export {
 	maskComments,
+	type QuotedStringScan,
 	type Segment,
 	type SegmentResult,
+	scanQuotedString,
 	segmentStatements,
 } from "./explain/segment.ts";
 export {

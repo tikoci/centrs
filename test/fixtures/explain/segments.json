@@ -670,6 +670,85 @@
 				"comments": [],
 				"notes": ["unclosed:{"]
 			}
+		},
+		{
+			"name": "substitution-in-string-does-not-swallow-the-next-comment",
+			"input": ":local a \"$[[:parse \"(\\\"x\\\")\"]]\"\n# :put $a\n:put $a",
+			"expect": [":local a \"$[[:parse \"(\\\"x\\\")\"]]\"", ":put $a"],
+			"notes": [],
+			"verified": "CHR 7.23.2 /console/inspect request=highlight: the whole `# :put $a` line is `comment` and both `$a` are `variable-local` — the device closes the nested string inside the substitution and returns to the outer string (#199).",
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 32,
+						"terminator": "newline",
+						"menuOnly": false
+					},
+					{
+						"start": 43,
+						"end": 50,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [
+					{
+						"start": 33,
+						"end": 42
+					}
+				],
+				"notes": []
+			}
+		},
+		{
+			"name": "nested-string-inside-a-substitution-is-one-statement",
+			"input": ":local tmpHex \"$[:pick \"0123456789ABCDEF\" $x ($x+1)]\"\n:put $tmpHex",
+			"expect": [
+				":local tmpHex \"$[:pick \"0123456789ABCDEF\" $x ($x+1)]\"",
+				":put $tmpHex"
+			],
+			"notes": [],
+			"verified": "CHR 7.23.2 highlight (corpus forum/rextended/topic-151033-post-0056-snippet-01.rsc): `\"$[` and the inner `\"` are `syntax-meta`, `:pick` is `dir`+`cmd`, `0123456789ABCDEF` is string content, and `)]\"` closes the ONE outer string.",
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 53,
+						"terminator": "newline",
+						"menuOnly": false
+					},
+					{
+						"start": 54,
+						"end": 66,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": []
+			}
+		},
+		{
+			"name": "escaped-quote-inside-a-substitution-is-a-device-error",
+			"input": ":log info \"TX=$[:pick ($result->\\\"tx-current\\\") 0 10]\"\n:put 1",
+			"expect": [
+				":log info \"TX=$[:pick ($result->\\\"tx-current\\\") 0 10]\"\n:put 1"
+			],
+			"notes": ["unterminated-string"],
+			"verified": "CHR 7.23.2 highlight (corpus forum/bandwidth-test.rsc): inside `$[…]` the `\\` is classed `error` and every later byte `none` — a substitution body is CODE, where `\\\"` is not an escape. The segmenter fails closed with `unterminated-string` instead of reporting confident statements past a byte the console never crossed.",
+			"golden": {
+				"segments": [
+					{
+						"start": 0,
+						"end": 61,
+						"terminator": "eof",
+						"menuOnly": false
+					}
+				],
+				"comments": [],
+				"notes": ["unterminated-string"]
+			}
 		}
 	]
 }

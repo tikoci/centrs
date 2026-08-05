@@ -4,7 +4,12 @@ import {
 	analyzeCoordinates,
 	byteToPosition,
 } from "../../src/explain/coordinates.ts";
-import { type Segment, segmentStatements } from "../../src/explain/segment.ts";
+import {
+	maskComments,
+	type Segment,
+	scanQuotedString,
+	segmentStatements,
+} from "../../src/explain/segment.ts";
 import * as centrs from "../../src/index.ts";
 
 /**
@@ -247,4 +252,69 @@ test("adversarial shape families stay deterministic with ordered, bounded spans"
 
 test("segmenter is re-exported from the library barrel", () => {
 	expect(centrs.segmentStatements).toBe(segmentStatements);
+	expect(centrs.maskComments).toBe(maskComments);
+	expect(centrs.scanQuotedString).toBe(scanQuotedString);
+});
+
+/**
+ * `scanQuotedString` — the one shared string skip (#199). Before it, every
+ * structural scan stopped at the next `"`, so a `$[…]` substitution carrying a
+ * nested string flipped the quote phase and every later `#` line read as string
+ * content. Measured on the frozen 913-script corpus against the CHR 7.23.2
+ * per-byte highlight streams: 7 files / 2,184 device-`comment` bytes left
+ * unmasked before, 0 after.
+ */
+describe("scanQuotedString — substitution frames inside a string", () => {
+	const at = (text: string): ReturnType<typeof scanQuotedString> =>
+		scanQuotedString(text, text.indexOf('"'));
+
+	test("a plain string ends at its closing quote", () => {
+		const t = ':put "abc" ;';
+		expect(at(t)).toEqual({ end: t.indexOf('"') + 5, closed: true });
+	});
+
+	test("an escaped quote does not close the string", () => {
+		const t = ':put "a\\"b"';
+		expect(at(t).closed).toBeTrue();
+		expect(t.slice(t.indexOf('"'), at(t).end)).toBe('"a\\"b"');
+	});
+
+	test("a nested string inside `$[…]` does not close the outer string", () => {
+		// CHR 7.23.2 highlight: `"$[` and the inner quotes are `syntax-meta`,
+		// `:pick` is `dir`+`cmd`, and `)]"` closes the ONE outer string.
+		const t = ':local h "$[:pick "0123456789ABCDEF" $x ($x+1)]" ;';
+		expect(t.slice(t.indexOf('"'), at(t).end)).toBe(
+			'"$[:pick "0123456789ABCDEF" $x ($x+1)]"',
+		);
+	});
+
+	test("`$(…)` opens a substitution frame the same way", () => {
+		const t = ':put "$(:pick "ab" 0 1)" ;';
+		expect(t.slice(t.indexOf('"'), at(t).end)).toBe('"$(:pick "ab" 0 1)"');
+	});
+
+	test("`$` before anything else is ordinary string content", () => {
+		const t = ':put "cost $x" ;';
+		expect(t.slice(t.indexOf('"'), at(t).end)).toBe('"cost $x"');
+	});
+
+	test("nesting is iterative — deep input cannot overflow the stack", () => {
+		const t = `"${'$[":x '.repeat(20_000)}`;
+		expect(() => scanQuotedString(t, 0)).not.toThrow();
+		expect(scanQuotedString(t, 0)).toEqual({ end: t.length, closed: false });
+	});
+
+	test("an unterminated string reports the end of input", () => {
+		expect(scanQuotedString('"abc', 0)).toEqual({ end: 4, closed: false });
+	});
+
+	test("maskComments keeps a comment after a substitution string", () => {
+		// The #199 repro. The device classes the whole `# :put $a` line `comment`.
+		const t = ':local a "$[[:parse "(\\"x\\")"]]"\n# :put $a\n:put $a';
+		const masked = maskComments(t);
+		expect(masked).toHaveLength(t.length);
+		expect(masked.slice(33, 42)).toBe(" ".repeat(9));
+		expect(masked.slice(0, 32)).toBe(t.slice(0, 32));
+		expect(maskComments(masked)).toBe(masked);
+	});
 });

@@ -17,9 +17,15 @@
  * primitives the path resolver needs. The recursive block *tree* / topology
  * surface stays in the lab until it can be promoted with a bounded, index-based
  * traversal of its own.
+ *
+ * Every string skip here goes through `segment.ts`'s `scanQuotedString` rather
+ * than a local quote-to-quote loop, so this module and the segmenter cannot
+ * drift on where a string ends: a `}` inside the nested string of a `$[…]`
+ * substitution is not a brace, and reading it as one truncated the scope body
+ * (#199).
  */
 
-import { maskComments } from "./segment.ts";
+import { maskComments, scanQuotedString } from "./segment.ts";
 
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
 
@@ -146,9 +152,7 @@ export function scopeBlocks(text: string): ScopeBlock[] {
 	for (let i = 0; i < masked.length; i++) {
 		const c = masked[i];
 		if (c === '"') {
-			i++;
-			while (i < masked.length && masked[i] !== '"')
-				i += masked[i] === "\\" ? 2 : 1;
+			i = scanQuotedString(masked, i).end - 1;
 			continue;
 		}
 		if (c === "[" || c === "(") depth++;
@@ -178,9 +182,7 @@ function matchBraceInMasked(masked: string, open: number): number {
 	for (let i = open; i < masked.length; i++) {
 		const c = masked[i];
 		if (c === '"') {
-			i++;
-			while (i < masked.length && masked[i] !== '"')
-				i += masked[i] === "\\" ? 2 : 1;
+			i = scanQuotedString(masked, i).end - 1;
 			continue;
 		}
 		if (c === "{") depth++;

@@ -22,7 +22,10 @@
  *       continues the statement.
  *   H3  `"` opens a string; `\` escapes the next char inside it; a string
  *       suppresses every separator and depth character. RouterOS has no
- *       single-quote string form, so `'` is an ordinary character.
+ *       single-quote string form, so `'` is an ordinary character. A string is
+ *       not opaque to the NEXT quote, though: a `$[…]`/`$(…)` substitution
+ *       inside it is code that may carry strings of its own, so where a string
+ *       ends is decided by the one shared `scanQuotedString` (#199).
  *   H4  `#` starts a comment ONLY in statement-leading position (start of
  *       input, or the first non-space after `;`, a newline, or an opening `{`),
  *       runs to end of line, and produces no statement. Recognized at every
@@ -91,6 +94,78 @@ export interface SegmentResult {
 
 const isSpace = (c: string): boolean => c === " " || c === "\t" || c === "\r";
 
+/** Where a double-quoted string ends, and whether it was closed at all. */
+export interface QuotedStringScan {
+	/** index just past the closing `"`, or `text.length` when unterminated. */
+	end: number;
+	closed: boolean;
+}
+
+/**
+ * Find the end of the double-quoted string that opens at `open` (H3).
+ *
+ * The one shared string skip for every structural scan in `explain`. A string is
+ * NOT opaque up to the next `"`: a `$[…]` or `$(…)` substitution inside it is
+ * CODE, and that code may open strings of its own —
+ * `:local a "$[[:parse "(\"x\")"]]"` is ONE string on the device (CHR 7.23.2
+ * `/console/inspect request=highlight` classes the following `#` line `comment`
+ * and both `$a` occurrences `variable-local`). A scanner that stops at the first
+ * nested `"` flips its quote phase and reads every later comment as string
+ * content; on the frozen 913-script corpus that hid 2,184 device-`comment` bytes
+ * across 7 files, and cost `symbols.ts` 3.1 points of precision before it grew
+ * the frame model this function now shares (#198/#199).
+ *
+ * Frames mirror `symbols.ts`: a `"` frame is string phase (`\` escapes the next
+ * character, `$[`/`$(` push a code frame), anything else is code phase (`"`
+ * opens a nested string, brackets nest, a mismatched close is content rather
+ * than a close — the same line `segment.ts` and `symbols.ts` take elsewhere).
+ * Iterative, so deeply nested input cannot overflow the stack. Escapes and
+ * comments inside the substitution are NOT interpreted here: the whole string,
+ * substitutions included, stays opaque to the caller — only its END moves.
+ */
+export function scanQuotedString(text: string, open: number): QuotedStringScan {
+	const frames: string[] = ['"'];
+	let i = open + 1;
+	while (i < text.length) {
+		const top = frames[frames.length - 1] as string;
+		const c = text[i] as string;
+		if (top === '"') {
+			if (c === "\\") {
+				i += 2;
+				continue;
+			}
+			if (c === '"') {
+				frames.pop();
+				i++;
+				if (frames.length === 0) return { end: i, closed: true };
+				continue;
+			}
+			// `$"…"` is NOT a quoted name inside a string (the device closes the
+			// string on that quote), so only the bracket forms open code.
+			if (c === "$" && (text[i + 1] === "[" || text[i + 1] === "(")) {
+				frames.push(text[i + 1] as string);
+				i += 2;
+				continue;
+			}
+			i++;
+			continue;
+		}
+		if (c === '"' || c === "[" || c === "(" || c === "{") {
+			frames.push(c);
+			i++;
+			continue;
+		}
+		if (c === "]" || c === ")" || c === "}") {
+			const want = c === "]" ? "[" : c === ")" ? "(" : "{";
+			if (top === want) frames.pop();
+			i++;
+			continue;
+		}
+		i++;
+	}
+	return { end: text.length, closed: false };
+}
+
 /**
  * Blank out RouterOS comments so a later delimiter re-scan cannot be fooled by
  * `#` text (a `}` or `[` inside a comment is not a real delimiter). A `#` starts
@@ -107,9 +182,7 @@ export function maskComments(original: string): string {
 		const c = original[i];
 		if (c === '"') {
 			atLead = false;
-			i++;
-			while (i < original.length && original[i] !== '"')
-				i += original[i] === "\\" ? 2 : 1;
+			i = scanQuotedString(original, i).end - 1;
 			continue; // i rests on the closing quote (or past end)
 		}
 		if (c === "#" && atLead) {
@@ -408,21 +481,9 @@ function scanAscii(ascii: string): {
 		if (c === '"') {
 			ensureStmt(f, i);
 			f.atLead = false;
-			i++;
-			let closed = false;
-			while (i < ascii.length) {
-				if (ascii[i] === "\\") {
-					i += 2;
-					continue;
-				}
-				if (ascii[i] === '"') {
-					i++;
-					closed = true;
-					break;
-				}
-				i++;
-			}
-			if (!closed) notes.push("unterminated-string");
+			const str = scanQuotedString(ascii, i);
+			i = str.end;
+			if (!str.closed) notes.push("unterminated-string");
 			continue;
 		}
 

@@ -500,10 +500,13 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 
 		// --- comments: `#` in statement-leading position (Q1 rule H4) ------------
 		//
-		// Done inline rather than through `segment.ts`'s shared `maskComments`,
-		// which is blind to F1: a `$[…]` carrying a nested string flips its quote
-		// phase, and every later `#` line then reads as string content (the device
-		// says `comment`). Pre-masking measured 98.50% dev where this reads 99.59%.
+		// Done inline rather than through `segment.ts`'s shared `maskComments`:
+		// this walk needs the substitution's code CLASSIFIED, not skipped, and it
+		// already carries the frame stack for that. Pre-masking measured 98.50% dev
+		// where this reads 99.59% — the F1 defect behind that gap (a `$[…]` with a
+		// nested string flipping the quote phase, so every later `#` line read as
+		// string content) is now fixed in the shared scanner too, via the same
+		// frame model (#199); the two must stay in step.
 		if (c === "#" && atLead) {
 			while (i < text.length && text[i] !== "\n") i++;
 			atLead = true;

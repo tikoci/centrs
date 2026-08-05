@@ -86,7 +86,11 @@
  */
 
 import { isScopeBrace, scopeBodies } from "./blocks.ts";
-import { maskComments, segmentStatements } from "./segment.ts";
+import {
+	maskComments,
+	scanQuotedString,
+	segmentStatements,
+} from "./segment.ts";
 import { VERBS } from "./verbs.ts";
 
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
@@ -168,20 +172,9 @@ function structuralDefect(text: string): boolean {
 	for (let i = 0; i < masked.length; i++) {
 		const c = masked[i];
 		if (c === '"') {
-			i++;
-			let closed = false;
-			while (i < masked.length) {
-				if (masked[i] === "\\") {
-					i += 2;
-					continue;
-				}
-				if (masked[i] === '"') {
-					closed = true;
-					break;
-				}
-				i++;
-			}
-			if (!closed) return true;
+			const str = scanQuotedString(masked, i);
+			if (!str.closed) return true;
+			i = str.end - 1;
 			continue;
 		}
 		if (c === "(" || c === "[" || c === "{") stack.push(c);
@@ -796,11 +789,15 @@ function collectBrackets(
 	}
 }
 
-/** Index of the closing quote of the string starting at `open`. */
+/**
+ * Index of the closing quote of the string starting at `open`. Delegates to the
+ * shared `scanQuotedString`, so a `$[…]` substitution carrying its own string
+ * does not end the outer one early and cut `scanInterpolations`' body short
+ * (#199).
+ */
 function stringEnd(text: string, open: number): number {
-	let i = open + 1;
-	while (i < text.length && text[i] !== '"') i += text[i] === "\\" ? 2 : 1;
-	return Math.min(i, text.length);
+	const str = scanQuotedString(text, open);
+	return str.closed ? str.end - 1 : text.length;
 }
 
 /** `$[ … ]` command substitutions inside a string body. */
@@ -993,8 +990,7 @@ function matchDelim(
 	for (let i = start; i < text.length; i++) {
 		const c = text[i];
 		if (c === '"') {
-			i++;
-			while (i < text.length && text[i] !== '"') i += text[i] === "\\" ? 2 : 1;
+			i = scanQuotedString(text, i).end - 1;
 			continue;
 		}
 		if (c === open) depth++;
