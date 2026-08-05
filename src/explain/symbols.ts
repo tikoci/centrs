@@ -116,7 +116,11 @@
  *       `do=\{` as a closure. `escapeKind` is shared with the `do=` lookback on
  *       purpose: `do=\ {`, `do=\<tab>{` and `do=\<nl>{` are all `do={` on the
  *       device, and a scan that accepted an escape the lookback did not would
- *       silently stop treating the body as a closure.
+ *       silently stop treating the body as a closure. The continuation reaches
+ *       past its own line — blank lines and an IMMEDIATE `#` comment line keep
+ *       the statement pending, and statement-leading position survives both — so
+ *       the walker carries the `Continuation` state `segment.ts` defines, in the
+ *       same shape as the two scanners there (#215).
  *   F2  A NAMED-FUNCTION body (`:local`/`:global NAME do={…}`) is a CLOSURE:
  *       outer names read `parameter` inside it, and a global needs an in-body
  *       `:global NAME` re-import to read `global`. A control-flow `do={…}`
@@ -158,6 +162,7 @@
  */
 
 import { analyzeCoordinates } from "./coordinates.ts";
+import type { Continuation } from "./segment.ts";
 
 /** The five variable classes the console assigns. */
 export type SymbolClass =
@@ -296,6 +301,10 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	let headSigil: ":" | "/" | "" = "";
 	/** H4 — still before the first real token of the current statement? */
 	let atLead = true;
+	/** H5 — how far the pending `\<newline>` continuation still reaches (#215). */
+	let cont: Continuation = "none";
+	/** H5 — at the immediate start of a line the continuation carried into? */
+	let contLineStart = false;
 
 	const resetStatement = (): void => {
 		head = null;
@@ -307,6 +316,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		pendingLoopVars = false;
 		declaredHere = false;
 		headSigil = "";
+		cont = "none";
+		contLineStart = false;
 	};
 
 	/**
@@ -469,6 +480,26 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			continue;
 		}
 
+		// H5 continuation reach (#215) — decided BEFORE the bookkeeping below, so an
+		// indented `#` mid-continuation stays content. See `Continuation`.
+		const inCont = cont !== "none";
+		const contComment = c === "#" && inCont && contLineStart;
+		if (inCont && !contComment) {
+			if (c === " " || c === "\t" || c === "\r") {
+				contLineStart = false;
+			} else if (c === "\n" && cont === "escape") {
+				// A blank line inside the `\` run is still the run: the statement, its
+				// head and its pending declaration all survive it.
+				contLineStart = true;
+				continue;
+			} else {
+				// Real content, or the blank line that spends a comment run's reach —
+				// which then ends the statement in the newline branch below.
+				cont = "none";
+				contLineStart = false;
+			}
+		}
+
 		// --- H5 line continuation and escape validity ---------------------------
 		//
 		// In CODE a backslash is valid ONLY before whitespace (CHR 7.23.2:
@@ -486,6 +517,10 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		if (c === "\\") {
 			const kind = escapeKind(text, i);
 			if (kind === "continuation") {
+				// `atLead` survives: on CHR 7.23.3 `do={\` + newline + `:local x 1`
+				// still reads `:local` as the head and declares `x` (#215).
+				cont = "escape";
+				contLineStart = true;
 				i += text[i + 1] === "\r" ? 2 : 1;
 				continue;
 			}
@@ -507,10 +542,18 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		// nested string flipping the quote phase, so every later `#` line read as
 		// string content) is now fixed in the shared scanner too, via the same
 		// frame model (#199); the two must stay in step.
-		if (c === "#" && atLead) {
+		if (c === "#" && (atLead || contComment)) {
 			while (i < text.length && text[i] !== "\n") i++;
-			atLead = true;
-			resetStatement();
+			if (contComment) {
+				// H5 — the comment line does not end the statement: the head, the
+				// pending declaration and `declaredHere` all survive it. The loop's
+				// i++ steps over the newline so it cannot reset anything either.
+				cont = "comment";
+				contLineStart = true;
+			} else {
+				atLead = true;
+				resetStatement();
+			}
 			continue;
 		}
 		// H4 bookkeeping. `leadBefore` is the value for the character ABOUT to be

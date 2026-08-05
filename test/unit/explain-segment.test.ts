@@ -335,4 +335,109 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 		expect(masked.slice(0, 32)).toBe(t.slice(0, 32));
 		expect(maskComments(masked)).toBe(masked);
 	});
+
+	// #215 — every expectation below is a `/console/inspect request=highlight`
+	// reading from CHR 7.23.3 (`.scratch/explain-215-verify-probe{,2}.ts`). The
+	// device's comment class covers the line's newline as well; a `comments` span
+	// here stops before it, which is this module's own long-standing convention
+	// (an ordinary `# x\n` comment is recorded the same way).
+	test("a `#` at the immediate start of a continued line is a comment", () => {
+		// device: `\<nl>` escaped, `# x\n` comment, `:put b` obj-inactive — i.e.
+		// still ARGUMENT bytes of the continued `:put a`, not a new command.
+		const input = ":put a\\\n# x\n:put b";
+		expect(maskComments(input).slice(8, 11)).toBe(" ".repeat(3));
+		expect(segmentStatements(input)).toEqual({
+			segments: [
+				{
+					start: 0,
+					end: 18,
+					text: ":put a\\\n# x\n:put b",
+					terminator: "eof",
+					menuOnly: false,
+				},
+			],
+			comments: [{ start: 8, end: 11 }],
+			notes: [],
+		});
+		// CRLF is the same shape one byte later.
+		expect(maskComments(":put a\\\r\n# x\r\n:put b").slice(9, 12)).toBe(
+			" ".repeat(3),
+		);
+		// Consecutive immediate comment lines all qualify.
+		expect(
+			segmentStatements(":local \\\n# one\n# two\nfoo 1").comments,
+		).toEqual([
+			{ start: 9, end: 14 },
+			{ start: 15, end: 20 },
+		]);
+		// Blank and whitespace-only lines are part of the `\` run, so a `#` after
+		// them is still immediate (device: `\<nl><nl>` is one `escaped` run).
+		expect(segmentStatements(":put a\\\n\n# x\n:put b").comments).toEqual([
+			{ start: 9, end: 12 },
+		]);
+		expect(segmentStatements(":put a\\\n   \n# x\n:put b").comments).toEqual([
+			{ start: 12, end: 15 },
+		]);
+	});
+
+	test("indentation before that `#` is decided by statement-lead, not the continuation", () => {
+		// device: `:put a\<nl>  #` classes the `#` an `error` — mid-statement, so
+		// not a comment. The segmenter has no error class; it keeps the bytes.
+		const indented = ":put a\\\n  # x\n:put b";
+		expect(maskComments(indented)).toBe(indented);
+		expect(segmentStatements(indented).comments).toEqual([]);
+		expect(maskComments(":put a\\\n\t# x\n:put b")).toBe(
+			":put a\\\n\t# x\n:put b",
+		);
+		// but with the statement still EMPTY the same indented `#` IS a comment
+		// (device: `do={\<nl>  ` escaped, then `# c\n` comment) — H4 as it stands.
+		const atLead = ":if (true) do={\\\n  # c\n:put 1\n}";
+		expect(maskComments(atLead).slice(19, 22)).toBe(" ".repeat(3));
+		expect(segmentStatements(atLead).comments).toEqual([
+			{ start: 19, end: 22 },
+		]);
+	});
+
+	test("a continuation comment line does not end the statement, but spends the run", () => {
+		// device: `foo` is `variable-local` — the `:local` head crossed the comment
+		// line — and the statement then ends at the newline after `foo 1`.
+		const input = ":local \\\n# $ghost\nfoo 1\n:put $foo";
+		expect(maskComments(input).slice(9, 17)).toBe(" ".repeat(8));
+		expect(segmentStatements(input).segments.map((s) => s.text)).toEqual([
+			":local \\\n# $ghost\nfoo 1",
+			":put $foo",
+		]);
+		// A blank line AFTER a continuation comment terminates, where the same
+		// blank line directly after the `\` would not (device: `foo` there is
+		// `obj-inactive` and the later `$foo` an unresolved `variable-parameter`).
+		expect(
+			segmentStatements(":local \\\n# one\n# two\n   \nfoo 1").segments.map(
+				(s) => s.text,
+			),
+		).toEqual([":local \\\n# one\n# two", "foo 1"]);
+		expect(
+			segmentStatements(":put a\\\n# x\n\n:put b").segments.map((s) => s.text),
+		).toEqual([":put a\\\n# x", ":put b"]);
+		// …while ordinary content on the next line simply continues it.
+		expect(
+			segmentStatements(":put a\\\n# x\nb\n:put c").segments.map((s) => s.text),
+		).toEqual([":put a\\\n# x\nb", ":put c"]);
+	});
+
+	test("masking a continuation comment stays idempotent", () => {
+		// Masking removes the `#`s, so the second pass reads the blanked lines as
+		// part of the `\` run instead of as a comment run. That must not change the
+		// output — the invariant the #199 fuzz asserts on every case.
+		for (const t of [
+			":put a\\\n# x\n:put b",
+			":local \\\n# one\n# two\nfoo 1",
+			":local \\\n# one\n   # two\n",
+			":put a\\\n# x\n\n# y\n:put b",
+			":if (true) do={\\\n  # c\n:put 1\n}",
+		]) {
+			const masked = maskComments(t);
+			expect(masked).toHaveLength(t.length);
+			expect(maskComments(masked)).toBe(masked);
+		}
+	});
 });
