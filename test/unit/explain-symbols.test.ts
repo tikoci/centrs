@@ -580,21 +580,225 @@ describe("explain/symbols — invariants", () => {
 	});
 });
 
+/**
+ * F6 — a `[…]` substitution is a nested STATEMENT context (#201, was the K1
+ * known limit).
+ *
+ * Every expectation below is the device's own reading on CHR 7.23.2 (build
+ * 2026-07-03), captured by `.scratch/explain-201-k1-chr-probe.ts` and its
+ * round-2 companion. The claim carried on #201 was measured from a MID-statement
+ * bracket and generalized to all of them; the device splits them:
+ *
+ *   - a statement-LEADING `[` is TRANSPARENT — the names declared inside escape;
+ *   - a MID-statement `[` confines its declarations, LOCAL AND GLOBAL alike;
+ *   - either way the bracket SHARES the enclosing bindings (it is not a closure)
+ *     and the `]` resumes the interrupted statement rather than starting one.
+ *
+ * The `:global`-shadowed variants that looked like the sharpest evidence are NOT
+ * usable as scope probes — see the S3 known limit below for why.
+ */
+describe("explain/symbols — F6 bracket statement context (#201)", () => {
+	const classes = (input: string): (string | null)[] =>
+		resolveSymbols(input).occurrences.map((o) => o.cls);
+
+	test("a directive inside a bracket is a HEAD and declares", () => {
+		const r = resolveSymbols("[:local v 1; :put $v]");
+		expect(r.occurrences.map((o) => [o.name, o.cls, o.declaration])).toEqual([
+			["v", "local", true],
+			["v", "local", false],
+		]);
+	});
+
+	test("a statement-LEADING bracket is transparent — its names escape", () => {
+		expect(classes("[:local b 1]\n:put $b")).toEqual(["local", "local"]);
+		expect(classes("[:global g 1]\n:put $g")).toEqual(["global", "global"]);
+		// still statement-leading after indentation and after a `;`
+		expect(classes("  [:local b 1]\n:put $b")).toEqual(["local", "local"]);
+		expect(classes(":put 1; [:local b 1]\n:put $b")).toEqual([
+			"local",
+			"local",
+		]);
+		// …and at the lead of a brace body
+		expect(classes(":if (1=1) do={[:local b 1]; :put $b}")).toEqual([
+			"local",
+			"local",
+		]);
+	});
+
+	test("a MID-statement bracket confines its names — globals included", () => {
+		expect(classes(":put [:local b 1]\n:put $b")).toEqual([
+			"local",
+			"parameter",
+		]);
+		// the issue claimed a `:global` escapes a bracket; on the device only a
+		// statement-LEADING one does.
+		expect(classes(":put [:global g 1]\n:put $g")).toEqual([
+			"global",
+			"parameter",
+		]);
+		// value position is mid-statement too
+		expect(classes(":local x [:local b 1]\n:put $b")).toEqual([
+			"local",
+			"local",
+			"parameter",
+		]);
+		// and the confinement ends at the `]`, not at the line
+		expect(classes(":local a 1\n:put [:local b 1]; :put $b")).toEqual([
+			"local",
+			"local",
+			"parameter",
+		]);
+	});
+
+	test("a confined global does not block a later document declaration", () => {
+		expect(classes(":put [:global g 1]\n:local g 2\n:put $g")).toEqual([
+			"global",
+			"local",
+			"local",
+		]);
+	});
+
+	test("the bracket scope SHARES the enclosing bindings (not a closure)", () => {
+		expect(classes(":local a 1\n:put [:put $a]")).toEqual(["local", "local"]);
+		expect(classes(":local a 1\n[:put $a]")).toEqual(["local", "local"]);
+		expect(classes(":global g 1\n:put [:put $g]")).toEqual([
+			"global",
+			"global",
+		]);
+		// a nested bracket still sees the outer bracket's declaration
+		expect(classes("[:local v 1; :put [:put $v]]")).toEqual(["local", "local"]);
+	});
+
+	test("lead-vs-mid composes through nesting", () => {
+		// the inner bracket leads its enclosing MID bracket, so it escapes INTO it,
+		// and the MID bracket's `]` is what confines the name.
+		expect(classes(":put [[:local b 1]; :put $b]\n:put $b")).toEqual([
+			"local",
+			"local",
+			"parameter",
+		]);
+		// mirror image: a MID bracket inside a transparent LEAD one still confines.
+		expect(classes("[:put [:local b 1]; :put $b]\n:put $b")).toEqual([
+			"local",
+			"parameter",
+			"parameter",
+		]);
+	});
+
+	test("a `$[…]` in a string is a bracket like any other, never leading", () => {
+		expect(classes(':put "$[:local v 1; :put $v]"')).toEqual([
+			"local",
+			"local",
+		]);
+		expect(classes(':put "$[:local b 1]"\n:put $b')).toEqual([
+			"local",
+			"parameter",
+		]);
+	});
+
+	test("the closure rule (F2) still decides across a bracket", () => {
+		// a named-function body hides the outer name even inside a bracket…
+		expect(classes(":local a 1\n:local f do={:put [:put $a]}")).toEqual([
+			"local",
+			"local",
+			"parameter",
+		]);
+		// …while a control-flow body shares it.
+		expect(classes(":local a 1\n:if (1=1) do={:put [:put $a]}")).toEqual([
+			"local",
+			"local",
+		]);
+		// and a bracket inside a closure confines to the bracket, not the body.
+		expect(
+			classes(":local f do={:put [:local b 1; :put $b]; :put $b}"),
+		).toEqual(["local", "local", "local", "parameter"]);
+	});
+
+	test("the `]` resumes the enclosing statement, it does not start one", () => {
+		// a `:local` after a `]` declares nothing (the device agrees; it is also
+		// where the walker's pre-F6 comment about "after a bracket" came from).
+		expect(classes(":local a 1\n:put [:put 1] :local v 1")).toEqual(["local"]);
+		// an explicit `;` does restart it
+		expect(classes(":put [:put 1]; :local v 1\n:put $v")).toEqual([
+			"local",
+			"local",
+		]);
+	});
+
+	test("`(` is an EXPRESSION context, not a statement one", () => {
+		// CHR 7.23.2 classes the `:local` text itself `variable-undefined` in
+		// `(:local v 1)` — a directive there is an ordinary expression term. This
+		// resolver never emits `undefined` (the ratified Q13 answer), so it
+		// abstains and the trailing use stays `parameter`; what matters is that it
+		// does NOT declare.
+		const r = resolveSymbols("(:local v 1)\n:put $v");
+		expect(r.occurrences.some((o) => o.declaration)).toBe(false);
+		expect(r.occurrences.map((o) => o.cls)).toEqual([null, "parameter"]);
+	});
+
+	test("S8 filter regions survive `find` becoming a head", () => {
+		// `[find comment=$tag]` is the commonest bracket in the corpus. Once `[`
+		// opens a statement context its `find` is the HEAD, and the head branch has
+		// to open the filter region itself or the field stops being reported.
+		const r = resolveSymbols(
+			'/ip route set [find comment="WAN1"] disabled=yes',
+		);
+		const comment = r.occurrences.find((o) => o.name === "comment");
+		expect(comment).toBeDefined();
+		expect(comment?.cls).toBeNull();
+		// the same for a `/`-sigilled head, which must still open a menu path
+		expect(
+			resolveSymbols(
+				":if ([:len [/interface list find name=LAN]] = 1) do={}",
+			).occurrences.map((o) => o.name),
+		).toEqual(["name"]);
+		// a HEAD `find` opens the region outside a bracket too: CHR 7.23.2 reads
+		// `comment` in `/ip route<nl>find comment=x` as `variable-local`, the same
+		// as in the `where` spelling.
+		expect(
+			resolveSymbols("/ip route\nfind comment=x").occurrences.map((o) => [
+				o.name,
+				o.cls,
+			]),
+		).toEqual([["comment", null]]);
+	});
+
+	test("a `#` at the lead of a bracket is a COMMENT, and swallows the `]`", () => {
+		// F6 makes the first position inside a `[` statement-leading, and H4 makes a
+		// statement-leading `#` a comment; CHR 7.23.2 confirms the composition —
+		// `[# c\n…` classes `# c\n` as `comment`, in both the lead and mid spellings.
+		// Found by the F6 differential fuzz, which flagged the declarations that
+		// appear AFTER a `]` the comment ate; the device says they are real.
+		const classes = (input: string): (string | null)[] =>
+			resolveSymbols(input).occurrences.map((o) => o.cls);
+		expect(classes("[# c\n:local v 1]\n:put $v")).toEqual(["local", "local"]);
+		expect(classes(":put [# c\n:local v 1]")).toEqual(["local"]);
+		expect(classes("[:put 1; # c\n:local v 1]\n:put $v")).toEqual([
+			"local",
+			"local",
+		]);
+		// the fuzz case verbatim: the comment runs past `;] \` AND the newline, so
+		// the bracket never closes and the `:local` still declares.
+		expect(classes("[#;] \\\n:local v 1\n:put $v")).toEqual(["local", "local"]);
+	});
+});
+
 describe("explain/symbols — known limits (#201)", () => {
 	// Pinned so a fix flips them deliberately, in the Q16 style: each carries the
 	// device reading it does not yet reproduce.
-	test("K1 a bracket substitution is not opened as a statement context", () => {
-		// CHR 7.23.2: `[:local v 1; :put $v]` classes BOTH `v` `variable-local`,
-		// and a `$v` after the bracket reads `variable-parameter` — the bracket
-		// scopes its locals. This walker misses the declaration and falls back to
-		// S5 for the uses; it never fabricates a binding.
-		const r = resolveSymbols("[:local v 1; :put $v]\n:put $v");
-		expect(r.occurrences.map((o) => o.cls)).toEqual(["parameter", "parameter"]);
-		expect(r.occurrences.some((o) => o.declaration)).toBe(false);
-		// a `:global` inside a bracket DOES escape on the device
+	test("S3 a document `:local` after a `:global` of the same name", () => {
+		// CHR 7.23.2: `:global v 1\n:local v 2\n:put $v` reads the trailing use
+		// `variable-global` — the earlier global outranks the later local at the
+		// same scope, where this resolver takes the nearest preceding binding and
+		// says `local`. Found as the CONTROL for the #201 K1 probe: it is why the
+		// `:global`-shadowing cases cannot be used to measure bracket scope extent.
+		// Its own extent (same scope only? which spellings?) is not probed yet, so
+		// it is carried rather than guessed at.
 		expect(
-			resolveSymbols("[:global g 1]\n:put $g").occurrences.map((o) => o.cls),
-		).toEqual(["parameter"]);
+			resolveSymbols(":global v 1\n:local v 2\n:put $v").occurrences.map(
+				(o) => o.cls,
+			),
+		).toEqual(["global", "local", "local"]);
 	});
 
 	test("K2 the doubled-sigil stop is statement-leading only", () => {
