@@ -20,9 +20,21 @@
  * fixed list honestly (it is what ratifies decision 3, "no offline schema
  * snapshot").
  *
- * Lookups are CASE-SENSITIVE everywhere, which is the device's own reading:
- * RouterOS rejects `PRINT`. Both consumers must keep it that way or they can
- * disagree about the same statement.
+ * The entries are lower-case, and the two sides of the R9 seam — `verbsplit`'s
+ * `splitRun`/`resolveVerb` and `pathresolve`'s `menuNavPath` — both look up the
+ * RAW run-token name, so both are case-sensitive. That agreement is the only
+ * thing R9 needs; what matters is that the two use the SAME normalization, not
+ * which one they pick.
+ *
+ * Elsewhere in `explain` the strategy differs: `write.ts`'s `classifyVerb`
+ * lower-cases before consulting `READ_VERBS`/`WRITE_VERBS` (a superset of this
+ * set — it also carries `monitor`, `reset`, `reset-counters`,
+ * `reset-counters-all`), and `menus.ts` lower-cases path segments. So an
+ * upper-cased verb is read differently by different modules. That divergence
+ * predates R9 and is NOT corpus-reachable — over the whole 911-script frozen
+ * corpus, zero run tokens match a verb only after lower-casing — and no claim
+ * is made here about which reading the device would give `PRINT`, because that
+ * has not been checked on a router.
  */
 export const VERBS: ReadonlySet<string> = new Set([
 	"add",

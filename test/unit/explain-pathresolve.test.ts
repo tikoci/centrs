@@ -527,10 +527,12 @@ describe("R9 — pathresolve and verbsplit cannot contradict each other", () => 
 		}
 	});
 
-	test("R9 cannot reject a real menu: no table path carries a verb segment", () => {
-		// The load-bearing premise of R9. If a menu were ever named `.../print`,
-		// R9 would refuse to navigate into it. Asserted over the whole generated
-		// table so a regeneration that introduced one fails here.
+	test("no path in the generated table carries a verb segment", () => {
+		// R9's premise, stated at the scope it is actually checked. If a menu were
+		// named `.../print`, R9 would refuse to navigate into it. Asserted over the
+		// whole generated table so a regeneration that introduced one fails here —
+		// which is a claim about `MENU_PATHS`, not about RouterOS: the table is a
+		// floor (#207), so this cannot rule out an unlisted menu of that shape.
 		const offenders = [...MENU_PATHS].filter((path) =>
 			path
 				.split("/")

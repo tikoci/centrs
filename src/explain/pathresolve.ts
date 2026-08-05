@@ -580,8 +580,14 @@ function walkStatements(
  * the invariant that a `verbsplit`-`resolved` statement is never `isNav`.
  *
  * This costs no abstention — the statements it removes from navigation were
- * already decided, just decided wrongly — and it cannot reject a real menu: no
- * path in `menus.ts` carries a verb segment, asserted in the same test.
+ * already decided, just decided wrongly. It also does not collide with any menu
+ * the generated table knows: no path in `MENU_PATHS` carries a verb segment,
+ * asserted in the same test so a regeneration that introduced one fails. That
+ * is a claim about the TABLE, not about RouterOS — `MENU_PATHS` is a floor
+ * (#207), so a real menu absent from it and named `.../print` would still be
+ * read as a command here. Nothing in the corpus or the four pinned trees looks
+ * like that, and such a menu would be indistinguishable from `print` at its
+ * parent anyway.
  *
  * What it does NOT touch is the harder half (#211 B2): a bare path with no verb
  * at all (`/system/reboot`, `/quit`, `/tool/speed-test`) is still claimed as

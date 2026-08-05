@@ -573,8 +573,10 @@ now consults the same frozen `VERBS` set (R9), which takes those statements to
 decided wrongly. The vocabulary moved to the leaf `verbs.ts` so both modules
 share one object and cannot drift apart, and the invariant — a
 `verbsplit`-`resolved` statement is never `isNav` — is pinned in
-`test/unit/explain-pathresolve.test.ts` alongside R9's premise (no path in
-`menus.ts` carries a verb segment).
+`test/unit/explain-pathresolve.test.ts` alongside R9's premise: no path in the
+generated `MENU_PATHS` table carries a verb segment. That premise is scoped to
+the table, not to RouterOS — `menus.ts` is a floor, so it cannot rule out an
+unlisted menu named `.../print`, which R9 would read as a command.
 
 R9 leaves the harder half open (**#211 B2**): a bare path with *no* verb
 (`/system/reboot`, `/quit`, `/terminal/cuu`) is still read as navigation and
