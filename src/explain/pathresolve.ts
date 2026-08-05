@@ -29,6 +29,11 @@
  *   R8 `..` ascends and a bare `/` resets; a bare word alone is NOT treated as
  *      navigation (offline cannot tell a submenu from a no-argument command
  *      without a schema — the known limit, reported not guessed).
+ *   R9 A `/`-led bare path whose run carries a FROZEN-VOCABULARY VERB is a
+ *      command, not navigation (#211). Q6 already decides these, so without it
+ *      this module and `verbsplit` returned contradictory answers for the same
+ *      text — and this one INVENTED a menu (`/ip address print` navigating to
+ *      `/ip/address/print`). See `menuNavPath`.
  *   R10 A `:` scripting directive takes its operand POSITIONALLY (`:global x`
  *      is `/global`, not `/global/x`); a menu command spells its menu out.
  *   R11 A bare directive (`while (…) do={…}`) is at the root, and hands its
@@ -82,6 +87,7 @@
 
 import { isScopeBrace, scopeBodies } from "./blocks.ts";
 import { maskComments, segmentStatements } from "./segment.ts";
+import { VERBS } from "./verbs.ts";
 
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
 /**
@@ -561,6 +567,26 @@ function walkStatements(
  * a bare word alone (`address`) is indistinguishable from a no-argument command
  * (`print`) without a schema, so it is NOT navigation. An absolute navigation
  * REPLACES the context rather than extending it.
+ *
+ * R9 (#211 B1) — a `/`-led bare path whose run carries a FROZEN-VOCABULARY VERB
+ * is a command, not navigation. Without this the shape test alone claimed
+ * `/ip address print` as a navigation to `/ip/address/print` — a menu that does
+ * not exist — and then resolved the rest of the document against it. Q6 already
+ * decides these statements: `verbsplit` reads the very same text as verb `print`
+ * at `/ip/address`, so the two promoted modules returned contradictory answers
+ * for 34 dev / 13 holdout statements, `verbsplit` right in every one. The verb
+ * set is deliberately the SAME `VERBS` object and the same case-sensitive
+ * lookup, so the modules cannot drift apart; `explain-pathresolve.test.ts` pins
+ * the invariant that a `verbsplit`-`resolved` statement is never `isNav`.
+ *
+ * This costs no abstention — the statements it removes from navigation were
+ * already decided, just decided wrongly — and it cannot reject a real menu: no
+ * path in `menus.ts` carries a verb segment, asserted in the same test.
+ *
+ * What it does NOT touch is the harder half (#211 B2): a bare path with no verb
+ * at all (`/system/reboot`, `/quit`, `/tool/speed-test`) is still claimed as
+ * navigation, because `MENU_PATHS` is a floor (#207) and "absent from the table"
+ * is not evidence of "command". See the module note above `resolveStatements`.
  */
 function menuNavPath(text: string, ctx: string): string | null {
 	const trimmed = trimAscii(text);
@@ -579,6 +605,13 @@ function menuNavPath(text: string, ctx: string): string | null {
 		)
 	)
 		return null;
+	// R9 — the run is verb-free, or this is not navigation. Tokens may be
+	// slash-joined (`/ip/address/print` is one token), so the verb test has to run
+	// over path SEGMENTS, exactly as `verbsplit`'s `runTokens` splits them.
+	const segments = tokens.flatMap((token) =>
+		token.split("/").filter((part) => part.length > 0),
+	);
+	if (segments.some((segment) => VERBS.has(segment))) return null;
 	return joinPath("/", tokens.join("/"));
 }
 

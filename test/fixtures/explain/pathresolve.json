@@ -111,15 +111,18 @@
 			"rule": "R4 — a leading `/` resets to root before descending; it never appends"
 		},
 		{
-			"name": "KNOWN LIMIT — a bare-path COMMAND line is misread as navigation",
+			"name": "R9 a bare-path line carrying a VERB is a command, and does NOT move the context",
 			"input": "/ip route\n/system identity print\nadd dst-address=8.8.8.8/32 gateway=1.1.1.1",
-			"expect": [
-				"/ip/route",
-				"/system/identity/print",
-				"/system/identity/print/add"
-			],
-			"rule": "offline calls every bare-path line navigation (right 97.5%); when wrong it CASCADES into following relative statements. The honest response is a diagnostic, not a silent guess — this fixture pins what offline DOES, and the 3rd path is wrong.",
-			"verified": "CHR 7.23.2 + 7.24rc2 (identical): IL `/ip/route/;(evl /system/identity/print);(evl /ip/route/add …)` — the absolute COMMAND did NOT move context. Cascade confirmed; offline's 3rd path is wrong exactly as pinned."
+			"expect": ["/ip/route", "/system/identity/print", "/ip/route/add"],
+			"rule": "R9 (#211 B1) — `print` is in the frozen vocabulary, so the middle line is a COMMAND at `/system/identity`, not a navigation to the non-existent menu `/system/identity/print`. Its own path is still the greedy menu+verb reading, but the context is untouched, so `add` resolves at `/ip/route`. Before R9 this fixture pinned the wrong 3rd path as a KNOWN LIMIT; the fix makes offline agree with the device.",
+			"verified": "CHR 7.23.2 + 7.24rc2 (identical): IL `/ip/route/;(evl /system/identity/print);(evl /ip/route/add …)` — the absolute COMMAND did NOT move context. Offline now reproduces that exactly."
+		},
+		{
+			"name": "KNOWN LIMIT (#211 B2) — a bare path with NO verb is still misread as navigation",
+			"input": "/ip route\n/system reboot\nadd dst-address=8.8.8.8/32 gateway=1.1.1.1",
+			"expect": ["/ip/route", "/system/reboot", "/system/reboot/add"],
+			"rule": "R8's residue after R9. `reboot` is not in the frozen vocabulary and `MENU_PATHS` is a FLOOR (#207) — absence there is not evidence of `command` — so offline still reads a verb-free bare path as navigation and cascades. The fail-closed alternative (context unknown) costs 6.7–10.8% of statements downstream; #211 leaves it open pending a priced rule. The 3rd path is wrong, exactly as pinned.",
+			"verified": "CHR 7.23.2 + 7.24rc2: `/system/reboot` is a no-argument COMMAND, not a menu — `isMenuPath([\"system\",\"reboot\"])` is false, pinned in explain-write.test.ts."
 		},
 		{
 			"name": "R5 a block body inherits the context in force",
