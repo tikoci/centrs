@@ -292,7 +292,6 @@ function formatFromArgs(args: readonly string[]): ExplainOutputFormat {
 }
 
 export async function runExplainCli(args: readonly string[]): Promise<number> {
-	const format = formatFromArgs(args);
 	try {
 		const parsed = parseExplainCliArgs(args);
 		if (parsed.help) {
@@ -318,9 +317,13 @@ export async function runExplainCli(args: readonly string[]): Promise<number> {
 			parsed.facets.length > 0
 				? withTips(base, [...base.tips, buildExplainFacetTip(parsed.facets)])
 				: base;
-		console.log(renderExplainEnvelope(envelope, parsed.format ?? format));
+		// The parser's decision, never the recovery scan: on this path the grammar
+		// ran to completion, so a second opinion could only disagree with it.
+		console.log(renderExplainEnvelope(envelope, parsed.format ?? "text"));
 		return explainExitCode(envelope.data.verdict, parsed.failOn);
 	} catch (error) {
+		// Only here is the parser's answer unavailable — it threw.
+		const format = formatFromArgs(args);
 		const envelope = buildExplainErrorEnvelope(error);
 		console.error(
 			format === "text"
