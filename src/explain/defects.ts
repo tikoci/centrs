@@ -4,17 +4,25 @@
  * Ratified by the phase-0 lab, question Q14 (#185), whose coordinate half
  * `commands/explain/README.md` states as "**Malformed input carries a defect
  * *region*** — each diagnostic points at the byte span of its defect". This
- * module is that span: the structured twin of the `notes: string[]` channel
- * every analyzer carries.
+ * module is that span, and since #202 it is the ONLY structural-surprise channel
+ * an analyzer carries.
  *
- * WHY TWO CHANNELS
+ * WHY ONE CHANNEL
  *
- *   `notes` is a flat `string[]` whose CONTENT no caller reads — `write.ts`
- *   tests only `notes.length > 0`, as a pure abstention gate. Defects are read
- *   for their regions. Keeping them separate means the two questions ("did
- *   anything go wrong" and "where") need not be answered by parsing one string,
- *   and a class that belongs to only one of them (see `isPositionalFact`) has
- *   somewhere to go.
+ *   It was two for exactly one issue. Every analyzer used to carry a flat
+ *   `notes: string[]` beside this one, and #192 added the regions additively so
+ *   that any movement in a `notes` value during that change was a real bug rather
+ *   than refactor noise. The convergence is this: a note answered "did anything
+ *   go wrong", a defect answers that AND "where", so the note channel was
+ *   strictly weaker and is gone. The two questions a caller actually asks are
+ *   {@link hasStructuralDefect} (the abstention gate the notes used to serve) and
+ *   the regions themselves.
+ *
+ *   The swap was measured, not assumed: over the frozen 913-document corpus and
+ *   19,972 targeted mutations (delimiter, quote, escape and non-ASCII injections
+ *   that made the gate fire on 6,908 of them), `notes.length > 0` and
+ *   `hasStructuralDefect(defects)` disagreed on ZERO inputs in all five analyzers,
+ *   and no `containsWrite` tristate moved.
  *
  * COORDINATES
  *
@@ -26,21 +34,21 @@
  *
  * WHY REGIONS ARE NOT MERELY THE NOTE STRINGS PARSED
  *
- *   Two real losses in the note channel are what this module fixes, and neither
- *   is recoverable by parsing `over-depth:<n>` back out of a string. Both are
+ *   Two real losses in the retired note channel are what this module fixed, and
+ *   neither was recoverable by parsing `over-depth:<n>` back out of a string. Both are
  *   reproduced in `test/unit/explain-defects.test.ts`:
  *
- *   - `pathresolve` collects notes into a `Set`, so several `over-depth` events
- *     at different offsets collapse into ONE entry and every offset is lost.
- *     Two independent 260-deep block chains in one document produce a single
- *     `"over-depth"` note and two distinct defects.
- *   - `pathresolve` emits a BARE `over-depth` with no offset at all, while
- *     `segment` and `symbols` emit `over-depth:<byte>` — the same class in two
+ *   - `pathresolve` collected notes into a `Set`, so several `over-depth` events
+ *     at different offsets collapsed into ONE entry and every offset was lost.
+ *     Two independent 260-deep block chains in one document produced a single
+ *     `"over-depth"` note; they are two distinct defects.
+ *   - `pathresolve` emitted a BARE `over-depth` with no offset at all, while
+ *     `segment` and `symbols` emitted `over-depth:<byte>` — the same class in two
  *     shapes, only one of them locatable.
  *
  *   A third suspected loss did NOT survive checking, and is recorded so it is
- *   not re-derived: segmenting a block body and discarding its notes LOOKS like
- *   it would hide a defect inside `do={…}`. It does not. The top-level
+ *   not re-derived: segmenting a block body and discarding its findings LOOKS
+ *   like it would hide a defect inside `do={…}`. It does not. The top-level
  *   segmenter scans the whole byte range including block bodies, and
  *   `scopeBlocks` only returns depth-0 braces, so the outer scan is a strict
  *   superset — six probe shapes (unterminated strings, stray closes and
@@ -70,8 +78,8 @@
 /**
  * One structural defect, located in analyzed-byte space.
  *
- * The `code` vocabulary is deliberately the same one the note channel uses, so
- * the two are comparable entry for entry.
+ * The `code` vocabulary is the one the retired note channel used, so a fixture
+ * or transcript from before #202 is still comparable entry for entry.
  */
 export interface Defect {
 	code: DefectCode;
@@ -114,12 +122,26 @@ export type DefectCode =
  * fact. The other six codes mark input the analyzer could not structurally
  * resolve, which is a different thing.
  *
- * They also stay out of the note channel entirely, so `write.ts`'s
- * `notes.length > 0` abstention gate cannot see them — a UTF-8 comment must
- * never flip a document's write tristate to `unknown`.
+ * {@link hasStructuralDefect} is where that distinction is enforced, so a UTF-8
+ * comment can never flip a document's write tristate to `unknown`.
  */
 export function isPositionalFact(code: DefectCode): boolean {
 	return code === "bom" || code === "non-ascii";
+}
+
+/**
+ * Does this list carry a defect an analyzer must ABSTAIN on?
+ *
+ * The abstention gate, and the reason {@link isPositionalFact} is a function
+ * rather than a comment: a defect list is not uniformly "bad input". Six codes
+ * mark structure the analyzer could not resolve — part of the document was never
+ * walked, so no verdict over it is safe. The other two are coordinate facts about
+ * bytes that were read perfectly well. Gating on `defects.length > 0` would
+ * abstain on `/system identity set name="router-🚀"`, a legal command, and on the
+ * ~12% of the phase-0 corpus that carries non-ASCII.
+ */
+export function hasStructuralDefect(defects: readonly Defect[]): boolean {
+	return defects.some((d) => !isPositionalFact(d.code));
 }
 
 /** A defect spanning exactly the byte at `at`. */
@@ -162,9 +184,10 @@ export function rebaseDefects(
  * Concatenate defect lists, dropping exact duplicates.
  *
  * Identity is `code + start + end + detail` — the WHOLE region, never the code
- * alone. That distinction is the entire point: the note channel de-duplicates by
- * stringified note, so two `over-depth` events at bytes 40 and 900 become one
- * `"over-depth"` entry and the second offset is gone. Here they are two defects.
+ * alone. That distinction is the entire point: the retired note channel
+ * de-duplicated by stringified note, so two `over-depth` events at bytes 40 and
+ * 900 became one `"over-depth"` entry and the second offset was gone. Here they
+ * are two defects.
  *
  * Order is stable (first occurrence wins) so a caller can report defects in
  * discovery order without sorting; callers that want source order should sort by

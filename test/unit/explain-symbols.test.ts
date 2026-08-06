@@ -4,6 +4,7 @@ import {
 	analyzeCoordinates,
 	byteToPosition,
 } from "../../src/explain/coordinates.ts";
+import type { Defect } from "../../src/explain/defects.ts";
 import {
 	HIGHLIGHT_CLASS,
 	resolveSymbols,
@@ -41,7 +42,7 @@ interface Case {
 	expect: { name: string; cls: SymbolClass | null }[];
 	rule: string;
 	verified?: string;
-	notes?: string[];
+	defects?: Defect[];
 }
 
 const fixtures: { cases: Case[] } = JSON.parse(
@@ -58,8 +59,8 @@ describe("explain/symbols — frozen fixtures", () => {
 	for (const c of fixtures.cases) {
 		test(`${c.id} (${c.class}) — ${c.name}`, () => {
 			expect(observed(c.input)).toEqual(c.expect);
-			if (c.notes !== undefined)
-				expect(resolveSymbols(c.input).notes).toEqual(c.notes);
+			if (c.defects !== undefined)
+				expect(resolveSymbols(c.input).defects).toEqual(c.defects);
 		});
 	}
 
@@ -327,7 +328,7 @@ describe("explain/symbols — escape validity (F4)", () => {
 			":local v 1 \\\n:put $v",
 			":local v 1 \\\r\n:put $v",
 		])
-			expect(resolveSymbols(input).notes).toEqual([]);
+			expect(resolveSymbols(input).defects).toEqual([]);
 	});
 
 	test("a malformed escape stops the analysis and says where", () => {
@@ -337,7 +338,7 @@ describe("explain/symbols — escape validity (F4)", () => {
 			":local v 1\n:put \\$v",
 		]) {
 			const r = resolveSymbols(input);
-			expect(r.notes.some((n) => n.startsWith("bad-escape:"))).toBe(true);
+			expect(r.defects.map((d) => d.code)).toContain("bad-escape");
 			// nothing is reported after the defect …
 			expect(r.occurrences.some((o) => o.name === "foo")).toBe(false);
 		}
@@ -346,7 +347,7 @@ describe("explain/symbols — escape validity (F4)", () => {
 	test("occurrences BEFORE a malformed escape still stand (X1)", () => {
 		const r = resolveSymbols(":local outer 1\n:local fn do=\\{ :put $outer }");
 		expect(r.occurrences.map((o) => o.cls)).toEqual(["local", "local"]);
-		expect(r.notes).toEqual(["bad-escape:28"]);
+		expect(r.defects).toEqual([{ code: "bad-escape", start: 28, end: 29 }]);
 	});
 
 	test("every valid escape is transparent to the `do=` lookback", () => {
@@ -356,14 +357,14 @@ describe("explain/symbols — escape validity (F4)", () => {
 			const r = resolveSymbols(
 				`:local outer 1\n:local fn do=${separator}{ :put $outer }`,
 			);
-			expect(r.notes).toEqual([]);
+			expect(r.defects).toEqual([]);
 			expect(r.occurrences.at(-1)?.cls).toBe("parameter");
 		}
 	});
 
 	test("a lone escaped carriage return is whitespace, not a defect", () => {
 		const r = resolveSymbols(":local v 1\n:put \\\r$v");
-		expect(r.notes).toEqual([]);
+		expect(r.defects).toEqual([]);
 		expect(r.occurrences.map((o) => o.cls)).toEqual(["local", "local"]);
 	});
 
@@ -376,7 +377,7 @@ describe("explain/symbols — escape validity (F4)", () => {
 
 	test("an escape inside a string is unaffected", () => {
 		const r = resolveSymbols(':local a "x\\\\"\n:put $a');
-		expect(r.notes).toEqual([]);
+		expect(r.defects).toEqual([]);
 		expect(r.occurrences.map((o) => o.cls)).toEqual(["local", "local"]);
 	});
 });
@@ -387,7 +388,7 @@ describe("explain/symbols — F1 substitutions inside strings", () => {
 			':local cs ""\n:set cs "$cs$[[:parse "(\\"x\\")"]]"\n:local pos 0\n:put $pos',
 		);
 		expect(r.occurrences.at(-1)?.cls).toBe("local");
-		expect(r.notes).toEqual([]);
+		expect(r.defects).toEqual([]);
 	});
 
 	test("a `#` line after such a substitution is still a comment", () => {
@@ -416,7 +417,9 @@ describe("explain/symbols — F1 substitutions inside strings", () => {
 describe("explain/symbols — structural recovery", () => {
 	test("a mismatched close is reported and does NOT unwind a scope", () => {
 		const r = resolveSymbols(":local f do={ :local v 1 ]\n :put $v }");
-		expect(r.notes).toEqual(["unbalanced-close:]"]);
+		expect(r.defects).toEqual([
+			{ code: "unbalanced-close", start: 25, end: 26, detail: "]" },
+		]);
 		// the `]` must not pop the `do={` scope, which would drop `v` early
 		expect(r.occurrences.at(-1)?.cls).toBe("local");
 	});
@@ -426,7 +429,7 @@ describe("explain/symbols — structural recovery", () => {
 		const r = resolveSymbols(
 			`:local v 1\n${"{".repeat(depth)}${"}".repeat(depth)}\n:put $v`,
 		);
-		expect(r.notes.some((n) => n.startsWith("over-depth:"))).toBe(true);
+		expect(r.defects.map((d) => d.code)).toContain("over-depth");
 		// every suppressed open consumed its own close, so the document scope —
 		// and `v` with it — is still standing at the end
 		expect(r.occurrences.at(-1)?.cls).toBe("local");
@@ -549,7 +552,7 @@ describe("explain/symbols — invariants", () => {
 	test("nesting is depth-bounded and reported, not thrown", () => {
 		const deep = `${"{".repeat(600)}:local v 1\n:put $v${"}".repeat(600)}`;
 		const r = resolveSymbols(deep);
-		expect(r.notes.some((n) => n.startsWith("over-depth:"))).toBe(true);
+		expect(r.defects.map((d) => d.code)).toContain("over-depth");
 	});
 
 	test("a large document is resolved without loss", () => {
@@ -1149,34 +1152,36 @@ describe("explain/symbols — F7 declaration claim (#201)", () => {
  * question, which `menus.ts` (#207) already answers.
  */
 describe("explain/symbols — F8 mid-statement defect (#201)", () => {
-	const stop = (input: string): string | null =>
-		resolveSymbols(input).notes.find((n) => n.startsWith("bad-sigil:")) ?? null;
+	/** The analyzed-byte offset the `bad-sigil` cliff lands on, or null. */
+	const stop = (input: string): number | null =>
+		resolveSymbols(input).defects.find((d) => d.code === "bad-sigil")?.start ??
+		null;
 
 	test("a doubled separator inside a path stops at the SECOND sigil", () => {
 		// `/` is a legal separator when adjacent to the segment before it, so the
 		// error is the one that follows it.
-		expect(stop("/ip//address print")).toBe("bad-sigil:4");
-		expect(stop("/ip///address print")).toBe("bad-sigil:4");
-		expect(stop("ip//address print")).toBe("bad-sigil:3");
-		expect(stop("/interface//print")).toBe("bad-sigil:11");
-		expect(stop("/ip/firewall//filter print")).toBe("bad-sigil:13");
-		expect(stop("/ip address//print")).toBe("bad-sigil:12");
+		expect(stop("/ip//address print")).toBe(4);
+		expect(stop("/ip///address print")).toBe(4);
+		expect(stop("ip//address print")).toBe(3);
+		expect(stop("/interface//print")).toBe(11);
+		expect(stop("/ip/firewall//filter print")).toBe(13);
+		expect(stop("/ip address//print")).toBe(12);
 	});
 
 	test("a `/` starting a space-separated segment stops at the FIRST sigil", () => {
 		// after a space it is not a separator at all, so the slash itself is wrong
 		// — single or doubled, the device errors on the same byte.
-		expect(stop("/ip /address print")).toBe("bad-sigil:4");
-		expect(stop("/ip //address print")).toBe("bad-sigil:4");
-		expect(stop("/ip address /print")).toBe("bad-sigil:12");
-		expect(stop("/ip address //print")).toBe("bad-sigil:12");
-		expect(stop("/ip address //foo")).toBe("bad-sigil:12");
-		expect(stop("ip /address print")).toBe("bad-sigil:3");
+		expect(stop("/ip /address print")).toBe(4);
+		expect(stop("/ip //address print")).toBe(4);
+		expect(stop("/ip address /print")).toBe(12);
+		expect(stop("/ip address //print")).toBe(12);
+		expect(stop("/ip address //foo")).toBe(12);
+		expect(stop("ip /address print")).toBe(3);
 	});
 
 	test("a `:` is never legal in a path, doubled or not", () => {
-		expect(stop("/ip:address print")).toBe("bad-sigil:3");
-		expect(stop("/ip::address print")).toBe("bad-sigil:3");
+		expect(stop("/ip:address print")).toBe(3);
+		expect(stop("/ip::address print")).toBe(3);
 	});
 
 	test("the path region ends at the first word that is not a menu", () => {
@@ -1200,8 +1205,8 @@ describe("explain/symbols — F8 mid-statement defect (#201)", () => {
 	});
 
 	test("a bracket opens its own path region (F6)", () => {
-		expect(stop(":put [/ip//address print]")).toBe("bad-sigil:10");
-		expect(stop("[/ip//address print]")).toBe("bad-sigil:5");
+		expect(stop(":put [/ip//address print]")).toBe(10);
+		expect(stop("[/ip//address print]")).toBe(5);
 		// the bracket's own head decides it, not the enclosing statement's
 		expect(stop("/ip route set [find //foo] disabled=yes")).toBeNull();
 		expect(stop(":foreach i in=[/ip address find] do={:put $i}")).toBeNull();
@@ -1231,17 +1236,17 @@ describe("explain/symbols — F8 mid-statement defect (#201)", () => {
 		expect(stop("/ip (1) //bad")).toBeNull();
 		expect(stop("/ip [find] //bad")).toBeNull();
 		// …and the control still fires: nothing ended the path here.
-		expect(stop("/ip //bad")).toBe("bad-sigil:4");
+		expect(stop("/ip //bad")).toBe(4);
 	});
 
 	test("the stop truncates like F4/F5: earlier bindings survive it", () => {
 		// CHR 7.23.2 classes every byte after the cliff `none`, so a declaration
 		// after it is not real and one before it is.
 		const after = resolveSymbols("/ip//address print\n:local v 1\n:put $v");
-		expect(after.notes).toEqual(["bad-sigil:4"]);
+		expect(after.defects).toEqual([{ code: "bad-sigil", start: 4, end: 5 }]);
 		expect(after.occurrences).toEqual([]);
 		const before = resolveSymbols(":local v 1\n/ip//address print\n:put $v");
-		expect(before.notes).toEqual(["bad-sigil:15"]);
+		expect(before.defects).toEqual([{ code: "bad-sigil", start: 15, end: 16 }]);
 		expect(before.occurrences.map((o) => [o.name, o.cls])).toEqual([
 			["v", "local"],
 		]);
@@ -1303,7 +1308,7 @@ describe("explain/symbols — F8 mid-statement defect (#201)", () => {
 	test("a bare `//` at statement start does stop (F5, no word to carry it)", () => {
 		const r = resolveSymbols("//\n:put $foo");
 		expect(r.occurrences).toEqual([]);
-		expect(r.notes).toEqual(["bad-sigil:1"]);
+		expect(r.defects).toEqual([{ code: "bad-sigil", start: 1, end: 2 }]);
 	});
 });
 

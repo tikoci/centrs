@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { hasStructuralDefect } from "../../src/explain/defects.ts";
 import { isMenuPath } from "../../src/explain/menus.ts";
 import {
 	resolveDocument,
@@ -482,10 +483,10 @@ describe("explain/write — Q14 floor and structural defects", () => {
 		expect(got.occurrences.some((o) => o.klass === "defect")).toBe(true);
 	});
 
-	test("a document-level structural note abstains on its own", () => {
+	test("a document-level structural defect abstains on its own", () => {
 		const got = containsWrite(':put "unterminated');
 		expect(got.verdict).toBe("unknown");
-		expect(got.notes.length).toBeGreaterThan(0);
+		expect(hasStructuralDefect(got.defects)).toBe(true);
 	});
 
 	/**
@@ -556,8 +557,8 @@ describe("explain/write — Q14 floor and structural defects", () => {
 		).toBe(true);
 	});
 
-	test("a clean document carries no notes", () => {
-		expect(containsWrite("/ip route print").notes).toEqual([]);
+	test("a clean document carries no defects", () => {
+		expect(containsWrite("/ip route print").defects).toEqual([]);
 	});
 
 	test("non-command heads are not mislabeled as structural defects", () => {
@@ -713,7 +714,7 @@ describe("explain/write — invariants", () => {
 				got.writes,
 			);
 			if (got.writes > 0) expect(got.verdict).toBe("true");
-			else if (got.blockers.length > 0 || got.notes.length > 0)
+			else if (got.blockers.length > 0 || hasStructuralDefect(got.defects))
 				expect(got.verdict).toBe("unknown");
 			else expect(got.verdict).toBe("false");
 			// A `false` verdict is the only one that may report no reason at all.

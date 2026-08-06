@@ -491,9 +491,54 @@ describe("resolveVerbs — document walk over the certainty contract", () => {
 		expect(checked).toBe(2);
 	});
 
-	test("structural notes propagate onto the analysis", () => {
-		expect(resolveVerbs("/ip) address").notes).toContain("unbalanced-close:)");
-		expect(resolveVerbs("/ip route\nprint").notes).toEqual([]);
+	test("a correct split after a lost context still says the context was lost", () => {
+		// #192's third bullet. The cascade FIX shipped in #197 — every
+		// context-DEPENDENT statement after a defect degrades — but a
+		// context-INDEPENDENT one keeps resolving, correctly, and the walker used
+		// to drop the resolver's certainty flag on the way out. So this document
+		// reported a clean `resolved` with no trace that the document had lost its
+		// place.
+		const { splits } = resolveVerbs("/ip) address\n/ip route print");
+		expect(splits.map((s) => s.resolution)).toEqual(["unknown", "resolved"]);
+		// The second split is RIGHT — `/ip route print` is absolute, so it never
+		// consumed the context — and it is reported alongside the fact that the
+		// context was gone.
+		expect(splits[1]?.path).toBe("/ip/route");
+		expect(splits.map((s) => s.contextCertain)).toEqual([true, false]);
+	});
+
+	test("contextCertain tracks the resolver statement for statement", () => {
+		// Not re-derived here: whatever the resolver decided is what the walker
+		// carries, so the two can never drift apart.
+		for (const text of [
+			"/ip route\nprint",
+			"/ip) address\nadd address=1.1.1.1\n/ip/route/add gateway=2.2.2.2",
+			"/ip/$menu\n:put 1",
+			":if [) do={ /ip route add }\n/ip address print",
+		]) {
+			const { splits } = resolveVerbs(text);
+			const { statements } = resolveStatements(text);
+			expect(splits.map((s) => s.contextCertain)).toEqual(
+				statements.map((s) => s.contextCertain),
+			);
+		}
+	});
+
+	test("the single-statement entry point carries no certainty claim", () => {
+		// `resolveVerb` is handed its context, so it has nothing to say about
+		// whether that context was knowable — and the type must not let a caller
+		// read silence as `true`.
+		expect("contextCertain" in resolveVerb("/ip route print", "/")).toBe(false);
+	});
+
+	test("structural defects propagate onto the analysis", () => {
+		expect(resolveVerbs("/ip) address").defects).toContainEqual({
+			code: "unbalanced-close",
+			start: 3,
+			end: 4,
+			detail: ")",
+		});
+		expect(resolveVerbs("/ip route\nprint").defects).toEqual([]);
 	});
 
 	test("never throws on adversarial input", () => {

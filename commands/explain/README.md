@@ -335,7 +335,7 @@ Standard envelope (constitution: result envelope); `data` sketch:
   "spans": [ { "start": 0, "end": 9, "class": "path", "ev": "e0" } ],
   "diagnostics": [],
   "evidence": [
-    { "id": "e0", "source": "canonicalizer", "basis": "heuristic", "outcome": "ok" }
+    { "id": "e0", "source": "canonicalizer", "probe": "resolveVerbs", "basis": "heuristic", "outcome": "ok" }
   ],
   "runtimeAcceptance": "not-proven"
 }
@@ -348,8 +348,13 @@ Standard envelope (constitution: result envelope); `data` sketch:
   schema-free readings (for example a bare path may be a menu or a no-argument
   command); `unknown` means analysis cannot safely recover a reading. Neither is
   silently collapsed to a diagnostic severity or to a guessed command. A
-  resolved statement also carries `kind: "menu" | "command"`; `command` is
-  present only for the latter. The library reports the two kinds as *separate
+  resolved statement also carries `kind: "menu" | "command"`, and the three
+  shapes are a **discriminated union**, not four independent optional fields:
+  a menu carries `command: { path }` and no verb (navigation names a menu and
+  nothing else), a command carries `command: { path, verb }`, and a refusal
+  carries `unresolved` and no `command`. Narrowing on `resolution`/`kind` yields
+  the fields that exist, which is what the LSP and MCP consumers need from the
+  exported types. The library reports the two kinds as *separate
   resolutions* — `src/explain/verbsplit.ts` returns `navigation` (with
   `kind: "menu"`) beside `resolved` (with `kind: "command"`), so `resolved`
   keeps meaning "a verb was decided" for its callers. Phase 1 folds `navigation`
@@ -455,6 +460,80 @@ Standard envelope (constitution: result envelope); `data` sketch:
 - Live-state token classes (disabled/dynamic/inactive object references)
   surface as facts, not errors; severity policy belongs to the caller.
 
+### What phase 1 offline actually emits (#202a)
+
+The sketch above is the whole shape, and `examples.md` describes the FINISHED
+command — both stay as they are. This table says which parts `src/explain.ts`
+ships today, so a reader can tell a decision from an oversight. Every gap closes
+by ADDING a field, never by changing one, which is why the examples do not need
+to move: an example asserting a field this phase omits is simply not green yet,
+and its phase is named below.
+
+| Part | Phase 1 offline |
+| ---- | --------------- |
+| `input`, `verdict`, `canonical`, `structure`, `diagnostics`, `runtimeAcceptance` | complete |
+| `evidence[]` | the **offline subset**: `source` is always `canonicalizer` and there is no RouterOS version stamp |
+| `structure.statements[].command` | `path` + `verb`; **no `args`** |
+| `structure.statements[].transport` | **absent** — #202c, which greens examples 1, 2, 6 and 23 |
+| `spans` | comment runs and resolved variable classes only; **no value shape or type** |
+| `schema`, `completion` | absent — live evidence, phase 2 |
+
+- **No per-statement argument list.** Splitting one statement's arguments needs
+  a statement-scope lexer for quoted values, `[…]` selectors and `?` queries.
+  That is new lexical work and it gets the #201 probe-matrix treatment when
+  `--curl` needs it, rather than a split on spaces now. `canonical.args` is the
+  whole-input structured case and is exact.
+- **Transport is absent, not defaulted.** An `unknown` on every statement would
+  read as a decision that was never made. Examples 1, 2, 6 and 23 assert
+  transport and are #202c's to green; examples 1b, 3, 4, 18, 18b, 20, 21 and 22
+  are the offline set #202b greens without it.
+- **`spans` carries what offline can prove.** Comment runs, and the variable
+  classes Q13 scored at 100% precision on resolved bindings; an abstention is
+  omitted rather than rendered as a guess. The Q12 vocabulary over
+  path/verb/argument bytes wants device `highlight` as its oracle. A subset is
+  not a claim that the vocabulary is closed.
+- **Evidence is offline-shaped, not the whole contract.** The bullet above says
+  an evidence entry carries `source` (`canonicalizer` vs `live-inspect`) and a
+  RouterOS version stamp; phase 1 emits neither the live source nor the stamp,
+  because no probe ran and there is no device to stamp. `ExplainEvidence` is
+  typed to what offline produces rather than pre-declaring variants nothing can
+  emit, so phase 2 widens the union and adds the stamp — an addition, not a
+  change to what a caller reads today.
+- **The value TYPE axis is untouched, and `highlight` cannot close it.**
+  RouterOS types values at parse time (bare `1.1.1.1` is `ip`, `3w4d8h` is
+  `time`, `"1.1.1.1"` is `str`, and some commands implicitly cast) while the
+  device highlighter classes every value byte `none` — so the value axis has a
+  different oracle (`:parse`/IL and `:typeof`) and is **not** a subset of the
+  Q12 span work above. Three facts stay separate when it lands, each with its
+  own provenance and uncertainty, never collapsed into one `type` string:
+  1. a **lexical shape hint** — non-authoritative and possibly *several*,
+     because shapes overlap (`2.2` is number-shaped and ip-completable);
+  2. the **observed type** a live IL/`:typeof` reading reports;
+  3. the argument's **schema type** from path enumeration.
+
+  The decision, the fail-closed rules (a hint is never a diagnostic; a quoted
+  value never gets a "wrong type" flag) and the probe matrix that has to ground
+  it are **#225**, carved out of #202's *Value-shape / typed-literal awareness*
+  section so they outlive #202 closing. It sequences as the **first phase-2 lab
+  round**: after #202c, because a value token cannot be annotated before the
+  statement-scope lexer can locate one, and before phase-2 span/`--schema`
+  emission, because retrofitting three facts onto one shipped `class` + `ev`
+  would *change* a field rather than add one. Written down here because the
+  lexical layer is deliberately type-blind: when a future verdict looks wrong
+  around a value, that is a type-axis question before it is a lexical one.
+- **Severity is fixed here, because it drives `--fail-on`.** Three buckets, and
+  the split is not "structural vs not":
+  - `error` — `unclosed`, `unbalanced-close`, `unterminated-string`,
+    `bad-escape`, `bad-sigil`. Five classes the device itself rejects.
+  - `warning` — `over-depth`, because it is centrs's own resource bound and says
+    nothing about whether the input is legal; and an `ambiguous`/`unknown`
+    resolution, never an error, so the default `--fail-on error` cannot fail a
+    document whose only sin is being unreadable without a schema — which is most
+    of RouterOS scripting.
+  - `info` — `bom`/`non-ascii` (positional facts: a legal command must not
+    fail), and `context-lost`, which reports a reading that is correct while the
+    document's menu context was already gone.
+
 ## MCP and library surfaces
 
 - `centrs_explain` today wraps `canonicalizeExecuteCommand` (offline, no CDB —
@@ -466,9 +545,17 @@ Standard envelope (constitution: result envelope); `data` sketch:
   (`{ input, mode, path, verb, attributes, queries, writeShaped }`) is
   **superseded** when this lands — a deliberate pre-1.0 breaking change, with
   `commands/mcp/` examples and integration tests updated in the same change;
-  no dual-shape compatibility layer is planned.
-- Library (sketch): `explainCommand(input, opts)` pure/offline;
-  `explainCommand(input, { target, facets })` live. `lsp-routeros-ts` and
+  no dual-shape compatibility layer is planned. **That supersession is held out
+  of #202 and tracked in #223** (maintainer decision): `centrs_explain` and
+  rosetta's tool surface must stay aligned for agent usage, which is a
+  cross-project decision. Until #223 lands the MCP keeps its flat shape, so the
+  CLI's `--json` and the MCP's `data` are **deliberately divergent**.
+- Library: `explainCommand(input)` is the offline analysis (`src/explain.ts`,
+  #202a) and `explainEnvelope(input)` wraps it in the standard envelope. The
+  live form takes a second argument — `explainCommand(input, { target, facets })`
+  — which is phase 2; it is deliberately not an options bag that accepts
+  nothing today, since a caller cannot tell an ignored option from an honored
+  one. `lsp-routeros-ts` and
   tikbook are the intended external consumers (hover/diagnostics/completion/
   semantic tokens over these calls); an LSP *protocol* surface on centrs
   stays out of scope (#90) — but the export shape is validated against a real

@@ -63,7 +63,7 @@
 import { scopeBodies } from "./blocks.ts";
 import type { Defect } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
-import { resolveStatements } from "./pathresolve.ts";
+import { resolveStatements, type Span } from "./pathresolve.ts";
 import { SUBMENU_DIRECTIVES, VERBS } from "./verbs.ts";
 
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
@@ -268,45 +268,75 @@ export function splitRun(
 			};
 }
 
-/** Whether a reading was decided, or refused. */
-export type VerbResolution =
-	| "resolved"
-	| "navigation"
-	| "ambiguous"
-	| "unknown";
-
-/** The verb/menu split of one statement, context applied. */
-export interface VerbSplit {
-	resolution: VerbResolution;
-	/**
-	 * `command` for a decided verb, `menu` for a bare path the container table
-	 * confirms as navigation, `null` for `ambiguous`/`unknown`. These are the
-	 * ratified envelope's two kinds (`commands/explain/README.md`), so phase 1
-	 * renders them without inventing a third word for the same concept — the
-	 * `navigation` resolution above maps to envelope `resolved` + `kind: "menu"`.
-	 *
-	 * This is **fully derived** from `resolution` and carries no independent
-	 * information: `resolution` says what the analyzer did, `kind` says what the
-	 * statement is. It is kept because it is the envelope's vocabulary and the
-	 * field phase 1 renders, and the mapping is pinned in both directions by a
-	 * test so the two can never drift apart.
-	 */
-	kind: "command" | "menu" | null;
-	/**
-	 * The menu path: context + the run before the verb when `resolved`, and the
-	 * whole run when `navigation` (a navigation statement names only a menu).
-	 * Null for `ambiguous`/`unknown`.
-	 */
-	path: string | null;
-	/** The verb token; null unless `resolved`. */
-	verb: string | null;
-	/** Index of the verb within the run; null unless `resolved`. */
-	verbAt: number | null;
+/** What every split carries, whatever it decided. */
+interface VerbSplitCommon {
 	/** Context extended by each run prefix — the path readings. */
 	candidates: string[];
 	/** The rule that fired, for provenance. */
 	why: string;
 }
+
+/**
+ * A decided verb: the menu is the context plus the run before the verb.
+ *
+ * `kind` is **fully derived** from `resolution` and carries no independent
+ * information: `resolution` says what the analyzer did, `kind` says what the
+ * statement is. It is kept because it is the ratified envelope's vocabulary
+ * (`commands/explain/README.md`) and the field phase 1 renders, so this module
+ * does not invent a third word for the same concept; the mapping is pinned in
+ * both directions by a test so the two can never drift apart.
+ */
+export interface VerbSplitCommandReading extends VerbSplitCommon {
+	resolution: "resolved";
+	kind: "command";
+	path: string;
+	verb: string;
+	/** Index of the verb within the run. */
+	verbAt: number;
+}
+
+/** A bare path the container table confirms: it names a menu and nothing else. */
+export interface VerbSplitMenuReading extends VerbSplitCommon {
+	resolution: "navigation";
+	kind: "menu";
+	path: string;
+	verb: null;
+	verbAt: null;
+}
+
+/** A refusal — the schema-free rule could not decide, or would have to guess. */
+export interface VerbSplitRefusal extends VerbSplitCommon {
+	resolution: "ambiguous" | "unknown";
+	kind: null;
+	path: null;
+	verb: null;
+	verbAt: null;
+}
+
+/**
+ * The verb/menu split of one statement, context applied.
+ *
+ * A union rather than one shape with four nullable fields, because the nulls
+ * are not independent: a `resolved` split always has a path AND a verb, a
+ * `navigation` split always has a path and never a verb, and a refusal has
+ * neither. Stating that in the type means a consumer narrowing on `resolution`
+ * gets the fields that exist, and the envelope's fold (`src/explain.ts`) has no
+ * unreachable null branch to write. The runtime shape is unchanged — every
+ * variant carries every key, so a null is still readable without narrowing.
+ */
+export type VerbSplit =
+	| VerbSplitCommandReading
+	| VerbSplitMenuReading
+	| VerbSplitRefusal;
+
+/**
+ * Whether a reading was decided, or refused.
+ *
+ * Derived from the union rather than declared beside it, so the vocabulary and
+ * the shapes cannot drift: a new resolution word has to arrive as a variant
+ * that says what it carries.
+ */
+export type VerbResolution = VerbSplit["resolution"];
 
 /** Join a base menu with bare run segments (run tokens are `BARE_WORD`, no `..`/`.`). */
 function joinBase(base: string, names: string[]): string {
@@ -314,7 +344,7 @@ function joinBase(base: string, names: string[]): string {
 	return `/${parts.join("/")}`;
 }
 
-function unknownSplit(why: string): VerbSplit {
+function unknownSplit(why: string): VerbSplitRefusal {
 	return {
 		resolution: "unknown",
 		kind: null,
@@ -408,11 +438,47 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 	};
 }
 
-/** A document's per-statement verb/menu splits, plus structural notes. */
+/**
+ * One statement's split, as seen by the DOCUMENT walker.
+ *
+ * The two extra fields are the difference between the entry points, and both are
+ * required rather than optional on purpose. `resolveVerb` is handed one
+ * statement and an explicit context, so it has nothing to say about where that
+ * statement sits or whether the context was knowable; `resolveVerbs` walks the
+ * document and always does. An optional flag would make "absent" mean both
+ * "single-statement call" and "certain", and the whole point of the field is
+ * that silence must not read as certainty.
+ */
+export type DocumentVerbSplit = VerbSplit & {
+	/**
+	 * This statement in DOCUMENT analyzed-byte space, straight from the resolver.
+	 *
+	 * Carried because the walk FLATTENS: a block body's statements are appended
+	 * after their parent, so `splits` is longer than the top-level segmentation
+	 * and a caller pairing the two by index silently attaches the wrong span to every
+	 * statement after the first `do={…}`. With the span here there is nothing to
+	 * pair — the location travels with the reading.
+	 */
+	span: Span;
+	/**
+	 * Was the menu context in force BEFORE this statement known? (Q14 C3b, #192.)
+	 *
+	 * `false` does NOT invalidate `path`: the resolver already degrades every
+	 * context-DEPENDENT statement to `unresolved` when context is lost, so a split
+	 * that still says `resolved` here resolved WITHOUT consuming the context — an
+	 * absolute path, a `:` directive, or a bare directive. What this carries is
+	 * the thing that was otherwise dropped on the floor: `/ip) address` followed
+	 * by `/ip route print` yields a perfectly correct `resolved` split whose
+	 * document had already lost its context, and a consumer ranking readings or
+	 * offering completions needs to know that.
+	 */
+	contextCertain: boolean;
+};
+
+/** A document's per-statement verb/menu splits, plus structural defects. */
 export interface VerbAnalysis {
-	splits: VerbSplit[];
-	notes: string[];
-	/** The located twin of {@link notes}; see `defects.ts`. */
+	splits: DocumentVerbSplit[];
+	/** Located structural surprises; see `defects.ts`. */
 	defects: Defect[];
 }
 
@@ -431,16 +497,29 @@ export interface VerbAnalysis {
  * fails closed on the cascade without a local taint that would over-fire on
  * benign statements. The distinction is only visible to the resolver; this
  * module sees flattened statements.
+ *
+ * What the walker does add is {@link DocumentVerbSplit.contextCertain} and
+ * {@link DocumentVerbSplit.span}: the resolver's per-statement certainty and
+ * location, carried through instead of dropped. The certainty was the last of
+ * #192's three bullets — the cascade FIX shipped in #197, but the signal it
+ * produced stopped here.
+ *
+ * The returned array is the RESOLVER's statement list, which is longer than the
+ * top-level segmentation: a `do={…}` body's statements are flattened in after
+ * their parent (matching what IL does to them), so a body statement's span is
+ * CONTAINED by its parent's rather than following it. Read the spans; do not
+ * pair this array with `segmentStatements` by index.
  */
 export function resolveVerbs(text: string): VerbAnalysis {
-	const { statements, notes, defects } = resolveStatements(text);
+	const { statements, defects } = resolveStatements(text);
 	return {
-		splits: statements.map((s) =>
-			s.unresolved
+		splits: statements.map((s) => ({
+			...(s.unresolved
 				? unknownSplit(s.unresolved)
-				: resolveVerb(s.text, s.context),
-		),
-		notes,
+				: resolveVerb(s.text, s.context)),
+			span: s.span,
+			contextCertain: s.contextCertain,
+		})),
 		defects,
 	};
 }

@@ -7,7 +7,9 @@ import {
 } from "../../src/explain/coordinates.ts";
 import {
 	type Defect,
+	type DefectCode,
 	defectAt,
+	hasStructuralDefect,
 	isPositionalFact,
 	mergeDefects,
 	rebaseDefects,
@@ -74,8 +76,8 @@ function allDefects(text: string): Defect[] {
 
 describe("Defect helpers", () => {
 	test("mergeDefects de-dupes on the WHOLE region, never the code alone", () => {
-		// This is the difference from the note channel, which builds a Set over
-		// stringified notes and so collapses two events into one.
+		// This is the difference from the retired note channel, which built a Set
+		// over stringified notes and so collapsed two events into one.
 		const a = defectAt("over-depth", 40);
 		const b = defectAt("over-depth", 900);
 		expect(mergeDefects([a], [b])).toEqual([a, b]);
@@ -355,11 +357,9 @@ describe("Regions recover what the note channel loses", () => {
 		const text = `${deepChain(260)}\n${deepChain(260)}`;
 		const analysis = resolveStatements(text);
 
-		// The note channel is a Set over strings: both events collapse to one
-		// entry and BOTH offsets are gone.
-		expect(analysis.notes).toEqual(["over-depth"]);
-
-		// The region channel keeps them addressable and distinct.
+		// The retired note channel was a Set over strings: both events collapsed to
+		// one entry and BOTH offsets were gone. The region channel keeps them
+		// addressable and distinct.
 		const overDepth = analysis.defects.filter((d) => d.code === "over-depth");
 		expect(overDepth).toHaveLength(2);
 		expect(overDepth[0]?.start).toBeLessThan(overDepth[1]?.start as number);
@@ -369,7 +369,6 @@ describe("Regions recover what the note channel loses", () => {
 		// It used to emit a bare `over-depth` with no offset, while segment.ts and
 		// symbols.ts emitted `over-depth:<byte>` — the same class, two shapes.
 		const analysis = resolveStatements(deepChain(260));
-		expect(analysis.notes).toEqual(["over-depth"]);
 		const [defect] = analysis.defects.filter((d) => d.code === "over-depth");
 		expect(defect).toBeDefined();
 		expect(defect?.end).toBeGreaterThan(defect?.start as number);
@@ -513,12 +512,76 @@ describe("Coordinate-pass defects", () => {
 
 	test("a non-ascii value never abstains the write tristate", () => {
 		// examples.md example 22 is a legal command; a UTF-8 comment or value must
-		// not flip `containsWrite` to `unknown`. The note channel is what gates
-		// that, and these two classes deliberately never enter it.
+		// not flip `containsWrite` to `unknown`. `hasStructuralDefect` is what gates
+		// that, and these two classes deliberately never pass it.
 		const analysis = containsWrite('/system identity set name="router-🚀"');
-		expect(analysis.notes).toEqual([]);
+		expect(hasStructuralDefect(analysis.defects)).toBe(false);
 		expect(analysis.verdict).not.toBe("unknown");
 		expect(analysis.defects.every((d) => isPositionalFact(d.code))).toBe(true);
+	});
+});
+
+/**
+ * The abstention gate, after the `notes` channel was deleted (#202).
+ *
+ * `write.ts` used to abstain on `notes.length > 0`; it now abstains on
+ * `hasStructuralDefect(defects)`. The swap was measured before it was made —
+ * over the frozen 913-document corpus and 19,972 targeted mutations, the two
+ * predicates disagreed on zero inputs in all five analyzers and no tristate
+ * moved — but a corpus run is not a contract. THIS is the contract: every
+ * structural class abstains, and neither positional class does.
+ */
+describe("the abstention gate rides the defect channel (#202)", () => {
+	// One input per structural class, each with NO proven write, so the verdict
+	// turns entirely on the gate. A `write` occurrence would mask it (rule 1).
+	const structural: [DefectCode, string][] = [
+		["unterminated-string", ':put "unterminated'],
+		["unclosed", ":if (true) do={ :put 1"],
+		["unbalanced-close", ":put 1}"],
+		["over-depth", `${"[".repeat(300)}find${"]".repeat(300)}`],
+	];
+
+	for (const [code, input] of structural) {
+		test(`${code} abstains the write tristate`, () => {
+			const analysis = containsWrite(input);
+			expect(analysis.defects.map((d) => d.code)).toContain(code);
+			expect(hasStructuralDefect(analysis.defects)).toBe(true);
+			expect(analysis.verdict).toBe("unknown");
+		});
+	}
+
+	test("a positional fact alone never abstains", () => {
+		// A read command whose only defect is the coordinate pass. It must stay
+		// `false`, not degrade to `unknown` — an eighth of the corpus carries
+		// non-ASCII, and `bom`/`non-ascii` say nothing about structure.
+		for (const input of ["\ufeff/ip route print", "/ip route print # 路由器"]) {
+			const analysis = containsWrite(input);
+			expect(analysis.defects.length).toBeGreaterThan(0);
+			expect(analysis.defects.every((d) => isPositionalFact(d.code))).toBe(
+				true,
+			);
+			expect(hasStructuralDefect(analysis.defects)).toBe(false);
+			expect(analysis.verdict).toBe("false");
+		}
+	});
+
+	test("hasStructuralDefect is the positional-fact split, exactly", () => {
+		expect(hasStructuralDefect([])).toBe(false);
+		for (const code of [
+			"over-depth",
+			"bad-escape",
+			"bad-sigil",
+			"unterminated-string",
+			"unclosed",
+			"unbalanced-close",
+		] as DefectCode[])
+			expect(hasStructuralDefect([defectAt(code, 0)])).toBe(true);
+		for (const code of ["bom", "non-ascii"] as DefectCode[])
+			expect(hasStructuralDefect([defectAt(code, 0)])).toBe(false);
+		// A structural defect anywhere in the list wins.
+		expect(
+			hasStructuralDefect([defectAt("non-ascii", 0), defectAt("unclosed", 1)]),
+		).toBe(true);
 	});
 });
 

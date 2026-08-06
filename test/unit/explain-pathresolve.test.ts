@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { hasStructuralDefect } from "../../src/explain/defects.ts";
 import { MENU_PATHS } from "../../src/explain/menus.ts";
 import {
 	resolveDocument,
@@ -75,14 +76,17 @@ describe("Q4 per-statement canonical paths (resolveStatements)", () => {
 	}
 });
 
-describe("well-formed corners report no structural notes", () => {
+describe("well-formed corners report no structural defects", () => {
 	for (const c of [...fixtures.document, ...fixtures.statements]) {
 		// The pasted-prompt corner is well-formed text (the device rejects it, but
 		// its delimiters balance), so like every ratified corner it carries no
-		// structural note; the abstention shows up as an unresolved resolution.
+		// structural defect; the abstention shows up as an unresolved resolution.
+		// Positional facts are not structure — a corner may legally carry one.
 		test(c.name, () => {
-			expect(resolveDocument(c.input).notes).toEqual([]);
-			expect(resolveStatements(c.input).notes).toEqual([]);
+			expect(hasStructuralDefect(resolveDocument(c.input).defects)).toBe(false);
+			expect(hasStructuralDefect(resolveStatements(c.input).defects)).toBe(
+				false,
+			);
 		});
 	}
 });
@@ -145,19 +149,19 @@ describe("Q14 fail-closed — malformed input degrades, never invents commands",
 	const malformed = ":if [) do={ /ip route add }";
 
 	test("resolveStatements degrades the malformed statement", () => {
-		const { statements, notes } = resolveStatements(malformed);
+		const { statements, defects } = resolveStatements(malformed);
 		expect(statements.map((s) => s.path)).toEqual([null]);
 		expect(statements[0]?.unresolved).toBeDefined();
 		expect(statements.map((s) => s.path)).not.toContain("/ip/route/add");
-		expect(notes.length).toBeGreaterThan(0); // segmenter defect surfaced
+		expect(hasStructuralDefect(defects)).toBe(true); // segmenter defect surfaced
 	});
 
 	test("resolveDocument emits no confident path from malformed input", () => {
-		const { resolutions, notes } = resolveDocument(malformed);
+		const { resolutions, defects } = resolveDocument(malformed);
 		expect(resolutions.map((r) => r.path).filter((p) => p !== null)).toEqual(
 			[],
 		);
-		expect(notes.length).toBeGreaterThan(0);
+		expect(hasStructuralDefect(defects)).toBe(true);
 	});
 });
 
@@ -165,10 +169,10 @@ describe("comment-aware delimiter scanning", () => {
 	test("a `#`-comment `}` is not a real delimiter (no false malformed)", () => {
 		// `:do {\n# }\n:put 1\n}` is valid — the `}` in the comment must not make
 		// the statement look unbalanced, and the body must reach `:put 1`.
-		const { statements, notes } = resolveStatements(":do {\n# }\n:put 1\n}");
+		const { statements, defects } = resolveStatements(":do {\n# }\n:put 1\n}");
 		expect(statements.map((s) => s.path)).toEqual(["/do", "/put"]);
 		expect(statements[0]?.unresolved).toBeUndefined();
-		expect(notes).toEqual([]);
+		expect(defects).toEqual([]);
 	});
 
 	test("a bogus :onerror scope does not emit confident body paths", () => {
@@ -187,7 +191,7 @@ describe("Q17 over-depth — bounded traversal abstains instead of overflowing",
 		expect(() => {
 			result = resolveDocument(deep);
 		}).not.toThrow();
-		expect(result?.notes).toContain("over-depth");
+		expect(result?.defects.map((d) => d.code)).toContain("over-depth");
 	});
 
 	test("deeply nested scope blocks do not overflow the stack", () => {
@@ -196,7 +200,7 @@ describe("Q17 over-depth — bounded traversal abstains instead of overflowing",
 		expect(() => {
 			result = resolveStatements(deep);
 		}).not.toThrow();
-		expect(result?.notes).toContain("over-depth");
+		expect(result?.defects.map((d) => d.code)).toContain("over-depth");
 	});
 });
 

@@ -1,5 +1,5 @@
 {
-	"_source": "Promoted from the phase-0 lab corners `.scratch/explain-lab-q13-corners.ts` (Q13, #185), all 22 of which pass unchanged against the shipped module — the ratified expectations, each carrying the device probe or corpus file it was read off. C1-C22 are those corners. F1a-F2d are the branch anchors for the two behaviors promoted BEYOND the lab SUT (substitution-in-string, closure scope); they were device-verified on CHR 7.23.2 before being frozen here, so no fixture in this file is hand-asserted. X1-X6 are behavior anchors for surfaces the oracle cannot express (empty input, structural notes, scan resumption). `cls: null` is an ABSTENTION and a first-class expected outcome: Q13's central finding is that offline may say what a name is bound to and must never say that a bare word is unbound.",
+	"_source": "Promoted from the phase-0 lab corners `.scratch/explain-lab-q13-corners.ts` (Q13, #185), all 22 of which pass unchanged against the shipped module — the ratified expectations, each carrying the device probe or corpus file it was read off. C1-C22 are those corners. F1a-F2d are the branch anchors for the two behaviors promoted BEYOND the lab SUT (substitution-in-string, closure scope); they were device-verified on CHR 7.23.2 before being frozen here, so no fixture in this file is hand-asserted. X1-X6 are behavior anchors for surfaces the oracle cannot express (empty input, located structural defects, scan resumption). `cls: null` is an ABSTENTION and a first-class expected outcome: Q13's central finding is that offline may say what a name is bound to and must never say that a bare word is unbound.",
 	"cases": [
 		{
 			"id": "C1",
@@ -753,9 +753,15 @@
 			"name": "a doubled sigil at statement start is a hard error — stop there",
 			"input": "//local foo 1\n:put $foo",
 			"expect": [],
-			"rule": "F3/F5 — the sigil run must be zero or one character. CHR 7.23.2 errors at the SECOND sigil (`//local` and `:/local` error at offset 1) and classes every later byte `none`, including variables on following lines. So this is not merely 'do not declare': the resolver records `bad-sigil:<offset>` and reports nothing further, the same fail-closed stop a malformed escape gets. Inside a VALUE a doubled slash is ordinary text — `url=http://example.com` and `comment=a//b` are clean on the device — so the check is statement-leading only.",
+			"rule": "F3/F5 — the sigil run must be zero or one character. CHR 7.23.2 errors at the SECOND sigil (`//local` and `:/local` error at offset 1) and classes every later byte `none`, including variables on following lines. So this is not merely 'do not declare': the resolver raises a located `bad-sigil` defect and reports nothing further, the same fail-closed stop a malformed escape gets. Inside a VALUE a doubled slash is ordinary text — `url=http://example.com` and `comment=a//b` are clean on the device — so the check is statement-leading only.",
 			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
-			"notes": ["bad-sigil:1"]
+			"defects": [
+				{
+					"code": "bad-sigil",
+					"start": 1,
+					"end": 2
+				}
+			]
 		},
 		{
 			"id": "E4",
@@ -763,9 +769,15 @@
 			"name": "a malformed escape stops the analysis",
 			"input": ":local \\\\\nfoo 1\n:put $foo",
 			"expect": [],
-			"rule": "F4 — in code a backslash is valid only before whitespace. Device: the doubled backslash errors on the FIRST one, `foo` is `none`, and nothing after is a variable. The resolver records `bad-escape:<offset>` and reports nothing further rather than continuing across a boundary the console never crossed.",
+			"rule": "F4 — in code a backslash is valid only before whitespace. Device: the doubled backslash errors on the FIRST one, `foo` is `none`, and nothing after is a variable. The resolver raises a located `bad-escape` defect and reports nothing further rather than continuing across a boundary the console never crossed.",
 			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
-			"notes": ["bad-escape:7"]
+			"defects": [
+				{
+					"code": "bad-escape",
+					"start": 7,
+					"end": 8
+				}
+			]
 		},
 		{
 			"id": "E5",
@@ -784,7 +796,13 @@
 			],
 			"rule": "F4 + F2 — `do=\\{` is not `do={`. Device: `outer` and `fn` are `variable-local`, then the error kills the rest (`put` and the in-body `outer` read `none`). Occurrences before the defect stand (the lab's X1 rule); the body is never entered.",
 			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
-			"notes": ["bad-escape:28"]
+			"defects": [
+				{
+					"code": "bad-escape",
+					"start": 28,
+					"end": 29
+				}
+			]
 		},
 		{
 			"id": "E6",
@@ -881,7 +899,7 @@
 			"name": "empty input resolves to nothing",
 			"input": "",
 			"expect": [],
-			"rule": "Never throws, reports nothing, notes nothing."
+			"rule": "Never throws, reports nothing, raises no defect."
 		},
 		{
 			"id": "X2",
@@ -906,8 +924,14 @@
 					"cls": "local"
 				}
 			],
-			"rule": "Structural notes use the segmenter's vocabulary; classes are still reported for what was read.",
-			"notes": ["unterminated-string"]
+			"rule": "Structural defects use the segmenter's vocabulary; classes are still reported for what was read.",
+			"defects": [
+				{
+					"code": "unterminated-string",
+					"start": 9,
+					"end": 21
+				}
+			]
 		},
 		{
 			"id": "X4",
@@ -924,8 +948,15 @@
 					"cls": "local"
 				}
 			],
-			"rule": "`unbalanced-close:<char>` — same vocabulary as `segment.ts`.",
-			"notes": ["unbalanced-close:}"]
+			"rule": "An `unbalanced-close` defect carrying the character — same vocabulary as `segment.ts`.",
+			"defects": [
+				{
+					"code": "unbalanced-close",
+					"start": 10,
+					"end": 11,
+					"detail": "}"
+				}
+			]
 		},
 		{
 			"id": "X5",
@@ -942,8 +973,15 @@
 					"cls": "local"
 				}
 			],
-			"rule": "`unclosed:<chars>` lists the delimiters still open at end of input.",
-			"notes": ["unclosed:{"]
+			"rule": "One `unclosed` defect per delimiter still open at end of input, each pointing at its opener.",
+			"defects": [
+				{
+					"code": "unclosed",
+					"start": 12,
+					"end": 13,
+					"detail": "{"
+				}
+			]
 		},
 		{
 			"id": "X6",

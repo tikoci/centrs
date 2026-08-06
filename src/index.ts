@@ -322,6 +322,7 @@ export {
 	type Defect,
 	type DefectCode,
 	defectAt,
+	hasStructuralDefect,
 	isPositionalFact,
 	mergeDefects,
 	rebaseDefects,
@@ -351,6 +352,7 @@ export {
 	type SymbolOccurrence,
 } from "./explain/symbols.ts";
 export {
+	type DocumentVerbSplit,
 	describeStatement,
 	isDirective,
 	type RunToken,
@@ -365,6 +367,9 @@ export {
 	type VerbAnalysis,
 	type VerbResolution,
 	type VerbSplit,
+	type VerbSplitCommandReading,
+	type VerbSplitMenuReading,
+	type VerbSplitRefusal,
 } from "./explain/verbsplit.ts";
 export {
 	classifyVerb,
@@ -382,6 +387,34 @@ export {
 	type WriteAnalysis,
 	type WriteVerdict,
 } from "./explain/write.ts";
+export {
+	type ExplainBlock,
+	type ExplainCanonical,
+	type ExplainCommandReading,
+	type ExplainData,
+	type ExplainDiagnostic,
+	type ExplainEnvelope,
+	type ExplainEvidence,
+	type ExplainInput,
+	type ExplainMenuReading,
+	type ExplainOperationMeta,
+	type ExplainPositionMapEntry,
+	type ExplainReading,
+	type ExplainRefusal,
+	type ExplainResolution,
+	type ExplainSeverity,
+	type ExplainSpan,
+	type ExplainSpanClass,
+	type ExplainSpanRange,
+	type ExplainStatement,
+	type ExplainStatementFacts,
+	type ExplainStructure,
+	type ExplainSubcommand,
+	type ExplainSubcommandFacts,
+	type ExplainVerdict,
+	explainCommand,
+	explainEnvelope,
+} from "./explain.ts";
 export {
 	type ApiVerb,
 	createProtocolAdapter,
