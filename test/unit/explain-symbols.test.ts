@@ -783,24 +783,358 @@ describe("explain/symbols — F6 bracket statement context (#201)", () => {
 	});
 });
 
+/**
+ * F7 — the FIRST declaration in a scope CLAIMS the name (#201, was the K3 known
+ * limit).
+ *
+ * Every expectation below is the device's own reading on CHR 7.23.2 AND
+ * 7.24rc2, which agreed on all 25 rows of the deciding round; captured by
+ * `.scratch/explain-201-k3-chr-probe{,2,3,4,5}.ts` and replayed against this
+ * module by `.scratch/explain-201-k3-probe-check.ts`.
+ *
+ * K3 claimed "an earlier `:global` outranks a later `:local`". The reverse order
+ * loses too, so it is not a precedence between the classes at all — it is
+ * first-declaration-wins, and three further rules fell out of probing its
+ * extent (the global that does not escape, the promoting lead bracket, and the
+ * statement scope). The control that made the difference measurable is Z: the
+ * device's `highlight` is purely LEXICAL here — inspecting `:global zzz 1` does
+ * not change how a later inspect reads `$zzz`, and `/system/script/environment`
+ * stays empty throughout — so none of this is probe-ordering contamination.
+ */
+describe("explain/symbols — F7 declaration claim (#201)", () => {
+	const classes = (input: string): (string | null)[] =>
+		resolveSymbols(input).occurrences.map((o) => o.cls);
+
+	test("the first declaration in a scope claims the name", () => {
+		expect(classes(":global v 1\n:local v 2\n:put $v")).toEqual([
+			"global",
+			"local",
+			"global",
+		]);
+		// …and it is not a precedence between the classes: the reverse order loses
+		// the same way, which is what killed the K3 wording.
+		expect(classes(":local v 1\n:global v 2\n:put $v")).toEqual([
+			"local",
+			"global",
+			"local",
+		]);
+		// the loser's own span still reads its own head's class; it just binds
+		// nothing.
+		expect(classes(":global v 1\n:local v 2\n:local v 3\n:put $v")).toEqual([
+			"global",
+			"local",
+			"local",
+			"global",
+		]);
+		expect(classes(":local v 1\n:global v 2\n:local v 3\n:put $v")).toEqual([
+			"local",
+			"global",
+			"local",
+			"local",
+		]);
+		// `;` is a statement boundary like a newline, and neither resets the claim
+		expect(classes(":global v 1; :local v 2; :put $v")).toEqual([
+			"global",
+			"local",
+			"global",
+		]);
+	});
+
+	test("a claim only applies from its own offset onwards", () => {
+		// the first in-body use precedes the body's own claim, so it still reads
+		// the enclosing binding.
+		expect(classes(":global v 1\n{:put $v; :local v 2; :put $v}")).toEqual([
+			"global",
+			"global",
+			"local",
+			"local",
+		]);
+		expect(classes(":put $v\n:global v 1")).toEqual(["parameter", "global"]);
+	});
+
+	test("a NESTED scope's declaration never claims the enclosing one", () => {
+		// the inner `:local` is confined, so the outer `:local` is still the
+		// document's first declaration…
+		expect(classes(":if (1=1) do={:local v 9}\n:local v 2\n:put $v")).toEqual([
+			"local",
+			"local",
+			"local",
+		]);
+		// …and an inner declaration cannot claim ahead of the outer one either way.
+		expect(
+			classes(":global v 1\n:if (1=1) do={:local v 9}\n:local v 2\n:put $v"),
+		).toEqual(["global", "local", "local", "global"]);
+		expect(classes(":global v 1\n:if (1=1) do={:local v 2; :put $v}")).toEqual([
+			"global",
+			"local",
+			"local",
+		]);
+		expect(classes(":global v 1\n{:put 1}\n:local v 2\n:put $v")).toEqual([
+			"global",
+			"local",
+			"global",
+		]);
+	});
+
+	test("a `:global` does NOT escape the body it was written in", () => {
+		// This overturns S2 as ratified ("visible for the remainder of the document
+		// regardless of brace nesting"). CHR 7.23.2 and 7.24rc2 agree: `:global`
+		// and `:local` have IDENTICAL lexical visibility and differ only in the
+		// class they emit.
+		expect(classes(":if (1=1) do={:global v 1}\n:put $v")).toEqual([
+			"global",
+			"parameter",
+		]);
+		expect(classes(":while (false) do={:global v 1}\n:put $v")).toEqual([
+			"global",
+			"parameter",
+		]);
+		expect(classes("{:global v 1}\n{:put $v}")).toEqual([
+			"global",
+			"parameter",
+		]);
+		expect(classes(":local f do={:global v 1}\n:put $v")).toEqual([
+			"local",
+			"global",
+			"parameter",
+		]);
+		expect(
+			classes(":if (1=1) do={:if (1=1) do={:global v 1}; :put $v}"),
+		).toEqual(["global", "parameter"]);
+		// it IS visible for the rest of its own scope, inner scopes included…
+		expect(classes(":if (1=1) do={:global v 1; :put $v}")).toEqual([
+			"global",
+			"global",
+		]);
+		expect(classes(":global v 1\n{:put $v}")).toEqual(["global", "global"]);
+		// …and a re-import at the outer scope brings it back.
+		expect(classes(":if (1=1) do={:global v 1}\n:global v\n:put $v")).toEqual([
+			"global",
+			"global",
+			"global",
+		]);
+	});
+
+	test("a statement-LEADING bracket PROMOTES its claims outwards", () => {
+		// F6 called this "transparent", which is indistinguishable from promotion
+		// until the enclosing scope already holds the name. It does not: the use
+		// INSIDE the bracket takes the bracket's own declaration, the use after the
+		// `]` takes the enclosing claim.
+		expect(classes(":global x 1\n[:local x 2; :put $x]\n:put $x")).toEqual([
+			"global",
+			"local",
+			"local",
+			"global",
+		]);
+		expect(classes(":local x 1\n[:global x 2; :put $x]\n:put $x")).toEqual([
+			"local",
+			"global",
+			"global",
+			"local",
+		]);
+		// with no conflict the promotion is what makes the name escape at all
+		expect(classes("[:local x 1; :put $x]\n:put $x")).toEqual([
+			"local",
+			"local",
+			"local",
+		]);
+		expect(classes("[:local x 1]\n[:put $x]")).toEqual(["local", "local"]);
+		// a MID bracket promotes nothing (F6)
+		expect(classes(":put [:local x 1]\n[:put $x]")).toEqual([
+			"local",
+			"parameter",
+		]);
+		// promotion composes through nesting, and stops at the enclosing claim
+		expect(classes(":global x 1\n[[:local x 2]; :put $x]\n:put $x")).toEqual([
+			"global",
+			"local",
+			"local",
+			"global",
+		]);
+		// promoted INTO a body scope, and gone with it
+		expect(classes(":if (1=1) do={[:local x 1]; :put $x}\n:put $x")).toEqual([
+			"local",
+			"local",
+			"parameter",
+		]);
+		// the promoted claim wins over a later declaration, bracket or not
+		expect(classes("[:local x 1]\n[:global x 2; :put $x]\n:put $x")).toEqual([
+			"local",
+			"global",
+			"global",
+			"local",
+		]);
+	});
+
+	test("loop variables live in a scope of their own, for the statement", () => {
+		// not the enclosing scope: an enclosing claim does not swallow them…
+		expect(classes(":global i 1\n:foreach i in={1;2} do={:put $i}")).toEqual([
+			"global",
+			"auto",
+			"auto",
+		]);
+		expect(classes(":local i 1\n:foreach i in=$i do={:put 1}")).toEqual([
+			"local",
+			"auto",
+			"auto",
+		]);
+		// …and not the body scope either: the body's own `:local` shadows them.
+		expect(classes(":foreach i in={1;2} do={:local i 9; :put $i}")).toEqual([
+			"auto",
+			"local",
+			"local",
+		]);
+		// they end with the statement, leaving no claim behind
+		expect(classes(":foreach i in={1;2} do={:put 1}\n:put $i")).toEqual([
+			"auto",
+			"parameter",
+		]);
+		expect(classes(":for i from=1 to=2 do={:put 1}\n:put $i")).toEqual([
+			"auto",
+			"parameter",
+		]);
+		expect(
+			classes(":local i 1\n:foreach i in={1;2} do={:put $i}\n:put $i"),
+		).toEqual(["local", "auto", "auto", "local"]);
+		expect(
+			classes(":foreach i in={1} do={:put 1}\n:local i 2\n:put $i"),
+		).toEqual(["auto", "local", "local"]);
+		// `:foreach k,v` shares one scope; nested loops each get their own
+		expect(classes(":foreach i,j in={1;2} do={:put $i; :put $j}")).toEqual([
+			"auto",
+			"auto",
+			"auto",
+			"auto",
+		]);
+		expect(
+			classes(":foreach i in={1} do={:foreach i in={2} do={:put $i}; :put $i}"),
+		).toEqual(["auto", "auto", "auto", "auto"]);
+	});
+
+	test("`:onerror` binds TWICE — statement scope and enclosing claim", () => {
+		// the statement scope is what makes it `local` inside the body even under
+		// an enclosing claim of the same name…
+		expect(classes(":global e 1\n:onerror e in={:put 1} do={:put $e}")).toEqual(
+			["global", "local", "local"],
+		);
+		expect(classes(":global e 1\n:onerror e in={:put $e} do={:put 1}")).toEqual(
+			["global", "local", "local"],
+		);
+		expect(
+			classes(
+				":global e 1\n:onerror e in={:put 1} do={:if (1=1) do={:put $e}}",
+			),
+		).toEqual(["global", "local", "local"]);
+		// …while the enclosing claim is what keeps it visible AFTER the statement,
+		// which is where it parts company with a loop variable.
+		expect(classes(":onerror e in={:put 1} do={:put 1}\n:put $e")).toEqual([
+			"local",
+			"local",
+		]);
+		expect(classes(":foreach e in={1} do={:put 1}\n:put $e")).toEqual([
+			"auto",
+			"parameter",
+		]);
+		// a failed claim stays failed: the enclosing scope keeps its own class
+		expect(
+			classes(":global e 1\n:onerror e in={:put 1} do={:put 1}; :put $e"),
+		).toEqual(["global", "local", "global"]);
+		expect(
+			classes(
+				":global e 1\n:onerror e in={:put 1} do={:put 1}\n:local e 2\n:put $e",
+			),
+		).toEqual(["global", "local", "local", "global"]);
+	});
+
+	test("a QUOTED name binds exactly like a bare one, for every head", () => {
+		// The quoted branch used to call `bind` in the enclosing scope and set
+		// `declaredHere` unconditionally, which broke every F7 rule for this
+		// spelling. Found in review by CodeRabbit and Codex independently; each
+		// row below is CHR 7.23.2 (`.scratch/explain-201-review-chr-probe.ts`).
+		//
+		// A quoted loop variable does not outlive its statement…
+		expect(classes(':foreach "i" in={1} do={:put 1}\n:put $"i"')).toEqual([
+			"auto",
+			"parameter",
+		]);
+		expect(classes(':foreach "i" in={1} do={:put 1}\n:put $i')).toEqual([
+			"auto",
+			"parameter",
+		]);
+		// …an enclosing claim does not swallow it…
+		expect(classes(':global i 1\n:foreach "i" in={1} do={:put $"i"}')).toEqual([
+			"global",
+			"auto",
+			"auto",
+		]);
+		// …and it does not make the following `do={` an F2 closure.
+		expect(classes(':for "i" from=1 to=2 do={:put $"i"}')).toEqual([
+			"auto",
+			"auto",
+		]);
+		expect(classes(':foreach "i" in={1} do={:put $"i"}\n:put $"i"')).toEqual([
+			"auto",
+			"auto",
+			"parameter",
+		]);
+		// the body's own `:local` still shadows it (the statement scope is outside
+		// the body, quoted or not)
+		expect(classes(':foreach "i" in={1} do={:local i 9; :put $i}')).toEqual([
+			"auto",
+			"local",
+			"local",
+		]);
+		// `:onerror` was not accepted by the quoted branch at all, so its pending
+		// state survived to the next bare word and declared `in`. It binds in both
+		// places like the bare spelling, and `in` is an argument, not a variable.
+		expect(
+			classes(':onerror "e" in={:put 1} do={:put $"e"}\n:put $"e"'),
+		).toEqual(["local", "local", "local"]);
+		expect(
+			resolveSymbols(':onerror "e" in={:put 1} do={:put 1}').occurrences.map(
+				(o) => o.name,
+			),
+		).toEqual(["e"]);
+		// a quoted `:local`/`:global` declaration is unchanged: it still declares,
+		// and still makes its own `do={` a closure (F2)
+		expect(classes(':local "v" 1\n:put $"v"')).toEqual(["local", "local"]);
+		expect(classes(':local "f" do={:put $outer}\n:local outer 1')).toEqual([
+			"local",
+			"parameter",
+			"local",
+		]);
+	});
+
+	test("the claim rule does not disturb the F2 closure boundary", () => {
+		// a closure still hides every outer name, whichever class claimed it
+		expect(classes(":global v 1\n:local v 2\n:local f do={:put $v}")).toEqual([
+			"global",
+			"local",
+			"local",
+			"parameter",
+		]);
+		expect(classes(":local v 1\n:global v 2\n:local f do={:put $v}")).toEqual([
+			"local",
+			"global",
+			"local",
+			"parameter",
+		]);
+		// a control-flow body still shares it
+		expect(classes(":global v 1\n:local v 2\n:if (1=1) do={:put $v}")).toEqual([
+			"global",
+			"local",
+			"global",
+		]);
+		// and an in-body re-import is still what a closure needs
+		expect(
+			classes(":global v 1\n:local f do={:global v; :local v 2; :put $v}"),
+		).toEqual(["global", "local", "global", "local", "global"]);
+	});
+});
+
 describe("explain/symbols — known limits (#201)", () => {
 	// Pinned so a fix flips them deliberately, in the Q16 style: each carries the
 	// device reading it does not yet reproduce.
-	test("K3 a document `:local` after a `:global` of the same name", () => {
-		// CHR 7.23.2: `:global v 1\n:local v 2\n:put $v` reads the trailing use
-		// `variable-global` — the earlier global outranks the later local at the
-		// same scope, where this resolver takes the nearest preceding binding and
-		// says `local`. Found as the CONTROL for the #201 K1 probe: it is why the
-		// `:global`-shadowing cases cannot be used to measure bracket scope extent.
-		// Its own extent (same scope only? which spellings?) is not probed yet, so
-		// it is carried rather than guessed at.
-		expect(
-			resolveSymbols(":global v 1\n:local v 2\n:put $v").occurrences.map(
-				(o) => o.cls,
-			),
-		).toEqual(["global", "local", "local"]);
-	});
-
 	test("K2 the doubled-sigil stop is statement-leading only", () => {
 		// CHR 7.23.2 errors at the doubled separator here too, but `:put //foo`
 		// and `url=//example.com` are valid, so this needs parser context.
@@ -810,6 +1144,32 @@ describe("explain/symbols — known limits (#201)", () => {
 		// the forms that MUST stay clean
 		for (const valid of [":put //foo", "/tool fetch url=//example.com"])
 			expect(resolveSymbols(valid).notes).toEqual([]);
+	});
+
+	test("K4 a bare hyphenated reference to a quoted declaration", () => {
+		// CHR 7.23.2: `:global "set-dns" 1` + `:put $set-dns` ERRORS at the `-` and
+		// reads only `$set` as `variable-parameter` — a bare `$name` reference never
+		// carries a hyphen, whatever the document declared, and `$"set-dns"` is the
+		// spelling that resolves. S19 tries the FULL run first, so this reports a
+		// confident `global` where the device errors out.
+		//
+		// Pre-existing and NOT part of F7: the same rows fail identically on the
+		// pre-F7 module (`.scratch/explain-201-k3-probe-check-old.ts`). Found by the
+		// F7 probe rounds and pinned here so a fix to S19 flips it on purpose.
+		expect(
+			resolveSymbols(':global "set-dns" 1\n:put $set-dns').occurrences.map(
+				(o) => [o.name, o.cls],
+			),
+		).toEqual([
+			["set-dns", "global"],
+			["set-dns", "global"],
+		]);
+		// the quoted reference is the one the device accepts, and agrees already
+		expect(
+			resolveSymbols(':global "set-dns" 1\n:put $"set-dns"').occurrences.map(
+				(o) => o.cls,
+			),
+		).toEqual(["global", "global"]);
 	});
 
 	test("a bare `//` at statement start does stop (F5, no word to carry it)", () => {
