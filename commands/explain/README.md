@@ -271,13 +271,22 @@ bare menu path. The positional grammar stays **target-first like every other
 router-taking command** (amended in PR review — the shared resolver/selection
 helpers assume it): one positional means offline and it *is* the input; two
 positionals mean live with the router first; `--` is accepted before the
-input; `--file`/stdin replace the input positional in either form, so with
-either of them **every positional is a target** (`… | centrs explain edge1` is
-the live form, not an offline reading of the string `edge1`). stdin counts when
-fd 0 actually carries bytes — a pipe, a redirected file — and never for a
-terminal or `/dev/null`, so a non-interactive `centrs explain '<input>'` is
-unaffected. Adding a
+input; **`--file` replaces the input positional in either form**, so with it
+every positional is a target. Adding a
 router therefore never reinterprets a previously valid offline invocation.
+
+**Ambient stdin is read only when no positional could be the input** — that is,
+the offline form with nothing else to analyze. A positional always wins, and
+when fd 0 is redirected anyway the result carries a
+[`usage/stdin-ignored`](../../docs/errors/usage/stdin-ignored.md) warning rather
+than quietly dropping the pipe. `--file -` names stdin explicitly and works in
+both forms (`… | centrs explain edge1 --file -`). The narrower rule is
+deliberate and measured: `runCli` is called in-process by tests, so reading fd 0
+on any path a positional invocation reaches consumes the invoking shell's
+stdin — it fed those bytes to the analyzer and broke 21 unrelated tests once,
+then passed on the next run because the read had drained the fd. Detecting the
+collision is a stat on fd 0, never a read, which is why it is reported instead
+of resolved.
 One verb serves all three intents; the accepted risk is that
 the refined "broad query → broader results" scheme adds complexity to one
 surface rather than splitting into sub-verbs. (Option B — sub-verbs

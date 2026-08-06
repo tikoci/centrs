@@ -11,12 +11,12 @@
  * No other centrs command has an optional target where arity changes meaning,
  * which is why the split is done here rather than in a shared helper.
  *
- * `--file` / stdin REPLACE the input positional, so with either of them every
- * positional is a target — `… | centrs explain edge1` is the live form, not an
- * offline reading of the string `edge1`. stdin counts when fd 0 carries bytes
- * (a pipe, a redirected file) and never for a terminal or `/dev/null`, so a
- * non-interactive `explain '<input>'` is unaffected. `--file -` reads stdin
- * explicitly.
+ * `--file` REPLACES the input positional, so with it every positional is a
+ * target. **Ambient stdin does not**: it is read only when no positional could
+ * be the input, a positional always wins, and a redirected fd 0 that went
+ * unread is reported as a `usage/stdin-ignored` warning rather than dropped
+ * quietly. `--file -` names stdin explicitly and works in both forms. The
+ * reasoning — and the measurement behind it — is on {@link readInput}.
  *
  * ## What this surface refuses to do
  *
