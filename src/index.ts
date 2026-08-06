@@ -295,6 +295,14 @@ export {
 	renderExecuteFanoutEnvelope,
 } from "./execute-fanout.ts";
 export {
+	type Argument,
+	type ArgumentKind,
+	type ArgumentReading,
+	type ArgumentsRead,
+	type ArgumentsUnread,
+	lexArguments,
+} from "./explain/args.ts";
+export {
 	DIRECTIVE_BODY,
 	HEAD_SCOPED_ARG_NAMES,
 	isScopeBrace,
@@ -390,6 +398,8 @@ export {
 export {
 	buildExplainErrorEnvelope,
 	buildExplainFacetTip,
+	type ExplainArguments,
+	type ExplainArgumentToken,
 	type ExplainBlock,
 	type ExplainCanonical,
 	type ExplainCommandReading,

@@ -66,7 +66,6 @@ import { isMenuPath } from "./menus.ts";
 import { resolveStatements, type Span } from "./pathresolve.ts";
 import { SUBMENU_DIRECTIVES, VERBS } from "./verbs.ts";
 
-const ASCII_WHITESPACE = /[ \t\r\n]+/;
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
 /**
  * A word that ends the leading run: it carries `=` (V2) or opens a group /
@@ -89,12 +88,74 @@ function trimAscii(text: string): string {
 	return text.slice(start, end);
 }
 
+/** Leading trim only — the half `describeStatement` has to count to rebase offsets. */
+function trimAsciiStart(text: string): string {
+	let start = 0;
+	while (start < text.length && isAsciiWhitespace(text[start])) start++;
+	return text.slice(start);
+}
+
+/** One whitespace-separated word, and where it sits in the text it came from. */
+interface Word {
+	name: string;
+	/** offset of the word's first character, inclusive. */
+	start: number;
+	/** offset just past its last character, exclusive. */
+	end: number;
+}
+
+/**
+ * The words of a statement, WITH their offsets (#202c).
+ *
+ * The one word scanner this module has. It replaced a
+ * `replace(/\\\r?\n/g,"").split(whitespace)` pair whose output could not be
+ * mapped back to the text it came from — and a second scanner written beside it
+ * for the offsets would be free to disagree with the boundary rule, which is the
+ * failure #202b hit three times in argument handling.
+ *
+ * H5 from the Q1 segmenter: a `\<newline>` is removed before RouterOS parses the
+ * continued line, so it JOINS the words either side of it rather than separating
+ * them (`na\<nl>me` is the single word `name`) and contributes no character to
+ * the name. That is why a word's `end - start` is not its `name.length`: the span
+ * covers the continuation bytes, the name does not. A caller taking an interior
+ * offset from a name is therefore wrong on continued statements, and
+ * {@link describeStatement} only ever publishes the run's END.
+ */
+function asciiWordSpans(text: string): Word[] {
+	const out: Word[] = [];
+	let current: Word | null = null;
+	let i = 0;
+	while (i < text.length) {
+		const c = text[i] as string;
+		if (
+			c === "\\" &&
+			(text[i + 1] === "\n" || (text[i + 1] === "\r" && text[i + 2] === "\n"))
+		) {
+			// Inside a word this joins; between words it is whitespace that opens
+			// none — matching the removal-then-split the rule replaced.
+			i += text[i + 1] === "\r" ? 3 : 2;
+			if (current !== null) current.end = i;
+			continue;
+		}
+		if (isAsciiWhitespace(c)) {
+			current = null;
+			i++;
+			continue;
+		}
+		if (current === null) {
+			current = { name: c, start: i, end: i + 1 };
+			out.push(current);
+		} else {
+			current.name += c;
+			current.end = i + 1;
+		}
+		i++;
+	}
+	return out;
+}
+
 function asciiWords(text: string): string[] {
-	// H5 from the Q1 segmenter: a backslash-newline is removed before RouterOS
-	// parses the continued line. Keep any surrounding spaces intact so the
-	// writer's slash/space boundary signal remains observable.
-	const trimmed = trimAscii(text.replace(/\\\r?\n/g, ""));
-	return trimmed.length === 0 ? [] : trimmed.split(ASCII_WHITESPACE);
+	return asciiWordSpans(text).map((w) => w.name);
 }
 
 /**
@@ -156,18 +217,48 @@ export function describeStatement(text: string): {
 	run: RunToken[];
 	directive: boolean;
 	whole: boolean;
+	/**
+	 * For each run token, the offset in `text` just past the WORD it came from —
+	 * where the arguments of a command whose verb is that token begin (#202c) —
+	 * or null where that offset would not mean that.
+	 *
+	 * Per RUN TOKEN rather than one run-wide offset, because the run does not
+	 * stop at the verb: `runTokens` consumes every leading bare word, so
+	 * `/interface print detail` puts `detail` IN the run. Once the boundary rule
+	 * has decided the verb, everything after it is by construction an argument —
+	 * measured at 60% of the corpus's CRUD-verb commands, so ending the argument
+	 * list at the run instead of at the verb would abstain on most of them.
+	 *
+	 * Null in two cases, both fail-closed:
+	 *   - the token is not the LAST part of its word (`/ip/route/add/x` splitting
+	 *     its verb mid-word): the following parts are neither path nor arguments
+	 *     of this reading;
+	 *   - the word walk stopped before reaching that token (the run and the words
+	 *     disagree), so no offset was established for it at all.
+	 *
+	 * A word END is the only offset that survives a `\<newline>` continuation —
+	 * the joined bytes are interior to the word (see {@link asciiWordSpans}),
+	 * which is why no per-token START is published.
+	 */
+	runEnds: (number | null)[];
 } {
+	const lead = text.length - trimAsciiStart(text).length;
 	const t = trimAscii(text);
-	const body = t.startsWith(":") ? t.slice(1) : t;
+	const directiveColon = t.startsWith(":") ? 1 : 0;
+	const body = t.slice(directiveColon);
+	// Body offsets rebase onto `text` by this much: the whitespace `trimAscii`
+	// dropped in front, plus a `:` the directive form strips.
+	const base = lead + directiveColon;
 	const run = runTokens(body);
 	// V4 — did the run consume every whitespace-separated word? A slash-joined
 	// word expands to several run tokens, so compare against the SOURCE words the
 	// run covers, not the run length.
-	const words = asciiWords(body);
+	const words = asciiWordSpans(body);
 	let covered = 0;
 	let index = 0;
+	const runEnds: (number | null)[] = run.map(() => null);
 	for (const word of words) {
-		const parts = word.split("/").filter((p) => p.length > 0);
+		const parts = word.name.split("/").filter((p) => p.length > 0);
 		if (parts.length === 0) continue;
 		if (index + parts.length > run.length) break;
 		if (
@@ -176,6 +267,9 @@ export function describeStatement(text: string): {
 			)
 		)
 			break;
+		// Only the word's LAST part ends where the word does; an earlier part is
+		// followed by more path inside the same word.
+		runEnds[index + parts.length - 1] = base + word.end;
 		index += parts.length;
 		covered++;
 	}
@@ -183,6 +277,7 @@ export function describeStatement(text: string): {
 		run,
 		directive: isDirective(text),
 		whole: covered === words.length && run.length > 0,
+		runEnds,
 	};
 }
 
@@ -293,6 +388,20 @@ export interface VerbSplitCommandReading extends VerbSplitCommon {
 	verb: string;
 	/** Index of the verb within the run. */
 	verbAt: number;
+	/**
+	 * Offset in the statement text where this command's ARGUMENTS begin — the
+	 * end of the run — or `null` when that offset would not mean that (#202c).
+	 *
+	 * It is the end of the VERB's word, so a bare-word argument the leading run
+	 * swallowed (`/interface print detail` puts `detail` in the run) is still
+	 * inside the argument list rather than lost above it.
+	 *
+	 * `null` when no such offset exists: the verb is not the last part of its
+	 * word (`/ip/route/add/x`), or the word walk never reached it. A caller that
+	 * lexed from a guessed offset would attribute bytes to the wrong command, so
+	 * the offset is withheld rather than approximated.
+	 */
+	argsAt: number | null;
 }
 
 /** A bare path the container table confirms: it names a menu and nothing else. */
@@ -302,6 +411,8 @@ export interface VerbSplitMenuReading extends VerbSplitCommon {
 	path: string;
 	verb: null;
 	verbAt: null;
+	/** Navigation names a menu and nothing else — there is no argument list. */
+	argsAt: null;
 }
 
 /** A refusal — the schema-free rule could not decide, or would have to guess. */
@@ -311,6 +422,8 @@ export interface VerbSplitRefusal extends VerbSplitCommon {
 	path: null;
 	verb: null;
 	verbAt: null;
+	/** No command was read, so nothing here is an argument OF one. */
+	argsAt: null;
 }
 
 /**
@@ -351,6 +464,7 @@ function unknownSplit(why: string): VerbSplitRefusal {
 		path: null,
 		verb: null,
 		verbAt: null,
+		argsAt: null,
 		candidates: [],
 		why,
 	};
@@ -368,7 +482,7 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 	if (t.startsWith("$") || t.startsWith("[") || t.startsWith("("))
 		return unknownSplit("dynamic or substitution-headed statement");
 
-	const { run, directive, whole } = describeStatement(text);
+	const { run, directive, whole, runEnds } = describeStatement(text);
 	if (run.length === 0) return unknownSplit("no leading path token");
 	if (
 		!directive &&
@@ -408,6 +522,7 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 				path: full,
 				verb: null,
 				verbAt: null,
+				argsAt: null,
 				candidates,
 				why: "bare path, and a known RouterOS menu — navigation",
 			};
@@ -417,6 +532,7 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 			path: null,
 			verb: null,
 			verbAt: null,
+			argsAt: null,
 			candidates,
 			why: split.why,
 		};
@@ -433,6 +549,10 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 		),
 		verb: (run[j] as RunToken).name,
 		verbAt: j,
+		// Arguments begin after the VERB's word. Run tokens following the verb are
+		// bare-word arguments (`print detail`), which the lexer reads from here as
+		// positionals rather than abstaining on.
+		argsAt: runEnds[j] ?? null,
 		candidates,
 		why: split.why,
 	};
@@ -460,6 +580,17 @@ export type DocumentVerbSplit = VerbSplit & {
 	 * pair — the location travels with the reading.
 	 */
 	span: Span;
+	/**
+	 * The statement's own text, as the resolver segmented it (#202c).
+	 *
+	 * Carried for the same reason {@link DocumentVerbSplit.span} is: the caller
+	 * that lexes ARGUMENTS from {@link VerbSplitCommandReading.argsAt} needs the
+	 * text those offsets index, and re-slicing the document by `span` to recover
+	 * it is exactly the step that silently succeeds when the span is a widened
+	 * FALLBACK (`pathresolve.ts` → `Loc`) rather than this statement's own bytes.
+	 * With both here the caller can CHECK that they agree instead of assuming it.
+	 */
+	text: string;
 	/**
 	 * Was the menu context in force BEFORE this statement known? (Q14 C3b, #192.)
 	 *
@@ -518,6 +649,7 @@ export function resolveVerbs(text: string): VerbAnalysis {
 				? unknownSplit(s.unresolved)
 				: resolveVerb(s.text, s.context)),
 			span: s.span,
+			text: s.text,
 			contextCertain: s.contextCertain,
 		})),
 		defects,

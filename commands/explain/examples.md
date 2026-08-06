@@ -104,18 +104,19 @@ visible in `canonical` at all. The two-role contrast is a claim about the
 gate's split, so the example uses the spelling the gate splits. The space
 spelling is example 4b.
 
-### 4b. The space spelling keeps the verb role and loses the argument one
+### 4b. The space spelling keeps both roles in the analysis, and neither in the gate
 
 ```bash
 centrs explain '/ip/address comment numbers=0 comment=uplink' --json
 ```
 
 `data.canonical.mode` is `"script"` with `verb: ""` and `args: {}` — the gate
-declines the whole input, so it distinguishes no roles. `data.structure.statements[0].command`
-is still `{ path: "/ip/address", verb: "comment" }`: the analysis reads the verb
-role from either spelling. The *argument* role has no offline home in this
-spelling until per-statement `args` land (#202c) — which is the honest state,
-not an omission.
+declines the whole input, so it distinguishes no roles at all.
+`data.structure.statements[0].command` is
+`{ path: "/ip/address", verb: "comment", args: { numbers: "0", comment: "uplink" } }`:
+the analysis reads the verb role from either spelling, and since #202c it reads
+the *argument* role here too. Both roles of the same word, from bytes the gate
+declined — which is the clearest statement of why the two surfaces are separate.
 
 ### 5. Offline is honest about what it cannot know
 
