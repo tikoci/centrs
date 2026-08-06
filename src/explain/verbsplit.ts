@@ -268,45 +268,75 @@ export function splitRun(
 			};
 }
 
-/** Whether a reading was decided, or refused. */
-export type VerbResolution =
-	| "resolved"
-	| "navigation"
-	| "ambiguous"
-	| "unknown";
-
-/** The verb/menu split of one statement, context applied. */
-export interface VerbSplit {
-	resolution: VerbResolution;
-	/**
-	 * `command` for a decided verb, `menu` for a bare path the container table
-	 * confirms as navigation, `null` for `ambiguous`/`unknown`. These are the
-	 * ratified envelope's two kinds (`commands/explain/README.md`), so phase 1
-	 * renders them without inventing a third word for the same concept — the
-	 * `navigation` resolution above maps to envelope `resolved` + `kind: "menu"`.
-	 *
-	 * This is **fully derived** from `resolution` and carries no independent
-	 * information: `resolution` says what the analyzer did, `kind` says what the
-	 * statement is. It is kept because it is the envelope's vocabulary and the
-	 * field phase 1 renders, and the mapping is pinned in both directions by a
-	 * test so the two can never drift apart.
-	 */
-	kind: "command" | "menu" | null;
-	/**
-	 * The menu path: context + the run before the verb when `resolved`, and the
-	 * whole run when `navigation` (a navigation statement names only a menu).
-	 * Null for `ambiguous`/`unknown`.
-	 */
-	path: string | null;
-	/** The verb token; null unless `resolved`. */
-	verb: string | null;
-	/** Index of the verb within the run; null unless `resolved`. */
-	verbAt: number | null;
+/** What every split carries, whatever it decided. */
+interface VerbSplitCommon {
 	/** Context extended by each run prefix — the path readings. */
 	candidates: string[];
 	/** The rule that fired, for provenance. */
 	why: string;
 }
+
+/**
+ * A decided verb: the menu is the context plus the run before the verb.
+ *
+ * `kind` is **fully derived** from `resolution` and carries no independent
+ * information: `resolution` says what the analyzer did, `kind` says what the
+ * statement is. It is kept because it is the ratified envelope's vocabulary
+ * (`commands/explain/README.md`) and the field phase 1 renders, so this module
+ * does not invent a third word for the same concept; the mapping is pinned in
+ * both directions by a test so the two can never drift apart.
+ */
+export interface VerbSplitCommandReading extends VerbSplitCommon {
+	resolution: "resolved";
+	kind: "command";
+	path: string;
+	verb: string;
+	/** Index of the verb within the run. */
+	verbAt: number;
+}
+
+/** A bare path the container table confirms: it names a menu and nothing else. */
+export interface VerbSplitMenuReading extends VerbSplitCommon {
+	resolution: "navigation";
+	kind: "menu";
+	path: string;
+	verb: null;
+	verbAt: null;
+}
+
+/** A refusal — the schema-free rule could not decide, or would have to guess. */
+export interface VerbSplitRefusal extends VerbSplitCommon {
+	resolution: "ambiguous" | "unknown";
+	kind: null;
+	path: null;
+	verb: null;
+	verbAt: null;
+}
+
+/**
+ * The verb/menu split of one statement, context applied.
+ *
+ * A union rather than one shape with four nullable fields, because the nulls
+ * are not independent: a `resolved` split always has a path AND a verb, a
+ * `navigation` split always has a path and never a verb, and a refusal has
+ * neither. Stating that in the type means a consumer narrowing on `resolution`
+ * gets the fields that exist, and the envelope's fold (`src/explain.ts`) has no
+ * unreachable null branch to write. The runtime shape is unchanged — every
+ * variant carries every key, so a null is still readable without narrowing.
+ */
+export type VerbSplit =
+	| VerbSplitCommandReading
+	| VerbSplitMenuReading
+	| VerbSplitRefusal;
+
+/**
+ * Whether a reading was decided, or refused.
+ *
+ * Derived from the union rather than declared beside it, so the vocabulary and
+ * the shapes cannot drift: a new resolution word has to arrive as a variant
+ * that says what it carries.
+ */
+export type VerbResolution = VerbSplit["resolution"];
 
 /** Join a base menu with bare run segments (run tokens are `BARE_WORD`, no `..`/`.`). */
 function joinBase(base: string, names: string[]): string {
@@ -314,7 +344,7 @@ function joinBase(base: string, names: string[]): string {
 	return `/${parts.join("/")}`;
 }
 
-function unknownSplit(why: string): VerbSplit {
+function unknownSplit(why: string): VerbSplitRefusal {
 	return {
 		resolution: "unknown",
 		kind: null,
@@ -419,7 +449,7 @@ export function resolveVerb(text: string, context: string): VerbSplit {
  * "single-statement call" and "certain", and the whole point of the field is
  * that silence must not read as certainty.
  */
-export interface DocumentVerbSplit extends VerbSplit {
+export type DocumentVerbSplit = VerbSplit & {
 	/**
 	 * This statement in DOCUMENT analyzed-byte space, straight from the resolver.
 	 *
@@ -443,7 +473,7 @@ export interface DocumentVerbSplit extends VerbSplit {
 	 * offering completions needs to know that.
 	 */
 	contextCertain: boolean;
-}
+};
 
 /** A document's per-statement verb/menu splits, plus structural defects. */
 export interface VerbAnalysis {

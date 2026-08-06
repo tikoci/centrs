@@ -54,8 +54,18 @@
  *   - **`spans` covers what offline can PROVE**: comment runs and resolved
  *     variable occurrences (Q13 scored 100% precision on resolved bindings, and
  *     abstentions are omitted rather than guessed). The full Q12 vocabulary over
- *     path/verb/argument/value bytes needs device `highlight` as its oracle and
- *     is phase 2. A subset is not a claim that the vocabulary is closed.
+ *     path/verb/argument bytes needs device `highlight` as its oracle and is
+ *     phase 2. A subset is not a claim that the vocabulary is closed.
+ *   - **No value TYPE, and highlight will not supply one.** RouterOS types
+ *     values at parse time and its highlighter classes every value byte `none`,
+ *     so the value axis has a different oracle (`:parse`/IL and `:typeof`) and
+ *     three facts that must not collapse into one field: a lexical SHAPE hint
+ *     (non-authoritative, possibly several, because shapes overlap — `2.2` is
+ *     number-shaped and ip-completable), the type OBSERVED from a live reading,
+ *     and the argument's SCHEMA type. Each needs its own provenance. The
+ *     decision and the probe matrix are #202's value-shape section; this module
+ *     is deliberately type-blind, which is why a verdict that looks wrong around
+ *     a value is a type-axis question before it is a lexical one.
  *   - **`runtimeAcceptance` is always `"not-proven"`**, offline and live alike.
  *     It is the inspect-vs-runtime gap made machine-readable, not a placeholder.
  */
@@ -140,20 +150,58 @@ export interface ExplainCanonical {
 /** What the canonicalizer decided about one statement. */
 export type ExplainResolution = "resolved" | "ambiguous" | "unknown";
 
-export interface ExplainStatement {
+/**
+ * A resolved menu. Navigation names a menu and nothing else, so there is no
+ * verb — not an absent one.
+ */
+export interface ExplainMenuReading {
+	resolution: "resolved";
+	kind: "menu";
+	command: { path: string };
+	unresolved?: undefined;
+}
+
+/** A resolved command: a path AND the verb that was decided on it. */
+export interface ExplainCommandReading {
+	resolution: "resolved";
+	kind: "command";
+	command: { path: string; verb: string };
+	unresolved?: undefined;
+}
+
+/** A refusal. It carries its reason and nothing that would read as a reading. */
+export interface ExplainRefusal {
+	resolution: "ambiguous" | "unknown";
+	kind?: undefined;
+	command?: undefined;
+	/** Why the analyzer refused. */
+	unresolved: string;
+}
+
+/**
+ * What the analyzer read, as a discriminated union.
+ *
+ * `verbsplit` reports menu navigation as its own `navigation` resolution so
+ * that `resolved` keeps meaning "a verb was decided" for its callers; the
+ * envelope folds the two into `resolved` + `kind`, which is the ratified
+ * vocabulary. The union rather than four independent optionals, because these
+ * fields co-vary and the intended consumers (LSP, MCP) narrow on them:
+ * `resolution === "resolved"` must yield a `command`, and `kind === "command"`
+ * must yield a `verb`, at compile time. Independently optional fields also
+ * describe three shapes that cannot occur — a resolved statement with no
+ * command, a menu with a verb, a refusal with a command.
+ *
+ * Every variant declares the other variants' discriminants as `?: undefined`,
+ * so `s.kind` and `s.command` stay readable without narrowing first.
+ */
+export type ExplainReading =
+	| ExplainMenuReading
+	| ExplainCommandReading
+	| ExplainRefusal;
+
+/** Where a statement is, and how much the analyzer knew when it read it. */
+export interface ExplainStatementFacts {
 	span: ExplainSpanRange;
-	resolution: ExplainResolution;
-	/**
-	 * Present only when `resolution` is `resolved`. `verbsplit` reports menu
-	 * navigation as its own `navigation` resolution so that `resolved` keeps
-	 * meaning "a verb was decided" for its callers; the envelope folds the two
-	 * into `resolved` + `kind`, which is the ratified vocabulary.
-	 */
-	kind?: "menu" | "command";
-	/** The decided reading. A menu statement carries a `path` and no `verb`. */
-	command?: { path: string; verb?: string };
-	/** Why the analyzer refused, when it did. */
-	unresolved?: string;
 	/**
 	 * Was the menu context in force BEFORE this statement known? A `false` here
 	 * does not invalidate a `resolved` reading — the resolver already degrades
@@ -163,6 +211,8 @@ export interface ExplainStatement {
 	contextCertain: boolean;
 	ev: string;
 }
+
+export type ExplainStatement = ExplainStatementFacts & ExplainReading;
 
 /**
  * A `[…]` command substitution, re-constituted against its enclosing menu.
@@ -181,21 +231,16 @@ export interface ExplainStatement {
  * refuses too, whatever Q6 says — the fail-closed floor is not up for a second
  * opinion.
  */
-export interface ExplainSubcommand {
-	span: ExplainSpanRange;
+export interface ExplainSubcommandFacts extends ExplainStatementFacts {
 	/** Menu context in force at the bracket, `/` at document root. */
 	context: string;
-	resolution: ExplainResolution;
-	kind?: "menu" | "command";
-	command?: { path: string; verb?: string };
 	/** Every path the inner command could resolve to, shortest first. */
 	candidates: string[];
-	unresolved?: string;
-	contextCertain: boolean;
 	/** Bracket nesting depth; 0 is directly inside a statement. */
 	depth: number;
-	ev: string;
 }
+
+export type ExplainSubcommand = ExplainSubcommandFacts & ExplainReading;
 
 /** A `{…}` scope at document level. */
 export interface ExplainBlock {
@@ -203,6 +248,7 @@ export interface ExplainBlock {
 	name: string;
 	/** The BODY's span, braces excluded. */
 	span: ExplainSpanRange;
+	ev: string;
 }
 
 export interface ExplainStructure {
@@ -264,7 +310,16 @@ export interface ExplainDiagnostic {
 	ev: string;
 }
 
-/** Where a derived fact came from. Offline every entry is `canonicalizer`. */
+/**
+ * Where a derived fact came from — the OFFLINE SUBSET of the contract.
+ *
+ * The spec's evidence entry also carries `source: "live-inspect"` and a
+ * RouterOS version stamp per probe, neither of which phase 1 can produce: no
+ * probe runs and there is no device to stamp. The type says only what offline
+ * emits rather than pre-declaring variants with no producer, so a consumer
+ * cannot narrow on a `source` that never appears; phase 2 widens the union and
+ * adds the stamp, which is an ADDITION to the shape a caller reads today.
+ */
 export interface ExplainEvidence {
 	id: string;
 	source: "canonicalizer";
@@ -323,10 +378,11 @@ const EV = {
 	canonical: "e0",
 	coordinates: "e1",
 	segment: "e2",
-	statements: "e3",
-	subcommands: "e4",
-	write: "e5",
-	symbols: "e6",
+	blocks: "e3",
+	statements: "e4",
+	subcommands: "e5",
+	write: "e6",
+	symbols: "e7",
 } as const;
 
 type EvidenceKey = keyof typeof EV;
@@ -350,6 +406,13 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		id: EV.segment,
 		source: "canonicalizer",
 		probe: "segmentStatements",
+		basis: "direct",
+		outcome: "ok",
+	},
+	blocks: {
+		id: EV.blocks,
+		source: "canonicalizer",
+		probe: "scopeBlocks",
 		basis: "direct",
 		outcome: "ok",
 	},
@@ -606,6 +669,7 @@ export function explainCommand(input: string): ExplainData {
 		blocks: scopeBlocks(input).map((b) => ({
 			name: b.name,
 			span: { start: b.start, end: b.start + b.body.length },
+			ev: EV.blocks,
 		})),
 		containsWrite: renderWriteVerdict(write.verdict),
 		subcommands: brackets.resolutions.map(subcommandOf),
@@ -684,26 +748,26 @@ function subcommandOf(r: Resolution): ExplainSubcommand {
 	};
 }
 
-/** The `resolution`/`kind`/`command` fold, shared by statements and subcommands. */
-function readingOf(split: VerbSplit): {
-	resolution: ExplainResolution;
-	kind?: "menu" | "command";
-	command?: { path: string; verb?: string };
-	unresolved?: string;
-} {
+/**
+ * The `resolution`/`kind`/`command` fold, shared by statements and subcommands.
+ *
+ * Total over `VerbSplit` with no null-guard, because that module's union states
+ * what each resolution carries: `navigation` has a path, `resolved` has a path
+ * and a verb, a refusal has neither. A guard here would be an unreachable
+ * branch pretending the invariant is unknown.
+ */
+function readingOf(split: VerbSplit): ExplainReading {
 	if (split.resolution === "navigation")
 		return {
 			resolution: "resolved",
 			kind: "menu",
-			...(split.path === null ? {} : { command: { path: split.path } }),
+			command: { path: split.path },
 		};
 	if (split.resolution === "resolved")
 		return {
 			resolution: "resolved",
 			kind: "command",
-			...(split.path === null || split.verb === null
-				? {}
-				: { command: { path: split.path, verb: split.verb } }),
+			command: { path: split.path, verb: split.verb },
 		};
 	return { resolution: split.resolution, unresolved: split.why };
 }
@@ -774,6 +838,7 @@ function citedEvidence(
 	const cited = new Set<string>([EV.canonical, EV.coordinates, structure.ev]);
 	for (const s of structure.statements) cited.add(s.ev);
 	for (const s of structure.subcommands) cited.add(s.ev);
+	for (const b of structure.blocks) cited.add(b.ev);
 	for (const d of diagnostics) cited.add(d.ev);
 	for (const s of spans) cited.add(s.ev);
 	return Object.values(EVIDENCE)

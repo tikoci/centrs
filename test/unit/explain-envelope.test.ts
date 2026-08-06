@@ -111,6 +111,7 @@ describe("explainCommand — structural invariants", () => {
 				data.structure.ev,
 				...data.structure.statements.map((s) => s.ev),
 				...data.structure.subcommands.map((s) => s.ev),
+				...data.structure.blocks.map((b) => b.ev),
 				...data.spans.map((s) => s.ev),
 				...data.diagnostics.map((d) => d.ev),
 			]);
@@ -143,7 +144,9 @@ describe("explainCommand — structural invariants", () => {
 			);
 
 			// The resolution vocabulary is total and consistent with `kind`, on
-			// BOTH surfaces that speak it.
+			// BOTH surfaces that speak it — and the three shapes the exported union
+			// declares are the three that actually occur. A resolved statement
+			// always has a command, a menu never has a verb, a refusal has neither.
 			for (const s of [
 				...data.structure.statements,
 				...data.structure.subcommands,
@@ -151,6 +154,9 @@ describe("explainCommand — structural invariants", () => {
 				if (s.resolution === "resolved") {
 					expect(s.kind).toBeDefined();
 					expect(s.unresolved).toBeUndefined();
+					expect(s.command?.path.startsWith("/")).toBe(true);
+					if (s.kind === "menu") expect("verb" in s.command).toBe(false);
+					else expect(typeof s.command.verb).toBe("string");
 				} else {
 					expect(s.kind).toBeUndefined();
 					expect(s.command).toBeUndefined();
@@ -196,11 +202,16 @@ describe("block bodies are statements too", () => {
 		);
 	});
 
-	test("the enclosing scope is reported separately, by name", () => {
-		const { blocks } = explainCommand(
-			":if (true) do={ /ip route print }",
-		).structure;
-		expect(blocks).toEqual([{ name: "do", span: { start: 15, end: 32 } }]);
+	test("the enclosing scope is reported separately, by name and with provenance", () => {
+		const data = explainCommand(":if (true) do={ /ip route print }");
+		const [block] = data.structure.blocks;
+		expect(data.structure.blocks).toHaveLength(1);
+		expect(block).toMatchObject({ name: "do", span: { start: 15, end: 32 } });
+		// A block is a derived fact like any other, so it names the pass that found
+		// it — the scope walk, which no other surface here cites.
+		expect(data.evidence.find((e) => e.id === block?.ev)?.probe).toBe(
+			"scopeBlocks",
+		);
 	});
 
 	test("a body command's write signal reaches the document verdict", () => {
