@@ -755,7 +755,13 @@
 			"expect": [],
 			"rule": "F3/F5 — the sigil run must be zero or one character. CHR 7.23.2 errors at the SECOND sigil (`//local` and `:/local` error at offset 1) and classes every later byte `none`, including variables on following lines. So this is not merely 'do not declare': the resolver records `bad-sigil:<offset>` and reports nothing further, the same fail-closed stop a malformed escape gets. Inside a VALUE a doubled slash is ordinary text — `url=http://example.com` and `comment=a//b` are clean on the device — so the check is statement-leading only.",
 			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
-			"notes": ["bad-sigil:1"]
+			"defects": [
+				{
+					"code": "bad-sigil",
+					"start": 1,
+					"end": 2
+				}
+			]
 		},
 		{
 			"id": "E4",
@@ -765,7 +771,13 @@
 			"expect": [],
 			"rule": "F4 — in code a backslash is valid only before whitespace. Device: the doubled backslash errors on the FIRST one, `foo` is `none`, and nothing after is a variable. The resolver records `bad-escape:<offset>` and reports nothing further rather than continuing across a boundary the console never crossed.",
 			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
-			"notes": ["bad-escape:7"]
+			"defects": [
+				{
+					"code": "bad-escape",
+					"start": 7,
+					"end": 8
+				}
+			]
 		},
 		{
 			"id": "E5",
@@ -784,7 +796,13 @@
 			],
 			"rule": "F4 + F2 — `do=\\{` is not `do={`. Device: `outer` and `fn` are `variable-local`, then the error kills the rest (`put` and the in-body `outer` read `none`). Occurrences before the defect stand (the lab's X1 rule); the body is never entered.",
 			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
-			"notes": ["bad-escape:28"]
+			"defects": [
+				{
+					"code": "bad-escape",
+					"start": 28,
+					"end": 29
+				}
+			]
 		},
 		{
 			"id": "E6",
@@ -907,7 +925,13 @@
 				}
 			],
 			"rule": "Structural notes use the segmenter's vocabulary; classes are still reported for what was read.",
-			"notes": ["unterminated-string"]
+			"defects": [
+				{
+					"code": "unterminated-string",
+					"start": 9,
+					"end": 21
+				}
+			]
 		},
 		{
 			"id": "X4",
@@ -925,7 +949,14 @@
 				}
 			],
 			"rule": "`unbalanced-close:<char>` — same vocabulary as `segment.ts`.",
-			"notes": ["unbalanced-close:}"]
+			"defects": [
+				{
+					"code": "unbalanced-close",
+					"start": 10,
+					"end": 11,
+					"detail": "}"
+				}
+			]
 		},
 		{
 			"id": "X5",
@@ -943,7 +974,14 @@
 				}
 			],
 			"rule": "`unclosed:<chars>` lists the delimiters still open at end of input.",
-			"notes": ["unclosed:{"]
+			"defects": [
+				{
+					"code": "unclosed",
+					"start": 12,
+					"end": 13,
+					"detail": "{"
+				}
+			]
 		},
 		{
 			"id": "X6",

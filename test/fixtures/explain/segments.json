@@ -20,7 +20,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -43,7 +43,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -67,7 +67,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -91,7 +91,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -108,7 +108,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -125,7 +125,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -148,7 +148,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -165,7 +165,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -188,7 +188,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -211,7 +211,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -233,7 +233,7 @@
 						"end": 11
 					}
 				],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -248,7 +248,7 @@
 						"end": 23
 					}
 				],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -270,7 +270,7 @@
 						"end": 33
 					}
 				],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -293,7 +293,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -311,7 +311,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -335,7 +335,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -352,7 +352,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -375,7 +375,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -398,7 +398,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -421,7 +421,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -454,14 +454,13 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
 			"name": "comment-inside-flattened-container-is-not-duplicated",
 			"input": "/system {\n# c\n:put 1\n}",
 			"expect": ["/system", ":put 1"],
-			"notes": [],
 			"golden": {
 				"segments": [
 					{
@@ -483,8 +482,9 @@
 						"end": 13
 					}
 				],
-				"notes": []
-			}
+				"defects": []
+			},
+			"defects": []
 		},
 		{
 			"name": "backslash-continuation-joins",
@@ -506,7 +506,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -523,14 +523,13 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
 			"name": "unterminated-string-notes",
 			"input": ":put \"unterminated",
 			"expect": [":put \"unterminated"],
-			"notes": ["unterminated-string"],
 			"golden": {
 				"segments": [
 					{
@@ -541,14 +540,24 @@
 					}
 				],
 				"comments": [],
-				"notes": ["unterminated-string"]
-			}
+				"defects": [
+					{
+						"code": "unterminated-string",
+						"start": 5,
+						"end": 18
+					}
+				]
+			},
+			"defects": [
+				{
+					"code": "unterminated-string"
+				}
+			]
 		},
 		{
 			"name": "unclosed-brace-notes",
 			"input": ":if (true) do={\n:put 1",
 			"expect": [":if (true) do={\n:put 1"],
-			"notes": ["unclosed:{"],
 			"golden": {
 				"segments": [
 					{
@@ -559,14 +568,26 @@
 					}
 				],
 				"comments": [],
-				"notes": ["unclosed:{"]
-			}
+				"defects": [
+					{
+						"code": "unclosed",
+						"start": 14,
+						"end": 15,
+						"detail": "{"
+					}
+				]
+			},
+			"defects": [
+				{
+					"code": "unclosed",
+					"detail": "{"
+				}
+			]
 		},
 		{
 			"name": "stray-close-notes",
 			"input": ":put 1}\n:put 2",
 			"expect": [":put 1}", ":put 2"],
-			"notes": ["unbalanced-close:}"],
 			"golden": {
 				"segments": [
 					{
@@ -583,8 +604,21 @@
 					}
 				],
 				"comments": [],
-				"notes": ["unbalanced-close:}"]
-			}
+				"defects": [
+					{
+						"code": "unbalanced-close",
+						"start": 6,
+						"end": 7,
+						"detail": "}"
+					}
+				]
+			},
+			"defects": [
+				{
+					"code": "unbalanced-close",
+					"detail": "}"
+				}
+			]
 		},
 		{
 			"name": "container-trailing-content-is-not-flattened",
@@ -601,7 +635,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -619,7 +653,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -649,7 +683,7 @@
 					}
 				],
 				"comments": [],
-				"notes": []
+				"defects": []
 			}
 		},
 		{
@@ -657,7 +691,6 @@
 			"input": "/ip {\nadd x=1",
 			"expect": ["/ip {\nadd x=1"],
 			"verified": "single-pass walker (#190); differential-equivalent to the recursive #189 implementation",
-			"notes": ["unclosed:{"],
 			"golden": {
 				"segments": [
 					{
@@ -668,14 +701,26 @@
 					}
 				],
 				"comments": [],
-				"notes": ["unclosed:{"]
-			}
+				"defects": [
+					{
+						"code": "unclosed",
+						"start": 4,
+						"end": 5,
+						"detail": "{"
+					}
+				]
+			},
+			"defects": [
+				{
+					"code": "unclosed",
+					"detail": "{"
+				}
+			]
 		},
 		{
 			"name": "substitution-in-string-does-not-swallow-the-next-comment",
 			"input": ":local a \"$[[:parse \"(\\\"x\\\")\"]]\"\n# :put $a\n:put $a",
 			"expect": [":local a \"$[[:parse \"(\\\"x\\\")\"]]\"", ":put $a"],
-			"notes": [],
 			"verified": "CHR 7.23.2 /console/inspect request=highlight: the whole `# :put $a` line is `comment` and both `$a` are `variable-local` — the device closes the nested string inside the substitution and returns to the outer string (#199).",
 			"golden": {
 				"segments": [
@@ -698,8 +743,9 @@
 						"end": 42
 					}
 				],
-				"notes": []
-			}
+				"defects": []
+			},
+			"defects": []
 		},
 		{
 			"name": "nested-string-inside-a-substitution-is-one-statement",
@@ -708,7 +754,6 @@
 				":local tmpHex \"$[:pick \"0123456789ABCDEF\" $x ($x+1)]\"",
 				":put $tmpHex"
 			],
-			"notes": [],
 			"verified": "CHR 7.23.2 highlight (corpus forum/rextended/topic-151033-post-0056-snippet-01.rsc): `\"$[` and the inner `\"` are `syntax-meta`, `:pick` is `dir`+`cmd`, `0123456789ABCDEF` is string content, and `)]\"` closes the ONE outer string.",
 			"golden": {
 				"segments": [
@@ -726,8 +771,9 @@
 					}
 				],
 				"comments": [],
-				"notes": []
-			}
+				"defects": []
+			},
+			"defects": []
 		},
 		{
 			"name": "escaped-quote-inside-a-substitution-is-a-device-error",
@@ -735,7 +781,6 @@
 			"expect": [
 				":log info \"TX=$[:pick ($result->\\\"tx-current\\\") 0 10]\"\n:put 1"
 			],
-			"notes": ["unterminated-string"],
 			"verified": "CHR 7.23.2 highlight (corpus forum/bandwidth-test.rsc): inside `$[…]` the `\\` is classed `error` and every later byte `none` — a substitution body is CODE, where `\\\"` is not an escape. The segmenter fails closed with `unterminated-string` instead of reporting confident statements past a byte the console never crossed.",
 			"golden": {
 				"segments": [
@@ -747,8 +792,19 @@
 					}
 				],
 				"comments": [],
-				"notes": ["unterminated-string"]
-			}
+				"defects": [
+					{
+						"code": "unterminated-string",
+						"start": 10,
+						"end": 61
+					}
+				]
+			},
+			"defects": [
+				{
+					"code": "unterminated-string"
+				}
+			]
 		}
 	]
 }

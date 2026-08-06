@@ -169,7 +169,7 @@ const MAX_DEPTH = 256;
  * `()`/`[]`/`{}` or an unterminated string. Q14 fail-closed floor: a malformed
  * statement must never yield a confident command, so the resolver degrades it
  * to `unresolved` and does not descend into it. Statement-local; the
- * segmenter's document-level notes are surfaced separately on the envelope.
+ * segmenter's document-level defects are surfaced separately on the envelope.
  */
 function structuralDefect(text: string): boolean {
 	// Mask comments so a `#`-comment `}`/`)` is not counted as a real delimiter.
@@ -381,26 +381,22 @@ export interface StatementResolution {
 	span: Span;
 }
 
-/** Q3 result: bracket resolutions plus any structural / over-depth notes. */
+/** Q3 result: bracket resolutions plus any structural / over-depth defects. */
 export interface DocumentAnalysis {
 	resolutions: Resolution[];
 	/**
-	 * Diagnostics surfaced from the segmenter (`unclosed:…`, `unbalanced-close:…`,
-	 * `unterminated-string`) plus `over-depth` when a bounded traversal abstained.
-	 * A caller must not treat resolutions as confident while notes are non-empty.
-	 */
-	notes: string[];
-	/**
-	 * The same structural surprises as {@link notes}, each located, and including
-	 * defects raised inside a block body. See `defects.ts`.
+	 * Located defects surfaced from the segmenter (`unclosed`, `unbalanced-close`,
+	 * `unterminated-string`) plus `over-depth` when a bounded traversal abstained,
+	 * and defects raised inside a block body. A caller must not treat resolutions
+	 * as confident while a NON-POSITIONAL defect is present — `isPositionalFact`
+	 * in `defects.ts` is that test.
 	 */
 	defects: Defect[];
 }
 
-/** Q4 result: per-statement resolutions plus structural / over-depth notes. */
+/** Q4 result: per-statement resolutions plus structural / over-depth defects. */
 export interface StatementAnalysis {
 	statements: StatementResolution[];
-	notes: string[];
 	/** As {@link DocumentAnalysis.defects}. */
 	defects: Defect[];
 }
@@ -534,7 +530,6 @@ export function resolveDocument(text: string): DocumentAnalysis {
 	// entry points, and re-segmenting here would put a document through the
 	// segmenter four times on input its own comment calls "not cheap".
 	const segmented = segmentStatements(text);
-	const notes = new Set(segmented.notes);
 	// The ROOT segmentation is the only source of coordinate facts (`bom`,
 	// `non-ascii`); `locate` strips them so recursion cannot re-derive them in a
 	// substring's coordinate space.
@@ -542,8 +537,8 @@ export function resolveDocument(text: string): DocumentAnalysis {
 	const resolutions: Resolution[] = [];
 	const top = locate(segmented, DOCUMENT_LOC);
 	defects.push(...top.defects);
-	walk(top.units, "/", resolutions, 0, notes, defects, true);
-	return { resolutions, notes: [...notes], defects: mergeDefects(defects) };
+	walk(top.units, "/", resolutions, 0, defects, true);
+	return { resolutions, defects: mergeDefects(defects) };
 }
 
 function walk(
@@ -551,7 +546,6 @@ function walk(
 	context: string,
 	out: Resolution[],
 	blockDepth: number,
-	notes: Set<string>,
 	defects: Defect[],
 	contextCertain: boolean,
 ): void {
@@ -585,11 +579,10 @@ function walk(
 		// which its own unreadability already governs.
 		const stmtCertain = handsKnownContext(text, certain);
 		if (isUnreadableAbsolute(text)) certain = false;
-		collectBrackets(text, stmtCtx, 0, out, notes, defects, stmtCertain, loc);
+		collectBrackets(text, stmtCtx, 0, out, defects, stmtCertain, loc);
 		// R5 — block bodies inherit the context in force here.
 		for (const block of scopeBlocks(text)) {
 			if (blockDepth >= MAX_DEPTH) {
-				notes.add("over-depth");
 				// The BLOCK that exceeded the limit, not the whole statement —
 				// narrowing regions is what this channel is for.
 				defects.push({
@@ -601,15 +594,7 @@ function walk(
 			const bodyLoc = nest(loc, block.start, unit.span);
 			const body = locate(segmentStatements(block.body), bodyLoc);
 			defects.push(...body.defects);
-			walk(
-				body.units,
-				stmtCtx,
-				out,
-				blockDepth + 1,
-				notes,
-				defects,
-				stmtCertain,
-			);
+			walk(body.units, stmtCtx, out, blockDepth + 1, defects, stmtCertain);
 		}
 	}
 }
@@ -617,14 +602,13 @@ function walk(
 /** Q4 — canonical path of every statement in source order. */
 export function resolveStatements(text: string): StatementAnalysis {
 	const segmented = segmentStatements(text);
-	const notes = new Set(segmented.notes);
 	// As `resolveDocument`: coordinate facts come from the root only.
 	const defects: Defect[] = [...segmented.defects];
 	const statements: StatementResolution[] = [];
 	const top = locate(segmented, DOCUMENT_LOC);
 	defects.push(...top.defects);
-	walkStatements(top.units, "/", statements, 0, notes, defects, true);
-	return { statements, notes: [...notes], defects: mergeDefects(defects) };
+	walkStatements(top.units, "/", statements, 0, defects, true);
+	return { statements, defects: mergeDefects(defects) };
 }
 
 function walkStatements(
@@ -632,7 +616,6 @@ function walkStatements(
 	context: string,
 	out: StatementResolution[],
 	blockDepth: number,
-	notes: Set<string>,
 	defects: Defect[],
 	contextCertain: boolean,
 ): void {
@@ -711,7 +694,6 @@ function walkStatements(
 		if (isUnreadableAbsolute(text)) certain = false;
 		for (const block of scopeBlocks(text)) {
 			if (blockDepth >= MAX_DEPTH) {
-				notes.add("over-depth");
 				defects.push({
 					code: "over-depth",
 					...regionIn(unit.loc, block.start, block.start + block.body.length),
@@ -726,7 +708,6 @@ function walkStatements(
 				stmtCtx,
 				out,
 				blockDepth + 1,
-				notes,
 				defects,
 				bodyCertain,
 			);
@@ -904,7 +885,6 @@ function collectBrackets(
 	ctx: string,
 	depth: number,
 	out: Resolution[],
-	notes: Set<string>,
 	defects: Defect[],
 	contextCertain: boolean,
 	loc: Loc,
@@ -912,7 +892,6 @@ function collectBrackets(
 	// Bound the recursion (bracket nesting AND literal-brace descent) so
 	// untrusted deeply nested input abstains instead of overflowing the stack.
 	if (depth >= MAX_DEPTH) {
-		notes.add("over-depth");
 		// `text` is empty when the nesting bottoms out on an empty body (`[]`),
 		// which `regionIn` widens rather than emitting a zero-width region.
 		defects.push({ code: "over-depth", ...regionIn(loc, 0, text.length) });
@@ -934,7 +913,6 @@ function collectBrackets(
 				ctx,
 				depth,
 				out,
-				notes,
 				defects,
 				contextCertain,
 				nest(loc, i + 1, loc.fallback),
@@ -953,7 +931,6 @@ function collectBrackets(
 					ctx,
 					depth + 1,
 					out,
-					notes,
 					defects,
 					contextCertain,
 					nest(loc, i + 1, loc.fallback),
@@ -976,7 +953,6 @@ function collectBrackets(
 			nestedCtx,
 			depth + 1,
 			out,
-			notes,
 			defects,
 			nestedCertainty(out[out.length - 1], contextCertain),
 			// `inner` is the trimmed slice of `masked` starting at i+1; the leading
@@ -1011,7 +987,6 @@ function scanInterpolations(
 	ctx: string,
 	depth: number,
 	out: Resolution[],
-	notes: Set<string>,
 	defects: Defect[],
 	contextCertain: boolean,
 	loc: Loc,
@@ -1031,7 +1006,6 @@ function scanInterpolations(
 			out[out.length - 1]?.path ?? ctx,
 			depth + 1,
 			out,
-			notes,
 			defects,
 			nestedCertainty(out[out.length - 1], contextCertain),
 			nest(

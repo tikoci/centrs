@@ -74,7 +74,7 @@
  * genuine false negatives the tristate exists to prevent.
  */
 
-import { type Defect, mergeDefects } from "./defects.ts";
+import { type Defect, hasStructuralDefect, mergeDefects } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
 import {
 	type DocumentAnalysis,
@@ -667,11 +667,10 @@ export interface WriteAnalysis {
 	 */
 	blockers: Occurrence[];
 	occurrences: Occurrence[];
-	/** Structural notes from the segmenter / bounded traversal; any note abstains. */
-	notes: string[];
 	/**
-	 * The located twin of {@link notes}, plus the `bom`/`non-ascii` positional
-	 * facts. Reporting only — the abstention gate reads `notes`.
+	 * Located structural surprises from the segmenter / bounded traversal, plus
+	 * the `bom`/`non-ascii` positional facts. Any NON-POSITIONAL defect abstains
+	 * (see {@link hasStructuralDefect}); the positional two never do.
 	 */
 	defects: Defect[];
 }
@@ -695,22 +694,17 @@ const BLOCKING: ReadonlySet<OccurrenceClass> = new Set([
  *    rather than being dropped (enforced in `occurrences`).
  * 4. `unknown` is reported with its blockers, so the caller can see why.
  *
- * A document-level structural note (unterminated string, over-depth nesting)
+ * A document-level structural defect (unterminated string, over-depth nesting)
  * means part of the input was never walked, so it abstains under rule 2 for the
  * same reason a `defect` occurrence does.
  */
 export function containsWrite(text: string): WriteAnalysis {
 	// One resolution pass each for the statement walk (Q4) and the bracket walk
 	// (Q3); both are re-entrant over the same segmentation and neither is cheap
-	// on adversarial input, so they are not re-run for the notes.
+	// on adversarial input, so they are not re-run for the defects.
 	const statements = resolveStatements(text);
 	const brackets = resolveDocument(text);
 	const found = collect(statements, brackets);
-	const notes = [...new Set([...statements.notes, ...brackets.notes])];
-	// The located twin of `notes` (#192). It does NOT feed the abstention gate
-	// below — that still reads `notes`, deliberately, because `defects` also
-	// carries the two positional-fact classes (`bom`, `non-ascii`) and a UTF-8
-	// comment must never flip a document's write tristate to `unknown`.
 	const defects = mergeDefects(statements.defects, brackets.defects);
 	const writes = found.filter((o) => o.klass === "write").length;
 	const blockers = found.filter((o) => BLOCKING.has(o.klass));
@@ -720,16 +714,14 @@ export function containsWrite(text: string): WriteAnalysis {
 			writes,
 			blockers,
 			occurrences: found,
-			notes,
 			defects,
 		};
-	if (blockers.length > 0 || notes.length > 0)
+	if (blockers.length > 0 || hasStructuralDefect(defects))
 		return {
 			verdict: "unknown",
 			writes: 0,
 			blockers,
 			occurrences: found,
-			notes,
 			defects,
 		};
 	return {
@@ -737,7 +729,6 @@ export function containsWrite(text: string): WriteAnalysis {
 		writes: 0,
 		blockers: [],
 		occurrences: found,
-		notes,
 		defects,
 	};
 }

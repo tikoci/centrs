@@ -491,9 +491,14 @@ describe("resolveVerbs — document walk over the certainty contract", () => {
 		expect(checked).toBe(2);
 	});
 
-	test("structural notes propagate onto the analysis", () => {
-		expect(resolveVerbs("/ip) address").notes).toContain("unbalanced-close:)");
-		expect(resolveVerbs("/ip route\nprint").notes).toEqual([]);
+	test("structural defects propagate onto the analysis", () => {
+		expect(resolveVerbs("/ip) address").defects).toContainEqual({
+			code: "unbalanced-close",
+			start: 3,
+			end: 4,
+			detail: ")",
+		});
+		expect(resolveVerbs("/ip route\nprint").defects).toEqual([]);
 	});
 
 	test("never throws on adversarial input", () => {

@@ -297,7 +297,7 @@
  *
  * The scan is a single left-to-right pass with an explicit delimiter stack (no
  * recursion, Q17 posture) and never throws; structural surprises land in
- * `notes` with the same vocabulary the segmenter uses. Scope creation is capped
+ * `defects` with the same vocabulary the segmenter uses. Scope creation is capped
  * at `MAX_SCOPE_DEPTH` so pathological nesting cannot make lookup unbounded.
  */
 
@@ -356,9 +356,7 @@ export interface SymbolOccurrence {
 
 export interface SymbolAnalysis {
 	occurrences: SymbolOccurrence[];
-	/** structural notes; never a throw. */
-	notes: string[];
-	/** The same structural surprises as {@link notes}, each located. */
+	/** Located structural surprises; never a throw. See `defects.ts`. */
 	defects: Defect[];
 }
 
@@ -442,8 +440,8 @@ const OPERATOR_WORDS: ReadonlySet<string> = new Set(["or", "and", "not", "in"]);
  *
  * Not a RouterOS limit — the same resource guard `segment.ts` applies to
  * container frames. Beyond this depth a `{` still tracks as a delimiter but
- * opens no new scope (inner declarations join the innermost one) and `notes`
- * carries `over-depth:<analyzed-byte-offset>`, so lookup stays bounded on
+ * opens no new scope (inner declarations join the innermost one) and an
+ * `over-depth` defect is raised at that offset, so lookup stays bounded on
  * adversarial input.
  */
 const MAX_SCOPE_DEPTH = 256;
@@ -465,7 +463,6 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	const openParen = parenMap(text);
 
 	const occurrences: SymbolOccurrence[] = [];
-	const notes: string[] = [];
 	const defects: Defect[] = [];
 	const root: Scope = { closure: false, bindings: new Map() };
 	const scopes: Scope[] = [root];
@@ -543,7 +540,6 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		if (scopes.length >= MAX_SCOPE_DEPTH) {
 			if (!overDepth) {
 				overDepth = true;
-				notes.push(`over-depth:${at}`);
 				defects.push(defectAt("over-depth", at));
 			}
 			return;
@@ -642,7 +638,6 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		if (scopes.length >= MAX_SCOPE_DEPTH) {
 			if (!overDepth) {
 				overDepth = true;
-				notes.push(`over-depth:${at}`);
 				defects.push(defectAt("over-depth", at));
 			}
 		} else {
@@ -859,7 +854,6 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				i += 1;
 				continue;
 			}
-			notes.push(`bad-escape:${i}`);
 			defects.push(defectAt("bad-escape", i));
 			defect = true;
 			break;
@@ -979,7 +973,6 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					suppressedScopes++;
 					if (!overDepth) {
 						overDepth = true;
-						notes.push(`over-depth:${i}`);
 						defects.push(defectAt("over-depth", i));
 					}
 				} else {
@@ -1004,7 +997,6 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				// A mismatched close is not a close: popping it would unwind a real
 				// enclosing scope and drop its bindings early. `segment.ts` takes the
 				// same line — report it and treat the character as content.
-				notes.push(`unbalanced-close:${c}`);
 				defects.push(defectAt("unbalanced-close", i, c));
 				continue;
 			}
@@ -1061,7 +1053,6 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			// menu-path position — F8 below decides that, and the value forms above
 			// stay clean because the path region has already closed by then.
 			if (leadBefore && sigilRun > 1) {
-				notes.push(`bad-sigil:${start + 1}`);
 				defects.push(defectAt("bad-sigil", start + 1));
 				defect = true;
 				break;
@@ -1081,7 +1072,6 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 							? start + 1
 							: -1;
 				if (at >= 0) {
-					notes.push(`bad-sigil:${at}`);
 					defects.push(defectAt("bad-sigil", at));
 					defect = true;
 					break;
@@ -1306,15 +1296,10 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	}
 
 	if (!defect && frames.length > 0) {
-		const open = frames.map((f) => f.char).join("");
-		if (open.includes('"')) notes.push("unterminated-string");
-		const brackets = open.replace(/"/g, "");
-		if (brackets.length > 0) notes.push(`unclosed:${brackets}`);
-		// The note fuses every open delimiter into one string; the region channel
-		// keeps them addressable, one defect per frame pointing at its OPENER. An
-		// unterminated string spans from its quote to end of input — that whole
-		// run is what the scan swallowed — while a bracket marks just its opener,
-		// since its intended extent is exactly what is unknown.
+		// One defect per open frame, pointing at its OPENER. An unterminated string
+		// spans from its quote to end of input — that whole run is what the scan
+		// swallowed — while a bracket marks just its opener, since its intended
+		// extent is exactly what is unknown.
 		for (const f of frames)
 			defects.push(
 				f.char === '"'
@@ -1323,7 +1308,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			);
 	}
 
-	return { occurrences, notes, defects };
+	return { occurrences, defects };
 }
 
 const FILTER_NOTE =

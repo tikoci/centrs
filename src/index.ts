@@ -322,6 +322,7 @@ export {
 	type Defect,
 	type DefectCode,
 	defectAt,
+	hasStructuralDefect,
 	isPositionalFact,
 	mergeDefects,
 	rebaseDefects,

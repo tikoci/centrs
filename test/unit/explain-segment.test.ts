@@ -4,6 +4,7 @@ import {
 	analyzeCoordinates,
 	byteToPosition,
 } from "../../src/explain/coordinates.ts";
+import { type Defect, hasStructuralDefect } from "../../src/explain/defects.ts";
 import {
 	maskComments,
 	type Segment,
@@ -23,16 +24,18 @@ import * as centrs from "../../src/index.ts";
  * line up with the coordinate contract shipped in #188.
  *
  * The frozen expectations live in `test/fixtures/explain/segments.json`:
- * `expect` (the ratified statement-text sequence) and `notes` are the human/
- * CHR-labeled contract; `golden` pins the exact spans, terminators, comments,
- * and menuOnly flags so a refactor cannot silently drift them.
+ * `expect` (the ratified statement-text sequence) and `defects` (the ratified
+ * defect classes, order-insensitive) are the human/CHR-labeled contract;
+ * `golden` pins the exact spans, terminators, comments, menuOnly flags, and
+ * defect REGIONS so a refactor cannot silently drift them.
  */
 
 interface Corner {
 	name: string;
 	input: string;
 	expect: string[];
-	notes?: string[];
+	/** Ratified classes only; `golden.defects` carries the regions. */
+	defects?: { code: Defect["code"]; detail?: string }[];
 	verified?: string;
 	golden: {
 		segments: {
@@ -42,7 +45,7 @@ interface Corner {
 			menuOnly: boolean;
 		}[];
 		comments: { start: number; end: number }[];
-		notes: string[];
+		defects: Defect[];
 	};
 }
 
@@ -62,11 +65,13 @@ describe("ratified statement boundaries (Q1 corners) — text sequence", () => {
 	}
 });
 
-describe("structural notes match the ratified label", () => {
+describe("structural defect classes match the ratified label", () => {
+	const key = (d: { code: string; detail?: string }): string =>
+		`${d.code}${d.detail === undefined ? "" : `:${d.detail}`}`;
 	for (const c of corners) {
 		test(c.name, () => {
-			const notes = segmentStatements(c.input).notes;
-			expect([...notes].sort()).toEqual([...(c.notes ?? [])].sort());
+			const got = segmentStatements(c.input).defects.map(key);
+			expect(got.sort()).toEqual((c.defects ?? []).map(key).sort());
 		});
 	}
 });
@@ -96,7 +101,7 @@ describe("golden — frozen spans, terminators, comments, menuOnly", () => {
 				})),
 			).toEqual(c.golden.segments);
 			expect(r.comments).toEqual(c.golden.comments);
-			expect(r.notes).toEqual(c.golden.notes);
+			expect(r.defects).toEqual(c.golden.defects);
 		});
 	}
 });
@@ -117,7 +122,7 @@ describe("coordinate integration — spans resolve through the #188 mapper", () 
 	}
 });
 
-test("never throws on adversarial input; malformed inputs self-report notes", () => {
+test("never throws on adversarial input; malformed inputs self-report defects", () => {
 	const nasty = [
 		"",
 		";;;",
@@ -130,32 +135,51 @@ test("never throws on adversarial input; malformed inputs self-report notes", ()
 		"/ip address", // non-ASCII (NBSP) → SUB, must not corrupt the stack
 		'/system note set note="路由器"; :put ok',
 	];
-	// Expected structural notes, parallel to `nasty`. Malformed delimiter state
-	// must surface a diagnostic; well-formed adversarial input reports none.
-	const expected: string[][] = [
+	// Expected defects, parallel to `nasty`. Malformed delimiter state must
+	// surface a located diagnostic; well-formed adversarial input reports none.
+	// The two non-ASCII inputs are the reason this is not `defects.length === 0`:
+	// they are perfectly readable commands that carry a POSITIONAL FACT, and
+	// `hasStructuralDefect` is what keeps that distinction (see `defects.ts`).
+	const u = (code: Defect["code"], start: number, detail?: string): Defect =>
+		detail === undefined
+			? { code, start, end: start + 1 }
+			: { code, start, end: start + 1, detail };
+	const expected: Defect[][] = [
 		[], // empty
 		[], // only separators
-		["unterminated-string"], // lone quote
-		["unclosed:{{{{"], // unbalanced opens
+		[{ code: "unterminated-string", start: 0, end: 1 }], // lone quote
+		// Four opens, four defects, each at ITS opener — the retired note channel
+		// fused these into one `unclosed:{{{{` string with no offsets at all.
 		[
-			"unbalanced-close:}",
-			"unbalanced-close:}",
-			"unbalanced-close:}",
-			"unbalanced-close:}",
+			u("unclosed", 0, "{"),
+			u("unclosed", 1, "{"),
+			u("unclosed", 2, "{"),
+			u("unclosed", 3, "{"),
+		],
+		[
+			u("unbalanced-close", 0, "}"),
+			u("unbalanced-close", 1, "}"),
+			u("unbalanced-close", 2, "}"),
+			u("unbalanced-close", 3, "}"),
 		], // stray closes
-		["unclosed:[("], // mixed unbalanced opens
+		[u("unclosed", 0, "["), u("unclosed", 1, "(")], // mixed unbalanced opens
 		[], // comment with no newline
 		[], // lone backslash
-		[], // /ip address (NBSP) → SUB, no structural note
-		[], // balanced string + separator
+		// `/ip address` (NBSP): a positional fact, NOT a structural defect.
+		[{ code: "non-ascii", start: 3, end: 5 }],
+		[{ code: "non-ascii", start: 23, end: 32 }], // balanced string + separator
 	];
 	nasty.forEach((input, i) => {
 		let result: ReturnType<typeof segmentStatements> | undefined;
 		expect(() => {
 			result = segmentStatements(input);
 		}).not.toThrow();
-		expect(result?.notes).toEqual(expected[i] as string[]);
+		expect(result?.defects).toEqual(expected[i] as Defect[]);
 	});
+	// The last two inputs are legal commands; nothing here may abstain on them.
+	for (const input of nasty.slice(-2)) {
+		expect(hasStructuralDefect(segmentStatements(input).defects)).toBe(false);
+	}
 });
 
 test("non-ASCII statement text is recovered as the original, not SUB", () => {
@@ -175,7 +199,7 @@ test("deep H7 containers abstain before recursion can overflow", () => {
 	const input = `${"{".repeat(depth)}:put ok${"}".repeat(depth)}`;
 	const r = segmentStatements(input);
 
-	expect(r.notes).toEqual(["over-depth:256"]);
+	expect(r.defects).toEqual([{ code: "over-depth", start: 256, end: 257 }]);
 	expect(r.segments).toHaveLength(1);
 	const segment = r.segments[0] as Segment;
 	expect(segment.start).toBe(256);
@@ -183,14 +207,17 @@ test("deep H7 containers abstain before recursion can overflow", () => {
 	expect(input.slice(segment.start, segment.end)).toBe(segment.text);
 });
 
-test("over-depth notes use analyzed-byte offsets with non-ASCII prefixes", () => {
+test("over-depth regions use analyzed-byte offsets with non-ASCII prefixes", () => {
 	const prefix = "/路 ";
 	const input = `${prefix}${"{".repeat(257)}x${"}".repeat(257)}`;
 	const expectedOffset =
 		new TextEncoder().encode(prefix).length + "{".repeat(256).length;
 
-	expect(segmentStatements(input).notes).toEqual([
-		`over-depth:${expectedOffset}`,
+	expect(segmentStatements(input).defects).toEqual([
+		// The coordinate pass reports the prefix first; the structural defect is
+		// located in the same analyzed-byte space, past the 3-byte 路.
+		{ code: "non-ascii", start: 1, end: 4 },
+		{ code: "over-depth", start: expectedOffset, end: expectedOffset + 1 },
 	]);
 });
 
@@ -200,7 +227,12 @@ test("a structural defect prevents container children from being promoted", () =
 	for (const input of cases) {
 		const result = segmentStatements(input);
 		expect(result.segments.map((segment) => segment.text)).toEqual([input]);
-		expect(result.notes).toContain("unbalanced-close:)");
+		expect(result.defects).toContainEqual({
+			code: "unbalanced-close",
+			start: input.indexOf(")"),
+			end: input.indexOf(")") + 1,
+			detail: ")",
+		});
 	}
 });
 
@@ -357,7 +389,6 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 				},
 			],
 			comments: [{ start: 8, end: 11 }],
-			notes: [],
 			defects: [],
 		});
 		// CRLF is the same shape one byte later.

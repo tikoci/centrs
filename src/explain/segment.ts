@@ -5,7 +5,8 @@
  * throwaway probe `.scratch/explain-lab-segmenter.ts`. This is the first walker
  * stage: a schema-free, device-free splitter of multi-statement RouterOS input
  * into top-level statements, matching `(evl …)` sibling adjacency in `:parse`
- * IL. It never throws; structural surprises are reported in `notes`.
+ * IL. It never throws; structural surprises are reported as located
+ * {@link Defect}s.
  *
  * Segmentation runs on the byte-count-preserving `analyzed` surface from
  * `./coordinates.ts`, so a segment's `start`/`end` are **analyzed-byte offsets**
@@ -64,8 +65,8 @@
  * H7 stays depth-bounded even so. `explain` accepts untrusted editor/MCP input,
  * so `MAX_CONTAINER_DEPTH` container frames is a hard cap: a `{` that would open
  * a deeper container is treated as an opaque group instead, the innermost
- * remainder stays one segment, and `notes` carries `over-depth:<analyzed-byte-
- * offset>`. With recursion gone the cap is now a resource guard (bounding the
+ * remainder stays one segment, and an `over-depth` defect is raised at that
+ * offset. With recursion gone the cap is now a resource guard (bounding the
  * `frames` array and abstention granularity), not the stack-safety boundary it
  * once was.
  */
@@ -103,11 +104,9 @@ export interface SegmentResult {
 	segments: Segment[];
 	/** comment spans (analyzed-byte offsets), dropped from the statement stream. */
 	comments: { start: number; end: number }[];
-	/** unbalanced-delimiter and other structural notes; never a throw. */
-	notes: string[];
 	/**
-	 * The same structural surprises as {@link notes}, each located, plus the two
-	 * coordinate-pass classes (`bom`, `non-ascii`) that have no note.
+	 * Unbalanced delimiters and other structural surprises, each located; never
+	 * a throw. Includes the two coordinate-pass classes (`bom`, `non-ascii`).
 	 */
 	defects: Defect[];
 }
@@ -328,7 +327,6 @@ export function segmentStatements(original: string): SegmentResult {
 	return {
 		segments,
 		comments: raw.comments,
-		notes: raw.notes,
 		// Coordinate-pass regions first: they are facts about the input as
 		// received, and they exist even when the scan finds nothing structural.
 		defects: mergeDefects(coordinateDefects(analysis), raw.defects),
@@ -402,16 +400,14 @@ interface Frame {
 function scanAscii(ascii: string): {
 	segments: RawSegment[];
 	comments: { start: number; end: number }[];
-	notes: string[];
 	defects: Defect[];
 } {
 	const comments: { start: number; end: number }[] = [];
-	const notes: string[] = [];
 	const defects: Defect[] = [];
 	const overDepth: number[] = [];
-	// H2 — every open bracket, for balance notes. Each frame carries WHERE it
-	// opened so an `unclosed` defect can point at the opener rather than at the
-	// end of input; the note channel still renders only the characters.
+	// H2 — every open bracket, for balance. Each frame carries WHERE it opened so
+	// an `unclosed` defect can point at the opener rather than at the end of
+	// input.
 	const delimStack: { char: string; at: number }[] = [];
 	const top: Frame = {
 		stmtStart: -1,
@@ -629,7 +625,6 @@ function scanAscii(ascii: string): {
 			f.atLead = false;
 			const str = scanQuotedString(ascii, i);
 			if (!str.closed) {
-				notes.push("unterminated-string");
 				// The region is the whole unterminated run — from the opening quote
 				// to where the scan gave up — not just the quote. A consumer
 				// highlighting the defect wants the text that is swallowed by it.
@@ -696,7 +691,6 @@ function scanAscii(ascii: string): {
 					f.atLead = false;
 				}
 			} else {
-				notes.push(`unbalanced-close:${c}`);
 				defects.push(defectAt("unbalanced-close", i, c));
 				ensureStmt(f, i);
 				f.atLead = false;
@@ -737,12 +731,9 @@ function scanAscii(ascii: string): {
 	}
 	flush(top, ascii.length, "eof");
 	if (delimStack.length > 0) {
-		notes.push(`unclosed:${delimStack.map((d) => d.char).join("")}`);
-		// One defect per still-open delimiter, each pointing at its OPENER. The
-		// note fuses them into a single string (`unclosed:{[`) because that is the
-		// shape the fixtures pin; the region channel keeps them addressable, which
-		// is the whole point — "something is unclosed" is not actionable, "the `{`
-		// at byte 41 is unclosed" is.
+		// One defect per still-open delimiter, each pointing at its OPENER —
+		// "something is unclosed" is not actionable, "the `{` at byte 41 is
+		// unclosed" is.
 		for (const d of delimStack)
 			defects.push(defectAt("unclosed", d.at, d.char));
 	}
@@ -750,7 +741,6 @@ function scanAscii(ascii: string): {
 	return {
 		segments: top.buffer,
 		comments,
-		notes: [...notes, ...overDepth.map((offset) => `over-depth:${offset}`)],
 		defects: [
 			...defects,
 			// No `detail`: `symbols.ts` and `pathresolve.ts` emit this class without

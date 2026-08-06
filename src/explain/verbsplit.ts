@@ -408,11 +408,10 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 	};
 }
 
-/** A document's per-statement verb/menu splits, plus structural notes. */
+/** A document's per-statement verb/menu splits, plus structural defects. */
 export interface VerbAnalysis {
 	splits: VerbSplit[];
-	notes: string[];
-	/** The located twin of {@link notes}; see `defects.ts`. */
+	/** Located structural surprises; see `defects.ts`. */
 	defects: Defect[];
 }
 
@@ -433,14 +432,13 @@ export interface VerbAnalysis {
  * module sees flattened statements.
  */
 export function resolveVerbs(text: string): VerbAnalysis {
-	const { statements, notes, defects } = resolveStatements(text);
+	const { statements, defects } = resolveStatements(text);
 	return {
 		splits: statements.map((s) =>
 			s.unresolved
 				? unknownSplit(s.unresolved)
 				: resolveVerb(s.text, s.context),
 		),
-		notes,
 		defects,
 	};
 }
