@@ -12,11 +12,11 @@
  * which is why the split is done here rather than in a shared helper.
  *
  * `--file` / stdin REPLACE the input positional, so with either of them every
- * positional is a target. stdin is consulted only when no positional could be
- * the input at all — `explain <router>` with a piped script would otherwise be
- * indistinguishable from `explain '<input>'`, and guessing between them is
- * exactly the kind of arity magic the target-first rule exists to avoid. Pass
- * `--file -` to read stdin in the live form.
+ * positional is a target — `… | centrs explain edge1` is the live form, not an
+ * offline reading of the string `edge1`. stdin counts when fd 0 carries bytes
+ * (a pipe, a redirected file) and never for a terminal or `/dev/null`, so a
+ * non-interactive `explain '<input>'` is unaffected. `--file -` reads stdin
+ * explicitly.
  *
  * ## What this surface refuses to do
  *
@@ -30,6 +30,8 @@
  *   offline consults no schema snapshot, by ratified decision.
  */
 
+import { fstatSync } from "node:fs";
+import type { Warning } from "../core/envelope.ts";
 import { CentrsError, formatCentrsErrorText } from "../errors.ts";
 import {
 	buildExplainErrorEnvelope,
@@ -41,15 +43,17 @@ import {
 	explainFailOnLevels,
 	explainOutputFormats,
 	renderExplainEnvelope,
+	resolveExplainFormat,
 } from "../explain.ts";
 import { describeCentrs } from "../index.ts";
+import { loadEnvFileDefaults } from "../resolver/config-file.ts";
+import type { ResolvedSetting } from "../resolver/settings.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
-import { withTips } from "./missing-target.ts";
 import { selectionFlagTokens } from "./selection.ts";
 
 export const explainCliCommand: CliCommandMetadata = {
@@ -176,14 +180,7 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 				// multi-target selection has nothing to mean here (the `terminal`
 				// pattern, shared catalog code).
 				if ((selectionFlagTokens as readonly string[]).includes(arg)) {
-					throw new CentrsError({
-						code: "usage/fanout-not-supported",
-						summary:
-							"`centrs explain` analyzes one input against at most one router and cannot fan out across a multi-target selection.",
-						remediation:
-							"Drop the selection flag and pass a single input (`centrs explain '<input>'`); use `execute` / `api` for multi-target commands.",
-						context: { flag: arg, capability: "explain" },
-					});
+					throw fanoutNotSupportedError({ flag: arg });
 				}
 				if (arg.startsWith("-")) {
 					throw unknownFlagError("explain", arg, explainCliCommand.options);
@@ -196,6 +193,35 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 }
 
 /**
+ * The one fan-out refusal, for both ways of asking for one.
+ *
+ * A selection flag and more than one positional target are the SAME fact under
+ * the constitution (`isFanoutMode` keys on either), so they get the same code.
+ * Giving the positional form its own `input/invalid-command` would have made a
+ * documented contract — the module header and the command README both promise
+ * `usage/fanout-not-supported` — false for half its cases.
+ */
+function fanoutNotSupportedError(context: {
+	flag?: string;
+	targets?: readonly string[];
+}): CentrsError {
+	return new CentrsError({
+		code: "usage/fanout-not-supported",
+		summary:
+			"`centrs explain` analyzes one input against at most one router and cannot fan out across a multi-target selection.",
+		remediation:
+			"Pass one input and at most one router, quoting the input so the shell keeps it as one argument (`centrs explain '/ip/route print'`); use `execute` / `api` for multi-target commands.",
+		context: {
+			capability: "explain",
+			...(context.flag === undefined ? {} : { flag: context.flag }),
+			...(context.targets === undefined
+				? {}
+				: { targets: [...context.targets] }),
+		},
+	});
+}
+
+/**
  * The one live-form error.
  *
  * Named separately because it is a PHASE boundary, not a usage mistake: the
@@ -203,41 +229,98 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
  * lands, so the remediation points at the offline form rather than at `--help`.
  */
 function liveNotImplementedError(router: string): CentrsError {
+	// A "router" that starts `/` or `:` is almost always an unquoted input the
+	// shell split, so name that reading first rather than reporting a router
+	// nobody meant to give.
+	const looksLikeInput = /^[/:]/.test(router);
 	return new CentrsError({
 		code: "usage/not-implemented",
-		summary: `\`centrs explain <router> '<input>'\` needs live \`/console/inspect\` evidence, which is phase 2; the router \`${router}\` was not contacted.`,
-		remediation:
-			"Drop the router for the offline analysis (`centrs explain '<input>'`), or use `rosetta` for documented RouterOS schema facts.",
+		summary: looksLikeInput
+			? `Read \`${router}\` as a router, because two positionals mean \`<router> '<input>'\` — the input was probably not quoted.`
+			: `\`centrs explain <router> '<input>'\` needs live \`/console/inspect\` evidence, which is phase 2; the router \`${router}\` was not contacted.`,
+		remediation: looksLikeInput
+			? "Quote the whole input as one argument: `centrs explain '/ip/route print'`."
+			: "Drop the router for the offline analysis (`centrs explain '<input>'`), or use `rosetta` for documented RouterOS schema facts.",
 		context: { router, phase: "2" },
 	});
 }
 
-/** Resolve the input text from `--file`, piped stdin, or the input positional. */
-async function readInput(
-	parsed: ExplainCliArgs,
-): Promise<{ input: string; targets: readonly string[] }> {
+/**
+ * Is fd 0 attached to something that could be carrying input?
+ *
+ * A **stat**, never a read. Stated as an exclusion, because the carriers are
+ * open-ended while the non-carriers are two: a TTY (a human who would be left
+ * waiting on EOF) and the ambient `/dev/null` that CI runners and `< /dev/null`
+ * scripts attach. Both are character devices, and so is `/dev/zero`, the one
+ * shape whose read never ends. Everything else — a shell pipe, a redirected
+ * file, the socket `Bun.spawn` hands a child — may be handing us bytes.
+ *
+ * An `isTTY`-only check is not enough: it reads `< /dev/null` as "the user
+ * piped input", which would break every non-interactive invocation.
+ */
+function stdinMayCarryInput(): boolean {
+	try {
+		const stat = fstatSync(0);
+		return !stat.isCharacterDevice() && !stat.isDirectory();
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Resolve the input text from `--file`, piped stdin, or the input positional.
+ *
+ * ## Ambient stdin is read ONLY when nothing else could be the input
+ *
+ * Measured, not assumed: consuming fd 0 whenever it looked like a carrier made
+ * `bun test` read the invoking shell's stdin, feed those bytes to the analyzer,
+ * and fail 21 unrelated tests — once, because the read DRAINED the fd and the
+ * next run passed. `runCli` is called in-process by tests, so any ambient read
+ * on a path a test can reach is a landmine that fires on whoever's terminal has
+ * bytes queued. Zero positionals is the one shape no in-process caller uses.
+ *
+ * ## The collision is reported, not resolved
+ *
+ * `… | centrs explain edge1` cannot silently analyze the string `edge1` and drop
+ * the script — but proving the pipe has bytes would mean reading it, which is
+ * the landmine above. So the stat-only signal becomes a WARNING on a result that
+ * is otherwise exactly what the arguments asked for, naming `--file -` as the
+ * way to mean the other thing. A warning is a fact about the invocation; it
+ * changes no analysis, so it cannot make a test's subject non-deterministic.
+ */
+async function readInput(parsed: ExplainCliArgs): Promise<{
+	input: string;
+	targets: readonly string[];
+	warnings: readonly Warning[];
+}> {
 	if (parsed.filePath !== undefined) {
 		const input =
 			parsed.filePath === "-"
 				? await Bun.stdin.text()
 				: await readFileInput(parsed.filePath);
-		return { input, targets: parsed.positionals };
+		return { input, targets: parsed.positionals, warnings: [] };
 	}
 	if (parsed.positionals.length === 0) {
-		// The TTY guard keeps an interactive `centrs explain` from silently waiting
-		// on EOF; the empty check covers the other way in — stdin closed or bound to
-		// /dev/null, where the read succeeds with nothing. Both mean the same thing
-		// to the user, so both raise the same error rather than analyzing "".
-		const piped = process.stdin.isTTY ? "" : await Bun.stdin.text();
+		const piped = stdinMayCarryInput() ? await Bun.stdin.text() : "";
 		if (piped.trim() === "") throw missingInputError();
-		return { input: piped, targets: [] };
+		return { input: piped, targets: [], warnings: [] };
 	}
 	// Target-first: the LAST positional is the input, everything before it is the
 	// target. Splitting from the end is what keeps the two forms unambiguous.
 	const positionals = [...parsed.positionals];
 	const input = positionals.pop() as string;
-	return { input, targets: positionals };
+	return {
+		input,
+		targets: positionals,
+		warnings: stdinMayCarryInput() ? [STDIN_IGNORED_WARNING] : [],
+	};
 }
+
+const STDIN_IGNORED_WARNING: Warning = {
+	code: "usage/stdin-ignored",
+	message:
+		"stdin is redirected, and the input came from the positional argument instead — anything piped in was NOT analyzed. Pass `--file -` to analyze stdin, or drop the positional.",
+};
 
 function missingInputError(): CentrsError {
 	return new CentrsError({
@@ -266,71 +349,97 @@ async function readFileInput(path: string): Promise<string> {
 const VALUE_FLAGS = new Set(["--file", "--fail-on", "--format"]);
 
 /**
- * The requested format, recovered when the parse loop THREW.
+ * The render options, recovered when the parse loop THREW.
  *
- * It has to walk the same grammar the parser does — left to right, stopping at
- * `--`, skipping each value-flag's value, last format winning. A `includes()`
- * scan reads `centrs explain -- --json` as a format request when `--json` is
- * the RouterOS input, and reports JSON for `--yaml --json --bad` in either
- * order. The error renderer picking a different format than the success
- * renderer would is its own bug, even though only failures reach here.
+ * ONE scan for both, walking the same grammar the parser does — left to right,
+ * stopping at `--`, skipping each value-flag's value, last format winning. Two
+ * `includes()` scans is how the bug appeared twice: `centrs explain -- --json`
+ * read a format request out of RouterOS input, and `-- --verbose` turned on the
+ * private error context for a router literally named `--verbose`. A second
+ * option parser that disagrees with the first is the defect, so there is one.
  */
-function formatFromArgs(args: readonly string[]): ExplainOutputFormat {
-	let format: ExplainOutputFormat = "text";
+function recoverRenderOptions(args: readonly string[]): {
+	format?: string;
+	verbose: boolean;
+} {
+	let format: string | undefined;
+	let verbose = false;
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
 		if (arg === undefined || arg === "--") break;
 		if (arg === "--json") format = "json";
 		else if (arg === "--yaml") format = "yaml";
-		else if (arg === "--format") {
-			const value = args[++index];
-			if ((explainOutputFormats as readonly string[]).includes(value ?? ""))
-				format = value as ExplainOutputFormat;
-		} else if (VALUE_FLAGS.has(arg)) index += 1;
+		else if (arg === "--verbose") verbose = true;
+		else if (arg === "--format") format = args[++index];
+		else if (VALUE_FLAGS.has(arg)) index += 1;
 	}
-	return format;
+	return { format, verbose };
+}
+
+/**
+ * The same ladder as the success path, but it must never throw: a bad
+ * `CENTRS_FORMAT` (or a bad `--format`, which is often WHY we are here) would
+ * otherwise replace the user's actual error with a complaint about rendering.
+ */
+function recoverFormat(
+	args: readonly string[],
+	env: Record<string, string | undefined>,
+	config: Record<string, string | undefined>,
+): ResolvedSetting<ExplainOutputFormat> {
+	const { format } = recoverRenderOptions(args);
+	try {
+		return resolveExplainFormat(format, env, config);
+	} catch {
+		try {
+			return resolveExplainFormat(undefined, env, config);
+		} catch {
+			return { value: "text", source: { kind: "default", key: "format" } };
+		}
+	}
 }
 
 export async function runExplainCli(args: readonly string[]): Promise<number> {
+	const env = Bun.env;
+	// Loaded before the try so BOTH paths see the same config tier. A broken
+	// `centrs.env` must not decide how the resulting error is rendered.
+	const config = await loadEnvFileDefaults(env).catch(() => ({}));
 	try {
 		const parsed = parseExplainCliArgs(args);
 		if (parsed.help) {
 			console.log(renderCommandHelp(describeCentrs(), explainCliCommand));
 			return 0;
 		}
+		// Resolved ONCE across config < env < CLI, so `meta.settings.format` can
+		// name the tier that won (`docs/CONSTITUTION.md` → Settings precedence).
+		const format = resolveExplainFormat(parsed.format, env, config);
 
-		const { input, targets } = await readInput(parsed);
-		if (targets.length > 1) {
-			throw new CentrsError({
-				code: "input/invalid-command",
-				summary: `\`centrs explain\` takes at most one router and one input; got ${targets.length + 1} positional arguments.`,
-				remediation:
-					"Quote the input so the shell passes it as one argument: `centrs explain '/ip/route print'`.",
-				context: { positionals: [...targets] },
-			});
-		}
+		const { input, targets, warnings } = await readInput(parsed);
+		// More than one positional target IS fan-out mode under the constitution
+		// (`isFanoutMode`), so it gets the same refusal as `--group` rather than a
+		// second code for the same fact.
+		if (targets.length > 1) throw fanoutNotSupportedError({ targets });
 		const router = targets[0];
 		if (router !== undefined) throw liveNotImplementedError(router);
 
-		const base = explainEnvelope(input);
-		const envelope =
-			parsed.facets.length > 0
-				? withTips(base, [...base.tips, buildExplainFacetTip(parsed.facets)])
-				: base;
-		// The parser's decision, never the recovery scan: on this path the grammar
-		// ran to completion, so a second opinion could only disagree with it.
-		console.log(renderExplainEnvelope(envelope, parsed.format ?? "text"));
+		const envelope = explainEnvelope(input, {
+			format,
+			warnings,
+			tips:
+				parsed.facets.length > 0
+					? [buildExplainFacetTip(parsed.facets)]
+					: undefined,
+		});
+		console.log(renderExplainEnvelope(envelope, format.value));
 		return explainExitCode(envelope.data.verdict, parsed.failOn);
 	} catch (error) {
 		// Only here is the parser's answer unavailable — it threw.
-		const format = formatFromArgs(args);
-		const envelope = buildExplainErrorEnvelope(error);
+		const format = recoverFormat(args, env, config);
+		const { verbose } = recoverRenderOptions(args);
+		const envelope = buildExplainErrorEnvelope(error, [], format);
 		console.error(
-			format === "text"
-				? formatCentrsErrorText(envelope.error, {
-						verbose: args.includes("--verbose"),
-					})
-				: renderExplainEnvelope(envelope, format),
+			format.value === "text"
+				? formatCentrsErrorText(envelope.error, { verbose })
+				: renderExplainEnvelope(envelope, format.value),
 		);
 		return 1;
 	}

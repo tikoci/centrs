@@ -271,7 +271,12 @@ bare menu path. The positional grammar stays **target-first like every other
 router-taking command** (amended in PR review — the shared resolver/selection
 helpers assume it): one positional means offline and it *is* the input; two
 positionals mean live with the router first; `--` is accepted before the
-input; `--file`/stdin replace the input positional in either form. Adding a
+input; `--file`/stdin replace the input positional in either form, so with
+either of them **every positional is a target** (`… | centrs explain edge1` is
+the live form, not an offline reading of the string `edge1`). stdin counts when
+fd 0 actually carries bytes — a pipe, a redirected file — and never for a
+terminal or `/dev/null`, so a non-interactive `centrs explain '<input>'` is
+unaffected. Adding a
 router therefore never reinterprets a previously valid offline invocation.
 One verb serves all three intents; the accepted risk is that
 the refined "broad query → broader results" scheme adds complexity to one

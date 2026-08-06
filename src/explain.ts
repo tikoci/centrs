@@ -73,6 +73,7 @@
 import type {
 	CentrsErrorEnvelope,
 	CentrsSuccessEnvelope,
+	CommonSettingsMeta,
 	EnvelopeMeta,
 } from "./core/envelope.ts";
 import { buildTip, type Tip, type Warning } from "./core/envelope.ts";
@@ -102,6 +103,11 @@ import {
 	type VerbSplit,
 } from "./explain/verbsplit.ts";
 import { containsWrite, type WriteVerdict } from "./explain/write.ts";
+import {
+	type ResolvedSetting,
+	resolveStringSetting,
+	toCoreSource,
+} from "./resolver/settings.ts";
 import { toYaml } from "./retrieve.ts";
 
 /** A half-open analyzed-byte span, the coordinate contract of `coordinates.ts`. */
@@ -860,7 +866,10 @@ function citedEvidence(
  * unresolvable target, a usage error). `via` is `null` because offline explain
  * never chooses a transport — there is nothing to choose.
  */
-export function explainEnvelope(input: string): ExplainEnvelope {
+export function explainEnvelope(
+	input: string,
+	options: ExplainEnvelopeOptions = {},
+): ExplainEnvelope {
 	const data = explainCommand(input);
 	const tips: Tip[] = [
 		buildTip(
@@ -868,12 +877,13 @@ export function explainEnvelope(input: string): ExplainEnvelope {
 			"No router was given, so this is the canonicalizer's reading alone.",
 			"Completion, schema, and `:parse` evidence come from a live target (`centrs explain <router> '<input>'`), which is phase 2 and not accepted yet.",
 		),
+		...(options.tips ?? []),
 	];
-	const warnings: Warning[] = [];
+	const warnings: Warning[] = [...(options.warnings ?? [])];
 	const meta: EnvelopeMeta<ExplainOperationMeta> = {
 		target: {},
 		via: null,
-		settings: {},
+		settings: settingsMeta(options.format),
 		validation: { enabled: false, result: "skipped" },
 		operation: {
 			command: "explain",
@@ -905,6 +915,61 @@ export function buildExplainFacetTip(facets: readonly string[]): Tip {
 
 export const explainOutputFormats = ["text", "json", "yaml"] as const;
 export type ExplainOutputFormat = (typeof explainOutputFormats)[number];
+
+/**
+ * Envelope-level options. Not analysis options — {@link explainCommand} still
+ * takes none, and phase 2's `{ target, facets }` is a different parameter on a
+ * different function. What lives here is what the ENVELOPE needs and the
+ * analysis does not: the resolved render format (so `meta.settings` can name
+ * the tier that won) and any tips the caller adds.
+ */
+export interface ExplainEnvelopeOptions {
+	format?: ResolvedSetting<ExplainOutputFormat>;
+	tips?: readonly Tip[];
+	/** Facts about the INVOCATION, not the analysis (e.g. an ignored stdin). */
+	warnings?: readonly Warning[];
+}
+
+function settingsMeta(
+	format: ResolvedSetting<ExplainOutputFormat> | undefined,
+): CommonSettingsMeta {
+	return format === undefined ? {} : { format: toCoreSource(format.source) };
+}
+
+/**
+ * Resolve the render format across the settings ladder: `centrs.env` config <
+ * `CENTRS_FORMAT` env < the CLI flag (`docs/CONSTITUTION.md` → Settings
+ * precedence). Throws `settings/invalid-format` on a bad value from ANY tier —
+ * a typo in `centrs.env` that silently rendered text would be the same silent
+ * fallback the constitution forbids on the CLI.
+ */
+export function resolveExplainFormat(
+	explicit: string | undefined,
+	env: Record<string, string | undefined> = Bun.env,
+	config: Record<string, string | undefined> = {},
+): ResolvedSetting<ExplainOutputFormat> {
+	return resolveStringSetting(
+		explicit,
+		env,
+		"CENTRS_FORMAT",
+		"text",
+		"format",
+		parseExplainOutputFormat,
+		undefined,
+		config,
+	) as ResolvedSetting<ExplainOutputFormat>;
+}
+
+function parseExplainOutputFormat(value: string): ExplainOutputFormat {
+	if ((explainOutputFormats as readonly string[]).includes(value))
+		return value as ExplainOutputFormat;
+	throw new CentrsError({
+		code: "settings/invalid-format",
+		summary: `Unsupported explain output format: ${value}`,
+		remediation: `Choose one of ${explainOutputFormats.join(", ")}.`,
+		context: { format: value },
+	});
+}
 
 /** `--fail-on` thresholds, in the order the CLI documents them. */
 export const explainFailOnLevels = ["error", "warning", "never"] as const;
@@ -938,6 +1003,7 @@ export type ExplainErrorEnvelope = CentrsErrorEnvelope<ExplainOperationMeta>;
 export function buildExplainErrorEnvelope(
 	error: unknown,
 	tips: readonly Tip[] = [],
+	format?: ResolvedSetting<ExplainOutputFormat>,
 ): ExplainErrorEnvelope {
 	const centrs =
 		error instanceof CentrsError
@@ -953,7 +1019,7 @@ export function buildExplainErrorEnvelope(
 		error: serializeCentrsError(centrs),
 		warnings: [],
 		tips,
-		meta: { target: {}, via: null, settings: {} },
+		meta: { target: {}, via: null, settings: settingsMeta(format) },
 	};
 }
 

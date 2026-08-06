@@ -280,6 +280,59 @@ describe("centrs explain — the CLI surface", () => {
 		}
 	});
 
+	test("more than one positional target is fan-out, with the fan-out code", async () => {
+		// Same fact as `--group`, so the same code: `isFanoutMode` keys on either.
+		const { code, err } = await run([
+			"explain",
+			"r1",
+			"r2",
+			"/ip/route print",
+			"--json",
+		]);
+		const envelope = JSON.parse(err) as {
+			error: { code: string; context?: { targets?: string[] } };
+		};
+		expect(envelope.error.code).toBe("usage/fanout-not-supported");
+		expect(envelope.error.context?.targets).toEqual(["r1", "r2"]);
+		expect(code).toBe(1);
+	});
+
+	test("an unquoted input names the likelier mistake", async () => {
+		// `explain /ip/route print` is two positionals, so the grammar reads a
+		// router — but a leading `/` or `:` says the shell split an input.
+		const { err } = await run(["explain", "/ip/route", "print"]);
+		expect(err).toContain("the input was probably not quoted");
+		expect(err).toContain("centrs explain '/ip/route print'");
+	});
+
+	test("the format follows the settings ladder, CLI last", async () => {
+		const env = await run(["explain", "/ip/route", "--format", "json"]);
+		const settings = (
+			JSON.parse(env.out) as {
+				meta: { settings: { format?: { kind: string; key: string } } };
+			}
+		).meta.settings;
+		expect(settings.format).toEqual({ kind: "cli", key: "format" });
+	});
+
+	test("a bad --format is a typed error, in text", async () => {
+		const { code, err } = await run([
+			"explain",
+			"/ip/route",
+			"--format",
+			"toml",
+		]);
+		expect(err).toContain("[settings/invalid-format]");
+		expect(code).toBe(1);
+	});
+
+	test("`--verbose` after `--` is an operand, not a flag", async () => {
+		// The private error context must not be unlocked by RouterOS input.
+		const { err } = await run(["explain", "--", "--verbose", "--yaml"]);
+		expect(err).toContain("[usage/not-implemented]");
+		expect(err).not.toContain("Context:");
+	});
+
 	test("a missing --file path is a typed error, not a throw", async () => {
 		const { code, err } = await run([
 			"explain",

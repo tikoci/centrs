@@ -74,8 +74,11 @@ section short enough that the grid remains the status surface.
   under `test/fixtures/explain/` — and phase 1 has composed them into one
   analysis and envelope in `src/explain.ts` (`explainCommand` /
   `explainEnvelope`, #202a). **`centrs explain '<input>'` is a real command as
-  of #202b** (`src/cli/explain.ts`), and the offline examples run green in
-  `test/unit/explain.test.ts`. The row nonetheless stays `designed`: offline
+  of #202b** (`src/cli/explain.ts`), and the **#202b subset** of the offline
+  examples runs green in `test/unit/explain.test.ts` — 1b, 3, 4, 4b, 5, 17, 18,
+  18b, 20, 21, 22. Examples **1, 2, 6 and 23 are not green**: each asserts
+  `transport`/`--curl` and is #202c's, and they stand as `test.todo` until then.
+  The row nonetheless stays `designed`: offline
   mode occupies no protocol cell, and the two `designed` cells are the live
   `/console/inspect` + `:parse` probes, which are phase 2. The live grammar
   (`explain <router> '<input>'`) is parsed and refused with

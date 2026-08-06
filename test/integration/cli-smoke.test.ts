@@ -346,6 +346,42 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		}
 	});
 
+	test("explain honors the CENTRS_FORMAT env tier and names it (#202b)", async () => {
+		const res = await runCliProcess({
+			args: ["explain", "/ip/route"],
+			env: { CENTRS_FORMAT: "json" },
+		});
+		expect(res.exitCode).toBe(0);
+		const envelope = JSON.parse(res.stdoutText) as {
+			meta: { settings: { format?: { kind: string; key: string } } };
+		};
+		expect(envelope.meta.settings.format).toEqual({
+			kind: "env",
+			key: "CENTRS_FORMAT",
+		});
+	});
+
+	test("explain says out loud when a piped script was NOT the input", async () => {
+		// The positional wins (the arguments asked for it), but the result carries
+		// `usage/stdin-ignored` so the dropped pipe is never silent. Proving the
+		// pipe has bytes would mean reading fd 0 on a path `bun test` reaches, which
+		// is measured to eat the invoking shell's stdin — so this is a stat, and the
+		// answer is a warning rather than a re-reading of the arguments.
+		const res = await runCliProcess({
+			args: ["explain", "/ip/route", "--json"],
+			stdin: "/ip/address print\n",
+		});
+		expect(res.exitCode).toBe(0);
+		const envelope = JSON.parse(res.stdoutText) as {
+			ok: boolean;
+			warnings: Array<{ code: string }>;
+		};
+		expect(envelope.ok).toBe(true);
+		expect(envelope.warnings.map((w) => w.code)).toContain(
+			"usage/stdin-ignored",
+		);
+	});
+
 	test("explain exits 2 when the verdict meets --fail-on (real process code)", async () => {
 		const res = await runCliProcess({
 			args: ["explain", ':put "unterminated', "--json"],
