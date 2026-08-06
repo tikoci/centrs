@@ -12,10 +12,14 @@ input source was present and lost.
 Name the source you meant:
 
 ```bash
-cat script.rsc | centrs explain --file -       # analyze stdin
-cat script.rsc | centrs explain edge1 --file - # ...in the live form
-centrs explain '/ip/route print'               # analyze the positional
+cat script.rsc | centrs explain --file -  # analyze stdin
+centrs explain '/ip/route print'          # analyze the positional
 ```
+
+The live form spells the same thing (`… | centrs explain edge1 --file -`) and is
+already parsed, but it is refused with
+[`usage/not-implemented`](not-implemented.md) until the phase-2 live probes
+land — so it is not a fix you can apply today.
 
 `explain` reads ambient stdin only when no positional could be the input, so a
 positional always wins. It cannot check whether the pipe actually carries bytes

@@ -268,7 +268,30 @@ function stdinMayCarryInput(): boolean {
 }
 
 /**
- * Resolve the input text from `--file`, piped stdin, or the input positional.
+ * Split the positionals into targets and the one that may be the input.
+ *
+ * Pure and cheap **on purpose**: the caller must be able to refuse the live and
+ * fan-out forms BEFORE any input source is touched. Reading first meant
+ * `centrs explain router --file -` blocked on EOF before returning
+ * `usage/not-implemented`, and `… --file missing` reported a file error instead
+ * of the live refusal — the wrong answer, arrived at slowly.
+ *
+ * `--file` replaces the input positional, so with it every positional is a
+ * target. Otherwise the LAST positional is the input and everything before it is
+ * a target; splitting from the end is what keeps the two forms unambiguous.
+ */
+function splitPositionals(parsed: ExplainCliArgs): {
+	targets: readonly string[];
+	inputPositional?: string;
+} {
+	if (parsed.filePath !== undefined) return { targets: parsed.positionals };
+	const positionals = [...parsed.positionals];
+	const inputPositional = positionals.pop();
+	return { targets: positionals, ...(inputPositional && { inputPositional }) };
+}
+
+/**
+ * Read the input text, once the invocation is known to be offline.
  *
  * ## Ambient stdin is read ONLY when nothing else could be the input
  *
@@ -281,37 +304,31 @@ function stdinMayCarryInput(): boolean {
  *
  * ## The collision is reported, not resolved
  *
- * `… | centrs explain edge1` cannot silently analyze the string `edge1` and drop
- * the script — but proving the pipe has bytes would mean reading it, which is
- * the landmine above. So the stat-only signal becomes a WARNING on a result that
- * is otherwise exactly what the arguments asked for, naming `--file -` as the
- * way to mean the other thing. A warning is a fact about the invocation; it
- * changes no analysis, so it cannot make a test's subject non-deterministic.
+ * `… | centrs explain '<input>'` cannot silently drop the pipe — but proving the
+ * pipe has bytes would mean reading it, which is the landmine above. So the
+ * stat-only signal becomes a WARNING on a result that is otherwise exactly what
+ * the arguments asked for, naming `--file -` as the way to mean the other thing.
+ * A warning is a fact about the invocation; it changes no analysis, so it cannot
+ * make a test's subject non-deterministic.
  */
-async function readInput(parsed: ExplainCliArgs): Promise<{
-	input: string;
-	targets: readonly string[];
-	warnings: readonly Warning[];
-}> {
+async function readInput(
+	parsed: ExplainCliArgs,
+	inputPositional: string | undefined,
+): Promise<{ input: string; warnings: readonly Warning[] }> {
 	if (parsed.filePath !== undefined) {
 		const input =
 			parsed.filePath === "-"
 				? await Bun.stdin.text()
 				: await readFileInput(parsed.filePath);
-		return { input, targets: parsed.positionals, warnings: [] };
+		return { input, warnings: [] };
 	}
-	if (parsed.positionals.length === 0) {
+	if (inputPositional === undefined) {
 		const piped = stdinMayCarryInput() ? await Bun.stdin.text() : "";
 		if (piped.trim() === "") throw missingInputError();
-		return { input: piped, targets: [], warnings: [] };
+		return { input: piped, warnings: [] };
 	}
-	// Target-first: the LAST positional is the input, everything before it is the
-	// target. Splitting from the end is what keeps the two forms unambiguous.
-	const positionals = [...parsed.positionals];
-	const input = positionals.pop() as string;
 	return {
-		input,
-		targets: positionals,
+		input: inputPositional,
 		warnings: stdinMayCarryInput() ? [STDIN_IGNORED_WARNING] : [],
 	};
 }
@@ -400,10 +417,12 @@ function recoverFormat(
 
 export async function runExplainCli(args: readonly string[]): Promise<number> {
 	const env = Bun.env;
-	// Loaded before the try so BOTH paths see the same config tier. A broken
-	// `centrs.env` must not decide how the resulting error is rendered.
-	const config = await loadEnvFileDefaults(env).catch(() => ({}));
+	let config: Record<string, string | undefined> = {};
 	try {
+		// Inside the try: a settings file that cannot be read or parsed is a real
+		// failure with a real remedy, and swallowing it would silently bypass the
+		// configured format and the rest of the precedence ladder.
+		config = await loadEnvFileDefaults(env);
 		const parsed = parseExplainCliArgs(args);
 		if (parsed.help) {
 			console.log(renderCommandHelp(describeCentrs(), explainCliCommand));
@@ -413,13 +432,16 @@ export async function runExplainCli(args: readonly string[]): Promise<number> {
 		// name the tier that won (`docs/CONSTITUTION.md` → Settings precedence).
 		const format = resolveExplainFormat(parsed.format, env, config);
 
-		const { input, targets, warnings } = await readInput(parsed);
+		// Targets first, from the positionals alone — no file opened, no fd read.
 		// More than one positional target IS fan-out mode under the constitution
 		// (`isFanoutMode`), so it gets the same refusal as `--group` rather than a
 		// second code for the same fact.
+		const { targets, inputPositional } = splitPositionals(parsed);
 		if (targets.length > 1) throw fanoutNotSupportedError({ targets });
 		const router = targets[0];
 		if (router !== undefined) throw liveNotImplementedError(router);
+
+		const { input, warnings } = await readInput(parsed, inputPositional);
 
 		const envelope = explainEnvelope(input, {
 			format,
@@ -432,7 +454,9 @@ export async function runExplainCli(args: readonly string[]): Promise<number> {
 		console.log(renderExplainEnvelope(envelope, format.value));
 		return explainExitCode(envelope.data.verdict, parsed.failOn);
 	} catch (error) {
-		// Only here is the parser's answer unavailable — it threw.
+		// Only here is the parser's answer unavailable — it threw. `config` is
+		// whatever loaded before the throw, which is `{}` when the loader itself is
+		// what failed: the tier that broke cannot also be the one that renders it.
 		const format = recoverFormat(args, env, config);
 		const { verbose } = recoverRenderOptions(args);
 		const envelope = buildExplainErrorEnvelope(error, [], format);

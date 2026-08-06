@@ -279,8 +279,10 @@ router therefore never reinterprets a previously valid offline invocation.
 the offline form with nothing else to analyze. A positional always wins, and
 when fd 0 is redirected anyway the result carries a
 [`usage/stdin-ignored`](../../docs/errors/usage/stdin-ignored.md) warning rather
-than quietly dropping the pipe. `--file -` names stdin explicitly and works in
-both forms (`… | centrs explain edge1 --file -`). The narrower rule is
+than quietly dropping the pipe. `--file -` names stdin explicitly; it is the
+offline fix today, since the live form it also spells
+(`… | centrs explain edge1 --file -`) is parsed and then refused with
+`usage/not-implemented` until phase 2. The narrower rule is
 deliberate and measured: `runCli` is called in-process by tests, so reading fd 0
 on any path a positional invocation reaches consumes the invoking shell's
 stdin — it fed those bytes to the analyzer and broke 21 unrelated tests once,

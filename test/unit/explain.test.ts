@@ -333,6 +333,27 @@ describe("centrs explain — the CLI surface", () => {
 		expect(err).not.toContain("Context:");
 	});
 
+	test("the live form is refused BEFORE any input source is touched", async () => {
+		// Ordering, not just outcome: reading first made `--file -` block on EOF
+		// before the refusal, and `--file <missing>` report a file error instead of
+		// it. Both must name the live form, and the `--file -` case must not hang.
+		const missing = await run([
+			"explain",
+			"edge1",
+			"--file",
+			`${import.meta.dir}/no-such-file.rsc`,
+			"--json",
+		]);
+		expect(
+			(JSON.parse(missing.err) as { error: { code: string } }).error.code,
+		).toBe("usage/not-implemented");
+
+		const stdin = await run(["explain", "edge1", "--file", "-", "--json"]);
+		expect(
+			(JSON.parse(stdin.err) as { error: { code: string } }).error.code,
+		).toBe("usage/not-implemented");
+	});
+
 	test("a missing --file path is a typed error, not a throw", async () => {
 		const { code, err } = await run([
 			"explain",
