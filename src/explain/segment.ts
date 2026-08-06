@@ -106,10 +106,8 @@ export interface SegmentResult {
 	/** unbalanced-delimiter and other structural notes; never a throw. */
 	notes: string[];
 	/**
-	 * The same structural surprises as {@link notes}, each located (#192). Adds
-	 * the two coordinate-pass classes (`bom`, `non-ascii`) that have no note.
-	 * `notes` is frozen while this lands and is deleted by the phase-1 envelope
-	 * (#202) — see `defects.ts` for why both channels exist right now.
+	 * The same structural surprises as {@link notes}, each located, plus the two
+	 * coordinate-pass classes (`bom`, `non-ascii`) that have no note.
 	 */
 	defects: Defect[];
 }
@@ -755,7 +753,10 @@ function scanAscii(ascii: string): {
 		notes: [...notes, ...overDepth.map((offset) => `over-depth:${offset}`)],
 		defects: [
 			...defects,
-			...overDepth.map((offset) => defectAt("over-depth", offset, "{")),
+			// No `detail`: `symbols.ts` and `pathresolve.ts` emit this class without
+			// one, and `mergeDefects` keys on it, so a `"{"` here would make the same
+			// event fail to de-duplicate across analyzers.
+			...overDepth.map((offset) => defectAt("over-depth", offset)),
 		],
 	};
 }

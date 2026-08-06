@@ -1,29 +1,20 @@
 /**
  * Defect regions for `explain` (centrs canonicalizer).
  *
- * Q14 (#185) ratified the fail-closed recovery contract and
- * `commands/explain/README.md` spells out its coordinate half: "**Malformed
- * input carries a defect *region*** — each diagnostic points at the byte span of
- * its defect". This module is that span. It is the structured twin of the
- * `notes: string[]` channel every analyzer already carries, and #192 is the
- * issue that adds it.
+ * Ratified by the phase-0 lab, question Q14 (#185), whose coordinate half
+ * `commands/explain/README.md` states as "**Malformed input carries a defect
+ * *region*** — each diagnostic points at the byte span of its defect". This
+ * module is that span: the structured twin of the `notes: string[]` channel
+ * every analyzer carries.
  *
- * WHY A SECOND CHANNEL RATHER THAN A REPLACEMENT
+ * WHY TWO CHANNELS
  *
- *   `notes` stays byte-identical while this lands (maintainer decision,
- *   2026-08-05: *additive now, converge in #202*). Two reasons, one practical
- *   and one methodological:
- *
- *   1. `write.ts` uses `notes.length > 0` as a pure abstention gate — the note
- *      CONTENT is never read. Leaving `notes` alone means the tristate's
- *      measured corpus split does not move while the regions are being proven.
- *   2. `test/fixtures/explain/segments.json` and `symbols.json` pin ~45 exact
- *      `notes` arrays. Holding them frozen turns any note change during this
- *      work into a caught bug rather than an expected re-baseline — the
- *      "corpus-green is not correct" lesson from #200, applied to fixtures.
- *
- *   The phase-1 envelope (#202) deletes `notes` and renders `data.diagnostics[]`
- *   from `Defect[]` alone. This channel is not permanent.
+ *   `notes` is a flat `string[]` whose CONTENT no caller reads — `write.ts`
+ *   tests only `notes.length > 0`, as a pure abstention gate. Defects are read
+ *   for their regions. Keeping them separate means the two questions ("did
+ *   anything go wrong" and "where") need not be answered by parsing one string,
+ *   and a class that belongs to only one of them (see `isPositionalFact`) has
+ *   somewhere to go.
  *
  * COORDINATES
  *
@@ -47,23 +38,23 @@
  *     `segment` and `symbols` emit `over-depth:<byte>` — the same class in two
  *     shapes, only one of them locatable.
  *
- *   A third suspected loss did NOT survive checking, and is recorded here so it
- *   is not re-derived: the walkers used to segment a block body and throw the
- *   resulting notes away, which looks like it would hide a defect inside
- *   `do={…}`. It does not. The top-level segmenter scans the whole byte range
- *   including block bodies, and `scopeBlocks` only returns depth-0 braces, so
- *   the outer scan is a strict superset — probing six shapes (unterminated
- *   strings, stray closes and unclosed delimiters inside bodies, nested two
- *   deep) surfaced no body-only defect. Body defects still propagate now, and
- *   `ScopeBlock.start` still exists, because that is the mechanism that lets a
- *   defect the WALKER itself raises (its block-descent `over-depth`) carry a
- *   document-space region — not because it recovers a hidden class.
+ *   A third suspected loss did NOT survive checking, and is recorded so it is
+ *   not re-derived: segmenting a block body and discarding its notes LOOKS like
+ *   it would hide a defect inside `do={…}`. It does not. The top-level
+ *   segmenter scans the whole byte range including block bodies, and
+ *   `scopeBlocks` only returns depth-0 braces, so the outer scan is a strict
+ *   superset — six probe shapes (unterminated strings, stray closes and
+ *   unclosed delimiters inside bodies, nested two deep) surfaced no body-only
+ *   defect. Body defects propagate and `ScopeBlock.start` exists because that is
+ *   what lets a defect the WALKER itself raises (its block-descent
+ *   `over-depth`) carry a document-space region — not because either recovers a
+ *   hidden class.
  *
  * CLASSES DELIBERATELY NOT DETECTED
  *
- *   The spec lists eight detectable classes; six are implemented here plus `bom`
- *   and `non-ascii`, which come free from the coordinate pass. Two are refused
- *   on purpose:
+ *   `commands/explain/README.md` lists eight detectable classes; six are
+ *   implemented here, plus `bom` and `non-ascii` which come free from the
+ *   coordinate pass. Two are refused on purpose:
  *
  *   - `truncation` — offline cannot tell a truncated complete-LOOKING token from
  *     a finished one without a schema; `commands/explain/README.md` says so
@@ -71,19 +62,18 @@
  *     trailing `=`, an open delimiter), which is a `--complete` concern and a
  *     live-target question, not a defect. Emitting it here would be exactly the
  *     confident-claim-on-ambiguous-input posture Q14 forbids.
- *   - `stray mid-token delimiter` — plausible, but the #201 round is the
- *     standing warning against curating a lexical rule from intuition: every
- *     one of its seven P1s was in lexical plumbing and none was corpus
- *     reachable. This class needs a probe matrix (spellings × positions ×
- *     accepted-form neighbors) before it is worth a detector.
+ *   - `stray mid-token delimiter` — plausible, but a lexical rule curated from
+ *     intuition is what the #201 round warns against: all seven of its P1s were
+ *     in lexical plumbing and none was reachable from the 913-script corpus.
+ *     This class needs a probe matrix (spellings × positions × accepted-form
+ *     neighbors) before it is worth a detector.
  */
 
 /**
  * One structural defect, located in analyzed-byte space.
  *
  * The `code` vocabulary is deliberately the same one the note channel uses, so
- * a reader comparing `notes` against `defects` during the #202 convergence is
- * comparing like with like.
+ * the two are comparable entry for entry.
  */
 export interface Defect {
 	code: DefectCode;
@@ -94,7 +84,7 @@ export interface Defect {
 	/**
 	 * The delimiter or byte that raised it, when the class has one — `"}"` for
 	 * `unbalanced-close`, the opener for `unclosed`. Never a sentence: prose
-	 * belongs in the phase-1 diagnostic, not in the structural record.
+	 * belongs in a rendered diagnostic, not in the structural record.
 	 */
 	detail?: string;
 }
@@ -112,8 +102,8 @@ export type DefectCode =
 /**
  * `bom` and `non-ascii` are POSITIONAL FACTS, not errors.
  *
- * This predicate exists so the phase-1 renderer cannot give them error severity
- * by accident, and it is a guard rather than a comment because the failure it
+ * This predicate exists so a renderer cannot give them error severity by
+ * accident, and it is a guard rather than a comment because the failure it
  * prevents is silent and user-facing: `/system identity set name="router-🚀"`
  * (`commands/explain/examples.md` example 22) is a perfectly legal command whose
  * value is non-ASCII by design. Failing it under `--fail-on error` would be a
@@ -182,6 +172,10 @@ export function rebaseDefects(
  * discovery order without sorting; callers that want source order should sort by
  * `start` themselves, since discovery order differs between the statement walk
  * and the bracket walk.
+ *
+ * The key is JSON rather than a joined string so that an ABSENT `detail` and an
+ * empty-string one stay distinguishable, and so the separator cannot be a raw
+ * control byte sitting invisibly in this file.
  */
 export function mergeDefects(
 	...lists: readonly (readonly Defect[])[]
@@ -190,7 +184,7 @@ export function mergeDefects(
 	const out: Defect[] = [];
 	for (const list of lists) {
 		for (const d of list) {
-			const key = `${d.code} ${d.start} ${d.end} ${d.detail ?? ""}`;
+			const key = JSON.stringify([d.code, d.start, d.end, d.detail]);
 			if (seen.has(key)) continue;
 			seen.add(key);
 			out.push(d);

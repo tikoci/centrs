@@ -89,6 +89,7 @@ import { isScopeBrace, scopeBlocks, scopeBodies } from "./blocks.ts";
 import { type Defect, mergeDefects, rebaseDefects } from "./defects.ts";
 import {
 	maskComments,
+	type SegmentResult,
 	scanQuotedString,
 	segmentStatements,
 } from "./segment.ts";
@@ -341,9 +342,9 @@ export interface Resolution {
 	/** Feature class, for per-class reporting. */
 	klass: string;
 	/**
-	 * The `[…]` in DOCUMENT analyzed-byte space, closing bracket included (#192).
-	 * Widens to the enclosing statement where interior offsets cannot be mapped —
-	 * see {@link Loc}.
+	 * The `[…]` in DOCUMENT analyzed-byte space, closing bracket included. Widens
+	 * to the enclosing statement where interior offsets cannot be mapped — see
+	 * {@link Loc}.
 	 */
 	span: Span;
 }
@@ -371,7 +372,7 @@ export interface StatementResolution {
 	 * so a `false` here does not by itself invalidate `path`.
 	 */
 	contextCertain: boolean;
-	/** This statement in DOCUMENT analyzed-byte space (#192). */
+	/** This statement in DOCUMENT analyzed-byte space. */
 	span: Span;
 }
 
@@ -385,10 +386,8 @@ export interface DocumentAnalysis {
 	 */
 	notes: string[];
 	/**
-	 * The same structural surprises as {@link notes}, each located (#192), and
-	 * including defects raised inside a block body — which the note channel drops
-	 * entirely. `notes` is frozen while this lands and is deleted by the phase-1
-	 * envelope (#202); see `defects.ts`.
+	 * The same structural surprises as {@link notes}, each located, and including
+	 * defects raised inside a block body. See `defects.ts`.
 	 */
 	defects: Defect[];
 }
@@ -408,7 +407,7 @@ export interface Span {
 }
 
 /**
- * Where the text a walker is scanning sits in the DOCUMENT (#192).
+ * Where the text a walker is scanning sits in the DOCUMENT.
  *
  * `base` is the document analyzed-byte offset that index 0 of that text maps to,
  * or -1 when the mapping is unavailable. It goes to -1 for exactly one reason:
@@ -436,6 +435,19 @@ function spanIn(loc: Loc, start: number, end: number): Span {
 	return loc.base < 0
 		? { start: loc.fallback.start, end: loc.fallback.end }
 		: { start: loc.base + start, end: loc.base + end };
+}
+
+/**
+ * A defect region for `[start, end)` of the scanned text, never zero-width.
+ *
+ * An empty extent is reachable — `do={}` at the block-depth limit, `[]` at the
+ * bracket limit — and `Defect` contracts `end > start`, so an empty one falls
+ * back to the enclosing statement rather than emitting `start === end`.
+ */
+function regionIn(loc: Loc, start: number, end: number): Span {
+	return end > start
+		? spanIn(loc, start, end)
+		: { start: loc.fallback.start, end: loc.fallback.end };
 }
 
 /** Move `loc` to a nested text beginning at index `start` of the current one. */
@@ -469,15 +481,13 @@ interface Located {
  * Segment `text` and locate every statement in document space, carrying the
  * segmenter's own defects out with them.
  *
- * This replaces a `segmentStatements(text).segments.map((s) => s.text)` that
- * threw the defects and the offsets away. For a block body that discard was
- * total: a defect inside `do={…}` reached no caller at all (#192).
+ * The offsets and defects a plain `segments.map((s) => s.text)` would discard
+ * are what every span and region downstream is built from.
  */
 function locate(
-	text: string,
+	segmented: SegmentResult,
 	loc: Loc,
 ): { units: Located[]; defects: Defect[] } {
-	const segmented = segmentStatements(text);
 	const units = segmented.segments.map((s) => {
 		const span = spanIn(loc, s.start, s.end);
 		// `s.start`/`s.end` are analyzed bytes of THIS text; `s.text` is the
@@ -505,10 +515,14 @@ const DOCUMENT_LOC: Loc = { base: 0, fallback: { start: 0, end: 0 } };
 
 /** Q3 — resolve every `[…]` command substitution in `text`. */
 export function resolveDocument(text: string): DocumentAnalysis {
-	const notes = new Set(segmentStatements(text).notes);
+	// Segment ONCE and hand the result to `locate` — `containsWrite` calls both
+	// entry points, and re-segmenting here would put a document through the
+	// segmenter four times on input its own comment calls "not cheap".
+	const segmented = segmentStatements(text);
+	const notes = new Set(segmented.notes);
 	const defects: Defect[] = [];
 	const resolutions: Resolution[] = [];
-	const top = locate(text, DOCUMENT_LOC);
+	const top = locate(segmented, DOCUMENT_LOC);
 	defects.push(...top.defects);
 	walk(top.units, "/", resolutions, 0, notes, defects, true);
 	return { resolutions, notes: [...notes], defects: mergeDefects(defects) };
@@ -558,11 +572,16 @@ function walk(
 		for (const block of scopeBlocks(text)) {
 			if (blockDepth >= MAX_DEPTH) {
 				notes.add("over-depth");
-				defects.push({ code: "over-depth", ...unit.span });
+				// The BLOCK that exceeded the limit, not the whole statement —
+				// narrowing regions is what this channel is for.
+				defects.push({
+					code: "over-depth",
+					...regionIn(loc, block.start, block.start + block.body.length),
+				});
 				continue;
 			}
 			const bodyLoc = nest(loc, block.start, unit.span);
-			const body = locate(block.body, bodyLoc);
+			const body = locate(segmentStatements(block.body), bodyLoc);
 			defects.push(...body.defects);
 			walk(
 				body.units,
@@ -579,10 +598,11 @@ function walk(
 
 /** Q4 — canonical path of every statement in source order. */
 export function resolveStatements(text: string): StatementAnalysis {
-	const notes = new Set(segmentStatements(text).notes);
+	const segmented = segmentStatements(text);
+	const notes = new Set(segmented.notes);
 	const defects: Defect[] = [];
 	const statements: StatementResolution[] = [];
-	const top = locate(text, DOCUMENT_LOC);
+	const top = locate(segmented, DOCUMENT_LOC);
 	defects.push(...top.defects);
 	walkStatements(top.units, "/", statements, 0, notes, defects, true);
 	return { statements, notes: [...notes], defects: mergeDefects(defects) };
@@ -673,11 +693,14 @@ function walkStatements(
 		for (const block of scopeBlocks(text)) {
 			if (blockDepth >= MAX_DEPTH) {
 				notes.add("over-depth");
-				defects.push({ code: "over-depth", ...span });
+				defects.push({
+					code: "over-depth",
+					...regionIn(unit.loc, block.start, block.start + block.body.length),
+				});
 				continue;
 			}
 			const bodyLoc = nest(unit.loc, block.start, span);
-			const body = locate(block.body, bodyLoc);
+			const body = locate(segmentStatements(block.body), bodyLoc);
 			defects.push(...body.defects);
 			walkStatements(
 				body.units,
@@ -871,7 +894,9 @@ function collectBrackets(
 	// untrusted deeply nested input abstains instead of overflowing the stack.
 	if (depth >= MAX_DEPTH) {
 		notes.add("over-depth");
-		defects.push({ code: "over-depth", ...spanIn(loc, 0, text.length) });
+		// `text` is empty when the nesting bottoms out on an empty body (`[]`),
+		// which `regionIn` widens rather than emitting a zero-width region.
+		defects.push({ code: "over-depth", ...regionIn(loc, 0, text.length) });
 		return;
 	}
 	// Scan a comment-masked copy so a `#`-comment `[`/`{` is not treated as a

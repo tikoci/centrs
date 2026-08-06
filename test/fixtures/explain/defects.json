@@ -1,5 +1,5 @@
 {
-	"_provenance": "Q14 defect-region corners (#192). Inputs are the phase-0 mutation suite's parents with one controlled defect injected, plus the coordinate-pass classes. `defects` is the merged, source-ordered output of segmentStatements + resolveStatements + resolveDocument + resolveSymbols over the input. Offsets are analyzed bytes, half-open, as contracted in src/explain/coordinates.ts.",
+	"_provenance": "Q14 defect-region corners (#192). `over-depth` and the Loc.base=-1 widening are NOT here: both require crossing MAX_DEPTH (256), so their inputs are ~2-6 KB and are generated in test/unit/explain-defects.test.ts rather than pinned as literals. Inputs are the phase-0 mutation suite's parents with one controlled defect injected, plus the coordinate-pass classes. `defects` is the merged, source-ordered output of segmentStatements + resolveStatements + resolveDocument + resolveSymbols over the input. Offsets are analyzed bytes, half-open, as contracted in src/explain/coordinates.ts.",
 	"corners": [
 		{
 			"name": "unbalanced-close-marks-the-stray-delimiter",
@@ -54,6 +54,15 @@
 			"input": "# äöü comment\n/ip route print",
 			"defects": [{ "code": "non-ascii", "start": 2, "end": 8 }],
 			"why": "three adjacent 2-byte characters are ONE region, not three — a CJK comment must not produce one defect per code point"
+		},
+		{
+			"name": "a-defect-inside-a-non-ascii-statement-keeps-its-precise-offset",
+			"input": ":foreach i in=\"\u00e4\" do={ /ip route add x=1) }",
+			"defects": [
+				{ "code": "non-ascii", "start": 15, "end": 17 },
+				{ "code": "unbalanced-close", "start": 41, "end": 42, "detail": ")" }
+			],
+			"why": "the segmenter's own defects always come from the TOP-LEVEL scan, which works in analyzed bytes throughout, so a non-ASCII statement never widens them. Only the walker-raised classes (over-depth) can reach the Loc.base=-1 fallback."
 		},
 		{
 			"name": "clean-input-has-no-defects",

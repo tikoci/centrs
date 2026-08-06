@@ -358,11 +358,7 @@ export interface SymbolAnalysis {
 	occurrences: SymbolOccurrence[];
 	/** structural notes; never a throw. */
 	notes: string[];
-	/**
-	 * The same structural surprises as {@link notes}, each located (#192).
-	 * `notes` is frozen while this lands and is deleted by the phase-1 envelope
-	 * (#202) — see `defects.ts` for why both channels exist right now.
-	 */
+	/** The same structural surprises as {@link notes}, each located. */
 	defects: Defect[];
 }
 

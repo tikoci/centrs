@@ -97,11 +97,11 @@ export interface ScopeBlock {
 	body: string;
 	/**
 	 * Offset of `body`'s first character within the text `scopeBlocks` was given
-	 * — i.e. one past the opening `{` (#192).
+	 * — i.e. one past the opening `{`.
 	 *
 	 * Without it a caller that re-segments `body` gets BODY-RELATIVE offsets and
-	 * has no way to rebase them, so every defect and span found inside a `do={…}`
-	 * was either dropped or wrong. `pathresolve` is that caller.
+	 * no way to rebase them, so a span or region found inside a `do={…}` cannot
+	 * be reported in document space. `pathresolve` is that caller.
 	 */
 	start: number;
 }

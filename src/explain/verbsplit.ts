@@ -412,7 +412,7 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 export interface VerbAnalysis {
 	splits: VerbSplit[];
 	notes: string[];
-	/** The located twin of {@link notes} (#192); see `defects.ts`. */
+	/** The located twin of {@link notes}; see `defects.ts`. */
 	defects: Defect[];
 }
 

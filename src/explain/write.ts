@@ -670,8 +670,8 @@ export interface WriteAnalysis {
 	/** Structural notes from the segmenter / bounded traversal; any note abstains. */
 	notes: string[];
 	/**
-	 * The located twin of {@link notes} (#192), plus the `bom`/`non-ascii`
-	 * positional facts. Reporting only — the abstention gate reads `notes`.
+	 * The located twin of {@link notes}, plus the `bom`/`non-ascii` positional
+	 * facts. Reporting only — the abstention gate reads `notes`.
 	 */
 	defects: Defect[];
 }

@@ -22,30 +22,30 @@ import { containsWrite } from "../../src/explain/write.ts";
 import * as centrs from "../../src/index.ts";
 
 /**
- * Q14 defect-REGION anchor tests (#192).
+ * Q14 defect-REGION anchor tests.
  *
  * Promoted from the throwaway lab probe `.scratch/explain-lab-q14-recovery.ts`,
- * whose C2 contract was scored in two tiers precisely because the gap between
- * them was the finding:
+ * whose C2 contract was scored in two tiers because the gap between them was
+ * the finding:
  *
- *   C2a signalled — a note exists at all              (already shipped in #191)
+ *   C2a signalled — a note exists at all
  *   C2b LOCALIZED — a note carries a REGION overlapping the injected defect
  *
- * C2b is what this issue delivers, so the mutation suite below is re-run against
- * the PRODUCT modules rather than the lab SUT.
+ * C2b is what `src/explain/defects.ts` provides, so the mutation suite below is
+ * re-run against the PRODUCT modules rather than the lab SUT.
  *
- * The suite deliberately asserts in three directions, because "does it fire" is
- * only a third of the contract:
+ * The suite asserts in three directions, because "does it fire" is only a third
+ * of the contract:
  *
  *   1. classes that must localize AT the injected offset;
  *   2. the unclosed-delimiter classes, whose region is at the OPENER by design
  *      — the mutation operator deletes a CLOSER, but where a delimiter was
  *      supposed to close is exactly what is unknown, so the opener is the only
- *      honest location and an "overlaps the injected offset" check is the wrong
- *      question for them;
- *   3. the classes this PR DECLARES it does not detect. Pinning a deferral is
- *      the point: if someone later adds `stray-delimiter` detection, these fire
- *      and the declaration in `defects.ts`'s header has to be updated with them.
+ *      honest location and "overlaps the injected offset" is the wrong question
+ *      for them;
+ *   3. the classes `defects.ts` DECLARES it does not detect. Pinning a deferral
+ *      is the point: adding `stray-delimiter` detection makes these fire, and
+ *      the declaration in that header has to be updated with them.
  */
 
 interface Corner {
@@ -373,6 +373,41 @@ describe("Regions recover what the note channel loses", () => {
 		const [defect] = analysis.defects.filter((d) => d.code === "over-depth");
 		expect(defect).toBeDefined();
 		expect(defect?.end).toBeGreaterThan(defect?.start as number);
+	});
+
+	test("over-depth widens to the statement when offsets cannot be mapped", () => {
+		// The `Loc.base = -1` path. A statement's `text` is the ORIGINAL substring,
+		// so an index into it is an analyzed-byte offset only while the statement
+		// is pure ASCII. The ASCII twin gets a narrow region; the non-ASCII one
+		// widens to its statement rather than pointing at a wrong byte.
+		const brackets = `${"[find ".repeat(260)}x${"]".repeat(260)}`;
+		const ascii = `/ip route remove numbers=${brackets}`;
+		const nonAscii = `/ip route remove comment="ä" numbers=${brackets}`;
+
+		const [narrow] = resolveDocument(ascii).defects.filter(
+			(d) => d.code === "over-depth",
+		);
+		expect(narrow?.start).toBeGreaterThan(0);
+		expect(narrow?.end).toBeLessThan(ascii.length);
+
+		const [widened] = resolveDocument(nonAscii).defects.filter(
+			(d) => d.code === "over-depth",
+		);
+		const span = resolveStatements(nonAscii).statements[0]?.span;
+		expect(span).toBeDefined();
+		expect(widened).toEqual({
+			code: "over-depth",
+			start: span?.start as number,
+			end: span?.end as number,
+		});
+	});
+
+	test("a bounded-out empty body never yields a zero-width region", () => {
+		// `Defect` contracts `end > start`. An empty bracket body at the depth
+		// limit would otherwise produce `start === end`.
+		const text = `/ip route remove ${"[".repeat(300)}${"]".repeat(300)}`;
+		for (const d of resolveDocument(text).defects)
+			expect(d.end).toBeGreaterThan(d.start);
 	});
 
 	test("a bracket walk that bottoms out is located too", () => {
