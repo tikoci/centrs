@@ -386,6 +386,55 @@ describe("the gate and the analysis never contradict each other about arguments"
 		expect(statement.command.args).toEqual({ comment: "it's fine" });
 	});
 
+	test.each([
+		["form feed", "\f"],
+		["vertical tab", "\v"],
+	])("a %s in an unquoted value fails closed", (_name: string, char: string) => {
+		// The gate splits tokens on JavaScript `\s`, which includes these two;
+		// every explain module splits on ASCII whitespace, which does not. So
+		// `comment=x<FF>disabled=no` was two arguments to the gate and one value
+		// here. Adopting `\s` in the lexer was the other option and would have
+		// put this scanner at odds with `verbsplit.ts` and `segment.ts` about
+		// where a token ends — the failure `continuationLength` exists to
+		// prevent.
+		const data = explainCommand(`/ip/address/add comment=x${char}disabled=no`);
+		expect(data.canonical.args).toEqual({ comment: "x", disabled: "no" });
+		const statement = data.structure.statements[0];
+		if (statement?.kind !== "command") throw new Error("expected a command");
+		expect(statement.arguments?.read).toBe(false);
+		expect(statement.command.args).toBeUndefined();
+	});
+
+	test("no character JavaScript `\\s` splits on can produce a contradiction", () => {
+		// The class, not the two reported instances. Every character the gate
+		// treats as a token boundary and ASCII whitespace does not must end in
+		// EITHER agreement or a refusal — never a second confident value. The
+		// non-ASCII ones are caught upstream, by the addressability check: they
+		// cannot survive `coordinates.ts` normalization as themselves.
+		const splitters = [
+			"\f",
+			"\v",
+			"\u00a0",
+			"\u1680",
+			"\u2000",
+			"\u2028",
+			"\u2029",
+			"\u202f",
+			"\u205f",
+			"\u3000",
+			"\ufeff",
+		];
+		for (const char of splitters) {
+			const data = explainCommand(
+				`/ip/address/add comment=x${char}disabled=no`,
+			);
+			const statement = data.structure.statements[0];
+			if (statement?.kind !== "command" || statement.arguments?.read !== true)
+				continue; // refused — fail-closed, which is the acceptable outcome
+			expect(statement.command.args).toEqual(data.canonical.args);
+		}
+	});
+
 	test("the analysis may abstain where the gate decided — but never differ", () => {
 		// The gate strips quotes and escapes anywhere; this lexer refuses an
 		// escape it cannot decode. Abstaining is a narrower claim than the gate's,

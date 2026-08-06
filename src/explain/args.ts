@@ -337,24 +337,53 @@ function literalValue(
 	// token (it is legal RouterOS), so the refusal has to happen here — the token
 	// is decided, its literal value is not. Found in review of #202c-1.
 	if (body.includes("\\")) return "an escape in an argument value";
-	// A `'` in an UNQUOTED value is where centrs's two readers genuinely disagree,
-	// so phase 1 publishes neither. RouterOS does not use `'` as a string
-	// delimiter — it is an ordinary character, which is what this lexer reads —
-	// but `canonicalizeExecuteCommand`'s tokenizer DOES treat it as a quote
-	// (`src/execute.ts`), and that gate is locked: widening or correcting it is a
-	// product regression. So `comment='lan uplink'` is `{comment: "lan uplink"}`
-	// to the gate and `{comment: "'lan"}` + a positional here, and `comment=it's`
-	// is `its` to the gate and `it's` here.
-	//
-	// Refusing is not a claim that the gate is right — the device-correct reading
-	// is this module's. It is the refusal to put a SECOND confident value in the
-	// same result, which is the contradiction `command.args` beside
-	// `canonical.args` must never contain. Only the bare branch: inside a `"…"`
-	// run the gate treats `'` as content too, so the two agree and there is
-	// nothing to fail closed on. Found by review of #202c-1 (P1); the corpus
-	// could not reach it, because no corpus statement pairs a single quote with a
-	// gate-structured reading.
+	const disagreement = gateDisagreement(body);
+	if (disagreement !== null) return disagreement;
+	return { value: body };
+}
+
+/**
+ * Characters an UNQUOTED value may not contain, because centrs's two readers
+ * genuinely disagree about them — so phase 1 publishes neither reading.
+ *
+ * Both cases were found by review of #202c-1, and neither is reachable from the
+ * corpus:
+ *
+ *   - **`'`** — RouterOS does not use it as a string delimiter; it is an
+ *     ordinary character, which is what this lexer reads. But
+ *     `canonicalizeExecuteCommand`'s tokenizer DOES treat it as a quote
+ *     (`src/execute.ts`), so `comment='lan uplink'` is `{comment: "lan uplink"}`
+ *     to the gate and `{comment: "'lan"}` + a positional here, and
+ *     `comment=it's` is `its` there and `it's` here.
+ *   - **`\f` / `\v`** — the gate splits tokens on JavaScript `\s`, which
+ *     includes them; every `explain` module splits on ASCII whitespace (space,
+ *     tab, CR, LF), which does not. So `comment=x\fdisabled=no` is two
+ *     arguments to the gate and one value here.
+ *
+ * **Refusing is not a claim that the gate is right.** The device-correct reading
+ * is this module's in both cases, and the gate is locked — widening or
+ * correcting it is a product regression (`docs/CONSTITUTION.md`). What is
+ * refused is putting a SECOND confident value in the same result, which is the
+ * contradiction `command.args` beside `canonical.args` must never contain.
+ *
+ * Two boundaries this deliberately does NOT cross:
+ *
+ *   - **Only unquoted values.** Inside a `"…"` run the gate treats all three as
+ *     content exactly as this lexer does, so the two agree and refusing there
+ *     would cost real readings.
+ *   - **Only these two control characters, not the gate's whole `\s` class.**
+ *     Adopting `\s` here would put this scanner at odds with `verbsplit.ts` and
+ *     `segment.ts` about where a token ends — two scanners disagreeing about a
+ *     boundary is the failure the shared `continuationLength` above exists to
+ *     prevent. The rest of `\s` is non-ASCII and never reaches this module
+ *     as itself: `coordinates.ts` normalization stands a placeholder in, so the
+ *     statement fails the addressability check in `src/explain.ts` first
+ *     (verified for NBSP, U+2028, U+FEFF and U+3000).
+ */
+function gateDisagreement(body: string): string | null {
 	if (body.includes("'"))
 		return "a single quote in an unquoted value, which centrs's execute gate and RouterOS read differently";
-	return { value: body };
+	if (body.includes("\f") || body.includes("\v"))
+		return "a form feed or vertical tab in an unquoted value, which centrs's execute gate treats as a token boundary and RouterOS does not";
+	return null;
 }

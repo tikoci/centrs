@@ -506,13 +506,15 @@ and its phase is named below.
     all: a `[…]`/`(…)`/`$x`/`{…}` value, an escape this phase does not decode, a
     left-hand side that is not a RouterOS name, a token split by a continuation.
     Never partially read, because a dropped argument silently changes what a
-    rendered `curl` DOES. One refusal is not lexical at all: a `'` in an
-    **unquoted** value, where RouterOS treats the character as ordinary and the
-    locked execute gate treats it as a quote (`comment=it's` is `it's` here and
-    `its` to the gate). The device-correct reading is the analysis's, but the
-    gate cannot be corrected — so phase 1 publishes neither rather than putting
-    two confident values in one result. Inside a `"…"` run the two agree and
-    nothing is refused.
+    rendered `curl` DOES. Two refusals are not lexical at all, but
+    places where centrs's two readers disagree about an **unquoted** value: a
+    `'`, which RouterOS treats as an ordinary character and the locked execute
+    gate treats as a quote (`comment=it's` is `it's` here and `its` to the
+    gate); and a `\f`/`\v`, which the gate splits tokens on (JavaScript `\s`)
+    and every explain module does not (ASCII whitespace). The device-correct
+    reading is the analysis's in both, but the gate cannot be corrected — so
+    phase 1 publishes neither rather than putting two confident values in one
+    result. Inside a `"…"` run the two agree and nothing is refused.
   - **A token is read but carries no `value`** — the list still reads. The token
     is delimited and classified; only its literal value is unknowable, as for
     the positional in `:log info "result: $[…]"`. **`value` absent means there
