@@ -1,0 +1,65 @@
+{
+	"_provenance": "Q14 defect-region corners (#192). Inputs are the phase-0 mutation suite's parents with one controlled defect injected, plus the coordinate-pass classes. `defects` is the merged, source-ordered output of segmentStatements + resolveStatements + resolveDocument + resolveSymbols over the input. Offsets are analyzed bytes, half-open, as contracted in src/explain/coordinates.ts.",
+	"corners": [
+		{
+			"name": "unbalanced-close-marks-the-stray-delimiter",
+			"input": "/ip) route add dst-address=10.9.0.0/16",
+			"defects": [
+				{ "code": "unbalanced-close", "start": 3, "end": 4, "detail": ")" }
+			],
+			"why": "the injected `)` is the defect; the region is exactly that byte"
+		},
+		{
+			"name": "unterminated-string-spans-the-swallowed-run",
+			"input": "/system identity set name=\"core-router-01",
+			"defects": [{ "code": "unterminated-string", "start": 26, "end": 41 }],
+			"why": "the region runs from the opening quote to end of input — the text the scan swallowed — not just the quote byte"
+		},
+		{
+			"name": "unclosed-bracket-marks-its-opener",
+			"input": "/ip firewall filter remove [find chain=input",
+			"defects": [
+				{ "code": "unclosed", "start": 27, "end": 28, "detail": "[" }
+			],
+			"why": "an unclosed delimiter's defect is AT THE OPENER: where it was supposed to close is exactly what is unknown, so the opener is the only honest location"
+		},
+		{
+			"name": "unclosed-brace-marks-its-opener",
+			"input": "/system script add name=boot source={ :log info \"up\" ",
+			"defects": [
+				{ "code": "unclosed", "start": 36, "end": 37, "detail": "{" }
+			],
+			"why": "same rule as the bracket; the note channel fuses these into one `unclosed:{` string with no offset at all"
+		},
+		{
+			"name": "bad-escape-marks-the-backslash",
+			"input": ":put \\q hello",
+			"defects": [{ "code": "bad-escape", "start": 5, "end": 6 }],
+			"why": "symbols.ts is the only scanner that detects this class; the device errors at the escape and classes every later byte `none`"
+		},
+		{
+			"name": "bom-is-its-own-class-not-non-ascii",
+			"input": "﻿/ip route add dst-address=1.2.3.4/32",
+			"defects": [{ "code": "bom", "start": 0, "end": 3 }],
+			"why": "U+FEFF is 3 UTF-8 bytes; in LEADING position it is a `bom` and is NOT also reported as `non-ascii`"
+		},
+		{
+			"name": "non-ascii-value-is-a-positional-fact",
+			"input": "/system identity set name=\"router-🚀\"",
+			"defects": [{ "code": "non-ascii", "start": 34, "end": 38 }],
+			"why": "examples.md example 22 — a legal command. The 4 UTF-8 bytes of the astral char are 4 analyzed bytes. isPositionalFact() must keep this out of error severity."
+		},
+		{
+			"name": "non-ascii-runs-coalesce",
+			"input": "# äöü comment\n/ip route print",
+			"defects": [{ "code": "non-ascii", "start": 2, "end": 8 }],
+			"why": "three adjacent 2-byte characters are ONE region, not three — a CJK comment must not produce one defect per code point"
+		},
+		{
+			"name": "clean-input-has-no-defects",
+			"input": "/ip route add dst-address=10.9.0.0/16 gateway=10.9.0.1",
+			"defects": [],
+			"why": "the floor: valid input carries no region at all"
+		}
+	]
+}

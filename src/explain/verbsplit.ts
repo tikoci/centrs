@@ -61,6 +61,7 @@
  */
 
 import { scopeBodies } from "./blocks.ts";
+import type { Defect } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
 import { resolveStatements } from "./pathresolve.ts";
 import { SUBMENU_DIRECTIVES, VERBS } from "./verbs.ts";
@@ -411,6 +412,8 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 export interface VerbAnalysis {
 	splits: VerbSplit[];
 	notes: string[];
+	/** The located twin of {@link notes} (#192); see `defects.ts`. */
+	defects: Defect[];
 }
 
 /**
@@ -430,7 +433,7 @@ export interface VerbAnalysis {
  * module sees flattened statements.
  */
 export function resolveVerbs(text: string): VerbAnalysis {
-	const { statements, notes } = resolveStatements(text);
+	const { statements, notes, defects } = resolveStatements(text);
 	return {
 		splits: statements.map((s) =>
 			s.unresolved
@@ -438,5 +441,6 @@ export function resolveVerbs(text: string): VerbAnalysis {
 				: resolveVerb(s.text, s.context),
 		),
 		notes,
+		defects,
 	};
 }

@@ -70,8 +70,8 @@ section short enough that the grid remains the status surface.
   design round (#90) and the spec is **ratified** on the phase-0 grounding
   lab (#185, ratification PR #187). Phase 0.5 has since promoted the ratified
   lab logic into the library — `src/explain/{segment,blocks,coordinates,
-  pathresolve,verbsplit,write,symbols,menus,verbs}.ts` with frozen fixtures
-  under `test/fixtures/explain/` — but there is **no `explain` command surface
+  defects,pathresolve,verbsplit,write,symbols,menus,verbs}.ts` with frozen
+  fixtures under `test/fixtures/explain/` — but there is **no `explain` command surface
   yet** (no `src/cli/explain.ts`, and `commands/explain/examples.md` is
   unexercised), so the row stays `designed`. Cells advance only when the
   phase-1 offline core lands and its examples run green per the done rule.

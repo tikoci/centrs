@@ -164,6 +164,7 @@ rosetta
 routeros
 routeros-skills
 rsc # RouterOS script / export file extension (.rsc)
+rstp # Rapid Spanning Tree Protocol; a RouterOS `protocol-mode=` value on /interface/bridge
 SARIF # Static Analysis Results Interchange Format; CodeQL's code-scanning analysis download format
 scp
 scriptability

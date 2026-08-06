@@ -307,19 +307,31 @@ export {
 } from "./explain/blocks.ts";
 export {
 	analyzeCoordinates,
+	byteSpanToRange,
 	byteToPosition,
 	type CharRun,
 	type CoordinateAnalysis,
+	coordinateDefects,
 	type Position,
 	positionToByte,
+	type Range,
 	runAtByte,
 	SUB,
 } from "./explain/coordinates.ts";
+export {
+	type Defect,
+	type DefectCode,
+	defectAt,
+	isPositionalFact,
+	mergeDefects,
+	rebaseDefects,
+} from "./explain/defects.ts";
 export {
 	type DocumentAnalysis,
 	type Resolution,
 	resolveDocument,
 	resolveStatements,
+	type Span,
 	type StatementAnalysis,
 	type StatementResolution,
 } from "./explain/pathresolve.ts";

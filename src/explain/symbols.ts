@@ -302,6 +302,7 @@
  */
 
 import { analyzeCoordinates } from "./coordinates.ts";
+import { type Defect, defectAt } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
 import type { Continuation } from "./segment.ts";
 
@@ -357,6 +358,12 @@ export interface SymbolAnalysis {
 	occurrences: SymbolOccurrence[];
 	/** structural notes; never a throw. */
 	notes: string[];
+	/**
+	 * The same structural surprises as {@link notes}, each located (#192).
+	 * `notes` is frozen while this lands and is deleted by the phase-1 envelope
+	 * (#202) — see `defects.ts` for why both channels exist right now.
+	 */
+	defects: Defect[];
 }
 
 interface Binding {
@@ -463,14 +470,19 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 
 	const occurrences: SymbolOccurrence[] = [];
 	const notes: string[] = [];
+	const defects: Defect[] = [];
 	const root: Scope = { closure: false, bindings: new Map() };
 	const scopes: Scope[] = [root];
 	/** F6 — saved statement state per open `[`, innermost last. */
 	const brackets: BracketFrame[] = [];
 	/** F7 — open statement scopes (loop / error variables), innermost last. */
 	const statementScopes: StatementScope[] = [];
-	/** open delimiters, innermost last; `"` is a string frame. */
-	const frames: ("{" | "[" | "(" | '"')[] = [];
+	/**
+	 * open delimiters, innermost last; `"` is a string frame. Each carries WHERE
+	 * it opened so an `unclosed`/`unterminated-string` defect can point at the
+	 * opener instead of at end-of-input (#192).
+	 */
+	const frames: { char: "{" | "[" | "(" | '"'; at: number }[] = [];
 	/** bracket/brace nesting, strings excluded (the S8 filter region uses it). */
 	let depth = 0;
 	/** `{` opens past the cap that pushed no scope; their `}` must not pop one. */
@@ -536,6 +548,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			if (!overDepth) {
 				overDepth = true;
 				notes.push(`over-depth:${at}`);
+				defects.push(defectAt("over-depth", at));
 			}
 			return;
 		}
@@ -634,6 +647,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			if (!overDepth) {
 				overDepth = true;
 				notes.push(`over-depth:${at}`);
+				defects.push(defectAt("over-depth", at));
 			}
 		} else {
 			const scope: Scope = { closure: false, bindings: new Map() };
@@ -762,7 +776,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		const c = text[i] as string;
 
 		// --- inside a double-quoted string --------------------------------------
-		if (frames[frames.length - 1] === '"') {
+		if (frames[frames.length - 1]?.char === '"') {
 			if (c === "\\") {
 				i++;
 				continue;
@@ -779,7 +793,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					// string. A scan that swallowed this as string bytes would flip
 					// its quote phase on the first nested string and lose every
 					// binding after it.
-					frames.push(next);
+					frames.push({ char: next, at: i + 1 });
 					depth++;
 					if (next === "[") {
 						// F6 — and it is a statement context like any other `[`. A `$[`
@@ -850,6 +864,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				continue;
 			}
 			notes.push(`bad-escape:${i}`);
+			defects.push(defectAt("bad-escape", i));
 			defect = true;
 			break;
 		}
@@ -955,12 +970,12 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					continue;
 				}
 			}
-			frames.push('"');
+			frames.push({ char: '"', at: i });
 			continue;
 		}
 
 		if (c === "{" || c === "[" || c === "(") {
-			frames.push(c);
+			frames.push({ char: c, at: i });
 			depth++;
 			if (c === "[") openBracket(leadBefore, i);
 			if (c === "{") {
@@ -969,6 +984,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					if (!overDepth) {
 						overDepth = true;
 						notes.push(`over-depth:${i}`);
+						defects.push(defectAt("over-depth", i));
 					}
 				} else {
 					// F2 — `:local F do={…}` opens a closure; `:if … do={…}` does not.
@@ -987,12 +1003,13 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			// F7 — a statement scope opened INSIDE this delimiter ends with it, and
 			// it sits above the scope this close is about to pop, so it comes down
 			// first. `depth` is still the inner value here (it decrements below).
-			if (frames[frames.length - 1] === want) unwindStatementScopes();
-			if (frames[frames.length - 1] !== want) {
+			if (frames[frames.length - 1]?.char === want) unwindStatementScopes();
+			if (frames[frames.length - 1]?.char !== want) {
 				// A mismatched close is not a close: popping it would unwind a real
 				// enclosing scope and drop its bindings early. `segment.ts` takes the
 				// same line — report it and treat the character as content.
 				notes.push(`unbalanced-close:${c}`);
+				defects.push(defectAt("unbalanced-close", i, c));
 				continue;
 			}
 			frames.pop();
@@ -1049,6 +1066,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			// stay clean because the path region has already closed by then.
 			if (leadBefore && sigilRun > 1) {
 				notes.push(`bad-sigil:${start + 1}`);
+				defects.push(defectAt("bad-sigil", start + 1));
 				defect = true;
 				break;
 			}
@@ -1068,6 +1086,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 							: -1;
 				if (at >= 0) {
 					notes.push(`bad-sigil:${at}`);
+					defects.push(defectAt("bad-sigil", at));
 					defect = true;
 					break;
 				}
@@ -1291,13 +1310,24 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	}
 
 	if (!defect && frames.length > 0) {
-		const open = frames.join("");
+		const open = frames.map((f) => f.char).join("");
 		if (open.includes('"')) notes.push("unterminated-string");
 		const brackets = open.replace(/"/g, "");
 		if (brackets.length > 0) notes.push(`unclosed:${brackets}`);
+		// The note fuses every open delimiter into one string; the region channel
+		// keeps them addressable, one defect per frame pointing at its OPENER. An
+		// unterminated string spans from its quote to end of input — that whole
+		// run is what the scan swallowed — while a bracket marks just its opener,
+		// since its intended extent is exactly what is unknown.
+		for (const f of frames)
+			defects.push(
+				f.char === '"'
+					? { code: "unterminated-string", start: f.at, end: text.length }
+					: defectAt("unclosed", f.at, f.char),
+			);
 	}
 
-	return { occurrences, notes };
+	return { occurrences, notes, defects };
 }
 
 const FILTER_NOTE =

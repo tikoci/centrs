@@ -38,16 +38,27 @@
  * a combining mark is its own code point, its own run, and its own column.
  */
 
+import type { Defect } from "./defects.ts";
+
 /** SUB (U+001A) — the byte-count-preserving stand-in for a non-ASCII byte. */
 export const SUB = 0x1a;
 
 /** U+FFFD REPLACEMENT CHARACTER — where a lone surrogate normalizes to. */
 const REPLACEMENT = 0xfffd;
 
+/** BYTE ORDER MARK (U+FEFF) — a defect only in leading position; see `coordinateDefects`. */
+const BOM = 0xfeff;
+
 /** A 0-based (line, column) position in `original`; column is a UTF-16 count. */
 export interface Position {
 	line: number;
 	col: number;
+}
+
+/** A half-open (line, col) range in `original` — the LSP range space. */
+export interface Range {
+	start: Position;
+	end: Position;
 }
 
 /** One code point of `original`, located in every coordinate space. */
@@ -210,6 +221,77 @@ export function byteToPosition(a: CoordinateAnalysis, byte: number): Position {
 	}
 	const run = runAtByte(a, byte);
 	return { line: run.line, col: run.col };
+}
+
+/**
+ * Map a half-open analyzed-byte span to an original (line, col) range — the
+ * conversion an LSP consumer needs for every defect region and every token span.
+ *
+ * Deliberately built on {@link byteToPosition} in both directions rather than on
+ * {@link positionToByte}: that one is an O(n) linear scan over `runs`, so using
+ * it here would make converting a document's worth of spans quadratic.
+ * `byteToPosition` binary-searches. Both endpoints snap to a character boundary
+ * (V6), and `end === analyzed.length` is legal, so a span reaching end-of-input
+ * converts without a special case.
+ */
+export function byteSpanToRange(
+	a: CoordinateAnalysis,
+	start: number,
+	end: number,
+): Range {
+	if (end < start)
+		throw new Error(
+			`byteSpanToRange: end ${end} precedes start ${start}; spans are half-open and forward`,
+		);
+	return { start: byteToPosition(a, start), end: byteToPosition(a, end) };
+}
+
+/**
+ * The defect regions that fall out of the coordinate pass itself: a leading BOM,
+ * and every run of bytes the ASCII normalization stood in for.
+ *
+ * Both classes are {@link isPositionalFact}s, never errors — see that predicate
+ * for why. They come from `runs` rather than from a second scan because
+ * `analyzeCoordinates` has already decided, per code point, whether it is ASCII
+ * (`CharRun.ascii`); re-deriving that would be a chance to disagree with it.
+ *
+ * Non-ASCII runs are COALESCED: a CJK comment or an emoji-bearing value is one
+ * region, not one per code point. Contiguity is measured in bytes, so adjacent
+ * non-ASCII characters merge even across a surrogate pair.
+ *
+ * Only a U+FEFF in LEADING position is a `bom`. The same code point later in the
+ * document is a zero-width no-break space — ordinary content — and is reported
+ * as part of its `non-ascii` run like any other character.
+ */
+export function coordinateDefects(a: CoordinateAnalysis): Defect[] {
+	const defects: Defect[] = [];
+	const first = a.runs[0];
+	const hasBom = first !== undefined && first.codePoint === BOM;
+	if (hasBom && first !== undefined)
+		defects.push({
+			code: "bom",
+			start: first.byteStart,
+			end: first.byteStart + first.byteLen,
+		});
+
+	let runStart = -1;
+	let runEnd = -1;
+	for (let i = hasBom ? 1 : 0; i < a.runs.length; i++) {
+		const run = a.runs[i] as CharRun;
+		if (run.ascii) {
+			if (runStart >= 0) {
+				defects.push({ code: "non-ascii", start: runStart, end: runEnd });
+				runStart = -1;
+			}
+			continue;
+		}
+		if (runStart < 0) runStart = run.byteStart;
+		runEnd = run.byteStart + run.byteLen;
+	}
+	if (runStart >= 0)
+		defects.push({ code: "non-ascii", start: runStart, end: runEnd });
+
+	return defects;
 }
 
 /**
