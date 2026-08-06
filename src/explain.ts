@@ -206,7 +206,21 @@ export interface ExplainBlock {
 }
 
 export interface ExplainStructure {
+	/**
+	 * `statements.length`, which counts BLOCK-BODY statements too — see
+	 * {@link ExplainStructure.statements}. Not the number of top-level statements.
+	 */
 	statementCount: number;
+	/**
+	 * Every statement the analyzer read, in discovery order.
+	 *
+	 * A `do={…}` body's statements are flattened in after their parent (which is
+	 * what RouterOS IL does to them), so a body statement's span is CONTAINED by
+	 * its parent's rather than following it, and spans may overlap. A consumer
+	 * that wants only the top level filters on containment; one that wants "every
+	 * command in this script" — the common case, and the reason to flatten — reads
+	 * the list as it stands.
+	 */
 	statements: ExplainStatement[];
 	blocks: ExplainBlock[];
 	/**
@@ -470,13 +484,11 @@ export function explainCommand(input: string): ExplainData {
 		symbols.defects,
 	).sort((a, b) => a.start - b.start || a.end - b.end);
 
-	const statements: ExplainStatement[] = segmented.segments.map(
-		(statement, i) =>
-			statementOf(
-				{ start: statement.start, end: statement.end },
-				verbs.splits[i],
-			),
-	);
+	// From the SPLITS, not from the segmentation. The resolver flattens `do={…}`
+	// bodies in after their parent, so its list is longer than the top-level
+	// segments and pairing the two by index attaches the wrong span to every statement after
+	// the first block. Each split carries its own document-space span.
+	const statements: ExplainStatement[] = verbs.splits.map(statementOf);
 
 	const diagnostics: ExplainDiagnostic[] = [
 		...defects.map((d) => {
@@ -563,25 +575,15 @@ export function explainCommand(input: string): ExplainData {
  * `resolved` + `kind`, and the mapping is total — `navigation` → menu,
  * `resolved` → command, and the two refusals carry no kind at all.
  *
- * The `splits` array is built from the same segmentation as `segments`, so a
- * missing entry is impossible; it is handled as `unknown` rather than asserted,
- * because a fail-closed refusal is the right answer to an invariant this module
- * cannot itself prove.
+ * The span comes from the split itself, because the resolver FLATTENS block
+ * bodies into its statement list — a body statement's span is contained by its
+ * parent's rather than following it, and the list is longer than the top-level
+ * segmentation. That is why `statements[]` may overlap, and why the count is not
+ * the number of top-level statements.
  */
-function statementOf(
-	span: ExplainSpanRange,
-	split: DocumentVerbSplit | undefined,
-): ExplainStatement {
-	if (split === undefined)
-		return {
-			span,
-			resolution: "unknown",
-			unresolved: "no verb analysis for this statement",
-			contextCertain: false,
-			ev: EV.resolve,
-		};
+function statementOf(split: DocumentVerbSplit): ExplainStatement {
 	return {
-		span,
+		span: { start: split.span.start, end: split.span.end },
 		...readingOf(split),
 		contextCertain: split.contextCertain,
 		ev: EV.resolve,

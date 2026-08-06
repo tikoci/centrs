@@ -72,11 +72,12 @@ describe("explainCommand — structural invariants", () => {
 			const data = explainCommand(input);
 			const bytes = analyzeCoordinates(input).analyzed.length;
 
-			// One statement per segment, in source order.
+			// The count is the list's length — and the list is the RESOLVER's, which
+			// flattens block bodies, so it is at least the top-level segmentation.
 			expect(data.structure.statementCount).toBe(
 				data.structure.statements.length,
 			);
-			expect(data.structure.statementCount).toBe(
+			expect(data.structure.statementCount).toBeGreaterThanOrEqual(
 				segmentStatements(input).segments.length,
 			);
 
@@ -149,6 +150,54 @@ describe("explainCommand — structural invariants", () => {
 			expect(data.runtimeAcceptance).toBe("not-proven");
 		});
 	}
+});
+
+describe("block bodies are statements too", () => {
+	test("a body statement is not paired with the wrong span", () => {
+		// The resolver FLATTENS `do={…}` bodies into its statement list, so it is
+		// longer than the top-level segmentation. Pairing the two by index — which
+		// this composition did until the corpus run showed 47% of statements
+		// resolving `unknown` — attaches the wrong span to every statement after the first
+		// block. Each split carries its own document-space span; nothing is paired.
+		const input = ":if (true) do={ /ip route print }\n/ip address print";
+		const { statements } = explainCommand(input).structure;
+		expect(statements).toHaveLength(3);
+		expect(statements.map((s) => s.command?.path ?? null)).toEqual([
+			"/",
+			"/ip/route",
+			"/ip/address",
+		]);
+		// Every span slices back to the statement it describes.
+		expect(
+			statements.map((s) => input.slice(s.span.start, s.span.end)),
+		).toEqual([
+			":if (true) do={ /ip route print }",
+			"/ip route print",
+			"/ip address print",
+		]);
+		// The body's span is CONTAINED by its parent's, not after it.
+		expect(statements[1]?.span.start).toBeGreaterThan(
+			statements[0]?.span.start as number,
+		);
+		expect(statements[1]?.span.end).toBeLessThan(
+			statements[0]?.span.end as number,
+		);
+	});
+
+	test("the enclosing scope is reported separately, by name", () => {
+		const { blocks } = explainCommand(
+			":if (true) do={ /ip route print }",
+		).structure;
+		expect(blocks).toEqual([{ name: "do", span: { start: 15, end: 32 } }]);
+	});
+
+	test("a body command's write signal reaches the document verdict", () => {
+		// The reason flattening is the right default: the write is INSIDE the body.
+		expect(
+			explainCommand(":foreach i in=[find] do={ /ip route add gateway=$i }")
+				.structure.containsWrite,
+		).toBe(true);
+	});
 });
 
 describe("the execute gate is reproduced, never widened", () => {

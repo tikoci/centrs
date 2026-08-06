@@ -63,7 +63,7 @@
 import { scopeBodies } from "./blocks.ts";
 import type { Defect } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
-import { resolveStatements } from "./pathresolve.ts";
+import { resolveStatements, type Span } from "./pathresolve.ts";
 import { SUBMENU_DIRECTIVES, VERBS } from "./verbs.ts";
 
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
@@ -411,15 +411,25 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 /**
  * One statement's split, as seen by the DOCUMENT walker.
  *
- * The extra field is the difference between the two entry points, and it is
+ * The two extra fields are the difference between the entry points, and both are
  * required rather than optional on purpose. `resolveVerb` is handed one
- * statement and an explicit context, so it has nothing to say about whether that
- * context was knowable; `resolveVerbs` walks the document and always does. An
- * optional flag would make "absent" mean both "single-statement call" and
- * "certain", and the whole point of the field is that silence must not read as
- * certainty.
+ * statement and an explicit context, so it has nothing to say about where that
+ * statement sits or whether the context was knowable; `resolveVerbs` walks the
+ * document and always does. An optional flag would make "absent" mean both
+ * "single-statement call" and "certain", and the whole point of the field is
+ * that silence must not read as certainty.
  */
 export interface DocumentVerbSplit extends VerbSplit {
+	/**
+	 * This statement in DOCUMENT analyzed-byte space, straight from the resolver.
+	 *
+	 * Carried because the walk FLATTENS: a block body's statements are appended
+	 * after their parent, so `splits` is longer than the top-level segmentation
+	 * and a caller pairing the two by index silently attaches the wrong span to every
+	 * statement after the first `do={…}`. With the span here there is nothing to
+	 * pair — the location travels with the reading.
+	 */
+	span: Span;
 	/**
 	 * Was the menu context in force BEFORE this statement known? (Q14 C3b, #192.)
 	 *
@@ -458,10 +468,17 @@ export interface VerbAnalysis {
  * benign statements. The distinction is only visible to the resolver; this
  * module sees flattened statements.
  *
- * What the walker does add is {@link DocumentVerbSplit.contextCertain}: the
- * resolver's per-statement certainty, carried through instead of dropped. That
- * was the last of #192's three bullets — the cascade FIX shipped in #197, but
- * the signal it produced stopped here.
+ * What the walker does add is {@link DocumentVerbSplit.contextCertain} and
+ * {@link DocumentVerbSplit.span}: the resolver's per-statement certainty and
+ * location, carried through instead of dropped. The certainty was the last of
+ * #192's three bullets — the cascade FIX shipped in #197, but the signal it
+ * produced stopped here.
+ *
+ * The returned array is the RESOLVER's statement list, which is longer than the
+ * top-level segmentation: a `do={…}` body's statements are flattened in after
+ * their parent (matching what IL does to them), so a body statement's span is
+ * CONTAINED by its parent's rather than following it. Read the spans; do not
+ * pair this array with `segmentStatements` by index.
  */
 export function resolveVerbs(text: string): VerbAnalysis {
 	const { statements, defects } = resolveStatements(text);
@@ -470,6 +487,7 @@ export function resolveVerbs(text: string): VerbAnalysis {
 			...(s.unresolved
 				? unknownSplit(s.unresolved)
 				: resolveVerb(s.text, s.context)),
+			span: s.span,
 			contextCertain: s.contextCertain,
 		})),
 		defects,
