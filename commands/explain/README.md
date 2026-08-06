@@ -506,7 +506,13 @@ and its phase is named below.
     all: a `[…]`/`(…)`/`$x`/`{…}` value, an escape this phase does not decode, a
     left-hand side that is not a RouterOS name, a token split by a continuation.
     Never partially read, because a dropped argument silently changes what a
-    rendered `curl` DOES.
+    rendered `curl` DOES. One refusal is not lexical at all: a `'` in an
+    **unquoted** value, where RouterOS treats the character as ordinary and the
+    locked execute gate treats it as a quote (`comment=it's` is `it's` here and
+    `its` to the gate). The device-correct reading is the analysis's, but the
+    gate cannot be corrected — so phase 1 publishes neither rather than putting
+    two confident values in one result. Inside a `"…"` run the two agree and
+    nothing is refused.
   - **A token is read but carries no `value`** — the list still reads. The token
     is delimited and classified; only its literal value is unknowable, as for
     the positional in `:log info "result: $[…]"`. **`value` absent means there
@@ -514,7 +520,9 @@ and its phase is named below.
     runnable command reads `value`, never the source `text`, and treats absence
     as not-renderable. Measured on the
   frozen corpus: 40.0% of CRUD-verb commands read, 0 arguments dropped against
-  the IL oracle, and 0 contradictions with `canonical.args` where both decided.
+  the IL oracle, and 0 contradictions with `canonical.args` where both decided —
+  the last of which holds *because* of the fail-closed rules above, not by
+  accident: the single-quote case contradicted until review found it.
   What offline still cannot do is NAME a positional operand — RouterOS binds
   `:log info "x"` to `message=x` from its schema, and offline reports the
   located positional instead of inventing the name.

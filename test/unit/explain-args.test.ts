@@ -18,7 +18,9 @@
  *      and that is tested in `explain-envelope.test.ts`); they are not allowed
  *      to contradict each other about what the arguments ARE. Measured across
  *      the frozen corpus one statement at a time: 83 statements where both
- *      decided, 0 contradictions.
+ *      decided, 0 contradictions — which holds BECAUSE of a fail-closed rule,
+ *      not by accident. The single-quote anchors below are a case that
+ *      contradicted until review found it, and that the corpus cannot reach.
  *
  * The corpus lines below are real, taken from the frozen 913-script phase-0
  * corpus, so the fixtures exercise the shapes that actually occur (a
@@ -32,10 +34,11 @@
  * and the oracle-free coverage invariant below held over all 4,389 read
  * statements.
  *
- * Those numbers did not move when review found two silent misreads (the lone
- * `\r` continuation and the unquoted escape, both pinned below): no corpus line
- * spells either shape. That is the standing lesson — corpus-green is a size
- * estimate for a risk, never evidence that a lexical rule is right.
+ * Those numbers did not move when review found three defects (the lone `\r`
+ * continuation, the unquoted escape, and the single-quote gate disagreement,
+ * all pinned below): no corpus line spells any of the shapes. That is the
+ * standing lesson — corpus-green is a size estimate for a risk, never evidence
+ * that a lexical rule is right.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -342,6 +345,46 @@ describe("the gate and the analysis never contradict each other about arguments"
 				throw new Error("expected a command with a reading");
 			expect(statement.command.args).toEqual(data.canonical.args);
 		});
+
+	test("a single quote in an unquoted value fails closed — with a space", () => {
+		// The P1 from review. RouterOS does not use `'` as a string delimiter, but
+		// `canonicalizeExecuteCommand`'s tokenizer does, and that gate is locked.
+		// This spelling was `{comment: "lan uplink"}` to the gate and
+		// `{comment: "'lan"}` + positional `uplink'` here — two confident answers
+		// to one question, in one result. The device-correct reading is this
+		// module's; refusing is about not publishing the second value, not about
+		// conceding the first.
+		const data = explainCommand("/ip/address/add comment='lan uplink'");
+		expect(data.canonical.args).toEqual({ comment: "lan uplink" });
+		const statement = data.structure.statements[0];
+		if (statement?.kind !== "command") throw new Error("expected a command");
+		expect(statement.arguments?.read).toBe(false);
+		expect(statement.command.args).toBeUndefined();
+	});
+
+	test("a single quote in an unquoted value fails closed — without a space", () => {
+		// The no-space form contradicted too (`x` vs `'x'`), so it gets its own
+		// anchor: a fix that only handled the token-splitting case would pass the
+		// spaced test and still emit a second value here.
+		const data = explainCommand("/ip/address/add comment='x'");
+		expect(data.canonical.args).toEqual({ comment: "x" });
+		const statement = data.structure.statements[0];
+		if (statement?.kind !== "command") throw new Error("expected a command");
+		expect(statement.arguments?.read).toBe(false);
+		expect(statement.command.args).toBeUndefined();
+	});
+
+	test("a single quote INSIDE a double-quoted value is not a disagreement", () => {
+		// The gate treats `'` as content inside a `"…"` run, exactly as this lexer
+		// does, so there is nothing to fail closed on. Pinned so the refusal above
+		// cannot widen into over-abstention.
+		const data = explainCommand('/ip/address/add comment="it\'s fine"');
+		const statement = data.structure.statements[0];
+		if (statement?.kind !== "command" || statement.arguments?.read !== true)
+			throw new Error("expected a command with a reading");
+		expect(statement.command.args).toEqual(data.canonical.args);
+		expect(statement.command.args).toEqual({ comment: "it's fine" });
+	});
 
 	test("the analysis may abstain where the gate decided — but never differ", () => {
 		// The gate strips quotes and escapes anywhere; this lexer refuses an

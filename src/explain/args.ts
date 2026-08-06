@@ -337,5 +337,24 @@ function literalValue(
 	// token (it is legal RouterOS), so the refusal has to happen here — the token
 	// is decided, its literal value is not. Found in review of #202c-1.
 	if (body.includes("\\")) return "an escape in an argument value";
+	// A `'` in an UNQUOTED value is where centrs's two readers genuinely disagree,
+	// so phase 1 publishes neither. RouterOS does not use `'` as a string
+	// delimiter — it is an ordinary character, which is what this lexer reads —
+	// but `canonicalizeExecuteCommand`'s tokenizer DOES treat it as a quote
+	// (`src/execute.ts`), and that gate is locked: widening or correcting it is a
+	// product regression. So `comment='lan uplink'` is `{comment: "lan uplink"}`
+	// to the gate and `{comment: "'lan"}` + a positional here, and `comment=it's`
+	// is `its` to the gate and `it's` here.
+	//
+	// Refusing is not a claim that the gate is right — the device-correct reading
+	// is this module's. It is the refusal to put a SECOND confident value in the
+	// same result, which is the contradiction `command.args` beside
+	// `canonical.args` must never contain. Only the bare branch: inside a `"…"`
+	// run the gate treats `'` as content too, so the two agree and there is
+	// nothing to fail closed on. Found by review of #202c-1 (P1); the corpus
+	// could not reach it, because no corpus statement pairs a single quote with a
+	// gate-structured reading.
+	if (body.includes("'"))
+		return "a single quote in an unquoted value, which centrs's execute gate and RouterOS read differently";
 	return { value: body };
 }
