@@ -826,16 +826,39 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			// `set-dns`, and the console carries the class across the quotes, so the
 			// span includes them. Without this the string is skipped and the next
 			// bare word (`do`) is declared instead.
-			if (pendingDecl !== null || pendingLoopVars) {
+			if (pendingDecl !== null || pendingLoopVars || pendingErrVar) {
 				const close = text.indexOf('"', i + 1);
 				if (close > i) {
 					const name = text.slice(i + 1, close);
-					const cls = pendingDecl ?? "auto";
-					bind(name, cls, i + 1);
+					// F7 — a quoted name binds exactly like a bare one, and the three
+					// binding heads differ. Routing them all through `bind` in the
+					// enclosing scope (what this branch used to do) broke every F7 rule
+					// for the quoted spelling, device-verified on CHR 7.23.2:
+					// `:foreach "i" …` + `$"i"` reads `parameter` after the statement,
+					// an enclosing `:global i` does not swallow the in-body `auto`, and
+					// `:for "i" … do={$"i"}` reads `auto` — so `declaredHere`, which
+					// makes the following `do={` an F2 closure, belongs to a
+					// `:local`/`:global` declaration ONLY. `:onerror` was not accepted
+					// here at all, so its `pendingErrVar` survived to the next bare
+					// word and declared `in`.
+					const cls: SymbolClass =
+						pendingDecl ?? (pendingErrVar ? "local" : "auto");
+					if (pendingDecl !== null) {
+						bind(name, cls, i + 1);
+						pendingDecl = null;
+						declaredHere = true;
+					} else {
+						// F7 — statement scope, and for `:onerror` the enclosing claim
+						// too. Same order as the bare paths: claim before the statement
+						// scope exists.
+						if (pendingErrVar)
+							claim(scopes[scopes.length - 1] as Scope, name, "local", i + 1);
+						openStatementScope(i + 1);
+						bind(name, cls, i + 1);
+						pendingErrVar = false;
+					}
 					// The span includes the quotes; the NAME does not.
 					record(i, close + 1, name, cls, true);
-					pendingDecl = null;
-					declaredHere = true;
 					i = close;
 					continue;
 				}

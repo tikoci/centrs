@@ -1046,6 +1046,65 @@ describe("explain/symbols — F7 declaration claim (#201)", () => {
 		).toEqual(["global", "local", "local", "global"]);
 	});
 
+	test("a QUOTED name binds exactly like a bare one, for every head", () => {
+		// The quoted branch used to call `bind` in the enclosing scope and set
+		// `declaredHere` unconditionally, which broke every F7 rule for this
+		// spelling. Found in review by CodeRabbit and Codex independently; each
+		// row below is CHR 7.23.2 (`.scratch/explain-201-review-chr-probe.ts`).
+		//
+		// A quoted loop variable does not outlive its statement…
+		expect(classes(':foreach "i" in={1} do={:put 1}\n:put $"i"')).toEqual([
+			"auto",
+			"parameter",
+		]);
+		expect(classes(':foreach "i" in={1} do={:put 1}\n:put $i')).toEqual([
+			"auto",
+			"parameter",
+		]);
+		// …an enclosing claim does not swallow it…
+		expect(classes(':global i 1\n:foreach "i" in={1} do={:put $"i"}')).toEqual([
+			"global",
+			"auto",
+			"auto",
+		]);
+		// …and it does not make the following `do={` an F2 closure.
+		expect(classes(':for "i" from=1 to=2 do={:put $"i"}')).toEqual([
+			"auto",
+			"auto",
+		]);
+		expect(classes(':foreach "i" in={1} do={:put $"i"}\n:put $"i"')).toEqual([
+			"auto",
+			"auto",
+			"parameter",
+		]);
+		// the body's own `:local` still shadows it (the statement scope is outside
+		// the body, quoted or not)
+		expect(classes(':foreach "i" in={1} do={:local i 9; :put $i}')).toEqual([
+			"auto",
+			"local",
+			"local",
+		]);
+		// `:onerror` was not accepted by the quoted branch at all, so its pending
+		// state survived to the next bare word and declared `in`. It binds in both
+		// places like the bare spelling, and `in` is an argument, not a variable.
+		expect(
+			classes(':onerror "e" in={:put 1} do={:put $"e"}\n:put $"e"'),
+		).toEqual(["local", "local", "local"]);
+		expect(
+			resolveSymbols(':onerror "e" in={:put 1} do={:put 1}').occurrences.map(
+				(o) => o.name,
+			),
+		).toEqual(["e"]);
+		// a quoted `:local`/`:global` declaration is unchanged: it still declares,
+		// and still makes its own `do={` a closure (F2)
+		expect(classes(':local "v" 1\n:put $"v"')).toEqual(["local", "local"]);
+		expect(classes(':local "f" do={:put $outer}\n:local outer 1')).toEqual([
+			"local",
+			"parameter",
+			"local",
+		]);
+	});
+
 	test("the claim rule does not disturb the F2 closure boundary", () => {
 		// a closure still hides every outer name, whichever class claimed it
 		expect(classes(":global v 1\n:local v 2\n:local f do={:put $v}")).toEqual([
