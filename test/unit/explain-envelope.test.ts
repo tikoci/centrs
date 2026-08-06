@@ -104,7 +104,7 @@ describe("explainCommand — structural invariants", () => {
 			}
 			expect(at).toBe(bytes);
 
-			// Every cited evidence id resolves, and no entry is uncited.
+			// Every cited evidence id resolves, and every entry is cited.
 			const ids = new Set(data.evidence.map((e) => e.id));
 			const cited = new Set<string>([
 				data.structure.ev,
@@ -412,7 +412,7 @@ describe("spans", () => {
 		// A bare word with no binding is S7's abstention: the resolver refuses to
 		// call it `undefined` (menu field vs unbound name needs a schema), so it
 		// has no centrs span class either.
-		const data = explainCommand(":put nothingbound");
+		const data = explainCommand(":put unbound-name");
 		expect(data.spans).toEqual([]);
 	});
 });

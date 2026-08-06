@@ -470,8 +470,12 @@ export function explainCommand(input: string): ExplainData {
 		symbols.defects,
 	).sort((a, b) => a.start - b.start || a.end - b.end);
 
-	const statements: ExplainStatement[] = segmented.segments.map((seg, i) =>
-		statementOf({ start: seg.start, end: seg.end }, verbs.splits[i]),
+	const statements: ExplainStatement[] = segmented.segments.map(
+		(statement, i) =>
+			statementOf(
+				{ start: statement.start, end: statement.end },
+				verbs.splits[i],
+			),
 	);
 
 	const diagnostics: ExplainDiagnostic[] = [

@@ -71,7 +71,9 @@ section short enough that the grid remains the status surface.
   lab (#185, ratification PR #187). Phase 0.5 has since promoted the ratified
   lab logic into the library — `src/explain/{segment,blocks,coordinates,defects,
   pathresolve,verbsplit,write,symbols,menus,verbs}.ts` with frozen fixtures
-  under `test/fixtures/explain/` — but there is **no `explain` command surface
+  under `test/fixtures/explain/` — and phase 1 has composed them into one
+  analysis and envelope in `src/explain.ts` (`explainCommand` /
+  `explainEnvelope`, #202a). There is still **no `explain` command surface
   yet** (no `src/cli/explain.ts`, and `commands/explain/examples.md` is
   unexercised), so the row stays `designed`. Cells advance only when the
   phase-1 offline core lands and its examples run green per the done rule.

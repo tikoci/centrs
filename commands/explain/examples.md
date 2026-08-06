@@ -8,6 +8,12 @@ offline examples run under `test/unit/explain.test.ts` and live examples under
 Until then these are the **target**: the cells are `designed`, nothing here is
 green yet, and flag and field names track the ratified surface in `README.md`.
 
+A letter-suffixed example (`1b`, `18b`) is the **counterpart** of the number it
+follows: the same question with the other answer, added where implementing the
+spec showed that one example was carrying two contradictory readings. It gets its
+own assertion (`1b` ↔ assertion `1b`); the numbering never renumbers, because
+these numbers are cited from issues and commit messages.
+
 `$R` is `<host>:<rest-port>` resolved by quickchr; `$A` is `<host>` and
 `$API_PORT` is the native API port (`chr.ports.api`); `$U` / `$P` are CHR
 credentials from the harness. Live examples are **target-first**
@@ -21,7 +27,7 @@ never expands `$vars` or splits on `>`. Envelope-asserting examples pass
 ### 1. Canonical form, write shape, and transport
 
 ```bash
-centrs explain '/ip/route add dst-address=10.9.0.0/16 gateway=192.0.2.1' --json
+centrs explain '/ip/route/add dst-address=10.9.0.0/16 gateway=192.0.2.1' --json
 ```
 
 `ok: true`; `data.canonical` is
@@ -30,6 +36,26 @@ with the args split out; `data.structure.statements[0].resolution` is
 `"resolved"` and its `transport.classification` is `"api-candidate"` (the
 statement is covered by a tested REST mapping rule); `data.verdict` is `pass`;
 exit `0`.
+
+**The verb must be IN the path for `mode` to be `structured`.** This example
+originally spelled the input `/ip/route add …`, which the execute gate reads as
+`script` — `add` is a bare token with no `=`, and widening the gate to accept it
+is a product regression (`docs/CONSTITUTION.md`). `data.canonical` reproduces
+that gate verbatim, so the example uses the spelling that is actually
+structured. The space spelling is example 1b.
+
+### 1b. The CLI spelling is script to the gate and a command to the analysis
+
+```bash
+centrs explain '/ip/route add dst-address=10.9.0.0/16 gateway=192.0.2.1' --json
+```
+
+`data.canonical.mode` is `"script"` and `writeShaped` is `false` — the gate's
+answer to "may this be sent as a structured REST call". Beside it,
+`data.structure.statements[0].command` is `{ path: "/ip/route", verb: "add" }`
+and `data.structure.containsWrite` is `true`: the analysis answers "what did the
+human write", and the two questions have different answers over the same bytes.
+Neither is wrong and the gate is never widened by the analysis.
 
 ### 2. Script mode is reported, not widened — and routes to execute
 
@@ -211,20 +237,37 @@ These examples are the product-facing subset of the phase-0 findings. The
 larger mutation, coordinate, and stress matrices live as product-owned fixture
 tests per README phase 0.5; no test imports `.scratch/` code.
 
-### 18. A bare path is ambiguous offline
+### 18. A bare path the menu table does not know is ambiguous offline
+
+```bash
+centrs explain '/system/reboot' --json
+```
+
+The first statement has `resolution: "ambiguous"`: without a schema, the same
+shape can be a menu or a no-argument command. It carries no invented `command`,
+its transport classification is `"unknown"`, and a canonicalizer diagnostic
+explains the menu-vs-command ambiguity. `data.verdict` remains the independent
+diagnostic severity summary; it is not the statement-resolution field.
+
+**The input changed with #207.** This example used to read `/ip/route`, from
+before the baked menu table existed. `/ip/route` is one of the 615 paths that
+table lists, so offline now decides it — see example 18b — and the ambiguity this
+example is about needs a path the table does *not* list. `/system/reboot` is
+one: a real command that is shaped exactly like a menu.
+
+### 18b. A bare path the menu table DOES know resolves as a menu, offline
 
 ```bash
 centrs explain '/ip/route' --json
 ```
 
-The first statement has `resolution: "ambiguous"`: without a schema, the same
-shape can be a menu (`/ip/route`) or a no-argument command
-(`/system/reboot`). It carries no invented `command`, its transport
-classification is `"unknown"`, and a canonicalizer diagnostic explains the
-menu-vs-command ambiguity. `data.verdict` remains the independent diagnostic
-severity summary; it is not the statement-resolution field.
+`resolution: "resolved"` with `kind: "menu"` and `command: { path: "/ip/route" }`
+— no verb, because a navigation statement names only a menu. The evidence is the
+generated table (#207), not a guess about hyphens or token counts, and it is why
+the export-abstention rate went to zero. Example 19 asserts the same reading
+against a live device, which is a confirmation rather than a promotion.
 
-### 19. Live evidence resolves the same bare path as a menu
+### 19. Live evidence confirms the same bare path as a menu
 
 ```bash
 centrs explain $R '/ip/route' -u $U -p $P --json
@@ -233,7 +276,10 @@ centrs explain $R '/ip/route' -u $U -p $P --json
 `/console/inspect` completion and highlight agree that the terminal token is a
 `dir`; the first statement is `resolution: "resolved"`, `kind: "menu"`, and
 has no runnable transport rendering. The evidence entry is version-stamped and
-the probe never executes the path.
+the probe never executes the path. Since #207 the offline reading (example 18b)
+already says the same thing from the generated table, so what the live probe
+adds here is **provenance and a version stamp**, not the answer — and it is the
+oracle for a path the table does not list, where offline abstains (example 18).
 
 ### 20. Explain-only write detection is three-valued
 
@@ -254,11 +300,19 @@ not alter the execute gate's `canonical.writeShaped` verdict.
 centrs explain '/interface bridge add name=br;0 protocol-mode=none' --json
 ```
 
-The injected `;` has RouterOS statement-separator semantics. A diagnostic
-carries its defect byte region; the tail statement beginning `0` resolves
-`"unknown"`, with no confident `/r0` command or runnable transport rendered.
-The analysis itself is `ok: true`; `data.verdict` and `--fail-on` report the
-diagnostic.
+The injected `;` has RouterOS statement-separator semantics, so the input is two
+statements, not one with a corrupt value. The tail statement beginning `0`
+resolves `"unknown"` — a bare-word head fails closed — with no confident `/r0`
+command or runnable transport rendered, and a
+`explain/canonicalizer/unresolved-statement` diagnostic carries **that
+statement's** byte region. The analysis itself is `ok: true`; `data.verdict` and
+`--fail-on` report the diagnostic.
+
+**No defect region is emitted for the `;` itself.** A stray mid-token delimiter
+is one of the two classes deliberately NOT detected (see *Result shape* → defect
+regions, and #192): it is plausible but ungrounded, and it needs a probe matrix
+before a detector is worth having. What this example pins is the fail-closed
+floor that matters — corruption may degrade a reading, never invent one.
 
 ### 22. Normalization preserves device byte offsets and LSP positions
 

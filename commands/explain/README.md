@@ -455,6 +455,40 @@ Standard envelope (constitution: result envelope); `data` sketch:
 - Live-state token classes (disabled/dynamic/inactive object references)
   surface as facts, not errors; severity policy belongs to the caller.
 
+### What phase 1 offline actually emits (#202a)
+
+The sketch above is the whole shape. `src/explain.ts` ships these parts of it,
+and the gaps are decisions with reasons, not oversights — a later phase closes
+each by ADDING a field, never by changing one:
+
+| Part | Phase 1 offline |
+| ---- | --------------- |
+| `input`, `verdict`, `canonical`, `structure`, `diagnostics`, `evidence`, `runtimeAcceptance` | complete |
+| `structure.statements[].command` | `path` + `verb`; **no `args`** |
+| `structure.statements[].transport` | **absent** — #202c |
+| `spans` | comment runs and resolved variable classes only |
+| `schema`, `completion` | absent — live evidence, phase 2 |
+
+- **No per-statement argument list.** Splitting one statement's arguments needs
+  a statement-scope lexer for quoted values, `[…]` selectors and `?` queries.
+  That is new lexical work and it gets the #201 probe-matrix treatment when
+  `--curl` needs it, rather than a split on spaces now. `canonical.args` is the
+  whole-input structured case and is exact.
+- **Transport is absent, not defaulted.** An `unknown` on every statement would
+  read as a decision that was never made.
+- **`spans` carries what offline can prove.** Comment runs, and the variable
+  classes Q13 scored at 100% precision on resolved bindings; an abstention is
+  omitted rather than rendered as a guess. The full Q12 vocabulary over
+  path/verb/argument/value bytes wants device `highlight` as its oracle. A
+  subset is not a claim that the vocabulary is closed.
+- **Severity is fixed here, because it drives `--fail-on`.** The six structural
+  defect classes are `error`; `bom`/`non-ascii` are `info` (positional facts —
+  a legal command must not fail); `over-depth` is a `warning` because it is
+  centrs's own resource bound and says nothing about the input's legality; and
+  an `ambiguous`/`unknown` resolution is a `warning`, never an error, so the
+  default `--fail-on error` cannot fail a document whose only sin is being
+  unreadable without a schema — which is most of RouterOS scripting.
+
 ## MCP and library surfaces
 
 - `centrs_explain` today wraps `canonicalizeExecuteCommand` (offline, no CDB —
@@ -466,9 +500,17 @@ Standard envelope (constitution: result envelope); `data` sketch:
   (`{ input, mode, path, verb, attributes, queries, writeShaped }`) is
   **superseded** when this lands — a deliberate pre-1.0 breaking change, with
   `commands/mcp/` examples and integration tests updated in the same change;
-  no dual-shape compatibility layer is planned.
-- Library (sketch): `explainCommand(input, opts)` pure/offline;
-  `explainCommand(input, { target, facets })` live. `lsp-routeros-ts` and
+  no dual-shape compatibility layer is planned. **That supersession is held out
+  of #202 and tracked in #223** (maintainer decision): `centrs_explain` and
+  rosetta's tool surface must stay aligned for agent usage, which is a
+  cross-project decision. Until #223 lands the MCP keeps its flat shape, so the
+  CLI's `--json` and the MCP's `data` are **deliberately divergent**.
+- Library: `explainCommand(input)` is the offline analysis (`src/explain.ts`,
+  #202a) and `explainEnvelope(input)` wraps it in the standard envelope. The
+  live form takes a second argument — `explainCommand(input, { target, facets })`
+  — which is phase 2; it is deliberately not an options bag that accepts
+  nothing today, since a caller cannot tell an ignored option from an honored
+  one. `lsp-routeros-ts` and
   tikbook are the intended external consumers (hover/diagnostics/completion/
   semantic tokens over these calls); an LSP *protocol* surface on centrs
   stays out of scope (#90) — but the export shape is validated against a real
