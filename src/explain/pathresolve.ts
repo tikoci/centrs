@@ -86,7 +86,12 @@
  */
 
 import { isScopeBrace, scopeBlocks, scopeBodies } from "./blocks.ts";
-import { type Defect, mergeDefects, rebaseDefects } from "./defects.ts";
+import {
+	type Defect,
+	isPositionalFact,
+	mergeDefects,
+	rebaseDefects,
+} from "./defects.ts";
 import {
 	maskComments,
 	type SegmentResult,
@@ -503,7 +508,17 @@ function locate(
 					: { base: loc.base + s.start, fallback: span },
 		};
 	});
-	return { units, defects: attribute(segmented.defects, loc) };
+	// STRUCTURAL defects only. `segmentStatements` merges `coordinateDefects`
+	// into every result, so a nested call on a block body would re-run the
+	// coordinate pass over that SUBSTRING — and a coordinate fact is a property
+	// of the ROOT input, not of any slice of it. Two things went wrong when this
+	// filter was missing: a non-ASCII run already reported by the document pass
+	// came back a second time widened to its whole statement, and a U+FEFF in
+	// document-MIDDLE position was re-classified `bom` because it happens to be
+	// leading within the body — contradicting `coordinateDefects`' own contract.
+	// The entry points seed these once from the root `SegmentResult`.
+	const structural = segmented.defects.filter((d) => !isPositionalFact(d.code));
+	return { units, defects: attribute(structural, loc) };
 }
 
 /**
@@ -520,7 +535,10 @@ export function resolveDocument(text: string): DocumentAnalysis {
 	// segmenter four times on input its own comment calls "not cheap".
 	const segmented = segmentStatements(text);
 	const notes = new Set(segmented.notes);
-	const defects: Defect[] = [];
+	// The ROOT segmentation is the only source of coordinate facts (`bom`,
+	// `non-ascii`); `locate` strips them so recursion cannot re-derive them in a
+	// substring's coordinate space.
+	const defects: Defect[] = [...segmented.defects];
 	const resolutions: Resolution[] = [];
 	const top = locate(segmented, DOCUMENT_LOC);
 	defects.push(...top.defects);
@@ -600,7 +618,8 @@ function walk(
 export function resolveStatements(text: string): StatementAnalysis {
 	const segmented = segmentStatements(text);
 	const notes = new Set(segmented.notes);
-	const defects: Defect[] = [];
+	// As `resolveDocument`: coordinate facts come from the root only.
+	const defects: Defect[] = [...segmented.defects];
 	const statements: StatementResolution[] = [];
 	const top = locate(segmented, DOCUMENT_LOC);
 	defects.push(...top.defects);

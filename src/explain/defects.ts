@@ -52,21 +52,19 @@
  *
  * CLASSES DELIBERATELY NOT DETECTED
  *
- *   `commands/explain/README.md` lists eight detectable classes; six are
- *   implemented here, plus `bom` and `non-ascii` which come free from the
- *   coordinate pass. Two are refused on purpose:
+ *   `truncation` and `stray mid-token delimiter` appeared in the phase-0 draft
+ *   of the detectable set and are deferred. **The decision and its reasoning
+ *   live in `commands/explain/README.md` (the executable spec), not here** —
+ *   this vocabulary follows that list rather than narrowing it. In short:
+ *   truncation is indistinguishable from a finished token without a schema (it
+ *   is a `--complete` continuation-state question against a live target), and
+ *   the stray-delimiter class needs a probe matrix before a detector is worth
+ *   having — the #201 round is the standing evidence that a lexical rule
+ *   curated from intuition produces defects the corpus cannot reach.
  *
- *   - `truncation` — offline cannot tell a truncated complete-LOOKING token from
- *     a finished one without a schema; `commands/explain/README.md` says so
- *     itself. What is actually detectable is the *continuation state* (a
- *     trailing `=`, an open delimiter), which is a `--complete` concern and a
- *     live-target question, not a defect. Emitting it here would be exactly the
- *     confident-claim-on-ambiguous-input posture Q14 forbids.
- *   - `stray mid-token delimiter` — plausible, but a lexical rule curated from
- *     intuition is what the #201 round warns against: all seven of its P1s were
- *     in lexical plumbing and none was reachable from the 913-script corpus.
- *     This class needs a probe matrix (spellings × positions × accepted-form
- *     neighbors) before it is worth a detector.
+ *   Re-opening either means grounding it first and amending the README's list;
+ *   `test/unit/explain-defects.test.ts` asserts they stay undetected so the two
+ *   cannot silently drift apart.
  */
 
 /**

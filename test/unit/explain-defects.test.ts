@@ -43,9 +43,9 @@ import * as centrs from "../../src/index.ts";
  *      supposed to close is exactly what is unknown, so the opener is the only
  *      honest location and "overlaps the injected offset" is the wrong question
  *      for them;
- *   3. the classes `defects.ts` DECLARES it does not detect. Pinning a deferral
- *      is the point: adding `stray-delimiter` detection makes these fire, and
- *      the declaration in that header has to be updated with them.
+ *   3. the classes `commands/explain/README.md` DEFERS. Pinning a deferral is
+ *      the point: adding `stray-delimiter` detection makes these fire, so the
+ *      spec's list and the code cannot drift apart silently.
  */
 
 interface Corner {
@@ -329,7 +329,7 @@ describe("Q14 mutation suite — C1 no throw, C2b localized", () => {
 		}
 	});
 
-	test("declared-undetected classes stay undetected (pins the deferral)", () => {
+	test("spec-deferred classes stay undetected (pins the deferral)", () => {
 		for (const m of MUTANTS) {
 			if (!DECLARED_UNDETECTED.has(m.op)) continue;
 			// Some of these mutants incidentally strand a real delimiter (truncating
@@ -452,6 +452,40 @@ describe("Statement and bracket spans", () => {
 });
 
 // --- the coordinate-pass classes -------------------------------------------
+
+describe("Coordinate facts belong to the ROOT input only", () => {
+	// `segmentStatements` merges `coordinateDefects` into every result, so a
+	// recursive call on a block body re-runs the coordinate pass over a
+	// SUBSTRING. `locate` filters them for exactly that reason; without the
+	// filter both shapes below leaked (found in Codex review of PR #222).
+	const surfaces = (text: string) => [
+		segmentStatements(text).defects,
+		resolveStatements(text).defects,
+		resolveDocument(text).defects,
+		centrs.resolveVerbs(text).defects,
+		containsWrite(text).defects,
+	];
+
+	test("a non-ASCII run inside a block is reported once, not re-widened", () => {
+		for (const defects of surfaces(':do { :put "é" }'))
+			expect(defects).toEqual([{ code: "non-ascii", start: 12, end: 14 }]);
+	});
+
+	test("a mid-document U+FEFF is never re-classified as a leading bom", () => {
+		// The nastier half: within the block body the U+FEFF IS leading, so a
+		// block-local coordinate pass calls it `bom` — contradicting
+		// `coordinateDefects`' contract that only a document-leading one is.
+		for (const defects of surfaces(":do {\ufeff/ip route print }"))
+			expect(defects).toEqual([{ code: "non-ascii", start: 5, end: 8 }]);
+	});
+
+	test("a real leading BOM still reports as bom through every surface", () => {
+		// The control: the filter must not suppress the root's own coordinate
+		// facts, only stop recursion from re-deriving them.
+		for (const defects of surfaces("\ufeff:do { /ip route print }"))
+			expect(defects).toContainEqual({ code: "bom", start: 0, end: 3 });
+	});
+});
 
 describe("Coordinate-pass defects", () => {
 	test("a BOM is reported once and not also as non-ascii", () => {
