@@ -352,6 +352,7 @@ export {
 	type SymbolOccurrence,
 } from "./explain/symbols.ts";
 export {
+	type DocumentVerbSplit,
 	describeStatement,
 	isDirective,
 	type RunToken,

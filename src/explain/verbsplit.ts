@@ -408,9 +408,36 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 	};
 }
 
+/**
+ * One statement's split, as seen by the DOCUMENT walker.
+ *
+ * The extra field is the difference between the two entry points, and it is
+ * required rather than optional on purpose. `resolveVerb` is handed one
+ * statement and an explicit context, so it has nothing to say about whether that
+ * context was knowable; `resolveVerbs` walks the document and always does. An
+ * optional flag would make "absent" mean both "single-statement call" and
+ * "certain", and the whole point of the field is that silence must not read as
+ * certainty.
+ */
+export interface DocumentVerbSplit extends VerbSplit {
+	/**
+	 * Was the menu context in force BEFORE this statement known? (Q14 C3b, #192.)
+	 *
+	 * `false` does NOT invalidate `path`: the resolver already degrades every
+	 * context-DEPENDENT statement to `unresolved` when context is lost, so a split
+	 * that still says `resolved` here resolved WITHOUT consuming the context — an
+	 * absolute path, a `:` directive, or a bare directive. What this carries is
+	 * the thing that was otherwise dropped on the floor: `/ip) address` followed
+	 * by `/ip route print` yields a perfectly correct `resolved` split whose
+	 * document had already lost its context, and a consumer ranking readings or
+	 * offering completions needs to know that.
+	 */
+	contextCertain: boolean;
+}
+
 /** A document's per-statement verb/menu splits, plus structural defects. */
 export interface VerbAnalysis {
-	splits: VerbSplit[];
+	splits: DocumentVerbSplit[];
 	/** Located structural surprises; see `defects.ts`. */
 	defects: Defect[];
 }
@@ -430,15 +457,21 @@ export interface VerbAnalysis {
  * fails closed on the cascade without a local taint that would over-fire on
  * benign statements. The distinction is only visible to the resolver; this
  * module sees flattened statements.
+ *
+ * What the walker does add is {@link DocumentVerbSplit.contextCertain}: the
+ * resolver's per-statement certainty, carried through instead of dropped. That
+ * was the last of #192's three bullets — the cascade FIX shipped in #197, but
+ * the signal it produced stopped here.
  */
 export function resolveVerbs(text: string): VerbAnalysis {
 	const { statements, defects } = resolveStatements(text);
 	return {
-		splits: statements.map((s) =>
-			s.unresolved
+		splits: statements.map((s) => ({
+			...(s.unresolved
 				? unknownSplit(s.unresolved)
-				: resolveVerb(s.text, s.context),
-		),
+				: resolveVerb(s.text, s.context)),
+			contextCertain: s.contextCertain,
+		})),
 		defects,
 	};
 }
