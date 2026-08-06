@@ -129,8 +129,12 @@ describe("explainCommand — structural invariants", () => {
 				(["pass", "warn", "fail"] as const)[worst] as ExplainData["verdict"],
 			);
 
-			// The resolution vocabulary is total and consistent with `kind`.
-			for (const s of data.structure.statements) {
+			// The resolution vocabulary is total and consistent with `kind`, on
+			// BOTH surfaces that speak it.
+			for (const s of [
+				...data.structure.statements,
+				...data.structure.subcommands,
+			]) {
 				if (s.resolution === "resolved") {
 					expect(s.kind).toBeDefined();
 					expect(s.unresolved).toBeUndefined();
@@ -243,6 +247,60 @@ describe("the resolution vocabulary", () => {
 		);
 		expect(lost).toHaveLength(1);
 		expect(lost[0]?.severity).toBe("info");
+	});
+});
+
+describe("subcommands speak the same vocabulary as statements", () => {
+	test("the inner command of a selector is resolved against the enclosing menu", () => {
+		// examples.md example 3. The GATE stays `script` (a `[…]` selector cannot
+		// be a structured attribute map) while the analysis reads the inner
+		// command, and the outer `remove` is what makes `containsWrite` true.
+		const data = explainCommand("/ip/address remove [find comment=defconf]");
+		expect(data.canonical.mode).toBe("script");
+		expect(data.canonical.writeShaped).toBe(false);
+		expect(data.structure.containsWrite).toBe(true);
+		const [sub] = data.structure.subcommands;
+		expect(sub?.resolution).toBe("resolved");
+		expect(sub?.kind).toBe("command");
+		expect(sub?.command).toEqual({ path: "/ip/address", verb: "find" });
+		expect(sub?.context).toBe("/ip/address");
+		expect(sub?.span).toEqual({ start: 19, end: 41 });
+		// The evidence for the write verdict is the heuristic Q16 pass.
+		expect(data.evidence.find((e) => e.id === data.structure.ev)?.basis).toBe(
+			"heuristic",
+		);
+	});
+
+	test("the verb boundary is Q6's answer, with Q3's readings kept as candidates", () => {
+		// Q3's own `path` reads this as the menu `/system/identity/get`; Q6 splits
+		// it into menu + verb, and Q6 is the module that decides verbs.
+		const [sub] = explainCommand(":put [/system/identity/get name]").structure
+			.subcommands;
+		expect(sub?.command).toEqual({ path: "/system/identity", verb: "get" });
+		expect(sub?.candidates).toContain("/system/identity/get");
+	});
+
+	test("a substitution Q3 refused stays unknown whatever Q6 reads", () => {
+		const [sub] = explainCommand("/ip route remove [$myFinder]").structure
+			.subcommands;
+		expect(sub?.resolution).toBe("unknown");
+		expect(sub?.command).toBeUndefined();
+		expect(sub?.unresolved).toBeDefined();
+	});
+
+	test("an expression is not promoted into a command", () => {
+		// Q3 resolves the bracket's CONTEXT to `/`, which is not a claim that
+		// `1+1` is a command at the root. Q6 refuses, and the envelope reports the
+		// refusal rather than the context.
+		const [sub] = explainCommand(":put [1+1]").structure.subcommands;
+		expect(sub?.resolution).toBe("unknown");
+		expect(sub?.command).toBeUndefined();
+	});
+
+	test("nested substitutions each carry their own depth", () => {
+		const subs = explainCommand(':put [[:parse "x"]]').structure.subcommands;
+		expect(subs.map((s) => s.depth)).toEqual([0, 1]);
+		expect(subs[1]?.command).toEqual({ path: "/", verb: "parse" });
 	});
 });
 

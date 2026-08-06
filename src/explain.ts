@@ -77,10 +77,15 @@ import {
 	type DefectCode,
 	mergeDefects,
 } from "./explain/defects.ts";
-import { resolveDocument } from "./explain/pathresolve.ts";
+import { type Resolution, resolveDocument } from "./explain/pathresolve.ts";
 import { segmentStatements } from "./explain/segment.ts";
 import { resolveSymbols } from "./explain/symbols.ts";
-import { type DocumentVerbSplit, resolveVerbs } from "./explain/verbsplit.ts";
+import {
+	type DocumentVerbSplit,
+	resolveVerb,
+	resolveVerbs,
+	type VerbSplit,
+} from "./explain/verbsplit.ts";
 import { containsWrite, type WriteVerdict } from "./explain/write.ts";
 
 /** A half-open analyzed-byte span, the coordinate contract of `coordinates.ts`. */
@@ -159,14 +164,31 @@ export interface ExplainStatement {
 	ev: string;
 }
 
-/** A `[…]` command substitution, re-constituted against its enclosing menu. */
+/**
+ * A `[…]` command substitution, re-constituted against its enclosing menu.
+ *
+ * Same vocabulary as {@link ExplainStatement}, deliberately: an inner command is
+ * a command, and a caller should not have to learn a second shape to read one.
+ *
+ * That means the verb boundary here is Q6's answer (`resolveVerb` over the
+ * bracket's inner text), not Q3's `Resolution.path`. The two are not always the
+ * same — Q3's `path` is documented as the greedy leading run, its "best guess",
+ * and it reads `[/system/identity/get name]` as the menu
+ * `/system/identity/get` where Q6 reads menu `/system/identity` + verb `get`.
+ * Q6 is the module that decides verbs (and #211's R9 exists precisely so these
+ * two stop contradicting each other), so it is what the envelope presents; Q3's
+ * alternative readings survive as {@link candidates}. Where Q3 REFUSED, this
+ * refuses too, whatever Q6 says — the fail-closed floor is not up for a second
+ * opinion.
+ */
 export interface ExplainSubcommand {
 	span: ExplainSpanRange;
 	/** Menu context in force at the bracket, `/` at document root. */
 	context: string;
-	/** Best single reading, or null where offline refused. */
-	path: string | null;
-	/** Every path the inner command could resolve to (Q6 is undecided offline). */
+	resolution: ExplainResolution;
+	kind?: "menu" | "command";
+	command?: { path: string; verb?: string };
+	/** Every path the inner command could resolve to, shortest first. */
 	candidates: string[];
 	unresolved?: string;
 	contextCertain: boolean;
@@ -518,16 +540,7 @@ export function explainCommand(input: string): ExplainData {
 				span: { start: b.start, end: b.start + b.body.length },
 			})),
 			containsWrite: renderWriteVerdict(write.verdict),
-			subcommands: brackets.resolutions.map((r) => ({
-				span: { start: r.span.start, end: r.span.end },
-				context: r.context,
-				path: r.path,
-				candidates: r.candidates,
-				...(r.unresolved === undefined ? {} : { unresolved: r.unresolved }),
-				contextCertain: r.contextCertain,
-				depth: r.depth,
-				ev: EV.resolve,
-			})),
+			subcommands: brackets.resolutions.map(subcommandOf),
 			ev: EV.write,
 		},
 		spans,
@@ -563,33 +576,58 @@ function statementOf(
 			contextCertain: false,
 			ev: EV.resolve,
 		};
+	return {
+		span,
+		...readingOf(split),
+		contextCertain: split.contextCertain,
+		ev: EV.resolve,
+	};
+}
+
+/** One `[…]` substitution in the envelope's vocabulary. See {@link ExplainSubcommand}. */
+function subcommandOf(r: Resolution): ExplainSubcommand {
+	// Q3 refused: the bracket is unreadable and Q6's reading of the same text
+	// cannot promote it.
+	const reading =
+		r.unresolved !== undefined || r.path === null
+			? {
+					resolution: "unknown" as const,
+					unresolved: r.unresolved ?? "no reading of this substitution",
+				}
+			: readingOf(resolveVerb(r.inner, r.context));
+	return {
+		span: { start: r.span.start, end: r.span.end },
+		context: r.context,
+		...reading,
+		candidates: r.candidates,
+		contextCertain: r.contextCertain,
+		depth: r.depth,
+		ev: EV.resolve,
+	};
+}
+
+/** The `resolution`/`kind`/`command` fold, shared by statements and subcommands. */
+function readingOf(split: VerbSplit): {
+	resolution: ExplainResolution;
+	kind?: "menu" | "command";
+	command?: { path: string; verb?: string };
+	unresolved?: string;
+} {
 	if (split.resolution === "navigation")
 		return {
-			span,
 			resolution: "resolved",
 			kind: "menu",
 			...(split.path === null ? {} : { command: { path: split.path } }),
-			contextCertain: split.contextCertain,
-			ev: EV.resolve,
 		};
 	if (split.resolution === "resolved")
 		return {
-			span,
 			resolution: "resolved",
 			kind: "command",
 			...(split.path === null || split.verb === null
 				? {}
 				: { command: { path: split.path, verb: split.verb } }),
-			contextCertain: split.contextCertain,
-			ev: EV.resolve,
 		};
-	return {
-		span,
-		resolution: split.resolution,
-		unresolved: split.why,
-		contextCertain: split.contextCertain,
-		ev: EV.resolve,
-	};
+	return { resolution: split.resolution, unresolved: split.why };
 }
 
 /** The tristate as the envelope renders it: a real `"unknown"`, never a boolean. */
