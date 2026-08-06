@@ -6,6 +6,7 @@ import type { CliCommandMetadata } from "./cli/common.ts";
 import { devicesCommand, runDevicesCli } from "./cli/devices.ts";
 import { discoverCommand, runDiscoverCli } from "./cli/discover.ts";
 import { executeCommand, runExecuteCli } from "./cli/execute.ts";
+import { explainCliCommand, runExplainCli } from "./cli/explain.ts";
 import { mcpCommand, runMcpCli } from "./cli/mcp.ts";
 import { retrieveCommand, runRetrieveCli } from "./cli/retrieve.ts";
 import { runSettingsCli, settingsCommand } from "./cli/settings.ts";
@@ -21,6 +22,7 @@ export const cliCommands: ReadonlyArray<CliCommandMetadata> = [
 	apiCommand,
 	transferCommand,
 	terminalCommand,
+	explainCliCommand,
 	devicesCommand,
 	discoverCommand,
 	btestCommand,
@@ -82,6 +84,9 @@ export async function runCli(
 		}
 		if (command === "download") {
 			return await runTransferCli(rest, { fixedVerb: "download" });
+		}
+		if (command === "explain") {
+			return await runExplainCli(rest);
 		}
 		if (command === "devices") {
 			return await runDevicesCli(rest);

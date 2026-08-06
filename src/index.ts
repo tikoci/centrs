@@ -388,16 +388,21 @@ export {
 	type WriteVerdict,
 } from "./explain/write.ts";
 export {
+	buildExplainErrorEnvelope,
+	buildExplainFacetTip,
 	type ExplainBlock,
 	type ExplainCanonical,
 	type ExplainCommandReading,
 	type ExplainData,
 	type ExplainDiagnostic,
 	type ExplainEnvelope,
+	type ExplainErrorEnvelope,
 	type ExplainEvidence,
+	type ExplainFailOn,
 	type ExplainInput,
 	type ExplainMenuReading,
 	type ExplainOperationMeta,
+	type ExplainOutputFormat,
 	type ExplainPositionMapEntry,
 	type ExplainReading,
 	type ExplainRefusal,
@@ -414,6 +419,10 @@ export {
 	type ExplainVerdict,
 	explainCommand,
 	explainEnvelope,
+	explainExitCode,
+	explainFailOnLevels,
+	explainOutputFormats,
+	renderExplainEnvelope,
 } from "./explain.ts";
 export {
 	type ApiVerb,

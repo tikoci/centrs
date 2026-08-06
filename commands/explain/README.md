@@ -11,7 +11,9 @@ validation): the cheap, safe knowledge tier in front of the runners
 
 Status: `designed` over `rest-api` and `native-api` — the transports the live
 inspection probes ride; every other cell is `—`. The offline mode is
-transport-less. See `docs/MATRIX.md` for the row. A first design round
+transport-less, and **`centrs explain '<input>'` runs today** (#202b): the row
+stays `designed` because the grid tracks protocol cells and offline occupies
+none. See `docs/MATRIX.md` for the row. A first design round
 (2026-07-19, recorded in #90) settled the surface shape and the offline model;
 the **phase-0 canonicalization grounding lab (#185) is complete and this spec
 is now ratified** — every ratification-gating question was answered with cited
@@ -269,8 +271,24 @@ bare menu path. The positional grammar stays **target-first like every other
 router-taking command** (amended in PR review — the shared resolver/selection
 helpers assume it): one positional means offline and it *is* the input; two
 positionals mean live with the router first; `--` is accepted before the
-input; `--file`/stdin replace the input positional in either form. Adding a
+input; **`--file` replaces the input positional in either form**, so with it
+every positional is a target. Adding a
 router therefore never reinterprets a previously valid offline invocation.
+
+**Ambient stdin is read only when no positional could be the input** — that is,
+the offline form with nothing else to analyze. A positional always wins, and
+when fd 0 is redirected anyway the result carries a
+[`usage/stdin-ignored`](../../docs/errors/usage/stdin-ignored.md) warning rather
+than quietly dropping the pipe. `--file -` names stdin explicitly; it is the
+offline fix today, since the live form it also spells
+(`… | centrs explain edge1 --file -`) is parsed and then refused with
+`usage/not-implemented` until phase 2. The narrower rule is
+deliberate and measured: `runCli` is called in-process by tests, so reading fd 0
+on any path a positional invocation reaches consumes the invoking shell's
+stdin — it fed those bytes to the analyzer and broke 21 unrelated tests once,
+then passed on the next run because the read had drained the fd. Detecting the
+collision is a stat on fd 0, never a read, which is why it is reported instead
+of resolved.
 One verb serves all three intents; the accepted risk is that
 the refined "broad query → broader results" scheme adds complexity to one
 surface rather than splitting into sub-verbs. (Option B — sub-verbs
@@ -485,8 +503,9 @@ and its phase is named below.
   whole-input structured case and is exact.
 - **Transport is absent, not defaulted.** An `unknown` on every statement would
   read as a decision that was never made. Examples 1, 2, 6 and 23 assert
-  transport and are #202c's to green; examples 1b, 3, 4, 18, 18b, 20, 21 and 22
-  are the offline set #202b greens without it.
+  transport and are #202c's to green; examples 1b, 3, 4, 4b, 5, 17, 18, 18b, 20,
+  21 and 22 are the offline set #202b greens without it, in
+  `test/unit/explain.test.ts`.
 - **`spans` carries what offline can prove.** Comment runs, and the variable
   classes Q13 scored at 100% precision on resolved bindings; an abstention is
   omitted rather than rendered as a guess. The Q12 vocabulary over
@@ -533,6 +552,24 @@ and its phase is named below.
   - `info` — `bom`/`non-ascii` (positional facts: a legal command must not
     fail), and `context-lost`, which reports a reading that is correct while the
     document's menu context was already gone.
+
+### Designed, not implemented (the CLI surface, #202b)
+
+`src/cli/explain.ts` ships the offline command; implemented flags are generated
+into [`docs/CLI.md`](../../docs/CLI.md) and are not restated here. What the
+[Surface](#surface-option-a--decided) table above describes and the command does
+**not** yet accept:
+
+| Flag / form | Phase | Why it is not accepted yet |
+| ----------- | ----- | -------------------------- |
+| `explain <router> '<input>'` | 2 | The grammar is parsed and **refused** with `usage/not-implemented`, naming the router it did not contact. Running the offline analysis under an invocation that asked for probes would report `mode: "offline"` about a request for more. |
+| `--curl` | #202c | Nothing in `src/explain/` does REST mapping today; the nine runtime-exercised Q8 rules are that PR's work. |
+| `--cursor <byte>` | 2 | It positions `--complete`, which enumerates nothing offline. A cursor with no candidate surface to position is a flag with no effect. |
+| `--full` | 3 | It lifts smart-sizing limits, and the offline result is never truncated (`input.truncated` is always `false`). Same rule: no accepted flag is a no-op. |
+
+`--complete` and `--schema` **are** accepted, because they have an offline
+behavior the spec names: they enumerate nothing and emit the live-target tip.
+That is the difference — an accepted flag must do something observable.
 
 ## MCP and library surfaces
 
@@ -762,7 +799,10 @@ examples gate via unit/fixture tests and each live cell advances to
    diagnostics (+ `--curl` rendering), and the CLI/MCP surface over it. Phase
    0.5 shipped the analysis modules as library exports only; phase 1 composes
    them behind one entry point, adds the envelope and `src/cli/explain.ts`, and
-   turns `examples.md` green. Carried in with it: the lexical-boundary
+   turns `examples.md` green. **Landing in four PRs:** #192a defect regions
+   (#222), #202a composition + envelope (#224), **#202b the CLI surface + the
+   offline examples**, then #202c transport classification + `--curl`, which
+   closes #202. Carried in with it: the lexical-boundary
    hardening (#201) and the shared-scanner substitution blind spot (#199), both
    found during Q13 and both spanning modules already promoted; plus the
    deferred lab questions Q5 (expression depth) and Q9 (potential-command

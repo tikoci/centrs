@@ -316,4 +316,95 @@ describe("CLI smoke (real subprocess, no network)", () => {
 			await rm(home, { recursive: true, force: true });
 		}
 	});
+
+	// `explain` is offline by construction, so the subprocess tier is where its
+	// two process-level facts live: fd 0 as an input carrier, and a real exit
+	// code (the in-process harness only sees `runCli`'s return value).
+	test("explain reads a piped script from stdin (#202b)", async () => {
+		const res = await runCliProcess({
+			args: ["explain", "--json"],
+			stdin: "/ip/route\n",
+		});
+		expect(res.exitCode).toBe(0);
+		const envelope = parseEnvelope(res.stdoutText);
+		expect(envelope.ok).toBe(true);
+	});
+
+	test("explain with no input and no stdin is a usage error, not an empty analysis", async () => {
+		// Both real shapes of "nothing on stdin": fd 0 bound to /dev/null (no
+		// `stdin` option) and an empty pipe. Neither is a TTY, so the isTTY guard
+		// alone would have analyzed "" in both.
+		for (const stdin of [undefined, ""]) {
+			const res = await runCliProcess({
+				args: ["explain", "--json"],
+				...(stdin === undefined ? {} : { stdin }),
+			});
+			expect(res.exitCode).toBe(1);
+			const envelope = parseEnvelope(res.stderrText);
+			expect(envelope.ok).toBe(false);
+			expect(envelope.error?.code).toBe("input/invalid-command");
+		}
+	});
+
+	test("explain honors the CENTRS_FORMAT env tier and names it (#202b)", async () => {
+		const res = await runCliProcess({
+			args: ["explain", "/ip/route"],
+			env: { CENTRS_FORMAT: "json" },
+		});
+		expect(res.exitCode).toBe(0);
+		const envelope = JSON.parse(res.stdoutText) as {
+			meta: { settings: { format?: { kind: string; key: string } } };
+		};
+		expect(envelope.meta.settings.format).toEqual({
+			kind: "env",
+			key: "CENTRS_FORMAT",
+		});
+	});
+
+	test("explain says out loud when a piped script was NOT the input", async () => {
+		// The positional wins (the arguments asked for it), but the result carries
+		// `usage/stdin-ignored` so the dropped pipe is never silent. Proving the
+		// pipe has bytes would mean reading fd 0 on a path `bun test` reaches, which
+		// is measured to eat the invoking shell's stdin — so this is a stat, and the
+		// answer is a warning rather than a re-reading of the arguments.
+		const res = await runCliProcess({
+			args: ["explain", "/ip/route", "--json"],
+			stdin: "/ip/address print\n",
+		});
+		expect(res.exitCode).toBe(0);
+		const envelope = JSON.parse(res.stdoutText) as {
+			ok: boolean;
+			warnings: Array<{ code: string }>;
+		};
+		expect(envelope.ok).toBe(true);
+		expect(envelope.warnings.map((w) => w.code)).toContain(
+			"usage/stdin-ignored",
+		);
+	});
+
+	test("explain rejects an empty positional identically under both stdin shapes", async () => {
+		// PRESENCE, not truthiness: `explain ""` is a present-but-empty argument, so
+		// it must never fall through to ambient stdin. Both fd 0 shapes are asserted
+		// because the bug was exactly that the same argv meant two different things.
+		for (const stdin of [undefined, "/ip/route print\n"]) {
+			const res = await runCliProcess({
+				args: ["explain", "", "--json"],
+				...(stdin === undefined ? {} : { stdin }),
+			});
+			expect(res.exitCode).toBe(1);
+			const envelope = parseEnvelope(res.stderrText);
+			expect(envelope.ok).toBe(false);
+			expect(envelope.error?.code).toBe("input/invalid-command");
+		}
+	});
+
+	test("explain exits 2 when the verdict meets --fail-on (real process code)", async () => {
+		const res = await runCliProcess({
+			args: ["explain", ':put "unterminated', "--json"],
+		});
+		expect(res.exitCode).toBe(2);
+		const envelope = parseEnvelope(res.stdoutText);
+		// Exit 2 is the verdict, not a failure: the diagnostics ARE the data.
+		expect(envelope.ok).toBe(true);
+	});
 });

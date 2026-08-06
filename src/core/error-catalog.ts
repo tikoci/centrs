@@ -511,6 +511,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "The --concurrency value must be an integer >= 1.",
 	},
 	{
+		code: "usage/stdin-ignored",
+		summary:
+			"stdin was redirected but the input came from the positional argument, so anything piped in was not analyzed.",
+	},
+	{
 		code: "usage/fanout-not-supported",
 		summary:
 			"The command or mode cannot fan out across multiple targets (e.g. terminal, --listen/--stream).",
