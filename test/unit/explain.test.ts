@@ -354,6 +354,14 @@ describe("centrs explain — the CLI surface", () => {
 		).toBe("usage/not-implemented");
 	});
 
+	test("an empty positional is a present argument, not an absent one", async () => {
+		const { code, err } = await run(["explain", "", "--json"]);
+		expect((JSON.parse(err) as { error: { code: string } }).error.code).toBe(
+			"input/invalid-command",
+		);
+		expect(code).toBe(1);
+	});
+
 	test("a missing --file path is a typed error, not a throw", async () => {
 		const { code, err } = await run([
 			"explain",

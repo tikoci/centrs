@@ -279,6 +279,13 @@ function stdinMayCarryInput(): boolean {
  * `--file` replaces the input positional, so with it every positional is a
  * target. Otherwise the LAST positional is the input and everything before it is
  * a target; splitting from the end is what keeps the two forms unambiguous.
+ *
+ * PRESENCE, never truthiness: `centrs explain ""` gave an empty positional that
+ * a `&&` spread dropped, so the same argv fell through to ambient stdin and
+ * analyzed whatever was piped in. An explicit empty argument is a mistake the
+ * user made, not an absent argument, and "a positional always wins" has to hold
+ * for it too — otherwise identical argv means different things depending on the
+ * shape of fd 0.
  */
 function splitPositionals(parsed: ExplainCliArgs): {
 	targets: readonly string[];
@@ -287,7 +294,9 @@ function splitPositionals(parsed: ExplainCliArgs): {
 	if (parsed.filePath !== undefined) return { targets: parsed.positionals };
 	const positionals = [...parsed.positionals];
 	const inputPositional = positionals.pop();
-	return { targets: positionals, ...(inputPositional && { inputPositional }) };
+	return inputPositional === undefined
+		? { targets: positionals }
+		: { targets: positionals, inputPositional };
 }
 
 /**
@@ -327,6 +336,10 @@ async function readInput(
 		if (piped.trim() === "") throw missingInputError();
 		return { input: piped, warnings: [] };
 	}
+	// An empty positional is rejected HERE, before fd 0 is even stat'd: it is a
+	// present-but-empty argument, so falling through to stdin would make the same
+	// argv mean two different things.
+	if (inputPositional.trim() === "") throw missingInputError();
 	return {
 		input: inputPositional,
 		warnings: stdinMayCarryInput() ? [STDIN_IGNORED_WARNING] : [],

@@ -382,6 +382,22 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		);
 	});
 
+	test("explain rejects an empty positional identically under both stdin shapes", async () => {
+		// PRESENCE, not truthiness: `explain ""` is a present-but-empty argument, so
+		// it must never fall through to ambient stdin. Both fd 0 shapes are asserted
+		// because the bug was exactly that the same argv meant two different things.
+		for (const stdin of [undefined, "/ip/route print\n"]) {
+			const res = await runCliProcess({
+				args: ["explain", "", "--json"],
+				...(stdin === undefined ? {} : { stdin }),
+			});
+			expect(res.exitCode).toBe(1);
+			const envelope = parseEnvelope(res.stderrText);
+			expect(envelope.ok).toBe(false);
+			expect(envelope.error?.code).toBe("input/invalid-command");
+		}
+	});
+
 	test("explain exits 2 when the verdict meets --fail-on (real process code)", async () => {
 		const res = await runCliProcess({
 			args: ["explain", ':put "unterminated', "--json"],
