@@ -122,6 +122,7 @@ export interface ArgumentsUnread {
 
 export type ArgumentReading = ArgumentsRead | ArgumentsUnread;
 
+/** A refusal, carrying the reason a consumer quotes instead of a bare `unknown`. */
 function unread(why: string): ArgumentsUnread {
 	return { read: false, why };
 }
@@ -150,8 +151,9 @@ export function lexArguments(text: string, from: number): ArgumentReading {
 		// A continuation between tokens is harmless — it is whitespace RouterOS
 		// removes — but one INSIDE a token breaks the value's contiguity, which
 		// `scanToken` reports.
-		if (c === "\\" && isNewline(text[i + 1])) {
-			i += text[i + 1] === "\r" ? 3 : 2;
+		const continuation = continuationLength(text, i);
+		if (continuation > 0) {
+			i += continuation;
 			continue;
 		}
 		const token = scanToken(text, i);
@@ -174,8 +176,25 @@ export function lexArguments(text: string, from: number): ArgumentReading {
 	return { read: true, tokens, args, queries, positional };
 }
 
-function isNewline(char: string | undefined): boolean {
-	return char === "\n" || char === "\r";
+/**
+ * Length of the `\<newline>` continuation at `at`, or 0 — the ONE boundary rule
+ * this module and `verbsplit.ts`'s word scanner share.
+ *
+ * A lone `\r` is deliberately NOT a continuation. Accepting one and then
+ * skipping three bytes ate the following character, so an argument the source
+ * spells `x` + `comment=2` lexed as plain `comment=2` — a token whose reported
+ * name is not the one in the source.
+ * That is a silent misread rather than a refusal, which is the one failure this
+ * module must not have — and the two scanners disagreeing about where a
+ * continuation ends is exactly how `argsAt` and the token stream come to
+ * describe different text. Found in review of #202c-1; `\<CR>` alone now falls
+ * through to the invalid-escape refusal below.
+ */
+function continuationLength(text: string, at: number): 0 | 2 | 3 {
+	if (text[at] !== "\\") return 0;
+	if (text[at + 1] === "\n") return 2;
+	if (text[at + 1] === "\r" && text[at + 2] === "\n") return 3;
+	return 0;
 }
 
 /**
@@ -198,7 +217,7 @@ function scanToken(text: string, start: number): { end: number } | string {
 		if (c === "{") return "an array or block value";
 		if (c === "$") return "a variable value";
 		if (c === "\\") {
-			if (isNewline(text[i + 1]))
+			if (continuationLength(text, i) > 0)
 				return "a line continuation inside an argument";
 			// The #201 rule: in code a backslash is valid only before whitespace.
 			// `symbols.ts` already located the defect; refusing is enough here.
@@ -312,5 +331,11 @@ function literalValue(
 	}
 	const body = text.slice(start, end);
 	if (body.includes('"')) return "a partly-quoted argument value";
+	// An UNQUOTED escape needs decoding just as much as a quoted one:
+	// `comment=a\ b` is the value `a b` on the device, and returning the source
+	// run would send the backslash. `scanToken` accepts `\ `/`\\t` as part of a
+	// token (it is legal RouterOS), so the refusal has to happen here — the token
+	// is decided, its literal value is not. Found in review of #202c-1.
+	if (body.includes("\\")) return "an escape in an argument value";
 	return { value: body };
 }

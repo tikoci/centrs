@@ -192,9 +192,17 @@ export interface ExplainArgumentToken {
 	span: ExplainSpanRange;
 	/** Attribute name / query word; absent on a positional. */
 	name?: string;
-	/** The attribute's value, quotes removed; absent on a positional and a query. */
+	/**
+	 * The token's LITERAL value, quotes removed — for an attribute the part after
+	 * `=`, for a positional the whole token.
+	 *
+	 * **Absent means there is no literal value**, whatever the kind: the source
+	 * spells a substitution, an expression, or an escape this phase does not
+	 * decode. A consumer rendering a runnable command reads this, never `text`,
+	 * and treats absence as "not renderable". A query is always absent.
+	 */
 	value?: string;
-	/** Where the value sits, quotes INCLUDED. */
+	/** Where the value sits, quotes INCLUDED. Absent whenever `value` is. */
 	valueSpan?: ExplainSpanRange;
 	/** The token verbatim. */
 	text: string;
@@ -831,71 +839,70 @@ function withArguments(
 	split: DocumentVerbSplit,
 	analyzed: string,
 ): ExplainCommandReading {
-	const args = argumentsOf(split, analyzed);
+	const read = argumentsOf(split, analyzed);
 	return {
 		...reading,
-		command: args.read
-			? { ...reading.command, args: argsObject(args.tokens) }
-			: reading.command,
-		arguments: args,
+		command:
+			read.args === undefined
+				? reading.command
+				: { ...reading.command, args: read.args },
+		arguments: read.arguments,
 	};
 }
 
+/**
+ * The statement's argument reading, plus the object view that goes on
+ * `command.args`.
+ *
+ * The two travel together because the LEXER owns the object view: it builds a
+ * last-wins map while it walks the tokens, and recomputing that here from the
+ * rebased tokens would be a second implementation of one rule — free to diverge
+ * from the lexer's, and so from `canonicalizeExecuteCommand`'s, which is the
+ * duplicate-name agreement this module's header asserts. Raised in review of
+ * #202c-1.
+ */
 function argumentsOf(
 	split: DocumentVerbSplit,
 	analyzed: string,
-): ExplainArguments {
+): { arguments: ExplainArguments; args?: Record<string, string> } {
 	if (split.argsAt === null)
 		return {
-			read: false,
-			why: "the verb is not the last token of the leading path run, so what follows the run is not this command's argument list",
+			arguments: {
+				read: false,
+				why: "the verb is not the last token of the leading path run, so what follows the run is not this command's argument list",
+			},
 		};
 	const { start, end } = split.span;
 	const text = analyzed.slice(start, end);
 	if (text !== split.text)
 		return {
-			read: false,
-			why: "this statement's bytes are not addressable: its text was normalized (non-ASCII), or its span was widened to the enclosing statement",
+			arguments: {
+				read: false,
+				why: "this statement's bytes are not addressable: its text was normalized (non-ASCII), or its span was widened to the enclosing statement",
+			},
 		};
 	const lexed = lexArguments(text, split.argsAt);
-	if (!lexed.read) return lexed;
+	if (!lexed.read) return { arguments: lexed };
 	return {
-		read: true,
-		tokens: lexed.tokens.map((token) => ({
-			...token,
-			span: { start: start + token.span.start, end: start + token.span.end },
-			...(token.valueSpan === undefined
-				? {}
-				: {
-						valueSpan: {
-							start: start + token.valueSpan.start,
-							end: start + token.valueSpan.end,
-						},
-					}),
-		})),
-		queries: lexed.queries,
-		positional: lexed.positional,
+		args: lexed.args,
+		arguments: {
+			read: true,
+			tokens: lexed.tokens.map((token) => ({
+				...token,
+				span: { start: start + token.span.start, end: start + token.span.end },
+				...(token.valueSpan === undefined
+					? {}
+					: {
+							valueSpan: {
+								start: start + token.valueSpan.start,
+								end: start + token.valueSpan.end,
+							},
+						}),
+			})),
+			queries: lexed.queries,
+			positional: lexed.positional,
+		},
 	};
-}
-
-/**
- * The object view of an argument list: attribute names to values, LAST
- * occurrence winning.
- *
- * Derived from the ordered tokens rather than carried beside them, so the two
- * cannot drift — and last-wins because that is what `canonicalizeExecuteCommand`
- * already does with a repeated name (`src/execute.ts`). The gate and the
- * analysis disagreeing about a duplicate would be a contradiction inside one
- * result.
- */
-function argsObject(
-	tokens: readonly ExplainArgumentToken[],
-): Record<string, string> {
-	const out: Record<string, string> = {};
-	for (const token of tokens)
-		if (token.kind === "attribute" && token.name !== undefined)
-			out[token.name] = token.value ?? "";
-	return out;
 }
 
 /** One `[…]` substitution in the envelope's vocabulary. See {@link ExplainSubcommand}. */

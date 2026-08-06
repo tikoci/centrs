@@ -31,6 +31,11 @@
  * the statements scored against the IL oracle, **0 dropped an argument IL saw**,
  * and the oracle-free coverage invariant below held over all 4,389 read
  * statements.
+ *
+ * Those numbers did not move when review found two silent misreads (the lone
+ * `\r` continuation and the unquoted escape, both pinned below): no corpus line
+ * spells either shape. That is the standing lesson — corpus-green is a size
+ * estimate for a risk, never evidence that a lexical rule is right.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -196,6 +201,32 @@ describe("abstention is whole-statement, and says why", () => {
 			// …and nothing partial leaks into the object view.
 			expect(statement.command.args).toBeUndefined();
 		});
+});
+
+describe("the two silent misreads review found (#202c-1)", () => {
+	test("a lone `\\r` after a backslash is not a continuation", () => {
+		// It was, and the skip then advanced three bytes and ate the following
+		// character: the argument below (source name `x` + `comment`) lexed as
+		// plain `comment=2`, a reported name that is not the one in the source. A
+		// silent misread, not a refusal — the one failure this module must not
+		// have. `verbsplit.ts`'s word scanner requires `\r\n`; the two scanners
+		// now share the rule. (Spelled as a concatenation so the corrupted token
+		// is not a word in this file.)
+		const read = lex(`/ip/address add a=1 \\\r${"x"}comment=2`, 15);
+		expect(read.read).toBe(false);
+		expect(read.read === false ? read.why : "").toContain("invalid escape");
+	});
+
+	test("an UNQUOTED escape has no literal value either", () => {
+		// `comment=a\ b` is the value `a b` on the device. Returning the source run
+		// would send the backslash — a wrong value, where the quoted spelling was
+		// already refused. The token is decided; only its value is not.
+		const read = lex("/ip/address add comment=a\\ b", 15);
+		expect(read.read).toBe(false);
+		expect(read.read === false ? read.why : "").toContain(
+			"escape in an argument value",
+		);
+	});
 });
 
 describe("a structural defect degrades the READING, before arguments matter", () => {

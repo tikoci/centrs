@@ -154,6 +154,7 @@ function asciiWordSpans(text: string): Word[] {
 	return out;
 }
 
+/** Just the names, for the rules that ask what the words ARE, not where. */
 function asciiWords(text: string): string[] {
 	return asciiWordSpans(text).map((w) => w.name);
 }
@@ -389,8 +390,8 @@ export interface VerbSplitCommandReading extends VerbSplitCommon {
 	/** Index of the verb within the run. */
 	verbAt: number;
 	/**
-	 * Offset in the statement text where this command's ARGUMENTS begin — the
-	 * end of the run — or `null` when that offset would not mean that (#202c).
+	 * Offset in the statement text where this command's ARGUMENTS begin, or
+	 * `null` when no such offset exists (#202c).
 	 *
 	 * It is the end of the VERB's word, so a bare-word argument the leading run
 	 * swallowed (`/interface print detail` puts `detail` in the run) is still

@@ -491,21 +491,28 @@ and its phase is named below.
 | ---- | --------------- |
 | `input`, `verdict`, `canonical`, `structure`, `diagnostics`, `runtimeAcceptance` | complete |
 | `evidence[]` | the **offline subset**: `source` is always `canonicalizer` and there is no RouterOS version stamp |
-| `structure.statements[].command` | `path` + `verb`, plus **`args` where every argument token is literal** (#202c); the ordered token list is `statements[].arguments` |
-| `structure.statements[].transport` | **absent** — #202c, which greens examples 1, 2, 6 and 23 |
+| `structure.statements[].command` | `path` + `verb`, plus **`args` where the argument list was read** (#202c-1); the ordered token list is `statements[].arguments.tokens` |
+| `structure.statements[].transport` | **absent** — #202c-2, which greens examples 1, 2, 6 and 23 |
 | `spans` | comment runs and resolved variable classes only; **no value shape or type** |
 | `schema`, `completion` | absent — live evidence, phase 2 |
 
-- **Per-statement arguments are read where they are LITERAL, and refused as a
-  whole where they are not** (#202c, `src/explain/args.ts`). The ordered token
-  list with spans is `statements[].arguments.tokens` (the phase-0 normal form);
-  `command.args` is its derived object view, present only when the list was
-  read. A statement is refused — never partially read — when a value is a
-  command substitution, an expression, a variable, an array literal, an escape
-  this phase does not decode, or a continued token, because a dropped argument
-  silently changes what a rendered `curl` DOES. **`value` absent on a token
-  means there is no literal value**, whatever its kind; a consumer rendering a
-  runnable command reads `value`, never the source `text`. Measured on the
+- **Per-statement arguments are lexed, and the list is all-or-nothing** (#202c-1,
+  `src/explain/args.ts`). The ordered token list with spans is
+  `statements[].arguments.tokens` (the phase-0 normal form); `command.args` is
+  its derived object view, present only when the list was read. Two different
+  outcomes, which a reader must not conflate:
+  - **The whole list is refused** — `arguments.read` is `false` with a reason,
+    and `command.args` is absent — when a token cannot be delimited or named at
+    all: a `[…]`/`(…)`/`$x`/`{…}` value, an escape this phase does not decode, a
+    left-hand side that is not a RouterOS name, a token split by a continuation.
+    Never partially read, because a dropped argument silently changes what a
+    rendered `curl` DOES.
+  - **A token is read but carries no `value`** — the list still reads. The token
+    is delimited and classified; only its literal value is unknowable, as for
+    the positional in `:log info "result: $[…]"`. **`value` absent means there
+    is no literal value**, whatever the token's kind, so a consumer rendering a
+    runnable command reads `value`, never the source `text`, and treats absence
+    as not-renderable. Measured on the
   frozen corpus: 40.0% of CRUD-verb commands read, 0 arguments dropped against
   the IL oracle, and 0 contradictions with `canonical.args` where both decided.
   What offline still cannot do is NAME a positional operand — RouterOS binds
