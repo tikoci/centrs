@@ -513,10 +513,14 @@ and its phase is named below.
 
   The decision, the fail-closed rules (a hint is never a diagnostic; a quoted
   value never gets a "wrong type" flag) and the probe matrix that has to ground
-  it are #202's *Value-shape / typed-literal awareness* section. Written down
-  here because the lexical layer is deliberately type-blind: when a future
-  verdict looks wrong around a value, that is a type-axis question before it is
-  a lexical one.
+  it are **#225**, carved out of #202's *Value-shape / typed-literal awareness*
+  section so they outlive #202 closing. It sequences as the **first phase-2 lab
+  round**: after #202c, because a value token cannot be annotated before the
+  statement-scope lexer can locate one, and before phase-2 span/`--schema`
+  emission, because retrofitting three facts onto one shipped `class` + `ev`
+  would *change* a field rather than add one. Written down here because the
+  lexical layer is deliberately type-blind: when a future verdict looks wrong
+  around a value, that is a type-axis question before it is a lexical one.
 - **Severity is fixed here, because it drives `--fail-on`.** Three buckets, and
   the split is not "structural vs not":
   - `error` — `unclosed`, `unbalanced-close`, `unterminated-string`,
