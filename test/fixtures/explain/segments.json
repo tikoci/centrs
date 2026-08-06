@@ -527,7 +527,7 @@
 			}
 		},
 		{
-			"name": "unterminated-string-notes",
+			"name": "unterminated-string-defects",
 			"input": ":put \"unterminated",
 			"expect": [":put \"unterminated"],
 			"golden": {
@@ -555,7 +555,7 @@
 			]
 		},
 		{
-			"name": "unclosed-brace-notes",
+			"name": "unclosed-brace-defects",
 			"input": ":if (true) do={\n:put 1",
 			"expect": [":if (true) do={\n:put 1"],
 			"golden": {
@@ -585,7 +585,7 @@
 			]
 		},
 		{
-			"name": "stray-close-notes",
+			"name": "stray-close-defects",
 			"input": ":put 1}\n:put 2",
 			"expect": [":put 1}", ":put 2"],
 			"golden": {
