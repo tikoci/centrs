@@ -250,15 +250,31 @@
  *           (`:put //foo`, `:put ::foo`, `:put :/foo` are clean), and so is a
  *           colon-less head the table does not know (`put //foo`).
  *
+ *         - A token that cannot be a path segment ENDS the region. A digit-led
+ *           object name is the one that matters: `/ip 1 //ip/address` is CLEAN
+ *           on the device (`1` is `obj-inactive`, every later byte `none`) and
+ *           only the RUNTIME rejects it — "bad command name 1 (line 1 column
+ *           5)", at the `1`, never at the `//`. `$`, `"`, `(` and `[` there are
+ *           hard errors on their own first byte, which this walker does not
+ *           model, so it closes the region and stays silent rather than
+ *           reporting a defect at the wrong offset.
+ *
  *       `menus.ts` being a FLOOR is the safe direction: an unlisted menu closes
  *       the region and the defect goes unreported, rather than a valid script
- *       being truncated. Measured that way — 71/73 device rows, **0 false
- *       positives and 0 wrong offsets** (the 2 remaining are the device's
- *       SEPARATE "argument before a command" error, which lands on the `=`), and
- *       over the whole 913-script frozen corpus **no file where this stops and
- *       the device is clean**. The corpus moves no occurrence at all: the 14
- *       files it newly stops in are non-RouterOS snippets (YAML, log text) that
- *       the device already rejects earlier, so they were past a cliff already.
+ *       being truncated. Measured that way — 91/97 device rows, **0 false
+ *       positives and 0 wrong offsets** — and over the whole 913-script frozen
+ *       corpus **no file where this stops and the device is clean**. The 6
+ *       remaining rows are device errors this walker does not model at all (the
+ *       "argument before a command" error, which lands on the `=`, and the four
+ *       non-path tokens above), every one of them the silent direction. The
+ *       corpus moves no occurrence: the 14 files it newly stops in are
+ *       non-RouterOS snippets (YAML, log text) that the device already rejects
+ *       earlier, so they were past a cliff already.
+ *
+ *       The path-region guard came out of review. Without it the walker scored 7
+ *       FALSE POSITIVES and 4 wrong offsets on those same rows — a defect stop on
+ *       input the device's highlight reads clean, which is the one failure mode
+ *       this rule may not have.
  *
  * Measured on the frozen split (`.scratch/explain-lab-partition.json`) against
  * the per-occurrence highlight streams for 7.23.2 AND 7.24rc2: **holdout 99.98%
@@ -871,6 +887,32 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		if (c === ";" || c === "\n" || c === "{" || c === "[") atLead = true;
 		else if (c !== " " && c !== "\t" && c !== "\r") atLead = false;
 
+		// F8 — anything that cannot be a path token ENDS the path region, so no
+		// defect may be reported past it. A digit-led object name is the case that
+		// matters: `/ip 1 //ip/address` is CLEAN on CHR 7.23.2 (`1` is
+		// `obj-inactive`, every later byte `none`) and only the RUNTIME rejects it,
+		// at the `1` — "bad command name 1 (line 1 column 5)" — never at the `//`.
+		// Reporting the `//` there was a false positive against the very oracle
+		// this module is scored on. The same holds for `1.1.1.1`, `-1` and a `:`
+		// following any of them.
+		//
+		// `$`, `"`, `(` and `[` in path position are hard device ERRORS on their
+		// own first byte, which this walker does not model; closing the region
+		// there keeps it silent rather than reporting a defect at the wrong offset.
+		// Word characters never reach here — the word branch consumes them — and
+		// `\` is the H5 continuation, which a path survives.
+		if (
+			pathOpen &&
+			!isIdentStart(c) &&
+			c !== ":" &&
+			c !== "/" &&
+			c !== " " &&
+			c !== "\t" &&
+			c !== "\r" &&
+			c !== "\\"
+		)
+			pathOpen = false;
+
 		if (c === '"') {
 			// S11 — a QUOTED declaration name. `:global "set-dns" do={…}` declares
 			// `set-dns`, and the console carries the class across the quotes, so the
@@ -1001,9 +1043,10 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			// and class every later byte `none`. Checked BEFORE the empty-word exit,
 			// because `//` on its own carries no word and would otherwise slip past.
 			// Inside a value a doubled slash is ordinary text (`url=http://example.com`,
-			// `comment=a//b`, `:put //foo`), so this is statement-leading only; the
-			// mid-path form (`/ip//address`) needs parser-context awareness and is
-			// tracked separately.
+			// `comment=a//b`, `:put //foo`), so this gate is statement-leading only.
+			// The MID-statement form (`/ip//address`) is a defect too, but only in
+			// menu-path position — F8 below decides that, and the value forms above
+			// stay clean because the path region has already closed by then.
 			if (leadBefore && sigilRun > 1) {
 				notes.push(`bad-sigil:${start + 1}`);
 				defect = true;

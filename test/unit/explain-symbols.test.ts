@@ -1207,6 +1207,33 @@ describe("explain/symbols — F8 mid-statement defect (#201)", () => {
 		expect(stop(":foreach i in=[/ip address find] do={:put $i}")).toBeNull();
 	});
 
+	test("a token that cannot be a path segment ends the region", () => {
+		// Found in review: `/ip 1 //ip/address` is CLEAN on CHR 7.23.2 — `1` is an
+		// `obj-inactive` object name and every later byte is `none` — so stopping at
+		// the `//` was a false positive against the oracle this module is scored on.
+		// Only the RUNTIME rejects it, and at the `1`, not the `//`:
+		//   /ip 1 //ip/address  ->  bad command name 1 (line 1 column 5)
+		// Before this guard these seven rows stopped wrongly and four more stopped
+		// at the wrong offset.
+		expect(stop("/ip 1 //ip/address")).toBeNull();
+		expect(stop("/ip 1.1.1.1 /bad")).toBeNull();
+		expect(stop("/ip 1.1.1.1 //bad")).toBeNull();
+		expect(stop("/ip 1")).toBeNull();
+		expect(stop("{ /ip 1 //ip/address }")).toBeNull();
+		expect(stop("/ip address 1 //bad")).toBeNull();
+		expect(stop("/ip -1 //bad")).toBeNull();
+		expect(stop("/ip 1 :bad")).toBeNull();
+		// `$`, `"`, `(` and `[` in path position are hard device errors on their own
+		// first byte, which this walker does not model. Staying silent is the safe
+		// reading; reporting a defect further along would be the wrong offset.
+		expect(stop('/ip "quoted" //bad')).toBeNull();
+		expect(stop("/ip $var //bad")).toBeNull();
+		expect(stop("/ip (1) //bad")).toBeNull();
+		expect(stop("/ip [find] //bad")).toBeNull();
+		// …and the control still fires: nothing ended the path here.
+		expect(stop("/ip //bad")).toBe("bad-sigil:4");
+	});
+
 	test("the stop truncates like F4/F5: earlier bindings survive it", () => {
 		// CHR 7.23.2 classes every byte after the cliff `none`, so a declaration
 		// after it is not real and one before it is.
