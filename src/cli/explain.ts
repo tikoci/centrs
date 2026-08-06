@@ -262,15 +262,33 @@ async function readFileInput(path: string): Promise<string> {
 	return await file.text();
 }
 
-/** The requested format, recoverable before the parse loop runs (error paths). */
+/** Flags whose NEXT token is a value, so a scanner must skip it. */
+const VALUE_FLAGS = new Set(["--file", "--fail-on", "--format"]);
+
+/**
+ * The requested format, recovered when the parse loop THREW.
+ *
+ * It has to walk the same grammar the parser does — left to right, stopping at
+ * `--`, skipping each value-flag's value, last format winning. A `includes()`
+ * scan reads `centrs explain -- --json` as a format request when `--json` is
+ * the RouterOS input, and reports JSON for `--yaml --json --bad` in either
+ * order. The error renderer picking a different format than the success
+ * renderer would is its own bug, even though only failures reach here.
+ */
 function formatFromArgs(args: readonly string[]): ExplainOutputFormat {
-	if (args.includes("--json")) return "json";
-	if (args.includes("--yaml")) return "yaml";
-	const index = args.indexOf("--format");
-	const value = index === -1 ? undefined : args[index + 1];
-	return (explainOutputFormats as readonly string[]).includes(value ?? "")
-		? (value as ExplainOutputFormat)
-		: "text";
+	let format: ExplainOutputFormat = "text";
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
+		if (arg === undefined || arg === "--") break;
+		if (arg === "--json") format = "json";
+		else if (arg === "--yaml") format = "yaml";
+		else if (arg === "--format") {
+			const value = args[++index];
+			if ((explainOutputFormats as readonly string[]).includes(value ?? ""))
+				format = value as ExplainOutputFormat;
+		} else if (VALUE_FLAGS.has(arg)) index += 1;
+	}
+	return format;
 }
 
 export async function runExplainCli(args: readonly string[]): Promise<number> {

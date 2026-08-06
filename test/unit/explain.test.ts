@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runCli } from "../../src/cli.ts";
 import type { ExplainData, ExplainEnvelope } from "../../src/explain.ts";
+import { runCliCaptured as run } from "./cli-capture.ts";
 
 /**
  * `commands/explain/examples.md`, one assertion per example (example N ↔
@@ -20,36 +20,6 @@ import type { ExplainData, ExplainEnvelope } from "../../src/explain.ts";
  * `transport.classification` / `--curl`, which is #202c. They are listed rather
  * than omitted so the gap is visible in the test output.
  */
-
-interface Captured {
-	code: number;
-	out: string;
-	err: string;
-}
-
-const restorers: Array<() => void> = [];
-afterEach(() => {
-	while (restorers.length > 0) restorers.pop()?.();
-});
-
-async function run(args: readonly string[]): Promise<Captured> {
-	const logs: string[] = [];
-	const errs: string[] = [];
-	const origLog = console.log;
-	const origErr = console.error;
-	console.log = (...a: unknown[]) => {
-		logs.push(a.map(String).join(" "));
-	};
-	console.error = (...a: unknown[]) => {
-		errs.push(a.map(String).join(" "));
-	};
-	restorers.push(() => {
-		console.log = origLog;
-		console.error = origErr;
-	});
-	const code = await runCli(args);
-	return { code, out: logs.join("\n"), err: errs.join("\n") };
-}
 
 /** Run `centrs explain … --json` and return the parsed success envelope. */
 async function explainJson(
@@ -106,6 +76,8 @@ describe("commands/explain/examples.md — offline", () => {
 			comment: "uplink",
 		});
 		// Both roles cite the canonicalizer; live completion is the authority.
+		// The length check keeps `every` from passing vacuously on an empty table.
+		expect(data.evidence.length).toBeGreaterThan(0);
 		expect(data.evidence.every((e) => e.source === "canonicalizer")).toBe(true);
 	});
 
@@ -128,6 +100,7 @@ describe("commands/explain/examples.md — offline", () => {
 			"--schema",
 		]);
 		expect(data).not.toHaveProperty("schema");
+		expect(data.evidence.length).toBeGreaterThan(0);
 		expect(data.evidence.every((e) => e.source === "canonicalizer")).toBe(true);
 		expect(envelope.tips.map((t) => t.code)).toContain(
 			"tip/explain-live-facets",
@@ -201,6 +174,7 @@ describe("commands/explain/examples.md — offline", () => {
 		const diagnostic = data.diagnostics.find(
 			(d) => d.code === "explain/canonicalizer/unresolved-statement",
 		);
+		expect(diagnostic).toBeDefined();
 		expect(diagnostic?.span).toEqual(
 			tail?.span as { start: number; end: number },
 		);
@@ -346,9 +320,26 @@ describe("centrs explain — the CLI surface", () => {
 		expect(code).toBe(0);
 	});
 
-	test("--yaml renders the same envelope", async () => {
-		const { out } = await run(["explain", "/ip/route", "--yaml"]);
-		expect(out).toContain("ok: true");
-		expect(out).toContain('verdict: "pass"');
+	test("the error format follows the same grammar as the parser", async () => {
+		// Flags after `--` are operands, so the error renders TEXT even though the
+		// argv contains `--json`; and when two format flags are given, the LAST one
+		// wins, matching what the parse loop would have decided.
+		const literal = await run(["explain", "--", "--json", "--yaml"]);
+		expect(literal.code).toBe(1);
+		expect(literal.err).toContain("[usage/not-implemented]");
+		expect(() => JSON.parse(literal.err)).toThrow();
+
+		const lastWins = await run(["explain", "--json", "--yaml", "--nope"]);
+		expect(lastWins.code).toBe(1);
+		expect(lastWins.err).toContain('code: "input/invalid-command"');
+	});
+
+	test("--yaml renders the same envelope, and it parses", async () => {
+		// Substring assertions would pass on YAML the hand-rolled writer emits but
+		// no parser accepts, so this round-trips it and compares whole envelopes.
+		const yaml = await run(["explain", "/ip/route", "--yaml"]);
+		const json = await run(["explain", "/ip/route", "--json"]);
+		expect(Bun.YAML.parse(yaml.out)).toEqual(JSON.parse(json.out));
+		expect(yaml.code).toBe(json.code);
 	});
 });

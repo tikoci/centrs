@@ -1,37 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { runCli } from "../../src/cli.ts";
-
-interface Captured {
-	code: number;
-	out: string;
-	err: string;
-}
-
-const restorers: Array<() => void> = [];
-afterEach(() => {
-	while (restorers.length > 0) {
-		restorers.pop()?.();
-	}
-});
-
-async function run(args: readonly string[]): Promise<Captured> {
-	const logs: string[] = [];
-	const errs: string[] = [];
-	const origLog = console.log;
-	const origErr = console.error;
-	console.log = (...a: unknown[]) => {
-		logs.push(a.map(String).join(" "));
-	};
-	console.error = (...a: unknown[]) => {
-		errs.push(a.map(String).join(" "));
-	};
-	restorers.push(() => {
-		console.log = origLog;
-		console.error = origErr;
-	});
-	const code = await runCli(args);
-	return { code, out: logs.join("\n"), err: errs.join("\n") };
-}
+import { describe, expect, test } from "bun:test";
+import { runCliCaptured as run } from "./cli-capture.ts";
 
 // Representative bad invocations for each runner: a missing flag value, a bad
 // value, or a missing required positional. Each must reach the runner's typed

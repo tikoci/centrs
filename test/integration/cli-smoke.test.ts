@@ -331,13 +331,19 @@ describe("CLI smoke (real subprocess, no network)", () => {
 	});
 
 	test("explain with no input and no stdin is a usage error, not an empty analysis", async () => {
-		// stdin is /dev/null here, so the read succeeds with nothing — the case the
-		// isTTY guard alone would miss.
-		const res = await runCliProcess({ args: ["explain", "--json"] });
-		expect(res.exitCode).toBe(1);
-		const envelope = parseEnvelope(res.stderrText);
-		expect(envelope.ok).toBe(false);
-		expect(envelope.error?.code).toBe("input/invalid-command");
+		// Both real shapes of "nothing on stdin": fd 0 bound to /dev/null (no
+		// `stdin` option) and an empty pipe. Neither is a TTY, so the isTTY guard
+		// alone would have analyzed "" in both.
+		for (const stdin of [undefined, ""]) {
+			const res = await runCliProcess({
+				args: ["explain", "--json"],
+				...(stdin === undefined ? {} : { stdin }),
+			});
+			expect(res.exitCode).toBe(1);
+			const envelope = parseEnvelope(res.stderrText);
+			expect(envelope.ok).toBe(false);
+			expect(envelope.error?.code).toBe("input/invalid-command");
+		}
 	});
 
 	test("explain exits 2 when the verdict meets --fail-on (real process code)", async () => {

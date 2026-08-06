@@ -121,7 +121,7 @@ core and carry their own state, tracked here:
 | Surface | State | Spec | Notes |
 | ------- | ----- | ---- | ----- |
 | ts-api | `CHR-passed` | `src/index.ts` | Root TypeScript library surface; everything else adapts it. |
-| cli | `coded` | `src/cli/` | `retrieve`/`execute`/`transfer`/`terminal`/`devices`/`discover`/`btest` wired. |
+| cli | `coded` | `src/cli/` | Every command in `cliCommands` (`src/cli.ts`) is wired: `retrieve`/`execute`/`api`/`transfer`/`terminal`/`explain`/`devices`/`discover`/`btest`/`mcp`/`settings`, plus the `upload`/`download` shortcuts. |
 | mcp | `CHR-passed` | `commands/mcp/` | Scoped-verb stdio MCP server; details in `commands/mcp/README.md` and `test/integration/mcp.test.ts`. |
 | tui | `not-started` | `src/tui.ts` | Stub. |
 | proxy | `not-started` | `src/webproxy.ts` | Stub. |
