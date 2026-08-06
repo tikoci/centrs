@@ -294,13 +294,24 @@ export {
 	executeFanout,
 	renderExecuteFanoutEnvelope,
 } from "./execute-fanout.ts";
+// The lexer's own names are module-scoped and read naturally there; at the
+// package root they need the `Explain` prefix every other explain export
+// carries — a bare `Argument` says nothing about which of centrs's surfaces it
+// belongs to. Aliasing at the re-export is the existing pattern here (see
+// `occurrences as explainOccurrences` below).
+//
+// `ExplainArgument` and `ExplainArgumentToken` are the same SHAPE in two
+// coordinate spaces: this one is what `lexArguments` returns, with spans
+// relative to the statement it was handed; the `Token` is that rebased into
+// document space by `explainCommand`. A consumer reading `explainCommand`'s
+// result wants the latter.
 export {
-	type Argument,
-	type ArgumentKind,
-	type ArgumentReading,
-	type ArgumentsRead,
-	type ArgumentsUnread,
-	lexArguments,
+	type Argument as ExplainArgument,
+	type ArgumentKind as ExplainArgumentKind,
+	type ArgumentReading as ExplainArgumentReading,
+	type ArgumentsRead as ExplainArgumentsRead,
+	type ArgumentsUnread as ExplainArgumentsUnread,
+	lexArguments as lexExplainArguments,
 } from "./explain/args.ts";
 export {
 	DIRECTIVE_BODY,
