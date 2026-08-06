@@ -1132,18 +1132,146 @@ describe("explain/symbols — F7 declaration claim (#201)", () => {
 	});
 });
 
-describe("explain/symbols — known limits (#201)", () => {
-	// Pinned so a fix flips them deliberately, in the Q16 style: each carries the
-	// device reading it does not yet reproduce.
-	test("K2 the doubled-sigil stop is statement-leading only", () => {
-		// CHR 7.23.2 errors at the doubled separator here too, but `:put //foo`
-		// and `url=//example.com` are valid, so this needs parser context.
-		const r = resolveSymbols("/ip//address print\n:put $foo");
-		expect(r.notes).toEqual([]);
-		expect(r.occurrences.map((o) => o.cls)).toEqual(["parameter"]);
-		// the forms that MUST stay clean
-		for (const valid of [":put //foo", "/tool fetch url=//example.com"])
-			expect(resolveSymbols(valid).notes).toEqual([]);
+/**
+ * F8 — a sigil is a DEFECT in menu-path position (#201, was the K2 known limit).
+ *
+ * Every offset below is the device's own error cliff on CHR 7.23.2, captured by
+ * `.scratch/explain-201-k2-chr-probe{,2}.ts` and replayed against this module by
+ * `.scratch/explain-201-k2-probe-check.ts` (71/73 rows, 0 false positives, 0
+ * wrong offsets; the 2 remaining are the device's SEPARATE "argument before a
+ * command" error, which lands on the `=`, not on a sigil).
+ *
+ * K2 said telling `/ip//address print` from `:put //foo` needed parser context
+ * the lexical scan did not have. What it actually needs is the region that ends
+ * at the COMMAND, and the device does not end it at a verb: `/ip address zzzz
+ * //foo` is as clean as `/ip address print //foo`, while `/ip address //foo` —
+ * nothing having ended the path — is a hard error. That is a menu-table
+ * question, which `menus.ts` (#207) already answers.
+ */
+describe("explain/symbols — F8 mid-statement defect (#201)", () => {
+	const stop = (input: string): string | null =>
+		resolveSymbols(input).notes.find((n) => n.startsWith("bad-sigil:")) ?? null;
+
+	test("a doubled separator inside a path stops at the SECOND sigil", () => {
+		// `/` is a legal separator when adjacent to the segment before it, so the
+		// error is the one that follows it.
+		expect(stop("/ip//address print")).toBe("bad-sigil:4");
+		expect(stop("/ip///address print")).toBe("bad-sigil:4");
+		expect(stop("ip//address print")).toBe("bad-sigil:3");
+		expect(stop("/interface//print")).toBe("bad-sigil:11");
+		expect(stop("/ip/firewall//filter print")).toBe("bad-sigil:13");
+		expect(stop("/ip address//print")).toBe("bad-sigil:12");
+	});
+
+	test("a `/` starting a space-separated segment stops at the FIRST sigil", () => {
+		// after a space it is not a separator at all, so the slash itself is wrong
+		// — single or doubled, the device errors on the same byte.
+		expect(stop("/ip /address print")).toBe("bad-sigil:4");
+		expect(stop("/ip //address print")).toBe("bad-sigil:4");
+		expect(stop("/ip address /print")).toBe("bad-sigil:12");
+		expect(stop("/ip address //print")).toBe("bad-sigil:12");
+		expect(stop("/ip address //foo")).toBe("bad-sigil:12");
+		expect(stop("ip /address print")).toBe("bad-sigil:3");
+	});
+
+	test("a `:` is never legal in a path, doubled or not", () => {
+		expect(stop("/ip:address print")).toBe("bad-sigil:3");
+		expect(stop("/ip::address print")).toBe("bad-sigil:3");
+	});
+
+	test("the path region ends at the first word that is not a menu", () => {
+		// a verb ends it…
+		expect(stop("/ip address print //foo")).toBeNull();
+		expect(stop("/ip address find //foo")).toBeNull();
+		expect(stop("/ip address print /foo")).toBeNull();
+		// …and so does a word that is not a verb at all, which is why this is a
+		// menu-table question and not a verb-list one.
+		expect(stop("/ip address zzzz //foo")).toBeNull();
+		expect(stop("/interface monitor //foo")).toBeNull();
+		expect(stop("/ip address export //foo")).toBeNull();
+		// a `:`-spelled head is a scripting directive, never a path
+		expect(stop(":put //foo")).toBeNull();
+		expect(stop(":put ::foo")).toBeNull();
+		expect(stop(":put :/foo")).toBeNull();
+		expect(stop(":put /:foo")).toBeNull();
+		// …and a colon-less head that is not a known menu is a command
+		expect(stop("put //foo")).toBeNull();
+		expect(stop("put ::foo")).toBeNull();
+	});
+
+	test("a bracket opens its own path region (F6)", () => {
+		expect(stop(":put [/ip//address print]")).toBe("bad-sigil:10");
+		expect(stop("[/ip//address print]")).toBe("bad-sigil:5");
+		// the bracket's own head decides it, not the enclosing statement's
+		expect(stop("/ip route set [find //foo] disabled=yes")).toBeNull();
+		expect(stop(":foreach i in=[/ip address find] do={:put $i}")).toBeNull();
+	});
+
+	test("a token that cannot be a path segment ends the region", () => {
+		// Found in review: `/ip 1 //ip/address` is CLEAN on CHR 7.23.2 — `1` is an
+		// `obj-inactive` object name and every later byte is `none` — so stopping at
+		// the `//` was a false positive against the oracle this module is scored on.
+		// Only the RUNTIME rejects it, and at the `1`, not the `//`:
+		//   /ip 1 //ip/address  ->  bad command name 1 (line 1 column 5)
+		// Before this guard these seven rows stopped wrongly and four more stopped
+		// at the wrong offset.
+		expect(stop("/ip 1 //ip/address")).toBeNull();
+		expect(stop("/ip 1.1.1.1 /bad")).toBeNull();
+		expect(stop("/ip 1.1.1.1 //bad")).toBeNull();
+		expect(stop("/ip 1")).toBeNull();
+		expect(stop("{ /ip 1 //ip/address }")).toBeNull();
+		expect(stop("/ip address 1 //bad")).toBeNull();
+		expect(stop("/ip -1 //bad")).toBeNull();
+		expect(stop("/ip 1 :bad")).toBeNull();
+		// `$`, `"`, `(` and `[` in path position are hard device errors on their own
+		// first byte, which this walker does not model. Staying silent is the safe
+		// reading; reporting a defect further along would be the wrong offset.
+		expect(stop('/ip "quoted" //bad')).toBeNull();
+		expect(stop("/ip $var //bad")).toBeNull();
+		expect(stop("/ip (1) //bad")).toBeNull();
+		expect(stop("/ip [find] //bad")).toBeNull();
+		// …and the control still fires: nothing ended the path here.
+		expect(stop("/ip //bad")).toBe("bad-sigil:4");
+	});
+
+	test("the stop truncates like F4/F5: earlier bindings survive it", () => {
+		// CHR 7.23.2 classes every byte after the cliff `none`, so a declaration
+		// after it is not real and one before it is.
+		const after = resolveSymbols("/ip//address print\n:local v 1\n:put $v");
+		expect(after.notes).toEqual(["bad-sigil:4"]);
+		expect(after.occurrences).toEqual([]);
+		const before = resolveSymbols(":local v 1\n/ip//address print\n:put $v");
+		expect(before.notes).toEqual(["bad-sigil:15"]);
+		expect(before.occurrences.map((o) => [o.name, o.cls])).toEqual([
+			["v", "local"],
+		]);
+	});
+
+	test("the false-positive battery: real scripts must stay clean", () => {
+		// The expensive failure mode is a WRONG stop — it truncates the analysis
+		// and destroys every later binding. Over the whole 913-script frozen corpus
+		// there is no file where this stops and the device is clean.
+		for (const clean of [
+			"/ipv6 address add address=fe80::1/64 interface=ether1",
+			"/ipv6 route add dst-address=::/0 gateway=fe80::1",
+			"/ip route add dst-address=0.0.0.0/0 gateway=1.1.1.1",
+			"/interface bridge host print where mac-address=00:11:22:33:44:55",
+			"/system clock set time=00:00:00",
+			"/tool fetch url=https://example.com/a//b",
+			"/tool fetch url=//example.com",
+			"/ip address set 0 comment=a//b",
+			"/ip firewall filter add chain=forward action=drop",
+			"/user-manager user print",
+			'/system script add name=s source="/ip//address print"',
+			'/ip address print where address~"::"',
+			'"/ip//address"',
+			"# a//b",
+			":put ::1",
+			":local x //foo",
+			":put http://example.com",
+			"/ip address export file=backup",
+		])
+			expect(stop(clean)).toBeNull();
 	});
 
 	test("K4 a bare hyphenated reference to a quoted declaration", () => {
