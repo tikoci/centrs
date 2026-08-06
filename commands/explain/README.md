@@ -457,15 +457,18 @@ Standard envelope (constitution: result envelope); `data` sketch:
 
 ### What phase 1 offline actually emits (#202a)
 
-The sketch above is the whole shape. `src/explain.ts` ships these parts of it,
-and the gaps are decisions with reasons, not oversights — a later phase closes
-each by ADDING a field, never by changing one:
+The sketch above is the whole shape, and `examples.md` describes the FINISHED
+command — both stay as they are. This table says which parts `src/explain.ts`
+ships today, so a reader can tell a decision from an oversight. Every gap closes
+by ADDING a field, never by changing one, which is why the examples do not need
+to move: an example asserting a field this phase omits is simply not green yet,
+and its phase is named below.
 
 | Part | Phase 1 offline |
 | ---- | --------------- |
 | `input`, `verdict`, `canonical`, `structure`, `diagnostics`, `evidence`, `runtimeAcceptance` | complete |
 | `structure.statements[].command` | `path` + `verb`; **no `args`** |
-| `structure.statements[].transport` | **absent** — #202c |
+| `structure.statements[].transport` | **absent** — #202c, which greens examples 1, 2, 6 and 23 |
 | `spans` | comment runs and resolved variable classes only |
 | `schema`, `completion` | absent — live evidence, phase 2 |
 
@@ -475,19 +478,26 @@ each by ADDING a field, never by changing one:
   `--curl` needs it, rather than a split on spaces now. `canonical.args` is the
   whole-input structured case and is exact.
 - **Transport is absent, not defaulted.** An `unknown` on every statement would
-  read as a decision that was never made.
+  read as a decision that was never made. Examples 1, 2, 6 and 23 assert
+  transport and are #202c's to green; examples 1b, 3, 4, 18, 18b, 20, 21 and 22
+  are the offline set #202b greens without it.
 - **`spans` carries what offline can prove.** Comment runs, and the variable
   classes Q13 scored at 100% precision on resolved bindings; an abstention is
   omitted rather than rendered as a guess. The full Q12 vocabulary over
   path/verb/argument/value bytes wants device `highlight` as its oracle. A
   subset is not a claim that the vocabulary is closed.
-- **Severity is fixed here, because it drives `--fail-on`.** The six structural
-  defect classes are `error`; `bom`/`non-ascii` are `info` (positional facts —
-  a legal command must not fail); `over-depth` is a `warning` because it is
-  centrs's own resource bound and says nothing about the input's legality; and
-  an `ambiguous`/`unknown` resolution is a `warning`, never an error, so the
-  default `--fail-on error` cannot fail a document whose only sin is being
-  unreadable without a schema — which is most of RouterOS scripting.
+- **Severity is fixed here, because it drives `--fail-on`.** Three buckets, and
+  the split is not "structural vs not":
+  - `error` — `unclosed`, `unbalanced-close`, `unterminated-string`,
+    `bad-escape`, `bad-sigil`. Five classes the device itself rejects.
+  - `warning` — `over-depth`, because it is centrs's own resource bound and says
+    nothing about whether the input is legal; and an `ambiguous`/`unknown`
+    resolution, never an error, so the default `--fail-on error` cannot fail a
+    document whose only sin is being unreadable without a schema — which is most
+    of RouterOS scripting.
+  - `info` — `bom`/`non-ascii` (positional facts: a legal command must not
+    fail), and `context-lost`, which reports a reading that is correct while the
+    document's menu context was already gone.
 
 ## MCP and library surfaces
 

@@ -75,7 +75,7 @@ import {
 import {
 	type Defect,
 	type DefectCode,
-	mergeDefects,
+	isPositionalFact,
 } from "./explain/defects.ts";
 import { type Resolution, resolveDocument } from "./explain/pathresolve.ts";
 import { segmentStatements } from "./explain/segment.ts";
@@ -309,19 +309,29 @@ export type ExplainEnvelope = CentrsSuccessEnvelope<
 	ExplainOperationMeta
 >;
 
-/** Stable evidence ids. One per analysis PASS, because offline that is the
- * finest real distinction: every fact a pass produces has the same provenance,
- * and inventing a per-fact id would imply the passes disagree per fact. */
+/**
+ * Stable evidence ids, one per analysis PASS.
+ *
+ * A pass is the finest distinction that is REAL offline: every fact a pass
+ * produces has the same provenance, and a per-fact id would imply a granularity
+ * the analyzers do not have. But it has to be the pass that actually produced
+ * the fact — `statements` and `subcommands` are separate entries because they
+ * come from different walks, and a defect is tagged where it is RAISED (below),
+ * not with whichever analyzer happens to be merged first.
+ */
 const EV = {
 	canonical: "e0",
 	coordinates: "e1",
 	segment: "e2",
-	resolve: "e3",
-	write: "e4",
-	symbols: "e5",
+	statements: "e3",
+	subcommands: "e4",
+	write: "e5",
+	symbols: "e6",
 } as const;
 
-const EVIDENCE: Record<keyof typeof EV, ExplainEvidence> = {
+type EvidenceKey = keyof typeof EV;
+
+const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 	canonical: {
 		id: EV.canonical,
 		source: "canonicalizer",
@@ -343,10 +353,17 @@ const EVIDENCE: Record<keyof typeof EV, ExplainEvidence> = {
 		basis: "direct",
 		outcome: "ok",
 	},
-	resolve: {
-		id: EV.resolve,
+	statements: {
+		id: EV.statements,
 		source: "canonicalizer",
 		probe: "resolveVerbs",
+		basis: "heuristic",
+		outcome: "ok",
+	},
+	subcommands: {
+		id: EV.subcommands,
+		source: "canonicalizer",
+		probe: "resolveDocument + resolveVerb",
 		basis: "heuristic",
 		outcome: "ok",
 	},
@@ -412,6 +429,57 @@ const DEFECT_DIAGNOSTICS: Record<
 	},
 };
 
+/** A defect plus the analysis pass that raised it. */
+interface AttributedDefect {
+	defect: Defect;
+	ev: string;
+}
+
+/**
+ * De-duplicate the analyzers' defect lists, keeping each region's FIRST
+ * attribution.
+ *
+ * `mergeDefects` answers "which regions are defective"; this also answers "who
+ * said so", which the evidence table needs and cannot recover afterwards — once
+ * the lists are concatenated a `bad-sigil` is indistinguishable from an
+ * `unclosed`, and guessing by class is wrong for the three classes two analyzers
+ * both raise.
+ *
+ * FIRST wins rather than "all who saw it", because a fact carries ONE `ev`. The
+ * order is the argument order, and the coordinate pass is not in it at all: its
+ * two classes are raised inside `segmentStatements`' result, so they are
+ * re-tagged here by class — they are readings of the input as received, not of
+ * any structural walk.
+ *
+ * Identity matches `mergeDefects`: the whole region plus `detail`, never the
+ * code alone, so two `over-depth` events at different offsets stay two defects.
+ */
+function attributeDefects(
+	sources: readonly (readonly [string, readonly Defect[]])[],
+): AttributedDefect[] {
+	const seen = new Map<string, AttributedDefect>();
+	for (const [ev, list] of sources)
+		for (const defect of list) {
+			const key = JSON.stringify([
+				defect.code,
+				defect.start,
+				defect.end,
+				defect.detail,
+			]);
+			if (seen.has(key)) continue;
+			seen.set(key, {
+				defect,
+				ev: isPositionalFact(defect.code) ? EV.coordinates : ev,
+			});
+		}
+	return [...seen.values()].sort(
+		(a, b) =>
+			a.defect.start - b.defect.start ||
+			a.defect.end - b.defect.end ||
+			a.defect.code.localeCompare(b.defect.code),
+	);
+}
+
 /** Build `input.positionMap`: coalesced identity runs, one entry per non-ASCII code point. */
 function positionMap(a: CoordinateAnalysis): ExplainPositionMapEntry[] {
 	const out: ExplainPositionMapEntry[] = [];
@@ -473,16 +541,22 @@ export function explainCommand(input: string): ExplainData {
 	const write = containsWrite(input);
 	const symbols = resolveSymbols(input);
 
-	// Every analyzer re-derives the document's defects from its own walk; the
-	// merge de-dupes on the whole region, so a defect two analyzers both see is
-	// reported once and one only `symbols` sees (its lexical classes) still lands.
-	const defects = mergeDefects(
-		segmented.defects,
-		verbs.defects,
-		brackets.defects,
-		write.defects,
-		symbols.defects,
-	).sort((a, b) => a.start - b.start || a.end - b.end);
+	// Every analyzer re-derives the document's defects from its own walk, so a
+	// defect two analyzers both see must be reported once — and tagged with the
+	// analyzer that RAISED it, not with whichever list was merged first. The
+	// classes do not partition: `unclosed`/`unbalanced-close`/`unterminated-string`
+	// come from the segmenter AND the symbol scan, while `bad-escape`/`bad-sigil`
+	// are the symbol scan alone (they are lexical rules, hence `heuristic`, where
+	// the segmenter's delimiter stack is a `direct` reading). Attributing all of
+	// them to the segmenter said "direct/segmentStatements" about a fact the
+	// segmenter cannot produce.
+	const defects = attributeDefects([
+		[EV.segment, segmented.defects],
+		[EV.statements, verbs.defects],
+		[EV.subcommands, brackets.defects],
+		[EV.write, write.defects],
+		[EV.symbols, symbols.defects],
+	]);
 
 	// From the SPLITS, not from the segmentation. The resolver flattens `do={…}`
 	// bodies in after their parent, so its list is longer than the top-level
@@ -491,19 +565,14 @@ export function explainCommand(input: string): ExplainData {
 	const statements: ExplainStatement[] = verbs.splits.map(statementOf);
 
 	const diagnostics: ExplainDiagnostic[] = [
-		...defects.map((d) => {
+		...defects.map(({ defect: d, ev }) => {
 			const render = DEFECT_DIAGNOSTICS[d.code];
 			return {
 				code: `explain/canonicalizer/${d.code}`,
 				severity: render.severity,
 				message: render.message(d),
 				span: { start: d.start, end: d.end },
-				// A positional fact is a coordinate reading; everything else was
-				// raised by a structural walk.
-				ev:
-					d.code === "bom" || d.code === "non-ascii"
-						? EV.coordinates
-						: EV.segment,
+				ev,
 			};
 		}),
 		...statements.flatMap((s) => diagnosticsForStatement(s)),
@@ -531,6 +600,19 @@ export function explainCommand(input: string): ExplainData {
 	].sort((a, b) => a.start - b.start || a.end - b.end);
 
 	const canonical = canonicalizeExecuteCommand(input);
+	const structure: ExplainStructure = {
+		statementCount: statements.length,
+		statements,
+		blocks: scopeBlocks(input).map((b) => ({
+			name: b.name,
+			span: { start: b.start, end: b.start + b.body.length },
+		})),
+		containsWrite: renderWriteVerdict(write.verdict),
+		subcommands: brackets.resolutions.map(subcommandOf),
+		// `containsWrite` is the fact `structure` itself asserts; the statements
+		// and subcommands beside it carry their own.
+		ev: EV.write,
+	};
 
 	return {
 		input: {
@@ -548,20 +630,10 @@ export function explainCommand(input: string): ExplainData {
 			queries: canonical.queries,
 			writeShaped: isWriteShaped(canonical),
 		},
-		structure: {
-			statementCount: statements.length,
-			statements,
-			blocks: scopeBlocks(input).map((b) => ({
-				name: b.name,
-				span: { start: b.start, end: b.start + b.body.length },
-			})),
-			containsWrite: renderWriteVerdict(write.verdict),
-			subcommands: brackets.resolutions.map(subcommandOf),
-			ev: EV.write,
-		},
+		structure,
 		spans,
 		diagnostics,
-		evidence: citedEvidence(statements, diagnostics, spans),
+		evidence: citedEvidence(structure, diagnostics, spans),
 		runtimeAcceptance: "not-proven",
 	};
 }
@@ -586,7 +658,7 @@ function statementOf(split: DocumentVerbSplit): ExplainStatement {
 		span: { start: split.span.start, end: split.span.end },
 		...readingOf(split),
 		contextCertain: split.contextCertain,
-		ev: EV.resolve,
+		ev: EV.statements,
 	};
 }
 
@@ -608,7 +680,7 @@ function subcommandOf(r: Resolution): ExplainSubcommand {
 		candidates: r.candidates,
 		contextCertain: r.contextCertain,
 		depth: r.depth,
-		ev: EV.resolve,
+		ev: EV.subcommands,
 	};
 }
 
@@ -693,12 +765,15 @@ function diagnosticsForStatement(s: ExplainStatement): ExplainDiagnostic[] {
  * — the opposite of what the provenance table is for.
  */
 function citedEvidence(
-	statements: readonly ExplainStatement[],
+	structure: ExplainStructure,
 	diagnostics: readonly ExplainDiagnostic[],
 	spans: readonly ExplainSpan[],
 ): ExplainEvidence[] {
-	const cited = new Set<string>([EV.canonical, EV.coordinates, EV.write]);
-	for (const s of statements) cited.add(s.ev);
+	// `canonical` and `input` carry no `ev` of their own — they are whole-result
+	// fields, not entries in a list — so their two passes are seeded here.
+	const cited = new Set<string>([EV.canonical, EV.coordinates, structure.ev]);
+	for (const s of structure.statements) cited.add(s.ev);
+	for (const s of structure.subcommands) cited.add(s.ev);
 	for (const d of diagnostics) cited.add(d.ev);
 	for (const s of spans) cited.add(s.ev);
 	return Object.values(EVIDENCE)

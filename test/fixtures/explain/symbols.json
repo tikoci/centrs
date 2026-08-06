@@ -753,7 +753,7 @@
 			"name": "a doubled sigil at statement start is a hard error — stop there",
 			"input": "//local foo 1\n:put $foo",
 			"expect": [],
-			"rule": "F3/F5 — the sigil run must be zero or one character. CHR 7.23.2 errors at the SECOND sigil (`//local` and `:/local` error at offset 1) and classes every later byte `none`, including variables on following lines. So this is not merely 'do not declare': the resolver records `bad-sigil:<offset>` and reports nothing further, the same fail-closed stop a malformed escape gets. Inside a VALUE a doubled slash is ordinary text — `url=http://example.com` and `comment=a//b` are clean on the device — so the check is statement-leading only.",
+			"rule": "F3/F5 — the sigil run must be zero or one character. CHR 7.23.2 errors at the SECOND sigil (`//local` and `:/local` error at offset 1) and classes every later byte `none`, including variables on following lines. So this is not merely 'do not declare': the resolver raises a located `bad-sigil` defect and reports nothing further, the same fail-closed stop a malformed escape gets. Inside a VALUE a doubled slash is ordinary text — `url=http://example.com` and `comment=a//b` are clean on the device — so the check is statement-leading only.",
 			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
 			"defects": [
 				{
@@ -769,7 +769,7 @@
 			"name": "a malformed escape stops the analysis",
 			"input": ":local \\\\\nfoo 1\n:put $foo",
 			"expect": [],
-			"rule": "F4 — in code a backslash is valid only before whitespace. Device: the doubled backslash errors on the FIRST one, `foo` is `none`, and nothing after is a variable. The resolver records `bad-escape:<offset>` and reports nothing further rather than continuing across a boundary the console never crossed.",
+			"rule": "F4 — in code a backslash is valid only before whitespace. Device: the doubled backslash errors on the FIRST one, `foo` is `none`, and nothing after is a variable. The resolver raises a located `bad-escape` defect and reports nothing further rather than continuing across a boundary the console never crossed.",
 			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `.scratch/q13-anchor-chr-probe.ts` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
 			"defects": [
 				{
@@ -899,7 +899,7 @@
 			"name": "empty input resolves to nothing",
 			"input": "",
 			"expect": [],
-			"rule": "Never throws, reports nothing, notes nothing."
+			"rule": "Never throws, reports nothing, raises no defect."
 		},
 		{
 			"id": "X2",
@@ -924,7 +924,7 @@
 					"cls": "local"
 				}
 			],
-			"rule": "Structural notes use the segmenter's vocabulary; classes are still reported for what was read.",
+			"rule": "Structural defects use the segmenter's vocabulary; classes are still reported for what was read.",
 			"defects": [
 				{
 					"code": "unterminated-string",
@@ -948,7 +948,7 @@
 					"cls": "local"
 				}
 			],
-			"rule": "`unbalanced-close:<char>` — same vocabulary as `segment.ts`.",
+			"rule": "An `unbalanced-close` defect carrying the character — same vocabulary as `segment.ts`.",
 			"defects": [
 				{
 					"code": "unbalanced-close",
@@ -973,7 +973,7 @@
 					"cls": "local"
 				}
 			],
-			"rule": "`unclosed:<chars>` lists the delimiters still open at end of input.",
+			"rule": "One `unclosed` defect per delimiter still open at end of input, each pointing at its opener.",
 			"defects": [
 				{
 					"code": "unclosed",

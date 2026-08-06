@@ -120,6 +120,18 @@ describe("explainCommand — structural invariants", () => {
 			for (const id of ids)
 				expect(cited.has(id) || id === "e0" || id === "e1").toBe(true);
 
+			// Provenance is the pass that RAISED the fact. The classes only one
+			// analyzer can produce pin it: a lexical class must never be attributed
+			// to the segmenter's delimiter stack, which cannot see it.
+			const probeOf = (ev: string): string | undefined =>
+				data.evidence.find((e) => e.id === ev)?.probe;
+			for (const d of data.diagnostics) {
+				if (d.code.endsWith("/bad-escape") || d.code.endsWith("/bad-sigil"))
+					expect(probeOf(d.ev)).toBe("resolveSymbols");
+				if (d.code.endsWith("/bom") || d.code.endsWith("/non-ascii"))
+					expect(probeOf(d.ev)).toBe("analyzeCoordinates");
+			}
+
 			// The verdict is the maximum diagnostic severity, nothing else.
 			const rank = { info: 0, warning: 1, error: 2 } as const;
 			const worst = data.diagnostics.reduce(
@@ -410,6 +422,50 @@ describe("diagnostics", () => {
 		);
 		expect(over.length).toBeGreaterThan(0);
 		expect(over.every((d) => d.severity === "warning")).toBe(true);
+	});
+
+	test("a defect is tagged with the pass that raised it, not the first merged", () => {
+		// Both bots caught this: `bad-escape` and `bad-sigil` are the SYMBOL scan's
+		// lexical rules, which is why they are `heuristic`, and the segmenter's
+		// delimiter stack cannot produce them. Attributing every non-positional
+		// defect to the segmenter claimed `direct`/`segmentStatements` for a fact
+		// `segmentStatements` never saw.
+		const data = explainCommand(":local \\\\\nfoo 1");
+		const d = data.diagnostics.find((x) =>
+			x.code.endsWith("/bad-escape"),
+		) as (typeof data.diagnostics)[number];
+		expect(d).toBeDefined();
+		const evidence = data.evidence.find((e) => e.id === d.ev);
+		expect(evidence?.probe).toBe("resolveSymbols");
+		expect(evidence?.basis).toBe("heuristic");
+	});
+
+	test("a class two analyzers both raise keeps its first attribution, once", () => {
+		// `unterminated-string` comes from BOTH the segmenter and the symbol scan.
+		// It is one diagnostic, tagged with the direct reading.
+		const data = explainCommand(':put "unterminated');
+		const hits = data.diagnostics.filter((d) =>
+			d.code.endsWith("/unterminated-string"),
+		);
+		expect(hits).toHaveLength(1);
+		expect(data.evidence.find((e) => e.id === hits[0]?.ev)?.probe).toBe(
+			"segmentStatements",
+		);
+	});
+
+	test("statements and subcommands cite different passes", () => {
+		// They come from different walks; one evidence entry for both would say a
+		// probe ran that did not.
+		const data = explainCommand("/ip/address remove [find comment=defconf]");
+		const statementEv = data.structure.statements[0]?.ev as string;
+		const subcommandEv = data.structure.subcommands[0]?.ev as string;
+		expect(statementEv).not.toBe(subcommandEv);
+		expect(data.evidence.find((e) => e.id === statementEv)?.probe).toBe(
+			"resolveVerbs",
+		);
+		expect(data.evidence.find((e) => e.id === subcommandEv)?.probe).toBe(
+			"resolveDocument + resolveVerb",
+		);
 	});
 
 	test("every diagnostic code is slash-namespaced under explain/", () => {
