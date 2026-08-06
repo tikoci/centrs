@@ -15,6 +15,7 @@ implemented flags live in each command's `commands/<name>/README.md`.
 | [`api`](#api) | Structured RouterOS API passthrough (gh-api style) over REST or native API. |
 | [`transfer`](#transfer) | Copy files to/from a RouterOS device and manage device files (rest/native/sftp). |
 | [`terminal`](#terminal) | Open an interactive RouterOS console (ssh or mac-telnet). |
+| [`explain`](#explain) | Analyze a RouterOS command offline: canonical form, structure, and syntax diagnostics. |
 | [`devices`](#devices) | Inspect and mutate the CDB-backed device registry. `devices` is the only command that writes the CDB. |
 | [`discover`](#discover) | Discover RouterOS neighbors over MNDP and optionally save them into the CDB. |
 | [`btest`](#btest) | Run MikroTik's bandwidth test as a client or server (peer measurement). |
@@ -205,6 +206,25 @@ Usage: centrs terminal <router> [flags]
 | `--format` | &lt;text\|json\|yaml&gt; | Error-envelope format on failure. --json / --yaml shortcuts. |
 | `--json` |  | Shortcut for --format json. |
 | `--yaml` |  | Shortcut for --format yaml. |
+| `--verbose` |  | Verbose error output. |
+
+## explain
+
+Analyze a RouterOS command offline: canonical form, structure, and syntax diagnostics.
+
+```text
+Usage: centrs explain '<input>' [flags]
+```
+
+| Flag | Value | Description |
+| ---- | ----- | ----------- |
+| `--file` | `<path>` | Read the input from a file instead of the positional (`-` reads stdin). Piped stdin is used automatically when no input positional is given. |
+| `--fail-on` | &lt;error\|warning\|never&gt; | Exit 2 when the verdict reaches this severity. Default `error`; an ambiguous or unknown statement is a warning, never an error. |
+| `--complete` |  | Continuation candidates at the cursor. Live evidence — offline emits a tip and enumerates nothing. |
+| `--schema` |  | Path enumeration (verbs, args, types, enums). Live evidence — offline emits a tip and enumerates nothing. |
+| `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
+| `--json` |  | Shortcut for `--format json`. |
+| `--yaml` |  | Shortcut for `--format yaml`. |
 | `--verbose` |  | Verbose error output. |
 
 ## devices

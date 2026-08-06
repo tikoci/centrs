@@ -316,4 +316,37 @@ describe("CLI smoke (real subprocess, no network)", () => {
 			await rm(home, { recursive: true, force: true });
 		}
 	});
+
+	// `explain` is offline by construction, so the subprocess tier is where its
+	// two process-level facts live: fd 0 as an input carrier, and a real exit
+	// code (the in-process harness only sees `runCli`'s return value).
+	test("explain reads a piped script from stdin (#202b)", async () => {
+		const res = await runCliProcess({
+			args: ["explain", "--json"],
+			stdin: "/ip/route\n",
+		});
+		expect(res.exitCode).toBe(0);
+		const envelope = parseEnvelope(res.stdoutText);
+		expect(envelope.ok).toBe(true);
+	});
+
+	test("explain with no input and no stdin is a usage error, not an empty analysis", async () => {
+		// stdin is /dev/null here, so the read succeeds with nothing — the case the
+		// isTTY guard alone would miss.
+		const res = await runCliProcess({ args: ["explain", "--json"] });
+		expect(res.exitCode).toBe(1);
+		const envelope = parseEnvelope(res.stderrText);
+		expect(envelope.ok).toBe(false);
+		expect(envelope.error?.code).toBe("input/invalid-command");
+	});
+
+	test("explain exits 2 when the verdict meets --fail-on (real process code)", async () => {
+		const res = await runCliProcess({
+			args: ["explain", ':put "unterminated', "--json"],
+		});
+		expect(res.exitCode).toBe(2);
+		const envelope = parseEnvelope(res.stdoutText);
+		// Exit 2 is the verdict, not a failure: the diagnostics ARE the data.
+		expect(envelope.ok).toBe(true);
+	});
 });

@@ -44,6 +44,7 @@ const badInvocations: ReadonlyArray<{ name: string; args: string[] }> = [
 	},
 	{ name: "devices", args: ["devices", "show"] },
 	{ name: "discover", args: ["discover", "--port"] },
+	{ name: "explain", args: ["explain", "/ip/route", "--fail-on", "loud"] },
 	{ name: "mcp", args: ["mcp", "--bogus-flag"] },
 ];
 

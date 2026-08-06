@@ -5,10 +5,12 @@ offline examples run under `test/unit/explain.test.ts` and live examples under
 `test/integration/explain.test.ts` (rest-api) and
 `test/integration/native-api-explain.test.ts` (native-api) against a CHR booted by
 `@tikoci/quickchr` — one assertion per example (example N ↔ assertion N).
-Until then these are the **target**: the cells are `designed`, nothing here is
-green yet, and flag and field names track the ratified surface in `README.md`.
+The offline examples (1b, 3, 4, 4b, 5, 17, 18, 18b, 20, 21, 22) are **green**
+as of #202b; 1, 2, 6 and 23 assert `transport`/`--curl` and are #202c's. The
+live examples are still the **target**: those cells are `designed`, and flag and
+field names track the ratified surface in `README.md`.
 
-A letter-suffixed example (`1b`, `18b`) is the **counterpart** of the number it
+A letter-suffixed example (`1b`, `4b`, `18b`) is the **counterpart** of the number it
 follows: the same question with the other answer, added where implementing the
 spec showed that one example was carrying two contradictory readings. It gets its
 own assertion (`1b` ↔ assertion `1b`); the numbering never renumbers, because
@@ -86,7 +88,7 @@ evidence entry) because of the outer `remove`.
 ### 4. Same token, different role: `comment` as verb vs argument
 
 ```bash
-centrs explain '/ip/address comment numbers=0 comment=uplink' --json
+centrs explain '/ip/address/comment numbers=0 comment=uplink' --json
 ```
 
 `data.canonical.verb` is `"comment"` — at this position `comment` is the
@@ -94,6 +96,26 @@ RouterOS *verb* — while `data.canonical.args` carries the `comment` *argument*
 with its value. The two roles of the same word are distinguished by position,
 and both facts cite canonicalizer evidence (offline heuristics; live
 completion is the authority — see examples 13–15).
+
+**The verb must be IN the path here too**, for the same reason as example 1:
+this example originally spelled the input `/ip/address comment …`, which the
+gate reads as `script` with an empty `path`/`verb`/`args`, so neither role was
+visible in `canonical` at all. The two-role contrast is a claim about the
+gate's split, so the example uses the spelling the gate splits. The space
+spelling is example 4b.
+
+### 4b. The space spelling keeps the verb role and loses the argument one
+
+```bash
+centrs explain '/ip/address comment numbers=0 comment=uplink' --json
+```
+
+`data.canonical.mode` is `"script"` with `verb: ""` and `args: {}` — the gate
+declines the whole input, so it distinguishes no roles. `data.structure.statements[0].command`
+is still `{ path: "/ip/address", verb: "comment" }`: the analysis reads the verb
+role from either spelling. The *argument* role has no offline home in this
+spelling until per-statement `args` land (#202c) — which is the honest state,
+not an omission.
 
 ### 5. Offline is honest about what it cannot know
 

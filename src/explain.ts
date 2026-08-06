@@ -70,8 +70,13 @@
  *     It is the inspect-vs-runtime gap made machine-readable, not a placeholder.
  */
 
-import type { CentrsSuccessEnvelope, EnvelopeMeta } from "./core/envelope.ts";
+import type {
+	CentrsErrorEnvelope,
+	CentrsSuccessEnvelope,
+	EnvelopeMeta,
+} from "./core/envelope.ts";
 import { buildTip, type Tip, type Warning } from "./core/envelope.ts";
+import { CentrsError, serializeCentrsError } from "./errors.ts";
 import {
 	type CanonicalExecuteCommand,
 	canonicalizeExecuteCommand,
@@ -97,6 +102,7 @@ import {
 	type VerbSplit,
 } from "./explain/verbsplit.ts";
 import { containsWrite, type WriteVerdict } from "./explain/write.ts";
+import { toYaml } from "./retrieve.ts";
 
 /** A half-open analyzed-byte span, the coordinate contract of `coordinates.ts`. */
 export interface ExplainSpanRange {
@@ -860,7 +866,7 @@ export function explainEnvelope(input: string): ExplainEnvelope {
 		buildTip(
 			"tip/explain-offline-only",
 			"No router was given, so this is the canonicalizer's reading alone.",
-			"Pass a router (`centrs explain <router> '<input>'`) for completion, schema, and `:parse` evidence.",
+			"Completion, schema, and `:parse` evidence come from a live target (`centrs explain <router> '<input>'`), which is phase 2 and not accepted yet.",
 		),
 	];
 	const warnings: Warning[] = [];
@@ -877,4 +883,186 @@ export function explainEnvelope(input: string): ExplainEnvelope {
 		},
 	};
 	return { ok: true, data, warnings, tips, meta };
+}
+
+/**
+ * The facets that need a device, requested offline.
+ *
+ * `--complete` and `--schema` are enumeration, and enumeration is live evidence:
+ * offline has no schema snapshot to consult (the ratified no-static-snapshot
+ * decision), so the honest answer is an empty result plus a tip naming what
+ * would answer it. Fabricating candidates from a bundled table is exactly the
+ * failure mode the decision exists to prevent.
+ */
+export function buildExplainFacetTip(facets: readonly string[]): Tip {
+	const named = facets.join(" and ");
+	return buildTip(
+		"tip/explain-live-facets",
+		`${named} enumerate what a device accepts, and no router was given — so nothing is enumerated here.`,
+		"Name a router once live evidence lands (phase 2); until then use `rosetta` for documented RouterOS schema facts.",
+	);
+}
+
+export const explainOutputFormats = ["text", "json", "yaml"] as const;
+export type ExplainOutputFormat = (typeof explainOutputFormats)[number];
+
+/** `--fail-on` thresholds, in the order the CLI documents them. */
+export const explainFailOnLevels = ["error", "warning", "never"] as const;
+export type ExplainFailOn = (typeof explainFailOnLevels)[number];
+
+/**
+ * Exit `2` when the verdict meets the threshold, `0` otherwise — the `check`
+ * pattern (`commands/explain/README.md` → Surface).
+ *
+ * Note what `--fail-on error` does NOT fail on: an `ambiguous`/`unknown`
+ * statement is a warning by construction, so a script that is merely unreadable
+ * without a schema still exits `0`. That is the whole reason the two verdicts
+ * are separate — a resolution is not a severity.
+ */
+export function explainExitCode(
+	verdict: ExplainVerdict,
+	failOn: ExplainFailOn,
+): 0 | 2 {
+	if (failOn === "never") return 0;
+	if (failOn === "warning") return verdict === "pass" ? 0 : 2;
+	return verdict === "fail" ? 2 : 0;
+}
+
+export type ExplainErrorEnvelope = CentrsErrorEnvelope<ExplainOperationMeta>;
+
+/**
+ * A usage failure, in the same envelope. No `operation` block: nothing was
+ * analyzed, so there is no statement count or verdict to report, and an
+ * invented one would read as an analysis that ran.
+ */
+export function buildExplainErrorEnvelope(
+	error: unknown,
+	tips: readonly Tip[] = [],
+): ExplainErrorEnvelope {
+	const centrs =
+		error instanceof CentrsError
+			? error
+			: new CentrsError({
+					code: "internal/unhandled",
+					summary: error instanceof Error ? error.message : String(error),
+					remediation:
+						"This is a centrs bug; re-run with --verbose and file an issue with the printed code.",
+				});
+	return {
+		ok: false,
+		error: serializeCentrsError(centrs),
+		warnings: [],
+		tips,
+		meta: { target: {}, via: null, settings: {} },
+	};
+}
+
+export function renderExplainEnvelope(
+	envelope: ExplainEnvelope | ExplainErrorEnvelope,
+	format: ExplainOutputFormat,
+): string {
+	if (format === "json") return JSON.stringify(envelope, null, 2);
+	if (format === "yaml") return toYaml(envelope);
+	return renderExplainText(envelope);
+}
+
+function span(s: ExplainSpanRange): string {
+	return `[${s.start},${s.end})`;
+}
+
+/** Tips in the shared text shape (`src/cli/missing-target.ts` renders the same block). */
+function tipLines(tips: readonly Tip[]): string[] {
+	if (tips.length === 0) return [];
+	const lines = ["", "Tips:"];
+	for (const tip of tips) {
+		lines.push(`  - [${tip.code}] ${tip.message}`);
+		if (tip.fix) lines.push(`    fix: ${tip.fix}`);
+	}
+	return lines;
+}
+
+/**
+ * One statement or subcommand: what it resolved to, or why it did not.
+ *
+ * `path=`/`verb=` rather than a bare `<path> <verb>`, because a scripting
+ * command resolves to path `/` plus its verb (`:foreach` is `/` + `foreach`)
+ * and `/ foreach` reads like a typo, while `/foreach` reads like a menu.
+ */
+function renderReading(reading: ExplainReading): string {
+	if (reading.resolution !== "resolved")
+		return `${reading.resolution.padEnd(9)}  ${reading.unresolved}`;
+	return reading.kind === "menu"
+		? `resolved  menu     path=${reading.command.path}`
+		: `resolved  command  path=${reading.command.path} verb=${reading.command.verb}`;
+}
+
+/**
+ * The human format.
+ *
+ * Deliberately not a pretty-print of `data`: the text surface answers "what did
+ * I write and what is wrong with it", so it leads with the two verdicts and the
+ * gate, and drops empty sections. `--json` is the complete shape.
+ */
+function renderExplainText(
+	envelope: ExplainEnvelope | ExplainErrorEnvelope,
+): string {
+	const lines: string[] = [];
+	if (!envelope.ok) {
+		lines.push(`[${envelope.error.code}] ${envelope.error.summary}`);
+		if (envelope.error.remediation)
+			lines.push(`Fix: ${envelope.error.remediation}`);
+		if (envelope.error.detailsUrl)
+			lines.push(`Details: ${envelope.error.detailsUrl}`);
+		lines.push(...tipLines(envelope.tips));
+		return lines.join("\n");
+	}
+
+	const { data } = envelope;
+	const { canonical, structure } = data;
+	lines.push(
+		`verdict: ${data.verdict} — ${structure.statementCount} statement(s), ${data.diagnostics.length} diagnostic(s)`,
+	);
+	const argCount = Object.keys(canonical.args).length;
+	lines.push(
+		`gate: ${canonical.mode}${canonical.path ? ` ${canonical.path}` : ""}${canonical.verb ? ` ${canonical.verb}` : ""} · ${argCount} arg(s)${canonical.writeShaped ? " · write-shaped" : ""}`,
+	);
+	lines.push(`write: ${structure.containsWrite}`);
+	if (data.input.normalized)
+		lines.push(
+			`input: ${data.input.bytes} byte(s), normalized (non-ASCII stood in for one-for-one)`,
+		);
+	if (structure.statements.length > 0) {
+		lines.push("statements:");
+		for (const s of structure.statements)
+			lines.push(
+				`  ${span(s.span).padEnd(12)} ${renderReading(s)}${s.contextCertain ? "" : "  (context lost)"}`,
+			);
+	}
+	if (structure.subcommands.length > 0) {
+		lines.push("subcommands:");
+		for (const s of structure.subcommands)
+			lines.push(
+				`  ${span(s.span).padEnd(12)} ${renderReading(s)}  (in ${s.context}, depth ${s.depth})`,
+			);
+	}
+	if (structure.blocks.length > 0) {
+		lines.push("blocks:");
+		for (const b of structure.blocks)
+			lines.push(`  ${span(b.span).padEnd(12)} ${b.name}`);
+	}
+	if (data.diagnostics.length > 0) {
+		lines.push("diagnostics:");
+		for (const d of data.diagnostics)
+			lines.push(
+				`  ${d.severity.padEnd(7)} ${span(d.span).padEnd(12)} ${d.code}: ${d.message}`,
+			);
+	}
+	lines.push(
+		`evidence: ${data.evidence.map((e) => `${e.id} ${e.probe} (${e.basis})`).join(", ")}`,
+	);
+	lines.push(`runtimeAcceptance: ${data.runtimeAcceptance}`);
+	for (const w of envelope.warnings)
+		lines.push(`warning: [${w.code}] ${w.message}`);
+	lines.push(...tipLines(envelope.tips));
+	return lines.join("\n");
 }
