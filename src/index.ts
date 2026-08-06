@@ -385,6 +385,28 @@ export {
 	type WriteVerdict,
 } from "./explain/write.ts";
 export {
+	type ExplainBlock,
+	type ExplainCanonical,
+	type ExplainData,
+	type ExplainDiagnostic,
+	type ExplainEnvelope,
+	type ExplainEvidence,
+	type ExplainInput,
+	type ExplainOperationMeta,
+	type ExplainPositionMapEntry,
+	type ExplainResolution,
+	type ExplainSeverity,
+	type ExplainSpan,
+	type ExplainSpanClass,
+	type ExplainSpanRange,
+	type ExplainStatement,
+	type ExplainStructure,
+	type ExplainSubcommand,
+	type ExplainVerdict,
+	explainCommand,
+	explainEnvelope,
+} from "./explain.ts";
+export {
 	type ApiVerb,
 	createProtocolAdapter,
 	getProtocolPlan,
