@@ -358,6 +358,7 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 			],
 			comments: [{ start: 8, end: 11 }],
 			notes: [],
+			defects: [],
 		});
 		// CRLF is the same shape one byte later.
 		expect(maskComments(":put a\\\r\n# x\r\n:put b").slice(9, 12)).toBe(

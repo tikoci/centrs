@@ -95,6 +95,15 @@ export const DIRECTIVE_BODY: Record<string, string> = {
 export interface ScopeBlock {
 	name: string;
 	body: string;
+	/**
+	 * Offset of `body`'s first character within the text `scopeBlocks` was given
+	 * — i.e. one past the opening `{`.
+	 *
+	 * Without it a caller that re-segments `body` gets BODY-RELATIVE offsets and
+	 * no way to rebase them, so a span or region found inside a `do={…}` cannot
+	 * be reported in document space. `pathresolve` is that caller.
+	 */
+	start: number;
 }
 
 /**
@@ -162,7 +171,12 @@ export function scopeBlocks(text: string): ScopeBlock[] {
 			const end = matchBraceInMasked(masked, i);
 			if (depth === 0) {
 				const name = scopeNameFromMasked(masked, i);
-				if (name !== null) blocks.push({ name, body: text.slice(i + 1, end) });
+				if (name !== null)
+					blocks.push({
+						name,
+						body: text.slice(i + 1, end),
+						start: i + 1,
+					});
 			}
 			i = end;
 		} else if (c === "}") {

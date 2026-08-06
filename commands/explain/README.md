@@ -414,8 +414,27 @@ Standard envelope (constitution: result envelope); `data` sketch:
   spans (or line/column from `:parse`), and follow the standard error-model
   severity channels. **Malformed input carries a defect *region*** (Q14): each
   diagnostic points at the byte span of its defect, and the detectable classes
-  are {unbalanced delimiter, unterminated string, stray mid-token delimiter,
-  invalid escape, BOM, non-ASCII, truncation, over-depth nesting}. Two hard
+  are {unbalanced delimiter, unterminated string, invalid escape, invalid sigil,
+  BOM, non-ASCII, over-depth nesting}. **Two classes named in the phase-0 draft
+  of this list are deliberately deferred** (maintainer decision, #192), because
+  each would require offline to assert something it cannot prove:
+  - **truncation** — offline cannot distinguish a truncated *complete-looking*
+    token from a finished one without a schema, as the `--complete` paragraph
+    below already states. What is detectable is the *continuation state*
+    (trailing `=`, open delimiter), which is a `--complete` concern reported
+    against a live target, not a defect region. Emitting it as a defect would be
+    the confident-claim-on-ambiguous-input posture Q14 forbids.
+  - **stray mid-token delimiter** — plausible but ungrounded. It needs a probe
+    matrix (spellings × positions × accepted-form neighbors) before a detector
+    is worth having; the #201 round is the standing evidence that a lexical rule
+    curated from intuition produces defects the corpus cannot reach.
+
+  Both remain candidates; re-opening either means grounding it first and
+  amending this list. `BOM` and `non-ASCII` are **positional facts, never
+  errors** — they record where the byte-count-preserving normalization stood in
+  for unreadable bytes, and a renderer must not give them error severity (a
+  non-ASCII value such as `name="router-🚀"` is a legal command, and non-ASCII
+  occurs in ~12% of the phase-0 corpus). Two hard
   recovery rules follow from the phase-0 mutation suite, both **fail-closed**:
   (a) corruption may only degrade a command to `ambiguous`/`unknown`, **never
   invent a confident one** after a defect region — the same fail-closed floor as

@@ -85,9 +85,16 @@
  * poisoning here would re-price that limit rather than close the cascade.
  */
 
-import { isScopeBrace, scopeBodies } from "./blocks.ts";
+import { isScopeBrace, scopeBlocks, scopeBodies } from "./blocks.ts";
+import {
+	type Defect,
+	isPositionalFact,
+	mergeDefects,
+	rebaseDefects,
+} from "./defects.ts";
 import {
 	maskComments,
+	type SegmentResult,
 	scanQuotedString,
 	segmentStatements,
 } from "./segment.ts";
@@ -339,6 +346,12 @@ export interface Resolution {
 	depth: number;
 	/** Feature class, for per-class reporting. */
 	klass: string;
+	/**
+	 * The `[…]` in DOCUMENT analyzed-byte space, closing bracket included. Widens
+	 * to the enclosing statement where interior offsets cannot be mapped — see
+	 * {@link Loc}.
+	 */
+	span: Span;
 }
 
 /** The canonical path of one statement in source order (Q4). */
@@ -364,6 +377,8 @@ export interface StatementResolution {
 	 * so a `false` here does not by itself invalidate `path`.
 	 */
 	contextCertain: boolean;
+	/** This statement in DOCUMENT analyzed-byte space. */
+	span: Span;
 }
 
 /** Q3 result: bracket resolutions plus any structural / over-depth notes. */
@@ -375,38 +390,175 @@ export interface DocumentAnalysis {
 	 * A caller must not treat resolutions as confident while notes are non-empty.
 	 */
 	notes: string[];
+	/**
+	 * The same structural surprises as {@link notes}, each located, and including
+	 * defects raised inside a block body. See `defects.ts`.
+	 */
+	defects: Defect[];
 }
 
 /** Q4 result: per-statement resolutions plus structural / over-depth notes. */
 export interface StatementAnalysis {
 	statements: StatementResolution[];
 	notes: string[];
+	/** As {@link DocumentAnalysis.defects}. */
+	defects: Defect[];
 }
 
-/** Statement texts of `text`, via the Q1 segmenter. */
-function statementTexts(text: string): string[] {
-	return segmentStatements(text).segments.map((s) => s.text);
+/** A half-open analyzed-byte span. */
+export interface Span {
+	start: number;
+	end: number;
 }
+
+/**
+ * Where the text a walker is scanning sits in the DOCUMENT.
+ *
+ * `base` is the document analyzed-byte offset that index 0 of that text maps to,
+ * or -1 when the mapping is unavailable. It goes to -1 for exactly one reason:
+ * a statement's `text` is the ORIGINAL substring (UTF-16 code units), so an
+ * index into it is an analyzed-byte offset only while the statement is pure
+ * ASCII. Once -1 it stays -1 for everything nested inside.
+ *
+ * The check for that is a length comparison, and it is exact rather than a
+ * heuristic: every non-ASCII code point has a UTF-8 length strictly greater than
+ * its UTF-16 length (2>1, 3>1, 4>2), so the two lengths agree if and only if
+ * every character is ASCII.
+ *
+ * `fallback` is the enclosing statement's span, used when `base` is -1. Widening
+ * a defect to its statement is the fail-closed choice in the Q14 sense: a region
+ * that is too WIDE still points the reader at real text, while one computed from
+ * a mismatched index space points confidently at the wrong byte.
+ */
+interface Loc {
+	base: number;
+	fallback: Span;
+}
+
+/** A `[start, end)` of the scanned text, in document space. */
+function spanIn(loc: Loc, start: number, end: number): Span {
+	return loc.base < 0
+		? { start: loc.fallback.start, end: loc.fallback.end }
+		: { start: loc.base + start, end: loc.base + end };
+}
+
+/**
+ * A defect region for `[start, end)` of the scanned text, never zero-width.
+ *
+ * An empty extent is reachable — `do={}` at the block-depth limit, `[]` at the
+ * bracket limit — and `Defect` contracts `end > start`, so an empty one falls
+ * back to the enclosing statement rather than emitting `start === end`.
+ */
+function regionIn(loc: Loc, start: number, end: number): Span {
+	return end > start
+		? spanIn(loc, start, end)
+		: { start: loc.fallback.start, end: loc.fallback.end };
+}
+
+/** Move `loc` to a nested text beginning at index `start` of the current one. */
+function nest(loc: Loc, start: number, fallback: Span): Loc {
+	return { base: loc.base < 0 ? -1 : loc.base + start, fallback };
+}
+
+/** Carry `defects` (offsets into the scanned text) into document space. */
+function attribute(defects: readonly Defect[], loc: Loc): Defect[] {
+	if (loc.base >= 0) return rebaseDefects(defects, loc.base);
+	return defects.map((d) =>
+		d.detail === undefined
+			? { code: d.code, start: loc.fallback.start, end: loc.fallback.end }
+			: {
+					code: d.code,
+					start: loc.fallback.start,
+					end: loc.fallback.end,
+					detail: d.detail,
+				},
+	);
+}
+
+/** One statement to walk, already located in document space. */
+interface Located {
+	text: string;
+	span: Span;
+	loc: Loc;
+}
+
+/**
+ * Segment `text` and locate every statement in document space, carrying the
+ * segmenter's own defects out with them.
+ *
+ * The offsets and defects a plain `segments.map((s) => s.text)` would discard
+ * are what every span and region downstream is built from.
+ */
+function locate(
+	segmented: SegmentResult,
+	loc: Loc,
+): { units: Located[]; defects: Defect[] } {
+	const units = segmented.segments.map((s) => {
+		const span = spanIn(loc, s.start, s.end);
+		// `s.start`/`s.end` are analyzed bytes of THIS text; `s.text` is the
+		// original substring. Interior indices into `s.text` are analyzed-byte
+		// offsets only when the two lengths agree (see `Loc`).
+		const asciiOnly = s.end - s.start === s.text.length;
+		return {
+			text: s.text,
+			span,
+			loc:
+				loc.base < 0 || !asciiOnly
+					? { base: -1, fallback: span }
+					: { base: loc.base + s.start, fallback: span },
+		};
+	});
+	// STRUCTURAL defects only. `segmentStatements` merges `coordinateDefects`
+	// into every result, so a nested call on a block body would re-run the
+	// coordinate pass over that SUBSTRING — and a coordinate fact is a property
+	// of the ROOT input, not of any slice of it. Two things went wrong when this
+	// filter was missing: a non-ASCII run already reported by the document pass
+	// came back a second time widened to its whole statement, and a U+FEFF in
+	// document-MIDDLE position was re-classified `bom` because it happens to be
+	// leading within the body — contradicting `coordinateDefects`' own contract.
+	// The entry points seed these once from the root `SegmentResult`.
+	const structural = segmented.defects.filter((d) => !isPositionalFact(d.code));
+	return { units, defects: attribute(structural, loc) };
+}
+
+/**
+ * The whole-document starting location. `base` is 0 and always valid — the
+ * segmenter's offsets are already document analyzed bytes — so the fallback is
+ * unreachable here and every statement gets its own from {@link locate}.
+ */
+const DOCUMENT_LOC: Loc = { base: 0, fallback: { start: 0, end: 0 } };
 
 /** Q3 — resolve every `[…]` command substitution in `text`. */
 export function resolveDocument(text: string): DocumentAnalysis {
-	const notes = new Set(segmentStatements(text).notes);
+	// Segment ONCE and hand the result to `locate` — `containsWrite` calls both
+	// entry points, and re-segmenting here would put a document through the
+	// segmenter four times on input its own comment calls "not cheap".
+	const segmented = segmentStatements(text);
+	const notes = new Set(segmented.notes);
+	// The ROOT segmentation is the only source of coordinate facts (`bom`,
+	// `non-ascii`); `locate` strips them so recursion cannot re-derive them in a
+	// substring's coordinate space.
+	const defects: Defect[] = [...segmented.defects];
 	const resolutions: Resolution[] = [];
-	walk(statementTexts(text), "/", resolutions, 0, notes, true);
-	return { resolutions, notes: [...notes] };
+	const top = locate(segmented, DOCUMENT_LOC);
+	defects.push(...top.defects);
+	walk(top.units, "/", resolutions, 0, notes, defects, true);
+	return { resolutions, notes: [...notes], defects: mergeDefects(defects) };
 }
 
 function walk(
-	segments: string[],
+	units: Located[],
 	context: string,
 	out: Resolution[],
 	blockDepth: number,
 	notes: Set<string>,
+	defects: Defect[],
 	contextCertain: boolean,
 ): void {
 	let ctx = context;
 	let certain = contextCertain;
-	for (const text of segments) {
+	for (const unit of units) {
+		const { text, loc } = unit;
 		// R4 — a menu-navigation statement moves the document context.
 		const nav = menuNavPath(text, ctx);
 		if (nav !== null) {
@@ -433,19 +585,29 @@ function walk(
 		// which its own unreadability already governs.
 		const stmtCertain = handsKnownContext(text, certain);
 		if (isUnreadableAbsolute(text)) certain = false;
-		collectBrackets(text, stmtCtx, 0, out, notes, stmtCertain);
+		collectBrackets(text, stmtCtx, 0, out, notes, defects, stmtCertain, loc);
 		// R5 — block bodies inherit the context in force here.
-		for (const body of scopeBodies(text)) {
+		for (const block of scopeBlocks(text)) {
 			if (blockDepth >= MAX_DEPTH) {
 				notes.add("over-depth");
+				// The BLOCK that exceeded the limit, not the whole statement —
+				// narrowing regions is what this channel is for.
+				defects.push({
+					code: "over-depth",
+					...regionIn(loc, block.start, block.start + block.body.length),
+				});
 				continue;
 			}
+			const bodyLoc = nest(loc, block.start, unit.span);
+			const body = locate(segmentStatements(block.body), bodyLoc);
+			defects.push(...body.defects);
 			walk(
-				statementTexts(body),
+				body.units,
 				stmtCtx,
 				out,
 				blockDepth + 1,
 				notes,
+				defects,
 				stmtCertain,
 			);
 		}
@@ -454,23 +616,30 @@ function walk(
 
 /** Q4 — canonical path of every statement in source order. */
 export function resolveStatements(text: string): StatementAnalysis {
-	const notes = new Set(segmentStatements(text).notes);
+	const segmented = segmentStatements(text);
+	const notes = new Set(segmented.notes);
+	// As `resolveDocument`: coordinate facts come from the root only.
+	const defects: Defect[] = [...segmented.defects];
 	const statements: StatementResolution[] = [];
-	walkStatements(statementTexts(text), "/", statements, 0, notes, true);
-	return { statements, notes: [...notes] };
+	const top = locate(segmented, DOCUMENT_LOC);
+	defects.push(...top.defects);
+	walkStatements(top.units, "/", statements, 0, notes, defects, true);
+	return { statements, notes: [...notes], defects: mergeDefects(defects) };
 }
 
 function walkStatements(
-	segments: string[],
+	units: Located[],
 	context: string,
 	out: StatementResolution[],
 	blockDepth: number,
 	notes: Set<string>,
+	defects: Defect[],
 	contextCertain: boolean,
 ): void {
 	let ctx = context;
 	let certain = contextCertain;
-	for (const text of segments) {
+	for (const unit of units) {
+		const { text, span } = unit;
 		const nav = menuNavPath(text, ctx);
 		if (nav !== null) {
 			// `..` ascends FROM the context, so it cannot be read while the context
@@ -485,6 +654,7 @@ function walkStatements(
 					path: null,
 					unresolved: CONTEXT_LOST,
 					contextCertain: false,
+					span,
 				});
 				continue;
 			}
@@ -494,6 +664,7 @@ function walkStatements(
 				context: ctx,
 				path: nav,
 				contextCertain: certain,
+				span,
 			});
 			ctx = nav;
 			if (!relative) certain = true;
@@ -510,6 +681,7 @@ function walkStatements(
 				path: null,
 				unresolved: "structural defect: unbalanced delimiter or string",
 				contextCertain: certain,
+				span,
 			});
 			certain = false;
 			continue;
@@ -527,6 +699,7 @@ function walkStatements(
 				? { path: null, unresolved: CONTEXT_LOST }
 				: resolved),
 			contextCertain: certain,
+			span,
 		});
 		// A block body's statements are the parent's siblings after flattening,
 		// and R5 gives them the context in force here — which is the ROOT, hence
@@ -536,17 +709,25 @@ function walkStatements(
 		const stmtCtx = statementPath(text, ctx);
 		const bodyCertain = handsKnownContext(text, certain);
 		if (isUnreadableAbsolute(text)) certain = false;
-		for (const body of scopeBodies(text)) {
+		for (const block of scopeBlocks(text)) {
 			if (blockDepth >= MAX_DEPTH) {
 				notes.add("over-depth");
+				defects.push({
+					code: "over-depth",
+					...regionIn(unit.loc, block.start, block.start + block.body.length),
+				});
 				continue;
 			}
+			const bodyLoc = nest(unit.loc, block.start, span);
+			const body = locate(segmentStatements(block.body), bodyLoc);
+			defects.push(...body.defects);
 			walkStatements(
-				statementTexts(body),
+				body.units,
 				stmtCtx,
 				out,
 				blockDepth + 1,
 				notes,
+				defects,
 				bodyCertain,
 			);
 		}
@@ -724,12 +905,17 @@ function collectBrackets(
 	depth: number,
 	out: Resolution[],
 	notes: Set<string>,
+	defects: Defect[],
 	contextCertain: boolean,
+	loc: Loc,
 ): void {
 	// Bound the recursion (bracket nesting AND literal-brace descent) so
 	// untrusted deeply nested input abstains instead of overflowing the stack.
 	if (depth >= MAX_DEPTH) {
 		notes.add("over-depth");
+		// `text` is empty when the nesting bottoms out on an empty body (`[]`),
+		// which `regionIn` widens rather than emitting a zero-width region.
+		defects.push({ code: "over-depth", ...regionIn(loc, 0, text.length) });
 		return;
 	}
 	// Scan a comment-masked copy so a `#`-comment `[`/`{` is not treated as a
@@ -749,7 +935,9 @@ function collectBrackets(
 				depth,
 				out,
 				notes,
+				defects,
 				contextCertain,
+				nest(loc, i + 1, loc.fallback),
 			);
 			i = strEnd;
 			continue;
@@ -766,7 +954,9 @@ function collectBrackets(
 					depth + 1,
 					out,
 					notes,
+					defects,
 					contextCertain,
+					nest(loc, i + 1, loc.fallback),
 				);
 			i = end;
 			continue;
@@ -774,7 +964,11 @@ function collectBrackets(
 		if (c !== "[") continue;
 		const end = matchDelim(masked, i, "[", "]");
 		const inner = trimAscii(masked.slice(i + 1, end));
-		out.push(resolveInner(inner, ctx, depth, contextCertain));
+		// The span covers the whole `[…]`, closing bracket included.
+		out.push({
+			...resolveInner(inner, ctx, depth, contextCertain),
+			span: spanIn(loc, i, Math.min(end + 1, text.length)),
+		});
 		// R6 — nested brackets inherit from this one's resolution.
 		const nestedCtx = out[out.length - 1]?.path ?? ctx;
 		collectBrackets(
@@ -783,7 +977,18 @@ function collectBrackets(
 			depth + 1,
 			out,
 			notes,
+			defects,
 			nestedCertainty(out[out.length - 1], contextCertain),
+			// `inner` is the trimmed slice of `masked` starting at i+1; the leading
+			// whitespace trim shifts it further right.
+			nest(
+				loc,
+				i +
+					1 +
+					(masked.slice(i + 1, end).length -
+						trimAsciiStart(masked.slice(i + 1, end)).length),
+				loc.fallback,
+			),
 		);
 		i = end;
 	}
@@ -807,20 +1012,33 @@ function scanInterpolations(
 	depth: number,
 	out: Resolution[],
 	notes: Set<string>,
+	defects: Defect[],
 	contextCertain: boolean,
+	loc: Loc,
 ): void {
 	for (let i = 0; i < body.length - 1; i++) {
 		if (body[i] !== "$" || body[i + 1] !== "[") continue;
 		const end = matchDelim(body, i + 1, "[", "]");
-		const inner = trimAscii(body.slice(i + 2, end));
-		out.push(resolveInner(inner, ctx, depth, contextCertain));
+		const raw = body.slice(i + 2, end);
+		const inner = trimAscii(raw);
+		// Span the `$[…]` from its sigil through the closing bracket.
+		out.push({
+			...resolveInner(inner, ctx, depth, contextCertain),
+			span: spanIn(loc, i, Math.min(end + 1, body.length)),
+		});
 		collectBrackets(
 			inner,
 			out[out.length - 1]?.path ?? ctx,
 			depth + 1,
 			out,
 			notes,
+			defects,
 			nestedCertainty(out[out.length - 1], contextCertain),
+			nest(
+				loc,
+				i + 2 + (raw.length - trimAsciiStart(raw).length),
+				loc.fallback,
+			),
 		);
 		i = end;
 	}
@@ -856,7 +1074,7 @@ function scanInterpolations(
  * spelling. Case 3 is text that names no menu at all.
  */
 function nestedCertainty(
-	enclosing: Resolution | undefined,
+	enclosing: Pick<Resolution, "path" | "inner"> | undefined,
 	contextCertain: boolean,
 ): boolean {
 	if (enclosing === undefined) return contextCertain;
@@ -865,12 +1083,16 @@ function nestedCertainty(
 	return contextCertain;
 }
 
+/**
+ * Resolve one bracket body. The caller owns the `span`, because only it knows
+ * where the bracket sat in the text it was scanning.
+ */
 function resolveInner(
 	inner: string,
 	ctx: string,
 	depth: number,
 	contextCertain: boolean,
-): Resolution {
+): Omit<Resolution, "span"> {
 	const absolute = inner.startsWith("/");
 	const klass = classify(inner, absolute, depth);
 	if (klass === "cli-prompt-artifact")

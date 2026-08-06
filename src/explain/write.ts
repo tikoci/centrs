@@ -74,6 +74,7 @@
  * genuine false negatives the tristate exists to prevent.
  */
 
+import { type Defect, mergeDefects } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
 import {
 	type DocumentAnalysis,
@@ -668,6 +669,11 @@ export interface WriteAnalysis {
 	occurrences: Occurrence[];
 	/** Structural notes from the segmenter / bounded traversal; any note abstains. */
 	notes: string[];
+	/**
+	 * The located twin of {@link notes}, plus the `bom`/`non-ascii` positional
+	 * facts. Reporting only — the abstention gate reads `notes`.
+	 */
+	defects: Defect[];
 }
 
 const BLOCKING: ReadonlySet<OccurrenceClass> = new Set([
@@ -701,10 +707,22 @@ export function containsWrite(text: string): WriteAnalysis {
 	const brackets = resolveDocument(text);
 	const found = collect(statements, brackets);
 	const notes = [...new Set([...statements.notes, ...brackets.notes])];
+	// The located twin of `notes` (#192). It does NOT feed the abstention gate
+	// below — that still reads `notes`, deliberately, because `defects` also
+	// carries the two positional-fact classes (`bom`, `non-ascii`) and a UTF-8
+	// comment must never flip a document's write tristate to `unknown`.
+	const defects = mergeDefects(statements.defects, brackets.defects);
 	const writes = found.filter((o) => o.klass === "write").length;
 	const blockers = found.filter((o) => BLOCKING.has(o.klass));
 	if (writes > 0)
-		return { verdict: "true", writes, blockers, occurrences: found, notes };
+		return {
+			verdict: "true",
+			writes,
+			blockers,
+			occurrences: found,
+			notes,
+			defects,
+		};
 	if (blockers.length > 0 || notes.length > 0)
 		return {
 			verdict: "unknown",
@@ -712,6 +730,7 @@ export function containsWrite(text: string): WriteAnalysis {
 			blockers,
 			occurrences: found,
 			notes,
+			defects,
 		};
 	return {
 		verdict: "false",
@@ -719,5 +738,6 @@ export function containsWrite(text: string): WriteAnalysis {
 		blockers: [],
 		occurrences: found,
 		notes,
+		defects,
 	};
 }

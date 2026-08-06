@@ -73,8 +73,10 @@
 import {
 	analyzeCoordinates,
 	type CoordinateAnalysis,
+	coordinateDefects,
 	runAtByte,
 } from "./coordinates.ts";
+import { type Defect, defectAt, mergeDefects } from "./defects.ts";
 
 /** One top-level statement located in analyzed-byte space. */
 export interface Segment {
@@ -103,6 +105,11 @@ export interface SegmentResult {
 	comments: { start: number; end: number }[];
 	/** unbalanced-delimiter and other structural notes; never a throw. */
 	notes: string[];
+	/**
+	 * The same structural surprises as {@link notes}, each located, plus the two
+	 * coordinate-pass classes (`bom`, `non-ascii`) that have no note.
+	 */
+	defects: Defect[];
 }
 
 const isSpace = (c: string): boolean => c === " " || c === "\t" || c === "\r";
@@ -318,7 +325,14 @@ export function segmentStatements(original: string): SegmentResult {
 		...s,
 		text: originalSlice(analysis, s.start, s.end),
 	}));
-	return { segments, comments: raw.comments, notes: raw.notes };
+	return {
+		segments,
+		comments: raw.comments,
+		notes: raw.notes,
+		// Coordinate-pass regions first: they are facts about the input as
+		// received, and they exist even when the scan finds nothing structural.
+		defects: mergeDefects(coordinateDefects(analysis), raw.defects),
+	};
 }
 
 /** Original substring for an analyzed-byte span (boundaries are char-aligned). */
@@ -389,11 +403,16 @@ function scanAscii(ascii: string): {
 	segments: RawSegment[];
 	comments: { start: number; end: number }[];
 	notes: string[];
+	defects: Defect[];
 } {
 	const comments: { start: number; end: number }[] = [];
 	const notes: string[] = [];
+	const defects: Defect[] = [];
 	const overDepth: number[] = [];
-	const delimStack: string[] = []; // H2 — every open bracket, for balance notes
+	// H2 — every open bracket, for balance notes. Each frame carries WHERE it
+	// opened so an `unclosed` defect can point at the opener rather than at the
+	// end of input; the note channel still renders only the characters.
+	const delimStack: { char: string; at: number }[] = [];
 	const top: Frame = {
 		stmtStart: -1,
 		atLead: true,
@@ -501,7 +520,7 @@ function scanAscii(ascii: string): {
 		// prefixStart = the parent statement's start, or the `{` itself when the
 		// container has no prefix (so a DISCARD absorbs from the `{`).
 		const prefixStart = parent.stmtStart >= 0 ? parent.stmtStart : i;
-		delimStack.push("{");
+		delimStack.push({ char: "{", at: i });
 		frames.push({
 			stmtStart: -1,
 			atLead: true,
@@ -609,8 +628,14 @@ function scanAscii(ascii: string): {
 			ensureStmt(f, i);
 			f.atLead = false;
 			const str = scanQuotedString(ascii, i);
+			if (!str.closed) {
+				notes.push("unterminated-string");
+				// The region is the whole unterminated run — from the opening quote
+				// to where the scan gave up — not just the quote. A consumer
+				// highlighting the defect wants the text that is swallowed by it.
+				defects.push({ code: "unterminated-string", start: i, end: str.end });
+			}
 			i = str.end;
-			if (!str.closed) notes.push("unterminated-string");
 			continue;
 		}
 
@@ -643,12 +668,12 @@ function scanAscii(ascii: string): {
 				} else {
 					overDepth.push(i);
 					ensureStmt(f, i);
-					delimStack.push("{");
+					delimStack.push({ char: "{", at: i });
 					f.atLead = true;
 				}
 			} else {
 				ensureStmt(f, i);
-				delimStack.push(c);
+				delimStack.push({ char: c, at: i });
 				f.atLead = c === "{";
 			}
 			i++;
@@ -658,7 +683,7 @@ function scanAscii(ascii: string): {
 		// H2 — closes.
 		if (c === "}" || c === "]" || c === ")") {
 			const want = c === "}" ? "{" : c === "]" ? "[" : "(";
-			if (delimStack[delimStack.length - 1] === want) {
+			if (delimStack[delimStack.length - 1]?.char === want) {
 				const isContainerClose =
 					c === "}" &&
 					frames.length > 1 &&
@@ -672,6 +697,7 @@ function scanAscii(ascii: string): {
 				}
 			} else {
 				notes.push(`unbalanced-close:${c}`);
+				defects.push(defectAt("unbalanced-close", i, c));
 				ensureStmt(f, i);
 				f.atLead = false;
 				f.structurallyInvalid = true;
@@ -710,12 +736,28 @@ function scanAscii(ascii: string): {
 		parent.atLead = false;
 	}
 	flush(top, ascii.length, "eof");
-	if (delimStack.length > 0) notes.push(`unclosed:${delimStack.join("")}`);
+	if (delimStack.length > 0) {
+		notes.push(`unclosed:${delimStack.map((d) => d.char).join("")}`);
+		// One defect per still-open delimiter, each pointing at its OPENER. The
+		// note fuses them into a single string (`unclosed:{[`) because that is the
+		// shape the fixtures pin; the region channel keeps them addressable, which
+		// is the whole point — "something is unclosed" is not actionable, "the `{`
+		// at byte 41 is unclosed" is.
+		for (const d of delimStack)
+			defects.push(defectAt("unclosed", d.at, d.char));
+	}
 
 	return {
 		segments: top.buffer,
 		comments,
 		notes: [...notes, ...overDepth.map((offset) => `over-depth:${offset}`)],
+		defects: [
+			...defects,
+			// No `detail`: `symbols.ts` and `pathresolve.ts` emit this class without
+			// one, and `mergeDefects` keys on it, so a `"{"` here would make the same
+			// event fail to de-duplicate across analyzers.
+			...overDepth.map((offset) => defectAt("over-depth", offset)),
+		],
 	};
 }
 

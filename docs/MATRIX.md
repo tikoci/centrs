@@ -69,7 +69,7 @@ section short enough that the grid remains the status surface.
   those two cells are `designed`. The surface was decided in the 2026-07-19
   design round (#90) and the spec is **ratified** on the phase-0 grounding
   lab (#185, ratification PR #187). Phase 0.5 has since promoted the ratified
-  lab logic into the library — `src/explain/{segment,blocks,coordinates,
+  lab logic into the library — `src/explain/{segment,blocks,coordinates,defects,
   pathresolve,verbsplit,write,symbols,menus,verbs}.ts` with frozen fixtures
   under `test/fixtures/explain/` — but there is **no `explain` command surface
   yet** (no `src/cli/explain.ts`, and `commands/explain/examples.md` is
