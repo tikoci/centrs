@@ -931,7 +931,7 @@ function argumentsOf(
  * ANALYSIS is device-correct (`;` ends a statement in RouterOS; it is not part
  * of a value). The gate is locked, so neither value is published.
  *
- * Cost, measured: a printable-ASCII differential over 8 templates finds 677
+ * Cost, measured: a printable-ASCII differential over 8 templates finds 675
  * cases where both decide and 0 surviving mismatches with this in place, and the
  * corpus parity probe is unchanged at 83 both-decided, 0 contradictions — so
  * this fires on `;` and nothing else that has been found. Raised as a P1 in
