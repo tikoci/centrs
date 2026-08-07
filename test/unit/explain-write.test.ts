@@ -316,6 +316,94 @@ describe("explain/write — finding 2: fail closed where input is discarded", ()
 	});
 });
 
+/**
+ * #228 step 2 — what the published command axis does and does not buy Q16.
+ *
+ * It answers a question about the STATEMENT, not about mutation: which token is
+ * the verb. Nothing about write-ness is published (the module note above), so
+ * the tristate's vocabularies are untouched and a command with an unlisted verb
+ * still abstains. What moves is everything downstream of reading the verb off
+ * the wrong token — a whole class of `unknown-verb` blockers that named an
+ * interface, a menu segment or a positional operand.
+ *
+ * Measured over the frozen 911-script corpus and the #203 export stratum: 171
+ * statement readings change and **every one names a better token**; abstention
+ * 44.8% -> 44.6% dev, 46.0% holdout unchanged, export 0.0% unchanged; exactly
+ * ONE document moves verdict, `unknown` -> `false`, and it is the
+ * `/system/gps/monitor once` transcript below.
+ */
+describe("explain/write — the published command axis (#228)", () => {
+	/**
+	 * The verdict mover, and a deliberate reversal of a #207 note. #207 recorded
+	 * this document's abstention as CORRECT — which it was, given no evidence
+	 * about `/system/gps/monitor`. The evidence exists now: it is a published
+	 * command whose verb is a curated READ, so `false` is decided rather than
+	 * guessed. The punctuation rule alone read the verb as `once`.
+	 */
+	test("a published command's verb is read off the right token", () => {
+		expect(containsWrite("/system/gps/monitor once").verdict).toBe("false");
+		const got = containsWrite("/interface/lte/monitor lte1 once");
+		expect(got.verdict).toBe("false");
+		expect(got.occurrences[0]).toMatchObject({
+			verb: "monitor",
+			klass: "read",
+		});
+	});
+
+	/**
+	 * The direction Q16's hard threshold exists for. `reset-counters` is a curated
+	 * WRITE verb, and the punctuation rule put the verb on the operand that
+	 * follows it (`ether1`) — so a real write reported `unknown`.
+	 */
+	test("a curated WRITE verb behind a positional operand is recovered", () => {
+		expect(
+			containsWrite("/interface ethernet reset-counters ether1").verdict,
+		).toBe("true");
+		expect(
+			containsWrite("/disk btrfs filesystem reset-counters 0").verdict,
+		).toBe("true");
+	});
+
+	/** Knowing a path is a command says nothing about whether it mutates. */
+	test("an unlisted verb still abstains, however well the path is known", () => {
+		for (const input of [
+			"/system/reboot",
+			"/certificate/create-certificate-request",
+			"/user expire-password admin",
+		]) {
+			const got = containsWrite(input);
+			expect(got.verdict).toBe("unknown");
+			expect(got.blockers.map((b) => b.klass)).toEqual(["unknown-verb"]);
+		}
+	});
+
+	/**
+	 * The relative half, and its boundary. An inherited menu context is the
+	 * evidence that the surrounding text is RouterOS at all; the root supplies
+	 * none, and the seven root-level catalog commands are ordinary English words.
+	 * The corpus carries `import serial` / `import io` / `import os` — Python
+	 * pasted into a `.rsc` snippet — which must not read as RouterOS `/import`.
+	 */
+	test("an inherited context can decide a relative command; the root cannot", () => {
+		expect(containsWrite("/container\nstop [find tag~$t]").verdict).toBe(
+			"unknown",
+		);
+		expect(
+			containsWrite("/container\nstop [find tag~$t]").occurrences[0],
+		).toMatchObject({ verb: "stop", klass: "unknown-verb" });
+		const python = containsWrite("import serial\nimport os");
+		expect(python.verdict).toBe("unknown");
+		expect(python.occurrences.map((o) => o.verb)).toEqual([null, null]);
+	});
+
+	/** Both tables are floors: absence from them is still not evidence. */
+	test("a path in neither table is unchanged", () => {
+		const got = containsWrite("/interface\nreset-counters");
+		expect(got.verdict).toBe("unknown");
+		expect(got.blockers.map((b) => b.klass)).toEqual(["ambiguous"]);
+	});
+});
+
 describe("explain/write — the (menu, verb) dependency", () => {
 	/**
 	 * The one boundary where write-ness needs the menu: `set`, `find`, `export`,
@@ -570,10 +658,30 @@ describe("explain/write — Q14 floor and structural defects", () => {
 	});
 
 	test("a bare path in a bracket retains Q6 ambiguity", () => {
-		const got = containsWrite(":put [/system/reboot]");
+		// Neither table carries `/disk/format-drive`, so the bracket walk still
+		// reaches Q6's refusal. It used to read `/system/reboot`, which the #228
+		// command axis now decides — see the bracket test below.
+		const got = containsWrite(":put [/disk/format-drive]");
 		expect(got.verdict).toBe("unknown");
 		expect(got.blockers).toContainEqual(
 			expect.objectContaining({ kind: "bracket", klass: "ambiguous" }),
+		);
+	});
+
+	test("the bracket walk reads the command axis too, and still abstains (#228)", () => {
+		// The catalog decides the VERB but not its write-ness: `reboot` is in
+		// neither curated vocabulary, so the occurrence is a named `unknown-verb`
+		// rather than a shapeless `ambiguous` — and the document still abstains.
+		// The two walks must carry the same rules; a bracket that decided what a
+		// statement refused is the gap #207's round found here twice.
+		const got = containsWrite(":put [/system/reboot]");
+		expect(got.verdict).toBe("unknown");
+		expect(got.blockers).toContainEqual(
+			expect.objectContaining({
+				kind: "bracket",
+				klass: "unknown-verb",
+				verb: "reboot",
+			}),
 		);
 	});
 

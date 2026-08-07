@@ -48,6 +48,21 @@
  * above are unchanged, still curated, still frozen against tuning — and the
  * module stays offline, because a baked constant is not a lookup.
  *
+ * **#228 added the second baked artifact, and the same caveat applies twice.**
+ * `catalog.ts`'s command axis says which token of a run is the VERB; it says
+ * nothing about whether that verb mutates, and the publication carries no
+ * mutation semantics either. So the tables above are still the only thing that
+ * decides `write` vs `read`, and a published command whose verb they do not list
+ * abstains exactly as before (`/system/reboot` is `unknown`, not `false`).
+ *
+ * What it does change is which token gets looked up. The punctuation rule reads
+ * the first SPACE token as the verb, so `/interface ethernet reset-counters
+ * ether1` looked up `ethernet` — a menu segment — and abstained on a curated
+ * WRITE verb; `/system/gps/monitor once` looked up `once`. Over the frozen
+ * corpus plus the export stratum, 171 readings move and every one names a better
+ * token: abstention 44.8% -> 44.6% dev, 46.0% holdout and 0.0% export unchanged,
+ * and exactly one document changes verdict.
+ *
  * **Fail-closed is enforced where input is DISCARDED, not where it is
  * classified** (Q16 finding 2, the part worth carrying past this module). The
  * lab priced three navigation arms; only the ratified `failclosed` one is
@@ -83,7 +98,12 @@ import {
 	type StatementAnalysis,
 	type StatementResolution,
 } from "./pathresolve.ts";
-import { describeStatement, type RunToken, splitRun } from "./verbsplit.ts";
+import {
+	catalogVerbAt,
+	describeStatement,
+	type RunToken,
+	splitRun,
+} from "./verbsplit.ts";
 
 /** One statement's run, directive flag and V4 flag — parsed once, read by every rule. */
 type Described = ReturnType<typeof describeStatement>;
@@ -422,9 +442,22 @@ function isDanglingBarePath(
 	return index >= lastNonEmpty;
 }
 
-/** Does the run carry a token Q6's boundary would call the verb? */
-function isCommandShaped(described: Described): boolean {
+/**
+ * Does the run carry a token Q6's boundary — or the published command catalog —
+ * would call the verb?
+ *
+ * The catalog arm (#228 step 2) is what routes a bare `/system/gps/monitor`
+ * away from the unconfirmed-nav fallback, where the last token was only ever a
+ * GUESS and even a recognized READ verb had to be downgraded, and into
+ * {@link classifyStatement}, where it is a decided verb read against the
+ * vocabulary that matches its position.
+ */
+function isCommandShaped(
+	described: Described,
+	catalogAt: number | null,
+): boolean {
 	if (described.run.length === 0) return false;
+	if (catalogAt !== null) return true;
 	const split = splitRun(described.run, {
 		directive: described.directive,
 		whole: described.whole,
@@ -482,8 +515,12 @@ function classifyStatement(
 	statement: StatementResolution,
 	text: string,
 	described: Described,
+	catalogAt: number | null,
 ): Occurrence {
-	const verb = verbOfRun(described.run, described.directive, described.whole);
+	const verb =
+		catalogAt === null
+			? verbOfRun(described.run, described.directive, described.whole)
+			: ((described.run[catalogAt] as RunToken).name ?? null);
 	// A single-token command at document root is a root cmd written without its
 	// `:` sigil (`/import file-name=…`), so it reads against the root vocabulary
 	// rather than the menu one.
@@ -525,6 +562,36 @@ function isPathShapedButUnread(text: string, described: Described): boolean {
 }
 
 /**
+ * The published catalog's verb index for one statement or bracket inner, or
+ * null (#228 step 2).
+ *
+ * Applies `resolveVerb`'s base rule locally rather than calling it: this module
+ * reads `splitRun` directly, and threading the whole resolver in to get one
+ * index would put the R9 `bare-word head is not a known verb` refusal in front
+ * of the classification, where a refusal means "unknown" instead of "abstain".
+ * The two must agree on the BASE, though — a lookup rooted differently would ask
+ * about a different path — so the rule is stated the same way in both places: a
+ * directive or a `/`-led statement resolves at the root, everything else
+ * inherits its context.
+ *
+ * Including the bare-word rule `resolveVerb` states beside its own refusal: a
+ * relative statement is only looked up under an INHERITED menu context, never at
+ * the root, because the seven root-level catalog commands are all ordinary
+ * English words and the corpus's pasted `import serial` would otherwise read as
+ * RouterOS `/import`.
+ */
+function catalogVerbOf(
+	text: string,
+	described: Described,
+	context: string,
+): number | null {
+	if (described.directive) return null;
+	if (text.startsWith("/")) return catalogVerbAt(described.run, "/");
+	if (context === "/") return null;
+	return catalogVerbAt(described.run, context);
+}
+
+/**
  * Every command occurrence offline can see: statements at every block depth
  * (Q4's stateful walker) plus bracket-inner commands at every nesting depth
  * (Q3's resolver).
@@ -561,6 +628,7 @@ function collect(
 		// One parse per statement, threaded through every rule below: the Q6
 		// boundary reads the same run three or four times otherwise.
 		const described = describeStatement(t);
+		const catalogAt = catalogVerbOf(t, described, statement.context);
 		if (isDynamicForm(t, described)) {
 			out.push({
 				kind: "statement",
@@ -593,7 +661,7 @@ function collect(
 			});
 			continue;
 		}
-		if (statement.isNav && !isCommandShaped(described)) {
+		if (statement.isNav && !isCommandShaped(described, catalogAt)) {
 			if (
 				isConfirmedNav(described) &&
 				!isDanglingBarePath(described, lastNonEmpty, index)
@@ -602,7 +670,7 @@ function collect(
 			out.push(classifyUnconfirmedNav(statement, t, described));
 			continue;
 		}
-		out.push(classifyStatement(statement, t, described));
+		out.push(classifyStatement(statement, t, described, catalogAt));
 	}
 
 	for (const bracket of brackets.resolutions) {
@@ -638,7 +706,11 @@ function collect(
 			});
 			continue;
 		}
-		const verb = verbOfRun(described.run, described.directive, described.whole);
+		const catalogAt = catalogVerbOf(inner, described, bracket.context);
+		const verb =
+			catalogAt === null
+				? verbOfRun(described.run, described.directive, described.whole)
+				: ((described.run[catalogAt] as RunToken).name ?? null);
 		const klass =
 			verb === null && isPathShapedButUnread(inner, described)
 				? "ambiguous"

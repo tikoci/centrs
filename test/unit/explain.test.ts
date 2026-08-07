@@ -131,8 +131,8 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(code).toBe(1);
 	});
 
-	test("18. A bare path the menu table does not know is ambiguous offline", async () => {
-		const { data } = await explainJson(["/system/reboot"]);
+	test("18. A bare path neither table knows is ambiguous offline", async () => {
+		const { data } = await explainJson(["/disk/format-drive"]);
 		const statement = data.structure.statements[0];
 		expect(statement?.resolution).toBe("ambiguous");
 		expect(statement?.command).toBeUndefined();
@@ -151,6 +151,22 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(statement?.resolution).toBe("resolved");
 		expect(statement?.kind).toBe("menu");
 		expect(statement?.command).toEqual({ path: "/ip/route" });
+	});
+
+	test("18c. A bare path the COMMAND axis knows resolves as a command, offline", async () => {
+		const { data } = await explainJson(["/system/reboot"]);
+		const statement = data.structure.statements[0];
+		expect(statement?.resolution).toBe("resolved");
+		expect(statement?.kind).toBe("command");
+		expect(statement?.command).toMatchObject({
+			path: "/system",
+			verb: "reboot",
+		});
+		// Knowing it is a command says nothing about whether it MUTATES.
+		expect(data.structure.containsWrite).toBe("unknown");
+		// …but the verb it names can be, and `monitor` is a curated READ.
+		const monitor = await explainJson(["/system/gps/monitor once"]);
+		expect(monitor.data.structure.containsWrite).toBe(false);
 	});
 
 	test("20. Explain-only write detection is three-valued", async () => {

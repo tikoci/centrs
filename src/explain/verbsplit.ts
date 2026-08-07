@@ -53,6 +53,13 @@
  * every `/`-led bare path unconditionally and so reports `/system/reboot` as a
  * menu (#211). Where the two disagree, this module is the narrower answer.
  *
+ * **V4's other half is decidable too (#228).** `catalog.ts` carries a published
+ * COMMAND axis beside the container table, so the twin `splitRun` cannot
+ * separate is now separated from both ends: `/ip/address` is a known menu and
+ * `/system/reboot` is a known command. See {@link catalogVerbAt} for the rule,
+ * its precedence over the punctuation guess, and the two places it deliberately
+ * does not apply. `splitRun` is again untouched — both tables are consumed here.
+ *
  * Like `blocks.ts`, this ships only the boundary primitives. Argument parsing
  * (`k=v` / `?query` after the verb) belongs to the phase-1 canonical assembly,
  * not to the Q6 question. `resolveVerb(text, context)` takes the enclosing menu
@@ -61,6 +68,7 @@
  */
 
 import { scopeBodies } from "./blocks.ts";
+import { commandVerbIndex } from "./catalog.ts";
 import type { Defect } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
 import { resolveStatements, type Span } from "./pathresolve.ts";
@@ -364,6 +372,44 @@ export function splitRun(
 			};
 }
 
+/**
+ * The verb index the published command catalog decides for a run, or null.
+ *
+ * The command half of V4 (#228 step 2). `splitRun` above stays the ratified
+ * schema-free rule — its abstention rate is what prices decision 3 — so the
+ * baked tables are layered by the CONSUMERS, exactly as `menus.ts` has been
+ * since #210. This is the other table and the other direction: `menus.ts` says
+ * a bare path is a menu, `commandVerbIndex` says a run prefix is a command.
+ *
+ * Where `splitRun` guesses from punctuation, this is first-order evidence and
+ * wins. `/system/gps/monitor once` has one space token, so the punctuation rule
+ * calls `once` the verb and `/system/gps/monitor` the menu; the publication says
+ * `/system/gps/monitor` IS the command, which makes `once` its argument. The
+ * frozen vocabulary is never overruled in practice — all four catalog commands
+ * carrying a `VERBS` segment carry it as the LEAF, so the two rules name the
+ * same token (pinned by a test) — but where they could differ, the published
+ * path is about that exact path and the vocabulary is a curated heuristic.
+ *
+ * Directives are left alone. R10 ("a directive's operand is positional") was
+ * measured at 2,088 against 18 over the dev split, and the seven root-level
+ * catalog commands (`/beep`, `/import`, `/password`, …) are all at index 0,
+ * where R10 already puts them. Consulting the table there could only move a
+ * case the measurement never saw.
+ *
+ * `base` is the enclosing menu the run extends, so the lookup is over the same
+ * absolute path a reader would type. A match falling entirely inside `base`
+ * means the CONTEXT is a command and the run continues past it — no reading of
+ * this statement follows from that, so it returns null rather than guessing.
+ */
+export function catalogVerbAt(
+	run: readonly RunToken[],
+	base: string,
+): number | null {
+	const prefix = base.split("/").filter(Boolean);
+	const at = commandVerbIndex([...prefix, ...run.map((token) => token.name)]);
+	return at !== null && at >= prefix.length ? at - prefix.length : null;
+}
+
 /** What every split carries, whatever it decided. */
 interface VerbSplitCommon {
 	/** Context extended by each run prefix — the path readings. */
@@ -485,19 +531,35 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 
 	const { run, directive, whole, runEnds } = describeStatement(text);
 	if (run.length === 0) return unknownSplit("no leading path token");
-	if (
-		!directive &&
-		!t.startsWith("/") &&
-		!t.startsWith(":") &&
-		!VERBS.has((run[0] as RunToken).name)
-	)
-		return unknownSplit("bare-word head is not a known verb");
 
 	// `directive` already folds in the bare-directive case (`isDirective`), so it
 	// stands in for the `:`-prefixed and `x do={…}` readings — no second
 	// `scopeBodies` scan. A directive or an absolute (`/`) statement resolves at
 	// the root; everything else inherits `context`.
 	const base = directive || t.startsWith("/") ? "/" : context;
+	const catalogAt = directive ? null : catalogVerbAt(run, base);
+
+	// A bare-word head is not RouterOS navigation (Q4's CHR round), so offline
+	// cannot tell a relative command from prose. An INHERITED menu context lifts
+	// that where the catalog confirms the result: `reset-counters` under
+	// `/interface/ethernet` is `/interface/ethernet/reset-counters`, and refusing
+	// it costs a curated WRITE verb the tristate exists to catch.
+	//
+	// At the ROOT context it stays a refusal, and that boundary is not cosmetic.
+	// Seven catalog commands sit at the root (`/import`, `/quit`, `/beep`, …) and
+	// every one is an ordinary English word: the corpus carries `import serial`,
+	// `import io`, `import os` — Python pasted into a `.rsc` snippet — which the
+	// table would happily confirm as RouterOS `/import`. A non-root context is
+	// itself the evidence that the surrounding text is RouterOS at all; nothing
+	// supplies that at the root, so the ratified refusal stands there.
+	if (
+		!directive &&
+		!t.startsWith("/") &&
+		!t.startsWith(":") &&
+		!VERBS.has((run[0] as RunToken).name) &&
+		(catalogAt === null || base === "/")
+	)
+		return unknownSplit("bare-word head is not a known verb");
 
 	const candidates: string[] = [];
 	for (let k = 1; k <= run.length; k++)
@@ -508,7 +570,14 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 			),
 		);
 
-	const split = splitRun(run, { directive, whole });
+	const split =
+		catalogAt === null
+			? splitRun(run, { directive, whole })
+			: {
+					verbAt: catalogAt,
+					ambiguous: false,
+					why: `published command \`${candidates[catalogAt]}\``,
+				};
 	if (split.ambiguous) {
 		// V4's bare path, the one case `proposed` refuses — and the one the baked
 		// container table can answer (#210). The lookup reads the LAST candidate,

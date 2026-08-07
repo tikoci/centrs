@@ -231,9 +231,14 @@ describe("#210 — the container table decides V4's bare path", () => {
 			verb: null,
 			verbAt: null,
 		});
+		// #228 step 2 gave the twin its other half: the same table lookup that
+		// confirms `/ip/address` is a menu now confirms `/system/reboot` is a
+		// published command. Both twins are decided; neither is guessed.
 		expect(resolveVerb("/system/reboot", "/")).toMatchObject({
-			resolution: "ambiguous",
-			path: null,
+			resolution: "resolved",
+			kind: "command",
+			path: "/system",
+			verb: "reboot",
 		});
 	});
 
@@ -249,21 +254,81 @@ describe("#210 — the container table decides V4's bare path", () => {
 		expect(resolveVerb("/IP/Address", "/").resolution).toBe("navigation");
 	});
 
-	test("a path the table does not carry stays ambiguous (it is a FLOOR)", () => {
-		// Every one of these is a genuine no-argument COMMAND drawn from the
-		// corpus-dev residual this rule leaves behind — the residual is the right
-		// residual. Absence from the table is not evidence either way, so refusing
-		// is the fail-closed answer, not a missing table entry.
+	test("a path NEITHER table carries stays ambiguous (both are FLOORS)", () => {
+		// This list used to be seven genuine no-argument COMMANDS drawn from the
+		// corpus-dev residual `menus.ts` alone leaves behind. #228 step 2 decided
+		// six of them from the published command axis; what is left is the honest
+		// residual of BOTH tables, and absence is still not evidence either way.
+		//
+		//   `/terminal/cuu`               console-internal, published nowhere
+		//   `/disk/format-drive`          in neither source — 7.23.2 spells it
+		//                                 `/disk format` (#207's corpus example)
+		//   `/system/script run myscript` the Q6 KNOWN LIMIT: the positional
+		//                                 operand joins the run, and no table
+		//                                 carries the result
 		for (const command of [
-			"/system/reboot",
-			"/quit",
-			"/container/start",
-			"/tool/speed-test",
-			"/system/routerboard/upgrade",
-			"/certificate/create-certificate-request",
 			"/terminal/cuu",
+			"/disk/format-drive",
+			"/system/script run myscript",
 		])
 			expect(resolveVerb(command, "/").resolution).toBe("ambiguous");
+	});
+
+	test("#228 — the command axis decides the other half of V4", () => {
+		// The six the menu table alone could not reach. Each names its own verb,
+		// so the menu is the prefix and there is nothing left to guess.
+		for (const [command, path, verb] of [
+			["/system/reboot", "/system", "reboot"],
+			["/quit", "/", "quit"],
+			["/container/start", "/container", "start"],
+			["/tool/speed-test", "/tool", "speed-test"],
+			["/system/routerboard/upgrade", "/system/routerboard", "upgrade"],
+			[
+				"/certificate/create-certificate-request",
+				"/certificate",
+				"create-certificate-request",
+			],
+		] as const)
+			expect(resolveVerb(command, "/")).toMatchObject({
+				resolution: "resolved",
+				kind: "command",
+				path,
+				verb,
+			});
+	});
+
+	test("#228 — a published command outranks the punctuation guess", () => {
+		// The punctuation rule reads the first SPACE token as the verb, which puts
+		// it on the operand whenever the command itself was written slash-joined.
+		// The publication names the command, so the operand goes back to being an
+		// argument — and `argsAt` moves with it, which is what a caller lexing the
+		// argument list actually consumes.
+		expect(resolveVerb("/system/gps/monitor once", "/")).toMatchObject({
+			resolution: "resolved",
+			path: "/system/gps",
+			verb: "monitor",
+			why: "published command `/system/gps/monitor`",
+		});
+		expect(
+			resolveVerb("/interface/lte/at-chat lte1 input=x", "/"),
+		).toMatchObject({ path: "/interface/lte", verb: "at-chat" });
+	});
+
+	test("#228 — an inherited context can rescue a bare-word head; the root cannot", () => {
+		// `stop [find …]` under `/container` is a published command and resolves.
+		expect(resolveVerb("stop [find tag~$t]", "/container")).toMatchObject({
+			resolution: "resolved",
+			path: "/container",
+			verb: "stop",
+		});
+		// At the root there is no context to supply the evidence, and the seven
+		// root-level catalog commands are ordinary English words. The corpus's
+		// pasted Python must not read as RouterOS `/import`.
+		for (const text of ["import serial", "quit", "beep"])
+			expect(resolveVerb(text, "/")).toMatchObject({
+				resolution: "unknown",
+				why: "bare-word head is not a known verb",
+			});
 	});
 
 	test("an ABBREVIATED menu stays ambiguous — the table carries full names", () => {
@@ -350,9 +415,14 @@ describe("robustness invariants", () => {
 		const nav = resolveVerb("/ip/address", "/");
 		expect(nav.resolution).toBe("navigation");
 		expect(nav.candidates).toEqual(["/ip", "/ip/address"]);
-		const ambiguous = resolveVerb("/system/reboot", "/");
+		const command = resolveVerb("/system/reboot", "/");
+		expect(command.resolution).toBe("resolved");
+		expect(command.candidates).toEqual(["/system", "/system/reboot"]);
+		// And the third arm, where neither table reaches: candidates are still the
+		// whole ladder, because a refusal is the case a consumer most needs them.
+		const ambiguous = resolveVerb("/disk/format-drive", "/");
 		expect(ambiguous.resolution).toBe("ambiguous");
-		expect(ambiguous.candidates).toEqual(["/system", "/system/reboot"]);
+		expect(ambiguous.candidates).toEqual(["/disk", "/disk/format-drive"]);
 	});
 
 	test("the same relative command resolves identically under any certain context", () => {

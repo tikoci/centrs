@@ -260,10 +260,10 @@ These examples are the product-facing subset of the phase-0 findings. The
 larger mutation, coordinate, and stress matrices live as product-owned fixture
 tests per README phase 0.5; no test imports `.scratch/` code.
 
-### 18. A bare path the menu table does not know is ambiguous offline
+### 18. A bare path neither table knows is ambiguous offline
 
 ```bash
-centrs explain '/system/reboot' --json
+centrs explain '/disk/format-drive' --json
 ```
 
 The first statement has `resolution: "ambiguous"`: without a schema, the same
@@ -272,11 +272,12 @@ its transport classification is `"unknown"`, and a canonicalizer diagnostic
 explains the menu-vs-command ambiguity. `data.verdict` remains the independent
 diagnostic severity summary; it is not the statement-resolution field.
 
-**The input changed with #207.** This example used to read `/ip/route`, from
-before the baked menu table existed. `/ip/route` is one of the 615 paths that
-table lists, so offline now decides it — see example 18b — and the ambiguity this
-example is about needs a path the table does *not* list. `/system/reboot` is
-one: a real command that is shaped exactly like a menu.
+**The input has changed twice, for the same reason each time.** It first read
+`/ip/route`, from before the baked menu table existed; #207 decided that one (see
+example 18b). It then read `/system/reboot`, which #228's published command axis
+decides (see example 18c). Both tables are floors, so the example needs a path in
+*neither*: `/disk/format-drive` is real enough to appear in the corpus, but 7.23.2
+spells it `/disk format`, and MikroTik publishes no such entry.
 
 ### 18b. A bare path the menu table DOES know resolves as a menu, offline
 
@@ -289,6 +290,30 @@ centrs explain '/ip/route' --json
 generated table (#207), not a guess about hyphens or token counts, and it is why
 the export-abstention rate went to zero. Example 19 asserts the same reading
 against a live device, which is a confirmation rather than a promotion.
+
+### 18c. A bare path the COMMAND axis knows resolves as a command, offline
+
+```bash
+centrs explain '/system/reboot' --json
+```
+
+`resolution: "resolved"` with `kind: "command"`, `command.path: "/system"` and
+`command.verb: "reboot"` — the other half of the twin in example 18b, from the
+other half of the same generated table (#228). `/system/reboot` and `/ip/address`
+are the same text shape, and offline now decides both from published evidence
+instead of refusing both.
+
+The same evidence moves two things a caller can see. A published command does not
+move the menu context, so a statement after `/system/reboot` resolves where it
+actually is rather than at `/system/reboot/…`. And where a command was written
+slash-joined with a positional operand — `/system/gps/monitor once` — the verb is
+`monitor` and `once` is an argument, where the punctuation rule alone put the verb
+on `once`.
+
+`structure.containsWrite` is deliberately *not* moved by this: knowing a path is a
+command says nothing about whether it mutates, so `/system/reboot` still abstains
+(`unknown`). What changed is that `/system/gps/monitor once` now reads `monitor`
+as a curated READ verb and reports `false`.
 
 ### 19. Live evidence confirms the same bare path as a menu
 

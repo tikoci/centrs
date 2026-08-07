@@ -1262,6 +1262,38 @@ export function lookupPath(
 	return PATH_CATALOG.get(`/${segments.join("/").toLowerCase()}`);
 }
 
+/**
+ * Where a published COMMAND ends inside a path run: the index of the run
+ * segment that is the VERB, or `null` when no prefix of `segments` is one.
+ *
+ * This is the command half of V4. `menus.ts` answers "is this bare path a
+ * menu?"; nothing answered "is it a command?", so `/system/reboot` and
+ * `/system/gps/monitor once` were read by punctuation — which puts the verb on
+ * `once`, not on `monitor`. A published command names its own boundary, so the
+ * segments before it are the menu and everything after it is an argument.
+ *
+ * At most ONE prefix can match: no command row has a descendant (R3, asserted at
+ * generation), so the walk direction cannot change the answer.
+ *
+ * Presence is load-bearing in one direction only, exactly as in `menus.ts`.
+ * A hit is decisive — both catalog sources are first-order, and the 439 command
+ * rows are `both` or `published`, never inspect-only. A MISS says nothing:
+ * generic CRUD leaves are deliberately not enumerated here, so absence must
+ * fall through to the schema-free rule rather than deny that a command exists.
+ *
+ * A gate is not consulted. Whether this router HAS the hardware is a live
+ * question; what the segment IS is not.
+ */
+export function commandVerbIndex(segments: readonly string[]): number | null {
+	for (let depth = 1; depth <= segments.length; depth++)
+		if (
+			PATH_CATALOG.get(`/${segments.slice(0, depth).join("/").toLowerCase()}`)
+				?.kind === "command"
+		)
+			return depth - 1;
+	return null;
+}
+
 /** One published gate, and the path that published it. */
 export interface CatalogGate {
 	path: string;
