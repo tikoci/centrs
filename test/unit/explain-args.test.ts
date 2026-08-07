@@ -435,6 +435,45 @@ describe("the gate and the analysis never contradict each other about arguments"
 		}
 	});
 
+	test("a divergent `?query` word fails the whole list closed", () => {
+		// The guard was written at the VALUE level, and a query has no value — so
+		// the one token kind with its own early return bypassed both earlier
+		// fixes. `?comment='lan uplink'` stayed `read: true` with query
+		// `?comment='lan` plus positional `uplink'` against the gate's single
+		// `?comment=lan uplink`.
+		for (const input of [
+			"/ip/address/print ?comment='lan uplink'",
+			"/ip/address/print ?type=ether\f?disabled=true",
+			"/ip/address/print ?type=ether\v?disabled=true",
+			'/ip/address/print ?comment="lan uplink"',
+			"/ip/address/print ?comment=a\\ b",
+		]) {
+			const statement = explainCommand(input).structure.statements[0];
+			if (statement?.kind !== "command")
+				throw new Error(`expected a command for ${input}`);
+			expect(statement.arguments?.read).toBe(false);
+		}
+	});
+
+	test("`arguments.queries` equals `canonical.queries` wherever both decide", () => {
+		// The reason the two are comparable at all: what survives the query guard
+		// is exactly the shape on which the gate's tokenizer is the identity — no
+		// quote to strip, no escape to decode, no byte it splits on that ASCII
+		// whitespace does not. Anchored rather than assumed.
+		for (const input of [
+			"/ip/address/print ?type=ether ?disabled",
+			"/ip/address/print ?#|",
+			"/ip/address/print ?>0 ?type=ether",
+			"/ip/address/print",
+		]) {
+			const data = explainCommand(input);
+			const statement = data.structure.statements[0];
+			if (statement?.kind !== "command" || statement.arguments?.read !== true)
+				throw new Error(`expected a reading for ${input}`);
+			expect(statement.arguments.queries).toEqual(data.canonical.queries);
+		}
+	});
+
 	test("the analysis may abstain where the gate decided — but never differ", () => {
 		// The gate strips quotes and escapes anywhere; this lexer refuses an
 		// escape it cannot decode. Abstaining is a narrower claim than the gate's,

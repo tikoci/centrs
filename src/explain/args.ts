@@ -240,8 +240,10 @@ function readToken(
 ): Argument | string {
 	const raw = text.slice(start, end);
 	const span = { start, end };
-	if (raw.startsWith("?"))
-		return { kind: "query", span, name: raw.slice(1), text: raw };
+	if (raw.startsWith("?")) {
+		const divergent = queryDisagreement(raw);
+		return divergent ?? { kind: "query", span, name: raw.slice(1), text: raw };
+	}
 
 	const eq = unquotedEquals(text, start, end);
 	if (eq === null) {
@@ -380,6 +382,38 @@ function literalValue(
  *     statement fails the addressability check in `src/explain.ts` first
  *     (verified for NBSP, U+2028, U+FEFF and U+3000).
  */
+/**
+ * The same guard for a `?query` word — which is where the first two versions of
+ * it did NOT reach, because the query branch of {@link readToken} returns before
+ * any value is read (found by review of #202c-1, twice: the fix was written at
+ * the value level and one of the three token kinds has no value).
+ *
+ * A query is kept VERBATIM: `ArgumentsRead.queries` is source text, and a query
+ * word's `?` forms (`?>`, `?#|`, existence tests) are a grammar this lexer does
+ * not split. So the check is not about values but about whether the gate's
+ * tokenizer would produce the same STRING — and it is the identity only on a run
+ * with no quote, escape, or `\s`-but-not-ASCII-whitespace byte in it:
+ *
+ *   - `'` and `\f`/`\v` — the two disagreements above, unchanged in cause.
+ *   - `"` — the gate STRIPS quotes, so `?comment="lan uplink"` is the word
+ *     `?comment=lan uplink` there and the source text here.
+ *   - `\` — the gate consumes it as an escape, so `?comment=a\ b` is
+ *     `?comment=a b` there and `?comment=a\ b` here.
+ *
+ * What survives is exactly the shape on which the gate's tokenizer is a no-op,
+ * which is what makes `arguments.queries` and `canonical.queries` comparable at
+ * all — and that comparison is now an anchored test rather than an assumption.
+ */
+function queryDisagreement(raw: string): string | null {
+	const found = gateDisagreement(raw);
+	if (found !== null) return found;
+	if (raw.includes('"'))
+		return "a quoted query word, which centrs's execute gate unquotes and this reading keeps verbatim";
+	if (raw.includes("\\"))
+		return "an escape in a query word, which centrs's execute gate decodes and this reading keeps verbatim";
+	return null;
+}
+
 function gateDisagreement(body: string): string | null {
 	if (body.includes("'"))
 		return "a single quote in an unquoted value, which centrs's execute gate and RouterOS read differently";
