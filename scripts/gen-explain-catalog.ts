@@ -33,10 +33,10 @@ import {
 	render,
 	SITEMAP_URL,
 } from "./explain-catalog-data.ts";
-import { fetchPinnedTrees } from "./restraml-trees.ts";
+import { fetchTextWithRetry } from "./fetch-retry.ts";
+import { fetchPinnedTrees, mergeTreeTypes } from "./restraml-trees.ts";
 
 const OUTPUT_PATH = join(import.meta.dir, "..", "src", "explain", "catalog.ts");
-const USER_AGENT = "tikoci-centrs (+https://github.com/tikoci/centrs)";
 const CONCURRENCY = 4;
 
 const cacheDir = ((): string | null => {
@@ -59,29 +59,6 @@ function cachePath(slug: string): string {
 	return target;
 }
 
-async function fetchText(url: string): Promise<string> {
-	let lastError: unknown;
-	for (let attempt = 1; attempt <= 3; attempt++) {
-		try {
-			const response = await fetch(url, {
-				headers: { "user-agent": USER_AGENT },
-				signal: AbortSignal.timeout(20_000),
-			});
-			if (response.ok) return await response.text();
-			// 4xx other than rate limiting is not worth retrying.
-			if (response.status !== 429 && response.status < 500)
-				throw new Error(`HTTP ${response.status} ${response.statusText}`);
-			lastError = new Error(`HTTP ${response.status} ${response.statusText}`);
-		} catch (error) {
-			lastError = error;
-		}
-		if (attempt < 3) await Bun.sleep(250 * 2 ** (attempt - 1));
-	}
-	throw new Error(`failed to fetch ${url} after 3 attempts`, {
-		cause: lastError,
-	});
-}
-
 async function fetchPage(slug: string): Promise<string> {
 	if (cacheDir !== null) {
 		try {
@@ -90,7 +67,13 @@ async function fetchPage(slug: string): Promise<string> {
 			// not cached yet
 		}
 	}
-	const text = await fetchText(`${MANUAL_BASE}${CLI_PREFIX}${slug}.md`);
+	const text = await fetchTextWithRetry(
+		`${MANUAL_BASE}${CLI_PREFIX}${slug}.md`,
+	);
+	// codeql[js/http-to-file-access] `--cache` is an opt-in maintainer flag that
+	// stores fetched Markdown for local iteration; the response body is parsed by
+	// `parsePage`, never executed, and `cachePath` constrains the file name to a
+	// sitemap-validated slug inside the chosen directory.
 	if (cacheDir !== null) writeFileSync(cachePath(slug), text);
 	return text;
 }
@@ -121,7 +104,7 @@ async function mapConcurrent<T, U>(
 // Main
 // ---------------------------------------------------------------------------
 
-const sitemapXml = await fetchText(SITEMAP_URL);
+const sitemapXml = await fetchTextWithRetry(SITEMAP_URL);
 const slugs = cliRefSlugs(sitemapXml);
 console.log(`cli-reference: ${slugs.length} pages`);
 
@@ -143,12 +126,13 @@ const publishedEntries = parsed.flat();
 console.log(`cli-reference: ${publishedEntries.length} entries`);
 
 const extracts = await fetchPinnedTrees();
-const treeTypes = new Map<string, string>();
+// Aborts on a cross-tree `dir`↔`cmd` flip, exactly as the menu generator does.
+// Last-write-wins here would let a published kind be validated against whichever
+// tree happened to sort last.
+const treeTypes = mergeTreeTypes(extracts);
 const treeContainers = new Set<string>();
-for (const extract of extracts) {
-	for (const [path, type] of extract.types) treeTypes.set(path, type);
+for (const extract of extracts)
 	for (const path of extract.containers) treeContainers.add(path);
-}
 
 const rows = build(publishedEntries, treeTypes, treeContainers);
 const content = render(rows, {

@@ -47,10 +47,11 @@
  * table**, and stays that way after #228 adopted it elsewhere. This table is a
  * DEVICE-CONFIRMED floor: every entry was observed as a container on at least
  * one real `/console/inspect` tree, which is what its header is allowed to
- * claim. 79 of the published menus are confirmed by no tree at all — necessarily
- * so, since this table *is* the union of those trees — so merging them in would
- * quietly retire that guarantee for a per-table provenance that cannot be stated
- * per entry.
+ * claim. 65 published container paths are confirmed by no tree at all — the
+ * `published`-provenance `menu` (54) and `settings` (11) rows of
+ * `src/explain/catalog.ts` — necessarily so, since this table *is* the union of
+ * those trees. Merging them in would quietly retire that guarantee for a
+ * per-table provenance that cannot be stated per entry.
  *
  * `src/explain/catalog.ts` (`gen-explain-catalog.ts`) is where the published
  * source landed instead: the same four trees unioned with CLI Reference, but
@@ -79,6 +80,7 @@ import { join } from "node:path";
 import {
 	CONTAINER_TYPES,
 	fetchPinnedTrees,
+	mergeTreeTypes,
 	type RestramlExtract,
 } from "./restraml-trees.ts";
 
@@ -87,37 +89,14 @@ const OUTPUT_PATH = join(import.meta.dir, "..", "src", "explain", "menus.ts");
 type Extract = RestramlExtract;
 
 /**
- * Union the extracts, aborting on any path whose type differs between trees.
+ * Every container path the pinned trees agree on.
  *
- * Measured across these four trees the conflict count is ZERO — no `dir`↔`cmd`
- * flip across three versions or across architectures — which is what makes a
- * version-less union sound at all. If RouterOS ever does flip one, that is a
- * fact this table cannot represent, so generation must stop and force a human
- * decision rather than silently letting whichever tree sorted last win.
+ * `mergeTreeTypes` is what aborts on a cross-tree `dir`↔`cmd` flip, and it is
+ * shared with `gen-explain-catalog.ts` so both tables refuse the same union.
  */
 function unionContainers(extracts: readonly Extract[]): string[] {
-	const seen = new Map<string, { type: string; source: string }>();
-	const conflicts: string[] = [];
-	for (const extract of extracts) {
-		const label = `${extract.arch} ${extract.version}`;
-		for (const [path, type] of extract.types) {
-			const prior = seen.get(path);
-			if (prior === undefined) {
-				seen.set(path, { type, source: label });
-				continue;
-			}
-			if (prior.type !== type)
-				conflicts.push(
-					`${path}: ${prior.type} (${prior.source}) vs ${type} (${label})`,
-				);
-		}
-	}
-	if (conflicts.length > 0)
-		throw new Error(
-			`node type conflicts across the pinned trees — the union is not sound:\n  ${conflicts.join("\n  ")}`,
-		);
-	return [...seen]
-		.filter(([, { type }]) => CONTAINER_TYPES.has(type))
+	return [...mergeTreeTypes(extracts)]
+		.filter(([, type]) => CONTAINER_TYPES.has(type))
 		.map(([path]) => path)
 		.sort();
 }

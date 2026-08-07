@@ -244,13 +244,20 @@ a live router (or to rosetta, by tip). Offline diagnostics are structural
 command accepts.
 
 Offline mode does ship two generated **structure** tables, baked at build time
-from pinned sources and read as ordinary closed lists: `src/explain/menus.ts`
-(container paths, from pinned restraml `/console/inspect` trees, #207) and
-`src/explain/catalog.ts` (path → kind, per-entry provenance, and MikroTik's
-published applicability gate, unioned from those trees and CLI Reference, #228).
-They decide whether a path is navigation or a command; they never describe what
-a command accepts. Absence from them abstains and never rejects, and a
-`published`-only entry is never decisive for navigation.
+from pinned sources and read as ordinary closed lists. They may say whether a
+path is navigation or a command; they never describe what a command accepts.
+Absence from either abstains and never rejects.
+
+- `src/explain/menus.ts` (#207) — container paths from pinned restraml
+  `/console/inspect` trees. **Read today**, by `write.ts`, to confirm
+  navigation.
+- `src/explain/catalog.ts` (#228) — path → kind, per-entry provenance and
+  MikroTik's published applicability gate, unioned from those same trees and
+  CLI Reference. **Generated and committed, but read by nothing**: no analyzer
+  consults it, so it changes no verdict yet. Wiring it in is a separate step,
+  and when it lands a `published`-only entry is decisive for `command` and a
+  tie-breaker only for `menu` — a published command misread as a menu would
+  drop a write as navigation.
 
 A live target arrives through the **same resolver as every other command**
 (CDB name/MAC/group keys, `--quickchr`, future TikTOML — #134/#174): a
@@ -898,10 +905,12 @@ Decided this round (details inline above; recorded in #90):
   no per-menu verb lists, no `.proplist` — but it does ship a generated
   **structure** table (path, kind, provenance, published applicability gate)
   unioned from pinned RouterOS inspect trees and MikroTik's published CLI
-  Reference. That table decides whether a path is navigation or a command; it
-  never describes what a command accepts. Absence from it abstains and never
-  rejects, and a `published`-only entry is never decisive for navigation. It is
-  still a static snapshot of vendor-published structure, which is why the
+  Reference. Such a table may say whether a path is navigation or a command; it
+  never describes what a command accepts, absence from it abstains and never
+  rejects, and a `published`-only entry is never decisive for navigation.
+  `src/explain/catalog.ts` is that table, and it is **committed but unread** —
+  it decides nothing until an analyzer consults it, which is a separate step.
+  It is still a static snapshot of vendor-published structure, which is why the
   decision is amended rather than argued around.
 - **No rosetta coupling for now** — at most steering tips; no calls, no
   artifacts, no maintained bindings.

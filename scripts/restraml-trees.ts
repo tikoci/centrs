@@ -23,6 +23,8 @@
  * effectively every real hardware export.
  */
 
+import { fetchTextWithRetry } from "./fetch-retry.ts";
+
 const RESTRAML_BASE = "https://tikoci.github.io/restraml/";
 
 /** One pinned typed tree. `file` is relative to the restraml Pages base. */
@@ -119,13 +121,51 @@ export interface RestramlExtract extends RestramlSource, WalkResult {
 export async function fetchTree(
 	source: RestramlSource,
 ): Promise<RestramlExtract> {
-	const url = `${RESTRAML_BASE}${source.file}`;
-	const response = await fetch(url);
-	if (!response.ok)
-		throw new Error(`${url} -> HTTP ${response.status} ${response.statusText}`);
-	const body = await response.text();
+	const body = await fetchTextWithRetry(`${RESTRAML_BASE}${source.file}`);
 	const walked = walkTree(JSON.parse(body) as TreeNode);
 	return { ...source, ...walked, bytes: body.length };
+}
+
+/**
+ * Merge the extracts into one path → node-type map, aborting on any path whose
+ * type differs between trees.
+ *
+ * Measured across these four trees the conflict count is ZERO — no `dir`↔`cmd`
+ * flip across three versions or across architectures — which is what makes a
+ * version-less union sound at all. If RouterOS ever does flip one, that is a
+ * fact neither generated table can represent, so generation must stop and force
+ * a human decision rather than letting whichever tree sorted last win.
+ *
+ * Both generators merge here so neither can quietly acquire the other's
+ * behaviour: a silent last-write-wins on one side would let a published kind be
+ * validated against an arbitrary tree.
+ */
+export function mergeTreeTypes(
+	extracts: readonly RestramlExtract[],
+): Map<string, string> {
+	const merged = new Map<string, string>();
+	const sources = new Map<string, string>();
+	const conflicts: string[] = [];
+	for (const extract of extracts) {
+		const label = `${extract.arch} ${extract.version}`;
+		for (const [path, type] of extract.types) {
+			const prior = merged.get(path);
+			if (prior === undefined) {
+				merged.set(path, type);
+				sources.set(path, label);
+				continue;
+			}
+			if (prior !== type)
+				conflicts.push(
+					`${path}: ${prior} (${sources.get(path)}) vs ${type} (${label})`,
+				);
+		}
+	}
+	if (conflicts.length > 0)
+		throw new Error(
+			`node type conflicts across the pinned trees — the union is not sound:\n  ${conflicts.join("\n  ")}`,
+		);
+	return merged;
 }
 
 /** Fetch every pinned tree, reporting each as it lands. */

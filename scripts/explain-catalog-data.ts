@@ -281,9 +281,14 @@ export function parsePage(slug: string, markdown: string): PublishedEntry[] {
 
 		// Argument rows, for the R2 alias assertion only. A `c1="Flag"` table names
 		// print flags rather than arguments, so its rows are skipped.
-		const open = line.match(/^<ArgTable\b[^>]*\bc1="([^"]*)"/);
-		if (open) {
-			table = open[1] ?? "";
+		//
+		// EVERY `<ArgTable` opening is recognized, not only one carrying a known
+		// `c1` on the same line. If the source ever splits the tag across lines or
+		// drops the header, the alternative is worse than a crash: `table` would
+		// keep its previous value and the new table's rows would be attributed to
+		// the wrong kind — flags read as arguments, silently.
+		if (line.startsWith("<ArgTable ") || line.startsWith("<ArgTable>")) {
+			table = line.match(/\bc1="([^"]*)"/)?.[1] ?? null;
 			if (
 				table !== "Flag" &&
 				table !== "Argument" &&
@@ -299,7 +304,12 @@ export function parsePage(slug: string, markdown: string): PublishedEntry[] {
 			continue;
 		}
 		const row = line.match(/^<ArgTableRow\b[^>]*\barg="([^"]*)"/);
-		if (row && table !== null && table !== "Flag")
+		if (row === null) continue;
+		if (table === null)
+			throw new Error(
+				`${slug}: ArgTableRow outside any ArgTable at line ${sourceLine}`,
+			);
+		if (table !== "Flag")
 			current.fields.add(decodeXml(row[1] ?? "").toLowerCase());
 	}
 

@@ -279,6 +279,30 @@ describe("explain/catalog — parsing published pages", () => {
 		).toThrow(/unknown ArgTable c1 header/);
 	});
 
+	/**
+	 * The dangerous shape, and why the open-tag match is deliberately loose. If an
+	 * `<ArgTable>` with no recognized `c1` were skipped instead of refused, the
+	 * previous table's kind would stay in force and its rows would be read as
+	 * arguments — a Flag table's `X`/`R` landing in the R2 field set, silently.
+	 */
+	test("refuses an ArgTable that declares no header at all", () => {
+		expect(() =>
+			parsePage(
+				"x",
+				'import {A} from \'b\';\n\n## x/y\n\n**Type:** Command\n<ArgTable c1="Flag" c2="Name">\n<ArgTableRow arg="X" typ="disabled"></ArgTableRow>\n</ArgTable>\n<ArgTable>\n<ArgTableRow arg="leaked" typ="bool"></ArgTableRow>\n</ArgTable>\n',
+			),
+		).toThrow(/unknown ArgTable c1 header/);
+	});
+
+	test("refuses a row outside any table", () => {
+		expect(() =>
+			parsePage(
+				"x",
+				'import {A} from \'b\';\n\n## x/y\n\n**Type:** Command\n<ArgTableRow arg="orphan" typ="bool"></ArgTableRow>\n',
+			),
+		).toThrow(/ArgTableRow outside any ArgTable/);
+	});
+
 	/** A fenced example must not be mistaken for structure. */
 	test("ignores headings and markers inside a code fence", () => {
 		const entries = parsePage(
