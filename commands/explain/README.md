@@ -161,14 +161,26 @@ today's path/verb/args split and script-vs-structured gate:
   version — which is why **decision 3 (no offline schema snapshot) ratifies
   unchanged**.
 
-  The *container* half of that pair is since decidable, and decision 3 still
-  holds. `src/explain/menus.ts` (#207) bakes only the menu-vs-command node type
-  — not a schema — and it is version-less because the pinned trees show no
-  `dir`↔`cmd` flip across 7.10.2 → 7.24rc2 or across architectures. So
-  `/ip/route` now resolves as `navigation` while `/system/reboot` still abstains
-  (#210). The floor is unmoved: the table is deliberately incomplete, absence
-  from it decides nothing, and every rule above it still refuses rather than
-  guesses.
+  The *container* half of that pair is since decidable. `src/explain/menus.ts`
+  (#207) bakes only the menu-vs-command node type — not a schema — and it is
+  version-less because the pinned trees show no `dir`↔`cmd` flip across
+  7.10.2 → 7.24rc2 or across architectures. So `/ip/route` now resolves as
+  `navigation` (#210). The floor is unmoved: the table is deliberately
+  incomplete, absence from it decides nothing, and every rule above it still
+  refuses rather than guesses.
+
+  The *command* half is what #228 addressed, by adding a second first-order
+  source rather than a schema. MikroTik's CLI Reference is generated from the
+  definition structs, and measured against the same four pinned trees it has
+  **zero kind contradictions** across 906 exactly-matching paths, three RouterOS
+  versions and two architectures; 105 of the 112 published paths absent from
+  every tree carry a `package`/`conditions`/`syscap` gate that predicts the
+  absence. `src/explain/catalog.ts` unions the two with per-entry provenance,
+  which is what keeps `menus.ts`'s device-confirmed floor intact rather than
+  diluting it. The publication is not device truth: it uses the
+  definition-module spelling, so `caps-man/acl/access-list` is published and
+  unreachable on any device, and the hand-audited alias allowlist that recovers
+  the CLI spelling is guarded by two generation-time assertions.
 
 There are real unknowns in how far offline parsing can go (expression
 grammar, scope fidelity vs `:parse`, `[]`-nesting corner cases). Grounding
@@ -223,11 +235,22 @@ with a tip ("richer data is available if you name a router").
 | **Offline** (default) | no `<router>` given | the centrs canonicalizer only: segmentation, AST-like structure, path/verb/args split, script-vs-structured, write-shape, transport classification, `curl`/runner rendering | `canonicalizer` (basis `heuristic`/`derived`) |
 | **Live** | `<router>` given | `request=highlight` (byte-classified spans, first hard error), `:parse` (structure, error line/column), `request=completion` / `syntax` / `child` (candidates, structured help, children/args/`.proplist` sets) | `live-inspect`, stamped with the device's version |
 
-There is **no static schema snapshot** (decision, 2026-07-19): offline mode
-does not consult restraml `inspect.json`/`deep-inspect.json` or rosetta data —
-version/schema questions are steered to a live router (or to rosetta, by tip).
-Offline diagnostics are therefore structural ("this does not parse", "this is
-script-shaped"), never existence claims about paths or arguments.
+There is **no static schema snapshot** (decision, 2026-07-19, amended 2026-08-07
+by #228): offline mode makes no call at analysis time — not to a router, not to
+rosetta, not to the network — and ships no argument names, types, enums,
+per-menu verb lists or `.proplist`. Version and schema questions are steered to
+a live router (or to rosetta, by tip). Offline diagnostics are structural
+("this does not parse", "this is script-shaped"), never claims about what a
+command accepts.
+
+Offline mode does ship two generated **structure** tables, baked at build time
+from pinned sources and read as ordinary closed lists: `src/explain/menus.ts`
+(container paths, from pinned restraml `/console/inspect` trees, #207) and
+`src/explain/catalog.ts` (path → kind, per-entry provenance, and MikroTik's
+published applicability gate, unioned from those trees and CLI Reference, #228).
+They decide whether a path is navigation or a command; they never describe what
+a command accepts. Absence from them abstains and never rejects, and a
+`published`-only entry is never decisive for navigation.
 
 A live target arrives through the **same resolver as every other command**
 (CDB name/MAC/group keys, `--quickchr`, future TikTOML — #134/#174): a
@@ -638,10 +661,13 @@ That is the difference — an accepted flag must do something observable.
   nothing more.
 - No execution probes; no state mutation of any kind.
 - No fan-out.
-- No rosetta/restraml integration for now (decision): no shell-outs, no
-  vendored schema/docs artifacts, no version-history facts. Output may tip
-  toward rosetta for docs/version questions; revisit only after centrs's
-  shape settles and rosetta publishes stable consumable surfaces.
+- No rosetta/restraml integration at runtime (decision, amended by #228): no
+  shell-outs, no calls, no vendored *schema* artifact, no version-history facts.
+  The two generated structure tables are built from pinned public sources by
+  scripts in `scripts/`, and centrs vendors its own CLI-Reference ETL rather
+  than depending on rosetta for it. Output may tip toward rosetta for
+  docs/version questions; deeper integration waits on centrs's shape settling
+  and rosetta publishing stable consumable surfaces.
 - No promise of enum exhaustiveness or of the upstream `completion-tricks`
   synthetic-probe recipes (still open research in lsp-routeros-ts
   `BACKLOG.md`) — candidates are labeled as observed, not closed sets.
@@ -865,6 +891,18 @@ Decided this round (details inline above; recorded in #90):
 - **No offline schema snapshot** — offline is the canonicalizer, full stop;
   schema/version truth comes from a live router (steered by tip) and
   docs/version history stays rosetta's domain.
+  *Amended 2026-08-07 (#228).* The rejected candidate was the
+  restraml/deep-inspect command tree: indirect, version-shaped schema data with
+  substantial churn, and that reasoning still holds for it. The carve-out is
+  narrower: offline ships **no schema** — no argument names, no types, no enums,
+  no per-menu verb lists, no `.proplist` — but it does ship a generated
+  **structure** table (path, kind, provenance, published applicability gate)
+  unioned from pinned RouterOS inspect trees and MikroTik's published CLI
+  Reference. That table decides whether a path is navigation or a command; it
+  never describes what a command accepts. Absence from it abstains and never
+  rejects, and a `published`-only entry is never decisive for navigation. It is
+  still a static snapshot of vendor-published structure, which is why the
+  decision is amended rather than argued around.
 - **No rosetta coupling for now** — at most steering tips; no calls, no
   artifacts, no maintained bindings.
 - **centrs-owned span vocabulary** with RouterOS-fidelity color mapping for

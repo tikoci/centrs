@@ -98,20 +98,24 @@ jobs:
             --requested-version "$REQUESTED_VERSION" \
             --summary "$GITHUB_STEP_SUMMARY"
 
-  # Drift gate for the generated `src/explain/menus.ts` (#207). It lives here
-  # rather than in ci.yaml's offline `lint:ci` because checking means refetching
-  # the pinned restraml trees over the network, and a per-PR gate that can fail
-  # on someone else's Pages deploy is a flaky gate. Nothing else in QA depends on
-  # it, so it runs alongside the CHR matrix rather than ahead of it.
+  # Drift gate for the two generated explain tables: `src/explain/menus.ts`
+  # (#207, pinned restraml trees) and `src/explain/catalog.ts` (#228, those same
+  # trees unioned with MikroTik's published CLI Reference). Both live here rather
+  # than in ci.yaml's offline `lint:ci` because checking means refetching their
+  # sources over the network, and a per-PR gate that can fail on someone else's
+  # deploy is a flaky gate. Nothing else in QA depends on them, so they run
+  # alongside the CHR matrix rather than ahead of it.
   #
   # A failure here is not automatically a bug: the pinned trees are supposed to
-  # be immutable, so drift means restraml republished one. Read the diff before
-  # committing a regeneration — a path moving from `cmd` to `dir` would let the
-  # analyzer clear a write, which is the one direction that costs correctness.
-  explain-menus-drift:
-    name: Explain menu table drift
+  # be immutable, so drift means restraml republished one. CLI Reference is
+  # current-only and genuinely does move. Read the diff before committing a
+  # regeneration — a path moving from `cmd` to `dir`, or losing device
+  # provenance, changes what a caller may conclude from it, which is the one
+  # direction that costs correctness.
+  explain-tables-drift:
+    name: Explain table drift
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -125,6 +129,8 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Check src/explain/menus.ts against the pinned restraml trees
         run: bun run explain:menus:check
+      - name: Check src/explain/catalog.ts against CLI Reference and the trees
+        run: bun run explain:catalog:check
 
   chr-matrix:
     name: CHR • ${{ matrix.routeros_channel }}${{ inputs.routeros_version && format(' • {0}', inputs.routeros_version) || '' }}

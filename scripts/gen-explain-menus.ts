@@ -25,18 +25,9 @@
  *
  * ## Source selection (pinned, deliberately)
  *
- * Four extra-packages trees, two architectures, spanning 7.10.2 → 7.24rc2.
- * The pin is the point: `--check` must be reproducible, so adopting a newer
- * RouterOS tree is a deliberate edit to `SOURCES` below, reviewed like any
- * other change. It is *not* version tracking — the emitted table is
- * version-less by design and approximately "latest", because `explain` is
- * offline and does not know the target device's version.
- *
- * arm64 is not optional. 22 menus are arm64-only on the published trees —
- * `/system/routerboard` and its button submenus, `/interface/ethernet/switch`,
- * `/ip/cloud/back-to-home-*`, the whole `/zerotier` subtree — and several are
- * exactly the hyphenated shape #207 is about. `/system/routerboard` appears in
- * effectively every real hardware export.
+ * The pin lives in `scripts/restraml-trees.ts`, shared with
+ * `gen-explain-catalog.ts` so both tables are built from the same four trees.
+ * That file carries the rationale for the pin and for arm64.
  *
  * ## Absence is safe; presence is load-bearing
  *
@@ -52,15 +43,20 @@
  * which is why generation aborts on a cross-tree type conflict rather than
  * picking a winner, and why the sources are pinned rather than tracking latest.
  *
- * `cliref` is deliberately NOT a source **for this table**, for one reason:
- * CLI-Reference paths are the definition-module spelling, not the CLI spelling
- * — `caps-man/acl/access-list` where the real menu is `/caps-man/access-list`.
- * Those doc spellings are unreachable on a device over `/console/inspect`,
- * REST *and* the native API alike (#228), so feeding one in would add a path
- * that does not exist. Recovering the CLI spelling needs a hand-audited alias
- * allowlist, which this generator does not have — and the naive rewrite is
- * unsafe: dropping an interior segment maps `/interface/ethernet/poe/monitor`
- * onto `/interface/ethernet/monitor`, a command with a disjoint field set.
+ * MikroTik's published CLI Reference is deliberately NOT a source **for this
+ * table**, and stays that way after #228 adopted it elsewhere. This table is a
+ * DEVICE-CONFIRMED floor: every entry was observed as a container on at least
+ * one real `/console/inspect` tree, which is what its header is allowed to
+ * claim. 79 of the published menus are confirmed by no tree at all — necessarily
+ * so, since this table *is* the union of those trees — so merging them in would
+ * quietly retire that guarantee for a per-table provenance that cannot be stated
+ * per entry.
+ *
+ * `src/explain/catalog.ts` (`gen-explain-catalog.ts`) is where the published
+ * source landed instead: the same four trees unioned with CLI Reference, but
+ * with `provenance` carried per entry. It is additive and does not reinterpret
+ * anything here. Read that generator for the alias allowlist, the published
+ * applicability gates, and the kind-contradiction assertion.
  *
  * What is NOT a reason, and used to be claimed here: that 79 of cliref's 81
  * tree-only dirs are "phantoms never observed on any device". Measured against
@@ -69,9 +65,7 @@
  * MSRP, partitions, SwOS — and 105 of the 112 published paths absent from every
  * tree carry a `package`/`conditions`/`syscap` gate that predicts the absence.
  * The unexplained residue is 7 paths. Across 906 exactly-matching paths the two
- * sources have ZERO kind contradictions. cliref is complementary to these trees
- * on the hardware axis, not noise; whether centrs adopts it as a second
- * provenance is the open question in #228.
+ * sources have ZERO kind contradictions.
  *
  * Usage:
  *   bun run explain:menus          # regenerate src/explain/menus.ts
@@ -82,114 +76,15 @@
  */
 
 import { join } from "node:path";
+import {
+	CONTAINER_TYPES,
+	fetchPinnedTrees,
+	type RestramlExtract,
+} from "./restraml-trees.ts";
 
 const OUTPUT_PATH = join(import.meta.dir, "..", "src", "explain", "menus.ts");
 
-const RESTRAML_BASE = "https://tikoci.github.io/restraml/";
-
-/** One pinned typed tree. `file` is relative to {@link RESTRAML_BASE}. */
-interface Source {
-	version: string;
-	arch: "x86" | "arm64";
-	file: string;
-}
-
-/**
- * The pinned trees. Two x86 points early in 7.x for menus that existed then and
- * were later renamed away, the phase-0 pinned pair (7.23.2 / 7.24rc2) for
- * current breadth, and arm64 for the hardware-only menus above.
- *
- * `extra/` is the extra-packages build throughout — a bare CHR under-covers.
- * Before 7.20.8 restraml published no arch-split deep-inspect, so the early
- * points read `extra/inspect.json`, which carries the same `_type` tagging.
- */
-const SOURCES: readonly Source[] = [
-	{ version: "7.10.2", arch: "x86", file: "7.10.2/extra/inspect.json" },
-	{ version: "7.16", arch: "x86", file: "7.16/extra/inspect.json" },
-	{
-		version: "7.23.2",
-		arch: "x86",
-		file: "7.23.2/extra/deep-inspect.x86.json",
-	},
-	{
-		version: "7.24rc2",
-		arch: "arm64",
-		file: "7.24rc2/extra/deep-inspect.arm64.json",
-	},
-];
-
-/**
- * Node types that name a CONTAINER — something a bare path may navigate into.
- *
- * `dir` is the ordinary menu. `path` is the tagging restraml gives the seven
- * top-level namespaces (`/file`, `/interface`, `/ip`, `/ipv6`, `/system`,
- * `/tool`, `/user`); they are navigable menus like any other and are included
- * for that reason. Omitting them would make `/ip` alone stop reading as
- * navigation — a regression the shape rule never had.
- */
-const CONTAINER_TYPES: ReadonlySet<string> = new Set(["dir", "path"]);
-
-interface TreeNode {
-	_type?: string;
-	[child: string]: unknown;
-}
-
-interface WalkResult {
-	containers: Set<string>;
-	/** Every node's observed type, for the cross-tree conflict assertion. */
-	types: Map<string, string>;
-	nodes: number;
-}
-
-/**
- * Collect every container path in one typed tree.
- *
- * The tree nests children directly under their parent object alongside the
- * `_type` tag, so any key starting with `_` is metadata and any non-object
- * value is a scalar annotation — both are skipped. `arg` and `cmd` nodes are
- * still WALKED (a `cmd` carries its arguments as children) so their types are
- * recorded for the conflict check, but they never enter `containers`.
- */
-function walkTree(tree: TreeNode): WalkResult {
-	const containers = new Set<string>();
-	const types = new Map<string, string>();
-	let nodes = 0;
-
-	const visit = (node: TreeNode, prefix: string): void => {
-		for (const [name, child] of Object.entries(node)) {
-			if (name.startsWith("_")) continue;
-			if (typeof child !== "object" || child === null) continue;
-			const value = child as TreeNode;
-			const type = value._type;
-			if (typeof type !== "string") continue;
-			const path = `${prefix}/${name.toLowerCase()}`;
-			nodes++;
-			types.set(path, type);
-			if (CONTAINER_TYPES.has(type)) containers.add(path);
-			visit(value, path);
-		}
-	};
-
-	visit(tree, "");
-	return { containers, types, nodes };
-}
-
-interface Extract extends Source {
-	containers: Set<string>;
-	types: Map<string, string>;
-	nodes: number;
-	bytes: number;
-}
-
-async function fetchTree(source: Source): Promise<Extract> {
-	const url = `${RESTRAML_BASE}${source.file}`;
-	const response = await fetch(url);
-	if (!response.ok)
-		throw new Error(`${url} -> HTTP ${response.status} ${response.statusText}`);
-	const body = await response.text();
-	const walked = walkTree(JSON.parse(body) as TreeNode);
-	return { ...source, ...walked, bytes: body.length };
-}
+type Extract = RestramlExtract;
 
 /**
  * Union the extracts, aborting on any path whose type differs between trees.
@@ -288,14 +183,7 @@ export function isMenuPath(segments: readonly string[]): boolean {
 `;
 }
 
-const extracts: Extract[] = [];
-for (const source of SOURCES) {
-	const extract = await fetchTree(source);
-	console.log(
-		`${source.arch} ${source.version}: ${extract.nodes.toLocaleString("en-US")} nodes, ${extract.containers.size} containers (${(extract.bytes / 1024 / 1024).toFixed(1)} MiB)`,
-	);
-	extracts.push(extract);
-}
+const extracts = await fetchPinnedTrees();
 
 const paths = unionContainers(extracts);
 const content = render(extracts, paths);
