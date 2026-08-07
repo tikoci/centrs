@@ -13,4 +13,6 @@ Use scoped instruction files instead of expanding root prompts.
 - Existing `.github/instructions/*.instructions.md` files contain path-specific
   Copilot instructions using `applyTo`; edit them to keep Copilot-specific
   pointers and existing path scopes accurate.
-- `.github/copilot-instructions.md` and `.claude/CLAUDE.md` are compatibility pointers.
+- `.github/copilot-instructions.md` is a compatibility pointer. Claude reads the
+  root `AGENTS.md` directly via the `CLAUDE.md` symlink, so no separate
+  `.claude/CLAUDE.md` pointer is kept.

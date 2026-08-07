@@ -20,31 +20,6 @@ tests passing is not done. The **normative** definition is
 the integration-test procedure is in
 `.github/instructions/done-definition.instructions.md`.
 
-## Quick commands
-
-```bash
-bun install
-bun run lint
-bun run test
-bun run test:integration
-bun run build
-bun run lint:ci
-```
-
-## Repo map
-
-| Path                        | Purpose                                                            |
-| --------------------------- | ------------------------------------------------------------------ |
-| `README.md`                 | Product overview and CLI manual.                                   |
-| `docs/CONSTITUTION.md`      | Load-bearing rules.                                                |
-| `docs/MATRIX.md`            | Command×protocol grid; only status source of truth.                |
-| `commands/<name>/`          | Per-command README + examples (the executable spec).               |
-| `src/`                      | Bun/TypeScript source.                                             |
-| `test/`                     | Unit, integration, and fixture space.                              |
-| `.mcp.json`                 | Shared MCP server config; no secrets or credentials.               |
-| `.github/instructions/`     | Path-scoped Copilot instructions with `applyTo` metadata.          |
-| `.github/workflows/`        | CI, QA/security, release, docs, and lab automation.                |
-
 ## Instruction map
 
 Copilot auto-loads `.github/instructions/*.instructions.md`; Codex and Claude
