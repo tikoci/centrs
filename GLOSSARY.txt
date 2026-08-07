@@ -642,3 +642,30 @@ CAINFO # `AT#CAINFO?` — an LTE modem AT command in a corpus `/interface/lte/at
 vzwinternet # Verizon LTE APN name, from a corpus `/interface lte apn add` line
 rtr # short device name in an explain test input
 
+
+# #228 path-catalog vocabulary: the CLI-Reference definition-module segments the
+# alias allowlist maps away, the published gate values, and the prose terms used
+# to describe the union. The generated table itself is cspell-ignored.
+chancfg # caps-man definition module for `/caps-man/channel` — a doc spelling, not a CLI path
+dpathcfg # caps-man definition module for `/caps-man/datapath`
+ifaceactual # caps-man definition module for `/caps-man/actual-interface-configuration`
+ratescfg # caps-man definition module for `/caps-man/rates`
+remoteap # caps-man definition module for `/caps-man/remote-cap`
+seccfg # caps-man definition module for `/caps-man/security`
+ifaces # CLI-Reference definition module for `/tool/graphing/interface`
+datapath # `/caps-man/datapath` — the real CLI menu behind `dpathcfg`
+easymesh # `/interface/wifi/easymesh` — the doc spelling of `/interface/wifi/wps-push-button`
+wps # Wi-Fi Protected Setup — `/interface/wifi/wps-push-button`
+qos # switch-chip quality of service — `/interface/ethernet/switch/qos`, a real menu segment R1 must never drop
+qca # Qualcomm Atheros — the `wireless-qca` package gate
+multiswitch # syscap gate: more than one switch chip
+oldswitch # syscap gate: the pre-Prestera switch-chip menu shape
+smips # RouterOS architecture (single-core MIPS), named in `conditions:` gates
+mmips # RouterOS architecture (multi-core MIPS), named in `conditions:` gates
+CRS # MikroTik Cloud Router Switch — carries the switch-chip menus no CHR has
+CCR # MikroTik Cloud Core Router
+ungated # of a published path: carrying no package/conditions/syscap that would explain its absence from a tree
+unioned # of the two sources: merged with per-entry provenance rather than flattened
+unioning # the act of the above
+greppable # of a generated table: one entry per line, so `grep` finds a path
+apos # the `&apos;` XML entity, decoded by the CLI-Reference parser

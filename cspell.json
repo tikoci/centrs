@@ -11,6 +11,7 @@
 		"dist",
 		"docs/api",
 		"src/explain/menus.ts",
+		"src/explain/catalog.ts",
 		"test/fixtures",
 		"GLOSSARY.txt",
 		".claude/settings*.json"

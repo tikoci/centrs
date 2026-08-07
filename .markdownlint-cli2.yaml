@@ -14,3 +14,7 @@ ignores:
   - "**/AGENTS.md"
   - "**/node_modules/**"
   - "docs/api/**"
+  # Captured third-party Markdown, frozen verbatim so a parser can be tested
+  # against it. Reformatting it would defeat the fixture. `README.md` files in
+  # those directories are ours and stay linted.
+  - "test/fixtures/**/cliref/!(README).md"
