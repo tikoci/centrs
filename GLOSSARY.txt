@@ -623,3 +623,15 @@ cuu # `/terminal cuu` (cursor up) — a RouterOS command that reads as a bare me
 # from the menu block above even though both arrived with the explain work.
 importability # whether a document RouterOS emitted can be re-imported (#203 oracle level L2)
 menuctx # the IL (`:parse`) statement type for menu navigation, as against `cmd` — the native nav-vs-command oracle (#210)
+
+# #202c-1 argument-lexer vocabulary: one analysis term, plus the RouterOS names
+# that appear verbatim in the corpus lines `test/unit/explain-args.test.ts`
+# fixtures. The corpus lines are real forum scripts and are quoted rather than
+# paraphrased, so their spellings are data, not prose.
+renderable # of a statement: covered by a tested REST mapping rule, so `--curl` may render it (#202c-2)
+wifiwave # `/interface wifiwave2` — the pre-7.13 RouterOS wifi menu, renamed `wifi` (drift the corpus carries)
+nomaster # from a corpus line where two arguments ran together (`disabled=nomaster-interface=wifi1`); pinned as the first-`=`-splits case
+CAINFO # `AT#CAINFO?` — an LTE modem AT command in a corpus `/interface/lte/at-chat` line
+vzwinternet # Verizon LTE APN name, from a corpus `/interface lte apn add` line
+rtr # short device name in an explain test input
+

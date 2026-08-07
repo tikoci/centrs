@@ -491,16 +491,50 @@ and its phase is named below.
 | ---- | --------------- |
 | `input`, `verdict`, `canonical`, `structure`, `diagnostics`, `runtimeAcceptance` | complete |
 | `evidence[]` | the **offline subset**: `source` is always `canonicalizer` and there is no RouterOS version stamp |
-| `structure.statements[].command` | `path` + `verb`; **no `args`** |
-| `structure.statements[].transport` | **absent** — #202c, which greens examples 1, 2, 6 and 23 |
+| `structure.statements[].command` | `path` + `verb`, plus **`args` where the argument list was read** (#202c-1); the ordered token list is `statements[].arguments.tokens` |
+| `structure.statements[].transport` | **absent** — #202c-2, which greens examples 1, 2, 6 and 23 |
 | `spans` | comment runs and resolved variable classes only; **no value shape or type** |
 | `schema`, `completion` | absent — live evidence, phase 2 |
 
-- **No per-statement argument list.** Splitting one statement's arguments needs
-  a statement-scope lexer for quoted values, `[…]` selectors and `?` queries.
-  That is new lexical work and it gets the #201 probe-matrix treatment when
-  `--curl` needs it, rather than a split on spaces now. `canonical.args` is the
-  whole-input structured case and is exact.
+- **Per-statement arguments are lexed, and the list is all-or-nothing** (#202c-1,
+  `src/explain/args.ts`). The ordered token list with spans is
+  `statements[].arguments.tokens` (the phase-0 normal form); `command.args` is
+  its derived object view, present only when the list was read. Two different
+  outcomes, which a reader must not conflate:
+  - **The whole list is refused** — `arguments.read` is `false` with a reason,
+    and `command.args` is absent — when a token cannot be delimited or named at
+    all: a `[…]`/`(…)`/`$x`/`{…}` value, an escape this phase does not decode, a
+    left-hand side that is not a RouterOS name, a token split by a continuation.
+    Never partially read, because a dropped argument silently changes what a
+    rendered `curl` DOES. Two refusals are not lexical at all, but
+    places where centrs's two readers disagree about an **unquoted** value: a
+    `'`, which RouterOS treats as an ordinary character and the locked execute
+    gate treats as a quote (`comment=it's` is `it's` here and `its` to the
+    gate); and a `\f`/`\v`, which the gate splits tokens on (JavaScript `\s`)
+    and every explain module does not (ASCII whitespace). The device-correct
+    reading is the analysis's in both, but the gate cannot be corrected — so
+    phase 1 publishes neither rather than putting two confident values in one
+    result. Inside a `"…"` run the two agree and nothing is refused.
+  - **A token is read but carries no `value`** — the list still reads. The token
+    is delimited and classified; only its literal value is unknowable, as for
+    the positional in `:log info "result: $[…]"`. **`value` absent means there
+    is no literal value**, whatever the token's kind, so a consumer rendering a
+    runnable command reads `value`, never the source `text`, and treats absence
+    as not-renderable.
+
+  Measured on the frozen corpus: 40.0% of CRUD-verb commands read, 0 arguments
+  dropped against the IL oracle, and 0 contradictions with `canonical.args`
+  where both decided. That last one holds *because* of the fail-closed rules
+  above, not by accident — a trailing `;`, a `'`, and `\f`/`\v` each
+  contradicted until review found them. The `;` case is enforced at the
+  composition boundary rather than in the lexer, because segmentation strips the
+  delimiter before the lexer ever sees it: where the gate read the whole input
+  as `structured` and the single statement's reading differs, the analysis
+  abstains.
+
+  What offline still cannot do is NAME a positional operand — RouterOS binds
+  `:log info "x"` to `message=x` from its schema, and offline reports the
+  located positional instead of inventing the name.
 - **Transport is absent, not defaulted.** An `unknown` on every statement would
   read as a decision that was never made. Examples 1, 2, 6 and 23 assert
   transport and are #202c's to green; examples 1b, 3, 4, 4b, 5, 17, 18, 18b, 20,

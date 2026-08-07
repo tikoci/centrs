@@ -252,6 +252,9 @@ describe("the execute gate is reproduced, never widened", () => {
 		expect(data.structure.statements[0]?.command).toEqual({
 			path: "/ip/route",
 			verb: "add",
+			// The gate declined the whole input, so `canonical.args` is empty; the
+			// analysis still reads the arguments the human wrote (#202c).
+			args: { "dst-address": "10.9.0.0/16" },
 		});
 		// …and the write signal that the gate cannot give is still reported.
 		expect(data.structure.containsWrite).toBe(true);

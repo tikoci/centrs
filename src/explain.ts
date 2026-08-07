@@ -42,12 +42,16 @@
  *
  * ## Declared gaps (phase 1 offline)
  *
- *   - **No per-statement argument list.** `structure.statements[].command`
- *     carries `path` and `verb` only. Splitting a statement's arguments needs a
- *     lexer that handles quoted values, `[…]` selectors and `?` queries at
- *     statement scope — new lexical work that gets the #201 probe-matrix
- *     treatment when `--curl` needs it (#202c), not a split on spaces here.
- *     `canonical.args` is the whole-input structured case and is exact.
+ *   - **Per-statement arguments are read where they are LITERAL** (#202c).
+ *     `structure.statements[].command.args` and the ordered `arguments.tokens`
+ *     beside it come from `explain/args.ts`, which decides every token of a
+ *     statement or refuses the whole list with a reason — a partially-read list
+ *     would silently change what a rendered command does. On the frozen corpus
+ *     40% of CRUD-verb commands are read; the refusals are overwhelmingly a
+ *     value only the device can compute (`[…]`, `$x`, `{…}`). The gate's
+ *     `canonical.args` and a read list never contradict each other (measured:
+ *     83 corpus statements where both decided, 0 contradictions), though the
+ *     analysis may abstain where the gate decided.
  *   - **No transport classification.** `api-candidate`/`execute`/`unknown` and
  *     `--curl` are #202c. The field is absent rather than defaulted, so nothing
  *     reads as decided that was never decided.
@@ -83,6 +87,7 @@ import {
 	canonicalizeExecuteCommand,
 	isWriteShaped,
 } from "./execute.ts";
+import { type ArgumentKind, lexArguments } from "./explain/args.ts";
 import { scopeBlocks } from "./explain/blocks.ts";
 import {
 	analyzeCoordinates,
@@ -170,14 +175,76 @@ export interface ExplainMenuReading {
 	resolution: "resolved";
 	kind: "menu";
 	command: { path: string };
+	/** Navigation names a menu and nothing else — there is no argument list. */
+	arguments?: undefined;
 	unresolved?: undefined;
 }
+
+/**
+ * One argument token, located in DOCUMENT analyzed-byte space.
+ *
+ * The ordered list is the primary shape and {@link ExplainCommandReading.command}
+ * `.args` is the object VIEW derived from it — the phase-0 normal form, which
+ * requires order and multiplicity to survive somewhere a consumer can read them.
+ */
+export interface ExplainArgumentToken {
+	kind: ArgumentKind;
+	span: ExplainSpanRange;
+	/** Attribute name / query word; absent on a positional. */
+	name?: string;
+	/**
+	 * The token's LITERAL value, quotes removed — for an attribute the part after
+	 * `=`, for a positional the whole token.
+	 *
+	 * **Absent means there is no literal value**, whatever the kind: the source
+	 * spells a substitution, an expression, or an escape this phase does not
+	 * decode. A consumer rendering a runnable command reads this, never `text`,
+	 * and treats absence as "not renderable". A query is always absent.
+	 */
+	value?: string;
+	/** Where the value sits, quotes INCLUDED. Absent whenever `value` is. */
+	valueSpan?: ExplainSpanRange;
+	/** The token verbatim. */
+	text: string;
+}
+
+/**
+ * What the statement-scope lexer decided about one command's arguments.
+ *
+ * All-or-nothing by construction (`src/explain/args.ts`): the consumer is a REST
+ * rendering, and a partially-read argument list changes what the rendered
+ * command DOES. `read: false` carries the reason, which the transport basis then
+ * quotes rather than reporting a bare `unknown`.
+ */
+export type ExplainArguments =
+	| {
+			read: true;
+			tokens: ExplainArgumentToken[];
+			/** `?`-prefixed query words, in order. */
+			queries: string[];
+			/** Bare tokens, in order — an id (`*1`), a `where`, a `find` operand. */
+			positional: string[];
+	  }
+	| { read: false; why: string };
 
 /** A resolved command: a path AND the verb that was decided on it. */
 export interface ExplainCommandReading {
 	resolution: "resolved";
 	kind: "command";
-	command: { path: string; verb: string };
+	/**
+	 * `args` is present exactly when {@link arguments} read: it is that reading's
+	 * object view (last occurrence wins), in the ratified sketch's place
+	 * (`commands/explain/README.md` → *Result shape*). Absent is not `{}` — a
+	 * command with no arguments reads as `{}`.
+	 */
+	command: { path: string; verb: string; args?: Record<string, string> };
+	/**
+	 * ABSENT rather than refused where no attempt was made — the same convention
+	 * transport follows. Statements always carry it; a `[…]` subcommand does not,
+	 * because its inner text has its own coordinate space that phase 1 does not
+	 * rebase (see {@link ExplainSubcommand}).
+	 */
+	arguments?: ExplainArguments;
 	unresolved?: undefined;
 }
 
@@ -186,6 +253,8 @@ export interface ExplainRefusal {
 	resolution: "ambiguous" | "unknown";
 	kind?: undefined;
 	command?: undefined;
+	/** No command was read, so nothing here is an argument OF one. */
+	arguments?: undefined;
 	/** Why the analyzer refused. */
 	unresolved: string;
 }
@@ -637,7 +706,15 @@ export function explainCommand(input: string): ExplainData {
 	// bodies in after their parent, so its list is longer than the top-level
 	// segments and pairing the two by index attaches the wrong span to every statement after
 	// the first block. Each split carries its own document-space span.
-	const statements: ExplainStatement[] = verbs.splits.map(statementOf);
+	//
+	// The ANALYZED text is what arguments are lexed from: it is pure ASCII with
+	// one byte standing in for every non-ASCII one, so an index into it IS a
+	// document byte offset. Decoding it once here keeps `statementOf` from
+	// re-deriving the same string per statement.
+	const analyzed = new TextDecoder().decode(coordinates.analyzed);
+	const statements: ExplainStatement[] = verbs.splits.map((split) =>
+		statementOf(split, analyzed),
+	);
 
 	const diagnostics: ExplainDiagnostic[] = [
 		...defects.map(({ defect: d, ev }) => {
@@ -677,7 +754,7 @@ export function explainCommand(input: string): ExplainData {
 	const canonical = canonicalizeExecuteCommand(input);
 	const structure: ExplainStructure = {
 		statementCount: statements.length,
-		statements,
+		statements: enforceGateParity(statements, canonical),
 		blocks: scopeBlocks(input).map((b) => ({
 			name: b.name,
 			span: { start: b.start, end: b.start + b.body.length },
@@ -729,13 +806,160 @@ export function explainCommand(input: string): ExplainData {
  * segmentation. That is why `statements[]` may overlap, and why the count is not
  * the number of top-level statements.
  */
-function statementOf(split: DocumentVerbSplit): ExplainStatement {
+function statementOf(
+	split: DocumentVerbSplit,
+	analyzed: string,
+): ExplainStatement {
+	const reading = readingOf(split);
 	return {
 		span: { start: split.span.start, end: split.span.end },
-		...readingOf(split),
+		...(reading.kind === "command"
+			? withArguments(reading, split, analyzed)
+			: reading),
 		contextCertain: split.contextCertain,
 		ev: EV.statements,
 	};
+}
+
+/**
+ * Attach the statement's argument reading, rebased into document space.
+ *
+ * The **span check** is the load-bearing line. `argsAt` indexes the statement's
+ * OWN text, and the document offsets come from `span` — so the two are only
+ * compatible when `span` really is where that text sits. It is not always:
+ * `pathresolve.ts`'s `Loc` widens a nested body statement's span to the
+ * enclosing statement when interior offsets cannot be mapped, and a non-ASCII
+ * statement's original text is shorter than its analyzed byte range. Both would
+ * lex the wrong bytes and report confident arguments for them, which is the one
+ * failure a fail-closed lexer must not have. Comparing the analyzed slice with
+ * the resolver's own text catches both at once and costs one string compare.
+ */
+function withArguments(
+	reading: ExplainCommandReading,
+	split: DocumentVerbSplit,
+	analyzed: string,
+): ExplainCommandReading {
+	const read = argumentsOf(split, analyzed);
+	return {
+		...reading,
+		command:
+			read.args === undefined
+				? reading.command
+				: { ...reading.command, args: read.args },
+		arguments: read.arguments,
+	};
+}
+
+/**
+ * The statement's argument reading, plus the object view that goes on
+ * `command.args`.
+ *
+ * The two travel together because the LEXER owns the object view: it builds a
+ * last-wins map while it walks the tokens, and recomputing that here from the
+ * rebased tokens would be a second implementation of one rule — free to diverge
+ * from the lexer's, and so from `canonicalizeExecuteCommand`'s, which is the
+ * duplicate-name agreement this module's header asserts. Raised in review of
+ * #202c-1.
+ */
+function argumentsOf(
+	split: DocumentVerbSplit,
+	analyzed: string,
+): { arguments: ExplainArguments; args?: Record<string, string> } {
+	if (split.argsAt === null)
+		return {
+			arguments: {
+				read: false,
+				why: "the verb is not the last token of the leading path run, so what follows the run is not this command's argument list",
+			},
+		};
+	const { start, end } = split.span;
+	const text = analyzed.slice(start, end);
+	if (text !== split.text)
+		return {
+			arguments: {
+				read: false,
+				why: "this statement's bytes are not addressable: its text was normalized (non-ASCII), or its span was widened to the enclosing statement",
+			},
+		};
+	const lexed = lexArguments(text, split.argsAt);
+	if (!lexed.read) return { arguments: lexed };
+	return {
+		args: lexed.args,
+		arguments: {
+			read: true,
+			tokens: lexed.tokens.map((token) => ({
+				...token,
+				span: { start: start + token.span.start, end: start + token.span.end },
+				...(token.valueSpan === undefined
+					? {}
+					: {
+							valueSpan: {
+								start: start + token.valueSpan.start,
+								end: start + token.valueSpan.end,
+							},
+						}),
+			})),
+			queries: lexed.queries,
+			positional: lexed.positional,
+		},
+	};
+}
+
+/**
+ * The last line of the "never two confident answers" rule: where the gate and
+ * the analysis read the SAME bytes and disagree about the arguments, the
+ * analysis abstains.
+ *
+ * `args.ts` guards the characters centrs's two readers are known to differ on,
+ * and that is where a specific, quotable reason belongs. But a token-level guard
+ * can only see what reaches the lexer, and the gate reads the RAW INPUT while
+ * the analysis reads a SEGMENTED statement — so a byte segmentation removes is
+ * invisible to every such guard. A trailing `;` is exactly that: the gate keeps
+ * it (`comment=x;` → the value `x;`), the segmenter strips it as the statement
+ * terminator (`x`), and no character rule in `args.ts` can be written to catch
+ * it, because by then it is gone.
+ *
+ * So the invariant is ENFORCED here rather than claimed. It is checkable only in
+ * the one case where the two readers genuinely share bytes — the gate read the
+ * whole input as `structured`, and there is exactly one statement — which is
+ * also the only case where a consumer could see both answers side by side. A
+ * multi-statement document makes the gate `script` with empty args, so there is
+ * nothing to compare and the token-level guards are what protect each
+ * statement's own reading.
+ *
+ * Abstaining is again not a concession that the gate is right: on `;` the
+ * ANALYSIS is device-correct (`;` ends a statement in RouterOS; it is not part
+ * of a value). The gate is locked, so neither value is published.
+ *
+ * Cost, measured: a printable-ASCII differential over 8 templates finds 675
+ * cases where both decide and 0 surviving mismatches with this in place, and the
+ * corpus parity probe is unchanged at 83 both-decided, 0 contradictions — so
+ * this fires on `;` and nothing else that has been found. Raised as a P1 in
+ * review of #202c-1, after three character-level guards each closed only what
+ * had been reported.
+ */
+function enforceGateParity(
+	statements: readonly ExplainStatement[],
+	canonical: CanonicalExecuteCommand,
+): ExplainStatement[] {
+	const out = [...statements];
+	if (canonical.mode !== "structured" || out.length !== 1) return out;
+	const only = out[0];
+	if (only?.kind !== "command" || only.arguments?.read !== true) return out;
+	const same =
+		JSON.stringify([only.command.args ?? {}, only.arguments.queries]) ===
+		JSON.stringify([canonical.attributes, canonical.queries]);
+	if (same) return out;
+	const { args: _dropped, ...command } = only.command;
+	out[0] = {
+		...only,
+		command,
+		arguments: {
+			read: false,
+			why: "centrs's execute gate reads these bytes as a different argument list, and offline cannot prove which reading a device would apply",
+		},
+	};
+	return out;
 }
 
 /** One `[…]` substitution in the envelope's vocabulary. See {@link ExplainSubcommand}. */

@@ -43,6 +43,7 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(data.structure.statements[0]?.command).toEqual({
 			path: "/ip/route",
 			verb: "add",
+			args: { "dst-address": "10.9.0.0/16", gateway: "192.0.2.1" },
 		});
 		expect(data.structure.containsWrite).toBe(true);
 		expect(code).toBe(0);
@@ -81,16 +82,19 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(data.evidence.every((e) => e.source === "canonicalizer")).toBe(true);
 	});
 
-	test("4b. The space spelling keeps the verb role and loses the argument one", async () => {
+	test("4b. The space spelling keeps both roles in the analysis, and neither in the gate", async () => {
 		const { data } = await explainJson([
 			"/ip/address comment numbers=0 comment=uplink",
 		]);
 		expect(data.canonical.mode).toBe("script");
 		expect(data.canonical.verb).toBe("");
 		expect(data.canonical.args).toEqual({});
+		// The gate declined the whole input, so it distinguishes no roles. The
+		// analysis distinguishes both, from the same bytes (#202c).
 		expect(data.structure.statements[0]?.command).toEqual({
 			path: "/ip/address",
 			verb: "comment",
+			args: { numbers: "0", comment: "uplink" },
 		});
 	});
 
