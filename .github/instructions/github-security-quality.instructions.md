@@ -26,7 +26,15 @@ Use `SECURITY.md` as the source-of-truth summary for scanning posture.
   `codeql.yaml`, confirm the finding fires) before it goes in `codeql-config.yml`.
 - Treat the GitHub Security tab as the live alert state and aim for 0 open findings.
 - AI findings are noisy; address each finding on its merits or dismiss false positives in the GitHub UI (or `gh api .../code-scanning/alerts/{n} -X PATCH`) with a written justification — this is still the right first move for a *new* finding, since the UI dismissal is the audit-log record.
-- For a false positive that keeps reopening at the same site across unrelated PRs, an in-code suppression comment **is honored by CodeQL's analysis** — confirmed against this repo's own scan history (`src/cli/btest.ts`: two suppression comments added 2026-06-22, zero recurrence across 8+ subsequent `main` scans as of 2026-07-03; grammar verified against the actual `AlertSuppression.qll` query library). Placement differs by syntax: `// codeql[<rule-id>]` must be a standalone comment on its own line immediately before the flagged line; the legacy `// lgtm[<rule-id>]` is more flexible and also works as a trailing same-line comment (the form actually used at `src/cli/btest.ts:510`/`:513`). Use the same justification text the UI dismissal would carry. A `.github/codeql-config.yml` query-filter is the blunter, rule-wide alternative when even per-site suppression is too fine-grained.
+- Do not rely on in-code `codeql[...]` or `lgtm[...]` comments to suppress a
+  finding. CodeQL 2.26.2 ignored both forms on PR #233, including trailing
+  `lgtm[...]` comments on the exact sink lines; moving the sinks merely changed
+  their fingerprints and created 11 new alerts. The earlier absence of
+  recurrence at `src/cli/btest.ts` was not proof of comment suppression because
+  a Security-tab dismissal can persist for the same fingerprint. Keep the code
+  stable when it is already correct and use the Security-tab dismissal plus its
+  written audit justification. A `.github/codeql-config.yml` query-filter is the
+  blunter, rule-wide alternative when site-specific dismissal is insufficient.
 - The PR-blocking "CodeQL" check is GitHub's alert-diff gate, distinct from the `Analyze (*)` workflow jobs. It compares alerts on `refs/pull/<n>/merge` against the base branch; inspect it with `gh api "/repos/<owner>/<repo>/code-scanning/alerts?ref=refs/pull/<n>/merge"` (the default, no-`ref` query only returns default-branch alerts and will look empty on an open PR).
 - To see *why* an alert fired, download the SARIF for the PR's analysis (`gh api -H "Accept: application/sarif+json" /repos/.../code-scanning/analyses/<analysis_id>`, id from `gh api ".../code-scanning/analyses?ref=refs/pull/<n>/merge"`) and read `results[].codeFlows` — the REST alert endpoints do not expose the taint path, only the final message.
 
