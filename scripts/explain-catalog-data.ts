@@ -160,6 +160,8 @@ export interface PublishedEntry {
 	syscap: string | null;
 	/** Argument names, for the R2 assertion only. Never emitted. */
 	fields: Set<string>;
+	/** Rows consumed, flags included, so every source marker can be reconciled. */
+	rows: number;
 	slug: string;
 	line: number;
 }
@@ -242,6 +244,7 @@ export function parsePage(slug: string, markdown: string): PublishedEntry[] {
 			current = {
 				conditions: null,
 				fields: new Set(),
+				rows: 0,
 				kind: "Directory",
 				line: sourceLine,
 				package: null,
@@ -303,12 +306,27 @@ export function parsePage(slug: string, markdown: string): PublishedEntry[] {
 			table = null;
 			continue;
 		}
-		const row = line.match(/^<ArgTableRow\b[^>]*\barg="([^"]*)"/);
-		if (row === null) continue;
+		// EVERY row marker must be accounted for, not only the ones the anchored
+		// pattern happens to read. A row this parser cannot parse yields an empty
+		// field set, and an empty field set makes the R2 alias guard skip — so a
+		// single changed quote upstream would silently disarm the check while
+		// `--check` stayed green, because fields are never emitted.
+		const markers = line.match(/<ArgTableRow\b/g)?.length ?? 0;
+		if (markers === 0) continue;
+		if (markers > 1)
+			throw new Error(
+				`${slug}: ${markers} ArgTableRow markers on line ${sourceLine} — one row per line is assumed`,
+			);
 		if (table === null)
 			throw new Error(
 				`${slug}: ArgTableRow outside any ArgTable at line ${sourceLine}`,
 			);
+		const row = line.match(/^<ArgTableRow\b[^>]*\barg="([^"]*)"/);
+		if (row === null)
+			throw new Error(
+				`${slug}: unreadable ArgTableRow at line ${sourceLine}: ${JSON.stringify(line.slice(0, 80))}`,
+			);
+		current.rows++;
 		if (table !== "Flag")
 			current.fields.add(decodeXml(row[1] ?? "").toLowerCase());
 	}
@@ -331,6 +349,27 @@ export function countTypeMarkers(markdown: string): number {
 			continue;
 		}
 		if (!inFence && /^\*\*Type:\*\*/.test(line)) count++;
+	}
+	return count;
+}
+
+/**
+ * Count `<ArgTableRow` markers outside fences, to reconcile against the parse.
+ *
+ * The entry count alone is not enough. Rows are the only input to the R2 alias
+ * guard and are never emitted, so a row the parser silently dropped would leave
+ * both the generated file and `--check` unchanged while the guard quietly
+ * stopped guarding.
+ */
+export function countRowMarkers(markdown: string): number {
+	let count = 0;
+	let inFence = false;
+	for (const line of pageBody(markdown).body.split("\n")) {
+		if (/^\s*```/.test(line)) {
+			inFence = !inFence;
+			continue;
+		}
+		if (!inFence) count += line.match(/<ArgTableRow\b/g)?.length ?? 0;
 	}
 	return count;
 }
@@ -592,6 +631,28 @@ export function render(rows: readonly CatalogRow[], counts: Counts): string {
 			tally((row) => row.kind === kind && row.provenance === "inspect"),
 			tally((row) => row.kind === kind && row.provenance === "published"),
 		].join(" | ")} |`;
+
+	// Measured here rather than quoted from the issue, so the emitted prose can
+	// never claim a figure this generation did not produce.
+	const gated = (row: CatalogRow | undefined): boolean =>
+		row !== undefined &&
+		(row.package !== undefined ||
+			row.conditions !== undefined ||
+			row.syscap !== undefined);
+	const byPath = new Map(rows.map((row) => [row.path, row]));
+	const ungated = rows.filter(
+		(row) => row.provenance === "published" && !gated(row),
+	);
+	const residue = ungated.filter((row) => {
+		const segments = row.path.split("/").filter(Boolean);
+		for (let depth = 1; depth < segments.length; depth++)
+			if (gated(byPath.get(`/${segments.slice(0, depth).join("/")}`)))
+				return false;
+		return true;
+	});
+	const ungatedRows = ungated.length.toLocaleString("en-US");
+	const residueRows = residue.length.toLocaleString("en-US");
+
 	const trees = counts.trees
 		.map(
 			(tree) =>
@@ -637,6 +698,11 @@ ${byKind("settings")}
  * caller that does not find one must abstain. A gate never decides anything
  * offline either: it explains why a published path may be missing from a given
  * router ("PoE hardware only"), and no router was consulted to build this.
+ *
+ * **Gates conjoin down a path, so read them with {@link effectiveGates}, not
+ * row by row.** A row states only what the publication stated at that entry.
+ * Row-wise, ${ungatedRows} published-only paths look ungated; ancestry-aware,
+ * only ${residueRows} carry no published explanation for their absence at all.
  *
  * Tree COMMANDS are not enumerated — those are the generic CRUD leaves
  * \`verbs.ts\` already owns. The command rows here are the published,
@@ -735,6 +801,46 @@ export function lookupPath(
 ): CatalogEntry | undefined {
 	if (segments.length === 0) return undefined;
 	return PATH_CATALOG.get(\`/\${segments.join("/").toLowerCase()}\`);
+}
+
+/** One published gate, and the path that published it. */
+export interface CatalogGate {
+	path: string;
+	package?: string;
+	conditions?: string;
+	syscap?: string;
+}
+
+/**
+ * Every gate that applies to a path, root-first — its own and its ancestors'.
+ *
+ * A row carries only what the publication stated AT that entry, which is the
+ * honest thing for a row to carry but the wrong thing to read alone. Reaching
+ * \`/interface/ethernet/poe/monitor\` requires \`/interface/ethernet/poe\`, so the
+ * parent's \`syscap\` applies even though the child entry states none: the gates
+ * up a path CONJOIN, they do not override.
+ *
+ * Read row-wise instead, ${ungatedRows} published-only paths look ungated, and
+ * #228's finding — that a published-only path almost always explains its own
+ * absence — would read as false. Ancestry-aware the residue is ${residueRows},
+ * and those are the only published paths carrying no explanation at all.
+ *
+ * Still not a claim about any router. This says what MikroTik published about
+ * applicability; only a live device knows what it has.
+ */
+export function effectiveGates(segments: readonly string[]): CatalogGate[] {
+	const gates: CatalogGate[] = [];
+	for (let depth = 1; depth <= segments.length; depth++) {
+		const path = \`/\${segments.slice(0, depth).join("/").toLowerCase()}\`;
+		const entry = PATH_CATALOG.get(path);
+		if (entry === undefined) continue;
+		const gate: CatalogGate = { path };
+		if (entry.package !== undefined) gate.package = entry.package;
+		if (entry.conditions !== undefined) gate.conditions = entry.conditions;
+		if (entry.syscap !== undefined) gate.syscap = entry.syscap;
+		if (Object.keys(gate).length > 1) gates.push(gate);
+	}
+	return gates;
 }
 `;
 }

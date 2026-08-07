@@ -27,6 +27,7 @@ import {
 	build,
 	CLI_PREFIX,
 	cliRefSlugs,
+	countRowMarkers,
 	countTypeMarkers,
 	MANUAL_BASE,
 	parsePage,
@@ -116,6 +117,15 @@ const parsed = await mapConcurrent(slugs, CONCURRENCY, async (slug) => {
 	if (markers !== entries.length)
 		throw new Error(
 			`${slug}: ${markers} Type markers but ${entries.length} parsed entries — the source format moved`,
+		);
+	// Rows are never emitted, so only this reconciliation can notice that the
+	// parser stopped reading them — and an unread row disarms the R2 alias guard
+	// without changing the generated file.
+	const rowMarkers = countRowMarkers(markdown);
+	const parsedRows = entries.reduce((sum, entry) => sum + entry.rows, 0);
+	if (rowMarkers !== parsedRows)
+		throw new Error(
+			`${slug}: ${rowMarkers} ArgTableRow markers but ${parsedRows} parsed rows — the source format moved`,
 		);
 	fetched++;
 	if (fetched % 50 === 0 || fetched === slugs.length)

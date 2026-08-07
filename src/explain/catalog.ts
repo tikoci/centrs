@@ -40,6 +40,11 @@
  * offline either: it explains why a published path may be missing from a given
  * router ("PoE hardware only"), and no router was consulted to build this.
  *
+ * **Gates conjoin down a path, so read them with {@link effectiveGates}, not
+ * row by row.** A row states only what the publication stated at that entry.
+ * Row-wise, 46 published-only paths look ungated; ancestry-aware,
+ * only 7 carry no published explanation for their absence at all.
+ *
  * Tree COMMANDS are not enumerated — those are the generic CRUD leaves
  * `verbs.ts` already owns. The command rows here are the published,
  * overwhelmingly non-generic ones.
@@ -1255,4 +1260,44 @@ export function lookupPath(
 ): CatalogEntry | undefined {
 	if (segments.length === 0) return undefined;
 	return PATH_CATALOG.get(`/${segments.join("/").toLowerCase()}`);
+}
+
+/** One published gate, and the path that published it. */
+export interface CatalogGate {
+	path: string;
+	package?: string;
+	conditions?: string;
+	syscap?: string;
+}
+
+/**
+ * Every gate that applies to a path, root-first — its own and its ancestors'.
+ *
+ * A row carries only what the publication stated AT that entry, which is the
+ * honest thing for a row to carry but the wrong thing to read alone. Reaching
+ * `/interface/ethernet/poe/monitor` requires `/interface/ethernet/poe`, so the
+ * parent's `syscap` applies even though the child entry states none: the gates
+ * up a path CONJOIN, they do not override.
+ *
+ * Read row-wise instead, 46 published-only paths look ungated, and
+ * #228's finding — that a published-only path almost always explains its own
+ * absence — would read as false. Ancestry-aware the residue is 7,
+ * and those are the only published paths carrying no explanation at all.
+ *
+ * Still not a claim about any router. This says what MikroTik published about
+ * applicability; only a live device knows what it has.
+ */
+export function effectiveGates(segments: readonly string[]): CatalogGate[] {
+	const gates: CatalogGate[] = [];
+	for (let depth = 1; depth <= segments.length; depth++) {
+		const path = `/${segments.slice(0, depth).join("/").toLowerCase()}`;
+		const entry = PATH_CATALOG.get(path);
+		if (entry === undefined) continue;
+		const gate: CatalogGate = { path };
+		if (entry.package !== undefined) gate.package = entry.package;
+		if (entry.conditions !== undefined) gate.conditions = entry.conditions;
+		if (entry.syscap !== undefined) gate.syscap = entry.syscap;
+		if (Object.keys(gate).length > 1) gates.push(gate);
+	}
+	return gates;
 }

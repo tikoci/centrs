@@ -26,6 +26,7 @@ import {
 	ALIASES,
 	build,
 	type CatalogRow,
+	countRowMarkers,
 	countTypeMarkers,
 	droppedSegments,
 	type PublishedEntry,
@@ -33,6 +34,7 @@ import {
 } from "../../scripts/explain-catalog-data.ts";
 import {
 	type CatalogEntry,
+	effectiveGates,
 	lookupPath,
 	PATH_CATALOG,
 } from "../../src/explain/catalog.ts";
@@ -194,6 +196,63 @@ describe("explain/catalog — lookupPath", () => {
 	});
 });
 
+describe("explain/catalog — effectiveGates", () => {
+	/**
+	 * A row states only what the publication stated AT that entry, so a gate must
+	 * be read down the whole path. `/interface/ethernet/poe/monitor` publishes no
+	 * gate of its own, but reaching it requires `/interface/ethernet/poe`.
+	 */
+	test("inherits an ancestor's gate", () => {
+		const own = lookupPath(["interface", "ethernet", "poe", "monitor"]);
+		expect(own?.syscap).toBeUndefined();
+
+		const gates = effectiveGates(["interface", "ethernet", "poe", "monitor"]);
+		expect(gates.map((gate) => gate.path)).toContain("/interface/ethernet/poe");
+		expect(
+			gates.find((gate) => gate.path === "/interface/ethernet/poe")?.syscap,
+		).toBe("(poe or poe-in)");
+	});
+
+	test("carries a path's own gate, root-first", () => {
+		const gates = effectiveGates(["partitions", "activate"]);
+		expect(gates[0]?.path).toBe("/partitions");
+		expect(gates[0]?.syscap).toBe("partitions");
+		expect(gates.at(-1)?.path).toBe("/partitions/activate");
+	});
+
+	test("an ungated path anywhere in its ancestry yields nothing", () => {
+		expect(effectiveGates(["ip", "address"])).toEqual([]);
+		expect(effectiveGates([])).toEqual([]);
+		expect(effectiveGates(["interface", "future-radio"])).toEqual([]);
+	});
+
+	/**
+	 * The #228 headline, re-derived from the shipped table rather than quoted:
+	 * a published-only path almost always explains its own absence from a
+	 * CHR-derived tree, and the unexplained residue is a small fixed set. Read
+	 * row-wise the residue looks like 46; ancestry-aware it is the seven #228
+	 * named. Those seven are the ONLY evidence that the publication can carry a
+	 * path with no explanation at all, so a growing set would be a real event.
+	 */
+	test("the unexplained residue is the seven paths #228 named", () => {
+		const residue = [...PATH_CATALOG]
+			.filter(([path, entry]) => {
+				if (entry.provenance !== "published") return false;
+				return effectiveGates(path.split("/").filter(Boolean)).length === 0;
+			})
+			.map(([path]) => path);
+		expect(residue).toEqual([
+			"/ip/cloud/app/update",
+			"/system/dashboard/settings",
+			"/system/dashboard/show",
+			"/system/serial-interface/read",
+			"/system/serial-interface/start",
+			"/system/serial-interface/stop",
+			"/system/serial-interface/write",
+		]);
+	});
+});
+
 // ---------------------------------------------------------------------------
 // The parser, against frozen pages
 // ---------------------------------------------------------------------------
@@ -303,6 +362,44 @@ describe("explain/catalog — parsing published pages", () => {
 		).toThrow(/ArgTableRow outside any ArgTable/);
 	});
 
+	/**
+	 * The R2 bypass. Rows are the ONLY input to the alias field-overlap guard and
+	 * are never emitted, so a row this parser cannot read yields an empty field
+	 * set, `assertFieldOverlap` skips the alias, and an alias against a disjoint
+	 * tree is accepted — with `--check` still green, because the generated file
+	 * does not change. One quote character upstream would have been enough.
+	 */
+	test("refuses a row it cannot read rather than dropping it", () => {
+		expect(() =>
+			parsePage(
+				"x",
+				'import {A} from \'b\';\n\n## x/y\n\n**Type:** Command\n<ArgTable c1="Argument" c2="Type">\n<ArgTableRow arg=\'single-quoted\' typ="bool"></ArgTableRow>\n</ArgTable>\n',
+			),
+		).toThrow(/unreadable ArgTableRow/);
+	});
+
+	test("refuses two rows sharing one line", () => {
+		expect(() =>
+			parsePage(
+				"x",
+				'import {A} from \'b\';\n\n## x/y\n\n**Type:** Command\n<ArgTable c1="Argument" c2="Type">\n<ArgTableRow arg="a" typ="bool"></ArgTableRow><ArgTableRow arg="b" typ="bool"></ArgTableRow>\n</ArgTable>\n',
+			),
+		).toThrow(/ArgTableRow markers on line/);
+	});
+
+	/** Every marker in the source is accounted for, flags included. */
+	test("row markers reconcile with the parse on the frozen pages", async () => {
+		for (const name of ["partitions.md", "tool__mac-server.md"]) {
+			const markdown = await readFixture(name);
+			const parsed = parsePage(name, markdown).reduce(
+				(sum, entry) => sum + entry.rows,
+				0,
+			);
+			expect(countRowMarkers(markdown)).toBe(parsed);
+			expect(parsed).toBeGreaterThan(0);
+		}
+	});
+
 	/** A fenced example must not be mistaken for structure. */
 	test("ignores headings and markers inside a code fence", () => {
 		const entries = parsePage(
@@ -329,6 +426,7 @@ const entry = (
 	line: 1,
 	package: null,
 	path,
+	rows: fields.length,
 	slug: "test",
 	syscap: null,
 });

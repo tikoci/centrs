@@ -98,24 +98,20 @@ jobs:
             --requested-version "$REQUESTED_VERSION" \
             --summary "$GITHUB_STEP_SUMMARY"
 
-  # Drift gate for the two generated explain tables: `src/explain/menus.ts`
-  # (#207, pinned restraml trees) and `src/explain/catalog.ts` (#228, those same
-  # trees unioned with MikroTik's published CLI Reference). Both live here rather
-  # than in ci.yaml's offline `lint:ci` because checking means refetching their
-  # sources over the network, and a per-PR gate that can fail on someone else's
-  # deploy is a flaky gate. Nothing else in QA depends on them, so they run
-  # alongside the CHR matrix rather than ahead of it.
+  # Drift gate for the generated `src/explain/menus.ts` (#207). It lives here
+  # rather than in ci.yaml's offline `lint:ci` because checking means refetching
+  # the pinned restraml trees over the network, and a per-PR gate that can fail
+  # on someone else's Pages deploy is a flaky gate. Nothing else in QA depends on
+  # it, so it runs alongside the CHR matrix rather than ahead of it.
   #
   # A failure here is not automatically a bug: the pinned trees are supposed to
-  # be immutable, so drift means restraml republished one. CLI Reference is
-  # current-only and genuinely does move. Read the diff before committing a
-  # regeneration — a path moving from `cmd` to `dir`, or losing device
-  # provenance, changes what a caller may conclude from it, which is the one
-  # direction that costs correctness.
-  explain-tables-drift:
-    name: Explain table drift
+  # be immutable, so drift means restraml republished one. Read the diff before
+  # committing a regeneration — a path moving from `cmd` to `dir` would let the
+  # analyzer clear a write, which is the one direction that costs correctness.
+  explain-menus-drift:
+    name: Explain menu table drift
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -129,12 +125,53 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Check src/explain/menus.ts against the pinned restraml trees
         run: bun run explain:menus:check
-      # Always, so one job run reports BOTH drifts. The two tables share the
-      # pinned trees and usually drift together; stopping at the first would hide
-      # the second until the next push.
+
+  # Drift REPORT for `src/explain/catalog.ts` (#228). Deliberately a separate,
+  # non-blocking job, because its second source is a different KIND of source.
+  #
+  # `menus.ts` reads four pinned, immutable trees, so drift there is an anomaly
+  # worth reddening a run. CLI Reference is current-only and moves whenever
+  # MikroTik edits the manual — a routine upstream event with no bearing on
+  # whether this code is correct. `release.yaml` calls this whole workflow and
+  # gates `publish` on it, so a hard failure here would let an upstream
+  # documentation edit block an npm release. #228 stages the audit as
+  # reporting-not-failing for exactly this reason.
+  #
+  # `continue-on-error` keeps the report visible without blocking; the summary
+  # says what to do when it fires.
+  explain-catalog-drift:
+    name: Explain catalog drift (report)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Setup Bun 1.3.13
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
       - name: Check src/explain/catalog.ts against CLI Reference and the trees
-        if: always()
+        id: catalog
         run: bun run explain:catalog:check
+      - name: Report drift
+        if: failure() && steps.catalog.outcome == 'failure'
+        run: |
+          {
+            echo "### \`src/explain/catalog.ts\` is out of date"
+            echo
+            echo "MikroTik's CLI Reference is current-only, so this fires on any"
+            echo "structural change upstream. It is a REPORT, not a gate: nothing"
+            echo "is blocked, including releases."
+            echo
+            echo "To adopt the change: \`bun run explain:catalog\` and commit."
+            echo "Read the diff first — a path changing kind, or losing device"
+            echo "provenance, changes what a caller may conclude from it."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   chr-matrix:
     name: CHR • ${{ matrix.routeros_channel }}${{ inputs.routeros_version && format(' • {0}', inputs.routeros_version) || '' }}
