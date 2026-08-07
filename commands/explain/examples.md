@@ -303,17 +303,38 @@ other half of the same generated table (#228). `/system/reboot` and `/ip/address
 are the same text shape, and offline now decides both from published evidence
 instead of refusing both.
 
-The same evidence moves two things a caller can see. A published command does not
-move the menu context, so a statement after `/system/reboot` resolves where it
-actually is rather than at `/system/reboot/…`. And where a command was written
-slash-joined with a positional operand — `/system/gps/monitor once` — the verb is
-`monitor` and `once` is an argument, where the punctuation rule alone put the verb
-on `once`.
-
 `structure.containsWrite` is deliberately *not* moved by this: knowing a path is a
-command says nothing about whether it mutates, so `/system/reboot` still abstains
-(`unknown`). What changed is that `/system/gps/monitor once` now reads `monitor`
-as a curated READ verb and reports `false`.
+command says nothing about whether it mutates, so this document still reports
+`"unknown"`. Examples 18d and 18e are the two things the same evidence *does*
+move.
+
+### 18d. A published command does not move the menu context
+
+```bash
+centrs explain '/ip route
+/system reboot
+add dst-address=8.8.8.8/32 gateway=1.1.1.1' --json
+```
+
+Three statements: `resolved`/`menu` at `/ip/route`, `resolved`/`command` at
+`/system` verb `reboot`, and `resolved`/`command` at **`/ip/route`** verb `add` —
+not at `/system/reboot`. A command is not navigation, so the context it does not
+establish is not inherited by what follows. This was `#211 B2`, pinned as a KNOWN
+LIMIT until the command axis supplied the positive evidence that a path is a
+command; it is why `structure.containsWrite` is `true` here rather than describing
+an `add` under a menu that does not exist.
+
+### 18e. A published command outranks the punctuation guess
+
+```bash
+centrs explain '/system/gps/monitor once' --json
+```
+
+`command.verb: "monitor"` with `once` inside the argument list — where the
+schema-free punctuation rule reads the first space-separated token as the verb and
+so lands on `once`. The publication names the command, so the operand goes back to
+being an operand. `structure.containsWrite` is `false`, because `monitor` is a
+curated read verb; before the command axis this document abstained.
 
 ### 19. Live evidence confirms the same bare path as a menu
 

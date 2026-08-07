@@ -164,9 +164,31 @@ describe("commands/explain/examples.md — offline", () => {
 		});
 		// Knowing it is a command says nothing about whether it MUTATES.
 		expect(data.structure.containsWrite).toBe("unknown");
-		// …but the verb it names can be, and `monitor` is a curated READ.
-		const monitor = await explainJson(["/system/gps/monitor once"]);
-		expect(monitor.data.structure.containsWrite).toBe(false);
+	});
+
+	test("18d. A published command does not move the menu context", async () => {
+		const { data } = await explainJson([
+			"/ip route\n/system reboot\nadd dst-address=8.8.8.8/32 gateway=1.1.1.1",
+		]);
+		const [nav, command, relative] = data.structure.statements;
+		expect(nav).toMatchObject({ resolution: "resolved", kind: "menu" });
+		expect(command?.command).toMatchObject({
+			path: "/system",
+			verb: "reboot",
+		});
+		// The #211 B2 closure: `add` resolves where the document actually is.
+		expect(relative?.command).toMatchObject({ path: "/ip/route", verb: "add" });
+		expect(data.structure.containsWrite).toBe(true);
+	});
+
+	test("18e. A published command outranks the punctuation guess", async () => {
+		const { data } = await explainJson(["/system/gps/monitor once"]);
+		expect(data.structure.statements[0]?.command).toMatchObject({
+			path: "/system/gps",
+			verb: "monitor",
+		});
+		// `monitor` is a curated READ; the punctuation reading (`once`) abstained.
+		expect(data.structure.containsWrite).toBe(false);
 	});
 
 	test("20. Explain-only write detection is three-valued", async () => {

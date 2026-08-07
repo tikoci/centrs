@@ -303,12 +303,20 @@ describe("#210 — the container table decides V4's bare path", () => {
 		// The publication names the command, so the operand goes back to being an
 		// argument — and `argsAt` moves with it, which is what a caller lexing the
 		// argument list actually consumes.
-		expect(resolveVerb("/system/gps/monitor once", "/")).toMatchObject({
+		const text = "/system/gps/monitor once";
+		const split = resolveVerb(text, "/");
+		expect(split).toMatchObject({
 			resolution: "resolved",
 			path: "/system/gps",
 			verb: "monitor",
+			// The whole point of moving the boundary: the operand is now INSIDE the
+			// argument list. Asserted as the slice a caller would actually lex, so a
+			// regression that restored `once` as the verb fails on the contract
+			// rather than on a magic number.
+			argsAt: 19,
 			why: "published command `/system/gps/monitor`",
 		});
+		expect(text.slice(split.argsAt as number).trim()).toBe("once");
 		expect(
 			resolveVerb("/interface/lte/at-chat lte1 input=x", "/"),
 		).toMatchObject({ path: "/interface/lte", verb: "at-chat" });
