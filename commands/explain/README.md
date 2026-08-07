@@ -520,11 +520,18 @@ and its phase is named below.
     the positional in `:log info "result: $[…]"`. **`value` absent means there
     is no literal value**, whatever the token's kind, so a consumer rendering a
     runnable command reads `value`, never the source `text`, and treats absence
-    as not-renderable. Measured on the
-  frozen corpus: 40.0% of CRUD-verb commands read, 0 arguments dropped against
-  the IL oracle, and 0 contradictions with `canonical.args` where both decided —
-  the last of which holds *because* of the fail-closed rules above, not by
-  accident: the single-quote case contradicted until review found it.
+    as not-renderable.
+
+  Measured on the frozen corpus: 40.0% of CRUD-verb commands read, 0 arguments
+  dropped against the IL oracle, and 0 contradictions with `canonical.args`
+  where both decided. That last one holds *because* of the fail-closed rules
+  above, not by accident — a trailing `;`, a `'`, and `\f`/`\v` each
+  contradicted until review found them. The `;` case is enforced at the
+  composition boundary rather than in the lexer, because segmentation strips the
+  delimiter before the lexer ever sees it: where the gate read the whole input
+  as `structured` and the single statement's reading differs, the analysis
+  abstains.
+
   What offline still cannot do is NAME a positional operand — RouterOS binds
   `:log info "x"` to `message=x` from its schema, and offline reports the
   located positional instead of inventing the name.

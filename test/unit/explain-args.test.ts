@@ -474,6 +474,67 @@ describe("the gate and the analysis never contradict each other about arguments"
 		}
 	});
 
+	test.each([
+		["an attribute value", "/ip/address/add comment=x;", "comment"],
+		["a query word", "/ip/address/print ?type=ether;", "?type=ether"],
+	])("a trailing `;` cannot leave two readings of %s", (_name: string, input: string) => {
+		// The delimiter no character guard in `args.ts` can see: the gate reads
+		// the RAW input and keeps `;` (the value `x;`), the segmenter strips it
+		// as the statement terminator (`x`), so by the time the lexer runs it is
+		// gone. Enforced at the composition boundary instead — and the ANALYSIS
+		// is the device-correct reader here, since `;` ends a statement in
+		// RouterOS rather than belonging to a value.
+		const data = explainCommand(input);
+		expect(data.canonical.mode).toBe("structured");
+		const statement = data.structure.statements[0];
+		if (statement?.kind !== "command") throw new Error("expected a command");
+		expect(statement.arguments?.read).toBe(false);
+		expect(statement.command.args).toBeUndefined();
+	});
+
+	test("no printable ASCII character leaves two decided views of one input", () => {
+		// The CLASS, swept rather than sampled. Three character guards were each
+		// written from a reported instance; this is what says none is left. 675
+		// cases where both readers decide, 0 mismatches — re-run it after any
+		// change to the lexer, the segmenter, or the gate.
+		const templates = [
+			(c: string) => `/ip/address/add comment=x${c}`,
+			(c: string) => `/ip/address/add comment=x${c}y`,
+			(c: string) => `/ip/address/add comment=${c}x`,
+			(c: string) => `/ip/address/add comment=x${c} disabled=no`,
+			(c: string) => `/ip/address/print ?type=ether${c}`,
+			(c: string) => `/ip/address/print ?type=ether${c}?disabled=true`,
+			(c: string) => `/ip/address/add ${c}comment=x`,
+			(c: string) => `/ip/address/add comment="x${c}y"`,
+		];
+		const chars: string[] = ["\t", "\n", "\r", "\f", "\v", "\0"];
+		for (let code = 0x20; code <= 0x7e; code++)
+			chars.push(String.fromCharCode(code));
+		let bothDecided = 0;
+		for (const char of chars)
+			for (const template of templates) {
+				const input = template(char);
+				const data = explainCommand(input);
+				if (data.canonical.mode !== "structured") continue;
+				if (data.structure.statements.length !== 1) continue;
+				const only = data.structure.statements[0];
+				if (only?.kind !== "command" || only.arguments?.read !== true) continue;
+				bothDecided++;
+				expect({
+					args: only.command.args ?? {},
+					queries: only.arguments.queries,
+					input,
+				}).toEqual({
+					args: data.canonical.args,
+					queries: data.canonical.queries,
+					input,
+				});
+			}
+		// Guard the guard: if a future change made every case abstain, the loop
+		// above would pass vacuously.
+		expect(bothDecided).toBeGreaterThan(500);
+	});
+
 	test("the analysis may abstain where the gate decided — but never differ", () => {
 		// The gate strips quotes and escapes anywhere; this lexer refuses an
 		// escape it cannot decode. Abstaining is a narrower claim than the gate's,

@@ -754,7 +754,7 @@ export function explainCommand(input: string): ExplainData {
 	const canonical = canonicalizeExecuteCommand(input);
 	const structure: ExplainStructure = {
 		statementCount: statements.length,
-		statements,
+		statements: enforceGateParity(statements, canonical),
 		blocks: scopeBlocks(input).map((b) => ({
 			name: b.name,
 			span: { start: b.start, end: b.start + b.body.length },
@@ -903,6 +903,63 @@ function argumentsOf(
 			positional: lexed.positional,
 		},
 	};
+}
+
+/**
+ * The last line of the "never two confident answers" rule: where the gate and
+ * the analysis read the SAME bytes and disagree about the arguments, the
+ * analysis abstains.
+ *
+ * `args.ts` guards the characters centrs's two readers are known to differ on,
+ * and that is where a specific, quotable reason belongs. But a token-level guard
+ * can only see what reaches the lexer, and the gate reads the RAW INPUT while
+ * the analysis reads a SEGMENTED statement — so a byte segmentation removes is
+ * invisible to every such guard. A trailing `;` is exactly that: the gate keeps
+ * it (`comment=x;` → the value `x;`), the segmenter strips it as the statement
+ * terminator (`x`), and no character rule in `args.ts` can be written to catch
+ * it, because by then it is gone.
+ *
+ * So the invariant is ENFORCED here rather than claimed. It is checkable only in
+ * the one case where the two readers genuinely share bytes — the gate read the
+ * whole input as `structured`, and there is exactly one statement — which is
+ * also the only case where a consumer could see both answers side by side. A
+ * multi-statement document makes the gate `script` with empty args, so there is
+ * nothing to compare and the token-level guards are what protect each
+ * statement's own reading.
+ *
+ * Abstaining is again not a concession that the gate is right: on `;` the
+ * ANALYSIS is device-correct (`;` ends a statement in RouterOS; it is not part
+ * of a value). The gate is locked, so neither value is published.
+ *
+ * Cost, measured: a printable-ASCII differential over 8 templates finds 677
+ * cases where both decide and 0 surviving mismatches with this in place, and the
+ * corpus parity probe is unchanged at 83 both-decided, 0 contradictions — so
+ * this fires on `;` and nothing else that has been found. Raised as a P1 in
+ * review of #202c-1, after three character-level guards each closed only what
+ * had been reported.
+ */
+function enforceGateParity(
+	statements: readonly ExplainStatement[],
+	canonical: CanonicalExecuteCommand,
+): ExplainStatement[] {
+	const out = [...statements];
+	if (canonical.mode !== "structured" || out.length !== 1) return out;
+	const only = out[0];
+	if (only?.kind !== "command" || only.arguments?.read !== true) return out;
+	const same =
+		JSON.stringify([only.command.args ?? {}, only.arguments.queries]) ===
+		JSON.stringify([canonical.attributes, canonical.queries]);
+	if (same) return out;
+	const { args: _dropped, ...command } = only.command;
+	out[0] = {
+		...only,
+		command,
+		arguments: {
+			read: false,
+			why: "centrs's execute gate reads these bytes as a different argument list, and offline cannot prove which reading a device would apply",
+		},
+	};
+	return out;
 }
 
 /** One `[…]` substitution in the envelope's vocabulary. See {@link ExplainSubcommand}. */
