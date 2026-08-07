@@ -71,11 +71,11 @@ async function fetchPage(slug: string): Promise<string> {
 	const text = await fetchTextWithRetry(
 		`${MANUAL_BASE}${CLI_PREFIX}${slug}.md`,
 	);
-	// codeql[js/http-to-file-access] `--cache` is an opt-in maintainer flag that
-	// stores fetched Markdown for local iteration; the response body is parsed by
-	// `parsePage`, never executed, and `cachePath` constrains the file name to a
-	// sitemap-validated slug inside the chosen directory.
-	if (cacheDir !== null) writeFileSync(cachePath(slug), text);
+	// `--cache` is an opt-in maintainer flag that stores fetched Markdown for
+	// local iteration. The response body is parsed by `parsePage`, never executed,
+	// and `cachePath` constrains the file name to a sitemap-validated slug inside
+	// the chosen directory.
+	if (cacheDir !== null) writeFileSync(cachePath(slug), text); // lgtm[js/http-to-file-access]
 	return text;
 }
 

@@ -416,10 +416,13 @@ describe("explain/write — the (menu, verb) dependency", () => {
 		["undo", "unknown-verb", "write"],
 		["export", "read", "read"],
 		["find", "read", "read"],
-	] as const)("%s classifies as %s at a menu and %s at root", (verb, menu, root) => {
-		expect(classifyVerb(verb, false)).toBe(menu);
-		expect(classifyVerb(verb, true)).toBe(root);
-	});
+	] as const)(
+		"%s classifies as %s at a menu and %s at root",
+		(verb, menu, root) => {
+			expect(classifyVerb(verb, false)).toBe(menu);
+			expect(classifyVerb(verb, true)).toBe(root);
+		},
+	);
 
 	test(":set assigns a variable; /ip/route set writes the device", () => {
 		expect(containsWrite(":local x 5\n:set x 6").verdict).toBe("false");

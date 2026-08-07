@@ -389,21 +389,26 @@ describe("the gate and the analysis never contradict each other about arguments"
 	test.each([
 		["form feed", "\f"],
 		["vertical tab", "\v"],
-	])("a %s in an unquoted value fails closed", (_name: string, char: string) => {
-		// The gate splits tokens on JavaScript `\s`, which includes these two;
-		// every explain module splits on ASCII whitespace, which does not. So
-		// `comment=x<FF>disabled=no` was two arguments to the gate and one value
-		// here. Adopting `\s` in the lexer was the other option and would have
-		// put this scanner at odds with `verbsplit.ts` and `segment.ts` about
-		// where a token ends — the failure `continuationLength` exists to
-		// prevent.
-		const data = explainCommand(`/ip/address/add comment=x${char}disabled=no`);
-		expect(data.canonical.args).toEqual({ comment: "x", disabled: "no" });
-		const statement = data.structure.statements[0];
-		if (statement?.kind !== "command") throw new Error("expected a command");
-		expect(statement.arguments?.read).toBe(false);
-		expect(statement.command.args).toBeUndefined();
-	});
+	])(
+		"a %s in an unquoted value fails closed",
+		(_name: string, char: string) => {
+			// The gate splits tokens on JavaScript `\s`, which includes these two;
+			// every explain module splits on ASCII whitespace, which does not. So
+			// `comment=x<FF>disabled=no` was two arguments to the gate and one value
+			// here. Adopting `\s` in the lexer was the other option and would have
+			// put this scanner at odds with `verbsplit.ts` and `segment.ts` about
+			// where a token ends — the failure `continuationLength` exists to
+			// prevent.
+			const data = explainCommand(
+				`/ip/address/add comment=x${char}disabled=no`,
+			);
+			expect(data.canonical.args).toEqual({ comment: "x", disabled: "no" });
+			const statement = data.structure.statements[0];
+			if (statement?.kind !== "command") throw new Error("expected a command");
+			expect(statement.arguments?.read).toBe(false);
+			expect(statement.command.args).toBeUndefined();
+		},
+	);
 
 	test("no character JavaScript `\\s` splits on can produce a contradiction", () => {
 		// The class, not the two reported instances. Every character the gate
@@ -477,20 +482,23 @@ describe("the gate and the analysis never contradict each other about arguments"
 	test.each([
 		["an attribute value", "/ip/address/add comment=x;", "comment"],
 		["a query word", "/ip/address/print ?type=ether;", "?type=ether"],
-	])("a trailing `;` cannot leave two readings of %s", (_name: string, input: string) => {
-		// The delimiter no character guard in `args.ts` can see: the gate reads
-		// the RAW input and keeps `;` (the value `x;`), the segmenter strips it
-		// as the statement terminator (`x`), so by the time the lexer runs it is
-		// gone. Enforced at the composition boundary instead — and the ANALYSIS
-		// is the device-correct reader here, since `;` ends a statement in
-		// RouterOS rather than belonging to a value.
-		const data = explainCommand(input);
-		expect(data.canonical.mode).toBe("structured");
-		const statement = data.structure.statements[0];
-		if (statement?.kind !== "command") throw new Error("expected a command");
-		expect(statement.arguments?.read).toBe(false);
-		expect(statement.command.args).toBeUndefined();
-	});
+	])(
+		"a trailing `;` cannot leave two readings of %s",
+		(_name: string, input: string) => {
+			// The delimiter no character guard in `args.ts` can see: the gate reads
+			// the RAW input and keeps `;` (the value `x;`), the segmenter strips it
+			// as the statement terminator (`x`), so by the time the lexer runs it is
+			// gone. Enforced at the composition boundary instead — and the ANALYSIS
+			// is the device-correct reader here, since `;` ends a statement in
+			// RouterOS rather than belonging to a value.
+			const data = explainCommand(input);
+			expect(data.canonical.mode).toBe("structured");
+			const statement = data.structure.statements[0];
+			if (statement?.kind !== "command") throw new Error("expected a command");
+			expect(statement.arguments?.read).toBe(false);
+			expect(statement.command.args).toBeUndefined();
+		},
+	);
 
 	test("no printable ASCII character leaves two decided views of one input", () => {
 		// The CLASS, swept rather than sampled. Three character guards were each

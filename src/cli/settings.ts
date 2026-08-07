@@ -263,11 +263,12 @@ export async function runSettingsCli(args: readonly string[]): Promise<number> {
 			centrsError,
 		);
 		if (format === "json" || format === "yaml") {
-			// codeql[js/clear-text-logging] sink renders only a literal error string (e.g. "Missing value for --password."), never the real value; CodeQL over-taints via shared expectValue/CentrsError code.
-			console.error(renderSettingsEnvelope(envelope, format));
+			// This renders only a literal error string (e.g. "Missing value for
+			// --password."), never the real value. CodeQL over-taints shared helpers.
+			console.error(renderSettingsEnvelope(envelope, format)); // lgtm[js/clear-text-logging]
 		} else {
-			// codeql[js/clear-text-logging] sink renders only a literal error string (e.g. "Missing value for --password."), never the real value; CodeQL over-taints via shared expectValue/CentrsError code.
-			console.error(formatCentrsErrorText(centrsError));
+			// This renders only a literal error string, never the password value.
+			console.error(formatCentrsErrorText(centrsError)); // lgtm[js/clear-text-logging]
 		}
 		return 1;
 	}

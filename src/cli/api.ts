@@ -470,27 +470,24 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 			// keep that machine shape on the pre-envelope failure path too (e.g. a
 			// missing `--input` file) instead of falling back to plain text.
 			const envelope = withTips(buildApiErrorEnvelope(parsed, error), tips);
-			console.error(
-				// codeql[js/clear-text-logging] CLI catch-block error render. No secret logged: envelope stores only passwordProvided (boolean) and target.input (router, not the password).
-				renderApiEnvelope(envelope, format, {
-					raw: true,
-					verbose: parsed.verbose ?? false,
-				}),
-			);
+			const rendered = renderApiEnvelope(envelope, format, {
+				raw: true,
+				verbose: parsed.verbose ?? false,
+			});
+			// The envelope stores only passwordProvided (boolean), target, and protocol.
+			console.error(rendered); // lgtm[js/clear-text-logging]
 		} else if (format === "json" || format === "yaml") {
 			const envelope = withTips(
 				buildApiErrorEnvelope(parsed ?? { endpoint: "" }, error),
 				tips,
 			);
-			console.error(
-				// codeql[js/clear-text-logging] CLI catch-block error render. No secret logged: envelope stores only passwordProvided (boolean) and target.input (router, not the password).
-				renderApiEnvelope(envelope, format, {
-					verbose: parsed?.verbose ?? false,
-				}),
-			);
+			const rendered = renderApiEnvelope(envelope, format, {
+				verbose: parsed?.verbose ?? false,
+			});
+			// The envelope stores only passwordProvided (boolean), target, and protocol.
+			console.error(rendered); // lgtm[js/clear-text-logging]
 		} else {
-			console.error(
-				// codeql[js/clear-text-logging] CLI catch-block error render. No secret logged: envelope stores only passwordProvided (boolean) and target.input (router, not the password).
+			const rendered =
 				formatCentrsErrorText(
 					asCentrsError(error, {
 						code: "input/invalid-command",
@@ -499,8 +496,9 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 							"Use `centrs api --help` to inspect the supported endpoint shape and flags.",
 					}),
 					{ verbose: parsed?.verbose ?? args.includes("--verbose") },
-				) + formatTipsText(tips),
-			);
+				) + formatTipsText(tips);
+			// The normalized error does not contain the password value.
+			console.error(rendered); // lgtm[js/clear-text-logging]
 		}
 		return 1;
 	}
