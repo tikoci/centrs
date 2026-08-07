@@ -733,12 +733,11 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 			centrsError,
 		);
 		if (format === "json" || format === "yaml") {
-			// Password reaches here only as SettingSource provenance ({kind,key}), never
-			// the value; see CommonSettingsMeta.password in src/core/envelope.ts.
-			console.error(renderDevicesEnvelope(envelope, format)); // lgtm[js/clear-text-logging]
+			// codeql[js/clear-text-logging] password reaches here only as SettingSource provenance ({kind,key}), never the value — see CommonSettingsMeta.password in src/core/envelope.ts.
+			console.error(renderDevicesEnvelope(envelope, format));
 		} else {
-			// The normalized error does not contain the password value.
-			console.error(formatCentrsErrorText(centrsError)); // lgtm[js/clear-text-logging]
+			// codeql[js/clear-text-logging] password reaches here only as SettingSource provenance ({kind,key}), never the value — see CommonSettingsMeta.password in src/core/envelope.ts.
+			console.error(formatCentrsErrorText(centrsError));
 		}
 		return 1;
 	}

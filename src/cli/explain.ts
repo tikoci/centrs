@@ -473,13 +473,11 @@ export async function runExplainCli(args: readonly string[]): Promise<number> {
 		const format = recoverFormat(args, env, config);
 		const { verbose } = recoverRenderOptions(args);
 		const envelope = buildExplainErrorEnvelope(error, [], format);
-		const rendered =
+		console.error(
 			format.value === "text"
 				? formatCentrsErrorText(envelope.error, { verbose })
-				: renderExplainEnvelope(envelope, format.value);
-		// Explain accepts no credentials. CodeQL conflates a test password with the
-		// unrelated format field after both pass through shared argv parsing.
-		console.error(rendered); // lgtm[js/clear-text-logging]
+				: renderExplainEnvelope(envelope, format.value),
+		);
 		return 1;
 	}
 }

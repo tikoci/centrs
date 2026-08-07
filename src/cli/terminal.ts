@@ -186,13 +186,13 @@ export async function runTerminalCli(args: readonly string[]): Promise<number> {
 			: [];
 		if (format === "json" || format === "yaml") {
 			const envelope = withTips(buildTerminalErrorEnvelope(error), tips);
-			const rendered =
-				format === "yaml" ? toYaml(envelope) : JSON.stringify(envelope);
-			console.error(rendered); // lgtm[js/clear-text-logging]
+			console.error(
+				// codeql[js/clear-text-logging] CLI error renderer false positive; password reaches neither the error nor the stderr renderers. Dismissed across all CLI commands.
+				format === "yaml" ? toYaml(envelope) : JSON.stringify(envelope),
+			);
 		} else {
-			// The parsed request may hold a password for auth, but only the normalized
-			// error and target-selection tips are rendered in this catch path.
-			const rendered =
+			console.error(
+				// codeql[js/clear-text-logging] Password parsed from args never reaches error.message in the text-format catch path; the parsed request (which holds the raw password) is never rendered.
 				formatCentrsErrorText(
 					asCentrsError(error, {
 						code: "input/invalid-command",
@@ -201,8 +201,8 @@ export async function runTerminalCli(args: readonly string[]): Promise<number> {
 							"Use `centrs terminal --help` for the supported command shape and flags.",
 					}),
 					{ verbose: args.includes("--verbose") },
-				) + formatTipsText(tips);
-			console.error(rendered); // lgtm[js/clear-text-logging]
+				) + formatTipsText(tips),
+			);
 		}
 		return 1;
 	}
