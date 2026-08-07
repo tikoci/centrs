@@ -618,6 +618,13 @@ wlan
 zerotier
 cuu # `/terminal cuu` (cursor up) — a RouterOS command that reads as a bare menu path, so the table refuses it (#210)
 
+# Hardware-gated RouterOS surfaces named when explaining why a published path is
+# absent from a CHR-derived inspect tree (#228). No CHR carries these.
+FDB # forwarding database — `/interface/ethernet/switch/{unicast,multicast,reserved}-fdb`, switch-chip only
+MSRP # Stream Reservation Protocol (TSN) — `/interface/bridge/msrp`, gated by `conditions: MSRP_ENABLE`
+PTP # Precision Time Protocol — `/system/ptp`, gated by `syscap: ptp`
+syscap # a CLI-Reference applicability gate naming the hardware/system capability a path requires (`poe`, `lcd`, `multiswitch`, `nochr`)
+
 # explain ANALYSIS/ORACLE vocabulary — not RouterOS menu names. These name the
 # lab's measurement machinery and the properties it measures, and belong apart
 # from the menu block above even though both arrived with the explain work.

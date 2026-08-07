@@ -52,10 +52,26 @@
  * which is why generation aborts on a cross-tree type conflict rather than
  * picking a winner, and why the sources are pinned rather than tracking latest.
  *
- * `cliref` is deliberately NOT a source: `cliref_nodes.path` interleaves the
- * docs slug with the CLI path (`caps-man/acl/access-list` where the real menu
- * is `/caps-man/access-list`), and 79 of its 81 tree-only dirs are phantoms
- * never observed on any device. The typed inspect trees are the record.
+ * `cliref` is deliberately NOT a source **for this table**, for one reason:
+ * CLI-Reference paths are the definition-module spelling, not the CLI spelling
+ * — `caps-man/acl/access-list` where the real menu is `/caps-man/access-list`.
+ * Those doc spellings are unreachable on a device over `/console/inspect`,
+ * REST *and* the native API alike (#228), so feeding one in would add a path
+ * that does not exist. Recovering the CLI spelling needs a hand-audited alias
+ * allowlist, which this generator does not have — and the naive rewrite is
+ * unsafe: dropping an interior segment maps `/interface/ethernet/poe/monitor`
+ * onto `/interface/ethernet/monitor`, a command with a disjoint field set.
+ *
+ * What is NOT a reason, and used to be claimed here: that 79 of cliref's 81
+ * tree-only dirs are "phantoms never observed on any device". Measured against
+ * these four trees (#228), that is wrong. They are overwhelmingly REAL menus
+ * gated to hardware no CHR has — switch-chip QoS/ACL/FDB, PoE, LCD, w60g, PTP,
+ * MSRP, partitions, SwOS — and 105 of the 112 published paths absent from every
+ * tree carry a `package`/`conditions`/`syscap` gate that predicts the absence.
+ * The unexplained residue is 7 paths. Across 906 exactly-matching paths the two
+ * sources have ZERO kind contradictions. cliref is complementary to these trees
+ * on the hardware axis, not noise; whether centrs adopts it as a second
+ * provenance is the open question in #228.
  *
  * Usage:
  *   bun run explain:menus          # regenerate src/explain/menus.ts
