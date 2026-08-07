@@ -269,10 +269,12 @@ describe("the resolution vocabulary", () => {
 		expect(statement?.command).toEqual({ path: "/ip/route" });
 	});
 
-	test("a bare path the menu table does not know is ambiguous, with a reason", () => {
-		// `/system/reboot` and `/ip/address` are the same SHAPE; the #207 table
-		// settles the ones it lists and this one it does not.
-		const data = explainCommand("/system/reboot");
+	test("a bare path NEITHER table knows is ambiguous, with a reason", () => {
+		// `/disk/format-drive` and `/ip/address` are the same SHAPE; the #207 menu
+		// table and the #228 command axis settle the paths they list, and neither
+		// lists this one — 7.23.2 spells it `/disk format`. It used to read
+		// `/system/reboot`, which the command axis now decides.
+		const data = explainCommand("/disk/format-drive");
 		expect(data.structure.statements[0]?.resolution).toBe("ambiguous");
 		expect(data.structure.statements[0]?.command).toBeUndefined();
 		const [diagnostic] = data.diagnostics;
@@ -284,7 +286,7 @@ describe("the resolution vocabulary", () => {
 	test("a refusal is a warning, never an error — `--fail-on error` must not fire", () => {
 		// Most RouterOS scripting is unreadable without a schema. If abstention
 		// were an error, the default `--fail-on error` would fail on correct input.
-		for (const input of ["/system/reboot", "/disk format-drive disk1"]) {
+		for (const input of ["/disk/format-drive", "/disk format-drive disk1"]) {
 			const data = explainCommand(input);
 			expect(data.verdict).toBe("warn");
 			expect(data.diagnostics.every((d) => d.severity !== "error")).toBe(true);

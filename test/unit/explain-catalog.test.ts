@@ -16,8 +16,11 @@
  *      and the naive rewrite it replaces maps `/interface/ethernet/poe/monitor`
  *      onto a different command.
  *
- * The table is not read by `write.ts` yet — that is #228 step 2, where the
- * abstention rate moves and the regression risk lives.
+ * Step 2 connected the COMMAND axis to the analyzers, through
+ * {@link commandVerbIndex}. What that consumer needs beyond the contract above
+ * is R3 — a command row has no descendant — so it is asserted here, on both
+ * sides: the generator refuses to emit a violation, and the shipped table is
+ * checked against it.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -34,11 +37,13 @@ import {
 } from "../../scripts/explain-catalog-data.ts";
 import {
 	type CatalogEntry,
+	commandVerbIndex,
 	effectiveGates,
 	lookupPath,
 	PATH_CATALOG,
 } from "../../src/explain/catalog.ts";
 import { MENU_PATHS } from "../../src/explain/menus.ts";
+import { VERBS } from "../../src/explain/verbs.ts";
 
 const FIXTURES = join(import.meta.dir, "..", "fixtures", "explain", "cliref");
 
@@ -193,6 +198,55 @@ describe("explain/catalog — lookupPath", () => {
 	/** The bare `/` and `..` forms are decided by their own rule. */
 	test("an empty segment list is not an entry", () => {
 		expect(lookupPath([])).toBeUndefined();
+	});
+});
+
+describe("explain/catalog — commandVerbIndex", () => {
+	test("returns the index of the verb segment, for a bare path or with arguments", () => {
+		expect(commandVerbIndex(["system", "reboot"])).toBe(1);
+		expect(commandVerbIndex(["system", "gps", "monitor", "once"])).toBe(2);
+		expect(commandVerbIndex(["quit"])).toBe(0);
+	});
+
+	/** A menu is not a command, and absence is not evidence of either. */
+	test("a menu and an unknown path both return null", () => {
+		expect(commandVerbIndex(["ip", "address"])).toBeNull();
+		expect(commandVerbIndex(["disk", "format-drive"])).toBeNull();
+		expect(commandVerbIndex([])).toBeNull();
+	});
+
+	/**
+	 * R3, checked against the SHIPPED table rather than only at generation. The
+	 * consumers walk a run root-first and take the first command prefix; with a
+	 * command that had a descendant, a run could carry two and the answer would
+	 * depend on the walk direction instead of on the evidence.
+	 */
+	test("no command row has a descendant, so at most one prefix can match", () => {
+		const paths = [...PATH_CATALOG.keys()];
+		const descended = paths.filter(
+			(path) =>
+				PATH_CATALOG.get(path)?.kind === "command" &&
+				paths.some((other) => other.startsWith(`${path}/`)),
+		);
+		expect(descended).toEqual([]);
+	});
+
+	/**
+	 * The precedence question the analyzers do NOT have to answer. `resolveVerb`
+	 * consults the catalog before the frozen vocabulary, which would matter if the
+	 * two ever named different tokens — they cannot today, because every catalog
+	 * command carrying a `VERBS` segment carries it as the LEAF. Pinned so a
+	 * regeneration that changes it surfaces here, where the precedence is
+	 * documented, rather than as a silent reading change.
+	 */
+	test("the catalog and the frozen vocabulary never name different tokens", () => {
+		for (const [path, entry] of PATH_CATALOG) {
+			if (entry.kind !== "command") continue;
+			const segments = path.split("/").filter(Boolean);
+			const vocab = segments.findIndex((segment) => VERBS.has(segment));
+			if (vocab < 0) continue;
+			expect({ path, vocab }).toEqual({ path, vocab: segments.length - 1 });
+		}
 	});
 });
 
@@ -512,6 +566,21 @@ describe("explain/catalog — what the generator refuses", () => {
 				{ "/tool/ddns/dns-update": "/tool/dns-update" },
 			),
 		).toThrow(/NO overlap/);
+	});
+
+	/**
+	 * R3. The precondition `commandVerbIndex` rests on, refused at the only place
+	 * that can still decline to emit — the lesson the `mergeTreeTypes` round
+	 * taught: extract a consumer's assertions with the data they guard, not just
+	 * the fetch.
+	 */
+	test("R3: refuses a command row that has a descendant", () => {
+		expect(() =>
+			buildWith(
+				[entry("/ip/thing", "Command"), entry("/ip/thing/deeper", "Directory")],
+				{},
+			),
+		).toThrow(/command row has a descendant/);
 	});
 
 	test("accepts an alias whose arguments do overlap", () => {

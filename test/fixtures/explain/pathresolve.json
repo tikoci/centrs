@@ -118,10 +118,10 @@
 			"verified": "CHR 7.23.2 + 7.24rc2 (identical): IL `/ip/route/;(evl /system/identity/print);(evl /ip/route/add …)` — the absolute COMMAND did NOT move context. Offline now reproduces that exactly."
 		},
 		{
-			"name": "KNOWN LIMIT (#211 B2) — a bare path with NO verb is still misread as navigation",
+			"name": "R12 a bare path with NO verb, named by the command catalog, does NOT move the context (#211 B2 closed)",
 			"input": "/ip route\n/system reboot\nadd dst-address=8.8.8.8/32 gateway=1.1.1.1",
-			"expect": ["/ip/route", "/system/reboot", "/system/reboot/add"],
-			"rule": "R8's residue after R9. `reboot` is not in the frozen vocabulary and `MENU_PATHS` is a FLOOR (#207) — absence there is not evidence of `command` — so offline still reads a verb-free bare path as navigation and cascades. The fail-closed alternative (context unknown) costs 6.7–10.8% of statements downstream; #211 leaves it open pending a priced rule. The 3rd path is wrong, exactly as pinned.",
+			"expect": ["/ip/route", "/system/reboot", "/ip/route/add"],
+			"rule": "R8's residue after R9, closed by R12 (#228). This pinned `/system/reboot/add` as a KNOWN LIMIT: `reboot` is not in the frozen vocabulary, and #211 B2 could only have refused it by reading ABSENCE from `MENU_PATHS` as evidence of a command — which inverts the floor contract (#207), which is why it was parked rather than guessed at. The published command axis is the missing POSITIVE evidence, so the floor is untouched: `/system/reboot` is a command because a table SAYS so, not because another table is silent. The 3rd path is now right.",
 			"verified": "CHR 7.23.2 + 7.24rc2: `/system/reboot` is a no-argument COMMAND, not a menu — `isMenuPath([\"system\",\"reboot\"])` is false, pinned in explain-write.test.ts."
 		},
 		{

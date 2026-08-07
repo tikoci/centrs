@@ -39,6 +39,10 @@
  *   R11 A bare directive (`while (…) do={…}`) is at the root, and hands its
  *      body the root context too. The schema-free tell is the scope block: no
  *      menu command takes `do=`.
+ *   R12 A `/`-led bare path the published CATALOG names as a command is not
+ *      navigation either (#228). The verb-free half R9 left open (#211 B2):
+ *      `/system/reboot` is a command, so it must not move the context and the
+ *      statement after it must not resolve against `/system/reboot`.
  *
  * Verb-vs-menu identification is deliberately NOT decided here — offline cannot
  * tell `find` (verb) from a deeper menu without a schema (that is Q6). A
@@ -86,6 +90,7 @@
  */
 
 import { isScopeBrace, scopeBlocks, scopeBodies } from "./blocks.ts";
+import { commandVerbIndex } from "./catalog.ts";
 import {
 	type Defect,
 	isPositionalFact,
@@ -744,10 +749,20 @@ function walkStatements(
  * like that, and such a menu would be indistinguishable from `print` at its
  * parent anyway.
  *
- * What it does NOT touch is the harder half (#211 B2): a bare path with no verb
- * at all (`/system/reboot`, `/quit`, `/tool/speed-test`) is still claimed as
- * navigation, because `MENU_PATHS` is a floor (#207) and "absent from the table"
- * is not evidence of "command". See the module note above `resolveStatements`.
+ * R12 (#228 step 2) — a `/`-led bare path the published CATALOG names as a
+ * command is not navigation either. This is the harder half R9 could not reach
+ * (#211 B2): `/system/reboot`, `/quit` and `/tool/speed-test` carry no
+ * vocabulary verb, and #211 could only have refused them by reading ABSENCE from
+ * `MENU_PATHS` as evidence of a command — which inverts the floor contract
+ * (#207) and is why B2 was parked rather than guessed at. The command axis is
+ * the missing POSITIVE evidence, so nothing about the floor changes: presence in
+ * either table decides, absence from both still abstains.
+ *
+ * It is also no longer optional. `verbsplit` reads `/system reboot` as verb
+ * `reboot` at `/system`, so leaving it navigation here would re-open exactly the
+ * contradiction R9 closed — and worse than before, since the two modules would
+ * now disagree CONFIDENTLY rather than one of them refusing. The same test pins
+ * the invariant for both rules.
  */
 function menuNavPath(text: string, ctx: string): string | null {
 	const trimmed = trimAscii(text);
@@ -773,6 +788,8 @@ function menuNavPath(text: string, ctx: string): string | null {
 		token.split("/").filter((part) => part.length > 0),
 	);
 	if (segments.some((segment) => VERBS.has(segment))) return null;
+	// R12 — the same segments, against the published command axis.
+	if (commandVerbIndex(segments) !== null) return null;
 	return joinPath("/", tokens.join("/"));
 }
 

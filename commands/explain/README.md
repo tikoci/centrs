@@ -147,9 +147,10 @@ today's path/verb/args split and script-vs-structured gate:
   by a text rule alone. The canonicalizer must abstain wherever nothing but the
   text is available to decide — a distinct **`ambiguous`** verdict, separate
   from "unresolved" — rather than guess. Since #210 the baked container floor
-  answers this one pair where it can confirm the path, so the requirement binds
-  on everything the floor does *not* carry, which is most of it; the paragraph
-  below that scopes it is normative, not a footnote. Four
+  answers this one pair where it can confirm the path, and since #228 the
+  published command axis answers it from the other side, so the requirement
+  binds on everything *neither* table carries — still most of it; the two
+  paragraphs below that scope it are normative, not a footnote. Four
   ratification questions reached this floor independently (Q6 verb/menu
   boundary, Q3 absolute inner paths, Q13 `variable-undefined`, Q14 bare-word
   recovery), so it is a **structural property of schema-free canonicalization**,
@@ -180,7 +181,11 @@ today's path/verb/args split and script-vs-structured gate:
   diluting it. The publication is not device truth: it uses the
   definition-module spelling, so `caps-man/acl/access-list` is published and
   unreachable on any device, and the hand-audited alias allowlist that recovers
-  the CLI spelling is guarded by two generation-time assertions.
+  the CLI spelling is guarded by two generation-time assertions. So
+  `/system/reboot` now resolves as a `command` at `/system`, and the floor is
+  again unmoved — the residual is a path in *neither* table, such as
+  `/disk/format-drive`, which 7.23.2 spells `/disk format` and MikroTik does not
+  publish at all.
 
 There are real unknowns in how far offline parsing can go (expression
 grammar, scope fidelity vs `:parse`, `[]`-nesting corner cases). Grounding
@@ -253,11 +258,14 @@ Absence from either abstains and never rejects.
   navigation.
 - `src/explain/catalog.ts` (#228) — path → kind, per-entry provenance and
   MikroTik's published applicability gate, unioned from those same trees and
-  CLI Reference. **Generated and committed, but read by nothing**: no analyzer
-  consults it, so it changes no verdict yet. Wiring it in is a separate step,
-  and when it lands a `published`-only entry is decisive for `command` and a
-  tie-breaker only for `menu` — a published command misread as a menu would
-  drop a write as navigation.
+  CLI Reference. Its **command axis is read today** by `pathresolve.ts` (R12),
+  `verbsplit.ts` and `write.ts`; the menu axis is not, so `menus.ts` remains the
+  sole authority on navigation. That asymmetry is the safety rule: a published
+  command misread as a menu would drop a write as navigation, so a
+  `published`-only entry is decisive for `command` and would be a tie-breaker
+  only for `menu`. A gate never decides anything offline — it explains why a
+  published path may be missing from a given router, and no router was consulted
+  to build the table.
 
 A live target arrives through the **same resolver as every other command**
 (CDB name/MAC/group keys, `--quickchr`, future TikTOML — #134/#174): a
@@ -770,7 +778,8 @@ calls a menu what the device read as a command, neither across the whole table
 nor across the 104 paths this rule flips. The residual is the right residual:
 `/system/reboot`, `/quit`, `/tool/speed-test` and abbreviated forms like
 `/ip fire conn` stay `ambiguous`, because the table is a floor and absence from
-it is not evidence of a command.
+it is not evidence of a command. *(#228 has since decided all but the
+abbreviated forms — see below.)*
 
 **The contradicting half of that seam is closed too (#211 B1).**
 `pathresolve.ts` claimed **every** `/`-led bare path was navigation, with no
@@ -788,12 +797,47 @@ generated `MENU_PATHS` table carries a verb segment. That premise is scoped to
 the table, not to RouterOS — `menus.ts` is a floor, so it cannot rule out an
 unlisted menu named `.../print`, which R9 would read as a command.
 
-R9 leaves the harder half open (**#211 B2**): a bare path with *no* verb
-(`/system/reboot`, `/quit`, `/terminal/cuu`) is still read as navigation and
-still cascades, because the table is a floor and absence from it is not
-evidence of a command. The remaining fabrication is pinned as a KNOWN LIMIT
+R9 left the harder half open (**#211 B2**): a bare path with *no* verb
+(`/system/reboot`, `/quit`, `/terminal/cuu`) was still read as navigation and
+still cascaded, because the menu table is a floor and absence from it is not
+evidence of a command. B2 was parked rather than guessed at for exactly that
+reason — the only rule available would have had to invert the floor contract.
+
+**#228 closes B2 for the published subset, without touching the floor.** The
+command axis is the missing *positive* evidence, so R12 refuses navigation into
+a path a table SAYS is a command rather than into one another table happens not
+to mention. `/system/reboot` no longer moves the context, so a statement after
+it resolves where it actually is; `verbsplit` and `pathresolve` agree, which
+they would otherwise now do *confidently* in opposite directions. What is left
+is the honest residue of both floors — `/terminal/cuu` is a real no-argument
+command MikroTik publishes nowhere — and it stays pinned as a KNOWN LIMIT
 fixture rather than assumed closed. The contradiction that #202 would have
 rendered is gone.
+
+**The command axis also outranks the punctuation guess.** `splitRun`'s last
+rule reads the first space-separated token as the verb, which lands on the
+operand whenever the command itself was written slash-joined:
+`/system/gps/monitor once` put the verb on `once`, and
+`/interface ethernet reset-counters ether1` on `ethernet`. A published command
+names its own boundary, so the operand goes back to being an argument and
+`argsAt` moves with it. Over the frozen corpus plus the export stratum, 171 of
+19,002 statement readings change and every one names a better token; Q16
+abstention moves 44.8% → **44.6%** dev, 46.0% holdout and 0.0% export unchanged,
+and exactly one document changes verdict (`unknown` → `false`, a pasted
+`/system/gps/monitor once` transcript — an abstention #207 recorded as correct
+*given no evidence*, which there now is). The command axis says which token is
+the verb; it says nothing about whether that verb mutates, so `write.ts`'s
+curated vocabularies are unchanged and `/system/reboot` still abstains.
+
+`splitRun` itself is untouched again — both tables are consumed by the callers —
+so the ratified schema-free rule keeps pricing decision 3 on its own terms. Two
+places deliberately do *not* consult the catalog: scripting directives, where
+R10 was measured 2,088-to-18 and the seven root-level catalog commands all sit
+where R10 already puts them; and a bare-word head at the ROOT context, because
+those seven are ordinary English words and the corpus's pasted `import serial` /
+`import io` / `import os` would otherwise read as RouterOS `/import`. An
+*inherited* menu context is itself the evidence that the surrounding text is
+RouterOS, so a relative `stop [find …]` under `/container` does resolve.
 
 **Importability was also measured, and is a weaker, narrower result than it
 first appears (#203 deliverable 4).** On CHR, none of the six root `/export`
@@ -908,10 +952,11 @@ Decided this round (details inline above; recorded in #90):
   Reference. Such a table may say whether a path is navigation or a command; it
   never describes what a command accepts, absence from it abstains and never
   rejects, and a `published`-only entry is never decisive for navigation.
-  `src/explain/catalog.ts` is that table, and it is **committed but unread** —
-  it decides nothing until an analyzer consults it, which is a separate step.
-  It is still a static snapshot of vendor-published structure, which is why the
-  decision is amended rather than argued around.
+  `src/explain/catalog.ts` is that table. Its **command axis is read** by
+  `pathresolve.ts`, `verbsplit.ts` and `write.ts`; the menu axis is not, so
+  `menus.ts` stays the sole authority on navigation. It is still a static
+  snapshot of vendor-published structure, which is why the decision is amended
+  rather than argued around.
 - **No rosetta coupling for now** — at most steering tips; no calls, no
   artifacts, no maintained bindings.
 - **centrs-owned span vocabulary** with RouterOS-fidelity color mapping for

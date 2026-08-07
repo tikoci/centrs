@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { commandVerbIndex } from "../../src/explain/catalog.ts";
 import { hasStructuralDefect } from "../../src/explain/defects.ts";
 import { MENU_PATHS } from "../../src/explain/menus.ts";
 import {
@@ -546,26 +547,53 @@ describe("R9 — pathresolve and verbsplit cannot contradict each other", () => 
 		expect(offenders).toEqual([]);
 	});
 
+	test("R12's premise — no menu the tables know is also a published command", () => {
+		// R12 refuses navigation into a path the catalog calls a command. That is
+		// only safe while the two tables are DISJOINT on that question: a path in
+		// both would be refused as navigation despite `MENU_PATHS` carrying it.
+		// Asserted over the whole menu table, so a regeneration that introduced an
+		// overlap fails here rather than silently changing where documents navigate.
+		const overlap = [...MENU_PATHS].filter(
+			(path) => commandVerbIndex(path.split("/").filter(Boolean)) !== null,
+		);
+		expect(overlap).toEqual([]);
+	});
+
 	test("the verb lookup is the SAME object on both sides of the seam", () => {
 		// Two copies of the vocabulary could drift apart and re-open the seam, so
 		// `verbs.ts` is a shared leaf and `verbsplit` merely re-exports it.
 		expect(centrs.VERBS).toBe(VERBS);
 	});
 
-	test("KNOWN LIMIT (#211 B2) — a verb-free bare path is still read as navigation", () => {
-		// R9 only removes the statements the frozen vocabulary already decided.
-		// `reboot` is not a verb and `MENU_PATHS` is a floor, so offline still
-		// claims navigation into a menu that does not exist and cascades. Pinned
-		// so the remaining limit stays visible rather than being quietly assumed
-		// closed by R9.
+	test("R12 (#228) closes #211 B2 for a PUBLISHED verb-free bare path", () => {
+		// This was the pinned KNOWN LIMIT: `reboot` is not in the frozen
+		// vocabulary, so R9 could not reach it, and refusing it from `MENU_PATHS`
+		// being silent would have inverted the floor contract. The command axis
+		// says what the silence could not, and both modules now agree.
 		const stmts = resolveStatements(
 			"/ip route\n/system reboot\nadd x=1",
 		).statements;
-		expect(stmts[1]?.isNav).toBe(true);
+		expect(stmts[1]?.isNav).toBe(false);
 		expect(resolveVerbs("/system reboot").splits[0]?.resolution).toBe(
+			"resolved",
+		);
+		expect(stmts[2]?.path).toBe("/ip/route/add");
+	});
+
+	test("KNOWN LIMIT — a verb-free bare path NEITHER table knows is still navigation", () => {
+		// What is left of #211 B2. `/terminal/cuu` is a real no-argument command
+		// published nowhere, so offline still claims navigation into a menu that
+		// does not exist and cascades. Pinned so the residue stays visible rather
+		// than being assumed closed by R12: the tables are floors in both
+		// directions, and neither absence is evidence.
+		const stmts = resolveStatements(
+			"/ip route\n/terminal cuu\nadd x=1",
+		).statements;
+		expect(stmts[1]?.isNav).toBe(true);
+		expect(resolveVerbs("/terminal cuu").splits[0]?.resolution).toBe(
 			"ambiguous",
 		);
-		expect(stmts[2]?.path).toBe("/system/reboot/add");
+		expect(stmts[2]?.path).toBe("/terminal/cuu/add");
 	});
 });
 

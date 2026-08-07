@@ -504,6 +504,39 @@ function assertFieldOverlap(
 }
 
 /**
+ * R3: a `command` row is a LEAF — no catalog path descends from it.
+ *
+ * `commandVerbIndex` in the emitted module walks a path run root-first and
+ * returns the FIRST prefix that is a command, calling that segment the verb.
+ * That is only unambiguous while no command has a descendant: with one, a run
+ * could carry two command prefixes and the reading would depend on the walk
+ * direction rather than on the evidence. Today the property holds outright
+ * (0 violations over 439 commands), which is why the consumer can be a lookup
+ * instead of a policy.
+ *
+ * Asserted here rather than assumed in `catalog.ts`, for the reason the
+ * `mergeTreeTypes` round taught: a consumer's precondition belongs with the
+ * generator that can still refuse to emit.
+ */
+function assertCommandLeaves(rows: readonly CatalogRow[]): void {
+	const paths = new Set(rows.map((row) => row.path));
+	const descended: string[] = [];
+	for (const row of rows) {
+		if (row.kind !== "command") continue;
+		for (const path of paths)
+			if (path.startsWith(`${row.path}/`))
+				descended.push(`${row.path} < ${path}`);
+	}
+	if (descended.length > 0)
+		throw new Error(
+			"a command row has a descendant, so a path run could carry two command\n" +
+				"prefixes and `commandVerbIndex` would have to choose between them.\n" +
+				"Decide by hand which of the two is the command:\n  " +
+				descended.join("\n  "),
+		);
+}
+
+/**
  * Union the two sources into the catalog rows, or abort.
  *
  * `aliases` is a parameter only so tests can exercise one rule at a time; the
@@ -573,9 +606,11 @@ export function build(
 		if (!rows.has(path))
 			rows.set(path, { kind: "menu", path, provenance: "inspect" });
 
-	return [...rows.values()].sort((left, right) =>
+	const sorted = [...rows.values()].sort((left, right) =>
 		left.path < right.path ? -1 : left.path > right.path ? 1 : 0,
 	);
+	assertCommandLeaves(sorted);
+	return sorted;
 }
 
 // ---------------------------------------------------------------------------
@@ -801,6 +836,38 @@ export function lookupPath(
 ): CatalogEntry | undefined {
 	if (segments.length === 0) return undefined;
 	return PATH_CATALOG.get(\`/\${segments.join("/").toLowerCase()}\`);
+}
+
+/**
+ * Where a published COMMAND ends inside a path run: the index of the run
+ * segment that is the VERB, or \`null\` when no prefix of \`segments\` is one.
+ *
+ * This is the command half of V4. \`menus.ts\` answers "is this bare path a
+ * menu?"; nothing answered "is it a command?", so \`/system/reboot\` and
+ * \`/system/gps/monitor once\` were read by punctuation — which puts the verb on
+ * \`once\`, not on \`monitor\`. A published command names its own boundary, so the
+ * segments before it are the menu and everything after it is an argument.
+ *
+ * At most ONE prefix can match: no command row has a descendant (R3, asserted at
+ * generation), so the walk direction cannot change the answer.
+ *
+ * Presence is load-bearing in one direction only, exactly as in \`menus.ts\`.
+ * A hit is decisive — both catalog sources are first-order, and the 439 command
+ * rows are \`both\` or \`published\`, never inspect-only. A MISS says nothing:
+ * generic CRUD leaves are deliberately not enumerated here, so absence must
+ * fall through to the schema-free rule rather than deny that a command exists.
+ *
+ * A gate is not consulted. Whether this router HAS the hardware is a live
+ * question; what the segment IS is not.
+ */
+export function commandVerbIndex(segments: readonly string[]): number | null {
+	for (let depth = 1; depth <= segments.length; depth++)
+		if (
+			PATH_CATALOG.get(\`/\${segments.slice(0, depth).join("/").toLowerCase()}\`)
+				?.kind === "command"
+		)
+			return depth - 1;
+	return null;
 }
 
 /** One published gate, and the path that published it. */

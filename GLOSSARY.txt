@@ -669,3 +669,4 @@ unioned # of the two sources: merged with per-entry provenance rather than flatt
 unioning # the act of the above
 greppable # of a generated table: one entry per line, so `grep` finds a path
 apos # the `&apos;` XML entity, decoded by the CLI-Reference parser
+btrfs # the Linux B-tree filesystem, a `/disk/btrfs/...` menu on RouterOS 7.20+

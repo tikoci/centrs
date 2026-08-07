@@ -147,10 +147,20 @@
 			"path": "/ip/firewall/filter"
 		},
 		{
-			"name": "cascade twin — same text shape as `/ip/address`, but NOT a menu, so still ambiguous",
+			"name": "cascade twin — same text shape as `/ip/address`, and the command axis names it (#228)",
 			"input": "/system/reboot",
-			"resolution": "ambiguous",
+			"resolution": "resolved",
 			"truth": "/system/reboot",
+			"path": "/system",
+			"verb": "reboot",
+			"verbAt": 1,
+			"rule": "published command `/system/reboot`"
+		},
+		{
+			"name": "cascade twin the tables miss — same shape again, and NEITHER carries it, so still ambiguous",
+			"input": "/terminal/cuu",
+			"resolution": "ambiguous",
+			"truth": "/terminal/cuu",
 			"rule": "bare path, nothing follows — navigation or no-arg command?"
 		}
 	],
@@ -166,13 +176,24 @@
 			"rule": "first space token after 2 slash-joined"
 		},
 		{
+			"_note": "Input changed with #228: `/tool/e-mail/send to=x` is a PUBLISHED command, so the catalog decides it before the punctuation rule is reached — see the branch below. `/system/script/run` is in neither source, so it still prices the punctuation branch.",
 			"name": "punctuation last segment, no vocabulary hit — all slash-joined, arguments follow",
-			"input": "/tool/e-mail/send to=x",
+			"input": "/system/script/run name=x",
 			"resolution": "resolved",
-			"path": "/tool/e-mail",
-			"verb": "send",
+			"path": "/system/script",
+			"verb": "run",
 			"verbAt": 2,
 			"rule": "no space token, arguments follow — last segment"
+		},
+		{
+			"name": "a published command outranks the punctuation guess (#228)",
+			"input": "/system/gps/monitor once",
+			"resolution": "resolved",
+			"truth": "/system/gps/monitor",
+			"path": "/system/gps",
+			"verb": "monitor",
+			"verbAt": 2,
+			"rule": "published command `/system/gps/monitor`"
 		},
 		{
 			"name": "directive precedence over vocabulary — `:set` is positional, not a CRUD verb",

@@ -131,8 +131,8 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(code).toBe(1);
 	});
 
-	test("18. A bare path the menu table does not know is ambiguous offline", async () => {
-		const { data } = await explainJson(["/system/reboot"]);
+	test("18. A bare path neither table knows is ambiguous offline", async () => {
+		const { data } = await explainJson(["/disk/format-drive"]);
 		const statement = data.structure.statements[0];
 		expect(statement?.resolution).toBe("ambiguous");
 		expect(statement?.command).toBeUndefined();
@@ -151,6 +151,44 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(statement?.resolution).toBe("resolved");
 		expect(statement?.kind).toBe("menu");
 		expect(statement?.command).toEqual({ path: "/ip/route" });
+	});
+
+	test("18c. A bare path the COMMAND axis knows resolves as a command, offline", async () => {
+		const { data } = await explainJson(["/system/reboot"]);
+		const statement = data.structure.statements[0];
+		expect(statement?.resolution).toBe("resolved");
+		expect(statement?.kind).toBe("command");
+		expect(statement?.command).toMatchObject({
+			path: "/system",
+			verb: "reboot",
+		});
+		// Knowing it is a command says nothing about whether it MUTATES.
+		expect(data.structure.containsWrite).toBe("unknown");
+	});
+
+	test("18d. A published command does not move the menu context", async () => {
+		const { data } = await explainJson([
+			"/ip route\n/system reboot\nadd dst-address=8.8.8.8/32 gateway=1.1.1.1",
+		]);
+		const [nav, command, relative] = data.structure.statements;
+		expect(nav).toMatchObject({ resolution: "resolved", kind: "menu" });
+		expect(command?.command).toMatchObject({
+			path: "/system",
+			verb: "reboot",
+		});
+		// The #211 B2 closure: `add` resolves where the document actually is.
+		expect(relative?.command).toMatchObject({ path: "/ip/route", verb: "add" });
+		expect(data.structure.containsWrite).toBe(true);
+	});
+
+	test("18e. A published command outranks the punctuation guess", async () => {
+		const { data } = await explainJson(["/system/gps/monitor once"]);
+		expect(data.structure.statements[0]?.command).toMatchObject({
+			path: "/system/gps",
+			verb: "monitor",
+		});
+		// `monitor` is a curated READ; the punctuation reading (`once`) abstained.
+		expect(data.structure.containsWrite).toBe(false);
 	});
 
 	test("20. Explain-only write detection is three-valued", async () => {
