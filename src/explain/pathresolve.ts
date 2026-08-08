@@ -89,14 +89,14 @@
  */
 
 import { isScopeBrace, scopeBlocks, scopeBodies } from "./blocks.ts";
-import { commandVerbIndex, lookupPath } from "./catalog.ts";
+import { commandVerbIndex } from "./catalog.ts";
 import {
 	type Defect,
 	isPositionalFact,
 	mergeDefects,
 	rebaseDefects,
 } from "./defects.ts";
-import { isMenuPath } from "./menus.ts";
+import { isKnownMenuPath } from "./is-known-menu.ts";
 import {
 	maskComments,
 	type SegmentResult,
@@ -816,13 +816,6 @@ function menuNavPath(text: string, ctx: string): string | null {
 	// R12 — the same segments, against the published command axis.
 	if (commandVerbIndex(segments) !== null) return null;
 	return joinPath("/", tokens.join("/"));
-}
-
-function isKnownMenuPath(segments: readonly string[]): boolean {
-	const entry = lookupPath(segments);
-	return (
-		isMenuPath(segments) || entry?.kind === "menu" || entry?.kind === "settings"
-	);
 }
 
 function relativeBarePath(

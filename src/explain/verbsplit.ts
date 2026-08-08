@@ -68,9 +68,9 @@
  */
 
 import { scopeBodies } from "./blocks.ts";
-import { commandVerbIndex, lookupPath } from "./catalog.ts";
+import { commandVerbIndex } from "./catalog.ts";
 import type { Defect } from "./defects.ts";
-import { isMenuPath } from "./menus.ts";
+import { isKnownMenuPath } from "./is-known-menu.ts";
 import { resolveStatements, type Span } from "./pathresolve.ts";
 import { SUBMENU_DIRECTIVES, VERBS } from "./verbs.ts";
 
@@ -502,13 +502,6 @@ export type VerbResolution = VerbSplit["resolution"];
 function joinBase(base: string, names: string[]): string {
 	const parts = [...base.split("/").filter(Boolean), ...names];
 	return `/${parts.join("/")}`;
-}
-
-function isKnownMenuPath(segments: readonly string[]): boolean {
-	const entry = lookupPath(segments);
-	return (
-		isMenuPath(segments) || entry?.kind === "menu" || entry?.kind === "settings"
-	);
 }
 
 function unknownSplit(why: string): VerbSplitRefusal {
