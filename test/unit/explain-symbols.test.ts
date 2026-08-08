@@ -1318,3 +1318,89 @@ describe("explain/symbols — public export surface", () => {
 		expect(centrs.HIGHLIGHT_CLASS).toBe(HIGHLIGHT_CLASS);
 	});
 });
+
+describe("explain/symbols — semantic occurrence surface (#239)", () => {
+	test("declaration, assignment, and reference share one binding identity", () => {
+		const occurrences = resolveSymbols(
+			":local x 1; :set x 2; :put $x",
+		).occurrences;
+		expect(occurrences.map((o) => [o.role, o.bindingIds])).toEqual([
+			["declaration", ["b0"]],
+			["assignment", ["b0"]],
+			["reference", ["b0"]],
+		]);
+	});
+
+	test("shadowing creates a distinct identity and references the nearest binding", () => {
+		const occurrences = resolveSymbols(
+			":local x 1; :if (true) do={:local x 2; :put $x}; :put $x",
+		).occurrences;
+		expect(occurrences.map((o) => o.bindingIds)).toEqual([
+			["b0"],
+			["b1"],
+			["b1"],
+			["b0"],
+		]);
+	});
+
+	test("`:onerror` exposes both bindings while each reference stays unambiguous", () => {
+		const occurrences = resolveSymbols(
+			":onerror e in={:put 1} do={:put $e}; :put $e",
+		).occurrences;
+		expect(occurrences.map((o) => [o.role, o.bindingIds])).toEqual([
+			["binding", ["b0", "b1"]],
+			["reference", ["b1"]],
+			["reference", ["b0"]],
+		]);
+	});
+
+	test("statement-leading bracket promotion preserves binding identity", () => {
+		const occurrences = resolveSymbols(
+			"[:local x 1; :put $x]; :put $x",
+		).occurrences;
+		expect(occurrences.map((o) => o.bindingIds)).toEqual([
+			["b0"],
+			["b0"],
+			["b0"],
+		]);
+	});
+
+	test("digit-led duration literals do not leak suffixes as symbols", () => {
+		const occurrences = resolveSymbols(
+			":local z (1d,1w7h2s,1w+1d)",
+		).occurrences;
+		expect(occurrences.map((o) => o.name)).toEqual(["z"]);
+	});
+
+	test("a quoted declaration carries its binding identity into a reference", () => {
+		const occurrences = resolveSymbols(
+			':local "set-dns" 1; :put $"set-dns"',
+		).occurrences;
+		expect(occurrences).toMatchObject([
+			{
+				name: "set-dns",
+				start: 7,
+				end: 16,
+				role: "declaration",
+				bindingIds: ["b0"],
+			},
+			{
+				name: "set-dns",
+				role: "reference",
+				bindingIds: ["b0"],
+			},
+		]);
+	});
+
+	test("`:set` on an undeclared name has no invented binding identity", () => {
+		const [target] = resolveSymbols(":set missing 1").occurrences;
+		expect(target).toMatchObject({
+			name: "missing",
+			cls: null,
+			declaration: false,
+			role: "assignment",
+			bindingIds: [],
+		});
+		expect(target?.note).toContain("hard error");
+	});
+});

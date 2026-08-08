@@ -86,6 +86,7 @@ describe("explainCommand — structural invariants", () => {
 				...data.structure.statements.map((s) => s.span),
 				...data.structure.subcommands.map((s) => s.span),
 				...data.structure.blocks.map((b) => b.span),
+				...data.symbols.occurrences.map((s) => s.span),
 				...data.spans,
 				...data.diagnostics.map((d) => d.span),
 			];
@@ -112,6 +113,7 @@ describe("explainCommand — structural invariants", () => {
 				...data.structure.statements.map((s) => s.ev),
 				...data.structure.subcommands.map((s) => s.ev),
 				...data.structure.blocks.map((b) => b.ev),
+				...data.symbols.occurrences.map((s) => s.ev),
 				...data.spans.map((s) => s.ev),
 				...data.diagnostics.map((d) => d.ev),
 			]);
@@ -611,6 +613,73 @@ describe("spans", () => {
 		// has no centrs span class either.
 		const data = explainCommand(":put unbound-name");
 		expect(data.spans).toEqual([]);
+	});
+});
+
+describe("symbols", () => {
+	test("declarations, assignments, and references retain their semantic roles", () => {
+		const data = explainCommand(":local x 1; :set x 2; :put $x");
+		expect(data.symbols.occurrences).toEqual([
+			{
+				name: "x",
+				span: { start: 7, end: 8 },
+				class: "local",
+				role: "declaration",
+				bindingIds: ["b0"],
+				sigil: false,
+				ev: "e7",
+			},
+			{
+				name: "x",
+				span: { start: 17, end: 18 },
+				class: "local",
+				role: "assignment",
+				bindingIds: ["b0"],
+				sigil: false,
+				ev: "e7",
+			},
+			{
+				name: "x",
+				span: { start: 28, end: 29 },
+				class: "local",
+				role: "reference",
+				bindingIds: ["b0"],
+				sigil: true,
+				ev: "e7",
+			},
+		]);
+	});
+
+	test("shadowed locals have distinct result-local binding identities", () => {
+		const data = explainCommand(
+			":local x 1; :if (true) do={:local x 2; :put $x}; :put $x",
+		);
+		expect(data.symbols.occurrences.map((s) => [s.role, s.bindingIds])).toEqual(
+			[
+				["declaration", ["b0"]],
+				["declaration", ["b1"]],
+				["reference", ["b1"]],
+				["reference", ["b0"]],
+			],
+		);
+	});
+
+	test("filter fields remain distinct from user references", () => {
+		const data = explainCommand("/ip route; :put [find gateway=$x]");
+		const [field, parameter] = data.symbols.occurrences;
+		expect(field).toMatchObject({
+			name: "gateway",
+			class: null,
+			role: "field",
+			bindingIds: [],
+		});
+		expect(field?.note).toContain("schema-dependent");
+		expect(parameter).toMatchObject({
+			name: "x",
+			class: "parameter",
+			role: "reference",
+			bindingIds: [],
+		});
 	});
 });
 

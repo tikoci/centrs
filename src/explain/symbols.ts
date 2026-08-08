@@ -314,6 +314,14 @@ export type SymbolClass =
 	| "parameter"
 	| "undefined";
 
+/** The source-level job an occurrence performs. */
+export type SymbolRole =
+	| "declaration"
+	| "binding"
+	| "assignment"
+	| "reference"
+	| "field";
+
 /**
  * Device highlight token-class name for each class, for callers comparing
  * against `/console/inspect request=highlight` output.
@@ -330,7 +338,7 @@ export const HIGHLIGHT_CLASS: Record<SymbolClass, string> = {
 	undefined: "variable-undefined",
 };
 
-/** One located variable occurrence — a declaration or a reference. */
+/** One located semantic symbol occurrence. */
 export interface SymbolOccurrence {
 	/** analyzed-byte offset, inclusive. */
 	start: number;
@@ -346,8 +354,17 @@ export interface SymbolOccurrence {
 	name: string;
 	/** true when written with the `$` sigil. */
 	sigil: boolean;
-	/** true at the declaration site, false at a use. */
+	/** true at a declaration/binding site, false otherwise. */
 	declaration: boolean;
+	/** Declaration/binding, assignment target, reference, or filter-field site. */
+	role: SymbolRole;
+	/**
+	 * Result-local identities of the bindings this occurrence establishes or
+	 * resolves to. Usually zero or one; `:onerror` establishes both its statement
+	 * binding and (when unclaimed) an enclosing binding, so declarations may name
+	 * two. Statement-leading bracket promotion preserves the original identity.
+	 */
+	bindingIds: string[];
 	/** resolved class, or null where offline must abstain (S7/S8/S10). */
 	cls: SymbolClass | null;
 	/** why the resolver abstained, or how the reference was read. */
@@ -361,6 +378,8 @@ export interface SymbolAnalysis {
 }
 
 interface Binding {
+	/** Stable only within one `resolveSymbols` result. */
+	id: string;
 	cls: SymbolClass;
 	/** analyzed-byte offset from which the binding is visible. */
 	from: number;
@@ -464,6 +483,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 
 	const occurrences: SymbolOccurrence[] = [];
 	const defects: Defect[] = [];
+	let nextBindingId = 0;
 	const root: Scope = { closure: false, bindings: new Map() };
 	const scopes: Scope[] = [root];
 	/** F6 — saved statement state per open `[`, innermost last. */
@@ -586,7 +606,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 
 	/**
 	 * F7 — the FIRST declaration written directly in a scope claims the name.
-	 * Returns false when the scope already had it, which is not an error: the
+	 * Returns null when the scope already had it, which is not an error: the
 	 * declaration's own span still records its own head's class, it just binds
 	 * nothing.
 	 */
@@ -595,10 +615,16 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		name: string,
 		cls: SymbolClass,
 		from: number,
-	): boolean => {
-		if (scope.bindings.has(name)) return false;
-		scope.bindings.set(name, { cls, from });
-		return true;
+		promotedId?: string,
+	): Binding | null => {
+		if (scope.bindings.has(name)) return null;
+		const binding = {
+			id: promotedId ?? `b${nextBindingId++}`,
+			cls,
+			from,
+		};
+		scope.bindings.set(name, binding);
+		return binding;
 	};
 
 	// Case matters: RouterOS variable resolution is CASE-SENSITIVE (`:local
@@ -607,9 +633,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	//
 	// F7 — `:global` and `:local` bind IDENTICALLY: current scope, from here on,
 	// not escaping the enclosing `{…}`. Only the class they emit differs.
-	const bind = (name: string, cls: SymbolClass, from: number): void => {
+	const bind = (name: string, cls: SymbolClass, from: number): Binding | null =>
 		claim(scopes[scopes.length - 1] as Scope, name, cls, from);
-	};
 
 	/**
 	 * F6/F7 — enter a `[`. Saves the enclosing statement, opens a nested
@@ -669,7 +694,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			if (frame.lead) {
 				const outer = scopes[scopes.length - 1] as Scope;
 				for (const [name, b] of frame.scope.bindings)
-					claim(outer, name, b.cls, b.from);
+					claim(outer, name, b.cls, b.from, b.id);
 			}
 		}
 		head = frame.head;
@@ -700,6 +725,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				name: r.name,
 				sigil: true,
 				declaration: false,
+				role: "reference",
+				bindingIds: [],
 				cls: "parameter",
 				note,
 			});
@@ -738,6 +765,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			name,
 			sigil: true,
 			declaration: false,
+			role: "reference",
+			bindingIds: binding === null ? [] : [binding.id],
 			// S5 — no visible declaration is `parameter`, matching the console.
 			cls: binding === null ? "parameter" : binding.cls,
 			note,
@@ -751,6 +780,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		cls: SymbolClass | null,
 		declaration: boolean,
 		note?: string,
+		role: SymbolRole = declaration ? "declaration" : "reference",
+		bindingIds: string[] = [],
 	): void => {
 		occurrences.push({
 			start,
@@ -758,6 +789,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			name,
 			sigil: false,
 			declaration,
+			role,
+			bindingIds,
 			cls,
 			note,
 		});
@@ -940,22 +973,34 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					// word and declared `in`.
 					const cls: SymbolClass =
 						pendingDecl ?? (pendingErrVar ? "local" : "auto");
+					const role: SymbolRole =
+						pendingDecl !== null ? "declaration" : "binding";
+					const bindingIds: string[] = [];
 					if (pendingDecl !== null) {
-						bind(name, cls, i + 1);
+						const binding = bind(name, cls, i + 1);
+						if (binding !== null) bindingIds.push(binding.id);
 						pendingDecl = null;
 						declaredHere = true;
 					} else {
 						// F7 — statement scope, and for `:onerror` the enclosing claim
 						// too. Same order as the bare paths: claim before the statement
 						// scope exists.
-						if (pendingErrVar)
-							claim(scopes[scopes.length - 1] as Scope, name, "local", i + 1);
+						if (pendingErrVar) {
+							const outer = claim(
+								scopes[scopes.length - 1] as Scope,
+								name,
+								"local",
+								i + 1,
+							);
+							if (outer !== null) bindingIds.push(outer.id);
+						}
 						openStatementScope(i + 1);
-						bind(name, cls, i + 1);
+						const statement = bind(name, cls, i + 1);
+						if (statement !== null) bindingIds.push(statement.id);
 						pendingErrVar = false;
 					}
 					// The span includes the quotes; the NAME does not.
-					record(i, close + 1, name, cls, true);
+					record(i, close + 1, name, cls, true, undefined, role, bindingIds);
 					i = close;
 					continue;
 				}
@@ -1028,6 +1073,18 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				pushRef(r);
 				i = r.next - 1;
 			}
+			continue;
+		}
+
+		// S13 — consume the whole identifier-shaped tail of a digit-led literal.
+		// Without this, `1d` skipped the `1` and revisited `d` as a bare symbol;
+		// the same leak affected duration forms such as `1w7h2s`. Identifier-shaped
+		// tails, including `.` and `-`, are consumed here; separators such as `:` and
+		// `/` stop the run and return to the ordinary byte walk.
+		if (/[0-9]/.test(c)) {
+			let j = i + 1;
+			while (j < text.length && isIdent(text[j] as string)) j++;
+			i = j - 1;
 			continue;
 		}
 
@@ -1172,6 +1229,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					binding === null
 						? "S10 :set on an undeclared name — the device raises a hard error here"
 						: undefined,
+					"assignment",
+					binding === null ? [] : [binding.id],
 				);
 				continue;
 			}
@@ -1188,17 +1247,43 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				// with a loop variable reads `parameter`). Order matters: the claim
 				// is offered to the ENCLOSING scope, before the statement scope
 				// exists.
-				claim(scopes[scopes.length - 1] as Scope, word, "local", wordStart);
+				const bindingIds: string[] = [];
+				const outer = claim(
+					scopes[scopes.length - 1] as Scope,
+					word,
+					"local",
+					wordStart,
+				);
+				if (outer !== null) bindingIds.push(outer.id);
 				openStatementScope(wordStart);
-				bind(word, "local", wordStart);
-				record(wordStart, j, word, "local", true);
+				const statement = bind(word, "local", wordStart);
+				if (statement !== null) bindingIds.push(statement.id);
+				record(
+					wordStart,
+					j,
+					word,
+					"local",
+					true,
+					undefined,
+					"binding",
+					bindingIds,
+				);
 				continue;
 			}
 
 			// S1/S2 — this word is the declared name.
 			if (pendingDecl !== null) {
-				bind(word, pendingDecl, wordStart);
-				record(wordStart, j, word, pendingDecl, true);
+				const binding = bind(word, pendingDecl, wordStart);
+				record(
+					wordStart,
+					j,
+					word,
+					pendingDecl,
+					true,
+					undefined,
+					"declaration",
+					binding === null ? [] : [binding.id],
+				);
 				pendingDecl = null;
 				declaredHere = true;
 				continue;
@@ -1214,8 +1299,17 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				// F7 — loop variables get a scope of their own, wrapping the rest of
 				// the statement including its body.
 				openStatementScope(wordStart);
-				bind(word, "auto", wordStart);
-				record(wordStart, j, word, "auto", true);
+				const binding = bind(word, "auto", wordStart);
+				record(
+					wordStart,
+					j,
+					word,
+					"auto",
+					true,
+					undefined,
+					"binding",
+					binding === null ? [] : [binding.id],
+				);
 				continue;
 			}
 
@@ -1235,7 +1329,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				!isLiteralWord(lower) &&
 				!OPERATOR_WORDS.has(lower)
 			) {
-				record(wordStart, j, word, null, false, FILTER_NOTE);
+				record(wordStart, j, word, null, false, FILTER_NOTE, "field");
 				continue;
 			}
 
@@ -1249,7 +1343,15 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					filterDepth !== null ||
 					(!sigilled && !isLiteralWord(lower) && openParen[start] === 1)
 				)
-					record(wordStart, j, word, null, false, FILTER_NOTE);
+					record(
+						wordStart,
+						j,
+						word,
+						null,
+						false,
+						filterDepth !== null ? FILTER_NOTE : BARE_WORD_NOTE,
+						filterDepth !== null ? "field" : "reference",
+					);
 				continue;
 			}
 
@@ -1290,6 +1392,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					// scored 100% precision); an unresolved bare word is NOT called
 					// `undefined`, because menu field vs unbound name needs a schema.
 					binding === null ? BARE_WORD_NOTE : undefined,
+					"reference",
+					binding === null ? [] : [binding.id],
 				);
 			}
 		}

@@ -268,6 +268,27 @@ describe("commands/explain/examples.md — offline", () => {
 	});
 
 	test.todo("23. Selector-less set fails closed offline (#202c)", () => {});
+
+	test("25. Offline semantic symbols retain roles and binding identity (#239)", async () => {
+		const input =
+			'{:local x 1.3; :put [:typeof $x]; :set x 2.1.1; /put $x; :local z (1.1,1::1,"abc",1d,1w7h2s,1.1.1.1/24,123,[:parse "(1+1)"],(1w+1d),2008:1::2/128,[:timestamp],"a"."b"."c",4%2,-1); :put "$[:typeof $z]"; :foreach i,v in=$z  do={:put "$i = $v; types i = $[:typeof $i], v = $[:typeof $v]"}}';
+		const { out, code } = await run(["explain", input]);
+		expect(out).toContain("symbols:");
+		expect(out.split("\n").filter((line) => line.includes('name="x"'))).toEqual(
+			[
+				'  [8,9)        local     declaration name="x" bindings=b0',
+				'  [30,31)      local     reference   name="x" bindings=b0',
+				'  [39,40)      local     assignment  name="x" bindings=b0',
+				'  [54,55)      local     reference   name="x" bindings=b0',
+			],
+		);
+		expect(out).toContain('declaration name="z" bindings=b1');
+		expect(out).toContain('binding     name="i" bindings=b2');
+		expect(out).toContain('binding     name="v" bindings=b3');
+		expect(out).not.toContain('name="d"');
+		expect(out).not.toContain('name="w7h2s"');
+		expect(code).toBe(0);
+	});
 });
 
 /**

@@ -397,6 +397,7 @@ Standard envelope (constitution: result envelope); `data` sketch:
     "containsWrite": true,
     "subcommands": []
   },
+  "symbols": { "occurrences": [] },
   "spans": [ { "start": 0, "end": 9, "class": "path", "ev": "e0" } ],
   "diagnostics": [],
   "evidence": [
@@ -540,6 +541,7 @@ and its phase is named below.
 | `evidence[]` | the **offline subset**: `source` is always `canonicalizer` and there is no RouterOS version stamp |
 | `structure.statements[].command` | `path` + `verb`, plus **`args` where the argument list was read** (#202c-1); the ordered token list is `statements[].arguments.tokens` |
 | `structure.statements[].transport` | **absent** — #202c-2, which greens examples 1, 2, 6 and 23 |
+| `symbols.occurrences[]` | Q13 name/span/class plus semantic `role`, result-local `bindingIds`, sigil spelling, and an abstention note where needed; **no value shape or type** |
 | `spans` | comment runs and resolved variable classes only; **no value shape or type** |
 | `schema`, `completion` | absent — live evidence, phase 2 |
 
@@ -592,6 +594,15 @@ and its phase is named below.
   omitted rather than rendered as a guess. The Q12 vocabulary over
   path/verb/argument bytes wants device `highlight` as its oracle. A subset is
   not a claim that the vocabulary is closed.
+- **`symbols` is the semantic Q13 projection.** Each occurrence carries its
+  source name/span, resolved class (or `null` when offline abstains), role
+  (`declaration`, `binding`, `assignment`, `reference`, or filter `field`), and
+  result-local binding identities. Those identities distinguish shadowed names
+  and connect `:set`/reference sites to their declaration; they are stable only
+  within one result. When `:onerror` establishes two bindings, the list is
+  ordered outer-scope binding first, statement-scope binding second. This is
+  symbol structure, not flow analysis: value/type inference remains #239 S2
+  after the expression/parser foundation in #225.
 - **Evidence is offline-shaped, not the whole contract.** The bullet above says
   an evidence entry carries `source` (`canonicalizer` vs `live-inspect`) and a
   RouterOS version stamp; phase 1 emits neither the live source nor the stamp,

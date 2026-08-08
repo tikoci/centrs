@@ -416,3 +416,20 @@ centrs explain $A ':if (1 > 2) do={ :put x' --via native-api --port $API_PORT --
 `as-string`, and the diagnostic carries the RouterOS line/column text rather
 than an opaque job handle. The corresponding evidence entry names `:parse`,
 is version-stamped, and no command is executed.
+
+### 25. Offline semantic symbols retain roles and binding identity
+
+```bash
+centrs explain '{:local x 1.3; :put [:typeof $x]; :set x 2.1.1; /put $x; :local z (1.1,1::1,"abc",1d,1w7h2s,1.1.1.1/24,123,[:parse "(1+1)"],(1w+1d),2008:1::2/128,[:timestamp],"a"."b"."c",4%2,-1); :put "$[:typeof $z]"; :foreach i,v in=$z  do={:put "$i = $v; types i = $[:typeof $i], v = $[:typeof $v]"}}'
+```
+
+The text output has a `symbols:` section. The declaration, `:set` target, and
+references for `x` share one result-local binding identity; `z` has another;
+and the `:foreach` bindings `i` and `v` each have their own identity. Their
+roles are respectively `declaration`, `assignment`, `reference`, and `binding`.
+Duration literals such as `1d` and `1w7h2s` do not fabricate symbol names.
+
+The JSON/YAML form carries the same facts under
+`data.symbols.occurrences[]` as `name`, byte `span`, `class`, `role`,
+`bindingIds`, `sigil`, optional `note`, and `ev`. This is the Q13 symbol view;
+it does not infer value-flow types, which remain #239 S2 after #225.
