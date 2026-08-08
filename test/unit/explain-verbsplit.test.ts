@@ -403,12 +403,28 @@ describe("#210 — the container table decides V4's bare path", () => {
 			}
 	});
 
-	test("a relative bare path is still `unknown`, never navigation", () => {
-		// The table lookup reads the context-applied candidate, so it would be
-		// correct under a non-root base — but a relative bare-word head is refused
-		// before it can reach that branch, and must stay refused: `address` in
-		// `/ip` is indistinguishable from a no-argument command (R8).
+	test("a relative bare path that joins to a known menu is navigation (#235)", () => {
+		// R13 lifts R8 where the tables know: `address` under `/ip` → `/ip/address`
+		// is a known menu, so the relative bare word is navigation rather than a
+		// refusal. A word whose join is in neither table stays `unknown`.
 		expect(resolveVerb("address", "/ip")).toMatchObject({
+			resolution: "navigation",
+			kind: "menu",
+			path: "/ip/address",
+		});
+		expect(resolveVerb("filter", "/ip/firewall")).toMatchObject({
+			resolution: "navigation",
+			kind: "menu",
+			path: "/ip/firewall/filter",
+		});
+		// `/interface/ethernet/poe` is published-only, so this also pins the
+		// catalog kind half of #235 rather than passing only through MENU_PATHS.
+		expect(resolveVerb("poe", "/interface/ethernet")).toMatchObject({
+			resolution: "navigation",
+			kind: "menu",
+			path: "/interface/ethernet/poe",
+		});
+		expect(resolveVerb("nonexistent", "/ip")).toMatchObject({
 			resolution: "unknown",
 			why: "bare-word head is not a known verb",
 		});

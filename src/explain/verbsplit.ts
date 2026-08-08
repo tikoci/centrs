@@ -68,7 +68,7 @@
  */
 
 import { scopeBodies } from "./blocks.ts";
-import { commandVerbIndex } from "./catalog.ts";
+import { commandVerbIndex, lookupPath } from "./catalog.ts";
 import type { Defect } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
 import { resolveStatements, type Span } from "./pathresolve.ts";
@@ -504,6 +504,13 @@ function joinBase(base: string, names: string[]): string {
 	return `/${parts.join("/")}`;
 }
 
+function isKnownMenuPath(segments: readonly string[]): boolean {
+	const entry = lookupPath(segments);
+	return (
+		isMenuPath(segments) || entry?.kind === "menu" || entry?.kind === "settings"
+	);
+}
+
 function unknownSplit(why: string): VerbSplitRefusal {
 	return {
 		resolution: "unknown",
@@ -558,8 +565,21 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 		!t.startsWith(":") &&
 		!VERBS.has((run[0] as RunToken).name) &&
 		(catalogAt === null || base === "/")
-	)
-		return unknownSplit("bare-word head is not a known verb");
+	) {
+		// #235 — a relative bare-word that joins to a known menu is navigation
+		// (`address` under `/ip` → `/ip/address`, `ip` at `/` → `/ip`),
+		// lifted from the refusal. Root prose like `import` (→ `/import` command)
+		// stays refused — only a known *menu* lifts.
+		const joinedSegments = [
+			...base.split("/").filter(Boolean),
+			(run[0] as RunToken).name.toLowerCase(),
+		];
+		if (isKnownMenuPath(joinedSegments)) {
+			// fall through to the ambiguous-menu handling below
+		} else {
+			return unknownSplit("bare-word head is not a known verb");
+		}
+	}
 
 	const candidates: string[] = [];
 	for (let k = 1; k <= run.length; k++)
@@ -585,7 +605,7 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 		// under a non-root context instead of relying on the (currently true)
 		// property that only `/`-led statements reach here.
 		const full = candidates[candidates.length - 1] as string;
-		if (isMenuPath(full.split("/").filter(Boolean)))
+		if (isKnownMenuPath(full.split("/").filter(Boolean)))
 			return {
 				resolution: "navigation",
 				kind: "menu",

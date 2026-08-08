@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { commandVerbIndex } from "../../src/explain/catalog.ts";
+import { commandVerbIndex, PATH_CATALOG } from "../../src/explain/catalog.ts";
 import { hasStructuralDefect } from "../../src/explain/defects.ts";
 import { MENU_PATHS } from "../../src/explain/menus.ts";
 import {
@@ -255,6 +255,27 @@ describe("Q14 C3b — a lost context poisons dependent statements", () => {
 		expect(res[1]?.unresolved).toBe("dynamic or substitution-headed statement");
 		expect(res[2]?.path).toBe("/ip/route/add");
 		expect(res[2]?.contextCertain).toBe(true);
+	});
+
+	test("an unknown relative bare path poisons every following relative statement (#235)", () => {
+		const res = resolveStatements(
+			"/ip\nnonexistent\naddress\nprint",
+		).statements;
+		expect(res[1]?.path).toBe("/ip/nonexistent");
+		expect(res[1]?.contextCertain).toBe(true);
+		// A known relative menu still consumes the lost context; it cannot revive
+		// certainty from the stale `/ip` value.
+		expect(res[2]).toMatchObject({
+			isNav: true,
+			path: null,
+			unresolved: LOST,
+			contextCertain: false,
+		});
+		expect(res[3]).toMatchObject({
+			path: null,
+			unresolved: LOST,
+			contextCertain: false,
+		});
 	});
 
 	test("context-INDEPENDENT statements keep resolving while context is lost", () => {
@@ -532,13 +553,16 @@ describe("R9 — pathresolve and verbsplit cannot contradict each other", () => 
 		}
 	});
 
-	test("no path in the generated table carries a verb segment", () => {
+	test("no known menu in either generated table carries a verb segment", () => {
 		// R9's premise, stated at the scope it is actually checked. If a menu were
 		// named `.../print`, R9 would refuse to navigate into it. Asserted over the
-		// whole generated table so a regeneration that introduced one fails here —
-		// which is a claim about `MENU_PATHS`, not about RouterOS: the table is a
-		// floor (#207), so this cannot rule out an unlisted menu of that shape.
-		const offenders = [...MENU_PATHS].filter((path) =>
+		// two generated sources #235 now reads, so a regeneration that introduced
+		// one fails here. Both are floors, so this says nothing about unlisted menus.
+		const catalogMenus = [...PATH_CATALOG]
+			.filter(([, entry]) => entry.kind === "menu" || entry.kind === "settings")
+			.map(([path]) => path);
+		const knownMenus = new Set([...MENU_PATHS, ...catalogMenus]);
+		const offenders = [...knownMenus].filter((path) =>
 			path
 				.split("/")
 				.filter(Boolean)
@@ -547,13 +571,16 @@ describe("R9 — pathresolve and verbsplit cannot contradict each other", () => 
 		expect(offenders).toEqual([]);
 	});
 
-	test("R12's premise — no menu the tables know is also a published command", () => {
+	test("R12's premise — no known menu is also a published command", () => {
 		// R12 refuses navigation into a path the catalog calls a command. That is
 		// only safe while the two tables are DISJOINT on that question: a path in
 		// both would be refused as navigation despite `MENU_PATHS` carrying it.
-		// Asserted over the whole menu table, so a regeneration that introduced an
-		// overlap fails here rather than silently changing where documents navigate.
-		const overlap = [...MENU_PATHS].filter(
+		// Asserted over both menu sources now read by #235, so a regeneration that
+		// introduced an overlap fails rather than silently changing navigation.
+		const catalogMenus = [...PATH_CATALOG]
+			.filter(([, entry]) => entry.kind === "menu" || entry.kind === "settings")
+			.map(([path]) => path);
+		const overlap = [...new Set([...MENU_PATHS, ...catalogMenus])].filter(
 			(path) => commandVerbIndex(path.split("/").filter(Boolean)) !== null,
 		);
 		expect(overlap).toEqual([]);
