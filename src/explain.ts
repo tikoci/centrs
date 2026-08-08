@@ -100,7 +100,11 @@ import {
 } from "./explain/defects.ts";
 import { type Resolution, resolveDocument } from "./explain/pathresolve.ts";
 import { segmentStatements } from "./explain/segment.ts";
-import { resolveSymbols } from "./explain/symbols.ts";
+import {
+	resolveSymbols,
+	type SymbolClass,
+	type SymbolRole,
+} from "./explain/symbols.ts";
 import {
 	type DocumentVerbSplit,
 	resolveVerb,
@@ -380,6 +384,28 @@ export interface ExplainSpan extends ExplainSpanRange {
 	ev: string;
 }
 
+/** The Q13 class, or `null` where offline analysis must abstain. */
+export type ExplainSymbolClass = Exclude<SymbolClass, "undefined"> | null;
+
+export interface ExplainSymbolOccurrence {
+	name: string;
+	span: ExplainSpanRange;
+	class: ExplainSymbolClass;
+	role: SymbolRole;
+	/** Stable only within this result; empty when no visible binding was decided. */
+	bindingIds: string[];
+	/** Whether the source used a `$`-sigilled reference spelling. */
+	sigil: boolean;
+	/** The resolver's reason for an abstention or special reading. */
+	note?: string;
+	ev: string;
+}
+
+/** Semantic symbol facts; `spans` remains the token/LSP-oriented projection. */
+export interface ExplainSymbols {
+	occurrences: ExplainSymbolOccurrence[];
+}
+
 export type ExplainSeverity = "error" | "warning" | "info";
 
 export interface ExplainDiagnostic {
@@ -422,6 +448,7 @@ export interface ExplainData {
 	verdict: ExplainVerdict;
 	canonical: ExplainCanonical;
 	structure: ExplainStructure;
+	symbols: ExplainSymbols;
 	spans: ExplainSpan[];
 	diagnostics: ExplainDiagnostic[];
 	evidence: ExplainEvidence[];
@@ -750,6 +777,20 @@ export function explainCommand(input: string): ExplainData {
 				: [{ start: o.start, end: o.end, class: cls, ev: EV.symbols }];
 		}),
 	].sort((a, b) => a.start - b.start || a.end - b.end);
+	const symbolFacts: ExplainSymbols = {
+		occurrences: symbols.occurrences.map((o) => ({
+			name: o.name,
+			span: { start: o.start, end: o.end },
+			// `undefined` is a live-device class Q13 forbids offline. Fail closed if
+			// the lower-level vocabulary ever grows a producer accidentally.
+			class: o.cls === "undefined" ? null : o.cls,
+			role: o.role,
+			bindingIds: [...o.bindingIds],
+			sigil: o.sigil,
+			...(o.note === undefined ? {} : { note: o.note }),
+			ev: EV.symbols,
+		})),
+	};
 
 	const canonical = canonicalizeExecuteCommand(input);
 	const structure: ExplainStructure = {
@@ -784,9 +825,10 @@ export function explainCommand(input: string): ExplainData {
 			writeShaped: isWriteShaped(canonical),
 		},
 		structure,
+		symbols: symbolFacts,
 		spans,
 		diagnostics,
-		evidence: citedEvidence(structure, diagnostics, spans),
+		evidence: citedEvidence(structure, diagnostics, spans, symbolFacts),
 		runtimeAcceptance: "not-proven",
 	};
 }
@@ -1068,6 +1110,7 @@ function citedEvidence(
 	structure: ExplainStructure,
 	diagnostics: readonly ExplainDiagnostic[],
 	spans: readonly ExplainSpan[],
+	symbols: ExplainSymbols,
 ): ExplainEvidence[] {
 	// `canonical` and `input` carry no `ev` of their own — they are whole-result
 	// fields, not entries in a list — so their two passes are seeded here.
@@ -1077,6 +1120,7 @@ function citedEvidence(
 	for (const b of structure.blocks) cited.add(b.ev);
 	for (const d of diagnostics) cited.add(d.ev);
 	for (const s of spans) cited.add(s.ev);
+	for (const occurrence of symbols.occurrences) cited.add(occurrence.ev);
 	return Object.values(EVIDENCE)
 		.filter((e) => cited.has(e.id))
 		.sort((a, b) => a.id.localeCompare(b.id));
@@ -1286,6 +1330,15 @@ function renderReading(reading: ExplainReading): string {
 		: `resolved  command  path=${reading.command.path} verb=${reading.command.verb}`;
 }
 
+function renderSymbol(occurrence: ExplainSymbolOccurrence): string {
+	const binding =
+		occurrence.bindingIds.length === 0
+			? ""
+			: ` bindings=${occurrence.bindingIds.join(",")}`;
+	const note = occurrence.note === undefined ? "" : `  (${occurrence.note})`;
+	return `${(occurrence.class ?? "unknown").padEnd(9)} ${occurrence.role.padEnd(11)} name=${JSON.stringify(occurrence.name)}${binding}${note}`;
+}
+
 /**
  * The human format.
  *
@@ -1339,6 +1392,13 @@ function renderExplainText(
 		lines.push("blocks:");
 		for (const b of structure.blocks)
 			lines.push(`  ${span(b.span).padEnd(12)} ${b.name}`);
+	}
+	if (data.symbols.occurrences.length > 0) {
+		lines.push("symbols:");
+		for (const occurrence of data.symbols.occurrences)
+			lines.push(
+				`  ${span(occurrence.span).padEnd(12)} ${renderSymbol(occurrence)}`,
+			);
 	}
 	if (data.diagnostics.length > 0) {
 		lines.push("diagnostics:");

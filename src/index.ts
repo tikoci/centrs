@@ -369,6 +369,7 @@ export {
 	type SymbolAnalysis,
 	type SymbolClass,
 	type SymbolOccurrence,
+	type SymbolRole,
 } from "./explain/symbols.ts";
 export {
 	type DocumentVerbSplit,
@@ -437,6 +438,9 @@ export {
 	type ExplainStructure,
 	type ExplainSubcommand,
 	type ExplainSubcommandFacts,
+	type ExplainSymbolClass,
+	type ExplainSymbolOccurrence,
+	type ExplainSymbols,
 	type ExplainVerdict,
 	explainCommand,
 	explainEnvelope,
