@@ -92,9 +92,10 @@ section short enough that the grid remains the status surface.
   `bun run explain:catalog`; both are drift-checked in QA. They keep the offline
   analyzer offline; do not hand-edit them. The catalog's **command axis is read**
   by `pathresolve.ts`, `verbsplit.ts` and `write.ts` (#228 step 2); #235 also
-  reads its menu/settings kind for a context-applied relative bare path, while
-  absolute bare-path navigation keeps the `menus.ts` floor. Both changes are
-  inside the offline canonicalizer, so this grid is unchanged by them.
+  reads its menu/settings kind, unioned with `menus.ts` behind
+  `src/explain/is-known-menu.ts`, for both a context-applied relative bare path
+  and an absolute one. Both changes are inside the offline canonicalizer, so
+  this grid is unchanged by them.
 - `transfer / ssh` means the SFTP-backed transfer method. Deferred file-transfer
   methods such as `scp`, `fetch`, and `ftp` are tracked in
   `commands/transfer/README.md`; `fetch` is not a grid column.

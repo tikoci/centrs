@@ -201,6 +201,13 @@
 			],
 			"rule": "R13 (#235) lifts R8 where the tables know: `filter` under `/ip/firewall` → `/ip/firewall/filter` is a known menu, so the bare word is navigation and `add` lands at `/ip/firewall/filter/add`, matching the device. A bare word whose join is in neither table still does not navigate (see the `nonexistent` poison case).",
 			"verified": "CHR 7.23.2 + 7.24rc2 (identical): IL `/ip/firewall/;/ip/firewall/filter/;(evl /ip/firewall/filter/add …)` — the device descends bare `filter` into the submenu. #235 closes the gap where the offline tables confirm the menu; the previous offline `/ip/firewall/add` was the known limit, now lifted for known menus."
+		},
+		{
+			"name": "a relative bare RUN navigates, whitespace or slash (#235)",
+			"input": "/ip\nfirewall filter\nadd chain=input",
+			"expect": ["/ip", "/ip/firewall/filter", "/ip/firewall/filter/add"],
+			"rule": "R13 reads a relative run over path SEGMENTS exactly as R9 reads an absolute one, because the device treats whitespace and `/` as interchangeable. Reading only the single-word spelling as navigation left the space spelling fabricating `/ip/add` — the very cascade #235 was filed on — and made `verbsplit` (navigation) and `pathresolve` (not navigation) contradict each other on one statement.",
+			"verified": "CHR 7.24rc1: `:parse` IL for this input and for its `firewall/filter` spelling are byte-identical — `/ip/;/ip/firewall/filter/;(evl /ip/firewall/filter/addchain=input)`."
 		}
 	]
 }

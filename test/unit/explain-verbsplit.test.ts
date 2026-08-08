@@ -424,10 +424,45 @@ describe("#210 — the container table decides V4's bare path", () => {
 			kind: "menu",
 			path: "/interface/ethernet/poe",
 		});
+		// A run, not just a word: the device treats whitespace and `/` alike, so
+		// both spellings are the same navigation and `pathresolve` agrees on both
+		// (CHR 7.24rc1 `:parse` IL, pinned in `pathresolve.json`).
+		for (const text of ["firewall filter", "firewall/filter"])
+			expect(resolveVerb(text, "/ip")).toMatchObject({
+				resolution: "navigation",
+				kind: "menu",
+				path: "/ip/firewall/filter",
+			});
+		// The verb guard still wins over the lift: this is `print` at
+		// `/ip/address`, not navigation into a menu named `print`.
+		expect(resolveVerb("address print", "/ip")).toMatchObject({
+			resolution: "resolved",
+			kind: "command",
+			path: "/ip/address",
+			verb: "print",
+		});
 		expect(resolveVerb("nonexistent", "/ip")).toMatchObject({
 			resolution: "unknown",
 			why: "bare-word head is not a known verb",
 		});
+	});
+
+	test("an absolute bare path reads the catalog menu axis too (#235)", () => {
+		// #210 answered V4's bare path from `MENU_PATHS` alone, so a published-only
+		// container was `ambiguous`. #235 unions the catalog's menu/settings kind
+		// into the same lookup, and it applies to the absolute spelling as well —
+		// the union is one helper, deliberately not one rule per statement shape.
+		//
+		// A CHR without PoE hardware answers `bad command name poe`, which is the
+		// published applicability GATE working as documented, not a wrong reading:
+		// the catalog says MikroTik publishes the menu, never that this router has
+		// it. Offline naming the menu is what lets the gate explain the absence.
+		for (const text of ["/interface/ethernet/poe", "/interface ethernet poe"])
+			expect(resolveVerb(text, "/")).toMatchObject({
+				resolution: "navigation",
+				kind: "menu",
+				path: "/interface/ethernet/poe",
+			});
 	});
 });
 

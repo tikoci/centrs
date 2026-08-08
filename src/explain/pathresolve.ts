@@ -43,8 +43,11 @@
  *      `/system/reboot` is a command, so it must not move the context and the
  *      statement after it must not resolve against `/system/reboot`.
  *   R13 A relative bare path that a shipped table names as a menu advances the
- *      context (#235). If neither table knows it, offline abstains and the
- *      following relative statements lose context certainty.
+ *      context (#235). Its run is read exactly as R9 reads an absolute one —
+ *      whitespace and `/` are interchangeable on the device, so `firewall
+ *      filter` and `firewall/filter` under `/ip` are one form. If neither table
+ *      knows the joined path, offline abstains and the following relative
+ *      statements lose context certainty.
  *
  * Verb-vs-menu identification is deliberately NOT decided here — offline cannot
  * tell `find` (verb) from a deeper menu without a schema (that is Q6). A
@@ -85,7 +88,6 @@
  * distinction is the whole reason this lives here rather than in a caller,
  * which sees only flattened statements. An ABSOLUTE navigation re-establishes
  * certainty, because R4 has it REPLACE the context rather than extend it.
- *
  */
 
 import { isScopeBrace, scopeBlocks, scopeBodies } from "./blocks.ts";
@@ -736,8 +738,9 @@ function walkStatements(
  * `/ip address` alone on a statement → the new context. Otherwise null.
  *
  * R8/R13 — `..` ascends, a bare `/` resets, and a relative bare path advances
- * only when a shipped structure table confirms the context-applied menu. An
- * absolute navigation REPLACES the context rather than extending it.
+ * only when a shipped structure table confirms the context-applied menu
+ * ({@link readRelativeBare}). An absolute navigation REPLACES the context
+ * rather than extending it; a relative one EXTENDS it.
  *
  * R9 (#211 B1) — a `/`-led bare path whose run carries a FROZEN-VOCABULARY VERB
  * is a command, not navigation. Without this the shape test alone claimed
@@ -785,18 +788,8 @@ function menuNavPath(text: string, ctx: string): string | null {
 	}
 	if (!trimmed.startsWith("/")) {
 		// #235 R13 — relative bare-word menu navigation.
-		// A single bare word (slash-joined allowed) that joins to a known menu
-		// is navigation: `address` under `/ip` → `/ip/address`. Guarded by R9/R12
-		// on the joined absolute path, and by the floor contract (presence is
-		// load-bearing, absence abstains). Multi-word `address print` is not
-		// navigation — that is a command with verb `print`.
-		const candidate = relativeBarePath(text, ctx);
-		if (candidate === null) return null;
-		// R9/R12 on the joined path — a verb-bearing or published-command path
-		// is a command, not navigation, even relatively.
-		if (candidate.segments.some((segment) => VERBS.has(segment))) return null;
-		if (commandVerbIndex(candidate.segments) !== null) return null;
-		return isKnownMenuPath(candidate.segments) ? candidate.path : null;
+		const reading = readRelativeBare(text, ctx);
+		return reading?.kind === "nav" ? reading.path : null;
 	}
 	if (/[=[({"$]/.test(trimmed)) return null;
 	const tokens = asciiWords(trimmed);
@@ -818,10 +811,29 @@ function menuNavPath(text: string, ctx: string): string | null {
 	return joinPath("/", tokens.join("/"));
 }
 
-function relativeBarePath(
+/**
+ * How a RELATIVE bare-path statement reads against `ctx` (#235, R13).
+ *
+ * - `nav` — a shipped table confirms the context-applied path, so it navigates.
+ * - `abstain` — the statement HAS the shape of relative navigation but neither
+ *   table knows the joined path. Offline cannot say which it was, so the caller
+ *   poisons what follows rather than resolve it against a context that may
+ *   already have moved.
+ * - `null` — not a relative bare path at all: absolute, dynamic, a directive,
+ *   or a run carrying a vocabulary verb / published command, which is a
+ *   COMMAND and therefore not a maybe-navigation either.
+ *
+ * ONE classifier rather than a shape test per question. The nav reading and the
+ * poison test must agree about which statements are in scope; written twice
+ * they can drift, and a drift there is silently either a lost navigation or a
+ * poisoned document.
+ */
+type RelativeBareReading = { kind: "nav"; path: string } | { kind: "abstain" };
+
+function readRelativeBare(
 	text: string,
 	ctx: string,
-): { path: string; segments: string[] } | null {
+): RelativeBareReading | null {
 	const trimmed = trimAscii(text);
 	if (
 		trimmed.length === 0 ||
@@ -833,34 +845,33 @@ function relativeBarePath(
 		isBareDirective(trimmed)
 	)
 		return null;
-	const words = asciiWords(trimmed);
-	if (words.length !== 1) return null;
-	const parts = (words[0] as string).split("/");
-	if (parts.length === 0 || !parts.every((part) => BARE_WORD.test(part)))
-		return null;
+	// Whitespace and `/` are interchangeable on the device, so the run is read
+	// over path SEGMENTS exactly as R9 reads an absolute one: `firewall filter`
+	// and `firewall/filter` under `/ip` are the same navigation (CHR 7.24rc1 —
+	// see the `pathresolve.json` corner). A `..`/`.` segment fails `BARE_WORD`,
+	// so the `..` form above stays the only ascent this function admits.
+	const parts = asciiWords(trimmed).flatMap((word) => word.split("/"));
+	if (!parts.every((part) => BARE_WORD.test(part))) return null;
 	const path = joinPath(ctx, parts.join("/"));
-	return {
-		path,
-		segments: path.split("/").filter(Boolean),
-	};
+	const segments = path.split("/").filter(Boolean);
+	// R9/R12 on the JOINED path — a verb-bearing or published-command path is a
+	// command, not navigation, and not an abstention either: `address print`
+	// under `/ip` is verb `print` at `/ip/address`, which `verbsplit` decides.
+	if (segments.some((segment) => VERBS.has(segment))) return null;
+	if (commandVerbIndex(segments) !== null) return null;
+	return isKnownMenuPath(segments)
+		? { kind: "nav", path }
+		: { kind: "abstain" };
 }
 
 /**
  * #235 — does `text` look like a relative menu navigation that ABSTAINED?
  *
- * True when `text` is a single bare word (slash-joined allowed) whose
- * `joinPath(ctx, token)` is in neither table and is not a verb/command-gated
- * path. It mirrors the shape test in `menuNavPath` but answers the opposite
- * question: presence → nav, absence → abstain → poison downstream.
- * A verb-bearing token (`print`) or a published command is NOT an abstention
- * — it is a legitimate command, not a maybe-navigation.
+ * Presence in a table → nav; absence → abstain → poison downstream, so the
+ * next relative statement cannot resolve against a context that may have moved.
  */
 function isAbstainedRelativeNav(text: string, ctx: string): boolean {
-	const candidate = relativeBarePath(text, ctx);
-	if (candidate === null) return false;
-	if (candidate.segments.some((segment) => VERBS.has(segment))) return false;
-	if (commandVerbIndex(candidate.segments) !== null) return false;
-	return !isKnownMenuPath(candidate.segments);
+	return readRelativeBare(text, ctx)?.kind === "abstain";
 }
 
 function canonicalPath(

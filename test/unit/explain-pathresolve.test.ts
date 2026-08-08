@@ -553,6 +553,30 @@ describe("R9 — pathresolve and verbsplit cannot contradict each other", () => 
 		}
 	});
 
+	test("…including a RELATIVE one, in either spelling (#235)", () => {
+		// The seam #235 re-opened: `verbsplit` reads a relative bare run through
+		// its candidate list, so `firewall filter` under `/ip` was navigation
+		// there while `pathresolve` — reading only the single-word spelling —
+		// called it a command and resolved the NEXT statement against a stale
+		// `/ip`. Both spellings are one navigation on the device, so both modules
+		// have to say so. Asserted through the DOCUMENT walk, because the context
+		// is what the disagreement was actually about.
+		for (const [text, path] of [
+			["firewall filter", "/ip/firewall/filter"],
+			["firewall/filter", "/ip/firewall/filter"],
+			["address", "/ip/address"],
+		] as const) {
+			const doc = `/ip\n${text}\nadd chain=input`;
+			const [, split] = resolveVerbs(doc).splits;
+			const [, stmt, next] = resolveStatements(doc).statements;
+			expect(split?.resolution).toBe("navigation");
+			expect(split?.path).toBe(path);
+			expect(stmt?.isNav).toBe(true);
+			expect(stmt?.path).toBe(path);
+			expect(next?.path).toBe(`${path}/add`);
+		}
+	});
+
 	test("no known menu in either generated table carries a verb segment", () => {
 		// R9's premise, stated at the scope it is actually checked. If a menu were
 		// named `.../print`, R9 would refuse to navigate into it. Asserted over the

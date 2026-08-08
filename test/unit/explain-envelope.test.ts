@@ -299,6 +299,25 @@ describe("the resolution vocabulary", () => {
 			expect(data.verdict).toBe("pass");
 		});
 
+	test("#235 a relative menu RUN navigates, whitespace or slash", () => {
+		// The envelope is where the two modules are folded together, so it is where
+		// a spelling-dependent disagreement would surface as a nav statement
+		// followed by a command at the wrong menu.
+		for (const spelling of ["firewall filter", "firewall/filter"]) {
+			const data = explainCommand(`/ip\n${spelling}\nadd chain=input`);
+			expect(
+				data.structure.statements.map((statement) => [
+					statement.kind,
+					statement.command?.path,
+				]),
+			).toEqual([
+				["menu", "/ip"],
+				["menu", "/ip/firewall/filter"],
+				["command", "/ip/firewall/filter"],
+			]);
+		}
+	});
+
 	test("#235 an unknown relative menu candidate poisons the remaining context", () => {
 		const data = explainCommand("/ip\nnonexistent\nprint");
 		expect(
