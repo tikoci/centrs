@@ -70,7 +70,7 @@
 import { scopeBodies } from "./blocks.ts";
 import { commandVerbIndex } from "./catalog.ts";
 import type { Defect } from "./defects.ts";
-import { isMenuPath } from "./menus.ts";
+import { isKnownMenuPath } from "./is-known-menu.ts";
 import { resolveStatements, type Span } from "./pathresolve.ts";
 import { SUBMENU_DIRECTIVES, VERBS } from "./verbs.ts";
 
@@ -545,19 +545,29 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 	// `/interface/ethernet` is `/interface/ethernet/reset-counters`, and refusing
 	// it costs a curated WRITE verb the tristate exists to catch.
 	//
-	// At the ROOT context it stays a refusal, and that boundary is not cosmetic.
-	// Seven catalog commands sit at the root (`/import`, `/quit`, `/beep`, …) and
-	// every one is an ordinary English word: the corpus carries `import serial`,
-	// `import io`, `import os` — Python pasted into a `.rsc` snippet — which the
-	// table would happily confirm as RouterOS `/import`. A non-root context is
-	// itself the evidence that the surrounding text is RouterOS at all; nothing
-	// supplies that at the root, so the ratified refusal stands there.
+	// At the ROOT context a bare-word COMMAND stays a refusal, and that boundary
+	// is not cosmetic. Seven catalog commands sit at the root (`/import`,
+	// `/quit`, `/beep`, …) and every one is an ordinary English word: the corpus
+	// carries `import serial`, `import io`, `import os` — Python pasted into a
+	// `.rsc` snippet — which the table would happily confirm as RouterOS
+	// `/import`. A non-root context is itself the evidence that the surrounding
+	// text is RouterOS at all; nothing supplies that at the root, so the ratified
+	// refusal stands there.
+	//
+	// #235 lifts the refusal — at any context, root included — when the head
+	// joins to a known MENU rather than a command: `address` under `/ip` and
+	// `ip` at `/` are both navigation on the device (CHR 7.24rc1 `:parse` IL).
+	// Only the menu axis lifts, so root prose like `import` is still refused.
 	if (
 		!directive &&
 		!t.startsWith("/") &&
 		!t.startsWith(":") &&
 		!VERBS.has((run[0] as RunToken).name) &&
-		(catalogAt === null || base === "/")
+		(catalogAt === null || base === "/") &&
+		!isKnownMenuPath([
+			...base.split("/").filter(Boolean),
+			(run[0] as RunToken).name,
+		])
 	)
 		return unknownSplit("bare-word head is not a known verb");
 
@@ -585,7 +595,7 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 		// under a non-root context instead of relying on the (currently true)
 		// property that only `/`-led statements reach here.
 		const full = candidates[candidates.length - 1] as string;
-		if (isMenuPath(full.split("/").filter(Boolean)))
+		if (isKnownMenuPath(full.split("/").filter(Boolean)))
 			return {
 				resolution: "navigation",
 				kind: "menu",

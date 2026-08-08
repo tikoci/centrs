@@ -262,6 +262,82 @@ describe("the execute gate is reproduced, never widened", () => {
 });
 
 describe("the resolution vocabulary", () => {
+	for (const [name, input] of [
+		["newline", "/ip\naddress\nprint"],
+		["semicolon", "/ip;address;print"],
+		["block", "{ ip; address; print }"],
+	] as const)
+		test(`#235 relative menu navigation — ${name}`, () => {
+			const data = explainCommand(input);
+			expect(
+				data.structure.statements.map((statement) => ({
+					resolution: statement.resolution,
+					kind: statement.kind,
+					contextCertain: statement.contextCertain,
+					command: statement.command,
+				})),
+			).toEqual([
+				{
+					resolution: "resolved",
+					kind: "menu",
+					contextCertain: true,
+					command: { path: "/ip" },
+				},
+				{
+					resolution: "resolved",
+					kind: "menu",
+					contextCertain: true,
+					command: { path: "/ip/address" },
+				},
+				{
+					resolution: "resolved",
+					kind: "command",
+					contextCertain: true,
+					command: { path: "/ip/address", verb: "print", args: {} },
+				},
+			]);
+			expect(data.verdict).toBe("pass");
+		});
+
+	test("#235 a relative menu RUN navigates, whitespace or slash", () => {
+		// The envelope is where the two modules are folded together, so it is where
+		// a spelling-dependent disagreement would surface as a nav statement
+		// followed by a command at the wrong menu.
+		for (const spelling of ["firewall filter", "firewall/filter"]) {
+			const data = explainCommand(`/ip\n${spelling}\nadd chain=input`);
+			expect(
+				data.structure.statements.map((statement) => [
+					statement.kind,
+					statement.command?.path,
+				]),
+			).toEqual([
+				["menu", "/ip"],
+				["menu", "/ip/firewall/filter"],
+				["command", "/ip/firewall/filter"],
+			]);
+		}
+	});
+
+	test("#235 an unknown relative menu candidate poisons the remaining context", () => {
+		const data = explainCommand("/ip\nnonexistent\nprint");
+		expect(
+			data.structure.statements.map((statement) => ({
+				resolution: statement.resolution,
+				contextCertain: statement.contextCertain,
+				command: statement.command,
+			})),
+		).toEqual([
+			{
+				resolution: "resolved",
+				contextCertain: true,
+				command: { path: "/ip" },
+			},
+			{ resolution: "unknown", contextCertain: true, command: undefined },
+			{ resolution: "unknown", contextCertain: false, command: undefined },
+		]);
+		expect(data.verdict).toBe("warn");
+	});
+
 	test("navigation folds into resolved + kind: menu", () => {
 		const [statement] = explainCommand("/ip/route").structure.statements;
 		expect(statement?.resolution).toBe("resolved");

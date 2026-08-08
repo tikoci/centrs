@@ -254,18 +254,27 @@ path is navigation or a command; they never describe what a command accepts.
 Absence from either abstains and never rejects.
 
 - `src/explain/menus.ts` (#207) — container paths from pinned restraml
-  `/console/inspect` trees. **Read today**, by `write.ts`, to confirm
-  navigation.
+  `/console/inspect` trees. **Read today** to confirm navigation, on its own by
+  `write.ts` and `symbols.ts` and unioned by `is-known-menu.ts` elsewhere.
 - `src/explain/catalog.ts` (#228) — path → kind, per-entry provenance and
   MikroTik's published applicability gate, unioned from those same trees and
   CLI Reference. Its **command axis is read today** by `pathresolve.ts` (R12),
-  `verbsplit.ts` and `write.ts`; the menu axis is not, so `menus.ts` remains the
-  sole authority on navigation. That asymmetry is the safety rule: a published
-  command misread as a menu would drop a write as navigation, so a
-  `published`-only entry is decisive for `command` and would be a tie-breaker
-  only for `menu`. A gate never decides anything offline — it explains why a
-  published path may be missing from a given router, and no router was consulted
-  to build the table.
+  `verbsplit.ts` and `write.ts`. Since #235 its **menu/settings kind is read
+  too**, unioned with `menus.ts` behind one `isKnownMenuPath` helper
+  (`src/explain/is-known-menu.ts`): it confirms a relative bare path once the
+  inherited context is applied (`filter` or `firewall filter` under `/ip`), and
+  it is the same union `verbsplit.ts` consults for an absolute bare path, which
+  now reads `/interface/ethernet/poe` as navigation instead of `ambiguous`. An
+  unknown joined path abstains and poisons following relative statements. A gate
+  never decides anything offline — it explains why a published path may be
+  missing from a given router, and no router was consulted to build the table.
+
+`write.ts` deliberately stays on `menus.ts` alone, and that asymmetry is the
+safety rule rather than an oversight: a published command misread as a menu
+would drop a WRITE as navigation, so a `published`-only entry is decisive for
+`command` and only a tie-breaker for `menu`. The #235 union is safe where it is
+read because both consumers there answer "where does the context move?", and a
+wrong menu costs a path, not a missed write.
 
 A live target arrives through the **same resolver as every other command**
 (CDB name/MAC/group keys, `--quickchr`, future TikTOML — #134/#174): a
@@ -950,11 +959,13 @@ Decided this round (details inline above; recorded in #90):
   **structure** table (path, kind, provenance, published applicability gate)
   unioned from pinned RouterOS inspect trees and MikroTik's published CLI
   Reference. Such a table may say whether a path is navigation or a command; it
-  never describes what a command accepts, absence from it abstains and never
-  rejects, and a `published`-only entry is never decisive for navigation.
-  `src/explain/catalog.ts` is that table. Its **command axis is read** by
-  `pathresolve.ts`, `verbsplit.ts` and `write.ts`; the menu axis is not, so
-  `menus.ts` stays the sole authority on navigation. It is still a static
+  never describes what a command accepts, and absence from it abstains and never
+  rejects. `src/explain/catalog.ts` is that table. Its **command axis is read**
+  by `pathresolve.ts`, `verbsplit.ts` and `write.ts`. *Amended again by #235:*
+  its **menu/settings kind is read too**, unioned with `menus.ts` — decisive for
+  a relative bare path once its inherited context is applied, and for the
+  absolute bare path `verbsplit.ts` used to call `ambiguous`. Presence still
+  decides in one direction only; absence still abstains. It is still a static
   snapshot of vendor-published structure, which is why the decision is amended
   rather than argued around.
 - **No rosetta coupling for now** — at most steering tips; no calls, no
