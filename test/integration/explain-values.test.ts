@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { lexValueAnchors } from "../../src/explain/args.ts";
 import { explainCommand } from "../../src/explain.ts";
 import {
 	isChrIntegrationEnabled,
@@ -257,9 +258,37 @@ describeFast("explain value facts against CHR", () => {
 				":local x 1; :set x #test",
 				"[:put #test]",
 				":local z [:put #test]",
+				// A bracket nested in an array restores the statement role the array
+				// dropped, so the hash is a value again (#246 review).
+				":local z {[:put #test]}",
+				":local z {1;[:put #test]}",
 			]) {
 				const classes = await highlightClasses(started.chr, input);
 				expect(classes[input.indexOf("#")]).toBe("none");
+			}
+
+			// …but only per frame: an array or group INSIDE that bracket drops the
+			// role again, so the offline reader must not skip whole `[…]` regions.
+			for (const input of [
+				":local z {[:put {#test}]}",
+				":local z {[:put (1,#test)]}",
+			]) {
+				const classes = await highlightClasses(started.chr, input);
+				expect(classes[input.indexOf("#")]).toBe("error");
+			}
+			for (const readable of [
+				":local z {[:put #test]}",
+				":local z {1;[:put #test]}",
+			]) {
+				const anchors = lexValueAnchors(readable, ":local".length);
+				expect(anchors.complete).toBeTrue();
+			}
+			for (const refused of [
+				":local z {[:put {#test}]}",
+				":local z {[:put (1,#test)]}",
+			]) {
+				const anchors = lexValueAnchors(refused, ":local".length);
+				expect(anchors.complete).toBeFalse();
 			}
 
 			const trailing = ":if (true) do={:put x} # c\n:put y";

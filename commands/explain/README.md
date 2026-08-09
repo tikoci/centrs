@@ -708,6 +708,7 @@ comment, a literal hash value, and a hard error at the exact byte.
 | First non-space content inside a stored-script brace such as `on-event={ # c` | `comment` | Treat exact `source`/`script` and `on-*`-named brace values as comment-bearing script bodies; a suffix such as `myScript` is not one. |
 | Immediate line start after `\` + newline | `comment`; the pending statement survives | Mask it in both argument views; the continuation-reach rules remain H5/#215. |
 | Inside an array (`{#test}`, `{1;#test}`, `{a=1;#b=2}`) or parenthesized expression (`(1,#test)`) | hard `error` at `#`; `:parse` reports `syntax error` | Do not mask it or emit an array value hint; semantic resolution stops there. |
+| Inside a `[…]` substitution that is itself nested in an array (`{[:put #test]}`, `{1;[:put #test]}`) | literal value (`none`) — the bracket restores the statement role the array dropped | Keep it as content and keep the enclosing array readable. The role is per frame, so an array or group opened again inside that bracket (`{[:put {#test}]}`, `{[:put (1,#test)]}`) is `error` once more; skipping whole `[…]` regions would wrongly accept those. |
 | In an attribute or bare value (`comment=#test`, `comment=a#b`, `:global y #test`) | literal value (`none` highlight class) | Keep it as content. |
 | Inside a quoted run | string content | Keep it as content. |
 | After a closing scope brace (`} # c`) | hard `error` at `#` | Do not mask it. |

@@ -194,6 +194,39 @@ describe("the token grammar", () => {
 		}
 	});
 
+	/**
+	 * The bracket RESTORES the statement role its enclosing array dropped, so the
+	 * hash inside it is a value again — but only until a brace or paren inside
+	 * that bracket drops the role a second time. Every row is the class CHR
+	 * 7.23.3 `/console/inspect request=highlight` gives the `#` byte. A scan that
+	 * skipped whole `[…]` regions instead would wrongly accept rows 3 and 4.
+	 */
+	test("a bracket inside an array restores the value role for a hash", () => {
+		const readable = [
+			":local z {[:put #test]}",
+			":local z {1;[:put #test]}",
+			":local z {[:len #test]}",
+		];
+		for (const text of readable) {
+			const anchors = lexValueAnchors(text, ":local".length);
+			expect(anchors.complete).toBeTrue();
+			expect(anchors.anchors.at(-1)?.sourceShape).toBe("array");
+		}
+
+		// Dropping back into an array or a group inside that bracket is an error
+		// again — the role is per-frame, not "anywhere under a bracket".
+		for (const text of [
+			":local z {[:put {#test}]}",
+			":local z {[:put (1,#test)]}",
+		]) {
+			const anchors = lexValueAnchors(text, ":local".length);
+			expect(anchors.complete).toBeFalse();
+			expect(anchors.complete ? "" : anchors.why).toContain(
+				"invalid hash in a structured argument value",
+			);
+		}
+	});
+
 	test("`value` absent means no literal value — for a positional too", () => {
 		// The token is DECIDED (it is located and classified); only its value is
 		// unknowable offline. A consumer rendering a runnable command reads

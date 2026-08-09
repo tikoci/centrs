@@ -50,6 +50,7 @@
  */
 
 import { isScopeBrace } from "./blocks.ts";
+import { braceStartsStatements } from "./scope-brace.ts";
 import { maskComments, scanQuotedString } from "./segment.ts";
 
 /** A RouterOS argument name: bare word, optionally dotted (`.id`, `.proplist`). */
@@ -319,14 +320,45 @@ function scanToken(
 	return { end: i };
 }
 
-/** RouterOS rejects an unquoted `#` inside array/group expressions (#245). */
+/**
+ * RouterOS rejects an unquoted `#` inside array/group expressions (#245) — but
+ * only where the expression role actually reaches the hash.
+ *
+ * A `[…]` substitution nested in an array RE-ENTERS a statement context, and
+ * the device keeps the hash there as a value. A flat scan cannot tell the two
+ * apart, so carry the same delimiter roles `segment.ts` and `symbols.ts` use.
+ * Grounded on CHR 7.23.3 `/console/inspect request=highlight`, class at the `#`:
+ *
+ *   `:local z {[:put #test]}`      `none`   — bracket restores statements
+ *   `:local z {1;[:put #test]}`    `none`
+ *   `:local z {[:put {#test}]}`    `error`  — array again inside the bracket
+ *   `:local z {[:put (1,#test)]}`  `error`  — group again inside the bracket
+ *   `:local z {#test}`             `error`  — the plain array case
+ *
+ * Skipping whole `[…]` regions instead would wrongly accept rows 3 and 4.
+ */
 function hasUnquotedHash(text: string, start: number, end: number): boolean {
+	// `start` is the `{`/`(` of an array-or-group value: not a statement context.
+	const statements: boolean[] = [false];
 	for (let i = start + 1; i < end - 1; i++) {
-		if (text[i] === '"') {
+		const c = text[i];
+		if (c === '"') {
 			i = scanQuotedString(text, i).end - 1;
 			continue;
 		}
-		if (text[i] === "#") return true;
+		const enclosing = statements[statements.length - 1] === true;
+		if (c === "[") statements.push(true);
+		else if (c === "{")
+			// Only a brace whose enclosing context ALREADY bears statements can be a
+			// scope; nested in an array it is another array, so the role is known
+			// without the reverse-prefix scan. The short-circuit is what keeps this
+			// O(1) per brace on the deep-nesting inputs `explain-write` and Q17 pin.
+			statements.push(enclosing && braceStartsStatements(text, i));
+		else if (c === "(") statements.push(false);
+		else if (c === "]" || c === "}" || c === ")") {
+			if (statements.length > 1) statements.pop();
+		} else if (c === "#" && statements[statements.length - 1] === false)
+			return true;
 	}
 	return false;
 }
