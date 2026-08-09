@@ -67,14 +67,13 @@ const DIRECTIVE_POSITIONAL_ARITY: Readonly<Record<string, number>> = {
 	put: 1,
 };
 
-let boundaryCacheText: string | undefined;
-let boundaryCache: Int32Array | undefined;
+const BOUNDARY_CACHE_LIMIT = 4;
+const boundaryCache = new Map<string, Int32Array>();
 
 /** Last unquoted statement boundary before every source offset, in one pass. */
 function statementBoundaries(text: string): Int32Array {
-	if (text === boundaryCacheText && boundaryCache !== undefined) {
-		return boundaryCache;
-	}
+	const cached = boundaryCache.get(text);
+	if (cached !== undefined) return cached;
 
 	const boundaries = new Int32Array(text.length + 1);
 	boundaries.fill(-1);
@@ -94,13 +93,32 @@ function statementBoundaries(text: string): Int32Array {
 	}
 	boundaries[text.length] = boundary;
 
-	boundaryCacheText = text;
-	boundaryCache = boundaries;
+	if (boundaryCache.size >= BOUNDARY_CACHE_LIMIT) boundaryCache.clear();
+	boundaryCache.set(text, boundaries);
 	return boundaries;
 }
 
 function statementPrefix(text: string, open: number): string {
-	const boundary = statementBoundaries(text)[open] ?? -1;
+	const braceBoundary = text.lastIndexOf("{", open - 1);
+	if (braceBoundary !== -1) {
+		const afterBrace = text.slice(braceBoundary + 1, open);
+		if (!/[\n;["]/.test(afterBrace)) return afterBrace;
+	}
+	const baseBoundary = Math.max(
+		text.lastIndexOf("\n", open - 1),
+		text.lastIndexOf(";", open - 1),
+		braceBoundary,
+	);
+	const suffix = text.slice(baseBoundary + 1, open);
+	const bracket = suffix.lastIndexOf("[");
+	const naiveBoundary =
+		bracket === -1 ? baseBoundary : baseBoundary + bracket + 1;
+	// The fast path is the original bounded reverse lookup. A quote after its
+	// candidate means that candidate may be string content, so only then pay for
+	// the shared quote-aware forward index (#246 review).
+	const boundary = suffix.slice(bracket + 1).includes('"')
+		? (statementBoundaries(text)[open] ?? -1)
+		: naiveBoundary;
 	return text.slice(boundary + 1, open);
 }
 
