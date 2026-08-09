@@ -402,6 +402,7 @@ Weierstrass
 # ndjson: newline-delimited JSON; the stream / btest output contract (one envelope per line).
 ndjson
 # allocate-udp-ports-from: /tool/bandwidth-server base of the UDP data-port range.
+allocate-udp-ports-from
 # srp5: the "5" suffix of EC-SRP5 (the MikroTik EC-SRP variant).
 srp5
 # SRV: the server-endpoint test variable in commands/btest/examples.md.
