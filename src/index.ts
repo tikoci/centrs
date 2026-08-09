@@ -371,6 +371,15 @@ export {
 	type SymbolOccurrence,
 	type SymbolRole,
 } from "./explain/symbols.ts";
+export type {
+	ExplainApiCandidateTransport,
+	ExplainExecuteTransport,
+	ExplainRestMethod,
+	ExplainRestRequest,
+	ExplainTransport,
+	ExplainTransportClassification,
+	ExplainUnknownTransport,
+} from "./explain/transport.ts";
 export {
 	type DocumentVerbSplit,
 	describeStatement,
@@ -414,10 +423,12 @@ export {
 	type ExplainArgumentToken,
 	type ExplainBlock,
 	type ExplainCanonical,
+	type ExplainCommandOptions,
 	type ExplainCommandReading,
 	type ExplainData,
 	type ExplainDiagnostic,
 	type ExplainEnvelope,
+	type ExplainEnvelopeOptions,
 	type ExplainErrorEnvelope,
 	type ExplainEvidence,
 	type ExplainFailOn,

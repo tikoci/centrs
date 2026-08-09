@@ -1,6 +1,6 @@
 /**
  * `centrs explain` CLI surface: command metadata, arg parsing, dispatch, and
- * envelope rendering for the phase-1 OFFLINE analysis (#202b).
+ * envelope rendering for the phase-1 OFFLINE analysis (#202b, #202c-2).
  *
  * ## The positional grammar is conditional, and that is deliberate
  *
@@ -85,6 +85,11 @@ export const explainCliCommand: CliCommandMetadata = {
 				"Path enumeration (verbs, args, types, enums). Live evidence — offline emits a tip and enumerates nothing.",
 		},
 		{
+			flag: "--curl",
+			description:
+				"Render a ready-to-edit REST curl for statements covered by a runtime-tested mapping rule.",
+		},
+		{
 			flag: "--format",
 			valueName: `<${explainOutputFormats.join("|")}>`,
 			description: "Output format for the CLI response.",
@@ -101,6 +106,7 @@ export interface ExplainCliArgs {
 	filePath?: string;
 	failOn: ExplainFailOn;
 	facets: string[];
+	curl?: boolean;
 	format?: ExplainOutputFormat;
 	verbose?: boolean;
 }
@@ -152,6 +158,9 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 				break;
 			case "--schema":
 				parsed.facets.push("--schema");
+				break;
+			case "--curl":
+				parsed.curl = true;
 				break;
 			case "--format": {
 				const value = expectValue(args, ++index, arg);
@@ -458,6 +467,7 @@ export async function runExplainCli(args: readonly string[]): Promise<number> {
 
 		const envelope = explainEnvelope(input, {
 			format,
+			curl: parsed.curl,
 			warnings,
 			tips:
 				parsed.facets.length > 0

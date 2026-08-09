@@ -12,13 +12,12 @@ import { runCliCaptured as run } from "./cli-capture.ts";
  * is a shell invocation, and asserting the library call instead would green a
  * spec the command cannot actually satisfy.
  *
- * Offline mode is transport-less, so its evidence is this file rather than CHR
+ * Offline mode opens no transport, so its evidence is this file rather than CHR
  * (`commands/explain/README.md` → *Definition of done and staging*; the live
  * examples 7-16, 19 and 24 are phase 2 and land in `test/integration/`).
  *
- * Examples **1, 2, 6 and 23 are `test.todo`**: each asserts
- * `transport.classification` / `--curl`, which is #202c. They are listed rather
- * than omitted so the gap is visible in the test output.
+ * Examples 1, 2, 6 and 23 are the #202c-2 transport/curl surface. The live
+ * examples remain phase 2 and belong under `test/integration/`.
  */
 
 /** Run `centrs explain … --json` and return the parsed success envelope. */
@@ -32,7 +31,30 @@ async function explainJson(
 }
 
 describe("commands/explain/examples.md — offline", () => {
-	test.todo("1. Canonical form, write shape, and transport (#202c)", () => {});
+	test("1. Canonical form, write shape, and transport (#202c)", async () => {
+		const { data, code } = await explainJson([
+			"/ip/route/add dst-address=10.9.0.0/16 gateway=192.0.2.1",
+		]);
+		expect(data.canonical).toMatchObject({
+			path: "/ip/route",
+			verb: "add",
+			mode: "structured",
+			writeShaped: true,
+		});
+		expect(data.structure.statements[0]?.transport).toMatchObject({
+			classification: "api-candidate",
+			rest: {
+				method: "PUT",
+				path: "/rest/ip/route",
+				body: {
+					"dst-address": "10.9.0.0/16",
+					gateway: "192.0.2.1",
+				},
+			},
+		});
+		expect(data.structure.statements[0]?.transport?.curl).toBeUndefined();
+		expect(code).toBe(0);
+	});
 
 	test("1b. The CLI spelling is script to the gate and a command to the analysis", async () => {
 		const { data, code } = await explainJson([
@@ -49,7 +71,22 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(code).toBe(0);
 	});
 
-	test.todo("2. Script mode routes to execute (#202c)", () => {});
+	test("2. Script mode routes to execute (#202c)", async () => {
+		const { data, code } = await explainJson([
+			":foreach i in=[/ip/address find] do={ :put $i }",
+		]);
+		expect(data.canonical.mode).toBe("script");
+		const commands = data.structure.statements.filter(
+			(statement) => statement.kind === "command",
+		);
+		expect(commands.length).toBeGreaterThan(0);
+		for (const statement of commands) {
+			expect(statement.transport?.classification).toBe("execute");
+			expect(statement.transport?.centrs).toContain("centrs execute");
+			expect(statement.transport?.rest).toBeUndefined();
+		}
+		expect(code).toBe(0);
+	});
 
 	test("3. Sub-command paths are re-constituted; the gate verdict is untouched", async () => {
 		const { data } = await explainJson([
@@ -112,7 +149,18 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(code).toBe(0);
 	});
 
-	test.todo("6. curl rendering with a placeholder host (#202c)", () => {});
+	test("6. curl rendering with a placeholder host (#202c)", async () => {
+		const { data, code } = await explainJson(["/ip/address print", "--curl"]);
+		const transport = data.structure.statements[0]?.transport;
+		expect(transport).toMatchObject({
+			classification: "api-candidate",
+			rest: { method: "GET", path: "/rest/ip/address" },
+		});
+		expect(transport?.curl).toContain("curl --user '<username>:<password>'");
+		expect(transport?.curl).toContain("'https://<router>/rest/ip/address'");
+		expect(transport?.centrs).toBe("centrs api '<router>' '/ip/address'");
+		expect(code).toBe(0);
+	});
 
 	test("17. Fan-out is rejected", async () => {
 		const { code, err } = await run([
@@ -267,7 +315,19 @@ describe("commands/explain/examples.md — offline", () => {
 		}
 	});
 
-	test.todo("23. Selector-less set fails closed offline (#202c)", () => {});
+	test("23. Selector-less set fails closed offline (#202c)", async () => {
+		const { data, code } = await explainJson([
+			"/ip/dns set use-doh-server=https://resolver.example/dns-query",
+			"--curl",
+		]);
+		const transport = data.structure.statements[0]?.transport;
+		expect(transport?.classification).toBe("unknown");
+		expect(transport?.basis).toContain("singleton menu");
+		expect(transport?.rest).toBeUndefined();
+		expect(transport?.curl).toBeUndefined();
+		expect(transport?.centrs).toBeUndefined();
+		expect(code).toBe(0);
+	});
 
 	test("25. Offline semantic symbols retain roles and binding identity (#239)", async () => {
 		const input =

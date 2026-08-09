@@ -11,9 +11,9 @@ validation): the cheap, safe knowledge tier in front of the runners
 
 Status: `designed` over `rest-api` and `native-api` — the transports the live
 inspection probes ride; every other cell is `—`. The offline mode is
-transport-less, and **`centrs explain '<input>'` runs today** (#202b): the row
-stays `designed` because the grid tracks protocol cells and offline occupies
-none. See `docs/MATRIX.md` for the row. A first design round
+protocol-connection-less, and **`centrs explain '<input>'` runs today** (issues #202b
+and #202c): the row stays `designed` because the grid tracks protocol cells and
+offline occupies none. See `docs/MATRIX.md` for the row. A first design round
 (2026-07-19, recorded in #90) settled the surface shape and the offline model;
 the **phase-0 canonicalization grounding lab (#185) is complete and this spec
 is now ratified** — every ratification-gating question was answered with cited
@@ -540,7 +540,7 @@ and its phase is named below.
 | `input`, `verdict`, `canonical`, `structure`, `diagnostics`, `runtimeAcceptance` | complete |
 | `evidence[]` | the **offline subset**: `source` is always `canonicalizer` and there is no RouterOS version stamp |
 | `structure.statements[].command` | `path` + `verb`, plus **`args` where the argument list was read** (#202c-1); the ordered token list is `statements[].arguments.tokens` |
-| `structure.statements[].transport` | **absent** — #202c-2, which greens examples 1, 2, 6 and 23 |
+| `structure.statements[].transport` | complete for commands: `api-candidate`, `execute`, or fail-closed `unknown`, with an equivalent `centrs` invocation and opt-in `curl` for tested REST mappings (#202c-2) |
 | `symbols.occurrences[]` | Q13 name/span/class plus semantic `role`, result-local `bindingIds`, sigil spelling, and an abstention note where needed; **no value shape or type** |
 | `spans` | comment runs and resolved variable classes only; **no value shape or type** |
 | `schema`, `completion` | absent — live evidence, phase 2 |
@@ -584,11 +584,12 @@ and its phase is named below.
   What offline still cannot do is NAME a positional operand — RouterOS binds
   `:log info "x"` to `message=x` from its schema, and offline reports the
   located positional instead of inventing the name.
-- **Transport is absent, not defaulted.** An `unknown` on every statement would
-  read as a decision that was never made. Examples 1, 2, 6 and 23 assert
-  transport and are #202c's to green; examples 1b, 3, 4, 4b, 5, 17, 18, 18b, 20,
-  21 and 22 are the offline set #202b greens without it, in
-  `test/unit/explain.test.ts`.
+- **Transport is classified per resolved command and fails closed.** Only the
+  nine Q8 shapes exercised on CHR 7.23.2 and 7.24rc2 become
+  `api-candidate`; script-shaped inputs become `execute`, and untested or
+  ambiguous mappings become `unknown` with no runnable REST rendering. Curl is
+  opt-in and uses placeholders offline. Menus and refused readings have no
+  transport because there is no command to classify.
 - **`spans` carries what offline can prove.** Comment runs, and the variable
   classes Q13 scored at 100% precision on resolved bindings; an abstention is
   omitted rather than rendered as a guess. The Q12 vocabulary over
@@ -655,7 +656,6 @@ into [`docs/CLI.md`](../../docs/CLI.md) and are not restated here. What the
 | Flag / form | Phase | Why it is not accepted yet |
 | ----------- | ----- | -------------------------- |
 | `explain <router> '<input>'` | 2 | The grammar is parsed and **refused** with `usage/not-implemented`, naming the router it did not contact. Running the offline analysis under an invocation that asked for probes would report `mode: "offline"` about a request for more. |
-| `--curl` | #202c | Nothing in `src/explain/` does REST mapping today; the nine runtime-exercised Q8 rules are that PR's work. |
 | `--cursor <byte>` | 2 | It positions `--complete`, which enumerates nothing offline. A cursor with no candidate surface to position is a flag with no effect. |
 | `--full` | 3 | It lifts smart-sizing limits, and the offline result is never truncated (`input.truncated` is always `false`). Same rule: no accepted flag is a no-op. |
 
@@ -679,12 +679,11 @@ That is the difference — an accepted flag must do something observable.
   rosetta's tool surface must stay aligned for agent usage, which is a
   cross-project decision. Until #223 lands the MCP keeps its flat shape, so the
   CLI's `--json` and the MCP's `data` are **deliberately divergent**.
-- Library: `explainCommand(input)` is the offline analysis (`src/explain.ts`,
-  #202a) and `explainEnvelope(input)` wraps it in the standard envelope. The
-  live form takes a second argument — `explainCommand(input, { target, facets })`
-  — which is phase 2; it is deliberately not an options bag that accepts
-  nothing today, since a caller cannot tell an ignored option from an honored
-  one. `lsp-routeros-ts` and
+- Library: `explainCommand(input, { curl?: boolean })` is the offline analysis
+  (`src/explain.ts`, #202a/#202c) and `explainEnvelope(input, { curl?: boolean })`
+  wraps it in the standard envelope. Phase 2 extends that same options bag with
+  `{ target, facets }`; `curl` stays an orthogonal rendering request, so offline
+  and live calls do not need competing second-argument shapes. `lsp-routeros-ts` and
   tikbook are the intended external consumers (hover/diagnostics/completion/
   semantic tokens over these calls); an LSP *protocol* surface on centrs
   stays out of scope (#90) — but the export shape is validated against a real
@@ -932,8 +931,8 @@ examples gate via unit/fixture tests and each live cell advances to
    them behind one entry point, adds the envelope and `src/cli/explain.ts`, and
    turns `examples.md` green. **Landing in four PRs:** #192a defect regions
    (#222), #202a composition + envelope (#224), **#202b the CLI surface + the
-   offline examples**, then #202c transport classification + `--curl`, which
-   closes #202. Carried in with it: the lexical-boundary
+   offline examples**, then #202c-1 argument reading and #202c-2 transport
+   classification + `--curl`, which close #202. Carried in with it: the lexical-boundary
    hardening (#201) and the shared-scanner substitution blind spot (#199), both
    found during Q13 and both spanning modules already promoted; plus the
    deferred lab questions Q5 (expression depth) and Q9 (potential-command

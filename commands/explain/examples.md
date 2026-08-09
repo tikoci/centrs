@@ -5,10 +5,10 @@ offline examples run under `test/unit/explain.test.ts` and live examples under
 `test/integration/explain.test.ts` (rest-api) and
 `test/integration/native-api-explain.test.ts` (native-api) against a CHR booted by
 `@tikoci/quickchr` — one assertion per example (example N ↔ assertion N).
-The offline examples (1b, 3, 4, 4b, 5, 17, 18, 18b, 20, 21, 22) are **green**
-as of #202b; 1, 2, 6 and 23 assert `transport`/`--curl` and are #202c's. The
-live examples are still the **target**: those cells are `designed`, and flag and
-field names track the ratified surface in `README.md`.
+The offline examples are **green** as of #202c-2, including 1, 2, 6 and 23's
+`transport`/`--curl` assertions. The live examples are still the **target**:
+those cells are `designed`, and flag and field names track the ratified surface
+in `README.md`.
 
 A letter-suffixed example (`1b`, `4b`, `18b`) is the **counterpart** of the number it
 follows: the same question with the other answer, added where implementing the
