@@ -52,9 +52,10 @@
  *     `canonical.args` and a read list never contradict each other (measured:
  *     83 corpus statements where both decided, 0 contradictions), though the
  *     analysis may abstain where the gate decided.
- *   - **No transport classification.** `api-candidate`/`execute`/`unknown` and
- *     `--curl` are #202c. The field is absent rather than defaulted, so nothing
- *     reads as decided that was never decided.
+ *   - **Transport classification is fail-closed.** `api-candidate` is emitted
+ *     only for the nine Q8 shapes runtime-exercised on two CHR versions;
+ *     script-shaped input routes to `execute`, and every other resolved command
+ *     is `unknown` with a reason. Curl is rendered only when requested.
  *   - **`spans` covers what offline can PROVE**: comment runs and resolved
  *     variable occurrences (Q13 scored 100% precision on resolved bindings, and
  *     abstentions are omitted rather than guessed). The full Q12 vocabulary over
@@ -105,6 +106,10 @@ import {
 	type SymbolClass,
 	type SymbolRole,
 } from "./explain/symbols.ts";
+import {
+	classifyExplainTransport,
+	type ExplainTransport,
+} from "./explain/transport.ts";
 import {
 	type DocumentVerbSplit,
 	resolveVerb,
@@ -181,6 +186,8 @@ export interface ExplainMenuReading {
 	command: { path: string };
 	/** Navigation names a menu and nothing else — there is no argument list. */
 	arguments?: undefined;
+	/** A menu is navigation, not a transportable command. */
+	transport?: undefined;
 	unresolved?: undefined;
 }
 
@@ -249,6 +256,11 @@ export interface ExplainCommandReading {
 	 * rebase (see {@link ExplainSubcommand}).
 	 */
 	arguments?: ExplainArguments;
+	/**
+	 * Present on document statements after the #202c-2 transport pass. Absent on
+	 * subcommands, whose inner argument coordinates phase 1 does not rebase.
+	 */
+	transport?: ExplainTransport;
 	unresolved?: undefined;
 }
 
@@ -259,6 +271,8 @@ export interface ExplainRefusal {
 	command?: undefined;
 	/** No command was read, so nothing here is an argument OF one. */
 	arguments?: undefined;
+	/** No command was read, so no transport can be classified. */
+	transport?: undefined;
 	/** Why the analyzer refused. */
 	unresolved: string;
 }
@@ -491,6 +505,7 @@ const EV = {
 	subcommands: "e5",
 	write: "e6",
 	symbols: "e7",
+	transport: "e8",
 } as const;
 
 type EvidenceKey = keyof typeof EV;
@@ -549,6 +564,13 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		id: EV.symbols,
 		source: "canonicalizer",
 		probe: "resolveSymbols",
+		basis: "heuristic",
+		outcome: "ok",
+	},
+	transport: {
+		id: EV.transport,
+		source: "canonicalizer",
+		probe: "classifyExplainTransport",
 		basis: "heuristic",
 		outcome: "ok",
 	},
@@ -696,15 +718,29 @@ function verdictOf(diagnostics: readonly ExplainDiagnostic[]): ExplainVerdict {
 }
 
 /**
+ * Extensible analysis options.
+ *
+ * ONE additive bag, which is why the previous no-options signature could be
+ * widened without a second shape: phase 2 puts `target` and the live facets
+ * here, and `curl` stays orthogonal to both — it asks for a rendering of a
+ * result, not for more evidence. A caller can still tell an honored option from
+ * an ignored one, because every field here changes the result.
+ */
+export interface ExplainCommandOptions {
+	/** Include a ready-to-edit REST curl on API-candidate statements. */
+	curl?: boolean;
+}
+
+/**
  * Analyze one RouterOS input offline. Never throws, never contacts a device.
  *
- * Deliberately takes no options: the only ones the spec describes
- * (`--complete`, `--schema`, a resolved target) are live evidence, and an
- * options bag that accepts nothing today would invite callers to pass something
- * that is silently ignored. A second parameter is a non-breaking addition when
- * phase 2 has something to put in it.
+ * Curl rendering is an opt-in presentation concern. It adds a shell-safe view
+ * of an already-classified request and does not alter canonical analysis.
  */
-export function explainCommand(input: string): ExplainData {
+export function explainCommand(
+	input: string,
+	options: ExplainCommandOptions = {},
+): ExplainData {
 	const coordinates = analyzeCoordinates(input);
 	const segmented = segmentStatements(input);
 	const verbs = resolveVerbs(input);
@@ -739,8 +775,17 @@ export function explainCommand(input: string): ExplainData {
 	// document byte offset. Decoding it once here keeps `statementOf` from
 	// re-deriving the same string per statement.
 	const analyzed = new TextDecoder().decode(coordinates.analyzed);
-	const statements: ExplainStatement[] = verbs.splits.map((split) =>
+	const readStatements: ExplainStatement[] = verbs.splits.map((split) =>
 		statementOf(split, analyzed),
+	);
+	const canonical = canonicalizeExecuteCommand(input);
+	const statements = enforceGateParity(readStatements, canonical).map(
+		(statement, index) =>
+			withStatementTransport(
+				statement,
+				verbs.splits[index]?.text ?? "",
+				options,
+			),
 	);
 
 	const diagnostics: ExplainDiagnostic[] = [
@@ -792,10 +837,9 @@ export function explainCommand(input: string): ExplainData {
 		})),
 	};
 
-	const canonical = canonicalizeExecuteCommand(input);
 	const structure: ExplainStructure = {
 		statementCount: statements.length,
-		statements: enforceGateParity(statements, canonical),
+		statements,
 		blocks: scopeBlocks(input).map((b) => ({
 			name: b.name,
 			span: { start: b.start, end: b.start + b.body.length },
@@ -830,6 +874,27 @@ export function explainCommand(input: string): ExplainData {
 		diagnostics,
 		evidence: citedEvidence(structure, diagnostics, spans, symbolFacts),
 		runtimeAcceptance: "not-proven",
+	};
+}
+
+/** Attach transport only after the gate-parity guard has had the final word. */
+function withStatementTransport(
+	statement: ExplainStatement,
+	source: string,
+	options: ExplainCommandOptions,
+): ExplainStatement {
+	if (statement.kind !== "command" || statement.arguments === undefined)
+		return statement;
+	return {
+		...statement,
+		transport: classifyExplainTransport(
+			{
+				command: statement.command,
+				arguments: statement.arguments,
+				source,
+			},
+			{ renderCurl: options.curl, evidenceId: EV.transport },
+		),
 	};
 }
 
@@ -1116,6 +1181,9 @@ function citedEvidence(
 	// fields, not entries in a list — so their two passes are seeded here.
 	const cited = new Set<string>([EV.canonical, EV.coordinates, structure.ev]);
 	for (const s of structure.statements) cited.add(s.ev);
+	for (const s of structure.statements)
+		if (s.kind === "command" && s.transport !== undefined)
+			cited.add(s.transport.ev);
 	for (const s of structure.subcommands) cited.add(s.ev);
 	for (const b of structure.blocks) cited.add(b.ev);
 	for (const d of diagnostics) cited.add(d.ev);
@@ -1131,14 +1199,14 @@ function citedEvidence(
  *
  * `ok: true` whenever the analysis RAN, mirroring `check`: the diagnostics are
  * the data, and `ok: false` is reserved for genuine command failure (an
- * unresolvable target, a usage error). `via` is `null` because offline explain
- * never chooses a transport — there is nothing to choose.
+ * unresolvable target, a usage error). `via` is `null` because the offline
+ * classifier plans each statement but does not open a protocol connection.
  */
 export function explainEnvelope(
 	input: string,
 	options: ExplainEnvelopeOptions = {},
 ): ExplainEnvelope {
-	const data = explainCommand(input);
+	const data = explainCommand(input, { curl: options.curl });
 	const tips: Tip[] = [
 		buildTip(
 			"tip/explain-offline-only",
@@ -1185,14 +1253,14 @@ export const explainOutputFormats = ["text", "json", "yaml"] as const;
 export type ExplainOutputFormat = (typeof explainOutputFormats)[number];
 
 /**
- * Envelope-level options. Not analysis options — {@link explainCommand} still
- * takes none, and phase 2's `{ target, facets }` is a different parameter on a
- * different function. What lives here is what the ENVELOPE needs and the
- * analysis does not: the resolved render format (so `meta.settings` can name
- * the tier that won) and any tips the caller adds.
+ * Envelope-level options. Curl is forwarded to the analysis as an opt-in
+ * rendering; the remaining fields are invocation metadata the analysis does
+ * not need. Phase 2's `{ target, facets }` remains a separate live concern.
  */
 export interface ExplainEnvelopeOptions {
 	format?: ResolvedSetting<ExplainOutputFormat>;
+	/** Include curl rendering for API-candidate statements. */
+	curl?: boolean;
 	tips?: readonly Tip[];
 	/** Facts about the INVOCATION, not the analysis (e.g. an ignored stdin). */
 	warnings?: readonly Warning[];
@@ -1376,10 +1444,20 @@ function renderExplainText(
 		);
 	if (structure.statements.length > 0) {
 		lines.push("statements:");
-		for (const s of structure.statements)
+		for (const s of structure.statements) {
 			lines.push(
-				`  ${span(s.span).padEnd(12)} ${renderReading(s)}${s.contextCertain ? "" : "  (context lost)"}`,
+				`  ${span(s.span).padEnd(12)} ${renderReading(s)}${s.kind === "command" && s.transport !== undefined ? `  via=${s.transport.classification}` : ""}${s.contextCertain ? "" : "  (context lost)"}`,
 			);
+			if (s.kind === "command" && s.transport?.centrs !== undefined)
+				lines.push(`    centrs: ${s.transport.centrs}`);
+			if (s.kind === "command" && s.transport?.curl !== undefined)
+				lines.push(`    curl: ${s.transport.curl}`);
+			// A refusal must say why in the DEFAULT surface. `api-candidate` and
+			// `execute` render the command they chose, which is the reason; only
+			// `unknown` renders nothing, and the basis is the actionable half.
+			if (s.kind === "command" && s.transport?.classification === "unknown")
+				lines.push(`    why: ${s.transport.basis}`);
+		}
 	}
 	if (structure.subcommands.length > 0) {
 		lines.push("subcommands:");

@@ -222,6 +222,7 @@ Usage: centrs explain '<input>' [flags]
 | `--fail-on` | &lt;error\|warning\|never&gt; | Exit 2 when the verdict reaches this severity. Default `error`; an ambiguous or unknown statement is a warning, never an error. |
 | `--complete` |  | Continuation candidates at the cursor. Live evidence — offline emits a tip and enumerates nothing. |
 | `--schema` |  | Path enumeration (verbs, args, types, enums). Live evidence — offline emits a tip and enumerates nothing. |
+| `--curl` |  | Render a ready-to-edit REST curl for statements covered by a runtime-tested mapping rule. |
 | `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
 | `--json` |  | Shortcut for `--format json`. |
 | `--yaml` |  | Shortcut for `--format yaml`. |

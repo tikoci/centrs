@@ -111,6 +111,11 @@ describe("explainCommand — structural invariants", () => {
 			const cited = new Set<string>([
 				data.structure.ev,
 				...data.structure.statements.map((s) => s.ev),
+				...data.structure.statements.flatMap((s) =>
+					s.kind === "command" && s.transport !== undefined
+						? [s.transport.ev]
+						: [],
+				),
 				...data.structure.subcommands.map((s) => s.ev),
 				...data.structure.blocks.map((b) => b.ev),
 				...data.symbols.occurrences.map((s) => s.ev),
@@ -164,6 +169,11 @@ describe("explainCommand — structural invariants", () => {
 					expect(s.command).toBeUndefined();
 					expect(s.unresolved).toBeDefined();
 				}
+			}
+			for (const statement of data.structure.statements) {
+				if (statement.kind === "command")
+					expect(statement.transport).toBeDefined();
+				else expect(statement.transport).toBeUndefined();
 			}
 
 			// Offline never claims acceptance, on any input.
@@ -691,7 +701,7 @@ describe("explainEnvelope", () => {
 		expect(envelope.warnings).toEqual([]);
 	});
 
-	test("offline chose no transport, so `via` is null rather than invented", () => {
+	test("offline opens no protocol, so envelope `via` stays null", () => {
 		const envelope = explainEnvelope("/ip/address/print");
 		expect(envelope.meta.via).toBeNull();
 		expect(envelope.meta.target).toEqual({});
