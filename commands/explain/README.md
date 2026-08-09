@@ -540,7 +540,7 @@ and its phase is named below.
 | `input`, `verdict`, `canonical`, `structure`, `diagnostics`, `runtimeAcceptance` | complete |
 | `evidence[]` | the **offline subset**: `source` is always `canonicalizer` and there is no RouterOS version stamp |
 | `structure.statements[].command` | `path` + `verb`, plus **`args` where the argument list was read** (#202c-1); the ordered token list is `statements[].arguments.tokens` |
-| `structure.statements[].transport` | complete for commands: `api-candidate`, `execute`, or fail-closed `unknown`, with an equivalent `centrs` invocation and opt-in `curl` for tested REST mappings (#202c-2) |
+| `structure.statements[].transport` | complete for commands: `api-candidate`, `execute`, or fail-closed `unknown`, with an equivalent `centrs` invocation and opt-in `curl` for tested REST mappings (#202c-2). The `basis` names the evidence for the route it chose or refused |
 | `symbols.occurrences[]` | Q13 name/span/class plus semantic `role`, result-local `bindingIds`, sigil spelling, and an abstention note where needed; **no value shape or type** |
 | `spans` | comment runs and resolved variable classes only; **no value shape or type** |
 | `schema`, `completion` | absent — live evidence, phase 2 |
@@ -585,11 +585,18 @@ and its phase is named below.
   `:log info "x"` to `message=x` from its schema, and offline reports the
   located positional instead of inventing the name.
 - **Transport is classified per resolved command and fails closed.** Only the
-  nine Q8 shapes exercised on CHR 7.23.2 and 7.24rc2 become
-  `api-candidate`; script-shaped inputs become `execute`, and untested or
-  ambiguous mappings become `unknown` with no runnable REST rendering. Curl is
-  opt-in and uses placeholders offline. Menus and refused readings have no
-  transport because there is no command to classify.
+  Q8 rules exercised on CHR 7.23.2 and 7.24rc2 become `api-candidate`;
+  script-shaped inputs become `execute`, and untested or ambiguous mappings
+  become `unknown` with no runnable REST rendering. Four rules are keyed on a
+  literal verb (`add`/`get`/`set`/`remove`) and `print` has its three shapes;
+  the fifth was recorded as the RULE `action → POST /rest/<path>/<command>`, so
+  every other verb rides it. That rule maps a URL and does **not** claim the
+  verb exists — a `catalog.ts` miss narrows the basis string, never the
+  classification, because "a MISS says nothing" is that table's contract and
+  existence is the phase-2 `/console/inspect` answer. An action operand offline
+  cannot NAME (`enable *A`, `monitor 0`) fails closed, since RouterOS binds it
+  from per-menu schema. Curl is opt-in and uses placeholders offline. Menus and
+  refused readings have no transport because there is no command to classify.
 - **`spans` carries what offline can prove.** Comment runs, and the variable
   classes Q13 scored at 100% precision on resolved bindings; an abstention is
   omitted rather than rendered as a guess. The Q12 vocabulary over
@@ -679,11 +686,13 @@ That is the difference — an accepted flag must do something observable.
   rosetta's tool surface must stay aligned for agent usage, which is a
   cross-project decision. Until #223 lands the MCP keeps its flat shape, so the
   CLI's `--json` and the MCP's `data` are **deliberately divergent**.
-- Library: `explainCommand(input, { curl?: boolean })` is the offline analysis
-  (`src/explain.ts`, #202a/#202c) and `explainEnvelope(input, { curl?: boolean })`
-  wraps it in the standard envelope. Phase 2 extends that same options bag with
-  `{ target, facets }`; `curl` stays an orthogonal rendering request, so offline
-  and live calls do not need competing second-argument shapes. `lsp-routeros-ts` and
+- Library: `explainCommand(input, options?: ExplainCommandOptions)` is the
+  offline analysis (`src/explain.ts`, #202a/#202c) and
+  `explainEnvelope(input, options?: ExplainEnvelopeOptions)` wraps it in the
+  standard envelope. Both option types are exported. Phase 2 extends that same
+  analysis bag with `target` and `facets`; `curl` stays an orthogonal rendering
+  request, so offline and live calls do not need competing second-argument
+  shapes. `lsp-routeros-ts` and
   tikbook are the intended external consumers (hover/diagnostics/completion/
   semantic tokens over these calls); an LSP *protocol* surface on centrs
   stays out of scope (#90) — but the export shape is validated against a real
@@ -1029,7 +1038,9 @@ Resolved during phase 0:
 - **First CLI→REST families (Q8).** Nine mapping rules are
    runtime-exercised (2xx on 7.23.2 and 7.24rc2): `add`→`PUT`, `print`→`GET`,
    `get`→`GET/<id>`, `set`→`PATCH/<id>`, `remove`→`DELETE/<id>`,
-   `run`→`POST/<command>`, and `proplist`/`query`→`POST/<path>/print`. Selector
+   `run(action)`→`POST/<path>/<command>` (demonstrated by `/ip/dns/cache flush`
+   with an empty body, and read as the family it names, not as the one verb),
+   and `proplist`/`query`→`POST/<path>/print`. Selector
    writes (`set`/`remove [find …]`), singleton-menu `set`, and non-CRUD actions
    fail closed to `execute`/`unknown` (no `curl`). Placeholder-host and
    credential-elision rendering details stay an implementation open; `curl` is

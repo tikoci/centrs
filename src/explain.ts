@@ -718,17 +718,25 @@ function verdictOf(diagnostics: readonly ExplainDiagnostic[]): ExplainVerdict {
 }
 
 /**
- * Analyze one RouterOS input offline. Never throws, never contacts a device.
+ * Extensible analysis options.
  *
- * Curl rendering is an opt-in presentation concern. It adds a shell-safe view
- * of an already-classified request and does not alter canonical analysis.
+ * ONE additive bag, which is why the previous no-options signature could be
+ * widened without a second shape: phase 2 puts `target` and the live facets
+ * here, and `curl` stays orthogonal to both — it asks for a rendering of a
+ * result, not for more evidence. A caller can still tell an honored option from
+ * an ignored one, because every field here changes the result.
  */
-/** Extensible analysis options; phase 2 adds target and live-facet fields here. */
 export interface ExplainCommandOptions {
 	/** Include a ready-to-edit REST curl on API-candidate statements. */
 	curl?: boolean;
 }
 
+/**
+ * Analyze one RouterOS input offline. Never throws, never contacts a device.
+ *
+ * Curl rendering is an opt-in presentation concern. It adds a shell-safe view
+ * of an already-classified request and does not alter canonical analysis.
+ */
 export function explainCommand(
 	input: string,
 	options: ExplainCommandOptions = {},
@@ -1444,6 +1452,11 @@ function renderExplainText(
 				lines.push(`    centrs: ${s.transport.centrs}`);
 			if (s.kind === "command" && s.transport?.curl !== undefined)
 				lines.push(`    curl: ${s.transport.curl}`);
+			// A refusal must say why in the DEFAULT surface. `api-candidate` and
+			// `execute` render the command they chose, which is the reason; only
+			// `unknown` renders nothing, and the basis is the actionable half.
+			if (s.kind === "command" && s.transport?.classification === "unknown")
+				lines.push(`    why: ${s.transport.basis}`);
 		}
 	}
 	if (structure.subcommands.length > 0) {

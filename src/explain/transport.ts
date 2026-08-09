@@ -2,12 +2,37 @@
  * Fail-closed offline transport classification for `explain` (#202c-2).
  *
  * RouterOS REST has a broad mechanical convention (CRUD verbs plus command
- * POSTs), but `explain` emits a runnable request only for the nine Q8 shapes
- * exercised successfully on CHR 7.23.2 and 7.24rc2. The table below is that
- * closed set. A verb or operand merely looking REST-shaped never widens it.
+ * POSTs), and `explain` emits a runnable request only where the Q8 probe
+ * exercised that convention on CHR 7.23.2 and 7.24rc2
+ * (`.scratch/explain-lab-q8-rest.*.json`). The rules below are that evidence.
+ * A verb or operand merely looking REST-shaped never widens them.
+ *
+ * ## The four CRUD rules are literal; the action rule is a family
+ *
+ * `add`/`get`/`set`/`remove` were each exercised as themselves, so they are a
+ * closed table keyed on the verb. The fifth row was exercised as
+ * `/ip/dns/cache flush` → `POST /rest/ip/dns/cache/flush` with body `{}`, and
+ * the probe recorded it as the RULE `run(action) → POST /rest/<path>/<command>`
+ * — a statement about how the REST adapter builds a URL for a menu action, not
+ * about the one verb that demonstrated it (maintainer decision, #241 review:
+ * most non-`get`/`set`/`print` operations are that POST, `monitor` included).
+ * So any verb outside the four CRUD rules, `print`, and `find` rides it.
+ *
+ * That rule deliberately does NOT claim the verb exists. Whether a menu has a
+ * `run` is a schema question, and offline has no schema: the `catalog.ts`
+ * command rows confirm a verb where they carry one, but "a MISS says nothing"
+ * is that table's own contract, so a miss strengthens no refusal. Existence is
+ * the phase-2 `/console/inspect` probe's answer, not this pass's.
+ *
+ * What DOES fail closed on the action rule is a positional operand: RouterOS
+ * names it from per-menu schema (`/file set 0` → `numbers=0`), decision 3 keeps
+ * no offline schema snapshot, and a POST body that omits the target would run
+ * against the wrong rows. `/ip/address enable *A` is therefore `unknown`, and
+ * the reason names the live probe that would lift it.
  */
 
-import type { ArgumentKind } from "./args.ts";
+import type { ExplainArguments } from "../explain.ts";
+import { lookupPath } from "./catalog.ts";
 
 export type ExplainTransportClassification =
 	| "api-candidate"
@@ -59,21 +84,8 @@ export type ExplainTransport =
 	| ExplainExecuteTransport
 	| ExplainUnknownTransport;
 
-interface LocatedArgumentToken {
-	kind: ArgumentKind;
-	name?: string;
-	value?: string;
-	text: string;
-}
-
-type LocatedArguments =
-	| {
-			read: true;
-			tokens: readonly LocatedArgumentToken[];
-			queries: readonly string[];
-			positional: readonly string[];
-	  }
-	| { read: false; why: string };
+/** The reading this pass consumes, once the lexer has decided every token. */
+type ReadArguments = Extract<ExplainArguments, { read: true }>;
 
 export interface ExplainTransportInput {
 	command: {
@@ -81,7 +93,11 @@ export interface ExplainTransportInput {
 		verb: string;
 		args?: Record<string, string>;
 	};
-	arguments: LocatedArguments;
+	/**
+	 * The envelope's own argument reading, imported rather than restated so the
+	 * transport contract cannot drift from what `src/explain.ts` publishes.
+	 */
+	arguments: ExplainArguments;
 	/** The statement exactly as written, for the execute invocation. */
 	source: string;
 }
@@ -91,7 +107,7 @@ export interface ExplainTransportOptions {
 	evidenceId: string;
 }
 
-type EndpointShape = "menu" | "id" | "command";
+type EndpointShape = "menu" | "id";
 type BodyShape = "none" | "attributes";
 
 interface TestedRestRule {
@@ -102,8 +118,9 @@ interface TestedRestRule {
 }
 
 /**
- * The non-print Q8 rules. `print` has three separately exercised shapes and is
- * handled below: bare GET, `.proplist` POST, and `.query` POST.
+ * The Q8 rules keyed on a literal verb. `print` has three separately exercised
+ * shapes and is handled below (bare GET, `.proplist` POST, `.query` POST), and
+ * every other verb rides the action rule.
  */
 const TESTED_REST_RULES: Readonly<Record<string, TestedRestRule>> = {
 	add: {
@@ -120,19 +137,23 @@ const TESTED_REST_RULES: Readonly<Record<string, TestedRestRule>> = {
 		requiresBody: true,
 	},
 	remove: { method: "DELETE", endpoint: "id", body: "none" },
-	run: {
-		method: "POST",
-		endpoint: "command",
-		body: "attributes",
-		requiresBody: true,
-	},
 };
 
 const ROUTEROS_ID = /^\*[0-9A-F]+$/i;
-const QUERY_NAME = /^[A-Za-z][A-Za-z0-9._-]*(?:=.*)?$/;
-const QUERY_COMPARISON = /^[<>][A-Za-z][A-Za-z0-9._-]*=.*$/;
+/**
+ * A `.query` word's property name. Q8 exercised exactly one spelling —
+ * `interface=ether1` — so this matches the NAME half and the value is required
+ * separately. A bare property, an empty value, an infix comparison
+ * (`address>1.1.1.1`), and a second `where` all fail that pair and fail closed;
+ * REST's own `<name=value` / `>name=value` comparison words are not a `where`
+ * spelling any device exercised here.
+ */
+const QUERY_NAME = /^[A-Za-z][A-Za-z0-9._-]*$/;
 
 function restPath(path: string): string {
+	// A single trailing slash, never a run: `path` is a resolved menu path from
+	// `pathresolve.ts`, whose segments are non-empty by construction, so `//`
+	// cannot reach here and one strip is total.
 	return `/rest${path === "/" ? "" : path.replace(/\/$/, "")}`;
 }
 
@@ -153,14 +174,11 @@ function bodyOf(
 
 function endpointOf(
 	path: string,
-	verb: string,
 	rule: TestedRestRule,
 	id: string | undefined,
 ): string {
 	const base = restPath(path);
-	if (rule.endpoint === "id") return `${base}/${id}`;
-	if (rule.endpoint === "command") return `${base}/${verb}`;
-	return base;
+	return rule.endpoint === "id" ? `${base}/${id}` : base;
 }
 
 function renderCentrsApi(rest: ExplainRestRequest): string {
@@ -209,7 +227,10 @@ function renderCurl(rest: ExplainRestRequest): string {
 		"--request",
 		rest.method,
 	];
-	if (rest.body !== undefined && Object.keys(rest.body).length > 0) {
+	// An EMPTY body still ships as `{}`: that is the byte-for-byte request the Q8
+	// action probe sent (`POST /rest/ip/dns/cache/flush {}` → 200), and a POST
+	// with no entity is a different request.
+	if (rest.body !== undefined) {
 		parts.push(
 			"--header",
 			shellQuote("Content-Type: application/json"),
@@ -253,8 +274,17 @@ function unknown(basis: string, evidenceId: string): ExplainUnknownTransport {
 	return { classification: "unknown", basis, ev: evidenceId };
 }
 
-function literalId(arguments_: LocatedArguments): string | undefined {
-	if (!arguments_.read || arguments_.tokens.length === 0) return undefined;
+/**
+ * The one literal `.id` an id-bearing rule needs, or nothing.
+ *
+ * Only `tokens[0]` is examined, and only when it is the sole positional. The
+ * rejection is deliberately two-stage: `get *A comment=x` gets an id here and is
+ * then refused by the `body === "none"` guard in the caller, because "there is
+ * an id" and "the operands fit the tested shape" are separate questions and
+ * folding them would hide which one failed from the basis string.
+ */
+function literalId(arguments_: ReadArguments): string | undefined {
+	if (arguments_.tokens.length === 0) return undefined;
 	const [first] = arguments_.tokens;
 	if (
 		arguments_.positional.length !== 1 ||
@@ -266,15 +296,10 @@ function literalId(arguments_: LocatedArguments): string | undefined {
 	return first.value;
 }
 
-function isRestQueryWord(word: string): boolean {
-	return QUERY_NAME.test(word) || QUERY_COMPARISON.test(word);
-}
-
 function printRequest(
-	input: ExplainTransportInput,
+	arguments_: ReadArguments,
+	path: string,
 ): { rest: ExplainRestRequest; basis: string } | string {
-	const arguments_ = input.arguments;
-	if (!arguments_.read) return arguments_.why;
 	if (arguments_.queries.length > 0)
 		return "only the tested print where shape can produce a REST .query";
 	const query: string[] = [];
@@ -299,10 +324,18 @@ function printRequest(
 		}
 		if (!where)
 			return `print operand ${JSON.stringify(token.text)} is outside the tested no-argument/proplist/query rules`;
-		const word = token.text;
-		if (token.value === undefined || !isRestQueryWord(word))
+		if (
+			token.kind !== "attribute" ||
+			token.name === undefined ||
+			!QUERY_NAME.test(token.name) ||
+			token.value === undefined ||
+			token.value === ""
+		)
 			return `where expression ${JSON.stringify(token.text)} has no tested .query translation`;
-		query.push(word);
+		// The DECODED value, never `text`: `comment="a b"` must reach the device as
+		// `comment=a b`, and shipping the quote bytes would filter on a value no
+		// row holds.
+		query.push(`${token.name}=${token.value}`);
 	}
 
 	if (where && query.length === 0)
@@ -311,10 +344,8 @@ function printRequest(
 		return "combined print projection and query were not runtime-exercised";
 	if (proplist !== undefined && proplist.length === 0)
 		return "the tested print projection requires at least one property";
-	if (query.some((word) => !isRestQueryWord(word)))
-		return "a query word has no tested .query translation";
 
-	const base = restPath(input.command.path);
+	const base = restPath(path);
 	if (query.length === 0 && proplist === undefined)
 		return {
 			rest: { method: "GET", path: base },
@@ -328,6 +359,60 @@ function printRequest(
 		basis:
 			"Q8 tested print projection/query as POST to the print endpoint on CHR 7.23.2 and 7.24rc2",
 	};
+}
+
+/**
+ * The Q8 action rule: a menu action POSTs to its own command endpoint.
+ *
+ * `find` is excluded and not because it is untested — it is a SELECTOR. A bare
+ * `find` yields ids for another statement to consume, there is no
+ * `/rest/<path>/find` for it to become, and `[find …]` already left through the
+ * execute branch above.
+ */
+function actionRequest(
+	input: ExplainTransportInput,
+	lower: string,
+	arguments_: ReadArguments,
+	options: ExplainTransportOptions,
+): ExplainTransport {
+	// The endpoint carries the verb AS WRITTEN. RouterOS paths are
+	// case-sensitive, so the normalized spelling is for LOOKUPS only — building
+	// `/rest/ip/address/tostring` out of `toString` would be a different URL.
+	const { path, verb, args = {} } = input.command;
+	if (lower === "find")
+		return unknown(
+			"find selects rows for another statement to consume and has no REST endpoint of its own",
+			options.evidenceId,
+		);
+	if (arguments_.positional.length > 0)
+		return unknown(
+			`offline cannot name the operand ${JSON.stringify(arguments_.positional[0])} the tested action POST would carry — RouterOS names it from per-menu schema, which is live evidence`,
+			options.evidenceId,
+		);
+	if (arguments_.queries.length > 0)
+		return unknown(
+			"the tested action POST carries attributes, and a ?query has no place in its body",
+			options.evidenceId,
+		);
+
+	// A catalog hit is decisive about what the segment IS; a miss says nothing
+	// (`catalog.ts`), so it narrows the basis rather than the classification.
+	const named =
+		lookupPath([...path.split("/").filter(Boolean), lower])?.kind === "command";
+	return apiCandidate(
+		{
+			method: "POST",
+			path: `${restPath(path)}/${verb}`,
+			// `{}`, not omitted: the Q8 action probe sent an empty object.
+			body: { ...args },
+		},
+		`Q8 tested a menu action as POST to its command endpoint on CHR 7.23.2 and 7.24rc2; ${
+			named
+				? `the CLI Reference catalog names ${path}/${verb} a command`
+				: `no offline source can confirm ${JSON.stringify(verb)} is a command under ${path}`
+		}`,
+		options,
+	);
 }
 
 /** Classify one resolved statement and optionally render its REST curl. */
@@ -358,32 +443,37 @@ export function classifyExplainTransport(
 			options.evidenceId,
 		);
 
+	const arguments_ = input.arguments;
+
 	if (lower === "print") {
-		const planned = printRequest(input);
+		const planned = printRequest(arguments_, path);
 		return typeof planned === "string"
 			? unknown(planned, options.evidenceId)
 			: apiCandidate(planned.rest, planned.basis, options);
 	}
 
-	const rule = TESTED_REST_RULES[lower];
+	// `Object.hasOwn`, not a truthiness test: a plain object literal inherits
+	// `Object.prototype`, so `TESTED_REST_RULES["constructor"]` is a function
+	// that passes an `=== undefined` guard and then reads `undefined` out of
+	// every shape field. The table is only closed when the lookup is.
+	const rule = Object.hasOwn(TESTED_REST_RULES, lower)
+		? TESTED_REST_RULES[lower]
+		: undefined;
 	if (rule === undefined)
-		return unknown(
-			`no runtime-exercised REST mapping exists for verb ${JSON.stringify(verb)}`,
-			options.evidenceId,
-		);
+		return actionRequest(input, lower, arguments_, options);
 
-	const id = rule.endpoint === "id" ? literalId(input.arguments) : undefined;
+	const id = rule.endpoint === "id" ? literalId(arguments_) : undefined;
 	if (rule.endpoint === "id" && id === undefined) {
 		const setBoundary =
-			lower === "set" && input.arguments.positional.length === 0
+			lower === "set" && arguments_.positional.length === 0
 				? "offline cannot distinguish a singleton menu from an id-bearing table"
 				: `the tested ${lower} mapping requires exactly one literal RouterOS .id`;
 		return unknown(setBoundary, options.evidenceId);
 	}
 
 	if (
-		(rule.endpoint !== "id" && input.arguments.positional.length > 0) ||
-		input.arguments.queries.length > 0 ||
+		(rule.endpoint !== "id" && arguments_.positional.length > 0) ||
+		arguments_.queries.length > 0 ||
 		(rule.body === "none" && Object.keys(args).length > 0) ||
 		(rule.requiresBody === true && Object.keys(args).length === 0)
 	)
@@ -395,7 +485,7 @@ export function classifyExplainTransport(
 	const body = bodyOf(rule, args);
 	const rest: ExplainRestRequest = {
 		method: rule.method,
-		path: endpointOf(path, lower, rule, id),
+		path: endpointOf(path, rule, id),
 		...(body === undefined ? {} : { body }),
 	};
 	return apiCandidate(
