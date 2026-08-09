@@ -122,6 +122,26 @@ export interface ArgumentsUnread {
 
 export type ArgumentReading = ArgumentsRead | ArgumentsUnread;
 
+/** One safely located literal value, before any later unreadable token. */
+export interface ValueAnchor {
+	kind: Exclude<ArgumentKind, "query">;
+	/** The whole argument token. */
+	tokenSpan: { start: number; end: number };
+	/** Attribute name; absent on a positional. */
+	name?: string;
+	/** The literal's source bytes, quotes included. */
+	valueSpan: { start: number; end: number };
+	/** The decoded literal value. */
+	value: string;
+	/** True only when one quoted run encloses the whole value. */
+	quoted: boolean;
+}
+
+/** Prefix-safe value anchoring; `complete: false` explains where scanning stopped. */
+export type ValueAnchorReading =
+	| { complete: true; anchors: ValueAnchor[] }
+	| { complete: false; anchors: ValueAnchor[]; why: string };
+
 /** A refusal, carrying the reason a consumer quotes instead of a bare `unknown`. */
 function unread(why: string): ArgumentsUnread {
 	return { read: false, why };
@@ -420,4 +440,57 @@ function gateDisagreement(body: string): string | null {
 	if (body.includes("\f") || body.includes("\v"))
 		return "a form feed or vertical tab in an unquoted value, which centrs's execute gate treats as a token boundary and RouterOS does not";
 	return null;
+}
+
+/**
+ * Locate the literal-value prefix of one statement's arguments (#225 V1).
+ *
+ * {@link lexArguments} remains all-or-nothing because its consumer may render a
+ * runnable REST request. Hints are different: an unreadable later expression
+ * must not erase an earlier, independently bounded literal. This scan therefore
+ * reuses the exact same token and literal readers, returns every safe anchor
+ * before the first refusal, and stops there. It never guesses past a bracket,
+ * escape, continuation, or gate disagreement.
+ */
+export function lexValueAnchors(
+	text: string,
+	from: number,
+): ValueAnchorReading {
+	const anchors: ValueAnchor[] = [];
+	let i = Math.max(0, from);
+	while (i < text.length) {
+		const c = text[i] as string;
+		if (c === " " || c === "\t" || c === "\r" || c === "\n") {
+			i++;
+			continue;
+		}
+		const continuation = continuationLength(text, i);
+		if (continuation > 0) {
+			i += continuation;
+			continue;
+		}
+		const token = scanToken(text, i);
+		if (typeof token === "string")
+			return { complete: false, anchors, why: token };
+		const read = readToken(text, i, token.end);
+		if (typeof read === "string")
+			return { complete: false, anchors, why: read };
+		if (
+			read.kind !== "query" &&
+			read.value !== undefined &&
+			read.valueSpan !== undefined
+		) {
+			const source = text.slice(read.valueSpan.start, read.valueSpan.end);
+			anchors.push({
+				kind: read.kind,
+				tokenSpan: read.span,
+				...(read.name === undefined ? {} : { name: read.name }),
+				valueSpan: read.valueSpan,
+				value: read.value,
+				quoted: source.startsWith('"') && source.endsWith('"'),
+			});
+		}
+		i = token.end;
+	}
+	return { complete: true, anchors };
 }

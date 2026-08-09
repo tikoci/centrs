@@ -433,3 +433,17 @@ The JSON/YAML form carries the same facts under
 `data.symbols.occurrences[]` as `name`, byte `span`, `class`, `role`,
 `bindingIds`, `sigil`, optional `note`, and `ev`. This is the Q13 symbol view;
 it does not infer value-flow types, which remain #239 S2 after #225.
+
+### 26. Value facts keep shape, observed type, and schema type separate
+
+```bash
+centrs explain ':local x 2.2; :set x "2.2"' --json
+```
+
+`data.values.occurrences[]` contains two result-local value records. The bare
+`2.2` carries `facts.shapeHints.values: ["num", "ip"]`; the quoted `"2.2"`
+carries `["str"]`. Each hint fact cites canonicalizer evidence with
+`basis: "heuristic"`; neither record has `observedType` or `schemaType`, because
+offline analysis has neither live parser output nor an argument schema. A hint
+is not a diagnostic and does not change `data.verdict` or
+`runtimeAcceptance: "not-proven"`.

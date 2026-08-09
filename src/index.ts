@@ -312,6 +312,9 @@ export {
 	type ArgumentsRead as ExplainArgumentsRead,
 	type ArgumentsUnread as ExplainArgumentsUnread,
 	lexArguments as lexExplainArguments,
+	lexValueAnchors as lexExplainValueAnchors,
+	type ValueAnchor as ExplainValueAnchor,
+	type ValueAnchorReading as ExplainValueAnchorReading,
 } from "./explain/args.ts";
 export {
 	DIRECTIVE_BODY,
@@ -380,6 +383,12 @@ export type {
 	ExplainTransportClassification,
 	ExplainUnknownTransport,
 } from "./explain/transport.ts";
+export {
+	VALUE_SHAPES,
+	type ValueShape as ExplainValueShape,
+	type ValueShapeOptions as ExplainValueShapeOptions,
+	valueShapeHints as explainValueShapeHints,
+} from "./explain/values.ts";
 export {
 	type DocumentVerbSplit,
 	describeStatement,
@@ -452,6 +461,11 @@ export {
 	type ExplainSymbolClass,
 	type ExplainSymbolOccurrence,
 	type ExplainSymbols,
+	type ExplainValueFacts,
+	type ExplainValueOccurrence,
+	type ExplainValueShapeFact,
+	type ExplainValues,
+	type ExplainValueTypeFact,
 	type ExplainVerdict,
 	explainCommand,
 	explainEnvelope,
