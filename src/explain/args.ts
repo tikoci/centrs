@@ -288,7 +288,7 @@ function scanToken(
 			if (end === null) return "an unclosed structured argument value";
 			i = end;
 			const next = nextNonWhitespace(structural, i);
-			if (continuesExpression(structural, next))
+			if (continuesExpression(structural, i, next))
 				return "an expression continuing after a structured value";
 			continue;
 		}
@@ -321,9 +321,23 @@ function nextNonWhitespace(text: string, from: number): number {
 	return i;
 }
 
+function startsDottedArgument(text: string, at: number): boolean {
+	const match = text.slice(at).match(/^(\.[A-Za-z][A-Za-z0-9._-]*)=/);
+	return match !== null && ARGUMENT_NAME.test(match[1] as string);
+}
+
 /** Operators that prove a closed group is only the left side of an expression. */
-function continuesExpression(text: string, at: number): boolean {
+function continuesExpression(
+	text: string,
+	structuredEnd: number,
+	at: number,
+): boolean {
 	const c = text[at];
+	// A space separates RouterOS arguments. Dotted names are legal arguments,
+	// so `{1;2} .proplist=.id` is not the `.` operator. Without the separation,
+	// `{1;2}.proplist=...` remains one expression token and must be refused.
+	if (c === "." && at > structuredEnd && startsDottedArgument(text, at))
+		return false;
 	if (c !== undefined && ".,+-*/%&|^~<>=!".includes(c)) return true;
 	return /^(?:and|or|in)(?=[ \t\r\n(])/.test(text.slice(at).toLowerCase());
 }

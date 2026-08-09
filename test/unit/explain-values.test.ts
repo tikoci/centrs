@@ -339,6 +339,21 @@ describe("value anchors", () => {
 			"list",
 			"in",
 		]);
+		for (const dotted of [".id=*1", ".proplist=.id,name"]) {
+			const input = `/x/cmd list={1;2} ${dotted}`;
+			const reading = lexValueAnchors(input, "/x/cmd".length);
+			expect(reading.complete).toBe(true);
+			expect(reading.anchors.map((anchor) => anchor.name)).toEqual([
+				"list",
+				dotted.slice(0, dotted.indexOf("=")),
+			]);
+		}
+		const continued = lexValueAnchors(
+			"/x/cmd list={1;2}.id=*1",
+			"/x/cmd".length,
+		);
+		expect(continued.complete).toBe(false);
+		expect(continued.anchors).toEqual([]);
 	});
 
 	test("grouping, empty groups, scopes, and concat do not fabricate arrays", () => {
