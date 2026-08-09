@@ -134,7 +134,7 @@ export function isPositionalFact(code: DefectCode): boolean {
  * Does this list carry a defect an analyzer must ABSTAIN on?
  *
  * The abstention gate, and the reason {@link isPositionalFact} is a function
- * rather than a comment: a defect list is not uniformly "bad input". Six codes
+ * rather than a comment: a defect list is not uniformly "bad input". Seven codes
  * mark structure the analyzer could not resolve — part of the document was never
  * walked, so no verdict over it is safe. The other two are coordinate facts about
  * bytes that were read perfectly well. Gating on `defects.length > 0` would

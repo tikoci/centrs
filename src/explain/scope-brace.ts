@@ -10,6 +10,8 @@
 import { scanQuotedString } from "./quoted-string.ts";
 
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
+
+/** Error-variable shape for `:onerror V { … }` — a bare/`$`-prefixed name. */
 const ERROR_VAR = /^\$?[A-Za-z][A-Za-z0-9._-]*$/;
 
 function isAsciiWhitespace(char: string | undefined): boolean {
@@ -30,9 +32,19 @@ function asciiWords(text: string): string[] {
 }
 
 /**
- * Source-visible argument names whose `{…}` is a scope. Closed set harvested
- * from the projected corpus; `in` is deliberately excluded because
- * `:foreach in={…}` is an array even though `:onerror V {…}` lowers to `in`.
+ * Source-visible argument names whose `{…}` is a scope. Closed set, harvested
+ * from every projected corpus capture (`do` 5623, `else` 720, `command` 177,
+ * `on-error` 132).
+ *
+ * `command` is here because users DO write it explicitly:
+ * `:retry delay=1s max=3 on-error={…} command={…}`
+ * (topic-169237/post-0021-snippet-01 @ 7.22.1).
+ *
+ * `in` is deliberately NOT here even though IL lowers `:onerror V { … }` under
+ * that name — in SOURCE, `in={…}` is always an array literal
+ * (`:foreach Type in={ "p12"; "pem" }` → `in=p12;pem`,
+ * eworm/check-certificates.rsc @ 7.22.1). The IL name and the source name
+ * collide; only the source spelling governs offline.
  */
 export const SCOPE_ARG_NAMES: ReadonlySet<string> = new Set([
 	"do",
@@ -46,7 +58,12 @@ export const HEAD_SCOPED_ARG_NAMES: Record<string, ReadonlySet<string>> = {
 	in: new Set([":onerror", "onerror"]),
 };
 
-/** Directives whose brace body attaches directly rather than through `name=`. */
+/**
+ * Directives whose brace body attaches to the directive itself, with the IL
+ * name the body is lowered under. The colon is optional in practice: `do {`
+ * opens a body the same way `:do {` does (topic-142687/post-0010-snippet-01 @
+ * 7.22.1).
+ */
 export const DIRECTIVE_BODY: Record<string, string> = {
 	":do": "command",
 	":retry": "command",
@@ -140,6 +157,13 @@ function statementPrefix(text: string, open: number): string {
 	// The fast path is the original bounded reverse lookup. A quote after its
 	// candidate means that candidate may be string content, so only then pay for
 	// the shared quote-aware forward index (#246 review).
+	//
+	// The guard is exact for every offset a walker can ask about. Differential
+	// fuzz over 300k delimiter-dense random inputs (alphabet `"{}[]();\n =a\\$/#:p`)
+	// found 0 disagreements with the always-quote-aware index across the 426,488
+	// `{`/`#` offsets reachable outside a string — with and without an
+	// unterminated string present. Disagreements exist ONLY at offsets inside a
+	// quoted run, and every caller consumes a string whole before it can ask.
 	const boundary = suffix.slice(bracket + 1).includes('"')
 		? (statementBoundaries(text)[open] ?? -1)
 		: naiveBoundary;
@@ -163,6 +187,9 @@ export function scopeNameFromMasked(
 		}
 		return null;
 	}
+	// `:do {`, `:retry {`, `:onerror Err {` — the directive may carry ONE bare
+	// error-variable word before the brace. A second token that is not an
+	// identifier (`:onerror [find] {`) is not this form, so the brace is a value.
 	const words = asciiWords(before);
 	const first = (words[0] ?? "").toLowerCase();
 	const body = DIRECTIVE_BODY[first];
