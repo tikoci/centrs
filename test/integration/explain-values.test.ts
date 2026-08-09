@@ -225,6 +225,9 @@ describeFast("explain value facts against CHR", () => {
 				":local x 2 #",
 				"{ :local x 2 # }",
 				":put 2 # blah",
+				':put "a;b" # blah',
+				':put "a{b" # blah',
+				":if ($a = true \\ # bad",
 			]) {
 				const classes = await highlightClasses(started.chr, input);
 				expect(classes[input.indexOf("#")]).toBe("error");
@@ -238,6 +241,8 @@ describeFast("explain value facts against CHR", () => {
 				":if (false) do={:put x} else={ # c\n:put y\n}",
 				":foreach i in={1} do={ # c\n:put $i\n}",
 				"/system/scheduler/add name=x start-time=startup on-event={ # c\n:put x\n}",
+				"[# c\n:put 1]",
+				":local z {[:do { # c\n:put 1\n}]}",
 			]) {
 				const classes = await highlightClasses(started.chr, input);
 				expect(classes[input.indexOf("#")]).toBe("comment");
@@ -250,6 +255,8 @@ describeFast("explain value facts against CHR", () => {
 				":local y #test",
 				":put #test",
 				":local x 1; :set x #test",
+				"[:put #test]",
+				":local z [:put #test]",
 			]) {
 				const classes = await highlightClasses(started.chr, input);
 				expect(classes[input.indexOf("#")]).toBe("none");

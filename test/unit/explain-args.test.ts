@@ -166,11 +166,31 @@ describe("the token grammar", () => {
 			":local z {1;#test}",
 			":local z (1,#test)",
 		]) {
-			const read = lexValueAnchors(text, ":local".length);
-			expect(read.complete).toBeFalse();
-			expect(read.complete ? "" : read.why).toContain(
+			const strict = lexArguments(text, ":local".length);
+			expect(strict.read).toBeFalse();
+			// The strict REST reader refuses every structured positional before
+			// inspecting its contents; the advisory anchor reader descends far enough
+			// to preserve the more specific grounded reason.
+			expect(strict.read ? "" : strict.why).toMatch(
+				/array or block value|substitution or expression value/,
+			);
+
+			const anchors = lexValueAnchors(text, ":local".length);
+			expect(anchors.complete).toBeFalse();
+			expect(anchors.complete ? "" : anchors.why).toContain(
 				"invalid hash in a structured argument value",
 			);
+		}
+	});
+
+	test("a real nested scope comment does not poison an enclosing array", () => {
+		for (const text of [
+			":local z {[:do { # c\n:put 1\n}]}",
+			":local z {[:if (true) do={ # c\n:put 1\n}]}",
+		]) {
+			const anchors = lexValueAnchors(text, ":local".length);
+			expect(anchors.complete).toBeTrue();
+			expect(anchors.anchors.at(-1)?.sourceShape).toBe("array");
 		}
 	});
 

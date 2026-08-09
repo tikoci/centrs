@@ -658,7 +658,7 @@ const DEFECT_DIAGNOSTICS: Record<
 	"invalid-hash": {
 		severity: "error",
 		message: () =>
-			"unquoted `#` is not a comment here — comments must begin in statement-leading position",
+			"unquoted `#` is a syntax error here — quote it where a value is accepted, or move it to statement-leading position to start a comment",
 	},
 	// centrs's own resource bound, not a RouterOS rule. The input may be entirely
 	// legal; what is reported is that the analyzer stopped descending, so the

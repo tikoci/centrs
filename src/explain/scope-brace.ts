@@ -7,6 +7,8 @@
  * gives comment masking, segmentation, and symbol resolution one rule.
  */
 
+import { scanQuotedString } from "./quoted-string.ts";
+
 const ASCII_WHITESPACE = /[ \t\r\n]+/;
 const ERROR_VAR = /^\$?[A-Za-z][A-Za-z0-9._-]*$/;
 
@@ -55,7 +57,7 @@ export const DIRECTIVE_BODY: Record<string, string> = {
 };
 
 /** Script-valued attribute naming convention already used by the corpus census. */
-const SCRIPT_BODY_ARG = /(?:^source$|script$|^on-)/;
+const SCRIPT_BODY_ARG = /^(?:source|script|on-.*)$/;
 
 /** Grounded scripting directives whose positional arity makes a later `#` fatal. */
 const DIRECTIVE_POSITIONAL_ARITY: Readonly<Record<string, number>> = {
@@ -65,12 +67,40 @@ const DIRECTIVE_POSITIONAL_ARITY: Readonly<Record<string, number>> = {
 	put: 1,
 };
 
+let boundaryCacheText: string | undefined;
+let boundaryCache: Int32Array | undefined;
+
+/** Last unquoted statement boundary before every source offset, in one pass. */
+function statementBoundaries(text: string): Int32Array {
+	if (text === boundaryCacheText && boundaryCache !== undefined) {
+		return boundaryCache;
+	}
+
+	const boundaries = new Int32Array(text.length + 1);
+	boundaries.fill(-1);
+	let boundary = -1;
+	let i = 0;
+	while (i < text.length) {
+		boundaries[i] = boundary;
+		const c = text[i] as string;
+		if (c === '"') {
+			const end = Math.min(scanQuotedString(text, i).end, text.length);
+			boundaries.fill(boundary, i + 1, end + 1);
+			i = end;
+			continue;
+		}
+		if (c === "\n" || c === ";" || c === "{" || c === "[") boundary = i;
+		i++;
+	}
+	boundaries[text.length] = boundary;
+
+	boundaryCacheText = text;
+	boundaryCache = boundaries;
+	return boundaries;
+}
+
 function statementPrefix(text: string, open: number): string {
-	const boundary = Math.max(
-		text.lastIndexOf("\n", open - 1),
-		text.lastIndexOf(";", open - 1),
-		text.lastIndexOf("{", open - 1),
-	);
+	const boundary = statementBoundaries(text)[open] ?? -1;
 	return text.slice(boundary + 1, open);
 }
 

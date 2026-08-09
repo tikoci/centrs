@@ -482,8 +482,10 @@ The CHR assertion grounds the wider placement rule on the requested RouterOS
 channel via `/console/inspect request=highlight` plus `:parse`: unquoted `#`
 inside brace arrays and parenthesized expressions is a hard error; the first
 non-space `#` in `do`, `else`, `foreach do`, and `on-event` bodies is a comment;
-attribute and bare-value `#` is content; and `#` after `}` is a hard error. The
-stable/testing grounding run for #245 used RouterOS 7.23.3 and 7.24rc3.
+the same lead inside a `[…]` command substitution is a comment while
+`[:put #test]` keeps `#test` as a value; attribute and bare-value `#` is
+content; and `#` after `}` is a hard error. The stable/testing grounding run
+for #245 used RouterOS 7.23.3 and 7.24rc3.
 
 A same-line hash after a completed scripting directive is likewise an error:
 `:local x 2 #` produces an `explain/canonicalizer/invalid-hash` diagnostic at

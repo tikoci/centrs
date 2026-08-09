@@ -374,6 +374,8 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 			":local z {1;#test}",
 			":local z {a=1;#b=2}",
 			":local z (1,#test)",
+			":put myScript={#test}",
+			":put description={#test}",
 		]) {
 			expect(maskComments(input)).toBe(input);
 			expect(segmentStatements(input).comments).toEqual([]);
@@ -384,7 +386,10 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 			":if (false) do={:put x} else={ # c\n:put y\n}",
 			":foreach i in={1} do={ # c\n:put $i\n}",
 			"/system/scheduler/add name=x on-event={ # c\n:put x\n}",
+			"/system/script/add name=x source={ # c\n:put x\n}",
 			":put before\n:do { # c\n:put x\n}",
+			"[# c\n:put x]",
+			":local z {[:do { # c\n:put 1\n}]}",
 		]) {
 			const hash = input.indexOf("#");
 			expect(maskComments(input).slice(hash, hash + 3)).toBe("   ");
@@ -397,6 +402,10 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 		const trailing = ":if (true) do={:put x} # c\n:put y";
 		expect(maskComments(trailing)).toBe(trailing);
 		expect(segmentStatements(trailing).comments).toEqual([]);
+
+		const bracketValue = "[:put #test]";
+		expect(maskComments(bracketValue)).toBe(bracketValue);
+		expect(segmentStatements(bracketValue).comments).toEqual([]);
 	});
 
 	test("the first grounded non-comment hash is a located hard defect (#245)", () => {
@@ -408,6 +417,10 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 			":local z (a#b)",
 			":local x 1; :set x 3 # blah",
 			":put 2 # blah",
+			':put "a;b" # blah',
+			':put "a{b" # blah',
+			':local x "a;b" # blah',
+			":if ($a = true \\ # bad",
 		]) {
 			const hash = input.indexOf("#");
 			expect(segmentStatements(input).defects).toContainEqual({

@@ -528,6 +528,10 @@ describe("diagnostics", () => {
 		expect(data.structure.containsWrite).toBe("unknown");
 		expect(hashes).toHaveLength(1);
 		expect(hashes[0]?.span).toEqual({ start: 34, end: 35 });
+		expect(hashes[0]?.message).toContain("quote it where a value is accepted");
+		expect(hashes[0]?.message).toContain(
+			"move it to statement-leading position",
+		);
 		expect(
 			data.structure.statements
 				.slice(2)

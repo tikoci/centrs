@@ -80,6 +80,7 @@ import {
 	runAtByte,
 } from "./coordinates.ts";
 import { type Defect, defectAt, mergeDefects } from "./defects.ts";
+import { scanQuotedString as scanQuotedStringShared } from "./quoted-string.ts";
 import { braceStartsStatements, hashStartsHardError } from "./scope-brace.ts";
 
 /** One top-level statement located in analyzed-byte space. */
@@ -115,19 +116,6 @@ export interface SegmentResult {
 }
 
 const isSpace = (c: string): boolean => c === " " || c === "\t" || c === "\r";
-
-/**
- * Frame-stack cap for `scanQuotedString` — the string-scan twin of
- * `MAX_CONTAINER_DEPTH`, and the same kind of guard: a resource bound on
- * untrusted input, not a RouterOS grammar limit. Without it a crafted string of
- * unclosed substitutions (`"$[$[$[…`) grows one frame per two bytes; measured on
- * a 1 MB input that is ~19 MB of array churn, against ~9 MB for the
- * `original.split("")` `maskComments` already allocates for the same text. 256
- * is far past any real script — the frozen 913-script corpus peaks at 8, and
- * 866 of 913 files never pass 3 — and it turns that worst case into an early,
- * O(1) exit. Raised on the PR #214 review.
- */
-const MAX_STRING_FRAME_DEPTH = 256;
 
 /** Where a double-quoted string ends, and whether it was closed at all. */
 export interface QuotedStringScan {
@@ -167,47 +155,7 @@ export interface QuotedStringScan {
  * (`"$[a]$[b]…"`) pop and never accumulate.
  */
 export function scanQuotedString(text: string, open: number): QuotedStringScan {
-	const frames: string[] = ['"'];
-	let i = open + 1;
-	while (i < text.length) {
-		if (frames.length > MAX_STRING_FRAME_DEPTH) break;
-		const top = frames[frames.length - 1] as string;
-		const c = text[i] as string;
-		if (top === '"') {
-			if (c === "\\") {
-				i += 2;
-				continue;
-			}
-			if (c === '"') {
-				frames.pop();
-				i++;
-				if (frames.length === 0) return { end: i, closed: true };
-				continue;
-			}
-			// `$"…"` is NOT a quoted name inside a string (the device closes the
-			// string on that quote), so only the bracket forms open code.
-			if (c === "$" && (text[i + 1] === "[" || text[i + 1] === "(")) {
-				frames.push(text[i + 1] as string);
-				i += 2;
-				continue;
-			}
-			i++;
-			continue;
-		}
-		if (c === '"' || c === "[" || c === "(" || c === "{") {
-			frames.push(c);
-			i++;
-			continue;
-		}
-		if (c === "]" || c === ")" || c === "}") {
-			const want = c === "]" ? "[" : c === ")" ? "(" : "{";
-			if (top === want) frames.pop();
-			i++;
-			continue;
-		}
-		i++;
-	}
-	return { end: text.length, closed: false };
+	return scanQuotedStringShared(text, open);
 }
 
 /**
@@ -301,9 +249,10 @@ export function maskComments(original: string): string {
 			const statements =
 				c === "[" || (c === "{" && braceStartsStatements(original, i));
 			contexts.push({ char: c, statements });
-			// A bracket can contain statements after its own separator, but unlike a
-			// scope brace it does not make its immediate next byte statement-leading.
-			atLead = c === "{" && statements;
+			// A bracket is a nested statement context too: `[# c\n:put 1]` starts
+			// with a real comment, while `[:put #value]` consumes the lead on `:put`
+			// and keeps the hash as that command's value.
+			atLead = statements;
 		} else if (c === "}" || c === "]" || c === ")") {
 			const want = c === "}" ? "{" : c === "]" ? "[" : "(";
 			if (contexts[contexts.length - 1]?.char === want) contexts.pop();
@@ -708,7 +657,7 @@ function scanAscii(ascii: string): {
 				const statements =
 					c === "[" || (c === "{" && braceStartsStatements(ascii, i));
 				delimStack.push({ char: c, at: i, statements });
-				f.atLead = c === "{" && statements;
+				f.atLead = statements;
 			}
 			i++;
 			continue;

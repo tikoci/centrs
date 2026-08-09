@@ -698,10 +698,14 @@ comment. The shared offline walkers follow this table, grounded with
 `/console/inspect request=highlight`, `:parse` IL, and `:typeof` on CHR 7.23.3
 (stable) and 7.24rc3 (testing):
 
+This intentionally follows the live parser rather than the scripting manual's
+broader prose that a `#` starts a comment. The same live probes distinguish a
+comment, a literal hash value, and a hard error at the exact byte.
+
 | Position | Device reading | Offline rule |
 | -------- | -------------- | ------------ |
-| Statement-leading at the document root, after a real statement separator, or in a `do`/`else`/`foreach do` body | `comment` through newline | Mask it and preserve byte offsets. |
-| First non-space content inside a stored-script brace such as `on-event={ # c` | `comment` | Treat source-/script-/`on-*`-named brace values as comment-bearing script bodies; `on-event` is the device-confirmed matrix row. |
+| Statement-leading at the document root, after a real statement separator, in a `do`/`else`/`foreach do` body, or immediately inside a `[…]` command substitution | `comment` through newline | Mask it and preserve byte offsets. A command first consumes that lead, so `[:put #test]` keeps `#test` as the value. |
+| First non-space content inside a stored-script brace such as `on-event={ # c` | `comment` | Treat exact `source`/`script` and `on-*`-named brace values as comment-bearing script bodies; a suffix such as `myScript` is not one. |
 | Immediate line start after `\` + newline | `comment`; the pending statement survives | Mask it in both argument views; the continuation-reach rules remain H5/#215. |
 | Inside an array (`{#test}`, `{1;#test}`, `{a=1;#b=2}`) or parenthesized expression (`(1,#test)`) | hard `error` at `#`; `:parse` reports `syntax error` | Do not mask it or emit an array value hint; semantic resolution stops there. |
 | In an attribute or bare value (`comment=#test`, `comment=a#b`, `:global y #test`) | literal value (`none` highlight class) | Keep it as content. |
@@ -709,15 +713,23 @@ comment. The shared offline walkers follow this table, grounded with
 | After a closing scope brace (`} # c`) | hard `error` at `#` | Do not mask it. |
 | After a complete fixed-arity scripting directive (`:local x 2 #`, `:set x 3 #`, `:put 2 #`) | hard `error` at `#`; `:parse` reports `expected end of command` | Emit `explain/canonicalizer/invalid-hash` at the first such byte and fail closed after it. A hash in the still-open value slot (`:local x #test`, `:set x #test`, `:put #test`) remains content. |
 
+An otherwise unrecognized `name={…}` is structurally an expression/array, not
+a stored-script body. Whether the target command's schema accepts an array at
+that argument is a separate live schema/runtime question; comment classification
+does not imply type acceptance.
+
 This distinction is why brace role lives in one shared primitive below the
 segmenter, block reader, and symbol resolver. The strict argument lexer now uses
 the same comment-masked structural view as value anchoring, so a continuation
 comment cannot fabricate positional operands or downgrade a tested REST shape.
-The 948-script corpus contains no such continuation-comment argument case:
-before and after both read 7,385 of 14,331 command statements and abstain on
-6,946 (48.4684%), with zero per-statement reading changes. That unchanged result
-is a blast-radius measurement, not the grounding evidence; the two CHR versions
-above are the oracle.
+The 948-script corpus contains no such continuation-comment argument case. The
+readable set stays exactly 7,385 statements. Recognizing a bracket-leading hash
+as a comment conservatively folds two previously separate abstentions inside
+one foreign kernel-panic transcript (`[#1]` / `[#2]`) into its already-unknown
+outer statement, leaving 14,329 argument-bearing candidates and 6,944
+abstentions (48.4612%). That two-statement movement is a blast-radius
+measurement, not the grounding evidence; the two CHR versions above are the
+oracle.
 
 The same corpus run finds five new `invalid-hash` diagnostics, all in pasted
 non-RouterOS material: one NGINX server block, one JavaScript highlighter, one
@@ -731,7 +743,8 @@ continues to carry the same ranges as `spans[]` entries with `class: "comment"`.
 - **Severity is fixed here, because it drives `--fail-on`.** Three buckets, and
   the split is not "structural vs not":
   - `error` — `unclosed`, `unbalanced-close`, `unterminated-string`,
-    `bad-escape`, `bad-sigil`. Five classes the device itself rejects.
+    `bad-escape`, `bad-sigil`, `invalid-hash`. Six classes the device itself
+    rejects.
   - `warning` — `over-depth`, because it is centrs's own resource bound and says
     nothing about whether the input is legal; and an `ambiguous`/`unknown`
     resolution, never an error, so the default `--fail-on error` cannot fail a
