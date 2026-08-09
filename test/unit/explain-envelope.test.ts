@@ -518,6 +518,32 @@ describe("the write tristate is three-valued in the envelope", () => {
 });
 
 describe("diagnostics", () => {
+	test("a grounded trailing hash fails closed at its first device-error byte", () => {
+		const input = ":local x 1; /put $x; { :local x 2 # }; :set x 3 # blah";
+		const data = explainCommand(input);
+		const hashes = data.diagnostics.filter((diagnostic) =>
+			diagnostic.code.endsWith("/invalid-hash"),
+		);
+		expect(data.verdict).toBe("fail");
+		expect(data.structure.containsWrite).toBe("unknown");
+		expect(hashes).toHaveLength(1);
+		expect(hashes[0]?.span).toEqual({ start: 34, end: 35 });
+		expect(hashes[0]?.message).toContain("quote it where a value is accepted");
+		expect(hashes[0]?.message).toContain(
+			"move it to statement-leading position",
+		);
+		expect(
+			data.structure.statements
+				.slice(2)
+				.map((statement) => statement.resolution),
+		).toEqual(["unknown", "unknown"]);
+		expect(
+			data.symbols.occurrences.some(
+				(occurrence) => occurrence.role === "assignment",
+			),
+		).toBeFalse();
+	});
+
 	test("structural defects are errors and carry their region", () => {
 		const data = explainCommand(':put "unterminated');
 		expect(data.verdict).toBe("fail");

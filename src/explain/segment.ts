@@ -28,11 +28,13 @@
  *       inside it is code that may carry strings of its own, so where a string
  *       ends is decided by the one shared `scanQuotedString` (#199).
  *   H4  `#` starts a comment in statement-leading position (start of input, or
- *       the first non-space after `;`, a newline, or an opening `{`) — and, per
- *       H5 below, at the immediate start of a line that a continuation carried
- *       into. It runs to end of line and produces no statement. Recognized at
- *       every nesting depth, so a `#` line inside a `do={…}` body cannot leak an
- *       apostrophe or stray brace into the delimiter stack.
+ *       the first non-space after a separator in a statement-bearing context)
+ *       — and, per H5 below, at the immediate start of a line that a
+ *       continuation carried into. A scope/stored-script brace starts such a
+ *       context; an array brace or parenthesized expression does not, and an
+ *       unquoted `#` there is a hard device error (#245). A real comment runs to
+ *       end of line and produces no statement, so its apostrophes and braces
+ *       cannot leak into the delimiter stack.
  *   H5  A backslash at end of line is a continuation: it does not separate. Its
  *       reach is wider than one line, and was measured on CHR 7.23.3 (#215):
  *         - blank and whitespace-only lines right after the `\` are part of the
@@ -78,6 +80,8 @@ import {
 	runAtByte,
 } from "./coordinates.ts";
 import { type Defect, defectAt, mergeDefects } from "./defects.ts";
+import { scanQuotedString as scanQuotedStringShared } from "./quoted-string.ts";
+import { braceStartsStatements, hashStartsHardError } from "./scope-brace.ts";
 
 /** One top-level statement located in analyzed-byte space. */
 export interface Segment {
@@ -112,19 +116,6 @@ export interface SegmentResult {
 }
 
 const isSpace = (c: string): boolean => c === " " || c === "\t" || c === "\r";
-
-/**
- * Frame-stack cap for `scanQuotedString` — the string-scan twin of
- * `MAX_CONTAINER_DEPTH`, and the same kind of guard: a resource bound on
- * untrusted input, not a RouterOS grammar limit. Without it a crafted string of
- * unclosed substitutions (`"$[$[$[…`) grows one frame per two bytes; measured on
- * a 1 MB input that is ~19 MB of array churn, against ~9 MB for the
- * `original.split("")` `maskComments` already allocates for the same text. 256
- * is far past any real script — the frozen 913-script corpus peaks at 8, and
- * 866 of 913 files never pass 3 — and it turns that worst case into an early,
- * O(1) exit. Raised on the PR #214 review.
- */
-const MAX_STRING_FRAME_DEPTH = 256;
 
 /** Where a double-quoted string ends, and whether it was closed at all. */
 export interface QuotedStringScan {
@@ -164,47 +155,7 @@ export interface QuotedStringScan {
  * (`"$[a]$[b]…"`) pop and never accumulate.
  */
 export function scanQuotedString(text: string, open: number): QuotedStringScan {
-	const frames: string[] = ['"'];
-	let i = open + 1;
-	while (i < text.length) {
-		if (frames.length > MAX_STRING_FRAME_DEPTH) break;
-		const top = frames[frames.length - 1] as string;
-		const c = text[i] as string;
-		if (top === '"') {
-			if (c === "\\") {
-				i += 2;
-				continue;
-			}
-			if (c === '"') {
-				frames.pop();
-				i++;
-				if (frames.length === 0) return { end: i, closed: true };
-				continue;
-			}
-			// `$"…"` is NOT a quoted name inside a string (the device closes the
-			// string on that quote), so only the bracket forms open code.
-			if (c === "$" && (text[i + 1] === "[" || text[i + 1] === "(")) {
-				frames.push(text[i + 1] as string);
-				i += 2;
-				continue;
-			}
-			i++;
-			continue;
-		}
-		if (c === '"' || c === "[" || c === "(" || c === "{") {
-			frames.push(c);
-			i++;
-			continue;
-		}
-		if (c === "]" || c === ")" || c === "}") {
-			const want = c === "]" ? "[" : c === ")" ? "(" : "{";
-			if (top === want) frames.pop();
-			i++;
-			continue;
-		}
-		i++;
-	}
-	return { end: text.length, closed: false };
+	return scanQuotedStringShared(text, open);
 }
 
 /**
@@ -228,14 +179,17 @@ export type Continuation = "none" | "escape" | "comment";
  * Blank out RouterOS comments so a later delimiter re-scan cannot be fooled by
  * `#` text (a `}` or `[` inside a comment is not a real delimiter). A `#` starts
  * a comment in statement-leading position (H4) or at the immediate start of a
- * line a continuation carried into (H5); any intervening space or tab makes it
- * content rather than a comment. Comments are opaque inside strings. Comment
- * characters become spaces; length and every non-comment offset are preserved,
- * so indices stay valid against the original and callers can slice the original
- * for content. Idempotent.
+ * line a continuation carried into (H5). Statement-leading is contextual:
+ * scope/stored-script braces admit it, array/group expressions do not. Any
+ * intervening space or tab makes a continuation-line `#` content unless the
+ * surrounding statement context is still empty. Comments are opaque inside
+ * strings. Comment characters become spaces; length and every non-comment
+ * offset are preserved, so indices stay valid against the original and callers
+ * can slice the original for content. Idempotent.
  */
 export function maskComments(original: string): string {
 	const out = original.split("");
+	const contexts: { char: "{" | "[" | "("; statements: boolean }[] = [];
 	let atLead = true;
 	let cont: Continuation = "none";
 	let contLineStart = false;
@@ -291,8 +245,21 @@ export function maskComments(original: string): string {
 			i += original[i + 1] === "\r" ? 2 : 1;
 			continue;
 		}
-		if (c === ";" || c === "\n" || c === "{") atLead = true;
-		else if (c !== " " && c !== "\t" && c !== "\r") atLead = false;
+		if (c === "{" || c === "[" || c === "(") {
+			const statements =
+				c === "[" || (c === "{" && braceStartsStatements(original, i));
+			contexts.push({ char: c, statements });
+			// A bracket is a nested statement context too: `[# c\n:put 1]` starts
+			// with a real comment, while `[:put #value]` consumes the lead on `:put`
+			// and keeps the hash as that command's value.
+			atLead = statements;
+		} else if (c === "}" || c === "]" || c === ")") {
+			const want = c === "}" ? "{" : c === "]" ? "[" : "(";
+			if (contexts[contexts.length - 1]?.char === want) contexts.pop();
+			atLead = false;
+		} else if (c === ";" || c === "\n") {
+			atLead = contexts.at(-1)?.statements ?? true;
+		} else if (c !== " " && c !== "\t" && c !== "\r") atLead = false;
 	}
 	return out.join("");
 }
@@ -405,10 +372,11 @@ function scanAscii(ascii: string): {
 	const comments: { start: number; end: number }[] = [];
 	const defects: Defect[] = [];
 	const overDepth: number[] = [];
+	let hardHashSeen = false;
 	// H2 — every open bracket, for balance. Each frame carries WHERE it opened so
 	// an `unclosed` defect can point at the opener rather than at the end of
 	// input.
-	const delimStack: { char: string; at: number }[] = [];
+	const delimStack: { char: string; at: number; statements: boolean }[] = [];
 	const top: Frame = {
 		stmtStart: -1,
 		atLead: true,
@@ -516,7 +484,7 @@ function scanAscii(ascii: string): {
 		// prefixStart = the parent statement's start, or the `{` itself when the
 		// container has no prefix (so a DISCARD absorbs from the `{`).
 		const prefixStart = parent.stmtStart >= 0 ? parent.stmtStart : i;
-		delimStack.push({ char: "{", at: i });
+		delimStack.push({ char: "{", at: i, statements: true });
 		frames.push({
 			stmtStart: -1,
 			atLead: true,
@@ -619,6 +587,24 @@ function scanAscii(ascii: string): {
 			}
 		}
 
+		// #245 — once the device reaches an unquoted hash that cannot be a
+		// statement-leading comment or value, highlight marks that byte `error` and
+		// stops. Record only that first hard hash, then keep scanning solely to
+		// recover balanced spans without pretending later hashes were classified.
+		if (
+			c === "#" &&
+			!hardHashSeen &&
+			hashStartsHardError(ascii, i, delimStack.at(-1)?.statements === false)
+		) {
+			defects.push(defectAt("invalid-hash", i, "#"));
+			hardHashSeen = true;
+			f.structurallyInvalid = true;
+			ensureStmt(f, i);
+			f.atLead = false;
+			i++;
+			continue;
+		}
+
 		// H3 — string.
 		if (c === '"') {
 			ensureStmt(f, i);
@@ -663,13 +649,15 @@ function scanAscii(ascii: string): {
 				} else {
 					overDepth.push(i);
 					ensureStmt(f, i);
-					delimStack.push({ char: "{", at: i });
+					delimStack.push({ char: "{", at: i, statements: true });
 					f.atLead = true;
 				}
 			} else {
 				ensureStmt(f, i);
-				delimStack.push({ char: c, at: i });
-				f.atLead = c === "{";
+				const statements =
+					c === "[" || (c === "{" && braceStartsStatements(ascii, i));
+				delimStack.push({ char: c, at: i, statements });
+				f.atLead = statements;
 			}
 			i++;
 			continue;
@@ -701,11 +689,11 @@ function scanAscii(ascii: string): {
 		}
 
 		// H1 — separators. They END a statement only at container level, but
-		// restore statement-leading position at every depth so H4 can see a
-		// comment inside a block body.
+		// restore statement-leading position only in a statement-bearing context.
+		// Array and parenthesized expression members do not admit bare `#` comments.
 		if (c === ";" || c === "\n") {
 			if (atContainerLevel()) flush(f, i, c === ";" ? ";" : "newline");
-			f.atLead = true;
+			f.atLead = delimStack.at(-1)?.statements ?? true;
 			i++;
 			continue;
 		}

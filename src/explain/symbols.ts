@@ -304,6 +304,7 @@
 import { analyzeCoordinates } from "./coordinates.ts";
 import { type Defect, defectAt } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
+import { braceStartsStatements, hashStartsHardError } from "./scope-brace.ts";
 import type { Continuation } from "./segment.ts";
 
 /** The five variable classes the console assigns. */
@@ -495,7 +496,11 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 	 * it opened so an `unclosed`/`unterminated-string` defect can point at the
 	 * opener instead of at end-of-input (#192).
 	 */
-	const frames: { char: "{" | "[" | "(" | '"'; at: number }[] = [];
+	const frames: {
+		char: "{" | "[" | "(" | '"';
+		at: number;
+		statements: boolean;
+	}[] = [];
 	/** bracket/brace nesting, strings excluded (the S8 filter region uses it). */
 	let depth = 0;
 	/** `{` opens past the cap that pushed no scope; their `}` must not pop one. */
@@ -817,7 +822,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					// string. A scan that swallowed this as string bytes would flip
 					// its quote phase on the first nested string and lose every
 					// binding after it.
-					frames.push({ char: next, at: i + 1 });
+					frames.push({ char: next, at: i + 1, statements: next === "[" });
 					depth++;
 					if (next === "[") {
 						// F6 — and it is a statement context like any other `[`. A `$[`
@@ -915,6 +920,17 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			}
 			continue;
 		}
+		// #245, CHR 7.23.3/7.24rc3: an unquoted `#` inside an array or
+		// parenthesized expression is a hard error, not a value or comment. The
+		// device stops highlighting there, so semantic resolution must stop too.
+		if (
+			c === "#" &&
+			hashStartsHardError(text, i, frames.at(-1)?.statements === false)
+		) {
+			defects.push(defectAt("invalid-hash", i, "#"));
+			defect = true;
+			break;
+		}
 		// H4 bookkeeping. `leadBefore` is the value for the character ABOUT to be
 		// read, which is what decides whether a word is the statement HEAD.
 		const leadBefore = atLead;
@@ -922,7 +938,9 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		// HEAD. `(` does not: the device reads a directive there as an ordinary
 		// expression term (`(:local v 1)` classes `:local` itself
 		// `variable-undefined`), which is why only the bracket is listed here.
-		if (c === ";" || c === "\n" || c === "{" || c === "[") atLead = true;
+		if (c === ";" || c === "\n") atLead = frames.at(-1)?.statements ?? true;
+		else if (c === "{") atLead = braceStartsStatements(text, i);
+		else if (c === "[") atLead = true;
 		else if (c !== " " && c !== "\t" && c !== "\r") atLead = false;
 
 		// F8 — anything that cannot be a path token ENDS the path region, so no
@@ -1005,12 +1023,16 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 					continue;
 				}
 			}
-			frames.push({ char: '"', at: i });
+			frames.push({ char: '"', at: i, statements: false });
 			continue;
 		}
 
 		if (c === "{" || c === "[" || c === "(") {
-			frames.push({ char: c, at: i });
+			frames.push({
+				char: c,
+				at: i,
+				statements: c === "[" || (c === "{" && braceStartsStatements(text, i)),
+			});
 			depth++;
 			if (c === "[") openBracket(leadBefore, i);
 			if (c === "{") {

@@ -464,3 +464,30 @@ distribute over an array; `[:toarray ""]` is the only empty-array construction
 and indexing it yields `nothing`; `[:parse "…"]` returns `code`; and `nil` has
 no standalone offline spelling. Produced empty arrays, concat, `code`, and
 `nil` remain abstentions rather than guessed hints.
+
+### 27. Continuation comments are not REST operands
+
+```bash
+centrs explain '/ip/address/add address=1.2.3.4 \
+# a note
+ comment=x' --json
+```
+
+The statement's argument reading is complete: `command.args` is
+`{ address: "1.2.3.4", comment: "x" }`, and `arguments.positional` is empty. Its
+transport classification stays `api-candidate`, with the same two fields in the
+REST body; the comment text is never rendered as an operand.
+
+The CHR assertion grounds the wider placement rule on the requested RouterOS
+channel via `/console/inspect request=highlight` plus `:parse`: unquoted `#`
+inside brace arrays and parenthesized expressions is a hard error; the first
+non-space `#` in `do`, `else`, `foreach do`, and `on-event` bodies is a comment;
+the same lead inside a `[…]` command substitution is a comment while
+`[:put #test]` keeps `#test` as a value; attribute and bare-value `#` is
+content; and `#` after `}` is a hard error. The stable/testing grounding run
+for #245 used RouterOS 7.23.3 and 7.24rc3.
+
+A same-line hash after a completed scripting directive is likewise an error:
+`:local x 2 #` produces an `explain/canonicalizer/invalid-hash` diagnostic at
+the hash byte and stops later semantic claims. Statement-leading comments are
+listed with their byte ranges under `comments:` in the default text output.

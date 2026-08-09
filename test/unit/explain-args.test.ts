@@ -42,7 +42,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { lexArguments } from "../../src/explain/args.ts";
+import { lexArguments, lexValueAnchors } from "../../src/explain/args.ts";
 import { explainCommand } from "../../src/explain.ts";
 
 /** Lex a whole statement's arguments from the first space, the common case. */
@@ -142,6 +142,89 @@ describe("the token grammar", () => {
 		const read = lex(text, "/ip/address add".length);
 		if (!read.read) throw new Error(read.why);
 		expect(read.args).toEqual({ address: "10.0.0.1", comment: "x" });
+	});
+
+	test("a continuation comment is whitespace to both argument readers (#245)", () => {
+		const text = "/ip/address add address=1.2.3.4 \\\n# a note\n comment=x";
+		const from = "/ip/address add".length;
+		const strict = lexArguments(text, from);
+		if (!strict.read) throw new Error(strict.why);
+		expect(strict.args).toEqual({ address: "1.2.3.4", comment: "x" });
+		expect(strict.positional).toEqual([]);
+
+		const anchors = lexValueAnchors(text, from);
+		expect(anchors.complete).toBeTrue();
+		expect(anchors.anchors.map((anchor) => anchor.value)).toEqual([
+			"1.2.3.4",
+			"x",
+		]);
+	});
+
+	test("an unquoted hash inside a structured value is a grounded refusal", () => {
+		for (const text of [
+			":local z {#test}",
+			":local z {1;#test}",
+			":local z (1,#test)",
+		]) {
+			const strict = lexArguments(text, ":local".length);
+			expect(strict.read).toBeFalse();
+			// The strict REST reader refuses every structured positional before
+			// inspecting its contents; the advisory anchor reader descends far enough
+			// to preserve the more specific grounded reason.
+			expect(strict.read ? "" : strict.why).toMatch(
+				/array or block value|substitution or expression value/,
+			);
+
+			const anchors = lexValueAnchors(text, ":local".length);
+			expect(anchors.complete).toBeFalse();
+			expect(anchors.complete ? "" : anchors.why).toContain(
+				"invalid hash in a structured argument value",
+			);
+		}
+	});
+
+	test("a real nested scope comment does not poison an enclosing array", () => {
+		for (const text of [
+			":local z {[:do { # c\n:put 1\n}]}",
+			":local z {[:if (true) do={ # c\n:put 1\n}]}",
+		]) {
+			const anchors = lexValueAnchors(text, ":local".length);
+			expect(anchors.complete).toBeTrue();
+			expect(anchors.anchors.at(-1)?.sourceShape).toBe("array");
+		}
+	});
+
+	/**
+	 * The bracket RESTORES the statement role its enclosing array dropped, so the
+	 * hash inside it is a value again — but only until a brace or paren inside
+	 * that bracket drops the role a second time. Every row is the class CHR
+	 * 7.23.3 `/console/inspect request=highlight` gives the `#` byte. A scan that
+	 * skipped whole `[…]` regions instead would wrongly accept rows 3 and 4.
+	 */
+	test("a bracket inside an array restores the value role for a hash", () => {
+		const readable = [
+			":local z {[:put #test]}",
+			":local z {1;[:put #test]}",
+			":local z {[:len #test]}",
+		];
+		for (const text of readable) {
+			const anchors = lexValueAnchors(text, ":local".length);
+			expect(anchors.complete).toBeTrue();
+			expect(anchors.anchors.at(-1)?.sourceShape).toBe("array");
+		}
+
+		// Dropping back into an array or a group inside that bracket is an error
+		// again — the role is per-frame, not "anywhere under a bracket".
+		for (const text of [
+			":local z {[:put {#test}]}",
+			":local z {[:put (1,#test)]}",
+		]) {
+			const anchors = lexValueAnchors(text, ":local".length);
+			expect(anchors.complete).toBeFalse();
+			expect(anchors.complete ? "" : anchors.why).toContain(
+				"invalid hash in a structured argument value",
+			);
+		}
 	});
 
 	test("`value` absent means no literal value — for a positional too", () => {

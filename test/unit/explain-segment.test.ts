@@ -368,6 +368,92 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 		expect(maskComments(masked)).toBe(masked);
 	});
 
+	test("comment placement follows brace role, not brace punctuation (#245)", () => {
+		for (const input of [
+			":local z {#test}",
+			":local z {1;#test}",
+			":local z {a=1;#b=2}",
+			":local z (1,#test)",
+			":put myScript={#test}",
+			":put description={#test}",
+		]) {
+			expect(maskComments(input)).toBe(input);
+			expect(segmentStatements(input).comments).toEqual([]);
+		}
+
+		for (const input of [
+			":if (true) do={ # c\n:put x\n}",
+			":if (false) do={:put x} else={ # c\n:put y\n}",
+			":foreach i in={1} do={ # c\n:put $i\n}",
+			"/system/scheduler/add name=x on-event={ # c\n:put x\n}",
+			"/system/script/add name=x source={ # c\n:put x\n}",
+			":put before\n:do { # c\n:put x\n}",
+			"[# c\n:put x]",
+			":local z {[:do { # c\n:put 1\n}]}",
+		]) {
+			const hash = input.indexOf("#");
+			expect(maskComments(input).slice(hash, hash + 3)).toBe("   ");
+			expect(segmentStatements(input).comments).toContainEqual({
+				start: hash,
+				end: hash + 3,
+			});
+		}
+
+		const trailing = ":if (true) do={:put x} # c\n:put y";
+		expect(maskComments(trailing)).toBe(trailing);
+		expect(segmentStatements(trailing).comments).toEqual([]);
+
+		const bracketValue = "[:put #test]";
+		expect(maskComments(bracketValue)).toBe(bracketValue);
+		expect(segmentStatements(bracketValue).comments).toEqual([]);
+	});
+
+	test("the first grounded non-comment hash is a located hard defect (#245)", () => {
+		for (const input of [
+			":local x 2 #",
+			"{ :local x 2 # }",
+			":local z {a#b}",
+			":local z {a=#b}",
+			":local z (a#b)",
+			":local x 1; :set x 3 # blah",
+			":put 2 # blah",
+			':put "a;b" # blah',
+			':put "a{b" # blah',
+			':local x "a;b" # blah',
+			":if ($a = true \\ # bad",
+		]) {
+			const hash = input.indexOf("#");
+			expect(segmentStatements(input).defects).toContainEqual({
+				code: "invalid-hash",
+				start: hash,
+				end: hash + 1,
+				detail: "#",
+			});
+		}
+
+		for (const input of [
+			":global y #test",
+			":local y #test",
+			":put #test",
+			":local x 1; :set x #test",
+			"/ip/address/add comment=#test",
+			"/ip/address/add comment=a#b",
+			"set x 3 #test",
+		])
+			expect(
+				segmentStatements(input).defects.some(
+					(defect) => defect.code === "invalid-hash",
+				),
+			).toBeFalse();
+
+		const two = ":local x 2 #; :put 3 #";
+		expect(
+			segmentStatements(two).defects.filter(
+				(defect) => defect.code === "invalid-hash",
+			),
+		).toEqual([{ code: "invalid-hash", start: 11, end: 12, detail: "#" }]);
+	});
+
 	// #215 — every expectation below is a `/console/inspect request=highlight`
 	// reading from CHR 7.23.3 (`.scratch/explain-215-verify-probe{,2}.ts`). The
 	// device's comment class covers the line's newline as well; a `comments` span

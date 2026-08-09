@@ -99,6 +99,7 @@ export type DefectCode =
 	| "over-depth"
 	| "bad-escape"
 	| "bad-sigil"
+	| "invalid-hash"
 	| "unterminated-string"
 	| "unclosed"
 	| "unbalanced-close"
@@ -119,7 +120,7 @@ export type DefectCode =
  * What these two regions actually record is where the byte-count-preserving
  * normalization stood in for bytes the analyzer cannot read — i.e. the spans a
  * consumer needs in order to map back to the original text. That is a coordinate
- * fact. The other six codes mark input the analyzer could not structurally
+ * fact. The other structural codes mark input the analyzer could not structurally
  * resolve, which is a different thing.
  *
  * {@link hasStructuralDefect} is where that distinction is enforced, so a UTF-8
@@ -133,7 +134,7 @@ export function isPositionalFact(code: DefectCode): boolean {
  * Does this list carry a defect an analyzer must ABSTAIN on?
  *
  * The abstention gate, and the reason {@link isPositionalFact} is a function
- * rather than a comment: a defect list is not uniformly "bad input". Six codes
+ * rather than a comment: a defect list is not uniformly "bad input". Seven codes
  * mark structure the analyzer could not resolve — part of the document was never
  * walked, so no verdict over it is safe. The other two are coordinate facts about
  * bytes that were read perfectly well. Gating on `defects.length > 0` would

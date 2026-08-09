@@ -192,6 +192,14 @@ describe("the boundary stays closed", () => {
 		expect(result.curl).toBeUndefined();
 	});
 
+	test("a continuation comment does not fabricate REST operands (#245)", () => {
+		const result = transport(
+			"/ip/address/add address=1.2.3.4 \\\n# a note\n comment=x",
+		);
+		expect(result.classification).toBe("api-candidate");
+		expect(result.rest?.body).toEqual({ address: "1.2.3.4", comment: "x" });
+	});
+
 	test("unexercised empty bodies and raw print queries stay unknown", () => {
 		for (const input of [
 			"/ip/address add",

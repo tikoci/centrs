@@ -185,6 +185,28 @@ describe("explain/symbols — F2 closure scope", () => {
 });
 
 describe("explain/symbols — sigil-optional heads and line continuations", () => {
+	test("an invalid hash in a structured expression stops semantic resolution", () => {
+		const result = resolveSymbols(":local z {1;# $ghost\n}; :put $after");
+		expect(result.occurrences.map((occurrence) => occurrence.name)).toEqual([
+			"z",
+		]);
+	});
+
+	test("a trailing hard hash stops before later statements (#245)", () => {
+		const input = ":local x 1; { :local x 2 # }; :set x 3 # blah";
+		const result = resolveSymbols(input);
+		expect(result.defects).toContainEqual({
+			code: "invalid-hash",
+			start: input.indexOf("#"),
+			end: input.indexOf("#") + 1,
+			detail: "#",
+		});
+		expect(result.occurrences.map((occurrence) => occurrence.role)).toEqual([
+			"declaration",
+			"declaration",
+		]);
+	});
+
 	test("a declaration survives an escaped newline", () => {
 		const r = resolveSymbols(":local \\\nfoo 1\n:put $foo");
 		expect(r.occurrences.map((o) => o.cls)).toEqual(["local", "local"]);

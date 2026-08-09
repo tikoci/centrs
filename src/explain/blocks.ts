@@ -25,72 +25,15 @@
  * (#199).
  */
 
+import {
+	DIRECTIVE_BODY,
+	HEAD_SCOPED_ARG_NAMES,
+	SCOPE_ARG_NAMES,
+	scopeNameFromMasked,
+} from "./scope-brace.ts";
 import { maskComments, scanQuotedString } from "./segment.ts";
 
-const ASCII_WHITESPACE = /[ \t\r\n]+/;
-
-/** Error-variable shape for `:onerror V { … }` — a bare/`$`-prefixed name. */
-const ERROR_VAR = /^\$?[A-Za-z][A-Za-z0-9._-]*$/;
-
-function isAsciiWhitespace(char: string | undefined): boolean {
-	return char === " " || char === "\t" || char === "\r" || char === "\n";
-}
-
-function trimAscii(text: string): string {
-	let start = 0;
-	let end = text.length;
-	while (start < end && isAsciiWhitespace(text[start])) start++;
-	while (end > start && isAsciiWhitespace(text[end - 1])) end--;
-	return text.slice(start, end);
-}
-
-function asciiWords(text: string): string[] {
-	const trimmed = trimAscii(text);
-	return trimmed.length === 0 ? [] : trimmed.split(ASCII_WHITESPACE);
-}
-
-/**
- * Source-visible argument names whose `{…}` is a scope. Closed set, harvested
- * from every projected corpus capture (`do` 5623, `else` 720, `command` 177,
- * `on-error` 132).
- *
- * `command` is here because users DO write it explicitly:
- * `:retry delay=1s max=3 on-error={…} command={…}`
- * (topic-169237/post-0021-snippet-01 @ 7.22.1).
- *
- * `in` is deliberately NOT here even though IL lowers `:onerror V { … }` under
- * that name — in SOURCE, `in={…}` is always an array literal
- * (`:foreach Type in={ "p12"; "pem" }` → `in=p12;pem`,
- * eworm/check-certificates.rsc @ 7.22.1). The IL name and the source name
- * collide; only the source spelling governs offline.
- */
-export const SCOPE_ARG_NAMES: ReadonlySet<string> = new Set([
-	"do",
-	"else",
-	"on-error",
-	"command",
-]);
-
-/** Argument names that are a scope only under a specific head directive. */
-export const HEAD_SCOPED_ARG_NAMES: Record<string, ReadonlySet<string>> = {
-	in: new Set([":onerror", "onerror"]),
-};
-
-/**
- * Directives whose brace body attaches to the directive itself, with the IL
- * name the body is lowered under. The colon is optional in practice: `do {`
- * opens a body the same way `:do {` does (topic-142687/post-0010-snippet-01 @
- * 7.22.1).
- */
-export const DIRECTIVE_BODY: Record<string, string> = {
-	":do": "command",
-	":retry": "command",
-	":onerror": "in",
-	do: "command",
-	retry: "command",
-	onerror: "in",
-};
-
+export { DIRECTIVE_BODY, HEAD_SCOPED_ARG_NAMES, SCOPE_ARG_NAMES };
 /** One depth-0 scope block found in a statement: its name and raw body text. */
 export interface ScopeBlock {
 	name: string;
@@ -112,31 +55,6 @@ export interface ScopeBlock {
  * under the right leading directive), and a brace body directly following a
  * body-taking directive (`:do {`, `:retry {`, `:onerror Err {`).
  */
-function scopeNameFromMasked(masked: string, open: number): string | null {
-	const before = masked.slice(0, open);
-	const named = before.match(/([A-Za-z][A-Za-z0-9.-]*)=[ \t\r\n]*$/);
-	if (named) {
-		const name = (named[1] as string).toLowerCase();
-		if (SCOPE_ARG_NAMES.has(name)) return name;
-		const heads = HEAD_SCOPED_ARG_NAMES[name];
-		if (heads !== undefined) {
-			const head = (asciiWords(masked)[0] ?? "").toLowerCase();
-			return heads.has(head) ? name : null;
-		}
-		return null;
-	}
-	// `:do {`, `:retry {`, `:onerror Err {` — the directive may carry ONE bare
-	// error-variable word before the brace. A second token that is not an
-	// identifier (`:onerror [find] {`) is not this form, so the brace is a value.
-	const words = asciiWords(before);
-	const first = (words[0] ?? "").toLowerCase();
-	const body = DIRECTIVE_BODY[first];
-	if (body === undefined) return null;
-	if (words.length === 1) return body;
-	if (words.length === 2 && ERROR_VAR.test(words[1] as string)) return body;
-	return null;
-}
-
 export function scopeNameAt(text: string, open: number): string | null {
 	return scopeNameFromMasked(maskComments(text), open);
 }
