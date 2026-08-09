@@ -174,7 +174,42 @@ describe("#225 value-shape grounding matrix", () => {
 		expect(
 			fixture.contexts.find((row) => row.input.includes("distance=2.2"))?.il,
 		).toContain("distance=2.2");
-		expect(valueShapeHints("2.2", { quoted: false })).toEqual(["num", "ip"]);
+		expect(valueShapeHints("2.2", { quoted: false })).toEqual(["ip"]);
+	});
+
+	test("`num` is integer-only, because a dotted decimal is observed as `ip`", () => {
+		for (const integer of ["0", "-1", "123"])
+			expect(valueShapeHints(integer, { quoted: false })).toEqual(["num"]);
+		// Every one of these is an IPv4 shortcut on the device (`2.2` -> 2.0.0.2),
+		// and RouterOS numbers are integers, so `num` would contradict `bareType`.
+		for (const decimal of ["1.1", "2.2", "1.5", "3.14159"])
+			expect(valueShapeHints(decimal, { quoted: false })).toEqual(["ip"]);
+		expect(
+			fixture.scalars.every(
+				(row) => !row.hints.includes("num") || row.bareType === "num",
+			),
+		).toBe(true);
+		// A decimal no address spelling can claim abstains rather than inventing one.
+		expect(valueShapeHints("-1.5", { quoted: false })).toEqual([]);
+		expect(
+			valueShapeHints("-1.5", { quoted: false, allowBareString: true }),
+		).toEqual(["str"]);
+	});
+
+	test("only an IPv6-shaped colon run counts as an address attempt", () => {
+		// One colon is never IPv6, so a named attribute keeps its string hint.
+		for (const text of ["foo:bar", "a:b", "9:00"])
+			expect(
+				valueShapeHints(text, { quoted: false, allowBareString: true }),
+			).toEqual(["str"]);
+		// Hex-and-colon runs stay fail-closed: a MAC or a colon time spelling has
+		// no lexicon member yet (#243) and must not be relabeled `str`.
+		for (const text of ["1:2:3", "00:00:02", "00:11:22:33:44:55"])
+			expect(
+				valueShapeHints(text, { quoted: false, allowBareString: true }),
+			).toEqual([]);
+		expect(valueShapeHints("1::1", { quoted: false })).toEqual(["ip6"]);
+		expect(valueShapeHints("face::b00c", { quoted: false })).toEqual(["ip6"]);
 	});
 });
 
@@ -269,7 +304,7 @@ describe("explain value facts", () => {
 				tokenSpan: { start: 9, end: 12 },
 				kind: "positional",
 				quoted: false,
-				facts: { shapeHints: { values: ["num", "ip"], ev: "e9" } },
+				facts: { shapeHints: { values: ["ip"], ev: "e9" } },
 			},
 			{
 				id: "v1",
@@ -300,13 +335,22 @@ describe("explain value facts", () => {
 
 	test("all shape vocabulary reaches the public envelope without query values", () => {
 		const data = explainCommand(
-			"/ip/firewall/filter/add count=123 src-address=10.9.0.0/16 dst-address=1::1 comment=plain disabled=yes interval=200ms ip6-prefix=2008:1::2/128 ?name",
+			"/ip/firewall/filter/add count=123 to-addresses=1.1.1.1 src-address=10.9.0.0/16 dst-address=1::1 comment=plain disabled=yes interval=200ms ip6-prefix=2008:1::2/128 ?name",
 		);
 		expect(
 			data.values.occurrences.flatMap(
 				(occurrence) => occurrence.facts.shapeHints?.values ?? [],
 			),
-		).toEqual(["num", "ip-prefix", "ip6", "str", "bool", "time", "ip6-prefix"]);
+		).toEqual([
+			"num",
+			"ip",
+			"ip-prefix",
+			"ip6",
+			"str",
+			"bool",
+			"time",
+			"ip6-prefix",
+		]);
 		expect(data.values.occurrences.some((value) => value.name === "name")).toBe(
 			false,
 		);

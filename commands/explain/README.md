@@ -625,22 +625,25 @@ and its phase is named below.
   types values at parse time while `highlight` classes every value byte `none`,
   so type evidence is not a subset of Q12 spans. Each result-local
   `values.occurrences[]` row owns one value span and a `facts` object:
-  1. `shapeHints: { values, ev }` is offline, heuristic, and possibly plural —
-     `2.2` is both decimal-shaped (`num`) and IPv4-completable (`ip`). Here
-     `num` names a spelling, not a RouterOS decimal type: RouterOS numbers are
-     integers and the scalar itself is observed as `ip`;
+  1. `shapeHints: { values, ev }` is offline and heuristic — a list, because the
+     axis admits overlap;
   2. `observedType?: { value, ev }` is what a live parser/IL reading supports;
   3. `schemaType?: { value, ev }` is the argument's declared live-schema type.
 
   The stable/testing CHR matrix fixes the offline lexicon: `num`, `ip`,
   `ip-prefix`, `ip6`, `ip6-prefix`, `time`, `bool`, and `str`; quoted literals
   hint only `str`, while malformed and out-of-range address-like controls
-  abstain even in named attributes. This list defines the vocabulary, not a
-  sort key; when one spelling has multiple hints, the result orders the more
-  direct spelling first (`2.2` is `num`, then its RouterOS `ip` shortcut shape).
+  abstain even in named attributes. Because the vocabulary borrows RouterOS's
+  own type names, a hint must never spell one the device contradicts: `num` is
+  **integer-only**, since RouterOS numbers are integers and a dotted decimal is
+  an IPv4 shortcut — bare `2.2` is observed as `ip` (`2.0.0.2`), so it hints
+  `ip` alone. On that grounded lexicon each spelling reaches at most one shape;
+  the list stays a list for the members #243 still owes (a colon time spelling
+  like `00:00:02`, and `mac`), which abstain today rather than being widened
+  into the nearest member that does exist. A single colon is not an address attempt
+  — `comment=foo:bar` hints `str` — while a hex-and-colon run stays fail-closed.
   Shape remains non-authoritative: `100000w` is time-shaped but observed as
-  `str`. Argument context remains separate: on 7.23.3 and 7.24rc3, bare `2.2`
-  is observed as `ip`, both
+  `str`. Argument context remains separate: on 7.23.3 and 7.24rc3, both
   `/ip/address address=2.2` and firewall `src-address=2.2` canonicalize it to
   `2.0.0.2`, while `comment=2.2` stays text, netwatch `interval=2.2`
   normalizes to `00:00:02.200`, a boolean slot rejects it, and `:parse` still

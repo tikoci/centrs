@@ -153,19 +153,18 @@ function unread(why: string): ArgumentsUnread {
 }
 
 /**
- * Lex the arguments of ONE statement, starting at `from`.
+ * The ONE argument token walk, shared by both readings.
  *
- * `text` is the statement, `from` is where its leading run ended
- * (`VerbSplitCommandReading.argsAt`). Offsets in the result are relative to
- * `text`, so a caller rebases them by the statement's own span; it never throws.
- *
- * Only ASCII text may be passed. The analyzed surface is ASCII by construction
- * (`coordinates.ts` stands one byte in for every non-ASCII one), and a caller
- * that hands over the ORIGINAL text of a non-ASCII statement would get spans
- * that do not map back — `src/explain.ts` verifies the two agree before calling.
+ * Yields each decided token in order, or one refusal string and stops. The
+ * strict {@link lexArguments} discards everything on that refusal while
+ * {@link lexValueAnchors} keeps the prefix — but they must never disagree about
+ * where a token starts, ends, or becomes unreadable, so the boundary rules live
+ * here once.
  */
-export function lexArguments(text: string, from: number): ArgumentReading {
-	const tokens: Argument[] = [];
+function* walkArguments(
+	text: string,
+	from: number,
+): Generator<ReadArgument | string> {
 	let i = Math.max(0, from);
 	while (i < text.length) {
 		const c = text[i] as string;
@@ -182,13 +181,39 @@ export function lexArguments(text: string, from: number): ArgumentReading {
 			continue;
 		}
 		const token = scanToken(text, i);
-		if (typeof token === "string") return unread(token);
+		if (typeof token === "string") {
+			yield token;
+			return;
+		}
 		const read = readToken(text, i, token.end);
-		if (typeof read === "string") return unread(read);
-		const publicToken = { ...read };
+		if (typeof read === "string") {
+			yield read;
+			return;
+		}
+		yield read;
+		i = token.end;
+	}
+}
+
+/**
+ * Lex the arguments of ONE statement, starting at `from`.
+ *
+ * `text` is the statement, `from` is where its leading run ended
+ * (`VerbSplitCommandReading.argsAt`). Offsets in the result are relative to
+ * `text`, so a caller rebases them by the statement's own span; it never throws.
+ *
+ * Only ASCII text may be passed. The analyzed surface is ASCII by construction
+ * (`coordinates.ts` stands one byte in for every non-ASCII one), and a caller
+ * that hands over the ORIGINAL text of a non-ASCII statement would get spans
+ * that do not map back — `src/explain.ts` verifies the two agree before calling.
+ */
+export function lexArguments(text: string, from: number): ArgumentReading {
+	const tokens: Argument[] = [];
+	for (const step of walkArguments(text, from)) {
+		if (typeof step === "string") return unread(step);
+		const publicToken = { ...step };
 		delete publicToken.literalQuoted;
 		tokens.push(publicToken);
-		i = token.end;
 	}
 
 	const args: Record<string, string> = {};
@@ -466,22 +491,7 @@ export function lexValueAnchors(
 	from: number,
 ): ValueAnchorReading {
 	const anchors: ValueAnchor[] = [];
-	let i = Math.max(0, from);
-	while (i < text.length) {
-		const c = text[i] as string;
-		if (c === " " || c === "\t" || c === "\r" || c === "\n") {
-			i++;
-			continue;
-		}
-		const continuation = continuationLength(text, i);
-		if (continuation > 0) {
-			i += continuation;
-			continue;
-		}
-		const token = scanToken(text, i);
-		if (typeof token === "string")
-			return { complete: false, anchors, why: token };
-		const read = readToken(text, i, token.end);
+	for (const read of walkArguments(text, from)) {
 		if (typeof read === "string")
 			return { complete: false, anchors, why: read };
 		if (
@@ -498,7 +508,6 @@ export function lexValueAnchors(
 				quoted: read.literalQuoted ?? false,
 			});
 		}
-		i = token.end;
 	}
 	return { complete: true, anchors };
 }

@@ -441,8 +441,9 @@ centrs explain ':local x 2.2; :set x "2.2"' --json
 ```
 
 `data.values.occurrences[]` contains two result-local value records. The bare
-`2.2` carries `facts.shapeHints.values: ["num", "ip"]`; the quoted `"2.2"`
-carries `["str"]`. Each hint fact cites canonicalizer evidence with
+`2.2` carries `facts.shapeHints.values: ["ip"]` — RouterOS numbers are integers,
+so a dotted decimal is an IPv4 shortcut (`2.0.0.2`) and never `num`; the quoted
+`"2.2"` carries `["str"]`. Each hint fact cites canonicalizer evidence with
 `basis: "heuristic"`; neither record has `observedType` or `schemaType`, because
 offline analysis has neither live parser output nor an argument schema. A hint
 is not a diagnostic and does not change `data.verdict` or

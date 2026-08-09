@@ -1,13 +1,24 @@
 /**
  * Offline lexical value-shape hints (#225).
  *
- * These are deliberately not RouterOS types. A spelling can carry several
- * hints (`2.2` is decimal-shaped and an IPv4 shortcut), while the live parser,
- * an argument schema, and runtime casting may each answer differently.
+ * These are deliberately not RouterOS types: a spelling is one axis, while the
+ * live parser, an argument schema, and runtime casting may each answer
+ * differently. The vocabulary still borrows RouterOS's type NAMES, so a shape
+ * must never be spelled in a way the device would contradict — `num` is
+ * integer-only here because RouterOS numbers are integers, and `2.2` is
+ * observed as `ip` (`2.0.0.2`), never as a decimal.
  */
 
 import { isIP } from "node:net";
 
+/**
+ * The closed V1 vocabulary — an ENUMERATION, not an ordering.
+ *
+ * Nothing sorts by this list: {@link valueShapeHints} emits in the order it
+ * tests spellings, so reordering the members here must not change any result.
+ * Members the grounded lexicon still owes (a colon time spelling, `mac`) are
+ * tracked in #243 and abstain rather than borrowing a near member.
+ */
 export const VALUE_SHAPES = [
 	"num",
 	"ip",
@@ -68,11 +79,29 @@ function isTimeShape(value: string): boolean {
 	);
 }
 
-/** A conservative address attempt whose failed validation must not become `str`. */
+/**
+ * IPv6 text always carries at least two colons (`::` counts as its own pair),
+ * so a single colon is not an address attempt: `comment=foo:bar` is a string,
+ * while `1::1`, a colon time spelling, and a MAC stay conservative.
+ */
+function isColonAddressLike(value: string): boolean {
+	if (!value.includes("::") && (value.match(/:/g) ?? []).length < 2)
+		return false;
+	return /^[0-9a-fA-F:.]+$/.test(value);
+}
+
+/**
+ * A conservative address attempt whose failed validation must not become `str`.
+ *
+ * The FIRST slash bounds the address here, while {@link prefixParts} reads the
+ * LAST one. The asymmetry is deliberate: a two-slash value like `1.1.1.1/24/x`
+ * is not a prefix any reading can accept, and splitting on the first slash is
+ * the reading that still recognizes the address attempt and abstains.
+ */
 function isAddressLike(value: string): boolean {
 	const slash = value.indexOf("/");
 	const address = slash < 0 ? value : value.slice(0, slash);
-	return /^\d+(?:\.\d+){1,3}$/.test(address) || address.includes(":");
+	return /^\d+(?:\.\d+){1,3}$/.test(address) || isColonAddressLike(address);
 }
 
 /**
@@ -100,7 +129,9 @@ export function valueShapeHints(
 	}
 
 	if (/^(?:yes|no|true|false)$/.test(value)) hints.push("bool");
-	if (/^-?\d+(?:\.\d+)?$/.test(value)) hints.push("num");
+	// Integer-only: a dotted decimal is an IPv4 shortcut on the device, not a
+	// number, so `num` here would contradict the observed type it is named after.
+	if (/^-?\d+$/.test(value)) hints.push("num");
 	if (isIpv4Shortcut(value)) hints.push("ip");
 	else if (isIP(value) === 6) hints.push("ip6");
 	if (isTimeShape(value)) hints.push("time");

@@ -62,9 +62,11 @@
  *     path/verb/argument bytes needs device `highlight` as its oracle and is
  *     phase 2. A subset is not a claim that the vocabulary is closed.
  *   - **Value facts have three axes, and highlight supplies none of them.**
- *     Offline analysis now publishes non-authoritative lexical SHAPE hints
- *     (possibly several, because `2.2` is number-shaped and ip-completable).
- *     The type OBSERVED from a live reading and the argument's SCHEMA type have
+ *     Offline analysis now publishes non-authoritative lexical SHAPE hints. The
+ *     hint list may carry several shapes, but it borrows RouterOS's own type
+ *     names, so it must never spell one the device contradicts: `2.2` is an
+ *     IPv4 shortcut (`2.0.0.2`), not a decimal, because RouterOS numbers are
+ *     integers. The type OBSERVED from a live reading and the SCHEMA type have
  *     separate optional homes but no offline producer. Each fact has its own
  *     provenance; no hint validates a value or becomes a diagnostic. The
  *     decision and the probe matrix are #225; this module
@@ -425,7 +427,11 @@ export interface ExplainSymbols {
 }
 
 export interface ExplainValueShapeFact {
-	/** Possibly several: `2.2` is both decimal-shaped and IPv4-completable. */
+	/**
+	 * A list because the axis admits overlap; the 7.23.3/7.24rc3-grounded V1
+	 * lexicon happens to assign at most one shape per spelling, and abstains
+	 * where it has no grounded member (#243) rather than widening a near miss.
+	 */
 	values: ValueShape[];
 	ev: string;
 }

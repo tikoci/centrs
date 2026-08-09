@@ -353,7 +353,7 @@ describe("commands/explain/examples.md — offline", () => {
 	test("26. Value facts keep the three type axes separate (#225)", async () => {
 		const { data, code } = await explainJson([':local x 2.2; :set x "2.2"']);
 		expect(data.values.occurrences.map((value) => value.facts)).toEqual([
-			{ shapeHints: { values: ["num", "ip"], ev: "e9" } },
+			{ shapeHints: { values: ["ip"], ev: "e9" } },
 			{ shapeHints: { values: ["str"], ev: "e9" } },
 		]);
 		expect(
