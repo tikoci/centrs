@@ -19,6 +19,19 @@ function rosString(value: string): string {
 	return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
+async function highlightClasses(
+	chr: { rest(path: string, init?: RequestInit): Promise<unknown> },
+	input: string,
+): Promise<string[]> {
+	const rows = (await chr.rest("/console/inspect", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ request: "highlight", input }),
+	})) as { highlight?: string }[];
+	const csv = rows[0]?.highlight ?? "";
+	return csv === "" ? [] : csv.split(",");
+}
+
 describeFast("explain value facts against CHR", () => {
 	test("example 26 keeps shape hints separate from live type and context", async () => {
 		const started = await startIntegrationChr();
@@ -195,6 +208,97 @@ describeFast("explain value facts against CHR", () => {
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
 				exampleIds: [26],
+			});
+		} finally {
+			await started.chr.destroy();
+		}
+	}, 300_000);
+
+	test("example 27 grounds comment placement and continuation arguments", async () => {
+		const started = await startIntegrationChr();
+		try {
+			for (const input of [
+				":local z {#test}",
+				":local z {1;#test}",
+				":local z {a=1;#b=2}",
+				":local z (1,#test)",
+				":local x 2 #",
+				"{ :local x 2 # }",
+				":put 2 # blah",
+			]) {
+				const classes = await highlightClasses(started.chr, input);
+				expect(classes[input.indexOf("#")]).toBe("error");
+				expect(
+					outputOf(await started.chr.exec(`:put [:parse ${rosString(input)}]`)),
+				).toMatch(/syntax error|expected end of command/);
+			}
+
+			for (const input of [
+				":if (true) do={ # c\n:put x\n}",
+				":if (false) do={:put x} else={ # c\n:put y\n}",
+				":foreach i in={1} do={ # c\n:put $i\n}",
+				"/system/scheduler/add name=x start-time=startup on-event={ # c\n:put x\n}",
+			]) {
+				const classes = await highlightClasses(started.chr, input);
+				expect(classes[input.indexOf("#")]).toBe("comment");
+			}
+
+			for (const input of [
+				"/ip/address/add comment=#test",
+				"/ip/address/add comment=a#b",
+				":global y #test\n:put $y",
+				":local y #test",
+				":put #test",
+				":local x 1; :set x #test",
+			]) {
+				const classes = await highlightClasses(started.chr, input);
+				expect(classes[input.indexOf("#")]).toBe("none");
+			}
+
+			const trailing = ":if (true) do={:put x} # c\n:put y";
+			const trailingClasses = await highlightClasses(started.chr, trailing);
+			expect(trailingClasses[trailing.indexOf("#")]).toBe("error");
+
+			const reported = ":local x 1; /put $x; { :local x 2 # }; :set x 3 # blah";
+			const reportedClasses = await highlightClasses(started.chr, reported);
+			const firstHash = reported.indexOf("#");
+			const secondHash = reported.indexOf("#", firstHash + 1);
+			expect(reportedClasses[firstHash]).toBe("error");
+			expect(reportedClasses[secondHash]).toBe("none");
+			const reportedOffline = explainCommand(reported);
+			expect(reportedOffline.verdict).toBe("fail");
+			expect(
+				reportedOffline.diagnostics.filter((diagnostic) =>
+					diagnostic.code.endsWith("/invalid-hash"),
+				),
+			).toHaveLength(1);
+
+			const continued =
+				"/ip/address/add address=1.2.3.4 \\\n# a note\n comment=x";
+			const continuedClasses = await highlightClasses(started.chr, continued);
+			expect(continuedClasses[continued.indexOf("#")]).toBe("comment");
+			const statement = explainCommand(continued).structure.statements[0];
+			if (statement?.kind !== "command")
+				throw new Error("expected a command statement");
+			expect(statement?.arguments).toMatchObject({
+				read: true,
+				positional: [],
+			});
+			expect(statement.command.args).toEqual({
+				address: "1.2.3.4",
+				comment: "x",
+			});
+			expect(statement?.transport?.classification).toBe("api-candidate");
+
+			await recordIntegrationEvidence({
+				suite: "explain value facts against CHR",
+				command: "explain",
+				protocol: "rest-api (/console/inspect highlight + :parse IL)",
+				routerosVersion: started.chr.state.version,
+				quickChrName: started.chr.name,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+				exampleIds: [27],
 			});
 		} finally {
 			await started.chr.destroy();

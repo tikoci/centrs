@@ -552,6 +552,16 @@ describe("centrs explain — the CLI surface", () => {
 		expect(code).toBe(0);
 	});
 
+	test("the text format surfaces comment spans", async () => {
+		const { out, code } = await run([
+			"explain",
+			"# root\n:put 1; # after separator\n:put 2",
+		]);
+		expect(out).toContain("comments:\n  [0,6)        comment");
+		expect(out).toContain("[15,32)      comment");
+		expect(code).toBe(0);
+	});
+
 	test("the error format follows the same grammar as the parser", async () => {
 		// Flags after `--` are operands, so the error renders TEXT even though the
 		// argv contains `--json`; and when two format flags are given, the LAST one

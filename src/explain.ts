@@ -655,6 +655,11 @@ const DEFECT_DIAGNOSTICS: Record<
 		severity: "error",
 		message: () => "invalid sigil: the run must be zero or one character",
 	},
+	"invalid-hash": {
+		severity: "error",
+		message: () =>
+			"unquoted `#` is not a comment here — comments must begin in statement-leading position",
+	},
 	// centrs's own resource bound, not a RouterOS rule. The input may be entirely
 	// legal; what is reported is that the analyzer stopped descending, so the
 	// honest severity is a warning about incomplete analysis.
@@ -1590,6 +1595,12 @@ function renderExplainText(
 		lines.push("blocks:");
 		for (const b of structure.blocks)
 			lines.push(`  ${span(b.span).padEnd(12)} ${b.name}`);
+	}
+	const comments = data.spans.filter((entry) => entry.class === "comment");
+	if (comments.length > 0) {
+		lines.push("comments:");
+		for (const comment of comments)
+			lines.push(`  ${span(comment).padEnd(12)} comment`);
 	}
 	if (data.symbols.occurrences.length > 0) {
 		lines.push("symbols:");

@@ -488,7 +488,8 @@ Standard envelope (constitution: result envelope); `data` sketch:
   severity channels. **Malformed input carries a defect *region*** (Q14): each
   diagnostic points at the byte span of its defect, and the detectable classes
   are {unbalanced delimiter, unterminated string, invalid escape, invalid sigil,
-  BOM, non-ASCII, over-depth nesting}. **Two classes named in the phase-0 draft
+  invalid unquoted hash, BOM, non-ASCII, over-depth nesting}. **Two classes named
+  in the phase-0 draft
   of this list are deliberately deferred** (maintainer decision, #192), because
   each would require offline to assert something it cannot prove:
   - **truncation** — offline cannot distinguish a truncated *complete-looking*
@@ -689,6 +690,44 @@ and its phase is named below.
   spellings; the corpus contains no source-literal `id` example. All retained
   document spans were in bounds. The strict lexer remains all-or-nothing; only
   non-authoritative hints use the wider view.
+
+### Offline comment placement (#245)
+
+Comment recognition is contextual, not a rule that every unquoted `#` begins a
+comment. The shared offline walkers follow this table, grounded with
+`/console/inspect request=highlight`, `:parse` IL, and `:typeof` on CHR 7.23.3
+(stable) and 7.24rc3 (testing):
+
+| Position | Device reading | Offline rule |
+| -------- | -------------- | ------------ |
+| Statement-leading at the document root, after a real statement separator, or in a `do`/`else`/`foreach do` body | `comment` through newline | Mask it and preserve byte offsets. |
+| First non-space content inside a stored-script brace such as `on-event={ # c` | `comment` | Treat source-/script-/`on-*`-named brace values as comment-bearing script bodies; `on-event` is the device-confirmed matrix row. |
+| Immediate line start after `\` + newline | `comment`; the pending statement survives | Mask it in both argument views; the continuation-reach rules remain H5/#215. |
+| Inside an array (`{#test}`, `{1;#test}`, `{a=1;#b=2}`) or parenthesized expression (`(1,#test)`) | hard `error` at `#`; `:parse` reports `syntax error` | Do not mask it or emit an array value hint; semantic resolution stops there. |
+| In an attribute or bare value (`comment=#test`, `comment=a#b`, `:global y #test`) | literal value (`none` highlight class) | Keep it as content. |
+| Inside a quoted run | string content | Keep it as content. |
+| After a closing scope brace (`} # c`) | hard `error` at `#` | Do not mask it. |
+| After a complete fixed-arity scripting directive (`:local x 2 #`, `:set x 3 #`, `:put 2 #`) | hard `error` at `#`; `:parse` reports `expected end of command` | Emit `explain/canonicalizer/invalid-hash` at the first such byte and fail closed after it. A hash in the still-open value slot (`:local x #test`, `:set x #test`, `:put #test`) remains content. |
+
+This distinction is why brace role lives in one shared primitive below the
+segmenter, block reader, and symbol resolver. The strict argument lexer now uses
+the same comment-masked structural view as value anchoring, so a continuation
+comment cannot fabricate positional operands or downgrade a tested REST shape.
+The 948-script corpus contains no such continuation-comment argument case:
+before and after both read 7,385 of 14,331 command statements and abstain on
+6,946 (48.4684%), with zero per-statement reading changes. That unchanged result
+is a blast-radius measurement, not the grounding evidence; the two CHR versions
+above are the oracle.
+
+The same corpus run finds five new `invalid-hash` diagnostics, all in pasted
+non-RouterOS material: one NGINX server block, one JavaScript highlighter, one
+JSON-like transcript, and two shell-shaped snippets. No RouterOS command reading
+moved; these diagnostics say those bytes are not valid RouterOS, not that the
+foreign snippets were expected to parse as RouterOS.
+
+The default text renderer surfaces comment spans in a `comments:` section; JSON
+continues to carry the same ranges as `spans[]` entries with `class: "comment"`.
+
 - **Severity is fixed here, because it drives `--fail-on`.** Three buckets, and
   the split is not "structural vs not":
   - `error` — `unclosed`, `unbalanced-close`, `unterminated-string`,

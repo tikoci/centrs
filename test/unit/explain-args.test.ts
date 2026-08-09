@@ -42,7 +42,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { lexArguments } from "../../src/explain/args.ts";
+import { lexArguments, lexValueAnchors } from "../../src/explain/args.ts";
 import { explainCommand } from "../../src/explain.ts";
 
 /** Lex a whole statement's arguments from the first space, the common case. */
@@ -142,6 +142,36 @@ describe("the token grammar", () => {
 		const read = lex(text, "/ip/address add".length);
 		if (!read.read) throw new Error(read.why);
 		expect(read.args).toEqual({ address: "10.0.0.1", comment: "x" });
+	});
+
+	test("a continuation comment is whitespace to both argument readers (#245)", () => {
+		const text = "/ip/address add address=1.2.3.4 \\\n# a note\n comment=x";
+		const from = "/ip/address add".length;
+		const strict = lexArguments(text, from);
+		if (!strict.read) throw new Error(strict.why);
+		expect(strict.args).toEqual({ address: "1.2.3.4", comment: "x" });
+		expect(strict.positional).toEqual([]);
+
+		const anchors = lexValueAnchors(text, from);
+		expect(anchors.complete).toBeTrue();
+		expect(anchors.anchors.map((anchor) => anchor.value)).toEqual([
+			"1.2.3.4",
+			"x",
+		]);
+	});
+
+	test("an unquoted hash inside a structured value is a grounded refusal", () => {
+		for (const text of [
+			":local z {#test}",
+			":local z {1;#test}",
+			":local z (1,#test)",
+		]) {
+			const read = lexValueAnchors(text, ":local".length);
+			expect(read.complete).toBeFalse();
+			expect(read.complete ? "" : read.why).toContain(
+				"invalid hash in a structured argument value",
+			);
+		}
 	});
 
 	test("`value` absent means no literal value — for a positional too", () => {

@@ -171,7 +171,7 @@ function* walkArguments(
 	from: number,
 	options: { allowArrayValues?: boolean } = {},
 ): Generator<ReadArgument | string> {
-	const structural = options.allowArrayValues ? maskComments(text) : text;
+	const structural = maskComments(text);
 	let i = Math.max(0, from);
 	while (i < text.length) {
 		// The MASKED view decides whitespace, because `maskComments` blanks a
@@ -179,8 +179,9 @@ function* walkArguments(
 		// here left the walk and `scanToken` disagreeing about the same byte: the
 		// scan broke on the masked space and returned a zero-length token, so
 		// `readToken` emitted an empty positional and `i` never advanced — an
-		// `explain` that never returns on `list={1;2} \<nl># c<nl> in=foo`. Strict
-		// mode is unchanged; `structural === text` there. Found in review of #243.
+		// `explain` that never returns on `list={1;2} \<nl># c<nl> in=foo`. The
+		// strict view uses the same mask: a real continuation comment is whitespace,
+		// not positional arguments. Found in review of #243/#245.
 		const c = structural[i] as string;
 		if (c === " " || c === "\t" || c === "\r" || c === "\n") {
 			i++;
@@ -293,6 +294,8 @@ function scanToken(
 			if (c === "{" && isScopeBrace(text, i)) return "a scope block value";
 			const end = delimitedEnd(structural, i);
 			if (end === null) return "an unclosed structured argument value";
+			if (hasUnquotedHash(structural, i, end))
+				return "an invalid hash in a structured argument value";
 			i = end;
 			const next = nextNonWhitespace(structural, i);
 			if (continuesExpression(structural, i, next))
@@ -314,6 +317,18 @@ function scanToken(
 		i++;
 	}
 	return { end: i };
+}
+
+/** RouterOS rejects an unquoted `#` inside array/group expressions (#245). */
+function hasUnquotedHash(text: string, start: number, end: number): boolean {
+	for (let i = start + 1; i < end - 1; i++) {
+		if (text[i] === '"') {
+			i = scanQuotedString(text, i).end - 1;
+			continue;
+		}
+		if (text[i] === "#") return true;
+	}
+	return false;
 }
 
 function nextNonWhitespace(text: string, from: number): number {

@@ -99,6 +99,7 @@ import {
 	rebaseDefects,
 } from "./defects.ts";
 import { isKnownMenuPath } from "./is-known-menu.ts";
+import { braceStartsStatements, hashStartsHardError } from "./scope-brace.ts";
 import {
 	maskComments,
 	type SegmentResult,
@@ -178,25 +179,39 @@ const MAX_DEPTH = 256;
  * to `unresolved` and does not descend into it. Statement-local; the
  * segmenter's document-level defects are surfaced separately on the envelope.
  */
-function structuralDefect(text: string): boolean {
+function structuralDefect(text: string): string | null {
 	// Mask comments so a `#`-comment `}`/`)` is not counted as a real delimiter.
 	const masked = maskComments(text);
 	const openOf: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
-	const stack: string[] = [];
+	const stack: { char: string; statements: boolean }[] = [];
 	for (let i = 0; i < masked.length; i++) {
 		const c = masked[i];
 		if (c === '"') {
 			const str = scanQuotedString(masked, i);
-			if (!str.closed) return true;
+			if (!str.closed)
+				return "structural defect: unbalanced delimiter or string";
 			i = str.end - 1;
 			continue;
 		}
-		if (c === "(" || c === "[" || c === "{") stack.push(c);
+		if (
+			c === "#" &&
+			hashStartsHardError(masked, i, stack.at(-1)?.statements === false)
+		)
+			return "structural defect: invalid unquoted hash";
+		if (c === "(" || c === "[" || c === "{")
+			stack.push({
+				char: c,
+				statements:
+					c === "[" || (c === "{" && braceStartsStatements(masked, i)),
+			});
 		else if (c === ")" || c === "]" || c === "}") {
-			if (stack.pop() !== openOf[c]) return true;
+			if (stack.pop()?.char !== openOf[c])
+				return "structural defect: unbalanced delimiter or string";
 		}
 	}
-	return stack.length > 0;
+	return stack.length > 0
+		? "structural defect: unbalanced delimiter or string"
+		: null;
 }
 
 /**
@@ -575,7 +590,7 @@ function walk(
 		// bracket path and is not descended. It may have been a navigation, so the
 		// context after it is unknown (Q14 C3b, the same contract the statement
 		// walk applies — these two walks must move in lockstep).
-		if (structuralDefect(text)) {
+		if (structuralDefect(text) !== null) {
 			certain = false;
 			continue;
 		}
@@ -669,13 +684,14 @@ function walkStatements(
 		// Q14 fail-closed — a malformed statement degrades to unresolved and is
 		// not descended; it does not move the context either. It may however have
 		// BEEN a navigation, so what the context now is becomes unknown.
-		if (structuralDefect(text)) {
+		const defectReason = structuralDefect(text);
+		if (defectReason !== null) {
 			out.push({
 				text,
 				isNav: false,
 				context: ctx,
 				path: null,
-				unresolved: "structural defect: unbalanced delimiter or string",
+				unresolved: defectReason,
 				contextCertain: certain,
 				span,
 			});
