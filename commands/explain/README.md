@@ -566,7 +566,11 @@ and its phase is named below.
     and every explain module does not (ASCII whitespace). The device-correct
     reading is the analysis's in both, but the gate cannot be corrected — so
     phase 1 publishes neither rather than putting two confident values in one
-    result. Inside a `"…"` run the two agree and nothing is refused.
+    result. Inside a `"…"` run the two agree and nothing is refused. The
+    advisory value-anchor view is intentionally wider only for exact array
+    literals: a non-empty `{…}` value or a parenthesized run with a depth-zero
+    comma is locatable and hints `array`, while the strict REST view continues
+    to refuse the whole list.
   - **A token is read but carries no `value`** — the list still reads. The token
     is delimited and classified; only its literal value is unknowable, as for
     the positional in `:log info "result: $[…]"`. **`value` absent means there
@@ -631,17 +635,36 @@ and its phase is named below.
   3. `schemaType?: { value, ev }` is the argument's declared live-schema type.
 
   The stable/testing CHR matrix fixes the offline lexicon: `num`, `ip`,
-  `ip-prefix`, `ip6`, `ip6-prefix`, `time`, `bool`, and `str`; quoted literals
+  `ip-prefix`, `ip6`, `ip6-prefix`, `id`, `time`, `array`, `mac`, `bool`, and
+  `str`; quoted literals
   hint only `str`, while malformed and out-of-range address-like controls
-  abstain even in named attributes. Because the vocabulary borrows RouterOS's
-  own type names, a hint must never spell one the device contradicts: `num` is
+  abstain even in named attributes. Most vocabulary borrows RouterOS scripting
+  type names (with the explicit `macAddr` schema exception below), so a hint
+  must never spell a scripting type the device contradicts: `num` is
   **integer-only**, since RouterOS numbers are integers and a dotted decimal is
   an IPv4 shortcut — bare `2.2` is observed as `ip` (`2.0.0.2`), so it hints
-  `ip` alone. On that grounded lexicon each spelling reaches at most one shape;
-  the list stays a list for the members #243 still owes (a colon time spelling
-  like `00:00:02`, and `mac`), which abstain today rather than being widened
-  into the nearest member that does exist. A single colon is not an address attempt
-  — `comment=foo:bar` hints `str` — while a hex-and-colon run stays fail-closed.
+  `ip` alone. On that grounded lexicon each spelling reaches at most one shape.
+  Colon-form time accepts RouterOS's displayed H:M / H:M:S spelling plus
+  week/day prefixes and fractional tails; `00:11:22` is therefore `time`, not a
+  short MAC. `mac` deliberately names the CLI Reference `macAddr` schema
+  spelling rather than a scripting type: a full six-octet MAC hints `mac` while
+  scalar `:typeof` reports `str`. `*1` hints the documented `id` type. A single
+  non-time colon is not an address attempt — `comment=foo:bar` hints `str` —
+  while malformed multi-colon runs stay fail-closed.
+
+  Arrays are the one structured literal admitted by offline hint anchoring.
+  Non-empty `{…}` values and parenthesized expressions with a depth-zero comma
+  hint `array`; grouping `(1)`, empty groups, and scope braces do not. The
+  strict REST argument reader still refuses every structured value. RouterOS
+  has no empty-array literal (`{}` is a syntax error); `[:toarray ""]` produces
+  an empty array, but remains an expression and therefore an offline
+  abstention. Indexing that empty array produces `nothing`. `.` remains an
+  expression operator rather than part of a literal: it produces `str` for
+  `1 . 2`, but distributes over arrays in either operand order, so offline
+  abstains on the whole concat expression and leaves its result type to #236.
+  `[:parse "…"]` similarly produces the observed but undocumented `code` type,
+  and `[:nothing]` produces `nil`; neither has a standalone literal spelling,
+  so neither becomes an offline shape member.
   Shape remains non-authoritative: `100000w` is time-shaped but observed as
   `str`. Argument context remains separate: on 7.23.3 and 7.24rc3, both
   `/ip/address address=2.2` and firewall `src-address=2.2` canonicalize it to
@@ -658,12 +681,14 @@ and its phase is named below.
   Offline emits only `shapeHints`; phase 2 adds the two live facts into their
   existing homes when its safe IL/schema producers land.
 
-  V1's corpus census covers 948 source scripts: all 13,143 value anchors for
+  The V2 corpus census covers 948 source scripts: all 13,143 value anchors for
   which the strict argument lexer also decided have identical half-open byte
-  spans (0 contradictions), while the prefix-safe hint scan retains 3,749
-  earlier literals across 1,345 statements whose later token made the strict
-  REST reading abstain. All retained document spans were in bounds. The strict
-  lexer remains all-or-nothing; only non-authoritative hints use the prefix.
+  spans (0 contradictions), while the prefix-safe hint scan retains 4,161
+  earlier or structured values across 1,603 statements whose strict REST
+  reading abstains. The 17,304 emitted occurrences include 420 arrays and 3 MAC
+  spellings; the corpus contains no source-literal `id` example. All retained
+  document spans were in bounds. The strict lexer remains all-or-nothing; only
+  non-authoritative hints use the wider view.
 - **Severity is fixed here, because it drives `--fail-on`.** Three buckets, and
   the split is not "structural vs not":
   - `error` — `unclosed`, `unbalanced-close`, `unterminated-string`,

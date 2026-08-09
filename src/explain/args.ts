@@ -49,7 +49,8 @@
  * re-announce; the abstention reason names it instead.
  */
 
-import { scanQuotedString } from "./segment.ts";
+import { isScopeBrace } from "./blocks.ts";
+import { maskComments, scanQuotedString } from "./segment.ts";
 
 /** A RouterOS argument name: bare word, optionally dotted (`.id`, `.proplist`). */
 const ARGUMENT_NAME = /^\.?[A-Za-z][A-Za-z0-9._-]*$/;
@@ -94,6 +95,8 @@ export interface Argument {
 /** Internal token classification; quote state is stripped from the REST view. */
 interface ReadArgument extends Argument {
 	literalQuoted?: boolean;
+	/** A located structured literal that the strict REST view still refuses. */
+	sourceShape?: "array";
 }
 
 /** Every token decided. */
@@ -127,7 +130,7 @@ export interface ArgumentsUnread {
 
 export type ArgumentReading = ArgumentsRead | ArgumentsUnread;
 
-/** One safely located literal value, before any later unreadable token. */
+/** One safely located value shape, before any later unreadable token. */
 export interface ValueAnchor {
 	kind: Exclude<ArgumentKind, "query">;
 	/** The whole argument token. */
@@ -136,10 +139,12 @@ export interface ValueAnchor {
 	name?: string;
 	/** The literal's source bytes, quotes included. */
 	valueSpan: { start: number; end: number };
-	/** The decoded literal value. */
+	/** Decoded scalar value, or exact source spelling when `sourceShape` is set. */
 	value: string;
-	/** True only when one quoted run encloses the whole value. */
+	/** True only when one quoted run encloses the whole scalar value. */
 	quoted: boolean;
+	/** Present only when source delimiters, rather than scalar decoding, prove it. */
+	sourceShape?: "array";
 }
 
 /** Prefix-safe value anchoring; `complete: false` explains where scanning stopped. */
@@ -164,10 +169,19 @@ function unread(why: string): ArgumentsUnread {
 function* walkArguments(
 	text: string,
 	from: number,
+	options: { allowArrayValues?: boolean } = {},
 ): Generator<ReadArgument | string> {
+	const structural = options.allowArrayValues ? maskComments(text) : text;
 	let i = Math.max(0, from);
 	while (i < text.length) {
-		const c = text[i] as string;
+		// The MASKED view decides whitespace, because `maskComments` blanks a
+		// continuation comment that `text` still spells with a `#`. Reading `text`
+		// here left the walk and `scanToken` disagreeing about the same byte: the
+		// scan broke on the masked space and returned a zero-length token, so
+		// `readToken` emitted an empty positional and `i` never advanced — an
+		// `explain` that never returns on `list={1;2} \<nl># c<nl> in=foo`. Strict
+		// mode is unchanged; `structural === text` there. Found in review of #243.
+		const c = structural[i] as string;
 		if (c === " " || c === "\t" || c === "\r" || c === "\n") {
 			i++;
 			continue;
@@ -180,12 +194,12 @@ function* walkArguments(
 			i += continuation;
 			continue;
 		}
-		const token = scanToken(text, i);
+		const token = scanToken(text, structural, i, options);
 		if (typeof token === "string") {
 			yield token;
 			return;
 		}
-		const read = readToken(text, i, token.end);
+		const read = readToken(text, structural, i, token.end, options);
 		if (typeof read === "string") {
 			yield read;
 			return;
@@ -254,19 +268,37 @@ function continuationLength(text: string, at: number): 0 | 2 | 3 {
  * lexable. A quoted run is skipped by the ONE shared string scanner (#199), so a
  * `"` inside this statement is read exactly as the segmenter read it.
  */
-function scanToken(text: string, start: number): { end: number } | string {
+function scanToken(
+	text: string,
+	structural: string,
+	start: number,
+	options: { allowArrayValues?: boolean },
+): { end: number } | string {
 	let i = start;
 	while (i < text.length) {
-		const c = text[i] as string;
+		const c = structural[i] as string;
 		if (c === " " || c === "\t" || c === "\r" || c === "\n") break;
 		if (c === '"') {
-			const scan = scanQuotedString(text, i);
+			const scan = scanQuotedString(structural, i);
 			if (!scan.closed) return "unterminated string in an argument";
 			i = scan.end;
 			continue;
 		}
-		if (c === "[" || c === "(") return "a substitution or expression value";
-		if (c === "{") return "an array or block value";
+		if (c === "[") return "a substitution or expression value";
+		if (c === "(" || c === "{") {
+			if (!options.allowArrayValues)
+				return c === "("
+					? "a substitution or expression value"
+					: "an array or block value";
+			if (c === "{" && isScopeBrace(text, i)) return "a scope block value";
+			const end = delimitedEnd(structural, i);
+			if (end === null) return "an unclosed structured argument value";
+			i = end;
+			const next = nextNonWhitespace(structural, i);
+			if (continuesExpression(structural, i, next))
+				return "an expression continuing after a structured value";
+			continue;
+		}
 		if (c === "$") return "a variable value";
 		if (c === "\\") {
 			if (continuationLength(text, i) > 0)
@@ -284,17 +316,124 @@ function scanToken(text: string, start: number): { end: number } | string {
 	return { end: i };
 }
 
+function nextNonWhitespace(text: string, from: number): number {
+	let i = from;
+	while (
+		text[i] === " " ||
+		text[i] === "\t" ||
+		text[i] === "\r" ||
+		text[i] === "\n"
+	)
+		i++;
+	return i;
+}
+
+function startsDottedArgument(text: string, at: number): boolean {
+	const match = text.slice(at).match(/^(\.[A-Za-z][A-Za-z0-9._-]*)=/);
+	return match !== null && ARGUMENT_NAME.test(match[1] as string);
+}
+
+/** Operators that prove a closed group is only the left side of an expression. */
+function continuesExpression(
+	text: string,
+	structuredEnd: number,
+	at: number,
+): boolean {
+	const c = text[at];
+	// A space separates RouterOS arguments. Dotted names are legal arguments,
+	// so `{1;2} .proplist=.id` is not the `.` operator. Without the separation,
+	// `{1;2}.proplist=...` remains one expression token and must be refused.
+	if (c === "." && at > structuredEnd && startsDottedArgument(text, at))
+		return false;
+	if (c !== undefined && ".,+-*/%&|^~<>=!".includes(c)) return true;
+	return /^(?:and|or|in)(?=[ \t\r\n(])/.test(text.slice(at).toLowerCase());
+}
+
+/** One balanced `(...)`/`{...}` run, including nested groups and strings. */
+function delimitedEnd(text: string, start: number): number | null {
+	const stack: string[] = [];
+	for (let i = start; i < text.length; i++) {
+		const c = text[i] as string;
+		if (c === '"') {
+			const scan = scanQuotedString(text, i);
+			if (!scan.closed) return null;
+			i = scan.end - 1;
+			continue;
+		}
+		if (c === "(" || c === "[" || c === "{") stack.push(c);
+		else if (c === ")" || c === "]" || c === "}") {
+			const want = c === ")" ? "(" : c === "]" ? "[" : "{";
+			if (stack.pop() !== want) return null;
+			if (stack.length === 0) return i + 1;
+		}
+	}
+	return null;
+}
+
+/** Whether an exact structured source run is an array literal, not grouping. */
+function isArraySource(
+	text: string,
+	structural: string,
+	start: number,
+	end: number,
+): boolean {
+	const open = text[start];
+	if (open !== "(" && open !== "{") return false;
+	if (delimitedEnd(structural, start) !== end) return false;
+	if (open === "{")
+		return (
+			!isScopeBrace(text, start) &&
+			structural.slice(start + 1, end - 1).trim().length > 0
+		);
+
+	let depth = 0;
+	let memberStart = start + 1;
+	let sawComma = false;
+	for (let i = start + 1; i < end - 1; i++) {
+		const c = structural[i] as string;
+		if (c === '"') {
+			i = scanQuotedString(structural, i).end - 1;
+			continue;
+		}
+		if (c === "(" || c === "[" || c === "{") depth++;
+		else if (c === ")" || c === "]" || c === "}") depth--;
+		else if (c === "," && depth === 0) {
+			if (structural.slice(memberStart, i).trim().length === 0) return false;
+			sawComma = true;
+			memberStart = i + 1;
+		}
+	}
+	return sawComma && structural.slice(memberStart, end - 1).trim().length > 0;
+}
+
+function startsStructuredSource(text: string, start: number): boolean {
+	return text[start] === "(" || text[start] === "{";
+}
+
 /** Classify one already-bounded token, or say why it cannot be read. */
 function readToken(
 	text: string,
+	structural: string,
 	start: number,
 	end: number,
+	options: { allowArrayValues?: boolean },
 ): ReadArgument | string {
 	const raw = text.slice(start, end);
 	const span = { start, end };
 	if (raw.startsWith("?")) {
 		const divergent = queryDisagreement(raw);
 		return divergent ?? { kind: "query", span, name: raw.slice(1), text: raw };
+	}
+	if (options.allowArrayValues && startsStructuredSource(text, start)) {
+		if (isArraySource(text, structural, start, end))
+			return {
+				kind: "positional",
+				span,
+				valueSpan: span,
+				sourceShape: "array",
+				text: raw,
+			};
+		return "a grouped or expression value";
 	}
 
 	const eq = unquotedEquals(text, start, end);
@@ -322,6 +461,18 @@ function readToken(
 	const name = text.slice(start, eq);
 	if (!ARGUMENT_NAME.test(name))
 		return `\`${name}=\` is not a RouterOS argument name`;
+	if (options.allowArrayValues && startsStructuredSource(text, eq + 1)) {
+		if (isArraySource(text, structural, eq + 1, end))
+			return {
+				kind: "attribute",
+				span,
+				name,
+				valueSpan: { start: eq + 1, end },
+				sourceShape: "array",
+				text: raw,
+			};
+		return "a grouped or expression value";
+	}
 	// An empty value is LEGAL (`comment=` clears it), so `literalValue` reports a
 	// refusal as a `string` and a decided value — empty included — as an object.
 	// Two different types rather than a sentinel string, which `""` would collide
@@ -483,22 +634,33 @@ function gateDisagreement(body: string): string | null {
  * runnable REST request. Hints are different: an unreadable later expression
  * must not erase an earlier, independently bounded literal. This scan therefore
  * reuses the exact same token and literal readers, returns every safe anchor
- * before the first refusal, and stops there. It never guesses past a bracket,
- * escape, continuation, or gate disagreement.
+ * before the first refusal, and stops there. The one V2 extension is an exact
+ * array literal: braces, or parentheses with a depth-zero comma, are locatable
+ * without evaluating their contents. Other expressions, including `.` concat,
+ * still stop the scan. The strict REST reading remains unchanged.
  */
 export function lexValueAnchors(
 	text: string,
 	from: number,
 ): ValueAnchorReading {
 	const anchors: ValueAnchor[] = [];
-	for (const read of walkArguments(text, from)) {
+	for (const read of walkArguments(text, from, { allowArrayValues: true })) {
 		if (typeof read === "string")
 			return { complete: false, anchors, why: read };
-		if (
-			read.kind !== "query" &&
-			read.value !== undefined &&
-			read.valueSpan !== undefined
-		) {
+		if (read.kind !== "query" && read.valueSpan !== undefined) {
+			if (read.sourceShape !== undefined) {
+				anchors.push({
+					kind: read.kind,
+					tokenSpan: read.span,
+					...(read.name === undefined ? {} : { name: read.name }),
+					valueSpan: read.valueSpan,
+					value: text.slice(read.valueSpan.start, read.valueSpan.end),
+					sourceShape: read.sourceShape,
+					quoted: false,
+				});
+				continue;
+			}
+			if (read.value === undefined) continue;
 			anchors.push({
 				kind: read.kind,
 				tokenSpan: read.span,

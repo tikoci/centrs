@@ -1088,10 +1088,13 @@ function valuesOf(
 		// Prefix completeness is intentionally not an envelope fact: shape hints are
 		// advisory and never turn the later refusal reason into a diagnostic.
 		for (const anchor of anchored.anchors) {
-			const hints = valueShapeHints(anchor.value, {
-				quoted: anchor.quoted,
-				allowBareString: anchor.kind === "attribute",
-			});
+			const hints: ValueShape[] =
+				anchor.sourceShape === "array"
+					? ["array"]
+					: valueShapeHints(anchor.value, {
+							quoted: anchor.quoted,
+							allowBareString: anchor.kind === "attribute",
+						});
 			if (hints.length === 0) continue;
 			const span = {
 				start: start + anchor.valueSpan.start,

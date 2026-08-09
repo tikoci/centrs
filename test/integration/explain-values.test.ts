@@ -28,6 +28,34 @@ describeFast("explain value facts against CHR", () => {
 			);
 			expect(scalar).toBe("ip\nstr");
 
+			const v2Scalars = outputOf(
+				await started.chr.exec(
+					":put [:typeof 00:00:02]; :put [:tostr 00:60:00]; :put [:typeof *1]; :put [:typeof 00:11:22:33:44:55]",
+				),
+			);
+			expect(v2Scalars).toBe("time\n01:00:00\nid\nstr");
+
+			const v2Arrays = outputOf(
+				await started.chr.exec(
+					':put [:typeof (1,2,3)]; :put [:typeof {1;2;3}]; :put [:typeof ((1,2,3) . "a")]; :put [:tostr ((1,2,3) . "a")]; :put [:typeof (1 . 2)]',
+				),
+			);
+			expect(v2Arrays).toBe("array\narray\narray\n1a;2a;3a\nstr");
+
+			const producedTypes = outputOf(
+				await started.chr.exec(
+					':put [:typeof [:toarray ""]]; :local empty [:toarray ""]; :put [:typeof ($empty->0)]; :put [:typeof [:parse ":put hello"]]; :put [:tostr [:parse ":put hello"]]; :local unset; :put [:typeof $unset]; :put [:typeof [:nothing]]',
+				),
+			);
+			expect(producedTypes).toBe("array\nnothing\ncode\n(code)\nnothing\nnil");
+
+			const macParse = outputOf(
+				await started.chr.exec(
+					`:put [:parse ${rosString("/interface/ethernet/set [find default-name=ether1] mac-address=00:11:22:33:44:55")}]`,
+				),
+			);
+			expect(macParse).toContain("mac-address=00:11:22:33:44:55");
+
 			const firewall = outputOf(
 				await started.chr.exec(
 					`:put [:parse ${rosString("/ip/firewall/filter/add chain=input action=accept src-address=2.2")}]`,
@@ -130,10 +158,16 @@ describeFast("explain value facts against CHR", () => {
 			}
 			expect(numericRestError).toContain("must be either yes or no");
 
-			const data = explainCommand(':local x 2.2; :set x "2.2"');
+			const data = explainCommand(
+				':local x 2.2; :set x "2.2"; :local z (1,2,3); :local t 00:00:02; :local i *1; /ip/arp/add mac-address=00:11:22:33:44:55',
+			);
 			expect(data.values.occurrences.map((value) => value.facts)).toEqual([
 				{ shapeHints: { values: ["ip"], ev: "e9" } },
 				{ shapeHints: { values: ["str"], ev: "e9" } },
+				{ shapeHints: { values: ["array"], ev: "e9" } },
+				{ shapeHints: { values: ["time"], ev: "e9" } },
+				{ shapeHints: { values: ["id"], ev: "e9" } },
+				{ shapeHints: { values: ["mac"], ev: "e9" } },
 			]);
 			expect(
 				data.values.occurrences.every(
@@ -142,6 +176,15 @@ describeFast("explain value facts against CHR", () => {
 						value.facts.schemaType === undefined,
 				),
 			).toBe(true);
+			expect(
+				explainCommand(':local z ((1,2,3) . "a")').values.occurrences,
+			).toEqual([]);
+			expect(
+				explainCommand(':local f [:parse ":put hello"]').values.occurrences,
+			).toEqual([]);
+			expect(
+				explainCommand(':local empty [:toarray ""]').values.occurrences,
+			).toEqual([]);
 
 			await recordIntegrationEvidence({
 				suite: "explain value facts against CHR",

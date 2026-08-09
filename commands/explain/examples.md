@@ -437,14 +437,18 @@ it does not infer value-flow types, which remain #239 S2 after #225.
 ### 26. Value facts keep shape, observed type, and schema type separate
 
 ```bash
-centrs explain ':local x 2.2; :set x "2.2"' --json
+centrs explain ':local x 2.2; :set x "2.2"; :local z (1,2,3); :local t 00:00:02; :local i *1; /ip/arp/add mac-address=00:11:22:33:44:55' --json
 ```
 
-`data.values.occurrences[]` contains two result-local value records. The bare
+`data.values.occurrences[]` contains six result-local value records. The bare
 `2.2` carries `facts.shapeHints.values: ["ip"]` — RouterOS numbers are integers,
 so a dotted decimal is an IPv4 shortcut (`2.0.0.2`) and never `num`; the quoted
-`"2.2"` carries `["str"]`. Each hint fact cites canonicalizer evidence with
-`basis: "heuristic"`; neither record has `observedType` or `schemaType`, because
+`"2.2"` carries `["str"]`. The array literal, colon-form time, internal ID, and
+full MAC spelling carry `["array"]`, `["time"]`, `["id"]`, and `["mac"]`.
+`mac` is a schema spelling clue, not a RouterOS scripting type: the bare scalar
+is `str` while the CLI Reference declares `mac-address` as `macAddr`. Each hint
+fact cites canonicalizer evidence with
+`basis: "heuristic"`; no record has `observedType` or `schemaType`, because
 offline analysis has neither live parser output nor an argument schema. A hint
 is not a diagnostic and does not change `data.verdict` or
 `runtimeAcceptance: "not-proven"`.
@@ -454,3 +458,9 @@ The CHR assertion for this example also pins the boolean boundary: scalar
 attributes accept `yes`/`no` rather than `true`/`false`, and REST accepts JSON
 booleans. These live/context observations ground the offline `bool` spelling
 hint; they are not emitted as `observedType` or `schemaType` by offline explain.
+The same assertion grounds the new boundaries: brace/comma literals are
+`array`; colon times are `time`; `*1` is `id`; `.` concat can return `str` or
+distribute over an array; `[:toarray ""]` is the only empty-array construction
+and indexing it yields `nothing`; `[:parse "…"]` returns `code`; and `nil` has
+no standalone offline spelling. Produced empty arrays, concat, `code`, and
+`nil` remain abstentions rather than guessed hints.
