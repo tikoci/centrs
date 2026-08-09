@@ -35,6 +35,10 @@ interface ValueFixture {
 		restDisabled: { accepted: unknown[]; rejected: unknown[] };
 		toBool: { literal: string; type: string; value: string }[];
 	};
+	timeOrdering: {
+		channelsMatch: boolean;
+		literals: { literal: string; type: string; value: string }[];
+	};
 	corpus: {
 		sourceScripts: number;
 		strictComparableAnchors: number;
@@ -194,6 +198,20 @@ describe("#225 value-shape grounding matrix", () => {
 		expect(
 			valueShapeHints("-1.5", { quoted: false, allowBareString: true }),
 		).toEqual(["str"]);
+	});
+
+	test("time units are order-independent and additive, so shape must not order them", () => {
+		expect(fixture.timeOrdering.channelsMatch).toBe(true);
+		for (const row of fixture.timeOrdering.literals) {
+			// The device typed every one of these `time` on 7.23.3 and 7.24rc3, so a
+			// shape that rejected repeats or descending order would contradict it.
+			expect(row.type).toBe("time");
+			expect(valueShapeHints(row.literal, { quoted: false })).toEqual(["time"]);
+		}
+		expect(
+			fixture.timeOrdering.literals.find((row) => row.literal === "1m1m")
+				?.value,
+		).toBe("00:02:00");
 	});
 
 	test("only an IPv6-shaped colon run counts as an address attempt", () => {

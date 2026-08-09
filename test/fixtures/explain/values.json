@@ -77,6 +77,25 @@
 			{ "literal": "1", "type": "bool", "value": "true" }
 		]
 	},
+	"timeOrdering": {
+		"captured": "2026-08-09",
+		"channelsMatch": true,
+		"note": "RouterOS time literals are order-independent and ADDITIVE: a repeated unit sums rather than being rejected. `isTimeShape` therefore checks fragment coverage, not unit order — raised as an ordering defect in review of #242 and refuted here on both channels.",
+		"probe": ":typeof + :tostr",
+		"literals": [
+			{ "literal": "1s1m", "type": "time", "value": "00:01:01" },
+			{ "literal": "1m1s", "type": "time", "value": "00:01:01" },
+			{ "literal": "1m1m", "type": "time", "value": "00:02:00" },
+			{ "literal": "1s1s", "type": "time", "value": "00:00:02" },
+			{ "literal": "1h1h1h", "type": "time", "value": "03:00:00" },
+			{ "literal": "1d2d", "type": "time", "value": "3d00:00:00" },
+			{ "literal": "1d1w", "type": "time", "value": "1w1d00:00:00" },
+			{ "literal": "1w1d", "type": "time", "value": "1w1d00:00:00" },
+			{ "literal": "2s3m4h", "type": "time", "value": "04:03:02" },
+			{ "literal": "1ms1s", "type": "time", "value": "00:00:01.001" },
+			{ "literal": "1s1ms", "type": "time", "value": "00:00:01.001" }
+		]
+	},
 	"corpus": {
 		"sourceScripts": 948,
 		"commandStatements": 14331,

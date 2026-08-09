@@ -69,6 +69,17 @@ function prefixParts(
 	return { address: value.slice(0, slash), prefix: Number(prefixText) };
 }
 
+/**
+ * Fragment COVERAGE, deliberately not unit order.
+ *
+ * On 7.23.3 and 7.24rc3 a time literal is order-independent and additive:
+ * `1s1m` is `00:01:01`, `1m1m` sums to `00:02:00`, `1h1h1h` to `03:00:00`, and
+ * `1d2d` to `3d00:00:00` — all typed `time`. Rejecting an out-of-order or
+ * repeated unit would make the hint disagree with the device, so the only
+ * question asked here is whether recognized fragments cover the whole value.
+ * Reported as an ordering defect in review of #242; the fixture's
+ * `timeOrdering` block is the refutation.
+ */
 function isTimeShape(value: string): boolean {
 	if (value.length > 64) return false;
 	// Longest suffixes must precede their one-letter prefixes: otherwise `ms`
