@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { lexValueAnchors } from "../../src/explain/args.ts";
-import { type ValueShape, valueShapeHints } from "../../src/explain/values.ts";
+import {
+	VALUE_SHAPES,
+	type ValueShape,
+	valueShapeHints,
+} from "../../src/explain/values.ts";
 import { explainCommand } from "../../src/explain.ts";
 
 interface ValueFixture {
@@ -39,12 +43,34 @@ interface ValueFixture {
 		channelsMatch: boolean;
 		literals: { literal: string; type: string; value: string }[];
 	};
+	v2Grounding: {
+		stable: string;
+		testing: string;
+		channelsMatch: boolean;
+		colonTime: { literal: string; type: string; value: string }[];
+		mac: {
+			literal: string;
+			scalarType: string;
+			schemaType: string;
+			parsePreserved: boolean;
+			shorterThreeGroupType: string;
+			shorterFiveGroupType: string;
+		};
+		arrays: { literal: string; type: string; value: string }[];
+		concat: { literal: string; type: string; value: string }[];
+		producedTypes: { expression: string; type: string; value: string }[];
+		uninitializedType: string;
+		nothingCommandType: string;
+	};
 	corpus: {
 		sourceScripts: number;
+		valueOccurrences: number;
 		strictComparableAnchors: number;
 		boundaryContradictions: number;
+		unreadStatementsWithAnchors: number;
 		recoveredPrefixAnchors: number;
 		invalidSpans: number;
+		shapeCounts: Record<string, number>;
 	};
 	scalars: {
 		literal: string;
@@ -89,8 +115,11 @@ describe("#225 value-shape grounding matrix", () => {
 		expect(fixture.corpus.sourceScripts).toBe(948);
 		expect(fixture.corpus.strictComparableAnchors).toBe(13_143);
 		expect(fixture.corpus.boundaryContradictions).toBe(0);
-		expect(fixture.corpus.recoveredPrefixAnchors).toBe(3_749);
+		expect(fixture.corpus.valueOccurrences).toBe(17_304);
+		expect(fixture.corpus.unreadStatementsWithAnchors).toBe(1_603);
+		expect(fixture.corpus.recoveredPrefixAnchors).toBe(4_161);
 		expect(fixture.corpus.invalidSpans).toBe(0);
+		expect(fixture.corpus.shapeCounts).toMatchObject({ array: 420, mac: 3 });
 	});
 
 	test("boolean spellings, slots, and conversions remain separate observations", () => {
@@ -214,15 +243,56 @@ describe("#225 value-shape grounding matrix", () => {
 		).toBe("00:02:00");
 	});
 
-	test("only an IPv6-shaped colon run counts as an address attempt", () => {
+	test("V2 records source spellings separately from produced and schema types", () => {
+		expect(fixture.v2Grounding).toMatchObject({
+			stable: "7.23.3",
+			testing: "7.24rc3",
+			channelsMatch: true,
+			mac: {
+				scalarType: "str",
+				schemaType: "macAddr",
+				parsePreserved: true,
+				shorterThreeGroupType: "time",
+				shorterFiveGroupType: "str",
+			},
+			uninitializedType: "nothing",
+			nothingCommandType: "nil",
+		});
+		expect(
+			fixture.v2Grounding.colonTime.every((row) => row.type === "time"),
+		).toBe(true);
+		expect(
+			fixture.v2Grounding.arrays.every((row) => row.type === "array"),
+		).toBe(true);
+		expect(fixture.v2Grounding.producedTypes.map((row) => row.type)).toEqual([
+			"code",
+			"id",
+			"id",
+		]);
+		expect(fixture.v2Grounding.concat.map((row) => row.type)).toEqual([
+			"array",
+			"array",
+			"str",
+		]);
+	});
+
+	test("colon time, IPv6, and MAC spellings remain distinct", () => {
 		// One colon is never IPv6, so a named attribute keeps its string hint.
-		for (const text of ["foo:bar", "a:b", "9:00"])
+		for (const text of ["foo:bar", "a:b"])
 			expect(
 				valueShapeHints(text, { quoted: false, allowBareString: true }),
 			).toEqual(["str"]);
-		// Hex-and-colon runs stay fail-closed: a MAC or a colon time spelling has
-		// no lexicon member yet (#243) and must not be relabeled `str`.
-		for (const text of ["1:2:3", "00:00:02", "00:11:22:33:44:55"])
+		for (const text of ["9:00", "1:2:3", "00:00:02", "00:11:22"])
+			expect(
+				valueShapeHints(text, { quoted: false, allowBareString: true }),
+			).toEqual(["time"]);
+		expect(
+			valueShapeHints("00:11:22:33:44:55", {
+				quoted: false,
+				allowBareString: true,
+			}),
+		).toEqual(["mac"]);
+		for (const text of ["00:11:22:33:44", "00:11:22:33:44:55:66"])
 			expect(
 				valueShapeHints(text, { quoted: false, allowBareString: true }),
 			).toEqual([]);
@@ -232,6 +302,62 @@ describe("#225 value-shape grounding matrix", () => {
 });
 
 describe("value anchors", () => {
+	test("array literals are anchored without widening the strict REST lexer", () => {
+		for (const source of ["(1,2,3)", '{1;"abc";3}', "{a=1;b=2}"]) {
+			const input = `:local z ${source}`;
+			const reading = lexValueAnchors(input, ":local z".length);
+			expect(reading).toMatchObject({
+				complete: true,
+				anchors: [
+					{
+						kind: "positional",
+						sourceShape: "array",
+						quoted: false,
+					},
+				],
+			});
+			expect(
+				input.slice(
+					reading.anchors[0]?.valueSpan.start,
+					reading.anchors[0]?.valueSpan.end,
+				),
+			).toBe(source);
+			expect(reading.anchors[0]?.value).toBe(source);
+			expect(
+				explainCommand(input).structure.statements[0]?.arguments?.read,
+			).toBe(false);
+		}
+		const followed = lexValueAnchors(
+			"/x/cmd list={1;2} in=foo",
+			"/x/cmd".length,
+		);
+		expect(followed.complete).toBe(true);
+		expect(followed.anchors.map((anchor) => anchor.name)).toEqual([
+			"list",
+			"in",
+		]);
+	});
+
+	test("grouping, empty groups, scopes, and concat do not fabricate arrays", () => {
+		for (const input of [
+			":local z (1)",
+			":local z ()",
+			":local z {}",
+			":local z (1,)",
+			":local z (,1)",
+			":local z (1,,2)",
+			':local z ((1,2,3)."a")',
+			':local z ((1,2,3) . "a")',
+			':local z ("a" . (1,2,3))',
+		])
+			expect(lexValueAnchors(input, ":local z".length).anchors).toEqual([]);
+		expect(
+			lexValueAnchors(":if true do={ :put 1 }", ":if".length).anchors.map(
+				(anchor) => anchor.sourceShape,
+			),
+		).not.toContain("array");
+	});
+
 	test("an unreadable later substitution does not erase an earlier literal", () => {
 		const input = "/ip/address/add address=1.1.1.1 comment=[find]";
 		const reading = lexValueAnchors(input, "/ip/address/add".length);
@@ -353,13 +479,12 @@ describe("explain value facts", () => {
 
 	test("all shape vocabulary reaches the public envelope without query values", () => {
 		const data = explainCommand(
-			"/ip/firewall/filter/add count=123 to-addresses=1.1.1.1 src-address=10.9.0.0/16 dst-address=1::1 comment=plain disabled=yes interval=200ms ip6-prefix=2008:1::2/128 ?name",
+			"/ip/firewall/filter/add count=123 to-addresses=1.1.1.1 src-address=10.9.0.0/16 dst-address=1::1 comment=plain disabled=yes interval=200ms ip6-prefix=2008:1::2/128 id=*A mac-address=00:11:22:33:44:55 list={1;2} ?name",
 		);
-		expect(
-			data.values.occurrences.flatMap(
-				(occurrence) => occurrence.facts.shapeHints?.values ?? [],
-			),
-		).toEqual([
+		const shapes = data.values.occurrences.flatMap(
+			(occurrence) => occurrence.facts.shapeHints?.values ?? [],
+		);
+		expect(shapes).toEqual([
 			"num",
 			"ip",
 			"ip-prefix",
@@ -368,7 +493,11 @@ describe("explain value facts", () => {
 			"bool",
 			"time",
 			"ip6-prefix",
+			"id",
+			"mac",
+			"array",
 		]);
+		expect(new Set(shapes)).toEqual(new Set(VALUE_SHAPES));
 		expect(data.values.occurrences.some((value) => value.name === "name")).toBe(
 			false,
 		);

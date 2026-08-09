@@ -6,18 +6,20 @@
  * differently. The vocabulary still borrows RouterOS's type NAMES, so a shape
  * must never be spelled in a way the device would contradict — `num` is
  * integer-only here because RouterOS numbers are integers, and `2.2` is
- * observed as `ip` (`2.0.0.2`), never as a decimal.
+ * observed as `ip` (`2.0.0.2`), never as a decimal. `mac` is the deliberate
+ * exception: it names the CLI Reference's `macAddr` schema spelling, not a
+ * `:typeof` result (a bare MAC is observed as `str`).
  */
 
 import { isIP } from "node:net";
 
 /**
- * The closed V1 vocabulary — an ENUMERATION, not an ordering.
+ * The closed offline vocabulary — an ENUMERATION, not an ordering.
  *
  * Nothing sorts by this list: {@link valueShapeHints} emits in the order it
  * tests spellings, so reordering the members here must not change any result.
- * Members the grounded lexicon still owes (a colon time spelling, `mac`) are
- * tracked in #243 and abstain rather than borrowing a near member.
+ * `array` is emitted by the structured anchor reader rather than
+ * {@link valueShapeHints}, which receives decoded scalar values only.
  */
 export const VALUE_SHAPES = [
 	"num",
@@ -25,7 +27,10 @@ export const VALUE_SHAPES = [
 	"ip-prefix",
 	"ip6",
 	"ip6-prefix",
+	"id",
 	"time",
+	"array",
+	"mac",
 	"bool",
 	"str",
 ] as const;
@@ -82,12 +87,22 @@ function prefixParts(
  */
 function isTimeShape(value: string): boolean {
 	if (value.length > 64) return false;
+	// RouterOS also accepts its own display form: optional additive week/day
+	// fragments followed by H:M or H:M:S, with a fractional final component.
+	// The fields are normalized rather than range-rejected (`00:60:00` becomes
+	// `01:00:00`). This branch must run before the colon/address abstention guard.
+	if (/^(?:\d+[wd])*\d+:\d+(?::\d+)?(?:\.\d+)?$/.test(value)) return true;
 	// Longest suffixes must precede their one-letter prefixes: otherwise `ms`
 	// could be consumed as minutes plus seconds instead of milliseconds.
 	const matches = [...value.matchAll(/(\d+(?:\.\d+)?)(ns|us|ms|w|d|h|m|s)/g)];
 	return (
 		matches.length > 0 && matches.map((match) => match[0]).join("") === value
 	);
+}
+
+/** Full six-octet CLI Reference `macAddr` spelling; shorter runs are time/text. */
+function isMacShape(value: string): boolean {
+	return /^[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}$/.test(value);
 }
 
 /**
@@ -143,9 +158,11 @@ export function valueShapeHints(
 	// Integer-only: a dotted decimal is an IPv4 shortcut on the device, not a
 	// number, so `num` here would contradict the observed type it is named after.
 	if (/^-?\d+$/.test(value)) hints.push("num");
+	if (/^\*[0-9a-fA-F]+$/.test(value)) hints.push("id");
 	if (isIpv4Shortcut(value)) hints.push("ip");
 	else if (isIP(value) === 6) hints.push("ip6");
 	if (isTimeShape(value)) hints.push("time");
+	if (isMacShape(value)) hints.push("mac");
 
 	if (hints.length === 0 && options.allowBareString && !isAddressLike(value))
 		hints.push("str");

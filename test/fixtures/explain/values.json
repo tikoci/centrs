@@ -96,14 +96,71 @@
 			{ "literal": "1s1ms", "type": "time", "value": "00:00:01.001" }
 		]
 	},
+	"v2Grounding": {
+		"captured": "2026-08-09",
+		"stable": "7.23.3",
+		"testing": "7.24rc3",
+		"channelsMatch": true,
+		"note": "Only source-identifiable facts become offline hints. `code` and `nil` are produced values with no standalone literal spelling; concat remains an expression even when its result is an array.",
+		"colonTime": [
+			{ "literal": "9:00", "type": "time", "value": "09:00:00" },
+			{ "literal": "00:00:02", "type": "time", "value": "00:00:02" },
+			{ "literal": "00:00:02.001", "type": "time", "value": "00:00:02.001" },
+			{ "literal": "1d00:00:00", "type": "time", "value": "1d00:00:00" },
+			{ "literal": "1w1d00:00:00", "type": "time", "value": "1w1d00:00:00" },
+			{ "literal": "00:60:00", "type": "time", "value": "01:00:00" }
+		],
+		"mac": {
+			"literal": "00:11:22:33:44:55",
+			"scalarType": "str",
+			"schemaType": "macAddr",
+			"parsePreserved": true,
+			"shorterThreeGroupType": "time",
+			"shorterFiveGroupType": "str"
+		},
+		"arrays": [
+			{ "literal": "(1,2,3)", "type": "array", "value": "1;2;3" },
+			{ "literal": "{1;2;3}", "type": "array", "value": "1;2;3" },
+			{ "literal": "{a=1;b=2}", "type": "array", "value": "a=1;b=2" }
+		],
+		"concat": [
+			{ "literal": "((1,2,3) . \"a\")", "type": "array", "value": "1a;2a;3a" },
+			{ "literal": "(\"a\" . (1,2,3))", "type": "array", "value": "a1;a2;a3" },
+			{ "literal": "(1 . 2)", "type": "str", "value": "12" }
+		],
+		"producedTypes": [
+			{
+				"expression": "[:parse \":put hello\"]",
+				"type": "code",
+				"value": "(code)"
+			},
+			{ "expression": "[:toid \"*1\"]", "type": "id", "value": "*1" },
+			{ "expression": "*1", "type": "id", "value": "*1" }
+		],
+		"uninitializedType": "nothing",
+		"nothingCommandType": "nil"
+	},
 	"corpus": {
 		"sourceScripts": 948,
 		"commandStatements": 14331,
+		"valueOccurrences": 17304,
 		"strictComparableAnchors": 13143,
 		"boundaryContradictions": 0,
-		"unreadStatementsWithAnchors": 1345,
-		"recoveredPrefixAnchors": 3749,
-		"invalidSpans": 0
+		"unreadStatementsWithAnchors": 1603,
+		"recoveredPrefixAnchors": 4161,
+		"invalidSpans": 0,
+		"shapeCounts": {
+			"array": 420,
+			"bool": 1217,
+			"ip": 1746,
+			"ip-prefix": 137,
+			"ip6": 1,
+			"ip6-prefix": 220,
+			"mac": 3,
+			"num": 1454,
+			"str": 11848,
+			"time": 258
+		}
 	},
 	"scalars": [
 		{ "literal": "0", "hints": ["num"], "bareType": "num", "bareValue": "0" },
@@ -155,6 +212,24 @@
 			"hints": ["ip6-prefix"],
 			"bareType": "ip6-prefix",
 			"bareValue": "2008:1::2/128"
+		},
+		{
+			"literal": "*1",
+			"hints": ["id"],
+			"bareType": "id",
+			"bareValue": "*1"
+		},
+		{
+			"literal": "00:00:02",
+			"hints": ["time"],
+			"bareType": "time",
+			"bareValue": "00:00:02"
+		},
+		{
+			"literal": "00:11:22:33:44:55",
+			"hints": ["mac"],
+			"bareType": "str",
+			"bareValue": "00:11:22:33:44:55"
 		},
 		{
 			"literal": "200ms",
