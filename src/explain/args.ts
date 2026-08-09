@@ -91,6 +91,11 @@ export interface Argument {
 	text: string;
 }
 
+/** Internal token classification; quote state is stripped from the REST view. */
+interface ReadArgument extends Argument {
+	literalQuoted?: boolean;
+}
+
 /** Every token decided. */
 export interface ArgumentsRead {
 	read: true;
@@ -180,7 +185,9 @@ export function lexArguments(text: string, from: number): ArgumentReading {
 		if (typeof token === "string") return unread(token);
 		const read = readToken(text, i, token.end);
 		if (typeof read === "string") return unread(read);
-		tokens.push(read);
+		const publicToken = { ...read };
+		delete publicToken.literalQuoted;
+		tokens.push(publicToken);
 		i = token.end;
 	}
 
@@ -257,7 +264,7 @@ function readToken(
 	text: string,
 	start: number,
 	end: number,
-): Argument | string {
+): ReadArgument | string {
 	const raw = text.slice(start, end);
 	const span = { start, end };
 	if (raw.startsWith("?")) {
@@ -283,6 +290,7 @@ function readToken(
 					span,
 					value: positional.value,
 					valueSpan: span,
+					literalQuoted: positional.quoted,
 					text: raw,
 				};
 	}
@@ -301,6 +309,7 @@ function readToken(
 		name,
 		value: value.value,
 		valueSpan: { start: eq + 1, end },
+		literalQuoted: value.quoted,
 		text: raw,
 	};
 }
@@ -340,8 +349,8 @@ function literalValue(
 	text: string,
 	start: number,
 	end: number,
-): { value: string } | string {
-	if (start >= end) return { value: "" };
+): { value: string; quoted: boolean } | string {
+	if (start >= end) return { value: "", quoted: false };
 	if ((text[start] as string) === '"') {
 		const scan = scanQuotedString(text, start);
 		if (!scan.closed) return "unterminated string in an argument value";
@@ -349,7 +358,7 @@ function literalValue(
 		const body = text.slice(start + 1, end - 1);
 		if (body.includes("\\")) return "an escape in a quoted argument value";
 		if (body.includes("$")) return "a substitution in a quoted argument value";
-		return { value: body };
+		return { value: body, quoted: true };
 	}
 	const body = text.slice(start, end);
 	if (body.includes('"')) return "a partly-quoted argument value";
@@ -361,7 +370,7 @@ function literalValue(
 	if (body.includes("\\")) return "an escape in an argument value";
 	const disagreement = gateDisagreement(body);
 	if (disagreement !== null) return disagreement;
-	return { value: body };
+	return { value: body, quoted: false };
 }
 
 /**
@@ -480,14 +489,13 @@ export function lexValueAnchors(
 			read.value !== undefined &&
 			read.valueSpan !== undefined
 		) {
-			const source = text.slice(read.valueSpan.start, read.valueSpan.end);
 			anchors.push({
 				kind: read.kind,
 				tokenSpan: read.span,
 				...(read.name === undefined ? {} : { name: read.name }),
 				valueSpan: read.valueSpan,
 				value: read.value,
-				quoted: source.startsWith('"') && source.endsWith('"'),
+				quoted: read.literalQuoted ?? false,
 			});
 		}
 		i = token.end;

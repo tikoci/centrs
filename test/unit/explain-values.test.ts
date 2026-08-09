@@ -21,6 +21,20 @@ interface ValueFixture {
 			typeChangingAssignment: string;
 		};
 	};
+	booleanGrounding: {
+		captured: string;
+		channelsMatch: boolean;
+		scalars: {
+			literal: string;
+			bareType: string;
+			bareValue: string;
+			quotedType: string;
+		}[];
+		assignmentTypes: string[];
+		cliDisabled: { accepted: string[]; rejected: string[] };
+		restDisabled: { accepted: unknown[]; rejected: unknown[] };
+		toBool: { literal: string; type: string; value: string }[];
+	};
 	corpus: {
 		sourceScripts: number;
 		strictComparableAnchors: number;
@@ -37,6 +51,7 @@ interface ValueFixture {
 	rejectionControls: {
 		literal: string;
 		hints: ValueShape[];
+		attributeHints: ValueShape[];
 		bareType: string;
 	}[];
 	contexts: { input: string; il: string }[];
@@ -74,6 +89,41 @@ describe("#225 value-shape grounding matrix", () => {
 		expect(fixture.corpus.invalidSpans).toBe(0);
 	});
 
+	test("boolean spellings, slots, and conversions remain separate observations", () => {
+		expect(fixture.booleanGrounding.channelsMatch).toBe(true);
+		expect(
+			fixture.booleanGrounding.scalars.map((row) => [
+				row.literal,
+				row.bareType,
+				row.quotedType,
+			]),
+		).toEqual([
+			["true", "bool", "str"],
+			["false", "bool", "str"],
+			["yes", "bool", "str"],
+			["no", "bool", "str"],
+			["0", "num", "str"],
+			["1", "num", "str"],
+		]);
+		expect(fixture.booleanGrounding.assignmentTypes).toEqual([
+			"bool",
+			"str",
+			"bool",
+			"str",
+		]);
+		expect(fixture.booleanGrounding.cliDisabled.accepted).toEqual([
+			"yes",
+			"no",
+			'"yes"',
+			'"no"',
+		]);
+		expect(fixture.booleanGrounding.restDisabled.accepted).toContain(true);
+		expect(fixture.booleanGrounding.restDisabled.accepted).toContain("true");
+		expect(
+			fixture.booleanGrounding.toBool.every((row) => row.type === "bool"),
+		).toBe(true);
+	});
+
 	for (const row of fixture.scalars) {
 		test(`${row.literal}: bare hints, observed type, and quoted control`, () => {
 			expect(valueShapeHints(row.literal, { quoted: false })).toEqual(
@@ -92,6 +142,12 @@ describe("#225 value-shape grounding matrix", () => {
 			expect(valueShapeHints(row.literal, { quoted: false })).toEqual(
 				row.hints,
 			);
+			expect(
+				valueShapeHints(row.literal, {
+					quoted: false,
+					allowBareString: true,
+				}),
+			).toEqual(row.attributeHints);
 		});
 	}
 
@@ -157,6 +213,20 @@ describe("value anchors", () => {
 		).toEqual(['"1.1.1.1"', "no"]);
 	});
 
+	test("quote state comes from literal decoding, including an empty value", () => {
+		const input = '/ip/address/add comment=""';
+		expect(lexValueAnchors(input, "/ip/address/add".length).anchors).toEqual([
+			{
+				kind: "attribute",
+				tokenSpan: { start: 16, end: 26 },
+				name: "comment",
+				valueSpan: { start: 24, end: 26 },
+				value: "",
+				quoted: true,
+			},
+		]);
+	});
+
 	for (const [suffix, why] of [
 		["comment=it's", "a single quote"],
 		["comment=a\\ b", "an escape"],
@@ -173,6 +243,23 @@ describe("value anchors", () => {
 });
 
 describe("explain value facts", () => {
+	for (const suffix of [
+		"comment=[find]",
+		"comment=it's",
+		"comment=a\\ b",
+		"comment=x\fdisabled=no",
+	]) {
+		test(`the public envelope retains a safe prefix before ${JSON.stringify(suffix)}`, () => {
+			const data = explainCommand(`/ip/address/add address=1.1.1.1 ${suffix}`);
+			expect(data.values.occurrences).toHaveLength(1);
+			expect(data.values.occurrences[0]).toMatchObject({
+				name: "address",
+				facts: { shapeHints: { values: ["ip"] } },
+			});
+			expect(data.structure.statements[0]?.arguments?.read).toBe(false);
+		});
+	}
+
 	test("three axes have stable homes and only offline hints are populated", () => {
 		const data = explainCommand(':local x 2.2; :set x "2.2"');
 		expect(data.values.occurrences).toEqual([
@@ -211,12 +298,33 @@ describe("explain value facts", () => {
 		});
 	});
 
+	test("all shape vocabulary reaches the public envelope without query values", () => {
+		const data = explainCommand(
+			"/ip/firewall/filter/add count=123 src-address=10.9.0.0/16 dst-address=1::1 comment=plain disabled=yes interval=200ms ip6-prefix=2008:1::2/128 ?name",
+		);
+		expect(
+			data.values.occurrences.flatMap(
+				(occurrence) => occurrence.facts.shapeHints?.values ?? [],
+			),
+		).toEqual(["num", "ip-prefix", "ip6", "str", "bool", "time", "ip6-prefix"]);
+		expect(data.values.occurrences.some((value) => value.name === "name")).toBe(
+			false,
+		);
+	});
+
+	test("malformed address-like attributes abstain in the public envelope", () => {
+		expect(
+			explainCommand("/ip/address/add address=1.1.1.1/99").values.occurrences,
+		).toEqual([]);
+	});
+
 	test("value ranges stay document-byte based after non-ASCII source", () => {
 		const input = ':put "🚀"; /ip/address/add address=1.1.1.1';
 		const occurrence = explainCommand(input).values.occurrences.at(-1);
 		const bytes = Buffer.from(input);
 		const start = bytes.indexOf(Buffer.from("1.1.1.1"));
 		expect(occurrence?.span).toEqual({ start, end: start + 7 });
+		expect(occurrence?.tokenSpan).toEqual({ start: start - 8, end: start + 7 });
 		expect(bytes.subarray(start, start + 7).toString()).toBe("1.1.1.1");
 	});
 });

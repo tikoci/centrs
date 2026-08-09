@@ -53,8 +53,8 @@ interface ChrInstance {
 	waitForBoot(timeoutMs?: number): Promise<boolean>;
 	/** Run a RouterOS console command (used here to set identity / discovery). */
 	exec(command: string): Promise<unknown>;
-	/** Issue a REST GET (the source-of-truth cross-check for L2-decoded values). */
-	rest(path: string): Promise<unknown>;
+	/** Issue a REST request; GET is the default when no init is supplied. */
+	rest(path: string, init?: RequestInit): Promise<unknown>;
 	/** Stop and delete the machine (alias of destroy on newer quickchr). */
 	remove(): Promise<void>;
 }

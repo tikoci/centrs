@@ -634,14 +634,22 @@ and its phase is named below.
 
   The stable/testing CHR matrix fixes the offline lexicon: `num`, `ip`,
   `ip-prefix`, `ip6`, `ip6-prefix`, `time`, `bool`, and `str`; quoted literals
-  hint only `str`, while malformed and out-of-range address controls abstain.
+  hint only `str`, while malformed and out-of-range address-like controls
+  abstain even in named attributes. This list defines the vocabulary, not a
+  sort key; when one spelling has multiple hints, the result orders the more
+  direct spelling first (`2.2` is `num`, then its RouterOS `ip` shortcut shape).
   Shape remains non-authoritative: `100000w` is time-shaped but observed as
   `str`. Argument context remains separate: on 7.23.3 and 7.24rc3, bare `2.2`
   is observed as `ip`, both
   `/ip/address address=2.2` and firewall `src-address=2.2` canonicalize it to
   `2.0.0.2`, while `comment=2.2` stays text, netwatch `interval=2.2`
   normalizes to `00:00:02.200`, a boolean slot rejects it, and `:parse` still
-  accepts `src-address=not-an-ip`. Thus a hint never validates a value or becomes a
+  accepts `src-address=not-an-ip`. Boolean grounding has the same separation:
+  bare `true`/`false` and `yes`/`no` are scalar `bool`, while their quoted forms
+  are `str`; a CLI `disabled=` slot accepts bare or quoted `yes`/`no` but rejects
+  `true`/`false`, while REST accepts JSON booleans and the string forms
+  `yes`/`no`/`true`/`false`. `:tobool` conversion is a separate runtime operation
+  and does not widen the hint. Thus a hint never validates a value or becomes a
   diagnostic, and never changes `runtimeAcceptance`. Quoting likewise never
   earns a wrong-type diagnostic: commands may cast quoted strings at runtime.
   Offline emits only `shapeHints`; phase 2 adds the two live facts into their

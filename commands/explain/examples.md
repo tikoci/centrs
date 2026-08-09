@@ -447,3 +447,9 @@ carries `["str"]`. Each hint fact cites canonicalizer evidence with
 offline analysis has neither live parser output nor an argument schema. A hint
 is not a diagnostic and does not change `data.verdict` or
 `runtimeAcceptance: "not-proven"`.
+
+The CHR assertion for this example also pins the boolean boundary: scalar
+`true`/`false` and `yes`/`no` are `bool`, quoted forms are `str`, CLI boolean
+attributes accept `yes`/`no` rather than `true`/`false`, and REST accepts JSON
+booleans. These live/context observations ground the offline `bool` spelling
+hint; they are not emitted as `observedType` or `schemaType` by offline explain.

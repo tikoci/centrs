@@ -1078,7 +1078,10 @@ function valuesOf(
 		const { start, end } = split.span;
 		const text = analyzed.slice(start, end);
 		if (text !== split.text) continue;
-		for (const anchor of lexValueAnchors(text, split.argsAt).anchors) {
+		const anchored = lexValueAnchors(text, split.argsAt);
+		// Prefix completeness is intentionally not an envelope fact: shape hints are
+		// advisory and never turn the later refusal reason into a diagnostic.
+		for (const anchor of anchored.anchors) {
 			const hints = valueShapeHints(anchor.value, {
 				quoted: anchor.quoted,
 				allowBareString: anchor.kind === "attribute",

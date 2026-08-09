@@ -197,6 +197,16 @@ describe("explainCommand — structural invariants", () => {
 	}
 });
 
+describe("conditional value evidence", () => {
+	test("e9 is absent when no value earns a shape hint", () => {
+		for (const input of [":local x", ":put uplink"]) {
+			const data = explainCommand(input);
+			expect(data.values.occurrences).toEqual([]);
+			expect(data.evidence.some((entry) => entry.id === "e9")).toBe(false);
+		}
+	});
+});
+
 describe("block bodies are statements too", () => {
 	test("a body statement is not paired with the wrong span", () => {
 		// The resolver FLATTENS `do={…}` bodies into its statement list, so it is

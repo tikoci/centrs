@@ -9,13 +9,13 @@
 import { isIP } from "node:net";
 
 export const VALUE_SHAPES = [
-	"bool",
 	"num",
 	"ip",
 	"ip-prefix",
 	"ip6",
 	"ip6-prefix",
 	"time",
+	"bool",
 	"str",
 ] as const;
 
@@ -60,10 +60,19 @@ function prefixParts(
 
 function isTimeShape(value: string): boolean {
 	if (value.length > 64) return false;
+	// Longest suffixes must precede their one-letter prefixes: otherwise `ms`
+	// could be consumed as minutes plus seconds instead of milliseconds.
 	const matches = [...value.matchAll(/(\d+(?:\.\d+)?)(ns|us|ms|w|d|h|m|s)/g)];
 	return (
 		matches.length > 0 && matches.map((match) => match[0]).join("") === value
 	);
+}
+
+/** A conservative address attempt whose failed validation must not become `str`. */
+function isAddressLike(value: string): boolean {
+	const slash = value.indexOf("/");
+	const address = slash < 0 ? value : value.slice(0, slash);
+	return /^\d+(?:\.\d+){1,3}$/.test(address) || address.includes(":");
 }
 
 /**
@@ -86,7 +95,8 @@ export function valueShapeHints(
 			hints.push("ip-prefix");
 		else if (prefix.prefix <= 128 && isIP(prefix.address) === 6)
 			hints.push("ip6-prefix");
-		return hints.length > 0 || !options.allowBareString ? hints : ["str"];
+		if (hints.length > 0 || isAddressLike(value)) return hints;
+		return options.allowBareString ? ["str"] : [];
 	}
 
 	if (/^(?:yes|no|true|false)$/.test(value)) hints.push("bool");
@@ -95,6 +105,7 @@ export function valueShapeHints(
 	else if (isIP(value) === 6) hints.push("ip6");
 	if (isTimeShape(value)) hints.push("time");
 
-	if (hints.length === 0 && options.allowBareString) hints.push("str");
+	if (hints.length === 0 && options.allowBareString && !isAddressLike(value))
+		hints.push("str");
 	return hints;
 }

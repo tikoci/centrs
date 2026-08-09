@@ -18,6 +18,65 @@
 			"runtimeRejectsBlackholeEquals": "expected end of command (line 1 column 48)"
 		}
 	},
+	"booleanGrounding": {
+		"captured": "2026-08-09",
+		"channelsMatch": true,
+		"scalars": [
+			{
+				"literal": "true",
+				"bareType": "bool",
+				"bareValue": "true",
+				"quotedType": "str"
+			},
+			{
+				"literal": "false",
+				"bareType": "bool",
+				"bareValue": "false",
+				"quotedType": "str"
+			},
+			{
+				"literal": "yes",
+				"bareType": "bool",
+				"bareValue": "true",
+				"quotedType": "str"
+			},
+			{
+				"literal": "no",
+				"bareType": "bool",
+				"bareValue": "false",
+				"quotedType": "str"
+			},
+			{
+				"literal": "0",
+				"bareType": "num",
+				"bareValue": "0",
+				"quotedType": "str"
+			},
+			{
+				"literal": "1",
+				"bareType": "num",
+				"bareValue": "1",
+				"quotedType": "str"
+			}
+		],
+		"assignmentTypes": ["bool", "str", "bool", "str"],
+		"cliDisabled": {
+			"accepted": ["yes", "no", "\"yes\"", "\"no\""],
+			"rejected": ["true", "false", "\"true\"", "\"false\"", "0", "1"]
+		},
+		"restDisabled": {
+			"accepted": [true, false, "yes", "no", "true", "false"],
+			"rejected": [0, 1]
+		},
+		"toBool": [
+			{ "literal": "\"true\"", "type": "bool", "value": "true" },
+			{ "literal": "\"false\"", "type": "bool", "value": "false" },
+			{ "literal": "\"yes\"", "type": "bool", "value": "true" },
+			{ "literal": "\"no\"", "type": "bool", "value": "false" },
+			{ "literal": "0", "type": "bool", "value": "false" },
+			{ "literal": "1", "type": "bool", "value": "true" }
+		]
+	},
 	"corpus": {
 		"sourceScripts": 948,
 		"commandStatements": 14331,
@@ -134,10 +193,30 @@
 		}
 	],
 	"rejectionControls": [
-		{ "literal": "999.999.999.999", "hints": [], "bareType": "str" },
-		{ "literal": "256.0.0.1", "hints": [], "bareType": "str" },
-		{ "literal": "1.1.1.1/99", "hints": [], "bareType": "str" },
-		{ "literal": "3w4q", "hints": [], "bareType": "str" }
+		{
+			"literal": "999.999.999.999",
+			"hints": [],
+			"attributeHints": [],
+			"bareType": "str"
+		},
+		{
+			"literal": "256.0.0.1",
+			"hints": [],
+			"attributeHints": [],
+			"bareType": "str"
+		},
+		{
+			"literal": "1.1.1.1/99",
+			"hints": [],
+			"attributeHints": [],
+			"bareType": "str"
+		},
+		{
+			"literal": "3w4q",
+			"hints": [],
+			"attributeHints": ["str"],
+			"bareType": "str"
+		}
 	],
 	"contexts": [
 		{
