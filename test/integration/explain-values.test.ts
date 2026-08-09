@@ -44,10 +44,10 @@ describeFast("explain value facts against CHR", () => {
 
 			const producedTypes = outputOf(
 				await started.chr.exec(
-					':put [:typeof [:parse ":put hello"]]; :put [:tostr [:parse ":put hello"]]; :local unset; :put [:typeof $unset]; :put [:typeof [:nothing]]',
+					':put [:typeof [:toarray ""]]; :local empty [:toarray ""]; :put [:typeof ($empty->0)]; :put [:typeof [:parse ":put hello"]]; :put [:tostr [:parse ":put hello"]]; :local unset; :put [:typeof $unset]; :put [:typeof [:nothing]]',
 				),
 			);
-			expect(producedTypes).toBe("code\n(code)\nnothing\nnil");
+			expect(producedTypes).toBe("array\nnothing\ncode\n(code)\nnothing\nnil");
 
 			const macParse = outputOf(
 				await started.chr.exec(
@@ -181,6 +181,9 @@ describeFast("explain value facts against CHR", () => {
 			).toEqual([]);
 			expect(
 				explainCommand(':local f [:parse ":put hello"]').values.occurrences,
+			).toEqual([]);
+			expect(
+				explainCommand(':local empty [:toarray ""]').values.occurrences,
 			).toEqual([]);
 
 			await recordIntegrationEvidence({

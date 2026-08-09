@@ -61,6 +61,7 @@ interface ValueFixture {
 		producedTypes: { expression: string; type: string; value: string }[];
 		uninitializedType: string;
 		nothingCommandType: string;
+		emptyArrayElementType: string;
 	};
 	corpus: {
 		sourceScripts: number;
@@ -257,6 +258,7 @@ describe("#225 value-shape grounding matrix", () => {
 			},
 			uninitializedType: "nothing",
 			nothingCommandType: "nil",
+			emptyArrayElementType: "nothing",
 		});
 		expect(
 			fixture.v2Grounding.colonTime.every((row) => row.type === "time"),
@@ -265,6 +267,7 @@ describe("#225 value-shape grounding matrix", () => {
 			fixture.v2Grounding.arrays.every((row) => row.type === "array"),
 		).toBe(true);
 		expect(fixture.v2Grounding.producedTypes.map((row) => row.type)).toEqual([
+			"array",
 			"code",
 			"id",
 			"id",
@@ -349,6 +352,7 @@ describe("value anchors", () => {
 			':local z ((1,2,3)."a")',
 			':local z ((1,2,3) . "a")',
 			':local z ("a" . (1,2,3))',
+			':local z [:toarray ""]',
 		])
 			expect(lexValueAnchors(input, ":local z".length).anchors).toEqual([]);
 		expect(

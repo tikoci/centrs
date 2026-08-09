@@ -655,8 +655,11 @@ and its phase is named below.
   Arrays are the one structured literal admitted by offline hint anchoring.
   Non-empty `{…}` values and parenthesized expressions with a depth-zero comma
   hint `array`; grouping `(1)`, empty groups, and scope braces do not. The
-  strict REST argument reader still refuses every structured value. `.` remains
-  an expression operator rather than part of a literal: it produces `str` for
+  strict REST argument reader still refuses every structured value. RouterOS
+  has no empty-array literal (`{}` is a syntax error); `[:toarray ""]` produces
+  an empty array, but remains an expression and therefore an offline
+  abstention. Indexing that empty array produces `nothing`. `.` remains an
+  expression operator rather than part of a literal: it produces `str` for
   `1 . 2`, but distributes over arrays in either operand order, so offline
   abstains on the whole concat expression and leaves its result type to #236.
   `[:parse "…"]` similarly produces the observed but undocumented `code` type,

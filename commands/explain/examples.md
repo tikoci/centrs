@@ -460,6 +460,7 @@ booleans. These live/context observations ground the offline `bool` spelling
 hint; they are not emitted as `observedType` or `schemaType` by offline explain.
 The same assertion grounds the new boundaries: brace/comma literals are
 `array`; colon times are `time`; `*1` is `id`; `.` concat can return `str` or
-distribute over an array; `[:parse "…"]` returns `code`; and `nil` has no
-standalone offline spelling. Concat, `code`, and `nil` remain abstentions rather
-than guessed hints.
+distribute over an array; `[:toarray ""]` is the only empty-array construction
+and indexing it yields `nothing`; `[:parse "…"]` returns `code`; and `nil` has
+no standalone offline spelling. Produced empty arrays, concat, `code`, and
+`nil` remain abstentions rather than guessed hints.

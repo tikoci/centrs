@@ -129,6 +129,7 @@
 			{ "literal": "(1 . 2)", "type": "str", "value": "12" }
 		],
 		"producedTypes": [
+			{ "expression": "[:toarray \"\"]", "type": "array", "value": "" },
 			{
 				"expression": "[:parse \":put hello\"]",
 				"type": "code",
@@ -138,7 +139,8 @@
 			{ "expression": "*1", "type": "id", "value": "*1" }
 		],
 		"uninitializedType": "nothing",
-		"nothingCommandType": "nil"
+		"nothingCommandType": "nil",
+		"emptyArrayElementType": "nothing"
 	},
 	"corpus": {
 		"sourceScripts": 948,
