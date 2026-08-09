@@ -174,7 +174,14 @@ function* walkArguments(
 	const structural = options.allowArrayValues ? maskComments(text) : text;
 	let i = Math.max(0, from);
 	while (i < text.length) {
-		const c = text[i] as string;
+		// The MASKED view decides whitespace, because `maskComments` blanks a
+		// continuation comment that `text` still spells with a `#`. Reading `text`
+		// here left the walk and `scanToken` disagreeing about the same byte: the
+		// scan broke on the masked space and returned a zero-length token, so
+		// `readToken` emitted an empty positional and `i` never advanced — an
+		// `explain` that never returns on `list={1;2} \<nl># c<nl> in=foo`. Strict
+		// mode is unchanged; `structural === text` there. Found in review of #243.
+		const c = structural[i] as string;
 		if (c === " " || c === "\t" || c === "\r" || c === "\n") {
 			i++;
 			continue;

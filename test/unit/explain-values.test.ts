@@ -356,6 +356,29 @@ describe("value anchors", () => {
 		expect(continued.anchors).toEqual([]);
 	});
 
+	test("a continuation comment is skipped, not read as a zero-length token", () => {
+		// The comment-masked view decides whitespace for the walk as well as the
+		// token scan. When only the scan saw the mask, the walk stalled on the `#`
+		// and `explain` never returned. Found in review of #243.
+		const input = "/x/cmd list={1;2} \\\n# note\n in=foo";
+		const reading = lexValueAnchors(input, "/x/cmd".length);
+		expect(reading.complete).toBe(true);
+		expect(
+			reading.anchors.map((anchor) => [
+				anchor.name,
+				input.slice(anchor.valueSpan.start, anchor.valueSpan.end),
+			]),
+		).toEqual([
+			["list", "{1;2}"],
+			["in", "foo"],
+		]);
+		expect(
+			explainCommand(input).values.occurrences.map(
+				(occurrence) => occurrence.facts.shapeHints?.values,
+			),
+		).toEqual([["array"], ["str"]]);
+	});
+
 	test("grouping, empty groups, scopes, and concat do not fabricate arrays", () => {
 		for (const input of [
 			":local z (1)",
