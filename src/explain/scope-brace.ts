@@ -68,7 +68,32 @@ const DIRECTIVE_POSITIONAL_ARITY: Readonly<Record<string, number>> = {
 };
 
 const BOUNDARY_CACHE_LIMIT = 4;
+const BOUNDARY_CACHE_BYTE_LIMIT = 8 * 1024 * 1024;
 const boundaryCache = new Map<string, Int32Array>();
+let boundaryCacheBytes = 0;
+
+function boundaryCacheEntryBytes(text: string, boundaries: Int32Array): number {
+	// JavaScript strings use at most two bytes per UTF-16 code unit. Include the
+	// key as well as the typed array so unusually large sources cannot be retained.
+	return text.length * 2 + boundaries.byteLength;
+}
+
+function cacheStatementBoundaries(text: string, boundaries: Int32Array): void {
+	const entryBytes = boundaryCacheEntryBytes(text, boundaries);
+	if (entryBytes > BOUNDARY_CACHE_BYTE_LIMIT) return;
+
+	while (
+		boundaryCache.size >= BOUNDARY_CACHE_LIMIT ||
+		boundaryCacheBytes + entryBytes > BOUNDARY_CACHE_BYTE_LIMIT
+	) {
+		const oldest = boundaryCache.entries().next().value;
+		if (oldest === undefined) break;
+		boundaryCache.delete(oldest[0]);
+		boundaryCacheBytes -= boundaryCacheEntryBytes(oldest[0], oldest[1]);
+	}
+	boundaryCache.set(text, boundaries);
+	boundaryCacheBytes += entryBytes;
+}
 
 /** Last unquoted statement boundary before every source offset, in one pass. */
 function statementBoundaries(text: string): Int32Array {
@@ -93,8 +118,7 @@ function statementBoundaries(text: string): Int32Array {
 	}
 	boundaries[text.length] = boundary;
 
-	if (boundaryCache.size >= BOUNDARY_CACHE_LIMIT) boundaryCache.clear();
-	boundaryCache.set(text, boundaries);
+	cacheStatementBoundaries(text, boundaries);
 	return boundaries;
 }
 
