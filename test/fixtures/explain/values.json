@@ -1,0 +1,270 @@
+{
+	"provenance": {
+		"captured": "2026-08-08",
+		"stable": "7.23.3",
+		"testing": "7.24rc3",
+		"contextRowsPerChannel": 170,
+		"matrixRowsMatch": true,
+		"quotedScalarRowsPerChannel": 17,
+		"quotedScalarType": "str",
+		"quotedScalarValuesPreserved": true,
+		"auxiliaryDifference": "out-of-range :tonsec coercion varied; scalar type was str on both channels",
+		"probes": [":typeof", ":parse IL"],
+		"controls": {
+			"knownFailure": "CONTROL-OK",
+			"badParse": "expected command name (line 1 column 1)",
+			"parseAcceptsBadValue": "(evl /ip/address/addaddress=not-an-ip;)",
+			"typeChangingAssignment": "ip\nip\nstr",
+			"runtimeRejectsBlackholeEquals": "expected end of command (line 1 column 48)"
+		}
+	},
+	"booleanGrounding": {
+		"captured": "2026-08-09",
+		"channelsMatch": true,
+		"scalars": [
+			{
+				"literal": "true",
+				"bareType": "bool",
+				"bareValue": "true",
+				"quotedType": "str"
+			},
+			{
+				"literal": "false",
+				"bareType": "bool",
+				"bareValue": "false",
+				"quotedType": "str"
+			},
+			{
+				"literal": "yes",
+				"bareType": "bool",
+				"bareValue": "true",
+				"quotedType": "str"
+			},
+			{
+				"literal": "no",
+				"bareType": "bool",
+				"bareValue": "false",
+				"quotedType": "str"
+			},
+			{
+				"literal": "0",
+				"bareType": "num",
+				"bareValue": "0",
+				"quotedType": "str"
+			},
+			{
+				"literal": "1",
+				"bareType": "num",
+				"bareValue": "1",
+				"quotedType": "str"
+			}
+		],
+		"assignmentTypes": ["bool", "str", "bool", "str"],
+		"cliDisabled": {
+			"accepted": ["yes", "no", "\"yes\"", "\"no\""],
+			"rejected": ["true", "false", "\"true\"", "\"false\"", "0", "1"]
+		},
+		"restDisabled": {
+			"accepted": [true, false, "yes", "no", "true", "false"],
+			"rejected": [0, 1]
+		},
+		"toBool": [
+			{ "literal": "\"true\"", "type": "bool", "value": "true" },
+			{ "literal": "\"false\"", "type": "bool", "value": "false" },
+			{ "literal": "\"yes\"", "type": "bool", "value": "true" },
+			{ "literal": "\"no\"", "type": "bool", "value": "false" },
+			{ "literal": "0", "type": "bool", "value": "false" },
+			{ "literal": "1", "type": "bool", "value": "true" }
+		]
+	},
+	"timeOrdering": {
+		"captured": "2026-08-09",
+		"channelsMatch": true,
+		"note": "RouterOS time literals are order-independent and ADDITIVE: a repeated unit sums rather than being rejected. `isTimeShape` therefore checks fragment coverage, not unit order — raised as an ordering defect in review of #242 and refuted here on both channels.",
+		"probe": ":typeof + :tostr",
+		"literals": [
+			{ "literal": "1s1m", "type": "time", "value": "00:01:01" },
+			{ "literal": "1m1s", "type": "time", "value": "00:01:01" },
+			{ "literal": "1m1m", "type": "time", "value": "00:02:00" },
+			{ "literal": "1s1s", "type": "time", "value": "00:00:02" },
+			{ "literal": "1h1h1h", "type": "time", "value": "03:00:00" },
+			{ "literal": "1d2d", "type": "time", "value": "3d00:00:00" },
+			{ "literal": "1d1w", "type": "time", "value": "1w1d00:00:00" },
+			{ "literal": "1w1d", "type": "time", "value": "1w1d00:00:00" },
+			{ "literal": "2s3m4h", "type": "time", "value": "04:03:02" },
+			{ "literal": "1ms1s", "type": "time", "value": "00:00:01.001" },
+			{ "literal": "1s1ms", "type": "time", "value": "00:00:01.001" }
+		]
+	},
+	"corpus": {
+		"sourceScripts": 948,
+		"commandStatements": 14331,
+		"strictComparableAnchors": 13143,
+		"boundaryContradictions": 0,
+		"unreadStatementsWithAnchors": 1345,
+		"recoveredPrefixAnchors": 3749,
+		"invalidSpans": 0
+	},
+	"scalars": [
+		{ "literal": "0", "hints": ["num"], "bareType": "num", "bareValue": "0" },
+		{ "literal": "-1", "hints": ["num"], "bareType": "num", "bareValue": "-1" },
+		{
+			"literal": "1.1",
+			"hints": ["ip"],
+			"bareType": "ip",
+			"bareValue": "1.0.0.1"
+		},
+		{
+			"literal": "1.3",
+			"hints": ["ip"],
+			"bareType": "ip",
+			"bareValue": "1.0.0.3"
+		},
+		{
+			"literal": "2.2",
+			"hints": ["ip"],
+			"bareType": "ip",
+			"bareValue": "2.0.0.2"
+		},
+		{
+			"literal": "2.1.1",
+			"hints": ["ip"],
+			"bareType": "ip",
+			"bareValue": "2.1.0.1"
+		},
+		{
+			"literal": "1.1.1.1",
+			"hints": ["ip"],
+			"bareType": "ip",
+			"bareValue": "1.1.1.1"
+		},
+		{
+			"literal": "1.1.1.1/24",
+			"hints": ["ip-prefix"],
+			"bareType": "ip-prefix",
+			"bareValue": "1.1.1.1/24"
+		},
+		{
+			"literal": "1::1",
+			"hints": ["ip6"],
+			"bareType": "ip6",
+			"bareValue": "1::1"
+		},
+		{
+			"literal": "2008:1::2/128",
+			"hints": ["ip6-prefix"],
+			"bareType": "ip6-prefix",
+			"bareValue": "2008:1::2/128"
+		},
+		{
+			"literal": "200ms",
+			"hints": ["time"],
+			"bareType": "time",
+			"bareValue": "00:00:00.200"
+		},
+		{
+			"literal": "1d",
+			"hints": ["time"],
+			"bareType": "time",
+			"bareValue": "1d00:00:00"
+		},
+		{
+			"literal": "1w7h2s",
+			"hints": ["time"],
+			"bareType": "time",
+			"bareValue": "1w07:00:02"
+		},
+		{
+			"literal": "3w4d8h",
+			"hints": ["time"],
+			"bareType": "time",
+			"bareValue": "3w4d08:00:00"
+		},
+		{
+			"literal": "123",
+			"hints": ["num"],
+			"bareType": "num",
+			"bareValue": "123"
+		},
+		{
+			"literal": "10000w",
+			"hints": ["time"],
+			"bareType": "time",
+			"bareValue": "10000w00:00:00"
+		},
+		{
+			"literal": "100000w",
+			"hints": ["time"],
+			"bareType": "str",
+			"bareValue": "100000w"
+		},
+		{
+			"literal": "yes",
+			"hints": ["bool"],
+			"bareType": "bool",
+			"bareValue": "true"
+		},
+		{
+			"literal": "no",
+			"hints": ["bool"],
+			"bareType": "bool",
+			"bareValue": "false"
+		}
+	],
+	"rejectionControls": [
+		{
+			"literal": "999.999.999.999",
+			"hints": [],
+			"attributeHints": [],
+			"bareType": "str"
+		},
+		{
+			"literal": "256.0.0.1",
+			"hints": [],
+			"attributeHints": [],
+			"bareType": "str"
+		},
+		{
+			"literal": "1.1.1.1/99",
+			"hints": [],
+			"attributeHints": [],
+			"bareType": "str"
+		},
+		{
+			"literal": "3w4q",
+			"hints": [],
+			"attributeHints": ["str"],
+			"bareType": "str"
+		}
+	],
+	"contexts": [
+		{
+			"input": "/ip/address/add address=2.2 comment=2.2",
+			"il": "(evl /ip/address/addaddress=2.0.0.2;;comment=2.2)"
+		},
+		{
+			"input": "/ip/firewall/filter/add chain=input src-address=2.2 action=accept comment=2.2",
+			"il": "(evl /ip/firewall/filter/addaction=accept;chain=input;comment=2.2;src-address=;2.0.0.2)"
+		},
+		{
+			"input": "/ip/firewall/filter/add chain=input src-address=not-an-ip action=accept",
+			"il": "(evl /ip/firewall/filter/addaction=accept;chain=input;src-address=;not-an-ip)"
+		},
+		{
+			"input": "/tool/netwatch/add host=1.1.1.1 interval=2.2",
+			"il": "(evl /tool/netwatch/addhost=1.1.1.1;interval=00:00:02.200)"
+		},
+		{
+			"input": "/ip/firewall/filter/add chain=input action=accept disabled=2.2",
+			"il": "syntax error (line 1 column 60)"
+		},
+		{
+			"input": "/ip/route/add dst-address=10.9.0.0/16 distance=2.2",
+			"il": "(evl /ip/route/adddistance=2.2;dst-address=10.9.0.0/16)"
+		},
+		{
+			"input": "/tool/netwatch/add interval=200ms comment=200ms host=1.1.1.1",
+			"il": "(evl /tool/netwatch/addcomment=200ms;host=1.1.1.1;interval=00:00:00.200)"
+		}
+	]
+}

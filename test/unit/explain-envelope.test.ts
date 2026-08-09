@@ -87,6 +87,10 @@ describe("explainCommand — structural invariants", () => {
 				...data.structure.subcommands.map((s) => s.span),
 				...data.structure.blocks.map((b) => b.span),
 				...data.symbols.occurrences.map((s) => s.span),
+				...data.values.occurrences.flatMap((value) => [
+					value.span,
+					value.tokenSpan,
+				]),
 				...data.spans,
 				...data.diagnostics.map((d) => d.span),
 			];
@@ -119,6 +123,17 @@ describe("explainCommand — structural invariants", () => {
 				...data.structure.subcommands.map((s) => s.ev),
 				...data.structure.blocks.map((b) => b.ev),
 				...data.symbols.occurrences.map((s) => s.ev),
+				...data.values.occurrences.flatMap((value) => [
+					...(value.facts.shapeHints === undefined
+						? []
+						: [value.facts.shapeHints.ev]),
+					...(value.facts.observedType === undefined
+						? []
+						: [value.facts.observedType.ev]),
+					...(value.facts.schemaType === undefined
+						? []
+						: [value.facts.schemaType.ev]),
+				]),
 				...data.spans.map((s) => s.ev),
 				...data.diagnostics.map((d) => d.ev),
 			]);
@@ -180,6 +195,16 @@ describe("explainCommand — structural invariants", () => {
 			expect(data.runtimeAcceptance).toBe("not-proven");
 		});
 	}
+});
+
+describe("conditional value evidence", () => {
+	test("e9 is absent when no value earns a shape hint", () => {
+		for (const input of [":local x", ":put uplink"]) {
+			const data = explainCommand(input);
+			expect(data.values.occurrences).toEqual([]);
+			expect(data.evidence.some((entry) => entry.id === "e9")).toBe(false);
+		}
+	});
 });
 
 describe("block bodies are statements too", () => {
@@ -734,5 +759,8 @@ describe("public export surface", () => {
 	test("the composition is exported from the library root", () => {
 		expect(centrs.explainCommand).toBe(explainCommand);
 		expect(centrs.explainEnvelope).toBe(explainEnvelope);
+		expect(typeof centrs.lexExplainValueAnchors).toBe("function");
+		expect(typeof centrs.explainValueShapeHints).toBe("function");
+		expect(centrs.VALUE_SHAPES).toContain("ip-prefix");
 	});
 });

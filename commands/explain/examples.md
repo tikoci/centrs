@@ -433,3 +433,24 @@ The JSON/YAML form carries the same facts under
 `data.symbols.occurrences[]` as `name`, byte `span`, `class`, `role`,
 `bindingIds`, `sigil`, optional `note`, and `ev`. This is the Q13 symbol view;
 it does not infer value-flow types, which remain #239 S2 after #225.
+
+### 26. Value facts keep shape, observed type, and schema type separate
+
+```bash
+centrs explain ':local x 2.2; :set x "2.2"' --json
+```
+
+`data.values.occurrences[]` contains two result-local value records. The bare
+`2.2` carries `facts.shapeHints.values: ["ip"]` — RouterOS numbers are integers,
+so a dotted decimal is an IPv4 shortcut (`2.0.0.2`) and never `num`; the quoted
+`"2.2"` carries `["str"]`. Each hint fact cites canonicalizer evidence with
+`basis: "heuristic"`; neither record has `observedType` or `schemaType`, because
+offline analysis has neither live parser output nor an argument schema. A hint
+is not a diagnostic and does not change `data.verdict` or
+`runtimeAcceptance: "not-proven"`.
+
+The CHR assertion for this example also pins the boolean boundary: scalar
+`true`/`false` and `yes`/`no` are `bool`, quoted forms are `str`, CLI boolean
+attributes accept `yes`/`no` rather than `true`/`false`, and REST accepts JSON
+booleans. These live/context observations ground the offline `bool` spelling
+hint; they are not emitted as `observedType` or `schemaType` by offline explain.

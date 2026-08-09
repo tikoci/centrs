@@ -349,6 +349,27 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(out).not.toContain('name="w7h2s"');
 		expect(code).toBe(0);
 	});
+
+	test("26. Value facts keep the three type axes separate (#225)", async () => {
+		const { data, code } = await explainJson([':local x 2.2; :set x "2.2"']);
+		expect(data.values.occurrences.map((value) => value.facts)).toEqual([
+			{ shapeHints: { values: ["ip"], ev: "e9" } },
+			{ shapeHints: { values: ["str"], ev: "e9" } },
+		]);
+		expect(
+			data.values.occurrences.every(
+				(value) => value.facts.observedType === undefined,
+			),
+		).toBe(true);
+		expect(
+			data.values.occurrences.every(
+				(value) => value.facts.schemaType === undefined,
+			),
+		).toBe(true);
+		expect(data.verdict).toBe("pass");
+		expect(data.runtimeAcceptance).toBe("not-proven");
+		expect(code).toBe(0);
+	});
 });
 
 /**

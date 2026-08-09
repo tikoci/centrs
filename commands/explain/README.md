@@ -398,10 +398,12 @@ Standard envelope (constitution: result envelope); `data` sketch:
     "subcommands": []
   },
   "symbols": { "occurrences": [] },
+  "values": { "occurrences": [ { "id": "v0", "span": { "start": 26, "end": 37 }, "tokenSpan": { "start": 14, "end": 37 }, "kind": "attribute", "name": "dst-address", "quoted": false, "facts": { "shapeHints": { "values": ["ip-prefix"], "ev": "e9" } } } ] },
   "spans": [ { "start": 0, "end": 9, "class": "path", "ev": "e0" } ],
   "diagnostics": [],
   "evidence": [
-    { "id": "e0", "source": "canonicalizer", "probe": "resolveVerbs", "basis": "heuristic", "outcome": "ok" }
+    { "id": "e0", "source": "canonicalizer", "probe": "resolveVerbs", "basis": "heuristic", "outcome": "ok" },
+    { "id": "e9", "source": "canonicalizer", "probe": "valueShapeHints", "basis": "heuristic", "outcome": "ok" }
   ],
   "runtimeAcceptance": "not-proven"
 }
@@ -542,6 +544,7 @@ and its phase is named below.
 | `structure.statements[].command` | `path` + `verb`, plus **`args` where the argument list was read** (#202c-1); the ordered token list is `statements[].arguments.tokens` |
 | `structure.statements[].transport` | complete for commands: `api-candidate`, `execute`, or fail-closed `unknown`, with an equivalent `centrs` invocation and opt-in `curl` for tested REST mappings (#202c-2). The `basis` names the evidence for the route it chose or refused |
 | `symbols.occurrences[]` | Q13 name/span/class plus semantic `role`, result-local `bindingIds`, sigil spelling, and an abstention note where needed; **no value shape or type** |
+| `values.occurrences[]` | result-local value id/span plus three separate fact homes: offline `shapeHints`; live `observedType` and `schemaType` remain absent until phase 2 |
 | `spans` | comment runs and resolved variable classes only; **no value shape or type** |
 | `schema`, `completion` | absent — live evidence, phase 2 |
 
@@ -618,28 +621,49 @@ and its phase is named below.
   typed to what offline produces rather than pre-declaring variants nothing can
   emit, so phase 2 widens the union and adds the stamp — an addition, not a
   change to what a caller reads today.
-- **The value TYPE axis is untouched, and `highlight` cannot close it.**
-  RouterOS types values at parse time (bare `1.1.1.1` is `ip`, `3w4d8h` is
-  `time`, `"1.1.1.1"` is `str`, and some commands implicitly cast) while the
-  device highlighter classes every value byte `none` — so the value axis has a
-  different oracle (`:parse`/IL and `:typeof`) and is **not** a subset of the
-  Q12 span work above. Three facts stay separate when it lands, each with its
-  own provenance and uncertainty, never collapsed into one `type` string:
-  1. a **lexical shape hint** — non-authoritative and possibly *several*,
-     because shapes overlap (`2.2` is number-shaped and ip-completable);
-  2. the **observed type** a live IL/`:typeof` reading reports;
-  3. the argument's **schema type** from path enumeration.
+- **Value facts are three axes, never one `type` string (#225).** RouterOS
+  types values at parse time while `highlight` classes every value byte `none`,
+  so type evidence is not a subset of Q12 spans. Each result-local
+  `values.occurrences[]` row owns one value span and a `facts` object:
+  1. `shapeHints: { values, ev }` is offline and heuristic — a list, because the
+     axis admits overlap;
+  2. `observedType?: { value, ev }` is what a live parser/IL reading supports;
+  3. `schemaType?: { value, ev }` is the argument's declared live-schema type.
 
-  The decision, the fail-closed rules (a hint is never a diagnostic; a quoted
-  value never gets a "wrong type" flag) and the probe matrix that has to ground
-  it are **#225**, carved out of #202's *Value-shape / typed-literal awareness*
-  section so they outlive #202 closing. It sequences as the **first phase-2 lab
-  round**: after #202c, because a value token cannot be annotated before the
-  statement-scope lexer can locate one, and before phase-2 span/`--schema`
-  emission, because retrofitting three facts onto one shipped `class` + `ev`
-  would *change* a field rather than add one. Written down here because the
-  lexical layer is deliberately type-blind: when a future verdict looks wrong
-  around a value, that is a type-axis question before it is a lexical one.
+  The stable/testing CHR matrix fixes the offline lexicon: `num`, `ip`,
+  `ip-prefix`, `ip6`, `ip6-prefix`, `time`, `bool`, and `str`; quoted literals
+  hint only `str`, while malformed and out-of-range address-like controls
+  abstain even in named attributes. Because the vocabulary borrows RouterOS's
+  own type names, a hint must never spell one the device contradicts: `num` is
+  **integer-only**, since RouterOS numbers are integers and a dotted decimal is
+  an IPv4 shortcut — bare `2.2` is observed as `ip` (`2.0.0.2`), so it hints
+  `ip` alone. On that grounded lexicon each spelling reaches at most one shape;
+  the list stays a list for the members #243 still owes (a colon time spelling
+  like `00:00:02`, and `mac`), which abstain today rather than being widened
+  into the nearest member that does exist. A single colon is not an address attempt
+  — `comment=foo:bar` hints `str` — while a hex-and-colon run stays fail-closed.
+  Shape remains non-authoritative: `100000w` is time-shaped but observed as
+  `str`. Argument context remains separate: on 7.23.3 and 7.24rc3, both
+  `/ip/address address=2.2` and firewall `src-address=2.2` canonicalize it to
+  `2.0.0.2`, while `comment=2.2` stays text, netwatch `interval=2.2`
+  normalizes to `00:00:02.200`, a boolean slot rejects it, and `:parse` still
+  accepts `src-address=not-an-ip`. Boolean grounding has the same separation:
+  bare `true`/`false` and `yes`/`no` are scalar `bool`, while their quoted forms
+  are `str`; a CLI `disabled=` slot accepts bare or quoted `yes`/`no` but rejects
+  `true`/`false`, while REST accepts JSON booleans and the string forms
+  `yes`/`no`/`true`/`false`. `:tobool` conversion is a separate runtime operation
+  and does not widen the hint. Thus a hint never validates a value or becomes a
+  diagnostic, and never changes `runtimeAcceptance`. Quoting likewise never
+  earns a wrong-type diagnostic: commands may cast quoted strings at runtime.
+  Offline emits only `shapeHints`; phase 2 adds the two live facts into their
+  existing homes when its safe IL/schema producers land.
+
+  V1's corpus census covers 948 source scripts: all 13,143 value anchors for
+  which the strict argument lexer also decided have identical half-open byte
+  spans (0 contradictions), while the prefix-safe hint scan retains 3,749
+  earlier literals across 1,345 statements whose later token made the strict
+  REST reading abstain. All retained document spans were in bounds. The strict
+  lexer remains all-or-nothing; only non-authoritative hints use the prefix.
 - **Severity is fixed here, because it drives `--fail-on`.** Three buckets, and
   the split is not "structural vs not":
   - `error` — `unclosed`, `unbalanced-close`, `unterminated-string`,

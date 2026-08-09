@@ -61,14 +61,15 @@
  *     abstentions are omitted rather than guessed). The full Q12 vocabulary over
  *     path/verb/argument bytes needs device `highlight` as its oracle and is
  *     phase 2. A subset is not a claim that the vocabulary is closed.
- *   - **No value TYPE, and highlight will not supply one.** RouterOS types
- *     values at parse time and its highlighter classes every value byte `none`,
- *     so the value axis has a different oracle (`:parse`/IL and `:typeof`) and
- *     three facts that must not collapse into one field: a lexical SHAPE hint
- *     (non-authoritative, possibly several, because shapes overlap — `2.2` is
- *     number-shaped and ip-completable), the type OBSERVED from a live reading,
- *     and the argument's SCHEMA type. Each needs its own provenance. The
- *     decision and the probe matrix are #202's value-shape section; this module
+ *   - **Value facts have three axes, and highlight supplies none of them.**
+ *     Offline analysis now publishes non-authoritative lexical SHAPE hints. The
+ *     hint list may carry several shapes, but it borrows RouterOS's own type
+ *     names, so it must never spell one the device contradicts: `2.2` is an
+ *     IPv4 shortcut (`2.0.0.2`), not a decimal, because RouterOS numbers are
+ *     integers. The type OBSERVED from a live reading and the SCHEMA type have
+ *     separate optional homes but no offline producer. Each fact has its own
+ *     provenance; no hint validates a value or becomes a diagnostic. The
+ *     decision and the probe matrix are #225; this module
  *     is deliberately type-blind, which is why a verdict that looks wrong around
  *     a value is a type-axis question before it is a lexical one.
  *   - **`runtimeAcceptance` is always `"not-proven"`**, offline and live alike.
@@ -88,7 +89,11 @@ import {
 	canonicalizeExecuteCommand,
 	isWriteShaped,
 } from "./execute.ts";
-import { type ArgumentKind, lexArguments } from "./explain/args.ts";
+import {
+	type ArgumentKind,
+	lexArguments,
+	lexValueAnchors,
+} from "./explain/args.ts";
 import { scopeBlocks } from "./explain/blocks.ts";
 import {
 	analyzeCoordinates,
@@ -110,6 +115,7 @@ import {
 	classifyExplainTransport,
 	type ExplainTransport,
 } from "./explain/transport.ts";
+import { type ValueShape, valueShapeHints } from "./explain/values.ts";
 import {
 	type DocumentVerbSplit,
 	resolveVerb,
@@ -420,6 +426,44 @@ export interface ExplainSymbols {
 	occurrences: ExplainSymbolOccurrence[];
 }
 
+export interface ExplainValueShapeFact {
+	/**
+	 * A list because the axis admits overlap; the 7.23.3/7.24rc3-grounded V1
+	 * lexicon happens to assign at most one shape per spelling, and abstains
+	 * where it has no grounded member (#243) rather than widening a near miss.
+	 */
+	values: ValueShape[];
+	ev: string;
+}
+
+export interface ExplainValueTypeFact {
+	value: string;
+	ev: string;
+}
+
+/** The three #225 axes; live producers add the latter two without reshaping. */
+export interface ExplainValueFacts {
+	shapeHints?: ExplainValueShapeFact;
+	observedType?: ExplainValueTypeFact;
+	schemaType?: ExplainValueTypeFact;
+}
+
+export interface ExplainValueOccurrence {
+	/** Result-local identity for #239's later flow-sensitive references. */
+	id: string;
+	/** Literal source bytes, quotes included. */
+	span: ExplainSpanRange;
+	tokenSpan: ExplainSpanRange;
+	kind: Exclude<ArgumentKind, "query">;
+	name?: string;
+	quoted: boolean;
+	facts: ExplainValueFacts;
+}
+
+export interface ExplainValues {
+	occurrences: ExplainValueOccurrence[];
+}
+
 export type ExplainSeverity = "error" | "warning" | "info";
 
 export interface ExplainDiagnostic {
@@ -463,6 +507,7 @@ export interface ExplainData {
 	canonical: ExplainCanonical;
 	structure: ExplainStructure;
 	symbols: ExplainSymbols;
+	values: ExplainValues;
 	spans: ExplainSpan[];
 	diagnostics: ExplainDiagnostic[];
 	evidence: ExplainEvidence[];
@@ -506,6 +551,7 @@ const EV = {
 	write: "e6",
 	symbols: "e7",
 	transport: "e8",
+	values: "e9",
 } as const;
 
 type EvidenceKey = keyof typeof EV;
@@ -571,6 +617,13 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		id: EV.transport,
 		source: "canonicalizer",
 		probe: "classifyExplainTransport",
+		basis: "heuristic",
+		outcome: "ok",
+	},
+	values: {
+		id: EV.values,
+		source: "canonicalizer",
+		probe: "valueShapeHints",
 		basis: "heuristic",
 		outcome: "ok",
 	},
@@ -836,6 +889,7 @@ export function explainCommand(
 			ev: EV.symbols,
 		})),
 	};
+	const valueFacts = valuesOf(verbs.splits, analyzed);
 
 	const structure: ExplainStructure = {
 		statementCount: statements.length,
@@ -870,9 +924,16 @@ export function explainCommand(
 		},
 		structure,
 		symbols: symbolFacts,
+		values: valueFacts,
 		spans,
 		diagnostics,
-		evidence: citedEvidence(structure, diagnostics, spans, symbolFacts),
+		evidence: citedEvidence(
+			structure,
+			diagnostics,
+			spans,
+			symbolFacts,
+			valueFacts,
+		),
 		runtimeAcceptance: "not-proven",
 	};
 }
@@ -1010,6 +1071,47 @@ function argumentsOf(
 			positional: lexed.positional,
 		},
 	};
+}
+
+/** Compose safely located literals into the three-axis #225 value surface. */
+function valuesOf(
+	splits: readonly DocumentVerbSplit[],
+	analyzed: string,
+): ExplainValues {
+	const occurrences: ExplainValueOccurrence[] = [];
+	for (const split of splits) {
+		if (split.resolution !== "resolved" || split.argsAt === null) continue;
+		const { start, end } = split.span;
+		const text = analyzed.slice(start, end);
+		if (text !== split.text) continue;
+		const anchored = lexValueAnchors(text, split.argsAt);
+		// Prefix completeness is intentionally not an envelope fact: shape hints are
+		// advisory and never turn the later refusal reason into a diagnostic.
+		for (const anchor of anchored.anchors) {
+			const hints = valueShapeHints(anchor.value, {
+				quoted: anchor.quoted,
+				allowBareString: anchor.kind === "attribute",
+			});
+			if (hints.length === 0) continue;
+			const span = {
+				start: start + anchor.valueSpan.start,
+				end: start + anchor.valueSpan.end,
+			};
+			occurrences.push({
+				id: `v${occurrences.length}`,
+				span,
+				tokenSpan: {
+					start: start + anchor.tokenSpan.start,
+					end: start + anchor.tokenSpan.end,
+				},
+				kind: anchor.kind,
+				...(anchor.name === undefined ? {} : { name: anchor.name }),
+				quoted: anchor.quoted,
+				facts: { shapeHints: { values: hints, ev: EV.values } },
+			});
+		}
+	}
+	return { occurrences };
 }
 
 /**
@@ -1176,6 +1278,7 @@ function citedEvidence(
 	diagnostics: readonly ExplainDiagnostic[],
 	spans: readonly ExplainSpan[],
 	symbols: ExplainSymbols,
+	values: ExplainValues,
 ): ExplainEvidence[] {
 	// `canonical` and `input` carry no `ev` of their own — they are whole-result
 	// fields, not entries in a list — so their two passes are seeded here.
@@ -1189,6 +1292,14 @@ function citedEvidence(
 	for (const d of diagnostics) cited.add(d.ev);
 	for (const s of spans) cited.add(s.ev);
 	for (const occurrence of symbols.occurrences) cited.add(occurrence.ev);
+	for (const occurrence of values.occurrences) {
+		if (occurrence.facts.shapeHints !== undefined)
+			cited.add(occurrence.facts.shapeHints.ev);
+		if (occurrence.facts.observedType !== undefined)
+			cited.add(occurrence.facts.observedType.ev);
+		if (occurrence.facts.schemaType !== undefined)
+			cited.add(occurrence.facts.schemaType.ev);
+	}
 	return Object.values(EVIDENCE)
 		.filter((e) => cited.has(e.id))
 		.sort((a, b) => a.id.localeCompare(b.id));
@@ -1407,6 +1518,12 @@ function renderSymbol(occurrence: ExplainSymbolOccurrence): string {
 	return `${(occurrence.class ?? "unknown").padEnd(9)} ${occurrence.role.padEnd(11)} name=${JSON.stringify(occurrence.name)}${binding}${note}`;
 }
 
+function renderValue(occurrence: ExplainValueOccurrence): string {
+	const name = occurrence.name === undefined ? "" : ` name=${occurrence.name}`;
+	const shapes = occurrence.facts.shapeHints?.values.join("|") ?? "unknown";
+	return `${occurrence.kind.padEnd(10)}${name} shapes=${shapes}`;
+}
+
 /**
  * The human format.
  *
@@ -1476,6 +1593,13 @@ function renderExplainText(
 		for (const occurrence of data.symbols.occurrences)
 			lines.push(
 				`  ${span(occurrence.span).padEnd(12)} ${renderSymbol(occurrence)}`,
+			);
+	}
+	if (data.values.occurrences.length > 0) {
+		lines.push("values:");
+		for (const occurrence of data.values.occurrences)
+			lines.push(
+				`  ${span(occurrence.span).padEnd(12)} ${renderValue(occurrence)}`,
 			);
 	}
 	if (data.diagnostics.length > 0) {

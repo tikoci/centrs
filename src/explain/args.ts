@@ -91,6 +91,11 @@ export interface Argument {
 	text: string;
 }
 
+/** Internal token classification; quote state is stripped from the REST view. */
+interface ReadArgument extends Argument {
+	literalQuoted?: boolean;
+}
+
 /** Every token decided. */
 export interface ArgumentsRead {
 	read: true;
@@ -122,25 +127,44 @@ export interface ArgumentsUnread {
 
 export type ArgumentReading = ArgumentsRead | ArgumentsUnread;
 
+/** One safely located literal value, before any later unreadable token. */
+export interface ValueAnchor {
+	kind: Exclude<ArgumentKind, "query">;
+	/** The whole argument token. */
+	tokenSpan: { start: number; end: number };
+	/** Attribute name; absent on a positional. */
+	name?: string;
+	/** The literal's source bytes, quotes included. */
+	valueSpan: { start: number; end: number };
+	/** The decoded literal value. */
+	value: string;
+	/** True only when one quoted run encloses the whole value. */
+	quoted: boolean;
+}
+
+/** Prefix-safe value anchoring; `complete: false` explains where scanning stopped. */
+export type ValueAnchorReading =
+	| { complete: true; anchors: ValueAnchor[] }
+	| { complete: false; anchors: ValueAnchor[]; why: string };
+
 /** A refusal, carrying the reason a consumer quotes instead of a bare `unknown`. */
 function unread(why: string): ArgumentsUnread {
 	return { read: false, why };
 }
 
 /**
- * Lex the arguments of ONE statement, starting at `from`.
+ * The ONE argument token walk, shared by both readings.
  *
- * `text` is the statement, `from` is where its leading run ended
- * (`VerbSplitCommandReading.argsAt`). Offsets in the result are relative to
- * `text`, so a caller rebases them by the statement's own span; it never throws.
- *
- * Only ASCII text may be passed. The analyzed surface is ASCII by construction
- * (`coordinates.ts` stands one byte in for every non-ASCII one), and a caller
- * that hands over the ORIGINAL text of a non-ASCII statement would get spans
- * that do not map back — `src/explain.ts` verifies the two agree before calling.
+ * Yields each decided token in order, or one refusal string and stops. The
+ * strict {@link lexArguments} discards everything on that refusal while
+ * {@link lexValueAnchors} keeps the prefix — but they must never disagree about
+ * where a token starts, ends, or becomes unreadable, so the boundary rules live
+ * here once.
  */
-export function lexArguments(text: string, from: number): ArgumentReading {
-	const tokens: Argument[] = [];
+function* walkArguments(
+	text: string,
+	from: number,
+): Generator<ReadArgument | string> {
 	let i = Math.max(0, from);
 	while (i < text.length) {
 		const c = text[i] as string;
@@ -157,11 +181,39 @@ export function lexArguments(text: string, from: number): ArgumentReading {
 			continue;
 		}
 		const token = scanToken(text, i);
-		if (typeof token === "string") return unread(token);
+		if (typeof token === "string") {
+			yield token;
+			return;
+		}
 		const read = readToken(text, i, token.end);
-		if (typeof read === "string") return unread(read);
-		tokens.push(read);
+		if (typeof read === "string") {
+			yield read;
+			return;
+		}
+		yield read;
 		i = token.end;
+	}
+}
+
+/**
+ * Lex the arguments of ONE statement, starting at `from`.
+ *
+ * `text` is the statement, `from` is where its leading run ended
+ * (`VerbSplitCommandReading.argsAt`). Offsets in the result are relative to
+ * `text`, so a caller rebases them by the statement's own span; it never throws.
+ *
+ * Only ASCII text may be passed. The analyzed surface is ASCII by construction
+ * (`coordinates.ts` stands one byte in for every non-ASCII one), and a caller
+ * that hands over the ORIGINAL text of a non-ASCII statement would get spans
+ * that do not map back — `src/explain.ts` verifies the two agree before calling.
+ */
+export function lexArguments(text: string, from: number): ArgumentReading {
+	const tokens: Argument[] = [];
+	for (const step of walkArguments(text, from)) {
+		if (typeof step === "string") return unread(step);
+		const publicToken = { ...step };
+		delete publicToken.literalQuoted;
+		tokens.push(publicToken);
 	}
 
 	const args: Record<string, string> = {};
@@ -237,7 +289,7 @@ function readToken(
 	text: string,
 	start: number,
 	end: number,
-): Argument | string {
+): ReadArgument | string {
 	const raw = text.slice(start, end);
 	const span = { start, end };
 	if (raw.startsWith("?")) {
@@ -263,6 +315,7 @@ function readToken(
 					span,
 					value: positional.value,
 					valueSpan: span,
+					literalQuoted: positional.quoted,
 					text: raw,
 				};
 	}
@@ -281,6 +334,7 @@ function readToken(
 		name,
 		value: value.value,
 		valueSpan: { start: eq + 1, end },
+		literalQuoted: value.quoted,
 		text: raw,
 	};
 }
@@ -320,8 +374,8 @@ function literalValue(
 	text: string,
 	start: number,
 	end: number,
-): { value: string } | string {
-	if (start >= end) return { value: "" };
+): { value: string; quoted: boolean } | string {
+	if (start >= end) return { value: "", quoted: false };
 	if ((text[start] as string) === '"') {
 		const scan = scanQuotedString(text, start);
 		if (!scan.closed) return "unterminated string in an argument value";
@@ -329,7 +383,7 @@ function literalValue(
 		const body = text.slice(start + 1, end - 1);
 		if (body.includes("\\")) return "an escape in a quoted argument value";
 		if (body.includes("$")) return "a substitution in a quoted argument value";
-		return { value: body };
+		return { value: body, quoted: true };
 	}
 	const body = text.slice(start, end);
 	if (body.includes('"')) return "a partly-quoted argument value";
@@ -341,7 +395,7 @@ function literalValue(
 	if (body.includes("\\")) return "an escape in an argument value";
 	const disagreement = gateDisagreement(body);
 	if (disagreement !== null) return disagreement;
-	return { value: body };
+	return { value: body, quoted: false };
 }
 
 /**
@@ -420,4 +474,40 @@ function gateDisagreement(body: string): string | null {
 	if (body.includes("\f") || body.includes("\v"))
 		return "a form feed or vertical tab in an unquoted value, which centrs's execute gate treats as a token boundary and RouterOS does not";
 	return null;
+}
+
+/**
+ * Locate the literal-value prefix of one statement's arguments (#225 V1).
+ *
+ * {@link lexArguments} remains all-or-nothing because its consumer may render a
+ * runnable REST request. Hints are different: an unreadable later expression
+ * must not erase an earlier, independently bounded literal. This scan therefore
+ * reuses the exact same token and literal readers, returns every safe anchor
+ * before the first refusal, and stops there. It never guesses past a bracket,
+ * escape, continuation, or gate disagreement.
+ */
+export function lexValueAnchors(
+	text: string,
+	from: number,
+): ValueAnchorReading {
+	const anchors: ValueAnchor[] = [];
+	for (const read of walkArguments(text, from)) {
+		if (typeof read === "string")
+			return { complete: false, anchors, why: read };
+		if (
+			read.kind !== "query" &&
+			read.value !== undefined &&
+			read.valueSpan !== undefined
+		) {
+			anchors.push({
+				kind: read.kind,
+				tokenSpan: read.span,
+				...(read.name === undefined ? {} : { name: read.name }),
+				valueSpan: read.valueSpan,
+				value: read.value,
+				quoted: read.literalQuoted ?? false,
+			});
+		}
+	}
+	return { complete: true, anchors };
 }
