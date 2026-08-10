@@ -481,11 +481,15 @@ REST body; the comment text is never rendered as an operand.
 The CHR assertion grounds the wider placement rule on the requested RouterOS
 channel via `/console/inspect request=highlight` plus `:parse`: unquoted `#`
 inside brace arrays and parenthesized expressions is a hard error; the first
-non-space `#` in `do`, `else`, `foreach do`, and `on-event` bodies is a comment;
-the same lead inside a `[…]` command substitution is a comment while
-`[:put #test]` keeps `#test` as a value; attribute and bare-value `#` is
-content; and `#` after `}` is a hard error. The stable/testing grounding run
-for #245 used RouterOS 7.23.3 and 7.24rc3.
+non-space `#` in `do`, `else`, `foreach do`, and `on-event` bodies that are
+themselves in a statement context is a comment — the same `do={ # c` nested
+inside an array is an array and `#` is an error (placement table, #249), while
+a `[…]` substitution nested in that array re-enters a statement context so
+`[:do { # c` is a comment again; the same lead inside a `[…]` command
+substitution is a comment while `[:put #test]` keeps `#test` as a value;
+attribute and bare-value `#` is content; and `#` after `}` is a hard error.
+The stable/testing grounding run for #245 used RouterOS 7.23.3 and 7.24rc3;
+the enclosing-array exception is grounded on CHR 7.23.3 via #249.
 
 A same-line hash after a completed scripting directive is likewise an error:
 `:local x 2 #` produces an `explain/canonicalizer/invalid-hash` diagnostic at

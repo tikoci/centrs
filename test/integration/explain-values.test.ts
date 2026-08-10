@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { lexValueAnchors } from "../../src/explain/args.ts";
+import { resolveDocument } from "../../src/explain/pathresolve.ts";
+import { resolveSymbols } from "../../src/explain/symbols.ts";
 import { explainCommand } from "../../src/explain.ts";
 import {
 	isChrIntegrationEnabled,
@@ -286,10 +288,14 @@ describeFast("explain value facts against CHR", () => {
 			}
 			// #249 — the same scope-named brace is an error already in the first group,
 			// but verify offline fail-closed there too (CHR ground: error above)
+			// and that no confident path/symbol fact is invented for the array
+			// body — the changed pathresolve/symbols walkers must not emit one
+			// even if the segmenter verdict later drifted.
 			for (const scrap of [
 				":local z {do={ # c\n:put 1}}",
 				":local z {script={ # c\n:put 1}}",
 				":local z { { # c\n:put 1}}",
+				":local z {/ip/dhcp-server { # c\n:put 1}}",
 			]) {
 				expect(explainCommand(scrap).verdict).toBe("fail");
 				expect(
@@ -297,6 +303,19 @@ describeFast("explain value facts against CHR", () => {
 						diagnostic.code.endsWith("/invalid-hash"),
 					),
 				).toHaveLength(1);
+				// `resolveDocument` must surface the hard defect so the statement
+				// cannot be treated as successful context for the next line.
+				expect(
+					resolveDocument(scrap).defects.some((d) => d.code === "invalid-hash"),
+				).toBe(true);
+				// `resolveSymbols` likewise stops at the hash; no post-hash
+				// occurrence should be claimed as confident.
+				const symbols = resolveSymbols(scrap);
+				expect(symbols.defects.some((d) => d.code === "invalid-hash")).toBe(
+					true,
+				);
+				const hash = scrap.indexOf("#");
+				expect(symbols.occurrences.some((o) => o.start > hash)).toBe(false);
 			}
 			for (const readable of [
 				":local z {[:put #test]}",
