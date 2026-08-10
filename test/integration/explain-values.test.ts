@@ -233,6 +233,7 @@ describeFast("explain value facts against CHR", () => {
 				":local z {source={ # c\n:put 1}}",
 				":local z {on-event={ # c\n:put 1}}",
 				":local z { { # c\n:put 1}}",
+				":local z {/ip/dhcp-server { # c\n:put 1}}",
 				":local x 2 #",
 				"{ :local x 2 # }",
 				":put 2 # blah",
@@ -330,6 +331,27 @@ describeFast("explain value facts against CHR", () => {
 			]) {
 				const anchors = lexValueAnchors(refused, ":local".length);
 				expect(anchors.complete).toBeFalse();
+			}
+			// #249 — /menu { control: same construct WITHOUT the hash is valid
+			// (proves the failure above is comment placement, not an earlier
+			// invalid construct). Runtime must see it as an array value.
+			{
+				const control = ':local z {/ip/dhcp-server { :put "INNER"}}';
+				const classes = await highlightClasses(started.chr, control);
+				// No hash, so no error class; verify highlight is clean and :parse succeeds
+				expect(classes.includes("error")).toBe(false);
+				expect(
+					outputOf(
+						await started.chr.exec(`:put [:parse ${rosString(control)}]`),
+					),
+				).not.toMatch(/syntax error|expected end of command|failure/);
+				const runtime = outputOf(
+					await started.chr.exec(
+						`${control}\n:put ("TYPE=" . [:typeof $z])\n:put ("VALUE=" . [:tostr $z])`,
+					),
+				);
+				expect(runtime).toContain("TYPE=array");
+				expect(runtime).toContain("VALUE=INNER");
 			}
 
 			const trailing = ":if (true) do={:put x} # c\n:put y";
