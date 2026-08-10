@@ -18,7 +18,17 @@ export interface QuotedStringScan {
 	closed: boolean;
 }
 
-/** Valid single-char escapes after `\` inside a RouterOS string. */
+/**
+ * Valid single-char escapes after `\` inside a RouterOS string.
+ *
+ * This is the DEVICE's set, not the manual's table. The manual's
+ * "Constant Escape Sequences" list is a lower bound: it omits `\?`, which
+ * RouterOS classes `escaped` and evaluates to `?`. Swept byte by byte on CHR
+ * 7.23.3 — `:put "\<c>"` for every 0x20–0x7E plus TAB/LF/CRLF, scored on both
+ * the `/console/inspect request=highlight` class and the runtime result — and
+ * the accepted set is exactly these plus whitespace continuations plus
+ * two-digit uppercase hex (#252, `.scratch/explain-252-escape-sweep.ts`).
+ */
 const VALID_SINGLE = new Set([
 	'"',
 	"\\",
@@ -31,10 +41,22 @@ const VALID_SINGLE = new Set([
 	"b",
 	"f",
 	"v",
+	"?",
 ]);
 
 function isHexUpper(c: string): boolean {
 	return (c >= "0" && c <= "9") || (c >= "A" && c <= "F");
+}
+
+/**
+ * `\` before whitespace is a line continuation INSIDE a string too, not only in
+ * code: the device swallows the pair and emits nothing (`:put "a\ b"` -> `ab`,
+ * and the same for TAB/CR/LF/CRLF). The manual states it under "Line joining" —
+ * "A backslash does not continue a token except for string". Every multi-line
+ * `source=`/`on-event=` script in the wild relies on it.
+ */
+function isContinuationWhitespace(c: string): boolean {
+	return c === " " || c === "\t" || c === "\r" || c === "\n";
 }
 
 /**
@@ -45,6 +67,7 @@ function isValidStringEscape(text: string, at: number): boolean {
 	const next1 = text[at + 1];
 	if (next1 === undefined) return false;
 	if (VALID_SINGLE.has(next1)) return true;
+	if (isContinuationWhitespace(next1)) return true;
 	if (isHexUpper(next1)) {
 		const next2 = text[at + 2];
 		if (next2 !== undefined && isHexUpper(next2)) return true;
@@ -55,10 +78,12 @@ function isValidStringEscape(text: string, at: number): boolean {
 
 /**
  * Bytes to skip past the escape at `at`. Always 2 or 3 so recovery advances
- * even when the escape is malformed (#199).
+ * even when the escape is malformed (#199). CRLF is ONE continuation, so it is
+ * the only non-hex three-byte escape.
  */
 function escapeLength(text: string, at: number): 2 | 3 {
 	const next1 = text[at + 1];
+	if (next1 === "\r" && text[at + 2] === "\n") return 3;
 	if (
 		next1 !== undefined &&
 		isHexUpper(next1) &&

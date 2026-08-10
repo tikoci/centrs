@@ -776,18 +776,33 @@ Corpus re-measurement for #249 — `bun -e 'explainCommand'` over the 948-script
     fail), and `context-lost`, which reports a reading that is correct while the
     document's menu context was already gone.
 
-### String escape validation (#247)
+### String escape validation (#247, #252)
 
-RouterOS string escapes are the documented constant escapes
-([Scripting manual — constant escape sequences](https://manual.mikrotik.com/docs/developer-guides/scripting/#constant-escape-sequences)):
-`\"` `\\` `\n` `\r` `\t` `\$` `\_` `\a` `\b` `\f` `\v` and `\XX` where
-`XX` is **uppercase** hex. `\$` is grounded on `highlight` (`escaped,escaped`,
-no `error` on CHR 7.23.3/7.24rc3) and the manual; the `:parse` wrapper
-(`:put [:parse "..."]`) is not used for that escape because outer-string
-escaping makes the inner `\$` appear as `$` to the parser. Grounded on CHR
-7.23.3 stable and 7.24rc3 testing (`highlight` hard `error` + `:parse`
-`expected message value` for the three issue rows `:put "\q"` / `:put "\x0a"`
-/ `:put "\0a"` vs `":put "\0A"` valid):
+The accepted set is the **device's**, not the manual's. The
+[Scripting manual's constant-escape table](https://manual.mikrotik.com/docs/developer-guides/scripting/#constant-escape-sequences)
+is a *lower bound*: it omits `\?`, and it documents the whitespace continuation
+only under a separate "Line joining" section. Treating that table as a closed
+allow-list is what #251 did and what #252 had to undo — it made 44 device-valid
+corpus scripts read `fail`. The set below comes from sweeping `:put "\<c>"` over
+every byte `0x20`–`0x7E` plus TAB/LF/CR/CRLF on CHR 7.23.3, scored on both the
+`/console/inspect request=highlight` class and the runtime result:
+
+- `\"` `\\` `\n` `\r` `\t` `\$` `\_` `\?` `\a` `\b` `\f` `\v`
+- `\XX` where `XX` is **uppercase** hex
+- `\` followed by whitespace (space, TAB, CR, LF, CRLF) — a **line
+  continuation**, valid inside a string and not just in code. The device
+  swallows the pair and emits nothing (`:put "a\ b"` → `ab`). CRLF counts as one
+  continuation, so it is the only non-hex three-byte escape.
+
+Everything else is rejected, including `\` before a non-ASCII byte. `\$` is
+grounded on `highlight` (`escaped,escaped`, no `error` on CHR 7.23.3/7.24rc3)
+and the manual; the `:parse` wrapper (`:put [:parse "..."]`) is not used for
+that escape because outer-string escaping makes the inner `\$` appear as `$` to
+the parser — for the same reason #252's rows are grounded by executing the input
+directly rather than through the wrapper. Grounded on CHR 7.23.3 stable and
+7.24rc3 testing (`highlight` hard `error` + `:parse` `expected message value`
+for the three issue rows `:put "\q"` / `:put "\x0a"` / `:put "\0a"` vs
+`":put "\0A"` valid):
 
 - A malformed escape (`\q`, `\x`, `\x0a`, truncated single-hex `\0`, lowercase
   hex `\0a`/`\5f`) is a located `bad-string-escape` structural defect
@@ -801,10 +816,17 @@ escaping makes the inner `\$` appear as `$` to the parser. Grounded on CHR
   quote-phase bug is reintroduced. Validation is a shared
   `collectStringEscapeDefects` walk with the same substitution frames; only the
   first invalid escape per document is reported and it fails closed after it.
-- Corpus blast radius (948 scripts): 62 `bad-string-escape` diagnostics (vs
-  15 code-position `bad-escape`). The flagged files are non-RouterOS
-  material (piano key maps, discourse code-blocks) and AT-chat snippets — not a
-  corpus-wide false positive on valid RouterOS input.
+- Corpus blast radius (948 scripts): **4** `bad-string-escape` diagnostics (vs
+  15 code-position `bad-escape`), and the device rejects all 4. Under #251's
+  closed allow-list this was 62 flags of which **44 were false positives on
+  valid RouterOS** — mostly multi-line `source=`/`on-event=` strings (`\`+LF)
+  and `\?`.
+- Scoring a defect rule against the corpus needs the right oracle.
+  `parseil_results.ok` is **not** one: `:parse` never throws, it returns a
+  diagnostic *value*, so the capture records `ok=1 / status="ok"` for scripts
+  the device rejected (only 3 of 2739 rows are `ok=0`, and those are capture
+  failures). The verdict is in `il_text` — plain prose such as
+  `expected input value (line 7 column 49)` means rejected, IL means accepted.
 
 ### Designed, not implemented (the CLI surface, #202b)
 

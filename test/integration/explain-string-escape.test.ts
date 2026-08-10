@@ -55,6 +55,35 @@ async function parseFails(
 	);
 }
 
+/**
+ * A RouterOS console rejection is PROSE where a result would be a value, and it
+ * always opens with one of these verbs. Matching the opening word (rather than
+ * `expected .* value`) keeps forms like `expected end of command` and
+ * `bad command name` on the reject side — a narrower pattern would score a real
+ * rejection as an acceptance and silently weaken every grounding assertion
+ * below (#254 review). Same predicate as the corpus audit in
+ * `.scratch/explain-252-escape-corpus-audit.ts`.
+ */
+const CONSOLE_REJECTION =
+	/^(syntax error|expected |missing |invalid |unknown |unexpected |no such |bad )/i;
+
+/**
+ * Run the input itself and report whether RouterOS accepted it.
+ *
+ * Stronger than the `:put [:parse …]` wrapper for #252's rows: the wrapper
+ * re-escapes the payload, which is exactly what the newly-grounded escapes are
+ * about, so a wrapper artifact would be indistinguishable from a real verdict.
+ */
+async function execAccepts(
+	chr: { exec(command: string): Promise<unknown> },
+	input: string,
+): Promise<boolean> {
+	const out = String(
+		((await chr.exec(input)) as { output?: string }).output ?? "",
+	).trim();
+	return !CONSOLE_REJECTION.test(out);
+}
+
 describeFast("explain string escapes against CHR (#247)", () => {
 	test("valid escapes, uppercase hex, lowercase hex, truncated and unknown are grounded on highlight + :parse", async () => {
 		const started = await startIntegrationChr();
@@ -170,6 +199,89 @@ describeFast("explain string escapes against CHR (#247)", () => {
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
 				exampleIds: [247],
+			});
+		} finally {
+			await started.chr.destroy();
+		}
+	}, 300_000);
+
+	// #252 — #251 built the allow-list from the manual's table and treated it as
+	// closed, so 44 device-valid corpus scripts started reading `fail`. These
+	// rows are the byte sweep's answers: the escapes RouterOS accepts that the
+	// manual never lists.
+	test("escapes outside the manual's table that RouterOS accepts (#252)", async () => {
+		const started = await startIntegrationChr();
+		try {
+			const resource = (await started.chr.rest("/system/resource")) as Record<
+				string,
+				unknown
+			>;
+			const version =
+				typeof resource["version"] === "string"
+					? (resource["version"] as string)
+					: started.chr.state.version;
+			const boardName =
+				typeof resource["board-name"] === "string"
+					? (resource["board-name"] as string)
+					: undefined;
+
+			// `\?` is absent from the manual but classes `escaped` and evaluates to `?`.
+			{
+				const input = ':put "\\?"';
+				expect(await highlightClasses(started.chr, input)).not.toContain(
+					"error",
+				);
+				expect(await execAccepts(started.chr, input)).toBe(true);
+				expect(explainCommand(input).verdict).toBe("pass");
+			}
+
+			// `\` before whitespace is a line continuation INSIDE a string, not only
+			// in code — the device swallows the pair and emits nothing.
+			for (const ws of [" ", "\t", "\r", "\n", "\r\n"]) {
+				const input = `:put "a\\${ws}b"`;
+				expect(await highlightClasses(started.chr, input)).not.toContain(
+					"error",
+				);
+				expect(await execAccepts(started.chr, input)).toBe(true);
+				expect(explainCommand(input).verdict).toBe("pass");
+			}
+
+			// The multi-line `on-event=` shape that 26 corpus scripts use.
+			{
+				const input =
+					'/system/scheduler/add name=c252 on-event=":global AT;\\\n    :put $AT"';
+				expect(await highlightClasses(started.chr, input)).not.toContain(
+					"error",
+				);
+				expect(explainCommand(input).verdict).not.toBe("fail");
+			}
+
+			// The sweep's REJECT side must stay rejected: a backslash before a
+			// non-whitespace, non-table byte is still a hard error, and so is
+			// `\` + non-ASCII (the corpus `\”` row).
+			for (const input of [
+				':put "a\\qb"',
+				':put "a\\;b"',
+				':put "a\\}b"',
+				':put "a\\]b"',
+				':put "a\\(b"',
+				':put "a\\”b"',
+			]) {
+				expect(await highlightClasses(started.chr, input)).toContain("error");
+				expect(await execAccepts(started.chr, input)).toBe(false);
+				expect(explainCommand(input).verdict).toBe("fail");
+			}
+
+			await recordIntegrationEvidence({
+				suite: "explain string escapes against CHR (#252)",
+				command: "highlight + execute",
+				protocol: "rest-api",
+				routerosVersion: version,
+				boardName,
+				quickChrName: started.chr.name,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+				exampleIds: [252],
 			});
 		} finally {
 			await started.chr.destroy();

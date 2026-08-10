@@ -562,6 +562,7 @@ versionless
 #   export stratum.
 SUT
 CJK
+parseil # lsp-routeros-ts corpus table of captured `:parse` IL, per script per RouterOS version
 pathresolve
 blocktree
 klass
