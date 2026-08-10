@@ -382,9 +382,9 @@ describe("commands/explain/examples.md — offline", () => {
 	});
 
 	test("28. An array literal is read member by member, and only where it is one (#225)", async () => {
-		const { data, code } = await explainJson([
-			':local z {1.1;"abc";1d;{2;3};a=0x10;b=100000w}; /ip/route/add comment={1;2}',
-		]);
+		const input =
+			':local z {1.1;"abc";1d;{2;3};a=0x10;b=100000w}; /ip/route/add comment={1;2}';
+		const { data, code } = await explainJson([input]);
 		expect(
 			data.values.occurrences.map((value) => [
 				value.kind,
@@ -403,8 +403,6 @@ describe("commands/explain/examples.md — offline", () => {
 			["element", "a", "v0", ["num"]],
 		]);
 		// Every member span addresses its own source bytes.
-		const input =
-			':local z {1.1;"abc";1d;{2;3};a=0x10;b=100000w}; /ip/route/add comment={1;2}';
 		expect(
 			data.values.occurrences
 				.filter((value) => value.kind === "element")

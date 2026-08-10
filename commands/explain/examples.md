@@ -533,9 +533,9 @@ the relative spelling `ip route add comment={1;2}`, and even
 `:log info message={1;2}`. The `(1,2)` spelling is never rejected at the
 delimiter in any of those positions, and a `(…)` or `[…]` around the brace
 restores the expression context (`comment=({1;2})` and `comment=[:tostr {1;2}]`
-both parse). Braces a
-command argument does accept are script bodies (`source=`, `on-event=`), which
-are refused earlier as scope blocks and are not arrays either.
+both parse). The braces a
+command argument does accept are script bodies (`source=`, `on-event=`), and
+those are refused earlier as scope blocks rather than read as arrays.
 
 An empty member is a device syntax error (`{;}`, `{;1}`, `{1;;2}`, `(1,)`), so
 the enclosing `array` shape is withdrawn with it; a single trailing separator is

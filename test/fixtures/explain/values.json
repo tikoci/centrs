@@ -680,11 +680,6 @@
 				"value": ""
 			},
 			{
-				"literal": "100000w",
-				"type": "nothing",
-				"value": ""
-			},
-			{
 				"literal": "106751d",
 				"type": "time",
 				"value": "15250w1d00:00:00"
@@ -805,19 +800,9 @@
 				"value": "::/0"
 			},
 			{
-				"literal": "yes",
-				"type": "bool",
-				"value": "true"
-			},
-			{
 				"literal": "no",
 				"type": "bool",
 				"value": "false"
-			},
-			{
-				"literal": "true",
-				"type": "bool",
-				"value": "true"
 			},
 			{
 				"literal": "false",
@@ -1071,12 +1056,6 @@
 			},
 			{
 				"input": "/ip/route/add comment=({1;2})",
-				"parses": true,
-				"highlightErrorAt": -1,
-				"highlightErrorByte": null
-			},
-			{
-				"input": "/ip/route/add comment=[:tostr {1;2}]",
 				"parses": true,
 				"highlightErrorAt": -1,
 				"highlightErrorByte": null

@@ -801,6 +801,11 @@ function splitMembers(
 	return members;
 }
 
+/** Why a located array literal was withdrawn; each is a device syntax error. */
+const EMPTY_MEMBER = "an array literal with an empty member";
+const UNPARSEABLE_MEMBER =
+	"an array member RouterOS rejects at its first character";
+
 /** Characters that cannot OPEN an array member; see {@link pushArrayMembers}. */
 function leadsInvalidMember(c: string | undefined): boolean {
 	return c === "*" || c === "+";
@@ -855,8 +860,10 @@ function depthZeroOffsets(
 /**
  * Append the members of one array literal, depth first (#225 V1 interior).
  *
- * Returns false when the literal does not parse on the device, so the caller
- * can withdraw the enclosing `array` shape as well.
+ * Returns null when every member was read, or the REASON the literal does not
+ * parse on the device — the caller withdraws the enclosing `array` shape and
+ * publishes that reason, so a consumer is never told "empty member" about a
+ * literal whose actual fault was something else (found in review).
  *
  * Every rule below is a CHR 7.23.3 reading, taken from each member's own
  * `:typeof` under `:foreach k,v` and the statement's `:parse` IL:
@@ -882,10 +889,10 @@ function pushArrayMembers(
 	contentEnd: number,
 	separator: ";" | ",",
 	depth: number,
-): boolean {
-	if (depth >= MAX_MEMBER_DEPTH) return true;
+): string | null {
+	if (depth >= MAX_MEMBER_DEPTH) return null;
 	const members = splitMembers(structural, contentStart, contentEnd, separator);
-	if (members === null) return false;
+	if (members === null) return EMPTY_MEMBER;
 	for (const member of members) {
 		let valueStart = member.start;
 		let name: string | undefined;
@@ -895,7 +902,7 @@ function pushArrayMembers(
 		// Only the first byte is read, because both characters are ordinary
 		// operators between operands — `{2*3}` is `num` 6 and `{1+1}` is 2 — and
 		// unary minus is fine either way (`{-1}` is `num` -1).
-		if (leadsInvalidMember(text[member.start])) return false;
+		if (leadsInvalidMember(text[member.start])) return UNPARSEABLE_MEMBER;
 		if (separator === ";") {
 			const eq = depthZeroOffsets(structural, member.start, member.end, "=")[0];
 			if (eq !== undefined) {
@@ -904,7 +911,7 @@ function pushArrayMembers(
 				// `{a=}` is not an empty-valued key: the device drops the `=` and
 				// keeps the NAME as a string member, so neither reading is safe.
 				if (key === null || value.start === value.end) continue;
-				if (leadsInvalidMember(text[value.start])) return false;
+				if (leadsInvalidMember(text[value.start])) return UNPARSEABLE_MEMBER;
 				name = key;
 				valueStart = value.start;
 			}
@@ -921,19 +928,17 @@ function pushArrayMembers(
 		if (isArraySource(text, structural, valueStart, member.end)) {
 			const at = anchors.length;
 			anchors.push({ ...anchor, sourceShape: "array" });
-			if (
-				!pushArrayMembers(
-					anchors,
-					text,
-					structural,
-					at,
-					valueStart + 1,
-					member.end - 1,
-					text[valueStart] === "{" ? ";" : ",",
-					depth + 1,
-				)
-			)
-				return false;
+			const nested = pushArrayMembers(
+				anchors,
+				text,
+				structural,
+				at,
+				valueStart + 1,
+				member.end - 1,
+				text[valueStart] === "{" ? ";" : ",",
+				depth + 1,
+			);
+			if (nested !== null) return nested;
 			continue;
 		}
 		if (
@@ -944,26 +949,24 @@ function pushArrayMembers(
 			// delimiters of its own — IL `1;(, 2 3)`. It splits on commas.
 			const at = anchors.length;
 			anchors.push({ ...anchor, sourceShape: "array" });
-			if (
-				!pushArrayMembers(
-					anchors,
-					text,
-					structural,
-					at,
-					valueStart,
-					member.end,
-					",",
-					depth + 1,
-				)
-			)
-				return false;
+			const nested = pushArrayMembers(
+				anchors,
+				text,
+				structural,
+				at,
+				valueStart,
+				member.end,
+				",",
+				depth + 1,
+			);
+			if (nested !== null) return nested;
 			continue;
 		}
 		const literal = literalValue(text, valueStart, member.end);
 		if (typeof literal === "string") continue;
 		anchors.push({ ...anchor, value: literal.value, quoted: literal.quoted });
 	}
-	return true;
+	return null;
 }
 
 /**
@@ -1007,24 +1010,19 @@ export function lexValueAnchors(
 					sourceShape: read.sourceShape,
 					quoted: false,
 				});
-				if (
-					!pushArrayMembers(
-						anchors,
-						text,
-						structural,
-						at,
-						read.valueSpan.start + 1,
-						read.valueSpan.end - 1,
-						text[read.valueSpan.start] === "{" ? ";" : ",",
-						0,
-					)
-				) {
+				const unparsed = pushArrayMembers(
+					anchors,
+					text,
+					structural,
+					at,
+					read.valueSpan.start + 1,
+					read.valueSpan.end - 1,
+					text[read.valueSpan.start] === "{" ? ";" : ",",
+					0,
+				);
+				if (unparsed !== null) {
 					anchors.length = at;
-					return {
-						complete: false,
-						anchors,
-						why: "an array literal with an empty member",
-					};
+					return { complete: false, anchors, why: unparsed };
 				}
 				continue;
 			}

@@ -715,9 +715,9 @@ and its phase is named below.
   positions — `.proplist=(name,comment)` still draws `bad parameter .proplist`,
   but that is a name-level diagnostic and the plain `name,comment` spelling
   draws it too — and a `(…)` or `[…]` around a brace restores the expression
-  context. Braces a
-  command argument does take are script bodies (`source=`, `on-event=`), which
-  are not arrays and are refused earlier as scope blocks. An empty member is a
+  context. The braces a
+  command argument does take are script bodies (`source=`, `on-event=`), and
+  those are not arrays either — they are refused earlier as scope blocks. An empty member is a
   syntax error (`{;}`, `{;1}`, `{1;;2}`, `(1,)`) and withdraws the enclosing
   `array` shape with it; a single trailing separator is legal (`{1;}`).
 
@@ -741,12 +741,12 @@ and its phase is named below.
   address attempt.
 
   The corpus census is re-derivable with `bun run explain:value-census` and
-  covers 948 source scripts. Every one of the 13,162 emitted values in a
+  covers 948 source scripts. Every one of the 13,168 emitted values in a
   statement the strict argument lexer ALSO read has identical half-open byte
   spans and decoded text (0 contradictions), while the prefix-safe scan retains
-  6,471 values across 501 statements whose strict REST reading abstains. Of
-  19,633 emitted occurrences, 5,636 are array members (529 keyed, 1,147 nested
-  inside another member) and 424 are arrays; the corpus contains no
+  6,541 values across 570 statements whose strict REST reading abstains. Of
+  19,709 emitted occurrences, 5,636 are array members (529 keyed, 1,147 nested
+  inside another member) and 814 are arrays; the corpus contains no
   source-literal `id` example. All spans were in bounds, every member named a
   container that exists, and every member sat strictly inside it. The strict
   lexer remains all-or-nothing; only non-authoritative hints use the wider view.

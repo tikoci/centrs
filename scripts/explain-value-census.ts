@@ -69,6 +69,8 @@ interface Emitted {
 	tokenSpan: { start: number; end: number };
 	value: string;
 	shapes: string[];
+	/** An array member's key, present only on a keyed `element`. */
+	name?: string;
 }
 
 function bump(counts: Record<string, number>, key: string): void {
@@ -119,7 +121,7 @@ export function census(scripts: readonly string[]): ValueCensus {
 					value: anchor.value,
 					shapes,
 					...(anchor.name === undefined ? {} : { name: anchor.name }),
-				} as Emitted & { name?: string };
+				};
 			});
 			const kept = emitted.filter((entry): entry is Emitted => entry !== null);
 			result.valueOccurrences += kept.length;
@@ -135,8 +137,7 @@ export function census(scripts: readonly string[]): ValueCensus {
 					result.invalidSpans++;
 				if (entry.kind !== "element") continue;
 				result.elementOccurrences++;
-				if ((entry as { name?: string }).name !== undefined)
-					result.keyedElements++;
+				if (entry.name !== undefined) result.keyedElements++;
 				for (const shape of entry.shapes)
 					bump(result.elementShapeCounts, shape);
 				const parent =
@@ -231,10 +232,16 @@ export async function main(args: readonly string[]): Promise<number> {
 		db.close();
 	}
 	const result = census(scripts);
-	console.log(
-		args.includes("--json")
-			? JSON.stringify(result, null, 2)
-			: renderMarkdown(result),
+	// Written rather than logged: `console.log` followed by `process.exit` can
+	// truncate a piped stdout in Bun, and this output is normally piped into a
+	// file or `jq`.
+	await Bun.write(
+		Bun.stdout,
+		`${
+			args.includes("--json")
+				? JSON.stringify(result, null, 2)
+				: renderMarkdown(result)
+		}\n`,
 	);
 	return 0;
 }
