@@ -223,6 +223,14 @@ describeFast("explain value facts against CHR", () => {
 				":local z {1;#test}",
 				":local z {a=1;#b=2}",
 				":local z (1,#test)",
+				// #249 — a scope-named or bare brace nested inside an array is still an array
+				":local z {do={ # c\n:put 1}}",
+				":local z {command={ # c\n:put 1}}",
+				":local z {else={ # c\n:put 1}}",
+				":local z {script={ # c\n:put 1}}",
+				":local z {source={ # c\n:put 1}}",
+				":local z {on-event={ # c\n:put 1}}",
+				":local z { { # c\n:put 1}}",
 				":local x 2 #",
 				"{ :local x 2 # }",
 				":put 2 # blah",
@@ -275,6 +283,20 @@ describeFast("explain value facts against CHR", () => {
 			]) {
 				const classes = await highlightClasses(started.chr, input);
 				expect(classes[input.indexOf("#")]).toBe("error");
+			}
+			// #249 — the same scope-named brace is an error already in the first group,
+			// but verify offline fail-closed there too (CHR ground: error above)
+			for (const scrap of [
+				":local z {do={ # c\n:put 1}}",
+				":local z {script={ # c\n:put 1}}",
+				":local z { { # c\n:put 1}}",
+			]) {
+				expect(explainCommand(scrap).verdict).toBe("fail");
+				expect(
+					explainCommand(scrap).diagnostics.filter((diagnostic) =>
+						diagnostic.code.endsWith("/invalid-hash"),
+					),
+				).toHaveLength(1);
 			}
 			for (const readable of [
 				":local z {[:put #test]}",

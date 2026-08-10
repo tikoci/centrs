@@ -939,8 +939,10 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		// expression term (`(:local v 1)` classes `:local` itself
 		// `variable-undefined`), which is why only the bracket is listed here.
 		if (c === ";" || c === "\n") atLead = frames.at(-1)?.statements ?? true;
-		else if (c === "{") atLead = braceStartsStatements(text, i);
-		else if (c === "[") atLead = true;
+		else if (c === "{") {
+			const enclosing = frames.at(-1)?.statements ?? true;
+			atLead = enclosing && braceStartsStatements(text, i);
+		} else if (c === "[") atLead = true;
 		else if (c !== " " && c !== "\t" && c !== "\r") atLead = false;
 
 		// F8 — anything that cannot be a path token ENDS the path region, so no
@@ -1031,7 +1033,11 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			frames.push({
 				char: c,
 				at: i,
-				statements: c === "[" || (c === "{" && braceStartsStatements(text, i)),
+				statements:
+					c === "[" ||
+					(c === "{" &&
+						(frames.at(-1)?.statements ?? true) &&
+						braceStartsStatements(text, i)),
 			});
 			depth++;
 			if (c === "[") openBracket(leadBefore, i);
