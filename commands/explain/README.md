@@ -708,6 +708,7 @@ comment, a literal hash value, and a hard error at the exact byte.
 | First non-space content inside a stored-script brace such as `on-event={ # c` | `comment` | Treat exact `source`/`script` and `on-*`-named brace values as comment-bearing script bodies; a suffix such as `myScript` is not one. |
 | Immediate line start after `\` + newline | `comment`; the pending statement survives | Mask it in both argument views; the continuation-reach rules remain H5/#215. |
 | Inside an array (`{#test}`, `{1;#test}`, `{a=1;#b=2}`) or parenthesized expression (`(1,#test)`) | hard `error` at `#`; `:parse` reports `syntax error` | Do not mask it or emit an array value hint; semantic resolution stops there. |
+| A scope-named brace (`do=`/`else=`/`command=`/`script=`/`source=`/`on-*=`) nested inside an array (`:local z {do={ # c⏎:put 1}}`, `:local z {script={ # c⏎…}}`, `:local z { { # c…}}`) — and likewise a bare `{` or `/menu {` inside an array | hard `error` at `#`; `/console/inspect` request `highlight` classes that byte `error` on CHR 7.23.3 (grounded in #249 on the four `#249` rows plus `bare {`/`source`/`on-event` corners) | A brace bears statements only when its enclosing context already does — `enclosing && braceStartsStatements(…)` on each walker's stack (`contexts`/`delimStack`/`frames`/`stack`). Inside an array the name is an array key and its `{…}` is a nested array. A `[…]` substitution nested in that array does re-enter a statement context, so `[:do { # c…}]` stays a real comment and a bare `{` under a bracket does too. |
 | Inside a `[…]` substitution that is itself nested in an array (`{[:put #test]}`, `{1;[:put #test]}`) | literal value (`none`) — the bracket restores the statement role the array dropped | Keep it as content and keep the enclosing array readable. The role is per frame, so an array or group opened again inside that bracket (`{[:put {#test}]}`, `{[:put (1,#test)]}`) is `error` once more; skipping whole `[…]` regions would wrongly accept those. |
 | In an attribute or bare value (`comment=#test`, `comment=a#b`, `:global y #test`) | literal value (`none` highlight class) | Keep it as content. |
 | Inside a quoted run | string content | Keep it as content. |
@@ -720,11 +721,16 @@ that argument is a separate live schema/runtime question; comment classification
 does not imply type acceptance.
 
 This distinction is why brace role lives in one shared primitive below the
-segmenter, block reader, and symbol resolver. The strict argument lexer now uses
-the same comment-masked structural view as value anchoring, so a continuation
+segmenter, block reader, and symbol resolver. The `#249` widening adds the
+single conjunct `enclosing && braceStartsStatements(…)` at the four walker
+sites so a scope-named or bare brace inside an array is another array.
+The strict argument lexer now uses the same comment-masked structural view as value anchoring, so a continuation
 comment cannot fabricate positional operands or downgrade a tested REST shape.
-The 948-script corpus contains no such continuation-comment argument case. The
-readable set stays exactly 7,385 statements. Recognizing a bracket-leading hash
+The 948-script corpus contains no such continuation-comment argument case. The same holds for #249:
+the corpus re-measurement below shows no readable/abstention movement — no
+`do=`/`else=`/`command=`/`script=` brace sits inside an array in the 948
+scripts, so the fix closes a device-grounded false `pass` with zero corpus
+blast radius. The readable set stays exactly 7,385 statements. Recognizing a bracket-leading hash
 as a comment conservatively folds two previously separate abstentions inside
 one foreign kernel-panic transcript (`[#1]` / `[#2]`) into its already-unknown
 outer statement, leaving 14,329 argument-bearing candidates and 6,944
@@ -740,6 +746,18 @@ foreign snippets were expected to parse as RouterOS.
 
 The default text renderer surfaces comment spans in a `comments:` section; JSON
 continues to carry the same ranges as `spans[]` entries with `class: "comment"`.
+
+Corpus re-measurement for #249 — `bun -e 'explainCommand'` over the 948-script
+`lsp-routeros-ts/test-data/corpus.sqlite` (same harness as § *What `offline` actually emits*):
+
+- `stmts` 18,648 · `argCandidates` 14,329 · `argReadable` 7,385 · `abstentions`
+  6,944 (48.4612%) — **identical** before and after the `enclosing &&`
+  conjunct (stashed vs patched, verified by `git stash --keep-index`).
+- `invalid-hash` diagnostics: 5 files / 5 diagnostics both before and after —
+  the widening has no corpus hit, because the corpus contains no `do=`/`else=`/
+  `command=`/`script=` brace nested in an array. Zero blast radius is the
+  expected outcome; the grounding remains the 15-input CHR probe below
+  (CHR 7.23.3 `highlight` at the `#` byte, 0/15 mismatches), not a corpus delta.
 
 - **Severity is fixed here, because it drives `--fail-on`.** Three buckets, and
   the split is not "structural vs not":

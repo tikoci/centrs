@@ -246,8 +246,10 @@ export function maskComments(original: string): string {
 			continue;
 		}
 		if (c === "{" || c === "[" || c === "(") {
+			const enclosing = contexts.at(-1)?.statements ?? true;
 			const statements =
-				c === "[" || (c === "{" && braceStartsStatements(original, i));
+				c === "[" ||
+				(c === "{" && enclosing && braceStartsStatements(original, i));
 			contexts.push({ char: c, statements });
 			// A bracket is a nested statement context too: `[# c\n:put 1]` starts
 			// with a real comment, while `[:put #value]` consumes the lead on `:put`
@@ -654,8 +656,10 @@ function scanAscii(ascii: string): {
 				}
 			} else {
 				ensureStmt(f, i);
+				const enclosing = delimStack.at(-1)?.statements ?? true;
 				const statements =
-					c === "[" || (c === "{" && braceStartsStatements(ascii, i));
+					c === "[" ||
+					(c === "{" && enclosing && braceStartsStatements(ascii, i));
 				delimStack.push({ char: c, at: i, statements });
 				f.atLead = statements;
 			}

@@ -376,6 +376,14 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 			":local z (1,#test)",
 			":put myScript={#test}",
 			":put description={#test}",
+			// #249 — a scope-named or bare brace nested inside an array is still an array
+			":local z {do={ # c\n:put 1}}",
+			":local z {command={ # c\n:put 1}}",
+			":local z {else={ # c\n:put 1}}",
+			":local z {script={ # c\n:put 1}}",
+			":local z {source={ # c\n:put 1}}",
+			":local z {on-event={ # c\n:put 1}}",
+			":local z { { # c\n:put 1}}",
 		]) {
 			expect(maskComments(input)).toBe(input);
 			expect(segmentStatements(input).comments).toEqual([]);

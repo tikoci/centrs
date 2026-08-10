@@ -202,7 +202,10 @@ function structuralDefect(text: string): string | null {
 			stack.push({
 				char: c,
 				statements:
-					c === "[" || (c === "{" && braceStartsStatements(masked, i)),
+					c === "[" ||
+					(c === "{" &&
+						(stack.at(-1)?.statements ?? true) &&
+						braceStartsStatements(masked, i)),
 			});
 		else if (c === ")" || c === "]" || c === "}") {
 			if (stack.pop()?.char !== openOf[c])

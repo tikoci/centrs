@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { lexValueAnchors } from "../../src/explain/args.ts";
+import { resolveDocument } from "../../src/explain/pathresolve.ts";
+import { resolveSymbols } from "../../src/explain/symbols.ts";
 import { explainCommand } from "../../src/explain.ts";
 import {
 	isChrIntegrationEnabled,
@@ -223,6 +225,15 @@ describeFast("explain value facts against CHR", () => {
 				":local z {1;#test}",
 				":local z {a=1;#b=2}",
 				":local z (1,#test)",
+				// #249 — a scope-named or bare brace nested inside an array is still an array
+				":local z {do={ # c\n:put 1}}",
+				":local z {command={ # c\n:put 1}}",
+				":local z {else={ # c\n:put 1}}",
+				":local z {script={ # c\n:put 1}}",
+				":local z {source={ # c\n:put 1}}",
+				":local z {on-event={ # c\n:put 1}}",
+				":local z { { # c\n:put 1}}",
+				":local z {/ip/dhcp-server { # c\n:put 1}}",
 				":local x 2 #",
 				"{ :local x 2 # }",
 				":put 2 # blah",
@@ -276,6 +287,37 @@ describeFast("explain value facts against CHR", () => {
 				const classes = await highlightClasses(started.chr, input);
 				expect(classes[input.indexOf("#")]).toBe("error");
 			}
+			// #249 — the same scope-named brace is an error already in the first group,
+			// but verify offline fail-closed there too (CHR ground: error above)
+			// and that no confident path/symbol fact is invented for the array
+			// body — the changed pathresolve/symbols walkers must not emit one
+			// even if the segmenter verdict later drifted.
+			for (const scrap of [
+				":local z {do={ # c\n:put 1}}",
+				":local z {script={ # c\n:put 1}}",
+				":local z { { # c\n:put 1}}",
+				":local z {/ip/dhcp-server { # c\n:put 1}}",
+			]) {
+				expect(explainCommand(scrap).verdict).toBe("fail");
+				expect(
+					explainCommand(scrap).diagnostics.filter((diagnostic) =>
+						diagnostic.code.endsWith("/invalid-hash"),
+					),
+				).toHaveLength(1);
+				// `resolveDocument` must surface the hard defect so the statement
+				// cannot be treated as successful context for the next line.
+				expect(
+					resolveDocument(scrap).defects.some((d) => d.code === "invalid-hash"),
+				).toBe(true);
+				// `resolveSymbols` likewise stops at the hash; no post-hash
+				// occurrence should be claimed as confident.
+				const symbols = resolveSymbols(scrap);
+				expect(symbols.defects.some((d) => d.code === "invalid-hash")).toBe(
+					true,
+				);
+				const hash = scrap.indexOf("#");
+				expect(symbols.occurrences.some((o) => o.start > hash)).toBe(false);
+			}
 			for (const readable of [
 				":local z {[:put #test]}",
 				":local z {1;[:put #test]}",
@@ -289,6 +331,27 @@ describeFast("explain value facts against CHR", () => {
 			]) {
 				const anchors = lexValueAnchors(refused, ":local".length);
 				expect(anchors.complete).toBeFalse();
+			}
+			// #249 — /menu { control: same construct WITHOUT the hash is valid
+			// (proves the failure above is comment placement, not an earlier
+			// invalid construct). Runtime must see it as an array value.
+			{
+				const control = ':local z {/ip/dhcp-server { :put "INNER"}}';
+				const classes = await highlightClasses(started.chr, control);
+				// No hash, so no error class; verify highlight is clean and :parse succeeds
+				expect(classes.includes("error")).toBe(false);
+				expect(
+					outputOf(
+						await started.chr.exec(`:put [:parse ${rosString(control)}]`),
+					),
+				).not.toMatch(/syntax error|expected end of command|failure/);
+				const runtime = outputOf(
+					await started.chr.exec(
+						`${control}\n:put ("TYPE=" . [:typeof $z])\n:put ("VALUE=" . [:tostr $z])`,
+					),
+				);
+				expect(runtime).toContain("TYPE=array");
+				expect(runtime).toContain("VALUE=INNER");
 			}
 
 			const trailing = ":if (true) do={:put x} # c\n:put y";
