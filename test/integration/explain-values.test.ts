@@ -327,7 +327,7 @@ describeFast("explain value facts against CHR", () => {
 				":local z {1;[:put #test]}",
 			]) {
 				const anchors = lexValueAnchors(readable, ":local".length, {
-					braceArrays: true,
+					directiveVerb: "local",
 				});
 				expect(anchors.complete).toBeTrue();
 			}
@@ -336,7 +336,7 @@ describeFast("explain value facts against CHR", () => {
 				":local z {[:put (1,#test)]}",
 			]) {
 				const anchors = lexValueAnchors(refused, ":local".length, {
-					braceArrays: true,
+					directiveVerb: "local",
 				});
 				expect(anchors.complete).toBeFalse();
 			}
@@ -611,6 +611,115 @@ describeFast("explain value facts against CHR", () => {
 					?.values,
 			).toEqual(["array"]);
 
+			// Example 28c: the (verb, slot) gate, the nested rejection, and the
+			// depth bound — each asked of the device first, then scored against
+			// what centrs claims for the same bytes.
+			const parseIl = async (source: string): Promise<string> =>
+				outputOf(
+					await started.chr.exec(`:put [:parse ${rosString(source)}]`),
+				).replaceAll("\n", " ");
+			const parses = (il: string): boolean =>
+				!/syntax error|expected /.test(il);
+			const claimsArray = (input: string): boolean =>
+				explainCommand(input).values.occurrences.some((value) =>
+					value.facts.shapeHints?.values?.includes("array"),
+				);
+
+			// A slot that EVALUATES the brace is an array; one that keeps it
+			// verbatim is a script, and `{1;2}` cannot tell them apart because both
+			// lower to `…=1;2`. `{(1,2)}` can: only an evaluated one lowers to
+			// `(, 1 2)`.
+			for (const [source, evaluated] of [
+				[":local z {(1,2)}", true],
+				[":put {(1,2)}", true],
+				[":foreach i in={(1,2)} do={}", true],
+				[":for i from={(1,2)} to=2 do={}", true],
+				[":execute script={(1,2)}", false],
+				[":grep script={(1,2)}", false],
+			] as const) {
+				const il = await parseIl(source);
+				expect({ source, evaluated: il.includes("(, 1 2)") }).toEqual({
+					source,
+					evaluated,
+				});
+			}
+
+			// Accepted and rejected controls, device verdict and product claim
+			// scored together: a slot centrs calls an array must parse, and a slot
+			// the device refuses must not be called one.
+			for (const [source, array] of [
+				[":local z {1;2}", true],
+				[":global g {1;2}", true],
+				[":put {1;2}", true],
+				[":return {1;2}", true],
+				[":foreach i in={1;2} do={:put 1}", true],
+				[":for i from={1;2} to=2 do={:put 1}", true],
+				[":delay {1;2}", false],
+				[":beep {1;2}", false],
+				[":resolve {1;2}", false],
+				[":local {1;2}", false],
+				[":local name={1;2}", false],
+				[":if condition={1;2}", false],
+				[":onerror e in={1;2} do={}", false],
+				[":retry command={1;2}", false],
+				[":execute script={1;2}", false],
+				["/ip/dns/set servers={1.1.1.1;8.8.8.8}", false],
+			] as const) {
+				const il = await parseIl(source);
+				expect({ source, array: claimsArray(source) }).toEqual({
+					source,
+					array,
+				});
+				if (array)
+					expect({ source, parses: parses(il) }).toEqual({
+						source,
+						parses: true,
+					});
+			}
+
+			// A nested literal the device rejects withdraws its container, while
+			// the group spellings next to it still read.
+			for (const literal of [
+				"{(1,)}",
+				"{a=(1,)}",
+				"{1;(2,)}",
+				"{()}",
+				"{a=()}",
+				"{(,)}",
+				"(1,(2,))",
+			]) {
+				const source = `:local z ${literal}`;
+				expect({ literal, parses: parses(await parseIl(source)) }).toEqual({
+					literal,
+					parses: false,
+				});
+				expect({ literal, array: claimsArray(source) }).toEqual({
+					literal,
+					array: false,
+				});
+			}
+			for (const literal of ["{(1)}", "{a=(1)}", "{1;(2)}", "{1;2;}"]) {
+				const source = `:local z ${literal}`;
+				expect({ literal, parses: parses(await parseIl(source)) }).toEqual({
+					literal,
+					parses: true,
+				});
+				expect({ literal, array: claimsArray(source) }).toEqual({
+					literal,
+					array: true,
+				});
+			}
+
+			// The depth bound: a fault below it is still a device syntax error, so
+			// eight frames read and nine withdraw rather than claim.
+			const nest = (depth: number, body: string): string =>
+				`:local z ${"{".repeat(depth)}${body}${"}".repeat(depth)}`;
+			expect(parses(await parseIl(nest(9, "(1,)")))).toBe(false);
+			expect(claimsArray(nest(9, "(1,)"))).toBe(false);
+			expect(parses(await parseIl(nest(9, "1")))).toBe(true);
+			expect(claimsArray(nest(8, "1"))).toBe(true);
+			expect(claimsArray(nest(9, "1"))).toBe(false);
+
 			await recordIntegrationEvidence({
 				suite: "explain value facts against CHR",
 				command: "explain",
@@ -619,7 +728,7 @@ describeFast("explain value facts against CHR", () => {
 				quickChrName: started.chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [28, "28b"],
+				exampleIds: [28, "28b", "28c"],
 			});
 		} finally {
 			await started.chr.destroy();

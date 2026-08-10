@@ -704,14 +704,38 @@ and its phase is named below.
   dotted-decimal-to-seconds fallback described below.
 
   **A `{…}` array literal is legal only in a root scripting directive's value
-  slot.** `/console/inspect` classes the `{` byte `error` and `:parse` refuses
-  the statement for `/ip/route/add comment={1;2}`,
-  `/ip/dns/set servers={1.1.1.1;8.8.8.8}` — a LIST-typed attribute, which is
-  what rules out a schema-shaped reading — `/interface/print
-  .proplist={name;comment}`, `/ip/route/print where comment={1;2}`, the relative
-  spelling `ip route add comment={1;2}`, and `:log info message={1;2}`; while
+  slot, and only in a slot the device proved.** `/console/inspect` classes the
+  `{` byte `error` and `:parse` refuses the statement for
+  `/ip/route/add comment={1;2}`, `/ip/dns/set servers={1.1.1.1;8.8.8.8}` — a
+  LIST-typed attribute, which is what rules out a schema-shaped reading —
+  `/interface/print .proplist={name;comment}`,
+  `/ip/route/print where comment={1;2}`, the relative spelling
+  `ip route add comment={1;2}`, and `:log info message={1;2}`; while
   `:local z {1;2}`, `:put {1;2}`, `:len {1;2}` and `:foreach i in={1;2}` all
-  parse. The `(…)` spelling is never rejected at the delimiter in any of those
+  parse.
+
+  Being a directive is necessary but not sufficient, and the path does not
+  decide: `:delay {1;2}`, `:beep {1;2}`, `:resolve {1;2}`,
+  `:if condition={1;2}` and `:local name={1;2}` are syntax errors at a `/` path
+  too. The gate is keyed on **(verb, slot)** from a device sweep of every root
+  builtin and every slot it completes — 222 rows in
+  `test/fixtures/explain/values.json` → `interiorGrounding.braceSlots`, baked
+  into `src/explain/brace-slots.ts` — and a slot has four outcomes, not two:
+
+  | outcome | what the slot does with `{(1,2)}` | example |
+  | ------- | --------------------------------- | ------- |
+  | `array` | evaluates it — IL `(, 1 2)` | `:local z`, `:put`, `:foreach in=`, `:for from=` |
+  | `code` | runs it as a program | `:onerror in=`, `:retry command=`, `:if do=` |
+  | `text` | keeps it verbatim as a script | `:execute script=`, `:grep script=` |
+  | `error` | refuses the statement | `:delay`, `:beep`, `:local name=` |
+
+  Only `array` slots are read as arrays; the other three and the 30 rows the
+  sweep could not ask are refused, which costs coverage and never correctness.
+  A positional is keyed by its index, because position decides — `:local {1;2}`
+  puts the literal in the NAME slot and does not parse, while `:local z {1;2}`
+  puts it in the VALUE slot and does. `{1;2}` alone cannot build this table:
+  `:local z {1;2}` and `:execute script={1;2}` both lower to `…=1;2`, so the
+  array test has to be a literal whose evaluated and verbatim readings differ. The `(…)` spelling is never rejected at the delimiter in any of those
   positions — `.proplist=(name,comment)` still draws `bad parameter .proplist`,
   but that is a name-level diagnostic and the plain `name,comment` spelling
   draws it too — and a `(…)` or `[…]` around a brace restores the expression
@@ -729,9 +753,12 @@ and its phase is named below.
   abstained on: `:parse` rejects each of them at every nesting depth, while
   `{(1)}`, `{a=(1)}` and `{1;(2)}` parse. `highlight` is not the oracle for this
   family — it accepts `{1;2,}`, `{2,}` and `{(1,2),}`, all of which `:parse`
-  rejects. Member descent stops after eight frames; past that the literal keeps
-  its `array` shape, proven by its delimiters, and its deeper members are simply
-  not emitted.
+  rejects. Member descent stops after eight frames, and the bound WITHDRAWS
+  rather than keeping an unverified shape: a fault below it still makes the
+  whole statement a syntax error — `:parse` rejects a `(1,)` buried nine levels
+  deep exactly as it rejects a shallow one — so a literal nested deeper than
+  eight is refused instead of called an array. The deepest member in the
+  948-script corpus sits at depth 6.
 
   **The bare comma spelling is the one place a hint is genuinely plural.**
   `=1,2,3` is not a syntax error anywhere, and whether the device SPLITS it is
@@ -756,9 +783,9 @@ and its phase is named below.
   covers 948 source scripts. Every one of the 13,168 emitted values in a
   statement the strict argument lexer ALSO read has identical half-open byte
   spans and decoded text (0 contradictions), while the prefix-safe scan retains
-  6,541 values across 570 statements whose strict REST reading abstains. Of
-  19,709 emitted occurrences, 5,636 are array members (529 keyed, 1,147 nested
-  inside another member) and 814 are arrays; the corpus contains no
+  6,540 values across 569 statements whose strict REST reading abstains. Of
+  19,708 emitted occurrences, 5,636 are array members (529 keyed, 1,147 nested
+  inside another member) and 813 are arrays; the corpus contains no
   source-literal `id` example. All spans were in bounds, every member named a
   container that exists, and every member sat strictly inside it. The strict
   lexer remains all-or-nothing; only non-authoritative hints use the wider view.

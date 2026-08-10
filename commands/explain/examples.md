@@ -542,6 +542,38 @@ the enclosing `array` shape is withdrawn with it; a single trailing separator is
 legal (`{1;}` is a one-member array). The verdict stays `pass` throughout —
 a shape hint never becomes a diagnostic, and neither does its absence.
 
+### 28c. Which slot the brace sits in decides whether it is an array
+
+```bash
+centrs explain ':local z {1;2}; :delay {1;2}; :for i from={1;2} to=2 do={:put 1}; :execute script={1;2}' --json
+```
+
+Only the first and third statements produce an array record. Being a scripting
+directive is necessary but not sufficient: the gate is keyed on **(verb, slot)**
+from a device sweep of every root builtin and every slot it completes, and a
+slot has four outcomes. `:local z {…}` and `:for from={…}` EVALUATE the brace
+(IL `(, 1 2)` for `{(1,2)}`), so they are arrays. `:delay {1;2}` is a syntax
+error — a scalar-typed slot at the same `/` path — and produces nothing.
+`:execute script={1;2}` parses but keeps the brace VERBATIM as a script
+(`script=(1,2)`, not `(, 1 2)`), so it is not an array either, and neither are
+the code slots `:onerror in=`, `:retry command=` and `:if do=`. The same name
+can differ by verb: `:foreach i in={1;2}` is an array while
+`:onerror e in={1;2}` is a program.
+
+A positional is keyed by its index, because position decides: `:local {1;2}`
+puts the literal in the NAME slot and does not parse, while `:local z {1;2}`
+puts it in the VALUE slot and does. Everything the sweep could not ask is
+refused, so the gate loses coverage rather than inventing a shape.
+
+Two rejections a member walk cannot see from the outside are also refused here.
+A nested literal the device rejects withdraws its container — `{(1,)}`,
+`{a=(1,)}`, `{1;(2,)}`, `{()}`, `{a=()}`, `{(,)}` and `(1,(2,))` are all
+`:parse` syntax errors, even though a `(…)` member is usually a group (`{(1)}`
+is the one-member array `1`). And member descent stops after eight frames: past
+that the interior is unverified, and a fault below the bound still makes the
+whole statement a syntax error, so the literal is refused rather than called an
+array on the strength of its delimiters alone.
+
 ### 28b. The comma spelling is accepted everywhere, and means two things
 
 ```bash

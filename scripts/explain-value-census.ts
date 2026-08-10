@@ -100,7 +100,7 @@ export function census(scripts: readonly string[]): ValueCensus {
 			if (split.resolution !== "resolved" || split.argsAt === null) continue;
 			const statement = split.text;
 			const anchored = lexValueAnchors(statement, split.argsAt, {
-				braceArrays: split.path === "/",
+				...(split.path === "/" ? { directiveVerb: split.verb } : {}),
 			});
 			const emitted: (Emitted | null)[] = anchored.anchors.map((anchor) => {
 				const shapes =
@@ -159,9 +159,14 @@ export function census(scripts: readonly string[]): ValueCensus {
 
 			const strict = lexArguments(statement, split.argsAt);
 			if (strict.read) {
-				result.strictComparableAnchors += kept.length;
-				for (const entry of kept) {
-					if (entry.kind === "element") continue;
+				// Members are excluded because the strict lexer has no token to compare
+				// them against. It is a no-op today — a structured value makes that
+				// lexer refuse the whole statement, so a statement it reads has 0
+				// elements (measured over the corpus) — but the counter has to match
+				// the definition it publishes rather than rely on that staying true.
+				const comparable = kept.filter((entry) => entry.kind !== "element");
+				result.strictComparableAnchors += comparable.length;
+				for (const entry of comparable) {
 					const token = strict.tokens.find(
 						(candidate) =>
 							candidate.span.start === entry.tokenSpan.start &&

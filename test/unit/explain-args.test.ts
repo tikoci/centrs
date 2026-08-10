@@ -176,7 +176,7 @@ describe("the token grammar", () => {
 			);
 
 			const anchors = lexValueAnchors(text, ":local".length, {
-				braceArrays: true,
+				directiveVerb: "local",
 			});
 			expect(anchors.complete).toBeFalse();
 			expect(anchors.complete ? "" : anchors.why).toContain(
@@ -191,7 +191,7 @@ describe("the token grammar", () => {
 			":local z {[:if (true) do={ # c\n:put 1\n}]}",
 		]) {
 			const anchors = lexValueAnchors(text, ":local".length, {
-				braceArrays: true,
+				directiveVerb: "local",
 			});
 			expect(anchors.complete).toBeTrue();
 			expect(
@@ -215,7 +215,7 @@ describe("the token grammar", () => {
 		];
 		for (const text of readable) {
 			const anchors = lexValueAnchors(text, ":local".length, {
-				braceArrays: true,
+				directiveVerb: "local",
 			});
 			expect(anchors.complete).toBeTrue();
 			expect(
@@ -230,7 +230,7 @@ describe("the token grammar", () => {
 			":local z {[:put (1,#test)]}",
 		]) {
 			const anchors = lexValueAnchors(text, ":local".length, {
-				braceArrays: true,
+				directiveVerb: "local",
 			});
 			expect(anchors.complete).toBeFalse();
 			expect(anchors.complete ? "" : anchors.why).toContain(

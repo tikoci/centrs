@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { lexValueAnchors } from "../../src/explain/args.ts";
+import { braceArraySlotPairs } from "../../src/explain/brace-slots.ts";
 import {
 	VALUE_SHAPES,
 	type ValueShape,
@@ -77,6 +78,7 @@ interface ValueFixture {
 		keyed: { literal: string; il: string; members: string[] }[];
 		invalidLiterals: string[];
 		nestedLiterals: { literal: string; parses: boolean; il: string }[];
+		braceSlots: { verb: string; slot: string; outcome: string }[];
 		positions: {
 			input: string;
 			parses: boolean;
@@ -160,13 +162,13 @@ describe("#225 value-shape grounding matrix", () => {
 		);
 		expect(fixture.corpus.sourceScripts).toBe(948);
 		expect(fixture.corpus.strictComparableAnchors).toBe(13_168);
-		expect(fixture.corpus.valueOccurrences).toBe(19_709);
-		expect(fixture.corpus.unreadStatementsWithAnchors).toBe(570);
-		expect(fixture.corpus.recoveredPrefixAnchors).toBe(6_541);
+		expect(fixture.corpus.valueOccurrences).toBe(19_708);
+		expect(fixture.corpus.unreadStatementsWithAnchors).toBe(569);
+		expect(fixture.corpus.recoveredPrefixAnchors).toBe(6_540);
 		expect(fixture.corpus.elementOccurrences).toBe(5_636);
 		expect(fixture.corpus.keyedElements).toBe(529);
 		expect(fixture.corpus.nestedElements).toBe(1_147);
-		expect(fixture.corpus.shapeCounts).toMatchObject({ array: 814, mac: 3 });
+		expect(fixture.corpus.shapeCounts).toMatchObject({ array: 813, mac: 3 });
 		// The four invariants, none of which is a measurement of taste: where both
 		// readings exist they agree, every span addresses its own bytes, every
 		// member names a container, and every member sits strictly inside it.
@@ -523,23 +525,23 @@ describe("value anchors", () => {
 	test("array literals are anchored without widening the strict REST lexer", () => {
 		for (const source of ["(1,2,3)", '{1;"abc";3}', "{a=1;b=2}"]) {
 			const input = `:local z ${source}`;
-			const reading = lexValueAnchors(input, ":local z".length, {
-				braceArrays: true,
+			const reading = lexValueAnchors(input, ":local".length, {
+				directiveVerb: "local",
 			});
 			expect(reading.complete).toBe(true);
-			expect(reading.anchors[0]).toMatchObject({
+			// `z` is positional #0 — the NAME slot, which takes no array — and the
+			// literal is #1, so the walk starts at the verb the way `explain` does.
+			const literal = reading.anchors[1];
+			expect(literal).toMatchObject({
 				kind: "positional",
 				sourceShape: "array",
 				quoted: false,
 			});
 			expect(
-				input.slice(
-					reading.anchors[0]?.valueSpan.start,
-					reading.anchors[0]?.valueSpan.end,
-				),
+				input.slice(literal?.valueSpan.start, literal?.valueSpan.end),
 			).toBe(source);
-			expect(reading.anchors[0]?.value).toBe(source);
-			expect(reading.anchors.slice(1).every((a) => a.kind === "element")).toBe(
+			expect(literal?.value).toBe(source);
+			expect(reading.anchors.slice(2).every((a) => a.kind === "element")).toBe(
 				true,
 			);
 			expect(
@@ -650,13 +652,15 @@ describe("value anchors", () => {
 			":local z {1;;2}",
 		])
 			expect(
-				lexValueAnchors(input, ":local z".length, { braceArrays: true })
-					.anchors,
-			).toEqual([]);
+				lexValueAnchors(input, ":local".length, {
+					directiveVerb: "local",
+				}).anchors.every((anchor) => anchor.sourceShape !== "array"),
+			).toBe(true);
 		expect(
-			lexValueAnchors(":local z {1;}", ":local z".length, { braceArrays: true })
-				.anchors.length,
-		).toBe(2);
+			lexValueAnchors(":local z {1;}", ":local".length, {
+				directiveVerb: "local",
+			}).anchors.length,
+		).toBe(3);
 		expect(
 			lexValueAnchors(":if true do={ :put 1 }", ":if".length).anchors.map(
 				(anchor) => anchor.sourceShape,
@@ -708,6 +712,77 @@ describe("value anchors", () => {
 		]);
 	});
 
+	test("the brace-slot table is exactly the device's array rows", () => {
+		// The drift gate for `src/explain/brace-slots.ts`: the fixture holds the
+		// sweep's 222 (verb, slot) verdicts and the product table must equal its
+		// `array` rows — no hand-added slot, no silently dropped one. `code` and
+		// `error` rows are excluded on purpose; `inconclusive` rows are excluded
+		// because the probe could not ask, which is not the same as a refusal.
+		const rows = fixture.interiorGrounding.braceSlots;
+		expect(rows.length).toBe(222);
+		const device = rows
+			.filter((row) => row.outcome === "array")
+			.map((row) => `${row.verb} ${row.slot}`)
+			.sort();
+		expect(braceArraySlotPairs()).toEqual(device);
+		// The same name is an array on one verb and a code block on another, which
+		// is why a bare name set cannot express this.
+		expect(device).toContain("foreach in");
+		expect(rows).toContainEqual({
+			verb: "onerror",
+			slot: "in",
+			outcome: "code",
+		});
+	});
+
+	test("a brace is read as an array only in a slot the device proved", () => {
+		const claimsArray = (input: string) =>
+			explainCommand(input).values.occurrences.some((value) =>
+				value.facts.shapeHints?.values?.includes("array"),
+			);
+		// Accepted: the seven verbs that carry every brace array in the corpus,
+		// plus a named slot the old `in`-only rule refused.
+		for (const input of [
+			":local z {1;2}",
+			":global g {1;2}",
+			":set g {1;2}",
+			":put {1;2}",
+			":len {1;2}",
+			":return {1;2}",
+			":foreach i in={1;2} do={:put 1}",
+			":for i from={1;2} to=2 do={:put 1}",
+		])
+			expect({ input, array: claimsArray(input) }).toEqual({
+				input,
+				array: true,
+			});
+		// Rejected by the device, and formerly called arrays by the path rule:
+		// a scalar-typed slot, the NAME positional, a condition, a code block,
+		// and a command argument.
+		for (const input of [
+			":delay {1;2}",
+			":beep {1;2}",
+			":resolve {1;2}",
+			":local {1;2}",
+			":local name={1;2}",
+			":if condition={1;2}",
+			":while condition={1;2}",
+			":onerror e in={1;2} do={}",
+			":retry command={1;2}",
+			// Accepted by the device, but as script TEXT rather than an array:
+			// `:execute script={(1,2)}` lowers to `script=(1,2)`, not `(, 1 2)`.
+			":execute {1;2}",
+			":execute script={1;2}",
+			":grep script={1;2}",
+			":log info message={1;2}",
+			"/ip/dns/set servers={1.1.1.1;8.8.8.8}",
+		])
+			expect({ input, array: claimsArray(input) }).toEqual({
+				input,
+				array: false,
+			});
+	});
+
 	test("a literal the device rejects never keeps its array shape", () => {
 		// The falsifier for the nested case, scored one-sided: a literal `:parse`
 		// rejects must not come back as a COMPLETE reading that calls those bytes
@@ -722,7 +797,7 @@ describe("value anchors", () => {
 		for (const row of rejected) {
 			const input = `:local z ${row.literal}`;
 			const reading = lexValueAnchors(input, ":local".length, {
-				braceArrays: true,
+				directiveVerb: "local",
 			});
 			const claimed =
 				reading.complete &&
@@ -747,7 +822,7 @@ describe("value anchors", () => {
 			.filter((row) => {
 				const input = `:local z ${row.literal}`;
 				const reading = lexValueAnchors(input, ":local".length, {
-					braceArrays: true,
+					directiveVerb: "local",
 				});
 				return (
 					reading.complete &&
@@ -757,16 +832,33 @@ describe("value anchors", () => {
 		expect(read).toHaveLength(9);
 	});
 
-	test("member descent is bounded, and the shape survives the bound", () => {
-		const deep = `:local z ${"{".repeat(40)}1${"}".repeat(40)}`;
-		const occurrences = explainCommand(deep).values.occurrences;
-		expect(occurrences[0]?.facts.shapeHints?.values).toEqual(["array"]);
-		// Eight frames of members, then the walk stops rather than recursing to
-		// the input's depth; the outermost shape is still proven by delimiters.
-		expect(occurrences).toHaveLength(9);
+	test("member descent is bounded, and the bound withdraws rather than guesses", () => {
+		// Eight frames are read; deeper than that the interior is unverified, and
+		// an unverified interior can hold a fault that makes the whole statement a
+		// syntax error — `:parse` rejects `{{…{(1,)}…}}` at depth 9 exactly as at
+		// depth 1. So the bound withdraws instead of keeping the shape.
+		const at = (depth: number, body: string) =>
+			`:local z ${"{".repeat(depth)}${body}${"}".repeat(depth)}`;
+		const read = explainCommand(at(8, "1")).values.occurrences;
+		expect(read[1]?.facts.shapeHints?.values).toEqual(["array"]);
+		expect(read.filter((value) => value.kind === "element")).toHaveLength(8);
+
+		for (const depth of [9, 40])
+			expect(
+				explainCommand(at(depth, "1")).values.occurrences.some((value) =>
+					value.facts.shapeHints?.values?.includes("array"),
+				),
+			).toBe(false);
+		// The fabrication the bound used to allow: a device-rejected member below
+		// it came back `array` and complete.
 		expect(
-			occurrences.slice(1).every((value) => value.kind === "element"),
-		).toBe(true);
+			lexValueAnchors(at(9, "(1,)"), ":local".length, {
+				directiveVerb: "local",
+			}),
+		).toMatchObject({
+			complete: false,
+			why: "an array literal nested deeper than this phase reads",
+		});
 	});
 
 	test("an unreadable later substitution does not erase an earlier literal", () => {

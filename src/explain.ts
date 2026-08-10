@@ -1113,7 +1113,7 @@ function valuesOf(
 			// both device syntax errors at the `{`. `path` is how that position is
 			// spelled offline: `:local`/`:put`/`:foreach` resolve to `/`, while
 			// `:log info` resolves to `/log` — and the device agrees with the split.
-			braceArrays: split.path === "/",
+			...(split.path === "/" ? { directiveVerb: split.verb } : {}),
 		});
 		// Prefix completeness is intentionally not an envelope fact: shape hints are
 		// advisory and never turn the later refusal reason into a diagnostic.

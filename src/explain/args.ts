@@ -50,6 +50,7 @@
  */
 
 import { isScopeBrace } from "./blocks.ts";
+import { braceSlotTakesArray } from "./brace-slots.ts";
 import { braceStartsStatements } from "./scope-brace.ts";
 import { maskComments, scanQuotedString } from "./segment.ts";
 
@@ -174,36 +175,25 @@ interface WalkOptions {
 	/** Locate `{…}`/`(…)` literals instead of refusing the statement at one. */
 	allowArrayValues?: boolean;
 	/**
-	 * Whether a `{…}` in this statement can be an array literal AT ALL.
+	 * The root scripting directive whose slots decide whether a `{…}` here is an
+	 * array literal, or undefined when this statement has none.
 	 *
-	 * The caller sets it from the statement's resolved path, because RouterOS
-	 * decides by position and not by content. On CHR 7.23.3, `/console/inspect`
+	 * A command argument never takes one. On CHR 7.23.3 `/console/inspect`
 	 * classes the `{` byte `error` and `:parse` refuses the statement for
 	 * `/ip/route/add comment={1;2}`, `/ip/dns/set servers={1.1.1.1;8.8.8.8}`
-	 * (a LIST-typed attribute), `/interface/print .proplist={name;comment}`,
+	 * (a LIST-typed attribute, which rules out a schema-shaped reading),
+	 * `/interface/print .proplist={name;comment}`,
 	 * `/ip/route/print where comment={1;2}`, the relative spelling
-	 * `ip route add comment={1;2}`, and even `:log info message={1;2}` — while
-	 * `:local z {1;2}`, `:put {1;2}`, `:len {1;2}` and `:foreach i in={1;2}` all
-	 * parse. A `(…)` array is accepted in every one of those positions, so only
-	 * the brace is gated.
+	 * `ip route add comment={1;2}`, and `:log info message={1;2}`. A `(…)`
+	 * array is accepted in every one of those positions, so only the brace is
+	 * gated.
 	 *
-	 * The rejection is not schema-driven — a list-typed attribute refuses one
-	 * too — and the braces a command argument DOES take are script bodies
-	 * (`source=`, `on-event=`), which are not arrays and are refused earlier as
-	 * scope blocks.
+	 * Being a directive is necessary but NOT sufficient — `:delay {1;2}` and
+	 * `:local name={1;2}` are syntax errors too — so which slot it is decides:
+	 * see {@link braceSlotTakesArray}.
 	 */
-	braceArrays?: boolean;
+	directiveVerb?: string;
 }
-
-/**
- * Argument names whose value is an array even on a scripting directive.
- *
- * `:foreach i in={1;2} do={…}` parses, so `in=` is a value slot rather than a
- * plain argument. The set is grounded and deliberately tiny: `:log info
- * message={1;2}` is rejected, so a directive's named argument is NOT generally
- * an expression position.
- */
-const ARRAY_ARG_NAMES: ReadonlySet<string> = new Set(["in"]);
 
 /** How deep member scanning descends before it stops and keeps only the shape. */
 const MAX_MEMBER_DEPTH = 8;
@@ -223,17 +213,29 @@ function braceValueOwner(
 	return ARGUMENT_NAME.test(name) ? name.toLowerCase() : undefined;
 }
 
-/** Whether a `{` at `at` may open an array literal in this statement. */
+/**
+ * Whether a `{` at `at` may open an array literal in this statement.
+ *
+ * `positionalIndex` is how many positionals the walk has already read, which is
+ * this token's own index if it turns out to be one. Position is load-bearing:
+ * `:local {1;2}` puts the literal in the NAME slot and does not parse, while
+ * `:local z {1;2}` puts it in the VALUE slot and does.
+ */
 function braceOpensArray(
 	text: string,
 	tokenStart: number,
 	at: number,
+	positionalIndex: number,
 	options: WalkOptions,
 ): boolean {
-	if (options.braceArrays !== true) return false;
+	const verb = options.directiveVerb;
+	if (verb === undefined) return false;
 	const owner = braceValueOwner(text, tokenStart, at);
 	if (owner === undefined) return false;
-	return owner === null || ARRAY_ARG_NAMES.has(owner);
+	return braceSlotTakesArray(
+		verb,
+		owner === null ? `#${positionalIndex}` : owner,
+	);
 }
 
 /**
@@ -252,6 +254,8 @@ function* walkArguments(
 ): Generator<ReadArgument | string> {
 	const structural = maskComments(text);
 	let i = Math.max(0, from);
+	// How many positionals have been read, which is the NEXT positional's index.
+	let positionals = 0;
 	while (i < text.length) {
 		// The MASKED view decides whitespace, because `maskComments` blanks a
 		// continuation comment that `text` still spells with a `#`. Reading `text`
@@ -274,7 +278,7 @@ function* walkArguments(
 			i += continuation;
 			continue;
 		}
-		const token = scanToken(text, structural, i, options);
+		const token = scanToken(text, structural, i, positionals, options);
 		if (typeof token === "string") {
 			yield token;
 			return;
@@ -284,6 +288,7 @@ function* walkArguments(
 			yield read;
 			return;
 		}
+		if (read.kind === "positional") positionals++;
 		yield read;
 		i = token.end;
 	}
@@ -352,6 +357,7 @@ function scanToken(
 	text: string,
 	structural: string,
 	start: number,
+	positionalIndex: number,
 	options: WalkOptions,
 ): { end: number } | string {
 	let i = start;
@@ -371,7 +377,10 @@ function scanToken(
 					? "a substitution or expression value"
 					: "an array or block value";
 			if (c === "{" && isScopeBrace(text, i)) return "a scope block value";
-			if (c === "{" && !braceOpensArray(text, start, i, options))
+			if (
+				c === "{" &&
+				!braceOpensArray(text, start, i, positionalIndex, options)
+			)
 				return "a brace value RouterOS does not read as an array here";
 			const end = delimitedEnd(structural, i);
 			if (end === null) return "an unclosed structured argument value";
@@ -804,6 +813,8 @@ function splitMembers(
 /** Why a located array literal was withdrawn; each is a device syntax error. */
 const EMPTY_MEMBER = "an array literal with an empty member";
 const EMPTY_GROUP = "an array member that is an empty group";
+const DEPTH_BOUND_REACHED =
+	"an array literal nested deeper than this phase reads";
 const UNPARSEABLE_MEMBER =
 	"an array member RouterOS rejects at its first character";
 
@@ -923,7 +934,13 @@ function pushArrayMembers(
 	separator: ";" | ",",
 	depth: number,
 ): string | null {
-	if (depth >= MAX_MEMBER_DEPTH) return null;
+	// Past the bound the interior is UNVERIFIED, and an unverified interior can
+	// hold a fault that makes the whole statement a syntax error — `:parse`
+	// rejects a `(1,)` buried nine levels deep exactly as it rejects a shallow
+	// one. Returning null here called those bytes an array anyway, so the bound
+	// withdraws instead. Deepest member in the 948-script corpus is 6, so this
+	// costs nothing that has ever been seen.
+	if (depth >= MAX_MEMBER_DEPTH) return DEPTH_BOUND_REACHED;
 	const members = splitMembers(structural, contentStart, contentEnd, separator);
 	if (members === null) return EMPTY_MEMBER;
 	for (const member of members) {
@@ -1023,13 +1040,15 @@ function pushArrayMembers(
 export function lexValueAnchors(
 	text: string,
 	from: number,
-	options: { braceArrays?: boolean } = {},
+	options: { directiveVerb?: string } = {},
 ): ValueAnchorReading {
 	const anchors: ValueAnchor[] = [];
 	const structural = maskComments(text);
 	for (const read of walkArguments(text, from, {
 		allowArrayValues: true,
-		braceArrays: options.braceArrays === true,
+		...(options.directiveVerb === undefined
+			? {}
+			: { directiveVerb: options.directiveVerb }),
 	})) {
 		if (typeof read === "string")
 			return { complete: false, anchors, why: read };

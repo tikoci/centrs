@@ -272,16 +272,15 @@
 	},
 	"corpus": {
 		"censusCommand": "bun run explain:value-census --json",
-		"censusRun": "2026-08-10",
 		"sourceScripts": 948,
-		"valueOccurrences": 19709,
+		"valueOccurrences": 19708,
 		"elementOccurrences": 5636,
 		"keyedElements": 529,
 		"nestedElements": 1147,
 		"strictComparableAnchors": 13168,
 		"boundaryContradictions": 0,
-		"unreadStatementsWithAnchors": 570,
-		"recoveredPrefixAnchors": 6541,
+		"unreadStatementsWithAnchors": 569,
+		"recoveredPrefixAnchors": 6540,
 		"invalidSpans": 0,
 		"danglingParents": 0,
 		"containmentBreaks": 0,
@@ -289,7 +288,7 @@
 			"time": 128,
 			"str": 14845,
 			"num": 1591,
-			"array": 814,
+			"array": 813,
 			"ip": 1738,
 			"bool": 551,
 			"ip-prefix": 130,
@@ -1016,6 +1015,1118 @@
 				"literal": "(1,2)",
 				"parses": true,
 				"il": "(evl /localname=$z;value=(, 1 2))"
+			}
+		],
+		"braceSlots": [
+			{
+				"verb": "set",
+				"slot": "#0",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "set",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "set",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "set",
+				"slot": "name",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "set",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "beep",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "beep",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "beep",
+				"slot": "as-value",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "beep",
+				"slot": "frequency",
+				"outcome": "error"
+			},
+			{
+				"verb": "beep",
+				"slot": "length",
+				"outcome": "error"
+			},
+			{
+				"verb": "break",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "break",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "continue",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "continue",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "convert",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "convert",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "convert",
+				"slot": "from",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "convert",
+				"slot": "from-scheme",
+				"outcome": "array"
+			},
+			{
+				"verb": "convert",
+				"slot": "to",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "convert",
+				"slot": "to-scheme",
+				"outcome": "array"
+			},
+			{
+				"verb": "convert",
+				"slot": "transform",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "convert",
+				"slot": "transform-scheme",
+				"outcome": "array"
+			},
+			{
+				"verb": "convert",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "delay",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "delay",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "delay",
+				"slot": "delay-time",
+				"outcome": "error"
+			},
+			{
+				"verb": "deserialize",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "deserialize",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "deserialize",
+				"slot": "delimiter",
+				"outcome": "error"
+			},
+			{
+				"verb": "deserialize",
+				"slot": "from",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "deserialize",
+				"slot": "options",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "deserialize",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "do",
+				"slot": "#0",
+				"outcome": "code"
+			},
+			{
+				"verb": "do",
+				"slot": "#1",
+				"outcome": "text"
+			},
+			{
+				"verb": "do",
+				"slot": "command",
+				"outcome": "code"
+			},
+			{
+				"verb": "do",
+				"slot": "if",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "do",
+				"slot": "on-error",
+				"outcome": "code"
+			},
+			{
+				"verb": "do",
+				"slot": "while",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "error",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "error",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "error",
+				"slot": "message",
+				"outcome": "array"
+			},
+			{
+				"verb": "execute",
+				"slot": "#0",
+				"outcome": "text"
+			},
+			{
+				"verb": "execute",
+				"slot": "#1",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "execute",
+				"slot": "file",
+				"outcome": "error"
+			},
+			{
+				"verb": "execute",
+				"slot": "script",
+				"outcome": "text"
+			},
+			{
+				"verb": "exit",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "exit",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "export",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "export",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "export",
+				"slot": "compact",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "export",
+				"slot": "file",
+				"outcome": "error"
+			},
+			{
+				"verb": "export",
+				"slot": "hide-sensitive",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "export",
+				"slot": "path",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "export",
+				"slot": "show-sensitive",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "export",
+				"slot": "terse",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "export",
+				"slot": "verbose",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "find",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "find",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "find",
+				"slot": "from",
+				"outcome": "array"
+			},
+			{
+				"verb": "find",
+				"slot": "in",
+				"outcome": "array"
+			},
+			{
+				"verb": "find",
+				"slot": "key",
+				"outcome": "array"
+			},
+			{
+				"verb": "for",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "for",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "for",
+				"slot": "counter",
+				"outcome": "error"
+			},
+			{
+				"verb": "for",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "for",
+				"slot": "from",
+				"outcome": "array"
+			},
+			{
+				"verb": "for",
+				"slot": "on-error",
+				"outcome": "code"
+			},
+			{
+				"verb": "for",
+				"slot": "step",
+				"outcome": "array"
+			},
+			{
+				"verb": "for",
+				"slot": "to",
+				"outcome": "array"
+			},
+			{
+				"verb": "foreach",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "foreach",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "foreach",
+				"slot": "counter",
+				"outcome": "error"
+			},
+			{
+				"verb": "foreach",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "foreach",
+				"slot": "in",
+				"outcome": "array"
+			},
+			{
+				"verb": "foreach",
+				"slot": "on-error",
+				"outcome": "code"
+			},
+			{
+				"verb": "global",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "global",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "global",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "global",
+				"slot": "name",
+				"outcome": "error"
+			},
+			{
+				"verb": "global",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "grep",
+				"slot": "#0",
+				"outcome": "text"
+			},
+			{
+				"verb": "grep",
+				"slot": "#1",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "grep",
+				"slot": "after",
+				"outcome": "error"
+			},
+			{
+				"verb": "grep",
+				"slot": "before",
+				"outcome": "error"
+			},
+			{
+				"verb": "grep",
+				"slot": "filename",
+				"outcome": "error"
+			},
+			{
+				"verb": "grep",
+				"slot": "pattern",
+				"outcome": "error"
+			},
+			{
+				"verb": "grep",
+				"slot": "script",
+				"outcome": "text"
+			},
+			{
+				"verb": "if",
+				"slot": "#0",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "if",
+				"slot": "#1",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "if",
+				"slot": "condition",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "if",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "if",
+				"slot": "else",
+				"outcome": "code"
+			},
+			{
+				"verb": "import",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "import",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "import",
+				"slot": "file-name",
+				"outcome": "error"
+			},
+			{
+				"verb": "import",
+				"slot": "from-line",
+				"outcome": "error"
+			},
+			{
+				"verb": "import",
+				"slot": "verbose",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "jobname",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "jobname",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "len",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "len",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "len",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "local",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "local",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "local",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "local",
+				"slot": "name",
+				"outcome": "error"
+			},
+			{
+				"verb": "local",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "lock",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "lock",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "lock",
+				"slot": "delay",
+				"outcome": "error"
+			},
+			{
+				"verb": "nothing",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "nothing",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "onerror",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "onerror",
+				"slot": "#1",
+				"outcome": "code"
+			},
+			{
+				"verb": "onerror",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "onerror",
+				"slot": "error",
+				"outcome": "error"
+			},
+			{
+				"verb": "onerror",
+				"slot": "in",
+				"outcome": "code"
+			},
+			{
+				"verb": "parse",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "parse",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "parse",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "password",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "password",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "password",
+				"slot": "as-value",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "password",
+				"slot": "confirm-new-password",
+				"outcome": "error"
+			},
+			{
+				"verb": "password",
+				"slot": "new-password",
+				"outcome": "error"
+			},
+			{
+				"verb": "password",
+				"slot": "old-password",
+				"outcome": "error"
+			},
+			{
+				"verb": "pick",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "pick",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "pick",
+				"slot": "begin",
+				"outcome": "array"
+			},
+			{
+				"verb": "pick",
+				"slot": "counter",
+				"outcome": "array"
+			},
+			{
+				"verb": "pick",
+				"slot": "end",
+				"outcome": "array"
+			},
+			{
+				"verb": "put",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "put",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "put",
+				"slot": "message",
+				"outcome": "array"
+			},
+			{
+				"verb": "quit",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "quit",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "range",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "range",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "range",
+				"slot": "from",
+				"outcome": "array"
+			},
+			{
+				"verb": "range",
+				"slot": "to",
+				"outcome": "array"
+			},
+			{
+				"verb": "redo",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "redo",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "resolve",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "resolve",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "resolve",
+				"slot": "domain-name",
+				"outcome": "error"
+			},
+			{
+				"verb": "resolve",
+				"slot": "server",
+				"outcome": "error"
+			},
+			{
+				"verb": "resolve",
+				"slot": "server-port",
+				"outcome": "error"
+			},
+			{
+				"verb": "resolve",
+				"slot": "type",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "retry",
+				"slot": "#0",
+				"outcome": "code"
+			},
+			{
+				"verb": "retry",
+				"slot": "#1",
+				"outcome": "text"
+			},
+			{
+				"verb": "retry",
+				"slot": "command",
+				"outcome": "code"
+			},
+			{
+				"verb": "retry",
+				"slot": "delay",
+				"outcome": "error"
+			},
+			{
+				"verb": "retry",
+				"slot": "max",
+				"outcome": "error"
+			},
+			{
+				"verb": "retry",
+				"slot": "on-error",
+				"outcome": "code"
+			},
+			{
+				"verb": "return",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "return",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "return",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndnum",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndnum",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndnum",
+				"slot": "from",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndnum",
+				"slot": "to",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndstr",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndstr",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndstr",
+				"slot": "from",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndstr",
+				"slot": "length",
+				"outcome": "array"
+			},
+			{
+				"verb": "serialize",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "serialize",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "serialize",
+				"slot": "delimiter",
+				"outcome": "error"
+			},
+			{
+				"verb": "serialize",
+				"slot": "file-name",
+				"outcome": "error"
+			},
+			{
+				"verb": "serialize",
+				"slot": "options",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "serialize",
+				"slot": "order",
+				"outcome": "array"
+			},
+			{
+				"verb": "serialize",
+				"slot": "to",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "serialize",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "time",
+				"slot": "#0",
+				"outcome": "code"
+			},
+			{
+				"verb": "time",
+				"slot": "#1",
+				"outcome": "text"
+			},
+			{
+				"verb": "time",
+				"slot": "command",
+				"outcome": "code"
+			},
+			{
+				"verb": "timestamp",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "timestamp",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "timestamp",
+				"slot": "use-tz",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "toarray",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "toarray",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "toarray",
+				"slot": "delimiter",
+				"outcome": "error"
+			},
+			{
+				"verb": "toarray",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "tobool",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "tobool",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "tobool",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "tocrlf",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "tocrlf",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "tocrlf",
+				"slot": "input",
+				"outcome": "error"
+			},
+			{
+				"verb": "toid",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "toid",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "toid",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "toip",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "toip",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "toip",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "toip6",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "toip6",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "toip6",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "tolf",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "tolf",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "tolf",
+				"slot": "input",
+				"outcome": "error"
+			},
+			{
+				"verb": "tonsec",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "tonsec",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "tonsec",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "tonum",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "tonum",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "tonum",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "tostr",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "tostr",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "tostr",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "totime",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "totime",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "totime",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "typeof",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "typeof",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "typeof",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "undo",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "undo",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "while",
+				"slot": "#0",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "while",
+				"slot": "#1",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "while",
+				"slot": "condition",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "while",
+				"slot": "do",
+				"outcome": "code"
 			}
 		],
 		"positions": [
