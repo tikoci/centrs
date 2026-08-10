@@ -69,6 +69,33 @@ describe("string escape validation (#247)", () => {
 		expect(explainCommand(input).verdict).not.toBe("fail");
 	});
 
+	// #254 review — the message is the one place the valid set is printed, and it
+	// shipped with a literal TAB where `\t` was meant, so an entry rendered as
+	// whitespace. Pin the exact literal: any future edit that lets a real control
+	// character back in fails here.
+	test("the diagnostic message prints escapes literally, never as control characters", () => {
+		const message = explainCommand(':put "\\q"').diagnostics.find(
+			(d) => d.code === "explain/canonicalizer/bad-string-escape",
+		)?.message;
+		expect(message).toBe(
+			'invalid escape in string: unknown escape, truncated hex, or lowercase hex digit — use \\n \\r \\t \\" \\\\ \\$ \\_ \\? \\a \\b \\f \\v, \\XX with uppercase hex, or \\ before whitespace to continue the line',
+		);
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: that is the bug being pinned.
+		expect(/[\x00-\x1f]/.test(message ?? "")).toBe(false);
+	});
+
+	test("the message names every case that raises it", () => {
+		// Copilot #254: truncated hex raises `bad-string-escape` too, so the text
+		// must not read as if only unknown/lowercase-hex escapes do.
+		const message = explainCommand(':put "\\q"').diagnostics.find(
+			(d) => d.code === "explain/canonicalizer/bad-string-escape",
+		)?.message;
+		for (const cause of ["unknown escape", "truncated hex", "lowercase hex"])
+			expect(message).toContain(cause);
+		for (const input of [':put "\\q"', ':put "\\0"', ':put "\\0a"'])
+			expect(explainCommand(input).verdict).toBe("fail");
+	});
+
 	test("valid uppercase hex escapes pass", () => {
 		for (const esc of ["\\00", "\\48", "\\0A", "\\FF", "\\5F", "\\4C"]) {
 			expect(explainCommand(`:put "${esc}"`).verdict).toBe("pass");

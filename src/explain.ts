@@ -655,7 +655,7 @@ const DEFECT_DIAGNOSTICS: Record<
 	"bad-string-escape": {
 		severity: "error",
 		message: () =>
-			'invalid escape in string: unknown escape or lowercase hex digit — use \\n \\r \\t \\" \\\\ \\$ \\_ \\? \\a \\b \\f \\v, \\XX with uppercase hex, or \\ before whitespace to continue the line',
+			'invalid escape in string: unknown escape, truncated hex, or lowercase hex digit — use \\n \\r \\t \\" \\\\ \\$ \\_ \\? \\a \\b \\f \\v, \\XX with uppercase hex, or \\ before whitespace to continue the line',
 	},
 	"bad-sigil": {
 		severity: "error",

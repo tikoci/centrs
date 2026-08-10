@@ -56,6 +56,18 @@ async function parseFails(
 }
 
 /**
+ * A RouterOS console rejection is PROSE where a result would be a value, and it
+ * always opens with one of these verbs. Matching the opening word (rather than
+ * `expected .* value`) keeps forms like `expected end of command` and
+ * `bad command name` on the reject side — a narrower pattern would score a real
+ * rejection as an acceptance and silently weaken every grounding assertion
+ * below (#254 review). Same predicate as the corpus audit in
+ * `.scratch/explain-252-escape-corpus-audit.ts`.
+ */
+const CONSOLE_REJECTION =
+	/^(syntax error|expected |missing |invalid |unknown |unexpected |no such |bad )/i;
+
+/**
  * Run the input itself and report whether RouterOS accepted it.
  *
  * Stronger than the `:put [:parse …]` wrapper for #252's rows: the wrapper
@@ -68,8 +80,8 @@ async function execAccepts(
 ): Promise<boolean> {
 	const out = String(
 		((await chr.exec(input)) as { output?: string }).output ?? "",
-	);
-	return !/expected .* value|syntax error/i.test(out);
+	).trim();
+	return !CONSOLE_REJECTION.test(out);
 }
 
 describeFast("explain string escapes against CHR (#247)", () => {
