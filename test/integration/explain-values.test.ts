@@ -181,6 +181,10 @@ describeFast("explain value facts against CHR", () => {
 				{ shapeHints: { values: ["ip"], ev: "e9" } },
 				{ shapeHints: { values: ["str"], ev: "e9" } },
 				{ shapeHints: { values: ["array"], ev: "e9" } },
+				// The array's three members; example 28 owns the interior rules.
+				{ shapeHints: { values: ["num"], ev: "e9" } },
+				{ shapeHints: { values: ["num"], ev: "e9" } },
+				{ shapeHints: { values: ["num"], ev: "e9" } },
 				{ shapeHints: { values: ["time"], ev: "e9" } },
 				{ shapeHints: { values: ["id"], ev: "e9" } },
 				{ shapeHints: { values: ["mac"], ev: "e9" } },
@@ -322,14 +326,18 @@ describeFast("explain value facts against CHR", () => {
 				":local z {[:put #test]}",
 				":local z {1;[:put #test]}",
 			]) {
-				const anchors = lexValueAnchors(readable, ":local".length);
+				const anchors = lexValueAnchors(readable, ":local".length, {
+					braceArrays: true,
+				});
 				expect(anchors.complete).toBeTrue();
 			}
 			for (const refused of [
 				":local z {[:put {#test}]}",
 				":local z {[:put (1,#test)]}",
 			]) {
-				const anchors = lexValueAnchors(refused, ":local".length);
+				const anchors = lexValueAnchors(refused, ":local".length, {
+					braceArrays: true,
+				});
 				expect(anchors.complete).toBeFalse();
 			}
 			// #249 — /menu { control: same construct WITHOUT the hash is valid
@@ -398,6 +406,220 @@ describeFast("explain value facts against CHR", () => {
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
 				exampleIds: [27],
+			});
+		} finally {
+			await started.chr.destroy();
+		}
+	}, 300_000);
+	/**
+	 * Example 28 — the interior of an array literal, and the positions in which
+	 * one exists at all.
+	 *
+	 * Every assertion below re-asks the device the question the offline lexicon
+	 * answers: `:foreach k,v` is RouterOS's own enumeration of the members, so
+	 * member identity is never inferred here, and `/console/inspect` names the
+	 * exact byte a rejected brace fails at.
+	 */
+	test("example 28 grounds array members and where a brace array is legal", async () => {
+		const started = await startIntegrationChr();
+		try {
+			/** The device's own member list: `k|kt|v|vt` per member. */
+			const members = async (literal: string): Promise<string[]> =>
+				outputOf(
+					await started.chr.exec(
+						`{ :local z ${literal}; :foreach k,v in=$z do={:put "$k|$[:typeof $k]|$v|$[:typeof $v]"} }`,
+					),
+				)
+					.split("\n")
+					.filter((line) => line.length > 0);
+
+			// The separator belongs to the delimiter, and a comma inside braces
+			// builds ONE nested member rather than splitting.
+			expect(await members("{1;2}")).toEqual(["0|num|1|num", "1|num|2|num"]);
+			expect(await members("(1,2)")).toEqual(["0|num|1|num", "1|num|2|num"]);
+			expect((await members("{1,2}")).length).toBe(1);
+			expect(outputOf(await started.chr.exec(":local z (1;2)"))).toContain(
+				"syntax error",
+			);
+
+			// `=` is a key in braces and a comparison in parens.
+			expect(await members("{a=1}")).toEqual(["a|str|1|num"]);
+			expect(await members("(a=1,b=2)")).toEqual([
+				"0|num|false|bool",
+				"1|num|false|bool",
+			]);
+
+			// The member lexicon: what centrs hints, and what it must not.
+			const memberType = async (literal: string): Promise<string> =>
+				outputOf(
+					await started.chr.exec(
+						`{ :local z {${literal}}; :put [:typeof ($z->0)] }`,
+					),
+				).trim();
+			for (const [literal, type] of [
+				["1.1", "ip"],
+				["1::1", "ip6"],
+				["1.1.1.1/24", "ip-prefix"],
+				["2008:1::2/128", "ip6-prefix"],
+				["123", "num"],
+				["0x10", "num"],
+				["1d", "time"],
+				["00:00:02", "time"],
+				["yes", "bool"],
+				['"abc"', "str"],
+			] as const) {
+				expect(await memberType(literal)).toBe(type);
+				const hints = explainCommand(`:local z {${literal}}`)
+					.values.occurrences.filter((value) => value.kind === "element")
+					.flatMap((value) => value.facts.shapeHints?.values ?? []);
+				expect(hints).toEqual([type]);
+			}
+
+			// `nothing` is the device saying "variable reference", where offline
+			// must stay silent: a bare word, a MAC, a boolean in the wrong case,
+			// and any time literal past 2^63 nanoseconds.
+			for (const literal of [
+				"abc",
+				"ether1",
+				"00:11:22:33:44:55",
+				"Yes",
+				"0X10",
+				"100000w",
+				"15251w",
+				"106752d",
+				"9223372037s",
+			]) {
+				expect(await memberType(literal)).toBe("nothing");
+				expect(
+					explainCommand(`:local z {${literal}}`).values.occurrences.filter(
+						(value) => value.kind === "element",
+					),
+				).toEqual([]);
+			}
+			// …and the neighbors on the in-range side of that cliff.
+			for (const literal of ["15250w", "106751d", "9223372036s"])
+				expect(await memberType(literal)).toBe("time");
+
+			// Literals that do not parse at all withdraw the enclosing shape.
+			for (const literal of [
+				"{}",
+				"{;}",
+				"{;1}",
+				"{1;;2}",
+				"(1,)",
+				"{*1}",
+				"{+1}",
+			]) {
+				expect(
+					outputOf(await started.chr.exec(`:local z ${literal}`)),
+				).toContain("syntax error");
+				expect(
+					explainCommand(`:local z ${literal}`).values.occurrences,
+				).toEqual([]);
+			}
+			expect(await members("{1;}")).toEqual(["0|num|1|num"]);
+
+			// Where a brace array is legal, byte for byte with the highlighter.
+			for (const input of [
+				"/ip/route/add comment={1;2}",
+				"/ip/dns/set servers={1.1.1.1;8.8.8.8}",
+				"/interface/print .proplist={name;comment}",
+				"ip route add comment={1;2}",
+				":log info message={1;2}",
+			]) {
+				const classes = await highlightClasses(started.chr, input);
+				expect(classes.indexOf("error")).toBe(input.indexOf("{"));
+				expect(
+					outputOf(await started.chr.exec(`:put [:parse ${rosString(input)}]`)),
+				).toMatch(/error/);
+				expect(explainCommand(input).values.occurrences).toEqual([]);
+			}
+			for (const input of [
+				":local z {1;2}",
+				":put {1;2}",
+				":foreach i in={1;2} do={:put $i}",
+				"/ip/route/add comment=(1,2)",
+			]) {
+				expect(await highlightClasses(started.chr, input)).not.toContain(
+					"error",
+				);
+				expect(
+					outputOf(await started.chr.exec(`:put [:parse ${rosString(input)}]`)),
+				).not.toMatch(/error/);
+				expect(
+					explainCommand(input).values.occurrences[0]?.facts.shapeHints?.values,
+				).toEqual(["array"]);
+			}
+
+			// The short IPv4 spelling is octet-bounded in both positions.
+			for (const [literal, type] of [
+				["1.255", "ip"],
+				["1.256", "time"],
+				["1.16777215", "time"],
+				["3.14159", "time"],
+				["1.1.255", "ip"],
+			] as const) {
+				expect(await memberType(literal)).toBe(type);
+				expect(
+					outputOf(
+						await started.chr.exec(
+							`{ :local x ${literal}; :put [:typeof $x] }`,
+						),
+					).trim(),
+				).toBe(type);
+			}
+			expect(explainCommand(":local z 3.14159").values.occurrences).toEqual([]);
+
+			// Example 28b — the comma spelling is accepted everywhere the brace is
+			// not, and the ARGUMENT's type decides whether the device splits it.
+			// `highlight` is read over the REST body so no RouterOS string quoting
+			// sits between the assertion and the input.
+			for (const [input, expected] of [
+				["/ip/dns/set servers=1.1.1.1,8.8.8.8", "servers=1.1.1.1;8.8.8.8"],
+				[
+					"/ip/firewall/filter/add chain=forward protocol=tcp dst-port=80,443",
+					"dst-port=;80;443",
+				],
+				["/ip/route/add comment=a,b", "comment=a,b"],
+				[
+					"/interface/bridge/port/add interface=ether1,ether2",
+					"interface=ether1,ether2",
+				],
+			] as const) {
+				expect(await highlightClasses(started.chr, input)).not.toContain(
+					"error",
+				);
+				expect(
+					outputOf(await started.chr.exec(`:put [:parse ${rosString(input)}]`)),
+				).toContain(expected);
+			}
+			// Both readings exist for the same spelling, so a named attribute keeps
+			// both; a directive's value slot has only the array reading.
+			expect(
+				outputOf(
+					await started.chr.exec(
+						'{ :local x 1,2; :put "$[:typeof $x]|$[:len $x]" }',
+					),
+				).trim(),
+			).toBe("array|2");
+			expect(
+				explainCommand("/ip/dns/set servers=1.1.1.1,8.8.8.8").values
+					.occurrences[0]?.facts.shapeHints?.values,
+			).toEqual(["array", "str"]);
+			expect(
+				explainCommand(":local x 1,2").values.occurrences[0]?.facts.shapeHints
+					?.values,
+			).toEqual(["array"]);
+
+			await recordIntegrationEvidence({
+				suite: "explain value facts against CHR",
+				command: "explain",
+				protocol: "rest-api (:typeof + :parse IL + /console/inspect highlight)",
+				routerosVersion: started.chr.state.version,
+				quickChrName: started.chr.name,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+				exampleIds: [28, "28b"],
 			});
 		} finally {
 			await started.chr.destroy();

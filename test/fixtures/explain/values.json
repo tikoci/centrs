@@ -69,12 +69,36 @@
 			"rejected": [0, 1]
 		},
 		"toBool": [
-			{ "literal": "\"true\"", "type": "bool", "value": "true" },
-			{ "literal": "\"false\"", "type": "bool", "value": "false" },
-			{ "literal": "\"yes\"", "type": "bool", "value": "true" },
-			{ "literal": "\"no\"", "type": "bool", "value": "false" },
-			{ "literal": "0", "type": "bool", "value": "false" },
-			{ "literal": "1", "type": "bool", "value": "true" }
+			{
+				"literal": "\"true\"",
+				"type": "bool",
+				"value": "true"
+			},
+			{
+				"literal": "\"false\"",
+				"type": "bool",
+				"value": "false"
+			},
+			{
+				"literal": "\"yes\"",
+				"type": "bool",
+				"value": "true"
+			},
+			{
+				"literal": "\"no\"",
+				"type": "bool",
+				"value": "false"
+			},
+			{
+				"literal": "0",
+				"type": "bool",
+				"value": "false"
+			},
+			{
+				"literal": "1",
+				"type": "bool",
+				"value": "true"
+			}
 		]
 	},
 	"timeOrdering": {
@@ -83,17 +107,61 @@
 		"note": "RouterOS time literals are order-independent and ADDITIVE: a repeated unit sums rather than being rejected. `isTimeShape` therefore checks fragment coverage, not unit order — raised as an ordering defect in review of #242 and refuted here on both channels.",
 		"probe": ":typeof + :tostr",
 		"literals": [
-			{ "literal": "1s1m", "type": "time", "value": "00:01:01" },
-			{ "literal": "1m1s", "type": "time", "value": "00:01:01" },
-			{ "literal": "1m1m", "type": "time", "value": "00:02:00" },
-			{ "literal": "1s1s", "type": "time", "value": "00:00:02" },
-			{ "literal": "1h1h1h", "type": "time", "value": "03:00:00" },
-			{ "literal": "1d2d", "type": "time", "value": "3d00:00:00" },
-			{ "literal": "1d1w", "type": "time", "value": "1w1d00:00:00" },
-			{ "literal": "1w1d", "type": "time", "value": "1w1d00:00:00" },
-			{ "literal": "2s3m4h", "type": "time", "value": "04:03:02" },
-			{ "literal": "1ms1s", "type": "time", "value": "00:00:01.001" },
-			{ "literal": "1s1ms", "type": "time", "value": "00:00:01.001" }
+			{
+				"literal": "1s1m",
+				"type": "time",
+				"value": "00:01:01"
+			},
+			{
+				"literal": "1m1s",
+				"type": "time",
+				"value": "00:01:01"
+			},
+			{
+				"literal": "1m1m",
+				"type": "time",
+				"value": "00:02:00"
+			},
+			{
+				"literal": "1s1s",
+				"type": "time",
+				"value": "00:00:02"
+			},
+			{
+				"literal": "1h1h1h",
+				"type": "time",
+				"value": "03:00:00"
+			},
+			{
+				"literal": "1d2d",
+				"type": "time",
+				"value": "3d00:00:00"
+			},
+			{
+				"literal": "1d1w",
+				"type": "time",
+				"value": "1w1d00:00:00"
+			},
+			{
+				"literal": "1w1d",
+				"type": "time",
+				"value": "1w1d00:00:00"
+			},
+			{
+				"literal": "2s3m4h",
+				"type": "time",
+				"value": "04:03:02"
+			},
+			{
+				"literal": "1ms1s",
+				"type": "time",
+				"value": "00:00:01.001"
+			},
+			{
+				"literal": "1s1ms",
+				"type": "time",
+				"value": "00:00:01.001"
+			}
 		]
 	},
 	"v2Grounding": {
@@ -103,12 +171,36 @@
 		"channelsMatch": true,
 		"note": "Only source-identifiable facts become offline hints. `code` and `nil` are produced values with no standalone literal spelling; concat remains an expression even when its result is an array.",
 		"colonTime": [
-			{ "literal": "9:00", "type": "time", "value": "09:00:00" },
-			{ "literal": "00:00:02", "type": "time", "value": "00:00:02" },
-			{ "literal": "00:00:02.001", "type": "time", "value": "00:00:02.001" },
-			{ "literal": "1d00:00:00", "type": "time", "value": "1d00:00:00" },
-			{ "literal": "1w1d00:00:00", "type": "time", "value": "1w1d00:00:00" },
-			{ "literal": "00:60:00", "type": "time", "value": "01:00:00" }
+			{
+				"literal": "9:00",
+				"type": "time",
+				"value": "09:00:00"
+			},
+			{
+				"literal": "00:00:02",
+				"type": "time",
+				"value": "00:00:02"
+			},
+			{
+				"literal": "00:00:02.001",
+				"type": "time",
+				"value": "00:00:02.001"
+			},
+			{
+				"literal": "1d00:00:00",
+				"type": "time",
+				"value": "1d00:00:00"
+			},
+			{
+				"literal": "1w1d00:00:00",
+				"type": "time",
+				"value": "1w1d00:00:00"
+			},
+			{
+				"literal": "00:60:00",
+				"type": "time",
+				"value": "01:00:00"
+			}
 		],
 		"mac": {
 			"literal": "00:11:22:33:44:55",
@@ -119,54 +211,117 @@
 			"shorterFiveGroupType": "str"
 		},
 		"arrays": [
-			{ "literal": "(1,2,3)", "type": "array", "value": "1;2;3" },
-			{ "literal": "{1;2;3}", "type": "array", "value": "1;2;3" },
-			{ "literal": "{a=1;b=2}", "type": "array", "value": "a=1;b=2" }
+			{
+				"literal": "(1,2,3)",
+				"type": "array",
+				"value": "1;2;3"
+			},
+			{
+				"literal": "{1;2;3}",
+				"type": "array",
+				"value": "1;2;3"
+			},
+			{
+				"literal": "{a=1;b=2}",
+				"type": "array",
+				"value": "a=1;b=2"
+			}
 		],
 		"concat": [
-			{ "literal": "((1,2,3) . \"a\")", "type": "array", "value": "1a;2a;3a" },
-			{ "literal": "(\"a\" . (1,2,3))", "type": "array", "value": "a1;a2;a3" },
-			{ "literal": "(1 . 2)", "type": "str", "value": "12" }
+			{
+				"literal": "((1,2,3) . \"a\")",
+				"type": "array",
+				"value": "1a;2a;3a"
+			},
+			{
+				"literal": "(\"a\" . (1,2,3))",
+				"type": "array",
+				"value": "a1;a2;a3"
+			},
+			{
+				"literal": "(1 . 2)",
+				"type": "str",
+				"value": "12"
+			}
 		],
 		"producedTypes": [
-			{ "expression": "[:toarray \"\"]", "type": "array", "value": "" },
+			{
+				"expression": "[:toarray \"\"]",
+				"type": "array",
+				"value": ""
+			},
 			{
 				"expression": "[:parse \":put hello\"]",
 				"type": "code",
 				"value": "(code)"
 			},
-			{ "expression": "[:toid \"*1\"]", "type": "id", "value": "*1" },
-			{ "expression": "*1", "type": "id", "value": "*1" }
+			{
+				"expression": "[:toid \"*1\"]",
+				"type": "id",
+				"value": "*1"
+			},
+			{
+				"expression": "*1",
+				"type": "id",
+				"value": "*1"
+			}
 		],
 		"uninitializedType": "nothing",
 		"nothingCommandType": "nil",
 		"emptyArrayElementType": "nothing"
 	},
 	"corpus": {
+		"censusCommand": "bun run explain:value-census --json",
+		"censusRun": "2026-08-10",
 		"sourceScripts": 948,
-		"commandStatements": 14331,
-		"valueOccurrences": 17304,
-		"strictComparableAnchors": 13143,
+		"valueOccurrences": 19709,
+		"elementOccurrences": 5636,
+		"keyedElements": 529,
+		"nestedElements": 1147,
+		"strictComparableAnchors": 13168,
 		"boundaryContradictions": 0,
-		"unreadStatementsWithAnchors": 1603,
-		"recoveredPrefixAnchors": 4161,
+		"unreadStatementsWithAnchors": 570,
+		"recoveredPrefixAnchors": 6541,
 		"invalidSpans": 0,
+		"danglingParents": 0,
+		"containmentBreaks": 0,
 		"shapeCounts": {
-			"array": 420,
-			"bool": 1217,
-			"ip": 1746,
-			"ip-prefix": 137,
+			"time": 128,
+			"str": 14845,
+			"num": 1591,
+			"array": 814,
+			"ip": 1738,
+			"bool": 551,
+			"ip-prefix": 130,
+			"ip6": 2,
+			"ip6-prefix": 221,
+			"mac": 3
+		},
+		"elementShapeCounts": {
+			"array": 249,
+			"str": 4519,
+			"num": 852,
+			"bool": 4,
+			"ip": 8,
 			"ip6": 1,
-			"ip6-prefix": 220,
-			"mac": 3,
-			"num": 1454,
-			"str": 11848,
-			"time": 258
+			"ip-prefix": 1,
+			"ip6-prefix": 1,
+			"time": 1
 		}
 	},
 	"scalars": [
-		{ "literal": "0", "hints": ["num"], "bareType": "num", "bareValue": "0" },
-		{ "literal": "-1", "hints": ["num"], "bareType": "num", "bareValue": "-1" },
+		{
+			"literal": "0",
+			"hints": ["num"],
+			"bareType": "num",
+			"bareValue": "0"
+		},
+		{
+			"literal": "-1",
+			"hints": ["num"],
+			"bareType": "num",
+			"bareValue": "-1"
+		},
 		{
 			"literal": "1.1",
 			"hints": ["ip"],
@@ -343,5 +498,850 @@
 			"input": "/tool/netwatch/add interval=200ms comment=200ms host=1.1.1.1",
 			"il": "(evl /tool/netwatch/addcomment=200ms;host=1.1.1.1;interval=00:00:00.200)"
 		}
-	]
+	],
+	"interiorGrounding": {
+		"captured": "2026-08-10",
+		"stable": "7.23.3",
+		"probes": [":typeof", ":parse IL", "/console/inspect request=highlight"],
+		"maxTimeNanos": "9223372036854775807",
+		"separators": [
+			{
+				"literal": "{1;2}",
+				"type": "array",
+				"length": 2,
+				"il": "(evl /localname=$z;value=1;2)"
+			},
+			{
+				"literal": "{1,2}",
+				"type": "array",
+				"length": 1,
+				"il": "(evl /localname=$z;value=(, 1 2))"
+			},
+			{
+				"literal": "(1,2)",
+				"type": "array",
+				"length": 2,
+				"il": "(evl /localname=$z;value=(, 1 2))"
+			},
+			{
+				"literal": "(1;2)",
+				"type": "error",
+				"length": -1,
+				"il": "syntax error (line 1 column 12)"
+			},
+			{
+				"literal": "{1;2,3}",
+				"type": "array",
+				"length": 2,
+				"il": "(evl /localname=$z;value=1;(, 2 3))"
+			},
+			{
+				"literal": "( 1 , 2 )",
+				"type": "array",
+				"length": 2,
+				"il": "(evl /localname=$z;value=(, 1 2))"
+			},
+			{
+				"literal": "{ 1 ; 2 }",
+				"type": "array",
+				"length": 2,
+				"il": "(evl /localname=$z;value=1;2)"
+			}
+		],
+		"members": [
+			{
+				"literal": "1.1",
+				"type": "ip",
+				"value": "1.0.0.1"
+			},
+			{
+				"literal": "2.2",
+				"type": "ip",
+				"value": "2.0.0.2"
+			},
+			{
+				"literal": "1.1.1.1",
+				"type": "ip",
+				"value": "1.1.1.1"
+			},
+			{
+				"literal": "1::1",
+				"type": "ip6",
+				"value": "1::1"
+			},
+			{
+				"literal": "1.1.1.1/24",
+				"type": "ip-prefix",
+				"value": "1.1.1.1/24"
+			},
+			{
+				"literal": "2008:1::2/128",
+				"type": "ip6-prefix",
+				"value": "2008:1::2/128"
+			},
+			{
+				"literal": "123",
+				"type": "num",
+				"value": "123"
+			},
+			{
+				"literal": "-1",
+				"type": "num",
+				"value": "-1"
+			},
+			{
+				"literal": "1d",
+				"type": "time",
+				"value": "1d00:00:00"
+			},
+			{
+				"literal": "1w7h2s",
+				"type": "time",
+				"value": "1w07:00:02"
+			},
+			{
+				"literal": "00:00:02",
+				"type": "time",
+				"value": "00:00:02"
+			},
+			{
+				"literal": "100000w",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "00:11:22:33:44:55",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "yes",
+				"type": "bool",
+				"value": "true"
+			},
+			{
+				"literal": "true",
+				"type": "bool",
+				"value": "true"
+			},
+			{
+				"literal": "\"abc\"",
+				"type": "str",
+				"value": "abc"
+			},
+			{
+				"literal": "abc",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "ether1",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "a-b",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "1s",
+				"type": "time",
+				"value": "00:00:01"
+			},
+			{
+				"literal": "1w",
+				"type": "time",
+				"value": "1w00:00:00"
+			},
+			{
+				"literal": "10000w",
+				"type": "time",
+				"value": "10000w00:00:00"
+			},
+			{
+				"literal": "15000w",
+				"type": "time",
+				"value": "15000w00:00:00"
+			},
+			{
+				"literal": "15250w",
+				"type": "time",
+				"value": "15250w00:00:00"
+			},
+			{
+				"literal": "15251w",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "16000w",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "100000w",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "106751d",
+				"type": "time",
+				"value": "15250w1d00:00:00"
+			},
+			{
+				"literal": "106752d",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "9223372036s",
+				"type": "time",
+				"value": "15250w1d23:47:16"
+			},
+			{
+				"literal": "9223372037s",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "99999999999999999999s",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "1000000ms",
+				"type": "time",
+				"value": "00:16:40"
+			},
+			{
+				"literal": "0x10",
+				"type": "num",
+				"value": "16"
+			},
+			{
+				"literal": "0X10",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "0xff",
+				"type": "num",
+				"value": "255"
+			},
+			{
+				"literal": "0x",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "0xg",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "-0x10",
+				"type": "num",
+				"value": "-16"
+			},
+			{
+				"literal": "0x7fffffffffffffff",
+				"type": "num",
+				"value": "9223372036854775807"
+			},
+			{
+				"literal": "9223372036854775807",
+				"type": "num",
+				"value": "9223372036854775807"
+			},
+			{
+				"literal": "9223372036854775808",
+				"type": "num",
+				"value": "9223372036854775807"
+			},
+			{
+				"literal": "-9223372036854775808",
+				"type": "num",
+				"value": "-9223372036854775807"
+			},
+			{
+				"literal": "007",
+				"type": "num",
+				"value": "7"
+			},
+			{
+				"literal": "1.1/24",
+				"type": "ip-prefix",
+				"value": "1.0.0.1/24"
+			},
+			{
+				"literal": "2.2.2",
+				"type": "ip",
+				"value": "2.2.0.2"
+			},
+			{
+				"literal": "255.255.255.255",
+				"type": "ip",
+				"value": "255.255.255.255"
+			},
+			{
+				"literal": "256.1",
+				"type": "time",
+				"value": "00:04:16.100"
+			},
+			{
+				"literal": "1.256",
+				"type": "time",
+				"value": "00:00:01.256"
+			},
+			{
+				"literal": "::",
+				"type": "ip6",
+				"value": "::"
+			},
+			{
+				"literal": "::1/0",
+				"type": "ip6-prefix",
+				"value": "::/0"
+			},
+			{
+				"literal": "yes",
+				"type": "bool",
+				"value": "true"
+			},
+			{
+				"literal": "no",
+				"type": "bool",
+				"value": "false"
+			},
+			{
+				"literal": "true",
+				"type": "bool",
+				"value": "true"
+			},
+			{
+				"literal": "false",
+				"type": "bool",
+				"value": "false"
+			},
+			{
+				"literal": "Yes",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "TRUE",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "\"1.1\"",
+				"type": "str",
+				"value": "1.1"
+			},
+			{
+				"literal": "\"yes\"",
+				"type": "str",
+				"value": "yes"
+			},
+			{
+				"literal": "\"0x10\"",
+				"type": "str",
+				"value": "0x10"
+			},
+			{
+				"literal": "\"\"",
+				"type": "str",
+				"value": ""
+			}
+		],
+		"keyed": [
+			{
+				"literal": "{a=1}",
+				"il": "(evl /localname=$z;value=a=1)",
+				"members": ["M|k=a|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{a=1;b=2}",
+				"il": "(evl /localname=$z;value=a=1;b=2)",
+				"members": ["M|k=a|kt=str|v=1|vt=num", "M|k=b|kt=str|v=2|vt=num"]
+			},
+			{
+				"literal": "{a=1;2}",
+				"il": "(evl /localname=$z;value=2;a=1)",
+				"members": ["M|k=0|kt=num|v=2|vt=num", "M|k=a|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{\"a b\"=1}",
+				"il": "(evl /localname=$z;value=a b=1)",
+				"members": ["M|k=a b|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{a=1.1}",
+				"il": "(evl /localname=$z;value=a=1.0.0.1)",
+				"members": ["M|k=a|kt=str|v=1.0.0.1|vt=ip"]
+			},
+			{
+				"literal": "{a=}",
+				"il": "(evl /localname=$z;value=a)",
+				"members": ["M|k=0|kt=num|v=a|vt=str"]
+			},
+			{
+				"literal": "(a=1,b=2)",
+				"il": "(evl /localname=$z;value=(, (= $a 1) (= $b 2)))",
+				"members": [
+					"M|k=0|kt=num|v=false|vt=bool",
+					"M|k=1|kt=num|v=false|vt=bool"
+				]
+			}
+		],
+		"invalidLiterals": [
+			"(1;2)",
+			"{*1}",
+			"{}",
+			"{;}",
+			"{;1}",
+			"(1,)",
+			"{1;2",
+			"{1;#c}",
+			"{+1}"
+		],
+		"positions": [
+			{
+				"input": ":local z {1;2}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":global z {1;2}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "{:local z 1; :set z {1;2}}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":put {1;2}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":put ({1;2})",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":len {1;2}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":foreach i in={1;2} do={:put $i}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":foreach i in=(1,2) do={:put $i}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":foreach i in={a=1;b=2} do={:put $i}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/add comment={1;2}",
+				"parses": false,
+				"highlightErrorAt": 22,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/ip/route/add comment=(1,2)",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/dns/set servers={1.1.1.1;8.8.8.8}",
+				"parses": false,
+				"highlightErrorAt": 20,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/ip/dns/set servers=1.1.1.1,8.8.8.8",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/interface/print .proplist={name;comment}",
+				"parses": false,
+				"highlightErrorAt": 27,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/interface/print .proplist=name,comment",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/add comment=[:tostr {1;2}]",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/print where comment={1;2}",
+				"parses": false,
+				"highlightErrorAt": 30,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/ip/route/print where (comment={1;2})",
+				"parses": false,
+				"highlightErrorAt": 31,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/x/cmd list={1;2}",
+				"parses": false,
+				"highlightErrorAt": 2,
+				"highlightErrorByte": "/"
+			},
+			{
+				"input": "/x/cmd list=(1,2)",
+				"parses": false,
+				"highlightErrorAt": 2,
+				"highlightErrorByte": "/"
+			},
+			{
+				"input": "/x/cmd list=abc",
+				"parses": false,
+				"highlightErrorAt": 2,
+				"highlightErrorByte": "/"
+			},
+			{
+				"input": ":local z {1;;2}",
+				"parses": false,
+				"highlightErrorAt": 12,
+				"highlightErrorByte": ";"
+			},
+			{
+				"input": ":local z {}",
+				"parses": false,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/system/script/add name=x source={:put 1}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/system/scheduler/add name=x on-event={:put 1}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/system/script/add name=x source={1;2}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/add comment={:put 1}",
+				"parses": false,
+				"highlightErrorAt": 22,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/ip/route/add comment=({1;2})",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/add comment=[:tostr {1;2}]",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/add comment=(1,{2;3})",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "ip route add comment={1;2}",
+				"parses": false,
+				"highlightErrorAt": 21,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/ip/route/print {1;2}",
+				"parses": false,
+				"highlightErrorAt": 16,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/ip/route/print (1,2)",
+				"parses": false,
+				"highlightErrorAt": 16,
+				"highlightErrorByte": "("
+			},
+			{
+				"input": ":log info message={1;2}",
+				"parses": false,
+				"highlightErrorAt": 18,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": ":log info message=(1,2)",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "{/ip/route/add comment={1;2}}",
+				"parses": false,
+				"highlightErrorAt": 23,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": ":local z {1;2}; /ip/route/add comment=$z",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/add comment={1;;2}",
+				"parses": false,
+				"highlightErrorAt": 22,
+				"highlightErrorByte": "{"
+			}
+		],
+		"addressShortcut": [
+			{
+				"literal": "1.1",
+				"valueType": "ip",
+				"value": "1.0.0.1",
+				"memberType": "ip",
+				"memberValue": "1.0.0.1"
+			},
+			{
+				"literal": "1.5",
+				"valueType": "ip",
+				"value": "1.0.0.5",
+				"memberType": "ip",
+				"memberValue": "1.0.0.5"
+			},
+			{
+				"literal": "1.255",
+				"valueType": "ip",
+				"value": "1.0.0.255",
+				"memberType": "ip",
+				"memberValue": "1.0.0.255"
+			},
+			{
+				"literal": "1.256",
+				"valueType": "time",
+				"value": "00:00:01.256",
+				"memberType": "time",
+				"memberValue": "00:00:01.256"
+			},
+			{
+				"literal": "1.999",
+				"valueType": "time",
+				"value": "00:00:01.999",
+				"memberType": "time",
+				"memberValue": "00:00:01.999"
+			},
+			{
+				"literal": "1.65535",
+				"valueType": "time",
+				"value": "00:00:01.655350",
+				"memberType": "time",
+				"memberValue": "00:00:01.655350"
+			},
+			{
+				"literal": "1.16777215",
+				"valueType": "time",
+				"value": "00:00:01.167772150",
+				"memberType": "time",
+				"memberValue": "00:00:01.167772150"
+			},
+			{
+				"literal": "1.16777216",
+				"valueType": "time",
+				"value": "00:00:01.167772160",
+				"memberType": "time",
+				"memberValue": "00:00:01.167772160"
+			},
+			{
+				"literal": "3.141",
+				"valueType": "ip",
+				"value": "3.0.0.141",
+				"memberType": "ip",
+				"memberValue": "3.0.0.141"
+			},
+			{
+				"literal": "3.14159",
+				"valueType": "time",
+				"value": "00:00:03.141590",
+				"memberType": "time",
+				"memberValue": "00:00:03.141590"
+			},
+			{
+				"literal": "255.1",
+				"valueType": "ip",
+				"value": "255.0.0.1",
+				"memberType": "ip",
+				"memberValue": "255.0.0.1"
+			},
+			{
+				"literal": "256.1",
+				"valueType": "time",
+				"value": "00:04:16.100",
+				"memberType": "time",
+				"memberValue": "00:04:16.100"
+			},
+			{
+				"literal": "2.1.1",
+				"valueType": "ip",
+				"value": "2.1.0.1",
+				"memberType": "ip",
+				"memberValue": "2.1.0.1"
+			},
+			{
+				"literal": "1.1.255",
+				"valueType": "ip",
+				"value": "1.1.0.255",
+				"memberType": "ip",
+				"memberValue": "1.1.0.255"
+			},
+			{
+				"literal": "1.1.256",
+				"valueType": "str",
+				"value": "1.1.256",
+				"memberType": "nothing",
+				"memberValue": ""
+			},
+			{
+				"literal": "1.1.65535",
+				"valueType": "str",
+				"value": "1.1.65535",
+				"memberType": "nothing",
+				"memberValue": ""
+			},
+			{
+				"literal": "1.1.1.255",
+				"valueType": "ip",
+				"value": "1.1.1.255",
+				"memberType": "ip",
+				"memberValue": "1.1.1.255"
+			},
+			{
+				"literal": "1.1.1.256",
+				"valueType": "str",
+				"value": "1.1.1.256",
+				"memberType": "nothing",
+				"memberValue": ""
+			},
+			{
+				"literal": "255.255.255.255",
+				"valueType": "ip",
+				"value": "255.255.255.255",
+				"memberType": "ip",
+				"memberValue": "255.255.255.255"
+			}
+		],
+		"commaSpelling": {
+			"arguments": [
+				{
+					"input": "/ip/dns/set servers=1.1.1.1,8.8.8.8",
+					"il": "(evl /ip/dns/setservers=1.1.1.1;8.8.8.8)",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/ip/dns/set servers=(1.1.1.1,8.8.8.8)",
+					"il": "(evl /ip/dns/setservers=(, 1.1.1.1 8.8.8.8))",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/ip/firewall/filter/add chain=forward protocol=tcp dst-port=80,443",
+					"il": "(evl /ip/firewall/filter/addchain=forward;dst-port=;80;443;protocol=;tcp)",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/ip/firewall/filter/add chain=forward protocol=tcp dst-port=(80,443)",
+					"il": "(evl /ip/firewall/filter/addchain=forward;dst-port=(, 80 443);protocol=;tcp)",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/ip/firewall/filter/add chain=forward connection-state=established,related",
+					"il": "(evl /ip/firewall/filter/addchain=forward;connection-state=;established;related)",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/ip/route/add comment=a,b",
+					"il": "(evl /ip/route/addcomment=a,b)",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/ip/route/add comment=(\"a\",\"b\")",
+					"il": "(evl /ip/route/addcomment=(, a b))",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/interface/bridge/port/add interface=ether1,ether2",
+					"il": "(evl /interface/bridge/port/addinterface=ether1,ether2)",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/interface/list/member add list=(\"ether1\",\"ether2\")",
+					"il": "(evl /interface/list/member/addlist=(, ether1 ether2))",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/interface/print .proplist=name,comment",
+					"il": "(evl bad parameter .proplist (line 1 column 27) /interface/print)",
+					"highlightErrorAt": -1
+				}
+			],
+			"expressions": [
+				{
+					"literal": "1,2",
+					"observed": "array|2"
+				},
+				{
+					"literal": "a,b",
+					"observed": "array|2"
+				},
+				{
+					"literal": "1.1.1.1,8.8.8.8",
+					"observed": "array|2|1.1.1.1"
+				},
+				{
+					"literal": "single 1",
+					"observed": "num"
+				}
+			]
+		}
+	}
 }

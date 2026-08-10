@@ -440,7 +440,9 @@ it does not infer value-flow types, which remain #239 S2 after #225.
 centrs explain ':local x 2.2; :set x "2.2"; :local z (1,2,3); :local t 00:00:02; :local i *1; /ip/arp/add mac-address=00:11:22:33:44:55' --json
 ```
 
-`data.values.occurrences[]` contains six result-local value records. The bare
+`data.values.occurrences[]` contains nine result-local value records — six
+argument values and the three members of the array literal (example 28 owns the
+interior). The bare
 `2.2` carries `facts.shapeHints.values: ["ip"]` — RouterOS numbers are integers,
 so a dotted decimal is an IPv4 shortcut (`2.0.0.2`) and never `num`; the quoted
 `"2.2"` carries `["str"]`. The array literal, colon-form time, internal ID, and
@@ -495,3 +497,72 @@ A same-line hash after a completed scripting directive is likewise an error:
 `:local x 2 #` produces an `explain/canonicalizer/invalid-hash` diagnostic at
 the hash byte and stops later semantic claims. Statement-leading comments are
 listed with their byte ranges under `comments:` in the default text output.
+
+### 28. An array literal is read member by member, and only where it is one
+
+```bash
+centrs explain ':local z {1.1;"abc";1d;{2;3};a=0x10;b=100000w}; /ip/route/add comment={1;2}' --json
+```
+
+Members of a located array literal are values in their own right.
+`data.values.occurrences[]` carries one record per member, each with its own
+document-byte span, its own `shapeHints`, and a `parent` naming the array's
+result-local id — `1.1` is `["ip"]`, `"abc"` is `["str"]`, `1d` is `["time"]`,
+the nested `{2;3}` is `["array"]` with two `["num"]` members of its own, and the
+keyed member carries `name: "a"` with `["num"]` for `0x10`. `kind` is `element`,
+so a caller can tell a member from a command argument without re-parsing.
+
+**A member is not an argument value, because RouterOS does not parse it as
+one.** Inside a literal the device reads an expression, so `b=100000w` hints
+nothing at all: `:parse` lowers it to `$100000w`, a variable reference, because
+the literal overflows the signed 64-bit nanosecond range that ends between
+`15250w` and `15251w`. The same rule removes three spellings the argument
+lexicon does hint — a bare word (`{abc}` is `$abc`), a full MAC
+(`{00:11:22:33:44:55}` is a variable, though `:local x 00:11:22:33:44:55` is
+`str`), and an internal id (`{*1}` is a hard syntax error, though `:local x *1`
+is `id`) — and adds hexadecimal, which is a number here (`0x10` is 16, while
+`0X10` is a variable). Expressions and substitutions abstain: `{1+1}`,
+`{"a"."b"}`, `{[:parse ":put 1"]}` and `{$x}` produce no member hint.
+
+The second statement produces **no value record at all**. A `{…}` array literal
+is legal only in a scripting directive's value slot: `/console/inspect` classes
+the `{` byte `error` and `:parse` refuses `/ip/route/add comment={1;2}`,
+`/ip/dns/set servers={1.1.1.1;8.8.8.8}` — whose attribute really is list-typed,
+which is what rules out a schema-shaped reading — `.proplist={name;comment}`,
+the relative spelling `ip route add comment={1;2}`, and even
+`:log info message={1;2}`. The `(1,2)` spelling is never rejected at the
+delimiter in any of those positions, and a `(…)` or `[…]` around the brace
+restores the expression context (`comment=({1;2})` and `comment=[:tostr {1;2}]`
+both parse). Braces a
+command argument does accept are script bodies (`source=`, `on-event=`), which
+are refused earlier as scope blocks and are not arrays either.
+
+An empty member is a device syntax error (`{;}`, `{;1}`, `{1;;2}`, `(1,)`), so
+the enclosing `array` shape is withdrawn with it; a single trailing separator is
+legal (`{1;}` is a one-member array). The verdict stays `pass` throughout —
+a shape hint never becomes a diagnostic, and neither does its absence.
+
+### 28b. The comma spelling is accepted everywhere, and means two things
+
+```bash
+centrs explain '/ip/dns/set servers=1.1.1.1,8.8.8.8; /ip/route/add comment=a,b; :local x 1,2' --json
+```
+
+The brace restriction is about the brace, not about lists: `=1,2,3` is a syntax
+error nowhere, and list-taking arguments really do take it. What the device does
+with it depends on the argument's TYPE, which offline does not have —
+`servers=1.1.1.1,8.8.8.8` lowers to `servers=1.1.1.1;8.8.8.8` and
+`dst-port=80,443` to `dst-port=;80;443`, while `comment=a,b` and
+`interface=ether1,ether2` keep the whole run as a single string.
+
+So the first two records carry **`["array", "str"]`** — the first genuinely
+plural hint, which is what `shapeHints.values` is a list for. Neither reading is
+validated and neither becomes a diagnostic; the split is a `schemaType` fact and
+that home stays empty offline. The third record, in a scripting directive's
+value slot, carries `["array"]` alone: `:local x 1,2` is a two-member array on
+the device and no text reading exists there.
+
+No members are emitted for a bare comma run, because whether it splits at all is
+the schema's answer. The `(1,2)` spelling is different — its delimiters prove
+the array — so `servers=(1.1.1.1,8.8.8.8)` yields the array plus two `["ip"]`
+members.

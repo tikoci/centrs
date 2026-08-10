@@ -314,6 +314,7 @@ export {
 	lexArguments as lexExplainArguments,
 	lexValueAnchors as lexExplainValueAnchors,
 	type ValueAnchor as ExplainValueAnchor,
+	type ValueAnchorKind as ExplainValueAnchorKind,
 	type ValueAnchorReading as ExplainValueAnchorReading,
 } from "./explain/args.ts";
 export {
@@ -385,6 +386,7 @@ export type {
 } from "./explain/transport.ts";
 export {
 	VALUE_SHAPES,
+	type ValueContext as ExplainValueContext,
 	type ValueShape as ExplainValueShape,
 	type ValueShapeOptions as ExplainValueShapeOptions,
 	valueShapeHints as explainValueShapeHints,

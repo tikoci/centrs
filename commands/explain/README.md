@@ -545,7 +545,7 @@ and its phase is named below.
 | `structure.statements[].command` | `path` + `verb`, plus **`args` where the argument list was read** (#202c-1); the ordered token list is `statements[].arguments.tokens` |
 | `structure.statements[].transport` | complete for commands: `api-candidate`, `execute`, or fail-closed `unknown`, with an equivalent `centrs` invocation and opt-in `curl` for tested REST mappings (#202c-2). The `basis` names the evidence for the route it chose or refused |
 | `symbols.occurrences[]` | Q13 name/span/class plus semantic `role`, result-local `bindingIds`, sigil spelling, and an abstention note where needed; **no value shape or type** |
-| `values.occurrences[]` | result-local value id/span plus three separate fact homes: offline `shapeHints`; live `observedType` and `schemaType` remain absent until phase 2 |
+| `values.occurrences[]` | result-local value id/span plus three separate fact homes: offline `shapeHints`; live `observedType` and `schemaType` remain absent until phase 2. `kind: "element"` rows are array members, carrying `parent` and, for a keyed member, `name` |
 | `spans` | comment runs and resolved variable classes only; **no value shape or type** |
 | `schema`, `completion` | absent — live evidence, phase 2 |
 
@@ -682,14 +682,74 @@ and its phase is named below.
   Offline emits only `shapeHints`; phase 2 adds the two live facts into their
   existing homes when its safe IL/schema producers land.
 
-  The V2 corpus census covers 948 source scripts: all 13,143 value anchors for
-  which the strict argument lexer also decided have identical half-open byte
-  spans (0 contradictions), while the prefix-safe hint scan retains 4,161
-  earlier or structured values across 1,603 statements whose strict REST
-  reading abstains. The 17,304 emitted occurrences include 420 arrays and 3 MAC
-  spellings; the corpus contains no source-literal `id` example. All retained
-  document spans were in bounds. The strict lexer remains all-or-nothing; only
-  non-authoritative hints use the wider view.
+  **A located array is read member by member (#225 V1).** Each member of a
+  `{…}`/`(…)` literal is its own `values.occurrences[]` row with `kind:
+  "element"`, its own span and hints, a `parent` naming the container's
+  result-local id, and `name` when the brace form spells a key. The separator is
+  the delimiter's and not a choice: a brace splits on `;` while a depth-zero `,`
+  inside one builds a nested array (`{1,2}` is a ONE-member array whose member
+  is `(, 1 2)`), a paren splits on `,`, and `(1;2)` does not parse. `=` binds a
+  key in the brace form (`{a=1}`) and COMPARES in the paren form
+  (`(a=1,b=2)` is two `bool` members), so keys are read in braces only.
+
+  **A member is not an argument value, because the device does not parse it as
+  one.** Inside a literal RouterOS reads an expression, so the member lexicon is
+  its own: a bare word is a variable reference (`{abc}` lowers to `$abc`), and
+  so is a full MAC (`{00:11:22:33:44:55}`) and any time literal past the signed
+  64-bit nanosecond range, whose cliff sits between `15250w` and `15251w`,
+  `106751d` and `106752d`, `9223372036s` and `9223372037s`. `*1` does not parse
+  at all there, though `:local x *1` is `id`. Hexadecimal is added — `0x10` is
+  16, while `0X10` is a variable — and `str`-by-fallback, `mac` and `id` are
+  dropped. Everything else abstains: expressions, substitutions, `$x`, and the
+  dotted-decimal-to-seconds fallback described below.
+
+  **A `{…}` array literal is legal only in a root scripting directive's value
+  slot.** `/console/inspect` classes the `{` byte `error` and `:parse` refuses
+  the statement for `/ip/route/add comment={1;2}`,
+  `/ip/dns/set servers={1.1.1.1;8.8.8.8}` — a LIST-typed attribute, which is
+  what rules out a schema-shaped reading — `/interface/print
+  .proplist={name;comment}`, `/ip/route/print where comment={1;2}`, the relative
+  spelling `ip route add comment={1;2}`, and `:log info message={1;2}`; while
+  `:local z {1;2}`, `:put {1;2}`, `:len {1;2}` and `:foreach i in={1;2}` all
+  parse. The `(…)` spelling is never rejected at the delimiter in any of those
+  positions — `.proplist=(name,comment)` still draws `bad parameter .proplist`,
+  but that is a name-level diagnostic and the plain `name,comment` spelling
+  draws it too — and a `(…)` or `[…]` around a brace restores the expression
+  context. Braces a
+  command argument does take are script bodies (`source=`, `on-event=`), which
+  are not arrays and are refused earlier as scope blocks. An empty member is a
+  syntax error (`{;}`, `{;1}`, `{1;;2}`, `(1,)`) and withdraws the enclosing
+  `array` shape with it; a single trailing separator is legal (`{1;}`).
+
+  **The bare comma spelling is the one place a hint is genuinely plural.**
+  `=1,2,3` is not a syntax error anywhere, and whether the device SPLITS it is
+  decided by the argument's type, which offline does not have:
+  `servers=1.1.1.1,8.8.8.8` lowers to `servers=1.1.1.1;8.8.8.8` and
+  `dst-port=80,443` to `dst-port=;80;443`, while `comment=a,b` and
+  `interface=ether1,ether2` keep the whole run as one string. A named attribute
+  therefore carries `["array", "str"]` — both readings, neither validated. In an
+  expression position there is no second reading (`:local x 1,2` is a
+  two-member `array`, and so is `a,b`), so the hint is singular there. No
+  members are located for a bare comma run: whether it splits at all is the
+  schema's answer, and a member span would be a guess. The `(1,2)` spelling,
+  where the delimiters prove it, is anchored and descended into as usual.
+
+  The short IPv4 spelling fills the LOW octets and every field is one octet:
+  `1.255` is `1.0.0.255` but `1.256` is `time` `00:00:01.256`, `1.16777215` is
+  `time` and not `1.255.255.255`, and `1.1.256` is plain text. Offline abstains
+  on the seconds fallback rather than encoding a chain that depends on a failed
+  address attempt.
+
+  The corpus census is re-derivable with `bun run explain:value-census` and
+  covers 948 source scripts. Every one of the 13,162 emitted values in a
+  statement the strict argument lexer ALSO read has identical half-open byte
+  spans and decoded text (0 contradictions), while the prefix-safe scan retains
+  6,471 values across 501 statements whose strict REST reading abstains. Of
+  19,633 emitted occurrences, 5,636 are array members (529 keyed, 1,147 nested
+  inside another member) and 424 are arrays; the corpus contains no
+  source-literal `id` example. All spans were in bounds, every member named a
+  container that exists, and every member sat strictly inside it. The strict
+  lexer remains all-or-nothing; only non-authoritative hints use the wider view.
 
 ### Offline comment placement (#245)
 

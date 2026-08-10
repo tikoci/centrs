@@ -358,6 +358,10 @@ describe("commands/explain/examples.md — offline", () => {
 			{ shapeHints: { values: ["ip"], ev: "e9" } },
 			{ shapeHints: { values: ["str"], ev: "e9" } },
 			{ shapeHints: { values: ["array"], ev: "e9" } },
+			// The array's own members, example 28's subject.
+			{ shapeHints: { values: ["num"], ev: "e9" } },
+			{ shapeHints: { values: ["num"], ev: "e9" } },
+			{ shapeHints: { values: ["num"], ev: "e9" } },
 			{ shapeHints: { values: ["time"], ev: "e9" } },
 			{ shapeHints: { values: ["id"], ev: "e9" } },
 			{ shapeHints: { values: ["mac"], ev: "e9" } },
@@ -374,6 +378,85 @@ describe("commands/explain/examples.md — offline", () => {
 		).toBe(true);
 		expect(data.verdict).toBe("pass");
 		expect(data.runtimeAcceptance).toBe("not-proven");
+		expect(code).toBe(0);
+	});
+
+	test("28. An array literal is read member by member, and only where it is one (#225)", async () => {
+		const { data, code } = await explainJson([
+			':local z {1.1;"abc";1d;{2;3};a=0x10;b=100000w}; /ip/route/add comment={1;2}',
+		]);
+		expect(
+			data.values.occurrences.map((value) => [
+				value.kind,
+				value.name ?? null,
+				value.parent ?? null,
+				value.facts.shapeHints?.values,
+			]),
+		).toEqual([
+			["positional", null, null, ["array"]],
+			["element", null, "v0", ["ip"]],
+			["element", null, "v0", ["str"]],
+			["element", null, "v0", ["time"]],
+			["element", null, "v0", ["array"]],
+			["element", null, "v4", ["num"]],
+			["element", null, "v4", ["num"]],
+			["element", "a", "v0", ["num"]],
+		]);
+		// Every member span addresses its own source bytes.
+		const input =
+			':local z {1.1;"abc";1d;{2;3};a=0x10;b=100000w}; /ip/route/add comment={1;2}';
+		expect(
+			data.values.occurrences
+				.filter((value) => value.kind === "element")
+				.map((value) => input.slice(value.span.start, value.span.end)),
+		).toEqual(["1.1", '"abc"', "1d", "{2;3}", "2", "3", "0x10"]);
+		// `b=100000w` overflows the time range and is a variable reference on the
+		// device; the second statement's brace array is a device syntax error, so
+		// nothing at all is anchored past the `;`.
+		const secondStatement = input.indexOf("/ip/route/add");
+		expect(
+			data.values.occurrences.some(
+				(value) => value.span.start >= secondStatement,
+			),
+		).toBe(false);
+		expect(data.verdict).toBe("pass");
+		expect(code).toBe(0);
+	});
+
+	test("28b. The comma spelling is accepted everywhere, and means two things (#225)", async () => {
+		const { data, code } = await explainJson([
+			"/ip/dns/set servers=1.1.1.1,8.8.8.8; /ip/route/add comment=a,b; :local x 1,2",
+		]);
+		expect(
+			data.values.occurrences.map((value) => [
+				value.kind,
+				value.name ?? null,
+				value.facts.shapeHints?.values,
+			]),
+		).toEqual([
+			["attribute", "servers", ["array", "str"]],
+			["attribute", "comment", ["array", "str"]],
+			["positional", null, ["array"]],
+		]);
+		// A bare comma run is never split into members; the delimited spelling is.
+		expect(
+			(
+				await explainJson(["/ip/dns/set servers=(1.1.1.1,8.8.8.8)"])
+			).data.values.occurrences.map((value) => [
+				value.kind,
+				value.facts.shapeHints?.values,
+			]),
+		).toEqual([
+			["attribute", ["array"]],
+			["element", ["ip"]],
+			["element", ["ip"]],
+		]);
+		expect(
+			data.values.occurrences.every(
+				(value) => value.facts.schemaType === undefined,
+			),
+		).toBe(true);
+		expect(data.verdict).toBe("pass");
 		expect(code).toBe(0);
 	});
 });
