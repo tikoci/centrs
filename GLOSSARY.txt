@@ -563,6 +563,7 @@ versionless
 SUT
 CJK
 pathresolve
+parseil # lsp-routeros-ts corpus table of captured `:parse` IL, per script per RouterOS version
 blocktree
 klass
 tostr

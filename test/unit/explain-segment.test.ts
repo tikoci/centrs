@@ -384,6 +384,13 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 			":local z {source={ # c\n:put 1}}",
 			":local z {on-event={ # c\n:put 1}}",
 			":local z { { # c\n:put 1}}",
+			// #253 — #249's conjunct also demotes a brace inside a PAREN, which
+			// none of its 15 grounded rows covered. Ground it: CHR 7.23.3
+			// `highlight` classes the `#` `error` for all three, `comment` once a
+			// bracket restores statement context. 5/5 agree with centrs.
+			":local z ({ # c\n:put 1})",
+			":put ({ # c\n1})",
+			":local z (do={ # c\n:put 1})",
 		]) {
 			expect(maskComments(input)).toBe(input);
 			expect(segmentStatements(input).comments).toEqual([]);
@@ -396,6 +403,8 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 			"/system/scheduler/add name=x on-event={ # c\n:put x\n}",
 			"/system/script/add name=x source={ # c\n:put x\n}",
 			":put before\n:do { # c\n:put x\n}",
+			// #253 — a bracket restores statement context inside a paren too.
+			":local z ([:do { # c\n:put 1}])",
 			"[# c\n:put x]",
 			":local z {[:do { # c\n:put 1\n}]}",
 		]) {

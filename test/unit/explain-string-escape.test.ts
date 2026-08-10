@@ -19,9 +19,54 @@ describe("string escape validation (#247)", () => {
 			"\\b",
 			"\\f",
 			"\\v",
+			// `\?` is absent from the manual's escape table but the device classes
+			// it `escaped` and evaluates it to `?` (#252 CHR 7.23.3 byte sweep).
+			"\\?",
 		]) {
 			expect(explainCommand(`:put "${esc}"`).verdict).toBe("pass");
 		}
+	});
+
+	// #252 — the manual's table is a LOWER bound on what RouterOS accepts. The
+	// accepted set below is the CHR 7.23.3 sweep of `:put "\<c>"` over every
+	// 0x20–0x7E byte plus the whitespace forms, scored on the `highlight` class
+	// and the runtime result. See `.scratch/explain-252-escape-sweep.ts`.
+	test("backslash before whitespace continues the line inside a string", () => {
+		for (const [label, esc] of [
+			["space", "\\ "],
+			["tab", "\\\t"],
+			["LF", "\\\n"],
+			["CR", "\\\r"],
+			["CRLF", "\\\r\n"],
+		] as const) {
+			const r = explainCommand(`:put "a${esc}b"`);
+			expect(`${label}:${r.verdict}`).toBe(`${label}:pass`);
+		}
+	});
+
+	test("a CRLF continuation is consumed as one escape, not two", () => {
+		// If the CR were consumed alone the LF would re-enter the string as a
+		// stray byte and the closing quote bookkeeping would drift.
+		const scan = scanQuotedString('"a\\\r\nb"', 0);
+		expect(scan.closed).toBe(true);
+		expect(scan.end).toBe(7);
+	});
+
+	test("whitespace continuation does not swallow a following bad escape", () => {
+		const r = explainCommand(':put "a\\\n\\q"');
+		expect(r.verdict).toBe("fail");
+		expect(
+			r.diagnostics.some(
+				(d) => d.code === "explain/canonicalizer/bad-string-escape",
+			),
+		).toBe(true);
+	});
+
+	test("a multi-line source= string is accepted (the #252 regression)", () => {
+		// 26 corpus scripts are shaped like this; #251 flagged every one.
+		const input =
+			'/system/scheduler/add name=x on-event=":global AT;\\\n    :put $AT"';
+		expect(explainCommand(input).verdict).not.toBe("fail");
 	});
 
 	test("valid uppercase hex escapes pass", () => {
