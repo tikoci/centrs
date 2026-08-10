@@ -25,15 +25,34 @@ async function highlightClasses(
 	return csv === "" ? [] : csv.split(",");
 }
 
-async function parseOk(
+async function parseText(
 	chr: { exec(command: string): Promise<unknown> },
 	input: string,
-): Promise<boolean> {
+): Promise<string> {
 	const cmd = `:put [:parse ${rosString(input)}]`;
 	const out = String(
 		((await chr.exec(cmd)) as { output?: string }).output ?? "",
 	).replaceAll("\r\n", "\n");
-	return out.startsWith("(evl");
+	return out.trim();
+}
+
+async function parseOk(
+	chr: { exec(command: string): Promise<unknown> },
+	input: string,
+): Promise<boolean> {
+	return (await parseText(chr, input)).startsWith("(evl");
+}
+
+async function parseFails(
+	chr: { exec(command: string): Promise<unknown> },
+	input: string,
+): Promise<boolean> {
+	const text = await parseText(chr, input);
+	return (
+		text.includes("expected message value") ||
+		text.includes("syntax error") ||
+		text.includes("expected value value")
+	);
 }
 
 describeFast("explain string escapes against CHR (#247)", () => {
@@ -66,8 +85,9 @@ describeFast("explain string escapes against CHR (#247)", () => {
 				"\\v",
 			];
 			const validHex = ["\\00", "\\48", "\\0A", "\\FF", "\\5F"];
-			// On CHR, \\$ is valid per the manual but current test rig shows it as invalid in :parse context;
-			// ground it separately below rather than mixing into the pass list.
+			// \$ is valid per manual and highlight (escaped,escaped, no error);
+			// the :parse wrapper (outer string escaping) makes parseOk unreliable
+			// for this escape, so ground it via highlight + explainCommand only.
 
 			for (const esc of [...validSingle, ...validHex]) {
 				const input = `:put "${esc}"`;
@@ -77,10 +97,16 @@ describeFast("explain string escapes against CHR (#247)", () => {
 				expect(explainCommand(input).verdict).toBe("pass");
 			}
 
-			// Lowercase hex second digit is rejected (highlight error, :parse fail)
-			for (const esc of ["\\0a", "\\4c", "\\5f", "\\ff"]) {
-				// \\ff is NOT in this list: it is \\f + f which is valid, see below
-				if (esc === "\\ff") continue;
+			// \$ ground via highlight (parse wrapper artifact: outer escaping turns \$ into $)
+			{
+				const input = ':put "\\$"';
+				const classes = await highlightClasses(started.chr, input);
+				expect(classes).not.toContain("error");
+				expect(explainCommand(input).verdict).toBe("pass");
+			}
+			// Lowercase hex second digit is rejected (highlight error, :parse fail).
+			// `\\ff` is excluded: it is `\\f` + literal `f`, checked as valid below.
+			for (const esc of ["\\0a", "\\4c", "\\5f"]) {
 				const input = `:put "${esc}"`;
 				const classes = await highlightClasses(started.chr, input);
 				expect(classes).toContain("error");
@@ -103,6 +129,7 @@ describeFast("explain string escapes against CHR (#247)", () => {
 				const classes = await highlightClasses(started.chr, input);
 				expect(classes).toContain("error");
 				expect(await parseOk(started.chr, input)).toBe(false);
+				expect(await parseFails(started.chr, input)).toBe(true);
 				expect(explainCommand(input).verdict).toBe("fail");
 			}
 
@@ -112,6 +139,7 @@ describeFast("explain string escapes against CHR (#247)", () => {
 				const classes = await highlightClasses(started.chr, input);
 				expect(classes).toContain("error");
 				expect(await parseOk(started.chr, input)).toBe(false);
+				expect(await parseFails(started.chr, input)).toBe(true);
 				expect(explainCommand(input).verdict).toBe("fail");
 			}
 
@@ -120,6 +148,7 @@ describeFast("explain string escapes against CHR (#247)", () => {
 				const classes = await highlightClasses(started.chr, input);
 				expect(classes).toContain("error");
 				expect(await parseOk(started.chr, input)).toBe(false);
+				expect(await parseFails(started.chr, input)).toBe(true);
 				expect(explainCommand(input).verdict).toBe("fail");
 			}
 			expect(explainCommand(':put "\\0A"').verdict).toBe("pass");

@@ -36,7 +36,7 @@ describe("string escape validation (#247)", () => {
 			expect(r.verdict).toBe("fail");
 			expect(
 				r.diagnostics.some(
-					(d) => d.code === "explain/canonicalizer/bad-escape",
+					(d) => d.code === "explain/canonicalizer/bad-string-escape",
 				),
 			).toBe(true);
 		}
@@ -57,18 +57,13 @@ describe("string escape validation (#247)", () => {
 	});
 
 	test("lowercase hex error is at the second hex byte, unknown escape at the escaped char", () => {
-		expect(explainCommand(':put "\\q"').diagnostics[0]?.span).toEqual({
-			start: 7,
-			end: 8,
-		});
-		expect(explainCommand(':put "\\0a"').diagnostics[0]?.span).toEqual({
-			start: 8,
-			end: 9,
-		});
-		expect(explainCommand(':put "\\x0a"').diagnostics[0]?.span).toEqual({
-			start: 7,
-			end: 8,
-		});
+		const badSpan = (input: string) =>
+			explainCommand(input).diagnostics.find(
+				(d) => d.code === "explain/canonicalizer/bad-string-escape",
+			)?.span;
+		expect(badSpan(':put "\\q"')).toEqual({ start: 7, end: 8 });
+		expect(badSpan(':put "\\0a"')).toEqual({ start: 8, end: 9 });
+		expect(badSpan(':put "\\x0a"')).toEqual({ start: 7, end: 8 });
 	});
 
 	test("first invalid escape wins; boundary recovery keeps the closing quote", () => {
@@ -95,9 +90,15 @@ describe("string escape validation (#247)", () => {
 		const r = explainCommand(':put "\\q"');
 		expect(r.verdict).toBe("fail");
 		expect(
-			r.diagnostics.filter((d) => d.code.endsWith("/bad-escape")),
+			r.diagnostics.filter(
+				(d) => d.code === "explain/canonicalizer/bad-string-escape",
+			),
 		).toHaveLength(1);
-		expect(r.diagnostics[0]!.severity).toBe("error");
+		expect(
+			r.diagnostics.find(
+				(d) => d.code === "explain/canonicalizer/bad-string-escape",
+			)?.severity,
+		).toBe("error");
 	});
 
 	test("collectStringEscapeDefects shares scanQuotedString's substitution frames", () => {
@@ -109,5 +110,16 @@ describe("string escape validation (#247)", () => {
 	test("escape defects inside strings do not depend on string position in document", () => {
 		// A valid string followed by an invalid one should still report the second
 		expect(explainCommand(':put "\\0A"; :put "\\0a"').verdict).toBe("fail");
+	});
+
+	test("unterminated string with malformed escape reports bad-string-escape and no closed string", () => {
+		const input = ':put "\\q';
+		expect(scanQuotedString(input, input.indexOf('"')).closed).toBe(false);
+		expect(scanQuotedString(input, input.indexOf('"')).end).toBe(input.length);
+		expect(
+			explainCommand(input).diagnostics.filter(
+				(d) => d.code === "explain/canonicalizer/bad-string-escape",
+			),
+		).toHaveLength(1);
 	});
 });

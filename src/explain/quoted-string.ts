@@ -53,16 +53,18 @@ function isValidStringEscape(text: string, at: number): boolean {
 	return false;
 }
 
-function escapeLength(text: string, at: number): number {
+/**
+ * Bytes to skip past the escape at `at`. Always 2 or 3 so recovery advances
+ * even when the escape is malformed (#199).
+ */
+function escapeLength(text: string, at: number): 2 | 3 {
 	const next1 = text[at + 1];
-	if (next1 === undefined) return 1;
-	if (VALID_SINGLE.has(next1)) return 2;
-	if (isHexUpper(next1)) {
-		const next2 = text[at + 2];
-		if (next2 !== undefined && isHexUpper(next2)) return 3;
-		// truncated or lowercase second char: treat as 2 or 3 for skipping
-		return next2 === undefined ? 1 : 2;
-	}
+	if (
+		next1 !== undefined &&
+		isHexUpper(next1) &&
+		isHexUpper(text[at + 2] ?? "")
+	)
+		return 3;
 	return 2;
 }
 
@@ -85,11 +87,7 @@ export function scanQuotedString(text: string, open: number): QuotedStringScan {
 				// escape itself is malformed, otherwise the closing quote is
 				// lost and every later comment is swallowed (#199).
 				// Validation is separate below; here we just advance.
-				const len = escapeLength(text, i);
-				// Always advance at least 2 to keep recovery stable, but for
-				// valid hex we need 3.
-				if (len === 3) i += 3;
-				else i += 2;
+				i += escapeLength(text, i);
 				continue;
 			}
 			if (c === '"') {
@@ -127,53 +125,36 @@ export function scanQuotedString(text: string, open: number): QuotedStringScan {
  *
  * Walks the entire document with the same frame model as `scanQuotedString`,
  * but validates each `\` inside a string frame against the documented escape
- * table (capital hex, truncated, unknown). Returns a single defect at the
- * first invalid escape, or null. The boundary walk still recovers the outer
- * string end via `escapeLength` above, so a malformed escape does not hide
- * the closing quote (#199).
+ * table (capital hex, truncated, unknown). Returns an array with at most one
+ * defect at the first invalid escape.
  */
 export function collectStringEscapeDefects(text: string): Defect[] {
 	const frames: string[] = [];
-	const defects: Defect[] = [];
 	let i = 0;
 	while (i < text.length) {
+		if (frames.length > MAX_STRING_FRAME_DEPTH) break;
 		const top = frames[frames.length - 1] as string | undefined;
 		const c = text[i] as string;
 		if (top === '"') {
 			if (c === "\\") {
 				if (!isValidStringEscape(text, i)) {
 					// Locate defect at the escaped byte the device marks `error`.
-					// For `\q` it's `q`; for `\0a` it's `a`; for truncated
-					// `\0` before `"` it's the closing quote. We report at the
-					// byte that makes the escape invalid, falling back to the
-					// backslash when the truncated escape has no following byte.
+					// For `\q` it's `q`; for `\0a` it's `a`.
+					// For truncated `\0` before `"` the device marks the closing
+					// quote; centrs reports at the backslash instead, because that
+					// byte is stable when the string is unterminated.
 					const next1 = text[i + 1];
 					let defectAtOffset: number;
 					if (next1 === undefined) defectAtOffset = i;
-					else if (VALID_SINGLE.has(next1))
-						defectAtOffset = i; // shouldn't happen (valid)
 					else if (isHexUpper(next1)) {
 						const next2 = text[i + 2];
-						if (next2 === undefined) {
-							// truncated single hex digit before close: highlight
-							// marks the closing quote, but we attribute to the
-							// backslash start for stability.
-							defectAtOffset = i;
-						} else if (!isHexUpper(next2)) {
-							// lowercase second hex digit
-							defectAtOffset = i + 2;
-						} else defectAtOffset = i;
-					} else {
-						// unknown escape like \q, \x
-						defectAtOffset = i + 1;
-					}
-					// Only first invalid per input, per issue contract.
-					if (defects.length === 0)
-						defects.push(defectAt("bad-escape", defectAtOffset));
+						if (next2 === undefined) defectAtOffset = i;
+						else if (!isHexUpper(next2)) defectAtOffset = i + 2;
+						else defectAtOffset = i;
+					} else defectAtOffset = i + 1;
+					return [defectAt("bad-string-escape", defectAtOffset)];
 				}
-				const len = escapeLength(text, i);
-				if (len === 3) i += 3;
-				else i += 2;
+				i += escapeLength(text, i);
 				continue;
 			}
 			if (c === '"') {
@@ -207,7 +188,6 @@ export function collectStringEscapeDefects(text: string): Defect[] {
 			continue;
 		}
 		i++;
-		if (frames.length > MAX_STRING_FRAME_DEPTH) break;
 	}
-	return defects;
+	return [];
 }

@@ -762,9 +762,10 @@ Corpus re-measurement for #249 — `bun -e 'explainCommand'` over the 948-script
 - **Severity is fixed here, because it drives `--fail-on`.** Three buckets, and
   the split is not "structural vs not":
   - `error` — `unclosed`, `unbalanced-close`, `unterminated-string`,
-    `bad-escape` (both code-position `\` + non-whitespace and string-internal
-    unknown/lowercase-hex/truncated — CHR `highlight` `error` + `:parse`
-    `expected message value`, grounded stable+testing #247), `bad-sigil`,
+    `bad-escape` (code-position `\` + non-whitespace), `bad-string-escape`
+    (string-internal unknown/lowercase-hex/truncated — CHR `highlight` `error`
+    - `:parse` `expected message value`, grounded stable+testing #247),
+    `bad-sigil`,
     `invalid-hash`. Six classes the device itself rejects.
   - `warning` — `over-depth`, because it is centrs's own resource bound and says
     nothing about whether the input is legal; and an `ambiguous`/`unknown`
@@ -780,22 +781,28 @@ Corpus re-measurement for #249 — `bun -e 'explainCommand'` over the 948-script
 RouterOS string escapes are the documented constant escapes
 ([Scripting manual — constant escape sequences](https://manual.mikrotik.com/docs/developer-guides/scripting/#constant-escape-sequences)):
 `\"` `\\` `\n` `\r` `\t` `\$` `\_` `\a` `\b` `\f` `\v` and `\XX` where
-`XX` is **uppercase** hex. Grounded on CHR 7.23.3 stable and 7.24rc3 testing
-(`highlight` hard `error` + `:parse` `expected message value` for the three
-issue rows `:put "\q"` / `:put "\x0a"` / `:put "\0a"` vs `":put "\0A"` valid):
+`XX` is **uppercase** hex. `\$` is grounded on `highlight` (`escaped,escaped`,
+no `error` on CHR 7.23.3/7.24rc3) and the manual; the `:parse` wrapper
+(`:put [:parse "..."]`) is not used for that escape because outer-string
+escaping makes the inner `\$` appear as `$` to the parser. Grounded on CHR
+7.23.3 stable and 7.24rc3 testing (`highlight` hard `error` + `:parse`
+`expected message value` for the three issue rows `:put "\q"` / `:put "\x0a"`
+/ `:put "\0a"` vs `":put "\0A"` valid):
 
 - A malformed escape (`\q`, `\x`, `\x0a`, truncated single-hex `\0`, lowercase
-  hex `\0a`/`\5f`) is a located `bad-escape` structural defect (severity
-  `error`) at the byte the device marks `error` — the unknown char or the
-  lowercase second hex digit.
+  hex `\0a`/`\5f`) is a located `bad-string-escape` structural defect
+  (severity `error`) at the byte the device marks `error` — the unknown char or
+  the lowercase second hex digit. For a truncated single-hex escape the device
+  marks the closing quote; centrs reports at the backslash instead, because that
+  byte is stable when the string is unterminated.
 - `\ff` is `\f` + literal `f` and `\aF` is `\a` + `F`; neither is invalid hex.
 - The one shared `scanQuotedString` below every walker still **recovers the
   closing quote** past a malformed escape, so no #199 nested-substitution
   quote-phase bug is reintroduced. Validation is a shared
   `collectStringEscapeDefects` walk with the same substitution frames; only the
   first invalid escape per document is reported and it fails closed after it.
-- Corpus blast radius (948 scripts): 62 string-escape `bad-escape` diagnostics
-  (vs 15 code-position `bad-escape`). The flagged files are non-RouterOS
+- Corpus blast radius (948 scripts): 62 `bad-string-escape` diagnostics (vs
+  15 code-position `bad-escape`). The flagged files are non-RouterOS
   material (piano key maps, discourse code-blocks) and AT-chat snippets — not a
   corpus-wide false positive on valid RouterOS input.
 

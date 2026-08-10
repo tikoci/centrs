@@ -98,6 +98,7 @@ export interface Defect {
 export type DefectCode =
 	| "over-depth"
 	| "bad-escape"
+	| "bad-string-escape"
 	| "bad-sigil"
 	| "invalid-hash"
 	| "unterminated-string"

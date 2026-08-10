@@ -649,10 +649,13 @@ const DEFECT_DIAGNOSTICS: Record<
 	},
 	"bad-escape": {
 		severity: "error",
-		message: (d) =>
-			d.detail === "string"
-				? 'invalid escape in string: unknown escape or lowercase hex digit — use \\n \\r 	 \\" \\\\ \\$ \\_ \\a \\b \\f \\v or \\XX with uppercase hex'
-				: "invalid escape: a backslash in code is valid only before whitespace",
+		message: () =>
+			"invalid escape: a backslash in code is valid only before whitespace",
+	},
+	"bad-string-escape": {
+		severity: "error",
+		message: () =>
+			'invalid escape in string: unknown escape or lowercase hex digit — use \\n \\r \t \\" \\\\ \\$ \\_ \\a \\b \\f \\v or \\XX with uppercase hex',
 	},
 	"bad-sigil": {
 		severity: "error",
@@ -803,6 +806,11 @@ export function explainCommand(
 	options: ExplainCommandOptions = {},
 ): ExplainData {
 	const coordinates = analyzeCoordinates(input);
+	// The ANALYZED text is what arguments are lexed from: it is pure ASCII with
+	// one byte standing in for every non-ASCII one, so an index into it IS a
+	// document byte offset. Decoding it once here keeps `statementOf` and the
+	// string-escape walk from re-deriving the same string.
+	const analyzed = new TextDecoder().decode(coordinates.analyzed);
 	const segmented = segmentStatements(input);
 	const verbs = resolveVerbs(input);
 	const brackets = resolveDocument(input);
@@ -824,14 +832,7 @@ export function explainCommand(
 		[EV.subcommands, brackets.defects],
 		[EV.write, write.defects],
 		[EV.symbols, symbols.defects],
-		[
-			EV.symbols,
-			collectStringEscapeDefects(
-				coordinates.analyzed.length === 0
-					? ""
-					: new TextDecoder().decode(coordinates.analyzed),
-			).map((d) => ({ ...d, detail: "string" as string })),
-		],
+		[EV.symbols, collectStringEscapeDefects(analyzed)],
 	]);
 
 	// From the SPLITS, not from the segmentation. The resolver flattens `do={…}`
@@ -839,11 +840,6 @@ export function explainCommand(
 	// segments and pairing the two by index attaches the wrong span to every statement after
 	// the first block. Each split carries its own document-space span.
 	//
-	// The ANALYZED text is what arguments are lexed from: it is pure ASCII with
-	// one byte standing in for every non-ASCII one, so an index into it IS a
-	// document byte offset. Decoding it once here keeps `statementOf` from
-	// re-deriving the same string per statement.
-	const analyzed = new TextDecoder().decode(coordinates.analyzed);
 	const readStatements: ExplainStatement[] = verbs.splits.map((split) =>
 		statementOf(split, analyzed),
 	);

@@ -571,6 +571,7 @@ describe("the abstention gate rides the defect channel (#202)", () => {
 		for (const code of [
 			"over-depth",
 			"bad-escape",
+			"bad-string-escape",
 			"bad-sigil",
 			"invalid-hash",
 			"unterminated-string",
