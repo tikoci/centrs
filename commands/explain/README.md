@@ -719,7 +719,19 @@ and its phase is named below.
   command argument does take are script bodies (`source=`, `on-event=`), and
   those are not arrays either — they are refused earlier as scope blocks. An empty member is a
   syntax error (`{;}`, `{;1}`, `{1;;2}`, `(1,)`) and withdraws the enclosing
-  `array` shape with it; a single trailing separator is legal (`{1;}`).
+  `array` shape with it; a single trailing separator is legal in the brace form
+  only (`{1;}` and `{1;2;}` parse, `{1;2,}` and `{2,}` do not).
+
+  **A nested member the device rejects withdraws its container too.** A `(…)`
+  inside a literal is a GROUP as often as an array — `{(1)}` is the one-member
+  array `1` — so an empty group (`{()}`, `{a=()}`) and an empty comma member
+  (`{(1,)}`, `{(,)}`, `{1;(2,)}`, `(1,(2,))`) are named as faults rather than
+  abstained on: `:parse` rejects each of them at every nesting depth, while
+  `{(1)}`, `{a=(1)}` and `{1;(2)}` parse. `highlight` is not the oracle for this
+  family — it accepts `{1;2,}`, `{2,}` and `{(1,2),}`, all of which `:parse`
+  rejects. Member descent stops after eight frames; past that the literal keeps
+  its `array` shape, proven by its delimiters, and its deeper members are simply
+  not emitted.
 
   **The bare comma spelling is the one place a hint is genuinely plural.**
   `=1,2,3` is not a syntax error anywhere, and whether the device SPLITS it is

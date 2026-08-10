@@ -891,6 +891,133 @@
 			"{1;#c}",
 			"{+1}"
 		],
+		"nestedLiterals": [
+			{
+				"literal": "{(1,)}",
+				"parses": false,
+				"il": "syntax error (line 1 column 15)"
+			},
+			{
+				"literal": "{a=(1,)}",
+				"parses": false,
+				"il": "syntax error (line 1 column 17)"
+			},
+			{
+				"literal": "{1;(2,)}",
+				"parses": false,
+				"il": "syntax error (line 1 column 17)"
+			},
+			{
+				"literal": "{ (1,) ; 2 }",
+				"parses": false,
+				"il": "syntax error (line 1 column 16)"
+			},
+			{
+				"literal": "{()}",
+				"parses": false,
+				"il": "syntax error (line 1 column 13)"
+			},
+			{
+				"literal": "{a=()}",
+				"parses": false,
+				"il": "syntax error (line 1 column 15)"
+			},
+			{
+				"literal": "{(,)}",
+				"parses": false,
+				"il": "syntax error (line 1 column 12)"
+			},
+			{
+				"literal": "((1,))",
+				"parses": false,
+				"il": "syntax error (line 1 column 15)"
+			},
+			{
+				"literal": "(1,(2,))",
+				"parses": false,
+				"il": "syntax error (line 1 column 17)"
+			},
+			{
+				"literal": "{1;2;}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;2)"
+			},
+			{
+				"literal": "{{1;2};}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;2)"
+			},
+			{
+				"literal": "{1;2,}",
+				"parses": false,
+				"il": "syntax error (line 1 column 16)"
+			},
+			{
+				"literal": "{2,}",
+				"parses": false,
+				"il": "syntax error (line 1 column 14)"
+			},
+			{
+				"literal": "{(1,2),}",
+				"parses": false,
+				"il": "syntax error (line 1 column 18)"
+			},
+			{
+				"literal": "{(1)}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1)"
+			},
+			{
+				"literal": "{a=(1)}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a=1)"
+			},
+			{
+				"literal": "{1;(2)}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;2)"
+			},
+			{
+				"literal": "{{}}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=)"
+			},
+			{
+				"literal": "{1;{}}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;)"
+			},
+			{
+				"literal": "{}",
+				"parses": false,
+				"il": "syntax error (line 1 column 12)"
+			},
+			{
+				"literal": "()",
+				"parses": false,
+				"il": "syntax error (line 1 column 12)"
+			},
+			{
+				"literal": "(1,)",
+				"parses": false,
+				"il": "syntax error (line 1 column 14)"
+			},
+			{
+				"literal": "{;}",
+				"parses": false,
+				"il": "syntax error (line 1 column 11)"
+			},
+			{
+				"literal": "{1;2}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;2)"
+			},
+			{
+				"literal": "(1,2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, 1 2))"
+			}
+		],
 		"positions": [
 			{
 				"input": ":local z {1;2}",

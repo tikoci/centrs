@@ -803,8 +803,41 @@ function splitMembers(
 
 /** Why a located array literal was withdrawn; each is a device syntax error. */
 const EMPTY_MEMBER = "an array literal with an empty member";
+const EMPTY_GROUP = "an array member that is an empty group";
 const UNPARSEABLE_MEMBER =
 	"an array member RouterOS rejects at its first character";
+
+/**
+ * Why a `(…)` member cannot stand where it is, or null when it can.
+ *
+ * A parenthesis inside a literal is either a GROUP — `{(1)}` is the one-member
+ * array `1` — or a comma array, and {@link isArraySource} only recognizes the
+ * second. That left the first sharing the fallback branch with every other
+ * expression, which is an abstention, so a group the device REJECTS kept the
+ * enclosing `array` shape instead of withdrawing it (found in review).
+ *
+ * On CHR 7.23.3 an empty group (`{()}`, `{a=()}`) and an empty comma member
+ * (`{(1,)}`, `{(,)}`, `{1;(2,)}`, `(1,(2,))`) are syntax errors at every
+ * nesting depth, while `{(1)}`, `{a=(1)}` and `{1;(2)}` all parse — so the
+ * check has to name the fault rather than refuse every parenthesis.
+ *
+ * `highlight` is not the oracle here: it accepts `{1;2,}`, `{2,}` and
+ * `{(1,2),}`, all of which `:parse` rejects.
+ */
+function parenMemberFault(
+	text: string,
+	structural: string,
+	start: number,
+	end: number,
+): string | null {
+	if (text[start] !== "(") return null;
+	if (delimitedEnd(structural, start) !== end) return null;
+	if (structural.slice(start + 1, end - 1).trim().length === 0)
+		return EMPTY_GROUP;
+	return splitMembers(structural, start + 1, end - 1, ",") === null
+		? EMPTY_MEMBER
+		: null;
+}
 
 /** Characters that cannot OPEN an array member; see {@link pushArrayMembers}. */
 function leadsInvalidMember(c: string | undefined): boolean {
@@ -925,6 +958,8 @@ function pushArrayMembers(
 			quoted: false,
 			parent,
 		};
+		const fault = parenMemberFault(text, structural, valueStart, member.end);
+		if (fault !== null) return fault;
 		if (isArraySource(text, structural, valueStart, member.end)) {
 			const at = anchors.length;
 			anchors.push({ ...anchor, sourceShape: "array" });

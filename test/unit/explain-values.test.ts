@@ -76,6 +76,7 @@ interface ValueFixture {
 		members: { literal: string; type: string; value: string }[];
 		keyed: { literal: string; il: string; members: string[] }[];
 		invalidLiterals: string[];
+		nestedLiterals: { literal: string; parses: boolean; il: string }[];
 		positions: {
 			input: string;
 			parses: boolean;
@@ -705,6 +706,55 @@ describe("value anchors", () => {
 			["positional", null, null, "array"],
 			["element", null, "v0", "num"],
 		]);
+	});
+
+	test("a literal the device rejects never keeps its array shape", () => {
+		// The falsifier for the nested case, scored one-sided: a literal `:parse`
+		// rejects must not come back as a COMPLETE reading that calls those bytes
+		// an array. Abstaining early is always allowed; naming a shape on a
+		// statement the device refuses to parse is not. Eight rows here — the
+		// nested empty-group and empty-comma-member family — were fabrications
+		// before the container-withdrawal fix.
+		const rejected = fixture.interiorGrounding.nestedLiterals.filter(
+			(row) => !row.parses,
+		);
+		expect(rejected.length).toBeGreaterThan(8);
+		for (const row of rejected) {
+			const input = `:local z ${row.literal}`;
+			const reading = lexValueAnchors(input, ":local".length, {
+				braceArrays: true,
+			});
+			const claimed =
+				reading.complete &&
+				reading.anchors.some(
+					(anchor) =>
+						anchor.sourceShape === "array" &&
+						anchor.valueSpan.start === input.indexOf(row.literal),
+				);
+			expect({ literal: row.literal, claimed }).toEqual({
+				literal: row.literal,
+				claimed: false,
+			});
+		}
+	});
+
+	test("the literals the device accepts are still read", () => {
+		// A coverage anchor, not a contract: abstention stays legal, but a drop
+		// here means the withdrawal rule got wider than the device is and should
+		// be a deliberate edit rather than a silent loss.
+		const read = fixture.interiorGrounding.nestedLiterals
+			.filter((row) => row.parses)
+			.filter((row) => {
+				const input = `:local z ${row.literal}`;
+				const reading = lexValueAnchors(input, ":local".length, {
+					braceArrays: true,
+				});
+				return (
+					reading.complete &&
+					reading.anchors.some((anchor) => anchor.sourceShape === "array")
+				);
+			});
+		expect(read).toHaveLength(9);
 	});
 
 	test("member descent is bounded, and the shape survives the bound", () => {
