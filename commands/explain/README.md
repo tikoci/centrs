@@ -762,8 +762,10 @@ Corpus re-measurement for #249 — `bun -e 'explainCommand'` over the 948-script
 - **Severity is fixed here, because it drives `--fail-on`.** Three buckets, and
   the split is not "structural vs not":
   - `error` — `unclosed`, `unbalanced-close`, `unterminated-string`,
-    `bad-escape`, `bad-sigil`, `invalid-hash`. Six classes the device itself
-    rejects.
+    `bad-escape` (both code-position `\` + non-whitespace and string-internal
+    unknown/lowercase-hex/truncated — CHR `highlight` `error` + `:parse`
+    `expected message value`, grounded stable+testing #247), `bad-sigil`,
+    `invalid-hash`. Six classes the device itself rejects.
   - `warning` — `over-depth`, because it is centrs's own resource bound and says
     nothing about whether the input is legal; and an `ambiguous`/`unknown`
     resolution, never an error, so the default `--fail-on error` cannot fail a
@@ -772,6 +774,30 @@ Corpus re-measurement for #249 — `bun -e 'explainCommand'` over the 948-script
   - `info` — `bom`/`non-ascii` (positional facts: a legal command must not
     fail), and `context-lost`, which reports a reading that is correct while the
     document's menu context was already gone.
+
+### String escape validation (#247)
+
+RouterOS string escapes are the documented constant escapes
+([Scripting manual — constant escape sequences](https://manual.mikrotik.com/docs/developer-guides/scripting/#constant-escape-sequences)):
+`\"` `\\` `\n` `\r` `\t` `\$` `\_` `\a` `\b` `\f` `\v` and `\XX` where
+`XX` is **uppercase** hex. Grounded on CHR 7.23.3 stable and 7.24rc3 testing
+(`highlight` hard `error` + `:parse` `expected message value` for the three
+issue rows `:put "\q"` / `:put "\x0a"` / `:put "\0a"` vs `":put "\0A"` valid):
+
+- A malformed escape (`\q`, `\x`, `\x0a`, truncated single-hex `\0`, lowercase
+  hex `\0a`/`\5f`) is a located `bad-escape` structural defect (severity
+  `error`) at the byte the device marks `error` — the unknown char or the
+  lowercase second hex digit.
+- `\ff` is `\f` + literal `f` and `\aF` is `\a` + `F`; neither is invalid hex.
+- The one shared `scanQuotedString` below every walker still **recovers the
+  closing quote** past a malformed escape, so no #199 nested-substitution
+  quote-phase bug is reintroduced. Validation is a shared
+  `collectStringEscapeDefects` walk with the same substitution frames; only the
+  first invalid escape per document is reported and it fails closed after it.
+- Corpus blast radius (948 scripts): 62 string-escape `bad-escape` diagnostics
+  (vs 15 code-position `bad-escape`). The flagged files are non-RouterOS
+  material (piano key maps, discourse code-blocks) and AT-chat snippets — not a
+  corpus-wide false positive on valid RouterOS input.
 
 ### Designed, not implemented (the CLI surface, #202b)
 

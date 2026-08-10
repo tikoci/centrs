@@ -105,6 +105,7 @@ import {
 	isPositionalFact,
 } from "./explain/defects.ts";
 import { type Resolution, resolveDocument } from "./explain/pathresolve.ts";
+import { collectStringEscapeDefects } from "./explain/quoted-string.ts";
 import { segmentStatements } from "./explain/segment.ts";
 import {
 	resolveSymbols,
@@ -648,8 +649,10 @@ const DEFECT_DIAGNOSTICS: Record<
 	},
 	"bad-escape": {
 		severity: "error",
-		message: () =>
-			"invalid escape: a backslash in code is valid only before whitespace",
+		message: (d) =>
+			d.detail === "string"
+				? 'invalid escape in string: unknown escape or lowercase hex digit — use \\n \\r 	 \\" \\\\ \\$ \\_ \\a \\b \\f \\v or \\XX with uppercase hex'
+				: "invalid escape: a backslash in code is valid only before whitespace",
 	},
 	"bad-sigil": {
 		severity: "error",
@@ -821,6 +824,14 @@ export function explainCommand(
 		[EV.subcommands, brackets.defects],
 		[EV.write, write.defects],
 		[EV.symbols, symbols.defects],
+		[
+			EV.symbols,
+			collectStringEscapeDefects(
+				coordinates.analyzed.length === 0
+					? ""
+					: new TextDecoder().decode(coordinates.analyzed),
+			).map((d) => ({ ...d, detail: "string" as string })),
+		],
 	]);
 
 	// From the SPLITS, not from the segmentation. The resolver flattens `do={…}`
