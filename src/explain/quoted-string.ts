@@ -126,13 +126,31 @@ export function scanQuotedString(text: string, open: number): QuotedStringScan {
  * Walks the entire document with the same frame model as `scanQuotedString`,
  * but validates each `\` inside a string frame against the documented escape
  * table (capital hex, truncated, unknown). Returns an array with at most one
- * defect at the first invalid escape.
+ * defect at the first invalid escape. Comment spans are skipped: a `"` inside
+ * a comment is not a string.
  */
-export function collectStringEscapeDefects(text: string): Defect[] {
+export function collectStringEscapeDefects(
+	text: string,
+	comments: readonly { start: number; end: number }[] = [],
+): Defect[] {
 	const frames: string[] = [];
 	let i = 0;
+	let ci = 0;
 	while (i < text.length) {
 		if (frames.length > MAX_STRING_FRAME_DEPTH) break;
+		// Skip comment spans (analyzed-byte offsets, same space as `text`).
+		while (
+			ci < comments.length &&
+			i >= (comments[ci] as { start: number; end: number }).end
+		)
+			ci++;
+		if (ci < comments.length) {
+			const c = comments[ci] as { start: number; end: number };
+			if (i >= c.start && i < c.end) {
+				i = c.end;
+				continue;
+			}
+		}
 		const top = frames[frames.length - 1] as string | undefined;
 		const c = text[i] as string;
 		if (top === '"') {

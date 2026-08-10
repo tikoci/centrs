@@ -122,4 +122,21 @@ describe("string escape validation (#247)", () => {
 			),
 		).toHaveLength(1);
 	});
+
+	test("malformed escapes inside comments do not produce bad-string-escape", () => {
+		// Root comment is real per comment placement contract (#245); its quotes are inert.
+		expect(explainCommand('# "\\q"\n:put 1').verdict).toBe("pass");
+		expect(
+			explainCommand('# "\\q"\n:put 1').diagnostics.some(
+				(d) => d.code === "explain/canonicalizer/bad-string-escape",
+			),
+		).toBe(false);
+		// Low-level collector must also skip comment spans when given them.
+		expect(
+			collectStringEscapeDefects('# "\\q"\n:put 1', [{ start: 0, end: 5 }]),
+		).toEqual([]);
+		expect(
+			collectStringEscapeDefects('# "\\q"\n:put 1').length,
+		).toBeGreaterThan(0);
+	});
 });

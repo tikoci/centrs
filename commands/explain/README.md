@@ -764,9 +764,9 @@ Corpus re-measurement for #249 — `bun -e 'explainCommand'` over the 948-script
   - `error` — `unclosed`, `unbalanced-close`, `unterminated-string`,
     `bad-escape` (code-position `\` + non-whitespace), `bad-string-escape`
     (string-internal unknown/lowercase-hex/truncated — CHR `highlight` `error`
-    - `:parse` `expected message value`, grounded stable+testing #247),
+      `:parse` `expected message value`, grounded stable+testing #247),
     `bad-sigil`,
-    `invalid-hash`. Six classes the device itself rejects.
+    `invalid-hash`. Seven classes the device itself rejects.
   - `warning` — `over-depth`, because it is centrs's own resource bound and says
     nothing about whether the input is legal; and an `ambiguous`/`unknown`
     resolution, never an error, so the default `--fail-on error` cannot fail a

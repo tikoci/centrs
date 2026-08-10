@@ -832,7 +832,7 @@ export function explainCommand(
 		[EV.subcommands, brackets.defects],
 		[EV.write, write.defects],
 		[EV.symbols, symbols.defects],
-		[EV.symbols, collectStringEscapeDefects(analyzed)],
+		[EV.symbols, collectStringEscapeDefects(analyzed, segmented.comments)],
 	]);
 
 	// From the SPLITS, not from the segmentation. The resolver flattens `do={…}`
