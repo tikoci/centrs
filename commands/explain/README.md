@@ -1283,8 +1283,11 @@ examples gate via unit/fixture tests and each live cell advances to
    deterministic/well-formed spans, bounded depth, no throw, and roughly linear
    scaling. **Remaining:** #192 (Q14 defect-*region* spans and the
    `ambiguous`/`unknown` verdict vocabulary — the verdict half wants the phase-1
-   envelope). The 76-file lab framework and its large raw streams stay out of
-   mainline; #186 tracks the residual `.scratch/` disposition.
+   envelope). The lab framework and its two ~7.5 MB per-character highlight
+   captures stay out of mainline (#186). What durable files CITE does not stay
+   out: the frozen dev/holdout split, the Q8 REST probe capture, a stratified
+   slice of the highlight streams, and the three device re-derivation probes
+   are committed under `test/fixtures/explain/` and `scripts/probes/`.
 - **Phase 1 — offline core** — the grown canonicalizer: structure + gate
    verdict + per-statement resolution and transport classification +
    diagnostics (+ `--curl` rendering), and the CLI/MCP surface over it. Phase

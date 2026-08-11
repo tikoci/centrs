@@ -1,0 +1,110 @@
+{
+	"version": "7.23.2 (stable)",
+	"chr": "http://127.0.0.1:9150",
+	"rows": [
+		{
+			"rule": "print→GET (list)",
+			"cli": "/ip/address print",
+			"method": "GET",
+			"url": "/rest/ip/address",
+			"status": 200,
+			"note": "array of 1 records",
+			"ok": true
+		},
+		{
+			"rule": "print→GET (singleton menu)",
+			"cli": "/system/resource print",
+			"method": "GET",
+			"url": "/rest/system/resource",
+			"status": 200,
+			"note": "single object (keys: 17)",
+			"ok": true
+		},
+		{
+			"rule": "print+.proplist→POST /rest/<path>/print body {.proplist}",
+			"cli": "/ip/address print proplist=…",
+			"method": "POST",
+			"url": "/rest/ip/address/print",
+			"body": {
+				".proplist": "address,interface"
+			},
+			"status": 200,
+			"note": "projected keys: address,interface",
+			"ok": true
+		},
+		{
+			"rule": "print+.query→POST /rest/<path>/print body {.query}",
+			"cli": "/ip/address print where …",
+			"method": "POST",
+			"url": "/rest/ip/address/print",
+			"body": {
+				".query": ["interface=ether1"]
+			},
+			"status": 200,
+			"note": "filtered to 1",
+			"ok": true
+		},
+		{
+			"rule": "add→PUT /rest/<path> body {attrs}",
+			"cli": "/ip/firewall/address-list add list=… address=…",
+			"method": "PUT",
+			"url": "/rest/ip/firewall/address-list",
+			"body": {
+				"list": "centrs-q8-1784727978314",
+				"address": "192.0.2.7"
+			},
+			"status": 201,
+			"note": "created id=*1",
+			"ok": true
+		},
+		{
+			"rule": "get-one→GET /rest/<path>/<id>",
+			"cli": "…/address-list get <id>",
+			"method": "GET",
+			"url": "/rest/ip/firewall/address-list/*1",
+			"status": 200,
+			"note": "single object addr=192.0.2.7",
+			"ok": true
+		},
+		{
+			"rule": "set→PATCH /rest/<path>/<id> body {attrs} — id REQUIRED",
+			"cli": "…/address-list set <id> comment=…",
+			"method": "PATCH",
+			"url": "/rest/ip/firewall/address-list/*1",
+			"body": {
+				"comment": "q8-updated"
+			},
+			"status": 200,
+			"note": "comment now=q8-updated",
+			"ok": true
+		},
+		{
+			"rule": "run(action)→POST /rest/<path>/<command> body {args}",
+			"cli": "/ip/dns/cache flush",
+			"method": "POST",
+			"url": "/rest/ip/dns/cache/flush",
+			"body": {},
+			"status": 200,
+			"note": "action returned status 200",
+			"ok": true
+		},
+		{
+			"rule": "remove→DELETE /rest/<path>/<id> — id REQUIRED",
+			"cli": "…/address-list remove <id>",
+			"method": "DELETE",
+			"url": "/rest/ip/firewall/address-list/*1",
+			"status": 204,
+			"note": "teardown status 204",
+			"ok": true
+		},
+		{
+			"rule": "FAIL-CLOSED: set/remove [find …] — no id → NOT api-candidate",
+			"cli": "/ip/route set [find dst-address=0.0.0.0/0] distance=1",
+			"method": "(none)",
+			"url": "(no id-bearing REST endpoint; only /rest/execute script form)",
+			"status": 0,
+			"ok": false,
+			"note": "selector-based set/remove has no single tested REST mapping → execute"
+		}
+	]
+}

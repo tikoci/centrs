@@ -30,7 +30,7 @@ describe("string escape validation (#247)", () => {
 	// #252 — the manual's table is a LOWER bound on what RouterOS accepts. The
 	// accepted set below is the CHR 7.23.3 sweep of `:put "\<c>"` over every
 	// 0x20–0x7E byte plus the whitespace forms, scored on the `highlight` class
-	// and the runtime result. See `.scratch/explain-252-escape-sweep.ts`.
+	// and the runtime result. Re-derive with `bun run explain:probe:escapes`.
 	test("backslash before whitespace continues the line inside a string", () => {
 		for (const [label, esc] of [
 			["space", "\\ "],

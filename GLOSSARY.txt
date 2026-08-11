@@ -97,6 +97,8 @@ dialable # an endpoint a client can actually connect to (advertised AND reachabl
 defconf
 demux
 demuxes
+desync # a highlight stream whose token count != input length, so classes line up against the wrong characters
+desynced
 dogtail
 donny
 dotenv
@@ -210,6 +212,7 @@ webproxy
 WinAppDriver
 winbox
 Wireshark
+workstream
 workstreams
 XCUI
 XDG

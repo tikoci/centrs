@@ -47,7 +47,7 @@
  * `interiorGrounding.braceSlots` (222 rows, CHR 7.23.3, `:parse` IL — NOT
  * `highlight`, which accepts `{1;2,}` and `(1,)` that `:parse` rejects), and
  * `explain-values.test.ts` asserts this table still equals the `array` rows of
- * that block. Re-derive with `.scratch/explain-225-brace-slot-sweep.ts`.
+ * that block. Re-derive with `bun run explain:probe:brace-slots` (#186).
  */
 const BRACE_ARRAY_SLOTS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
 	(
