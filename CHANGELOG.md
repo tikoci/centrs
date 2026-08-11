@@ -22,7 +22,13 @@ documenting cross-cutting shifts that affect contributors and consumers.
   `{a b=1}` and `{$a=1,2}` nest it under an operator whose type is its
   operands', and both still abstain — and an empty side, a syntax error in all
   14 spellings asked, now withdraws the literal instead of leaving it reported
-  as an array. Grounded on CHR 7.23.3 across six probe rounds; the 97 device
+  as an array. That withdrawal keys on positive evidence that the left side is
+  an expression, never on the key reader failing to recognize it, because the
+  member-key grammar is not the identifier grammar and was swept rather than
+  assumed: `.`, `-` and `/` are name bytes anywhere (`{.id=1}`, `{.=1}`,
+  `{a/b=1}`), `_` is not (`{a_b=1}` compares), and `@` is not a member
+  character at any position. Grounded on CHR 7.23.3 across eight probe rounds;
+  the 137 device
   rows are `interiorGrounding.keyBinding` in `test/fixtures/explain/values.json`
   and are scored one-sided (abstention always allowed, a contradicted type
   never) by a new unit test. The value census is unchanged: no statement in the

@@ -700,10 +700,20 @@ and its phase is named below.
   `1.1` rather than the address (no member lexicon runs on a name). Everywhere
   else the sign compares, which returns `bool` whatever it compares, so
   `{$a=1}`, `{(a)=1}`, `{[:timestamp]=1}` and `{{1;2}=1}` are each one `bool`
-  member. A leading `-` belongs to the name (`{-1=1}` binds the key `-1`, while
-  `+` is a syntax error one position earlier), and every key is a `str` however
-  it is spelled: `{1=1}` keys on the string `1`, and `{1.1=1.1}` keys on `1.1`
-  while its VALUE goes through the address shortcut to `1.0.0.1`.
+  member. Every key is a `str` however it is spelled: `{1=1}` keys on the string
+  `1`, and `{1.1=1.1}` keys on `1.1` while its VALUE goes through the address
+  shortcut to `1.0.0.1`.
+
+  **A member key's name is not the identifier grammar**, and was swept
+  character by character rather than borrowed. `.`, `-` and `/` are ordinary
+  name bytes anywhere in it, including alone and repeated — `{.id=1}`,
+  `{..id=1}`, `{.=1}`, `{-=1}`, `{--=1}`, `{/=1}`, `{a/b=1}` and `{-.1=1}` each
+  bind the key spelled exactly that way — while `_` does NOT, even though
+  `$a_b` is a good variable: `{_a=1}` and `{a_b=1}` lower to comparisons.
+  Neither do `: * ~ % > < + ! @ #`. `@` is stronger still — not a member
+  character at ANY position, so `{a@b}`, `{@a}`, `{1;a@b}` and `(a@b,2)` are
+  withdrawn outright, though the same bytes are fine one slot out
+  (`:local z a@b` parses) or inside quotes (`{"a@b"}`).
 
   `bool` is claimed only where the `=` is the member's TOP operator, which
   offline reads as a left side that is one complete operand — a name, `$name`,
@@ -713,7 +723,11 @@ and its phase is named below.
   syntax error in every spelling asked — `{=}`, `{=1}`, `(=1,2)`, `{$a=}`,
   `{(a)=}`, `{a =}`, `{a b=}`, `{a,b=}`, `{[:len 1]=}`, `{{1;2}=}`, `{1+1=}`,
   `{a<=}`, `{a==}`, `(a=,2)` — so it withdraws the literal rather than
-  abstaining on the member. The 97 rows are in
+  abstaining on the member. That withdrawal needs POSITIVE evidence that the
+  left side is an expression (a byte no key may hold), never the key reader's
+  silence: a name spelling this phase does not recognize abstains instead, so
+  the next `.id` costs a dropped member rather than a withdrawn literal. The 137
+  rows are in
   `test/fixtures/explain/values.json` → `interiorGrounding.keyBinding`, and the
   value census below is unchanged by all of it — no statement in the 948-script
   corpus reaches any of these branches, so the fixture is the only falsifier

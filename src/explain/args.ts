@@ -875,9 +875,10 @@ function leadsInvalidMember(c: string | undefined): boolean {
 /**
  * A member key: a bare word or one fully-enclosing quoted run.
  *
- * A leading `-` is part of the NAME, not an operator: `{-1=1}`, `{-a=1}` and
- * `{-1.1=1}` all bind the key with the minus included (#258), while `+` is a
- * syntax error one position earlier and never reaches here.
+ * The bare spelling is {@link MEMBER_NAME}, which is NOT the identifier grammar
+ * and was measured rather than assumed — see that constant. Review caught the
+ * first version of this rejecting `.id`, which the fixture itself held as a
+ * valid key.
  */
 function memberKey(
 	text: string,
@@ -893,8 +894,39 @@ function memberKey(
 		return body.includes("\\") || body.includes("$") ? null : body;
 	}
 	const raw = text.slice(start, end);
-	return /^-?[A-Za-z0-9][A-Za-z0-9._-]*$/.test(raw) ? raw : null;
+	return MEMBER_NAME.test(raw) ? raw : null;
 }
+
+/**
+ * A bare array-member key, as the device spells one on 7.23.3 (#258).
+ *
+ * Swept character by character rather than borrowed from the identifier rules,
+ * because the two disagree in both directions. `.`, `-` and `/` are ordinary
+ * name bytes ANYWHERE, including alone and repeated: `{.id=1}`, `{..id=1}`,
+ * `{.=1}`, `{-=1}`, `{--=1}`, `{/=1}`, `{a/b=1}` and `{-.1=1}` all bind the key
+ * spelled exactly that way. But `_` does NOT: `{_a=1}` and `{a_b=1}` lower to
+ * `(= $_a 1)` and `(= $a_b 1)`, comparisons — even though `$a_b` is a perfectly
+ * good variable. Neither do `: * ~ % > < + ! @ #`.
+ *
+ * The review that caught `.id` is the reason this is a named constant with its
+ * own evidence: a key reader that quietly disagrees with the device about what
+ * a name IS makes every rule built on top of it wrong in the same direction.
+ */
+const MEMBER_NAME = /^[A-Za-z0-9./-]+$/;
+
+/**
+ * Characters the device proved cannot appear in a bare member key (#258).
+ *
+ * Used only to say a left side is POSITIVELY an expression, never to say it is
+ * a name. That asymmetry is the fix for the `.id` defect: an unrecognized
+ * spelling that is merely not in {@link MEMBER_NAME} abstains, while only a
+ * spelling holding one of these bytes is treated as a comparison and can
+ * withdraw its literal. Each byte is a syntax error with an empty right side
+ * (`{_a=}`, `{a:b=}`, `{a*b=}`, `{a~b=}`, `{a>b=}`, `{a%b=}`, `{1+1=}`,
+ * `{a<=}`, `{a b=}`, `{a,b=}`, `{$a=}`, `{(a)=}`, `{[:len 1]=}`, `{{1;2}=}`)
+ * or an operator in the IL of the same member with one.
+ */
+const NOT_IN_MEMBER_NAME = /[\s,$([{"'+*<>!~%:_@#=]/;
 
 /**
  * Whether `[start,end)` is ONE complete operand, so a following `=` is the
@@ -1013,6 +1045,13 @@ function pushArrayMembers(
 		// operators between operands — `{2*3}` is `num` 6 and `{1+1}` is 2 — and
 		// unary minus is fine either way (`{-1}` is `num` -1).
 		if (leadsInvalidMember(text[member.start])) return UNPARSEABLE_MEMBER;
+		// `@` is not a member character ANYWHERE, unlike `*`/`+` which are only
+		// fatal at the front: `{a@b}`, `{@a}`, `{a@}`, `{1;a@b}`, `(a@b,2)` and
+		// `{a@b=1}` are all syntax errors, while the same bytes one slot out are
+		// fine (`:local z a@b` parses). Quoted runs keep it — `{"a@b"}` parses —
+		// which is why this is a depth-zero scan and not a substring test.
+		if (depthZeroOffsets(structural, member.start, member.end, "@").length > 0)
+			return UNPARSEABLE_MEMBER;
 		const eq = depthZeroOffsets(structural, member.start, member.end, "=")[0];
 		if (eq !== undefined) {
 			const left = trimRange(structural, member.start, eq);
@@ -1024,15 +1063,33 @@ function pushArrayMembers(
 				separator === ";" && eq === left.end
 					? memberKey(text, structural, left.start, left.end)
 					: null;
-			if (
-				left.start === left.end ||
-				(key === null && right.start === right.end)
-			)
-				// Every left-side shape asked on 7.23.3 is a syntax error with an
-				// empty side — `{=}`, `{=1}`, `(=1,2)`, `{$a=}`, `{(a)=}`, `{a =}`,
-				// `{a b=}`, `{a,b=}`, `{[:len 1]=}`, `{{1;2}=}`, `{1+1=}`, `{a<=}`,
-				// `(a=,2)` — so the literal is withdrawn rather than abstained on.
-				return HALF_COMPARISON;
+			// An empty LEFT side is a syntax error in both forms and at any
+			// position: `{=}`, `{=1}`, `{ =1 }`, `(=1,2)`, `(1,=2)`.
+			if (left.start === left.end) return HALF_COMPARISON;
+			if (key === null && right.start === right.end) {
+				// An empty RIGHT side is a syntax error too — but ONLY once the left
+				// side is known not to be a name, because a name means the sign is
+				// dropped instead (`{a=}`). Review found the first version of this
+				// asking `memberKey` that question, which withdrew `{.id=}`: a
+				// literal the device accepts, whose member is the string `.id`. So
+				// the fault now needs POSITIVE evidence of an expression, and a
+				// spelling this reader simply does not recognize abstains.
+				//
+				// The paren form needs no such evidence: `=` never binds a key
+				// there, so an empty right side is always a comparison missing an
+				// operand (`(a=)`, `(a=,2)`).
+				//
+				// The span read here is the RAW one, not the trimmed `left`: the
+				// whitespace between a name and the sign is itself the evidence
+				// (`{a =}` and `{.id =}` are syntax errors while `{a=}` and
+				// `{.id=}` are not), and trimming it away hides exactly that.
+				if (
+					separator === "," ||
+					NOT_IN_MEMBER_NAME.test(text.slice(member.start, eq))
+				)
+					return HALF_COMPARISON;
+				continue;
+			}
 			if (key !== null && right.start === right.end) {
 				// `{a=}` is not an empty-valued key: the device DROPS the sign and
 				// keeps the name as a positional `str` — `{1.1=}` is the string

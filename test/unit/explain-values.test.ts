@@ -719,6 +719,31 @@ describe("value anchors", () => {
 			["element", null, "v0", "str"],
 			["element", null, "v0", "num"],
 		]);
+		// A dotted key is a key. `memberKey` rejected `.id`, so the empty-right
+		// rule read it as a comparison missing an operand and WITHDREW a literal
+		// the device accepts — found in review on #268, and the reason the fault
+		// now needs positive evidence of an expression rather than the key
+		// reader's silence. `/a` is here because it is the same class of name and
+		// was found by the sweep that followed.
+		expect(shapes(":local z {.id=}")).toEqual([
+			["positional", null, null, "array"],
+			["element", null, "v0", "str"],
+		]);
+		expect(shapes(":local z {.id=1}")).toEqual([
+			["positional", null, null, "array"],
+			["element", ".id", "v0", "num"],
+		]);
+		expect(shapes(":local z {/a=1}")).toEqual([
+			["positional", null, null, "array"],
+			["element", "/a", "v0", "num"],
+		]);
+		// …but the whitespace rule still applies to it, and `@` is not a member
+		// character at all, at any position, so its literal is withdrawn.
+		expect(shapes(":local z {.id =1}")).toEqual([
+			["positional", null, null, "array"],
+			["element", null, "v0", "bool"],
+		]);
+		expect(shapes(":local z {a@b=1}")).toEqual([]);
 		// A name that does not TOUCH the sign compares instead of binding, and a
 		// left side that is not one operand abstains rather than guessing a type.
 		expect(shapes(":local z {a =1;$b=2;c d=3}")).toEqual([
@@ -868,6 +893,23 @@ describe("value anchors", () => {
 			if (!row.parses) {
 				if (container?.facts.shapeHints?.values.includes("array"))
 					wrong.push(`${row.literal}: device rejects it, offline says array`);
+				continue;
+			}
+			// The scoring below is a SUBSET check, so a literal that was withdrawn
+			// entirely scores clean with an empty member list — which is how the
+			// `.id` defect reached review. A row the device parses must still come
+			// back as an array, and a withdrawal here is the failure, not a pass.
+			//
+			// Only rows that ARE array literals, though: `(a=1)` is a grouped
+			// comparison and assigns a `bool`, so abstaining on it is right. The
+			// delimiters say which is which, and saying so here in one line keeps
+			// the check from asking the product the question it is scoring.
+			const isArrayLiteral =
+				row.literal.startsWith("{") ||
+				(row.literal.startsWith("(") && row.literal.includes(","));
+			if (!isArrayLiteral) continue;
+			if (!container?.facts.shapeHints?.values.includes("array")) {
+				wrong.push(`${row.literal}: device parses it, offline withdrew it`);
 				continue;
 			}
 			// Direct members only: a nested container's own members are scored
