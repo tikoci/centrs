@@ -760,7 +760,7 @@ async function validateExecuteCommand(
  * Validate a command over a console transport (mac-telnet or ssh) with a single
  * `:put [:parse ...]`. Unlike REST/native (a syntax gate plus a `/console/inspect`
  * semantic gate), one console `:parse` reports both `syntax error` and `bad
- * parameter <name>`, so it covers syntax and the unknown-attribute (semantic)
+ * parameter <name>`, so it covers syntax and the unknown-attribute (name-level)
  * gate at once — identical strings over mac-telnet and ssh (CHR 7.23.1 grounded;
  * see `mac-telnet-console.ts` and `ssh.ts`).
  */
@@ -789,7 +789,7 @@ async function validateConsoleParseCommand(
 		script: parseScriptFor(resolved.command),
 	});
 	// Throws validation/syntax or validation/unknown-attribute on a bad parse.
-	classifyParseResult(result.ret ?? "", resolved.command);
+	classifyParseResult(result.ret ?? "", resolved.command, resolved.via.value);
 	return {
 		enabled: true,
 		source: `:put [:parse ...] over ${resolved.via.value}`,
@@ -821,7 +821,14 @@ async function runSyntaxGate(
 	}
 	const script = `:put [:parse ${routerOsStringLiteral(resolved.command)}]`;
 	try {
-		await backend.execute({ path: "", command: "", script });
+		// GH#230: `:parse` never throws (CHR 7.23.3). The diagnostic rides the
+		// success value's text — over REST/native the `ret` field (HTTP 200 /
+		// `as-string`), over console the printed output. The old code only watched
+		// for a thrown transport/RouterOS error and so never rejected anything.
+		// Read the return and classify it: one `:parse` covers syntax and the
+		// unknown-attribute (name-level) gate.
+		const result = await backend.execute({ path: "", command: "", script });
+		classifyParseResult(result.ret ?? "", resolved.command, resolved.via.value);
 	} catch (error) {
 		// The preflight is a syntax gate, but `backend.execute` also surfaces
 		// connection and authentication failures (login happens lazily here).
@@ -830,6 +837,9 @@ async function runSyntaxGate(
 		// `validation/syntax`. Only genuine RouterOS parse rejections (mapped to
 		// `routeros/*`) are relabeled as a syntax failure below.
 		if (error instanceof CentrsError && isPreflightTransportError(error)) {
+			throw error;
+		}
+		if (error instanceof CentrsError && error.code.startsWith("validation/")) {
 			throw error;
 		}
 		// If the mapped RouterOS fault carried a `(line N column M)` byte offset,

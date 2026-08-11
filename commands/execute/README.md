@@ -16,11 +16,14 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
 - Mirror RouterOS `execute` semantics. Input is a CLI string; output is
   console-shaped text (or structured records for path+verb writes) wrapped in
   the standard envelope. This includes write-shaped add/set/remove.
-- Validation is two-stage (see constitution: validation): `:put [:parse
-  "<cmd>"]` is a **syntax** gate only — it does not catch unknown attributes or
-  bad values. Semantic validation needs `/console/inspect` or the server's own
-  re-validation on the write round-trip. A clean parse is necessary, not
-  sufficient.
+- Validation is two-stage (see constitution: validation; grounded on CHR 7.23.3,
+  GH#230): a single `:put [:parse "<cmd>"]` covers both the syntax and the
+  unknown-attribute (name-level) gate on **every** transport — `:parse` never
+  throws; its return value's printed form (`(evl …)` / `(evl bad parameter …)` /
+  `(<%% bad command name …)`) is read from the REST/native `ret` *and* the
+  console output. That check is necessary, not sufficient: value-type errors pass
+  it, and the `/console/inspect` / server re-validation semantic checks are
+  separate.
 - centrs owns the **script-vs-structured gate** (`canonicalizeExecuteCommand` +
   `isWriteShaped` in `src/execute.ts`): it decides which validation runs and
   whether the write-confirm prompt fires. The shared `rosetta`/`lsp-routeros-ts`
@@ -106,9 +109,10 @@ Implemented flags are generated from the CLI metadata into
 [`docs/CLI.md` → execute](../../docs/CLI.md#execute); this file does not
 duplicate that table. Behavior notes the generated reference cannot carry:
 
-- `--validate` is transport-appropriate: REST/native use `:parse` +
-  `/console/inspect`; mac-telnet and ssh use a single console `:parse`
-  (covers syntax + unknown-attribute).
+- `--validate` is transport-appropriate but now one gate on every transport —
+  a single `:put [:parse ...]` that is read as a value (GH#230): REST/native
+  read the `ret` text (HTTP 200 / `as-string`); mac-telnet and ssh read the
+  console's printed value.
 - `--format` defaults to `text`; `CENTRS_FORMAT` sets the default.
 - `--quickchr` resolves host/port/auth from the live `@tikoci/quickchr`
   (0.4.5+, optional dependency) descriptor, bypassing CDB/env resolution for
@@ -218,7 +222,7 @@ How it is wired:
   `transport/capability-unsupported` (mac-telnet is execute/terminal only).
 - **Validation is one console `:parse`.** Over the console, `:put [:parse "<cmd>"]`
   prints both `syntax error` and `bad parameter <name>`, so a single gate covers
-  syntax **and** the unknown-attribute (semantic) check — no `/console/inspect`
+  syntax **and** the unknown-attribute (name-level) check — no `/console/inspect`
   table parsing. Maps to `validation/syntax` / `validation/unknown-attribute`,
   same codes as REST/native (see `docs/CONSTITUTION.md`, validation).
 - **Auth (grounded):** MTWEI is required; a stock device offers a 16-byte MD5 salt

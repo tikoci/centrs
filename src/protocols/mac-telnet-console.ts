@@ -39,7 +39,7 @@
  *     scraped for: `(evl …)` = ok, `syntax error (line …)` = malformed, and
  *     `bad parameter <name> (line …)` = unknown attribute. A single console
  *     `:parse` therefore covers both the syntax and the unknown-attribute
- *     (semantic) gate — no `/console/inspect` table parsing needed.
+ *     (name-level) gate — no `/console/inspect` table parsing needed.
  */
 
 import { parseRouterOsPosition } from "../core/routeros-errors.ts";
@@ -323,8 +323,11 @@ export class MacTelnetConsole {
 	 * Validate a command without running it, using a single console `:parse`.
 	 * Throws `validation/syntax` for malformed CLI and
 	 * `validation/unknown-attribute` for a rejected parameter; returns the parsed
-	 * form on success. One gate covers both because the console's `:parse`
-	 * reports `bad parameter <name>` as well as `syntax error`.
+	 * form on success. One gate covers both because the console prints the
+	 * `:parse` return value, which carries `bad parameter <name>` as well as the
+	 * `(<%%` / `(line N column M)` syntax diagnostics — see
+	 * {@link classifyParseResult} for the full grammar and why the matcher is
+	 * anchored to the diagnostic shape rather than to bare words.
 	 */
 	async parseGate(cli: string): Promise<string> {
 		const { output } = await this.run(parseScriptFor(cli));
@@ -604,17 +607,61 @@ export function parseScriptFor(cli: string): string {
 	return `:put [:parse ${routerOsStringLiteral(cli)}]`;
 }
 
-/**
- * Classify the output of a console `:put [:parse "<cli>"]`. A single console
- * `:parse` reports both forms (grounded on CHR 7.23.1): `bad parameter <name>`
- * for an unknown attribute and `syntax error` / `bad command name` for malformed
- * CLI. Throws the matching `validation/*` error; returns on a clean parse.
+/*
+ * The `:parse` diagnostic grammar, anchored to where RouterOS actually emits
+ * each shape. Anchoring is load-bearing, not cosmetic: an *accepted* return
+ * echoes the script body, so `:put "bad parameter x"` comes back as
+ * `(evl /putmessage=bad parameter x)`. An unanchored search reads that echoed
+ * content as a verdict and refuses to run a valid command (GH#230).
+ *
+ * Two shapes, both corpus-verified against lsp-routeros-ts
+ * `parseil_results.il_text` (2736 rows, RouterOS 7.20.8/7.22.1/7.23rc1):
+ *
+ *   1. WRAPPED — the diagnostic sits inside the returned value, marked by the
+ *      `(evl ` / `(<%%` wrapper. It can appear mid-return, because a
+ *      multi-statement script reports the offending statement in place. Every
+ *      corpus `bad parameter` (8/8) follows `(evl `, and every `bad command
+ *      name` (135/135) follows `(<%%`.
+ *   2. BARE — the diagnostic *is* the whole return, printed on its own line
+ *      with RouterOS's position suffix. All 425 corpus rows of this shape are
+ *      the entire return; none appear embedded. Requiring both line-start and
+ *      the `(line N column M)` suffix is what separates a real verdict from
+ *      echoed body text.
  */
-export function classifyParseResult(output: string, cli: string): void {
-	// The console `:parse` rejection carries RouterOS's authoritative byte offset
+const WRAPPED_BAD_PARAMETER = /\(evl\s+bad parameter\s+(\S+)/i;
+const WRAPPED_BAD_COMMAND = /\(<%%\s*bad command name\b/i;
+const BARE_BAD_PARAMETER =
+	/^[ \t]*bad parameter\s+(\S+)[^\n]*\(line \d+ column \d+\)/im;
+const BARE_SYNTAX =
+	/^[ \t]*(?:syntax error|bad command name|expected [a-z]+(?: [a-z]+)*)[^\n]*\(line \d+ column \d+\)/im;
+
+/**
+ * Classify the printed value of `:put [:parse "<cli>"]`. Grounded on CHR 7.23.3
+ * (see GH#230): `:parse` *never* throws — it returns a value whose text carries
+ * the verdict. For a bare menu path the accepted form is `(evl /canonical/path)`
+ * (abbreviations expanded); for script-shaped input the accepted return echoes
+ * the statement body and may contain arbitrary text — including text that looks
+ * like a diagnostic. Rejections are therefore matched only in the positions
+ * RouterOS emits them (see the grammar note above): wrapped as
+ * `(evl bad parameter <name> (line N column M) /path)` /
+ * `(<%% bad command name <name> (line N column M) a;b;c)`, or bare and
+ * line-initial as `expected … (line N column M)` / `syntax error (line N column
+ * M)`. A single `:parse` covers both the syntax and the unknown-attribute
+ * (name-level) gate on every transport — REST and native API expose the same text
+ * in the `ret` value (HTTP 200 / `as-string`), the console transports print it.
+ *
+ * Throws the matching `validation/*` error; returns on a clean parse.
+ */
+export function classifyParseResult(
+	output: string,
+	cli: string,
+	via: string = "mac-telnet",
+): void {
+	// The `:parse` rejection carries RouterOS's authoritative byte offset
 	// (`… (line N column M)`); surface it as the structured `error.position`.
 	const position = parseRouterOsPosition(output);
-	const unknown = output.match(/bad parameter\s+(\S+)/i);
+	const unknown =
+		output.match(WRAPPED_BAD_PARAMETER) ?? output.match(BARE_BAD_PARAMETER);
 	if (unknown) {
 		throw new CentrsError({
 			code: "validation/unknown-attribute",
@@ -624,13 +671,13 @@ export function classifyParseResult(output: string, cli: string): void {
 			context: {
 				command: cli,
 				parameter: cleanToken(unknown[1] ?? ""),
-				validationSource: ":put [:parse ...] over mac-telnet",
+				validationSource: `:put [:parse ...] over ${via}`,
 				detail: output,
 			},
 			...(position ? { position } : {}),
 		});
 	}
-	if (/syntax error|bad command name|expected\b/i.test(output)) {
+	if (WRAPPED_BAD_COMMAND.test(output) || BARE_SYNTAX.test(output)) {
 		throw new CentrsError({
 			code: "validation/syntax",
 			summary: "RouterOS rejected the command syntax while parsing it.",
@@ -638,7 +685,7 @@ export function classifyParseResult(output: string, cli: string): void {
 				"Fix the RouterOS CLI syntax (quotes, brackets, attribute form), then retry.",
 			context: {
 				command: cli,
-				validationSource: ":put [:parse ...] over mac-telnet",
+				validationSource: `:put [:parse ...] over ${via}`,
 				detail: output,
 			},
 			...(position ? { position } : {}),

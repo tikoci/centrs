@@ -37,25 +37,29 @@ re-validate-server-side. Validation is not optional polish.
   attribute inspection. The path syntax (commas, no leading slash, last token
   is the verb) is part of the validator contract.
 - `execute` and other CLI-shaped calls validate with `:put [:parse "..."]` plus
-  a semantic gate. **How `:parse` surfaces an error is transport-specific**
-  (grounded on CHR 7.23.2 and 7.24rc2): `:parse` *does* reject an unknown
-  attribute (`bad parameter <name>`) and malformed CLI (`syntax error`), but over
-  REST that text rides the **HTTP-200 `ret` value** (no error status). Native API
-  `/execute` returns the same `ret` text when `as-string` is present; the opaque
-  `*NN` value is only the asynchronous job handle returned when `as-string` is
-  omitted. centrs's REST/native syntax gate sends `as-string` but does not yet
-  interpret the `ret`, so **on REST/native today a `:parse`-reported `syntax
-  error`/`bad parameter` is not itself raised as a validation failure** — the
-  `:parse` round-trip there mainly backstops transport errors and pairs with the
-  local quote preflight, while the unknown-attribute (and other semantic) catch
-  comes from the separate **`/console/inspect`** gate or the server's own write
-  re-validation. Over **mac-telnet** the
-  interactive console *prints* the `:parse` result, so centrs reads it and a
-  single console `:parse` covers both syntax and the unknown-attribute
-  (semantic) gate — no
-  `/console/inspect` table needed. In every case a clean parse is necessary, not
-  sufficient on its own; semantic validation is a distinct, transport-appropriate
-  step (`/console/inspect`, the console `:parse` text, or server re-validation).
+  a semantic gate. Grounded on CHR 7.23.3 (GH#230), **`:parse` never throws** —
+  it returns a script value whose printed form carries the verdict. For a bare
+  menu path a clean parse prints `(evl /canonical/path)` with abbreviations
+  expanded; for script-shaped input (e.g. `:put …`, `:global …`, `where …`) the
+  accepted return echoes the script body and may contain arbitrary text such as
+  `expected`. Rejection forms are `(evl bad parameter <name> (line N column M)
+  /path)`, `(<%% bad command name <name> (line N column M) …)`, and the
+  line-anchored `expected … (line N column M)` (spellings: `expected end of
+  command`, `expected command name`, `expected input value`) / `syntax error
+  (line N column M)`. That text rides the **HTTP-200 `ret` value** (REST,
+  `as-string`), the native `as-string` `ret`, and the console's printed output
+  alike — so a single `:put [:parse ...]` covers both the syntax and the
+  **unknown-attribute** gate on every transport. centrs sends `as-string` and now
+  reads the `ret`/printed value (the previous gate ignored it, so it rejected
+  nothing). Because the accepted return echoes the body, the matcher must anchor
+  on the diagnostic shape (the `(<%%` wrapper, or a trailing `(line N column M)`)
+  and never on a bare English word — `expected` is also a real
+  `/ip/firewall/connection` field name.
+  That unknown-attribute check is **name-level only**: `:parse` does not validate
+  parameter *values* (`/ip/address/add address=not-an-ip` parses clean). So a
+  clean parse is necessary, not sufficient, and value-type plus the remaining
+  semantic validation stay distinct steps — `/console/inspect` or the server's
+  own re-validation on the write round-trip.
 - **Peer-measurement commands (`btest`) are exempt from this gate** — they issue
   no RouterOS command, so they validate *option-grammar* + the **EC-SRP5** auth
   exchange instead (the envelope, identity-resolution, and friendly-error
