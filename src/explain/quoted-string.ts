@@ -94,6 +94,52 @@ function escapeLength(text: string, at: number): 2 | 3 {
 	return 2;
 }
 
+// ---------------------------------------------------------------------------
+// Single source of truth for the frame grammar (#253).
+//
+// Both `scanQuotedString` and `collectStringEscapeDefects` walk the same
+// nesting: a `"` frame is string phase, anything else is code phase where
+// `$[`/`$(` inside a string push a bracket frame and brackets nest until
+// matched. Two helpers encode those transitions once; callers differ only in
+// what they do with an escape (skip vs validate).
+// ---------------------------------------------------------------------------
+
+function stepStringNonEscape(
+	text: string,
+	i: number,
+	frames: string[],
+): number {
+	const c = text[i] as string;
+	if (c === '"') {
+		frames.pop();
+		return 1;
+	}
+	if (c === "$" && (text[i + 1] === "[" || text[i + 1] === "(")) {
+		frames.push(text[i + 1] as string);
+		return 2;
+	}
+	return 1;
+}
+
+function stepCode(text: string, i: number, frames: string[]): number {
+	const top = frames[frames.length - 1] as string | undefined;
+	const c = text[i] as string;
+	if (c === '"') {
+		frames.push('"');
+		return 1;
+	}
+	if (c === "[" || c === "(" || c === "{") {
+		frames.push(c);
+		return 1;
+	}
+	if (c === "]" || c === ")" || c === "}") {
+		const want = c === "]" ? "[" : c === ")" ? "(" : "{";
+		if (top === want) frames.pop();
+		return 1;
+	}
+	return 1;
+}
+
 /**
  * Find the end of the double-quoted string that opens at `open`.
  *
@@ -116,32 +162,12 @@ export function scanQuotedString(text: string, open: number): QuotedStringScan {
 				i += escapeLength(text, i);
 				continue;
 			}
-			if (c === '"') {
-				frames.pop();
-				i++;
-				if (frames.length === 0) return { end: i, closed: true };
-				continue;
-			}
-			if (c === "$" && (text[i + 1] === "[" || text[i + 1] === "(")) {
-				frames.push(text[i + 1] as string);
-				i += 2;
-				continue;
-			}
-			i++;
+			const adv = stepStringNonEscape(text, i, frames);
+			i += adv;
+			if (frames.length === 0) return { end: i, closed: true };
 			continue;
 		}
-		if (c === '"' || c === "[" || c === "(" || c === "{") {
-			frames.push(c);
-			i++;
-			continue;
-		}
-		if (c === "]" || c === ")" || c === "}") {
-			const want = c === "]" ? "[" : c === ")" ? "(" : "{";
-			if (top === want) frames.pop();
-			i++;
-			continue;
-		}
-		i++;
+		i += stepCode(text, i, frames);
 	}
 	return { end: text.length, closed: false };
 }
@@ -201,37 +227,10 @@ export function collectStringEscapeDefects(
 				i += escapeLength(text, i);
 				continue;
 			}
-			if (c === '"') {
-				frames.pop();
-				i++;
-				continue;
-			}
-			if (c === "$" && (text[i + 1] === "[" || text[i + 1] === "(")) {
-				frames.push(text[i + 1] as string);
-				i += 2;
-				continue;
-			}
-			i++;
+			i += stepStringNonEscape(text, i, frames);
 			continue;
 		}
-		// outside string
-		if (c === '"') {
-			frames.push('"');
-			i++;
-			continue;
-		}
-		if (c === "[" || c === "(" || c === "{") {
-			frames.push(c);
-			i++;
-			continue;
-		}
-		if (c === "]" || c === ")" || c === "}") {
-			const want = c === "]" ? "[" : c === ")" ? "(" : "{";
-			if (top === want) frames.pop();
-			i++;
-			continue;
-		}
-		i++;
+		i += stepCode(text, i, frames);
 	}
 	return [];
 }
