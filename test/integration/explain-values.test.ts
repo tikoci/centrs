@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { routerOsStringLiteral } from "../../src/core/routeros-string.ts";
 import { lexValueAnchors } from "../../src/explain/args.ts";
 import { resolveDocument } from "../../src/explain/pathresolve.ts";
 import { resolveSymbols } from "../../src/explain/symbols.ts";
@@ -16,10 +17,6 @@ function outputOf(result: unknown): string {
 		"\r\n",
 		"\n",
 	);
-}
-
-function rosString(value: string): string {
-	return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
 async function highlightClasses(
@@ -67,21 +64,21 @@ describeFast("explain value facts against CHR", () => {
 
 			const macParse = outputOf(
 				await started.chr.exec(
-					`:put [:parse ${rosString("/interface/ethernet/set [find default-name=ether1] mac-address=00:11:22:33:44:55")}]`,
+					`:put [:parse ${routerOsStringLiteral("/interface/ethernet/set [find default-name=ether1] mac-address=00:11:22:33:44:55")}]`,
 				),
 			);
 			expect(macParse).toContain("mac-address=00:11:22:33:44:55");
 
 			const firewall = outputOf(
 				await started.chr.exec(
-					`:put [:parse ${rosString("/ip/firewall/filter/add chain=input action=accept src-address=2.2")}]`,
+					`:put [:parse ${routerOsStringLiteral("/ip/firewall/filter/add chain=input action=accept src-address=2.2")}]`,
 				),
 			);
 			expect(firewall).toContain("src-address=;2.0.0.2");
 
 			const duration = outputOf(
 				await started.chr.exec(
-					`:put [:parse ${rosString("/tool/netwatch/add host=1.1.1.1 interval=2.2")}]`,
+					`:put [:parse ${routerOsStringLiteral("/tool/netwatch/add host=1.1.1.1 interval=2.2")}]`,
 				),
 			);
 			expect(duration).toContain("interval=00:00:02.200");
@@ -247,9 +244,17 @@ describeFast("explain value facts against CHR", () => {
 			]) {
 				const classes = await highlightClasses(started.chr, input);
 				expect(classes[input.indexOf("#")]).toBe("error");
-				expect(
-					outputOf(await started.chr.exec(`:put [:parse ${rosString(input)}]`)),
-				).toMatch(/syntax error|expected end of command/);
+				const parseOutput = outputOf(
+					await started.chr.exec(
+						`:put [:parse ${routerOsStringLiteral(input)}]`,
+					),
+				);
+				expect(parseOutput).toMatch(/syntax error|expected end of command/);
+				if (input === ":if ($a = true \\ # bad") {
+					// The `$a` bytes must reach `:parse`; an unescaped outer string drops
+					// them and reports column 7 instead of the hash at column 18 (#269).
+					expect(parseOutput).toContain("(line 1 column 18)");
+				}
 			}
 
 			for (const input of [
@@ -350,7 +355,9 @@ describeFast("explain value facts against CHR", () => {
 				expect(classes.includes("error")).toBe(false);
 				expect(
 					outputOf(
-						await started.chr.exec(`:put [:parse ${rosString(control)}]`),
+						await started.chr.exec(
+							`:put [:parse ${routerOsStringLiteral(control)}]`,
+						),
 					),
 				).not.toMatch(/syntax error|expected end of command|failure/);
 				const runtime = outputOf(
@@ -530,7 +537,11 @@ describeFast("explain value facts against CHR", () => {
 				const classes = await highlightClasses(started.chr, input);
 				expect(classes.indexOf("error")).toBe(input.indexOf("{"));
 				expect(
-					outputOf(await started.chr.exec(`:put [:parse ${rosString(input)}]`)),
+					outputOf(
+						await started.chr.exec(
+							`:put [:parse ${routerOsStringLiteral(input)}]`,
+						),
+					),
 				).toMatch(/error/);
 				expect(explainCommand(input).values.occurrences).toEqual([]);
 			}
@@ -543,9 +554,17 @@ describeFast("explain value facts against CHR", () => {
 				expect(await highlightClasses(started.chr, input)).not.toContain(
 					"error",
 				);
-				expect(
-					outputOf(await started.chr.exec(`:put [:parse ${rosString(input)}]`)),
-				).not.toMatch(/error/);
+				const parseOutput = outputOf(
+					await started.chr.exec(
+						`:put [:parse ${routerOsStringLiteral(input)}]`,
+					),
+				);
+				expect(parseOutput).not.toMatch(/error/);
+				if (input === ":foreach i in={1;2} do={:put $i}") {
+					// A bare outer `$i` disappears before `:parse` and turns this into
+					// `:put` with no operand. Pin the parser's real variable-bearing IL.
+					expect(parseOutput).toContain("/putmessage=$i");
+				}
 				expect(
 					explainCommand(input).values.occurrences[0]?.facts.shapeHints?.values,
 				).toEqual(["array"]);
@@ -590,7 +609,11 @@ describeFast("explain value facts against CHR", () => {
 					"error",
 				);
 				expect(
-					outputOf(await started.chr.exec(`:put [:parse ${rosString(input)}]`)),
+					outputOf(
+						await started.chr.exec(
+							`:put [:parse ${routerOsStringLiteral(input)}]`,
+						),
+					),
 				).toContain(expected);
 			}
 			// Both readings exist for the same spelling, so a named attribute keeps
@@ -616,7 +639,9 @@ describeFast("explain value facts against CHR", () => {
 			// what centrs claims for the same bytes.
 			const parseIl = async (source: string): Promise<string> =>
 				outputOf(
-					await started.chr.exec(`:put [:parse ${rosString(source)}]`),
+					await started.chr.exec(
+						`:put [:parse ${routerOsStringLiteral(source)}]`,
+					),
 				).replaceAll("\n", " ");
 			const parses = (il: string): boolean =>
 				!/syntax error|expected /.test(il);

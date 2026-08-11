@@ -17,6 +17,7 @@ import {
 	pathTokens,
 } from "./core/inspect.ts";
 import { mapRouterOsError } from "./core/routeros-errors.ts";
+import { routerOsStringLiteral } from "./core/routeros-string.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import {
 	createProtocolAdapter,
@@ -738,7 +739,7 @@ async function validateExecuteCommand(
 			context: {
 				path: resolved.canonical.path,
 				verb: resolved.canonical.verb,
-				attribute: missing[0],
+				parameter: missing[0],
 				requestedAttributes: requested,
 				availableAttributes,
 				validationSource: "/console/inspect request=child+completion",
@@ -1426,10 +1427,6 @@ function tokenizeRouterOsCli(input: string): string[] {
 		tokens.push(current);
 	}
 	return tokens;
-}
-
-function routerOsStringLiteral(value: string): string {
-	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
 function syntaxCause(error: unknown): unknown {

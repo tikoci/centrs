@@ -1,0 +1,171 @@
+  Using cached image: chr-7.23.2
+# CHR 7.23.2 (stable) (undefined) build 2026-07-03 09:08:08
+
+=== Z: is highlight lexical, or environment-aware? ===
+# environment before any inspect: (empty)
+
+Z1 local only, name never seen
+  ":local zzz 2\n:put $zzz"
+  7:"zzz"=local  19:"zzz"=local
+  env now: (empty)
+
+Z2 bare use of a never-seen name
+  ":put $zzz"
+  6:"zzz"=parameter
+  env now: (empty)
+
+Z3 declare it global (inspect only, no execute)
+  ":global zzz 1"
+  8:"zzz"=global
+  env now: (empty)
+
+Z4 REPEAT Z2 — flipped?
+  ":put $zzz"
+  6:"zzz"=parameter
+  env now: (empty)
+
+Z5 REPEAT Z1 — flipped?
+  ":local zzz 2\n:put $zzz"
+  7:"zzz"=local  19:"zzz"=local
+  env now: (empty)
+
+=== A–G: the K3 matrix ===
+
+A1 the carried case
+  ":global v 1\n:local v 2\n:put $v"
+  8:"v"=global  19:"v"=local  29:"v"=global
+
+A2 reversed order
+  ":local v 1\n:global v 2\n:put $v"
+  7:"v"=local  19:"v"=global  29:"v"=local
+
+A3 what does the losing DECLARATION read?
+  ":global v 1\n:local v 2"
+  8:"v"=global  19:"v"=local
+
+A4 control: local then local
+  ":local v 1\n:local v 2\n:put $v"
+  7:"v"=local  18:"v"=local  28:"v"=local
+
+A5 control: global then global
+  ":global v 1\n:global v 2\n:put $v"
+  8:"v"=global  20:"v"=global  30:"v"=global
+
+A6 three: global, local, local
+  ":global v 1\n:local v 2\n:local v 3\n:put $v"
+  8:"v"=global  19:"v"=local  30:"v"=local  40:"v"=global
+
+A7 same line via `;`
+  ":global v 1; :local v 2; :put $v"
+  8:"v"=global  20:"v"=local  31:"v"=global
+
+A8 use BETWEEN the two decls
+  ":global v 1\n:put $v\n:local v 2\n:put $v"
+  8:"v"=global  18:"v"=global  27:"v"=local  37:"v"=global
+
+B1 use before a later global
+  ":local v 1\n:put $v\n:global v 2"
+  7:"v"=local  17:"v"=local  27:"v"=global
+
+B2 bare use before a later global
+  ":put $v\n:global v 1"
+  6:"v"=parameter  16:"v"=global
+
+B3 control: local, use, no global
+  ":local v 1\n:put $v"
+  7:"v"=local  17:"v"=local
+
+B4 local, use, global, use
+  ":local v 1\n:put $v\n:global v 2\n:put $v"
+  7:"v"=local  17:"v"=local  27:"v"=global  37:"v"=local
+
+C1 inner local under an outer global (control-flow body)
+  ":global v 1\n:if (1=1) do={:local v 2; :put $v}"
+  8:"v"=global  33:"v"=local  44:"v"=local
+
+C2 inner local under an outer global (CLOSURE body)
+  ":global v 1\n:local f do={:local v 2; :put $v}"
+  8:"v"=global  19:"f"=local  32:"v"=local  43:"v"=local
+
+C3 inner global escapes, then an outer local
+  ":if (1=1) do={:global v 1}\n:local v 2\n:put $v"
+  22:"v"=global  34:"v"=local  44:"v"=local
+
+C4 inner local does not reach outside
+  ":global v 1\n:if (1=1) do={:local v 2}\n:put $v"
+  8:"v"=global  33:"v"=local  44:"v"=global
+
+C5 global and local both inside one body
+  ":local f do={:global v 1; :local v 2; :put $v}"
+  7:"f"=local  21:"v"=global  33:"v"=local  44:"v"=global
+
+C6 outer local, inner global, use after body
+  ":local v 1\n:if (1=1) do={:global v 2}\n:put $v"
+  7:"v"=local  33:"v"=global  44:"v"=local
+
+C7 closure re-import shape
+  ":global v 1\n:local f do={:global v; :local v 2; :put $v}"
+  8:"v"=global  19:"f"=local  33:"v"=global  43:"v"=local  54:"v"=global
+
+D1 global then a MID-bracket local
+  ":global v 1\n:put [:local v 2; :put $v]"
+  8:"v"=global  25:"v"=local  36:"v"=local
+
+D2 LEAD bracket global then a document local
+  "[:global v 1]\n:local v 2\n:put $v"
+  9:"v"=global  21:"v"=local  31:"v"=global
+
+D3 MID bracket global (confined) then a local
+  ":put [:global v 1]\n:local v 2\n:put $v"
+  14:"v"=global  26:"v"=local  36:"v"=local
+
+D4 global then a LEAD-bracket local
+  ":global v 1\n[:local v 2]\n:put $v"
+  8:"v"=global  20:"v"=local  31:"v"=global
+
+E1 foreach loop var under a global
+  ":global i 1\n:foreach i in={1;2} do={:put $i}"
+  8:"i"=global  21:"i"=auto  42:"i"=auto
+
+E2 for loop var under a global
+  ":global i 1\n:for i from=1 to=2 do={:put $i}"
+  8:"i"=global  17:"i"=auto  41:"i"=auto
+
+E3 onerror var under a global
+  ":global e 1\n:onerror e in={:put 1} do={:put $e}"
+  8:"e"=global  21:"e"=local  45:"e"=local
+
+E4 loop var then a global, use after
+  ":foreach i in={1;2} do={:put 1}\n:global i 1\n:put $i"
+  9:"i"=auto  40:"i"=global  50:"i"=global
+
+F1 colon-less both
+  "global v 1\nlocal v 2\n:put $v"
+  7:"v"=global  17:"v"=local  27:"v"=global
+
+F2 `/`-spelled global
+  "/global v 1\n:local v 2\n:put $v"
+  8:"v"=global  19:"v"=local  29:"v"=global
+
+F3 colon-less local under a `:global`
+  ":global v 1\nlocal v 2\n:put $v"
+  8:"v"=global  18:"v"=local  28:"v"=global
+
+G1 quoted global name
+  ":global \"v\" 1\n:local v 2\n:put $v"
+  8:"\"v\""=global  21:"v"=local  31:"v"=global
+
+G2 quoted local name
+  ":global v 1\n:local \"v\" 2\n:put $v"
+  8:"v"=global  19:"\"v\""=local  31:"v"=global
+
+G3 case: global V, local v
+  ":global V 1\n:local v 2\n:put $v"
+  8:"V"=global  19:"v"=local  29:"v"=local
+
+G4 hyphenated name
+  ":global set-dns 1\n:local set-dns 2\n:put $set-dns"
+  !! error cliff at 11 ("-")
+  8:"set"=global
+
+# environment at end: (empty)

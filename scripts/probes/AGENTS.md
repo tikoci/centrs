@@ -1,19 +1,25 @@
 # `scripts/probes/` — device re-derivation recipes
 
-These scripts ask a real CHR a question whose **answer is already committed
-elsewhere**. They exist so a version bump is a re-run rather than an archaeology
-exercise (#186).
+These scripts ask a real CHR a question, score a committed device capture, or
+replay recorded probe output whose **answer is already committed elsewhere**.
+They exist so a version bump is a re-run rather than an archaeology exercise
+(#186).
 
-They are not tests, are not wired into any gate, and assert nothing. Each one
-needs `@tikoci/quickchr` (an optional dependency) or a reachable CHR, prints a
-table, and writes its capture to `.scratch/` — in-flight by design, because only
-the reviewed slice that lands under `test/fixtures/` is durable.
+They are not tests, are not wired into any gate, and assert nothing. A live
+probe needs `@tikoci/quickchr` (an optional dependency) or a reachable CHR,
+prints a table, and writes its capture to `.scratch/`; a scorer or replay tool reads
+such a capture and prints the comparison. Captures are in-flight by design,
+because only a reviewed slice that lands under `test/fixtures/` is durable.
 
 | Probe | Re-derives | Durable answer |
 | ----- | ---------- | -------------- |
 | `explain-brace-slot-sweep.ts` | which `(verb, slot)` pairs read `{…}` as an array (#225/#257) | `src/explain/brace-slots.ts` + `test/fixtures/explain/values.json` → `interiorGrounding.braceSlots` |
 | `explain-escape-sweep.ts` | the device-accepted `\<c>` set inside a string (#252) | `VALID_SINGLE` in `src/explain/quoted-string.ts` |
 | `explain-highlight-recapture.ts` | the per-character `highlight` stream for every corpus script (Q13) | `test/fixtures/explain/highlight-streams.slice.json` (a stratified slice; the full capture is ~7.5 MB/version and stays out of the repo) |
+| `explain-symbol-anchors.ts` | every committed device-verified symbol branch anchor on live `highlight` | `src/explain/symbols.ts` + `test/fixtures/explain/symbols.json` |
+| `explain-symbol-arms-score.ts` | the historical Q13 candidate arms and shipped resolver over a full highlight capture | the symbol decisions in `src/explain/symbols.ts` |
+| `explain-symbol-bad-sigil-replay.ts` | recorded K2 hard-error offsets | the F8 anchors in `test/unit/explain-symbols.test.ts` |
+| `explain-symbol-classes-replay.ts` | recorded K3 per-occurrence variable classes | the F7 anchors in `test/unit/explain-symbols.test.ts` |
 
 ## Rules a probe here must follow
 
@@ -31,3 +37,8 @@ the reviewed slice that lands under `test/fixtures/` is durable.
 - **Resolve the corpus through `../corpus-fetch.ts`.** A hardcoded
   `$HOME/GitHub/lsp-routeros-ts` path is the reachability bug #186 exists to
   fix, and the resolver announces which snapshot's bytes were measured.
+- **A replay must reject an empty input set.** Printing `0/0 agree` is not a
+  successful replay and must not look like one.
+- **An abstention is not a disagreement.** Report decided agreements,
+  deliberate abstentions, and wrong assertions separately; a scorer that
+  turns the product's fail-closed answer red cannot measure the product.

@@ -62,14 +62,16 @@ The command is a script-shaped console expression, not a slash path plus verb,
 so REST must use the `/rest/execute` fallback.
 
 ```bash
-centrs execute $R ':put [/system/identity/get name]' --via rest-api --username $U --password $P
+centrs execute $R ':local a true; :if ($a = true) do={:put [/system/identity/get name]}' --via rest-api --username $U --password $P
 ```
 
 Envelope: `ok: true`, `data` is string-shaped (`data.output` or `data.ret`) and
 contains the CHR identity name, `meta.via=rest-api`, and
 `meta.validation.syntax=true`. `meta.validation.semantic` is absent or marked
 `not-applicable` because `/console/inspect` validates path-shaped commands, not
-arbitrary script expressions.
+arbitrary script expressions. The `$a` variable must survive the validation
+wrapper: if that outer string expands it before `:parse`, this example fails even
+though RouterOS accepts the original command.
 
 ### 5. Syntax reject from `:put [:parse ...]`
 
@@ -95,7 +97,7 @@ centrs execute $R '/ip/address/add address=198.51.100.11/32 interface=ether1 no-
 ```
 
 Envelope: `ok: false`, `error.code=validation/unknown-attribute`,
-`error.cause.attribute="no-such-arg"` (or equivalent structured field),
+`error.context.parameter="no-such-arg"`,
 `meta.validation.syntax=true`, `meta.validation.source=/console/inspect`, and
 no address is added. This example is the product claim: syntax validation and
 semantic validation are separate gates.

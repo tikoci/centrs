@@ -1,0 +1,167 @@
+  Using cached image: chr-7.23.2
+# CHR 7.23.2 (stable) (undefined) build 2026-07-03 09:08:08
+
+P1 single slash after a space
+  "/ip /address print"
+  !! error cliff at 4 ("/")
+  0:"/ip"=dir  3:" "=none  4:"/"=error  5:"address print"=none
+
+P2 single slash before the verb
+  "/ip address /print"
+  !! error cliff at 12 ("/")
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"/"=error  13:"print"=none
+
+P3 single slash after the verb
+  "/ip address print /foo"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"print"=cmd  17:" "=none  18:"/foo"=obj-inactive
+
+P4 doubled after the verb (round-1 C1 repeat)
+  "/ip address print //foo"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"print"=cmd  17:" "=none  18:"//foo"=obj-inactive
+
+P5 single slash, no leading slash
+  "ip /address print"
+  !! error cliff at 3 ("/")
+  0:"ip"=dir  2:" "=none  3:"/"=error  4:"address print"=none
+
+P6 absolute path restarted mid-statement
+  "/ip address print\n/interface print"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"print"=cmd  17:"\n"=none  18:"/interface"=dir  28:" "=none  29:"print"=cmd
+
+Q1 verb in the frozen list
+  "/ip address print //foo"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"print"=cmd  17:" "=none  18:"//foo"=obj-inactive
+
+Q2 verb NOT in the frozen list (monitor)
+  "/interface monitor //foo"
+  clean
+  0:"/interface"=dir  10:" "=none  11:"monitor"=cmd  18:" //foo"=none
+
+Q3 verb NOT in the frozen list (export)
+  "/ip address export //foo"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"export"=cmd  18:" "=none  19:"//foo"=obj-inactive
+
+Q4 unknown word then a doubled run
+  "/ip address zzzz //foo"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"zzzz"=obj-inactive  16:" //foo"=none
+
+Q5 doubled run before any verb
+  "/ip address //foo"
+  !! error cliff at 12 ("/")
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"/"=error  13:"/foo"=none
+
+Q6 doubled run in the FIRST token
+  "/ip//address"
+  !! error cliff at 4 ("/")
+  0:"/ip/"=dir  4:"/"=error  5:"address"=none
+
+Q7 argument before the verb
+  "/ip address comment=x //foo"
+  !! error cliff at 19 ("=")
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"comment"=cmd  19:"="=error  20:"x //foo"=none
+
+Q8 `:`-sigilled head then a doubled run
+  ":put //foo"
+  clean
+  0:":"=dir  1:"put"=cmd  4:" //foo"=none
+
+Q9 colon-less directive head then a doubled run
+  "put //foo"
+  clean
+  0:"put"=cmd  3:" //foo"=none
+
+Q10 colon-less directive head then `::`
+  "put ::foo"
+  clean
+  0:"put"=cmd  3:" ::foo"=none
+
+Q11 `:`-head with a menu path argument
+  ":put [/ip//address print]"
+  !! error cliff at 10 ("/")
+  0:":"=dir  1:"put"=cmd  4:" "=none  5:"["=syntax-meta  6:"/ip/"=dir  10:"/"=error  11:"address print]"=none
+
+R1 IPv6 in a value
+  "/ipv6 address add address=fe80::1/64 interface=ether1"
+  clean
+  0:"/ipv6"=dir  5:" "=none  6:"address"=dir  13:" "=none  14:"add"=cmd  17:" "=none  18:"address"=arg  25:"="=syntax-meta  26:"fe80::1"=none  33:"/"=syntax-meta  34:"64 "=none  37:"interface"=arg  46:"="=syntax-meta  47:"ether1"=none
+
+R2 IPv6 default route
+  "/ipv6 route add dst-address=::/0 gateway=fe80::1"
+  clean
+  0:"/ipv6"=dir  5:" "=none  6:"route"=dir  11:" "=none  12:"add"=cmd  15:" "=none  16:"dst-address"=arg  27:"="=syntax-meta  28:"::/0 "=none  33:"gateway"=arg  40:"="=syntax-meta  41:"fe80::1"=none
+
+R3 IPv4 CIDR in a value
+  "/ip route add dst-address=0.0.0.0/0 gateway=1.1.1.1"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"route"=dir  9:" "=none  10:"add"=cmd  13:" "=none  14:"dst-address"=arg  25:"="=syntax-meta  26:"0.0.0.0/0 "=none  36:"gateway"=arg  43:"="=syntax-meta  44:"1.1.1.1"=none
+
+R4 MAC address in a value
+  "/interface bridge host print where mac-address=00:11:22:33:44:55"
+  clean
+  0:"/interface"=dir  10:" "=none  11:"bridge"=dir  17:" "=none  18:"host"=dir  22:" "=none  23:"print"=cmd  28:" "=none  29:"where"=arg  34:" "=syntax-meta  35:"mac-address"=variable-local  46:"="=syntax-meta  47:"00:11:22:33:44:55"=none
+
+R5 time in a value
+  "/system clock set time=00:00:00"
+  clean
+  0:"/system"=dir  7:" "=none  8:"clock"=dir  13:" "=none  14:"set"=cmd  17:" "=none  18:"time"=arg  22:"="=syntax-meta  23:"00:00:00"=none
+
+R6 URL in a value
+  "/tool fetch url=https://example.com/a//b"
+  clean
+  0:"/tool"=dir  5:" "=none  6:"fetch"=cmd  11:" "=none  12:"url"=arg  15:"="=syntax-meta  16:"https://example.com/a//b"=none
+
+R7 path inside a bracket after `in=`
+  ":foreach i in=[/ip address find] do={:put $i}"
+  clean
+  0:":"=dir  1:"foreach"=cmd  8:" "=none  9:"i"=variable-auto  10:" "=none  11:"in"=arg  13:"=["=syntax-meta  15:"/ip"=dir  18:" "=none  19:"address"=dir  26:" "=none  27:"find"=cmd  31:"]"=syntax-meta  32:" "=none  33:"do"=arg  35:"={"=syntax-meta  37:":"=dir  38:"put"=cmd  41:" "=none  42:"$"=syntax-meta  43:"i"=variable-auto  44:"}"=syntax-meta
+
+R8 path in a quoted value
+  "/system script add name=s source=\"/ip//address print\""
+  clean
+  0:"/system"=dir  7:" "=none  8:"script"=dir  14:" "=none  15:"add"=cmd  18:" "=none  19:"name"=arg  23:"="=syntax-meta  24:"s "=none  26:"source"=arg  32:"=\""=syntax-meta  34:"/ip//address print"=none  52:"\""=syntax-meta
+
+R9 IPv6 bare after a directive
+  ":put ::1"
+  clean
+  0:":"=dir  1:"put"=cmd  4:" ::1"=none
+
+R10 IPv6 in a comparison
+  ":if ([:typeof $a] = \"str\") do={:put fe80::1}"
+  clean
+  0:":"=dir  1:"if"=cmd  3:" "=none  4:"(["=syntax-meta  6:":"=dir  7:"typeof"=cmd  13:" "=none  14:"$"=syntax-meta  15:"a"=variable-parameter  16:"]"=syntax-meta  17:" "=none  18:"="=syntax-meta  19:" "=none  20:"\""=syntax-meta  21:"str"=none  24:"\")"=syntax-meta  26:" "=none  27:"do"=arg  29:"={"=syntax-meta  31:":"=dir  32:"put"=cmd  35:" fe80::1"=none  43:"}"=syntax-meta
+
+R11 deep menu path, verb, then args
+  "/ip firewall filter add chain=forward action=drop"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"firewall"=dir  12:" "=none  13:"filter"=dir  19:" "=none  20:"add"=cmd  23:" "=none  24:"chain"=arg  29:"="=syntax-meta  30:"forward "=none  38:"action"=arg  44:"="=syntax-meta  45:"drop"=none
+
+R12 path with hyphens
+  "/user-manager user print"
+  clean
+  0:"/"=dir  1:"user-manager"=obj-inactive  13:" user print"=none
+
+R13 `find` bracket with a path
+  "/ip route set [find gateway=1.1.1.1] comment=x"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"route"=dir  9:" "=none  10:"set"=cmd  13:" "=none  14:"["=syntax-meta  15:"find"=cmd  19:" "=none  20:"gateway"=variable-local  27:"="=syntax-meta  28:"1.1.1.1"=none  35:"]"=syntax-meta  36:" "=none  37:"comment"=arg  44:"="=syntax-meta  45:"x"=none
+
+R14 value-list with a colon
+  "/ip address print where address~\"::\""
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"print"=cmd  17:" "=none  18:"where"=arg  23:" "=syntax-meta  24:"address"=variable-local  31:"~\""=syntax-meta  33:"::"=none  35:"\""=syntax-meta
+
+R15 doubled slash inside a string value
+  ":put \"/ip//address\""
+  clean
+  0:":"=dir  1:"put"=cmd  4:" "=none  5:"\""=syntax-meta  6:"/ip//address"=none  18:"\""=syntax-meta
+
+R16 export path
+  "/ip address export file=backup"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"export"=cmd  18:" "=none  19:"file"=arg  23:"="=syntax-meta  24:"backup"=none
