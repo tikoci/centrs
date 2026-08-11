@@ -5,11 +5,15 @@ replay recorded probe output whose **answer is already committed elsewhere**.
 They exist so a version bump is a re-run rather than an archaeology exercise
 (#186).
 
-They are not tests, are not wired into any gate, and assert nothing. A live
-probe needs `@tikoci/quickchr` (an optional dependency) or a reachable CHR,
-prints a table, and writes its capture to `.scratch/`; a scorer or replay tool reads
-such a capture and prints the comparison. Captures are in-flight by design,
-because only a reviewed slice that lands under `test/fixtures/` is durable.
+A probe, scorer or replay tool is not a test, is not wired into any gate, and
+asserts nothing. A pure helper it shares with the test suite is the exception
+and may be gated: `explain-symbol-comparison.ts` is covered by
+`test/unit/explain-symbol-probes.test.ts`, because the comparison contract is
+the part that must not silently change. A live probe needs `@tikoci/quickchr`
+(an optional dependency) or a reachable CHR, prints a table, and writes its
+capture to `.scratch/`; a scorer or replay tool reads such a capture and prints
+the comparison. Captures are in-flight by design, because only a reviewed slice
+that lands under `test/fixtures/` is durable.
 
 | Probe | Re-derives | Durable answer |
 | ----- | ---------- | -------------- |
