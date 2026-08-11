@@ -80,12 +80,17 @@
  *
  * The corpus lives in the sibling `lsp-routeros-ts` repo, not in centrs — see
  * `docs/CONSTITUTION.md` / #203 "Longer term" for the corpus-ownership split.
- * It is resolved as a sibling of this checkout; `CENTRS_CORPUS_DB` or `--db`
- * point elsewhere.
+ * A sibling checkout is used when present; otherwise the pinned snapshot from
+ * `bun run corpus:fetch`. `CENTRS_CORPUS_DB` or `--db` point elsewhere, and the
+ * source plus its sha256 are announced on stderr — see `corpus-fetch.ts`.
  */
 
 import { Database } from "bun:sqlite";
-import { resolve } from "node:path";
+import {
+	describeResolution,
+	resolveCorpusDb,
+	unreachableMessage,
+} from "./corpus-fetch.ts";
 
 export interface CorpusRow {
 	path: string;
@@ -528,20 +533,6 @@ function has(args: readonly string[], name: string): boolean {
 	return args.includes(name);
 }
 
-/**
- * The corpus lives in the sibling `lsp-routeros-ts` checkout. Resolve it from
- * this file rather than from `$HOME/GitHub`, so any clone layout works as long
- * as the two repos are siblings. `CENTRS_CORPUS_DB` and `--db` override.
- */
-export function defaultDbPath(): string {
-	const override = Bun.env["CENTRS_CORPUS_DB"];
-	if (override) return override;
-	return resolve(
-		import.meta.dir,
-		"../../lsp-routeros-ts/test-data/corpus.sqlite",
-	);
-}
-
 function loadRows(dbPath: string): CorpusRow[] {
 	const db = new Database(dbPath, { readonly: true });
 	try {
@@ -570,13 +561,18 @@ function loadRows(dbPath: string): CorpusRow[] {
 }
 
 export async function main(args: readonly string[]): Promise<number> {
-	const dbPath = flag(args, "--db") ?? defaultDbPath();
-	if (!(await Bun.file(dbPath).exists())) {
-		console.error(
-			`::error title=explain corpus census::corpus.sqlite not found at ${dbPath}\n` +
-				"Clone/update the sibling lsp-routeros-ts repo, or pass --db <path>.",
-		);
+	const resolution = resolveCorpusDb(flag(args, "--db"));
+	const dbPath = resolution.path;
+	if (dbPath === undefined || !(await Bun.file(dbPath).exists())) {
+		console.error(unreachableMessage("explain corpus census"));
 		return 1;
+	}
+	// stderr, not stdout: `--json` output is consumed as JSON.
+	console.error(describeResolution(resolution));
+	if (resolution.warning) {
+		console.error(
+			`::warning title=explain corpus census::${resolution.warning}`,
+		);
 	}
 
 	const rows = loadRows(dbPath);

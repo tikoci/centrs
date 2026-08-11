@@ -16,6 +16,16 @@ documenting cross-cutting shifts that affect contributors and consumers.
   modify, or redistribute it, and a VS Code extension could not have bundled it
   (#208). `package.json` already said `MIT`; the file now exists to match, and
   is in the npm `files` allowlist so consumers get it in the tarball.
+- **`bun run corpus:fetch` — the `explain` censuses run from a bare clone and
+  in CI.** `scripts/corpus-pin.json` records which snapshot of the RouterOS
+  script corpus centrs measures against (a commit in `tikoci/lsp-routeros-ts`
+  plus the blob's sha256); `corpus:fetch` downloads it to a gitignored cache and
+  verifies the hash, and a mismatch is a hard error rather than a silent
+  re-download. `explain:corpus-census` and `explain:value-census` previously
+  resolved the corpus *only* as a sibling checkout, so they ran on one machine
+  and never on a PR; both now fall back to the pinned snapshot and announce the
+  source and hash they used. A new CI job gates the fetch and posts both
+  censuses to the run summary (#186).
 
 ## 0.1.3 — 2026-07-06
 

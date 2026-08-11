@@ -211,6 +211,19 @@ Generated API docs through TypeDoc:
 bun run build:doc:api
 ```
 
+The `explain` censuses measure a RouterOS script corpus that lives in
+[`tikoci/lsp-routeros-ts`](https://github.com/tikoci/lsp-routeros-ts), not in
+this repo. `scripts/corpus-pin.json` records which snapshot centrs measures
+against — a commit plus the blob's sha256 — and `corpus:fetch` downloads and
+verifies it. A sibling `lsp-routeros-ts` checkout is used when present, and the
+censuses print the source and hash they used:
+
+```bash
+bun run corpus:fetch          # download the pinned snapshot, verify its sha256
+bun run explain:corpus-census # genre census (#203)
+bun run explain:value-census  # value-surface census (#225)
+```
+
 ## Done definition (short version)
 
 A feature is done when every line in `commands/<name>/examples.md` is green on

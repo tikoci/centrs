@@ -126,6 +126,8 @@ keystream
 KSA
 KVM
 LDTP
+LFS # Git Large File Storage. The pinned corpus blob is NOT stored through it,
+    # which is why a plain raw.githubusercontent GET returns the real bytes.
 librouteros # <https://github.com/haakonnessjoen/librouteros-api>
 LLDP
 lsp-routeros-ts
