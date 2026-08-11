@@ -10,6 +10,33 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Added
 
+- **`explain` reads the array members an `=` makes, instead of abstaining at
+  the sign.** #256 read a `{…}` literal member by member but dropped every
+  member whose `=` did not bind a key, which is three readings the device has:
+  `{a=}` is not an empty-valued key but a positional `str` holding the name
+  (the device drops the sign — and `{1.1=}` is the string `1.1`, not the
+  address), `{$a=1}`/`{(a)=1}`/`{[:timestamp]=1}` are comparisons and therefore
+  one `bool` member, and a leading `-` belongs to the key (`{-1=1}`). A key
+  binds only where the name TOUCHES the sign, so `{a =1}` compares and `{a=1}`
+  does not. `bool` is claimed only where the `=` is the member's top operator —
+  `{a b=1}` and `{$a=1,2}` nest it under an operator whose type is its
+  operands', and both still abstain — and an empty side, a syntax error in all
+  14 spellings asked, now withdraws the literal instead of leaving it reported
+  as an array. That withdrawal keys on positive evidence that the left side is
+  an expression, never on the key reader failing to recognize it, because the
+  member-key grammar is not the identifier grammar and was swept rather than
+  assumed: `.`, `-` and `/` are name bytes anywhere (`{.id=1}`, `{.=1}`,
+  `{a/b=1}`), `_` is not (`{a_b=1}` compares), and `@` is not a member
+  character at any position. Two member faults that predate the `=` axis are
+  checked with it: a `$` takes an alphanumeric or a quote and nothing else
+  (`$"a b"` is a name, `$.id` and `$_a` are syntax errors), and no run may end
+  on a dangling operator (`{a-}`, `{$a.}`). Grounded on CHR 7.23.3 across ten
+  probe rounds; the 186 device
+  rows are `interiorGrounding.keyBinding` in `test/fixtures/explain/values.json`
+  and are scored one-sided (abstention always allowed, a contradicted type
+  never) by a new unit test. The value census is unchanged: no statement in the
+  948-script corpus reaches any of these spellings (#258, part of #225).
+
 - **`LICENSE` — centrs is MIT.** The repository carried no `LICENSE` file and
   the published `@tikoci/centrs` tarball carried no license text, so GitHub
   reported `licenseInfo: null` and consumers had only a bare `"license": "MIT"`

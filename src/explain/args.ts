@@ -144,12 +144,27 @@ export interface ValueAnchor {
 	name?: string;
 	/** The literal's source bytes, quotes included. */
 	valueSpan: { start: number; end: number };
-	/** Decoded scalar value, or exact source spelling when `sourceShape` is set. */
+	/**
+	 * Decoded scalar value, or exact source spelling when `sourceShape` is set.
+	 *
+	 * `str` is the exception in both directions: the leftover of a `{a=}` member
+	 * is the DECODED name (`{"a b"=}` carries `a b`), because the bytes that
+	 * spell it are the key's, not a value's.
+	 */
 	value: string;
 	/** True only when one quoted run encloses the whole scalar value. */
 	quoted: boolean;
-	/** Present only when source delimiters, rather than scalar decoding, prove it. */
-	sourceShape?: "array";
+	/**
+	 * Present only when the SOURCE proves the type, rather than scalar decoding.
+	 *
+	 * `array` is proved by the delimiters. The other two are proved by an `=`
+	 * that does not bind a key (#258): with an empty right side the device drops
+	 * the sign and keeps the name as a `str`, and with a left side that is not a
+	 * name the sign COMPARES, which returns `bool` whatever the operands hold.
+	 * None of the three survives {@link valueShapeHints}, which reads a decoded
+	 * scalar and cannot see the sign.
+	 */
+	sourceShape?: "array" | "str" | "bool";
 	/**
 	 * Index, in this same list, of the array literal this member belongs to.
 	 *
@@ -817,6 +832,8 @@ const DEPTH_BOUND_REACHED =
 	"an array literal nested deeper than this phase reads";
 const UNPARSEABLE_MEMBER =
 	"an array member RouterOS rejects at its first character";
+const HALF_COMPARISON =
+	"an array member whose `=` is missing one of its operands";
 
 /**
  * Why a `(…)` member cannot stand where it is, or null when it can.
@@ -855,7 +872,14 @@ function leadsInvalidMember(c: string | undefined): boolean {
 	return c === "*" || c === "+";
 }
 
-/** A member key: a bare word or one fully-enclosing quoted run. */
+/**
+ * A member key: a bare word or one fully-enclosing quoted run.
+ *
+ * The bare spelling is {@link MEMBER_NAME}, which is NOT the identifier grammar
+ * and was measured rather than assumed — see that constant. Review caught the
+ * first version of this rejecting `.id`, which the fixture itself held as a
+ * valid key.
+ */
 function memberKey(
 	text: string,
 	structural: string,
@@ -870,7 +894,112 @@ function memberKey(
 		return body.includes("\\") || body.includes("$") ? null : body;
 	}
 	const raw = text.slice(start, end);
-	return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(raw) ? raw : null;
+	return MEMBER_NAME.test(raw) ? raw : null;
+}
+
+/**
+ * A bare array-member key, as the device spells one on 7.23.3 (#258).
+ *
+ * Swept character by character rather than borrowed from the identifier rules,
+ * because the two disagree in both directions. `.`, `-` and `/` are ordinary
+ * name bytes ANYWHERE, including alone and repeated: `{.id=1}`, `{..id=1}`,
+ * `{.=1}`, `{-=1}`, `{--=1}`, `{/=1}`, `{a/b=1}` and `{-.1=1}` all bind the key
+ * spelled exactly that way. But `_` does NOT: `{_a=1}` and `{a_b=1}` lower to
+ * `(= $_a 1)` and `(= $a_b 1)`, comparisons — even though `$a_b` is a perfectly
+ * good variable. Neither do `: * ~ % > < + ! @ #`.
+ *
+ * The review that caught `.id` is the reason this is a named constant with its
+ * own evidence: a key reader that quietly disagrees with the device about what
+ * a name IS makes every rule built on top of it wrong in the same direction.
+ */
+const MEMBER_NAME = /^[A-Za-z0-9./-]+$/;
+
+/**
+ * Characters the device proved cannot appear in a bare member key (#258).
+ *
+ * Used only to say a left side is POSITIVELY an expression, never to say it is
+ * a name. That asymmetry is the fix for the `.id` defect: an unrecognized
+ * spelling that is merely not in {@link MEMBER_NAME} abstains, while only a
+ * spelling holding one of these bytes is treated as a comparison and can
+ * withdraw its literal. Each byte is a syntax error with an empty right side
+ * (`{_a=}`, `{a:b=}`, `{a*b=}`, `{a~b=}`, `{a>b=}`, `{a%b=}`, `{1+1=}`,
+ * `{a<=}`, `{a b=}`, `{a,b=}`, `{$a=}`, `{(a)=}`, `{[:len 1]=}`, `{{1;2}=}`)
+ * or an operator in the IL of the same member with one.
+ */
+const NOT_IN_MEMBER_NAME = /[\s,$([{"'+*<>!~%:_@#=]/;
+
+/**
+ * Whether `[start,end)` ends on an operator with no right operand (#258).
+ *
+ * A member and a comparison's left side are both runs the device lexes on
+ * their own, so both carry this fault: `{-}`, `{--}`, `{a-}`, `{$a-}` and
+ * `{$a-;1}` are syntax errors, and so are `{a- =1}` and `{$a-=1}` where the
+ * dangling run is only the left side. The trailing-dot half is narrower and
+ * the asymmetry is the device's: `{$a.}` and `{$a.=1}` are refused while
+ * `{a.}`, `{.}`, `{/}`, `{a/}` and `{a. =1}` all parse as variable references
+ * — a bare name absorbs the dot into itself, a `$` name does not.
+ *
+ * A KEY is not an operand and does not carry it: `{a-=1}` binds the key `a-`
+ * and `{a-=}` is the string `a-`, so this is only asked where the sign failed
+ * to bind.
+ */
+function danglesOperator(text: string, start: number, end: number): boolean {
+	if (start >= end) return false;
+	const last = text[end - 1];
+	if (last === "-") return true;
+	return last === "." && text[start] === "$";
+}
+
+/**
+ * Whether `[start,end)` is ONE complete operand, so a following `=` is the
+ * member's top-level operator (#258).
+ *
+ * This is the whole difference between a member that is provably `bool` and one
+ * that must abstain. `=` returns `bool` for any pair of operands, so `{$a=1}`,
+ * `{(a)=1}`, `{[:timestamp]=1}` and `{{1;2}=1}` are all `bool` — but only
+ * because the `=` is on top. `{a b=1}` lowers to `(  $a (= $b 1))`, where the
+ * top operator is the space and the type is its operands', and `{$a=1,2}`
+ * lowers to `(, (= $a 1) 2)`, an `array` whose FIRST ELEMENT is the comparison.
+ * Both were device-typed `bool` under the bindings a probe happened to use, so
+ * the shape of the left side — not the observed type — has to decide.
+ *
+ * A bare name is included because it only reaches here when whitespace kept it
+ * from binding a key (`{a =1}` compares, `{a=1}` does not) — but OPERAND
+ * position is stricter than key position, so it is not simply
+ * {@link memberKey}: `{a-=1}` binds the key `a-`, while `{a- =1}` does not
+ * parse at all. Both classes therefore end on an alphanumeric here.
+ *
+ * The class is narrower than RouterOS's operand grammar on purpose, and the
+ * gap is all abstention: `{a_b=1}`, `{:a=1}`, `{1+1=2}` and `{$a/b=1}` are
+ * `bool` on the device and silent here. Widening it means proving the `=`
+ * stays on top for the new spelling, which is exactly what {@link MEMBER_NAME}
+ * had to be measured for.
+ */
+function isSingleOperand(
+	text: string,
+	structural: string,
+	start: number,
+	end: number,
+): boolean {
+	if (start >= end) return false;
+	const open = text[start];
+	if (open === "(" || open === "[" || open === "{")
+		return delimitedEnd(structural, start) === end;
+	// A `$` name is NOT the member-key name, and review's suggestion to widen it
+	// was the wrong direction: `$:a`, `$_a`, `$/a` and `$.id` are all syntax
+	// errors, so the byte after the `$` must be alphanumeric, and `$a-`/`$a.`
+	// are errors too, so the last byte must be as well. In between, `.` and `-`
+	// join operands (`{$a-b=1}` is `(= (- $a $b) 1)`) and the `=` stays on top,
+	// while `_` and `:` end the name and start a SPACE-concat whose type is its
+	// operands' (`{$a_b=1}` is `(  $a (= $_b 1))`).
+	if (open === "$")
+		return /^\$[A-Za-z0-9]+(?:[.-]+[A-Za-z0-9]+)*$/.test(
+			text.slice(start, end),
+		);
+	return (
+		memberKey(text, structural, start, end) !== null &&
+		/[A-Za-z0-9]$/.test(text.slice(start, end))
+	);
 }
 
 /**
@@ -915,9 +1044,12 @@ function depthZeroOffsets(
  *   - the separator is the DELIMITER's, not a choice: `{1;2}` has two members
  *     while `{1,2}` has ONE (`(, 1 2)`, a nested array), and `(1;2)` is a
  *     syntax error;
- *   - `=` binds a key in the brace form (`{a=1}` -> key `a`, value `num`) and
- *     COMPARES in the paren form (`(a=1,b=2)` -> two `bool` members), so keys
- *     are read in braces only;
+ *   - `=` binds a key only in the brace form, and only where a NAME touches the
+ *     sign (`{a=1}` -> key `a`, value `num`); anywhere else it COMPARES, so
+ *     `{a =1}`, `{$a=1}` and `(a=1,b=2)` are `bool` members and not keys;
+ *   - a key whose right side is EMPTY is not an empty-valued key: the device
+ *     drops the sign and keeps the name as a positional `str` (`{a=}` -> `a`),
+ *     while an empty side anywhere else is a syntax error;
  *   - a member that is itself `{…}`/`(…)`, or a brace member carrying a depth-0
  *     comma, is an array and is descended into;
  *   - everything else is offered to the literal reader, and what it refuses is
@@ -945,7 +1077,11 @@ function pushArrayMembers(
 	if (members === null) return EMPTY_MEMBER;
 	for (const member of members) {
 		let valueStart = member.start;
+		let valueEnd = member.end;
 		let name: string | undefined;
+		let sourceShape: "str" | "bool" | undefined;
+		let decoded: string | undefined;
+		let quoted = false;
 		// A member may not OPEN with `*` or `+`: `{*1}`, `{ *1 }`, `(*1,2)`,
 		// `{a=*1}` and `{+1}` are all syntax errors on 7.23.3, even though `*1` is
 		// a perfectly good value one position out (`:local x *1` is typed `id`).
@@ -953,28 +1089,121 @@ function pushArrayMembers(
 		// operators between operands — `{2*3}` is `num` 6 and `{1+1}` is 2 — and
 		// unary minus is fine either way (`{-1}` is `num` -1).
 		if (leadsInvalidMember(text[member.start])) return UNPARSEABLE_MEMBER;
-		if (separator === ";") {
-			const eq = depthZeroOffsets(structural, member.start, member.end, "=")[0];
-			if (eq !== undefined) {
-				const key = memberKey(text, structural, member.start, eq);
-				const value = trimRange(structural, eq + 1, member.end);
-				// `{a=}` is not an empty-valued key: the device drops the `=` and
-				// keeps the NAME as a string member, so neither reading is safe.
-				if (key === null || value.start === value.end) continue;
-				if (leadsInvalidMember(text[value.start])) return UNPARSEABLE_MEMBER;
+		// `@` is not a member character ANYWHERE, unlike `*`/`+` which are only
+		// fatal at the front: `{a@b}`, `{@a}`, `{a@}`, `{1;a@b}`, `(a@b,2)` and
+		// `{a@b=1}` are all syntax errors, while the same bytes one slot out are
+		// fine (`:local z a@b` parses). Quoted runs keep it — `{"a@b"}` parses —
+		// which is why this is a depth-zero scan and not a substring test.
+		if (depthZeroOffsets(structural, member.start, member.end, "@").length > 0)
+			return UNPARSEABLE_MEMBER;
+		// A `$` takes an alphanumeric or a QUOTE and nothing else: `$.id`, `$_a`,
+		// `$:a`, `$/a`, `$$a`, `$(x)`, `$[:len 1]` and a bare `$` are all syntax
+		// errors, while `$"a b"` is a good quoted variable name — so "alphanumeric"
+		// alone would withdraw a literal the device accepts.
+		for (const at of depthZeroOffsets(
+			structural,
+			member.start,
+			member.end,
+			"$",
+		))
+			if (!/[A-Za-z0-9"]/.test(text[at + 1] ?? "")) return UNPARSEABLE_MEMBER;
+		if (danglesOperator(text, member.start, member.end))
+			return UNPARSEABLE_MEMBER;
+		const eq = depthZeroOffsets(structural, member.start, member.end, "=")[0];
+		if (eq !== undefined) {
+			const left = trimRange(structural, member.start, eq);
+			const right = trimRange(structural, eq + 1, member.end);
+			// A key binds only in the brace form, and only where the NAME TOUCHES
+			// the sign: `{a=1}` is the key `a`, `{a =1}` is the comparison
+			// `(= $a 1)`, and one byte of space is the whole difference (#258).
+			const key =
+				separator === ";" && eq === left.end
+					? memberKey(text, structural, left.start, left.end)
+					: null;
+			// An empty LEFT side is a syntax error in both forms and at any
+			// position: `{=}`, `{=1}`, `{ =1 }`, `(=1,2)`, `(1,=2)`.
+			if (left.start === left.end) return HALF_COMPARISON;
+			if (key === null && right.start === right.end) {
+				// An empty RIGHT side is a syntax error too — but ONLY once the left
+				// side is known not to be a name, because a name means the sign is
+				// dropped instead (`{a=}`). Review found the first version of this
+				// asking `memberKey` that question, which withdrew `{.id=}`: a
+				// literal the device accepts, whose member is the string `.id`. So
+				// the fault now needs POSITIVE evidence of an expression, and a
+				// spelling this reader simply does not recognize abstains.
+				//
+				// The paren form needs no such evidence: `=` never binds a key
+				// there, so an empty right side is always a comparison missing an
+				// operand (`(a=)`, `(a=,2)`).
+				//
+				// The span read here is the RAW one, not the trimmed `left`: the
+				// whitespace between a name and the sign is itself the evidence
+				// (`{a =}` and `{.id =}` are syntax errors while `{a=}` and
+				// `{.id=}` are not), and trimming it away hides exactly that.
+				if (
+					separator === "," ||
+					NOT_IN_MEMBER_NAME.test(text.slice(member.start, eq))
+				)
+					return HALF_COMPARISON;
+				continue;
+			}
+			if (key !== null && right.start === right.end) {
+				// `{a=}` is not an empty-valued key: the device DROPS the sign and
+				// keeps the name as a positional `str` — `{1.1=}` is the string
+				// `1.1`, not the address, so no member lexicon runs on it either.
+				sourceShape = "str";
+				decoded = key;
+				quoted = text[left.start] === '"';
+				valueStart = left.start;
+				valueEnd = left.end;
+			} else if (key !== null) {
+				if (leadsInvalidMember(text[right.start])) return UNPARSEABLE_MEMBER;
+				// A value that OPENS with the sign is an `=` with nothing on its
+				// left, which is the same syntax error one level down: `{a==}` is
+				// rejected exactly as `{=1}` is.
+				if (text[right.start] === "=") return HALF_COMPARISON;
 				name = key;
-				valueStart = value.start;
+				valueStart = right.start;
+			} else if (danglesOperator(text, left.start, left.end)) {
+				// The sign's left operand is itself incomplete: `{a- =1}` and
+				// `{$a-=1}` are refused exactly as the bare `{a-}` is.
+				return UNPARSEABLE_MEMBER;
+			} else if (
+				isSingleOperand(text, structural, left.start, left.end) &&
+				depthZeroOffsets(structural, member.start, member.end, ",").length === 0
+			) {
+				// The left operand is a member in its own right, so it carries the
+				// same faults: `{()=1}` is rejected exactly as `{()}` is, and being
+				// on the left of a comparison does not excuse it.
+				const leftFault = parenMemberFault(
+					text,
+					structural,
+					left.start,
+					left.end,
+				);
+				if (leftFault !== null) return leftFault;
+				// The `=` is on top, so the member is `bool` whatever it compares.
+				sourceShape = "bool";
+			} else {
+				// A left side that is not one operand, or a depth-zero comma that
+				// outranks the sign: the device has a member, but its type is its
+				// operands' and offline cannot read those.
+				continue;
 			}
 		}
 		const anchor: ValueAnchor = {
 			kind: "element",
 			tokenSpan: { start: member.start, end: member.end },
 			...(name === undefined ? {} : { name }),
-			valueSpan: { start: valueStart, end: member.end },
-			value: text.slice(valueStart, member.end),
-			quoted: false,
+			valueSpan: { start: valueStart, end: valueEnd },
+			value: decoded ?? text.slice(valueStart, valueEnd),
+			quoted,
 			parent,
 		};
+		if (sourceShape !== undefined) {
+			anchors.push({ ...anchor, sourceShape });
+			continue;
+		}
 		const fault = parenMemberFault(text, structural, valueStart, member.end);
 		if (fault !== null) return fault;
 		if (isArraySource(text, structural, valueStart, member.end)) {
