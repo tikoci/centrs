@@ -269,13 +269,33 @@ const BLOCK_END = `${BLOCK_INDENT}<!-- END GENERATED value-census -->`;
 const WRAP_COLUMNS = 78;
 
 /**
+ * Split on either line ending, so a checkout with `core.autocrlf=true` — the
+ * Git-for-Windows default, and this repo ships no `.gitattributes` to override
+ * it — still finds the markers instead of failing the gate for a `\r` (#142
+ * wants the unit tier on Windows).
+ */
+export function splitLines(text: string): string[] {
+	return text.split(/\r?\n/);
+}
+
+/** The line ending a file already uses, so rewriting it does not convert one. */
+function lineEndingOf(text: string): string {
+	return text.includes("\r\n") ? "\r\n" : "\n";
+}
+
+/**
  * Greedy word wrap that never breaks inside a `code span`.
  *
- * A token is a maximal run of non-space characters in which a whole
- * backtick-delimited span counts as one character, so `` `bun run x` `` and any
- * punctuation glued to it stay on one line. CommonMark would in fact fold a
- * newline inside a code span into a space, but a command the reader may want to
- * copy should not be split across lines in the source either.
+ * Tokenization, not measurement, is what protects the span: a token is a
+ * maximal run in which a whole backtick-delimited span counts as ONE atom
+ * alongside single non-space characters, so `` `bun run x` `` and any
+ * punctuation glued to it arrive here as one indivisible word. Its full text
+ * still counts toward the line budget, so a span longer than the wrap column
+ * simply overflows its line rather than being split.
+ *
+ * CommonMark would in fact fold a newline inside a code span into a space, so
+ * splitting one renders correctly; a command the reader may want to copy should
+ * still not be broken in the source.
  */
 function wrap(text: string): string[] {
 	const lines: string[] = [];
@@ -339,11 +359,14 @@ function readFixtureCensus(): ValueCensus {
 }
 
 /**
- * Compare a fresh census against the committed fixture, figure by figure.
- *
- * `censusCommand` is the fixture's own provenance note, not a measurement, so
- * it is excluded here; `explain-values.test.ts` pins it instead.
+ * Fixture keys that record provenance rather than measure anything, skipped by
+ * BOTH directions of the comparison so the exclusion is a stated rule and not
+ * an accident of `censusCommand` happening never to appear in a fresh result.
+ * `explain-values.test.ts` pins it instead.
  */
+const PROVENANCE_KEYS: ReadonlySet<string> = new Set(["censusCommand"]);
+
+/** Compare a fresh census against the committed fixture, figure by figure. */
 export function diffAgainstFixture(
 	fresh: ValueCensus,
 	pinned: ValueCensus,
@@ -354,6 +377,7 @@ export function diffAgainstFixture(
 		typeof value === "number" ? String(value) : JSON.stringify(value);
 	const drift: string[] = [];
 	for (const key of Object.keys(measured)) {
+		if (PROVENANCE_KEYS.has(key)) continue;
 		const a = render(measured[key]);
 		const b = render(committed[key]);
 		if (a !== b) drift.push(`${key}: fixture ${b}, measured ${a}`);
@@ -361,7 +385,7 @@ export function diffAgainstFixture(
 	// A figure the fixture carries and the census no longer emits is drift too:
 	// silently keeping it would leave the README quoting a retired definition.
 	for (const key of Object.keys(committed)) {
-		if (key in measured || key === "censusCommand") continue;
+		if (key in measured || PROVENANCE_KEYS.has(key)) continue;
 		drift.push(`${key}: in the fixture, not measured`);
 	}
 	return drift;
@@ -373,7 +397,7 @@ export function diffAgainstFixture(
 export function runReadme(check: boolean): number {
 	const rendered = renderReadmeBlock(readFixtureCensus());
 	const readme = readFileSync(README_PATH, "utf8");
-	const lines = readme.split("\n");
+	const lines = splitLines(readme);
 	const begin = lines.indexOf(BLOCK_BEGIN);
 	const end = lines.indexOf(BLOCK_END);
 	if (begin < 0 || end < begin) {
@@ -396,9 +420,14 @@ export function runReadme(check: boolean): number {
 		console.error(`+++ fixture\n${rendered.join("\n")}`);
 		return 1;
 	}
+	// Rejoined with the ending the file already used: `splitLines` discards a
+	// `\r`, so writing back with a bare "\n" would silently convert a CRLF
+	// checkout to LF and put the whole README in the diff.
 	writeFileSync(
 		README_PATH,
-		[...lines.slice(0, begin + 1), ...rendered, ...lines.slice(end)].join("\n"),
+		[...lines.slice(0, begin + 1), ...rendered, ...lines.slice(end)].join(
+			lineEndingOf(readme),
+		),
 	);
 	console.error("rewrote the value-census block in commands/explain/README.md");
 	return 0;

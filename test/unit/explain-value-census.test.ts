@@ -19,6 +19,7 @@ import { readFileSync } from "node:fs";
 import {
 	diffAgainstFixture,
 	renderReadmeBlock,
+	splitLines,
 	type ValueCensus,
 } from "../../scripts/explain-value-census.ts";
 
@@ -37,12 +38,18 @@ const BEGIN =
 	"  <!-- BEGIN GENERATED value-census — regenerate with `bun run explain:value-census:readme` -->";
 const END = "  <!-- END GENERATED value-census -->";
 
-function readmeBlock(): string[] {
-	const lines = README.split("\n");
+/** Marker line indices, located exactly as the gate itself locates them. */
+function markers(): { lines: string[]; begin: number; end: number } {
+	const lines = splitLines(README);
 	const begin = lines.indexOf(BEGIN);
 	const end = lines.indexOf(END);
 	expect(begin).toBeGreaterThanOrEqual(0);
 	expect(end).toBeGreaterThan(begin);
+	return { lines, begin, end };
+}
+
+function readmeBlock(): string[] {
+	const { lines, begin, end } = markers();
 	return lines.slice(begin + 1, end);
 }
 
@@ -57,10 +64,15 @@ describe("#260 value-census drift gate", () => {
 		// The drift that happened in #256 was a number left behind in prose. Any
 		// figure large enough to need a thousands separator is census-shaped, so
 		// none may appear outside the block that regenerates.
-		const block = readmeBlock().join("\n");
-		const outside = README.split("\n")
-			.filter((line) => !block.includes(line))
-			.join("\n");
+		//
+		// Sliced by marker index rather than by filtering out lines whose text
+		// appears in the block: a substring test drops every blank line (the empty
+		// string is "in" any block) and any line duplicating generated text, which
+		// silently shrank the region this test actually scanned.
+		const { lines, begin, end } = markers();
+		const outside = [...lines.slice(0, begin), ...lines.slice(end + 1)].join(
+			"\n",
+		);
 		for (const figure of [
 			fixture.corpus.valueOccurrences,
 			fixture.corpus.strictComparableAnchors,
@@ -70,6 +82,20 @@ describe("#260 value-census drift gate", () => {
 		]) {
 			expect(outside).not.toContain(figure.toLocaleString("en-US"));
 		}
+	});
+
+	test("the block locator survives a CRLF checkout", () => {
+		// This repo ships no `.gitattributes`, so a Windows clone with the
+		// Git-for-Windows default `core.autocrlf=true` gets CRLF here — and #142
+		// wants the unit tier running there.
+		const crlf = README.replace(/\r?\n/g, "\r\n");
+		const { begin, end } = markers();
+		expect(splitLines(crlf).indexOf(BEGIN)).toBe(begin);
+		expect(splitLines(crlf).indexOf(END)).toBe(end);
+		// The fix is load-bearing, not belt-and-braces: a bare "\n" split leaves a
+		// trailing `\r` on every line and finds neither marker, which would fail
+		// the gate for a line ending rather than for drift.
+		expect(crlf.split("\n").indexOf(BEGIN)).toBe(-1);
 	});
 
 	test("a rendered line never breaks a code span", () => {
