@@ -9,7 +9,10 @@
 // Defaults to the committed device recordings; pass files after `--` to replay
 // a fresh capture instead.
 import { HIGHLIGHT_CLASS, resolveSymbols } from "../../src/explain/symbols.ts";
-import { normalizeVariableClass } from "./explain-symbol-comparison.ts";
+import {
+	compareSymbolClass,
+	normalizeVariableClass,
+} from "./explain-symbol-comparison.ts";
 
 const DEFAULT_FILES = [
 	"test/fixtures/explain/symbol-probes/explain-201-k3-chr-probe.out",
@@ -23,6 +26,7 @@ const suppliedFiles = process.argv.slice(2);
 const files = suppliedFiles.length === 0 ? DEFAULT_FILES : suppliedFiles;
 let cases = 0;
 let agree = 0;
+const abstentions: string[] = [];
 const disagreements: string[] = [];
 
 for (const file of files) {
@@ -49,32 +53,42 @@ for (const file of files) {
 		for (const m of runsLine.matchAll(/(\d+):("(?:[^"\\]|\\.)*")=(\S+)/g))
 			device.set(Number(m[1]), normalizeVariableClass(m[3] as string));
 
-		const module_ = new Map<number, string>();
+		const module_ = new Map<number, string | null>();
 		for (const o of resolveSymbols(input).occurrences) {
 			if (o.start >= errAt) continue;
 			module_.set(
 				o.start,
-				o.cls === null
-					? "(abstain)"
-					: normalizeVariableClass(HIGHLIGHT_CLASS[o.cls]),
+				o.cls === null ? null : normalizeVariableClass(HIGHLIGHT_CLASS[o.cls]),
 			);
 		}
 
 		cases++;
-		const rows: string[] = [];
+		const abstainedRows: string[] = [];
+		const disagreementRows: string[] = [];
 		for (const [off, cls] of device) {
-			const got = module_.get(off);
-			if (got !== cls)
-				rows.push(`    @${off} device=${cls} module=${got ?? "(silent)"}`);
+			if (!module_.has(off)) {
+				disagreementRows.push(`    @${off} device=${cls} module=(silent)`);
+				continue;
+			}
+			const got = module_.get(off) as string | null;
+			const outcome = compareSymbolClass(got, cls);
+			if (outcome === "abstain")
+				abstainedRows.push(`    @${off} device=${cls} module=(abstain)`);
+			else if (outcome === "disagree")
+				disagreementRows.push(`    @${off} device=${cls} module=${got}`);
 		}
-		for (const [off, cls] of module_)
-			if (!device.has(off) && off < errAt)
-				rows.push(`    @${off} device=(silent) module=${cls}`);
-		if (rows.length === 0) agree++;
-		else
-			disagreements.push(
-				`${label}\n  ${JSON.stringify(input)}\n${rows.join("\n")}`,
-			);
+		for (const [off, cls] of module_) {
+			if (device.has(off) || off >= errAt) continue;
+			if (cls === null)
+				abstainedRows.push(`    @${off} device=(silent) module=(abstain)`);
+			else disagreementRows.push(`    @${off} device=(silent) module=${cls}`);
+		}
+		const header = `${label}\n  ${JSON.stringify(input)}`;
+		if (abstainedRows.length > 0)
+			abstentions.push(`${header}\n${abstainedRows.join("\n")}`);
+		if (disagreementRows.length > 0)
+			disagreements.push(`${header}\n${disagreementRows.join("\n")}`);
+		if (abstainedRows.length === 0 && disagreementRows.length === 0) agree++;
 	}
 }
 
@@ -84,5 +98,8 @@ if (cases === 0) {
 	);
 }
 
-for (const d of disagreements) console.log(d);
-console.log(`\nprobe cases: ${agree}/${cases} agree with the device`);
+for (const a of abstentions) console.log(`ABSTAIN\n${a}`);
+for (const d of disagreements) console.log(`DISAGREE\n${d}`);
+console.log(
+	`\nprobe cases: ${agree} decided agreements, ${abstentions.length} with intentional abstentions, ${disagreements.length} with disagreements (${cases} total)`,
+);
