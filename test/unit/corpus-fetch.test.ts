@@ -9,7 +9,11 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+	acceptCachedCorpus,
 	type CorpusPin,
 	cachePath,
 	describeResolution,
@@ -95,16 +99,50 @@ describe("corpus resolution", () => {
 	});
 
 	test("a reported hash is one that was actually computed", () => {
-		// The defect this pins: the cache branch used to return `pin.sha256`
-		// without hashing the file, so a corrupt or swapped cache entry reported
-		// a hash its bytes had never been checked against. Environment-agnostic
-		// on purpose — it passes through the sibling branch on a dev machine and
-		// through the cache branch in CI, which is where the bug lived.
+		// Whatever source resolves here, it must not report a hash it did not
+		// compute. Passes vacuously where nothing resolves, so the corrupt-cache
+		// case is pinned directly below rather than through this.
 		withEnv(undefined, () => {
 			const r = resolveCorpusDb();
 			if (r.path === undefined || r.sha256 === undefined) return;
 			expect(r.sha256).toBe(sha256File(r.path));
 		});
+	});
+
+	test("a cache entry whose bytes miss the pin does not resolve", () => {
+		// The defect this pins: the cache branch returned `pin.sha256` for a file
+		// it never hashed, so a corrupt or swapped entry was measured and
+		// reported under a hash its bytes had never been checked against.
+		//
+		// Driven directly rather than through `resolveCorpusDb`, which reaches
+		// the cache branch only when a sibling checkout is absent AND a cache
+		// entry is present — true on a CI runner mid-job, but on no job we run,
+		// so a test routed through it would pass by not executing.
+		const dir = mkdtempSync(join(tmpdir(), "centrs-corpus-"));
+		try {
+			const entry = join(dir, "corpus-0accd1c08743.sqlite");
+			writeFileSync(entry, "not the corpus");
+			const pin = readPin();
+
+			const rejected = acceptCachedCorpus(entry, pin);
+			expect(rejected.path).toBeUndefined();
+			expect(rejected.source).toBeUndefined();
+			// Names the real hash and the way out, not just "no".
+			expect(rejected.warning).toContain(sha256File(entry).slice(0, 12));
+			expect(rejected.warning).toContain("corpus:fetch --force");
+
+			// Same file, honest pin: accepted, and the hash is the computed one.
+			const matching = acceptCachedCorpus(entry, {
+				...pin,
+				sha256: sha256File(entry),
+			});
+			expect(matching.path).toBe(entry);
+			expect(matching.source).toBe("cache");
+			expect(matching.sha256).toBe(sha256File(entry));
+			expect(matching.warning).toBeUndefined();
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 
 	test("a resolution describes itself with its source and hash", () => {

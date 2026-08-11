@@ -155,26 +155,40 @@ export function resolveCorpusDb(explicit?: string): CorpusResolution {
 	}
 
 	const cached = cachePath(pin);
-	if (existsSync(cached)) {
-		// Hashed, never assumed. The cache path is content-addressed by NAME, so
-		// taking the pin's hash on faith would report a hash these bytes were
-		// never checked against — the exact laundering this module exists to
-		// prevent, and asymmetric with the sibling branch above.
-		const sha256 = sha256File(cached);
-		if (sha256 === pin.sha256) return { path: cached, source: "cache", sha256 };
-		// Unlike a sibling checkout, the cache is ours and is *supposed* to be the
-		// pin. A mismatch is corruption or tampering, not someone iterating on a
-		// new snapshot, so it does not resolve.
-		return {
-			path: undefined,
-			source: undefined,
-			warning:
-				`the cached corpus at ${cached} has sha256 ${sha256.slice(0, 12)}, ` +
-				`not the pinned ${pin.sha256.slice(0, 12)}. Re-fetch it with ` +
-				"`bun run corpus:fetch --force`.",
-		};
-	}
+	if (existsSync(cached)) return acceptCachedCorpus(cached, pin);
 	return { path: undefined, source: undefined };
+}
+
+/**
+ * Decide whether a cache entry may be measured from.
+ *
+ * Hashed, never assumed: the cache path is content-addressed by NAME, so taking
+ * the pin's hash on faith would report a hash these bytes were never checked
+ * against — the exact laundering this module exists to prevent, and asymmetric
+ * with the sibling branch, which does hash.
+ *
+ * Unlike a sibling checkout, the cache is ours and is *supposed* to be the pin,
+ * so a mismatch is corruption or tampering rather than someone iterating on a
+ * new snapshot: it does not resolve at all.
+ *
+ * Split out as its own function so this is testable on any machine. Driving it
+ * through `resolveCorpusDb` only reaches here when a sibling checkout is absent
+ * AND a cache entry is present, which is true on no CI job we run.
+ */
+export function acceptCachedCorpus(
+	cached: string,
+	pin: CorpusPin,
+): CorpusResolution {
+	const sha256 = sha256File(cached);
+	if (sha256 === pin.sha256) return { path: cached, source: "cache", sha256 };
+	return {
+		path: undefined,
+		source: undefined,
+		warning:
+			`the cached corpus at ${cached} has sha256 ${sha256.slice(0, 12)}, ` +
+			`not the pinned ${pin.sha256.slice(0, 12)}. Re-fetch it with ` +
+			"`bun run corpus:fetch --force`.",
+	};
 }
 
 /** The one-line "where did this number come from" note every census prints. */
