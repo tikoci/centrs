@@ -64,7 +64,7 @@
 		"lint": "bun run lint:biome && bun run lint:typecheck",
 		"lint:git:commit": "bun run lint",
 		"lint:git:push": "bun run lint:ci && bun run test && bun run build",
-		"lint:ci": "bun run lint && bun run docs:cli:check && bun run lint:markdownlint && bun run lint:cspell && bun run lint:secretlint",
+		"lint:ci": "bun run lint && bun run docs:cli:check && bun run explain:value-census:readme:check && bun run lint:markdownlint && bun run lint:cspell && bun run lint:secretlint",
 		"lint:cspell": "cspell lint . --gitignore",
 		"lint:cspell:all": "cspell lint . --no-gitignore",
 		"lint:markdownlint": "markdownlint-cli2 \"**/*.md\" \"!.scratch/**\"",
@@ -98,6 +98,9 @@
 		"explain:menus": "bun run scripts/gen-explain-menus.ts",
 		"explain:menus:check": "bun run scripts/gen-explain-menus.ts --check",
 		"explain:value-census": "bun run scripts/explain-value-census.ts",
+		"explain:value-census:check": "bun run scripts/explain-value-census.ts --check",
+		"explain:value-census:readme": "bun run scripts/explain-value-census.ts --readme",
+		"explain:value-census:readme:check": "bun run scripts/explain-value-census.ts --readme --check",
 		"security": "bun run lint:secretlint && bun run lint:markdownlint"
 	},
 	"type": "module",

@@ -11,14 +11,39 @@
  * census is (`scripts/explain-corpus-census.ts`).
  *
  * ```
- * bun run explain:value-census            # markdown
- * bun run explain:value-census --json     # the fixture's `corpus` block
- * bun run explain:value-census --db PATH  # override the corpus.sqlite location
+ * bun run explain:value-census              # markdown
+ * bun run explain:value-census --json       # the fixture's `corpus` block
+ * bun run explain:value-census --db PATH    # override the corpus.sqlite location
+ * bun run explain:value-census:check        # gate: fresh census vs the fixture
+ * bun run explain:value-census:readme       # rewrite the README block from the fixture
+ * bun run explain:value-census:readme:check # gate: README block vs the fixture
  * ```
  *
  * The corpus is not in this repo. A sibling `lsp-routeros-ts` checkout is used
  * when present, otherwise the snapshot pinned by `bun run corpus:fetch`; the
  * source and its sha256 are announced on stderr. See `corpus-fetch.ts` (#186).
+ *
+ * ## Two gates, because the figures live in three places (#260)
+ *
+ * Committing this script made the figures **re-derivable**; it did not make
+ * them **checked**. #256 changed the emission, regenerated the fixture and the
+ * unit assertions, and shipped with the README prose still quoting the
+ * pre-change numbers — three review comments found that, not CI.
+ *
+ * The chain is corpus → fixture → README, and each link now has its own gate,
+ * separated by what data it needs:
+ *
+ * - `--check` re-runs the census and asserts it against
+ *   `test/fixtures/explain/values.json` → `corpus`. It needs the corpus, so it
+ *   runs in ci.yaml's `corpus` job (the one #186 gave `corpus:fetch`
+ *   reachability for) and never in the offline `lint:ci`.
+ * - `--readme --check` asserts the README paragraph against that same fixture
+ *   block. The README is now a GENERATED projection of it, so the drift that
+ *   actually happened is caught with no corpus at all — that one is in
+ *   `lint:ci` and in `bun test`.
+ *
+ * The fixture is the hinge: it is the one copy a human writes, and both gates
+ * point at it rather than at each other.
  *
  * ## What each figure means
  *
@@ -43,6 +68,8 @@
  */
 
 import { Database } from "bun:sqlite";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { lexArguments, lexValueAnchors } from "../src/explain/args.ts";
 import { valueShapeHints } from "../src/explain/values.ts";
 import { resolveVerbs } from "../src/explain/verbsplit.ts";
@@ -216,7 +243,227 @@ function flag(args: readonly string[], name: string): string | undefined {
 	return at < 0 ? undefined : args[at + 1];
 }
 
+const README_PATH = join(
+	import.meta.dir,
+	"..",
+	"commands",
+	"explain",
+	"README.md",
+);
+const FIXTURE_PATH = join(
+	import.meta.dir,
+	"..",
+	"test",
+	"fixtures",
+	"explain",
+	"values.json",
+);
+
+/**
+ * The generated paragraph sits inside a list item, so both markers and every
+ * rendered line carry the item's two-space continuation indent.
+ */
+const BLOCK_INDENT = "  ";
+const BLOCK_BEGIN = `${BLOCK_INDENT}<!-- BEGIN GENERATED value-census — regenerate with \`bun run explain:value-census:readme\` -->`;
+const BLOCK_END = `${BLOCK_INDENT}<!-- END GENERATED value-census -->`;
+const WRAP_COLUMNS = 78;
+
+/**
+ * Split on either line ending, so a checkout with `core.autocrlf=true` — the
+ * Git-for-Windows default, and this repo ships no `.gitattributes` to override
+ * it — still finds the markers instead of failing the gate for a `\r` (#142
+ * wants the unit tier on Windows).
+ */
+export function splitLines(text: string): string[] {
+	return text.split(/\r?\n/);
+}
+
+/** The line ending a file already uses, so rewriting it does not convert one. */
+function lineEndingOf(text: string): string {
+	return text.includes("\r\n") ? "\r\n" : "\n";
+}
+
+/**
+ * Greedy word wrap that never breaks inside a `code span`.
+ *
+ * Tokenization, not measurement, is what protects the span: a token is a
+ * maximal run in which a whole backtick-delimited span counts as ONE atom
+ * alongside single non-space characters, so `` `bun run x` `` and any
+ * punctuation glued to it arrive here as one indivisible word. Its full text
+ * still counts toward the line budget, so a span longer than the wrap column
+ * simply overflows its line rather than being split.
+ *
+ * CommonMark would in fact fold a newline inside a code span into a space, so
+ * splitting one renders correctly; a command the reader may want to copy should
+ * still not be broken in the source.
+ */
+function wrap(text: string): string[] {
+	const lines: string[] = [];
+	let line = BLOCK_INDENT;
+	for (const word of text.match(/(?:`[^`]*`|\S)+/g) ?? []) {
+		if (line !== BLOCK_INDENT && line.length + 1 + word.length > WRAP_COLUMNS) {
+			lines.push(line);
+			line = BLOCK_INDENT;
+		}
+		line += line === BLOCK_INDENT ? word : ` ${word}`;
+	}
+	if (line !== BLOCK_INDENT) lines.push(line);
+	return lines;
+}
+
+const count = (value: number): string => value.toLocaleString("en-US");
+
+/**
+ * Render the README's census paragraph from a census result.
+ *
+ * Every sentence stays true at any value: the invariants are reported as
+ * counters rather than asserted as held, so a regenerated block states a
+ * regression instead of quietly contradicting itself.
+ */
+export function renderReadmeBlock(result: ValueCensus): string[] {
+	const idCount = result.shapeCounts["id"] ?? 0;
+	const idClause =
+		idCount === 0
+			? "the corpus holds no source-literal `id` example"
+			: `${count(idCount)} are \`id\``;
+	return wrap(
+		`The corpus census is re-derivable with \`bun run explain:value-census\` and ` +
+			`covers ${count(result.sourceScripts)} source scripts. The figures below are generated from ` +
+			"`test/fixtures/explain/values.json` → `corpus` by " +
+			"`bun run explain:value-census:readme` and gated against it by " +
+			"`bun run explain:value-census:readme:check`; the fixture itself is gated " +
+			"against a fresh corpus run by `bun run explain:value-census:check`. Of the " +
+			`${count(result.strictComparableAnchors)} emitted values in a statement the strict argument lexer ` +
+			`ALSO read, ${count(result.boundaryContradictions)} disagree with it on half-open byte span or ` +
+			`decoded text, while the prefix-safe scan retains a further ${count(result.recoveredPrefixAnchors)} ` +
+			`values across ${count(result.unreadStatementsWithAnchors)} statements whose strict REST reading ` +
+			`abstains. Of ${count(result.valueOccurrences)} emitted occurrences, ` +
+			`${count(result.elementOccurrences)} are array members (${count(result.keyedElements)} keyed, ` +
+			`${count(result.nestedElements)} nested inside another member) and ` +
+			`${count(result.shapeCounts["array"] ?? 0)} are arrays; ${idClause}. The three structural ` +
+			"counters — spans addressing bytes outside their own source, members " +
+			"naming a container that does not exist, members escaping the container " +
+			`they name — read ${count(result.invalidSpans)}, ${count(result.danglingParents)} and ` +
+			`${count(result.containmentBreaks)}, and each must stay 0.`,
+	);
+}
+
+/** The `corpus` block of the values fixture, which the README block projects. */
+function readFixtureCensus(): ValueCensus {
+	const fixture = JSON.parse(readFileSync(FIXTURE_PATH, "utf8")) as {
+		corpus?: ValueCensus;
+	};
+	if (fixture.corpus === undefined)
+		throw new Error(`${FIXTURE_PATH} has no \`corpus\` block`);
+	return fixture.corpus;
+}
+
+/**
+ * Fixture keys that record provenance rather than measure anything, skipped by
+ * BOTH directions of the comparison so the exclusion is a stated rule and not
+ * an accident of `censusCommand` happening never to appear in a fresh result.
+ * `explain-values.test.ts` pins it instead.
+ */
+const PROVENANCE_KEYS: ReadonlySet<string> = new Set(["censusCommand"]);
+
+/** A per-shape tally such as `shapeCounts`, as opposed to a scalar figure. */
+function isCountMap(value: unknown): value is Record<string, number> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Compare a fresh census against the committed fixture, figure by figure.
+ *
+ * A tally is compared **entry by entry**, never as serialized text. JSON object
+ * order is insertion order, and `shapeCounts` is built in first-seen order
+ * across the corpus walk — so a corpus whose scripts are visited in a different
+ * order, or a hand-tidied fixture, reorders the keys without moving a single
+ * count. Comparing `JSON.stringify` output would call that drift and print two
+ * blobs a reader cannot tell apart. Entry-wise comparison also makes the
+ * message say which shape moved instead of dumping both tallies.
+ */
+export function diffAgainstFixture(
+	fresh: ValueCensus,
+	pinned: ValueCensus,
+): string[] {
+	const measured = fresh as unknown as Record<string, unknown>;
+	const committed = pinned as unknown as Record<string, unknown>;
+	const drift: string[] = [];
+	for (const key of Object.keys(measured)) {
+		if (PROVENANCE_KEYS.has(key)) continue;
+		const a = measured[key];
+		const b = committed[key];
+		if (isCountMap(a) || isCountMap(b)) {
+			const am = isCountMap(a) ? a : {};
+			const bm = isCountMap(b) ? b : {};
+			const names = [
+				...new Set([...Object.keys(am), ...Object.keys(bm)]),
+			].sort();
+			for (const name of names) {
+				if (am[name] === bm[name]) continue;
+				drift.push(
+					`${key}.${name}: fixture ${bm[name] ?? "absent"}, measured ${am[name] ?? "absent"}`,
+				);
+			}
+			continue;
+		}
+		if (a !== b) drift.push(`${key}: fixture ${b}, measured ${a}`);
+	}
+	// A figure the fixture carries and the census no longer emits is drift too:
+	// silently keeping it would leave the README quoting a retired definition.
+	for (const key of Object.keys(committed)) {
+		if (key in measured || PROVENANCE_KEYS.has(key)) continue;
+		drift.push(`${key}: in the fixture, not measured`);
+	}
+	return drift;
+}
+
+/**
+ * Rewrite or verify the README's generated block. Returns a process exit code.
+ */
+export function runReadme(check: boolean): number {
+	const rendered = renderReadmeBlock(readFixtureCensus());
+	const readme = readFileSync(README_PATH, "utf8");
+	const lines = splitLines(readme);
+	const begin = lines.indexOf(BLOCK_BEGIN);
+	const end = lines.indexOf(BLOCK_END);
+	if (begin < 0 || end < begin) {
+		console.error(
+			`::error title=explain value census::commands/explain/README.md is missing the generated value-census block markers`,
+		);
+		return 1;
+	}
+	const current = lines.slice(begin + 1, end);
+	if (current.join("\n") === rendered.join("\n")) {
+		if (!check) console.error("value-census README block already current");
+		return 0;
+	}
+	if (check) {
+		console.error(
+			"::error title=explain value census::commands/explain/README.md no longer matches " +
+				"test/fixtures/explain/values.json → corpus. Run `bun run explain:value-census:readme`.",
+		);
+		console.error(`--- README\n${current.join("\n")}`);
+		console.error(`+++ fixture\n${rendered.join("\n")}`);
+		return 1;
+	}
+	// Rejoined with the ending the file already used: `splitLines` discards a
+	// `\r`, so writing back with a bare "\n" would silently convert a CRLF
+	// checkout to LF and put the whole README in the diff.
+	writeFileSync(
+		README_PATH,
+		[...lines.slice(0, begin + 1), ...rendered, ...lines.slice(end)].join(
+			lineEndingOf(readme),
+		),
+	);
+	console.error("rewrote the value-census block in commands/explain/README.md");
+	return 0;
+}
+
 export async function main(args: readonly string[]): Promise<number> {
+	// Before any corpus resolution: the doc gate reads the fixture, so it must
+	// run in CI and from a bare clone, where `corpus.sqlite` does not exist.
+	if (args.includes("--readme")) return runReadme(args.includes("--check"));
 	const resolution = resolveCorpusDb(flag(args, "--db"));
 	// All of this goes to stderr, not stdout: `--json` is piped into the fixture.
 	// The warning is emitted before the reachability check because a corrupt
@@ -242,6 +489,22 @@ export async function main(args: readonly string[]): Promise<number> {
 		db.close();
 	}
 	const result = census(scripts);
+	if (args.includes("--check")) {
+		const drift = diffAgainstFixture(result, readFixtureCensus());
+		if (drift.length > 0) {
+			console.error(
+				"::error title=explain value census::the census no longer matches " +
+					"test/fixtures/explain/values.json → corpus. Repin with " +
+					"`bun run explain:value-census --json`, then " +
+					"`bun run explain:value-census:readme`, and update the assertions in " +
+					"test/unit/explain-values.test.ts.",
+			);
+			for (const line of drift) console.error(`  ${line}`);
+			return 1;
+		}
+		console.error("value census matches the committed fixture");
+		return 0;
+	}
 	// Written rather than logged: `console.log` followed by `process.exit` can
 	// truncate a piped stdout in Bun, and this output is normally piped into a
 	// file or `jq`.
