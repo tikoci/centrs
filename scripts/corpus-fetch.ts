@@ -116,7 +116,8 @@ export function pinUrl(pin: CorpusPin): string {
 
 /**
  * Content-addressed, so a repin lands beside the old snapshot instead of
- * overwriting it and so the CI cache key is just the pinned hash.
+ * overwriting it. Note the CI cache keys on the *whole* pin file, not this
+ * hash, and `fetchPinned` re-hashes whatever it finds either way.
  */
 export function cachePath(pin: CorpusPin): string {
 	return resolve(CACHE_DIR, `corpus-${pin.sha256.slice(0, 12)}.sqlite`);
