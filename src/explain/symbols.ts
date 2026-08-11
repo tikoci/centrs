@@ -276,7 +276,9 @@
  *       input the device's highlight reads clean, which is the one failure mode
  *       this rule may not have.
  *
- * Measured on the frozen split (`.scratch/explain-lab-partition.json`) against
+ * Measured on the frozen split (`test/fixtures/explain/corpus-partition.json`,
+ * promoted in #186 — it is the leakage guard, and only scores taken on the
+ * SAME split are comparable to the ones below) against
  * the per-occurrence highlight streams for 7.23.2 AND 7.24rc2: **holdout 99.98%
  * precision on decided (6155/6156), 4.25% abstention, 14 missed; dev 99.79%
  * (8733/8751), 5.40%, 34 missed.**

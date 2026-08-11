@@ -26,30 +26,38 @@
  * `:parse` is the oracle, not `highlight`: `highlight` accepts `{1;2,}`,
  * `{2,}` and `{(1,2),}`, all of which `:parse` rejects.
  *
- * Run: bun run .scratch/explain-225-brace-slot-sweep.ts [existing-chr-name]
+ * Run: bun run explain:probe:brace-slots [existing-chr-name]
  */
-import { QuickCHR } from "@tikoci/quickchr";
+import { openChr, probeOutputPath } from "./chr.ts";
 
 const REUSE = process.argv[2];
 
-const chr = REUSE
-	? await QuickCHR.get(REUSE)
-	: await QuickCHR.start({
-			name: `centrs-225slots-${Date.now()}`,
-			version: process.env.CHR_VERSION ?? "7.23.3",
-			arch: "x86",
-		});
-if (!chr) throw new Error(`no CHR named ${REUSE}`);
+const chr = await openChr({
+	reuse: REUSE,
+	name: "centrs-225slots",
+	version: Bun.env["CHR_VERSION"] ?? "7.23.3",
+});
 
 async function exec(input: string): Promise<string> {
-	const out = (await chr.exec(input)) as unknown;
+	const out = await chr.exec(input);
 	const text =
-		typeof out === "string" ? out : String((out as any)?.output ?? "");
+		typeof out === "string"
+			? out
+			: String((out as { output?: unknown } | null)?.output ?? "");
 	return text.replaceAll("\r\n", " ").trim();
 }
 
+/**
+ * `:put [:parse "<src>"]`.
+ *
+ * The guard rejects `$` as well as `"` and `\` because RouterOS SUBSTITUTES
+ * inside double quotes: a `$name` in `src` reaches `:parse` already replaced —
+ * by nothing, in a fresh scope — so the device answers about a different
+ * program than the row names, and the answer reads as a grounded fact (#269).
+ * No slot probe below carries one; the guard is here so a later one cannot.
+ */
 async function parse(src: string): Promise<string> {
-	if (/["\\]/.test(src)) throw new Error(`unquotable probe input: ${src}`);
+	if (/["\\$]/.test(src)) throw new Error(`unquotable probe input: ${src}`);
 	return exec(`:put [:parse "${src}"]`);
 }
 
@@ -192,12 +200,13 @@ for (const outcome of ["array", "code", "text", "inconclusive"] as const) {
 }
 
 const res = (await chr.rest("/system/resource")) as Record<string, string>;
+const outPath = await probeOutputPath("explain-225-brace-slot-sweep.json");
 await Bun.write(
-	".scratch/explain-225-brace-slot-sweep.json",
+	outPath,
 	`${JSON.stringify(
-		{ version: res.version, captured: new Date().toISOString(), rows },
+		{ version: res["version"], captured: new Date().toISOString(), rows },
 		null,
 		"\t",
 	)}\n`,
 );
-console.log("\nwrote .scratch/explain-225-brace-slot-sweep.json");
+console.log(`\nwrote ${outPath}`);

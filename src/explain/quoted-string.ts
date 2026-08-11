@@ -27,7 +27,8 @@ export interface QuotedStringScan {
  * 7.23.3 — `:put "\<c>"` for every 0x20–0x7E plus TAB/LF/CRLF, scored on both
  * the `/console/inspect request=highlight` class and the runtime result — and
  * the accepted set is exactly these plus whitespace continuations plus
- * two-digit uppercase hex (#252, `.scratch/explain-252-escape-sweep.ts`).
+ * two-digit uppercase hex (#252). Re-derive with
+ * `bun run explain:probe:escapes` (#186).
  */
 const VALID_SINGLE = new Set([
 	'"',

@@ -23,14 +23,22 @@
 //     corpusRows, aligned, misaligned, truncated,
 //     streams: { [rel]: { pairs:[[frag,cls],…], bytes, truncated } } }
 //
-// Usage:  CHR_URL=http://127.0.0.1:9150 bun .scratch/explain-lab-q13-recapture.ts [--limit N]
+// The full capture is ~7.5 MB per RouterOS version and stays out of the repo;
+// `explain-highlight-slice.ts` cuts the committed stratified slice from it
+// (`test/fixtures/explain/highlight-streams.slice.json`).
+//
+// Usage:  CHR_URL=http://127.0.0.1:9150 bun run explain:probe:highlight-recapture [--limit N]
 
 import { Database } from "bun:sqlite";
+import {
+	describeResolution,
+	resolveCorpusDb,
+	unreachableMessage,
+} from "../corpus-fetch.ts";
 
-const CHR_URL = process.env.CHR_URL ?? "http://127.0.0.1:9150";
-const CHR_USER = process.env.CHR_USER ?? "admin";
-const CHR_PASS = process.env.CHR_PASS ?? "";
-const LSP = `${process.env.HOME}/GitHub/lsp-routeros-ts/test-data`;
+const CHR_URL = Bun.env["CHR_URL"] ?? "http://127.0.0.1:9150";
+const CHR_USER = Bun.env["CHR_USER"] ?? "admin";
+const CHR_PASS = Bun.env["CHR_PASS"] ?? "";
 const MAX_BYTES = 32767; // ROUTEROS_API_MAX_BYTES
 const LIMIT = (() => {
 	const i = process.argv.indexOf("--limit");
@@ -48,7 +56,8 @@ async function rest(path: string, body?: unknown): Promise<unknown> {
 		signal: AbortSignal.timeout(120_000),
 	});
 	const text = await resp.text();
-	if (!resp.ok) throw new Error(`${path} → ${resp.status}: ${text.slice(0, 300)}`);
+	if (!resp.ok)
+		throw new Error(`${path} → ${resp.status}: ${text.slice(0, 300)}`);
 	return JSON.parse(text);
 }
 
@@ -76,21 +85,30 @@ function runLength(input: string, tokens: string[]): Array<[string, string]> {
 }
 
 async function highlight(input: string): Promise<string[]> {
-	const data = (await rest("/rest/console/inspect", { request: "highlight", input })) as Array<Record<string, string>>;
-	const hl = data[0]?.highlight ?? "";
+	const data = (await rest("/rest/console/inspect", {
+		request: "highlight",
+		input,
+	})) as Array<Record<string, string>>;
+	const hl = data[0]?.["highlight"] ?? "";
 	return hl.length === 0 ? [] : hl.split(",");
 }
 
 async function captureEnvironment() {
 	const r = (await rest("/rest/system/resource")) as Record<string, string>;
-	const pkgs = (await rest("/rest/system/package")) as Array<Record<string, string>>;
+	const pkgs = (await rest("/rest/system/package")) as Array<
+		Record<string, string>
+	>;
 	return {
-		version: (r.version ?? "").trim().split(/\s+/)[0] || "unknown",
+		version: (r["version"] ?? "").trim().split(/\s+/)[0] || "unknown",
 		buildTime: r["build-time"] ?? "",
 		architectureName: r["architecture-name"] ?? "",
 		boardName: r["board-name"] ?? "",
 		packages: pkgs
-			.map((p) => ({ name: p.name ?? "", version: p.version ?? "", disabled: p.disabled === "true" }))
+			.map((p) => ({
+				name: p["name"] ?? "",
+				version: p["version"] ?? "",
+				disabled: p["disabled"] === "true",
+			}))
 			.sort((a, b) => a.name.localeCompare(b.name)),
 	};
 }
@@ -103,11 +121,15 @@ async function captureEnvironment() {
  */
 async function captureMenuSurface(): Promise<string[]> {
 	try {
-		const data = (await rest("/rest/console/inspect", { request: "completion", input: "/" })) as Array<Record<string, unknown>>;
+		const data = (await rest("/rest/console/inspect", {
+			request: "completion",
+			input: "/",
+		})) as Array<Record<string, unknown>>;
 		const names = new Set<string>();
 		for (const item of data) {
-			const c = item.completion ?? item.name ?? item.value;
-			if (typeof c === "string") names.add(c.replace(/^\//, "").replace(/[/ ].*$/, ""));
+			const c = item["completion"] ?? item["name"] ?? item["value"];
+			if (typeof c === "string")
+				names.add(c.replace(/^\//, "").replace(/[/ ].*$/, ""));
 		}
 		return [...names].sort();
 	} catch (err) {
@@ -118,16 +140,41 @@ async function captureMenuSurface(): Promise<string[]> {
 async function main() {
 	const environment = await captureEnvironment();
 	const version = environment.version;
-	console.log(`CHR ${CHR_URL} → RouterOS ${version} (build ${environment.buildTime}, board ${environment.boardName})`);
+	console.log(
+		`CHR ${CHR_URL} → RouterOS ${version} (build ${environment.buildTime}, board ${environment.boardName})`,
+	);
 	const menuSurface = await captureMenuSurface();
-	console.log(`menu surface (${menuSurface.length}): ${menuSurface.slice(0, 20).join(" ")}${menuSurface.length > 20 ? " …" : ""}`);
+	console.log(
+		`menu surface (${menuSurface.length}): ${menuSurface.slice(0, 20).join(" ")}${menuSurface.length > 20 ? " …" : ""}`,
+	);
 
-	const db = new Database(`${LSP}/corpus.sqlite`, { readonly: true });
-	let rows = db.query("SELECT path, text FROM source_scripts ORDER BY path").all() as { path: string; text: string }[];
+	// The pinned snapshot, not `$HOME/GitHub/lsp-routeros-ts` — a hardcoded
+	// sibling path was this probe's own share of the reachability problem #186
+	// exists to fix, and the resolver announces WHICH bytes were highlighted.
+	const resolution = resolveCorpusDb();
+	if (resolution.path === undefined) {
+		console.error(unreachableMessage("explain highlight recapture"));
+		process.exitCode = 1;
+		return;
+	}
+	console.error(describeResolution(resolution));
+	const db = new Database(resolution.path, { readonly: true });
+	let rows = db
+		.query("SELECT path, text FROM source_scripts ORDER BY path")
+		.all() as { path: string; text: string }[];
 	if (LIMIT > 0) rows = rows.slice(0, LIMIT);
 	console.log(`Recapturing highlight for ${rows.length} corpus scripts …`);
 
-	const streams: Record<string, { pairs?: Array<[string, string]>; bytes: number; truncated: boolean; tokenCount: number; aligned: boolean }> = {};
+	const streams: Record<
+		string,
+		{
+			pairs?: Array<[string, string]>;
+			bytes: number;
+			truncated: boolean;
+			tokenCount: number;
+			aligned: boolean;
+		}
+	> = {};
 	let aligned = 0;
 	let misaligned = 0;
 	let truncated = 0;
@@ -153,10 +200,20 @@ async function main() {
 			};
 		} catch (err) {
 			misaligned++;
-			streams[path] = { bytes: sent.length, truncated: wasTruncated, tokenCount: -1, aligned: false };
-			console.log(`  [${i}/${rows.length}] ERR ${path}: ${err instanceof Error ? err.message.slice(0, 80) : err}`);
+			streams[path] = {
+				bytes: sent.length,
+				truncated: wasTruncated,
+				tokenCount: -1,
+				aligned: false,
+			};
+			console.log(
+				`  [${i}/${rows.length}] ERR ${path}: ${err instanceof Error ? err.message.slice(0, 80) : err}`,
+			);
 		}
-		if (i % 100 === 0 || i === rows.length) console.log(`  [${i}/${rows.length}] aligned=${aligned} misaligned=${misaligned}`);
+		if (i % 100 === 0 || i === rows.length)
+			console.log(
+				`  [${i}/${rows.length}] aligned=${aligned} misaligned=${misaligned}`,
+			);
 	}
 
 	const outPath = `.scratch/explain-lab-q13-streams.v${version}.json`;
@@ -179,7 +236,9 @@ async function main() {
 			1,
 		)}\n`,
 	);
-	console.log(`\nWrote ${outPath}: ${aligned} aligned / ${misaligned} misaligned / ${truncated} truncated of ${rows.length}`);
+	console.log(
+		`\nWrote ${outPath}: ${aligned} aligned / ${misaligned} misaligned / ${truncated} truncated of ${rows.length}`,
+	);
 }
 
 await main();

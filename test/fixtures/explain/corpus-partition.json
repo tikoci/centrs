@@ -200,13 +200,7 @@
 			"content_hashes": [
 				"eaf9adf70e6b8176d90f172a2c0d763d57ebc4531185644a88c9e03118f22b8e"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment",
-				"loop",
-				"var-local"
-			]
+			"features": ["block-do", "bracket-sub", "comment", "loop", "var-local"]
 		},
 		{
 			"key": "amm0/topic-106147",
@@ -217,11 +211,7 @@
 			"content_hashes": [
 				"d234497f96f254f5b4d2f72c9492a426bdbd1f6f8f7cb0aae96260758cb680cd"
 			],
-			"features": [
-				"comment",
-				"sep-semicolon",
-				"var-global"
-			]
+			"features": ["comment", "sep-semicolon", "var-global"]
 		},
 		{
 			"key": "amm0/topic-110481",
@@ -250,9 +240,7 @@
 			"content_hashes": [
 				"6fe44e6c6a6c27040198d00e03662394a9d10350c9c647c0731f569ed55bcdfe"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-117288",
@@ -285,11 +273,7 @@
 			"content_hashes": [
 				"85c892d799a661abee36e40ab05cd51b4217375ad234db3d4449df54869d963f"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"var-local"
-			]
+			"features": ["bracket-sub", "comment", "var-local"]
 		},
 		{
 			"key": "amm0/topic-120920",
@@ -348,12 +332,7 @@
 			"content_hashes": [
 				"4aeb1e1256fdcaa29669af3e7627d818bbb9953367f6bb40235e044adf5b628a"
 			],
-			"features": [
-				"bracket-nested",
-				"bracket-sub",
-				"comment",
-				"var-global"
-			]
+			"features": ["bracket-nested", "bracket-sub", "comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-131473",
@@ -387,10 +366,7 @@
 			"content_hashes": [
 				"efced93d7ead6ae09a24ee87d73fad5c5c2f7b21eacc4472617ad3925f1a55c7"
 			],
-			"features": [
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-135789",
@@ -401,10 +377,7 @@
 			"content_hashes": [
 				"0998c8e11830a559b5835ea8a25ede611a3aa2f0c216bbbd5a0a49c65e5fb816"
 			],
-			"features": [
-				"comment",
-				"var-global"
-			]
+			"features": ["comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-136185",
@@ -415,11 +388,7 @@
 			"content_hashes": [
 				"8b99cdb9bd164768218a58087eb79e1e1b9398234464cfc5ff2e26286f7909ba"
 			],
-			"features": [
-				"bracket-sub",
-				"cli-prompt",
-				"comment"
-			]
+			"features": ["bracket-sub", "cli-prompt", "comment"]
 		},
 		{
 			"key": "amm0/topic-139391",
@@ -469,12 +438,7 @@
 			"content_hashes": [
 				"546125ef1a85e97dc9e8c7e90f262b22d1ddc5d43bc5d0f00f9c07386e5f3f44"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"line-continuation",
-				"var-global"
-			]
+			"features": ["bracket-sub", "comment", "line-continuation", "var-global"]
 		},
 		{
 			"key": "amm0/topic-140952",
@@ -530,12 +494,7 @@
 			"content_hashes": [
 				"478a50c3a10af507c13b771becdff35ccc14ccd351620d0a070fe046f00cc5a5"
 			],
-			"features": [
-				"bracket-sub",
-				"cli-prompt",
-				"comment",
-				"var-local"
-			]
+			"features": ["bracket-sub", "cli-prompt", "comment", "var-local"]
 		},
 		{
 			"key": "amm0/topic-142687",
@@ -566,9 +525,7 @@
 			"content_hashes": [
 				"fa826a08465f9da3c732c27f5e76d0117da05e05b92b5c10c512f232f0b89e71"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-143441",
@@ -579,10 +536,7 @@
 			"content_hashes": [
 				"33de5a9069bb8a174d420c04e14336ab672fabb93a56d819fd9efda5fa751a35"
 			],
-			"features": [
-				"comment",
-				"sep-semicolon"
-			]
+			"features": ["comment", "sep-semicolon"]
 		},
 		{
 			"key": "amm0/topic-145326",
@@ -733,10 +687,7 @@
 			"content_hashes": [
 				"e5a6317e37576375f0180aa031ee7c25250541be43d86958c097fa66dfc3f939"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-151589",
@@ -787,12 +738,7 @@
 				"69969dc30ea3617df7247ff3f5892529c95e9fe312eb190a4055cfc72494f703",
 				"a118695322b99658769b187bf2831e552f040ea382db0cbd7e7ed84f5b9ac03b"
 			],
-			"features": [
-				"bracket-find",
-				"bracket-sub",
-				"cli-prompt",
-				"comment"
-			]
+			"features": ["bracket-find", "bracket-sub", "cli-prompt", "comment"]
 		},
 		{
 			"key": "amm0/topic-151712",
@@ -803,9 +749,7 @@
 			"content_hashes": [
 				"77619c1fa81d6aced1766386177152f8d603a0da885b5cdc619f738685cfe0cb"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-152405",
@@ -836,10 +780,7 @@
 			"content_hashes": [
 				"f50a5d7aaf234e98cdb0052f94c9f6f4826cbf6c69e6a8c7d75d4af5bf0d8830"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-153346",
@@ -939,10 +880,7 @@
 			"content_hashes": [
 				"117be52789ea1a47cf7b522e9801ed6844a85183eb279a556153f4c8f0f45e0e"
 			],
-			"features": [
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-154024",
@@ -977,10 +915,7 @@
 			"content_hashes": [
 				"bb69a390ddddc264460661d2a31e008a2d5b0062825bf87a84035c1fc98d5144"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-154290",
@@ -1046,9 +981,7 @@
 			"content_hashes": [
 				"967e462b6a09d2ca530a8c814a8fc755ea289837c59e6cfa6c767e68662a3371"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-155394",
@@ -1059,12 +992,7 @@
 			"content_hashes": [
 				"727a67d6e6aca667c7699368d456e881876efe62eb1461b96d9bae2f6d866279"
 			],
-			"features": [
-				"bracket-sub",
-				"cli-prompt",
-				"comment",
-				"sep-semicolon"
-			]
+			"features": ["bracket-sub", "cli-prompt", "comment", "sep-semicolon"]
 		},
 		{
 			"key": "amm0/topic-155540",
@@ -1098,12 +1026,7 @@
 			"content_hashes": [
 				"0b466054d076073136313c2af5b0f505b25aac8284abed50536eced89b38c921"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"sep-semicolon",
-				"var-global"
-			]
+			"features": ["bracket-sub", "comment", "sep-semicolon", "var-global"]
 		},
 		{
 			"key": "amm0/topic-155978",
@@ -1200,11 +1123,7 @@
 			"content_hashes": [
 				"047a811291af9dba18e1657bf12ebc9bb9e5ceb59f5d2c23635dc0d2f74507c5"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"sep-semicolon"
-			]
+			"features": ["bracket-sub", "comment", "sep-semicolon"]
 		},
 		{
 			"key": "amm0/topic-156147",
@@ -1263,12 +1182,7 @@
 			"content_hashes": [
 				"02aa289a739dd06072aab6264c3fb72d78cd158f19ffc45df4d016dc5ad526d7"
 			],
-			"features": [
-				"bracket-nested",
-				"bracket-sub",
-				"comment",
-				"var-global"
-			]
+			"features": ["bracket-nested", "bracket-sub", "comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-156539",
@@ -1279,11 +1193,7 @@
 			"content_hashes": [
 				"b2ff16564ce354ffd90d820bec5b41ac6b759f8356215394f1292dc17e83a80c"
 			],
-			"features": [
-				"comment",
-				"line-continuation",
-				"sep-semicolon"
-			]
+			"features": ["comment", "line-continuation", "sep-semicolon"]
 		},
 		{
 			"key": "amm0/topic-156647",
@@ -1320,10 +1230,7 @@
 			"content_hashes": [
 				"b236cc983110f681ad6a75b8f5eb27bb120efb4aa63911aa98fa81d48231c36a"
 			],
-			"features": [
-				"comment",
-				"dollar-in-path"
-			]
+			"features": ["comment", "dollar-in-path"]
 		},
 		{
 			"key": "amm0/topic-157085",
@@ -1359,10 +1266,7 @@
 			"content_hashes": [
 				"8a242ce682808d609e4ae0a18afd25f2a0d3d504de092daef8b44b8555193963"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-157473",
@@ -1392,10 +1296,7 @@
 			"content_hashes": [
 				"c51a890b7f0856da364f89c0c46e5a256dd2772a8dda00d258d17603b8981cd3"
 			],
-			"features": [
-				"comment",
-				"var-global"
-			]
+			"features": ["comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-158170",
@@ -1432,12 +1333,7 @@
 			"content_hashes": [
 				"dad0178066d18f6b7bb221a6495ad4e84ee411c8d78802b417fd0f49e6d2b345"
 			],
-			"features": [
-				"bracket-find",
-				"bracket-sub",
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["bracket-find", "bracket-sub", "comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-160882",
@@ -1498,12 +1394,7 @@
 			"content_hashes": [
 				"ccde2d56aab056cca03d5903c3574ec670c9dd27ba1361fc4dce43c5342e4587"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"menu-nav-line",
-				"sep-semicolon"
-			]
+			"features": ["bracket-sub", "comment", "menu-nav-line", "sep-semicolon"]
 		},
 		{
 			"key": "amm0/topic-162640",
@@ -1514,12 +1405,7 @@
 			"content_hashes": [
 				"b40a219b9c8405951389f3306575119f9dfe1c36de4296ebb55429ce4b6a28be"
 			],
-			"features": [
-				"block-do",
-				"block-else",
-				"comment",
-				"var-global"
-			]
+			"features": ["block-do", "block-else", "comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-162674",
@@ -1581,12 +1467,7 @@
 				"1c6f55979b902dd0e3e9863243d0f7f055f99326b742d30714db8d021c01b4f2",
 				"35ac87454e17486e604a1318a1187cbcc8ada9076e6f3036e42b1fea692f6a8b"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"sep-semicolon",
-				"var-local"
-			]
+			"features": ["bracket-sub", "comment", "sep-semicolon", "var-local"]
 		},
 		{
 			"key": "amm0/topic-162737",
@@ -1628,10 +1509,7 @@
 			"content_hashes": [
 				"f9707e0183189ebfb4682159b245dcfed3f9f171c3a42e9bae4061fda062b44a"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-162876",
@@ -1642,10 +1520,7 @@
 			"content_hashes": [
 				"bc5cc8710fbbb200a139f1a59f99546a88adeeadf04d95b043d6a2b109b5eb44"
 			],
-			"features": [
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-162942",
@@ -1656,11 +1531,7 @@
 			"content_hashes": [
 				"156ae85a083d71f814e3bbc4b6d8b4e4bbf17d41d88d6dda745aea4809b8641f"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["block-do", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-163033",
@@ -1730,9 +1601,7 @@
 			"content_hashes": [
 				"1d73aebc6e55ae307cb0be4665914b41755bd6c18c9d583114408a69d561c893"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-163200",
@@ -1743,10 +1612,7 @@
 			"content_hashes": [
 				"0f20d35145045e511094869e4e50cbb769b237e686baea5d547cc6b12900318e"
 			],
-			"features": [
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-163487",
@@ -1757,9 +1623,7 @@
 			"content_hashes": [
 				"b576a5381948fc4cf169ee524181788ea37ef416e8bd3f9bae8be1f3152b4aca"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-163557",
@@ -1799,12 +1663,7 @@
 			"content_hashes": [
 				"f4db03b781d34ea67a64cb31b0c80455be12bb466f9f0e08c02471611a2e1ab7"
 			],
-			"features": [
-				"bracket-sub",
-				"cli-prompt",
-				"comment",
-				"var-global"
-			]
+			"features": ["bracket-sub", "cli-prompt", "comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-163810",
@@ -1834,9 +1693,7 @@
 			"content_hashes": [
 				"aa5494f83e704483bed80dfdd969db3c9db5d903ec0a1e6454ae1131c9ab090b"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-164314",
@@ -1847,10 +1704,7 @@
 			"content_hashes": [
 				"7433e85caa2a8af3308c1933eb569345e5ba17a6abd34d6eb5ccd76582f87f48"
 			],
-			"features": [
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-164326",
@@ -1861,11 +1715,7 @@
 			"content_hashes": [
 				"a7fcebd26030c780f8da6bc735238ddf828def1c653e362c451eceacabc3d39d"
 			],
-			"features": [
-				"bracket-nested",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-nested", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-164329",
@@ -1906,12 +1756,7 @@
 				"1414c045c03b522c6c5575d329adb693d480baf5afd8aab7967a5c1bb8f44ae0",
 				"b286372ba9f85d5ebe8c8547d7eb8fac2f4089a79cbdf501bc092edb4a1c2f0f"
 			],
-			"features": [
-				"bracket-find",
-				"bracket-sub",
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["bracket-find", "bracket-sub", "comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-164536",
@@ -1922,9 +1767,7 @@
 			"content_hashes": [
 				"2e1341685b09be5e1ddf3232eafe39aa099b4f6984ded3622f64fa49abf0947f"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-164588",
@@ -1935,12 +1778,7 @@
 			"content_hashes": [
 				"5fd3c13599bdf21c869f08c1edaf7f169a5517c77b9345e3b2df82886098ff0c"
 			],
-			"features": [
-				"block-do",
-				"block-else",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["block-do", "block-else", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-164589",
@@ -1978,11 +1816,7 @@
 				"4bbe4a0618e9bccd089a54f6580ede585d12f08cc1c132d44ef1123ae9f4112d",
 				"82a6542580920daf8c916d23740d84e7c24769cf84b8f3c18546899b3dcd7b79"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"dollar-in-path"
-			]
+			"features": ["bracket-sub", "comment", "dollar-in-path"]
 		},
 		{
 			"key": "amm0/topic-165186",
@@ -1995,11 +1829,7 @@
 				"0c28e9ce97995938b6de99c9279a641b373ea9ff57a1e0e8e0e506ee2c2e796f",
 				"44b6fc10c7724955f2454fab25e44fd5ac53cf9bac542f9fedc8bddbce442116"
 			],
-			"features": [
-				"block-do",
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["block-do", "comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-165210",
@@ -2010,13 +1840,7 @@
 			"content_hashes": [
 				"0e48c677ac43274de320ded09d9d6f17b92e3356aa8327755451c7a45ca80e70"
 			],
-			"features": [
-				"block-do",
-				"bracket-find",
-				"bracket-sub",
-				"comment",
-				"loop"
-			]
+			"features": ["block-do", "bracket-find", "bracket-sub", "comment", "loop"]
 		},
 		{
 			"key": "amm0/topic-165375",
@@ -2027,10 +1851,7 @@
 			"content_hashes": [
 				"578aa4c0bb50aa68413c83d947e75a88edbd2d0836919d3b656d23d2a14bdde9"
 			],
-			"features": [
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-165419",
@@ -2041,12 +1862,7 @@
 			"content_hashes": [
 				"910a3ee232e0e4b00bba2ba03c81d25fb2d87450875e8e327e279dfb9bfed80e"
 			],
-			"features": [
-				"bracket-sub",
-				"cli-prompt",
-				"comment",
-				"relative-dotdot"
-			]
+			"features": ["bracket-sub", "cli-prompt", "comment", "relative-dotdot"]
 		},
 		{
 			"key": "amm0/topic-165831",
@@ -2057,10 +1873,7 @@
 			"content_hashes": [
 				"7c6525fa560eae9fb52888bd32976d83709a24ebb3fafe18d4394d0337aec594"
 			],
-			"features": [
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-165849",
@@ -2073,12 +1886,7 @@
 				"0f89994530763d31fe4308acab6ef8ed7358d16a5231f51249a57b0489d27c73",
 				"d1fc0c27e78779b218d6d8a8517819683e9f6f9fdeae6381cf470038a5fb8270"
 			],
-			"features": [
-				"comment",
-				"dollar-in-path",
-				"menu-nav-line",
-				"var-global"
-			]
+			"features": ["comment", "dollar-in-path", "menu-nav-line", "var-global"]
 		},
 		{
 			"key": "amm0/topic-165917",
@@ -2110,11 +1918,7 @@
 				"d8f9d5cb8e502b093578459068a96e8033097e0c5d7735f993409398286780a8",
 				"f412d92bef7ddb339b6b3f0493671a7eb1358def08b1c314a355824d4bbbf1d6"
 			],
-			"features": [
-				"bracket-find",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-find", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-166698",
@@ -2169,9 +1973,7 @@
 			"content_hashes": [
 				"9e3dd0e20f028680084507d937a7ac9968522589ba41b3764909efc5a2d68ec6"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-167253",
@@ -2222,11 +2024,7 @@
 			"content_hashes": [
 				"c1c6728e57bc90bd1dd91339aa857c5019eaf8995f31e3800ffcb364f661cb02"
 			],
-			"features": [
-				"bracket-find",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-find", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-167746",
@@ -2326,12 +2124,7 @@
 			"content_hashes": [
 				"797adc4bbc7b0c7c005e05a804d3aed476b5bf67fe9cfaa71e996a651fbe6dba"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment",
-				"var-local"
-			]
+			"features": ["block-do", "bracket-sub", "comment", "var-local"]
 		},
 		{
 			"key": "amm0/topic-168093",
@@ -2370,9 +2163,7 @@
 			"content_hashes": [
 				"0b53f32dfc943879bb10d2dab47074d9d84e9609d093542244a299e3e3dd0756"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-168376",
@@ -2421,9 +2212,7 @@
 			"content_hashes": [
 				"4c510d26fa90a6baf37df8faf14d65c9a7ecfecf1089941b0e263b9b222a0792"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-168434",
@@ -2436,12 +2225,7 @@
 				"92fc4849d76d614563b18b50f10cb241ae970be13581365e260b0b41850b787f",
 				"a88ada37f3520c3154e4779e618826d4782c497e761e1ba57af79bf36713a016"
 			],
-			"features": [
-				"bracket-find",
-				"bracket-sub",
-				"comment",
-				"sep-semicolon"
-			]
+			"features": ["bracket-find", "bracket-sub", "comment", "sep-semicolon"]
 		},
 		{
 			"key": "amm0/topic-168494",
@@ -2536,12 +2320,7 @@
 			"content_hashes": [
 				"4ca6c1dc007a17a482555dda32578d8ea9f5a3c9ccb622b5b07997a123bb48ab"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment",
-				"loop"
-			]
+			"features": ["block-do", "bracket-sub", "comment", "loop"]
 		},
 		{
 			"key": "amm0/topic-168643",
@@ -2552,11 +2331,7 @@
 			"content_hashes": [
 				"f076de05ed39466983020e4f33b2e17c7acc238fc019a5667e7911269050d71f"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["block-do", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-168802",
@@ -2567,11 +2342,7 @@
 			"content_hashes": [
 				"4942df4af17136971adb2b577ffdddbb37eec25b207a53f1c2f9e22a9f9fb509"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"var-local"
-			]
+			"features": ["bracket-sub", "comment", "var-local"]
 		},
 		{
 			"key": "amm0/topic-168851",
@@ -2636,10 +2407,7 @@
 			"content_hashes": [
 				"ffba9b0b49e38086a2de244c55aa8fee3a1dbde6346ca6728e4b1deee410892e"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-169108",
@@ -2705,11 +2473,7 @@
 			"content_hashes": [
 				"b6861c83dfa6b6facb8a49544c36b0866a550cb8e8adb3ac3e7d6bcd3c7a5f52"
 			],
-			"features": [
-				"comment",
-				"sep-semicolon",
-				"var-global"
-			]
+			"features": ["comment", "sep-semicolon", "var-global"]
 		},
 		{
 			"key": "amm0/topic-169237",
@@ -2775,11 +2539,7 @@
 			"content_hashes": [
 				"13b23ff855b481ba72dc91d5d4ce4c86f8373b4d90257614b7b999bb75f30e0d"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["block-do", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-169291",
@@ -2790,11 +2550,7 @@
 			"content_hashes": [
 				"11a4dce33b13bed56894419447cc0869e1127f8973840dfaebc67ec37e9d5abb"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["block-do", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-169308",
@@ -2842,12 +2598,7 @@
 			"content_hashes": [
 				"c48aaa70b0e194e396855a0faf9d66baf27967ef5a944d55fa3ca0724f472e7b"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"dollar-in-path",
-				"var-local"
-			]
+			"features": ["bracket-sub", "comment", "dollar-in-path", "var-local"]
 		},
 		{
 			"key": "amm0/topic-169590",
@@ -2952,12 +2703,7 @@
 			"content_hashes": [
 				"51ffca41289926a9e2bba97935a79f3a1df381b75fb3cf66cecfbc427a5196f3"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"dollar-in-path",
-				"sep-semicolon"
-			]
+			"features": ["bracket-sub", "comment", "dollar-in-path", "sep-semicolon"]
 		},
 		{
 			"key": "amm0/topic-171132",
@@ -2968,12 +2714,7 @@
 			"content_hashes": [
 				"cef45ce7e9914d00769d4549b28cf0ab3159bd88890b366a4464334c7d173772"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"sep-semicolon",
-				"var-local"
-			]
+			"features": ["bracket-sub", "comment", "sep-semicolon", "var-local"]
 		},
 		{
 			"key": "amm0/topic-171134",
@@ -2984,11 +2725,7 @@
 			"content_hashes": [
 				"9012806bff045c21e3ce7689dfa3970b1ffd79fd2980bd2905626338a5a96853"
 			],
-			"features": [
-				"bracket-find",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-find", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-171425",
@@ -3016,13 +2753,7 @@
 			"content_hashes": [
 				"96f71bfa225fd6c7327b0636ace92ee57e48ad1b1a8a600cefe89d49da5ca617"
 			],
-			"features": [
-				"block-do",
-				"bracket-find",
-				"bracket-sub",
-				"comment",
-				"loop"
-			]
+			"features": ["block-do", "bracket-find", "bracket-sub", "comment", "loop"]
 		},
 		{
 			"key": "amm0/topic-171659",
@@ -3052,12 +2783,7 @@
 			"content_hashes": [
 				"e0b909c3d80b4f6c6658cd2feb36f8030cf11e130729aae64c30190809fd9d20"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"sep-semicolon",
-				"var-global"
-			]
+			"features": ["bracket-sub", "comment", "sep-semicolon", "var-global"]
 		},
 		{
 			"key": "amm0/topic-172341",
@@ -3131,11 +2857,7 @@
 			"content_hashes": [
 				"a6909a6f76118311783217a4a7df70aac553057a059558e476b627ac104bf567"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"sep-semicolon"
-			]
+			"features": ["bracket-sub", "comment", "sep-semicolon"]
 		},
 		{
 			"key": "amm0/topic-173298",
@@ -3146,12 +2868,7 @@
 			"content_hashes": [
 				"7d967d090aca739dca30ab827e9828e6e9da2e0f59b453021c55257102300a3f"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"dollar-in-path",
-				"sep-semicolon"
-			]
+			"features": ["bracket-sub", "comment", "dollar-in-path", "sep-semicolon"]
 		},
 		{
 			"key": "amm0/topic-173568",
@@ -3208,12 +2925,7 @@
 			"content_hashes": [
 				"c2a90ac19b595a571d4f042a08e79467c6a6cff776885df9795fc6504dfd4b1a"
 			],
-			"features": [
-				"bracket-sub",
-				"cli-prompt",
-				"comment",
-				"non-ascii"
-			]
+			"features": ["bracket-sub", "cli-prompt", "comment", "non-ascii"]
 		},
 		{
 			"key": "amm0/topic-173937",
@@ -3262,12 +2974,7 @@
 				"15fe702325580209e76c590d5770eb2d4de7b9412eeb6e4dd4801b7a2eb9f88c",
 				"ce5f0b6fa2492d2fab8ba600769cdf92ffc56af95885f3e9e76027410d9625aa"
 			],
-			"features": [
-				"block-do",
-				"comment",
-				"var-global",
-				"var-local"
-			]
+			"features": ["block-do", "comment", "var-global", "var-local"]
 		},
 		{
 			"key": "amm0/topic-174102",
@@ -3301,11 +3008,7 @@
 				"06a1f82a9a79cb7279d4c7f96e1ab307a21dfcd5e1458e2cce6faeb54e48ef47",
 				"dc4e2294e1b0eb41bc941496401dd0c44140e00745ee527fc9699a161d346710"
 			],
-			"features": [
-				"block-on-error",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["block-on-error", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-174145",
@@ -3316,12 +3019,7 @@
 			"content_hashes": [
 				"25ae366fc7c20087f96c3aeed5de8102ba43178da717a1b1518a1f91a32279f2"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment",
-				"var-global"
-			]
+			"features": ["block-do", "bracket-sub", "comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-174279",
@@ -3332,10 +3030,7 @@
 			"content_hashes": [
 				"50d1b685cad53888a913d0e164f4b28e0f56e2c6d4c0947d7d6eaaafd061a2d9"
 			],
-			"features": [
-				"comment",
-				"dollar-in-path"
-			]
+			"features": ["comment", "dollar-in-path"]
 		},
 		{
 			"key": "amm0/topic-174305",
@@ -3396,12 +3091,7 @@
 			"content_hashes": [
 				"90b2502645aaf35629e8a1d0e571978d54eca2afb71041eb663a5d8caed8ef4b"
 			],
-			"features": [
-				"bracket-sub",
-				"cli-prompt",
-				"comment",
-				"non-ascii"
-			]
+			"features": ["bracket-sub", "cli-prompt", "comment", "non-ascii"]
 		},
 		{
 			"key": "amm0/topic-174437",
@@ -3412,9 +3102,7 @@
 			"content_hashes": [
 				"bda2378d972249efeb69b2ce44927cb005fcf7e0c093743ad00f2f3c6391fa68"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-174618",
@@ -3475,11 +3163,7 @@
 			"content_hashes": [
 				"0794027ff2b0e3e9fe54c0a772ffc2ec5452810d877c4d4ca93b7cfeb95f4fb3"
 			],
-			"features": [
-				"bracket-find",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-find", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-174886",
@@ -3542,10 +3226,7 @@
 			"content_hashes": [
 				"771b892956c8e9225de604954d7768e29e8383d90b60edec1bc28aea48714c57"
 			],
-			"features": [
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-175543",
@@ -3556,12 +3237,7 @@
 			"content_hashes": [
 				"b3cab5495f0818317232ebafaa3a71440e6727f530b999b90379149505e15951"
 			],
-			"features": [
-				"bracket-nested",
-				"bracket-sub",
-				"comment",
-				"var-local"
-			]
+			"features": ["bracket-nested", "bracket-sub", "comment", "var-local"]
 		},
 		{
 			"key": "amm0/topic-175598",
@@ -3591,9 +3267,7 @@
 			"content_hashes": [
 				"54ed65c00f26fd08e5244b31557b2dc2c4ac983a4f9ff5df37249c6aad8d1917"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-176050",
@@ -3604,12 +3278,7 @@
 			"content_hashes": [
 				"6a424d549e3eea26dd46095537e2c3901932b64fa505b16c661266b3dfa3e4cc"
 			],
-			"features": [
-				"bracket-nested",
-				"bracket-sub",
-				"comment",
-				"var-local"
-			]
+			"features": ["bracket-nested", "bracket-sub", "comment", "var-local"]
 		},
 		{
 			"key": "amm0/topic-176103",
@@ -3620,12 +3289,7 @@
 			"content_hashes": [
 				"845db92dbb90de708306419bb0cf5a2179fd738b0a4982f2b04db7b7a9c73f78"
 			],
-			"features": [
-				"bracket-find",
-				"bracket-sub",
-				"comment",
-				"sep-semicolon"
-			]
+			"features": ["bracket-find", "bracket-sub", "comment", "sep-semicolon"]
 		},
 		{
 			"key": "amm0/topic-176267",
@@ -3636,11 +3300,7 @@
 			"content_hashes": [
 				"1464bc0981043d80c14d0bb877683901b64fba8e7c2b100714ff27cf83eddabe"
 			],
-			"features": [
-				"bracket-find",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-find", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-176277",
@@ -3675,13 +3335,7 @@
 			"content_hashes": [
 				"14f483d21f15b3dfe67124ec1442726949e3eab40b66fafcddbfc69e7a953ebf"
 			],
-			"features": [
-				"block-do",
-				"bracket-find",
-				"bracket-sub",
-				"comment",
-				"loop"
-			]
+			"features": ["block-do", "bracket-find", "bracket-sub", "comment", "loop"]
 		},
 		{
 			"key": "amm0/topic-176329",
@@ -3694,11 +3348,7 @@
 				"3327694363fbf3c026b78ff13272a34553755c594e82c053373b252e79df017e",
 				"c0a82fa7bb6482f00f73eb108382b77f729330a13ec46e73d8d31faf71638582"
 			],
-			"features": [
-				"bracket-find",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-find", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-176336",
@@ -3809,13 +3459,7 @@
 			"content_hashes": [
 				"16d8a41f75bd262c64ab227b68a4a45f0c16d0bdc702189deebf4e81fc9c9bfb"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment",
-				"loop",
-				"var-local"
-			]
+			"features": ["block-do", "bracket-sub", "comment", "loop", "var-local"]
 		},
 		{
 			"key": "amm0/topic-176872",
@@ -3836,40 +3480,25 @@
 				"aa42ef37692467dc88219c20046a366e9d75596f051e5b9c55c54b116c6b6818",
 				"dcf470ffe31e81a6a78e9630aff76a451ed9412df686b538a7d797f4449ac0e5"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-176920",
 			"split": "holdout",
-			"scripts": [
-				"forum/amm0/topic-176920-get-ip/post-0002-snippet-01.rsc"
-			],
+			"scripts": ["forum/amm0/topic-176920-get-ip/post-0002-snippet-01.rsc"],
 			"content_hashes": [
 				"da7b70745c7de9813c05a053b79d126d117daf77c15c7cc58d2f7a7066b986d2"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"var-local"
-			]
+			"features": ["bracket-sub", "comment", "var-local"]
 		},
 		{
 			"key": "amm0/topic-176936",
 			"split": "dev",
-			"scripts": [
-				"forum/amm0/topic-176936-lte-gw/post-0003-snippet-01.rsc"
-			],
+			"scripts": ["forum/amm0/topic-176936-lte-gw/post-0003-snippet-01.rsc"],
 			"content_hashes": [
 				"9e340c04a3cc311af169211abd14b38daa57ad2c656e1c1b20c1445d06cabd24"
 			],
-			"features": [
-				"comment",
-				"menu-nav-line",
-				"sep-semicolon"
-			]
+			"features": ["comment", "menu-nav-line", "sep-semicolon"]
 		},
 		{
 			"key": "amm0/topic-177491",
@@ -3880,10 +3509,7 @@
 			"content_hashes": [
 				"c23ee0470f595436e9ee3984c4464c369b40ed43b96e638720b29604673d4013"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-178036",
@@ -3894,10 +3520,7 @@
 			"content_hashes": [
 				"b34b706f8664d0a2879ada834472d27996fa5a6059422e8ef42debfbc705e1c8"
 			],
-			"features": [
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-178358",
@@ -3908,11 +3531,7 @@
 			"content_hashes": [
 				"a236cb13f08b8887277daabedbe3f276b6231752c6167218f75402d6450ff4fe"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"non-ascii"
-			]
+			"features": ["bracket-sub", "comment", "non-ascii"]
 		},
 		{
 			"key": "amm0/topic-178444",
@@ -3923,10 +3542,7 @@
 			"content_hashes": [
 				"4cc49c5563c6c978e8107ebd180e1314502c0be4169e5399efe576d8d828ce8b"
 			],
-			"features": [
-				"comment",
-				"line-continuation"
-			]
+			"features": ["comment", "line-continuation"]
 		},
 		{
 			"key": "amm0/topic-178600",
@@ -3937,11 +3553,7 @@
 			"content_hashes": [
 				"fb1f59b2d03e862f9162a6c29f468a059a8ffc4f2fee5b2924c0025a0481fd64"
 			],
-			"features": [
-				"bracket-nested",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-nested", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-178801",
@@ -3972,11 +3584,7 @@
 			"content_hashes": [
 				"f075a0686899c09db192f1b2868f6d6063ca0c229b517b36c6023b4281c9e5ba"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"var-global"
-			]
+			"features": ["bracket-sub", "comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-178856",
@@ -3987,11 +3595,7 @@
 			"content_hashes": [
 				"8d19c9e9a552431317b88a61a9b88d9b3cf6dcb06b9d9976762e5f296c09892d"
 			],
-			"features": [
-				"bracket-sub",
-				"cli-prompt",
-				"comment"
-			]
+			"features": ["bracket-sub", "cli-prompt", "comment"]
 		},
 		{
 			"key": "amm0/topic-178918",
@@ -4002,11 +3606,7 @@
 			"content_hashes": [
 				"0489a6e3d9255b3a5957d89b52a5f877989dbe31d95620a0bf30043ffb6e6f1a"
 			],
-			"features": [
-				"block-do",
-				"comment",
-				"var-local"
-			]
+			"features": ["block-do", "comment", "var-local"]
 		},
 		{
 			"key": "amm0/topic-178928",
@@ -4037,12 +3637,7 @@
 				"3149f93ff16f8ebf7c265b7dc6c185cfec1d09e3b22be0b0cb9cfe304c39ad9b",
 				"3286286ef16b93a6b0d02e45b51bd88f10e442420cfd077c5762f8b92e64a6ff"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"sep-semicolon",
-				"var-global"
-			]
+			"features": ["bracket-sub", "comment", "sep-semicolon", "var-global"]
 		},
 		{
 			"key": "amm0/topic-178945",
@@ -4072,11 +3667,7 @@
 			"content_hashes": [
 				"03b818dd672b7b40922cefbf34aef6f48e09d83240cca1e5714d24a40d867f2d"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"var-global"
-			]
+			"features": ["bracket-sub", "comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-178987",
@@ -4087,10 +3678,7 @@
 			"content_hashes": [
 				"00dd0e0c4412880932f7e37b98814b380a3acadb5888a9d73c5efbb77cee7e5a"
 			],
-			"features": [
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-178998",
@@ -4210,11 +3798,7 @@
 			"content_hashes": [
 				"979b72d760e3a06e1b4689447faf5ab5738931ba0fcd6d5218c2bf49b81f4b42"
 			],
-			"features": [
-				"bracket-nested",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-nested", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-179268",
@@ -4251,11 +3835,7 @@
 			"content_hashes": [
 				"640c256602fa997d38f3cbfa2df847b4662150beda7ed1968d5e865835695bc9"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["bracket-sub", "comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-179598",
@@ -4268,12 +3848,7 @@
 				"210b40f14b409bb050c6aaf4de5dee0d07c03b1f2cc59fe5f4217652b9717ed2",
 				"e0dc75283567edaf58348becc569be1de73c604c9fec57a04a50997603fcd36d"
 			],
-			"features": [
-				"bracket-nested",
-				"bracket-sub",
-				"comment",
-				"var-local"
-			]
+			"features": ["bracket-nested", "bracket-sub", "comment", "var-local"]
 		},
 		{
 			"key": "amm0/topic-179893",
@@ -4304,9 +3879,7 @@
 			"content_hashes": [
 				"50aebde7f4bfd16256ca8d76f73102944c3c3e23ff4eb8e48383e73af1704a7c"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-180563",
@@ -4317,10 +3890,7 @@
 			"content_hashes": [
 				"7c69c45e5dad072fdff6d641192dfb7867ff6fd85c4fe916938f9a6d2fb61719"
 			],
-			"features": [
-				"comment",
-				"var-global"
-			]
+			"features": ["comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-180595",
@@ -4331,12 +3901,7 @@
 			"content_hashes": [
 				"582b522db417508593677f1c1989deb126245a6f403bbb0faca16c7ae2f46bcb"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment",
-				"loop"
-			]
+			"features": ["block-do", "bracket-sub", "comment", "loop"]
 		},
 		{
 			"key": "amm0/topic-180659",
@@ -4347,13 +3912,7 @@
 			"content_hashes": [
 				"490849569deb35bd4a0ab5fcce9a21d8c13ef6ef0c02417c553f7a0618895839"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment",
-				"loop",
-				"var-local"
-			]
+			"features": ["block-do", "bracket-sub", "comment", "loop", "var-local"]
 		},
 		{
 			"key": "amm0/topic-180741",
@@ -4381,9 +3940,7 @@
 			"content_hashes": [
 				"8ebf6258809ecf9965b069e70649e512748b2111a582a1268b1404eb9848918a"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-181208",
@@ -4394,9 +3951,7 @@
 			"content_hashes": [
 				"8819bbdd1aaeaac8053eb898fa45ba9efb8d5d35c52a641f58310dbeb317b0ff"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-181344",
@@ -4407,9 +3962,7 @@
 			"content_hashes": [
 				"326b492b09dbfe78e7fd4658312c1a28b202c08586660041a6dea0b4be81a294"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-181371",
@@ -4577,9 +4130,7 @@
 			"content_hashes": [
 				"e48f65d4166db4c1707383f798f8ef7fe26789ea3fe08ed98aea97b13ac0378f"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-182244",
@@ -4590,10 +4141,7 @@
 			"content_hashes": [
 				"b8bce2b59e14d9aadf8864cb622733935866737f1378b272dd675a7afa77dec1"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-182323",
@@ -4669,10 +4217,7 @@
 			"content_hashes": [
 				"fc7fe236ec1c68bef0ac40fed67726b452cd76cae82139d4b2d9508e495b0a5a"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-183145",
@@ -4683,9 +4228,7 @@
 			"content_hashes": [
 				"c804e56f08e17a5f8dff980970121870fab61ac1dcfa88ecffa7256ef21b0a1a"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-183452",
@@ -4700,12 +4243,7 @@
 				"6a8730017cc98dfb4008b552ca97c8ceaeed11f9123a9991eb64e39cb0da2c2f",
 				"a33ad7eea7c8f837a4cb18e2b689683ef541866451e53c5a4a02c25b543b56da"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"menu-nav-line",
-				"var-global"
-			]
+			"features": ["bracket-sub", "comment", "menu-nav-line", "var-global"]
 		},
 		{
 			"key": "amm0/topic-183538",
@@ -4752,10 +4290,7 @@
 			"content_hashes": [
 				"0f230e91157b06bbc33b4bf9aaac4395fae7ddf04f244a1427fb97c8aa5346e1"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-183944",
@@ -4863,11 +4398,7 @@
 			"content_hashes": [
 				"cc4e197ddf4a351170947a04c2ba6a7b7032c46a492fbfef814f1a485873cb97"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"var-global"
-			]
+			"features": ["bracket-sub", "comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-261912",
@@ -4915,9 +4446,7 @@
 			"content_hashes": [
 				"469ec44706ddda75238dd404618733bac9954240446fe85c5af7c42ee6b5b69b"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-262517",
@@ -5002,11 +4531,7 @@
 			"content_hashes": [
 				"a92e3afdef78bfd3fbcd0169085cc6ef9c92a302895e07759baa8b9ddf3a19dc"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"line-continuation"
-			]
+			"features": ["bracket-sub", "comment", "line-continuation"]
 		},
 		{
 			"key": "amm0/topic-263305",
@@ -5093,13 +4618,7 @@
 			"content_hashes": [
 				"8aaca3a9763a24bf4af87f14bf61cb17b0ddc8a11f9515fb3c03ec093fb11d6f"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"cli-prompt",
-				"comment",
-				"loop"
-			]
+			"features": ["block-do", "bracket-sub", "cli-prompt", "comment", "loop"]
 		},
 		{
 			"key": "amm0/topic-264534",
@@ -5112,11 +4631,7 @@
 				"147649052b48b8eb07450e931a881ddca9f56d715a52ecc99081494574a1b729",
 				"ee3f093d7c413e6b3258336faef3d4c3282b5a77961ec2dccce7163311e1e9d0"
 			],
-			"features": [
-				"bracket-nested",
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-nested", "bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-265403",
@@ -5127,11 +4642,7 @@
 			"content_hashes": [
 				"aad59915a7a5fcb989c2f97778eaceca7d51387eca98a6fd6482779490bdd900"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"var-global"
-			]
+			"features": ["bracket-sub", "comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-265864",
@@ -5142,9 +4653,7 @@
 			"content_hashes": [
 				"33d43218e617976757422a24ebe1fa1af53bd96df6947239626a4d61884b93a8"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-266277",
@@ -5176,11 +4685,7 @@
 			"content_hashes": [
 				"ee7db6861a2f768a578c1226e1a221faa2039ef897e9c68deaed8d313e101ec6"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"var-local"
-			]
+			"features": ["bracket-sub", "comment", "var-local"]
 		},
 		{
 			"key": "amm0/topic-266499",
@@ -5193,10 +4698,7 @@
 				"028a4742527ea81933c911d53ebf2c7501407a8f317076b34d36104fd9f8f26b",
 				"c704c67c07da0aeaa4aea76d7eada9a72c96d9ea3486249d0632d8cdd945c0b0"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-266665",
@@ -5247,11 +4749,7 @@
 				"9a0a24a9d46d5fde42eaff105a6def4d2bdbbb70e9b8a8a67fe83bbf50dea1d2",
 				"af100ecd741118cbad7e829e76e619f06217c85e7c3c6c36525beddc489d7e3c"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["bracket-sub", "comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-267329",
@@ -5394,10 +4892,7 @@
 			"content_hashes": [
 				"6f47b79878cd05341b5a6dac2de2e88fd0311a4273d90c9511ae31aa5ce4aecf"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-267809",
@@ -5410,10 +4905,7 @@
 				"dc3c001df6c5e26c3754461702f67181450aafcef73e177c4ab95e409eb68a68",
 				"f4610df611a36747121b7c36c36a01867629e2e1ad2b70b0fac9b6c30baee2f7"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-267905",
@@ -5424,11 +4916,7 @@
 			"content_hashes": [
 				"539ebd47df7b3ca6c79b5cf5c136b8d8eb0538bec56aa9bad35318eb96f4977d"
 			],
-			"features": [
-				"comment",
-				"sep-semicolon",
-				"var-local"
-			]
+			"features": ["comment", "sep-semicolon", "var-local"]
 		},
 		{
 			"key": "amm0/topic-268036",
@@ -5484,11 +4972,7 @@
 				"607d48170fbd0ed20b71b86df41038713836c6cc16231bfa18b7453e251e20cf",
 				"c87e61a65d76012c0f9fa241c9001c92eb51e532a26b69c1d036150322093577"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["bracket-sub", "comment", "menu-nav-line"]
 		},
 		{
 			"key": "amm0/topic-268312",
@@ -5501,9 +4985,7 @@
 				"b8bf675ebc5487c60198ed0e55a92e8c20ac22d97b99785d05b7adf501657820",
 				"c9ea8430ff3c7bb9467001def814a278fd83e5d0f6fccdd5ea5add3ac218ed2b"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "amm0/topic-268717",
@@ -5516,12 +4998,7 @@
 				"3874d9fab9f195254ca2568d208beebb46306c7a2eccd30b84a1748a3c86b0ad",
 				"7b9f0e86bf25dbb98684640de820eb5c49fba1ec8696e7c794b9a2ac7d82e478"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"menu-nav-line",
-				"non-ascii"
-			]
+			"features": ["bracket-sub", "comment", "menu-nav-line", "non-ascii"]
 		},
 		{
 			"key": "amm0/topic-37391",
@@ -5536,12 +5013,7 @@
 				"6a516c3aacacb46c88fa35cff5a6780154cabb02ed5ba63e725b078e1432f7d1",
 				"7f61a5799439c4ee4aa828ff6176c00f5278acc70481f4eefd7575ff8fd4be44"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"var-global",
-				"var-local"
-			]
+			"features": ["bracket-sub", "comment", "var-global", "var-local"]
 		},
 		{
 			"key": "amm0/topic-41609",
@@ -5554,10 +5026,7 @@
 				"1427b5d24fd06ff3ac53059b42bd453cc41be466f656624d74d8401a460bec5e",
 				"1adbec6e836977312409ca70a5a2963f0373a3e86b4eae9dc793994a085bcfa1"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-51962",
@@ -5587,12 +5056,7 @@
 			"content_hashes": [
 				"cc79867529382a8d5ba6c8d8059027e1e49c3130c67e9e2411b4e81b0d3edd2f"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment",
-				"var-global"
-			]
+			"features": ["block-do", "bracket-sub", "comment", "var-global"]
 		},
 		{
 			"key": "amm0/topic-59076",
@@ -5603,10 +5067,7 @@
 			"content_hashes": [
 				"28960e03d40b5b00a4b41f2831f8eb4c5f128a2bf9244befd4f99307e86b2518"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "amm0/topic-68159",
@@ -5661,9 +5122,7 @@
 		{
 			"key": "complex",
 			"split": "dev",
-			"scripts": [
-				"complex/piano.rsc"
-			],
+			"scripts": ["complex/piano.rsc"],
 			"content_hashes": [
 				"02b0ff5ad74b34352635e6ab61fcfe391e9601f42edc384d8573f26fbba7dbb2"
 			],
@@ -5818,15 +5277,11 @@
 		{
 			"key": "rextended/topic-104992",
 			"split": "dev",
-			"scripts": [
-				"forum/rextended/topic-104992-post-0083-snippet-01.rsc"
-			],
+			"scripts": ["forum/rextended/topic-104992-post-0083-snippet-01.rsc"],
 			"content_hashes": [
 				"4b02f2e6b2925c3a6c516a9188960ee76525bc72b2f77e29747453f87a3b1dad"
 			],
-			"features": [
-				"comment"
-			]
+			"features": ["comment"]
 		},
 		{
 			"key": "rextended/topic-110950",
@@ -5855,9 +5310,7 @@
 		{
 			"key": "rextended/topic-113429",
 			"split": "dev",
-			"scripts": [
-				"forum/rextended/topic-113429-post-0004-snippet-01.rsc"
-			],
+			"scripts": ["forum/rextended/topic-113429-post-0004-snippet-01.rsc"],
 			"content_hashes": [
 				"b88ee54c5b5ca10cd285e02ea822c0cbf10a347c6ab94f6a01380e5c6b12ee9e"
 			],
@@ -5876,9 +5329,7 @@
 		{
 			"key": "rextended/topic-115644",
 			"split": "dev",
-			"scripts": [
-				"forum/rextended/topic-115644-post-0004-snippet-01.rsc"
-			],
+			"scripts": ["forum/rextended/topic-115644-post-0004-snippet-01.rsc"],
 			"content_hashes": [
 				"b18fc300bda4b433ce3cf57371a8cc971ad2575edd37f6eed38b3d0429e0990b"
 			],
@@ -5897,9 +5348,7 @@
 		{
 			"key": "rextended/topic-121369",
 			"split": "dev",
-			"scripts": [
-				"forum/rextended/topic-121369-post-0013-snippet-01.rsc"
-			],
+			"scripts": ["forum/rextended/topic-121369-post-0013-snippet-01.rsc"],
 			"content_hashes": [
 				"8015a5629c1aba8b9016f898d69631f9bf147c4976414cc70ddce67bfc19a9f1"
 			],
@@ -6143,10 +5592,7 @@
 				"9af0891ddaa681d1a6d242381de905a1d102f9133feb914fe830a535fcb62f61",
 				"e1606aff259545534c5258a433a0fa16c49ddddb7a0807dd375fd0bc6b6f92d3"
 			],
-			"features": [
-				"comment",
-				"menu-nav-line"
-			]
+			"features": ["comment", "menu-nav-line"]
 		},
 		{
 			"key": "rextended/topic-149116",
@@ -6361,13 +5807,7 @@
 				"1c15fa893eec7b098d6dc1e6fe75ea8ecb98e9365725a41364ac0fcf15e0cc8e",
 				"65aa361830a3706006ea88478baf66c21a5f860da315844702611c918cb72f1e"
 			],
-			"features": [
-				"block-do",
-				"bracket-sub",
-				"comment",
-				"loop",
-				"var-local"
-			]
+			"features": ["block-do", "bracket-sub", "comment", "loop", "var-local"]
 		},
 		{
 			"key": "rextended/topic-151033",
@@ -6869,32 +6309,21 @@
 				"3d208fdc081e310f974b520bf51579bdd38d9441900ae56c1be28d6bfea223e4",
 				"9e601726cbce6005ecb1894c917ec4fc4bbeb276dc47c88dfc53669136a1435a"
 			],
-			"features": [
-				"bracket-sub",
-				"comment",
-				"var-local"
-			]
+			"features": ["bracket-sub", "comment", "var-local"]
 		},
 		{
 			"key": "rextended/topic-163488",
 			"split": "dev",
-			"scripts": [
-				"forum/rextended/topic-163488-post-0005-snippet-01.rsc"
-			],
+			"scripts": ["forum/rextended/topic-163488-post-0005-snippet-01.rsc"],
 			"content_hashes": [
 				"065e871517f4de02359ad50a705781b561fdba68b618300826eb4ff1e9d73c07"
 			],
-			"features": [
-				"comment",
-				"sep-semicolon"
-			]
+			"features": ["comment", "sep-semicolon"]
 		},
 		{
 			"key": "rextended/topic-163718",
 			"split": "dev",
-			"scripts": [
-				"forum/rextended/topic-163718-post-0012-snippet-01.rsc"
-			],
+			"scripts": ["forum/rextended/topic-163718-post-0012-snippet-01.rsc"],
 			"content_hashes": [
 				"c6480bf7d07ac60d391e88df525776a2168c94c96fa469ec6ceb38ca56f7c488"
 			],
@@ -7024,12 +6453,7 @@
 				"6f8d2aa4f3b6b6fc88d15d8556714e5355b30ad76112e41b9c1559e18a40e73d",
 				"f27b9175a40dc6ecb0e66f0f0e766e61c0797487117400da1997a99dad9f0557"
 			],
-			"features": [
-				"bracket-nested",
-				"bracket-sub",
-				"comment",
-				"sep-semicolon"
-			]
+			"features": ["bracket-nested", "bracket-sub", "comment", "sep-semicolon"]
 		},
 		{
 			"key": "rextended/topic-166898",
@@ -7068,9 +6492,7 @@
 		{
 			"key": "rextended/topic-167618",
 			"split": "holdout",
-			"scripts": [
-				"forum/rextended/topic-167618-post-0003-snippet-01.rsc"
-			],
+			"scripts": ["forum/rextended/topic-167618-post-0003-snippet-01.rsc"],
 			"content_hashes": [
 				"23f12fb85738339c1219dc9ae2254050fa1b317b0f70b2eefbf139ae84a24dde"
 			],
@@ -7157,9 +6579,7 @@
 		{
 			"key": "rextended/topic-63496",
 			"split": "holdout",
-			"scripts": [
-				"forum/rextended/topic-63496-post-0005-snippet-01.rsc"
-			],
+			"scripts": ["forum/rextended/topic-63496-post-0005-snippet-01.rsc"],
 			"content_hashes": [
 				"255dabc0a70d43656650dab72730f7162a213326e7733d66a6a8e784f52f0637"
 			],
@@ -7254,17 +6674,12 @@
 				"ce535dbc4e56af226adf87d87ce3343a5c9bef733727c82b05abf93313a6b879",
 				"ece37935f8c52ded64598194a1384f7a1363f38e2958667b64b3b63bef29e317"
 			],
-			"features": [
-				"bracket-sub",
-				"comment"
-			]
+			"features": ["bracket-sub", "comment"]
 		},
 		{
 			"key": "rextended/topic-77321",
 			"split": "holdout",
-			"scripts": [
-				"forum/rextended/topic-77321-post-0015-snippet-01.rsc"
-			],
+			"scripts": ["forum/rextended/topic-77321-post-0015-snippet-01.rsc"],
 			"content_hashes": [
 				"a7938e93d67865917cb75dfc261f4d7687d7786fcb9f26ce36aa5666f208bf1a"
 			],
@@ -7279,9 +6694,7 @@
 		{
 			"key": "rextended/topic-79536",
 			"split": "dev",
-			"scripts": [
-				"forum/rextended/topic-79536-post-0006-snippet-01.rsc"
-			],
+			"scripts": ["forum/rextended/topic-79536-post-0006-snippet-01.rsc"],
 			"content_hashes": [
 				"47f9d1a7767b1256a499a906784ce7ba894c82bdf90fc41e05d9cbb4aefc7633"
 			],
@@ -7355,10 +6768,7 @@
 		{
 			"key": "tikbook",
 			"split": "dev",
-			"scripts": [
-				"tikbook/hello.tikbook.rsc",
-				"tikbook/scep.tikbook.rsc"
-			],
+			"scripts": ["tikbook/hello.tikbook.rsc", "tikbook/scep.tikbook.rsc"],
 			"content_hashes": [
 				"0e49abe186c33e95212e7e8ebf25ca319a548a6ded0b0d0ad002d9caff7080f8",
 				"a3be480589c45d80b7d2fb7329cd17971a5609636ca1172972cfa8acae5e62e5"

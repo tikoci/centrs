@@ -14,9 +14,9 @@
  * The control matters: a raw `"` ends the string and a raw `$` starts a
  * substitution, so a difference there is about C, not about the escape.
  *
- * Run: bun run .scratch/explain-252-escape-sweep.ts [existing-chr-name]
+ * Run: bun run explain:probe:escapes [existing-chr-name]
  */
-import { QuickCHR } from "@tikoci/quickchr";
+import { openChr, type ProbeChr } from "./chr.ts";
 
 const REUSE = process.argv[2];
 
@@ -24,14 +24,20 @@ type Probe = { label: string; ch: string; note?: string };
 
 const probes: Probe[] = [];
 for (let b = 0x20; b <= 0x7e; b++)
-	probes.push({ label: `0x${b.toString(16).padStart(2, "0")}`, ch: String.fromCharCode(b) });
+	probes.push({
+		label: `0x${b.toString(16).padStart(2, "0")}`,
+		ch: String.fromCharCode(b),
+	});
 probes.push({ label: "0x09 TAB", ch: "\t" });
 probes.push({ label: "0x0A LF", ch: "\n", note: "line continuation" });
 probes.push({ label: "0x0D+0x0A CRLF", ch: "\r\n", note: "line continuation" });
 probes.push({ label: "U+201D", ch: "”", note: "non-ASCII (corpus AT-chat)" });
 probes.push({ label: "U+00E9", ch: "é", note: "non-ASCII latin-1" });
 
-async function highlightClasses(chr: any, input: string): Promise<string[]> {
+async function highlightClasses(
+	chr: ProbeChr,
+	input: string,
+): Promise<string[]> {
 	const rows = (await chr.rest("/console/inspect", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
@@ -40,24 +46,25 @@ async function highlightClasses(chr: any, input: string): Promise<string[]> {
 	return (rows[0]?.highlight ?? "").split(",").filter(Boolean);
 }
 
-async function execOutcome(chr: any, input: string): Promise<string> {
+async function execOutcome(chr: ProbeChr, input: string): Promise<string> {
 	try {
-		const out = (await chr.exec(input)) as unknown;
+		const out = await chr.exec(input);
 		const text = typeof out === "string" ? out : JSON.stringify(out);
-		return /error|expected|syntax/i.test(text) ? `REJECT ${text.slice(0, 70)}` : "accept";
+		return /error|expected|syntax/i.test(text)
+			? `REJECT ${text.slice(0, 70)}`
+			: "accept";
 	} catch (e) {
 		return `REJECT ${String(e).slice(0, 70)}`;
 	}
 }
 
-const chr = REUSE
-	? await QuickCHR.get(REUSE)
-	: await QuickCHR.start({ name: `centrs-252-${Date.now()}`, arch: "x86" });
-if (!chr) throw new Error(`no CHR named ${REUSE}`);
+const chr = await openChr({ reuse: REUSE, name: "centrs-252" });
 
 try {
 	const res = (await chr.rest("/system/resource")) as Record<string, string>;
-	console.log(`CHR ${res.version} (${res.architecture}) build ${res["build-time"]}\n`);
+	console.log(
+		`CHR ${res["version"]} (${res["architecture"]}) build ${res["build-time"]}\n`,
+	);
 
 	const rows: string[] = [];
 	const accepted: string[] = [];

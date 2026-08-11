@@ -4,7 +4,8 @@
  * RouterOS REST has a broad mechanical convention (CRUD verbs plus command
  * POSTs), and `explain` emits a runnable request only where the Q8 probe
  * exercised that convention on CHR 7.23.2 and 7.24rc2
- * (`.scratch/explain-lab-q8-rest.*.json`). The rules below are that evidence.
+ * (`test/fixtures/explain/transport-rest-q8.v*.json`, promoted in #186).
+ * The rules below are that evidence.
  * A verb or operand merely looking REST-shaped never widens them.
  *
  * ## The four CRUD rules are literal; the action rule is a family
