@@ -739,7 +739,7 @@ async function validateExecuteCommand(
 			context: {
 				path: resolved.canonical.path,
 				verb: resolved.canonical.verb,
-				attribute: missing[0],
+				parameter: missing[0],
 				requestedAttributes: requested,
 				availableAttributes,
 				validationSource: "/console/inspect request=child+completion",

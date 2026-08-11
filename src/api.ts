@@ -985,7 +985,7 @@ async function validateApiRequest(
 						context: {
 							path: resolved.path,
 							verb: resolved.verb,
-							attribute: missing[0],
+							parameter: missing[0],
 							requestedAttributes: requested,
 							availableAttributes: available,
 							validationSource: "/console/inspect request=child+completion",
@@ -1030,7 +1030,7 @@ async function validateApiRequest(
 				context: {
 					path: resolved.path,
 					verb: resolved.verb,
-					attribute: missing[0],
+					parameter: missing[0],
 					requestedAttributes: requested,
 					availableAttributes: available,
 					validationSource: "/console/inspect request=child+completion",
