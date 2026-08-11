@@ -71,6 +71,17 @@ contains the CHR identity name, `meta.via=rest-api`, and
 `not-applicable` because `/console/inspect` validates path-shaped commands, not
 arbitrary script expressions.
 
+The same path must preserve dollar-prefixed variables while wrapping the
+command for `:parse`:
+
+```bash
+centrs execute $R ':local a true; :if ($a = true) do={:put ok}' --via rest-api --username $U --password $P
+```
+
+Envelope: `ok: true`, output contains `ok`, and
+`meta.validation.syntax=true`. If the validation wrapper expands `$a` before
+`:parse`, this example fails even though RouterOS accepts the original command.
+
 ### 5. Syntax reject from `:put [:parse ...]`
 
 Malformed CLI is rejected by the syntax gate before semantic validation or the
@@ -95,7 +106,7 @@ centrs execute $R '/ip/address/add address=198.51.100.11/32 interface=ether1 no-
 ```
 
 Envelope: `ok: false`, `error.code=validation/unknown-attribute`,
-`error.cause.attribute="no-such-arg"` (or equivalent structured field),
+`error.context.parameter="no-such-arg"`,
 `meta.validation.syntax=true`, `meta.validation.source=/console/inspect`, and
 no address is added. This example is the product claim: syntax validation and
 semantic validation are separate gates.

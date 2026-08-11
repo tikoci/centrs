@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { routerOsStringLiteral } from "../../src/core/routeros-string.ts";
 import { explainCommand } from "../../src/explain.ts";
 import {
 	isChrIntegrationEnabled,
@@ -7,10 +8,6 @@ import {
 } from "./chr.ts";
 
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
-
-function rosString(value: string): string {
-	return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
-}
 
 async function highlightClasses(
 	chr: { rest(path: string, init?: RequestInit): Promise<unknown> },
@@ -29,7 +26,7 @@ async function parseText(
 	chr: { exec(command: string): Promise<unknown> },
 	input: string,
 ): Promise<string> {
-	const cmd = `:put [:parse ${rosString(input)}]`;
+	const cmd = `:put [:parse ${routerOsStringLiteral(input)}]`;
 	const out = String(
 		((await chr.exec(cmd)) as { output?: string }).output ?? "",
 	).replaceAll("\r\n", "\n");

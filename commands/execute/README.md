@@ -24,6 +24,9 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   console output. That check is necessary, not sufficient: value-type errors pass
   it, and the `/console/inspect` / server re-validation semantic checks are
   separate.
+  The outer RouterOS string literal escapes backslash, quote, and dollar so
+  validation parses the caller's exact command rather than expanding variables
+  in the wrapper.
 - centrs owns the **script-vs-structured gate** (`canonicalizeExecuteCommand` +
   `isWriteShaped` in `src/execute.ts`): it decides which validation runs and
   whether the write-confirm prompt fires. The shared `rosetta`/`lsp-routeros-ts`

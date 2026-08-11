@@ -43,6 +43,7 @@
  */
 
 import { parseRouterOsPosition } from "../core/routeros-errors.ts";
+import { routerOsStringLiteral } from "../core/routeros-string.ts";
 import { CentrsError } from "../errors.ts";
 import {
 	type MacAddress,
@@ -691,10 +692,6 @@ export function classifyParseResult(
 			...(position ? { position } : {}),
 		});
 	}
-}
-
-function routerOsStringLiteral(value: string): string {
-	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
 function cleanToken(token: string): string {

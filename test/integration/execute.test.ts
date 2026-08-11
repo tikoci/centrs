@@ -192,6 +192,16 @@ describeFast("execute against CHR", () => {
 			expect(script.meta.validation?.syntax).toBe(true);
 			expect(script.meta.validation?.semantic).toBe("not-applicable");
 
+			const dollarVariable = expectExecuteSuccess(
+				await executeEnvelope({
+					...base,
+					command: ":local a true; :if ($a = true) do={:put ok}",
+				}),
+				"rest-api",
+			);
+			expect(JSON.stringify(dollarVariable.data)).toContain("ok");
+			expect(dollarVariable.meta.validation?.syntax).toBe(true);
+
 			expectExecuteFailure(
 				await executeEnvelope({
 					...base,
@@ -212,11 +222,11 @@ describeFast("execute against CHR", () => {
 				"rest-api",
 				VALIDATION_REJECT_CODES,
 			);
-			// The offending attribute name is only surfaced when RouterOS reports it as
+			// The offending parameter name is only surfaced when RouterOS reports it as
 			// a `bad parameter` (≥ 7.23, via /console/inspect). On ≤ 7.21.x the `:parse`
-			// syntax gate rejects it generically first, so there is no attribute. (JG-14.)
+			// syntax gate rejects it generically first, so there is no parameter. (JG-14.)
 			if (semantic.error.code === "validation/unknown-attribute") {
-				expect(semantic.error.context?.["attribute"]).toBe("no-such-arg");
+				expect(semantic.error.context?.["parameter"]).toBe("no-such-arg");
 			}
 			await ensureNoAddressWithComment({ ...base, comment: "missing-confirm" });
 
