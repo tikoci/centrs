@@ -8,6 +8,18 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Changed
+
+- **Local Git gates now stop at the useful feedback boundary.** Pre-commit runs
+  the near-instant Biome check; pre-push runs the same `lint:ci` repo-check gate
+  as GitHub (source/type checks, generated-doc drift, Markdown, spelling, and
+  secrets) without serially duplicating the required unit-test and build jobs.
+  The hosted repo-check job no longer runs its source subset twice, while unit,
+  build, and stable CHR smoke coverage remain unchanged. The three
+  bounded-traversal tests identified in #277 also have a 30-second runner budget
+  so host contention does not turn their structural bounds into a laptop-speed
+  assertion.
+
 ### Added
 
 - **`explain` reads the array members an `=` makes, instead of abstaining at

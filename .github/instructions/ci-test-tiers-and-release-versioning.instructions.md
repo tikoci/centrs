@@ -45,11 +45,16 @@ Keep `CHANGELOG.md` current with the bump.
 The policy above maps to five workflows (quickchr's `ci`/`publish`/`verify-extended`
 scheme as the reference):
 
-- **Push/PR gate** → `ci.yaml`: lint ‖ unit+coverage → **stable CHR smoke**
-  (`test/integration/chr-smoke.test.ts`, single boot). Coverage + failing tests
-  surface to the job summary + artifacts; coverage floor is a non-blocking
+- **Push/PR gate** → `ci.yaml`: `lint:ci` repo checks ‖ unit+coverage; repo
+  checks then unlock the build, while repo checks + unit green unlock
+  **stable CHR smoke**
+  (`test/integration/chr-smoke.test.ts`, single boot). `lint:ci` runs once; its
+  source-lint subset is not repeated as a separate step. Coverage + failing
+  tests surface to the job summary + artifacts; coverage floor is a non-blocking
   annotation. Cross-platform unit (macOS + Windows) runs in `qa.yaml` on push to
-  main, not here — keeping PR runs fast.
+  main, not here — keeping PR runs fast. The local pre-push hook runs the same
+  `lint:ci` repo checks but leaves unit tests and build to these required,
+  parallel hosted jobs.
 - **Definitive channel matrix** → `qa.yaml`: push[main] + weekly + dispatch +
   `workflow_call`. The active set is **recency-aware**, resolved per run by the
   `resolve-matrix` pre-flight job via quickchr (`resolveAllVersions` /

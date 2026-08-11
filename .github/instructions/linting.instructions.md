@@ -8,6 +8,9 @@ Run the narrowest useful check while editing, then the full relevant gate before
 
 - `bun run lint` is the fast source gate.
 - `bun run lint:ci` includes docs, spelling, secrets, and agent instruction checks.
+- `bun run lint:git:commit` is the near-instant Biome subset;
+  `bun run lint:git:push` is exactly `lint:ci`. Unit tests and build stay in the
+  hosted push/PR gate, or in the opt-in local aggregate `bun run ci`.
 - Prefer concise command output so agents can inspect failures without losing context.
 - Add schema-aware JSON/YAML validation when this repo starts owning non-trivial schemas.
 - Update `GLOSSARY.txt` or local ignore comments for intentional project vocabulary.

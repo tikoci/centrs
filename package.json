@@ -58,12 +58,12 @@
 		"GLOSSARY.txt"
 	],
 	"scripts": {
-		"ci": "bun run lint && bun run test && bun run build",
-		"git:pre-commit": "bun run lint",
+		"ci": "bun run lint:ci && bun run test && bun run build",
+		"git:pre-commit": "bun run lint:git:commit",
 		"git:pre-push": "bun run lint:git:push",
 		"lint": "bun run lint:biome && bun run lint:typecheck",
-		"lint:git:commit": "bun run lint",
-		"lint:git:push": "bun run lint:ci && bun run test && bun run build",
+		"lint:git:commit": "bun run lint:biome",
+		"lint:git:push": "bun run lint:ci",
 		"lint:ci": "bun run lint && bun run docs:cli:check && bun run explain:value-census:readme:check && bun run lint:markdownlint && bun run lint:cspell && bun run lint:secretlint",
 		"lint:cspell": "cspell lint . --gitignore",
 		"lint:cspell:all": "cspell lint . --no-gitignore",

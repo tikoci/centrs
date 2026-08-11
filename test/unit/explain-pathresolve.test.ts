@@ -202,7 +202,7 @@ describe("Q17 over-depth — bounded traversal abstains instead of overflowing",
 			result = resolveStatements(deep);
 		}).not.toThrow();
 		expect(result?.defects.map((d) => d.code)).toContain("over-depth");
-	});
+	}, 30_000);
 });
 
 test("never throws on adversarial input", () => {

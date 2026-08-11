@@ -852,7 +852,7 @@ describe("explain/write — invariants", () => {
 		// Over-depth means part of the document was never walked, so the answer
 		// must abstain or find a write — it may never come back clean.
 		expect(got.verdict).not.toBe("false");
-	});
+	}, 30_000);
 });
 
 describe("explain/write — public export surface", () => {

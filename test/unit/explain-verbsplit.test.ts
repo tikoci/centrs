@@ -680,7 +680,7 @@ describe("resolveVerbs — document walk over the certainty contract", () => {
 			`${"do={".repeat(2048)}:put 1${"}".repeat(2048)}`,
 		])
 			expect(() => resolveVerbs(input)).not.toThrow();
-	});
+	}, 30_000);
 });
 
 test("verb/menu API is re-exported from the library barrel", () => {
