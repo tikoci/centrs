@@ -756,6 +756,17 @@ describe("value anchors", () => {
 				input,
 				array: true,
 			});
+		// A differently-cased directive is NOT the same verb. RouterOS accepts only
+		// the lower-case spelling — `:LOCAL z {1;2}` draws `expected command name`
+		// on 7.23.3 — so matching the verb verbatim gives the device's answer,
+		// while normalizing it would open the gate on a statement that does not
+		// parse. An argument's casing is free (`:local Z {1;2}` binds `$Z`).
+		for (const input of [":LOCAL z {1;2}", ":Local z {1;2}", ":PUT {1;2}"])
+			expect({ input, array: claimsArray(input) }).toEqual({
+				input,
+				array: false,
+			});
+		expect(claimsArray(":local Z {1;2}")).toBe(true);
 		// Rejected by the device, and formerly called arrays by the path rule:
 		// a scalar-typed slot, the NAME positional, a condition, a code block,
 		// and a command argument.

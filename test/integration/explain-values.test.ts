@@ -677,6 +677,21 @@ describeFast("explain value facts against CHR", () => {
 					});
 			}
 
+			// A directive's casing is load-bearing and an argument's is not, so the
+			// gate matches the verb verbatim rather than normalizing it.
+			for (const source of [":LOCAL z {1;2}", ":Local z {1;2}", ":PUT {1;2}"]) {
+				expect({ source, parses: parses(await parseIl(source)) }).toEqual({
+					source,
+					parses: false,
+				});
+				expect({ source, array: claimsArray(source) }).toEqual({
+					source,
+					array: false,
+				});
+			}
+			expect(parses(await parseIl(":local Z {1;2}"))).toBe(true);
+			expect(claimsArray(":local Z {1;2}")).toBe(true);
+
 			// A nested literal the device rejects withdraws its container, while
 			// the group spellings next to it still read.
 			for (const literal of [

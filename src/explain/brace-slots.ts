@@ -33,6 +33,16 @@
  * position decides: `:local {1;2}` puts the literal in the NAME slot (a syntax
  * error) while `:local z {1;2}` puts it in the VALUE slot.
  *
+ * **The verb is matched VERBATIM, and that is the device's rule, not laziness.**
+ * `verbsplit.ts` keeps a run token's source casing, and RouterOS accepts only
+ * the lower-case spelling: `:LOCAL z {1;2}`, `:Local z {1;2}`, `:PUT {1;2}` and
+ * even `/IP/DNS/set servers=1.1.1.1` all draw `expected command name (line 1
+ * column 2)` on CHR 7.23.3, while an ARGUMENT's casing is free (`:local Z {1;2}`
+ * parses and binds `$Z`). Normalizing the verb here would open the gate on a
+ * statement the device refuses to parse — the exact fabrication this table
+ * exists to remove — so a differently-cased directive misses every entry and is
+ * refused, which is the same answer the device gives.
+ *
  * The evidence is `test/fixtures/explain/values.json` →
  * `interiorGrounding.braceSlots` (222 rows, CHR 7.23.3, `:parse` IL — NOT
  * `highlight`, which accepts `{1;2,}` and `(1,)` that `:parse` rejects), and

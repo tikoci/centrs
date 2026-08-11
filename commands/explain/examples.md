@@ -562,7 +562,10 @@ can differ by verb: `:foreach i in={1;2}` is an array while
 
 A positional is keyed by its index, because position decides: `:local {1;2}`
 puts the literal in the NAME slot and does not parse, while `:local z {1;2}`
-puts it in the VALUE slot and does. Everything the sweep could not ask is
+puts it in the VALUE slot and does. The verb is matched verbatim for the same
+reason: RouterOS accepts only the lower-case spelling, so `:LOCAL z {1;2}` is
+`expected command name` and gets no array, while an argument's casing is free
+(`:local Z {1;2}` binds `$Z` and does). Everything the sweep could not ask is
 refused, so the gate loses coverage rather than inventing a shape.
 
 Two rejections a member walk cannot see from the outside are also refused here.
