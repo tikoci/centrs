@@ -1,0 +1,207 @@
+{
+	"generatedFrom": ".scratch/explain-parse-oracle.ts + .scratch/cliref-research/parse-oracle.json + lsp-routeros-ts test-data/corpus.sqlite parseil_results.il_text",
+	"chr": "7.23.3 (stable) x86, 2026-08-07, GH#230",
+	"provenance": "Two device sources, both captured — no row is hand-written. (1) CHR 7.23.3 x86: :put [:parse \"<input>\"] round-tripped via bun run .scratch/explain-parse-oracle.ts and the cliref sweep; 7.24rc2 showed the same forms. Every row whose `input` is a literal CLI string comes from here. (2) lsp-routeros-ts corpus IL oracle (test-data/corpus.sqlite, parseil_results.il_text), RouterOS 7.20.8 / 7.22.1 / 7.23rc1 — whole-file :parse of real-world scripts. Rows carrying `corpusScript` are verbatim il_text fragments from there and are marked as such; their `input` names the corpus path, not a CLI string. The wrapper that only watches for a thrown error records parse-ok for every input (GH#230 control). Read the return value's text instead — it is a diagnostic value, not a throw.",
+	"notes": [
+		"The oracle is the PRINTED VALUE of :parse, not a throw. Console (mac-telnet/ssh) prints it; REST (HTTP 200 ret) and native API (as-string ret) return the same text.",
+		"Fixtures are 7.23.3 (stable) x86. Pin 7.23.3 wording; tolerate form drift across 7.24rc2 only where called out.",
+		"`bad parameter` is a NAME-level verdict only — it does not check value types (/ip/address/add address=not-an-ip still passes). `}`/`)/bad values were accepted in the sweep (see GH#230 reach limits).",
+		"`column` is RouterOS's 1-based byte offset; the issue requires a column→byte mapping and its UTF-8 failure mode before any byte span.",
+		"`/ip addr print` canonicalizes to `/ip/address/print` inside the returned value — the canonicalization is per-input, not per-path-table.",
+		"Each classification entry carries `raw`: the exact printed `:parse` value as captured on a device — CHR 7.23.3 for CLI-string rows, corpus il_text for `corpusScript` rows. Tests classify `raw`, not the `expectedContains` fragment. Never hand-write a `raw`.",
+		"For script-shaped input the accepted return echoes the statement body, so RouterOS's own IL spelling matters: statement heads print with a LEADING SLASH (`(evl /globalname=…)`, `(evl /putmessage=…)`), never `(evl :globalname=…)`; a `where` clause prints as `…/findwhere=$field;$field;…` with `$`-prefixed names. Zero corpus rows use the `(evl :` form.",
+		"Because the body is echoed, the word `expected` in source text is not a rejection (GH#230 blocker, ~1.3% FP on the corpus before the fix). Only `expected … (line N column M)` / `syntax error … (line N column M)`, or the `(<%%` menu wrapper, is a reject.",
+		"Corpus-verified against all 2736 parseil_results rows with the shipped classifyParseResult: 0 false positives, 0 false negatives."
+	],
+	"canonicalAccepted": [
+		{
+			"caption": "accepted: exact path → canonical slash form (the oracle)",
+			"input": "/ip address print",
+			"raw": "(evl /ip/address/print)",
+			"expectedContains": "(evl /ip/address/print)",
+			"verdict": "accepted"
+		},
+		{
+			"caption": "accepted: abbreviation expands in the return",
+			"input": "/ip addr print",
+			"raw": "(evl /ip/address/print)",
+			"expectedContains": "(evl /ip/address/print)",
+			"verdict": "accepted"
+		},
+		{
+			"caption": "accepted: another abbreviation form",
+			"input": "/int eth print",
+			"raw": "(evl /interface/ethernet/print)",
+			"expectedContains": "(evl /interface/ethernet/print)",
+			"verdict": "accepted"
+		},
+		{
+			"caption": "accepted: interface/ethernet monitor (real path)",
+			"input": "/interface ethernet monitor",
+			"raw": "(evl /interface/ethernet/monitor)",
+			"expectedContains": "(evl /interface/ethernet/monitor)",
+			"verdict": "accepted"
+		},
+		{
+			"caption": "accepted: console inspect",
+			"input": "/console inspect",
+			"raw": "(evl /console/inspect)",
+			"expectedContains": "(evl /console/inspect)",
+			"verdict": "accepted"
+		},
+		{
+			"caption": "accepted: `$Expected` as a variable name is echoed body text, not a reject",
+			"input": "eworm/netwatch-notify.rsc (whole-file parseil)",
+			"corpusScript": "eworm/netwatch-notify.rsc",
+			"corpusVersions": "7.20.8, 7.22.1, 7.23rc1",
+			"raw": "(evl /localname=$Expected;value=(evl (evl /tostrvalue=$3)))",
+			"expectedContains": "$Expected",
+			"verdict": "accepted"
+		},
+		{
+			"caption": "accepted: `expected:` inside a :put string is echoed body text, not a reject",
+			"input": "forum/amm0/topic-154024-positional-arguments-in-array-function-0-vs-1/post-0001-snippet-01.rsc (whole-file parseil)",
+			"corpusScript": "forum/amm0/topic-154024-positional-arguments-in-array-function-0-vs-1/post-0001-snippet-01.rsc",
+			"corpusVersions": "7.20.8, 7.22.1, 7.23rc1",
+			"raw": "(evl /putmessage=expected: 'hello world' not just 'hello' string)",
+			"expectedContains": "expected: 'hello world'",
+			"verdict": "accepted"
+		},
+		{
+			"caption": "accepted: conntrack `where` field list echoes `$expected` as a real RouterOS field name",
+			"input": "forum/amm0/topic-169108-simpler-failover-for-two-gateways-i-found-working/post-0026-snippet-01.rsc (whole-file parseil)",
+			"corpusScript": "forum/amm0/topic-169108-simpler-failover-for-two-gateways-i-found-working/post-0026-snippet-01.rsc",
+			"corpusVersions": "7.20.8, 7.22.1, 7.23rc1",
+			"raw": "(evl /ip/firewall/connection/findwhere=$protocol;$src-address;$src-port;$dst-address;$dst-port;$reply-src-address;$reply-src-port;$reply-dst-address;$reply-dst-port;$tcp-state;$icmp-type;$icmp-code;$icmp-id;$gre-protocol;$gre-version;$gre-key;$connection-type;$timeout;$connection-mark;$orig-packets;$orig-bytes;$orig-fasttrack-packets;$orig-fasttrack-bytes;$repl-packets;$repl-bytes;$repl-fasttrack-packets;$repl-fasttrack-bytes;$orig-rate;$repl-rate;$expected;$seen-reply;$assured;$confirmed;$dying;$fasttrack;$hw-offload;$srcnat;$dstnat;$.id;$.nextid;$.dead;$.about;(= $.id $idc))",
+			"expectedContains": "$expected",
+			"verdict": "accepted"
+		}
+	],
+	"badParameter": [
+		{
+			"caption": "bad-parameter: unknown attribute inside the (evl ...) form",
+			"input": "/ip address print bogus-attr=1",
+			"raw": "(evl bad parameter bogus-attr (line 1 column 29) /ip/address/print)",
+			"expectedContains": "bad parameter bogus-attr",
+			"mustHavePosition": true,
+			"verdict": "bad-parameter"
+		},
+		{
+			"caption": "bad-parameter: ip/address/add with unknown attr",
+			"input": "/ip address add no-such-arg=x",
+			"raw": "(evl bad parameter no-such-arg (line 1 column 28) /ip/address/add)",
+			"expectedContains": "bad parameter no-such-arg",
+			"mustHavePosition": true,
+			"verdict": "bad-parameter"
+		},
+		{
+			"caption": "bad-parameter: canonical slash path retained alongside position",
+			"input": "/ip/address/add address=10.9.9.9/32 interface=ether1 no-such-arg=x",
+			"raw": "(evl bad parameter no-such-arg (line 1 column 54) /ip/address/add)",
+			"expectedContains": "bad parameter no-such-arg",
+			"expectedAlsoContains": "/ip/address/add",
+			"mustHavePosition": true,
+			"verdict": "bad-parameter"
+		}
+	],
+	"badCommandName": [
+		{
+			"caption": "bad-command-name: unknown mid-path segment",
+			"input": "/interface ethernet poe monitor",
+			"raw": "(<%% bad command name poe (line 1 column 21) poe;monitor)",
+			"expectedContains": "bad command name poe",
+			"mustHavePosition": true,
+			"verdict": "bad-command-name"
+		},
+		{
+			"caption": "bad-command-name: unknown leaf verb",
+			"input": "/system license output",
+			"raw": "(<%% bad command name output (line 1 column 17) output)",
+			"expectedContains": "bad command name output",
+			"mustHavePosition": true,
+			"verdict": "bad-command-name"
+		},
+		{
+			"caption": "bad-command-name: completely unknown root",
+			"input": "/zzz qqq print",
+			"raw": "(<%% bad command name zzz (line 1 column 2) zzz;qqq;print)",
+			"expectedContains": "bad command name zzz",
+			"mustHavePosition": true,
+			"verdict": "bad-command-name"
+		},
+		{
+			"caption": "bad-command-name: partitions (CHR 7.23.3 fixture)",
+			"input": "/partitions print",
+			"raw": "(<%% bad command name partitions (line 1 column 2) partitions;print)",
+			"expectedContains": "bad command name partitions",
+			"mustHavePosition": true,
+			"verdict": "bad-command-name"
+		},
+		{
+			"caption": "bad-command-name: lcd (CHR 7.23.3 fixture)",
+			"input": "/lcd show",
+			"raw": "(<%% bad command name lcd (line 1 column 2) lcd;show)",
+			"expectedContains": "bad command name lcd",
+			"mustHavePosition": true,
+			"verdict": "bad-command-name"
+		}
+	],
+	"syntaxExpected": [
+		{
+			"caption": "syntax: expected end of command — the whole return is the bare diagnostic",
+			"input": "edge-cases/unicode-heavy.rsc (whole-file parseil)",
+			"corpusScript": "edge-cases/unicode-heavy.rsc",
+			"corpusVersions": "7.20.8, 7.22.1, 7.23rc1",
+			"raw": "expected end of command (line 4 column 11)",
+			"expectedContains": "expected end of command",
+			"mustHavePosition": true,
+			"verdict": "syntax"
+		},
+		{
+			"caption": "syntax: expected command name",
+			"input": "forum/amm0/topic-136185-sdwan-using-zerotier-solved/post-0052-snippet-01.rsc (whole-file parseil)",
+			"corpusScript": "forum/amm0/topic-136185-sdwan-using-zerotier-solved/post-0052-snippet-01.rsc",
+			"corpusVersions": "7.20.8, 7.22.1, 7.23rc1",
+			"raw": "expected command name (line 6 column 6)",
+			"expectedContains": "expected command name",
+			"mustHavePosition": true,
+			"verdict": "syntax"
+		},
+		{
+			"caption": "syntax: expected input value — the third `expected …` spelling",
+			"input": "forum/amm0/topic-158170-mikrotik-lte-sierra-wireless-mc7455/post-0010-snippet-01.rsc (whole-file parseil)",
+			"corpusScript": "forum/amm0/topic-158170-mikrotik-lte-sierra-wireless-mc7455/post-0010-snippet-01.rsc",
+			"corpusVersions": "7.20.8, 7.22.1, 7.23rc1",
+			"raw": "expected input value (line 7 column 49)",
+			"expectedContains": "expected input value",
+			"mustHavePosition": true,
+			"verdict": "syntax"
+		}
+	],
+	"positionFixtures": [
+		{
+			"caption": "byte offset carried as (line N column M)",
+			"raw": "bad parameter address (line 1 column 35)",
+			"line": 1,
+			"column": 35
+		},
+		{
+			"caption": "generic syntax error still carries a position",
+			"raw": "syntax error (line 1 column 9)",
+			"line": 1,
+			"column": 9
+		},
+		{
+			"caption": "inside the (evl bad parameter ...) value",
+			"raw": "(evl bad parameter no-such-arg (line 1 column 28) /ip/address/add)",
+			"line": 1,
+			"column": 28
+		},
+		{
+			"caption": "inside the expected … (line …) value (corpus: edge-cases/unicode-heavy.rsc)",
+			"raw": "expected end of command (line 4 column 11)",
+			"line": 4,
+			"column": 11
+		}
+	]
+}

@@ -375,6 +375,10 @@ CSI
 SIGWINCH
 # evl: RouterOS :parse renders a parsed command as "(evl ...)" on the console.
 evl
+# putmessage/globalname: RouterOS :parse IL statement heads — ":put x" echoes back
+# as "(evl /putmessage=x)", ":global n v" as "(evl /globalname=$n;value=v)" (GH#230).
+putmessage
+globalname
 # unconfigured: a freshly-flashed RouterOS device with no IP — the mac-telnet use case.
 unconfigured
 unwired
