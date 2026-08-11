@@ -156,7 +156,23 @@ export function resolveCorpusDb(explicit?: string): CorpusResolution {
 
 	const cached = cachePath(pin);
 	if (existsSync(cached)) {
-		return { path: cached, source: "cache", sha256: pin.sha256 };
+		// Hashed, never assumed. The cache path is content-addressed by NAME, so
+		// taking the pin's hash on faith would report a hash these bytes were
+		// never checked against — the exact laundering this module exists to
+		// prevent, and asymmetric with the sibling branch above.
+		const sha256 = sha256File(cached);
+		if (sha256 === pin.sha256) return { path: cached, source: "cache", sha256 };
+		// Unlike a sibling checkout, the cache is ours and is *supposed* to be the
+		// pin. A mismatch is corruption or tampering, not someone iterating on a
+		// new snapshot, so it does not resolve.
+		return {
+			path: undefined,
+			source: undefined,
+			warning:
+				`the cached corpus at ${cached} has sha256 ${sha256.slice(0, 12)}, ` +
+				`not the pinned ${pin.sha256.slice(0, 12)}. Re-fetch it with ` +
+				"`bun run corpus:fetch --force`.",
+		};
 	}
 	return { path: undefined, source: undefined };
 }
@@ -270,10 +286,21 @@ async function repin(ref: string): Promise<number> {
 		scripts: current.scripts,
 	};
 
+	// Staged then renamed, as in `fetchPinned`. Publishing to the
+	// content-addressed path before `readDbFacts` has accepted the bytes would
+	// leave a file whose NAME claims a hash it was never validated under, at the
+	// exact path a later run resolves from.
 	const target = cachePath(staged);
 	mkdirSync(dirname(target), { recursive: true });
-	await Bun.write(target, bytes);
-	const facts = await readDbFacts(target);
+	const staging = `${target}.tmp-${process.pid}`;
+	let facts: { schemaVersion: number; scripts: number };
+	try {
+		await Bun.write(staging, bytes);
+		facts = await readDbFacts(staging);
+		renameSync(staging, target);
+	} finally {
+		rmSync(staging, { force: true });
+	}
 
 	const next = JSON.parse(readFileSync(PIN_FILE, "utf8")) as Record<
 		string,

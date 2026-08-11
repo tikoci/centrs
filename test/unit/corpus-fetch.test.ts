@@ -16,6 +16,7 @@ import {
 	pinUrl,
 	readPin,
 	resolveCorpusDb,
+	sha256File,
 	unreachableMessage,
 } from "../../scripts/corpus-fetch.ts";
 
@@ -90,6 +91,19 @@ describe("corpus resolution", () => {
 				expect(["sibling", "cache"]).toContain(r.source ?? "");
 				expect(r.sha256 ?? "").toMatch(/^[0-9a-f]{64}$/);
 			}
+		});
+	});
+
+	test("a reported hash is one that was actually computed", () => {
+		// The defect this pins: the cache branch used to return `pin.sha256`
+		// without hashing the file, so a corrupt or swapped cache entry reported
+		// a hash its bytes had never been checked against. Environment-agnostic
+		// on purpose — it passes through the sibling branch on a dev machine and
+		// through the cache branch in CI, which is where the bug lived.
+		withEnv(undefined, () => {
+			const r = resolveCorpusDb();
+			if (r.path === undefined || r.sha256 === undefined) return;
+			expect(r.sha256).toBe(sha256File(r.path));
 		});
 	});
 

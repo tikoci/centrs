@@ -562,18 +562,20 @@ function loadRows(dbPath: string): CorpusRow[] {
 
 export async function main(args: readonly string[]): Promise<number> {
 	const resolution = resolveCorpusDb(flag(args, "--db"));
-	const dbPath = resolution.path;
-	if (dbPath === undefined || !(await Bun.file(dbPath).exists())) {
-		console.error(unreachableMessage("explain corpus census"));
-		return 1;
-	}
-	// stderr, not stdout: `--json` output is consumed as JSON.
-	console.error(describeResolution(resolution));
+	// All of this goes to stderr, not stdout: `--json` is consumed as JSON. The
+	// warning is emitted before the reachability check because a corrupt cache
+	// both warns and fails to resolve, and "why" beats "no".
 	if (resolution.warning) {
 		console.error(
 			`::warning title=explain corpus census::${resolution.warning}`,
 		);
 	}
+	const dbPath = resolution.path;
+	if (dbPath === undefined || !(await Bun.file(dbPath).exists())) {
+		console.error(unreachableMessage("explain corpus census"));
+		return 1;
+	}
+	console.error(describeResolution(resolution));
 
 	const rows = loadRows(dbPath);
 	const result = census(rows);

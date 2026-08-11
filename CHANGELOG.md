@@ -10,12 +10,13 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Added
 
-- **`LICENSE` — centrs is MIT.** The repository and the published
-  `@tikoci/centrs` package declared no license anywhere, which under default
-  copyright meant all rights reserved: an installer acquired no right to use,
-  modify, or redistribute it, and a VS Code extension could not have bundled it
-  (#208). `package.json` already said `MIT`; the file now exists to match, and
-  is in the npm `files` allowlist so consumers get it in the tarball.
+- **`LICENSE` — centrs is MIT.** The repository carried no `LICENSE` file and
+  the published `@tikoci/centrs` tarball carried no license text, so GitHub
+  reported `licenseInfo: null` and consumers had only a bare `"license": "MIT"`
+  string in `package.json` to go on — no grant they could actually read, quote,
+  or redistribute, which is a problem for anything bundling centrs (a VS Code
+  extension, say) (#208). The file now exists to back the declaration, and is in
+  the npm `files` allowlist so it ships.
 - **`bun run corpus:fetch` — the `explain` censuses run from a bare clone and
   in CI.** `scripts/corpus-pin.json` records which snapshot of the RouterOS
   script corpus centrs measures against (a commit in `tikoci/lsp-routeros-ts`

@@ -218,18 +218,20 @@ function flag(args: readonly string[], name: string): string | undefined {
 
 export async function main(args: readonly string[]): Promise<number> {
 	const resolution = resolveCorpusDb(flag(args, "--db"));
-	const dbPath = resolution.path;
-	if (dbPath === undefined || !(await Bun.file(dbPath).exists())) {
-		console.error(unreachableMessage("explain value census"));
-		return 1;
-	}
-	// stderr, not stdout: `--json` output is piped into the fixture.
-	console.error(describeResolution(resolution));
+	// All of this goes to stderr, not stdout: `--json` is piped into the fixture.
+	// The warning is emitted before the reachability check because a corrupt
+	// cache both warns and fails to resolve, and "why" beats "no".
 	if (resolution.warning) {
 		console.error(
 			`::warning title=explain value census::${resolution.warning}`,
 		);
 	}
+	const dbPath = resolution.path;
+	if (dbPath === undefined || !(await Bun.file(dbPath).exists())) {
+		console.error(unreachableMessage("explain value census"));
+		return 1;
+	}
+	console.error(describeResolution(resolution));
 	const db = new Database(dbPath, { readonly: true });
 	let scripts: string[];
 	try {

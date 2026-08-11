@@ -1054,10 +1054,11 @@ deliverable 2).
 
 The corpus itself is not in this repo and is not moving here — `lsp-routeros-ts`
 owns producing snapshots, centrs owns which snapshot it measures against.
-`scripts/corpus-pin.json` is that second half: the commit and the blob sha256
-every figure on this page was measured from. `bun run corpus:fetch` downloads
-and verifies it, so the censuses run from a bare clone and in CI rather than on
-one machine (#186).
+`scripts/corpus-pin.json` is that second half: the commit and the blob sha256 a
+census run measures. It identifies the **current** 948-script snapshot only —
+the phase-0 figures above were measured on the frozen 913-script corpus and no
+pin describes them. `bun run corpus:fetch` downloads and verifies it, so the
+censuses run from a bare clone and in CI rather than on one machine (#186).
 
 **All three export serializations parse clean offline (#203 deliverable 2,
 re-scored after #207).** Every one of the 120 CHR captures — `compact`, `terse`

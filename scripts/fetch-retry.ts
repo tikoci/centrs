@@ -7,8 +7,9 @@
  * burns the whole job budget and reports nothing useful. So every request gets
  * a deadline, and a transient failure gets two more tries.
  *
- * A 4xx that is not 429 fails immediately. Retrying it only delays the report,
- * and the answer will not change.
+ * What retries: a thrown request error (connection reset, DNS, the deadline
+ * itself), a 429, and any 5xx. What does not: every other 4xx — retrying it
+ * only delays the report, and the answer will not change.
  *
  * The deadline covers the body read, not just the response head — a truncated
  * download is exactly the failure a byte-count check would otherwise catch late.
@@ -44,7 +45,7 @@ async function fetchWithRetry<T>(
 	throw new Error(`failed to fetch ${url}`, { cause: lastError });
 }
 
-/** Fetch `url` as text, retrying rate limits and server errors only. */
+/** Fetch `url` as text under the policy above. */
 export async function fetchTextWithRetry(url: string): Promise<string> {
 	return await fetchWithRetry(url, (response) => response.text(), TIMEOUT_MS);
 }
