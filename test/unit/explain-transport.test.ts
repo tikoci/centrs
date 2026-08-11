@@ -85,6 +85,46 @@ describe("the runtime-exercised Q8 REST shapes", () => {
 		],
 	] as const;
 
+	/**
+	 * case name -> the `rule` string of the Q8 capture row it rests on. This is
+	 * the join, and it is written out rather than derived because a derived join
+	 * would silently re-pair itself after a rule is renamed.
+	 */
+	const CASE_RULES: Record<string, string> = {
+		"bare print": "print\u2192GET (list)",
+		"singleton print": "print\u2192GET (singleton menu)",
+		"print proplist":
+			"print+.proplist\u2192POST /rest/<path>/print body {.proplist}",
+		"print where": "print+.query\u2192POST /rest/<path>/print body {.query}",
+		add: "add\u2192PUT /rest/<path> body {attrs}",
+		get: "get-one\u2192GET /rest/<path>/<id>",
+		set: "set\u2192PATCH /rest/<path>/<id> body {attrs} \u2014 id REQUIRED",
+		remove: "remove\u2192DELETE /rest/<path>/<id> \u2014 id REQUIRED",
+		action: "run(action)\u2192POST /rest/<path>/<command> body {args}",
+		"action with attributes":
+			"run(action)\u2192POST /rest/<path>/<command> body {args}",
+	};
+
+	type UrlShape = "bare" | "id" | "print" | "command";
+
+	/** The URL shape a capture rule's template declares. */
+	function shapeOfRule(rule: string): UrlShape {
+		if (rule.includes("/rest/<path>/<id>")) return "id";
+		if (rule.includes("/rest/<path>/print")) return "print";
+		if (rule.includes("/rest/<path>/<command>")) return "command";
+		return "bare";
+	}
+
+	/** The URL shape the module actually produced, read off the emitted path. */
+	function shapeOf(input: string, path: string): UrlShape {
+		const last = path.slice(path.lastIndexOf("/") + 1);
+		if (last.startsWith("*")) return "id";
+		if (last === "print") return "print";
+		// A command endpoint ends with the statement's own verb.
+		const verb = input.trim().split(/\s+/).at(1) ?? "";
+		return last === verb ? "command" : "bare";
+	}
+
 	for (const [name, input, method, path, body] of cases)
 		test(name, () => {
 			const result = transport(input);
@@ -131,23 +171,47 @@ describe("the runtime-exercised Q8 REST shapes", () => {
 			expect(shape(second)).toEqual(shape(first));
 		});
 
-		test("every method the module emits was exercised on the device", () => {
-			const exercised = new Set(
-				captures[0]?.data.rows
-					.filter((row) => row.ok)
-					.map((row) => row.method) ?? [],
+		/**
+		 * Each production case names the capture ROW it rests on, and is checked
+		 * against that row's method and URL shape.
+		 *
+		 * A previous version of this test only asserted that every method the
+		 * module emits appears SOMEWHERE in the capture's exercised set. That is
+		 * too weak to be worth having: flipping the `run(action)` row from POST to
+		 * GET left it green, because POST was still supplied by the print rows.
+		 * The binding has to be per-rule or it does not bind anything.
+		 */
+		test("each case matches the method and shape of the row it cites", () => {
+			const rows = new Map(
+				(captures[0]?.data.rows ?? []).map((row) => [row.rule, row]),
 			);
-			expect(exercised.size).toBeGreaterThan(0);
-			for (const [name, input] of cases.map(
-				(entry) => [entry[0], entry[1]] as [string, string],
-			)) {
-				const method = transport(input).rest?.method;
-				expect(method, `${name}: ${input}`).toBeDefined();
-				// A method the probe never recorded means the module widened past
-				// its evidence — the one thing this fixture exists to prevent.
-				expect(exercised.has(method as string), `${name}: ${method}`).toBe(
-					true,
+			for (const [name, input, , path] of cases) {
+				const rule = CASE_RULES[name];
+				expect(rule, `${name} names no capture rule`).toBeDefined();
+				const row = rows.get(rule as string);
+				expect(row, `${name}: no capture row for "${rule}"`).toBeDefined();
+				expect(row?.ok, `${name}: cites a row the device rejected`).toBe(true);
+
+				const result = transport(input);
+				// Compare as plain strings: the fixture is device output typed as
+				// `string`, and narrowing it to the module's own method union here
+				// would let the module define what counts as a match.
+				expect(String(result.rest?.method), `${name} method`).toBe(
+					String(row?.method),
 				);
+				expect(shapeOf(input, path), `${name} shape`).toBe(
+					shapeOfRule(rule as string),
+				);
+			}
+		});
+
+		test("every rule the device exercised has a case citing it", () => {
+			// The other direction: a rule with no case is evidence nothing checks,
+			// which is how the captures came to have no reader in the first place.
+			const cited = new Set(Object.values(CASE_RULES));
+			for (const row of captures[0]?.data.rows ?? []) {
+				if (!row.ok) continue;
+				expect(cited.has(row.rule), `no case cites "${row.rule}"`).toBe(true);
 			}
 		});
 

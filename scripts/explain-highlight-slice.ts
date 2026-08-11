@@ -178,6 +178,75 @@ export async function main(args: readonly string[]): Promise<number> {
 	}
 
 	const base = captures.get(VERSIONS[0]) as Capture;
+
+	// --- the captures must be what they claim, before anything reads them ----
+	//
+	// Everything downstream makes COMPLETENESS claims — `versionDiffering` is
+	// "every script whose versions disagree", `classesInCapture` is "every class
+	// the device produced". Neither can be checked against a capture that is
+	// short, mislabeled, or partly failed: a script the device never answered for
+	// looks exactly like a script with nothing to say. So the claims are only
+	// made after the inputs are verified, not repaired around.
+	const captureProblems: string[] = [];
+	for (const version of VERSIONS) {
+		const capture = captures.get(version) as Capture;
+		// A file named v7.23.2 holding a 7.99 capture would publish the alias.
+		if (capture.routerosVersion !== version) {
+			captureProblems.push(
+				`the capture at v${version} reports routerosVersion "${capture.routerosVersion}"`,
+			);
+		}
+		const paths = Object.keys(capture.streams);
+		if (paths.length !== capture.corpusRows) {
+			captureProblems.push(
+				`v${version} holds ${paths.length} streams but claims corpusRows=${capture.corpusRows}`,
+			);
+		}
+		const counted =
+			capture.aligned + capture.misaligned + (capture.failed ?? 0);
+		if (counted !== capture.corpusRows) {
+			captureProblems.push(
+				`v${version} counters do not add up: aligned ${capture.aligned} + ` +
+					`misaligned ${capture.misaligned} + failed ${capture.failed ?? 0} ` +
+					`!= corpusRows ${capture.corpusRows}`,
+			);
+		}
+		if (capture.misaligned > 0 || (capture.failed ?? 0) > 0) {
+			captureProblems.push(
+				`v${version} has ${capture.misaligned} misaligned and ` +
+					`${capture.failed ?? 0} failed rows — recapture before slicing`,
+			);
+		}
+		// Every version must cover the same scripts, or a version-only class or a
+		// version difference is invisible rather than absent.
+		const basePaths = Object.keys(base.streams);
+		if (paths.length !== basePaths.length) {
+			captureProblems.push(
+				`v${version} covers ${paths.length} scripts, v${VERSIONS[0]} covers ${basePaths.length}`,
+			);
+		} else {
+			const missing = basePaths.filter((p) => capture.streams[p] === undefined);
+			if (missing.length > 0) {
+				captureProblems.push(
+					`v${version} is missing ${missing.length} scripts present in ` +
+						`v${VERSIONS[0]}, e.g. ${missing.slice(0, 3).join(", ")}`,
+				);
+			}
+		}
+	}
+	if (captureProblems.length > 0) {
+		console.error(
+			"::error title=explain highlight slice::the captures are not complete " +
+				"enough to slice:\n" +
+				captureProblems.map((problem) => `  - ${problem}`).join("\n") +
+				"\nRecapture with `bun run explain:probe:highlight-recapture`. This " +
+				"refuses rather than shrinking the universe, because a slice cut from " +
+				"a short capture still claims to cover every class and every version " +
+				"difference.",
+		);
+		return 1;
+	}
+
 	const partition = (await Bun.file(PARTITION).json()) as Partition;
 	const splitOf = new Map<string, "dev" | "holdout">();
 	for (const group of partition.groups) {
@@ -211,10 +280,16 @@ export async function main(args: readonly string[]): Promise<number> {
 			continue;
 		}
 		if (streamsForPath.some((s) => !s?.pairs)) {
-			// A misaligned capture carries no pairs by design (no fabrication past a
-			// desync). Nothing to slice.
-			excludedTruncated.push(path);
-			continue;
+			// Unreachable given the capture check above (a row without pairs is
+			// misaligned or failed, and both are refused). Kept as a hard stop
+			// rather than a silent exclusion: quietly dropping it here is what let
+			// a short capture still claim complete class and version coverage.
+			console.error(
+				`::error title=explain highlight slice::${path} has no pairs for at ` +
+					"least one version, but the capture counters reported none " +
+					"missing. The capture is internally inconsistent — recapture it.",
+			);
+			return 1;
 		}
 		universe.push(path);
 	}
@@ -452,6 +527,25 @@ export async function main(args: readonly string[]): Promise<number> {
 	};
 
 	await Bun.write(outPath, `${JSON.stringify(output, null, "\t")}\n`);
+
+	// Format with the repo's own formatter before returning. `JSON.stringify`
+	// with a tab indent puts every run-length pair on three lines; biome collapses
+	// what fits. Without this the command the fixture README tells contributors to
+	// run emits a file that fails `bun run lint` and shows up as a 160 KB
+	// formatting-only diff — a regeneration path that cannot be followed is not a
+	// regeneration path.
+	const formatted = await Bun.$`bunx --bun biome format --write ${outPath}`
+		.nothrow()
+		.quiet();
+	if (formatted.exitCode !== 0) {
+		console.error(
+			"::error title=explain highlight slice::biome could not format " +
+				`${outPath} (exit ${formatted.exitCode}). The fixture was written but ` +
+				"is not in the repo's canonical form and will fail `bun run lint`.\n" +
+				formatted.stderr.toString().trim(),
+		);
+		return 1;
+	}
 	const bytes = Bun.file(outPath).size;
 	console.error(
 		`wrote ${outPath}: ${selected.size} scripts of ${universe.length} in universe ` +
