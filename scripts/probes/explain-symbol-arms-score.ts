@@ -1,15 +1,45 @@
 // cspell:ignore premask scanfix
-// Q13 promotion — score every candidate arm against the frozen corpus streams.
+// Q13 promotion — score the historical candidates and shipped resolver against
+// the frozen corpus streams.
 // Precision on decided / abstention / missed, against the full highlight
 // captures written by `explain:probe:highlight-recapture`. The candidate emits
 // ANALYZED-BYTE offsets, which
 // are the highlight stream's own byte offsets (Q15: the ASCII normalization is
 // byte-count-preserving), so no char→byte remap is needed.
+
+import {
+	resolveSymbols as resolveShippedSymbols,
+	HIGHLIGHT_CLASS as SHIPPED_HIGHLIGHT_CLASS,
+} from "../../src/explain/symbols.ts";
 import {
 	type Arm,
 	HIGHLIGHT_CLASS,
 	resolveSymbols,
 } from "./explain-symbol-arms.ts";
+
+type ScoreArm = Arm | "shipped";
+
+function scoreSymbols(text: string, arm: ScoreArm) {
+	if (arm === "shipped") {
+		return {
+			occurrences: resolveShippedSymbols(text).occurrences.map(
+				(occurrence) => ({
+					start: occurrence.start,
+					cls:
+						occurrence.cls === null
+							? null
+							: SHIPPED_HIGHLIGHT_CLASS[occurrence.cls],
+				}),
+			),
+		};
+	}
+	return {
+		occurrences: resolveSymbols(text, arm).occurrences.map((occurrence) => ({
+			start: occurrence.start,
+			cls: occurrence.cls === null ? null : HIGHLIGHT_CLASS[occurrence.cls],
+		})),
+	};
+}
 
 function expandPairs(pairs: [string, string][]): {
 	text: string;
@@ -32,8 +62,15 @@ const KNOWN_ARMS = [
 	"scanfix",
 	"closure",
 	"abstain",
-] as const satisfies readonly Arm[];
-const DEFAULT_ARMS: Arm[] = ["lab", "scanfix", "closure", "abstain"];
+	"shipped",
+] as const satisfies readonly ScoreArm[];
+const DEFAULT_ARMS: ScoreArm[] = [
+	"lab",
+	"scanfix",
+	"closure",
+	"abstain",
+	"shipped",
+];
 const requestedArms =
 	Bun.env["ARMS"]
 		?.split(",")
@@ -46,8 +83,8 @@ for (const arm of requestedArms) {
 		);
 	}
 }
-const ARMS: Arm[] =
-	requestedArms.length === 0 ? DEFAULT_ARMS : (requestedArms as Arm[]);
+const ARMS: ScoreArm[] =
+	requestedArms.length === 0 ? DEFAULT_ARMS : (requestedArms as ScoreArm[]);
 const VERSION = Bun.env["HL_VERSION"] ?? "7.23.2";
 const PARTITION_PATH = "test/fixtures/explain/corpus-partition.json";
 const ARTIFACT_PATH = `.scratch/explain-lab-q13-streams.v${VERSION}.json`;
@@ -103,7 +140,7 @@ for (const arm of ARMS) {
 			const errAt = classes.indexOf("error");
 			const limit = errAt >= 0 ? errAt : classes.length;
 			const seen = new Set<number>();
-			const { occurrences } = resolveSymbols(text, arm);
+			const { occurrences } = scoreSymbols(text, arm);
 			for (const o of occurrences) {
 				if (o.start >= limit) continue;
 				const expected = classes[o.start];
@@ -114,7 +151,7 @@ for (const arm of ARMS) {
 					t.abstained++;
 					continue;
 				}
-				const got = HIGHLIGHT_CLASS[o.cls];
+				const got = o.cls;
 				if (got === expected) t.correct++;
 				else {
 					t.wrong++;

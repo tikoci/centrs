@@ -101,7 +101,7 @@
 		"explain:probe:escapes": "bun run scripts/probes/explain-escape-sweep.ts",
 		"explain:probe:highlight-recapture": "bun run scripts/probes/explain-highlight-recapture.ts",
 		"explain:probe:symbol-anchors": "bun run scripts/probes/explain-symbol-anchors.ts",
-		"explain:probe:symbol-arms": "bun run scripts/probes/explain-symbol-arms-score.ts",
+		"explain:probe:symbol-arms-score": "bun run scripts/probes/explain-symbol-arms-score.ts",
 		"explain:probe:symbol-bad-sigil-replay": "bun run scripts/probes/explain-symbol-bad-sigil-replay.ts",
 		"explain:probe:symbol-classes-replay": "bun run scripts/probes/explain-symbol-classes-replay.ts",
 		"explain:menus:check": "bun run scripts/gen-explain-menus.ts --check",

@@ -6,15 +6,16 @@
 // rather than the per-occurrence classes
 // `bun run explain:probe:symbol-classes-replay` reads.
 //
-//   bun run explain:probe:symbol-bad-sigil-replay -- .scratch/explain-201-k2-*.out
+// Defaults to the committed device recordings; pass files after `--` to replay
+// a fresh capture instead.
 import { resolveSymbols } from "../../src/explain/symbols.ts";
 
-const files = process.argv.slice(2);
-if (files.length === 0) {
-	throw new Error(
-		"pass one or more recorded K2 probe-output files after `--`; refusing an empty 0/0 replay",
-	);
-}
+const DEFAULT_FILES = [
+	"test/fixtures/explain/symbol-probes/explain-201-k2-chr-probe.out",
+	"test/fixtures/explain/symbol-probes/explain-201-k2-chr-probe2.out",
+];
+const suppliedFiles = process.argv.slice(2);
+const files = suppliedFiles.length === 0 ? DEFAULT_FILES : suppliedFiles;
 let cases = 0;
 let agree = 0;
 const falsePositives: string[] = [];

@@ -1,0 +1,74 @@
+  Using cached image: chr-7.23.2
+# CHR 7.23.2 (stable) (undefined) build 2026-07-03 09:08:08
+
+X1 in-body use under an outer global
+  ":global e 1\n:onerror e in={:put 1} do={:put $e}"
+  8:"e"=global  21:"e"=local  45:"e"=local
+
+X2 use after, via `;` not a newline
+  ":global e 1\n:onerror e in={:put 1} do={:put 1}; :put $e"
+  8:"e"=global  21:"e"=local  54:"e"=global
+
+X3 the `in={}` part under an outer global
+  ":global e 1\n:onerror e in={:put $e} do={:put 1}"
+  8:"e"=global  21:"e"=local  33:"e"=local
+
+X4 two bodies deep under an outer global
+  ":global e 1\n:onerror e in={:put 1} do={:if (1=1) do={:put $e}}"
+  8:"e"=global  21:"e"=local  59:"e"=local
+
+X5 no outer claim: does it survive the statement?
+  ":onerror e in={:put 1} do={:put 1}\n:put $e"
+  9:"e"=local  41:"e"=local
+
+X6 body redeclares the error variable
+  ":onerror e in={:put 1} do={:local e 9}\n:put $e"
+  9:"e"=local  34:"e"=local  45:"e"=local
+
+X7 outer LOCAL claim, in-body use
+  ":local e 1\n:onerror e in={:put 1} do={:put $e}\n:put $e"
+  7:"e"=local  20:"e"=local  44:"e"=local  53:"e"=local
+
+X8 outer global, onerror, then a document local
+  ":global e 1\n:onerror e in={:put 1} do={:put 1}\n:local e 2\n:put $e"
+  8:"e"=global  21:"e"=local  54:"e"=local  64:"e"=global
+
+X9 control: loop var equivalent of X5
+  ":foreach e in={1} do={:put 1}\n:put $e"
+  9:"e"=auto  36:"e"=parameter
+
+Y1 quoted decl, bare hyphen reference
+  ":global \"set-dns\" 1\n:put $set-dns"
+  !! error cliff at 29 ("-")
+  8:"\"set-dns\""=global  26:"set"=parameter
+
+Y2 quoted decl, QUOTED reference
+  ":global \"set-dns\" 1\n:put $\"set-dns\""
+  8:"\"set-dns\""=global  26:"\"set-dns\""=global
+
+Y3 quoted decl, braced reference
+  ":global \"set-dns\" 1\n:put ${\"set-dns\"}"
+  !! error cliff at 26 ("{")
+  8:"\"set-dns\""=global
+
+Y4 no declaration, bare hyphen reference
+  ":put $set-dns"
+  !! error cliff at 9 ("-")
+  6:"set"=parameter
+
+Y5 hyphen as subtraction on a declared name
+  ":local octive 1\n:put ($octive-1)"
+  7:"octive"=local  23:"octive"=local
+
+Y6 declared prefix, hyphen, declared suffix
+  ":local a 1\n:local b 2\n:put ($a-b)"
+  7:"a"=local  18:"b"=local  29:"a"=local  31:"b"=local
+
+Y7 quoted local decl, bare reference
+  ":local \"set-dns\" 1\n:put $set-dns"
+  !! error cliff at 28 ("-")
+  7:"\"set-dns\""=local  25:"set"=parameter
+
+Y8 quoted decl, bare reference in a string
+  ":global \"set-dns\" 1\n:put \"$set-dns\""
+  8:"\"set-dns\""=global  27:"set"=parameter

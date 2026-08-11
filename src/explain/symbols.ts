@@ -79,7 +79,7 @@
  * scopes follow RouterOS scope identity, not brace depth alone" — and F3/F4 are
  * lexical facts the probe simply got wrong. Each was priced against the frozen
  * corpus streams before being shipped, then device-verified per occurrence on
- * CHR 7.23.2 (`bun run explain:probe:symbol-arms` +
+ * CHR 7.23.2 (`bun run explain:probe:symbol-arms-score` +
  * `bun run explain:probe:symbol-anchors`, the Q16 re-score method):
  *
  *   F1  A `$[…]` / `$(…)` substitution inside a double-quoted string is CODE

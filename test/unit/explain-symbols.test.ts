@@ -814,7 +814,8 @@ describe("explain/symbols — F6 bracket statement context (#201)", () => {
  *
  * Every expectation below is the device's own reading on CHR 7.23.2 AND
  * 7.24rc2, which agreed on all 25 rows of the deciding round. Replay the
- * recorded rows with `bun run explain:probe:symbol-classes-replay -- <files>`.
+ * recorded rows with `bun run explain:probe:symbol-classes-replay` (or pass a
+ * fresh capture after `--`).
  *
  * K3 claimed "an earlier `:global` outranks a later `:local`". The reverse order
  * loses too, so it is not a precedence between the classes at all — it is
@@ -1161,8 +1162,9 @@ describe("explain/symbols — F7 declaration claim (#201)", () => {
  *
  * Every offset below is the device's own error cliff on CHR 7.23.2. Replay the
  * recorded rows with
- * `bun run explain:probe:symbol-bad-sigil-replay -- <files>` (71/73 rows, 0
- * false positives, 0 wrong offsets; the 2 remaining are the device's SEPARATE
+ * `bun run explain:probe:symbol-bad-sigil-replay` (or pass a fresh capture
+ * after `--`; 71/73 rows, 0 false positives, 0 wrong offsets; the 2 remaining
+ * are the device's SEPARATE
  * "argument before a command" error, which lands on the `=`, not on a sigil).
  *
  * K2 said telling `/ip//address print` from `:put //foo` needed parser context

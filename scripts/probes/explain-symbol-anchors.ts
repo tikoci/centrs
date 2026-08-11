@@ -1,15 +1,16 @@
 /**
  * Re-verify the constructed Q13 symbol anchors against live RouterOS highlight.
  *
- * These are the corners that selected the production resolver's F1/F2/H5/H6
- * rules. The answer already lives in `src/explain/symbols.ts` and its unit
- * fixtures; this probe makes a RouterOS version bump a rerun instead of an
- * archaeology exercise.
+ * The committed fixture marks every corner this probe owns as a
+ * `device-verified branch anchor`. The answer already lives in
+ * `src/explain/symbols.ts` and its unit fixtures; this probe makes a RouterOS
+ * version bump a rerun instead of an archaeology exercise.
  *
  * Run: bun run explain:probe:symbol-anchors [existing-chr-name]
  */
 import { HIGHLIGHT_CLASS, resolveSymbols } from "../../src/explain/symbols.ts";
 import { openChr, probeOutputPath } from "./chr.ts";
+import { compareSymbolClass } from "./explain-symbol-comparison.ts";
 
 const REUSE = process.argv[2];
 const chr = await openChr({
@@ -49,6 +50,8 @@ try {
 	>;
 	const version = resource["version"]?.trim().split(/\s+/)[0] ?? "unknown";
 	const records: Record<string, unknown>[] = [];
+	let agreements = 0;
+	let abstentions = 0;
 	let disagreements = 0;
 
 	for (const anchor of anchors) {
@@ -61,19 +64,21 @@ try {
 		console.log(`\n=== ${anchor.id} — ${anchor.name}`);
 		for (const occurrence of occurrences) {
 			const device = classes[occurrence.start] ?? "?";
-			const sut =
-				occurrence.cls === null ? "ABSTAIN" : HIGHLIGHT_CLASS[occurrence.cls];
-			const agrees = occurrence.cls !== null && sut === device;
-			if (!agrees) disagreements++;
+			const offline =
+				occurrence.cls === null ? null : HIGHLIGHT_CLASS[occurrence.cls];
+			const outcome = compareSymbolClass(offline, device);
+			if (outcome === "agree") agreements++;
+			else if (outcome === "abstain") abstentions++;
+			else disagreements++;
 			rows.push({
 				start: occurrence.start,
 				text: occurrence.name,
-				sut,
+				offline: offline ?? "ABSTAIN",
 				device,
-				agrees,
+				outcome,
 			});
 			console.log(
-				`  @${String(occurrence.start).padStart(4)} ${occurrence.name.padEnd(12)} sut=${sut.padEnd(18)} device=${device}${agrees ? "" : "  <-- DIFFERS"}`,
+				`  @${String(occurrence.start).padStart(4)} ${occurrence.name.padEnd(12)} offline=${(offline ?? "ABSTAIN").padEnd(18)} device=${device}  ${outcome}`,
 			);
 		}
 
@@ -87,9 +92,9 @@ try {
 				rows.push({
 					start: i,
 					text: anchor.input.slice(i, end),
-					sut: "(missed)",
+					offline: "(missed)",
 					device: cls,
-					agrees: false,
+					outcome: "disagree",
 				});
 			}
 			i = end - 1;
@@ -113,6 +118,8 @@ try {
 				buildTime: resource["build-time"] ?? "",
 				capturedAt: new Date().toISOString(),
 				oracle: "highlight",
+				agreements,
+				abstentions,
 				disagreements,
 				records,
 			},
@@ -121,7 +128,7 @@ try {
 		)}\n`,
 	);
 	console.log(
-		`\nWrote ${outPath}: ${records.length} anchors, ${disagreements} disagreements`,
+		`\nWrote ${outPath}: ${records.length} anchors, ${agreements} agreements, ${abstentions} abstentions, ${disagreements} disagreements`,
 	);
 } finally {
 	if (!REUSE) await chr.remove();

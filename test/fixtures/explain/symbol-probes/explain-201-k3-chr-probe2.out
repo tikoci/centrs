@@ -1,0 +1,109 @@
+  Using cached image: chr-7.23.2
+# CHR 7.23.2 (stable) (undefined) build 2026-07-03 09:08:08
+
+H1 local, global, local
+  ":local v 1\n:global v 2\n:local v 3\n:put $v"
+  7:"v"=local  19:"v"=global  30:"v"=local  40:"v"=local
+
+H2 global, local, global
+  ":global v 1\n:local v 2\n:global v 3\n:put $v"
+  8:"v"=global  19:"v"=local  31:"v"=global  41:"v"=global
+
+H3 local, global, use, local, use
+  ":local v 1\n:global v 2\n:put $v\n:local v 3\n:put $v"
+  7:"v"=local  19:"v"=global  29:"v"=local  38:"v"=local  48:"v"=local
+
+I1 first=global, use in a control-flow body
+  ":global v 1\n:local v 2\n:if (1=1) do={:put $v}"
+  8:"v"=global  19:"v"=local  43:"v"=global
+
+I2 first=local, use in a control-flow body
+  ":local v 1\n:global v 2\n:if (1=1) do={:put $v}"
+  7:"v"=local  19:"v"=global  43:"v"=local
+
+I3 first=global, use in a CLOSURE body
+  ":global v 1\n:local v 2\n:local f do={:put $v}"
+  8:"v"=global  19:"v"=local  30:"f"=local  42:"v"=parameter
+
+I4 first=local, use in a CLOSURE body
+  ":local v 1\n:global v 2\n:local f do={:put $v}"
+  7:"v"=local  19:"v"=global  30:"f"=local  42:"v"=parameter
+
+I5 control: first=global only, use in a closure
+  ":global v 1\n:local f do={:put $v}"
+  8:"v"=global  19:"f"=local  31:"v"=parameter
+
+I6 control: first=local only, use in a closure
+  ":local v 1\n:local f do={:put $v}"
+  7:"v"=local  18:"f"=local  30:"v"=parameter
+
+J1 global, body, local, use
+  ":global v 1\n:if (1=1) do={:put 1}\n:local v 2\n:put $v"
+  8:"v"=global  41:"v"=local  51:"v"=global
+
+J2 local, body, global, use
+  ":local v 1\n:if (1=1) do={:put 1}\n:global v 2\n:put $v"
+  7:"v"=local  41:"v"=global  51:"v"=local
+
+J3 global, body that redeclares, local, use
+  ":global v 1\n:if (1=1) do={:local v 9}\n:local v 2\n:put $v"
+  8:"v"=global  33:"v"=local  45:"v"=local  55:"v"=global
+
+J4 inner scope's own first: local then global inside
+  ":if (1=1) do={:local v 1; :global v 2; :put $v}"
+  21:"v"=local  34:"v"=global  45:"v"=local
+
+J5 inner scope's own first: global then local inside
+  ":if (1=1) do={:global v 1; :local v 2; :put $v}"
+  22:"v"=global  34:"v"=local  45:"v"=global
+
+K1 onerror var, use AFTER the statement
+  ":global e 1\n:onerror e in={:put 1} do={:put 1}\n:put $e"
+  8:"e"=global  21:"e"=local  53:"e"=global
+
+K2 onerror var under a LOCAL first
+  ":local e 1\n:onerror e in={:put 1} do={:put $e}\n:put $e"
+  7:"e"=local  20:"e"=local  44:"e"=local  53:"e"=local
+
+K3 loop var under a local, use after
+  ":local i 1\n:foreach i in={1;2} do={:put $i}\n:put $i"
+  7:"i"=local  20:"i"=auto  41:"i"=auto  50:"i"=local
+
+K4 loop var then a local in the SAME body
+  ":foreach i in={1;2} do={:local i 9; :put $i}"
+  9:"i"=auto  31:"i"=local  42:"i"=local
+
+K5 loop var declared twice
+  ":foreach i in={1;2} do={:put 1}\n:foreach i in={3} do={:put $i}"
+  9:"i"=auto  41:"i"=auto  60:"i"=auto
+
+L1 global, set, local, use
+  ":global v 1\n:set v 2\n:local v 3\n:put $v"
+  8:"v"=global  17:"v"=global  28:"v"=local  38:"v"=global
+
+M1 lead bracket local first, then a global
+  "[:local v 1]\n:global v 2\n:put $v"
+  8:"v"=local  21:"v"=global  31:"v"=local
+
+M2 mid bracket local, then a document global
+  ":put [:local v 1]\n:global v 2\n:put $v"
+  13:"v"=local  26:"v"=global  36:"v"=global
+
+M3 first decl inside a mid bracket, second in the same bracket
+  ":put [:global v 1; :local v 2; :put $v]"
+  14:"v"=global  26:"v"=local  37:"v"=global
+
+N1 quoted hyphenated global
+  ":global \"set-dns\" 1\n:put $set-dns"
+  !! error cliff at 29 ("-")
+  8:"\"set-dns\""=global  26:"set"=parameter
+
+N2 quoted hyphenated global then quoted local
+  ":global \"set-dns\" 1\n:local \"set-dns\" 2\n:put $set-dns"
+  !! error cliff at 48 ("-")
+  8:"\"set-dns\""=global  27:"\"set-dns\""=local  45:"set"=parameter
+
+N3 unquoted hyphen in a declaration (expect error)
+  ":local set-dns 1"
+  !! error cliff at 10 ("-")
+  7:"set"=local

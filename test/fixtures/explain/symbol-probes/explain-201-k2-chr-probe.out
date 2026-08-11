@@ -1,0 +1,202 @@
+  Using cached image: chr-7.23.2
+# CHR 7.23.2 (stable) (undefined) build 2026-07-03 09:08:08
+
+A1 doubled inside a path
+  "/ip//address print"
+  !! error cliff at 4 ("/")
+  0:"/ip/"=dir  4:"/"=error  5:"address print"=none
+
+A2 control: single separators
+  "/ip/address print"
+  clean
+  0:"/ip/address"=dir  11:" "=none  12:"print"=cmd
+
+A3 space before the doubled run
+  "/ip //address print"
+  !! error cliff at 4 ("/")
+  0:"/ip"=dir  3:" "=none  4:"/"=error  5:"/address print"=none
+
+A4 doubled before the verb
+  "/ip address//print"
+  !! error cliff at 12 ("/")
+  0:"/ip"=dir  3:" "=none  4:"address/"=dir  12:"/"=error  13:"print"=none
+
+A5 tripled
+  "/ip///address print"
+  !! error cliff at 4 ("/")
+  0:"/ip/"=dir  4:"/"=error  5:"/address print"=none
+
+A6 trailing separator
+  "/ip/address/ print"
+  clean
+  0:"/ip/address/"=dir  12:" "=none  13:"print"=cmd
+
+A7 bare path, no leading slash
+  "ip//address print"
+  !! error cliff at 3 ("/")
+  0:"ip/"=dir  3:"/"=error  4:"address print"=none
+
+A8 doubled at a one-word path
+  "/interface//print"
+  !! error cliff at 11 ("/")
+  0:"/interface/"=dir  11:"/"=error  12:"print"=none
+
+A9 space-separated path then doubled
+  "/ip address //print"
+  !! error cliff at 12 ("/")
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"/"=error  13:"/print"=none
+
+A10 doubled after a deeper path
+  "/ip/firewall//filter print"
+  !! error cliff at 13 ("/")
+  0:"/ip/firewall/"=dir  13:"/"=error  14:"filter print"=none
+
+B1 url value
+  "/tool fetch url=//example.com"
+  clean
+  0:"/tool"=dir  5:" "=none  6:"fetch"=cmd  11:" "=none  12:"url"=arg  15:"="=syntax-meta  16:"//example.com"=none
+
+B2 url value with scheme
+  "/tool fetch url=http://example.com"
+  clean
+  0:"/tool"=dir  5:" "=none  6:"fetch"=cmd  11:" "=none  12:"url"=arg  15:"="=syntax-meta  16:"http://example.com"=none
+
+B3 comment value
+  "/ip address set 0 comment=a//b"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"set"=cmd  15:" 0 "=none  18:"comment"=arg  25:"="=syntax-meta  26:"a//b"=none
+
+B4 after :put
+  ":put //foo"
+  clean
+  0:":"=dir  1:"put"=cmd  4:" //foo"=none
+
+B5 as a :local value
+  ":local x //foo"
+  clean
+  0:":"=dir  1:"local"=cmd  6:" "=none  7:"x"=variable-local  8:" //foo"=none
+
+B6 filter value
+  "/ip address print where comment=//x"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"print"=cmd  17:" "=none  18:"where"=arg  23:" "=syntax-meta  24:"comment"=variable-local  31:"="=syntax-meta  32:"//x"=none
+
+B7 quoted value
+  "/tool fetch url=\"http://example.com\""
+  clean
+  0:"/tool"=dir  5:" "=none  6:"fetch"=cmd  11:" "=none  12:"url"=arg  15:"=\""=syntax-meta  17:"http://example.com"=none  35:"\""=syntax-meta
+
+B8 bare url after :put
+  ":put http://example.com"
+  clean
+  0:":"=dir  1:"put"=cmd  4:" http://example.com"=none
+
+B9 inside a string
+  ":put \"a//b\""
+  clean
+  0:":"=dir  1:"put"=cmd  4:" "=none  5:"\""=syntax-meta  6:"a//b"=none  10:"\""=syntax-meta
+
+B10 inside a comment
+  "# a//b"
+  clean
+  0:"# a//b"=comment
+
+C1 doubled as a bare argument
+  "/ip address print //foo"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"print"=cmd  17:" "=none  18:"//foo"=obj-inactive
+
+C2 doubled after find
+  "/ip address find //foo"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"find"=cmd  16:" "=none  17:"//foo"=variable-undefined
+
+C3 doubled argument name
+  "/ip address print //foo=1"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"print"=cmd  17:" "=none  18:"//foo"=obj-inactive  23:"="=syntax-meta  24:"1"=none
+
+C4 doubled after a value
+  "/ip address print comment=x //foo"
+  !! error cliff at 25 ("=")
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"print"=cmd  17:" "=none  18:"comment"=arg  25:"="=error  26:"x //foo"=none
+
+D1 `::` after a directive
+  ":put ::foo"
+  clean
+  0:":"=dir  1:"put"=cmd  4:" ::foo"=none
+
+D2 `:/` after a directive
+  ":put :/foo"
+  clean
+  0:":"=dir  1:"put"=cmd  4:" :/foo"=none
+
+D3 `/:` after a directive
+  ":put /:foo"
+  clean
+  0:":"=dir  1:"put"=cmd  4:" /:foo"=none
+
+D4 `::` in a path
+  "/ip::address print"
+  !! error cliff at 3 (":")
+  0:"/ip"=dir  3:":"=error  4:":address print"=none
+
+D5 `::` after a menu verb
+  "/ip address print ::foo"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"address"=dir  11:" "=none  12:"print"=cmd  17:" "=none  18:"::foo"=obj-inactive
+
+D6 `:` alone mid-path
+  "/ip:address print"
+  !! error cliff at 3 (":")
+  0:"/ip"=dir  3:":"=error  4:"address print"=none
+
+E1 doubled inside a MID bracket
+  ":put [/ip//address print]"
+  !! error cliff at 10 ("/")
+  0:":"=dir  1:"put"=cmd  4:" "=none  5:"["=syntax-meta  6:"/ip/"=dir  10:"/"=error  11:"address print]"=none
+
+E2 doubled inside a LEAD bracket
+  "[/ip//address print]"
+  !! error cliff at 5 ("/")
+  0:"["=syntax-meta  1:"/ip/"=dir  5:"/"=error  6:"address print]"=none
+
+E3 doubled inside a find bracket
+  "/ip route set [find //foo] disabled=yes"
+  clean
+  0:"/ip"=dir  3:" "=none  4:"route"=dir  9:" "=none  10:"set"=cmd  13:" "=none  14:"["=syntax-meta  15:"find"=cmd  19:" "=none  20:"//foo"=variable-undefined  25:"]"=syntax-meta  26:" "=none  27:"disabled"=arg  35:"="=syntax-meta  36:"yes"=none
+
+F1 declaration after the cliff
+  "/ip//address print\n:local v 1\n:put $v"
+  !! error cliff at 4 ("/")
+  0:"/ip/"=dir  4:"/"=error  5:"address print\n:local v 1\n:put $v"=none
+
+F2 declaration BEFORE the cliff
+  ":local v 1\n/ip//address print\n:put $v"
+  !! error cliff at 15 ("/")
+  0:":"=dir  1:"local"=cmd  6:" "=none  7:"v"=variable-local  8:" 1\n"=none  11:"/ip/"=dir  15:"/"=error  16:"address print\n:put $v"=none
+
+F3 cliff inside a body
+  ":if (1=1) do={/ip//address print}\n:local v 1"
+  !! error cliff at 18 ("/")
+  0:":"=dir  1:"if"=cmd  3:" "=none  4:"("=syntax-meta  5:"1"=none  6:"="=syntax-meta  7:"1"=none  8:")"=syntax-meta  9:" "=none  10:"do"=arg  12:"={"=syntax-meta  14:"/ip/"=dir  18:"/"=error  19:"address print}\n:local v 1"=none
+
+G1 leading doubled slash
+  "//local foo 1"
+  !! error cliff at 1 ("/")
+  0:"/"=dir  1:"/"=error  2:"local foo 1"=none
+
+G2 leading doubled colon
+  "::put 1"
+  !! error cliff at 1 (":")
+  0:":"=dir  1:":"=error  2:"put 1"=none
+
+G3 bare doubled slash
+  "//"
+  !! error cliff at 1 ("/")
+  0:"/"=dir  1:"/"=error
+
+G4 leading after a `;`
+  ":put 1; //local foo 1"
+  !! error cliff at 9 ("/")
+  0:":"=dir  1:"put"=cmd  4:" 1"=none  6:";"=syntax-meta  7:" "=none  8:"/"=dir  9:"/"=error  10:"local foo 1"=none

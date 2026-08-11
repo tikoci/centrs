@@ -6,7 +6,7 @@ the notes below.
 
 Most files are the promoted phase-0.5 lab corners consumed directly by
 `test/unit/explain-*.test.ts` (`segments`, `blocks`, `verbsplit`, `symbols`,
-`pathresolve`, `write`, `defects`, `coordinates`, `values`). The three below are
+`pathresolve`, `write`, `defects`, `coordinates`, `values`). The four below are
 different: they are **method artifacts**, promoted out of `.scratch/` by #186
 because durable files were citing them and a `.scratch/` wipe would have taken
 the citation's referent with it.
@@ -61,3 +61,15 @@ Read them as what they are: **five rules exercised**, four CRUD verbs as
 themselves plus one menu action. `transport.ts` widens the fifth into a family
 by an explicit maintainer decision (#241 review), not because the probe covered
 the family. Nothing else here is a licence to widen.
+
+## `symbol-probes/*.out` — the F7/F8 device recordings
+
+Verbatim RouterOS 7.23.2 and 7.24rc2 highlight recordings behind the F7 class
+and F8 hard-error rules. Replay the committed defaults with
+`bun run explain:probe:symbol-classes-replay` and
+`bun run explain:probe:symbol-bad-sigil-replay`; pass files after `--` to score
+a fresh capture instead. The old capture headers say architecture `undefined`
+because their throwaway probes queried the wrong `/system/resource` field; the
+version, channel, build time, input, offsets, and highlight classes are the
+verbatim device output. The two fuzz summaries were not promoted because they
+contain no recorded cases either replay can consume.

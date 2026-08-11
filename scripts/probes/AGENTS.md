@@ -16,8 +16,8 @@ because only a reviewed slice that lands under `test/fixtures/` is durable.
 | `explain-brace-slot-sweep.ts` | which `(verb, slot)` pairs read `{…}` as an array (#225/#257) | `src/explain/brace-slots.ts` + `test/fixtures/explain/values.json` → `interiorGrounding.braceSlots` |
 | `explain-escape-sweep.ts` | the device-accepted `\<c>` set inside a string (#252) | `VALID_SINGLE` in `src/explain/quoted-string.ts` |
 | `explain-highlight-recapture.ts` | the per-character `highlight` stream for every corpus script (Q13) | `test/fixtures/explain/highlight-streams.slice.json` (a stratified slice; the full capture is ~7.5 MB/version and stays out of the repo) |
-| `explain-symbol-anchors.ts` | the constructed F1/F2/H5/H6 symbol corners on live `highlight` | `src/explain/symbols.ts` + `test/unit/explain-symbols.test.ts` |
-| `explain-symbol-arms-score.ts` | the Q13 candidate-arm score over a full highlight capture | the F1/F2 decisions in `src/explain/symbols.ts` |
+| `explain-symbol-anchors.ts` | every committed device-verified symbol branch anchor on live `highlight` | `src/explain/symbols.ts` + `test/fixtures/explain/symbols.json` |
+| `explain-symbol-arms-score.ts` | the historical Q13 candidate arms and shipped resolver over a full highlight capture | the symbol decisions in `src/explain/symbols.ts` |
 | `explain-symbol-bad-sigil-replay.ts` | recorded K2 hard-error offsets | the F8 anchors in `test/unit/explain-symbols.test.ts` |
 | `explain-symbol-classes-replay.ts` | recorded K3 per-occurrence variable classes | the F7 anchors in `test/unit/explain-symbols.test.ts` |
 
@@ -39,3 +39,6 @@ because only a reviewed slice that lands under `test/fixtures/` is durable.
   fix, and the resolver announces which snapshot's bytes were measured.
 - **A replay must reject an empty input set.** Printing `0/0 agree` is not a
   successful replay and must not look like one.
+- **An abstention is not a disagreement.** Report decided agreements,
+  deliberate abstentions, and wrong assertions separately; a scorer that
+  turns the product's fail-closed answer red cannot measure the product.

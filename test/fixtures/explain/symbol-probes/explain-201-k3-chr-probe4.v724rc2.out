@@ -1,0 +1,95 @@
+  Using cached image: chr-7.24rc2
+# CHR 7.24rc2 (testing) (undefined) build 2026-07-10 08:58:23
+
+U1 lead bracket, no claim conflict
+  "[:local x 1; :put $x]\n:put $x"
+  8:"x"=local  19:"x"=local  28:"x"=local
+
+U2 conflict: use inside vs. in a LATER bracket
+  ":global x 1\n[:local x 2; :put $x]\n[:put $x]"
+  8:"x"=global  20:"x"=local  31:"x"=local  41:"x"=global
+
+U3 conflict: nested lead brackets
+  ":global x 1\n[[:local x 2]; :put $x]\n:put $x"
+  8:"x"=global  21:"x"=local  33:"x"=local  42:"x"=global
+
+U4 mid bracket under a local claim
+  ":local x 1\n:put [:global x 2; :put $x]\n:put $x"
+  7:"x"=local  25:"x"=global  36:"x"=global  45:"x"=local
+
+U5 promotion reaches a later bracket
+  "[:local x 1]\n[:put $x]"
+  8:"x"=local  20:"x"=local
+
+U6 a MID bracket does not promote
+  ":put [:local x 1]\n[:put $x]"
+  13:"x"=local  25:"x"=parameter
+
+U7 conflict: two uses inside the bracket
+  ":global x 1\n[:local x 2; :put $x; :put $x]"
+  8:"x"=global  20:"x"=local  31:"x"=local  40:"x"=local
+
+U8 promotion claims, later bracket cannot
+  "[:local x 1]\n[:global x 2; :put $x]\n:put $x"
+  8:"x"=local  22:"x"=global  33:"x"=global  42:"x"=local
+
+U9 promotion into a BODY scope
+  ":if (1=1) do={[:local x 1]; :put $x}\n:put $x"
+  22:"x"=local  34:"x"=local  43:"x"=parameter
+
+V1 :if body
+  ":if (1=1) do={:global v 1}\n:put $v"
+  22:"v"=global  33:"v"=parameter
+
+V2 :while body
+  ":while (false) do={:global v 1}\n:put $v"
+  27:"v"=global  38:"v"=parameter
+
+V3 :do…while body
+  ":do {:global v 1} while=(false)\n:put $v"
+  13:"v"=global  38:"v"=parameter
+
+V4 :foreach body
+  ":foreach i in={1} do={:global v 1}\n:put $v"
+  9:"i"=auto  30:"v"=global  41:"v"=parameter
+
+V5 bare block, use in a sibling block
+  "{:global v 1}\n{:put $v}"
+  9:"v"=global  21:"v"=parameter
+
+V6 control: outer global seen INSIDE a block
+  ":global v 1\n{:put $v}"
+  8:"v"=global  19:"v"=global
+
+V7 control: global seen inside its OWN block
+  ":if (1=1) do={:global v 1; :put $v}"
+  22:"v"=global  33:"v"=global
+
+V8 nested: global two bodies deep
+  ":if (1=1) do={:if (1=1) do={:global v 1}; :put $v}"
+  36:"v"=global  48:"v"=parameter
+
+V9 re-import after a body
+  ":if (1=1) do={:global v 1}\n:global v\n:put $v"
+  22:"v"=global  35:"v"=global  43:"v"=global
+
+W1 control: local then local
+  ":local v 1\n:local v 2\n:put $v"
+  7:"v"=local  18:"v"=local  28:"v"=local
+
+W2 use before the body's own claim
+  ":global v 1\n{:put $v; :local v 2; :put $v}"
+  8:"v"=global  19:"v"=global  29:"v"=local  40:"v"=local
+
+W3 onerror inside a body under an outer global
+  ":global e 1\n{:onerror e in={:put 1} do={:put 1}; :put $e}"
+  8:"e"=global  22:"e"=local  55:"e"=local
+
+W4 does `:set` claim a name?
+  ":set v 1\n:put $v"
+  !! error cliff at 5 ("v")
+  (no variable runs)
+
+W5 claim survives a nested body between
+  ":global v 1\n{:put 1}\n:local v 2\n:put $v"
+  8:"v"=global  28:"v"=local  38:"v"=global

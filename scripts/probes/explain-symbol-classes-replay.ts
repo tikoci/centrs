@@ -6,15 +6,21 @@
 // instead of a handful of hand-copied expectations — #201's "a reusable device
 // probe harness" at the scale this issue needs it.
 //
-//   bun run explain:probe:symbol-classes-replay -- .scratch/explain-201-k3-*.out
+// Defaults to the committed device recordings; pass files after `--` to replay
+// a fresh capture instead.
 import { HIGHLIGHT_CLASS, resolveSymbols } from "../../src/explain/symbols.ts";
+import { normalizeVariableClass } from "./explain-symbol-comparison.ts";
 
-const files = process.argv.slice(2);
-if (files.length === 0) {
-	throw new Error(
-		"pass one or more recorded K3 probe-output files after `--`; refusing an empty 0/0 replay",
-	);
-}
+const DEFAULT_FILES = [
+	"test/fixtures/explain/symbol-probes/explain-201-k3-chr-probe.out",
+	"test/fixtures/explain/symbol-probes/explain-201-k3-chr-probe2.out",
+	"test/fixtures/explain/symbol-probes/explain-201-k3-chr-probe3.out",
+	"test/fixtures/explain/symbol-probes/explain-201-k3-chr-probe4.v7232.out",
+	"test/fixtures/explain/symbol-probes/explain-201-k3-chr-probe4.v724rc2.out",
+	"test/fixtures/explain/symbol-probes/explain-201-k3-chr-probe5.out",
+];
+const suppliedFiles = process.argv.slice(2);
+const files = suppliedFiles.length === 0 ? DEFAULT_FILES : suppliedFiles;
 let cases = 0;
 let agree = 0;
 const disagreements: string[] = [];
@@ -41,7 +47,7 @@ for (const file of files) {
 		}
 		const device = new Map<number, string>();
 		for (const m of runsLine.matchAll(/(\d+):("(?:[^"\\]|\\.)*")=(\S+)/g))
-			device.set(Number(m[1]), m[3] as string);
+			device.set(Number(m[1]), normalizeVariableClass(m[3] as string));
 
 		const module_ = new Map<number, string>();
 		for (const o of resolveSymbols(input).occurrences) {
@@ -50,7 +56,7 @@ for (const file of files) {
 				o.start,
 				o.cls === null
 					? "(abstain)"
-					: HIGHLIGHT_CLASS[o.cls].slice("variable-".length),
+					: normalizeVariableClass(HIGHLIGHT_CLASS[o.cls]),
 			);
 		}
 

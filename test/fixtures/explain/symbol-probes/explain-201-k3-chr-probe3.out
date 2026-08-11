@@ -1,0 +1,114 @@
+  Using cached image: chr-7.23.2
+# CHR 7.23.2 (stable) (undefined) build 2026-07-03 09:08:08
+
+P1 global then a bare-block local
+  ":global x 1\n{:local x 2; :put $x}\n:put $x"
+  8:"x"=global  20:"x"=local  31:"x"=local  40:"x"=global
+
+P2 local then a bare-block global
+  ":local x 1\n{:global x 2; :put $x}\n:put $x"
+  7:"x"=local  20:"x"=global  31:"x"=global  40:"x"=local
+
+P3 bare block declares, use after
+  "{:local x 1}\n:put $x"
+  8:"x"=local  19:"x"=parameter
+
+P4 bare block globals, use after
+  "{:global x 1}\n:put $x"
+  9:"x"=global  20:"x"=parameter
+
+P5 global, bare block redeclares, use after
+  ":global x 1\n{:local x 2}\n:put $x"
+  8:"x"=global  20:"x"=local  31:"x"=global
+
+P6 bare block with no declaration
+  ":global x 1\n{:put $x}"
+  8:"x"=global  19:"x"=global
+
+P7 bare block is not a closure?
+  ":local a 1\n{:put $a}"
+  7:"a"=local  18:"a"=local
+
+Q1 global then a LEAD-bracket local + use inside
+  ":global x 1\n[:local x 2; :put $x]\n:put $x"
+  8:"x"=global  20:"x"=local  31:"x"=local  40:"x"=global
+
+Q2 local then a LEAD-bracket global + use inside
+  ":local x 1\n[:global x 2; :put $x]\n:put $x"
+  7:"x"=local  20:"x"=global  31:"x"=global  40:"x"=local
+
+Q3 global then a MID-bracket local + use after
+  ":global x 1\n:put [:local x 2; :put $x]\n:put $x"
+  8:"x"=global  25:"x"=local  36:"x"=local  45:"x"=global
+
+Q4 lead bracket declares first, document redeclares
+  "[:local x 1]\n:local x 2\n:put $x"
+  8:"x"=local  20:"x"=local  30:"x"=local
+
+R1 loop var visible after the statement?
+  ":foreach i in={1;2} do={:put 1}\n:put $i"
+  9:"i"=auto  38:"i"=parameter
+
+R2 for var visible after the statement?
+  ":for i from=1 to=2 do={:put 1}\n:put $i"
+  5:"i"=auto  37:"i"=parameter
+
+R3 body redeclares the loop var, use after
+  ":foreach i in={1;2} do={:local i 9}\n:put $i"
+  9:"i"=auto  31:"i"=local  42:"i"=parameter
+
+R4 two loop variables
+  ":foreach i,j in={1;2} do={:put $i; :put $j}"
+  9:"i"=auto  11:"j"=auto  32:"i"=auto  41:"j"=auto
+
+R5 global, loop, body local, use inside
+  ":global i 1\n:foreach i in={1;2} do={:local i 9; :put $i}"
+  8:"i"=global  21:"i"=auto  43:"i"=local  54:"i"=local
+
+R6 nested loops over the same name
+  ":foreach i in={1} do={:foreach i in={2} do={:put $i}; :put $i}"
+  9:"i"=auto  31:"i"=auto  50:"i"=auto  60:"i"=auto
+
+R7 loop var used in the `in=` argument
+  ":local i 1\n:foreach i in=$i do={:put 1}"
+  7:"i"=local  20:"i"=auto  26:"i"=auto
+
+R8 loop var, then a document local, then a use
+  ":foreach i in={1} do={:put 1}\n:local i 2\n:put $i"
+  9:"i"=auto  37:"i"=local  47:"i"=local
+
+S1 onerror var visible after the statement?
+  ":onerror e in={:put 1} do={:put 1}\n:put $e"
+  9:"e"=local  41:"e"=local
+
+S2 onerror var in the `in={}` part
+  ":onerror e in={:put $e} do={:put $e}"
+  9:"e"=local  21:"e"=local  34:"e"=local
+
+S3 onerror under a local, body redeclares
+  ":local e 1\n:onerror e in={:put 1} do={:local e 9; :put $e}\n:put $e"
+  7:"e"=local  20:"e"=local  45:"e"=local  56:"e"=local  65:"e"=local
+
+T1 escaped global, use, then an outer local, use
+  ":if (1=1) do={:global v 1}\n:put $v\n:local v 2\n:put $v"
+  22:"v"=global  33:"v"=parameter  42:"v"=local  52:"v"=local
+
+T2 escaped global, use only (S2 sanity)
+  ":if (1=1) do={:global v 1}\n:put $v"
+  22:"v"=global  33:"v"=parameter
+
+T3 escaped from a CLOSURE body
+  ":local f do={:global v 1}\n:put $v"
+  7:"f"=local  21:"v"=global  32:"v"=parameter
+
+T4 escaped global, outer local FIRST
+  ":local v 2\n:if (1=1) do={:global v 1}\n:put $v"
+  7:"v"=local  33:"v"=global  44:"v"=local
+
+T5 escaped global, use in a sibling body
+  ":if (1=1) do={:global v 1}\n:if (1=1) do={:put $v}"
+  22:"v"=global  47:"v"=parameter
+
+T6 escaped from a bare block
+  "{:global v 1}\n:put $v\n:local v 2\n:put $v"
+  9:"v"=global  20:"v"=parameter  29:"v"=local  39:"v"=local
