@@ -1120,8 +1120,11 @@ function valuesOf(
 		const ids = new Map<number, string>();
 		for (const [index, anchor] of anchored.anchors.entries()) {
 			const hints: ValueShape[] =
-				anchor.sourceShape === "array"
-					? ["array"]
+				// A source-proved shape wins outright: the delimiters prove `array`,
+				// and an `=` that binds no key proves `str` or `bool` (#258). None is
+				// recoverable from the decoded scalar `valueShapeHints` reads.
+				anchor.sourceShape !== undefined
+					? [anchor.sourceShape]
 					: valueShapeHints(anchor.value, {
 							quoted: anchor.quoted,
 							allowBareString: anchor.kind === "attribute",

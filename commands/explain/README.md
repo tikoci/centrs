@@ -688,9 +688,36 @@ and its phase is named below.
   result-local id, and `name` when the brace form spells a key. The separator is
   the delimiter's and not a choice: a brace splits on `;` while a depth-zero `,`
   inside one builds a nested array (`{1,2}` is a ONE-member array whose member
-  is `(, 1 2)`), a paren splits on `,`, and `(1;2)` does not parse. `=` binds a
-  key in the brace form (`{a=1}`) and COMPARES in the paren form
-  (`(a=1,b=2)` is two `bool` members), so keys are read in braces only.
+  is `(, 1 2)`), a paren splits on `,`, and `(1;2)` does not parse.
+
+  **`=` does three different things inside a literal, and a byte of whitespace
+  picks between them (#258).** It binds a key only in the brace form, and only
+  where the NAME TOUCHES the sign: `{a=1}` is the key `a`, but `{a =1}` lowers
+  to `(= $a 1)` and `(a=1,b=2)` is two comparisons, so keys are read in braces
+  only. A key whose right side is EMPTY is not an empty-valued key — the device
+  drops the sign and keeps the name as a POSITIONAL `str`, so `{a=}` is the
+  one-member array `a`, `{"a b"=}` decodes to `a b`, and `{1.1=}` is the string
+  `1.1` rather than the address (no member lexicon runs on a name). Everywhere
+  else the sign compares, which returns `bool` whatever it compares, so
+  `{$a=1}`, `{(a)=1}`, `{[:timestamp]=1}` and `{{1;2}=1}` are each one `bool`
+  member. A leading `-` belongs to the name (`{-1=1}` binds the key `-1`, while
+  `+` is a syntax error one position earlier), and every key is a `str` however
+  it is spelled: `{1=1}` keys on the string `1`, and `{1.1=1.1}` keys on `1.1`
+  while its VALUE goes through the address shortcut to `1.0.0.1`.
+
+  `bool` is claimed only where the `=` is the member's TOP operator, which
+  offline reads as a left side that is one complete operand — a name, `$name`,
+  or a fully-enclosing `(…)`/`[…]`/`{…}`. `{a b=1}` lowers to `(  $a (= $b 1))`
+  and `{$a=1,2}` to `(, (= $a 1) 2)`; in both the sign is nested under an
+  operator whose type is its operands', so both abstain. An empty side is a
+  syntax error in every spelling asked — `{=}`, `{=1}`, `(=1,2)`, `{$a=}`,
+  `{(a)=}`, `{a =}`, `{a b=}`, `{a,b=}`, `{[:len 1]=}`, `{{1;2}=}`, `{1+1=}`,
+  `{a<=}`, `{a==}`, `(a=,2)` — so it withdraws the literal rather than
+  abstaining on the member. The 97 rows are in
+  `test/fixtures/explain/values.json` → `interiorGrounding.keyBinding`, and the
+  value census below is unchanged by all of it — no statement in the 948-script
+  corpus reaches any of these branches, so the fixture is the only falsifier
+  they have.
 
   **A member is not an argument value, because the device does not parse it as
   one.** Inside a literal RouterOS reads an expression, so the member lexicon is

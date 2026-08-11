@@ -501,7 +501,12 @@
 	"interiorGrounding": {
 		"captured": "2026-08-10",
 		"stable": "7.23.3",
-		"probes": [":typeof", ":parse IL", "/console/inspect request=highlight"],
+		"probes": [
+			":typeof",
+			":parse IL",
+			"/console/inspect request=highlight",
+			":foreach k,v"
+		],
 		"maxTimeNanos": "9223372036854775807",
 		"separators": [
 			{
@@ -2559,6 +2564,596 @@
 					"observed": "num"
 				}
 			]
-		}
+		},
+		"keyBinding": [
+			{
+				"literal": "(-1=1,2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, (= (- 1) 1) 2))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool", "M|k=1|kt=num|v=2|vt=num"]
+			},
+			{
+				"literal": "(\"a b\"=1,2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, (= a b 1) 2))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool", "M|k=1|kt=num|v=2|vt=num"]
+			},
+			{
+				"literal": "((a)=1,2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, (= $a 1) 2))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool", "M|k=1|kt=num|v=2|vt=num"]
+			},
+			{
+				"literal": "([:len 1]=1,2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, (= (evl (evl /lenvalue=1)) 1) 2))",
+				"members": ["M|k=0|kt=num|v=true|vt=bool", "M|k=1|kt=num|v=2|vt=num"]
+			},
+			{
+				"literal": "({1;2}=1,2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, (= 1;2 1) 2))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool", "M|k=1|kt=num|v=2|vt=num"]
+			},
+			{
+				"literal": "(=,2)",
+				"parses": false,
+				"il": "syntax error (line 1 column 11)",
+				"members": []
+			},
+			{
+				"literal": "(=1,2)",
+				"parses": false,
+				"il": "syntax error (line 1 column 11)",
+				"members": []
+			},
+			{
+				"literal": "($a=1,2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, (= $a 1) 2))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool", "M|k=1|kt=num|v=2|vt=num"]
+			},
+			{
+				"literal": "(1,=2)",
+				"parses": false,
+				"il": "syntax error (line 1 column 13)",
+				"members": []
+			},
+			{
+				"literal": "(1<=2,2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, (<= 1 2) 2))",
+				"members": ["M|k=0|kt=num|v=true|vt=bool", "M|k=1|kt=num|v=2|vt=num"]
+			},
+			{
+				"literal": "(a =1,2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, (= $a 1) 2))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool", "M|k=1|kt=num|v=2|vt=num"]
+			},
+			{
+				"literal": "(a b=1,2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, (  $a (= $b 1)) 2))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool", "M|k=1|kt=num|v=2|vt=num"]
+			},
+			{
+				"literal": "(a= 1,2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, (= $a 1) 2))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool", "M|k=1|kt=num|v=2|vt=num"]
+			},
+			{
+				"literal": "(a=,2)",
+				"parses": false,
+				"il": "syntax error (line 1 column 13)",
+				"members": []
+			},
+			{
+				"literal": "(a=)",
+				"parses": false,
+				"il": "syntax error (line 1 column 14)",
+				"members": []
+			},
+			{
+				"literal": "(a=1,b=2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, (= $a 1) (= $b 2)))",
+				"members": [
+					"M|k=0|kt=num|v=false|vt=bool",
+					"M|k=1|kt=num|v=false|vt=bool"
+				]
+			},
+			{
+				"literal": "(a=1)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= $a 1))",
+				"members": ["M|k=false|kt=bool|v=|vt=nil"]
+			},
+			{
+				"literal": "{ =1 }",
+				"parses": false,
+				"il": "syntax error (line 1 column 12)",
+				"members": []
+			},
+			{
+				"literal": "{ a= }",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a)",
+				"members": ["M|k=0|kt=num|v=a|vt=str"]
+			},
+			{
+				"literal": "{ a=1 }",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a=1)",
+				"members": ["M|k=a|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{-1.1=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=-1.1=1)",
+				"members": ["M|k=-1.1|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{-1=}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=-1)",
+				"members": ["M|k=0|kt=num|v=-1|vt=str"]
+			},
+			{
+				"literal": "{-1=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=-1=1)",
+				"members": ["M|k=-1|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{-a=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=-a=1)",
+				"members": ["M|k=-a|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{.id=}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=.id)",
+				"members": ["M|k=0|kt=num|v=.id|vt=str"]
+			},
+			{
+				"literal": "{\"a b\" =}",
+				"parses": false,
+				"il": "syntax error (line 1 column 19)",
+				"members": []
+			},
+			{
+				"literal": "{\"a b\"=}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a b)",
+				"members": ["M|k=0|kt=num|v=a b|vt=str"]
+			},
+			{
+				"literal": "{\"a b\"=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a b=1)",
+				"members": ["M|k=a b|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{\"a\"=}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a)",
+				"members": ["M|k=0|kt=num|v=a|vt=str"]
+			},
+			{
+				"literal": "{\"a\"=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a=1)",
+				"members": ["M|k=a|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{()=1}",
+				"parses": false,
+				"il": "syntax error (line 1 column 13)",
+				"members": []
+			},
+			{
+				"literal": "{($a=1)}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= $a 1))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{(1)=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= 1 1))",
+				"members": ["M|k=0|kt=num|v=true|vt=bool"]
+			},
+			{
+				"literal": "{(a)=}",
+				"parses": false,
+				"il": "syntax error (line 1 column 16)",
+				"members": []
+			},
+			{
+				"literal": "{(a)=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= $a 1))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{(a)b=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(  $a (= $b 1)))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{[:len 1]=}",
+				"parses": false,
+				"il": "syntax error (line 1 column 21)",
+				"members": []
+			},
+			{
+				"literal": "{[:len 1]=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= (evl (evl /lenvalue=1)) 1))",
+				"members": ["M|k=0|kt=num|v=true|vt=bool"]
+			},
+			{
+				"literal": "{[:timestamp]=[:timestamp]}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= (evl (evl /timestamp)) (evl (evl /timestamp))))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{[:timestamp]=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= (evl (evl /timestamp)) 1))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{{$a=1}}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= $a 1))",
+				"members": ["M|k=0|kt=num|v=false|vt=array"]
+			},
+			{
+				"literal": "{{1;2}=}",
+				"parses": false,
+				"il": "syntax error (line 1 column 18)",
+				"members": []
+			},
+			{
+				"literal": "{{1;2}=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= 1;2 1))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{{a=}}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a)",
+				"members": ["M|k=0|kt=num|v=a|vt=array"]
+			},
+			{
+				"literal": "{+1=1}",
+				"parses": false,
+				"il": "syntax error (line 1 column 11)",
+				"members": []
+			},
+			{
+				"literal": "{=}",
+				"parses": false,
+				"il": "syntax error (line 1 column 11)",
+				"members": []
+			},
+			{
+				"literal": "{=1}",
+				"parses": false,
+				"il": "syntax error (line 1 column 11)",
+				"members": []
+			},
+			{
+				"literal": "{$a b=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(  $a (= $b 1)))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{$a-b=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= (- $a $b) 1))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{$a.b=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= (. $a $b) 1))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{$a<=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(<= $a 1))",
+				"members": ["M|k=0|kt=num|v=true|vt=bool"]
+			},
+			{
+				"literal": "{$a=}",
+				"parses": false,
+				"il": "syntax error (line 1 column 15)",
+				"members": []
+			},
+			{
+				"literal": "{$a=$b}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= $a $b))",
+				"members": ["M|k=0|kt=num|v=true|vt=bool"]
+			},
+			{
+				"literal": "{$a=1,2}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, (= $a 1) 2))",
+				"members": ["M|k=0|kt=num|v=false|vt=array;M|k=0|kt=num|v=2|vt=array"]
+			},
+			{
+				"literal": "{$a=1;2}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= $a 1);2)",
+				"members": ["M|k=0|kt=num|v=false|vt=bool", "M|k=1|kt=num|v=2|vt=num"]
+			},
+			{
+				"literal": "{$a=1;b=2}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= $a 1);b=2)",
+				"members": ["M|k=0|kt=num|v=false|vt=bool", "M|k=b|kt=str|v=2|vt=num"]
+			},
+			{
+				"literal": "{$a=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= $a 1))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{$a=1=2}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= (= $a 1) 2))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{0x10=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=0x10=1)",
+				"members": ["M|k=0x10|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{1;{a=}}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;a)",
+				"members": ["M|k=0|kt=num|v=1|vt=num", "M|k=1|kt=num|v=a|vt=array"]
+			},
+			{
+				"literal": "{1;$a=1,2}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;(, (= $a 1) 2))",
+				"members": [
+					"M|k=0|kt=num|v=1|vt=num",
+					"M|k=1|kt=num|v=false|vt=array;M|k=1|kt=num|v=2|vt=array"
+				]
+			},
+			{
+				"literal": "{1;$a=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;(= $a 1))",
+				"members": ["M|k=0|kt=num|v=1|vt=num", "M|k=1|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{1.1=}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1.1)",
+				"members": ["M|k=0|kt=num|v=1.1|vt=str"]
+			},
+			{
+				"literal": "{1.1=1.1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1.1=1.0.0.1)",
+				"members": ["M|k=1.1|kt=str|v=1.0.0.1|vt=ip"]
+			},
+			{
+				"literal": "{1+1=}",
+				"parses": false,
+				"il": "syntax error (line 1 column 16)",
+				"members": []
+			},
+			{
+				"literal": "{1+1=2}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= (+ 1 1) 2))",
+				"members": ["M|k=0|kt=num|v=true|vt=bool"]
+			},
+			{
+				"literal": "{1<=2}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(<= 1 2))",
+				"members": ["M|k=0|kt=num|v=true|vt=bool"]
+			},
+			{
+				"literal": "{1=}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1)",
+				"members": ["M|k=0|kt=num|v=1|vt=str"]
+			},
+			{
+				"literal": "{1=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1=1)",
+				"members": ["M|k=1|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{1w=}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1w)",
+				"members": ["M|k=0|kt=num|v=1w|vt=str"]
+			},
+			{
+				"literal": "{1w=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1w=1)",
+				"members": ["M|k=1w|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{a = 1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= $a 1))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{a =}",
+				"parses": false,
+				"il": "syntax error (line 1 column 15)",
+				"members": []
+			},
+			{
+				"literal": "{a =1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(= $a 1))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{a b=}",
+				"parses": false,
+				"il": "syntax error (line 1 column 16)",
+				"members": []
+			},
+			{
+				"literal": "{a b=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(  $a (= $b 1)))",
+				"members": ["M|k=0|kt=num|v=false|vt=bool"]
+			},
+			{
+				"literal": "{a-b=}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a-b)",
+				"members": ["M|k=0|kt=num|v=a-b|vt=str"]
+			},
+			{
+				"literal": "{a,b=}",
+				"parses": false,
+				"il": "syntax error (line 1 column 16)",
+				"members": []
+			},
+			{
+				"literal": "{a,b=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, $a (= $b 1)))",
+				"members": ["M|k=0|kt=num|v=false|vt=array"]
+			},
+			{
+				"literal": "{a!=}",
+				"parses": false,
+				"il": "syntax error (line 1 column 15)",
+				"members": []
+			},
+			{
+				"literal": "{a!=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(!= $a 1))",
+				"members": ["M|k=0|kt=num|v=true|vt=bool"]
+			},
+			{
+				"literal": "{a.b=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a.b=1)",
+				"members": ["M|k=a.b|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{a<=}",
+				"parses": false,
+				"il": "syntax error (line 1 column 15)",
+				"members": []
+			},
+			{
+				"literal": "{a<=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(<= $a 1))",
+				"members": ["M|k=0|kt=num|v=true|vt=bool"]
+			},
+			{
+				"literal": "{a= }",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a)",
+				"members": ["M|k=0|kt=num|v=a|vt=str"]
+			},
+			{
+				"literal": "{a= 1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a=1)",
+				"members": ["M|k=a|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{a=;}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a)",
+				"members": ["M|k=0|kt=num|v=a|vt=str"]
+			},
+			{
+				"literal": "{a=;2}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a;2)",
+				"members": ["M|k=0|kt=num|v=a|vt=str", "M|k=1|kt=num|v=2|vt=num"]
+			},
+			{
+				"literal": "{a=;a=}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a;a)",
+				"members": ["M|k=0|kt=num|v=a|vt=str", "M|k=1|kt=num|v=a|vt=str"]
+			},
+			{
+				"literal": "{a=;b=2}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a;b=2)",
+				"members": ["M|k=0|kt=num|v=a|vt=str", "M|k=b|kt=str|v=2|vt=num"]
+			},
+			{
+				"literal": "{a=}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a)",
+				"members": ["M|k=0|kt=num|v=a|vt=str"]
+			},
+			{
+				"literal": "{a==}",
+				"parses": false,
+				"il": "syntax error (line 1 column 13)",
+				"members": []
+			},
+			{
+				"literal": "{a=1,2}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a=(, 1 2))",
+				"members": ["M|k=a|kt=str|v=1|vt=array;M|k=a|kt=str|v=2|vt=array"]
+			},
+			{
+				"literal": "{a=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a=1)",
+				"members": ["M|k=a|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{b=}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=b)",
+				"members": ["M|k=0|kt=num|v=b|vt=str"]
+			},
+			{
+				"literal": "{true=}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=true)",
+				"members": ["M|k=0|kt=num|v=true|vt=str"]
+			},
+			{
+				"literal": "{true=1}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=true=1)",
+				"members": ["M|k=true|kt=str|v=1|vt=num"]
+			}
+		]
 	}
 }

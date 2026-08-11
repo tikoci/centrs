@@ -76,6 +76,12 @@ interface ValueFixture {
 		}[];
 		members: { literal: string; type: string; value: string }[];
 		keyed: { literal: string; il: string; members: string[] }[];
+		keyBinding: {
+			literal: string;
+			parses: boolean;
+			il: string;
+			members: string[];
+		}[];
 		invalidLiterals: string[];
 		nestedLiterals: { literal: string; parses: boolean; il: string }[];
 		braceSlots: { verb: string; slot: string; outcome: string }[];
@@ -699,16 +705,26 @@ describe("value anchors", () => {
 			["element", "b", "v0", "time"],
 		]);
 		// `=` compares rather than binding a key in the paren form, so both
-		// members are expressions and abstain.
+		// members are positional `bool` — the type the sign returns whatever it
+		// compares — and neither carries a name (#258).
 		expect(shapes(":local z (a=1,b=2)")).toEqual([
 			["positional", null, null, "array"],
+			["element", null, "v0", "bool"],
+			["element", null, "v0", "bool"],
 		]);
 		// `a=` is not an empty-valued key: `{a=;1}` is two members on the device,
-		// the first the STRING `a` — the `=` disappears. Offline declines to
-		// claim either reading of it and still reads the member beside it.
+		// the first the positional STRING `a` — the `=` disappears (#258).
 		expect(shapes(":local z {a=;1}")).toEqual([
 			["positional", null, null, "array"],
+			["element", null, "v0", "str"],
 			["element", null, "v0", "num"],
+		]);
+		// A name that does not TOUCH the sign compares instead of binding, and a
+		// left side that is not one operand abstains rather than guessing a type.
+		expect(shapes(":local z {a =1;$b=2;c d=3}")).toEqual([
+			["positional", null, null, "array"],
+			["element", null, "v0", "bool"],
+			["element", null, "v0", "bool"],
 		]);
 	});
 
@@ -822,6 +838,56 @@ describe("value anchors", () => {
 				claimed: false,
 			});
 		}
+	});
+
+	/**
+	 * The `=` axis, scored against the 97 literals the device answered for #258.
+	 *
+	 * `=` is the one byte inside a literal that changes what a member IS rather
+	 * than what it holds: it binds a key, or compares, or vanishes and leaves the
+	 * name behind as a string — and which of the three happens turns on a byte of
+	 * whitespace and on the shape of the left side. So the rows are scored the
+	 * same one-sided way as the rest of this file. Abstention is always allowed;
+	 * naming a type the device did not report, or calling bytes an array when
+	 * `:parse` refuses the statement, is not.
+	 */
+	test("no `=` member is typed against the device that typed it", () => {
+		// `:put "…$v…"` DISTRIBUTES the string over an array value, so a member
+		// whose value is an array arrives as several `M|` copies on one line. They
+		// are one member with one type, which is the first `vt=` on the line.
+		const deviceTypes = (row: { members: string[] }) =>
+			row.members.map(
+				(line) =>
+					/\|vt=([a-z0-9-]+)/.exec(line.split(";M|")[0] ?? "")?.[1] ?? "?",
+			);
+		const wrong: string[] = [];
+		for (const row of fixture.interiorGrounding.keyBinding) {
+			const input = `:local z ${row.literal}`;
+			const values = explainCommand(input).values.occurrences;
+			const container = values.find((value) => value.kind !== "element");
+			if (!row.parses) {
+				if (container?.facts.shapeHints?.values.includes("array"))
+					wrong.push(`${row.literal}: device rejects it, offline says array`);
+				continue;
+			}
+			// Direct members only: a nested container's own members are scored
+			// against the device row for that nested literal, not this one.
+			const offline = values
+				.filter(
+					(value) => value.kind === "element" && value.parent === container?.id,
+				)
+				.map((value) => value.facts.shapeHints?.values.join("|") ?? "?");
+			const available = deviceTypes(row);
+			for (const shape of offline) {
+				const at = available.indexOf(shape);
+				if (at === -1)
+					wrong.push(
+						`${row.literal}: offline ${shape}, device ${deviceTypes(row).join(",")}`,
+					);
+				else available.splice(at, 1);
+			}
+		}
+		expect(wrong).toEqual([]);
 	});
 
 	test("the literals the device accepts are still read", () => {
