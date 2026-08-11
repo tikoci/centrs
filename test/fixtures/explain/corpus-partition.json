@@ -1,7 +1,7 @@
 {
 	"lab": "centrs#185 phase-0",
 	"artifact": "corpus partition freeze (dev/holdout)",
-	"generated_by": ".scratch/explain-lab-partition.ts",
+	"frozen": "Do not regenerate: published phase-0 scores depend on this exact dev/holdout split.",
 	"corpus_db": "lsp-routeros-ts/test-data/corpus.sqlite",
 	"rules": {
 		"R1": "group = forum topic id when present, else collection",

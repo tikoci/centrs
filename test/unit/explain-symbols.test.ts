@@ -813,9 +813,8 @@ describe("explain/symbols — F6 bracket statement context (#201)", () => {
  * limit).
  *
  * Every expectation below is the device's own reading on CHR 7.23.2 AND
- * 7.24rc2, which agreed on all 25 rows of the deciding round; captured by
- * `.scratch/explain-201-k3-chr-probe{,2,3,4,5}.ts` and replayed against this
- * module by `.scratch/explain-201-k3-probe-check.ts`.
+ * 7.24rc2, which agreed on all 25 rows of the deciding round. Replay the
+ * recorded rows with `bun run explain:probe:symbol-classes-replay -- <files>`.
  *
  * K3 claimed "an earlier `:global` outranks a later `:local`". The reverse order
  * loses too, so it is not a precedence between the classes at all — it is
@@ -1160,11 +1159,11 @@ describe("explain/symbols — F7 declaration claim (#201)", () => {
 /**
  * F8 — a sigil is a DEFECT in menu-path position (#201, was the K2 known limit).
  *
- * Every offset below is the device's own error cliff on CHR 7.23.2, captured by
- * `.scratch/explain-201-k2-chr-probe{,2}.ts` and replayed against this module by
- * `.scratch/explain-201-k2-probe-check.ts` (71/73 rows, 0 false positives, 0
- * wrong offsets; the 2 remaining are the device's SEPARATE "argument before a
- * command" error, which lands on the `=`, not on a sigil).
+ * Every offset below is the device's own error cliff on CHR 7.23.2. Replay the
+ * recorded rows with
+ * `bun run explain:probe:symbol-bad-sigil-replay -- <files>` (71/73 rows, 0
+ * false positives, 0 wrong offsets; the 2 remaining are the device's SEPARATE
+ * "argument before a command" error, which lands on the `=`, not on a sigil).
  *
  * K2 said telling `/ip//address print` from `:put //foo` needed parser context
  * the lexical scan did not have. What it actually needs is the region that ends
@@ -1308,9 +1307,9 @@ describe("explain/symbols — F8 mid-statement defect (#201)", () => {
 		// spelling that resolves. S19 tries the FULL run first, so this reports a
 		// confident `global` where the device errors out.
 		//
-		// Pre-existing and NOT part of F7: the same rows fail identically on the
-		// pre-F7 module (`.scratch/explain-201-k3-probe-check-old.ts`). Found by the
-		// F7 probe rounds and pinned here so a fix to S19 flips it on purpose.
+		// Pre-existing and NOT part of F7: the same rows failed identically on the
+		// pre-F7 module. Found by the F7 probe rounds and pinned here so a fix to
+		// S19 flips it on purpose.
 		expect(
 			resolveSymbols(':global "set-dns" 1\n:put $set-dns').occurrences.map(
 				(o) => [o.name, o.cls],
