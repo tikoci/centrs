@@ -779,16 +779,26 @@ and its phase is named below.
   on the seconds fallback rather than encoding a chain that depends on a failed
   address attempt.
 
+  <!-- BEGIN GENERATED value-census — regenerate with `bun run explain:value-census:readme` -->
   The corpus census is re-derivable with `bun run explain:value-census` and
-  covers 948 source scripts. Every one of the 13,168 emitted values in a
-  statement the strict argument lexer ALSO read has identical half-open byte
-  spans and decoded text (0 contradictions), while the prefix-safe scan retains
-  6,540 values across 569 statements whose strict REST reading abstains. Of
-  19,708 emitted occurrences, 5,636 are array members (529 keyed, 1,147 nested
-  inside another member) and 813 are arrays; the corpus contains no
-  source-literal `id` example. All spans were in bounds, every member named a
-  container that exists, and every member sat strictly inside it. The strict
-  lexer remains all-or-nothing; only non-authoritative hints use the wider view.
+  covers 948 source scripts. The figures below are generated from
+  `test/fixtures/explain/values.json` → `corpus` by
+  `bun run explain:value-census:readme` and gated against it by
+  `bun run explain:value-census:readme:check`; the fixture itself is gated
+  against a fresh corpus run by `bun run explain:value-census:check`. Of the
+  13,168 emitted values in a statement the strict argument lexer ALSO read, 0
+  disagree with it on half-open byte span or decoded text, while the
+  prefix-safe scan retains a further 6,540 values across 569 statements whose
+  strict REST reading abstains. Of 19,708 emitted occurrences, 5,636 are array
+  members (529 keyed, 1,147 nested inside another member) and 813 are arrays;
+  the corpus holds no source-literal `id` example. The three structural
+  counters — spans addressing bytes outside their own source, members naming a
+  container that does not exist, members escaping the container they name —
+  read 0, 0 and 0, and each must stay 0.
+  <!-- END GENERATED value-census -->
+
+  The strict lexer remains all-or-nothing; only non-authoritative hints use the
+  wider view.
 
 ### Offline comment placement (#245)
 

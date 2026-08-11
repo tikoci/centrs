@@ -27,6 +27,18 @@ documenting cross-cutting shifts that affect contributors and consumers.
   and never on a PR; both now fall back to the pinned snapshot and announce the
   source and hash they used. A new CI job gates the fetch and posts both
   censuses to the run summary (#186).
+- **The `explain` value census is drift-gated, not just re-derivable.** Its
+  figures live in three places — the census itself, the `corpus` block of
+  `test/fixtures/explain/values.json`, and prose in `commands/explain/README.md`
+  — and #256 shipped with the README still quoting pre-change numbers, caught by
+  review rather than CI. Each link now has a gate keyed to the data it needs:
+  `bun run explain:value-census:check` re-runs the census against the committed
+  fixture in the CI corpus job, while the README paragraph became a generated
+  projection of that fixture (`bun run explain:value-census:readme`) checked by
+  `bun run explain:value-census:readme:check` in `lint:ci` and in `bun test`,
+  needing no corpus at all. The generated prose reports the invariants as
+  counters rather than asserting they hold, so regenerating after a regression
+  states it instead of reading as reassurance (#260).
 
 ## 0.1.3 — 2026-07-06
 
