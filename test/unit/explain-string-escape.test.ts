@@ -211,4 +211,88 @@ describe("string escape validation (#247)", () => {
 			collectStringEscapeDefects('# "\\q"\n:put 1').length,
 		).toBeGreaterThan(0);
 	});
+
+	test("the two walkers stay in lockstep (#253 anti-drift)", () => {
+		// Golden boundaries for scanQuotedString — the CONTRACT of the shared
+		// frame grammar. A delimiter or substitution change that moves the
+		// wrong `"` must update these deliberately, not pass on `end>start`.
+		const boundaryCases: [string, number, { end: number; closed: boolean }][] =
+			[
+				[':put "hi"', 5, { end: 9, closed: true }],
+				[':put "a\\"b"', 5, { end: 11, closed: true }],
+				[':put "\\\\"', 5, { end: 9, closed: true }],
+				[':put "$[ :put "hi" ]"', 5, { end: 21, closed: true }],
+				[':put "$( :put "hi" )"', 5, { end: 21, closed: true }],
+				['"a\\\r\nb"', 0, { end: 7, closed: true }],
+				['"\\0A"', 0, { end: 5, closed: true }],
+				['"$[ $[ $[ x ] ] ]"', 0, { end: 18, closed: true }],
+				// {/} is a real frame inside a substitution (not just []/())
+				// and a mismatched closer must not pop the wrong frame.
+				['"$[{]"', 0, { end: 6, closed: false }],
+				['"$[ )"', 0, { end: 6, closed: false }],
+				[':put "a"; :put "\\q"', 5, { end: 8, closed: true }],
+				[':put "a"; :put "\\q"', 15, { end: 19, closed: true }],
+				['# "\\q"\n:put 1', 2, { end: 6, closed: true }],
+			];
+		for (const [input, at, expected] of boundaryCases) {
+			expect(scanQuotedString(input, at)).toEqual(expected);
+		}
+
+		// Defect parity — pin both walkers against ground truth, not each
+		// other. Comparing viaExplain vs viaCollector is one walker vs itself.
+		const defectCases: [string, boolean][] = [
+			[':put "\\q"', true],
+			[':put "\\0a"', true],
+			[':put "\\0"', true],
+			[':put "\\?"', false],
+			[':put "a\\n b"', false],
+			[':put "a\\r\\nb"', false],
+			[':put "a\\0A b"', false],
+			[':put "outer $[ :put \\"inner \\\\q\\" ] tail"', false],
+			[':foreach i in={1;2} do={:put "a\\qb"}', true],
+			[':local s "a"; :put "$s"', false],
+		];
+		for (const [input, expectBad] of defectCases) {
+			expect(
+				explainCommand(input).diagnostics.some(
+					(d) => d.code === "explain/canonicalizer/bad-string-escape",
+				),
+			).toBe(expectBad);
+			expect(collectStringEscapeDefects(input).length > 0).toBe(expectBad);
+		}
+		// Comment handling is not a walker-vs-walker parity — the collector
+		// only skips comments when given the segments, so test it through
+		// the explained path and with explicit comment spans.
+		expect(
+			explainCommand('# "\\q"\n:put 1').diagnostics.some(
+				(d) => d.code === "explain/canonicalizer/bad-string-escape",
+			),
+		).toBe(false);
+		expect(
+			collectStringEscapeDefects('# "\\q"\n:put 1', [{ start: 0, end: 7 }])
+				.length,
+		).toBe(0);
+		expect(collectStringEscapeDefects('# "\\q"\n:put 1').length).toBe(1);
+
+		// Depth parity — the M3 killer (#253). MAX_STRING_FRAME_DEPTH is a
+		// shared constant; a per-walker cap (e.g. collect cap 8 vs scan 256)
+		// must fail. The two walkers share the depth guard in `stepFrame`, so
+		// at 255 nestings the string still closes, at 256 it fails closed.
+		const inside = (n: number, tail: string): string =>
+			`"a${"$[".repeat(n)}${tail}${"]".repeat(n)}"`;
+		for (const n of [255, 256]) {
+			const valid = inside(n, "hi");
+			expect(scanQuotedString(valid, 0).closed).toBe(n === 255);
+			expect(collectStringEscapeDefects(valid).length).toBe(0);
+		}
+		// A malformed escape at the deepest frame: reported only while the
+		// collector is under the SHARED cap, so a lower cap fails here.
+		// `inside(n, '"a\qb"')` puts a string literal inside the nested
+		// code; at n=254 depth is 256 (outer " + 254 "[" + inner "), so
+		// the escape is seen, while at n=255 depth 257 exceeds the cap.
+		for (const n of [254, 255]) {
+			const bad = inside(n, '"a\\qb"');
+			expect(collectStringEscapeDefects(bad).length).toBe(n === 254 ? 1 : 0);
+		}
+	});
 });
