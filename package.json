@@ -95,6 +95,7 @@
 		"explain:catalog": "bun run scripts/gen-explain-catalog.ts",
 		"explain:catalog:check": "bun run scripts/gen-explain-catalog.ts --check",
 		"explain:corpus-census": "bun run scripts/explain-corpus-census.ts",
+		"explain:highlight-slice": "bun run scripts/explain-highlight-slice.ts",
 		"explain:menus": "bun run scripts/gen-explain-menus.ts",
 		"explain:probe:brace-slots": "bun run scripts/probes/explain-brace-slot-sweep.ts",
 		"explain:probe:escapes": "bun run scripts/probes/explain-escape-sweep.ts",
