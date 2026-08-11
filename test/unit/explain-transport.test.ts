@@ -185,7 +185,7 @@ describe("the runtime-exercised Q8 REST shapes", () => {
 			const rows = new Map(
 				(captures[0]?.data.rows ?? []).map((row) => [row.rule, row]),
 			);
-			for (const [name, input, , path] of cases) {
+			for (const [name, input] of cases) {
 				const rule = CASE_RULES[name];
 				expect(rule, `${name} names no capture rule`).toBeDefined();
 				const row = rows.get(rule as string);
@@ -199,7 +199,10 @@ describe("the runtime-exercised Q8 REST shapes", () => {
 				expect(String(result.rest?.method), `${name} method`).toBe(
 					String(row?.method),
 				);
-				expect(shapeOf(input, path), `${name} shape`).toBe(
+				// The shape comes off the path the MODULE produced, not the expected
+				// path in `cases` — reading the table here would check the table
+				// against the capture and call it a binding on the module.
+				expect(shapeOf(input, result.rest?.path ?? ""), `${name} shape`).toBe(
 					shapeOfRule(rule as string),
 				);
 			}
