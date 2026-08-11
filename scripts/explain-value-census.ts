@@ -366,20 +366,47 @@ function readFixtureCensus(): ValueCensus {
  */
 const PROVENANCE_KEYS: ReadonlySet<string> = new Set(["censusCommand"]);
 
-/** Compare a fresh census against the committed fixture, figure by figure. */
+/** A per-shape tally such as `shapeCounts`, as opposed to a scalar figure. */
+function isCountMap(value: unknown): value is Record<string, number> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Compare a fresh census against the committed fixture, figure by figure.
+ *
+ * A tally is compared **entry by entry**, never as serialized text. JSON object
+ * order is insertion order, and `shapeCounts` is built in first-seen order
+ * across the corpus walk — so a corpus whose scripts are visited in a different
+ * order, or a hand-tidied fixture, reorders the keys without moving a single
+ * count. Comparing `JSON.stringify` output would call that drift and print two
+ * blobs a reader cannot tell apart. Entry-wise comparison also makes the
+ * message say which shape moved instead of dumping both tallies.
+ */
 export function diffAgainstFixture(
 	fresh: ValueCensus,
 	pinned: ValueCensus,
 ): string[] {
 	const measured = fresh as unknown as Record<string, unknown>;
 	const committed = pinned as unknown as Record<string, unknown>;
-	const render = (value: unknown): string =>
-		typeof value === "number" ? String(value) : JSON.stringify(value);
 	const drift: string[] = [];
 	for (const key of Object.keys(measured)) {
 		if (PROVENANCE_KEYS.has(key)) continue;
-		const a = render(measured[key]);
-		const b = render(committed[key]);
+		const a = measured[key];
+		const b = committed[key];
+		if (isCountMap(a) || isCountMap(b)) {
+			const am = isCountMap(a) ? a : {};
+			const bm = isCountMap(b) ? b : {};
+			const names = [
+				...new Set([...Object.keys(am), ...Object.keys(bm)]),
+			].sort();
+			for (const name of names) {
+				if (am[name] === bm[name]) continue;
+				drift.push(
+					`${key}.${name}: fixture ${bm[name] ?? "absent"}, measured ${am[name] ?? "absent"}`,
+				);
+			}
+			continue;
+		}
 		if (a !== b) drift.push(`${key}: fixture ${b}, measured ${a}`);
 	}
 	// A figure the fixture carries and the census no longer emits is drift too:

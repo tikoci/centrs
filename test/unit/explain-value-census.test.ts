@@ -136,6 +136,42 @@ describe("#260 value-census drift gate", () => {
 				},
 				fixture.corpus,
 			).map((line) => line.split(":")[0]),
-		).toEqual(["keyedElements", "shapeCounts"]);
+		).toEqual(["keyedElements", "shapeCounts.array"]);
+	});
+
+	test("a tally is compared by entry, so key ORDER is not census data", () => {
+		// `shapeCounts` is built in first-seen order across the corpus walk, so a
+		// different visit order — or a hand-tidied fixture — reorders the keys
+		// without moving a count. Serialized comparison called that drift and
+		// printed two blobs a reader cannot tell apart.
+		const reversed = Object.fromEntries(
+			Object.entries(fixture.corpus.shapeCounts).reverse(),
+		);
+		expect(Object.keys(reversed)).not.toEqual(
+			Object.keys(fixture.corpus.shapeCounts),
+		);
+		expect(
+			diffAgainstFixture(
+				{ ...fixture.corpus, shapeCounts: reversed },
+				fixture.corpus,
+			),
+		).toEqual([]);
+
+		// Order-independence must not cost sensitivity: added, removed and
+		// changed entries all still report, and each names the shape that moved.
+		const { mac: _dropped, ...withoutMac } = fixture.corpus.shapeCounts;
+		expect(
+			diffAgainstFixture(
+				{
+					...fixture.corpus,
+					shapeCounts: { ...withoutMac, id: 4, num: 0 },
+				},
+				fixture.corpus,
+			).sort(),
+		).toEqual([
+			"shapeCounts.id: fixture absent, measured 4",
+			`shapeCounts.mac: fixture ${fixture.corpus.shapeCounts["mac"]}, measured absent`,
+			`shapeCounts.num: fixture ${fixture.corpus.shapeCounts["num"]}, measured 0`,
+		]);
 	});
 });
