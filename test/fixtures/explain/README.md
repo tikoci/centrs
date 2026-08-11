@@ -44,6 +44,12 @@ version and are not committed. Re-cut with
 `bun run explain:highlight-slice`, recapture with
 `bun run explain:probe:highlight-recapture`.
 
+**Generated output — never hand-edit it.** Patching a single pair by hand
+breaks the chain the file claims for itself: its `source.captures` sha256 would
+no longer identify the bytes it was cut from, and `test/unit/explain-highlight-
+slice.test.ts` checks the header against the data, not the data against the
+device. Change the rule in the generator and re-cut.
+
 ## `transport-rest-q8.v7.23.2.json` / `.v7.24rc2.json` — the Q8 REST probe
 
 The captured evidence behind `src/explain/transport.ts`. Each row is one

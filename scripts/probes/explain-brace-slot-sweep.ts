@@ -86,6 +86,13 @@ type Row = {
 	/** A named slot, or the positional's zero-based index as `#0`/`#1`. */
 	slot: string;
 	outcome: Outcome;
+	/**
+	 * Which device oracle scored the row. `:parse`, always — `highlight` is a
+	 * DIFFERENT oracle that disagrees here, accepting `{1;2,}`, `{2,}` and
+	 * `{(1,2),}` that `:parse` rejects. A row that does not name its oracle
+	 * cannot be checked by a later reader.
+	 */
+	oracle: "parse";
 	control: string;
 	braceIl: string;
 	discriminatorIl: string;
@@ -111,102 +118,119 @@ function classify(
 	return discriminatorIl.includes("(1,2)") ? "text" : "inconclusive";
 }
 
-const verbs = await completions(":", "cmd");
-const rows: Row[] = [];
+try {
+	const verbs = await completions(":", "cmd");
+	const rows: Row[] = [];
 
-/**
- * `:set` needs a variable that already exists, so every bare `:set g …` probe
- * fails at `g` and says nothing about braces. Declaring one first is the only
- * way to ask the question, and the answer matters: `:set` carries 5 of the
- * corpus's 112 brace arrays.
- */
-for (const [index, prefix] of [":set ", ":set g "].entries()) {
-	const control = await parse(`{:global g; ${prefix}1}`);
-	const braceIl = await parse(`{:global g; ${prefix}{1;2}}`);
-	const discriminatorIl = await parse(`{:global g; ${prefix}{(1,2)}}`);
-	rows.push({
-		verb: "set",
-		slot: `#${index}`,
-		outcome: classify(control, braceIl, discriminatorIl),
-		control,
-		braceIl,
-		discriminatorIl,
-	});
-}
-for (const name of ["value", "name", "do"]) {
-	const control = await parse(`{:global g; :set g ${name}=1}`);
-	const braceIl = await parse(`{:global g; :set g ${name}={1;2}}`);
-	const discriminatorIl = await parse(`{:global g; :set g ${name}={(1,2)}}`);
-	rows.push({
-		verb: "set",
-		slot: name,
-		outcome: classify(control, braceIl, discriminatorIl),
-		control,
-		braceIl,
-		discriminatorIl,
-	});
-}
-
-for (const verb of verbs.filter((v) => v !== "set")) {
-	// Positional 0 and 1: `:local z {1;2}` puts the literal in the VALUE slot
-	// while `:local {1;2}` puts it in the NAME slot, and only one of those is an
-	// array. The lexer knows a positional's index, so the table records it.
-	for (const [index, prefix] of [`:${verb} `, `:${verb} x `].entries()) {
-		const control = await parse(`${prefix}1`);
-		const braceIl = await parse(`${prefix}{1;2}`);
-		const discriminatorIl = await parse(`${prefix}{(1,2)}`);
+	/**
+	 * `:set` needs a variable that already exists, so every bare `:set g …` probe
+	 * fails at `g` and says nothing about braces. Declaring one first is the only
+	 * way to ask the question, and the answer matters: `:set` carries 5 of the
+	 * corpus's 112 brace arrays.
+	 */
+	for (const [index, prefix] of [":set ", ":set g "].entries()) {
+		const control = await parse(`{:global g; ${prefix}1}`);
+		const braceIl = await parse(`{:global g; ${prefix}{1;2}}`);
+		const discriminatorIl = await parse(`{:global g; ${prefix}{(1,2)}}`);
 		rows.push({
-			verb,
+			verb: "set",
 			slot: `#${index}`,
 			outcome: classify(control, braceIl, discriminatorIl),
+			oracle: "parse",
 			control,
 			braceIl,
 			discriminatorIl,
 		});
 	}
-	for (const name of await completions(`:${verb} `, "arg")) {
-		const control = await parse(`:${verb} ${name}=1`);
-		const braceIl = await parse(`:${verb} ${name}={1;2}`);
-		const discriminatorIl = await parse(`:${verb} ${name}={(1,2)}`);
+	for (const name of ["value", "name", "do"]) {
+		const control = await parse(`{:global g; :set g ${name}=1}`);
+		const braceIl = await parse(`{:global g; :set g ${name}={1;2}}`);
+		const discriminatorIl = await parse(`{:global g; :set g ${name}={(1,2)}}`);
 		rows.push({
-			verb,
+			verb: "set",
 			slot: name,
 			outcome: classify(control, braceIl, discriminatorIl),
+			oracle: "parse",
 			control,
 			braceIl,
 			discriminatorIl,
 		});
 	}
-}
 
-const counts: Record<Outcome, number> = {
-	array: 0,
-	code: 0,
-	text: 0,
-	error: 0,
-	inconclusive: 0,
-};
-for (const row of rows) counts[row.outcome]++;
-console.log(`${rows.length} slots across ${verbs.length} verbs:`, counts);
-
-for (const outcome of ["array", "code", "text", "inconclusive"] as const) {
-	console.log(`\n-- ${outcome} --`);
-	for (const row of rows.filter((r) => r.outcome === outcome)) {
-		console.log(
-			`  :${row.verb} ${row.slot}`.padEnd(34) +
-				(outcome === "array" ? "" : `  ${row.discriminatorIl.slice(0, 80)}`),
-		);
+	for (const verb of verbs.filter((v) => v !== "set")) {
+		// Positional 0 and 1: `:local z {1;2}` puts the literal in the VALUE slot
+		// while `:local {1;2}` puts it in the NAME slot, and only one of those is an
+		// array. The lexer knows a positional's index, so the table records it.
+		for (const [index, prefix] of [`:${verb} `, `:${verb} x `].entries()) {
+			const control = await parse(`${prefix}1`);
+			const braceIl = await parse(`${prefix}{1;2}`);
+			const discriminatorIl = await parse(`${prefix}{(1,2)}`);
+			rows.push({
+				verb,
+				slot: `#${index}`,
+				outcome: classify(control, braceIl, discriminatorIl),
+				oracle: "parse",
+				control,
+				braceIl,
+				discriminatorIl,
+			});
+		}
+		for (const name of await completions(`:${verb} `, "arg")) {
+			const control = await parse(`:${verb} ${name}=1`);
+			const braceIl = await parse(`:${verb} ${name}={1;2}`);
+			const discriminatorIl = await parse(`:${verb} ${name}={(1,2)}`);
+			rows.push({
+				verb,
+				slot: name,
+				outcome: classify(control, braceIl, discriminatorIl),
+				oracle: "parse",
+				control,
+				braceIl,
+				discriminatorIl,
+			});
+		}
 	}
-}
 
-const res = (await chr.rest("/system/resource")) as Record<string, string>;
-const outPath = await probeOutputPath("explain-225-brace-slot-sweep.json");
-await Bun.write(
-	outPath,
-	`${JSON.stringify(
-		{ version: res["version"], captured: new Date().toISOString(), rows },
-		null,
-		"\t",
-	)}\n`,
-);
-console.log(`\nwrote ${outPath}`);
+	const counts: Record<Outcome, number> = {
+		array: 0,
+		code: 0,
+		text: 0,
+		error: 0,
+		inconclusive: 0,
+	};
+	for (const row of rows) counts[row.outcome]++;
+	console.log(`${rows.length} slots across ${verbs.length} verbs:`, counts);
+
+	for (const outcome of ["array", "code", "text", "inconclusive"] as const) {
+		console.log(`\n-- ${outcome} --`);
+		for (const row of rows.filter((r) => r.outcome === outcome)) {
+			console.log(
+				`  :${row.verb} ${row.slot}`.padEnd(34) +
+					(outcome === "array" ? "" : `  ${row.discriminatorIl.slice(0, 80)}`),
+			);
+		}
+	}
+
+	const res = (await chr.rest("/system/resource")) as Record<string, string>;
+	const outPath = await probeOutputPath("explain-225-brace-slot-sweep.json");
+	await Bun.write(
+		outPath,
+		`${JSON.stringify(
+			{
+				version: res["version"],
+				architecture: res["architecture-name"],
+				oracle: "parse",
+				captured: new Date().toISOString(),
+				rows,
+			},
+			null,
+			"\t",
+		)}\n`,
+	);
+	console.log(`\nwrote ${outPath}`);
+} finally {
+	// The sweep boots a throwaway when no machine name was passed. Without this
+	// it leaks that CHR on every run, successful or not — the escape sweep has
+	// always cleaned up after itself and this one did not.
+	if (!REUSE) await chr.remove();
+}

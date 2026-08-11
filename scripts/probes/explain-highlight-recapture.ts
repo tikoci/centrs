@@ -159,9 +159,14 @@ async function main() {
 	}
 	console.error(describeResolution(resolution));
 	const db = new Database(resolution.path, { readonly: true });
-	let rows = db
-		.query("SELECT path, text FROM source_scripts ORDER BY path")
-		.all() as { path: string; text: string }[];
+	let rows: { path: string; text: string }[];
+	try {
+		rows = db
+			.query("SELECT path, text FROM source_scripts ORDER BY path")
+			.all() as { path: string; text: string }[];
+	} finally {
+		db.close();
+	}
 	if (LIMIT > 0) rows = rows.slice(0, LIMIT);
 	console.log(`Recapturing highlight for ${rows.length} corpus scripts …`);
 
@@ -173,10 +178,18 @@ async function main() {
 			truncated: boolean;
 			tokenCount: number;
 			aligned: boolean;
+			/** Set when the REST call itself failed, so the row has no verdict. */
+			failed?: boolean;
 		}
 	> = {};
 	let aligned = 0;
 	let misaligned = 0;
+	// A REST failure is NOT a token/byte desync. Folding the two together
+	// publishes a wrong alignment figure — `explain-highlight-slice.ts` copies
+	// `misaligned` straight into the committed fixture header, so one CHR timeout
+	// would permanently inflate a number a reader takes as a property of the
+	// device's highlighter.
+	let failed = 0;
 	let truncated = 0;
 	let i = 0;
 	for (const { path, text } of rows) {
@@ -199,12 +212,13 @@ async function main() {
 				...(isAligned ? { pairs: runLength(sent, tokens) } : {}),
 			};
 		} catch (err) {
-			misaligned++;
+			failed++;
 			streams[path] = {
 				bytes: sent.length,
 				truncated: wasTruncated,
 				tokenCount: -1,
 				aligned: false,
+				failed: true,
 			};
 			console.log(
 				`  [${i}/${rows.length}] ERR ${path}: ${err instanceof Error ? err.message.slice(0, 80) : err}`,
@@ -212,7 +226,7 @@ async function main() {
 		}
 		if (i % 100 === 0 || i === rows.length)
 			console.log(
-				`  [${i}/${rows.length}] aligned=${aligned} misaligned=${misaligned}`,
+				`  [${i}/${rows.length}] aligned=${aligned} misaligned=${misaligned} failed=${failed}`,
 			);
 	}
 
@@ -226,9 +240,16 @@ async function main() {
 				environment,
 				menuSurface,
 				capturedAt: new Date().toISOString(),
+				// `highlight`, not `:parse`. They are different oracles that disagree
+				// (`highlight` accepts `{1;2,}`, `{2,}` and `{(1,2),}` that `:parse`
+				// rejects), and nothing else in this file says which one produced the
+				// streams.
+				oracle: "highlight",
 				corpusRows: rows.length,
+				corpusSource: describeResolution(resolution),
 				aligned,
 				misaligned,
+				failed,
 				truncated,
 				streams,
 			},
@@ -237,7 +258,7 @@ async function main() {
 		)}\n`,
 	);
 	console.log(
-		`\nWrote ${outPath}: ${aligned} aligned / ${misaligned} misaligned / ${truncated} truncated of ${rows.length}`,
+		`\nWrote ${outPath}: ${aligned} aligned / ${misaligned} misaligned / ${failed} failed / ${truncated} truncated of ${rows.length}`,
 	);
 }
 

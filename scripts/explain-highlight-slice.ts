@@ -109,6 +109,8 @@ interface Capture {
 	corpusRows: number;
 	aligned: number;
 	misaligned: number;
+	/** Absent on captures cut before REST failures were split out of `misaligned`. */
+	failed?: number;
 	truncated: number;
 	streams: Record<string, CapturedStream>;
 }
@@ -304,6 +306,17 @@ export async function main(args: readonly string[]): Promise<number> {
 		db.close();
 	}
 
+	// How many of the WHOLE capture the transform altered, not just the selected
+	// scripts — the `_readAs` sentence is about the capture, and a figure that
+	// silently means something narrower is the drift this file exists to avoid.
+	let nonAsciiInCapture = 0;
+	for (const path of allPaths) {
+		const source = corpusText.get(path);
+		if (source !== undefined && replaceNonAscii(source, "?") !== source) {
+			nonAsciiInCapture++;
+		}
+	}
+
 	// --- emit ---------------------------------------------------------------
 	const scripts: Record<string, unknown> = {};
 	const coverage: Record<string, number> = {};
@@ -362,10 +375,11 @@ export async function main(args: readonly string[]): Promise<number> {
 			"non-base version means byte-identical to the base version's stream. " +
 			"Concatenating the base pairs yields THE BYTES THE DEVICE SAW, which is " +
 			"`replaceNonAscii(source_scripts.text.substring(0, 32767), '?')` — NOT " +
-			"the raw corpus text: 112 of the 913 captured scripts contain non-ASCII " +
-			"that the capture replaced before sending. Score an offline lexer " +
-			"against the concatenated pairs, never against the corpus row, or the " +
-			"two halves are reading different bytes (the #269 failure, one layer up).",
+			`the raw corpus text: ${nonAsciiInCapture} of the ${allPaths.length} ` +
+			"captured scripts contain non-ASCII that the capture replaced before " +
+			"sending. Score an offline lexer against the concatenated pairs, never " +
+			"against the corpus row, or the two halves are reading different bytes " +
+			"(the #269 failure, one layer up).",
 		baseVersion: VERSIONS[0],
 		versions: VERSIONS.map((version) => {
 			const capture = captures.get(version) as Capture;
@@ -377,6 +391,14 @@ export async function main(args: readonly string[]): Promise<number> {
 				corpusRows: capture.corpusRows,
 				aligned: capture.aligned,
 				misaligned: capture.misaligned,
+				/**
+				 * A capture cut before the probe separated the two counters reports
+				 * `null` here, and its `misaligned` may include REST failures — a
+				 * transport error is not a token/byte desync, and folding them
+				 * together publishes a wrong alignment figure. Recapture to get a
+				 * number.
+				 */
+				failed: capture.failed ?? null,
 				truncated: capture.truncated,
 			};
 		}),
@@ -430,7 +452,7 @@ export async function main(args: readonly string[]): Promise<number> {
 	};
 
 	await Bun.write(outPath, `${JSON.stringify(output, null, "\t")}\n`);
-	const bytes = (await Bun.file(outPath).size) ?? 0;
+	const bytes = Bun.file(outPath).size;
 	console.error(
 		`wrote ${outPath}: ${selected.size} scripts of ${universe.length} in universe ` +
 			`(${allPaths.length} captured), ${versionDiffering.length} version-differing, ` +

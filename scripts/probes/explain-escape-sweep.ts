@@ -16,7 +16,7 @@
  *
  * Run: bun run explain:probe:escapes [existing-chr-name]
  */
-import { openChr, type ProbeChr } from "./chr.ts";
+import { openChr, type ProbeChr, probeOutputPath } from "./chr.ts";
 
 const REUSE = process.argv[2];
 
@@ -63,10 +63,12 @@ const chr = await openChr({ reuse: REUSE, name: "centrs-252" });
 try {
 	const res = (await chr.rest("/system/resource")) as Record<string, string>;
 	console.log(
-		`CHR ${res["version"]} (${res["architecture"]}) build ${res["build-time"]}\n`,
+		`CHR ${res["version"]} (${res["architecture-name"]}) build ${res["build-time"]}\n`,
 	);
 
 	const rows: string[] = [];
+	/** One structured record per candidate, so the capture is not just a banner. */
+	const records: Record<string, unknown>[] = [];
 	const accepted: string[] = [];
 	const rejected: string[] = [];
 
@@ -91,11 +93,42 @@ try {
 		rows.push(
 			`${verdict} ${p.label.padEnd(15)} clsEsc=${clsEsc.padEnd(12)} clsBare=${clsBare.padEnd(12)} bareErr=${bareReject ? "y" : "n"} exec=${ex}${p.note ? `  (${p.note})` : ""}`,
 		);
+		records.push({
+			label: p.label,
+			verdict,
+			// TWO oracles, named per record: `highlight` gives the class at the
+			// escaped byte, `exec` gives the runtime verdict. They are not
+			// interchangeable, and the verdict above is their conjunction.
+			highlightClassEscaped: clsEsc,
+			highlightClassBare: clsBare,
+			highlightRejectsBare: bareReject,
+			execOutcome: ex,
+			...(p.note ? { note: p.note } : {}),
+		});
 	}
 
 	console.log(rows.join("\n"));
 	console.log(`\nACCEPTED (${accepted.length}): ${accepted.join(" ")}`);
 	console.log(`\nREJECTED (${rejected.length}): ${rejected.join(" ")}`);
+
+	const outPath = await probeOutputPath("explain-252-escape-sweep.json");
+	await Bun.write(
+		outPath,
+		`${JSON.stringify(
+			{
+				version: res["version"],
+				architecture: res["architecture-name"],
+				oracles: ["highlight", "exec"],
+				captured: new Date().toISOString(),
+				accepted,
+				rejected,
+				records,
+			},
+			null,
+			"\t",
+		)}\n`,
+	);
+	console.log(`\nwrote ${outPath}`);
 } finally {
 	if (!REUSE) await chr.remove();
 }

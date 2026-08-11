@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
 	explainCommand,
 	explainEnvelope,
@@ -96,6 +97,72 @@ describe("the runtime-exercised Q8 REST shapes", () => {
 			expect(result.centrs).toContain("centrs api");
 			expect(result.curl).toBeUndefined();
 		});
+
+	/**
+	 * The Q8 captures are the evidence `src/explain/transport.ts` cites, and
+	 * until #186 promoted them out of `.scratch/` nothing in the repo read them.
+	 * A committed capture with no reader drifts silently: the module can widen a
+	 * rule and no test notices that the device was never asked.
+	 *
+	 * These bind the two without restating either. The `cli` column cannot be
+	 * replayed — several rows elide an id or a generated value (`<id>`, `…`) —
+	 * so the binding is on the RULE: which verb the probe exercised, and which
+	 * HTTP method it recorded for it.
+	 */
+	describe("against the committed Q8 captures", () => {
+		const captures = ["7.23.2", "7.24rc2"].map((version) => ({
+			version,
+			data: JSON.parse(
+				readFileSync(
+					new URL(
+						`../fixtures/explain/transport-rest-q8.v${version}.json`,
+						import.meta.url,
+					),
+					"utf8",
+				),
+			) as { rows: { rule: string; method: string; ok: boolean }[] },
+		}));
+
+		test("both captured versions recorded the same rules and methods", () => {
+			const shape = (c: (typeof captures)[number]) =>
+				c.data.rows.map((row) => `${row.rule} => ${row.method} ok=${row.ok}`);
+			const [first, second] = captures;
+			if (!first || !second) throw new Error("expected two captures");
+			expect(shape(second)).toEqual(shape(first));
+		});
+
+		test("every method the module emits was exercised on the device", () => {
+			const exercised = new Set(
+				captures[0]?.data.rows
+					.filter((row) => row.ok)
+					.map((row) => row.method) ?? [],
+			);
+			expect(exercised.size).toBeGreaterThan(0);
+			for (const [name, input] of cases.map(
+				(entry) => [entry[0], entry[1]] as [string, string],
+			)) {
+				const method = transport(input).rest?.method;
+				expect(method, `${name}: ${input}`).toBeDefined();
+				// A method the probe never recorded means the module widened past
+				// its evidence — the one thing this fixture exists to prevent.
+				expect(exercised.has(method as string), `${name}: ${method}`).toBe(
+					true,
+				);
+			}
+		});
+
+		test("the capture's fail-closed row is still refused", () => {
+			const failClosed = captures[0]?.data.rows.find((row) => !row.ok);
+			expect(failClosed?.rule).toContain("NOT api-candidate");
+			// The probe recorded that a selector-based `set` has no id-bearing REST
+			// endpoint. The module must not invent one.
+			const result = transport(
+				"/ip/route set [find dst-address=0.0.0.0/0] distance=1",
+			);
+			expect(result.classification).not.toBe("api-candidate");
+			expect(result.rest).toBeUndefined();
+		});
+	});
 
 	test("print facets keep centrs api on the semantic GET/print surface", () => {
 		const result = transport("/ip/address print proplist=name,address");

@@ -52,7 +52,21 @@ export async function openChr(options: {
 	version?: string;
 }): Promise<ProbeChr> {
 	const moduleName = "@tikoci/quickchr";
-	const { QuickCHR } = (await import(moduleName)) as unknown as QuickChrModule;
+	let QuickCHR: QuickChrModule["QuickCHR"];
+	try {
+		({ QuickCHR } = (await import(moduleName)) as unknown as QuickChrModule);
+	} catch (error) {
+		// quickchr is an OPTIONAL dependency, so a probe run on a clone that
+		// skipped optionals fails with a bare module-resolution error that says
+		// nothing about what to do. These scripts are meant for contributors.
+		throw new Error(
+			"`@tikoci/quickchr` is not installed. It is an optional dependency; " +
+				"install it with `bun install` (without --omit=optional) to run the " +
+				`device probes in scripts/probes/. Original error: ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+		);
+	}
 	if (options.reuse) {
 		const existing = await QuickCHR.get(options.reuse);
 		if (!existing) throw new Error(`no CHR named ${options.reuse}`);
