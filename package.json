@@ -54,6 +54,7 @@
 		"README.md",
 		"CHANGELOG.md",
 		"SECURITY.md",
+		"LICENSE",
 		"GLOSSARY.txt"
 	],
 	"scripts": {
@@ -85,6 +86,7 @@
 		"test:ci": "bun test --coverage",
 		"test:all": "bun run test:ci",
 		"check:agent": "bun run scripts/agent-check.ts",
+		"corpus:fetch": "bun run scripts/corpus-fetch.ts",
 		"build": "bun build src/index.ts src/cli.ts src/mcp.ts src/tui.ts src/webproxy.ts src/protocols/index.ts --outdir dist --target bun",
 		"build:doc:api": "typedoc --out docs/api src/index.ts",
 		"docs:cli": "bun run scripts/gen-cli-docs.ts",

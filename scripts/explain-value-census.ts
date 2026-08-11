@@ -16,6 +16,10 @@
  * bun run explain:value-census --db PATH  # override the corpus.sqlite location
  * ```
  *
+ * The corpus is not in this repo. A sibling `lsp-routeros-ts` checkout is used
+ * when present, otherwise the snapshot pinned by `bun run corpus:fetch`; the
+ * source and its sha256 are announced on stderr. See `corpus-fetch.ts` (#186).
+ *
  * ## What each figure means
  *
  * - **strictComparableAnchors** — emitted values in statements the STRICT REST
@@ -39,10 +43,14 @@
  */
 
 import { Database } from "bun:sqlite";
-import { resolve } from "node:path";
 import { lexArguments, lexValueAnchors } from "../src/explain/args.ts";
 import { valueShapeHints } from "../src/explain/values.ts";
 import { resolveVerbs } from "../src/explain/verbsplit.ts";
+import {
+	describeResolution,
+	resolveCorpusDb,
+	unreachableMessage,
+} from "./corpus-fetch.ts";
 
 export interface ValueCensus {
 	sourceScripts: number;
@@ -208,25 +216,22 @@ function flag(args: readonly string[], name: string): string | undefined {
 	return at < 0 ? undefined : args[at + 1];
 }
 
-/** The corpus lives in the sibling `lsp-routeros-ts` checkout, as in #203. */
-export function defaultDbPath(): string {
-	const override = Bun.env["CENTRS_CORPUS_DB"];
-	if (override) return override;
-	return resolve(
-		import.meta.dir,
-		"../../lsp-routeros-ts/test-data/corpus.sqlite",
-	);
-}
-
 export async function main(args: readonly string[]): Promise<number> {
-	const dbPath = flag(args, "--db") ?? defaultDbPath();
-	if (!(await Bun.file(dbPath).exists())) {
+	const resolution = resolveCorpusDb(flag(args, "--db"));
+	// All of this goes to stderr, not stdout: `--json` is piped into the fixture.
+	// The warning is emitted before the reachability check because a corrupt
+	// cache both warns and fails to resolve, and "why" beats "no".
+	if (resolution.warning) {
 		console.error(
-			`::error title=explain value census::corpus.sqlite not found at ${dbPath}\n` +
-				"Clone/update the sibling lsp-routeros-ts repo, or pass --db <path>.",
+			`::warning title=explain value census::${resolution.warning}`,
 		);
+	}
+	const dbPath = resolution.path;
+	if (dbPath === undefined || !(await Bun.file(dbPath).exists())) {
+		console.error(unreachableMessage("explain value census"));
 		return 1;
 	}
+	console.error(describeResolution(resolution));
 	const db = new Database(dbPath, { readonly: true });
 	let scripts: string[];
 	try {

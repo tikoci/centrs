@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
+import { SIBLING_CORPUS_DB } from "../../scripts/corpus-fetch.ts";
 import {
 	BASELINE_TOTAL,
 	type CorpusRow,
 	census,
-	defaultDbPath,
 	flag,
 	MARKERS,
 	renderMarkdown,
@@ -317,20 +317,11 @@ describe("census aggregation", () => {
 	});
 
 	test("the corpus resolves as a sibling of this checkout, not from $HOME", () => {
-		const previous = Bun.env["CENTRS_CORPUS_DB"];
-		delete Bun.env["CENTRS_CORPUS_DB"];
-		try {
-			// test/unit/ -> repo root -> the directory holding both checkouts.
-			const siblingRoot = resolve(import.meta.dir, "../..", "..");
-			expect(defaultDbPath()).toBe(
-				resolve(siblingRoot, "lsp-routeros-ts/test-data/corpus.sqlite"),
-			);
-			Bun.env["CENTRS_CORPUS_DB"] = "/elsewhere/corpus.sqlite";
-			expect(defaultDbPath()).toBe("/elsewhere/corpus.sqlite");
-		} finally {
-			if (previous === undefined) delete Bun.env["CENTRS_CORPUS_DB"];
-			else Bun.env["CENTRS_CORPUS_DB"] = previous;
-		}
+		// test/unit/ -> repo root -> the directory holding both checkouts.
+		const siblingRoot = resolve(import.meta.dir, "../..", "..");
+		expect(SIBLING_CORPUS_DB).toBe(
+			resolve(siblingRoot, "lsp-routeros-ts/test-data/corpus.sqlite"),
+		);
 	});
 
 	test("renderMarkdown --compare adds baseline/delta columns and a size caveat", () => {

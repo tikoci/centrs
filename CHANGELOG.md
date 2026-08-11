@@ -8,6 +8,26 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Added
+
+- **`LICENSE` — centrs is MIT.** The repository carried no `LICENSE` file and
+  the published `@tikoci/centrs` tarball carried no license text, so GitHub
+  reported `licenseInfo: null` and consumers had only a bare `"license": "MIT"`
+  string in `package.json` to go on — no grant they could actually read, quote,
+  or redistribute, which is a problem for anything bundling centrs (a VS Code
+  extension, say) (#208). The file now exists to back the declaration, and is in
+  the npm `files` allowlist so it ships.
+- **`bun run corpus:fetch` — the `explain` censuses run from a bare clone and
+  in CI.** `scripts/corpus-pin.json` records which snapshot of the RouterOS
+  script corpus centrs measures against (a commit in `tikoci/lsp-routeros-ts`
+  plus the blob's sha256); `corpus:fetch` downloads it to a gitignored cache and
+  verifies the hash, and a mismatch is a hard error rather than a silent
+  re-download. `explain:corpus-census` and `explain:value-census` previously
+  resolved the corpus *only* as a sibling checkout, so they ran on one machine
+  and never on a PR; both now fall back to the pinned snapshot and announce the
+  source and hash they used. A new CI job gates the fetch and posts both
+  censuses to the run summary (#186).
+
 ## 0.1.3 — 2026-07-06
 
 Patch release. `@tikoci/centrs@0.1.3`.
