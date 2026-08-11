@@ -54,6 +54,7 @@
 		"README.md",
 		"CHANGELOG.md",
 		"SECURITY.md",
+		"LICENSE",
 		"GLOSSARY.txt"
 	],
 	"scripts": {

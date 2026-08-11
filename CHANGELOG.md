@@ -8,6 +8,15 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Added
+
+- **`LICENSE` — centrs is MIT.** The repository and the published
+  `@tikoci/centrs` package declared no license anywhere, which under default
+  copyright meant all rights reserved: an installer acquired no right to use,
+  modify, or redistribute it, and a VS Code extension could not have bundled it
+  (#208). `package.json` already said `MIT`; the file now exists to match, and
+  is in the npm `files` allowlist so consumers get it in the tarball.
+
 ## 0.1.3 — 2026-07-06
 
 Patch release. `@tikoci/centrs@0.1.3`.
