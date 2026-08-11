@@ -97,6 +97,17 @@ describeFast("explain string escapes against CHR (#247)", () => {
 				typeof resource["board-name"] === "string"
 					? (resource["board-name"] as string)
 					: undefined;
+			const controlWhitespace = ":local\ta\t1\r\n:put\t$a";
+			const controlBytes = String(
+				(
+					(await started.chr.exec(
+						`:put [:convert to=hex ${routerOsStringLiteral(controlWhitespace)}]`,
+					)) as { output?: unknown }
+				).output ?? "",
+			).trim();
+			expect(controlBytes).toBe(
+				Buffer.from(controlWhitespace, "utf8").toString("hex"),
+			);
 
 			const validSingle = [
 				'\\"',
