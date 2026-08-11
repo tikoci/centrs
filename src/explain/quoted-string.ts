@@ -100,30 +100,39 @@ function escapeLength(text: string, at: number): 2 | 3 {
 // Both `scanQuotedString` and `collectStringEscapeDefects` walk the same
 // nesting: a `"` frame is string phase, anything else is code phase where
 // `$[`/`$(` inside a string push a bracket frame and brackets nest until
-// matched. Two helpers encode those transitions once; callers differ only in
-// what they do with an escape (skip vs validate).
+// matched. The helpers below own the transitions, the depth guard, and the
+// phase dispatch once — callers differ only in what they do with an escape
+// (skip vs validate) and whether they skip comment spans.
 // ---------------------------------------------------------------------------
 
-function stepStringNonEscape(
+/**
+ * One step of the shared frame machine. Owns the depth guard, the `top` read,
+ * and the phase dispatch (`"` vs code) so callers cannot drift on them.
+ * When inside a string at `\`, delegates to `onStringEscape` so callers can
+ * validate or just skip. Returns bytes to advance, or a Defect, or 0 when the
+ * shared depth cap is hit (caller must break).
+ */
+function stepFrame(
 	text: string,
 	i: number,
 	frames: string[],
-): number {
-	const c = text[i] as string;
-	if (c === '"') {
-		frames.pop();
-		return 1;
-	}
-	if (c === "$" && (text[i + 1] === "[" || text[i + 1] === "(")) {
-		frames.push(text[i + 1] as string);
-		return 2;
-	}
-	return 1;
-}
-
-function stepCode(text: string, i: number, frames: string[]): number {
+	onStringEscape: (at: number) => number | Defect,
+): number | Defect {
+	if (frames.length > MAX_STRING_FRAME_DEPTH) return 0;
 	const top = frames[frames.length - 1] as string | undefined;
 	const c = text[i] as string;
+	if (top === '"') {
+		if (c === "\\") return onStringEscape(i);
+		if (c === '"') {
+			frames.pop();
+			return 1;
+		}
+		if (c === "$" && (text[i + 1] === "[" || text[i + 1] === "(")) {
+			frames.push(text[i + 1] as string);
+			return 2;
+		}
+		return 1;
+	}
 	if (c === '"') {
 		frames.push('"');
 		return 1;
@@ -141,6 +150,38 @@ function stepCode(text: string, i: number, frames: string[]): number {
 }
 
 /**
+ * Boundary recovery must skip the escaped byte even when the escape itself
+ * is malformed, otherwise the closing quote is lost and every later comment
+ * is swallowed (#199). Validation is separate; here we just advance.
+ */
+function stringEscapeSkip(text: string, at: number): number {
+	return escapeLength(text, at);
+}
+
+/**
+ * Locate defect at the escaped byte the device marks `error`.
+ * For `\q` it's `q`; for `\0a` it's `a`.
+ * For truncated `\0` before `"` the device marks the closing quote;
+ * centrs reports at the backslash instead, because that byte is stable
+ * when the string is unterminated (#252).
+ */
+function stringEscapeValidated(text: string, at: number): number | Defect {
+	if (!isValidStringEscape(text, at)) {
+		const next1 = text[at + 1];
+		let defectAtOffset: number;
+		if (next1 === undefined) defectAtOffset = at;
+		else if (isHexUpper(next1)) {
+			const next2 = text[at + 2];
+			if (next2 === undefined) defectAtOffset = at;
+			else if (!isHexUpper(next2)) defectAtOffset = at + 2;
+			else defectAtOffset = at;
+		} else defectAtOffset = at + 1;
+		return defectAt("bad-string-escape", defectAtOffset);
+	}
+	return escapeLength(text, at);
+}
+
+/**
  * Find the end of the double-quoted string that opens at `open`.
  *
  * A `$[…]` or `$(…)` substitution inside a string is code and may contain
@@ -150,24 +191,11 @@ export function scanQuotedString(text: string, open: number): QuotedStringScan {
 	const frames: string[] = ['"'];
 	let i = open + 1;
 	while (i < text.length) {
-		if (frames.length > MAX_STRING_FRAME_DEPTH) break;
-		const top = frames[frames.length - 1] as string;
-		const c = text[i] as string;
-		if (top === '"') {
-			if (c === "\\") {
-				// Boundary recovery must skip the escaped byte even when the
-				// escape itself is malformed, otherwise the closing quote is
-				// lost and every later comment is swallowed (#199).
-				// Validation is separate below; here we just advance.
-				i += escapeLength(text, i);
-				continue;
-			}
-			const adv = stepStringNonEscape(text, i, frames);
-			i += adv;
-			if (frames.length === 0) return { end: i, closed: true };
-			continue;
-		}
-		i += stepCode(text, i, frames);
+		const res = stepFrame(text, i, frames, (at) => stringEscapeSkip(text, at));
+		if (typeof res !== "number") break;
+		if (res === 0) break;
+		i += res;
+		if (frames.length === 0) return { end: i, closed: true };
 	}
 	return { end: text.length, closed: false };
 }
@@ -189,7 +217,6 @@ export function collectStringEscapeDefects(
 	let i = 0;
 	let ci = 0;
 	while (i < text.length) {
-		if (frames.length > MAX_STRING_FRAME_DEPTH) break;
 		// Skip comment spans (analyzed-byte offsets, same space as `text`).
 		while (
 			ci < comments.length &&
@@ -203,34 +230,12 @@ export function collectStringEscapeDefects(
 				continue;
 			}
 		}
-		const top = frames[frames.length - 1] as string | undefined;
-		const c = text[i] as string;
-		if (top === '"') {
-			if (c === "\\") {
-				if (!isValidStringEscape(text, i)) {
-					// Locate defect at the escaped byte the device marks `error`.
-					// For `\q` it's `q`; for `\0a` it's `a`.
-					// For truncated `\0` before `"` the device marks the closing
-					// quote; centrs reports at the backslash instead, because that
-					// byte is stable when the string is unterminated.
-					const next1 = text[i + 1];
-					let defectAtOffset: number;
-					if (next1 === undefined) defectAtOffset = i;
-					else if (isHexUpper(next1)) {
-						const next2 = text[i + 2];
-						if (next2 === undefined) defectAtOffset = i;
-						else if (!isHexUpper(next2)) defectAtOffset = i + 2;
-						else defectAtOffset = i;
-					} else defectAtOffset = i + 1;
-					return [defectAt("bad-string-escape", defectAtOffset)];
-				}
-				i += escapeLength(text, i);
-				continue;
-			}
-			i += stepStringNonEscape(text, i, frames);
-			continue;
-		}
-		i += stepCode(text, i, frames);
+		const res = stepFrame(text, i, frames, (at) =>
+			stringEscapeValidated(text, at),
+		);
+		if (typeof res !== "number") return [res];
+		if (res === 0) break;
+		i += res;
 	}
 	return [];
 }
