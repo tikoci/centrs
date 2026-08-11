@@ -27,8 +27,11 @@ documenting cross-cutting shifts that affect contributors and consumers.
   member-key grammar is not the identifier grammar and was swept rather than
   assumed: `.`, `-` and `/` are name bytes anywhere (`{.id=1}`, `{.=1}`,
   `{a/b=1}`), `_` is not (`{a_b=1}` compares), and `@` is not a member
-  character at any position. Grounded on CHR 7.23.3 across eight probe rounds;
-  the 137 device
+  character at any position. Two member faults that predate the `=` axis are
+  checked with it: a `$` takes an alphanumeric or a quote and nothing else
+  (`$"a b"` is a name, `$.id` and `$_a` are syntax errors), and no run may end
+  on a dangling operator (`{a-}`, `{$a.}`). Grounded on CHR 7.23.3 across ten
+  probe rounds; the 186 device
   rows are `interiorGrounding.keyBinding` in `test/fixtures/explain/values.json`
   and are scored one-sided (abstention always allowed, a contradicted type
   never) by a new unit test. The value census is unchanged: no statement in the

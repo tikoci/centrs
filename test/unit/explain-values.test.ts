@@ -744,6 +744,26 @@ describe("value anchors", () => {
 			["element", null, "v0", "bool"],
 		]);
 		expect(shapes(":local z {a@b=1}")).toEqual([]);
+		// …but only when it is bare. A quoted key holding one is just a string,
+		// which is why the `@` rule is a depth-zero scan and not a substring test.
+		expect(shapes(':local z {"a@b"=1}')).toEqual([
+			["positional", null, null, "array"],
+			["element", "a@b", "v0", "num"],
+		]);
+		expect(shapes(':local z {"a@b"=}')).toEqual([
+			["positional", null, null, "array"],
+			["element", null, "v0", "str"],
+		]);
+		// A depth-zero comma OUTRANKS the sign: `{$a=1,2}` is `(, (= $a 1) 2)`,
+		// an array whose first element is the comparison — so the member is not
+		// `bool` and the whole member abstains rather than guessing which.
+		expect(shapes(":local z {$a=1,2}")).toEqual([
+			["positional", null, null, "array"],
+		]);
+		// A run ending on an operator with no right operand is refused, and so is
+		// a `$` the device will not lex — both are member faults, not `=` ones.
+		expect(shapes(":local z {a- =1}")).toEqual([]);
+		expect(shapes(":local z {$.id=1}")).toEqual([]);
 		// A name that does not TOUCH the sign compares instead of binding, and a
 		// left side that is not one operand abstains rather than guessing a type.
 		expect(shapes(":local z {a =1;$b=2;c d=3}")).toEqual([

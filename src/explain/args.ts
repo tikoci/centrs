@@ -929,6 +929,28 @@ const MEMBER_NAME = /^[A-Za-z0-9./-]+$/;
 const NOT_IN_MEMBER_NAME = /[\s,$([{"'+*<>!~%:_@#=]/;
 
 /**
+ * Whether `[start,end)` ends on an operator with no right operand (#258).
+ *
+ * A member and a comparison's left side are both runs the device lexes on
+ * their own, so both carry this fault: `{-}`, `{--}`, `{a-}`, `{$a-}` and
+ * `{$a-;1}` are syntax errors, and so are `{a- =1}` and `{$a-=1}` where the
+ * dangling run is only the left side. The trailing-dot half is narrower and
+ * the asymmetry is the device's: `{$a.}` and `{$a.=1}` are refused while
+ * `{a.}`, `{.}`, `{/}`, `{a/}` and `{a. =1}` all parse as variable references
+ * — a bare name absorbs the dot into itself, a `$` name does not.
+ *
+ * A KEY is not an operand and does not carry it: `{a-=1}` binds the key `a-`
+ * and `{a-=}` is the string `a-`, so this is only asked where the sign failed
+ * to bind.
+ */
+function danglesOperator(text: string, start: number, end: number): boolean {
+	if (start >= end) return false;
+	const last = text[end - 1];
+	if (last === "-") return true;
+	return last === "." && text[start] === "$";
+}
+
+/**
  * Whether `[start,end)` is ONE complete operand, so a following `=` is the
  * member's top-level operator (#258).
  *
@@ -942,7 +964,16 @@ const NOT_IN_MEMBER_NAME = /[\s,$([{"'+*<>!~%:_@#=]/;
  * the shape of the left side — not the observed type — has to decide.
  *
  * A bare name is included because it only reaches here when whitespace kept it
- * from binding a key (`{a =1}` compares, `{a=1}` does not).
+ * from binding a key (`{a =1}` compares, `{a=1}` does not) — but OPERAND
+ * position is stricter than key position, so it is not simply
+ * {@link memberKey}: `{a-=1}` binds the key `a-`, while `{a- =1}` does not
+ * parse at all. Both classes therefore end on an alphanumeric here.
+ *
+ * The class is narrower than RouterOS's operand grammar on purpose, and the
+ * gap is all abstention: `{a_b=1}`, `{:a=1}`, `{1+1=2}` and `{$a/b=1}` are
+ * `bool` on the device and silent here. Widening it means proving the `=`
+ * stays on top for the new spelling, which is exactly what {@link MEMBER_NAME}
+ * had to be measured for.
  */
 function isSingleOperand(
 	text: string,
@@ -954,8 +985,21 @@ function isSingleOperand(
 	const open = text[start];
 	if (open === "(" || open === "[" || open === "{")
 		return delimitedEnd(structural, start) === end;
-	if (open === "$") return /^\$[A-Za-z0-9._-]+$/.test(text.slice(start, end));
-	return memberKey(text, structural, start, end) !== null;
+	// A `$` name is NOT the member-key name, and review's suggestion to widen it
+	// was the wrong direction: `$:a`, `$_a`, `$/a` and `$.id` are all syntax
+	// errors, so the byte after the `$` must be alphanumeric, and `$a-`/`$a.`
+	// are errors too, so the last byte must be as well. In between, `.` and `-`
+	// join operands (`{$a-b=1}` is `(= (- $a $b) 1)`) and the `=` stays on top,
+	// while `_` and `:` end the name and start a SPACE-concat whose type is its
+	// operands' (`{$a_b=1}` is `(  $a (= $_b 1))`).
+	if (open === "$")
+		return /^\$[A-Za-z0-9]+(?:[.-]+[A-Za-z0-9]+)*$/.test(
+			text.slice(start, end),
+		);
+	return (
+		memberKey(text, structural, start, end) !== null &&
+		/[A-Za-z0-9]$/.test(text.slice(start, end))
+	);
 }
 
 /**
@@ -1052,6 +1096,19 @@ function pushArrayMembers(
 		// which is why this is a depth-zero scan and not a substring test.
 		if (depthZeroOffsets(structural, member.start, member.end, "@").length > 0)
 			return UNPARSEABLE_MEMBER;
+		// A `$` takes an alphanumeric or a QUOTE and nothing else: `$.id`, `$_a`,
+		// `$:a`, `$/a`, `$$a`, `$(x)`, `$[:len 1]` and a bare `$` are all syntax
+		// errors, while `$"a b"` is a good quoted variable name — so "alphanumeric"
+		// alone would withdraw a literal the device accepts.
+		for (const at of depthZeroOffsets(
+			structural,
+			member.start,
+			member.end,
+			"$",
+		))
+			if (!/[A-Za-z0-9"]/.test(text[at + 1] ?? "")) return UNPARSEABLE_MEMBER;
+		if (danglesOperator(text, member.start, member.end))
+			return UNPARSEABLE_MEMBER;
 		const eq = depthZeroOffsets(structural, member.start, member.end, "=")[0];
 		if (eq !== undefined) {
 			const left = trimRange(structural, member.start, eq);
@@ -1107,6 +1164,10 @@ function pushArrayMembers(
 				if (text[right.start] === "=") return HALF_COMPARISON;
 				name = key;
 				valueStart = right.start;
+			} else if (danglesOperator(text, left.start, left.end)) {
+				// The sign's left operand is itself incomplete: `{a- =1}` and
+				// `{$a-=1}` are refused exactly as the bare `{a-}` is.
+				return UNPARSEABLE_MEMBER;
 			} else if (
 				isSingleOperand(text, structural, left.start, left.end) &&
 				depthZeroOffsets(structural, member.start, member.end, ",").length === 0
