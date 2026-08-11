@@ -71,9 +71,9 @@ section short enough that the grid remains the status surface.
   design round (#90) and the spec is **ratified** on the phase-0 grounding
   lab (#185, ratification PR #187). Phase 0.5 has since promoted the ratified
   lab logic into the library — `src/explain/{segment,blocks,coordinates,defects,
-  pathresolve,verbsplit,write,symbols,menus,verbs,args}.ts` with frozen fixtures
-  under `test/fixtures/explain/` — and phase 1 has composed them into one
-  analysis and envelope in `src/explain.ts` (`explainCommand` /
+  pathresolve,verbsplit,write,symbols,menus,verbs,args,values,brace-slots}.ts`
+  with frozen fixtures under `test/fixtures/explain/` — and phase 1 has composed
+  them into one analysis and envelope in `src/explain.ts` (`explainCommand` /
   `explainEnvelope`, #202a). **`centrs explain '<input>'` is a real command as
   of #202b** (`src/cli/explain.ts`), and #202c adds statement argument reading,
   the closed Q8 transport classifier, equivalent centrs invocations, and

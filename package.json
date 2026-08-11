@@ -95,6 +95,7 @@
 		"explain:corpus-census": "bun run scripts/explain-corpus-census.ts",
 		"explain:menus": "bun run scripts/gen-explain-menus.ts",
 		"explain:menus:check": "bun run scripts/gen-explain-menus.ts --check",
+		"explain:value-census": "bun run scripts/explain-value-census.ts",
 		"security": "bun run lint:secretlint && bun run lint:markdownlint"
 	},
 	"type": "module",

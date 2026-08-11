@@ -285,7 +285,12 @@ export interface IntegrationEvidence {
 	quickChrName?: string;
 	requestedChannel?: string;
 	requestedVersion?: string;
-	exampleIds: readonly number[];
+	/**
+	 * The examples this run proves. Strings carry the letter-suffixed ids the
+	 * examples file uses for a counterpart example (`18b`, `28b`), which are
+	 * numbered examples in their own right.
+	 */
+	exampleIds: readonly (number | string)[];
 }
 
 export async function recordIntegrationEvidence(

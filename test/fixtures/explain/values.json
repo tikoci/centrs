@@ -69,12 +69,36 @@
 			"rejected": [0, 1]
 		},
 		"toBool": [
-			{ "literal": "\"true\"", "type": "bool", "value": "true" },
-			{ "literal": "\"false\"", "type": "bool", "value": "false" },
-			{ "literal": "\"yes\"", "type": "bool", "value": "true" },
-			{ "literal": "\"no\"", "type": "bool", "value": "false" },
-			{ "literal": "0", "type": "bool", "value": "false" },
-			{ "literal": "1", "type": "bool", "value": "true" }
+			{
+				"literal": "\"true\"",
+				"type": "bool",
+				"value": "true"
+			},
+			{
+				"literal": "\"false\"",
+				"type": "bool",
+				"value": "false"
+			},
+			{
+				"literal": "\"yes\"",
+				"type": "bool",
+				"value": "true"
+			},
+			{
+				"literal": "\"no\"",
+				"type": "bool",
+				"value": "false"
+			},
+			{
+				"literal": "0",
+				"type": "bool",
+				"value": "false"
+			},
+			{
+				"literal": "1",
+				"type": "bool",
+				"value": "true"
+			}
 		]
 	},
 	"timeOrdering": {
@@ -83,17 +107,61 @@
 		"note": "RouterOS time literals are order-independent and ADDITIVE: a repeated unit sums rather than being rejected. `isTimeShape` therefore checks fragment coverage, not unit order — raised as an ordering defect in review of #242 and refuted here on both channels.",
 		"probe": ":typeof + :tostr",
 		"literals": [
-			{ "literal": "1s1m", "type": "time", "value": "00:01:01" },
-			{ "literal": "1m1s", "type": "time", "value": "00:01:01" },
-			{ "literal": "1m1m", "type": "time", "value": "00:02:00" },
-			{ "literal": "1s1s", "type": "time", "value": "00:00:02" },
-			{ "literal": "1h1h1h", "type": "time", "value": "03:00:00" },
-			{ "literal": "1d2d", "type": "time", "value": "3d00:00:00" },
-			{ "literal": "1d1w", "type": "time", "value": "1w1d00:00:00" },
-			{ "literal": "1w1d", "type": "time", "value": "1w1d00:00:00" },
-			{ "literal": "2s3m4h", "type": "time", "value": "04:03:02" },
-			{ "literal": "1ms1s", "type": "time", "value": "00:00:01.001" },
-			{ "literal": "1s1ms", "type": "time", "value": "00:00:01.001" }
+			{
+				"literal": "1s1m",
+				"type": "time",
+				"value": "00:01:01"
+			},
+			{
+				"literal": "1m1s",
+				"type": "time",
+				"value": "00:01:01"
+			},
+			{
+				"literal": "1m1m",
+				"type": "time",
+				"value": "00:02:00"
+			},
+			{
+				"literal": "1s1s",
+				"type": "time",
+				"value": "00:00:02"
+			},
+			{
+				"literal": "1h1h1h",
+				"type": "time",
+				"value": "03:00:00"
+			},
+			{
+				"literal": "1d2d",
+				"type": "time",
+				"value": "3d00:00:00"
+			},
+			{
+				"literal": "1d1w",
+				"type": "time",
+				"value": "1w1d00:00:00"
+			},
+			{
+				"literal": "1w1d",
+				"type": "time",
+				"value": "1w1d00:00:00"
+			},
+			{
+				"literal": "2s3m4h",
+				"type": "time",
+				"value": "04:03:02"
+			},
+			{
+				"literal": "1ms1s",
+				"type": "time",
+				"value": "00:00:01.001"
+			},
+			{
+				"literal": "1s1ms",
+				"type": "time",
+				"value": "00:00:01.001"
+			}
 		]
 	},
 	"v2Grounding": {
@@ -103,12 +171,36 @@
 		"channelsMatch": true,
 		"note": "Only source-identifiable facts become offline hints. `code` and `nil` are produced values with no standalone literal spelling; concat remains an expression even when its result is an array.",
 		"colonTime": [
-			{ "literal": "9:00", "type": "time", "value": "09:00:00" },
-			{ "literal": "00:00:02", "type": "time", "value": "00:00:02" },
-			{ "literal": "00:00:02.001", "type": "time", "value": "00:00:02.001" },
-			{ "literal": "1d00:00:00", "type": "time", "value": "1d00:00:00" },
-			{ "literal": "1w1d00:00:00", "type": "time", "value": "1w1d00:00:00" },
-			{ "literal": "00:60:00", "type": "time", "value": "01:00:00" }
+			{
+				"literal": "9:00",
+				"type": "time",
+				"value": "09:00:00"
+			},
+			{
+				"literal": "00:00:02",
+				"type": "time",
+				"value": "00:00:02"
+			},
+			{
+				"literal": "00:00:02.001",
+				"type": "time",
+				"value": "00:00:02.001"
+			},
+			{
+				"literal": "1d00:00:00",
+				"type": "time",
+				"value": "1d00:00:00"
+			},
+			{
+				"literal": "1w1d00:00:00",
+				"type": "time",
+				"value": "1w1d00:00:00"
+			},
+			{
+				"literal": "00:60:00",
+				"type": "time",
+				"value": "01:00:00"
+			}
 		],
 		"mac": {
 			"literal": "00:11:22:33:44:55",
@@ -119,54 +211,116 @@
 			"shorterFiveGroupType": "str"
 		},
 		"arrays": [
-			{ "literal": "(1,2,3)", "type": "array", "value": "1;2;3" },
-			{ "literal": "{1;2;3}", "type": "array", "value": "1;2;3" },
-			{ "literal": "{a=1;b=2}", "type": "array", "value": "a=1;b=2" }
+			{
+				"literal": "(1,2,3)",
+				"type": "array",
+				"value": "1;2;3"
+			},
+			{
+				"literal": "{1;2;3}",
+				"type": "array",
+				"value": "1;2;3"
+			},
+			{
+				"literal": "{a=1;b=2}",
+				"type": "array",
+				"value": "a=1;b=2"
+			}
 		],
 		"concat": [
-			{ "literal": "((1,2,3) . \"a\")", "type": "array", "value": "1a;2a;3a" },
-			{ "literal": "(\"a\" . (1,2,3))", "type": "array", "value": "a1;a2;a3" },
-			{ "literal": "(1 . 2)", "type": "str", "value": "12" }
+			{
+				"literal": "((1,2,3) . \"a\")",
+				"type": "array",
+				"value": "1a;2a;3a"
+			},
+			{
+				"literal": "(\"a\" . (1,2,3))",
+				"type": "array",
+				"value": "a1;a2;a3"
+			},
+			{
+				"literal": "(1 . 2)",
+				"type": "str",
+				"value": "12"
+			}
 		],
 		"producedTypes": [
-			{ "expression": "[:toarray \"\"]", "type": "array", "value": "" },
+			{
+				"expression": "[:toarray \"\"]",
+				"type": "array",
+				"value": ""
+			},
 			{
 				"expression": "[:parse \":put hello\"]",
 				"type": "code",
 				"value": "(code)"
 			},
-			{ "expression": "[:toid \"*1\"]", "type": "id", "value": "*1" },
-			{ "expression": "*1", "type": "id", "value": "*1" }
+			{
+				"expression": "[:toid \"*1\"]",
+				"type": "id",
+				"value": "*1"
+			},
+			{
+				"expression": "*1",
+				"type": "id",
+				"value": "*1"
+			}
 		],
 		"uninitializedType": "nothing",
 		"nothingCommandType": "nil",
 		"emptyArrayElementType": "nothing"
 	},
 	"corpus": {
+		"censusCommand": "bun run explain:value-census --json",
 		"sourceScripts": 948,
-		"commandStatements": 14331,
-		"valueOccurrences": 17304,
-		"strictComparableAnchors": 13143,
+		"valueOccurrences": 19708,
+		"elementOccurrences": 5636,
+		"keyedElements": 529,
+		"nestedElements": 1147,
+		"strictComparableAnchors": 13168,
 		"boundaryContradictions": 0,
-		"unreadStatementsWithAnchors": 1603,
-		"recoveredPrefixAnchors": 4161,
+		"unreadStatementsWithAnchors": 569,
+		"recoveredPrefixAnchors": 6540,
 		"invalidSpans": 0,
+		"danglingParents": 0,
+		"containmentBreaks": 0,
 		"shapeCounts": {
-			"array": 420,
-			"bool": 1217,
-			"ip": 1746,
-			"ip-prefix": 137,
+			"time": 128,
+			"str": 14845,
+			"num": 1591,
+			"array": 813,
+			"ip": 1738,
+			"bool": 551,
+			"ip-prefix": 130,
+			"ip6": 2,
+			"ip6-prefix": 221,
+			"mac": 3
+		},
+		"elementShapeCounts": {
+			"array": 249,
+			"str": 4519,
+			"num": 852,
+			"bool": 4,
+			"ip": 8,
 			"ip6": 1,
-			"ip6-prefix": 220,
-			"mac": 3,
-			"num": 1454,
-			"str": 11848,
-			"time": 258
+			"ip-prefix": 1,
+			"ip6-prefix": 1,
+			"time": 1
 		}
 	},
 	"scalars": [
-		{ "literal": "0", "hints": ["num"], "bareType": "num", "bareValue": "0" },
-		{ "literal": "-1", "hints": ["num"], "bareType": "num", "bareValue": "-1" },
+		{
+			"literal": "0",
+			"hints": ["num"],
+			"bareType": "num",
+			"bareValue": "0"
+		},
+		{
+			"literal": "-1",
+			"hints": ["num"],
+			"bareType": "num",
+			"bareValue": "-1"
+		},
 		{
 			"literal": "1.1",
 			"hints": ["ip"],
@@ -343,5 +497,2068 @@
 			"input": "/tool/netwatch/add interval=200ms comment=200ms host=1.1.1.1",
 			"il": "(evl /tool/netwatch/addcomment=200ms;host=1.1.1.1;interval=00:00:00.200)"
 		}
-	]
+	],
+	"interiorGrounding": {
+		"captured": "2026-08-10",
+		"stable": "7.23.3",
+		"probes": [":typeof", ":parse IL", "/console/inspect request=highlight"],
+		"maxTimeNanos": "9223372036854775807",
+		"separators": [
+			{
+				"literal": "{1;2}",
+				"type": "array",
+				"length": 2,
+				"il": "(evl /localname=$z;value=1;2)"
+			},
+			{
+				"literal": "{1,2}",
+				"type": "array",
+				"length": 1,
+				"il": "(evl /localname=$z;value=(, 1 2))"
+			},
+			{
+				"literal": "(1,2)",
+				"type": "array",
+				"length": 2,
+				"il": "(evl /localname=$z;value=(, 1 2))"
+			},
+			{
+				"literal": "(1;2)",
+				"type": "error",
+				"length": -1,
+				"il": "syntax error (line 1 column 12)"
+			},
+			{
+				"literal": "{1;2,3}",
+				"type": "array",
+				"length": 2,
+				"il": "(evl /localname=$z;value=1;(, 2 3))"
+			},
+			{
+				"literal": "( 1 , 2 )",
+				"type": "array",
+				"length": 2,
+				"il": "(evl /localname=$z;value=(, 1 2))"
+			},
+			{
+				"literal": "{ 1 ; 2 }",
+				"type": "array",
+				"length": 2,
+				"il": "(evl /localname=$z;value=1;2)"
+			}
+		],
+		"members": [
+			{
+				"literal": "1.1",
+				"type": "ip",
+				"value": "1.0.0.1"
+			},
+			{
+				"literal": "2.2",
+				"type": "ip",
+				"value": "2.0.0.2"
+			},
+			{
+				"literal": "1.1.1.1",
+				"type": "ip",
+				"value": "1.1.1.1"
+			},
+			{
+				"literal": "1::1",
+				"type": "ip6",
+				"value": "1::1"
+			},
+			{
+				"literal": "1.1.1.1/24",
+				"type": "ip-prefix",
+				"value": "1.1.1.1/24"
+			},
+			{
+				"literal": "2008:1::2/128",
+				"type": "ip6-prefix",
+				"value": "2008:1::2/128"
+			},
+			{
+				"literal": "123",
+				"type": "num",
+				"value": "123"
+			},
+			{
+				"literal": "-1",
+				"type": "num",
+				"value": "-1"
+			},
+			{
+				"literal": "1d",
+				"type": "time",
+				"value": "1d00:00:00"
+			},
+			{
+				"literal": "1w7h2s",
+				"type": "time",
+				"value": "1w07:00:02"
+			},
+			{
+				"literal": "00:00:02",
+				"type": "time",
+				"value": "00:00:02"
+			},
+			{
+				"literal": "100000w",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "00:11:22:33:44:55",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "yes",
+				"type": "bool",
+				"value": "true"
+			},
+			{
+				"literal": "true",
+				"type": "bool",
+				"value": "true"
+			},
+			{
+				"literal": "\"abc\"",
+				"type": "str",
+				"value": "abc"
+			},
+			{
+				"literal": "abc",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "ether1",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "a-b",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "1s",
+				"type": "time",
+				"value": "00:00:01"
+			},
+			{
+				"literal": "1w",
+				"type": "time",
+				"value": "1w00:00:00"
+			},
+			{
+				"literal": "10000w",
+				"type": "time",
+				"value": "10000w00:00:00"
+			},
+			{
+				"literal": "15000w",
+				"type": "time",
+				"value": "15000w00:00:00"
+			},
+			{
+				"literal": "15250w",
+				"type": "time",
+				"value": "15250w00:00:00"
+			},
+			{
+				"literal": "15251w",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "16000w",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "106751d",
+				"type": "time",
+				"value": "15250w1d00:00:00"
+			},
+			{
+				"literal": "106752d",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "9223372036s",
+				"type": "time",
+				"value": "15250w1d23:47:16"
+			},
+			{
+				"literal": "9223372037s",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "99999999999999999999s",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "1000000ms",
+				"type": "time",
+				"value": "00:16:40"
+			},
+			{
+				"literal": "0x10",
+				"type": "num",
+				"value": "16"
+			},
+			{
+				"literal": "0X10",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "0xff",
+				"type": "num",
+				"value": "255"
+			},
+			{
+				"literal": "0x",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "0xg",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "-0x10",
+				"type": "num",
+				"value": "-16"
+			},
+			{
+				"literal": "0x7fffffffffffffff",
+				"type": "num",
+				"value": "9223372036854775807"
+			},
+			{
+				"literal": "9223372036854775807",
+				"type": "num",
+				"value": "9223372036854775807"
+			},
+			{
+				"literal": "9223372036854775808",
+				"type": "num",
+				"value": "9223372036854775807"
+			},
+			{
+				"literal": "-9223372036854775808",
+				"type": "num",
+				"value": "-9223372036854775807"
+			},
+			{
+				"literal": "007",
+				"type": "num",
+				"value": "7"
+			},
+			{
+				"literal": "1.1/24",
+				"type": "ip-prefix",
+				"value": "1.0.0.1/24"
+			},
+			{
+				"literal": "2.2.2",
+				"type": "ip",
+				"value": "2.2.0.2"
+			},
+			{
+				"literal": "255.255.255.255",
+				"type": "ip",
+				"value": "255.255.255.255"
+			},
+			{
+				"literal": "256.1",
+				"type": "time",
+				"value": "00:04:16.100"
+			},
+			{
+				"literal": "1.256",
+				"type": "time",
+				"value": "00:00:01.256"
+			},
+			{
+				"literal": "::",
+				"type": "ip6",
+				"value": "::"
+			},
+			{
+				"literal": "::1/0",
+				"type": "ip6-prefix",
+				"value": "::/0"
+			},
+			{
+				"literal": "no",
+				"type": "bool",
+				"value": "false"
+			},
+			{
+				"literal": "false",
+				"type": "bool",
+				"value": "false"
+			},
+			{
+				"literal": "Yes",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "TRUE",
+				"type": "nothing",
+				"value": ""
+			},
+			{
+				"literal": "\"1.1\"",
+				"type": "str",
+				"value": "1.1"
+			},
+			{
+				"literal": "\"yes\"",
+				"type": "str",
+				"value": "yes"
+			},
+			{
+				"literal": "\"0x10\"",
+				"type": "str",
+				"value": "0x10"
+			},
+			{
+				"literal": "\"\"",
+				"type": "str",
+				"value": ""
+			}
+		],
+		"keyed": [
+			{
+				"literal": "{a=1}",
+				"il": "(evl /localname=$z;value=a=1)",
+				"members": ["M|k=a|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{a=1;b=2}",
+				"il": "(evl /localname=$z;value=a=1;b=2)",
+				"members": ["M|k=a|kt=str|v=1|vt=num", "M|k=b|kt=str|v=2|vt=num"]
+			},
+			{
+				"literal": "{a=1;2}",
+				"il": "(evl /localname=$z;value=2;a=1)",
+				"members": ["M|k=0|kt=num|v=2|vt=num", "M|k=a|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{\"a b\"=1}",
+				"il": "(evl /localname=$z;value=a b=1)",
+				"members": ["M|k=a b|kt=str|v=1|vt=num"]
+			},
+			{
+				"literal": "{a=1.1}",
+				"il": "(evl /localname=$z;value=a=1.0.0.1)",
+				"members": ["M|k=a|kt=str|v=1.0.0.1|vt=ip"]
+			},
+			{
+				"literal": "{a=}",
+				"il": "(evl /localname=$z;value=a)",
+				"members": ["M|k=0|kt=num|v=a|vt=str"]
+			},
+			{
+				"literal": "(a=1,b=2)",
+				"il": "(evl /localname=$z;value=(, (= $a 1) (= $b 2)))",
+				"members": [
+					"M|k=0|kt=num|v=false|vt=bool",
+					"M|k=1|kt=num|v=false|vt=bool"
+				]
+			}
+		],
+		"invalidLiterals": [
+			"(1;2)",
+			"{*1}",
+			"{}",
+			"{;}",
+			"{;1}",
+			"(1,)",
+			"{1;2",
+			"{1;#c}",
+			"{+1}"
+		],
+		"nestedLiterals": [
+			{
+				"literal": "{(1,)}",
+				"parses": false,
+				"il": "syntax error (line 1 column 15)"
+			},
+			{
+				"literal": "{a=(1,)}",
+				"parses": false,
+				"il": "syntax error (line 1 column 17)"
+			},
+			{
+				"literal": "{1;(2,)}",
+				"parses": false,
+				"il": "syntax error (line 1 column 17)"
+			},
+			{
+				"literal": "{ (1,) ; 2 }",
+				"parses": false,
+				"il": "syntax error (line 1 column 16)"
+			},
+			{
+				"literal": "{()}",
+				"parses": false,
+				"il": "syntax error (line 1 column 13)"
+			},
+			{
+				"literal": "{a=()}",
+				"parses": false,
+				"il": "syntax error (line 1 column 15)"
+			},
+			{
+				"literal": "{(,)}",
+				"parses": false,
+				"il": "syntax error (line 1 column 12)"
+			},
+			{
+				"literal": "((1,))",
+				"parses": false,
+				"il": "syntax error (line 1 column 15)"
+			},
+			{
+				"literal": "(1,(2,))",
+				"parses": false,
+				"il": "syntax error (line 1 column 17)"
+			},
+			{
+				"literal": "{1;2;}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;2)"
+			},
+			{
+				"literal": "{{1;2};}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;2)"
+			},
+			{
+				"literal": "{1;2,}",
+				"parses": false,
+				"il": "syntax error (line 1 column 16)"
+			},
+			{
+				"literal": "{2,}",
+				"parses": false,
+				"il": "syntax error (line 1 column 14)"
+			},
+			{
+				"literal": "{(1,2),}",
+				"parses": false,
+				"il": "syntax error (line 1 column 18)"
+			},
+			{
+				"literal": "{(1)}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1)"
+			},
+			{
+				"literal": "{a=(1)}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=a=1)"
+			},
+			{
+				"literal": "{1;(2)}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;2)"
+			},
+			{
+				"literal": "{{}}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=)"
+			},
+			{
+				"literal": "{1;{}}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;)"
+			},
+			{
+				"literal": "{}",
+				"parses": false,
+				"il": "syntax error (line 1 column 12)"
+			},
+			{
+				"literal": "()",
+				"parses": false,
+				"il": "syntax error (line 1 column 12)"
+			},
+			{
+				"literal": "(1,)",
+				"parses": false,
+				"il": "syntax error (line 1 column 14)"
+			},
+			{
+				"literal": "{;}",
+				"parses": false,
+				"il": "syntax error (line 1 column 11)"
+			},
+			{
+				"literal": "{1;2}",
+				"parses": true,
+				"il": "(evl /localname=$z;value=1;2)"
+			},
+			{
+				"literal": "(1,2)",
+				"parses": true,
+				"il": "(evl /localname=$z;value=(, 1 2))"
+			}
+		],
+		"braceSlots": [
+			{
+				"verb": "set",
+				"slot": "#0",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "set",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "set",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "set",
+				"slot": "name",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "set",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "beep",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "beep",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "beep",
+				"slot": "as-value",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "beep",
+				"slot": "frequency",
+				"outcome": "error"
+			},
+			{
+				"verb": "beep",
+				"slot": "length",
+				"outcome": "error"
+			},
+			{
+				"verb": "break",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "break",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "continue",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "continue",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "convert",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "convert",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "convert",
+				"slot": "from",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "convert",
+				"slot": "from-scheme",
+				"outcome": "array"
+			},
+			{
+				"verb": "convert",
+				"slot": "to",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "convert",
+				"slot": "to-scheme",
+				"outcome": "array"
+			},
+			{
+				"verb": "convert",
+				"slot": "transform",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "convert",
+				"slot": "transform-scheme",
+				"outcome": "array"
+			},
+			{
+				"verb": "convert",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "delay",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "delay",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "delay",
+				"slot": "delay-time",
+				"outcome": "error"
+			},
+			{
+				"verb": "deserialize",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "deserialize",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "deserialize",
+				"slot": "delimiter",
+				"outcome": "error"
+			},
+			{
+				"verb": "deserialize",
+				"slot": "from",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "deserialize",
+				"slot": "options",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "deserialize",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "do",
+				"slot": "#0",
+				"outcome": "code"
+			},
+			{
+				"verb": "do",
+				"slot": "#1",
+				"outcome": "text"
+			},
+			{
+				"verb": "do",
+				"slot": "command",
+				"outcome": "code"
+			},
+			{
+				"verb": "do",
+				"slot": "if",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "do",
+				"slot": "on-error",
+				"outcome": "code"
+			},
+			{
+				"verb": "do",
+				"slot": "while",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "error",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "error",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "error",
+				"slot": "message",
+				"outcome": "array"
+			},
+			{
+				"verb": "execute",
+				"slot": "#0",
+				"outcome": "text"
+			},
+			{
+				"verb": "execute",
+				"slot": "#1",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "execute",
+				"slot": "file",
+				"outcome": "error"
+			},
+			{
+				"verb": "execute",
+				"slot": "script",
+				"outcome": "text"
+			},
+			{
+				"verb": "exit",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "exit",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "export",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "export",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "export",
+				"slot": "compact",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "export",
+				"slot": "file",
+				"outcome": "error"
+			},
+			{
+				"verb": "export",
+				"slot": "hide-sensitive",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "export",
+				"slot": "path",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "export",
+				"slot": "show-sensitive",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "export",
+				"slot": "terse",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "export",
+				"slot": "verbose",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "find",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "find",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "find",
+				"slot": "from",
+				"outcome": "array"
+			},
+			{
+				"verb": "find",
+				"slot": "in",
+				"outcome": "array"
+			},
+			{
+				"verb": "find",
+				"slot": "key",
+				"outcome": "array"
+			},
+			{
+				"verb": "for",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "for",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "for",
+				"slot": "counter",
+				"outcome": "error"
+			},
+			{
+				"verb": "for",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "for",
+				"slot": "from",
+				"outcome": "array"
+			},
+			{
+				"verb": "for",
+				"slot": "on-error",
+				"outcome": "code"
+			},
+			{
+				"verb": "for",
+				"slot": "step",
+				"outcome": "array"
+			},
+			{
+				"verb": "for",
+				"slot": "to",
+				"outcome": "array"
+			},
+			{
+				"verb": "foreach",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "foreach",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "foreach",
+				"slot": "counter",
+				"outcome": "error"
+			},
+			{
+				"verb": "foreach",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "foreach",
+				"slot": "in",
+				"outcome": "array"
+			},
+			{
+				"verb": "foreach",
+				"slot": "on-error",
+				"outcome": "code"
+			},
+			{
+				"verb": "global",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "global",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "global",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "global",
+				"slot": "name",
+				"outcome": "error"
+			},
+			{
+				"verb": "global",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "grep",
+				"slot": "#0",
+				"outcome": "text"
+			},
+			{
+				"verb": "grep",
+				"slot": "#1",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "grep",
+				"slot": "after",
+				"outcome": "error"
+			},
+			{
+				"verb": "grep",
+				"slot": "before",
+				"outcome": "error"
+			},
+			{
+				"verb": "grep",
+				"slot": "filename",
+				"outcome": "error"
+			},
+			{
+				"verb": "grep",
+				"slot": "pattern",
+				"outcome": "error"
+			},
+			{
+				"verb": "grep",
+				"slot": "script",
+				"outcome": "text"
+			},
+			{
+				"verb": "if",
+				"slot": "#0",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "if",
+				"slot": "#1",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "if",
+				"slot": "condition",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "if",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "if",
+				"slot": "else",
+				"outcome": "code"
+			},
+			{
+				"verb": "import",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "import",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "import",
+				"slot": "file-name",
+				"outcome": "error"
+			},
+			{
+				"verb": "import",
+				"slot": "from-line",
+				"outcome": "error"
+			},
+			{
+				"verb": "import",
+				"slot": "verbose",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "jobname",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "jobname",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "len",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "len",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "len",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "local",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "local",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "local",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "local",
+				"slot": "name",
+				"outcome": "error"
+			},
+			{
+				"verb": "local",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "lock",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "lock",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "lock",
+				"slot": "delay",
+				"outcome": "error"
+			},
+			{
+				"verb": "nothing",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "nothing",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "onerror",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "onerror",
+				"slot": "#1",
+				"outcome": "code"
+			},
+			{
+				"verb": "onerror",
+				"slot": "do",
+				"outcome": "code"
+			},
+			{
+				"verb": "onerror",
+				"slot": "error",
+				"outcome": "error"
+			},
+			{
+				"verb": "onerror",
+				"slot": "in",
+				"outcome": "code"
+			},
+			{
+				"verb": "parse",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "parse",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "parse",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "password",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "password",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "password",
+				"slot": "as-value",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "password",
+				"slot": "confirm-new-password",
+				"outcome": "error"
+			},
+			{
+				"verb": "password",
+				"slot": "new-password",
+				"outcome": "error"
+			},
+			{
+				"verb": "password",
+				"slot": "old-password",
+				"outcome": "error"
+			},
+			{
+				"verb": "pick",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "pick",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "pick",
+				"slot": "begin",
+				"outcome": "array"
+			},
+			{
+				"verb": "pick",
+				"slot": "counter",
+				"outcome": "array"
+			},
+			{
+				"verb": "pick",
+				"slot": "end",
+				"outcome": "array"
+			},
+			{
+				"verb": "put",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "put",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "put",
+				"slot": "message",
+				"outcome": "array"
+			},
+			{
+				"verb": "quit",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "quit",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "range",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "range",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "range",
+				"slot": "from",
+				"outcome": "array"
+			},
+			{
+				"verb": "range",
+				"slot": "to",
+				"outcome": "array"
+			},
+			{
+				"verb": "redo",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "redo",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "resolve",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "resolve",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "resolve",
+				"slot": "domain-name",
+				"outcome": "error"
+			},
+			{
+				"verb": "resolve",
+				"slot": "server",
+				"outcome": "error"
+			},
+			{
+				"verb": "resolve",
+				"slot": "server-port",
+				"outcome": "error"
+			},
+			{
+				"verb": "resolve",
+				"slot": "type",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "retry",
+				"slot": "#0",
+				"outcome": "code"
+			},
+			{
+				"verb": "retry",
+				"slot": "#1",
+				"outcome": "text"
+			},
+			{
+				"verb": "retry",
+				"slot": "command",
+				"outcome": "code"
+			},
+			{
+				"verb": "retry",
+				"slot": "delay",
+				"outcome": "error"
+			},
+			{
+				"verb": "retry",
+				"slot": "max",
+				"outcome": "error"
+			},
+			{
+				"verb": "retry",
+				"slot": "on-error",
+				"outcome": "code"
+			},
+			{
+				"verb": "return",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "return",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "return",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndnum",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndnum",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndnum",
+				"slot": "from",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndnum",
+				"slot": "to",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndstr",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndstr",
+				"slot": "#1",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndstr",
+				"slot": "from",
+				"outcome": "array"
+			},
+			{
+				"verb": "rndstr",
+				"slot": "length",
+				"outcome": "array"
+			},
+			{
+				"verb": "serialize",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "serialize",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "serialize",
+				"slot": "delimiter",
+				"outcome": "error"
+			},
+			{
+				"verb": "serialize",
+				"slot": "file-name",
+				"outcome": "error"
+			},
+			{
+				"verb": "serialize",
+				"slot": "options",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "serialize",
+				"slot": "order",
+				"outcome": "array"
+			},
+			{
+				"verb": "serialize",
+				"slot": "to",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "serialize",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "time",
+				"slot": "#0",
+				"outcome": "code"
+			},
+			{
+				"verb": "time",
+				"slot": "#1",
+				"outcome": "text"
+			},
+			{
+				"verb": "time",
+				"slot": "command",
+				"outcome": "code"
+			},
+			{
+				"verb": "timestamp",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "timestamp",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "timestamp",
+				"slot": "use-tz",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "toarray",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "toarray",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "toarray",
+				"slot": "delimiter",
+				"outcome": "error"
+			},
+			{
+				"verb": "toarray",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "tobool",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "tobool",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "tobool",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "tocrlf",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "tocrlf",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "tocrlf",
+				"slot": "input",
+				"outcome": "error"
+			},
+			{
+				"verb": "toid",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "toid",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "toid",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "toip",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "toip",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "toip",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "toip6",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "toip6",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "toip6",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "tolf",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "tolf",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "tolf",
+				"slot": "input",
+				"outcome": "error"
+			},
+			{
+				"verb": "tonsec",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "tonsec",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "tonsec",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "tonum",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "tonum",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "tonum",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "tostr",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "tostr",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "tostr",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "totime",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "totime",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "totime",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "typeof",
+				"slot": "#0",
+				"outcome": "array"
+			},
+			{
+				"verb": "typeof",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "typeof",
+				"slot": "value",
+				"outcome": "array"
+			},
+			{
+				"verb": "undo",
+				"slot": "#0",
+				"outcome": "error"
+			},
+			{
+				"verb": "undo",
+				"slot": "#1",
+				"outcome": "error"
+			},
+			{
+				"verb": "while",
+				"slot": "#0",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "while",
+				"slot": "#1",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "while",
+				"slot": "condition",
+				"outcome": "inconclusive"
+			},
+			{
+				"verb": "while",
+				"slot": "do",
+				"outcome": "code"
+			}
+		],
+		"positions": [
+			{
+				"input": ":local z {1;2}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":global z {1;2}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "{:local z 1; :set z {1;2}}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":put {1;2}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":put ({1;2})",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":len {1;2}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":foreach i in={1;2} do={:put $i}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":foreach i in=(1,2) do={:put $i}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": ":foreach i in={a=1;b=2} do={:put $i}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/add comment={1;2}",
+				"parses": false,
+				"highlightErrorAt": 22,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/ip/route/add comment=(1,2)",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/dns/set servers={1.1.1.1;8.8.8.8}",
+				"parses": false,
+				"highlightErrorAt": 20,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/ip/dns/set servers=1.1.1.1,8.8.8.8",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/interface/print .proplist={name;comment}",
+				"parses": false,
+				"highlightErrorAt": 27,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/interface/print .proplist=name,comment",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/add comment=[:tostr {1;2}]",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/print where comment={1;2}",
+				"parses": false,
+				"highlightErrorAt": 30,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/ip/route/print where (comment={1;2})",
+				"parses": false,
+				"highlightErrorAt": 31,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/x/cmd list={1;2}",
+				"parses": false,
+				"highlightErrorAt": 2,
+				"highlightErrorByte": "/"
+			},
+			{
+				"input": "/x/cmd list=(1,2)",
+				"parses": false,
+				"highlightErrorAt": 2,
+				"highlightErrorByte": "/"
+			},
+			{
+				"input": "/x/cmd list=abc",
+				"parses": false,
+				"highlightErrorAt": 2,
+				"highlightErrorByte": "/"
+			},
+			{
+				"input": ":local z {1;;2}",
+				"parses": false,
+				"highlightErrorAt": 12,
+				"highlightErrorByte": ";"
+			},
+			{
+				"input": ":local z {}",
+				"parses": false,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/system/script/add name=x source={:put 1}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/system/scheduler/add name=x on-event={:put 1}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/system/script/add name=x source={1;2}",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/add comment={:put 1}",
+				"parses": false,
+				"highlightErrorAt": 22,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/ip/route/add comment=({1;2})",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/add comment=(1,{2;3})",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "ip route add comment={1;2}",
+				"parses": false,
+				"highlightErrorAt": 21,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/ip/route/print {1;2}",
+				"parses": false,
+				"highlightErrorAt": 16,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": "/ip/route/print (1,2)",
+				"parses": false,
+				"highlightErrorAt": 16,
+				"highlightErrorByte": "("
+			},
+			{
+				"input": ":log info message={1;2}",
+				"parses": false,
+				"highlightErrorAt": 18,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": ":log info message=(1,2)",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "{/ip/route/add comment={1;2}}",
+				"parses": false,
+				"highlightErrorAt": 23,
+				"highlightErrorByte": "{"
+			},
+			{
+				"input": ":local z {1;2}; /ip/route/add comment=$z",
+				"parses": true,
+				"highlightErrorAt": -1,
+				"highlightErrorByte": null
+			},
+			{
+				"input": "/ip/route/add comment={1;;2}",
+				"parses": false,
+				"highlightErrorAt": 22,
+				"highlightErrorByte": "{"
+			}
+		],
+		"addressShortcut": [
+			{
+				"literal": "1.1",
+				"valueType": "ip",
+				"value": "1.0.0.1",
+				"memberType": "ip",
+				"memberValue": "1.0.0.1"
+			},
+			{
+				"literal": "1.5",
+				"valueType": "ip",
+				"value": "1.0.0.5",
+				"memberType": "ip",
+				"memberValue": "1.0.0.5"
+			},
+			{
+				"literal": "1.255",
+				"valueType": "ip",
+				"value": "1.0.0.255",
+				"memberType": "ip",
+				"memberValue": "1.0.0.255"
+			},
+			{
+				"literal": "1.256",
+				"valueType": "time",
+				"value": "00:00:01.256",
+				"memberType": "time",
+				"memberValue": "00:00:01.256"
+			},
+			{
+				"literal": "1.999",
+				"valueType": "time",
+				"value": "00:00:01.999",
+				"memberType": "time",
+				"memberValue": "00:00:01.999"
+			},
+			{
+				"literal": "1.65535",
+				"valueType": "time",
+				"value": "00:00:01.655350",
+				"memberType": "time",
+				"memberValue": "00:00:01.655350"
+			},
+			{
+				"literal": "1.16777215",
+				"valueType": "time",
+				"value": "00:00:01.167772150",
+				"memberType": "time",
+				"memberValue": "00:00:01.167772150"
+			},
+			{
+				"literal": "1.16777216",
+				"valueType": "time",
+				"value": "00:00:01.167772160",
+				"memberType": "time",
+				"memberValue": "00:00:01.167772160"
+			},
+			{
+				"literal": "3.141",
+				"valueType": "ip",
+				"value": "3.0.0.141",
+				"memberType": "ip",
+				"memberValue": "3.0.0.141"
+			},
+			{
+				"literal": "3.14159",
+				"valueType": "time",
+				"value": "00:00:03.141590",
+				"memberType": "time",
+				"memberValue": "00:00:03.141590"
+			},
+			{
+				"literal": "255.1",
+				"valueType": "ip",
+				"value": "255.0.0.1",
+				"memberType": "ip",
+				"memberValue": "255.0.0.1"
+			},
+			{
+				"literal": "256.1",
+				"valueType": "time",
+				"value": "00:04:16.100",
+				"memberType": "time",
+				"memberValue": "00:04:16.100"
+			},
+			{
+				"literal": "2.1.1",
+				"valueType": "ip",
+				"value": "2.1.0.1",
+				"memberType": "ip",
+				"memberValue": "2.1.0.1"
+			},
+			{
+				"literal": "1.1.255",
+				"valueType": "ip",
+				"value": "1.1.0.255",
+				"memberType": "ip",
+				"memberValue": "1.1.0.255"
+			},
+			{
+				"literal": "1.1.256",
+				"valueType": "str",
+				"value": "1.1.256",
+				"memberType": "nothing",
+				"memberValue": ""
+			},
+			{
+				"literal": "1.1.65535",
+				"valueType": "str",
+				"value": "1.1.65535",
+				"memberType": "nothing",
+				"memberValue": ""
+			},
+			{
+				"literal": "1.1.1.255",
+				"valueType": "ip",
+				"value": "1.1.1.255",
+				"memberType": "ip",
+				"memberValue": "1.1.1.255"
+			},
+			{
+				"literal": "1.1.1.256",
+				"valueType": "str",
+				"value": "1.1.1.256",
+				"memberType": "nothing",
+				"memberValue": ""
+			},
+			{
+				"literal": "255.255.255.255",
+				"valueType": "ip",
+				"value": "255.255.255.255",
+				"memberType": "ip",
+				"memberValue": "255.255.255.255"
+			}
+		],
+		"commaSpelling": {
+			"arguments": [
+				{
+					"input": "/ip/dns/set servers=1.1.1.1,8.8.8.8",
+					"il": "(evl /ip/dns/setservers=1.1.1.1;8.8.8.8)",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/ip/dns/set servers=(1.1.1.1,8.8.8.8)",
+					"il": "(evl /ip/dns/setservers=(, 1.1.1.1 8.8.8.8))",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/ip/firewall/filter/add chain=forward protocol=tcp dst-port=80,443",
+					"il": "(evl /ip/firewall/filter/addchain=forward;dst-port=;80;443;protocol=;tcp)",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/ip/firewall/filter/add chain=forward protocol=tcp dst-port=(80,443)",
+					"il": "(evl /ip/firewall/filter/addchain=forward;dst-port=(, 80 443);protocol=;tcp)",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/ip/firewall/filter/add chain=forward connection-state=established,related",
+					"il": "(evl /ip/firewall/filter/addchain=forward;connection-state=;established;related)",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/ip/route/add comment=a,b",
+					"il": "(evl /ip/route/addcomment=a,b)",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/ip/route/add comment=(\"a\",\"b\")",
+					"il": "(evl /ip/route/addcomment=(, a b))",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/interface/bridge/port/add interface=ether1,ether2",
+					"il": "(evl /interface/bridge/port/addinterface=ether1,ether2)",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/interface/list/member add list=(\"ether1\",\"ether2\")",
+					"il": "(evl /interface/list/member/addlist=(, ether1 ether2))",
+					"highlightErrorAt": -1
+				},
+				{
+					"input": "/interface/print .proplist=name,comment",
+					"il": "(evl bad parameter .proplist (line 1 column 27) /interface/print)",
+					"highlightErrorAt": -1
+				}
+			],
+			"expressions": [
+				{
+					"literal": "1,2",
+					"observed": "array|2"
+				},
+				{
+					"literal": "a,b",
+					"observed": "array|2"
+				},
+				{
+					"literal": "1.1.1.1,8.8.8.8",
+					"observed": "array|2|1.1.1.1"
+				},
+				{
+					"literal": "single 1",
+					"observed": "num"
+				}
+			]
+		}
+	}
 }

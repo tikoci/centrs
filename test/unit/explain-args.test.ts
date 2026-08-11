@@ -175,7 +175,9 @@ describe("the token grammar", () => {
 				/array or block value|substitution or expression value/,
 			);
 
-			const anchors = lexValueAnchors(text, ":local".length);
+			const anchors = lexValueAnchors(text, ":local".length, {
+				directiveVerb: "local",
+			});
 			expect(anchors.complete).toBeFalse();
 			expect(anchors.complete ? "" : anchors.why).toContain(
 				"invalid hash in a structured argument value",
@@ -188,9 +190,13 @@ describe("the token grammar", () => {
 			":local z {[:do { # c\n:put 1\n}]}",
 			":local z {[:if (true) do={ # c\n:put 1\n}]}",
 		]) {
-			const anchors = lexValueAnchors(text, ":local".length);
+			const anchors = lexValueAnchors(text, ":local".length, {
+				directiveVerb: "local",
+			});
 			expect(anchors.complete).toBeTrue();
-			expect(anchors.anchors.at(-1)?.sourceShape).toBe("array");
+			expect(
+				anchors.anchors.some((anchor) => anchor.sourceShape === "array"),
+			).toBeTrue();
 		}
 	});
 
@@ -208,9 +214,13 @@ describe("the token grammar", () => {
 			":local z {[:len #test]}",
 		];
 		for (const text of readable) {
-			const anchors = lexValueAnchors(text, ":local".length);
+			const anchors = lexValueAnchors(text, ":local".length, {
+				directiveVerb: "local",
+			});
 			expect(anchors.complete).toBeTrue();
-			expect(anchors.anchors.at(-1)?.sourceShape).toBe("array");
+			expect(
+				anchors.anchors.some((anchor) => anchor.sourceShape === "array"),
+			).toBeTrue();
 		}
 
 		// Dropping back into an array or a group inside that bracket is an error
@@ -219,7 +229,9 @@ describe("the token grammar", () => {
 			":local z {[:put {#test}]}",
 			":local z {[:put (1,#test)]}",
 		]) {
-			const anchors = lexValueAnchors(text, ":local".length);
+			const anchors = lexValueAnchors(text, ":local".length, {
+				directiveVerb: "local",
+			});
 			expect(anchors.complete).toBeFalse();
 			expect(anchors.complete ? "" : anchors.why).toContain(
 				"invalid hash in a structured argument value",

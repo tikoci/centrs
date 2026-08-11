@@ -50,6 +50,7 @@
  */
 
 import { isScopeBrace } from "./blocks.ts";
+import { braceSlotTakesArray } from "./brace-slots.ts";
 import { braceStartsStatements } from "./scope-brace.ts";
 import { maskComments, scanQuotedString } from "./segment.ts";
 
@@ -131,12 +132,15 @@ export interface ArgumentsUnread {
 
 export type ArgumentReading = ArgumentsRead | ArgumentsUnread;
 
+/** What a located value IS: a command's argument, or one array member. */
+export type ValueAnchorKind = Exclude<ArgumentKind, "query"> | "element";
+
 /** One safely located value shape, before any later unreadable token. */
 export interface ValueAnchor {
-	kind: Exclude<ArgumentKind, "query">;
-	/** The whole argument token. */
+	kind: ValueAnchorKind;
+	/** The whole argument token, or the whole member run including its key. */
 	tokenSpan: { start: number; end: number };
-	/** Attribute name; absent on a positional. */
+	/** Attribute name, or an array member's key; absent on a positional. */
 	name?: string;
 	/** The literal's source bytes, quotes included. */
 	valueSpan: { start: number; end: number };
@@ -146,6 +150,15 @@ export interface ValueAnchor {
 	quoted: boolean;
 	/** Present only when source delimiters, rather than scalar decoding, prove it. */
 	sourceShape?: "array";
+	/**
+	 * Index, in this same list, of the array literal this member belongs to.
+	 *
+	 * An index rather than a nested list because the list stays ONE ordered
+	 * sequence of located values — the phase-0 normal form — and because a
+	 * consumer that only wants spans should not have to walk a tree. Members
+	 * follow their container immediately, so a parent index is always smaller.
+	 */
+	parent?: number;
 }
 
 /** Prefix-safe value anchoring; `complete: false` explains where scanning stopped. */
@@ -156,6 +169,73 @@ export type ValueAnchorReading =
 /** A refusal, carrying the reason a consumer quotes instead of a bare `unknown`. */
 function unread(why: string): ArgumentsUnread {
 	return { read: false, why };
+}
+
+interface WalkOptions {
+	/** Locate `{…}`/`(…)` literals instead of refusing the statement at one. */
+	allowArrayValues?: boolean;
+	/**
+	 * The root scripting directive whose slots decide whether a `{…}` here is an
+	 * array literal, or undefined when this statement has none.
+	 *
+	 * A command argument never takes one. On CHR 7.23.3 `/console/inspect`
+	 * classes the `{` byte `error` and `:parse` refuses the statement for
+	 * `/ip/route/add comment={1;2}`, `/ip/dns/set servers={1.1.1.1;8.8.8.8}`
+	 * (a LIST-typed attribute, which rules out a schema-shaped reading),
+	 * `/interface/print .proplist={name;comment}`,
+	 * `/ip/route/print where comment={1;2}`, the relative spelling
+	 * `ip route add comment={1;2}`, and `:log info message={1;2}`. A `(…)`
+	 * array is accepted in every one of those positions, so only the brace is
+	 * gated.
+	 *
+	 * Being a directive is necessary but NOT sufficient — `:delay {1;2}` and
+	 * `:local name={1;2}` are syntax errors too — so which slot it is decides:
+	 * see {@link braceSlotTakesArray}.
+	 */
+	directiveVerb?: string;
+}
+
+/** How deep member scanning descends before it stops and keeps only the shape. */
+const MAX_MEMBER_DEPTH = 8;
+
+/**
+ * The argument name whose value the brace at `at` opens, `null` when the brace
+ * IS the token (a positional value), or undefined when it opens neither.
+ */
+function braceValueOwner(
+	text: string,
+	tokenStart: number,
+	at: number,
+): string | null | undefined {
+	if (at === tokenStart) return null;
+	if (text[at - 1] !== "=") return undefined;
+	const name = text.slice(tokenStart, at - 1);
+	return ARGUMENT_NAME.test(name) ? name.toLowerCase() : undefined;
+}
+
+/**
+ * Whether a `{` at `at` may open an array literal in this statement.
+ *
+ * `positionalIndex` is how many positionals the walk has already read, which is
+ * this token's own index if it turns out to be one. Position is load-bearing:
+ * `:local {1;2}` puts the literal in the NAME slot and does not parse, while
+ * `:local z {1;2}` puts it in the VALUE slot and does.
+ */
+function braceOpensArray(
+	text: string,
+	tokenStart: number,
+	at: number,
+	positionalIndex: number,
+	options: WalkOptions,
+): boolean {
+	const verb = options.directiveVerb;
+	if (verb === undefined) return false;
+	const owner = braceValueOwner(text, tokenStart, at);
+	if (owner === undefined) return false;
+	return braceSlotTakesArray(
+		verb,
+		owner === null ? `#${positionalIndex}` : owner,
+	);
 }
 
 /**
@@ -170,10 +250,12 @@ function unread(why: string): ArgumentsUnread {
 function* walkArguments(
 	text: string,
 	from: number,
-	options: { allowArrayValues?: boolean } = {},
+	options: WalkOptions = {},
 ): Generator<ReadArgument | string> {
 	const structural = maskComments(text);
 	let i = Math.max(0, from);
+	// How many positionals have been read, which is the NEXT positional's index.
+	let positionals = 0;
 	while (i < text.length) {
 		// The MASKED view decides whitespace, because `maskComments` blanks a
 		// continuation comment that `text` still spells with a `#`. Reading `text`
@@ -196,7 +278,7 @@ function* walkArguments(
 			i += continuation;
 			continue;
 		}
-		const token = scanToken(text, structural, i, options);
+		const token = scanToken(text, structural, i, positionals, options);
 		if (typeof token === "string") {
 			yield token;
 			return;
@@ -206,6 +288,7 @@ function* walkArguments(
 			yield read;
 			return;
 		}
+		if (read.kind === "positional") positionals++;
 		yield read;
 		i = token.end;
 	}
@@ -274,7 +357,8 @@ function scanToken(
 	text: string,
 	structural: string,
 	start: number,
-	options: { allowArrayValues?: boolean },
+	positionalIndex: number,
+	options: WalkOptions,
 ): { end: number } | string {
 	let i = start;
 	while (i < text.length) {
@@ -293,6 +377,11 @@ function scanToken(
 					? "a substitution or expression value"
 					: "an array or block value";
 			if (c === "{" && isScopeBrace(text, i)) return "a scope block value";
+			if (
+				c === "{" &&
+				!braceOpensArray(text, start, i, positionalIndex, options)
+			)
+				return "a brace value RouterOS does not read as an array here";
 			const end = delimitedEnd(structural, i);
 			if (end === null) return "an unclosed structured argument value";
 			if (hasUnquotedHash(structural, i, end))
@@ -463,7 +552,7 @@ function readToken(
 	structural: string,
 	start: number,
 	end: number,
-	options: { allowArrayValues?: boolean },
+	options: WalkOptions,
 ): ReadArgument | string {
 	const raw = text.slice(start, end);
 	const span = { start, end };
@@ -674,6 +763,264 @@ function gateDisagreement(body: string): string | null {
 	return null;
 }
 
+/** Trim ASCII whitespace off a range, returning the tightened bounds. */
+function trimRange(
+	text: string,
+	start: number,
+	end: number,
+): { start: number; end: number } {
+	let from = start;
+	let to = end;
+	while (from < to && " \t\r\n".includes(text[from] as string)) from++;
+	while (to > from && " \t\r\n".includes(text[to - 1] as string)) to--;
+	return { start: from, end: to };
+}
+
+/**
+ * Split `[from,to)` on depth-0 `separator`, or null when the device would call
+ * the literal a syntax error.
+ *
+ * On CHR 7.23.3 an empty member is fatal — `{;}`, `{;1}`, `{1;;2}` and `(1,)`
+ * are all `syntax error` — with exactly one exception: a brace array tolerates
+ * ONE trailing separator (`{1;}` is a one-member array, `{1;2;}` a two-member
+ * one). Returning null rather than "no members" matters, because the enclosing
+ * `array` shape is wrong too when the literal does not parse.
+ */
+function splitMembers(
+	structural: string,
+	from: number,
+	to: number,
+	separator: ";" | ",",
+): { start: number; end: number }[] | null {
+	const runs: { start: number; end: number }[] = [];
+	let memberStart = from;
+	for (const at of depthZeroOffsets(structural, from, to, separator)) {
+		runs.push({ start: memberStart, end: at });
+		memberStart = at + 1;
+	}
+	runs.push({ start: memberStart, end: to });
+	const trimmed = runs.map((run) => trimRange(structural, run.start, run.end));
+	const trailingEmpty =
+		separator === ";" &&
+		trimmed.length > 1 &&
+		(trimmed[trimmed.length - 1] as { start: number; end: number }).start ===
+			(trimmed[trimmed.length - 1] as { start: number; end: number }).end;
+	const members = trailingEmpty ? trimmed.slice(0, -1) : trimmed;
+	if (members.some((run) => run.start === run.end)) return null;
+	return members;
+}
+
+/** Why a located array literal was withdrawn; each is a device syntax error. */
+const EMPTY_MEMBER = "an array literal with an empty member";
+const EMPTY_GROUP = "an array member that is an empty group";
+const DEPTH_BOUND_REACHED =
+	"an array literal nested deeper than this phase reads";
+const UNPARSEABLE_MEMBER =
+	"an array member RouterOS rejects at its first character";
+
+/**
+ * Why a `(…)` member cannot stand where it is, or null when it can.
+ *
+ * A parenthesis inside a literal is either a GROUP — `{(1)}` is the one-member
+ * array `1` — or a comma array, and {@link isArraySource} only recognizes the
+ * second. That left the first sharing the fallback branch with every other
+ * expression, which is an abstention, so a group the device REJECTS kept the
+ * enclosing `array` shape instead of withdrawing it (found in review).
+ *
+ * On CHR 7.23.3 an empty group (`{()}`, `{a=()}`) and an empty comma member
+ * (`{(1,)}`, `{(,)}`, `{1;(2,)}`, `(1,(2,))`) are syntax errors at every
+ * nesting depth, while `{(1)}`, `{a=(1)}` and `{1;(2)}` all parse — so the
+ * check has to name the fault rather than refuse every parenthesis.
+ *
+ * `highlight` is not the oracle here: it accepts `{1;2,}`, `{2,}` and
+ * `{(1,2),}`, all of which `:parse` rejects.
+ */
+function parenMemberFault(
+	text: string,
+	structural: string,
+	start: number,
+	end: number,
+): string | null {
+	if (text[start] !== "(") return null;
+	if (delimitedEnd(structural, start) !== end) return null;
+	if (structural.slice(start + 1, end - 1).trim().length === 0)
+		return EMPTY_GROUP;
+	return splitMembers(structural, start + 1, end - 1, ",") === null
+		? EMPTY_MEMBER
+		: null;
+}
+
+/** Characters that cannot OPEN an array member; see {@link pushArrayMembers}. */
+function leadsInvalidMember(c: string | undefined): boolean {
+	return c === "*" || c === "+";
+}
+
+/** A member key: a bare word or one fully-enclosing quoted run. */
+function memberKey(
+	text: string,
+	structural: string,
+	start: number,
+	end: number,
+): string | null {
+	if (start >= end) return null;
+	if (text[start] === '"') {
+		const scan = scanQuotedString(structural, start);
+		if (!scan.closed || scan.end !== end) return null;
+		const body = text.slice(start + 1, end - 1);
+		return body.includes("\\") || body.includes("$") ? null : body;
+	}
+	const raw = text.slice(start, end);
+	return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(raw) ? raw : null;
+}
+
+/**
+ * Every offset of `needle` at depth 0 in `[start,end)`, strings skipped.
+ *
+ * Member splitting, the key split, and the nested-comma test are the same walk
+ * asked three questions, so they share it: this module's standing failure mode
+ * is two scanners disagreeing about one byte (see {@link continuationLength}).
+ */
+function depthZeroOffsets(
+	structural: string,
+	start: number,
+	end: number,
+	needle: string,
+): number[] {
+	const found: number[] = [];
+	let depth = 0;
+	for (let i = start; i < end; i++) {
+		const c = structural[i] as string;
+		if (c === '"') {
+			i = scanQuotedString(structural, i).end - 1;
+			continue;
+		}
+		if (c === "(" || c === "[" || c === "{") depth++;
+		else if (c === ")" || c === "]" || c === "}") depth--;
+		else if (c === needle && depth === 0) found.push(i);
+	}
+	return found;
+}
+
+/**
+ * Append the members of one array literal, depth first (#225 V1 interior).
+ *
+ * Returns null when every member was read, or the REASON the literal does not
+ * parse on the device — the caller withdraws the enclosing `array` shape and
+ * publishes that reason, so a consumer is never told "empty member" about a
+ * literal whose actual fault was something else (found in review).
+ *
+ * Every rule below is a CHR 7.23.3 reading, taken from each member's own
+ * `:typeof` under `:foreach k,v` and the statement's `:parse` IL:
+ *
+ *   - the separator is the DELIMITER's, not a choice: `{1;2}` has two members
+ *     while `{1,2}` has ONE (`(, 1 2)`, a nested array), and `(1;2)` is a
+ *     syntax error;
+ *   - `=` binds a key in the brace form (`{a=1}` -> key `a`, value `num`) and
+ *     COMPARES in the paren form (`(a=1,b=2)` -> two `bool` members), so keys
+ *     are read in braces only;
+ *   - a member that is itself `{…}`/`(…)`, or a brace member carrying a depth-0
+ *     comma, is an array and is descended into;
+ *   - everything else is offered to the literal reader, and what it refuses is
+ *     a variable reference or an expression on the device — which is exactly
+ *     what an abstention should mean.
+ */
+function pushArrayMembers(
+	anchors: ValueAnchor[],
+	text: string,
+	structural: string,
+	parent: number,
+	contentStart: number,
+	contentEnd: number,
+	separator: ";" | ",",
+	depth: number,
+): string | null {
+	// Past the bound the interior is UNVERIFIED, and an unverified interior can
+	// hold a fault that makes the whole statement a syntax error — `:parse`
+	// rejects a `(1,)` buried nine levels deep exactly as it rejects a shallow
+	// one. Returning null here called those bytes an array anyway, so the bound
+	// withdraws instead. Deepest member in the 948-script corpus is 6, so this
+	// costs nothing that has ever been seen.
+	if (depth >= MAX_MEMBER_DEPTH) return DEPTH_BOUND_REACHED;
+	const members = splitMembers(structural, contentStart, contentEnd, separator);
+	if (members === null) return EMPTY_MEMBER;
+	for (const member of members) {
+		let valueStart = member.start;
+		let name: string | undefined;
+		// A member may not OPEN with `*` or `+`: `{*1}`, `{ *1 }`, `(*1,2)`,
+		// `{a=*1}` and `{+1}` are all syntax errors on 7.23.3, even though `*1` is
+		// a perfectly good value one position out (`:local x *1` is typed `id`).
+		// Only the first byte is read, because both characters are ordinary
+		// operators between operands — `{2*3}` is `num` 6 and `{1+1}` is 2 — and
+		// unary minus is fine either way (`{-1}` is `num` -1).
+		if (leadsInvalidMember(text[member.start])) return UNPARSEABLE_MEMBER;
+		if (separator === ";") {
+			const eq = depthZeroOffsets(structural, member.start, member.end, "=")[0];
+			if (eq !== undefined) {
+				const key = memberKey(text, structural, member.start, eq);
+				const value = trimRange(structural, eq + 1, member.end);
+				// `{a=}` is not an empty-valued key: the device drops the `=` and
+				// keeps the NAME as a string member, so neither reading is safe.
+				if (key === null || value.start === value.end) continue;
+				if (leadsInvalidMember(text[value.start])) return UNPARSEABLE_MEMBER;
+				name = key;
+				valueStart = value.start;
+			}
+		}
+		const anchor: ValueAnchor = {
+			kind: "element",
+			tokenSpan: { start: member.start, end: member.end },
+			...(name === undefined ? {} : { name }),
+			valueSpan: { start: valueStart, end: member.end },
+			value: text.slice(valueStart, member.end),
+			quoted: false,
+			parent,
+		};
+		const fault = parenMemberFault(text, structural, valueStart, member.end);
+		if (fault !== null) return fault;
+		if (isArraySource(text, structural, valueStart, member.end)) {
+			const at = anchors.length;
+			anchors.push({ ...anchor, sourceShape: "array" });
+			const nested = pushArrayMembers(
+				anchors,
+				text,
+				structural,
+				at,
+				valueStart + 1,
+				member.end - 1,
+				text[valueStart] === "{" ? ";" : ",",
+				depth + 1,
+			);
+			if (nested !== null) return nested;
+			continue;
+		}
+		if (
+			separator === ";" &&
+			depthZeroOffsets(structural, valueStart, member.end, ",").length > 0
+		) {
+			// `{1;2,3}` is two members, the second a comma array carrying no
+			// delimiters of its own — IL `1;(, 2 3)`. It splits on commas.
+			const at = anchors.length;
+			anchors.push({ ...anchor, sourceShape: "array" });
+			const nested = pushArrayMembers(
+				anchors,
+				text,
+				structural,
+				at,
+				valueStart,
+				member.end,
+				",",
+				depth + 1,
+			);
+			if (nested !== null) return nested;
+			continue;
+		}
+		const literal = literalValue(text, valueStart, member.end);
+		if (typeof literal === "string") continue;
+		anchors.push({ ...anchor, value: literal.value, quoted: literal.quoted });
+	}
+	return null;
+}
+
 /**
  * Locate the literal-value prefix of one statement's arguments (#225 V1).
  *
@@ -685,17 +1032,29 @@ function gateDisagreement(body: string): string | null {
  * array literal: braces, or parentheses with a depth-zero comma, are locatable
  * without evaluating their contents. Other expressions, including `.` concat,
  * still stop the scan. The strict REST reading remains unchanged.
+ *
+ * A located array is then DESCENDED into, so each member is anchored in its own
+ * right ({@link pushArrayMembers}); a member that does not parse withdraws the
+ * whole literal, since the device rejects the statement in that case.
  */
 export function lexValueAnchors(
 	text: string,
 	from: number,
+	options: { directiveVerb?: string } = {},
 ): ValueAnchorReading {
 	const anchors: ValueAnchor[] = [];
-	for (const read of walkArguments(text, from, { allowArrayValues: true })) {
+	const structural = maskComments(text);
+	for (const read of walkArguments(text, from, {
+		allowArrayValues: true,
+		...(options.directiveVerb === undefined
+			? {}
+			: { directiveVerb: options.directiveVerb }),
+	})) {
 		if (typeof read === "string")
 			return { complete: false, anchors, why: read };
 		if (read.kind !== "query" && read.valueSpan !== undefined) {
 			if (read.sourceShape !== undefined) {
+				const at = anchors.length;
 				anchors.push({
 					kind: read.kind,
 					tokenSpan: read.span,
@@ -705,6 +1064,20 @@ export function lexValueAnchors(
 					sourceShape: read.sourceShape,
 					quoted: false,
 				});
+				const unparsed = pushArrayMembers(
+					anchors,
+					text,
+					structural,
+					at,
+					read.valueSpan.start + 1,
+					read.valueSpan.end - 1,
+					text[read.valueSpan.start] === "{" ? ";" : ",",
+					0,
+				);
+				if (unparsed !== null) {
+					anchors.length = at;
+					return { complete: false, anchors, why: unparsed };
+				}
 				continue;
 			}
 			if (read.value === undefined) continue;

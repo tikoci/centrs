@@ -93,6 +93,7 @@ import {
 	type ArgumentKind,
 	lexArguments,
 	lexValueAnchors,
+	type ValueAnchorKind,
 } from "./explain/args.ts";
 import { scopeBlocks } from "./explain/blocks.ts";
 import {
@@ -455,9 +456,19 @@ export interface ExplainValueOccurrence {
 	/** Literal source bytes, quotes included. */
 	span: ExplainSpanRange;
 	tokenSpan: ExplainSpanRange;
-	kind: Exclude<ArgumentKind, "query">;
+	/** `element` is one member of an array literal, located inside its container. */
+	kind: ValueAnchorKind;
+	/** An attribute's name, or an array member's key. */
 	name?: string;
 	quoted: boolean;
+	/**
+	 * The `id` of the array literal this value is a member of.
+	 *
+	 * Present only on `element` rows. Containment is a reference rather than
+	 * nesting so the list stays flat and ordered, and so #239 can point a symbol
+	 * at one member without re-walking a tree.
+	 */
+	parent?: string;
 	facts: ExplainValueFacts;
 }
 
@@ -1096,24 +1107,37 @@ function valuesOf(
 		const { start, end } = split.span;
 		const text = analyzed.slice(start, end);
 		if (text !== split.text) continue;
-		const anchored = lexValueAnchors(text, split.argsAt);
+		const anchored = lexValueAnchors(text, split.argsAt, {
+			// A `{…}` array literal is legal only in a ROOT scripting directive's
+			// value slot; `/ip/dns/set servers={…}` and `:log info message={…}` are
+			// both device syntax errors at the `{`. `path` is how that position is
+			// spelled offline: `:local`/`:put`/`:foreach` resolve to `/`, while
+			// `:log info` resolves to `/log` — and the device agrees with the split.
+			...(split.path === "/" ? { directiveVerb: split.verb } : {}),
+		});
 		// Prefix completeness is intentionally not an envelope fact: shape hints are
 		// advisory and never turn the later refusal reason into a diagnostic.
-		for (const anchor of anchored.anchors) {
+		const ids = new Map<number, string>();
+		for (const [index, anchor] of anchored.anchors.entries()) {
 			const hints: ValueShape[] =
 				anchor.sourceShape === "array"
 					? ["array"]
 					: valueShapeHints(anchor.value, {
 							quoted: anchor.quoted,
 							allowBareString: anchor.kind === "attribute",
+							context: anchor.kind === "element" ? "array-member" : "argument",
 						});
 			if (hints.length === 0) continue;
 			const span = {
 				start: start + anchor.valueSpan.start,
 				end: start + anchor.valueSpan.end,
 			};
+			const id = `v${occurrences.length}`;
+			ids.set(index, id);
+			const parent =
+				anchor.parent === undefined ? undefined : ids.get(anchor.parent);
 			occurrences.push({
-				id: `v${occurrences.length}`,
+				id,
 				span,
 				tokenSpan: {
 					start: start + anchor.tokenSpan.start,
@@ -1122,6 +1146,7 @@ function valuesOf(
 				kind: anchor.kind,
 				...(anchor.name === undefined ? {} : { name: anchor.name }),
 				quoted: anchor.quoted,
+				...(parent === undefined ? {} : { parent }),
 				facts: { shapeHints: { values: hints, ev: EV.values } },
 			});
 		}
@@ -1536,7 +1561,9 @@ function renderSymbol(occurrence: ExplainSymbolOccurrence): string {
 function renderValue(occurrence: ExplainValueOccurrence): string {
 	const name = occurrence.name === undefined ? "" : ` name=${occurrence.name}`;
 	const shapes = occurrence.facts.shapeHints?.values.join("|") ?? "unknown";
-	return `${occurrence.kind.padEnd(10)}${name} shapes=${shapes}`;
+	const parent =
+		occurrence.parent === undefined ? "" : ` in=${occurrence.parent}`;
+	return `${occurrence.kind.padEnd(10)}${name}${parent} shapes=${shapes}`;
 }
 
 /**
