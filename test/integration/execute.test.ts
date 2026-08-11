@@ -176,7 +176,8 @@ describeFast("execute against CHR", () => {
 			const script = expectExecuteSuccess(
 				await executeEnvelope({
 					...base,
-					command: ":put [/system/identity/get name]",
+					command:
+						":local a true; :if ($a = true) do={:put [/system/identity/get name]}",
 				}),
 				"rest-api",
 			);
@@ -191,16 +192,6 @@ describeFast("execute against CHR", () => {
 			expect(JSON.stringify(script.data)).toContain(liveIdentity);
 			expect(script.meta.validation?.syntax).toBe(true);
 			expect(script.meta.validation?.semantic).toBe("not-applicable");
-
-			const dollarVariable = expectExecuteSuccess(
-				await executeEnvelope({
-					...base,
-					command: ":local a true; :if ($a = true) do={:put ok}",
-				}),
-				"rest-api",
-			);
-			expect(JSON.stringify(dollarVariable.data)).toContain("ok");
-			expect(dollarVariable.meta.validation?.syntax).toBe(true);
 
 			expectExecuteFailure(
 				await executeEnvelope({

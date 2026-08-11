@@ -3,7 +3,8 @@
 // K2's claim is about ONE number per case: the offset the device's hard `error`
 // lands on, which the module has to reproduce as `bad-sigil:<offset>` (and, when
 // the device is clean, must NOT report at all). So this compares exactly that,
-// rather than the per-occurrence classes `explain-201-k3-probe-check.ts` reads.
+// rather than the per-occurrence classes
+// `bun run explain:probe:symbol-classes-replay` reads.
 //
 //   bun run explain:probe:symbol-bad-sigil-replay -- .scratch/explain-201-k2-*.out
 import { resolveSymbols } from "../../src/explain/symbols.ts";

@@ -62,25 +62,16 @@ The command is a script-shaped console expression, not a slash path plus verb,
 so REST must use the `/rest/execute` fallback.
 
 ```bash
-centrs execute $R ':put [/system/identity/get name]' --via rest-api --username $U --password $P
+centrs execute $R ':local a true; :if ($a = true) do={:put [/system/identity/get name]}' --via rest-api --username $U --password $P
 ```
 
 Envelope: `ok: true`, `data` is string-shaped (`data.output` or `data.ret`) and
 contains the CHR identity name, `meta.via=rest-api`, and
 `meta.validation.syntax=true`. `meta.validation.semantic` is absent or marked
 `not-applicable` because `/console/inspect` validates path-shaped commands, not
-arbitrary script expressions.
-
-The same path must preserve dollar-prefixed variables while wrapping the
-command for `:parse`:
-
-```bash
-centrs execute $R ':local a true; :if ($a = true) do={:put ok}' --via rest-api --username $U --password $P
-```
-
-Envelope: `ok: true`, output contains `ok`, and
-`meta.validation.syntax=true`. If the validation wrapper expands `$a` before
-`:parse`, this example fails even though RouterOS accepts the original command.
+arbitrary script expressions. The `$a` variable must survive the validation
+wrapper: if that outer string expands it before `:parse`, this example fails even
+though RouterOS accepts the original command.
 
 ### 5. Syntax reject from `:put [:parse ...]`
 

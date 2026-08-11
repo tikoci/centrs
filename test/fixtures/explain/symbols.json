@@ -412,7 +412,7 @@
 				}
 			],
 			"rule": "F1 — the substitution is CODE, so its nested string closes inside it. A scan that reads it as string bytes flips its quote phase here and every later binding is lost (the lab SUT read both `pos` uses as `parameter`).",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "F1b",
@@ -430,7 +430,7 @@
 				}
 			],
 			"rule": "F1 — H4 must be decided by a scanner that models substitutions. `segment.ts`'s shared `maskComments` does not, so it leaves this comment unmasked; the device classes the whole `# :put $a` line `comment`.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "F2a",
@@ -456,7 +456,7 @@
 				}
 			],
 			"rule": "F2 — the console cannot see the enclosing binding from inside a function definition, so it falls back to `parameter` (S5). The lab SUT, being depth-scoped, said `local`.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "F2b",
@@ -474,7 +474,7 @@
 				}
 			],
 			"rule": "F2 — the contrast case. `:if`/`:foreach`/`:while`/`:do` bodies are not closures, and they spell `do={` exactly like a function definition; the statement head is the only tell.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "F2c",
@@ -508,7 +508,7 @@
 				}
 			],
 			"rule": "F2 — the eworm idiom, device-confirmed: the re-imported `$G` reads `global`, the one in the body without a re-import reads `parameter`.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "F2d",
@@ -534,7 +534,7 @@
 				}
 			],
 			"rule": "F2 + S3 — `auto` bindings obey the same closure boundary as locals.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "F3a",
@@ -552,7 +552,7 @@
 				}
 			],
 			"rule": "S18 + Q2's colon-optional finding (`do {` opens a body the same way `:do {` does), which `blocks.ts` already encodes in DIRECTIVE_BODY. Unlike `:local`/`:global`/`:set`, the error-variable head is deliberately NOT gated on the `:` sigil.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight` (2026-08-02): `onerror Err {…} do={… $Err}` and `:onerror Err {…} do={… $Err}` produce byte-identical classes, `Err` = `variable-local` in both. Same for the `in={…} do={…}` spelling."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): `onerror Err {…} do={… $Err}` and `:onerror Err {…} do={… $Err}` produce byte-identical classes, `Err` = `variable-local` in both. Same for the `in={…} do={…}` spelling."
 		},
 		{
 			"id": "H5a",
@@ -570,7 +570,7 @@
 				}
 			],
 			"rule": "F4 (Q1 H5) — a `\\` at end of line is a continuation, not a boundary. Resetting statement state here dropped the declaration and then reported `$foo` as a confident `parameter`; the device says `variable-local` at both occurrences.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "H5b",
@@ -592,7 +592,7 @@
 				}
 			],
 			"rule": "F4 + F2 — the continuation must also carry `declaredHere`, or the function body stops being a closure and the outer local leaks into it. Device: the in-body `outer` is `variable-parameter`.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "H6a",
@@ -610,7 +610,7 @@
 				}
 			],
 			"rule": "F3 — the sigil is optional; requiring `:` skipped the declaration and made every later use a confident `parameter`.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "H6b",
@@ -628,7 +628,7 @@
 				}
 			],
 			"rule": "F3.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "H6c",
@@ -646,7 +646,7 @@
 				}
 			],
 			"rule": "F3 + S3.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "H6d",
@@ -664,7 +664,7 @@
 				}
 			],
 			"rule": "F3 + S3.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "H6e",
@@ -686,7 +686,7 @@
 				}
 			],
 			"rule": "F3 + S10 — the device reports all three occurrences `variable-local`.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "H6f",
@@ -695,7 +695,7 @@
 			"input": "set foo 2",
 			"expect": [],
 			"rule": "F3 + S10 — spelling decides: bare `set` with nothing in scope is the menu verb and the device reports NO variable, while `:set`/`/set` are the scripting command and report a hard `error`, so those abstain instead (C12).",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "H6g",
@@ -709,7 +709,7 @@
 				}
 			],
 			"rule": "F3 — `/local` at ROOT is the scripting command and binds (device: `foo` = `variable-local`). Contrast `/ip/local foo 1` and `/interface local foo 1`, where the device makes `local` an `obj-inactive` menu item and `foo` `none`; there the head word is `ip`/`interface`, so no declaration is made either.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "E1",
@@ -727,7 +727,7 @@
 				}
 			],
 			"rule": "F3 boundary — `head === null` is not the statement-start test, because nothing before a bare word sets it. Device: `local` and the first `foo` are `none` (no declaration is made) and the later `$foo` is `variable-parameter`. Reading `local` as a head here fabricated a binding and then reported that `$foo` as a confident `local`.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "E2",
@@ -745,7 +745,7 @@
 				}
 			],
 			"rule": "F3 boundary — same rule, second shape. Device: `local`/`foo` `none`, `$x` and the later `$foo` `variable-parameter`.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "E3",
@@ -754,7 +754,7 @@
 			"input": "//local foo 1\n:put $foo",
 			"expect": [],
 			"rule": "F3/F5 — the sigil run must be zero or one character. CHR 7.23.2 errors at the SECOND sigil (`//local` and `:/local` error at offset 1) and classes every later byte `none`, including variables on following lines. So this is not merely 'do not declare': the resolver raises a located `bad-sigil` defect and reports nothing further, the same fail-closed stop a malformed escape gets. Inside a VALUE a doubled slash is ordinary text — `url=http://example.com` and `comment=a//b` are clean on the device — so the check is statement-leading only.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases.",
 			"defects": [
 				{
 					"code": "bad-sigil",
@@ -770,7 +770,7 @@
 			"input": ":local \\\\\nfoo 1\n:put $foo",
 			"expect": [],
 			"rule": "F4 — in code a backslash is valid only before whitespace. Device: the doubled backslash errors on the FIRST one, `foo` is `none`, and nothing after is a variable. The resolver raises a located `bad-escape` defect and reports nothing further rather than continuing across a boundary the console never crossed.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases.",
 			"defects": [
 				{
 					"code": "bad-escape",
@@ -795,7 +795,7 @@
 				}
 			],
 			"rule": "F4 + F2 — `do=\\{` is not `do={`. Device: `outer` and `fn` are `variable-local`, then the error kills the rest (`put` and the in-body `outer` read `none`). Occurrences before the defect stand (the lab's X1 rule); the body is never entered.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed.",
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases.",
 			"defects": [
 				{
 					"code": "bad-escape",
@@ -820,7 +820,7 @@
 				}
 			],
 			"rule": "F4 — CHR 7.23.2 accepts `\\ ` and `\\<tab>` in code with no error and still classes `$v` `variable-local`; only a backslash before a NON-whitespace character is malformed.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "E7",
@@ -842,7 +842,7 @@
 				}
 			],
 			"rule": "F4 — `\\ ` is a valid escape, so `do=\\ {` is still `do={` and the body is a closure: the device reads the in-body `outer` as `variable-parameter`. The walker and the closure test must share one escape rule, or the scan accepts an escape the `do=` lookback does not and the body silently stops being a closure.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "E8",
@@ -864,7 +864,7 @@
 				}
 			],
 			"rule": "F4 — same rule, tab spelling.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "E9",
@@ -882,7 +882,7 @@
 				}
 			],
 			"rule": "F4 — `\\<cr>` with no line feed after it escapes whitespace like `\\ ` and `\\<tab>`; the device raises no error and still classes `$v` `variable-local`. Only `\\<cr><lf>` is the CONTINUATION form.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "E10",
@@ -891,7 +891,7 @@
 			"input": "/tool fetch url=http://example.com/file\n:put 1",
 			"expect": [],
 			"rule": "F5 boundary — the fail-closed sigil rule must not fire on URLs, which are the common real shape. The device raises no error here at all.",
-			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): every occurrence below carries the device class shown, and the device reported no variable the resolver missed."
+			"verified": "CHR 7.23.2 `/console/inspect request=highlight`, probe `bun run explain:probe:symbol-anchors` (2026-08-02): resolver occurrences matched every device variable run, including zero-occurrence cases."
 		},
 		{
 			"id": "X1",

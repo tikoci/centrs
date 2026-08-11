@@ -28,85 +28,19 @@ async function highlight(input: string): Promise<string[]> {
 	return csv === "" ? [] : csv.split(",");
 }
 
-const anchors: { id: string; name: string; input: string }[] = [
-	{
-		id: "F1a",
-		name: "a substitution carrying a nested string does not break later bindings",
-		input:
-			':global f do={\n    :local cs ""\n    :set cs "$cs$[[:parse "(\\"x\\")"]]"\n    :local pos 0\n    :while ($pos < 3) do={ :set pos ($pos + 1) }\n}',
-	},
-	{
-		id: "F1b",
-		name: "a hash line after such a substitution is a comment",
-		input: ':local a "$[[:parse "(\\"x\\")"]]"\n# :put $a\n:put $a',
-	},
-	{
-		id: "F2a",
-		name: "a named-function body is a closure",
-		input: ":local outer 1\n:local fn do={ :put $outer }\n$fn",
-	},
-	{
-		id: "F2b",
-		name: "a control-flow body shares the enclosing scope",
-		input: ":local v 1\n:if (true) do={ :put $v }",
-	},
-	{
-		id: "F2c",
-		name: "a global needs an in-body re-import inside a function",
-		input:
-			":global G 1\n:global withImport do={ :global G\n :put $G }\n:global without do={ :put $G }",
-	},
-	{
-		id: "F2d",
-		name: "a loop variable is visible in its body but not through a function",
-		input: ":foreach i in={1;2} do={ :put $i }\n:local fn do={ :put $i }",
-	},
-	{
-		id: "H5a",
-		name: "an escaped newline continues the declaration",
-		input: ":local \\\nfoo 1\n:put $foo",
-	},
-	{
-		id: "H5b",
-		name: "an escaped newline before do keeps the body a closure",
-		input: ":local outer 1\n:local fn do=\\\n{ :put $outer }",
-	},
-	{
-		id: "H6a",
-		name: "a colon-less local head declares",
-		input: "local foo 1\n:put $foo",
-	},
-	{
-		id: "H6b",
-		name: "a colon-less global head declares",
-		input: "global foo 1\n:put $foo",
-	},
-	{
-		id: "H6c",
-		name: "a colon-less foreach head binds its loop variable",
-		input: "foreach i in={1} do={:put $i}",
-	},
-	{
-		id: "H6d",
-		name: "a colon-less for head binds its loop variable",
-		input: "for i from=1 to=3 do={:put $i}",
-	},
-	{
-		id: "H6e",
-		name: "a colon-less set targets an existing binding",
-		input: ":local foo 1\nset foo 2\n:put $foo",
-	},
-	{
-		id: "H6f",
-		name: "a colon-less set on an unknown name is a menu verb",
-		input: "set foo 2",
-	},
-	{
-		id: "H6g",
-		name: "a root-path scripting head declares like its colon-less twin",
-		input: "/local foo 1",
-	},
-];
+const fixture = (await Bun.file(
+	"test/fixtures/explain/symbols.json",
+).json()) as {
+	cases: { id: string; class: string; name: string; input: string }[];
+};
+const anchors = fixture.cases.filter(
+	(row) => row.class === "device-verified branch anchor",
+);
+if (anchors.length === 0) {
+	throw new Error(
+		"test/fixtures/explain/symbols.json contains no device-verified branch anchors",
+	);
+}
 
 try {
 	const resource = (await chr.rest("/system/resource")) as Record<

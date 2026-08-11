@@ -5,7 +5,7 @@ import { parseScriptFor } from "../../src/protocols/mac-telnet-console.ts";
 describe("RouterOS string literals", () => {
 	test("escape every byte that an outer double quote would reinterpret", () => {
 		expect(routerOsStringLiteral(':put "\\$value"')).toBe(
-			'":put \\"\\\\\\$value\\""',
+			String.raw`":put \"\\\$value\""`,
 		);
 	});
 

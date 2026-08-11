@@ -1,4 +1,4 @@
-// cspell:ignore scanfix
+// cspell:ignore premask scanfix
 // Q13 promotion — score every candidate arm against the frozen corpus streams.
 // Precision on decided / abstention / missed, against the full highlight
 // captures written by `explain:probe:highlight-recapture`. The candidate emits
@@ -26,28 +26,51 @@ function expandPairs(pairs: [string, string][]): {
 
 const VAR_CLASSES = new Set(Object.values(HIGHLIGHT_CLASS));
 const SPLITS = ["dev", "holdout"] as const;
-const ARMS: Arm[] = (Bun.env["ARMS"]?.split(",") as Arm[]) ?? [
+const KNOWN_ARMS = [
 	"lab",
+	"premask",
 	"scanfix",
 	"closure",
 	"abstain",
-];
+] as const satisfies readonly Arm[];
+const DEFAULT_ARMS: Arm[] = ["lab", "scanfix", "closure", "abstain"];
+const requestedArms =
+	Bun.env["ARMS"]
+		?.split(",")
+		.map((arm) => arm.trim())
+		.filter((arm) => arm !== "") ?? [];
+for (const arm of requestedArms) {
+	if (!(KNOWN_ARMS as readonly string[]).includes(arm)) {
+		throw new Error(
+			`unknown arm ${JSON.stringify(arm)}; choose a comma-separated subset of ${KNOWN_ARMS.join(",")}`,
+		);
+	}
+}
+const ARMS: Arm[] =
+	requestedArms.length === 0 ? DEFAULT_ARMS : (requestedArms as Arm[]);
 const VERSION = Bun.env["HL_VERSION"] ?? "7.23.2";
+const PARTITION_PATH = "test/fixtures/explain/corpus-partition.json";
+const ARTIFACT_PATH = `.scratch/explain-lab-q13-streams.v${VERSION}.json`;
 
-const manifest = (await Bun.file(
-	"test/fixtures/explain/corpus-partition.json",
-).json()) as {
+const manifest = (await Bun.file(PARTITION_PATH).json()) as {
 	groups: { split: string; scripts: string[] }[];
 };
 const splitOf = new Map<string, string>();
 for (const g of manifest.groups)
 	for (const p of g.scripts) splitOf.set(p, g.split);
 
-const artifact = (await Bun.file(
-	`.scratch/explain-lab-q13-streams.v${VERSION}.json`,
-).json()) as {
+const artifactFile = Bun.file(ARTIFACT_PATH);
+if (!(await artifactFile.exists())) {
+	throw new Error(
+		`no highlight capture at ${ARTIFACT_PATH}; run \`bun run explain:probe:highlight-recapture\` or select a captured HL_VERSION`,
+	);
+}
+const artifact = (await artifactFile.json()) as {
 	streams: Record<string, { pairs?: [string, string][]; aligned: boolean }>;
 };
+console.log(
+	`oracle=highlight  artifact=${ARTIFACT_PATH}  partition=${PARTITION_PATH}`,
+);
 
 interface Tally {
 	total: number;
@@ -114,8 +137,17 @@ for (const arm of ARMS) {
 			}
 		}
 		const decided = t.total - t.abstained;
+		if (t.total === 0) {
+			throw new Error(
+				`${arm}/${split} selected no scored occurrences; check ${ARTIFACT_PATH} against ${PARTITION_PATH}`,
+			);
+		}
+		const precision =
+			decided === 0
+				? `n/a (all ${t.total} occurrences abstained)`
+				: `${((100 * t.correct) / decided).toFixed(2)}% (${t.correct}/${decided})`;
 		console.log(
-			`${arm.padEnd(8)} ${split.padEnd(8)} occurrences ${String(t.total).padStart(6)}  precision ${((100 * t.correct) / decided).toFixed(2)}% (${t.correct}/${decided})  abstention ${((100 * t.abstained) / t.total).toFixed(2)}%  wrong ${String(t.wrong).padStart(4)}  missed ${String(t.missed).padStart(4)}`,
+			`${arm.padEnd(8)} ${split.padEnd(8)} occurrences ${String(t.total).padStart(6)}  precision ${precision}  abstention ${((100 * t.abstained) / t.total).toFixed(2)}%  wrong ${String(t.wrong).padStart(4)}  missed ${String(t.missed).padStart(4)}`,
 		);
 		if (Bun.env["DETAIL"]) {
 			for (const [k, v] of [...t.directions]

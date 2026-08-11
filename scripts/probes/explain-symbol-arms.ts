@@ -103,6 +103,8 @@ export function resolveSymbols(original: string, arm: Arm): SymbolAnalysis {
 	const frames: ("{" | "[" | "(" | '"')[] = [];
 	let depth = 0; // bracket/brace depth, strings excluded
 	let overDepth = false;
+	/** Braces past the cap pushed no scope, so their closes must pop no scope. */
+	let suppressedScopes = 0;
 
 	let head: string | null = null;
 	let filterDepth: number | null = null;
@@ -177,7 +179,9 @@ export function resolveSymbols(original: string, arm: Arm): SymbolAnalysis {
 	): void => {
 		if (/^\d+$/.test(r.name)) {
 			occurrences.push({
-				...r,
+				start: r.start,
+				end: r.end,
+				name: r.name,
 				sigil: true,
 				declaration: false,
 				cls: "parameter",
@@ -300,6 +304,7 @@ export function resolveSymbols(original: string, arm: Arm): SymbolAnalysis {
 			depth++;
 			if (c === "{") {
 				if (scopes.length >= MAX_SCOPE_DEPTH) {
+					suppressedScopes++;
 					if (!overDepth) {
 						overDepth = true;
 						notes.push(`over-depth:${i}`);
@@ -318,7 +323,8 @@ export function resolveSymbols(original: string, arm: Arm): SymbolAnalysis {
 			if (frames.length > 0) frames.pop();
 			if (filterDepth !== null && depth <= filterDepth) filterDepth = null;
 			if (c === "}") {
-				if (scopes.length > 1) scopes.pop();
+				if (suppressedScopes > 0) suppressedScopes--;
+				else if (scopes.length > 1) scopes.pop();
 				resetStatement();
 			}
 			if (depth > 0) depth--;
