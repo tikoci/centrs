@@ -29,11 +29,15 @@ import {
 	ALIASES,
 	build,
 	type CatalogRow,
+	categoryLeafSlugs,
 	countRowMarkers,
 	countTypeMarkers,
+	discoverSlugs,
 	droppedSegments,
+	llmsSlugs,
 	type PublishedEntry,
 	parsePage,
+	sitemapSlugs,
 } from "../../scripts/explain-catalog-data.ts";
 import {
 	type CatalogEntry,
@@ -144,9 +148,15 @@ describe("explain/catalog — the generated table", () => {
 	});
 
 	/**
-	 * The alias layer, read from the product side: the doc spelling must NOT be in
-	 * the table, and the CLI spelling must be — with device provenance, since
-	 * every alias target was proven against a tree at generation time.
+	 * The definition-module spellings, read from the product side: the doc
+	 * spelling must NOT be in the table and the CLI spelling must be, with device
+	 * provenance.
+	 *
+	 * This used to be the alias layer's job. Since #285 the source publishes the
+	 * CLI spelling directly and the doc spellings are gone, so the same two
+	 * assertions now hold for a different reason — which is exactly why they stay:
+	 * a regression in either direction is visible here whichever mechanism is
+	 * responsible.
 	 */
 	test("resolves the caps-man definition-module spellings", () => {
 		expect(PATH_CATALOG.has("/caps-man/acl/access-list")).toBe(false);
@@ -173,6 +183,25 @@ describe("explain/catalog — the generated table", () => {
 		expect(PATH_CATALOG.get("/interface/ethernet/switch/port")?.kind).toBe(
 			"menu",
 		);
+	});
+
+	/**
+	 * The shipped-table half of the #285 discovery fix. `interface/ethernet/
+	 * switch/qos/` is a trailing-slash category URL — the sitemap carries its
+	 * CHILDREN but never the menu itself, whose entry is published only at
+	 * `qos/qos.md` and listed only in `llms.txt`. It is published-only, so
+	 * sitemap-only discovery does not merely lose its gate: the row disappears,
+	 * and with it the explanation for why no CHR tree has it.
+	 *
+	 * This is also the R1 path from tikoci/rosetta#136 — `qos` being a real,
+	 * published menu segment is what makes dropping it unsafe, and it can only be
+	 * seen to be one once the leaf is recovered.
+	 */
+	test("carries a branching menu the sitemap alone never lists", () => {
+		const qos = PATH_CATALOG.get("/interface/ethernet/switch/qos");
+		expect(qos?.kind).toBe("menu");
+		expect(qos?.provenance).toBe("published");
+		expect(qos?.syscap).toBe("rbswitch and crs_prestera");
 	});
 
 	test("entries are lower-case, slash-led and sorted", () => {
@@ -253,18 +282,18 @@ describe("explain/catalog — commandVerbIndex", () => {
 describe("explain/catalog — effectiveGates", () => {
 	/**
 	 * A row states only what the publication stated AT that entry, so a gate must
-	 * be read down the whole path. `/interface/ethernet/poe/monitor` publishes no
-	 * gate of its own, but reaching it requires `/interface/ethernet/poe`.
+	 * be read down the whole path. `/disk/smb-share` publishes no gate of its own,
+	 * but reaching it requires `/disk`, which is built `!smips`.
 	 */
 	test("inherits an ancestor's gate", () => {
-		const own = lookupPath(["interface", "ethernet", "poe", "monitor"]);
+		const own = lookupPath(["disk", "smb-share"]);
+		expect(own?.conditions).toBeUndefined();
+		expect(own?.package).toBeUndefined();
 		expect(own?.syscap).toBeUndefined();
 
-		const gates = effectiveGates(["interface", "ethernet", "poe", "monitor"]);
-		expect(gates.map((gate) => gate.path)).toContain("/interface/ethernet/poe");
-		expect(
-			gates.find((gate) => gate.path === "/interface/ethernet/poe")?.syscap,
-		).toBe("(poe or poe-in)");
+		const gates = effectiveGates(["disk", "smb-share"]);
+		expect(gates.map((gate) => gate.path)).toEqual(["/disk"]);
+		expect(gates[0]?.conditions).toBe("!smips");
 	});
 
 	test("carries a path's own gate, root-first", () => {
@@ -283,27 +312,24 @@ describe("explain/catalog — effectiveGates", () => {
 	/**
 	 * The #228 headline, re-derived from the shipped table rather than quoted:
 	 * a published-only path almost always explains its own absence from a
-	 * CHR-derived tree, and the unexplained residue is a small fixed set. Read
-	 * row-wise the residue looks like 46; ancestry-aware it is the seven #228
-	 * named. Those seven are the ONLY evidence that the publication can carry a
-	 * path with no explanation at all, so a growing set would be a real event.
+	 * CHR-derived tree, and the unexplained residue is a small fixed set.
+	 *
+	 * The corrected inventory (#285) sharpened this rather than moving it. The
+	 * seven paths #228 named were an artifact of the module-page corpus:
+	 * `serial-interface` and `dashboard` are now published as their own gated
+	 * menus, and the recovered `<dir>/<basename>` leaves carry the gates their
+	 * children inherit. Row-wise the residue is 2; ancestry-aware it is
+	 * `/interface/xfrm` alone — the one published path that explains its absence
+	 * from a CHR tree in no way at all. A growing set would be a real event.
 	 */
-	test("the unexplained residue is the seven paths #228 named", () => {
+	test("the unexplained residue is one path", () => {
 		const residue = [...PATH_CATALOG]
 			.filter(([path, entry]) => {
 				if (entry.provenance !== "published") return false;
 				return effectiveGates(path.split("/").filter(Boolean)).length === 0;
 			})
 			.map(([path]) => path);
-		expect(residue).toEqual([
-			"/ip/cloud/app/update",
-			"/system/dashboard/settings",
-			"/system/dashboard/show",
-			"/system/serial-interface/read",
-			"/system/serial-interface/start",
-			"/system/serial-interface/stop",
-			"/system/serial-interface/write",
-		]);
+		expect(residue).toEqual(["/interface/xfrm"]);
 	});
 });
 
@@ -348,6 +374,38 @@ describe("explain/catalog — parsing published pages", () => {
 			"/tool/mac-server/mac-winbox Settings Directory",
 			"/tool/mac-server/ping Settings Directory",
 			"/tool/mac-server/sessions Directory",
+		]);
+	});
+
+	/**
+	 * A `<dir>/<basename>` leaf, the shape sitemap-only discovery dropped (#285),
+	 * publishing ONE path as two entries under different hardware gates. Read
+	 * end-to-end, because each half was decided from this page: the parser keeps
+	 * both occurrences, the fold records the kind they agree on, and the gate
+	 * survives only where both state it — `!i386` does, `syscap: health` does not.
+	 */
+	test("reads a path published twice under different gates", async () => {
+		const entries = parsePage(
+			"system/health/health",
+			await readFixture("system__health__health.md"),
+		);
+		expect(
+			entries.map((entry) => `${entry.path} ${entry.kind} ${entry.syscap}`),
+		).toEqual([
+			"/system/health Settings Directory null",
+			"/system/health Directory health",
+		]);
+
+		const rows = buildWith(entries, { "/system/health": "dir" });
+		expect(rows).toEqual([
+			{
+				conditions: "!i386",
+				kind: "menu",
+				package: undefined,
+				path: "/system/health",
+				provenance: "both",
+				syscap: undefined,
+			},
 		]);
 	});
 
@@ -466,6 +524,127 @@ describe("explain/catalog — parsing published pages", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Discovery
+// ---------------------------------------------------------------------------
+
+/**
+ * The sitemap is not the inventory (#285). A branching menu is served as a
+ * trailing-slash category URL with no `.md`, while the menu's own entry is
+ * published at `<dir>/<basename(dir)>.md` and listed only in `llms.txt`. These
+ * hold the shape of that pair, because getting it wrong shrinks the catalog by
+ * a quarter without a single error.
+ */
+describe("explain/catalog — discovery", () => {
+	const loc = (path: string): string =>
+		`<url><loc>https://manual.mikrotik.com${path}</loc></url>`;
+	const sitemap = [
+		loc("/docs/cli-reference/"),
+		loc("/docs/cli-reference/app/"),
+		loc("/docs/cli-reference/app/cleanup"),
+		loc("/docs/cli-reference/beep"),
+		loc("/docs/other/thing"),
+	].join("\n");
+	const llms = [
+		"- [App](https://manual.mikrotik.com/docs/cli-reference/app/app.md)",
+		"- [Cleanup](https://manual.mikrotik.com/docs/cli-reference/app/cleanup.md)",
+		"- [Beep](https://manual.mikrotik.com/docs/cli-reference/beep.md)",
+		"- [Index](https://manual.mikrotik.com/docs/cli-reference/index.md)",
+		"- [Other](https://manual.mikrotik.com/docs/other/thing.md)",
+	].join("\n");
+
+	test("the sitemap lists only the directly-addressable pages", () => {
+		expect(sitemapSlugs(sitemap)).toEqual(["app/cleanup", "beep"]);
+	});
+
+	test("a category URL names the leaf that carries the menu's own entry", () => {
+		expect(categoryLeafSlugs(sitemap)).toEqual(["app/app"]);
+	});
+
+	/** `index` is the argument-type glossary prose, not a CLI path. */
+	test("llms.txt lists every page except the section landing page", () => {
+		expect(llmsSlugs(llms)).toEqual(["app/app", "app/cleanup", "beep"]);
+	});
+
+	/**
+	 * Both inventories publish absolute URLs today, so a relative link must be
+	 * resolved rather than dropped: `new URL(link)` alone throws on it, and
+	 * returning nothing is indistinguishable from "not a CLI page" — which is how
+	 * an inventory silently shrinks. Root-relative and document-relative both
+	 * resolve against `llms.txt`'s own URL, the way a browser reads them.
+	 */
+	test("a relative llms.txt link resolves against the document, not away", () => {
+		expect(
+			llmsSlugs(
+				[
+					"- [Root-relative](/docs/cli-reference/beep.md)",
+					"- [Document-relative](./docs/cli-reference/app/app.md)",
+					"- [Elsewhere](/docs/other/thing.md)",
+				].join("\n"),
+			),
+		).toEqual(["app/app", "beep"]);
+	});
+
+	test("the inventory is the union, and the category leaf survives it", () => {
+		expect(discoverSlugs(sitemap, llms)).toEqual([
+			"app/app",
+			"app/cleanup",
+			"beep",
+		]);
+	});
+
+	/**
+	 * The #285 defect itself, refused. A category dir whose leaf no inventory
+	 * carries means that menu's entry is being dropped — invisibly, since the
+	 * generated table would simply be shorter.
+	 */
+	test("aborts when a category dir contributes no leaf", () => {
+		expect(() =>
+			discoverSlugs(sitemap, llms.split("\n").slice(1).join("\n")),
+		).toThrow(/contribute no <dir>\/<basename> leaf/);
+	});
+
+	/**
+	 * A page only the sitemap lists is reported, not refused: the union already
+	 * carries it, so nothing is dropped, and `--check` fails on the new row.
+	 */
+	test("reports a sitemap page llms.txt does not list", () => {
+		const reported: string[] = [];
+		const slugs = discoverSlugs(
+			`${sitemap}\n${loc("/docs/cli-reference/new-page")}`,
+			llms,
+			(message) => reported.push(message),
+		);
+		expect(slugs).toContain("new-page");
+		expect(reported.join("\n")).toMatch(/not in llms\.txt.*new-page/s);
+	});
+
+	/**
+	 * And the inverse, which is NOT symmetric. `llms.txt` legitimately carries
+	 * every category leaf the sitemap lacks — 256 of them — so reporting all
+	 * llms-only pages would bury the signal in the shape. The residue is what
+	 * matters: a page in neither the sitemap nor the category leaves has appeared
+	 * from nowhere and the sitemap no longer accounts for it.
+	 */
+	test("reports an llms.txt page the sitemap cannot account for", () => {
+		const reported: string[] = [];
+		const slugs = discoverSlugs(
+			sitemap,
+			`${llms}\n- [Nowhere](https://manual.mikrotik.com/docs/cli-reference/nowhere.md)`,
+			(message) => reported.push(message),
+		);
+		expect(slugs).toContain("nowhere");
+		expect(reported.join("\n")).toMatch(/neither in the sitemap.*nowhere/s);
+	});
+
+	/** ...and the category leaves themselves are never reported as that. */
+	test("stays silent when llms.txt differs only by its category leaves", () => {
+		const reported: string[] = [];
+		discoverSlugs(sitemap, llms, (message) => reported.push(message));
+		expect(reported).toEqual([]);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // The generator's refusals
 // ---------------------------------------------------------------------------
 
@@ -529,14 +708,31 @@ describe("explain/catalog — what the generator refuses", () => {
 	});
 
 	/**
+	 * ...but a `Directory` / `Settings Directory` pair is NOT that disagreement.
+	 * Both say the path is navigation and differ only on whether this hardware's
+	 * menu holds a single record — `/system/health` is published both ways on one
+	 * page, `!i386` and `health`. Record what they agree on, as a disagreed gate
+	 * is dropped rather than picked.
+	 */
+	test("records the agreed kind when two occurrences differ only in container kind", () => {
+		const rows = buildWith(
+			[entry("/x/y", "Settings Directory"), entry("/x/y", "Directory")],
+			{},
+		);
+		expect(rows.map((row) => `${row.path} ${row.kind}`)).toEqual(["/x/y menu"]);
+	});
+
+	/**
 	 * R1, stated directly. `poe` is a real CLI menu segment, so dropping it is
-	 * never allowed — this is the rule tikoci/rosetta#136 is missing, and the
-	 * reason nine of the naive candidates are not in {@link ALIASES}.
+	 * never allowed — this is the rule tikoci/rosetta#136 was missing.
+	 *
+	 * Exercised against a synthetic allowlist because the shipped one is empty
+	 * (#285): the rule guards the next entry someone adds, so it must be provable
+	 * without one.
 	 */
 	test("R1: refuses to drop a segment that is itself a published entry", () => {
 		const from = "/caps-man/acl/access-list";
 		const to = "/caps-man/access-list";
-		expect(ALIASES.get(from)).toBe(to);
 		expect(() =>
 			buildWith(
 				[
@@ -614,8 +810,14 @@ describe("explain/catalog — what the generator refuses", () => {
 		).toThrow(/is in no pinned tree/);
 	});
 
-	/** Every alias must be a pure segment drop, or R1 is not defined on it. */
-	test("every allowlist entry is a segment drop", () => {
+	/**
+	 * The allowlist is empty and that is the correct state (#285): MikroTik now
+	 * publishes every path in its CLI spelling, so nothing needs rewriting. Pinned
+	 * because an entry appearing again is a source change to read, not a routine
+	 * regeneration — and because R0/R1/R2 above only ever fire on an entry.
+	 */
+	test("the allowlist is empty, and any entry would be a segment drop", () => {
+		expect([...ALIASES]).toEqual([]);
 		for (const [from, to] of ALIASES)
 			expect(droppedSegments(from, to).length).toBeGreaterThan(0);
 		expect(() => droppedSegments("/a/b/c", "/a/x")).toThrow(

@@ -23,20 +23,32 @@
  * other first-order source. It is generated from the definition structs — the
  * `typ=` strings are a dumped internal type grammar with `:0` ordinals, and
  * `Package` / `Conditions` / `Syscap` are build-time gates no documentation
- * author writes by hand. But it publishes the DEFINITION-MODULE spelling, not
- * the CLI spelling, which is why `caps-man/acl/access-list` exists there and is
+ * author writes by hand.
+ *
+ * It USED to publish the DEFINITION-MODULE spelling rather than the CLI
+ * spelling, which is why `caps-man/acl/access-list` was documented and yet
  * unreachable on a device over `/console/inspect`, REST and the native API
- * alike (#228, five independent oracles).
+ * alike (#228, five independent oracles). MikroTik has since reshaped the
+ * publication from module pages into per-command leaf pages whose slug IS the
+ * CLI path, and those spellings are gone (#285). {@link ALIASES} is empty as a
+ * result — still asserted, still able to refuse the next one.
  *
  * So neither source is a superset and neither is "more accurate" outright.
  * inspect is first-order about the **CLI surface**; CLI Reference is first-order
  * about the **definition structs and their gates**. This table unions them and
  * records, per entry, which one carried it.
  *
- * Measured across 906 exactly-matching paths, three RouterOS versions and two
+ * Measured across 968 exactly-matching paths, three RouterOS versions and two
  * architectures, the two sources have **zero kind contradictions** — they have
  * never disagreed about whether something is a menu or a command. That is the
  * assertion this generator aborts on, and the one worth watching.
+ *
+ * The publication does disagree with ITSELF on a narrower axis: seven paths are
+ * published twice on one page under different hardware gates, and two of those
+ * pairs split `Directory` against `Settings Directory` (`/system/health`,
+ * `/interface/ethernet/switch`). Both halves say the path is navigation, so the
+ * row records that and drops the refinement, exactly as a disagreed gate is
+ * dropped rather than picked. Only a navigation-vs-command split aborts.
  *
  * ## What is NOT here
  *
@@ -79,66 +91,51 @@ import { CONTAINER_TYPES } from "./restraml-trees.ts";
 
 export const MANUAL_BASE = "https://manual.mikrotik.com";
 export const SITEMAP_URL = `${MANUAL_BASE}/sitemap.xml`;
+export const LLMS_TXT_URL = `${MANUAL_BASE}/llms.txt`;
 export const CLI_PREFIX = "/docs/cli-reference/";
 const CLI_SLUG = /^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/;
+/**
+ * The section landing page: the argument-type glossary prose. It is listed in
+ * `llms.txt` like any other `.md`, but publishes no `**Type:**` entry, so it is
+ * not a CLI path and the loud-fail parser would (correctly) reject it.
+ */
+const SECTION_INDEX_SLUG = "index";
 
 /**
  * Published doc spelling -> real CLI spelling. HAND-AUDITED; the generator
  * never rewrites a path on its own.
  *
- * The naive rule ("drop an interior segment until something matches a tree") is
- * unsafe, and dangerously so: it maps `/interface/ethernet/poe/monitor` onto
- * `/interface/ethernet/monitor`, a different command with a disjoint field set.
- * `poe`, `qos`, `acl`, `controller` and `route` are real CLI menu segments, and
- * an unscoped allowlist of segment names to drop is exactly the defect filed as
- * tikoci/rosetta#136.
+ * **Empty, and correct as empty (#285).** MikroTik reshaped the CLI Reference
+ * from module pages — one page carrying many command headings, in the
+ * DEFINITION-MODULE spelling — into per-command leaf pages whose slug IS the
+ * CLI path. All twenty entries this list used to carry (fifteen `caps-man`
+ * definition modules plus `easymesh`, `serial-interface`, `ddns`, `ifaces`,
+ * `queues`) are gone from the source, and each one's target is now published
+ * directly under its real path. Re-audited against the corrected 1,070-page
+ * inventory: zero of the twenty sources survive, twenty of twenty targets are
+ * published outright.
  *
- * Two assertions below keep this list honest, and generation ABORTS on either:
+ * The machinery stays, and stays asserted, because an allowlist that expects
+ * zero hits is exactly what should refuse the next one loudly. Generation
+ * ABORTS on any of these, and every abort wants a hand decision, not an entry:
  *
+ *   R0 stale source — an alias whose `from` is no longer published. That is what
+ *      caught this reshape (`/caps-man/acl/access-list` vanished) rather than
+ *      the table quietly keeping a dead rewrite.
  *   R1 prefix scoping — never drop segment `S` when the prefix ENDING at `S` is
- *      itself a published entry. This alone rejects all nine unsafe candidates,
- *      including the three rosetta gets wrong.
+ *      itself a published entry. The naive rule ("drop an interior segment until
+ *      something matches a tree") maps `/interface/ethernet/poe/monitor` onto
+ *      `/interface/ethernet/monitor`, a different command with a disjoint field
+ *      set; `poe`, `qos`, `acl`, `controller` and `route` are real CLI menu
+ *      segments. An unscoped allowlist of segment names is the defect filed as
+ *      tikoci/rosetta#136 and fixed in tikoci/rosetta#138.
  *   R2 field overlap — where both sides publish argument names, they must
- *      overlap. This is the offline proof that the two spellings are the same
+ *      overlap. This is the offline proof that two spellings are the same
  *      command rather than a coincidental name collision.
  *
- * Every entry here was produced by running both rules over the naive candidate
- * set and keeping the survivors, then reading them. Fifteen are the `caps-man`
- * definition modules (`acl`, `cfg`, `chancfg`, `dpathcfg`, `ifaceactual`,
- * `ratescfg`, `remoteap`, `seccfg`, `sta`, `rule`, `controller`); the rest are
- * the same shape elsewhere.
+ * A new hit is a signal to read the source, not to normalize it away.
  */
-export const ALIASES: ReadonlyMap<string, string> = new Map([
-	["/caps-man/acl/access-list", "/caps-man/access-list"],
-	["/caps-man/cfg/configuration", "/caps-man/configuration"],
-	["/caps-man/chancfg/channel", "/caps-man/channel"],
-	["/caps-man/controller/manager", "/caps-man/manager"],
-	["/caps-man/controller/manager/interface", "/caps-man/manager/interface"],
-	["/caps-man/dpathcfg/datapath", "/caps-man/datapath"],
-	[
-		"/caps-man/ifaceactual/actual-interface-configuration",
-		"/caps-man/actual-interface-configuration",
-	],
-	["/caps-man/ratescfg/rates", "/caps-man/rates"],
-	["/caps-man/remoteap/remote-cap", "/caps-man/remote-cap"],
-	["/caps-man/remoteap/remote-cap/provision", "/caps-man/remote-cap/provision"],
-	[
-		"/caps-man/remoteap/remote-cap/set-identity",
-		"/caps-man/remote-cap/set-identity",
-	],
-	["/caps-man/remoteap/remote-cap/upgrade", "/caps-man/remote-cap/upgrade"],
-	["/caps-man/rule/provisioning", "/caps-man/provisioning"],
-	["/caps-man/seccfg/security", "/caps-man/security"],
-	["/caps-man/sta/registration-table", "/caps-man/registration-table"],
-	[
-		"/interface/wifi/easymesh/wps-push-button",
-		"/interface/wifi/wps-push-button",
-	],
-	["/system/serial-interface/serial-terminal", "/system/serial-terminal"],
-	["/tool/ddns/dns-update", "/tool/dns-update"],
-	["/tool/graphing/ifaces/interface", "/tool/graphing/interface"],
-	["/tool/graphing/queues/queue", "/tool/graphing/queue"],
-]);
+export const ALIASES: ReadonlyMap<string, string> = new Map<string, string>();
 
 // ---------------------------------------------------------------------------
 // CLI-Reference ETL (vendored; see the header)
@@ -175,22 +172,144 @@ function decodeXml(text: string): string {
 		.replace(/&amp;/g, "&");
 }
 
-/** Every CLI-Reference slug the sitemap lists, sorted and de-duplicated. */
-export function cliRefSlugs(sitemapXml: string): string[] {
+/**
+ * The CLI-Reference path a link names, or `null` when it names something else.
+ *
+ * `base` is the document the link was read FROM, so a relative link resolves
+ * the way a browser would. Both inventories publish absolute URLs today, but a
+ * relative one must not vanish: `new URL(link)` alone throws on `/docs/…` and
+ * on `./app/app.md`, and this returning `null` is indistinguishable from "not a
+ * CLI page". Resolving against the base is what keeps the two cases apart.
+ */
+function cliRefPath(location: string, base: string): string | null {
+	let path: string;
+	try {
+		path = new URL(location, base).pathname;
+	} catch {
+		return null;
+	}
+	return path.startsWith(CLI_PREFIX) ? path : null;
+}
+
+/** The slug a CLI-Reference page path names, or `null` when it is not a page. */
+function pageSlug(path: string): string | null {
+	if (path.endsWith("/")) return null;
+	const slug = path.slice(CLI_PREFIX.length).replace(/\.md$/, "");
+	if (slug === "" || slug === SECTION_INDEX_SLUG || !CLI_SLUG.test(slug))
+		return null;
+	return slug;
+}
+
+/** Every directly-addressable CLI-Reference page the sitemap lists. */
+export function sitemapSlugs(sitemapXml: string): string[] {
 	const slugs = new Set<string>();
 	for (const match of sitemapXml.matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/g)) {
-		const location = decodeXml(match[1] ?? "");
-		let path: string;
-		try {
-			path = new URL(location).pathname;
-		} catch {
-			continue;
-		}
-		if (!path.startsWith(CLI_PREFIX) || path.endsWith("/")) continue;
-		const slug = path.slice(CLI_PREFIX.length);
-		if (slug !== "" && CLI_SLUG.test(slug)) slugs.add(slug);
+		const path = cliRefPath(decodeXml(match[1] ?? ""), SITEMAP_URL);
+		const slug = path === null ? null : pageSlug(path);
+		if (slug !== null) slugs.add(slug);
 	}
 	return [...slugs].sort();
+}
+
+/**
+ * Every BRANCHING menu the sitemap serves as a trailing-slash category URL, as
+ * the slug of the page that carries its own entry: `app/` -> `app/app`.
+ *
+ * The section root itself (`/docs/cli-reference/`) is not a menu and is skipped.
+ */
+export function categoryLeafSlugs(sitemapXml: string): string[] {
+	const slugs = new Set<string>();
+	for (const match of sitemapXml.matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/g)) {
+		const path = cliRefPath(decodeXml(match[1] ?? ""), SITEMAP_URL);
+		if (path === null || !path.endsWith("/")) continue;
+		const dir = path.slice(CLI_PREFIX.length).replace(/\/$/, "");
+		if (dir === "" || !CLI_SLUG.test(dir)) continue;
+		slugs.add(`${dir}/${dir.split("/").pop()}`);
+	}
+	return [...slugs].sort();
+}
+
+/** Every CLI-Reference page `llms.txt` lists. */
+export function llmsSlugs(llmsTxt: string): string[] {
+	const slugs = new Set<string>();
+	for (const match of llmsTxt.matchAll(/^-\s*\[[^\]]*\]\(([^)\s]+)\)/gm)) {
+		const path = cliRefPath(match[1] ?? "", LLMS_TXT_URL);
+		const slug = path === null ? null : pageSlug(path);
+		if (slug !== null) slugs.add(slug);
+	}
+	return [...slugs].sort();
+}
+
+/**
+ * The page inventory: the union of the two published inventories, or abort.
+ *
+ * The sitemap alone is NOT the inventory, and its shortfall is silent. A menu
+ * that BRANCHES is served as a trailing-slash category URL with no `.md` of its
+ * own — but the menu's own `Directory` entry is published, at
+ * `<dir>/<basename(dir)>.md` (`app/` -> `app/app.md`), and listed only in
+ * `llms.txt`. Sitemap-only discovery therefore dropped 256 of 1,070 pages, and
+ * the field-heavy quarter of them: `app/app` carries 35 argument rows,
+ * `caps-man/interface/interface` 79 (tikoci/rosetta#137, centrs #285).
+ *
+ * `<dir>.md`, `<dir>/index.md` and `<dir>/.md` all 404, which is what made this
+ * read as a navigation stub for months. A 404 on a probe is evidence about the
+ * probe, not about the page.
+ *
+ * The two inventories reconcile exactly, and this asserts it rather than
+ * trusting either one:
+ *
+ *   sitemap pages 814 ∪ derived <dir>/<basename> 256  = 1,070 = llms.txt pages
+ *
+ * The category-leaf reconciliation is the ABORT, because a category dir whose
+ * leaf no inventory carries is a menu entry being dropped — the #285 defect
+ * itself, and invisible in the output. A page only one inventory lists is
+ * reported instead of refused: the union already carries it, so nothing is
+ * dropped, and `--check` fails on the new row anyway.
+ *
+ * BOTH one-sided directions are reported, but they are not symmetric, and the
+ * asymmetry is the shape itself. Every sitemap page is also in `llms.txt`, so a
+ * sitemap-only page is bare drift. `llms.txt` has 256 pages the sitemap lacks —
+ * that is not drift, it IS the category leaves, so reporting them all would be
+ * noise that buries the signal. What is reported is the residue: an `llms.txt`
+ * page that is neither in the sitemap nor a category leaf, i.e. one that
+ * appears from nowhere.
+ */
+export function discoverSlugs(
+	sitemapXml: string,
+	llmsTxt: string,
+	report: (message: string) => void = console.warn,
+): string[] {
+	const sitemap = new Set(sitemapSlugs(sitemapXml));
+	const llms = new Set(llmsSlugs(llmsTxt));
+	const leaves = new Set(categoryLeafSlugs(sitemapXml));
+	const inventory = new Set([...sitemap, ...llms]);
+
+	const orphans = [...leaves].filter((slug) => !inventory.has(slug));
+	if (orphans.length > 0)
+		throw new Error(
+			`${orphans.length} sitemap category dir(s) contribute no <dir>/<basename> leaf to the\n` +
+				"discovered inventory (sitemap ∪ llms.txt), so those menus' own entries would be\n" +
+				"dropped silently — the #285 defect. Re-verify the inventory by hand:\n  " +
+				orphans.join("\n  "),
+		);
+
+	const sitemapOnly = [...sitemap].filter((slug) => !llms.has(slug));
+	if (sitemapOnly.length > 0)
+		report(
+			`${sitemapOnly.length} page(s) are in the sitemap but not in llms.txt — the two ` +
+				`published inventories no longer agree in shape: ${sitemapOnly.join(", ")}`,
+		);
+
+	const unaccounted = [...llms].filter(
+		(slug) => !sitemap.has(slug) && !leaves.has(slug),
+	);
+	if (unaccounted.length > 0)
+		report(
+			`${unaccounted.length} page(s) are in llms.txt but are neither in the sitemap nor a ` +
+				`category leaf, so the sitemap no longer accounts for them: ${unaccounted.join(", ")}`,
+		);
+
+	return [...inventory].sort();
 }
 
 /**
@@ -430,10 +549,13 @@ export function droppedSegments(from: string, to: string): number[] {
  * Fold the published entries onto their CLI paths, applying the alias allowlist
  * and asserting it.
  *
- * Four paths are published twice on the same page (`/interface/ethernet/switch`
- * variants). Same kind is required; a gate is kept only where every occurrence
- * agrees, because one ungated occurrence means the path is not uniformly gated
- * and claiming a gate would over-state the publication.
+ * Seven paths are published twice, each on one page, under different hardware
+ * gates — `/interface/ethernet/switch` and its four children as `musicswitch`
+ * and `rbswitch`, `/system/health` as `!i386` and `health`. One entry per page
+ * is therefore NOT an invariant, and a key on path would reject real source. A
+ * gate is kept only where every occurrence states it, because one ungated
+ * occurrence means the path is not uniformly gated and claiming the gate would
+ * over-state the publication.
  */
 function foldPublished(
 	entries: readonly PublishedEntry[],
@@ -559,13 +681,21 @@ export function build(
 		const kinds = new Set(
 			occurrences.map((entry) => PUBLISHED_KINDS[entry.kind]),
 		);
-		if (kinds.size > 1) {
+		// Occurrences that disagree about navigation-vs-executable are a real
+		// contradiction. Occurrences that disagree only about `menu` vs `settings`
+		// are not: both say the path is navigation, and they differ on whether THIS
+		// hardware's menu holds a single record — `/system/health` is a settings
+		// menu on `!i386` and a directory under the `health` syscap, on one page.
+		// Record what they agree on, exactly as a disagreed gate is dropped rather
+		// than picked. Nothing downstream distinguishes the two kinds anyway
+		// (`isKnownMenu` accepts either), so the weaker claim costs nothing.
+		if (kinds.size > 1 && kinds.has("command")) {
 			contradictions.push(
 				`${path}: published as ${[...kinds].sort().join(" and ")} on ${occurrences.map((e) => e.slug).join(", ")}`,
 			);
 			continue;
 		}
-		const kind = [...kinds][0] ?? "menu";
+		const kind: PathKind = kinds.size > 1 ? "menu" : ([...kinds][0] ?? "menu");
 		const treeType = treeTypes.get(path);
 		if (treeType !== undefined && !agrees(kind, treeType)) {
 			contradictions.push(
@@ -706,9 +836,9 @@ export function render(rows: readonly CatalogRow[], counts: Counts): string {
  * Union of two first-order sources (#228):
  *
  * 1. MikroTik's published CLI Reference (\`${MANUAL_BASE}${CLI_PREFIX}\`),
- *    ${counts.pages} pages, ${counts.publishedEntries.toLocaleString("en-US")} entries — first-order about the definition
- *    structs and their build-time gates, but published in the definition-module
- *    spelling rather than the CLI spelling.
+ *    ${counts.pages.toLocaleString("en-US")} pages, ${counts.publishedEntries.toLocaleString("en-US")} entries — first-order about the definition
+ *    structs and their build-time gates. Since #285 every page is a leaf whose
+ *    slug is the CLI path, so no spelling has to be rewritten to be looked up.
  * 2. Four pinned restraml \`/console/inspect\` trees
  *    (\`https://tikoci.github.io/restraml/\`) — first-order about the CLI surface:
  *
@@ -722,8 +852,11 @@ ${byKind("menu")}
 ${byKind("command")}
 ${byKind("settings")}
  *
- * Zero kind contradictions between the two sources. Generation aborts if that
- * ever stops holding, rather than picking a winner.
+ * Zero navigation-vs-command contradictions between the two sources. Generation
+ * aborts if that ever stops holding, rather than picking a winner. Where a path
+ * is published twice as a container under different hardware gates — the seven
+ * \`/interface/ethernet/switch\` and \`/system/health\` variants — the row records
+ * what the occurrences agree on.
  *
  * **This table is not a schema.** It says what a path IS — navigation, an
  * executable command, or a settings menu — and never what a command accepts.
@@ -736,8 +869,9 @@ ${byKind("settings")}
  *
  * **Gates conjoin down a path, so read them with {@link effectiveGates}, not
  * row by row.** A row states only what the publication stated at that entry.
- * Row-wise, ${ungatedRows} published-only paths look ungated; ancestry-aware,
- * only ${residueRows} carry no published explanation for their absence at all.
+ * Read row-wise, ${ungatedRows} published-only paths look ungated; read with
+ * ancestry, the residue carrying no published explanation for its absence at
+ * all is ${residueRows}.
  *
  * Tree COMMANDS are not enumerated — those are the generic CRUD leaves
  * \`verbs.ts\` already owns. The command rows here are the published,
@@ -887,10 +1021,11 @@ export interface CatalogGate {
  * parent's \`syscap\` applies even though the child entry states none: the gates
  * up a path CONJOIN, they do not override.
  *
- * Read row-wise instead, ${ungatedRows} published-only paths look ungated, and
- * #228's finding — that a published-only path almost always explains its own
- * absence — would read as false. Ancestry-aware the residue is ${residueRows},
- * and those are the only published paths carrying no explanation at all.
+ * Read row-wise, ${ungatedRows} published-only paths look ungated; read with
+ * ancestry the residue is ${residueRows}. The gap between the two is the
+ * conjunction, and it is what a caller has to reproduce: a child's silence about
+ * a gate is not the absence of one. #228's finding — that a published-only path
+ * almost always explains its own absence — is about the ancestry-aware number.
  *
  * Still not a claim about any router. This says what MikroTik published about
  * applicability; only a live device knows what it has.

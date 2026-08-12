@@ -173,19 +173,30 @@ today's path/verb/args split and script-vs-structured gate:
   The *command* half is what #228 addressed, by adding a second first-order
   source rather than a schema. MikroTik's CLI Reference is generated from the
   definition structs, and measured against the same four pinned trees it has
-  **zero kind contradictions** across 906 exactly-matching paths, three RouterOS
-  versions and two architectures; 105 of the 112 published paths absent from
-  every tree carry a `package`/`conditions`/`syscap` gate that predicts the
-  absence. `src/explain/catalog.ts` unions the two with per-entry provenance,
-  which is what keeps `menus.ts`'s device-confirmed floor intact rather than
-  diluting it. The publication is not device truth: it uses the
-  definition-module spelling, so `caps-man/acl/access-list` is published and
-  unreachable on any device, and the hand-audited alias allowlist that recovers
-  the CLI spelling is guarded by two generation-time assertions. So
+  **zero navigation-vs-command contradictions** across 968 exactly-matching
+  paths, three RouterOS versions and two architectures; all but one of the 102
+  published paths absent from every tree carry a `package`/`conditions`/`syscap`
+  gate — their own or an ancestor's — that predicts the absence.
+  `src/explain/catalog.ts` unions the two with per-entry provenance, which is
+  what keeps `menus.ts`'s device-confirmed floor intact rather than diluting it.
+  The publication is still not device truth, but as of #285 it is at least
+  spelled like the CLI: MikroTik reshaped it from module pages into per-command
+  leaf pages whose slug *is* the CLI path, so the definition-module spellings
+  (`caps-man/acl/access-list`) are gone and the alias allowlist that recovered
+  them is empty — kept, and kept asserted, to refuse the next one loudly. So
   `/system/reboot` now resolves as a `command` at `/system`, and the floor is
   again unmoved — the residual is a path in *neither* table, such as
   `/disk/format-drive`, which 7.23.2 spells `/disk format` and MikroTik does not
   publish at all.
+
+  Discovery is the union of MikroTik's two published inventories, not the
+  sitemap alone. A *branching* menu is served as a trailing-slash category URL
+  with no `.md` of its own, while that menu's own entry is published at
+  `<dir>/<basename>.md` and listed only in `llms.txt` — so sitemap-only
+  discovery dropped 256 of 1,070 pages, silently and field-heavily. Generation
+  asserts that every category dir still contributes its leaf, so the next
+  inventory reshape fails loudly instead of shrinking the table (#285,
+  tikoci/rosetta#137).
 
 There are real unknowns in how far offline parsing can go (expression
 grammar, scope fidelity vs `:parse`, `[]`-nesting corner cases). Grounding
@@ -899,13 +910,14 @@ The 948-script corpus contains no such continuation-comment argument case. The s
 the corpus re-measurement below shows no readable/abstention movement — no
 `do=`/`else=`/`command=`/`script=` brace sits inside an array in the 948
 scripts, so the fix closes a device-grounded false `pass` with zero corpus
-blast radius. The readable set stays exactly 7,385 statements. Recognizing a bracket-leading hash
+blast radius. The readable set stayed exactly 7,385 statements. Recognizing a bracket-leading hash
 as a comment conservatively folds two previously separate abstentions inside
 one foreign kernel-panic transcript (`[#1]` / `[#2]`) into its already-unknown
 outer statement, leaving 14,329 argument-bearing candidates and 6,944
 abstentions (48.4612%). That two-statement movement is a blast-radius
 measurement, not the grounding evidence; the two CHR versions above are the
-oracle.
+oracle. (Those are the #249-era figures; the #285 catalog correction has since
+moved the readable set to 7,392 — see the re-measurement below.)
 
 The same corpus run finds five new `invalid-hash` diagnostics, all in pasted
 non-RouterOS material: one NGINX server block, one JavaScript highlighter, one
@@ -927,6 +939,37 @@ Corpus re-measurement for #249 — `bun -e 'explainCommand'` over the 948-script
   `command=`/`script=` brace nested in an array. Zero blast radius is the
   expected outcome; the grounding remains the 15-input CHR probe below
   (CHR 7.23.3 `highlight` at the `#` byte, 0/15 mismatches), not a corpus delta.
+
+The #285 catalog correction moved those figures, and only upward. Same harness,
+old table vs new:
+
+| | #249 | #285 |
+| --- | ---: | ---: |
+| `stmts` | 18,648 | 18,648 |
+| `argCandidates` | 14,329 | **14,336** |
+| `argReadable` | 7,385 | **7,392** |
+| `abstentions` | 6,944 | 6,944 (**48.4375%**) |
+| `ambiguous-statement` | 91 | **85** |
+| `unresolved-statement` | 3,911 | **3,910** |
+| `context-lost` | 69 | **83** |
+
+Six scripts move, and every statement in them is a correction. Seven statements
+that read as `ambiguous`/`unknown` now resolve and their arguments read —
+`/interface/monitor-traffic`, `/system/package/apply-changes`,
+`/system/package/update/{check-for-updates,download,install}` — which is the
+whole of the `argCandidates`/`argReadable` gain, with `abstentions` flat. Five
+more read the same but with the right verb: `/ip hotspot user reset-counters
+[find …]` took `hotspot` as the verb and now takes `reset-counters`, which also
+reclassifies it as a write. No document changes `containsWrite` verdict.
+
+`context-lost` rising is the resolver **withdrawing** a certainty claim, not
+losing ground. It is `info` severity and marks a statement that resolved
+correctly while the document context was already unknown. All 14 are in one
+script — a bare list of command paths, one per line, with no navigation
+anywhere. Previously `/interface/monitor-traffic` was unreadable and so *might*
+have been an absolute navigation, which R4 has REPLACE the context; certainty
+was restored on that maybe. Knowing it is a command, the resolver knows it never
+navigated, so the context stays as unknown as it already was.
 
 - **Severity is fixed here, because it drives `--fail-on`.** Three buckets, and
   the split is not "structural vs not":

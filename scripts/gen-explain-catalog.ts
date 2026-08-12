@@ -17,8 +17,8 @@
  *   bun run explain:catalog --cache=DIR    # reuse/populate a local page cache
  *
  * `--check` needs network (CLI Reference plus the pinned trees), so it hangs off
- * the QA workflow rather than the offline `lint:ci` gate. A full run is ~230
- * small page fetches plus 15 MB of trees, about 15 seconds.
+ * the QA workflow rather than the offline `lint:ci` gate. A full run is ~1,070
+ * small page fetches plus 15 MB of trees, about a minute.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -26,9 +26,10 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import {
 	build,
 	CLI_PREFIX,
-	cliRefSlugs,
 	countRowMarkers,
 	countTypeMarkers,
+	discoverSlugs,
+	LLMS_TXT_URL,
 	MANUAL_BASE,
 	parsePage,
 	render,
@@ -110,8 +111,14 @@ async function mapConcurrent<T, U>(
 // Main
 // ---------------------------------------------------------------------------
 
-const sitemapXml = await fetchTextWithRetry(SITEMAP_URL);
-const slugs = cliRefSlugs(sitemapXml);
+// Both inventories, because neither alone is the page set: the sitemap serves a
+// branching menu as a category URL with no `.md`, and only `llms.txt` lists the
+// leaf that carries that menu's own entry (#285).
+const [sitemapXml, llmsTxt] = await Promise.all([
+	fetchTextWithRetry(SITEMAP_URL),
+	fetchTextWithRetry(LLMS_TXT_URL),
+]);
+const slugs = discoverSlugs(sitemapXml, llmsTxt);
 console.log(`cli-reference: ${slugs.length} pages`);
 
 let fetched = 0;
