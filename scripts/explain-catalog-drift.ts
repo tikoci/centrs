@@ -25,7 +25,7 @@ export function parseCommittedCatalog(
 		const kind = parts[1];
 		const provenance = parts[2];
 		if (
-			path === undefined ||
+			!path ||
 			kind === undefined ||
 			provenance === undefined ||
 			!["menu", "command", "settings"].includes(kind) ||
