@@ -1040,6 +1040,170 @@ for the three issue rows `:put "\q"` / `:put "\x0a"` / `:put "\0a"` vs
   failures). The verdict is in `il_text` — plain prose such as
   `expected input value (line 7 column 49)` means rejected, IL means accepted.
 
+### The operator surface (#255)
+
+Grounded, not transcribed, for the same reason the escape set above is: the
+[manual's operator list](https://manual.mikrotik.com/docs/developer-guides/scripting/index.md#operators)
+is a lower bound. `bun run explain:probe:operators` sweeps the manual's list
+**plus** plausible non-operators (`not`, `..`, `xor`, `mod`, `is`, `div`, …)
+**plus** every IL head the corpus census saw, on CHR 7.23.3 stable, 7.24rc4
+testing and 7.21.5 long-term — one build per release channel, so a claim about
+any channel is evidence rather than an assumption. Re-cut the fixture with
+`bun run explain:operator-slice`; the table
+below is generated from `src/explain/operators.ts` by
+`bun run explain:operator-readme` and gated by
+`bun run explain:operator-readme:check`.
+
+**`:parse` IL is the oracle, and `highlight` cannot be.** IL is prefix form with
+the operator as its node's head, so it names the operator and shows its
+operands. `highlight`'s `syntax-meta` is the device's *residual structure*
+class — measured over `test/fixtures/explain/highlight-streams.slice.json` it
+covers `=`, `"`, `$`, brackets, braces, parens, `;`, `,`, `/` and whitespace
+runs as well as `||`, `&&`, `!=`, `.` and `~` — and adjacent runs are **merged**
+(`="`, `($`, `")+` each arrive as one token; the run around `and`, `or` and `in`
+swallows the preceding space). An operator boundary is not recoverable from it.
+What it does decide is *structure versus word*, which is what rules `not` out:
+it comes back `variable-undefined`.
+
+Five things the device says that the manual does not:
+
+1. **`not` is not an operator.** Nor are `xor`, `mod`, `is`, `div`, `band`,
+   `bor`, `shl`, `shr`, `eq`, `ne`. Inside a paren group a bare word is a
+   **variable reference**, so `(1 not 2)` parses — as `(  1 $not 2)`, with an
+   unnamed juxtaposition node. "It parsed" is therefore not evidence of an
+   operator, which is what the sweep's `(1 zzz 2)` control exists to prove.
+2. **`..` is not a range operator** — `(1 .. 2)` is `(  (. 1 $.) 2)`, concat
+   applied to a variable named `.`. Same for `//`. And `<>` is not "not equal":
+   `(1 <> 2)` is `(< 1 (> 2))`, less-than applied to a *deferred* `2`.
+3. **`$`, `[`, `]` are syntax, not operator heads.** `$x` stays an atom in the
+   IL and `[:tostr 1]` lowers to an `evl` node. Those bytes belong to the
+   substitution axis.
+4. **`any` is an operator** (prefix, arity 1) and is not in the manual's list — a **nil-check**: `:typeof (any x)` is `bool`, `false` only for `nil`/`nothing` (the value of an undefined `:local` and of `[:nothing]`), `true` for everything else including `0`, `""` and `false`.  It is the idiom `:if (any $x) ...` to test a variable that may be `nil`; `(true any false)` is not infix at all but juxtaposition `(  true (any false))`, and `(1 . any [:nothing])` is concat `1`+`false`.  Present since at least 7.20.8 (corpus `any|7.20.8:2`, and swept live on 7.21.5 long-term, 7.23.3 stable and 7.24rc4 testing with no difference between them).
+5. **`&&` and `||` are spellings**, lowering to the `and` and `or` nodes.
+
+The `(>…)` and `<%%` forms are in the table on the same footing as `+`.
+`(> x)` at arity 1 is the deferred-expression form — `[:typeof (>[:return 1])]`
+is `op` — while `(2 > 1)` at arity 2 is the comparison; **arity is the only
+thing that separates them**, so a table keyed on spelling alone gets one wrong.
+`<%%` applies a deferred expression to an argument array, binding positionals
+from `$0`; a `do={…}` function binds the same arguments from `$1`, because
+there `$0` is the function's own name.
+
+Both `!` and `any` are prefix-only, so the *pair* sweep cannot carry them and
+their `precedence` is honestly `null`. That is "unmeasured", not "unknown": the
+sweep asks them separately, every `(U 1 B 2)` and `(1 B U 2)` for
+`U`∈`!`,`any`,`~`,`-`,`>` against all 24 binaries — 240 probes, recorded in the
+fixture's `unary` block. All 240 are accepted and the **binary is outer in every
+one**, on all three versions, so each prefix operator binds tighter than every
+binary including `->` (14) and `<%%` (13). The table stores one `precedence` per
+spelling, which is the binary level; `~`, `-` and `>` are here because their
+unary reading has no other record.
+
+Spacing decides the *tokens*, not just the tree. `(1.2)` is an IP literal and
+`(.1)` a time literal, but the rest of the matrix is where a tokenizer goes
+wrong: `(1 . 2)` and `(1 .2)` are both concat (`(. 1 2)`), while **`(1. 2)` is
+not concat at all** — `1.` lexes as a *variable name* and the row comes back as
+juxtaposition, `(  $1. 2)`. A rule that claims every `.` byte for the operator
+emits a span the device does not have.
+
+Everything in the sweep is identical across 7.21.5, 7.23.3 and 7.24rc4 except
+one runtime row: `:put ({2;1} > {1;2;3})` evaluates to `true` only on 7.24rc4.
+Identical is measured, not assumed — the slice diffs verdict, arity, precedence,
+associativity, `highlight` run, unary placement and op-axis per version. So the
+operator table needs no version gate; anything reporting what a comparison
+*means* does.
+
+<!-- BEGIN GENERATED operator-table — regenerate with `bun run explain:operator-readme` -->
+The device builds a node for **26** spellings, reads **3**
+as something else, and refuses the other **33** the sweep asked about.
+
+| operator | arity | precedence | associativity | category |
+| -------- | ----- | ---------- | ------------- | -------- |
+| `,` | 2 | 1 | variadic | concatenation |
+| `or` | 2 | 2 | variadic | logical |
+| `and` | 2 | 3 | variadic | logical |
+| `in` | 2 | 4 | left | logical |
+| `<` | 2 | 5 | left | relational |
+| `>` | 1, 2 | 5 | left | relational |
+| `=` | 2 | 5 | left | relational |
+| `<=` | 2 | 5 | left | relational |
+| `>=` | 2 | 5 | left | relational |
+| `!=` | 2 | 5 | left | relational |
+| `~` | 1, 2 | 5 | left | relational |
+| `.` | 2 | 6 | variadic | concatenation |
+| `<<` | 2 | 7 | right | bitwise |
+| `>>` | 2 | 7 | right | bitwise |
+| `\|` | 2 | 8 | variadic | bitwise |
+| `^` | 2 | 9 | variadic | bitwise |
+| `&` | 2 | 10 | variadic | bitwise |
+| `+` | 2 | 11 | variadic | arithmetic |
+| `-` | 1, 2 | 11 | left | arithmetic |
+| `*` | 2 | 12 | variadic | arithmetic |
+| `/` | 2 | 12 | left | arithmetic |
+| `%` | 2 | 12 | left | arithmetic |
+| `<%%` | 2 | 13 | right | apply |
+| `->` | 2 | 14 | left | access |
+| `!` | 1 | not measured | not measured | logical |
+| `any` | 1 | not measured | not measured | logical |
+
+Precedence runs 1 (loosest) to 14 (tightest), measured over every
+ordered pair rather than transcribed. `variadic` means the device FLATTENS
+the operator — `(1 + 2 + 3)` is one node with three children, not two nested
+ones. The 2 prefix-only operators never appear in a pair and so
+carry no measured level.
+
+Spellings the device reads as something else:
+
+| spelling | reads as | kind |
+| -------- | -------- | ---- |
+| `&&` | `(<%% (and 1 2) )` | alias |
+| `\|\|` | `(<%% (or 1 2) )` | alias |
+| `<>` | `(<%% (< 1 (> 2)) )` | re-lexed |
+
+And the grounded complement — asked, and refused:
+
+| spelling | why not |
+| -------- | ------- |
+| `not` | reads-as-variable |
+| `xor` | reads-as-variable |
+| `mod` | reads-as-variable |
+| `is` | reads-as-variable |
+| `div` | reads-as-variable |
+| `band` | reads-as-variable |
+| `bor` | reads-as-variable |
+| `shl` | reads-as-variable |
+| `shr` | reads-as-variable |
+| `eq` | reads-as-variable |
+| `ne` | reads-as-variable |
+| `line` | reads-as-variable |
+| `array` | reads-as-variable |
+| `as` | reads-as-variable |
+| `at` | reads-as-variable |
+| `for` | reads-as-variable |
+| `none` | reads-as-variable |
+| `outside` | reads-as-variable |
+| `evl` | reads-as-variable |
+| `..` | reads-as-variable |
+| `//` | reads-as-variable |
+| `**` | rejected |
+| `===` | rejected |
+| `+=` | rejected |
+| `++` | rejected |
+| `?` | rejected |
+| `?:` | rejected |
+| `<%` | rejected |
+| `%%` | rejected |
+| `;` | rejected |
+| `$` | juxtaposition-only |
+| `[` | rejected |
+| `]` | rejected |
+<!-- END GENERATED operator-table -->
+
+None of this emits a span yet. `src/explain/operators.ts` is data plus
+accessors; the operator fill for `data.tokens[]` is #264's B2 and the
+`centrs → highlight` projection is B4, and both read this table rather than
+re-deriving it.
+
 ### Designed, not implemented (the CLI surface, #202b)
 
 `src/cli/explain.ts` ships the offline command; implemented flags are generated
