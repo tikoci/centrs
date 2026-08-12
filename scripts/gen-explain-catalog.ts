@@ -21,7 +21,12 @@
  * small page fetches plus 15 MB of trees, about 15 seconds.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	appendFileSync,
+	mkdirSync,
+	readFileSync,
+	writeFileSync,
+} from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import {
 	build,
@@ -163,11 +168,12 @@ console.log(
 );
 
 function parseCommittedCatalog(text: string): Map<string, CatalogRow> | null {
-	const match = text.match(/const ROWS = `\n([\s\S]*?)\n`;\n/);
+	const match = text.match(/const ROWS = `\r?\n([\s\S]*?)\r?\n`;\r?\n/);
 	if (match === null) return null;
 	const body = match[1] ?? "";
 	const out = new Map<string, CatalogRow>();
-	for (const line of body.split("\n")) {
+	for (const raw of body.split(/\r?\n/)) {
+		const line = raw.replace(/\r$/, "");
 		if (line === "") continue;
 		const parts = line.split("|");
 		const path = parts[0];
@@ -213,6 +219,7 @@ function buildDriftReport(
 	const fresh = new Map(freshRows.map((row) => [row.path, row]));
 	const lines: string[] = [];
 
+	lines.push("<!-- explain-catalog-drift -->");
 	lines.push("### `src/explain/catalog.ts` is out of date");
 	lines.push("");
 	lines.push("MikroTik's CLI Reference is current-only, so this fires on any");
@@ -255,6 +262,7 @@ function buildDriftReport(
 			`| \`${prov}\` | ${countBy(committed, (r) => r.provenance === prov).toLocaleString("en-US")} | ${countBy(fresh, (r) => r.provenance === prov).toLocaleString("en-US")} |`,
 		);
 	}
+	lines.push("");
 	lines.push("| Kind | Committed | Fresh |");
 	lines.push("| --- | --- | --- |");
 	for (const kind of ["menu", "command", "settings"] as const) {
@@ -315,16 +323,31 @@ function buildDriftReport(
 	}
 	lines.push("");
 
-	const provenanceFlips: string[] = [];
+	const provenanceFlips: {
+		path: string;
+		from: CatalogRow["provenance"];
+		to: CatalogRow["provenance"];
+		kind: CatalogRow["kind"];
+	}[] = [];
 	const gateChanges: string[] = [];
 	const kindChanges: string[] = [];
+	const formatFlip = (flip: {
+		path: string;
+		from: CatalogRow["provenance"];
+		to: CatalogRow["provenance"];
+		kind: CatalogRow["kind"];
+	}): string =>
+		`- \`${flip.path}\` — \`${flip.from}\` → \`${flip.to}\` (\`${flip.kind}\`)`;
 	for (const [path, freshRow] of fresh) {
 		const old = committed.get(path);
 		if (old === undefined) continue;
 		if (old.provenance !== freshRow.provenance)
-			provenanceFlips.push(
-				`- \`${path}\` — \`${old.provenance}\` → \`${freshRow.provenance}\` (\`${freshRow.kind}\`)`,
-			);
+			provenanceFlips.push({
+				path,
+				from: old.provenance,
+				to: freshRow.provenance,
+				kind: freshRow.kind,
+			});
 		if (old.kind !== freshRow.kind)
 			kindChanges.push(
 				`- \`${path}\` — \`${old.kind}\` → \`${freshRow.kind}\``,
@@ -338,30 +361,32 @@ function buildDriftReport(
 				`- \`${path}\` — ${formatGate(old)} → ${formatGate(freshRow)}`,
 			);
 	}
-	provenanceFlips.sort();
+	provenanceFlips.sort((a, b) =>
+		a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+	);
 	kindChanges.sort();
 	gateChanges.sort();
 
 	lines.push(`#### Provenance changes (${provenanceFlips.length})`);
 	if (provenanceFlips.length === 0) lines.push("No provenance flips.");
 	else {
-		const bothToPublished = provenanceFlips.filter((line) =>
-			line.includes("`both` → `published`"),
+		const bothToPublished = provenanceFlips.filter(
+			(flip) => flip.from === "both" && flip.to === "published",
 		);
 		if (bothToPublished.length > 0) {
 			lines.push(
 				`Both → published (losing device confirmation, ${bothToPublished.length}):`,
 			);
-			lines.push(...bothToPublished.slice(0, cap));
+			lines.push(...bothToPublished.slice(0, cap).map(formatFlip));
 			if (bothToPublished.length > cap)
 				lines.push(`- … and ${bothToPublished.length - cap} more`);
 		}
 		const rest = provenanceFlips.filter(
-			(line) => !line.includes("`both` → `published`"),
+			(flip) => !(flip.from === "both" && flip.to === "published"),
 		);
 		if (rest.length > 0) {
 			if (bothToPublished.length > 0) lines.push("Other provenance flips:");
-			lines.push(...rest.slice(0, cap));
+			lines.push(...rest.slice(0, cap).map(formatFlip));
 			if (rest.length > cap) lines.push(`- … and ${rest.length - cap} more`);
 		}
 	}
@@ -397,22 +422,10 @@ if (process.argv.includes("--check")) {
 		const committed = parseCommittedCatalog(existing);
 		const report = buildDriftReport(committed, rows);
 		console.error(report);
-		const driftFile = join(
-			import.meta.dir,
-			"..",
-			".scratch",
-			"explain-catalog-drift.md",
-		);
-		try {
-			mkdirSync(join(import.meta.dir, "..", ".scratch"), { recursive: true });
-			await Bun.write(driftFile, report);
-		} catch {
-			// best-effort
-		}
 		const summaryPath = process.env["GITHUB_STEP_SUMMARY"];
 		if (summaryPath) {
 			try {
-				await Bun.write(summaryPath, `${report}\n`);
+				appendFileSync(summaryPath, `${report}\n`);
 			} catch {
 				// summary is best-effort; the stderr report is the source of truth
 			}

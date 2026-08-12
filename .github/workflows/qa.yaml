@@ -161,26 +161,13 @@ jobs:
       - name: Report drift
         if: failure() && steps.catalog.outcome == 'failure'
         run: |
-          if [ -f .scratch/explain-catalog-drift.md ] && ! grep -q "Row counts" "$GITHUB_STEP_SUMMARY" 2>/dev/null; then
-            cat .scratch/explain-catalog-drift.md >> "$GITHUB_STEP_SUMMARY"
+          if grep -qF "<!-- explain-catalog-drift -->" "$GITHUB_STEP_SUMMARY" 2>/dev/null; then
+            echo "Drift report already present in summary (from check step); skipping duplicate."
           else
-            if [ -f .scratch/explain-catalog-drift.md ]; then
-              echo "Drift report already present in summary (from check step); skipping duplicate."
-            else
-              {
-                echo "### \`src/explain/catalog.ts\` is out of date"
-                echo
-                echo "MikroTik's CLI Reference is current-only, so this fires on any"
-                echo "structural change upstream. It is a REPORT, not a gate: nothing"
-                echo "is blocked, including releases."
-                echo
-                echo "To adopt the change: \`bun run explain:catalog\` and commit."
-                echo "Read the diff first — a path changing kind, or losing device"
-                echo "provenance, changes what a caller may conclude from it."
-                echo
-                echo "No structured drift file found; review \`git diff src/explain/catalog.ts\`."
-              } >> "$GITHUB_STEP_SUMMARY"
-            fi
+            {
+              echo "No structured drift file found. This is a REPORT, not a gate."
+              echo "Run \`bun run explain:catalog\` and review \`git diff src/explain/catalog.ts\`."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
   chr-matrix:
