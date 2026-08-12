@@ -20,6 +20,7 @@ export function parseCommittedCatalog(
 		const line = raw.replace(/\r$/, "");
 		if (line === "") continue;
 		const parts = line.split("|");
+		if (parts.length > 6) return null;
 		const path = parts[0];
 		const kind = parts[1];
 		const provenance = parts[2];

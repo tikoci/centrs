@@ -110,6 +110,11 @@ describe("explain catalog drift report", () => {
 		).toBeNull();
 		expect(
 			parseCommittedCatalog(
+				"const ROWS = `\n/extra|menu|both|pkg|cond|syscap|unexpected\n`;\n",
+			),
+		).toBeNull();
+		expect(
+			parseCommittedCatalog(
 				"const ROWS = `\n/duplicate|menu|both\n/duplicate|menu|both\n`;\n",
 			),
 		).toBeNull();

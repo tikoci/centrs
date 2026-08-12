@@ -34,7 +34,9 @@ Provenance:
 
 ## Fix
 
-Check the name against `/console/inspect`. For `retrieve`, use
-`--list-attributes` to inspect available properties first. Use
-`--validate=false` only when intentionally probing an undocumented RouterOS
+For `retrieve` and inspect-gated API/execute validation, check the name against
+`/console/inspect`; `retrieve --list-attributes` lists the available properties.
+For console `:parse`, compare `context.parameter` with the RouterOS parameters
+for `context.command`; `context.detail` preserves the device's raw diagnostic.
+Use `--validate=false` only when intentionally probing an undocumented RouterOS
 edge.
