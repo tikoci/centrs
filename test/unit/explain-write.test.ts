@@ -239,19 +239,27 @@ describe("explain/write — finding 2: fail closed where input is discarded", ()
 	 * would be a false negative on a curated write verb, so it abstains — Q14's
 	 * rule (b) enforced at the rollup.
 	 *
-	 * This read `/interface\nreset-counters` until #285. The corrected
-	 * CLI-Reference inventory publishes `/interface/reset-counters` as a Command,
-	 * and the pinned trees carry it too, so the catalog now RESOLVES that head and
-	 * the document is a confirmed write — the abstention there was a false
-	 * negative the larger table fixed. `reset` is the same shape with the path
-	 * still in neither table, which is the case under test.
+	 * This read `/interface\nreset-counters` until #285; `reset` is the same shape
+	 * with the path still in neither table, which is what this test is about. The
+	 * head that MOVED has its own test below.
 	 */
 	test("a bare-word head abstains rather than clearing the document", () => {
 		const got = containsWrite("/interface\nreset");
 		expect(got.verdict).toBe("unknown");
 		expect(got.blockers.map((b) => b.klass)).toEqual(["ambiguous"]);
-		// The catalog decides it once the path IS published.
-		expect(containsWrite("/interface\nreset-counters").verdict).toBe("true");
+	});
+
+	/**
+	 * The other side of that boundary, on its own anchor so a catalog change is
+	 * legible as one. The corrected CLI-Reference inventory (#285) publishes
+	 * `/interface/reset-counters` as a Command and the pinned trees carry it too,
+	 * so the head RESOLVES and the document is a confirmed write — the abstention
+	 * that used to stand here was a false negative the larger table fixed.
+	 */
+	test("a bare-word head the catalog knows resolves instead", () => {
+		const got = containsWrite("/interface\nreset-counters");
+		expect(got.verdict).toBe("true");
+		expect(got.blockers).toEqual([]);
 	});
 
 	/**

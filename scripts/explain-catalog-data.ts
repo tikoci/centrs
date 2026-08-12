@@ -172,11 +172,19 @@ function decodeXml(text: string): string {
 		.replace(/&amp;/g, "&");
 }
 
-/** The CLI-Reference path a URL names, or `null` when it names something else. */
-function cliRefPath(location: string): string | null {
+/**
+ * The CLI-Reference path a link names, or `null` when it names something else.
+ *
+ * `base` is the document the link was read FROM, so a relative link resolves
+ * the way a browser would. Both inventories publish absolute URLs today, but a
+ * relative one must not vanish: `new URL(link)` alone throws on `/docs/…` and
+ * on `./app/app.md`, and this returning `null` is indistinguishable from "not a
+ * CLI page". Resolving against the base is what keeps the two cases apart.
+ */
+function cliRefPath(location: string, base: string): string | null {
 	let path: string;
 	try {
-		path = new URL(location).pathname;
+		path = new URL(location, base).pathname;
 	} catch {
 		return null;
 	}
@@ -196,7 +204,7 @@ function pageSlug(path: string): string | null {
 export function sitemapSlugs(sitemapXml: string): string[] {
 	const slugs = new Set<string>();
 	for (const match of sitemapXml.matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/g)) {
-		const path = cliRefPath(decodeXml(match[1] ?? ""));
+		const path = cliRefPath(decodeXml(match[1] ?? ""), SITEMAP_URL);
 		const slug = path === null ? null : pageSlug(path);
 		if (slug !== null) slugs.add(slug);
 	}
@@ -212,7 +220,7 @@ export function sitemapSlugs(sitemapXml: string): string[] {
 export function categoryLeafSlugs(sitemapXml: string): string[] {
 	const slugs = new Set<string>();
 	for (const match of sitemapXml.matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/g)) {
-		const path = cliRefPath(decodeXml(match[1] ?? ""));
+		const path = cliRefPath(decodeXml(match[1] ?? ""), SITEMAP_URL);
 		if (path === null || !path.endsWith("/")) continue;
 		const dir = path.slice(CLI_PREFIX.length).replace(/\/$/, "");
 		if (dir === "" || !CLI_SLUG.test(dir)) continue;
@@ -225,7 +233,7 @@ export function categoryLeafSlugs(sitemapXml: string): string[] {
 export function llmsSlugs(llmsTxt: string): string[] {
 	const slugs = new Set<string>();
 	for (const match of llmsTxt.matchAll(/^-\s*\[[^\]]*\]\(([^)\s]+)\)/gm)) {
-		const path = cliRefPath(match[1] ?? "");
+		const path = cliRefPath(match[1] ?? "", LLMS_TXT_URL);
 		const slug = path === null ? null : pageSlug(path);
 		if (slug !== null) slugs.add(slug);
 	}
@@ -257,6 +265,14 @@ export function llmsSlugs(llmsTxt: string): string[] {
  * itself, and invisible in the output. A page only one inventory lists is
  * reported instead of refused: the union already carries it, so nothing is
  * dropped, and `--check` fails on the new row anyway.
+ *
+ * BOTH one-sided directions are reported, but they are not symmetric, and the
+ * asymmetry is the shape itself. Every sitemap page is also in `llms.txt`, so a
+ * sitemap-only page is bare drift. `llms.txt` has 256 pages the sitemap lacks —
+ * that is not drift, it IS the category leaves, so reporting them all would be
+ * noise that buries the signal. What is reported is the residue: an `llms.txt`
+ * page that is neither in the sitemap nor a category leaf, i.e. one that
+ * appears from nowhere.
  */
 export function discoverSlugs(
 	sitemapXml: string,
@@ -265,11 +281,10 @@ export function discoverSlugs(
 ): string[] {
 	const sitemap = new Set(sitemapSlugs(sitemapXml));
 	const llms = new Set(llmsSlugs(llmsTxt));
+	const leaves = new Set(categoryLeafSlugs(sitemapXml));
 	const inventory = new Set([...sitemap, ...llms]);
 
-	const orphans = categoryLeafSlugs(sitemapXml).filter(
-		(slug) => !inventory.has(slug),
-	);
+	const orphans = [...leaves].filter((slug) => !inventory.has(slug));
 	if (orphans.length > 0)
 		throw new Error(
 			`${orphans.length} sitemap category dir(s) contribute no <dir>/<basename> leaf to the\n` +
@@ -283,6 +298,15 @@ export function discoverSlugs(
 		report(
 			`${sitemapOnly.length} page(s) are in the sitemap but not in llms.txt — the two ` +
 				`published inventories no longer agree in shape: ${sitemapOnly.join(", ")}`,
+		);
+
+	const unaccounted = [...llms].filter(
+		(slug) => !sitemap.has(slug) && !leaves.has(slug),
+	);
+	if (unaccounted.length > 0)
+		report(
+			`${unaccounted.length} page(s) are in llms.txt but are neither in the sitemap nor a ` +
+				`category leaf, so the sitemap no longer accounts for them: ${unaccounted.join(", ")}`,
 		);
 
 	return [...inventory].sort();

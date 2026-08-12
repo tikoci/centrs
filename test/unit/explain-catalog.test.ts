@@ -565,6 +565,25 @@ describe("explain/catalog — discovery", () => {
 		expect(llmsSlugs(llms)).toEqual(["app/app", "app/cleanup", "beep"]);
 	});
 
+	/**
+	 * Both inventories publish absolute URLs today, so a relative link must be
+	 * resolved rather than dropped: `new URL(link)` alone throws on it, and
+	 * returning nothing is indistinguishable from "not a CLI page" — which is how
+	 * an inventory silently shrinks. Root-relative and document-relative both
+	 * resolve against `llms.txt`'s own URL, the way a browser reads them.
+	 */
+	test("a relative llms.txt link resolves against the document, not away", () => {
+		expect(
+			llmsSlugs(
+				[
+					"- [Root-relative](/docs/cli-reference/beep.md)",
+					"- [Document-relative](./docs/cli-reference/app/app.md)",
+					"- [Elsewhere](/docs/other/thing.md)",
+				].join("\n"),
+			),
+		).toEqual(["app/app", "beep"]);
+	});
+
 	test("the inventory is the union, and the category leaf survives it", () => {
 		expect(discoverSlugs(sitemap, llms)).toEqual([
 			"app/app",
@@ -597,6 +616,31 @@ describe("explain/catalog — discovery", () => {
 		);
 		expect(slugs).toContain("new-page");
 		expect(reported.join("\n")).toMatch(/not in llms\.txt.*new-page/s);
+	});
+
+	/**
+	 * And the inverse, which is NOT symmetric. `llms.txt` legitimately carries
+	 * every category leaf the sitemap lacks — 256 of them — so reporting all
+	 * llms-only pages would bury the signal in the shape. The residue is what
+	 * matters: a page in neither the sitemap nor the category leaves has appeared
+	 * from nowhere and the sitemap no longer accounts for it.
+	 */
+	test("reports an llms.txt page the sitemap cannot account for", () => {
+		const reported: string[] = [];
+		const slugs = discoverSlugs(
+			sitemap,
+			`${llms}\n- [Nowhere](https://manual.mikrotik.com/docs/cli-reference/nowhere.md)`,
+			(message) => reported.push(message),
+		);
+		expect(slugs).toContain("nowhere");
+		expect(reported.join("\n")).toMatch(/neither in the sitemap.*nowhere/s);
+	});
+
+	/** ...and the category leaves themselves are never reported as that. */
+	test("stays silent when llms.txt differs only by its category leaves", () => {
+		const reported: string[] = [];
+		discoverSlugs(sitemap, llms, (message) => reported.push(message));
+		expect(reported).toEqual([]);
 	});
 });
 
