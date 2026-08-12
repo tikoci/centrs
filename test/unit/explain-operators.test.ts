@@ -31,6 +31,7 @@ interface OperatorFixture {
 		rejectedRows: number;
 		headOccurrences: Record<string, number>;
 		headShapes: Record<string, string>;
+		headVersions: Record<string, number>;
 	};
 	sweep: {
 		_source: {
@@ -281,6 +282,34 @@ describe("precedence and associativity", () => {
 describe("what the device does that the manual does not say", () => {
 	test("`any` is an operator and is not in the manual's list", () => {
 		expect(operatorFor("any")?.arities).toEqual([1]);
+	});
+
+	test("`any` is a nil-check: false only for nil/nothing", () => {
+		// Grounded on 7.23.3 + 7.24rc4 (and 7.21.5 long-term, corpus 7.20.8):
+		// `any` is prefix arity 1, `:typeof (any x)` is always `bool`. It is
+		// the idiom `:if (any $x) ...` to test a `:local` that may be `nil`.
+		expect(runtime("any-undefined-var").output).toBe("false");
+		expect(runtime("any-defined-var").output).toBe("true");
+		expect(runtime("any-nothing").output).toBe("false");
+		expect(runtime("any-true").output).toBe("true");
+		expect(runtime("any-false").output).toBe("true");
+		// `any` composes with the logical binaries without extra parens
+		expect(runtime("any-and-nothing").output).toBe("false");
+		expect(runtime("any-or-nothing").output).toBe("true");
+		// Infix `any` is not an infix at all — space-separated `true any false`
+		// is the unnamed juxtaposition node `(  true (any false))`, while
+		// `1 . any [:nothing]` is concat `1` + `false`.
+		expect(runtime("any-juxt").output).toBe("true");
+		expect(runtime("any-concat").output).toBe("1false");
+	});
+
+	test("`any` has been an operator since at least 7.20.8", () => {
+		// Offline corroboration: the corpus IL census (7.20.8, 7.22.1, 7.23rc1)
+		// already saw head `any` with `any|7.20.8:2`.
+		expect(fixture.corpus.headOccurrences["any"]).toBe(6);
+		expect(fixture.corpus.headVersions["any|7.20.8"]).toBe(2);
+		// Live: 7.21.5 long-term still answers `any`.
+		expect(runtime("any-nothing").output).toBe("false");
 	});
 
 	test("spacing changes the LEXER, not just the parse", () => {

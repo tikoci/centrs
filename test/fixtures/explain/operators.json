@@ -1768,6 +1768,51 @@
 		],
 		"runtime": [
 			{
+				"id": "any-undefined-var",
+				"source": ":local x; :put (any $x)",
+				"output": "false"
+			},
+			{
+				"id": "any-defined-var",
+				"source": ":local x; :set x 1.1; :put (any $x)",
+				"output": "true"
+			},
+			{
+				"id": "any-nothing",
+				"source": ":put (any [:nothing])",
+				"output": "false"
+			},
+			{
+				"id": "any-true",
+				"source": ":put (any true)",
+				"output": "true"
+			},
+			{
+				"id": "any-false",
+				"source": ":put (any false)",
+				"output": "true"
+			},
+			{
+				"id": "any-and-nothing",
+				"source": ":put (true and any [:nothing])",
+				"output": "false"
+			},
+			{
+				"id": "any-or-nothing",
+				"source": ":put (true or any [:nothing])",
+				"output": "true"
+			},
+			{
+				"id": "any-juxt",
+				"source": ":put (true any false)",
+				"output": "true"
+			},
+			{
+				"id": "any-concat",
+				"source": ":put (1 . any [:nothing])",
+				"output": "1false"
+			},
+			{
 				"id": "typeof-deferred",
 				"source": ":global f255 (>[:return 1]); :put [:typeof $f255]",
 				"output": "op"

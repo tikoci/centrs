@@ -567,6 +567,51 @@ const OP_AXIS: { id: string; source: string; note: string }[] = [
  */
 const RUNTIME: { id: string; source: string; expect: string }[] = [
 	{
+		id: "any-undefined-var",
+		source: ":local x; :put (any $x)",
+		expect: "false",
+	},
+	{
+		id: "any-defined-var",
+		source: ":local x; :set x 1.1; :put (any $x)",
+		expect: "true",
+	},
+	{
+		id: "any-nothing",
+		source: ":put (any [:nothing])",
+		expect: "false",
+	},
+	{
+		id: "any-true",
+		source: ":put (any true)",
+		expect: "true",
+	},
+	{
+		id: "any-false",
+		source: ":put (any false)",
+		expect: "true",
+	},
+	{
+		id: "any-and-nothing",
+		source: ":put (true and any [:nothing])",
+		expect: "false",
+	},
+	{
+		id: "any-or-nothing",
+		source: ":put (true or any [:nothing])",
+		expect: "true",
+	},
+	{
+		id: "any-juxt",
+		source: ":put (true any false)",
+		expect: "true",
+	},
+	{
+		id: "any-concat",
+		source: ":put (1 . any [:nothing])",
+		expect: "1false",
+	},
+	{
 		id: "typeof-deferred",
 		source: ":global f255 (>[:return 1]); :put [:typeof $f255]",
 		expect: "op",

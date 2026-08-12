@@ -1076,7 +1076,7 @@ Five things the device says that the manual does not:
 3. **`$`, `[`, `]` are syntax, not operator heads.** `$x` stays an atom in the
    IL and `[:tostr 1]` lowers to an `evl` node. Those bytes belong to the
    substitution axis.
-4. **`any` is an operator** (prefix, arity 1) and is not in the manual's list.
+4. **`any` is an operator** (prefix, arity 1) and is not in the manual's list — a **nil-check**: `:typeof (any x)` is `bool`, `false` only for `nil`/`nothing` (the value of an undefined `:local` and of `[:nothing]`), `true` for everything else including `0`, `""` and `false`.  It is the idiom `:if (any $x) ...` to test a variable that may be `nil`; `(true any false)` is not infix at all but juxtaposition `(  true (any false))`, and `(1 . any [:nothing])` is concat `1`+`false`.  Present since at least 7.20.8 (corpus `any|7.20.8:2`, live on 7.21.5 long-term and both 7.23.3/7.24rc4).
 5. **`&&` and `||` are spellings**, lowering to the `and` and `or` nodes.
 
 The `(>…)` and `<%%` forms are in the table on the same footing as `+`.
@@ -1086,6 +1086,14 @@ thing that separates them**, so a table keyed on spelling alone gets one wrong.
 `<%%` applies a deferred expression to an argument array, binding positionals
 from `$0`; a `do={…}` function binds the same arguments from `$1`, because
 there `$0` is the function's own name.
+
+Both `!` and `any` are prefix-only, so the pair sweep leaves their precedence
+unmeasured (`null`).  Local unary-vs-binary probes (every `U 1 B 2` and
+`1 B U 2`, `U`∈`!`/`any`, `B`∈24 binaries, on 7.23.3 and 7.21.5) show they bind
+**tighter than every binary**, including `->` (14) and `<%%` (13) — outer is
+always `B`.  That is an extra level 15, right-assoc, shared with the unary
+arities of `~`, `-`, `>` (binary arities sit at 5, 11, 5); the table's single
+`precedence` per spelling is the binary level.
 
 Everything in the sweep is identical on 7.23.3 and 7.24rc4 except one runtime
 row: `:put ({2;1} > {1;2;3})` errors on stable and evaluates to `true` on

@@ -148,6 +148,27 @@ const OPERATORS: readonly RouterosOperator[] = [
 	op("->", [2], 14, "left", "access", "->"),
 	op("<%%", [2], 13, "right", "apply", "<%%"),
 	// Undocumented and prefix-only. Not in the manual's list at all.
+	//
+	// `any` is a nil-check: `:typeof (any x)` is always `bool`; it is `false`
+	// only for `nil`/`nothing` (the value of an undefined `:local` and of
+	// `[:nothing]`), `true` for everything else — `0`, `""`, `false`, arrays
+	// included.  Typical use is `:if (any $x) ...` to test a `:local`/`:global`
+	// that may be `nil` (see issue #255 thread: `any $x` guards the
+	// `[:typeof]` branch).  Infix uses like `(true any false)` are not an infix
+	// `any` at all — the space-separated form is the juxtaposition node
+	// `(  true (any false))`, and `(1 any [:nothing])` is juxt `1` and `false`
+	// while `(1 . any [:nothing])` is concat `1`+`false`.
+	//
+	// `!` and `any` are prefix-only, so the pair sweep never carries them and
+	// the table honestly stores `null` for measured precedence.  Local unary-vs-
+	// binary probes on 7.23.3 (and 7.21.5 long-term, plus corpus 7.20.8 heads)
+	// show both bind **tighter than every binary**, including `->` (14) and
+	// `<%%` (13): every `(U 1 B 2)` and `(1 B U 2)` (`U` = `!`/`any`, `B` = all
+	// 24 binaries) parses with `B` outermost.  That is level 15, right-assoc,
+	// shared with the unary arities of `~`, `-`, `>` (whose binary arities sit
+	// at 5, 11, 5).  The single `precedence` per spelling is therefore the
+	// binary level; the unary level is documented here until a split field
+	// lands.
 	op("any", [1], null, null, "logical", "any"),
 ];
 
