@@ -331,6 +331,53 @@ describe("retrieve core", () => {
 			code: "routeros/unsupported-capability",
 		} satisfies Partial<CentrsError>);
 	});
+
+	test("pins validation/unknown-attribute context shape for retrieve (parameter + requestedAttributes)", async () => {
+		const fetchMock = mockFetchSequence([
+			() =>
+				new Response(
+					JSON.stringify([
+						{ type: "child", name: "print", "node-type": "cmd" },
+					]),
+				),
+			() =>
+				new Response(
+					JSON.stringify([
+						{ type: "completion", completion: "uptime" },
+						{ type: "completion", completion: "version" },
+					]),
+				),
+		]);
+
+		try {
+			let caught: unknown;
+			try {
+				await retrieve({
+					targetInput: "router1",
+					path: "/system/resource",
+					via: "rest-api",
+					attribute: ["bogus"],
+					username: "admin",
+					password: "",
+				});
+			} catch (error) {
+				caught = error;
+			}
+			const err = caught as CentrsError;
+			expect(err.code).toBe("validation/unknown-attribute");
+			const ctx = err.context as Record<string, unknown>;
+			expect(ctx["parameter"]).toBe("bogus");
+			expect(ctx["requestedAttributes"]).toEqual(["bogus"]);
+			expect(ctx["availableAttributes"]).toEqual(
+				expect.arrayContaining(["uptime", "version"]),
+			);
+			expect(ctx["path"]).toBe("/system/resource");
+			// Old key `requested` must not be present — canonical is `requestedAttributes`.
+			expect(ctx["requested"]).toBeUndefined();
+		} finally {
+			fetchMock.restore();
+		}
+	});
 });
 
 describe("retrieve CLI", () => {

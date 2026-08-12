@@ -231,7 +231,8 @@ export async function runResolvedRetrieve(
 						"Check the attribute name, or use `--list-attributes` to inspect the available properties first.",
 					context: {
 						path: resolved.path,
-						requested: resolved.attributes,
+						parameter: missing[0],
+						requestedAttributes: resolved.attributes,
 						availableAttributes,
 					},
 				});
