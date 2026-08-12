@@ -835,13 +835,17 @@ export function buildTokens(
 	// B1 reuses existing analyzers — overlaps or out-of-bounds are a bug, not a fill.
 	let prev = 0;
 	for (const s of sorted) {
+		if (!Number.isInteger(s.start) || !Number.isInteger(s.end))
+			throw new Error(
+				`buildTokens: non-integer span [${s.start},${s.end}) for length ${len}`,
+			);
+		if (s.start < 0 || s.end <= s.start || s.end > len)
+			throw new Error(
+				`buildTokens: span out of bounds [${s.start},${s.end}) for length ${len}`,
+			);
 		if (s.start < prev)
 			throw new Error(
 				`buildTokens: overlapping spans at [${s.start},${s.end})`,
-			);
-		if (s.start < 0 || s.end > len)
-			throw new Error(
-				`buildTokens: span out of bounds [${s.start},${s.end}) for length ${len}`,
 			);
 		prev = Math.max(prev, s.end);
 	}

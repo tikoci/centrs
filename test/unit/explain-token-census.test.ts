@@ -102,11 +102,20 @@ describe("#289 B1 — token partition invariant over representative inputs", () 
 	});
 
 	test("`unclassified` is a first-class class, not a gap", () => {
-		const data = explainCommand("/ip/address/add address=1.2.3.4/24", {
+		// Whitespace-only input has no analyzer claim, so the partition is a
+		// single `unclassified` token — this holds regardless of how many B2
+		// fills land. Tying the assertion to a specific command (e.g.
+		// `/ip/address/add ...`) would make it fail once that command becomes
+		// fully classified.
+		const data = explainCommand("   ", {
 			tokens: true,
 		});
 		expect(data.tokens?.every((t) => typeof t.class === "string")).toBe(true);
-		expect(data.tokens?.some((t) => t.class === "unclassified")).toBe(true);
+		expect(data.tokens).toEqual([
+			{ start: 0, end: 3, class: "unclassified", ev: "e0" },
+		]);
+		// The pinned census still has unclassified bytes (the deliverable number)
+		expect(fixture.corpus.classCounts["unclassified"]).toBeGreaterThan(0);
 	});
 
 	test("normalized input: offsets on analyzed text, join(slice) === analyzed", () => {

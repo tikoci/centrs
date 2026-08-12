@@ -87,21 +87,40 @@ export function census(scripts: readonly string[]): TokenCensus {
 			invariantFailures.push("first token not at 0");
 		if (tokensLocal[tokensLocal.length - 1]?.end !== bytes)
 			invariantFailures.push("last token not at bytes");
-		for (let i = 1; i < tokensLocal.length; i++) {
-			const cur = tokensLocal[i] as { start: number; end: number };
-			const prev = tokensLocal[i - 1] as { start: number; end: number };
-			if (cur.start !== prev.end) {
-				invariantFailures.push(`gap/overlap at ${i}`);
+		let hasInvalidRange = false;
+		for (const t of tokensLocal) {
+			if (
+				!Number.isInteger(t.start) ||
+				!Number.isInteger(t.end) ||
+				t.start < 0 ||
+				t.end <= t.start ||
+				t.end > bytes ||
+				t.start >= bytes
+			) {
+				invariantFailures.push(
+					`invalid token range [${t.start},${t.end}) for bytes ${bytes}`,
+				);
+				hasInvalidRange = true;
 				break;
 			}
 		}
-		const analyzed = new TextDecoder().decode(
-			analyzeCoordinates(text).analyzed,
-		);
-		const recon = tokensLocal
-			.map((t) => analyzed.slice(t.start, t.end))
-			.join("");
-		if (recon !== analyzed) invariantFailures.push("join(slice) !== input");
+		if (!hasInvalidRange) {
+			for (let i = 1; i < tokensLocal.length; i++) {
+				const cur = tokensLocal[i] as { start: number; end: number };
+				const prev = tokensLocal[i - 1] as { start: number; end: number };
+				if (cur.start !== prev.end) {
+					invariantFailures.push(`gap/overlap at ${i}`);
+					break;
+				}
+			}
+			const analyzed = new TextDecoder().decode(
+				analyzeCoordinates(text).analyzed,
+			);
+			const recon = tokensLocal
+				.map((t) => analyzed.slice(t.start, t.end))
+				.join("");
+			if (recon !== analyzed) invariantFailures.push("join(slice) !== input");
+		}
 
 		for (const t of tokensLocal) {
 			bump(classCounts, t.class);
@@ -294,6 +313,14 @@ export async function main(args: readonly string[]): Promise<number> {
 		console.error(
 			`::warning title=explain token census::${resolution.warning}`,
 		);
+	}
+	if (args.includes("--check") && resolution.warning) {
+		console.error(
+			"::error title=explain token census::refusing to check against a " +
+				"corpus that is not the pinned snapshot — the result would not be " +
+				"comparable to CI's.",
+		);
+		return 1;
 	}
 	const dbPath = resolution.path;
 	if (dbPath === undefined || !(await Bun.file(dbPath).exists())) {
