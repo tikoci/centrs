@@ -14,7 +14,8 @@
 		"src/explain/catalog.ts",
 		"test/fixtures",
 		"GLOSSARY.txt",
-		".claude/settings*.json"
+		".claude/**",
+		".agents/**"
 	],
 	"useGitignore": false,
 	"flagWords": ["hte"],
