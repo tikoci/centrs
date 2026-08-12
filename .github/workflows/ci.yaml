@@ -157,10 +157,11 @@ jobs:
   # scripts/corpus-pin.json and verifies its sha256.
   #
   # What gates here (#260): the FETCH — a hash mismatch is a hard failure, or
-  # the pin is decorative — and the VALUE census against the committed
-  # `corpus` block of test/fixtures/explain/values.json, which is the
-  # reachability this job was built to provide. The genre census still only
-  # reports: it has no committed fixture to be asserted against.
+  # the pin is decorative — the VALUE census against the committed `corpus`
+  # block of test/fixtures/explain/values.json, and the OPERATOR IL-head census
+  # against the same block of test/fixtures/explain/operators.json (#255). That
+  # is the reachability this job was built to provide. The genre census still
+  # only reports: it has no committed fixture to be asserted against.
   #
   # The other half of #260 needs no corpus and is not here: the README figures
   # are a generated projection of that same fixture, gated by
@@ -211,12 +212,20 @@ jobs:
             echo '```'
             bun run explain:value-census 2>&1
             echo '```'
+            echo
+            echo "### Operator IL head census"
+            echo
+            echo '```'
+            bun run explain:operator-census 2>&1
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       # After the summary, so a drifted run still publishes its figures — the
       # numbers are what tells you whether the drift is an intended emission
       # change or a regression.
       - name: Value census matches the committed fixture
         run: bun run explain:value-census:check
+      - name: Operator census matches the committed fixture
+        run: bun run explain:operator-census:check
 
   chr-smoke:
     name: CHR smoke (stable)
