@@ -1046,8 +1046,10 @@ Grounded, not transcribed, for the same reason the escape set above is: the
 [manual's operator list](https://manual.mikrotik.com/docs/developer-guides/scripting/index.md#operators)
 is a lower bound. `bun run explain:probe:operators` sweeps the manual's list
 **plus** plausible non-operators (`not`, `..`, `xor`, `mod`, `is`, `div`, …)
-**plus** every IL head the corpus census saw, on CHR 7.23.3 stable and 7.24rc4
-testing. Re-cut the fixture with `bun run explain:operator-slice`; the table
+**plus** every IL head the corpus census saw, on CHR 7.23.3 stable, 7.24rc4
+testing and 7.21.5 long-term — one build per release channel, so a claim about
+any channel is evidence rather than an assumption. Re-cut the fixture with
+`bun run explain:operator-slice`; the table
 below is generated from `src/explain/operators.ts` by
 `bun run explain:operator-readme` and gated by
 `bun run explain:operator-readme:check`.
@@ -1076,7 +1078,7 @@ Five things the device says that the manual does not:
 3. **`$`, `[`, `]` are syntax, not operator heads.** `$x` stays an atom in the
    IL and `[:tostr 1]` lowers to an `evl` node. Those bytes belong to the
    substitution axis.
-4. **`any` is an operator** (prefix, arity 1) and is not in the manual's list — a **nil-check**: `:typeof (any x)` is `bool`, `false` only for `nil`/`nothing` (the value of an undefined `:local` and of `[:nothing]`), `true` for everything else including `0`, `""` and `false`.  It is the idiom `:if (any $x) ...` to test a variable that may be `nil`; `(true any false)` is not infix at all but juxtaposition `(  true (any false))`, and `(1 . any [:nothing])` is concat `1`+`false`.  Present since at least 7.20.8 (corpus `any|7.20.8:2`, live on 7.21.5 long-term and both 7.23.3/7.24rc4).
+4. **`any` is an operator** (prefix, arity 1) and is not in the manual's list — a **nil-check**: `:typeof (any x)` is `bool`, `false` only for `nil`/`nothing` (the value of an undefined `:local` and of `[:nothing]`), `true` for everything else including `0`, `""` and `false`.  It is the idiom `:if (any $x) ...` to test a variable that may be `nil`; `(true any false)` is not infix at all but juxtaposition `(  true (any false))`, and `(1 . any [:nothing])` is concat `1`+`false`.  Present since at least 7.20.8 (corpus `any|7.20.8:2`, and swept live on 7.21.5 long-term, 7.23.3 stable and 7.24rc4 testing with no difference between them).
 5. **`&&` and `||` are spellings**, lowering to the `and` and `or` nodes.
 
 The `(>…)` and `<%%` forms are in the table on the same footing as `+`.
@@ -1087,18 +1089,29 @@ thing that separates them**, so a table keyed on spelling alone gets one wrong.
 from `$0`; a `do={…}` function binds the same arguments from `$1`, because
 there `$0` is the function's own name.
 
-Both `!` and `any` are prefix-only, so the pair sweep leaves their precedence
-unmeasured (`null`).  Local unary-vs-binary probes (every `U 1 B 2` and
-`1 B U 2`, `U`∈`!`/`any`, `B`∈24 binaries, on 7.23.3 and 7.21.5) show they bind
-**tighter than every binary**, including `->` (14) and `<%%` (13) — outer is
-always `B`.  That is an extra level 15, right-assoc, shared with the unary
-arities of `~`, `-`, `>` (binary arities sit at 5, 11, 5); the table's single
-`precedence` per spelling is the binary level.
+Both `!` and `any` are prefix-only, so the *pair* sweep cannot carry them and
+their `precedence` is honestly `null`. That is "unmeasured", not "unknown": the
+sweep asks them separately, every `(U 1 B 2)` and `(1 B U 2)` for
+`U`∈`!`,`any`,`~`,`-`,`>` against all 24 binaries — 240 probes, recorded in the
+fixture's `unary` block. All 240 are accepted and the **binary is outer in every
+one**, on all three versions, so each prefix operator binds tighter than every
+binary including `->` (14) and `<%%` (13). The table stores one `precedence` per
+spelling, which is the binary level; `~`, `-` and `>` are here because their
+unary reading has no other record.
 
-Everything in the sweep is identical on 7.23.3 and 7.24rc4 except one runtime
-row: `:put ({2;1} > {1;2;3})` errors on stable and evaluates to `true` on
-testing. So the operator table needs no version gate; anything reporting what a
-comparison *means* does.
+Spacing decides the *tokens*, not just the tree. `(1.2)` is an IP literal and
+`(.1)` a time literal, but the rest of the matrix is where a tokenizer goes
+wrong: `(1 . 2)` and `(1 .2)` are both concat (`(. 1 2)`), while **`(1. 2)` is
+not concat at all** — `1.` lexes as a *variable name* and the row comes back as
+juxtaposition, `(  $1. 2)`. A rule that claims every `.` byte for the operator
+emits a span the device does not have.
+
+Everything in the sweep is identical across 7.21.5, 7.23.3 and 7.24rc4 except
+one runtime row: `:put ({2;1} > {1;2;3})` evaluates to `true` only on 7.24rc4.
+Identical is measured, not assumed — the slice diffs verdict, arity, precedence,
+associativity, `highlight` run, unary placement and op-axis per version. So the
+operator table needs no version gate; anything reporting what a comparison
+*means* does.
 
 <!-- BEGIN GENERATED operator-table — regenerate with `bun run explain:operator-readme` -->
 The device builds a node for **26** spellings, reads **3**
@@ -1136,8 +1149,8 @@ as something else, and refuses the other **33** the sweep asked about.
 Precedence runs 1 (loosest) to 14 (tightest), measured over every
 ordered pair rather than transcribed. `variadic` means the device FLATTENS
 the operator — `(1 + 2 + 3)` is one node with three children, not two nested
-ones. The two prefix-only operators never appear in a pair and so carry no
-measured level.
+ones. The 2 prefix-only operators never appear in a pair and so
+carry no measured level.
 
 Spellings the device reads as something else:
 

@@ -2,11 +2,12 @@
  * The RouterOS operator surface, as the DEVICE describes it (#255).
  *
  * Every row here was scored on CHR 7.23.3 (stable) and re-scored on 7.24rc4
- * (testing) by `bun run explain:probe:operators`; the reviewed slice is
+ * (testing) and 7.21.5 (long-term) by `bun run explain:probe:operators` — one
+ * build per release channel; the reviewed slice is
  * `test/fixtures/explain/operators.json` → `sweep`, and
  * `test/unit/explain-operators.test.ts` asserts this table still equals it.
- * The two versions differ in exactly one row, and it is not a lexer row — see
- * {@link ARRAY_COMPARISON_NOTE}.
+ * The three versions differ in exactly one row, and it is not a lexer row —
+ * see {@link ARRAY_COMPARISON_NOTE}.
  *
  * ## Why this is not the manual's list
  *
@@ -29,6 +30,14 @@
  *     1: `(any 1)` lowers to `(any 1)`.
  *  5. **`&&` and `||` are spellings, not operators.** They lower to the `and`
  *     and `or` nodes; nothing in the IL remembers which spelling was written.
+ *
+ * And one the manual does not contradict so much as omit: **spacing decides the
+ * tokens.** `(1.2)` is an IP literal and `(.1)` a time literal, neither of them
+ * concatenation. `(1 . 2)` and `(1 .2)` are both `(. 1 2)` — a leading `.` is
+ * still the operator — but `(1. 2)` is `(  $1. 2)`: `1.` lexes as a VARIABLE
+ * NAME and the row is juxtaposition, with no operator in it at all. A fill rule
+ * that claims every `.` byte gets that last one wrong in the one direction that
+ * matters, by emitting a span the device does not have.
  *
  * ## Which oracle decided what, and what `highlight` cannot do
  *
@@ -159,16 +168,17 @@ const OPERATORS: readonly RouterosOperator[] = [
 	// `(  true (any false))`, and `(1 any [:nothing])` is juxt `1` and `false`
 	// while `(1 . any [:nothing])` is concat `1`+`false`.
 	//
-	// `!` and `any` are prefix-only, so the pair sweep never carries them and
-	// the table honestly stores `null` for measured precedence.  Local unary-vs-
-	// binary probes on 7.23.3 (and 7.21.5 long-term, plus corpus 7.20.8 heads)
-	// show both bind **tighter than every binary**, including `->` (14) and
-	// `<%%` (13): every `(U 1 B 2)` and `(1 B U 2)` (`U` = `!`/`any`, `B` = all
-	// 24 binaries) parses with `B` outermost.  That is level 15, right-assoc,
-	// shared with the unary arities of `~`, `-`, `>` (whose binary arities sit
-	// at 5, 11, 5).  The single `precedence` per spelling is therefore the
-	// binary level; the unary level is documented here until a split field
-	// lands.
+	// `!` and `any` are prefix-only, so the PAIR sweep never carries them and
+	// the table honestly stores `null` for measured precedence.  The sweep asks
+	// them separately: every `(U 1 B 2)` and `(1 B U 2)` for `U` in
+	// `!`/`any`/`~`/`-`/`>` against all 24 binaries, 240 probes, published as
+	// the fixture's `unary` block.  All 240 accept and `B` is outermost in
+	// every one, on 7.21.5, 7.23.3 and 7.24rc4 alike — so both bind TIGHTER
+	// than every binary, including `->` (14) and `<%%` (13).  That is level 15,
+	// right-assoc, shared with the unary arities of `~`, `-`, `>` (whose binary
+	// arities sit at 5, 11, 5).  The single `precedence` per spelling is
+	// therefore the binary level; the unary level is documented here until a
+	// split field lands.
 	op("any", [1], null, null, "logical", "any"),
 ];
 
@@ -275,8 +285,9 @@ export interface NonOperator {
  *
  * This half is the point. An allow-list assembled from documentation cannot say
  * a spelling is absent; it can only fail to mention it, which is a different
- * claim and the one #252 got wrong. Eleven of these are word-shaped and would
- * have been plausible keywords in any other language.
+ * claim and the one #252 got wrong. Eighteen of these are word-shaped and would
+ * have been plausible keywords in any other language — including the eleven the
+ * probe's first verdict rule wrongly promoted, listed at the top of this file.
  */
 const NOT_OPERATORS: readonly NonOperator[] = [
 	// Word-shaped. Every one of these would be a keyword in some other language,
@@ -347,16 +358,25 @@ function notOp(
 /**
  * The single version-dependent fact the sweep found.
  *
- * Every operator, arity, precedence level, associativity and `highlight` class
- * is byte-identical on 7.23.3 and 7.24rc4. The one row that moved is a RUNTIME
- * semantic, not a lexer fact: `:put ({2;1} > {1;2;3})` is `Script Error: cannot
- * compare if array is more than array` on 7.23.3 and `true` on 7.24rc4. So the
- * offline lexer needs no version gate for operators — and anything that reports
- * what a comparison MEANS does.
+ * Every operator, arity, precedence level, associativity, `highlight` class and
+ * op-axis row is identical on 7.21.5, 7.23.3 and 7.24rc4 — and identical is a
+ * measurement here, not a reading: `buildSweep` diffs each of those axes per
+ * version, so a build that re-ranked `->` would appear in
+ * `sweep.versionDifferences` rather than in nobody's notes.
+ *
+ * The one row that moved is a RUNTIME semantic, not a lexer fact:
+ * `:put ({2;1} > {1;2;3})` is `true` on 7.24rc4 and an error on the two older
+ * builds. So the offline lexer needs no version gate for operators — and
+ * anything that reports what a comparison MEANS does.
  */
 export const ARRAY_COMPARISON_NOTE =
-	"array comparison with `>` errors on 7.23.3 and evaluates on 7.24rc4; " +
-	"the operator table itself is identical on both";
+	"array comparison with `>` errors on 7.21.5 and 7.23.3 and evaluates on " +
+	"7.24rc4; the operator table itself is identical on all three. The two " +
+	"errors are not the same error: 7.23.3 says `cannot compare if array is " +
+	"more than array` and 7.21.5 says `cannot compare if nothing is more than " +
+	"nothing`, so on 7.21.5 the `{2;1}` operands did not survive to the " +
+	"comparison at all. That is a RUNTIME difference either way — no version " +
+	"disagrees about what `>` is";
 
 const BY_SPELLING: ReadonlyMap<string, RouterosOperator> = new Map(
 	OPERATORS.map((entry) => [entry.spelling, entry]),

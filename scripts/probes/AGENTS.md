@@ -20,7 +20,7 @@ that lands under `test/fixtures/` is durable.
 | `explain-brace-slot-sweep.ts` | which `(verb, slot)` pairs read `{…}` as an array (#225/#257) | `src/explain/brace-slots.ts` + `test/fixtures/explain/values.json` → `interiorGrounding.braceSlots` |
 | `explain-escape-sweep.ts` | the device-accepted `\<c>` set inside a string (#252) | `VALID_SINGLE` in `src/explain/quoted-string.ts` |
 | `explain-highlight-recapture.ts` | the per-character `highlight` stream for every corpus script (Q13) | `test/fixtures/explain/highlight-streams.slice.json` (a stratified slice; the full capture is ~7.5 MB/version and stays out of the repo) |
-| `explain-operator-sweep.ts` | the operator set, arities, precedence and associativity, plus the `(>…)`/`<%%` axis (#255) | `src/explain/operators.ts` + `test/fixtures/explain/operators.json` → `sweep`, cut by `bun run explain:operator-slice` |
+| `explain-operator-sweep.ts` | the operator set, arities, precedence and associativity, where each prefix operator sits against every binary, and the `(>…)`/`<%%` axis (#255) | `src/explain/operators.ts` + `test/fixtures/explain/operators.json` → `sweep`, cut by `bun run explain:operator-slice` |
 | `explain-symbol-anchors.ts` | every committed device-verified symbol branch anchor on live `highlight` | `src/explain/symbols.ts` + `test/fixtures/explain/symbols.json` |
 | `explain-symbol-arms-score.ts` | the historical Q13 candidate arms and shipped resolver over a full highlight capture | the symbol decisions in `src/explain/symbols.ts` |
 | `explain-symbol-bad-sigil-replay.ts` | recorded K2 hard-error offsets | the F8 anchors in `test/unit/explain-symbols.test.ts` |

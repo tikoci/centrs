@@ -40,11 +40,20 @@ interface OperatorFixture {
 			precedencePairsDropped: number;
 		};
 		operators: SweepOperator[];
+		unary: {
+			spelling: string;
+			probes: number;
+			accepted: number;
+			binaryOuter: number;
+			orders: string[];
+			exceptions: unknown[];
+		}[];
 		lowered: { spelling: string; ilHeads: string[]; example?: string }[];
 		notOperators: {
 			spelling: string;
 			highlightClass: string | null;
 			whyNot: string;
+			example?: string;
 		}[];
 		opAxis: {
 			id: string;
@@ -129,10 +138,15 @@ describe("operator table vs the device sweep", () => {
 		}
 	});
 
-	test("the sweep covered both a stable and a testing build", () => {
+	test("the sweep covered a stable, a testing and a long-term build", () => {
+		// All three release channels. `7.23.3` is primary because every other
+		// explain fixture is grounded there; `7.24rc4` is where array comparison
+		// landed; `7.21.5` is the oldest branch still supported, and the only way
+		// a claim about long-term is evidence rather than an assumption.
 		expect(fixture.sweep._source.versions).toEqual([
 			"7.23.3 (stable) (x86_64)",
 			"7.24rc4 (testing) (x86_64)",
+			"7.21.5 (long-term) (x86_64)",
 		]);
 	});
 });
@@ -308,8 +322,41 @@ describe("what the device does that the manual does not say", () => {
 		// already saw head `any` with `any|7.20.8:2`.
 		expect(fixture.corpus.headOccurrences["any"]).toBe(6);
 		expect(fixture.corpus.headVersions["any|7.20.8"]).toBe(2);
-		// Live: 7.21.5 long-term still answers `any`.
-		expect(runtime("any-nothing").output).toBe("false");
+		// Live corroboration on the oldest branch swept. The runtime rows above
+		// come from the PRIMARY capture only, so asserting one of them again
+		// would prove nothing about long-term — the evidence that 7.21.5 answers
+		// `any` the same way is that it was swept and reported no difference.
+		expect(fixture.sweep._source.versions).toContain(
+			"7.21.5 (long-term) (x86_64)",
+		);
+		expect(
+			fixture.sweep.versionDifferences.filter((row) =>
+				String(row["id"] ?? "").startsWith("any-"),
+			),
+		).toEqual([]);
+	});
+
+	test("a prefix operator binds tighter than every binary — measured", () => {
+		// `precedence` is null for `!` and `any` because the PAIR sweep cannot
+		// carry a prefix operator. That is "unmeasured", which was being read as
+		// "unknown": the README asserted a level from a local run no capture
+		// held. These rows are that claim, asked of the device in both orders.
+		const unary = fixture.sweep.unary;
+		expect(unary.map((row) => row.spelling).sort()).toEqual([
+			"!",
+			"-",
+			">",
+			"any",
+			"~",
+		]);
+		for (const row of unary) {
+			expect(row.orders).toEqual(["prefix-left", "prefix-right"]);
+			// Every probe accepted, and the BINARY was outer in every one of them
+			// — so the unary bound tighter, every time, in both orders.
+			expect(row.accepted).toBe(row.probes);
+			expect(row.binaryOuter).toBe(row.accepted);
+			expect(row.exceptions).toEqual([]);
+		}
 	});
 
 	test("spacing changes the LEXER, not just the parse", () => {
@@ -320,10 +367,80 @@ describe("what the device does that the manual does not say", () => {
 		expect(axis("tight-dot-time").il).toBe("(<%% 00:00:00.100 )");
 	});
 
+	test("a dot glued to the LEFT operand is part of a name, not an operator", () => {
+		// The spacing matrix, completed. `(1 . 2)` and `(1 .2)` are both concat,
+		// so a leading `.` still lexes as the operator — but `(1. 2)` is NOT
+		// concat at all: `1.` becomes a VARIABLE and the row is juxtaposition.
+		// A tokenizer that claims every `.` byte as an operator emits a span
+		// here that the device does not have.
+		expect(axis("dot-space-both").ilHead).toBe(".");
+		expect(axis("dot-space-left").ilHead).toBe(".");
+		expect(axis("dot-space-right").il).toContain("$1.");
+		expect(axis("dot-space-right").ilHead).toBe("");
+	});
+
 	test("only one fact in the sweep is version-dependent", () => {
-		expect(fixture.sweep.versionDifferences).toHaveLength(1);
-		expect(fixture.sweep.versionDifferences[0]?.["id"]).toBe("array-compare");
+		// Three versions, so one differing row yields two diff entries — each
+		// version is compared against the primary. Asserted as "every difference
+		// is that row" rather than a count, so adding a fourth CHR cannot turn a
+		// new finding into an off-by-one.
+		expect(
+			new Set(fixture.sweep.versionDifferences.map((row) => row["kind"])),
+		).toEqual(new Set(["runtime"]));
+		expect(
+			new Set(fixture.sweep.versionDifferences.map((row) => row["id"])),
+		).toEqual(new Set(["array-compare"]));
 		expect(ARRAY_COMPARISON_NOTE).toContain("7.24rc4");
+	});
+
+	test("the version diff covers every axis the table publishes", () => {
+		// The claim above is only worth the axes it was checked on. `buildSweep`
+		// diffs verdict, arities, highlight, precedence, associativity, op-axis
+		// and precedence conformance as well as runtime; a version that re-ranked
+		// `->` used to be reported as identical. Guarded by mutation: flip any
+		// one of those in a capture and a row appears here.
+		const kinds = new Set(
+			fixture.sweep.versionDifferences.map((row) => row["kind"]),
+		);
+		expect(kinds.has("precedence")).toBe(false);
+		expect(kinds.has("associativity")).toBe(false);
+		expect(kinds.has("opAxis")).toBe(false);
+		expect(fixture.sweep._source.versions).toHaveLength(3);
+	});
+
+	test("outer-count separates `never outer` from `never measured`", () => {
+		// `->` binds tightest and is outer zero times — a measurement. `!` and
+		// `any` are prefix-only and never appear in a pair — no measurement.
+		// Storing both as `null` made the two indistinguishable.
+		const outer = (spelling: string) =>
+			fixture.sweep.operators.find((row) => row.spelling === spelling)
+				?.outerCount;
+		expect(outer("->")).toBe(0);
+		expect(outer("!")).toBeNull();
+		expect(outer("any")).toBeNull();
+	});
+
+	test("exactly three operators have a highlight run wider than the token", () => {
+		// `and`, `or` and `in` arrive as `" and"` — the device merges the leading
+		// space into the run. Pinned as a SET because it is the evidence for
+		// "`highlight` cannot give an operator boundary"; a future version that
+		// stopped merging would otherwise pass silently.
+		expect(
+			fixture.sweep.operators
+				.filter((row) => !row.highlightRunIsTokenExactly)
+				.map((row) => row.spelling)
+				.sort(),
+		).toEqual(["and", "in", "or"]);
+	});
+
+	test("a non-operator's example is the IL that justifies its verdict", () => {
+		// `evl` is why: its first carrier `(1 evl 2)` is a plain syntax error,
+		// while the verdict `residual-variable` is earned by `(1evl2)`.
+		const evl = fixture.sweep.notOperators.find(
+			(row) => row.spelling === "evl",
+		);
+		expect(evl?.whyNot).toContain("residual-variable");
+		expect(evl?.example).toContain("$1evl2");
 	});
 });
 

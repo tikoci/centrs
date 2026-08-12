@@ -33,11 +33,14 @@
  *   produced it — rejected outright, absorbed into the unnamed juxtaposition
  *   node, or accepted only by lexing part of the spelling as a variable.
  *
- * ## Two versions, and what a difference means
+ * ## Several versions, and what a difference means
  *
- * The slice carries both captures and computes their differences rather than
- * merging them. A row that differs is the only kind of version-dependent datum
- * here, and there is exactly one on 7.23.3 vs 7.24rc4.
+ * The slice carries every capture and computes their differences rather than
+ * merging them, on every axis it publishes — verdict, arity, precedence,
+ * associativity, `highlight` run, op-axis and runtime. A merge would report
+ * "identical" for axes nobody compared, which is the failure mode this
+ * replaced. Across 7.21.5, 7.23.3 and 7.24rc4 exactly one row differs, and it
+ * is a runtime semantic.
  *
  * Run: bun run explain:operator-slice [--capture <path>]... [--out <path>]
  */
@@ -89,12 +92,22 @@ interface CapturePrecedence {
 	outerHead: string | null;
 }
 
+interface CaptureUnary {
+	u: string;
+	b: string;
+	order: string;
+	il: string;
+	accepted: boolean;
+	outerHead: string | null;
+}
+
 interface Capture {
 	version: string;
 	architecture: string;
 	buildTime: string;
 	candidates: CaptureCandidate[];
 	precedence: CapturePrecedence[];
+	unaryPrecedence: CaptureUnary[];
 	controls: { id: string; source: string; il: string; accepted: boolean }[];
 	opAxis: {
 		id: string;
@@ -187,6 +200,43 @@ export function precedenceLevels(counts: {
 	return { levels, nonConforming };
 }
 
+/**
+ * Where each prefix operator sits relative to every binary, as counters.
+ *
+ * The pair sweep cannot carry a prefix operator, so its `precedence` is
+ * honestly `null` — but "unmeasured" was being read as "unknown", and the
+ * README was asserting a level from a local run no capture held. This is that
+ * claim, measured: for every `(U 1 B 2)` and `(1 B U 2)`, is the BINARY the
+ * outer node? If it always is, the unary binds tighter than every binary.
+ *
+ * `exceptions` is the load-bearing field. An empty list is the finding; a
+ * non-empty one is a lattice this table does not yet describe, and either way
+ * the number is published rather than the conclusion.
+ */
+export function unarySummary(
+	rows: readonly CaptureUnary[],
+): Record<string, unknown>[] {
+	const spellings = [...new Set(rows.map((row) => row.u))];
+	return spellings.map((u) => {
+		const mine = rows.filter((row) => row.u === u);
+		const accepted = mine.filter((row) => row.accepted);
+		const exceptions = accepted.filter((row) => row.outerHead !== row.b);
+		return {
+			spelling: u,
+			probes: mine.length,
+			accepted: accepted.length,
+			binaryOuter: accepted.length - exceptions.length,
+			orders: [...new Set(mine.map((row) => row.order))].sort(),
+			exceptions: exceptions.map((row) => ({
+				binary: row.b,
+				order: row.order,
+				outerHead: row.outerHead,
+				il: row.il,
+			})),
+		};
+	});
+}
+
 /** Which device behaviour kept a spelling out of the operator set. */
 export function whyNot(row: CaptureCandidate): string {
 	const carriers = Object.values(row.carriers);
@@ -196,6 +246,54 @@ export function whyNot(row: CaptureCandidate): string {
 	if (carriers.some((c) => c.juxtaposition))
 		return "juxtaposition: accepted only inside the unnamed node";
 	return "no node headed by this spelling";
+}
+
+/**
+ * The IL that JUSTIFIES this row's {@link whyNot}, not merely its first carrier.
+ *
+ * `evl` is why this exists: its `whyNot` is `residual-variable`, earned by the
+ * no-space carrier `(1evl2)` -> `$1evl2`, but the first carrier is `(1 evl 2)`,
+ * which is a plain syntax error. Publishing that pair let the fixture show an
+ * example that argues for a different verdict than the one beside it.
+ */
+export function whyNotExample(row: CaptureCandidate): string | undefined {
+	const carriers = Object.values(row.carriers);
+	const reason = whyNot(row);
+	if (reason.startsWith("residual-variable"))
+		return carriers.find((c) => c.residualVariable)?.il;
+	if (reason.startsWith("juxtaposition"))
+		return carriers.find((c) => c.juxtaposition)?.il;
+	return carriers[0]?.il;
+}
+
+/**
+ * Read a capture and check it has the arrays this script iterates.
+ *
+ * Without the check a capture missing `precedence` fails inside `outerCounts`
+ * with a bare iteration TypeError, printed verbatim by `main`'s catch — an
+ * operator asks a probe question and gets a stack trace about a for-of loop.
+ * The shape is only checked to the depth that produces a useful message; the
+ * contents are the device's and are not second-guessed here.
+ */
+export function readCapture(path: string): Capture {
+	const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<Capture>;
+	const missing = (
+		[
+			"candidates",
+			"precedence",
+			"unaryPrecedence",
+			"controls",
+			"opAxis",
+			"runtime",
+		] as const
+	).filter((key) => !Array.isArray(parsed[key]));
+	if (typeof parsed.version !== "string") missing.push("version" as never);
+	if (missing.length > 0)
+		throw new Error(
+			`${path} is not an operator-sweep capture: missing ${missing.join(", ")}. ` +
+				"Re-run `bun run explain:probe:operators` and pass the file it names.",
+		);
+	return parsed as Capture;
 }
 
 function flagValues(args: readonly string[], name: string): string[] {
@@ -222,7 +320,14 @@ export function buildSweep(
 			arities: row.operatorArities,
 			precedence: levels.get(row.token) ?? null,
 			associativity: associativityOf(row.token, primary.precedence),
-			outerCount: counts.outer.get(row.token) ?? null,
+			// `0` and `null` are different answers. `->` is measured and is outer
+			// zero times — that IS the tightest-binding result. `!` and `any` are
+			// prefix-only, never carried by a pair, and have no measurement at all.
+			// Collapsing both to `null` made "tightest" indistinguishable from
+			// "unasked" for anything reading this field.
+			outerCount: counts.seen.has(row.token)
+				? (counts.outer.get(row.token) ?? 0)
+				: null,
 			highlightClass: row.highlight.run?.class ?? null,
 			highlightRun: row.highlight.run?.text ?? null,
 			highlightRunIsTokenExactly: row.highlight.runIsTokenExactly,
@@ -245,34 +350,106 @@ export function buildSweep(
 			spelling: row.token,
 			highlightClass: row.highlight.run?.class ?? null,
 			whyNot: whyNot(row),
-			example: Object.values(row.carriers)[0]?.il,
+			example: whyNotExample(row),
 		}));
 
 	// A per-row diff rather than a merge: a version-dependent row is the only
 	// datum here that is not simply "the language", and burying it in a union
-	// would lose exactly the thing the second CHR was booted for.
+	// would lose exactly the thing the extra CHRs were booted for.
+	//
+	// Every axis the `sweep` block publishes is diffed, not just the two that
+	// happened to differ first. A claim of "identical except one runtime row"
+	// is only worth the axes it was checked on, and precedence, associativity,
+	// arity and the op-axis were previously not among them — a version that
+	// re-ranked `->` would have been reported as identical.
 	const versionDifferences: Record<string, unknown>[] = [];
 	for (const other of captures.slice(1)) {
+		const diff = (
+			kind: string,
+			key: Record<string, unknown>,
+			a: unknown,
+			b: unknown,
+		) => {
+			if (JSON.stringify(a) === JSON.stringify(b)) return;
+			versionDifferences.push({
+				kind,
+				...key,
+				[primary.version]: a ?? null,
+				[other.version]: b ?? null,
+			});
+		};
 		for (const [i, row] of primary.runtime.entries()) {
 			const mirror = other.runtime[i];
-			if (mirror === undefined || mirror.output === row.output) continue;
-			versionDifferences.push({
-				kind: "runtime",
-				id: row.id,
-				source: row.source,
-				[primary.version]: row.output,
-				[other.version]: mirror.output,
-			});
+			diff(
+				"runtime",
+				{ id: row.id, source: row.source },
+				row.output,
+				mirror?.output,
+			);
 		}
+		const otherCounts = outerCounts(other.precedence);
+		const otherDerived = precedenceLevels(otherCounts);
+		const otherLevels = otherDerived.levels;
+		diff(
+			"precedenceConformance",
+			{},
+			{ nonConforming, dropped: counts.dropped },
+			{
+				nonConforming: otherDerived.nonConforming,
+				dropped: otherCounts.dropped,
+			},
+		);
 		for (const row of primary.candidates) {
 			const mirror = other.candidates.find((c) => c.token === row.token);
-			if (mirror === undefined || mirror.verdict === row.verdict) continue;
-			versionDifferences.push({
-				kind: "verdict",
-				spelling: row.token,
-				[primary.version]: row.verdict,
-				[other.version]: mirror.verdict,
-			});
+			diff("verdict", { spelling: row.token }, row.verdict, mirror?.verdict);
+			diff(
+				"arities",
+				{ spelling: row.token },
+				row.operatorArities,
+				mirror?.operatorArities,
+			);
+			diff(
+				"highlight",
+				{ spelling: row.token },
+				{
+					class: row.highlight.run?.class ?? null,
+					run: row.highlight.run?.text ?? null,
+				},
+				mirror && {
+					class: mirror.highlight.run?.class ?? null,
+					run: mirror.highlight.run?.text ?? null,
+				},
+			);
+			if (row.verdict !== "operator") continue;
+			diff(
+				"precedence",
+				{ spelling: row.token },
+				levels.get(row.token) ?? null,
+				otherLevels.get(row.token) ?? null,
+			);
+			diff(
+				"associativity",
+				{ spelling: row.token },
+				associativityOf(row.token, primary.precedence),
+				associativityOf(row.token, other.precedence),
+			);
+		}
+		const primaryUnary = unarySummary(primary.unaryPrecedence);
+		const otherUnary = unarySummary(other.unaryPrecedence);
+		for (const [i, row] of primaryUnary.entries())
+			diff("unary", { spelling: row["spelling"] }, row, otherUnary[i]);
+		for (const row of primary.opAxis) {
+			const mirror = other.opAxis.find((c) => c.id === row.id);
+			diff(
+				"opAxis",
+				{ id: row.id, source: row.source },
+				{ il: row.il, head: row.ilHead, arity: row.ilArity },
+				mirror && {
+					il: mirror.il,
+					head: mirror.ilHead,
+					arity: mirror.ilArity,
+				},
+			);
 		}
 	}
 
@@ -295,10 +472,12 @@ export function buildSweep(
 			precedenceNonConforming: nonConforming,
 			precedencePairsDropped: counts.dropped,
 			unaryPrecedenceNotMeasured:
-				"`!` and `any` are prefix-only, so the pair sweep never carries them " +
-				"and they have no measured level.",
+				"`!` and `any` are prefix-only, so the PAIR sweep never carries them " +
+				"and their `precedence` is null. `unary` below measures them " +
+				"separately, against every binary in both orders.",
 		},
 		operators,
+		unary: unarySummary(primary.unaryPrecedence),
 		lowered,
 		notOperators,
 		controls: primary.controls.map((c) => ({
@@ -350,6 +529,22 @@ function lineEndingOf(text: string): string {
 }
 
 /**
+ * A code span safe to put in a markdown table cell.
+ *
+ * A `|` inside backticks still ends the cell — GFM resolves table pipes before
+ * inline code — so `|`, `||` and the IL example containing them have to be
+ * escaped. Missed on the first render, and it split three rows in half.
+ *
+ * The backslash does NOT survive into the rendered output: GFM consumes the
+ * escape and emits a literal `|` inside the code span. Verified against
+ * GitHub's own renderer (`gh api markdown -f mode=gfm`), which turns
+ * `` `\|` `` into `<code>|</code>`.
+ */
+function cell(text: string): string {
+	return `\`${text.replaceAll("|", "\\|")}\``;
+}
+
+/**
  * Render the README's operator tables from `src/explain/operators.ts`.
  *
  * The chain is capture -> fixture -> table -> README, and every link has its own
@@ -363,17 +558,6 @@ function lineEndingOf(text: string): string {
  * Every figure is a counter rather than an assertion, so a regenerated block
  * states a regression instead of quietly contradicting itself (#260).
  */
-/**
- * A code span safe to put in a markdown table cell.
- *
- * A `|` inside backticks still ends the cell — GFM resolves table pipes before
- * inline code — so `|`, `||` and the IL example containing them have to be
- * escaped. Missed on the first render, and it split three rows in half.
- */
-function cell(text: string): string {
-	return `\`${text.replaceAll("|", "\\|")}\``;
-}
-
 export function renderReadmeBlock(): string[] {
 	const operators = routerosOperators();
 	const lowered = loweredSpellings();
@@ -403,8 +587,8 @@ export function renderReadmeBlock(): string[] {
 		`Precedence runs 1 (loosest) to ${byPrecedence.at(-1)?.precedence ?? 0} (tightest), measured over every`,
 		"ordered pair rather than transcribed. `variadic` means the device FLATTENS",
 		"the operator — `(1 + 2 + 3)` is one node with three children, not two nested",
-		"ones. The two prefix-only operators never appear in a pair and so carry no",
-		"measured level.",
+		`ones. The ${prefixOnly.length} prefix-only operators never appear in a pair and so`,
+		"carry no measured level.",
 		"",
 		"Spellings the device reads as something else:",
 		"",
@@ -478,15 +662,27 @@ export async function main(args: readonly string[]): Promise<number> {
 		);
 		return 1;
 	}
-	const captures = paths.map(
-		(path) => JSON.parse(readFileSync(path, "utf8")) as Capture,
-	);
+	const captures = paths.map((path) => readCapture(path));
 	const sweep = buildSweep(captures);
 	const outPath = flagValues(args, "--out")[0] ?? FIXTURE_PATH;
-	const fixture = JSON.parse(readFileSync(outPath, "utf8")) as Record<
-		string,
-		unknown
-	>;
+	// The corpus block belongs to the census, so this script only ever REWRITES
+	// an existing fixture. Saying so beats an ENOENT the operator has to guess
+	// at, since the fix is "run the census first", not "create the file".
+	let fixture: Record<string, unknown>;
+	try {
+		fixture = JSON.parse(readFileSync(outPath, "utf8")) as Record<
+			string,
+			unknown
+		>;
+	} catch (error) {
+		console.error(
+			`::error title=explain operator slice::cannot read ${outPath}: ${String(error)}. ` +
+				"This script rewrites only the `sweep` block, so the fixture must " +
+				"already exist and carry the `corpus` block written by " +
+				"`bun run explain:operator-census --json`.",
+		);
+		return 1;
+	}
 	// The corpus block is the census's, not this script's: rewriting the whole
 	// file would silently drop it and take the README gate's input with it.
 	writeFileSync(

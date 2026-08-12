@@ -95,7 +95,14 @@ export function quoteForParse(src: string): string {
 interface ParseResult {
 	/** The program the row is about. */
 	source: string;
-	/** The exact console command the device received. */
+	/**
+	 * The `:parse` wrapper the device received for this row — the bytes that
+	 * decide what was parsed, including the `\$` escape.
+	 *
+	 * Not the whole console command: batched runs prefix a `:put "#P<i>#"`
+	 * marker statement and join several of these per round-trip. The wrapper
+	 * itself is byte-for-byte what ran.
+	 */
 	deviceSource: string;
 	/** Raw `:put [:parse …]` output. */
 	il: string;
@@ -393,8 +400,13 @@ const PLAUSIBLE_NON_OPERATORS = [
  * way — `(1 $ 2)` is not the question — but leaving them out would let the
  * table imply the sweep considered them. They are swept generically for
  * completeness and answered properly by the op-axis rows below.
+ *
+ * `[` is named here even though {@link CENSUS_HEADS} also carries it (the set
+ * below de-duplicates). Naming it in both is deliberate: this list is the one
+ * that states an INTENT to ask, and a census repin that drops `[` must not
+ * silently stop asking about it.
  */
-const UNDOCUMENTED = ["<%%", "<%", "%%", "$", "]"];
+const UNDOCUMENTED = ["<%%", "<%", "%%", "$", "[", "]"];
 
 /**
  * Heads the corpus IL census saw at least twice, pasted from
@@ -464,7 +476,7 @@ const CONTROLS = [
 	{ id: "no-operator", source: "(1 2)" },
 	{ id: "group", source: "(1)" },
 	{ id: "bogus-word", source: "(1 zzz 2)" },
-	{ id: "bogus-symbol", source: "(1 @@ 2)" },
+	{ id: "bogus-punct", source: "(1 @@ 2)" },
 	{ id: "empty-group", source: "()" },
 ];
 
@@ -557,7 +569,45 @@ const OP_AXIS: { id: string; source: string; note: string }[] = [
 		source: "(.1)",
 		note: "and this is a time literal",
 	},
+	// The rest of the spacing matrix. `(1.2)` and `(.1)` alone show that spacing
+	// matters; they do not show WHERE the boundary is, and a tokenizer has to
+	// decide that for every one of these.
+	{
+		id: "dot-space-right",
+		source: "(1. 2)",
+		note: "digit-dot then space: is `1.` still a literal prefix?",
+	},
+	{
+		id: "dot-space-left",
+		source: "(1 .2)",
+		note: "space then dot-digit: `.2` could re-lex as a time literal",
+	},
+	{
+		id: "dot-space-both",
+		source: "(1 . 2)",
+		note: "the unambiguous concat, as the control for the three above",
+	},
+	{
+		id: "dot-space-strings",
+		source: '("a" . "b")',
+		note: "concat on operands no numeric literal rule can claim",
+	},
 ];
+
+/**
+ * Prefix operators, swept against every binary to place them in the lattice.
+ *
+ * The pair sweep only carries spellings that took two operands, so a prefix
+ * operator never appears in it and honestly has no measured level. That is not
+ * the same as having no level: `(! 1 + 2)` still has to associate one way. Both
+ * orders are asked because one alone cannot tell "binds tighter" from "can only
+ * appear leftmost".
+ *
+ * `~`, `-` and `>` are here too even though they also have binary arities — the
+ * question is about the UNARY reading, and the table stores one precedence per
+ * spelling (the binary one), so this is the only record of the other.
+ */
+const UNARY_PREFIX = ["!", "any", "~", "-", ">"];
 
 /**
  * Runtime rows: what a deferred expression IS, which `:parse` cannot say.
@@ -717,6 +767,7 @@ async function main(): Promise<void> {
 		console.log(
 			`${CANDIDATES.length} candidates x ${CARRIERS.length} carriers, plus ` +
 				`${CONTROLS.length} controls, ${OP_AXIS.length} op-axis rows, ` +
+				`${UNARY_PREFIX.length} prefix operators against every binary, ` +
 				`${RUNTIME.length} runtime rows\n`,
 		);
 
@@ -882,6 +933,58 @@ async function main(): Promise<void> {
 			if (row.a === row.b && row.accepted)
 				console.log(`  ${row.a.padEnd(6)} ${row.il.slice(0, 60)}`);
 
+		// --- unary vs binary: where a prefix operator sits in the same lattice.
+		const unaryPairs: {
+			u: string;
+			b: string;
+			order: string;
+			source: string;
+		}[] = [];
+		for (const u of UNARY_PREFIX)
+			for (const b of binary) {
+				unaryPairs.push({
+					u,
+					b: b.token,
+					order: "prefix-left",
+					source: `(${u} 1 ${b.token} 2)`,
+				});
+				unaryPairs.push({
+					u,
+					b: b.token,
+					order: "prefix-right",
+					source: `(1 ${b.token} ${u} 2)`,
+				});
+			}
+		const unaryResults = await parseMany(
+			chr,
+			unaryPairs.map((p) => p.source),
+		);
+		const unaryPrecedence = unaryPairs.map((pair, i) => {
+			const result = unaryResults[i] as ParseResult;
+			const root = readIlTree(result.il).roots[0];
+			const top = root?.children[0];
+			return {
+				...pair,
+				oracle: "parse" as const,
+				il: result.il,
+				accepted: result.accepted,
+				// The binary being OUTER means the unary bound tighter — the same
+				// reading as the pair sweep, so the two are comparable.
+				outerHead:
+					top !== undefined && typeof top !== "string" ? top.head : null,
+			};
+		});
+		const unaryExceptions = unaryPrecedence.filter(
+			(row) => row.accepted && row.outerHead !== row.b,
+		);
+		console.log(
+			`\nunary vs binary: ${unaryPrecedence.length} probes, ` +
+				`${unaryPrecedence.filter((r) => r.accepted).length} accepted, ` +
+				`${unaryExceptions.length} where the binary was NOT outer`,
+		);
+		for (const row of unaryExceptions.slice(0, 12))
+			console.log(`  ${row.source.padEnd(16)} outer=${row.outerHead ?? "-"}`);
+
 		// --- the op / apply axis.
 		const opResults = await parseMany(
 			chr,
@@ -931,6 +1034,7 @@ async function main(): Promise<void> {
 					controls,
 					candidates: rows,
 					precedence,
+					unaryPrecedence,
 					opAxis,
 					runtime,
 				},

@@ -698,3 +698,4 @@ btrfs # the Linux B-tree filesystem, a `/disk/btrfs/...` menu on RouterOS 7.20+
 arities # plural of arity — the operand counts an operator accepted, which is what separates `(> 1)` (deferred expression) from `(2 > 1)` (comparison)
 typeofvalue # RouterOS IL renders `[:typeof $x]` as `/typeofvalue=$x` — the directive and its argument name run together with no separator
 juxt # short for juxtaposition — the unnamed ` (  a b)` node RouterOS builds for space-separated paren contents; used in ids like `any-juxt`
+punct # short for punctuation — the shape class for a candidate spelling made of symbol bytes, as opposed to a word; used in the `bogus-punct` control id

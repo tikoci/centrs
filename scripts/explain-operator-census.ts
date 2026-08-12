@@ -306,8 +306,14 @@ function renderMarkdown(result: OperatorCensus): string {
 			const perVersion = versions.map(
 				(v) => result.headVersions[`${head}|${v}`] ?? 0,
 			);
+			// A `|` inside a code span still ends a GFM table cell, and IL carries
+			// unquoted string content into head position — `num|str` and
+			// `2[0-4]|[01]` are both real heads here. Unescaped, those rows grow
+			// extra columns and shift `shape`, `scripts` and `occurrences` sideways
+			// in the CI job summary this renders into.
+			const cell = head.replaceAll("|", "\\|");
 			return (
-				`| \`${head}\` | ${result.headShapes[head]} | ${result.headScripts[head] ?? 0} ` +
+				`| \`${cell}\` | ${result.headShapes[head]} | ${result.headScripts[head] ?? 0} ` +
 				`| ${result.headOccurrences[head] ?? 0} | ${aritiesOf(result, head).join(",")} ` +
 				`| ${perVersion.join(" | ")} |`
 			);
@@ -421,6 +427,18 @@ export async function main(args: readonly string[]): Promise<number> {
 	const result = census(rows, sourceScripts);
 
 	if (args.includes("--check")) {
+		// A gate cannot pass on an unstated premise. `resolveCorpusDb` prefers a
+		// sibling checkout over the pinned cache and only WARNS when it is not the
+		// pin, so without this a green "matches the committed fixture" could have
+		// been measured against a corpus nobody else has.
+		if (resolution.warning) {
+			console.error(
+				"::error title=explain operator census::refusing to check against a " +
+					"corpus that is not the pinned snapshot — the result would not be " +
+					"comparable to CI's.",
+			);
+			return 1;
+		}
 		const drift = diffAgainstFixture(result, readFixtureCensus());
 		if (drift.length > 0) {
 			console.error(
