@@ -1016,6 +1016,19 @@ That is the difference — an accepted flag must do something observable.
 
 ## MCP and library surfaces
 
+- **The cross-project handoff is the structure layer, not the token layer.**
+  `explain`'s data is three layers: byte ranges and their classes
+  (`spans`, and `tokens` when #264 lands) — centrs-owned, and nothing outside
+  centrs consumes them; the resolved reading (`structure`, `symbols`,
+  `values`) — path, verb, argument names, value spans; and doc/version
+  enrichment, which is rosetta's (#175). A consumer that wants enrichment takes
+  the **middle** layer: given `{path, verb, args}` plus a version it does its
+  own lookups, whereas handing it tokens would make it re-derive from bytes a
+  path centrs already resolved. So #223 is a decision about the structure
+  layer, and the token vocabulary (#264) is deliberately outside its scope —
+  the two do not need to be sequenced against each other. The same split says
+  where a schema-shaped gap belongs: the per-path argument list `catalog.ts`
+  refuses to be is enrichment, not lexing.
 - `centrs_explain` today wraps `canonicalizeExecuteCommand` (offline, no CDB —
   the only tool that serves without one). It grows toward this spec
   **following the CLI scheme** (decision): same facets, same envelope-shaped

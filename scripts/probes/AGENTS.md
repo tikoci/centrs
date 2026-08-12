@@ -43,6 +43,15 @@ that lands under `test/fixtures/` is durable.
   fix, and the resolver announces which snapshot's bytes were measured.
 - **A replay must reject an empty input set.** Printing `0/0 agree` is not a
   successful replay and must not look like one.
+- **A replay must be able to obtain its input in a clone.** Recordings are
+  in-flight by design, so a replay whose recording is not committed must name
+  the promoted capture probe that regenerates it and fail with that command.
+  `explain-symbol-arms-score.ts` closes that loop ("run
+  `bun run explain:probe:highlight-recapture`"); the K2/K3 replays do **not** —
+  they name a `.scratch/` glob no clone can produce, and their capture probes
+  were never promoted (#272). Promoting a replay without a path back to its
+  input moves the unreachable citation into a committed source header, which
+  reads as a reproducible method and is not one.
 - **An abstention is not a disagreement.** Report decided agreements,
   deliberate abstentions, and wrong assertions separately; a scorer that
   turns the product's fail-closed answer red cannot measure the product.

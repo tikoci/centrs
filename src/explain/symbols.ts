@@ -27,6 +27,17 @@
  *     local, and telling a real field from a typo needs the menu schema, so
  *     S8 abstains.
  *
+ * **The three causes are not one gap, and this abstention is not permanent.**
+ * An operator keyword is purely lexical — and device-grounded, since `not` and
+ * `..` class `variable-undefined` while a doc-derived operator list would call
+ * them operators (#255) — so closing that cause needs no schema. A menu field
+ * and a bare query flag both need a per-path argument list, which `catalog.ts`
+ * deliberately is not ("never what a command accepts"); those are
+ * schema-shaped holes, closable by an enriched caller without a router. What
+ * genuinely requires a live device is narrower than the abstention: a
+ * `:global` persisted from a previous console session. Do not read `cls: null`
+ * here as "undefined is unreachable offline" (#263).
+ *
  * Spans are **analyzed-byte offsets** (half-open), like `segment.ts` and the
  * coordinate contract (#188): the ASCII normalization is byte-count-preserving,
  * so an occurrence offset is also its offset in the device's highlight byte
