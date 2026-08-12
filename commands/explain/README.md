@@ -1199,8 +1199,22 @@ And the grounded complement — asked, and refused:
 | `]` | rejected |
 <!-- END GENERATED operator-table -->
 
-None of this emits a span yet. `src/explain/operators.ts` is data plus
-accessors; the operator fill for `data.tokens[]` is #264's B2 and the
+  <!-- BEGIN GENERATED token-census — regenerate with `bun run explain:token-census:readme` -->
+  The token census is re-derivable with `bun run explain:token-census` and
+  covers 948 source scripts. The figures below are generated from
+  `test/fixtures/explain/tokens.json` → `corpus` by
+  `bun run explain:token-census:readme` and gated against it by
+  `bun run explain:token-census:readme:check`; the fixture itself is gated
+  against a fresh corpus run by `bun run explain:token-census:check`. Of
+  1,426,731 analyzed bytes, 391,474 are classified (27.44%), the remaining
+  1,035,257 are `unclassified`. The census emits 46,580 tokens (avg 49.1 per
+  script). Every byte belongs to exactly one token — sorted by `start`, no
+  gaps, no overlaps, `join(slice) === input` — and the `class` field is
+  provisional until #264 B5. Each B2 fill should move the classified
+  percentage.
+  <!-- END GENERATED token-census -->
+
+B1's `data.tokens[]` is live behind `--tokens` — a total, gapless byte partition whose `class` is provisional until #264 B5 (every unclaimed byte is `unclassified`). `src/explain/operators.ts` is still data plus accessors; the operator fill for that partition is #264's B2 and the
 `centrs → highlight` projection is B4, and both read this table rather than
 re-deriving it.
 

@@ -158,14 +158,17 @@ jobs:
   #
   # What gates here (#260): the FETCH — a hash mismatch is a hard failure, or
   # the pin is decorative — the VALUE census against the committed `corpus`
-  # block of test/fixtures/explain/values.json, and the OPERATOR IL-head census
-  # against the same block of test/fixtures/explain/operators.json (#255). That
-  # is the reachability this job was built to provide. The genre census still
-  # only reports: it has no committed fixture to be asserted against.
+  # block of test/fixtures/explain/values.json, the OPERATOR IL-head census
+  # against the same block of test/fixtures/explain/operators.json (#255), and
+  # the TOKEN partition census against `test/fixtures/explain/tokens.json` →
+  # `corpus` (#289 B1). That is the reachability this job was built to provide.
+  # The genre census still only reports: it has no committed fixture to be
+  # asserted against.
   #
   # The other half of #260 needs no corpus and is not here: the README figures
   # are a generated projection of that same fixture, gated by
-  # `explain:value-census:readme:check` inside `lint:ci`.
+  # `explain:value-census:readme:check` and `explain:token-census:readme:check`
+  # inside `lint:ci`.
   corpus:
     name: Corpus census
     needs: [checks]
@@ -218,6 +221,12 @@ jobs:
             echo '```'
             bun run explain:operator-census 2>&1
             echo '```'
+            echo
+            echo "### Token partition census"
+            echo
+            echo '```'
+            bun run explain:token-census 2>&1
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       # After the summary, so a drifted run still publishes its figures — the
       # numbers are what tells you whether the drift is an intended emission
@@ -226,6 +235,8 @@ jobs:
         run: bun run explain:value-census:check
       - name: Operator census matches the committed fixture
         run: bun run explain:operator-census:check
+      - name: Token partition census matches the committed fixture
+        run: bun run explain:token-census:check
 
   chr-smoke:
     name: CHR smoke (stable)
