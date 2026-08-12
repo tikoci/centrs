@@ -5,17 +5,19 @@ validator rejects the command before RouterOS executes it.
 
 ## Context keys
 
-All validation/unknown-attribute sites emit a structured `error.context`
-so callers can surface the offending name without parsing the summary.
+Context keys vary by validation mechanism — callers must not assume every
+key below is present on every `validation/unknown-attribute` rejection.
+The inspect-gated paths (`/console/inspect` + `:parse`) emit the full
+structured shape; the console `:parse`-only path emits a lighter shape.
 
 | Key | Type | Notes |
 | --- | ---- | ----- |
-| `parameter` | `string` | Offending attribute name — `missing[0]` (first missing). Always present on validation/unknown-attribute. |
-| `requestedAttributes` | `string[]` | Full requested attribute/argument list supplied by the caller. |
-| `availableAttributes` | `string[]` | Attributes the path/verb exposes per `/console/inspect`. |
-| `path` | `string` | Slash-prefixed RouterOS path (e.g. `/ip/address`). |
-| `verb` | `string` | Verb when applicable (`print`, `add`, `set`, …). Absent on retrieve (path-only). |
-| `validationSource` | `string` | Inspect provenance (e.g. `/console/inspect request=child+completion`, `:put [:parse] + /console/inspect`). |
+| `parameter` | `string` | Offending attribute name — `missing[0]` (first missing). Always present on the inspect-gated `validation/unknown-attribute` path; console `:parse` siblings use `command`/`detail`/`position` instead. |
+| `requestedAttributes` | `string[]` | Full requested attribute/argument list supplied by the caller. Inspect-gated only. |
+| `availableAttributes` | `string[]` | Attributes the path/verb exposes per `/console/inspect`. Inspect-gated only. |
+| `path` | `string` | Slash-prefixed RouterOS path (e.g. `/ip/address`). Inspect-gated only. |
+| `verb` | `string` | Verb when applicable (`print`, `add`, `set`, …). Absent on retrieve (path-only). Inspect-gated only. |
+| `validationSource` | `string` | Inspect provenance (e.g. `/console/inspect request=child+completion`, `:put [:parse] + /console/inspect`). Inspect-gated only. |
 
 Provenance:
 
