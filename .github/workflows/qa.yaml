@@ -165,7 +165,7 @@ jobs:
             echo "Drift report already present in summary (from check step); skipping duplicate."
           else
             {
-              echo "No structured drift file found. This is a REPORT, not a gate."
+              echo "No structured drift report was produced. This is a REPORT, not a gate."
               echo "Run \`bun run explain:catalog\` and review \`git diff src/explain/catalog.ts\`."
             } >> "$GITHUB_STEP_SUMMARY"
           fi

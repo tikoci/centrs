@@ -1,23 +1,28 @@
 # `validation/unknown-attribute`
 
-An attribute is not valid for the path/verb per /console/inspect. The
-validator rejects the command before RouterOS executes it.
+An attribute or argument is not valid for the requested RouterOS operation.
+The validator rejects the request before RouterOS executes it.
 
 ## Context keys
 
-Context keys vary by validation mechanism — callers must not assume every
-key below is present on every `validation/unknown-attribute` rejection.
-The inspect-gated paths (`/console/inspect` + `:parse`) emit the full
-structured shape; the console `:parse`-only path emits a lighter shape.
+Context keys vary by validation mechanism. Callers must not assume every key
+below is present on every `validation/unknown-attribute` rejection.
 
 | Key | Type | Notes |
 | --- | ---- | ----- |
-| `parameter` | `string` | Offending attribute name — `missing[0]` (first missing). Always present on the inspect-gated `validation/unknown-attribute` path; console `:parse` siblings use `command`/`detail`/`position` instead. |
-| `requestedAttributes` | `string[]` | Full requested attribute/argument list supplied by the caller. Inspect-gated only. |
-| `availableAttributes` | `string[]` | Attributes the path/verb exposes per `/console/inspect`. Inspect-gated only. |
-| `path` | `string` | Slash-prefixed RouterOS path (e.g. `/ip/address`). Inspect-gated only. |
-| `verb` | `string` | Verb when applicable (`print`, `add`, `set`, …). Absent on retrieve (path-only). Inspect-gated only. |
-| `validationSource` | `string` | Inspect provenance (e.g. `/console/inspect request=child+completion`, `:put [:parse] + /console/inspect`). Inspect-gated only. |
+| `parameter` | `string` | First offending name. Present on retrieve and inspect-gated rejections, and on console `:parse` when RouterOS reports `bad parameter <name>`. |
+| `requestedAttributes` | `string[]` | Full requested name list. Retrieve and inspect-gated API/execute validation only. |
+| `availableAttributes` | `string[]` | Names exposed for the path/verb. Retrieve and inspect-gated API/execute validation only. |
+| `path` | `string` | Slash-prefixed RouterOS path (for example `/ip/address`). Retrieve and inspect-gated API/execute validation only. |
+| `verb` | `string` | Verb when applicable (`print`, `add`, `set`, …). Inspect-gated API/execute validation only; retrieve is path-only. |
+| `validationSource` | `string` | Validation provenance. Inspect-gated API/execute and console `:parse` only; retrieve does not currently emit it. |
+| `command` | `string` | Original CLI command. Console `:parse` only. |
+| `detail` | `string` | Raw RouterOS parse diagnostic. Console `:parse` only. |
+
+Console `:parse` may also put RouterOS' byte location in the top-level
+`error.position` field. On older RouterOS versions, an unknown name can produce
+only a generic syntax diagnostic; that is reported as `validation/syntax`
+because no parameter identity is available.
 
 Provenance:
 
@@ -29,7 +34,9 @@ Provenance:
 
 ## Fix
 
-Check the attribute name against `/console/inspect`, or use
-`--list-attributes` to inspect the available properties first. Use
-`--validate=false` only when intentionally probing an undocumented
-RouterOS edge.
+For `retrieve` and inspect-gated API/execute validation, check the name against
+`/console/inspect`; `retrieve --list-attributes` lists the available properties.
+For console `:parse`, compare `context.parameter` with the RouterOS parameters
+for `context.command`; `context.detail` preserves the device's raw diagnostic.
+Use `--validate=false` only when intentionally probing an undocumented RouterOS
+edge.
