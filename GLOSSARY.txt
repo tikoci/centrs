@@ -684,4 +684,12 @@ unioned # of the two sources: merged with per-entry provenance rather than flatt
 unioning # the act of the above
 greppable # of a generated table: one entry per line, so `grep` finds a path
 apos # the `&apos;` XML entity, decoded by the CLI-Reference parser
+
+# #285 CLI-Reference reshape vocabulary: the second published inventory, and the
+# gate values on the paths that publish twice.
+llms # `llms.txt` — MikroTik's published page inventory; the only one listing the `<dir>/<basename>` leaf a branching menu's own entry lives on, so discovery is the union of it and the sitemap
+musicswitch # syscap gate: the Marvell-era switch-chip menu shape — one half of the `/interface/ethernet/switch` pair published under two gates
+rbswitch # syscap gate: the RouterBOARD switch-chip menu shape — the other half of that pair
+prestera # Marvell Prestera switch chip — named in the `crs_prestera` syscap gate on `/interface/ethernet/switch/qos`
+xfrm # `/interface/xfrm` — the IPsec transform interface, and the one published path with no gate anywhere in its ancestry to explain its absence from a CHR tree
 btrfs # the Linux B-tree filesystem, a `/disk/btrfs/...` menu on RouterOS 7.20+

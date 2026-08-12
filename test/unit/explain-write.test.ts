@@ -238,11 +238,20 @@ describe("explain/write — finding 2: fail closed where input is discarded", ()
 	 * unconfirmed-nav fallback and instead arrives with V4 ambiguity. Clearing it
 	 * would be a false negative on a curated write verb, so it abstains — Q14's
 	 * rule (b) enforced at the rollup.
+	 *
+	 * This read `/interface\nreset-counters` until #285. The corrected
+	 * CLI-Reference inventory publishes `/interface/reset-counters` as a Command,
+	 * and the pinned trees carry it too, so the catalog now RESOLVES that head and
+	 * the document is a confirmed write — the abstention there was a false
+	 * negative the larger table fixed. `reset` is the same shape with the path
+	 * still in neither table, which is the case under test.
 	 */
 	test("a bare-word head abstains rather than clearing the document", () => {
-		const got = containsWrite("/interface\nreset-counters");
+		const got = containsWrite("/interface\nreset");
 		expect(got.verdict).toBe("unknown");
 		expect(got.blockers.map((b) => b.klass)).toEqual(["ambiguous"]);
+		// The catalog decides it once the path IS published.
+		expect(containsWrite("/interface\nreset-counters").verdict).toBe("true");
 	});
 
 	/**
@@ -396,9 +405,14 @@ describe("explain/write — the published command axis (#228)", () => {
 		expect(python.occurrences.map((o) => o.verb)).toEqual([null, null]);
 	});
 
-	/** Both tables are floors: absence from them is still not evidence. */
+	/**
+	 * Both tables are floors: absence from them is still not evidence.
+	 *
+	 * `/interface/reset` is the anchor since #285 — `/interface/reset-counters`,
+	 * which this used to use, is now published and therefore decided.
+	 */
 	test("a path in neither table is unchanged", () => {
-		const got = containsWrite("/interface\nreset-counters");
+		const got = containsWrite("/interface\nreset");
 		expect(got.verdict).toBe("unknown");
 		expect(got.blockers.map((b) => b.klass)).toEqual(["ambiguous"]);
 	});

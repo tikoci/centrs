@@ -9,9 +9,9 @@
  * Union of two first-order sources (#228):
  *
  * 1. MikroTik's published CLI Reference (`https://manual.mikrotik.com/docs/cli-reference/`),
- *    228 pages, 1,051 entries — first-order about the definition
- *    structs and their build-time gates, but published in the definition-module
- *    spelling rather than the CLI spelling.
+ *    1,070 pages, 1,077 entries — first-order about the definition
+ *    structs and their build-time gates. Since #285 every page is a leaf whose
+ *    slug is the CLI path, so no spelling has to be rewritten to be looked up.
  * 2. Four pinned restraml `/console/inspect` trees
  *    (`https://tikoci.github.io/restraml/`) — first-order about the CLI surface:
  *
@@ -24,12 +24,15 @@
  *
  * | Kind | Total | `both` | `inspect` | `published` |
  * | ---- | ----- | ------ | --------- | ----------- |
- * | `menu` | 563 | 436 | 73 | 54 |
- * | `command` | 439 | 383 | 0 | 56 |
- * | `settings` | 117 | 106 | 0 | 11 |
+ * | `menu` | 558 | 454 | 54 | 50 |
+ * | `command` | 450 | 407 | 0 | 43 |
+ * | `settings` | 116 | 107 | 0 | 9 |
  *
- * Zero kind contradictions between the two sources. Generation aborts if that
- * ever stops holding, rather than picking a winner.
+ * Zero navigation-vs-command contradictions between the two sources. Generation
+ * aborts if that ever stops holding, rather than picking a winner. Where a path
+ * is published twice as a container under different hardware gates — the seven
+ * `/interface/ethernet/switch` and `/system/health` variants — the row records
+ * what the occurrences agree on.
  *
  * **This table is not a schema.** It says what a path IS — navigation, an
  * executable command, or a settings menu — and never what a command accepts.
@@ -42,8 +45,9 @@
  *
  * **Gates conjoin down a path, so read them with {@link effectiveGates}, not
  * row by row.** A row states only what the publication stated at that entry.
- * Row-wise, 46 published-only paths look ungated; ancestry-aware,
- * only 7 carry no published explanation for their absence at all.
+ * Read row-wise, 2 published-only paths look ungated; read with
+ * ancestry, the residue carrying no published explanation for its absence at
+ * all is 1.
  *
  * Tree COMMANDS are not enumerated — those are the generic CRUD leaves
  * `verbs.ts` already owns. The command rows here are the published,
@@ -83,18 +87,18 @@ export interface CatalogEntry {
  * `path|kind|provenance|package|conditions|syscap` — with trailing empty
  * columns trimmed. Lower-cased, slash-led and sorted by path.
  *
- * Text rather than ~1,119 object literals so that one path is one line in a
+ * Text rather than ~1,124 object literals so that one path is one line in a
  * review diff, and so the formatter has nothing to re-wrap.
  */
 const ROWS = `
 /app|menu|both|container||app
-/app/cleanup|command|both|container
-/app/network|menu|both|container
-/app/remove|command|both|container
-/app/restart|command|both|container
-/app/settings|settings|both|container
-/app/setup|command|both|container
-/app/update|command|both|container
+/app/cleanup|command|both|container||app
+/app/network|menu|both|container||app
+/app/remove|command|both|container||app
+/app/restart|command|both|container||app
+/app/settings|settings|both|container||app
+/app/setup|command|both|container||app
+/app/update|command|both|container||app
 /beep|command|both
 /blink|command|both||!i386
 /caps-man|menu|inspect
@@ -123,6 +127,7 @@ const ROWS = `
 /caps-man/remote-cap/upgrade|command|both|wireless-rep
 /caps-man/security|menu|both|wireless-rep
 /certificate|menu|both
+/certificate/acme-renew|command|both
 /certificate/add-acme|command|both
 /certificate/add-scep|command|both
 /certificate/builtin|menu|both
@@ -147,8 +152,6 @@ const ROWS = `
 /certificate/settings|settings|both
 /certificate/sign|command|both
 /certificate/sign-certificate-request|command|both
-/colon/root|menu|published||CONSOLE_DEBUG
-/colon/root/terminal|menu|published
 /console|menu|both
 /console/inspect|command|both
 /console/settings|settings|both
@@ -161,6 +164,7 @@ const ROWS = `
 /container/mounts|menu|both|container
 /container/repull|command|both|container
 /container/restart|command|both|container
+/container/save|command|both|container
 /container/start|command|both|container
 /container/stop|command|both|container
 /container/update|command|both|container
@@ -168,15 +172,15 @@ const ROWS = `
 /disk/blink|command|both||!smips
 /disk/btrfs|menu|both||!smips|storage
 /disk/btrfs/filesystem|menu|both||!smips|storage
-/disk/btrfs/filesystem/add-device|command|both||!smips
-/disk/btrfs/filesystem/balance-cancel|command|both||!smips
-/disk/btrfs/filesystem/balance-start|command|both||!smips
-/disk/btrfs/filesystem/remove-device|command|both||!smips
-/disk/btrfs/filesystem/replace-cancel|command|both||!smips
-/disk/btrfs/filesystem/replace-device|command|both||!smips
-/disk/btrfs/filesystem/reset-counters|command|both||!smips
-/disk/btrfs/filesystem/scrub-cancel|command|both||!smips
-/disk/btrfs/filesystem/scrub-start|command|both||!smips
+/disk/btrfs/filesystem/add-device|command|both||!smips|storage
+/disk/btrfs/filesystem/balance-cancel|command|both||!smips|storage
+/disk/btrfs/filesystem/balance-start|command|both||!smips|storage
+/disk/btrfs/filesystem/remove-device|command|both||!smips|storage
+/disk/btrfs/filesystem/replace-cancel|command|both||!smips|storage
+/disk/btrfs/filesystem/replace-device|command|both||!smips|storage
+/disk/btrfs/filesystem/reset-counters|command|both||!smips|storage
+/disk/btrfs/filesystem/scrub-cancel|command|both||!smips|storage
+/disk/btrfs/filesystem/scrub-start|command|both||!smips|storage
 /disk/btrfs/subvolume|menu|both||!smips|storage
 /disk/btrfs/transfer|menu|both||!smips|storage
 /disk/check|command|both||!smips|storage
@@ -220,13 +224,18 @@ const ROWS = `
 /dude/settings|settings|both|dude
 /dude/vacuum-db|command|both|dude
 /environment|menu|both
-/file|menu|inspect
+/file|menu|both
+/file/copy|command|both
+/file/head|command|both
+/file/read|command|both
 /file/rsync-daemon|settings|both|rose-storage
 /file/sync|menu|both|rose-storage
 /file/sync/monitor|command|both|rose-storage
+/file/tail|command|both
 /import|command|both
-/interface|menu|inspect
-/interface/6to4|menu|both|ipv6
+/interface|menu|both
+/interface/6to4|menu|both
+/interface/blink|command|both
 /interface/bonding|menu|both
 /interface/bonding/monitor|command|both
 /interface/bonding/monitor-slaves|command|both
@@ -270,76 +279,73 @@ const ROWS = `
 /interface/dot1x/server/active|menu|both||!smips
 /interface/dot1x/server/state|menu|both||!smips
 /interface/eoip|menu|both
-/interface/eoipv6|menu|both|ipv6
+/interface/eoipv6|menu|both
 /interface/ethernet|menu|both||i386
 /interface/ethernet/blink|command|both
 /interface/ethernet/cable-test|command|both
 /interface/ethernet/monitor|command|both||i386
 /interface/ethernet/poe|menu|published|||(poe or poe-in)
-/interface/ethernet/poe/monitor|command|published
-/interface/ethernet/poe/power-cycle|command|published|||poe
-/interface/ethernet/poe/settings|settings|published|||poesettings
+/interface/ethernet/poe/monitor|command|published|||(poe or poe-in)
+/interface/ethernet/poe/power-cycle|command|published|||(poe or poe-in)
+/interface/ethernet/poe/settings|settings|published|||(poe or poe-in) and poesettings
 /interface/ethernet/reset-counters|command|both
 /interface/ethernet/reset-mac-address|command|both
-/interface/ethernet/switch|menu|both||!smips|multiswitch
-/interface/ethernet/switch/acl|menu|published
-/interface/ethernet/switch/acl/policer|menu|published
-/interface/ethernet/switch/dscp-qos-map|menu|published
-/interface/ethernet/switch/dscp-to-dscp|menu|published
-/interface/ethernet/switch/egress-vlan-tag|menu|published
-/interface/ethernet/switch/egress-vlan-translation|menu|published
-/interface/ethernet/switch/host|menu|both|||oldswitch
-/interface/ethernet/switch/ingress-port-policer|menu|published
-/interface/ethernet/switch/ingress-vlan-translation|menu|published
-/interface/ethernet/switch/l3hw-settings|settings|published|||crs_prestera
-/interface/ethernet/switch/l3hw-settings/advanced|settings|published|||crs_prestera
-/interface/ethernet/switch/l3hw-settings/advanced/monitor|command|published
-/interface/ethernet/switch/l3hw-settings/monitor|command|published
-/interface/ethernet/switch/mac-based-vlan|menu|published
-/interface/ethernet/switch/multicast-fdb|menu|published
-/interface/ethernet/switch/one2one-vlan-switching|menu|published
-/interface/ethernet/switch/policer-qos-map|menu|published
+/interface/ethernet/switch|menu|both
+/interface/ethernet/switch/acl|menu|published|||musicswitch
+/interface/ethernet/switch/acl/policer|menu|published|||musicswitch
+/interface/ethernet/switch/dscp-qos-map|menu|published|||musicswitch
+/interface/ethernet/switch/dscp-to-dscp|menu|published|||musicswitch
+/interface/ethernet/switch/egress-vlan-tag|menu|published|||musicswitch
+/interface/ethernet/switch/egress-vlan-translation|menu|published|||musicswitch
+/interface/ethernet/switch/host|menu|both|||rbswitch and oldswitch
+/interface/ethernet/switch/ingress-port-policer|menu|published|||musicswitch
+/interface/ethernet/switch/ingress-vlan-translation|menu|published|||musicswitch
+/interface/ethernet/switch/l3hw-settings|settings|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/l3hw-settings/advanced|settings|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/l3hw-settings/advanced/monitor|command|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/l3hw-settings/monitor|command|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/mac-based-vlan|menu|published|||musicswitch
+/interface/ethernet/switch/multicast-fdb|menu|published|||musicswitch
+/interface/ethernet/switch/one2one-vlan-switching|menu|published|||musicswitch
+/interface/ethernet/switch/policer-qos-map|menu|published|||musicswitch
 /interface/ethernet/switch/port|menu|both
 /interface/ethernet/switch/port-isolation|menu|both
-/interface/ethernet/switch/port-leakage|menu|published
+/interface/ethernet/switch/port-leakage|menu|published|||musicswitch
 /interface/ethernet/switch/port/reset-counters|command|both
-/interface/ethernet/switch/prbs/reset-prbs|command|published
-/interface/ethernet/switch/prbs/start-prbs|command|published
-/interface/ethernet/switch/prbs/stop-prbs|command|published
-/interface/ethernet/switch/protocol-based-vlan|menu|published
-/interface/ethernet/switch/qos|menu|published|||crs_prestera
-/interface/ethernet/switch/qos-group|menu|published
-/interface/ethernet/switch/qos/map|menu|published|||crs_prestera
-/interface/ethernet/switch/qos/map/ip|menu|published|||crs_prestera
-/interface/ethernet/switch/qos/map/vlan|menu|published|||crs_prestera
-/interface/ethernet/switch/qos/monitor|command|published
-/interface/ethernet/switch/qos/port|menu|published
-/interface/ethernet/switch/qos/port/reset-counters|command|published
-/interface/ethernet/switch/qos/priority-flow-control|menu|published|||!prestera-ac3
-/interface/ethernet/switch/qos/profile|menu|published|||crs_prestera
-/interface/ethernet/switch/qos/settings|settings|published
-/interface/ethernet/switch/qos/tx-manager|menu|published|||crs_prestera
-/interface/ethernet/switch/qos/tx-manager/queue|menu|published|||crs_prestera
-/interface/ethernet/switch/reserved-fdb|menu|published
-/interface/ethernet/switch/reset-counters|command|both||!smips
-/interface/ethernet/switch/rule|menu|both
-/interface/ethernet/switch/shaper|menu|published
-/interface/ethernet/switch/stats|settings|published||!smips
-/interface/ethernet/switch/trunk|menu|published
-/interface/ethernet/switch/unicast-fdb|menu|published
-/interface/ethernet/switch/unicast-fdb/flush|command|published
+/interface/ethernet/switch/protocol-based-vlan|menu|published|||musicswitch
+/interface/ethernet/switch/qos|menu|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/qos-group|menu|published|||musicswitch
+/interface/ethernet/switch/qos/map|menu|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/qos/map/ip|menu|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/qos/map/vlan|menu|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/qos/monitor|command|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/qos/port|menu|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/qos/port/reset-counters|command|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/qos/priority-flow-control|menu|published|||rbswitch and crs_prestera and !prestera-ac3
+/interface/ethernet/switch/qos/profile|menu|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/qos/settings|settings|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/qos/tx-manager|menu|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/qos/tx-manager/queue|menu|published|||rbswitch and crs_prestera
+/interface/ethernet/switch/reserved-fdb|menu|published|||musicswitch
+/interface/ethernet/switch/reset-counters|command|both
+/interface/ethernet/switch/rule|menu|both|||rbswitch
+/interface/ethernet/switch/shaper|menu|published|||musicswitch
+/interface/ethernet/switch/stats|settings|published||!smips|musicswitch
+/interface/ethernet/switch/trunk|menu|published|||musicswitch
+/interface/ethernet/switch/unicast-fdb|menu|published|||musicswitch
+/interface/ethernet/switch/unicast-fdb/flush|command|published|||musicswitch
 /interface/ethernet/switch/vlan|menu|both
 /interface/gre|menu|both
-/interface/gre6|menu|both|ipv6
+/interface/gre6|menu|both
 /interface/ipip|menu|both
-/interface/ipipv6|menu|both|ipv6
-/interface/l2tp-client|menu|both|ppp
-/interface/l2tp-client/monitor|command|both|ppp
-/interface/l2tp-ether|menu|both|ppp
-/interface/l2tp-ether/monitor|command|both|ppp
-/interface/l2tp-server|menu|both|ppp
-/interface/l2tp-server/monitor|command|both|ppp
-/interface/l2tp-server/server|settings|both|ppp
+/interface/ipipv6|menu|both
+/interface/l2tp-client|menu|both
+/interface/l2tp-client/monitor|command|both
+/interface/l2tp-ether|menu|both
+/interface/l2tp-ether/monitor|command|both
+/interface/l2tp-server|menu|both
+/interface/l2tp-server/monitor|command|both
+/interface/l2tp-server/server|settings|both
 /interface/list|menu|both
 /interface/list/member|menu|both
 /interface/lte|menu|both||!smips
@@ -357,6 +363,7 @@ const ROWS = `
 /interface/lte/esim/set-nickname|command|both||!smips
 /interface/lte/firmware-upgrade|command|both||!smips
 /interface/lte/monitor|command|both||!smips
+/interface/lte/run-modem-update|command|published||!smips
 /interface/lte/scan|command|both||!smips
 /interface/lte/settings|settings|both||!smips, !i386, !mips, !powerpc
 /interface/lte/show-capabilities|command|both||!smips
@@ -368,46 +375,48 @@ const ROWS = `
 /interface/mesh/fdb|menu|both
 /interface/mesh/port|menu|both
 /interface/mesh/traceroute|command|both
-/interface/ovpn-client|menu|both|ppp
-/interface/ovpn-client/import-ovpn-configuration|command|both|ppp
-/interface/ovpn-client/monitor|command|both|ppp
-/interface/ovpn-server|menu|both|ppp
-/interface/ovpn-server/monitor|command|both|ppp
-/interface/ovpn-server/server|menu|both|ppp
-/interface/ovpn-server/server/export-client-configuration|command|both|ppp
-/interface/ppp-client|menu|both|ppp
-/interface/ppp-client/at-chat|command|both|ppp
-/interface/ppp-client/firmware-upgrade|command|both|ppp
-/interface/ppp-client/info|command|both|ppp
-/interface/ppp-client/monitor|command|both|ppp
-/interface/ppp-client/scan|command|both|ppp
-/interface/ppp-server|menu|both|ppp
-/interface/ppp-server/monitor|command|both|ppp
-/interface/pppoe-client|menu|both|ppp
-/interface/pppoe-client/monitor|command|both|ppp
-/interface/pppoe-client/scan|command|both|ppp
-/interface/pppoe-server|menu|both|ppp
-/interface/pppoe-server/monitor|command|both|ppp
-/interface/pppoe-server/server|menu|both|ppp
-/interface/pptp-client|menu|both|ppp
-/interface/pptp-client/monitor|command|both|ppp
-/interface/pptp-server|menu|both|ppp
-/interface/pptp-server/monitor|command|both|ppp
-/interface/pptp-server/server|settings|both|ppp
-/interface/pwr-link/pwr-line|menu|published|||pwrlink
-/interface/pwr-link/pwr-line/blink|command|published
-/interface/pwr-link/pwr-line/configure|command|published
-/interface/pwr-link/pwr-line/join|command|published
-/interface/pwr-link/pwr-line/leave|command|published
-/interface/pwr-link/pwr-line/monitor|command|published
-/interface/pwr-link/pwr-line/reset-counters|command|published
-/interface/pwr-link/pwr-line/reset-mac-address|command|published
-/interface/pwr-link/pwr-line/upgrade-firmware|command|published
-/interface/sstp-client|menu|both|ppp
-/interface/sstp-client/monitor|command|both|ppp
-/interface/sstp-server|menu|both|ppp
-/interface/sstp-server/monitor|command|both|ppp
-/interface/sstp-server/server|settings|both|ppp
+/interface/monitor-traffic|command|both
+/interface/ovpn-client|menu|both
+/interface/ovpn-client/import-ovpn-configuration|command|both
+/interface/ovpn-client/monitor|command|both
+/interface/ovpn-server|menu|both
+/interface/ovpn-server/monitor|command|both
+/interface/ovpn-server/server|menu|both
+/interface/ovpn-server/server/export-client-configuration|command|both
+/interface/ppp-client|menu|both
+/interface/ppp-client/at-chat|command|both
+/interface/ppp-client/firmware-upgrade|command|both
+/interface/ppp-client/info|command|both
+/interface/ppp-client/monitor|command|both
+/interface/ppp-client/scan|command|both
+/interface/ppp-server|menu|both
+/interface/ppp-server/monitor|command|both
+/interface/pppoe-client|menu|both
+/interface/pppoe-client/monitor|command|both
+/interface/pppoe-client/scan|command|both
+/interface/pppoe-server|menu|both
+/interface/pppoe-server/monitor|command|both
+/interface/pppoe-server/server|menu|both
+/interface/pptp-client|menu|both
+/interface/pptp-client/monitor|command|both
+/interface/pptp-server|menu|both
+/interface/pptp-server/monitor|command|both
+/interface/pptp-server/server|settings|both
+/interface/pwr-line|menu|published|||pwrlink
+/interface/pwr-line/blink|command|published|||pwrlink
+/interface/pwr-line/configure|command|published|||pwrlink
+/interface/pwr-line/join|command|published|||pwrlink
+/interface/pwr-line/leave|command|published|||pwrlink
+/interface/pwr-line/monitor|command|published|||pwrlink
+/interface/pwr-line/reset-counters|command|published|||pwrlink
+/interface/pwr-line/reset-mac-address|command|published|||pwrlink
+/interface/pwr-line/upgrade-firmware|command|published|||pwrlink
+/interface/reset-counters|command|both
+/interface/sstp-client|menu|both
+/interface/sstp-client/monitor|command|both
+/interface/sstp-server|menu|both
+/interface/sstp-server/monitor|command|both
+/interface/sstp-server/server|settings|both
 /interface/veth|menu|both||!smips|container
 /interface/vlan|menu|both||!smips
 /interface/vpls|menu|both||!smips
@@ -417,59 +426,50 @@ const ROWS = `
 /interface/vxlan/fdb|menu|both
 /interface/vxlan/vteps|menu|both
 /interface/w60g|menu|published|wireless-rep||60ghz
-/interface/w60g/align|command|published|wireless-rep
-/interface/w60g/monitor|command|published|wireless-rep
-/interface/w60g/reset-configuration|command|published|wireless-rep
-/interface/w60g/scan|command|published|wireless-rep
-/interface/w60g/station|menu|published|wireless-rep
-/interface/w60g/station/monitor|command|published|wireless-rep
-/interface/wifi|menu|both|wireless-qca
-/interface/wifi/aaa|menu|both|wireless-qca
-/interface/wifi/access-list|menu|both|wireless-qca
-/interface/wifi/cap|settings|both|wireless-qca
-/interface/wifi/capsman|settings|both|wireless-qca
-/interface/wifi/capsman/remote-cap|menu|both|wireless-qca
-/interface/wifi/capsman/remote-cap/provision|command|both|wireless-qca
-/interface/wifi/capsman/remote-cap/set-identity|command|both|wireless-qca
-/interface/wifi/capsman/remote-cap/upgrade|command|both|wireless-qca
-/interface/wifi/channel|menu|both|wireless-qca
-/interface/wifi/configuration|menu|both|wireless-qca
-/interface/wifi/dashboard/settings|settings|published|wireless-qca
-/interface/wifi/dashboard/show|command|published|wireless-qca
-/interface/wifi/dashboard/show-clients|command|published|wireless-qca
-/interface/wifi/dashboard/show-logs|command|published|wireless-qca
-/interface/wifi/datapath|menu|both|wireless-qca
-/interface/wifi/devel|command|both|wireless-qca
-/interface/wifi/dpp-bootstrap-info/gen-qr-code|command|published|wireless-qca
-/interface/wifi/easymesh/bss|menu|published|wireless-qca
-/interface/wifi/easymesh/dpp-trigger|command|published|wireless-qca
-/interface/wifi/easymesh/sta|menu|published|wireless-qca
-/interface/wifi/easymesh/topology|menu|published|wireless-qca
+/interface/w60g/align|command|published|wireless-rep||60ghz
+/interface/w60g/monitor|command|published|wireless-rep||60ghz
+/interface/w60g/reset-configuration|command|published|wireless-rep||60ghz
+/interface/w60g/scan|command|published|wireless-rep||60ghz
+/interface/w60g/station|menu|published|wireless-rep||60ghz
+/interface/w60g/station/monitor|command|published|wireless-rep||60ghz
+/interface/wifi|menu|both
+/interface/wifi/aaa|menu|both
+/interface/wifi/access-list|menu|both
+/interface/wifi/cap|settings|both
+/interface/wifi/capsman|settings|both
+/interface/wifi/capsman/remote-cap|menu|both
+/interface/wifi/capsman/remote-cap/provision|command|both
+/interface/wifi/capsman/remote-cap/set-identity|command|both
+/interface/wifi/capsman/remote-cap/upgrade|command|both
+/interface/wifi/channel|menu|both
+/interface/wifi/configuration|menu|both
+/interface/wifi/datapath|menu|both
+/interface/wifi/devel|command|both
 /interface/wifi/flat-snoop|command|both
-/interface/wifi/frequency-scan|command|both|wireless-qca
-/interface/wifi/interworking|menu|both|wireless-qca
-/interface/wifi/liberate|command|both|wireless-qca
-/interface/wifi/monitor|command|both|wireless-qca
-/interface/wifi/network|menu|both|wireless-qca
-/interface/wifi/network/radio|menu|both|wireless-qca
-/interface/wifi/provisioning|menu|both|wireless-qca
-/interface/wifi/radio|menu|both|wireless-qca
-/interface/wifi/radio/provision|command|both|wireless-qca
-/interface/wifi/radio/reg-info|command|both|wireless-qca
-/interface/wifi/radio/settings|settings|both|wireless-qca
-/interface/wifi/registration-table|menu|both|wireless-qca
-/interface/wifi/reset-mac-address|command|both|wireless-qca
-/interface/wifi/roam|command|both|wireless-qca
-/interface/wifi/scan|command|both|wireless-qca
-/interface/wifi/security|menu|both|wireless-qca
-/interface/wifi/security/multi-passphrase|menu|both|wireless-qca
-/interface/wifi/sniffer|command|both|wireless-qca
-/interface/wifi/spectral-scan|command|both|wireless-qca
-/interface/wifi/steering|menu|both|wireless-qca
-/interface/wifi/steering/neighbor-group|menu|both|wireless-qca
-/interface/wifi/trigger-radar|command|published|wireless-qca||dfstest
-/interface/wifi/wps-client|command|both|wireless-qca
-/interface/wifi/wps-push-button|command|both|wireless-qca
+/interface/wifi/frequency-scan|command|both
+/interface/wifi/interworking|menu|both
+/interface/wifi/liberate|command|both
+/interface/wifi/monitor|command|both
+/interface/wifi/network|menu|both
+/interface/wifi/network/radio|menu|both
+/interface/wifi/provisioning|menu|both
+/interface/wifi/radio|menu|both
+/interface/wifi/radio/provision|command|both
+/interface/wifi/radio/reg-info|command|both
+/interface/wifi/radio/settings|settings|both
+/interface/wifi/registration-table|menu|both
+/interface/wifi/reset-mac-address|command|both
+/interface/wifi/roam|command|both
+/interface/wifi/scan|command|both
+/interface/wifi/security|menu|both
+/interface/wifi/security/multi-passphrase|menu|both
+/interface/wifi/sniffer|command|both
+/interface/wifi/spectral-scan|command|both
+/interface/wifi/steering|menu|both
+/interface/wifi/steering/neighbor-group|menu|both
+/interface/wifi/trigger-radar|command|published|||dfstest
+/interface/wifi/wps-client|command|both
+/interface/wifi/wps-push-button|command|both
 /interface/wifiwave2|menu|inspect
 /interface/wifiwave2/aaa|menu|inspect
 /interface/wifiwave2/access-list|menu|inspect
@@ -531,6 +531,7 @@ const ROWS = `
 /interface/wireless/wds/monitor|command|both|wireless-rep
 /interface/wireless/wps-client|command|both|wireless-rep
 /interface/wireless/wps-push-button|command|both|wireless-rep
+/interface/xfrm|menu|published
 /iot|menu|inspect
 /iot/bluetooth|menu|both|iot
 /iot/bluetooth/advertisers|menu|both|iot
@@ -554,8 +555,8 @@ const ROWS = `
 /iot/bluetooth/scanners/advertisements/clear|command|both|iot
 /iot/bluetooth/whitelist|menu|both|iot
 /iot/gpio|menu|published|iot||gpio
-/iot/gpio/analog|menu|published|iot
-/iot/gpio/digital|menu|published|iot
+/iot/gpio/analog|menu|published|iot||gpio
+/iot/gpio/digital|menu|published|iot||gpio
 /iot/lora|menu|both|iot
 /iot/lora/channels|menu|both|iot
 /iot/lora/joineui|menu|both|iot
@@ -599,32 +600,32 @@ const ROWS = `
 /ip/arp|menu|both
 /ip/cloud|settings|both
 /ip/cloud/advanced|settings|both
-/ip/cloud/app/update|command|published
 /ip/cloud/back-to-home-file|menu|both|||cloud-vpn
-/ip/cloud/back-to-home-file/settings|settings|both
+/ip/cloud/back-to-home-file/settings|settings|both|||cloud-vpn
+/ip/cloud/back-to-home-file/settings/remove-certificate|command|published|||cloud-vpn
 /ip/cloud/back-to-home-user|menu|both|||cloud-vpn
-/ip/cloud/back-to-home-user/show-client-config|command|both
+/ip/cloud/back-to-home-user/show-client-config|command|both|||cloud-vpn
 /ip/cloud/force-update|command|both
-/ip/dhcp-client|menu|both|dhcp
-/ip/dhcp-client/option|menu|both|dhcp
-/ip/dhcp-client/release|command|both|dhcp
-/ip/dhcp-client/renew|command|both|dhcp
-/ip/dhcp-relay|menu|both|dhcp
-/ip/dhcp-relay/monitor|command|both|dhcp
-/ip/dhcp-relay/reset-counters|command|both|dhcp
-/ip/dhcp-server|menu|both|dhcp
-/ip/dhcp-server/alert|menu|both|dhcp
-/ip/dhcp-server/alert/reset-alert|command|both|dhcp
-/ip/dhcp-server/config|settings|both|dhcp
-/ip/dhcp-server/lease|menu|both|dhcp
-/ip/dhcp-server/lease/check-status|command|both|dhcp
-/ip/dhcp-server/lease/make-static|command|both|dhcp
-/ip/dhcp-server/lease/send-reconfigure|command|both|dhcp
-/ip/dhcp-server/matcher|menu|both|dhcp
-/ip/dhcp-server/network|menu|both|dhcp
-/ip/dhcp-server/option|menu|both|dhcp
-/ip/dhcp-server/option/sets|menu|both|dhcp
-/ip/dhcp-server/setup|command|both|dhcp
+/ip/dhcp-client|menu|both
+/ip/dhcp-client/option|menu|both
+/ip/dhcp-client/release|command|both
+/ip/dhcp-client/renew|command|both
+/ip/dhcp-relay|menu|both
+/ip/dhcp-relay/monitor|command|both
+/ip/dhcp-relay/reset-counters|command|both
+/ip/dhcp-server|menu|both
+/ip/dhcp-server/alert|menu|both
+/ip/dhcp-server/alert/reset-alert|command|both
+/ip/dhcp-server/config|settings|both
+/ip/dhcp-server/lease|menu|both
+/ip/dhcp-server/lease/check-status|command|both
+/ip/dhcp-server/lease/make-static|command|both
+/ip/dhcp-server/lease/send-reconfigure|command|both
+/ip/dhcp-server/matcher|menu|both
+/ip/dhcp-server/network|menu|both
+/ip/dhcp-server/option|menu|both
+/ip/dhcp-server/option/sets|menu|both
+/ip/dhcp-server/setup|command|both
 /ip/dns|settings|both
 /ip/dns/adlist|menu|both
 /ip/dns/adlist/pause|command|both
@@ -655,44 +656,46 @@ const ROWS = `
 /ip/firewall/raw/reset-counters|command|both
 /ip/firewall/raw/reset-counters-all|command|both
 /ip/firewall/service-port|menu|both
-/ip/hotspot|menu|inspect
-/ip/hotspot/active|menu|inspect
-/ip/hotspot/cookie|menu|inspect
-/ip/hotspot/host|menu|inspect
-/ip/hotspot/ip-binding|menu|inspect
-/ip/hotspot/profile|menu|inspect
-/ip/hotspot/service-port|menu|inspect
-/ip/hotspot/setup|command|both|hotspot
-/ip/hotspot/user|menu|inspect
-/ip/hotspot/user/profile|menu|inspect
-/ip/hotspot/walled-garden|menu|inspect
-/ip/hotspot/walled-garden/ip|menu|inspect
-/ip/ipsec|menu|both|security
-/ip/ipsec/active-peers|menu|both|security
-/ip/ipsec/active-peers/kill-connections|command|both|security
-/ip/ipsec/identity|menu|both|security
-/ip/ipsec/installed-sa|menu|both|security
-/ip/ipsec/installed-sa/flush|command|both|security
-/ip/ipsec/key|menu|both|security
-/ip/ipsec/key/psk|menu|both|security
-/ip/ipsec/key/psk/generate|command|both|security
-/ip/ipsec/key/qkd|settings|both|security
-/ip/ipsec/key/qkd/get-key|command|both|security
-/ip/ipsec/key/qkd/get-key-cached|command|both|security
-/ip/ipsec/key/qkd/get-key-with-ids|command|both|security
-/ip/ipsec/key/qkd/get-status|command|both|security
-/ip/ipsec/key/rsa|menu|both|security
-/ip/ipsec/key/rsa/export-pub-key|command|both|security
-/ip/ipsec/key/rsa/generate-key|command|both|security
-/ip/ipsec/key/rsa/import|command|both|security
-/ip/ipsec/mode-config|menu|both|security
-/ip/ipsec/peer|menu|both|security
-/ip/ipsec/policy|menu|both|security
-/ip/ipsec/policy/group|menu|both|security
-/ip/ipsec/profile|menu|both|security
-/ip/ipsec/proposal|menu|both|security|IKE2_DEV
-/ip/ipsec/settings|settings|both|security
-/ip/ipsec/statistics|settings|both|security
+/ip/hotspot|menu|both
+/ip/hotspot/active|menu|both
+/ip/hotspot/active/login|command|both
+/ip/hotspot/cookie|menu|both
+/ip/hotspot/host|menu|both
+/ip/hotspot/host/make-binding|command|both
+/ip/hotspot/ip-binding|menu|both
+/ip/hotspot/profile|menu|both
+/ip/hotspot/reset-html|command|both
+/ip/hotspot/service-port|menu|both
+/ip/hotspot/setup|command|both
+/ip/hotspot/user|menu|both
+/ip/hotspot/user/profile|menu|both
+/ip/hotspot/user/reset-counters|command|both
+/ip/hotspot/walled-garden|menu|both
+/ip/hotspot/walled-garden/ip|menu|both
+/ip/hotspot/walled-garden/reset-counters|command|both
+/ip/hotspot/walled-garden/reset-counters-all|command|both
+/ip/ipsec|menu|both
+/ip/ipsec/active-peers|menu|both
+/ip/ipsec/active-peers/kill-connections|command|both
+/ip/ipsec/identity|menu|both
+/ip/ipsec/installed-sa|menu|both
+/ip/ipsec/installed-sa/flush|command|both
+/ip/ipsec/key|menu|both
+/ip/ipsec/key/psk|menu|both
+/ip/ipsec/key/psk/generate|command|both
+/ip/ipsec/key/qkd|menu|inspect
+/ip/ipsec/key/rsa|menu|both
+/ip/ipsec/key/rsa/export-pub-key|command|both
+/ip/ipsec/key/rsa/generate-key|command|both
+/ip/ipsec/key/rsa/import|command|both
+/ip/ipsec/mode-config|menu|both
+/ip/ipsec/peer|menu|both
+/ip/ipsec/policy|menu|both
+/ip/ipsec/policy/group|menu|both
+/ip/ipsec/profile|menu|both
+/ip/ipsec/proposal|menu|both
+/ip/ipsec/settings|settings|both
+/ip/ipsec/statistics|settings|both
 /ip/kid-control|menu|both
 /ip/kid-control/device|menu|both
 /ip/kid-control/device/reset-counters|command|both
@@ -740,10 +743,10 @@ const ROWS = `
 /ip/socks/connections|menu|both
 /ip/socks/users|menu|both
 /ip/socksify|menu|both
-/ip/ssh|settings|both|security
-/ip/ssh/export-host-key|command|both|security
-/ip/ssh/import-host-key|command|both|security
-/ip/ssh/regenerate-host-key|command|both|security
+/ip/ssh|settings|both
+/ip/ssh/export-host-key|command|both
+/ip/ssh/import-host-key|command|both
+/ip/ssh/regenerate-host-key|command|both
 /ip/tftp|menu|both
 /ip/tftp/settings|settings|both
 /ip/traffic-flow|settings|both
@@ -754,58 +757,58 @@ const ROWS = `
 /ip/upnp/interfaces|menu|both
 /ip/vrf|menu|both
 /ipv6|menu|inspect
-/ipv6/address|menu|both|ipv6
-/ipv6/dhcp-client|menu|both|dhcp
-/ipv6/dhcp-client/option|menu|both|dhcp
-/ipv6/dhcp-client/release|command|both|dhcp
-/ipv6/dhcp-client/renew|command|both|dhcp
-/ipv6/dhcp-relay|menu|both|dhcp
-/ipv6/dhcp-relay/monitor|command|both|dhcp
-/ipv6/dhcp-relay/option|menu|both|dhcp
-/ipv6/dhcp-relay/reset-counters|command|both|dhcp
-/ipv6/dhcp-relay/routes|menu|both|dhcp
-/ipv6/dhcp-server|menu|both|dhcp
-/ipv6/dhcp-server/binding|menu|both|dhcp
-/ipv6/dhcp-server/binding/make-static|command|both|dhcp
-/ipv6/dhcp-server/binding/send-reconfigure|command|both|dhcp
-/ipv6/dhcp-server/option|menu|both|dhcp
-/ipv6/dhcp-server/option/sets|menu|both|dhcp
+/ipv6/address|menu|both
+/ipv6/dhcp-client|menu|both
+/ipv6/dhcp-client/option|menu|both
+/ipv6/dhcp-client/release|command|both
+/ipv6/dhcp-client/renew|command|both
+/ipv6/dhcp-relay|menu|both
+/ipv6/dhcp-relay/monitor|command|both
+/ipv6/dhcp-relay/option|menu|both
+/ipv6/dhcp-relay/reset-counters|command|both
+/ipv6/dhcp-relay/routes|menu|both
+/ipv6/dhcp-server|menu|both
+/ipv6/dhcp-server/binding|menu|both
+/ipv6/dhcp-server/binding/make-static|command|both
+/ipv6/dhcp-server/binding/send-reconfigure|command|both
+/ipv6/dhcp-server/option|menu|both
+/ipv6/dhcp-server/option/sets|menu|both
 /ipv6/firewall|menu|inspect
-/ipv6/firewall/address-list|menu|both|ipv6
-/ipv6/firewall/connection|menu|both|ipv6
-/ipv6/firewall/filter|menu|both|ipv6
+/ipv6/firewall/address-list|menu|both
+/ipv6/firewall/connection|menu|both
+/ipv6/firewall/filter|menu|both
 /ipv6/firewall/filter/reset-counters|command|both
 /ipv6/firewall/filter/reset-counters-all|command|both
-/ipv6/firewall/mangle|menu|both|ipv6
+/ipv6/firewall/mangle|menu|both
 /ipv6/firewall/mangle/reset-counters|command|both
 /ipv6/firewall/mangle/reset-counters-all|command|both
-/ipv6/firewall/nat|menu|both|ipv6
+/ipv6/firewall/nat|menu|both
 /ipv6/firewall/nat/reset-counters|command|both
 /ipv6/firewall/nat/reset-counters-all|command|both
-/ipv6/firewall/raw|menu|both|ipv6
+/ipv6/firewall/raw|menu|both
 /ipv6/firewall/raw/reset-counters|command|both
 /ipv6/firewall/raw/reset-counters-all|command|both
-/ipv6/nd|menu|inspect
-/ipv6/nd/prefix|menu|both|ipv6
-/ipv6/nd/prefix/default|settings|both|ipv6
-/ipv6/nd/proxy|menu|both|ipv6
-/ipv6/nd/settings|settings|both|ipv6
-/ipv6/neighbor|menu|both|ipv6
-/ipv6/pool|menu|both|ipv6
-/ipv6/pool/used|menu|both|ipv6
-/ipv6/route|menu|both|ipv6
-/ipv6/settings|settings|both|ipv6
+/ipv6/nd|menu|both
+/ipv6/nd/prefix|menu|both
+/ipv6/nd/prefix/default|settings|both
+/ipv6/nd/proxy|menu|both
+/ipv6/nd/settings|settings|both
+/ipv6/neighbor|menu|both
+/ipv6/pool|menu|both
+/ipv6/pool/used|menu|both
+/ipv6/route|menu|both
+/ipv6/settings|settings|both
 /lcd|settings|published||!smips|lcd
-/lcd/backlight|command|published||!smips
-/lcd/interface|menu|published||!smips
-/lcd/interface/default-wireless|command|published||!smips
-/lcd/interface/display|command|published||!smips
-/lcd/interface/pages|menu|published||!smips
-/lcd/pin|settings|published||!smips
-/lcd/recalibrate|command|published||!smips
-/lcd/screen|menu|published||!smips
-/lcd/show|command|published||!smips
-/lcd/take-screenshot|command|published||!smips
+/lcd/backlight|command|published||!smips|lcd
+/lcd/interface|menu|published||!smips|lcd
+/lcd/interface/default-wireless|command|published||!smips|lcd
+/lcd/interface/display|command|published||!smips|lcd
+/lcd/interface/pages|menu|published||!smips|lcd
+/lcd/pin|settings|published||!smips|lcd
+/lcd/recalibrate|command|published||!smips|lcd
+/lcd/screen|menu|published||!smips|lcd
+/lcd/show|command|published||!smips|lcd
+/lcd/take-screenshot|command|published||!smips|lcd
 /log|menu|both
 /lora|menu|inspect
 /lora/channels|menu|inspect
@@ -839,20 +842,20 @@ const ROWS = `
 /openflow/meter|menu|both|openflow
 /openflow/port|menu|both|openflow
 /partitions|menu|published||!i386, !smips, !mmips|partitions
-/partitions/activate|command|published||!i386, !smips, !mmips
-/partitions/copy-to|command|published||!i386, !smips, !mmips
-/partitions/repartition|command|published||!i386, !smips, !mmips
-/partitions/restore-config-from|command|published||!i386, !smips, !mmips
-/partitions/save-config-to|command|published||!i386, !smips, !mmips
+/partitions/activate|command|published||!i386, !smips, !mmips|partitions
+/partitions/copy-to|command|published||!i386, !smips, !mmips|partitions
+/partitions/repartition|command|published||!i386, !smips, !mmips|partitions
+/partitions/restore-config-from|command|published||!i386, !smips, !mmips|partitions
+/partitions/save-config-to|command|published||!i386, !smips, !mmips|partitions
 /password|command|both
 /port|menu|both
 /port/remote-access|menu|both
-/ppp|menu|both|ppp
-/ppp/aaa|settings|both|ppp
-/ppp/active|menu|both|ppp
-/ppp/l2tp-secret|menu|both|ppp
-/ppp/profile|menu|both|ppp
-/ppp/secret|menu|both|ppp
+/ppp|menu|both
+/ppp/aaa|settings|both
+/ppp/active|menu|both
+/ppp/l2tp-secret|menu|both
+/ppp/profile|menu|both
+/ppp/secret|menu|both
 /queue|menu|inspect
 /queue/interface|menu|both
 /queue/monitor|command|both
@@ -871,6 +874,8 @@ const ROWS = `
 /radius/monitor|command|both
 /radius/reset-counters|command|both
 /redo|command|both
+/root|menu|published||CONSOLE_DEBUG
+/root/terminal|menu|published
 /routing|menu|inspect
 /routing/bfd|menu|both||BFD_AUTHENTICATION
 /routing/bfd/authentication|menu|published||BFD_AUTHENTICATION
@@ -946,7 +951,7 @@ const ROWS = `
 /routing/rip/neighbor|menu|both
 /routing/rip/static-neighbor|menu|both
 /routing/route|menu|both
-/routing/route/rule|menu|both
+/routing/route/rule|menu|inspect
 /routing/rpki|menu|both
 /routing/rpki/rpki-check|command|both
 /routing/rpki/rpki-query|command|both
@@ -979,10 +984,8 @@ const ROWS = `
 /system/check-installation|command|both
 /system/clock|settings|both
 /system/clock/manual|settings|both
-/system/console|menu|inspect
+/system/console|menu|both
 /system/console/screen|settings|both||i386
-/system/dashboard/settings|settings|published
-/system/dashboard/show|command|published
 /system/default-configuration|settings|both
 /system/default-configuration/caps-mode-script|settings|both
 /system/default-configuration/custom-script|settings|both
@@ -993,12 +996,15 @@ const ROWS = `
 /system/gps|settings|both|gps|mmips
 /system/gps/monitor|command|both|gps
 /system/hardware|menu|inspect
-/system/health|menu|both||!i386|health
-/system/health/settings|settings|both||!i386, tile|health-settings
-/system/health/settings/detect-fans|command|both||!i386
+/system/health|menu|both||!i386
+/system/health/settings|settings|both||!i386, tile|health and health-settings
+/system/health/settings/detect-fans|command|both||!i386|health and health-settings
 /system/history|menu|both
 /system/identity|settings|both
-/system/keymat-provider|menu|inspect
+/system/keymat-provider|menu|both
+/system/keymat-provider/qkd-get-key|command|both
+/system/keymat-provider/qkd-get-key-with-ids|command|both
+/system/keymat-provider/qkd-get-status|command|both
 /system/leds|menu|both
 /system/leds/settings|settings|both
 /system/license|settings|both
@@ -1016,7 +1022,11 @@ const ROWS = `
 /system/ntp/key|menu|both
 /system/ntp/monitor-peers|command|both
 /system/ntp/server|settings|both
-/system/package|menu|inspect
+/system/package|menu|both
+/system/package/apply-changes|command|both
+/system/package/disable|command|both
+/system/package/downgrade|command|both
+/system/package/enable|command|both
 /system/package/local-update|menu|both
 /system/package/local-update/download|command|both
 /system/package/local-update/download-all|command|both
@@ -1024,11 +1034,17 @@ const ROWS = `
 /system/package/local-update/mirror/force-check|command|both
 /system/package/local-update/refresh|command|both
 /system/package/local-update/update-package-source|menu|both
-/system/package/update|menu|inspect
+/system/package/uninstall|command|both
+/system/package/unschedule|command|both
+/system/package/update|settings|both
+/system/package/update/cancel|command|both
+/system/package/update/check-for-updates|command|both
+/system/package/update/download|command|both
+/system/package/update/install|command|both
 /system/ptp|menu|published||!smips|ptp
-/system/ptp/monitor|command|published||!smips
-/system/ptp/port|menu|published||!smips
-/system/ptp/status|menu|published||!smips
+/system/ptp/monitor|command|published||!smips|ptp
+/system/ptp/port|menu|published||!smips|ptp
+/system/ptp/status|menu|published||!smips|ptp
 /system/reboot|command|both
 /system/regulatory|settings|both
 /system/reset-configuration|command|both
@@ -1057,24 +1073,20 @@ const ROWS = `
 /system/rtrace/start|command|both
 /system/rtrace/stop|command|both
 /system/scheduler|menu|both
-/system/script|menu|inspect
-/system/script/environment|menu|inspect
+/system/script|menu|both
+/system/script/environment|menu|both
 /system/script/job|menu|both
-/system/serial-interface/read|command|published
-/system/serial-interface/start|command|published
-/system/serial-interface/stop|command|published
-/system/serial-interface/write|command|published
 /system/serial-terminal|command|both
 /system/shutdown|command|both
-/system/ssh|command|both|security
-/system/ssh-exec|command|both|security
+/system/ssh|command|both
+/system/ssh-exec|command|both
 /system/sup-output|command|both
 /system/swos|settings|published||!i386, !mmips, !powerpc, !tile, !smips|swos
-/system/swos/load-config|command|published||!i386, !mmips, !powerpc, !tile, !smips
-/system/swos/password|command|published||!i386, !mmips, !powerpc, !tile, !smips
-/system/swos/reset-config|command|published||!i386, !mmips, !powerpc, !tile, !smips
-/system/swos/save-config|command|published||!i386, !mmips, !powerpc, !tile, !smips
-/system/swos/upgrade|command|published||!i386, !mmips, !powerpc, !tile, !smips
+/system/swos/load-config|command|published||!i386, !mmips, !powerpc, !tile, !smips|swos
+/system/swos/password|command|published||!i386, !mmips, !powerpc, !tile, !smips|swos
+/system/swos/reset-config|command|published||!i386, !mmips, !powerpc, !tile, !smips|swos
+/system/swos/save-config|command|published||!i386, !mmips, !powerpc, !tile, !smips|swos
+/system/swos/upgrade|command|published||!i386, !mmips, !powerpc, !tile, !smips|swos
 /system/telnet|command|both
 /system/upgrade|menu|inspect
 /system/upgrade/mirror|menu|inspect
@@ -1091,24 +1103,21 @@ const ROWS = `
 /task/terminate|command|both
 /terminal|menu|inspect
 /tool|menu|inspect
-/tool/apptraffic/stats|menu|published||!mmips, !powerpc, !smips, !mipsel
-/tool/apptraffic/stats/categories|menu|published||!mmips, !powerpc, !smips, !mipsel
-/tool/apptraffic/stats/clear|command|published||!mmips, !powerpc, !smips, !mipsel
 /tool/bandwidth-server|settings|both
 /tool/bandwidth-server/session|menu|both
 /tool/bandwidth-test|command|both
 /tool/calea|menu|both|calea
-/tool/dns-update|command|both|advanced-tools
+/tool/dns-update|command|both
 /tool/e-mail|settings|both
 /tool/e-mail/send|command|both
 /tool/fetch|command|both||arm64
-/tool/flood-ping|command|both|advanced-tools|!smips
-/tool/graphing|menu|inspect
+/tool/flood-ping|command|both||!smips
+/tool/graphing|settings|both
 /tool/graphing/interface|menu|both
 /tool/graphing/queue|menu|both
 /tool/graphing/resource|menu|both
-/tool/ip-scan|command|both|advanced-tools|!smips
-/tool/mac-scan|command|both|advanced-tools|!smips
+/tool/ip-scan|command|both||!smips
+/tool/mac-scan|command|both||!smips
 /tool/mac-server|settings|both
 /tool/mac-server/mac-winbox|settings|both
 /tool/mac-server/ping|settings|both
@@ -1118,9 +1127,9 @@ const ROWS = `
 /tool/netinstall/cache|menu|inspect
 /tool/netinstall/devices|menu|inspect
 /tool/netinstall/settings|menu|inspect
-/tool/netwatch|menu|both|advanced-tools
+/tool/netwatch|menu|both
 /tool/ping|command|both
-/tool/ping-speed|command|both|advanced-tools|!smips
+/tool/ping-speed|command|both||!smips
 /tool/profile|command|both
 /tool/romon|settings|both
 /tool/romon/discover|command|both
@@ -1160,7 +1169,7 @@ const ROWS = `
 /tool/traffic-generator/stop|command|both
 /tool/traffic-generator/stream|menu|both
 /tool/traffic-monitor|menu|both
-/tool/wol|command|both|advanced-tools
+/tool/wol|command|both
 /tr069-client|settings|both|tr069-client
 /tr069-client/reset-tr069-config|command|both|tr069-client
 /undo|command|both
@@ -1196,10 +1205,10 @@ const ROWS = `
 /user/expire-password|command|both
 /user/group|menu|both
 /user/settings|settings|both
-/user/ssh-keys|menu|both|security
-/user/ssh-keys/import|command|both|security
-/user/ssh-keys/private|menu|both|security
-/user/ssh-keys/private/import|command|both|security
+/user/ssh-keys|menu|both
+/user/ssh-keys/import|command|both
+/user/ssh-keys/private|menu|both
+/user/ssh-keys/private/import|command|both
 /zerotier|menu|both|zerotier
 /zerotier/controller|menu|both|zerotier
 /zerotier/controller/member|menu|both|zerotier
@@ -1311,10 +1320,11 @@ export interface CatalogGate {
  * parent's `syscap` applies even though the child entry states none: the gates
  * up a path CONJOIN, they do not override.
  *
- * Read row-wise instead, 46 published-only paths look ungated, and
- * #228's finding — that a published-only path almost always explains its own
- * absence — would read as false. Ancestry-aware the residue is 7,
- * and those are the only published paths carrying no explanation at all.
+ * Read row-wise, 2 published-only paths look ungated; read with
+ * ancestry the residue is 1. The gap between the two is the
+ * conjunction, and it is what a caller has to reproduce: a child's silence about
+ * a gate is not the absence of one. #228's finding — that a published-only path
+ * almost always explains its own absence — is about the ancestry-aware number.
  *
  * Still not a claim about any router. This says what MikroTik published about
  * applicability; only a live device knows what it has.
