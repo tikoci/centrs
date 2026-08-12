@@ -359,9 +359,10 @@ export function buildSweep(
 	//
 	// Every axis the `sweep` block publishes is diffed, not just the two that
 	// happened to differ first. A claim of "identical except one runtime row"
-	// is only worth the axes it was checked on, and precedence, associativity,
-	// arity and the op-axis were previously not among them — a version that
-	// re-ranked `->` would have been reported as identical.
+	// is only worth the axes it was checked on. The rule is now mechanical:
+	// anything the `sweep` block publishes gets diffed here. Add a field there
+	// and add it here, or the fixture asserts a sameness nobody measured —
+	// which is how `controls` went un-diffed through the first pass.
 	const versionDifferences: Record<string, unknown>[] = [];
 	for (const other of captures.slice(1)) {
 		const diff = (
@@ -432,6 +433,21 @@ export function buildSweep(
 				{ spelling: row.token },
 				associativityOf(row.token, primary.precedence),
 				associativityOf(row.token, other.precedence),
+			);
+		}
+		// The controls are the sweep's own calibration, so a version where one
+		// moved invalidates every other row taken from it. `(1 zzz 2)` in
+		// particular is the KNOWN-FAILING control: a build that stopped accepting
+		// it, or accepted it with a different IL, would mean the harness had been
+		// measuring something else — which is the one difference that must never
+		// be reported as "identical".
+		for (const row of primary.controls) {
+			const mirror = other.controls.find((c) => c.id === row.id);
+			diff(
+				"control",
+				{ id: row.id, source: row.source },
+				{ il: row.il, accepted: row.accepted },
+				mirror && { il: mirror.il, accepted: mirror.accepted },
 			);
 		}
 		const primaryUnary = unarySummary(primary.unaryPrecedence);

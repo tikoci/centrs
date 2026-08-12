@@ -24,6 +24,7 @@ import {
 } from "../../scripts/explain-operator-census.ts";
 import {
 	associativityOf,
+	buildSweep,
 	outerCounts,
 	precedenceLevels,
 	unarySummary,
@@ -463,5 +464,75 @@ describe("unarySummary", () => {
 	test("a rejected probe is not counted as agreement", () => {
 		const [row] = unarySummary([u("any", "+", "prefix-left", null, false)]);
 		expect(row).toMatchObject({ probes: 1, accepted: 0, binaryOuter: 0 });
+	});
+});
+
+describe("buildSweep version differences", () => {
+	/** A capture with just enough shape for `buildSweep` to run. */
+	const capture = (
+		version: string,
+		over: Record<string, unknown> = {},
+	): Parameters<typeof buildSweep>[0][number] =>
+		({
+			version,
+			architecture: "x86_64",
+			buildTime: "",
+			candidates: [],
+			precedence: [],
+			unaryPrecedence: [],
+			controls: [
+				{
+					id: "bogus-word",
+					source: "(1 zzz 2)",
+					il: "(<%% (  1 $zzz 2) )",
+					accepted: true,
+				},
+			],
+			opAxis: [],
+			runtime: [],
+			...over,
+		}) as unknown as Parameters<typeof buildSweep>[0][number];
+
+	const differences = (
+		...captures: Parameters<typeof buildSweep>[0]
+	): Record<string, unknown>[] =>
+		buildSweep(captures)["versionDifferences"] as Record<string, unknown>[];
+
+	test("identical captures produce no differences", () => {
+		expect(differences(capture("a"), capture("b"))).toEqual([]);
+	});
+
+	test("a control that moved between versions is REPORTED", () => {
+		// The controls calibrate the whole sweep, so a version where one moved
+		// invalidates every other row taken from it. `(1 zzz 2)` is the
+		// known-failing control: a build that rejected it would mean the harness
+		// had been measuring something else, and that is the single difference
+		// that must never be reported as "identical". It was published in the
+		// fixture without being compared until CodeRabbit caught it on #287.
+		const moved = differences(
+			capture("a"),
+			capture("b", {
+				controls: [
+					{
+						id: "bogus-word",
+						source: "(1 zzz 2)",
+						il: "syntax error (line 1 column 4)",
+						accepted: false,
+					},
+				],
+			}),
+		);
+		expect(moved).toHaveLength(1);
+		expect(moved[0]).toMatchObject({ kind: "control", id: "bogus-word" });
+		expect(moved[0]?.["b"]).toEqual({
+			il: "syntax error (line 1 column 4)",
+			accepted: false,
+		});
+	});
+
+	test("a control missing from a version is a difference, not a skip", () => {
+		const missing = differences(capture("a"), capture("b", { controls: [] }));
+		expect(missing).toHaveLength(1);
+		expect(missing[0]?.["b"]).toBeNull();
 	});
 });
