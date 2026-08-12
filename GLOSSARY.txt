@@ -675,6 +675,7 @@ smips # RouterOS architecture (single-core MIPS), named in `conditions:` gates
 mmips # RouterOS architecture (multi-core MIPS), named in `conditions:` gates
 CRS # MikroTik Cloud Router Switch — carries the switch-chip menus no CHR has
 CCR # MikroTik Cloud Core Router
+superlinear # growth faster than linear, used for resolveDocument wall-clock on separator-free input (#248)
 stmts # `explainCommand` corpus measurement: statement count (shorthand for `statements`)
 argCandidates # `explainCommand` corpus measurement: arg-bearing candidates
 argReadable # `explainCommand` corpus measurement: readable statements
