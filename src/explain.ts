@@ -718,7 +718,7 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		id: EV.args,
 		source: "canonicalizer",
 		probe: "argSpans",
-		basis: "heuristic",
+		basis: "direct",
 		outcome: "ok",
 	},
 };

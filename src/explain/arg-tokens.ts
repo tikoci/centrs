@@ -1,10 +1,10 @@
 /**
  * B2 arg fill — claims argument names and their `=` on the residual.
  *
- * This is the second B2 fill of #264, after the operator fill. It runs **after**
- * the proof-only spans (`comment` + `variable-*`) and **before** the operator
- * fill, so the fill order is structural: `spans` claims first, then `arg`,
- * then `operator` sees only what neither wanted. That ordering is why the
+ * This is the second B2 fill of #264, added after the operator fill. It runs
+ * **after** the proof-only spans (`comment` + `variable-*`) and **before** the
+ * operator fill, so the fill order is structural: `spans` claims first, then
+ * `arg`, then `operator` sees only what neither wanted. That ordering is why the
  * operator fill can abstain on `, / = -` outside `( )`, on bytes glued after
  * an argument `=`, and on bytes glued into an argument name — those bytes
  * belong to a later fill, not to a smarter operator scanner.
@@ -34,15 +34,9 @@
  * only the retag.
  */
 
-import type { ExplainToken } from "../explain.ts";
+import type { ExplainArgumentToken, ExplainToken } from "../explain.ts";
 
-export interface ArgCandidate {
-	kind: string;
-	span: { start: number; end: number };
-	valueSpan?: { start: number; end: number };
-	name?: string;
-	text: string;
-}
+export type ArgCandidate = ExplainArgumentToken;
 
 function clipToResidual(
 	start: number,
@@ -50,9 +44,23 @@ function clipToResidual(
 	residual: readonly { start: number; end: number }[],
 ): { start: number; end: number }[] {
 	if (start >= end) return [];
+	if (residual.length === 0) return [];
+	// Binary-search to first residual that could overlap `start` (r.end > start).
+	let lo = 0;
+	let hi = residual.length - 1;
+	let first = residual.length;
+	while (lo <= hi) {
+		const mid = (lo + hi) >> 1;
+		const r = residual[mid] as { start: number; end: number };
+		if (r.end <= start) lo = mid + 1;
+		else {
+			first = mid;
+			hi = mid - 1;
+		}
+	}
 	const out: { start: number; end: number }[] = [];
-	for (const r of residual) {
-		if (r.end <= start) continue;
+	for (let i = first; i < residual.length; i++) {
+		const r = residual[i] as { start: number; end: number };
 		if (r.start >= end) break;
 		const oStart = Math.max(start, r.start);
 		const oEnd = Math.min(end, r.end);
@@ -79,19 +87,6 @@ export function argSpans(
 	const len = analyzed.length;
 	if (len === 0 || residual.length === 0 || candidates.length === 0) return [];
 
-	function isResidual(pos: number): boolean {
-		let lo = 0;
-		let hi = residual.length - 1;
-		while (lo <= hi) {
-			const mid = (lo + hi) >> 1;
-			const r = residual[mid] as { start: number; end: number };
-			if (pos < r.start) hi = mid - 1;
-			else if (pos >= r.end) lo = mid + 1;
-			else return true;
-		}
-		return false;
-	}
-
 	const out: ExplainToken[] = [];
 
 	for (const candidate of candidates) {
@@ -110,9 +105,8 @@ export function argSpans(
 			!Number.isInteger(eqEnd)
 		)
 			continue;
-		if (nameStart < 0 || nameEnd < nameStart || eqEnd > len) continue;
+		if (nameStart < 0 || eqEnd > len) continue;
 		if (nameStart >= nameEnd) continue;
-		if (eqStart < nameStart || eqEnd !== eqStart + 1) continue;
 		// The whole token's `=` byte must be `=` in the analyzed text — a cheap
 		// shape check that catches a caller that passed un-rebased or misaligned
 		// spans. Not a scan for `=`; the position is derived from `valueSpan`.
@@ -127,11 +121,8 @@ export function argSpans(
 		// so it never reaches here, but a future variable inside a quoted value
 		// would). Offering only residual keeps `buildTokens`'s cross-fill overlap
 		// throw as a safety net rather than a production path.
-		if (!isResidual(eqStart)) {
-			// `=` not residual → name is also not useful in isolation? But a
-			// `variable-*` claiming the `=` does not imply it claims the name
-			// bytes, so still clip the name separately.
-		}
+		// A `variable-*` claiming the `=` does not imply it claims the name
+		// bytes, so the name and the `=` are clipped separately.
 		const nameClipped = clipToResidual(nameStart, nameEnd, residual);
 		const eqClipped = clipToResidual(eqStart, eqEnd, residual);
 		for (const r of nameClipped) {
