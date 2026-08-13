@@ -8,11 +8,37 @@
  * and `-` that is a hyphen in a name are resolved by who claimed the byte
  * first, not by a smarter operator scanner.
  *
- * Two-hop census note: operator's top-level conservatism leaves some bytes
- * `unclassified` that a future path/arg fill will claim. That means the
- * classified percentage jumps twice for those bytes (now `unclassified`→stays,
- * later `unclassified`→`path`/`arg`), which is correct — don't misread the
- * later diff as "operator stole bytes".
+ * Two-hop census note: operator's abstention leaves some bytes `unclassified`
+ * that a future path/arg fill will claim. That means the classified percentage
+ * jumps twice for those bytes (now `unclassified`→stays, later
+ * `unclassified`→`path`/`arg`), which is correct — don't misread the later diff
+ * as "operator stole bytes".
+ *
+ * ## Abstention is the same rule three times
+ *
+ * A byte that is structurally part of a **path** or an **argument** belongs to
+ * a later fill, so this fill leaves it alone. Grounded on the corpus device
+ * oracle (`parseil_results.il_text`, the IL RouterOS actually parsed to):
+ *
+ * 1. **`[` is command substitution, not expression grouping.** `(` opens an
+ *    expression; `[` opens a *command* and `{` a block/array literal. The IL
+ *    for `[ /system/identity/get value-name=name ]` is
+ *    `(evl /system/identity/get value-name=name)` — the `/` are path
+ *    separators and the `=` is an argument separator, with no division and no
+ *    comparison node. So the `, / = -` conservatism holds everywhere except
+ *    directly inside `(`. Measured cost: `find where name="x"` inside `[…]`
+ *    *does* lower to a real `(= $name x)` node, and those `=` bytes now stay
+ *    `unclassified` — 224 of the corpus's 1,259 bracket `=` against 1,035 that
+ *    were plain `arg=value`. Abstaining on all of them beats claiming 82%
+ *    wrong; a `where`-aware fill can take them later.
+ * 2. **Glued after `=` is an argument value.** `in-interface-list=!LAN`,
+ *    `.id=*2`, `oid=.1.3.6.1.2.1` — the byte after an argument `=` starts the
+ *    value, never an operator.
+ * 3. **Glued into an argument name is a name byte.** `:foreach x in=$list` is
+ *    `/foreach counter=$x` in the IL with **no** `(in …)` node anywhere — `in=`
+ *    is an argument name. Same for the dotted names: the IL keeps
+ *    `security.authentication-types=wpa2-psk` as one name and renders `.id` as
+ *    the single symbol `$.id`, never a `(. …)` concat.
  *
  * Vocabulary is provisional: one `operator` class for all 26 spellings + the
  * two aliases (`&&`, `||`). Per-operator/per-category legend is #264 B5.
@@ -25,7 +51,17 @@ import { loweredSpellings, routerosOperators } from "./operators.ts";
 import { scanQuotedString } from "./quoted-string.ts";
 
 const WORD_OPERATORS = new Set(["and", "or", "in", "any"]);
-const TOP_LEVEL_CONSERVATIVE = new Set([",", "/", "=", "-"]);
+/**
+ * Spellings that are only operators inside an expression group — everywhere
+ * else they are path separators, argument separators or hyphens in a name.
+ * `->` is never ambiguous and is deliberately absent.
+ */
+const EXPRESSION_ONLY = new Set([",", "/", "=", "-"]);
+
+/** The only opener that starts an expression. `[` is a command, `{` a block. */
+const EXPRESSION_OPENER = "(";
+const OPENERS = "([{";
+const CLOSERS = ")]}";
 
 const PUNCT_ONLY_DOT_GUARD = ".";
 
@@ -55,6 +91,40 @@ const SPELLINGS = buildSpellings();
 
 function isWordOperator(spelling: string): boolean {
 	return WORD_OPERATORS.has(spelling);
+}
+
+/**
+ * `=` immediately to the left — everything after an argument `=` is the value
+ * (`in-interface-list=!LAN`, `.id=*2`, `oid=.1.3.6.1.2.1`), never an operator.
+ */
+function followsArgumentEquals(analyzed: string, start: number): boolean {
+	return start > 0 && analyzed[start - 1] === "=";
+}
+
+/**
+ * The spelling is glued into an argument NAME, which ends at its `=`.
+ *
+ * Two grounded shapes: a word operator immediately before `=` (`in=$list` in
+ * `:foreach`), and a dot that joins name parts (`.id=`, `.passphrase=`,
+ * `configuration.ssid=`, `security.authentication-types=`). Deliberately not
+ * generalized to every spelling — `<`/`>`/`-` before an `=` have no grounded
+ * name shape and generalizing would abstain on real comparisons.
+ */
+function insideArgumentName(
+	analyzed: string,
+	start: number,
+	spelling: string,
+): boolean {
+	const after = start + spelling.length;
+	if (isWordOperator(spelling)) return analyzed[after] === "=";
+	if (spelling !== PUNCT_ONLY_DOT_GUARD) return false;
+	// `.` + at least one name character, then the `=` that ends the name.
+	let p = after;
+	if (p >= analyzed.length || !/[A-Za-z]/.test(analyzed[p] as string))
+		return false;
+	while (p < analyzed.length && /[A-Za-z0-9._-]/.test(analyzed[p] as string))
+		p++;
+	return analyzed[p] === "=";
 }
 
 function isAllResidual(
@@ -97,13 +167,15 @@ export function operatorSpans(
 	}
 
 	const out: ExplainToken[] = [];
-	let depth = 0;
+	// Delimiter stack, not a depth counter: only `(` opens an expression, so the
+	// innermost opener — not the nesting level — decides `EXPRESSION_ONLY`.
+	const openers: string[] = [];
 	let i = 0;
 
 	while (i < len) {
 		const ch = analyzed[i] as string;
 
-		// String interior — skip entirely, no depth accounting inside.
+		// String interior — skip entirely, no delimiter accounting inside.
 		if (ch === '"' && isResidual(i)) {
 			const scan = scanQuotedString(analyzed, i);
 			if (scan.end > i + 1) {
@@ -117,21 +189,28 @@ export function operatorSpans(
 
 		const residualAt = isResidual(i);
 
-		// Expression grouping — only when the paren/bracket byte itself is residual.
-		// A `(` or `)` or `[`/`]` inside a comment/variable is not residual and does not
-		// count. This is the conservatism signal for `, / = -`.
-		if (residualAt && (ch === "(" || ch === "[")) {
-			depth++;
+		// Delimiter tracking — only when the byte itself is residual. A `(` or `[`
+		// inside a comment/variable is not residual and does not open anything.
+		// This is the conservatism signal for `, / = -`.
+		if (residualAt && OPENERS.includes(ch)) {
+			openers.push(ch);
 			i++;
 			continue;
 		}
-		if (residualAt && (ch === ")" || ch === "]")) {
-			depth = Math.max(0, depth - 1);
+		if (residualAt && CLOSERS.includes(ch)) {
+			openers.pop();
 			i++;
 			continue;
 		}
 
 		if (!residualAt) {
+			i++;
+			continue;
+		}
+
+		// Everything after an argument `=` is that argument's value — no operator
+		// starts there. Checked once per offset, not once per spelling.
+		if (followsArgumentEquals(analyzed, i)) {
 			i++;
 			continue;
 		}
@@ -198,9 +277,16 @@ export function operatorSpans(
 				if (i > 0 && analyzed[i - 1] === "/") continue;
 			}
 
-			// Top-level conservatism — leaves `, / = -` for path/arg fills.
-			// `->` is explicitly allowed even at depth 0.
-			if (depth === 0 && TOP_LEVEL_CONSERVATIVE.has(spell)) continue;
+			// Glued into an argument name (`in=`, `.id=`, `configuration.ssid=`).
+			if (insideArgumentName(analyzed, i, spell)) continue;
+
+			// Expression-only conservatism — leaves `, / = -` for the path/arg
+			// fills everywhere except directly inside `(`. `->` is always allowed.
+			if (
+				EXPRESSION_ONLY.has(spell) &&
+				openers[openers.length - 1] !== EXPRESSION_OPENER
+			)
+				continue;
 
 			matched = spell;
 			break;

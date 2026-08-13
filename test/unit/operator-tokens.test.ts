@@ -7,8 +7,10 @@
  * byte that `spans[]` already holds.
  *
  * The fill runs on the residual only — fill order is structural, not lexical
- * (#290 design decision 1). The `, / = -` conservatism (leave top-level for
- * path/args) is asserted here and via explainCommand.
+ * (#290 design decision 1). Its three abstentions — `, / = -` outside `( )`,
+ * bytes glued after an argument `=`, and bytes glued into an argument name —
+ * are asserted here and via explainCommand. Each is grounded on the corpus
+ * device oracle; see the `operator-tokens.ts` header for the IL evidence.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -87,8 +89,8 @@ describe("#290 operator fill — direct residual scanner", () => {
 		expect(opsDirect("a//b", [{ start: 0, end: 4 }])).toEqual([]);
 	});
 
-	test("depth conservatism: , / = - only inside parens/brackets", () => {
-		// residual is whole input; depth 0 so these are skipped
+	test("expression conservatism: , / = - only directly inside ( )", () => {
+		// residual is whole input; no opener so these are skipped
 		expect(opsDirect("a,b", [{ start: 0, end: 3 }])).toEqual([]);
 		expect(opsDirect("a/b", [{ start: 0, end: 3 }])).toEqual([]);
 		expect(opsDirect("a=b", [{ start: 0, end: 3 }])).toEqual([]);
@@ -98,10 +100,76 @@ describe("#290 operator fill — direct residual scanner", () => {
 		expect(opsDirect("(a/b)", [{ start: 0, end: 5 }])).toEqual(["/"]);
 		expect(opsDirect("(a=b)", [{ start: 0, end: 5 }])).toEqual(["="]);
 		expect(opsDirect("(a-b)", [{ start: 0, end: 5 }])).toEqual(["-"]);
-		// -> is allowed even at depth 0
+		// -> is allowed with no opener at all
 		expect(opsDirect("a->b", [{ start: 0, end: 4 }])).toEqual(["->"]);
-		// Inside brackets (command substitution)
-		expect(opsDirect("[a,b]", [{ start: 0, end: 5 }])).toEqual([","]);
+	});
+
+	test("`[` is command substitution, not an expression group", () => {
+		// The IL for a bracketed command is `(evl /path/segments arg=value)` —
+		// the `/` are path separators and the `=` an argument separator, with no
+		// division and no comparison node. So `, / = -` abstain inside `[ ]`.
+		expect(opsDirect("[a,b]", [{ start: 0, end: 5 }])).toEqual([]);
+		expect(
+			opsDirect("[/ip/route/find where x=1]", [{ start: 0, end: 25 }]),
+		).toEqual([]);
+		expect(
+			opsDirect("[/interface/get $x default-name]", [{ start: 0, end: 32 }]),
+		).toEqual([]);
+		// A `(` nested inside `[ ]` restores expression context.
+		expect(opsDirect("[f ($a/$b)]", [{ start: 0, end: 11 }])).toEqual(["/"]);
+		// …and a `[ ]` nested inside `(` takes it away again.
+		expect(
+			opsDirect("(x . [/ip/route/print])", [{ start: 0, end: 23 }]),
+		).toEqual(["."]);
+		// `{` (block or array literal) is command context too.
+		expect(
+			opsDirect("do={/ip/route/add x=1}", [{ start: 0, end: 22 }]),
+		).toEqual([]);
+		// Non-ambiguous spellings are unaffected by the opener.
+		expect(opsDirect("[$a->1]", [{ start: 0, end: 7 }])).toEqual(["->"]);
+		expect(opsDirect("[find where a>1]", [{ start: 0, end: 16 }])).toEqual([
+			">",
+		]);
+	});
+
+	test("glued after `=` is an argument value, never an operator", () => {
+		// `!LAN`, `*2`, `.1.3.6.1…` are value bytes on the device.
+		expect(
+			opsDirect("in-interface-list=!LAN", [{ start: 0, end: 22 }]),
+		).toEqual([]);
+		expect(opsDirect("(x=!y)", [{ start: 0, end: 6 }])).toEqual(["="]);
+		expect(opsDirect("[find where .id=*2]", [{ start: 0, end: 19 }])).toEqual(
+			[],
+		);
+		expect(opsDirect("oid=.1.3.6.1", [{ start: 0, end: 12 }])).toEqual([]);
+		// A space breaks the glue — that is an ordinary operand position.
+		expect(opsDirect("(a = -1)", [{ start: 0, end: 8 }])).toEqual(["=", "-"]);
+	});
+
+	test("glued into an argument name is a name byte", () => {
+		// `:foreach x in=$list` is `/foreach counter=$x` in the IL — no `(in …)`.
+		expect(opsDirect("in=$list", [{ start: 0, end: 8 }])).toEqual([]);
+		expect(opsDirect("(a in $b)", [{ start: 0, end: 9 }])).toEqual(["in"]);
+		// Dotted argument names stay one name: `.id=`, `configuration.ssid=`.
+		expect(opsDirect("[find where .id=1]", [{ start: 0, end: 18 }])).toEqual(
+			[],
+		);
+		expect(
+			opsDirect("[find where configuration.ssid=$s]", [{ start: 0, end: 34 }]),
+		).toEqual([]);
+		expect(
+			opsDirect("[set x security.authentication-types=wpa2]", [
+				{ start: 0, end: 42 },
+			]),
+		).toEqual([]);
+		// The dot abstains on its own merit — inside `( )` the `=` is still a
+		// comparison, but the name-joining dot is not concatenation.
+		expect(
+			opsDirect("(configuration.ssid=$s)", [{ start: 0, end: 23 }]),
+		).toEqual(["="]);
+		// A dot NOT ending at an `=` is still concatenation.
+		expect(opsDirect("(a . b)", [{ start: 0, end: 7 }])).toEqual(["."]);
+		expect(opsDirect("(a .b)", [{ start: 0, end: 6 }])).toEqual(["."]);
 	});
 
 	test("lowered spellings: && and || as length-2 operators, <> as two tokens", () => {
