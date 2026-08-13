@@ -300,10 +300,12 @@ describe("#290 B2 — residualRanges seam and multi-fill buildTokens", () => {
 		).toEqual([{ start: 2, end: 4 }]);
 	});
 
-	test("buildTokens with ordered fills concatenates in argument order", () => {
-		// Fill order IS the fill order (#290 design decision 1) — the scanner
-		// achieves impossibility by offering only residual; the throw is the safety
-		// net. Assert the hard throw when a caller violates it.
+	test("buildTokens output is byte-ordered whatever order the fills arrive in", () => {
+		// Fill order IS the fill order (#290 design decision 1), but it decides
+		// who may CLAIM a byte — not the emitted order. The partition is always
+		// sorted by `start`, so passing the same two fills either way round is the
+		// same stream. A fill offering only residual can never overlap; the throw
+		// below is the safety net for a caller that violates that.
 		const op: ExplainSpan = { start: 2, end: 4, class: "comment", ev: "e10" };
 		const comment: ExplainSpan = {
 			start: 0,
@@ -311,7 +313,13 @@ describe("#290 B2 — residualRanges seam and multi-fill buildTokens", () => {
 			class: "comment",
 			ev: "e2",
 		};
-		expect(() => buildTokens("abcdef", [[comment], [op]])).not.toThrow();
+		const spansFirst = buildTokens("abcdef", [[comment], [op]]);
+		const opFirst = buildTokens("abcdef", [[op], [comment]]);
+		expect(spansFirst).toEqual(opFirst);
+		expect(spansFirst.map((t) => t.start)).toEqual([0, 2, 4]);
+		// The trailing gap is `unclassified`, attributed to the coordinates pass.
+		expect(spansFirst.map((t) => t.ev)).toEqual(["e2", "e10", "e1"]);
+		expect(spansFirst[2]?.class).toBe("unclassified");
 		// Overlap across fills is a hard throw, not a silent merge.
 		expect(() =>
 			buildTokens("abcdef", [
@@ -361,5 +369,14 @@ describe("#290 B2 — residualRanges seam and multi-fill buildTokens", () => {
 				(t) => t.class === "operator",
 			),
 		).toBe(true);
+		// …and a `[ ]` is a command substitution, so it does NOT lift the
+		// conservatism the way a `( )` does: every byte of this line is path or
+		// argument structure and none of it is an operator.
+		expect(
+			explainCommand(
+				":put [/ip/route/find where dst-address=0.0.0.0/0 gateway-status=reachable]",
+				{ tokens: true },
+			).tokens?.some((t) => t.class === "operator"),
+		).toBe(false);
 	});
 });
