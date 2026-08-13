@@ -90,6 +90,11 @@ export const explainCliCommand: CliCommandMetadata = {
 				"Render a ready-to-edit REST curl for statements covered by a runtime-tested mapping rule.",
 		},
 		{
+			flag: "--tokens",
+			description:
+				"Emit the total, gapless token partition behind `data.tokens[]` (provisional `class` until #264 B5: every byte not claimed by an analyzer is `unclassified`).",
+		},
+		{
 			flag: "--format",
 			valueName: `<${explainOutputFormats.join("|")}>`,
 			description: "Output format for the CLI response.",
@@ -107,6 +112,7 @@ export interface ExplainCliArgs {
 	failOn: ExplainFailOn;
 	facets: string[];
 	curl?: boolean;
+	tokens?: boolean;
 	format?: ExplainOutputFormat;
 	verbose?: boolean;
 }
@@ -161,6 +167,9 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 				break;
 			case "--curl":
 				parsed.curl = true;
+				break;
+			case "--tokens":
+				parsed.tokens = true;
 				break;
 			case "--format": {
 				const value = expectValue(args, ++index, arg);
@@ -468,6 +477,7 @@ export async function runExplainCli(args: readonly string[]): Promise<number> {
 		const envelope = explainEnvelope(input, {
 			format,
 			curl: parsed.curl,
+			tokens: parsed.tokens,
 			warnings,
 			tips:
 				parsed.facets.length > 0

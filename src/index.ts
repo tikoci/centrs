@@ -463,6 +463,8 @@ export {
 	type ExplainSymbolClass,
 	type ExplainSymbolOccurrence,
 	type ExplainSymbols,
+	type ExplainToken,
+	type ExplainTokenClass,
 	type ExplainValueFacts,
 	type ExplainValueOccurrence,
 	type ExplainValueShapeFact,

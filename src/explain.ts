@@ -406,6 +406,31 @@ export interface ExplainSpan extends ExplainSpanRange {
 	ev: string;
 }
 
+/**
+ * A token in the total, gapless byte partition (B1).
+ *
+ * Every byte of the analyzed input belongs to exactly one token — a
+ * contiguous, non-overlapping partition of `[0, input.bytes)` — sorted by
+ * `start`, with no gaps and `tokens.map(t => slice).join("") === input`.
+ * Byte-exact, inheriting the #215/#252 offset discipline. Offsets are on the
+ * analyzed text; `input.positionMap` applies when normalized.
+ *
+ * `class` is **explicitly provisional until #264 B5** — the vocabulary here is
+ * not the final LSP/SCIP legend, and every byte no analyzer claims becomes
+ * `unclassified`. Filling those holes is B2, one PR per fill. `unclassified`
+ * is a first-class answer, not a placeholder to be avoided.
+ */
+export type ExplainTokenClass = ExplainSpanClass | "unclassified";
+
+export interface ExplainToken extends ExplainSpanRange {
+	/**
+	 * Provisional until #264 B5 — do not treat as the final vocabulary.
+	 * `unclassified` means no analyzer claimed this byte.
+	 */
+	class: ExplainTokenClass;
+	ev: string;
+}
+
 /** The Q13 class, or `null` where offline analysis must abstain. */
 export type ExplainSymbolClass = Exclude<SymbolClass, "undefined"> | null;
 
@@ -521,6 +546,17 @@ export interface ExplainData {
 	symbols: ExplainSymbols;
 	values: ExplainValues;
 	spans: ExplainSpan[];
+	/**
+	 * Total, gapless token partition of `[0, input.bytes)`.
+	 *
+	 * Present only when `--tokens` is requested, matching the `--complete` /
+	 * `--schema` / `--curl` facet pattern. Every byte belongs to exactly one
+	 * token, sorted by `start`, with no gaps and no overlaps:
+	 * `tokens.map(t => input.slice(t.start, t.end)).join("") === input`.
+	 * The `class` field is provisional until #264 B5; every byte no analyzer
+	 * claims is `unclassified`.
+	 */
+	tokens?: ExplainToken[];
 	diagnostics: ExplainDiagnostic[];
 	evidence: ExplainEvidence[];
 	/**
@@ -781,6 +817,68 @@ const SPAN_CLASS_OF_SYMBOL: Record<string, ExplainSpanClass> = {
 	parameter: "variable-parameter",
 };
 
+/**
+ * Build the total, gapless token partition (B1).
+ *
+ * Every byte of `[0, bytes)` belongs to exactly one token: `spans` are
+ * placed sorted, no gaps become `unclassified`, and the result is sorted by
+ * `start` with no overlaps and `join(slice) === input`. The `class` field is
+ * provisional until #264 B5.
+ */
+export function buildTokens(
+	analyzed: string,
+	spans: readonly ExplainSpan[],
+): ExplainToken[] {
+	const len = analyzed.length;
+	const sorted = [...spans].sort((a, b) => a.start - b.start || a.end - b.end);
+	// Validate preconditions: spans sorted, non-overlapping, in bounds.
+	// B1 reuses existing analyzers — overlaps or out-of-bounds are a bug, not a fill.
+	let prev = 0;
+	for (const s of sorted) {
+		if (!Number.isInteger(s.start) || !Number.isInteger(s.end))
+			throw new Error(
+				`buildTokens: non-integer span [${s.start},${s.end}) for length ${len}`,
+			);
+		if (s.start < 0 || s.end <= s.start || s.end > len)
+			throw new Error(
+				`buildTokens: span out of bounds [${s.start},${s.end}) for length ${len}`,
+			);
+		if (s.start < prev)
+			throw new Error(
+				`buildTokens: overlapping spans at [${s.start},${s.end})`,
+			);
+		prev = Math.max(prev, s.end);
+	}
+	if (len === 0) return [];
+	const out: ExplainToken[] = [];
+	let cursor = 0;
+	for (const s of sorted) {
+		if (cursor < s.start) {
+			out.push({
+				start: cursor,
+				end: s.start,
+				class: "unclassified",
+				// The pass that produced an UNCLAIMED byte is the one that produced
+				// the analyzed surface it sits on — `analyzeCoordinates`, not the
+				// execute canonicalizer. A B2 fill replaces this with the pass that
+				// claimed the byte.
+				ev: EV.coordinates,
+			});
+		}
+		out.push({ start: s.start, end: s.end, class: s.class, ev: s.ev });
+		cursor = s.end;
+	}
+	if (cursor < len) {
+		out.push({
+			start: cursor,
+			end: len,
+			class: "unclassified",
+			ev: EV.coordinates, // see above
+		});
+	}
+	return out;
+}
+
 function severityRank(s: ExplainSeverity): number {
 	return s === "error" ? 2 : s === "warning" ? 1 : 0;
 }
@@ -804,6 +902,14 @@ function verdictOf(diagnostics: readonly ExplainDiagnostic[]): ExplainVerdict {
 export interface ExplainCommandOptions {
 	/** Include a ready-to-edit REST curl on API-candidate statements. */
 	curl?: boolean;
+	/**
+	 * Emit the total, gapless token partition behind `data.tokens[]`.
+	 *
+	 * Mirrors `--complete` / `--schema` / `--curl`: an opt-in facet whose
+	 * presence changes the result. The `class` field is provisional until
+	 * #264 B5.
+	 */
+	tokens?: boolean;
 }
 
 /**
@@ -949,6 +1055,9 @@ export function explainCommand(
 		symbols: symbolFacts,
 		values: valueFacts,
 		spans,
+		...(options.tokens === true
+			? { tokens: buildTokens(analyzed, spans) }
+			: {}),
 		diagnostics,
 		evidence: citedEvidence(
 			structure,
@@ -1360,7 +1469,10 @@ export function explainEnvelope(
 	input: string,
 	options: ExplainEnvelopeOptions = {},
 ): ExplainEnvelope {
-	const data = explainCommand(input, { curl: options.curl });
+	const data = explainCommand(input, {
+		curl: options.curl,
+		tokens: options.tokens,
+	});
 	const tips: Tip[] = [
 		buildTip(
 			"tip/explain-offline-only",
@@ -1415,6 +1527,13 @@ export interface ExplainEnvelopeOptions {
 	format?: ResolvedSetting<ExplainOutputFormat>;
 	/** Include curl rendering for API-candidate statements. */
 	curl?: boolean;
+	/**
+	 * Include the gapless token partition behind `data.tokens[]`.
+	 *
+	 * Mirrors `--complete` / `--schema` / `--curl` facet pattern. Provisional
+	 * vocabulary until #264 B5.
+	 */
+	tokens?: boolean;
 	tips?: readonly Tip[];
 	/** Facts about the INVOCATION, not the analysis (e.g. an ignored stdin). */
 	warnings?: readonly Warning[];
@@ -1652,6 +1771,23 @@ function renderExplainText(
 			lines.push(
 				`  ${span(occurrence.span).padEnd(12)} ${renderValue(occurrence)}`,
 			);
+	}
+	// `--tokens` is opt-in, so it must CHANGE this surface — a flag that only
+	// moves `--json` reads as a no-op from the default format. The header is the
+	// #289 deliverable (a coverage number) for this one input; the rows are the
+	// partition itself, `unclassified` runs included.
+	if (data.tokens !== undefined) {
+		const classified = data.tokens.reduce(
+			(sum, t) => sum + (t.class === "unclassified" ? 0 : t.end - t.start),
+			0,
+		);
+		const bytes = data.input.bytes;
+		const pct = bytes === 0 ? 0 : (classified / bytes) * 100;
+		lines.push(
+			`tokens: ${data.tokens.length} token(s), ${classified}/${bytes} byte(s) classified (${pct.toFixed(1)}%), class provisional`,
+		);
+		for (const t of data.tokens)
+			lines.push(`  ${span(t).padEnd(12)} ${t.class}`);
 	}
 	if (data.diagnostics.length > 0) {
 		lines.push("diagnostics:");

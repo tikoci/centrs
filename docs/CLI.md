@@ -223,6 +223,7 @@ Usage: centrs explain '<input>' [flags]
 | `--complete` |  | Continuation candidates at the cursor. Live evidence — offline emits a tip and enumerates nothing. |
 | `--schema` |  | Path enumeration (verbs, args, types, enums). Live evidence — offline emits a tip and enumerates nothing. |
 | `--curl` |  | Render a ready-to-edit REST curl for statements covered by a runtime-tested mapping rule. |
+| `--tokens` |  | Emit the total, gapless token partition behind `data.tokens[]` (provisional `class` until #264 B5: every byte not claimed by an analyzer is `unclassified`). |
 | `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |
 | `--json` |  | Shortcut for `--format json`. |
 | `--yaml` |  | Shortcut for `--format yaml`. |

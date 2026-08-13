@@ -699,3 +699,6 @@ arities # plural of arity — the operand counts an operator accepted, which is 
 typeofvalue # RouterOS IL renders `[:typeof $x]` as `/typeofvalue=$x` — the directive and its argument name run together with no separator
 juxt # short for juxtaposition — the unnamed ` (  a b)` node RouterOS builds for space-separated paren contents; used in ids like `any-juxt`
 punct # short for punctuation — the shape class for a candidate spelling made of symbol bytes, as opposed to a word; used in the `bogus-punct` control id
+gapless # of a token partition: every byte in [0, input.bytes) belongs to exactly one token, sorted by start, no gaps (#289 B1)
+SCIP # Source Code Intelligence Protocol — the symbol-identity axis for `data.tokens[]`'s later vocabulary (#264 B5)
+unclassified # the provisional token class for a byte no analyzer claims; a first-class answer in the gapless partition (#289 B1)
