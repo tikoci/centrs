@@ -709,3 +709,6 @@ andx
 alnum
 wpa # `security.authentication-types=wpa2-psk` — a wifi argument name whose interior dot the operator fill must not read as concatenation
 psk # pre-shared key — the value half of the same grounded `wpa2-psk` example
+
+# #293 B2 arg-fill vocabulary
+retag # B5 may retag the `=` separator from the provisional `arg` class without moving byte coverage

@@ -1206,8 +1206,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 403,516 are classified (28.28%), the remaining
-  1,023,215 are `unclassified`. The census emits 63,416 tokens (avg 66.9 per
+  1,426,731 analyzed bytes, 497,801 are classified (34.89%), the remaining
+  928,930 are `unclassified`. The census emits 86,290 tokens (avg 91.0 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is
   provisional until #264 B5. Each B2 fill should move the classified
@@ -1219,14 +1219,25 @@ partition whose `class` is provisional until #264 B5 (every unclaimed byte is
 `unclassified`). Since B1 its only fill source was `data.spans[]` (comment runs
 and resolved variable occurrences); **`#290`'s operator fill is the first B2
 fill** — `src/explain/operator-tokens.ts` claims `operator` bytes on the
-residual left by spans, with fill order enforced by argument order to
-`buildTokens` ([#290 design decision 1](../../src/explain.ts)).
-`ExplainTokenClass` is `ExplainSpanClass | "operator" | "unclassified"` — one
-provisional `operator` class for all 26 spellings + 2 aliases, not per-operator
-or per-category (`#264` B5). `ExplainSpanClass` and `data.spans[]` stay
-proof-only; `src/explain/operators.ts` remains data plus accessors, and the
-operator table above is its source. The `centrs → highlight` projection is B4
-and reads both.
+residual left by spans — and **`#293`'s arg fill is the second** —
+`src/explain/arg-tokens.ts` claims argument names and their `=` (name run
+`[span.start, valueSpan.start - 1)` plus the single `=` byte at
+`valueSpan.start - 1`; the value itself, `valueSpan`, is left for the next
+fill) on the residual left by spans, before operators see it. Fill order is
+enforced by argument order to `buildTokens`
+([#290 design decision 1](../../src/explain.ts)): `spans` claims first, then
+`arg`, then `operator` sees only what neither wanted — which is why the
+operator fill can abstain on `, / = -` outside `( )`, on bytes glued after an
+argument `=`, and on bytes glued into an argument name without a smarter
+operator scanner.
+`ExplainTokenClass` is `ExplainSpanClass | "operator" | "arg" | "unclassified"`
+— one provisional `operator` class for all 26 spellings + 2 aliases plus one
+provisional `arg` class for both the name bytes and the `=` separator (emit
+first, name later — whether the `=` later deserves its own class is #264 B5 and
+does not move the byte coverage), not per-operator or per-category (`#264` B5).
+`ExplainSpanClass` and `data.spans[]` stay proof-only; `src/explain/operators.ts`
+remains data plus accessors, and the operator table above is its source. The
+`centrs → highlight` projection is B4 and reads both.
 
 **Where the operator fill abstains.** Fill order is the resolution mechanism, so
 a byte that is structurally part of a path or an argument is left

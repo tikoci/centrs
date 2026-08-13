@@ -89,6 +89,7 @@ import {
 	canonicalizeExecuteCommand,
 	isWriteShaped,
 } from "./execute.ts";
+import { argSpans } from "./explain/arg-tokens.ts";
 import {
 	type ArgumentKind,
 	lexArguments,
@@ -416,8 +417,8 @@ export interface ExplainSpan extends ExplainSpanRange {
  * (#290 design decision 1) and a structural ambiguity (`/` path sep vs `division`)
  * resolves by which analyzer came first rather than by a smarter byte scanner.
  *
- * A fill is typed as `ExplainToken[]` because B2 fills (operator, then
- * path/arg) introduce classes outside `ExplainSpanClass`; the proof-only
+ * A fill is typed as `ExplainToken[]` because B2 fills (operator, arg, then
+ * path) introduce classes outside `ExplainSpanClass`; the proof-only
  * `spans[]` (ExplainSpan[]) remains a subtype and so fits the same slot.
  */
 export type TokenFill = readonly ExplainToken[];
@@ -435,8 +436,21 @@ export type TokenFill = readonly ExplainToken[];
  * not the final LSP/SCIP legend, and every byte no analyzer claims becomes
  * `unclassified`. Filling those holes is B2, one PR per fill. `unclassified`
  * is a first-class answer, not a placeholder to be avoided.
+ *
+ * B2 so far: `operator` (26 spellings + 2 aliases, `syntax-meta` is a residual
+ * merge, never a source, #255) and `arg` (argument names and their `=` as
+ * located by `args.ts` — the name run is `[span.start, valueSpan.start - 1)`
+ * and the `=` is the single byte at `valueSpan.start - 1`; the value itself is
+ * `valueSpan` and is left for the next fill, #293). `arg` covers both the name
+ * bytes and the `=` byte in one provisional class (emit first, name later);
+ * whether the `=` later deserves its own class is #264 B5 vocabulary and does
+ * not move the byte coverage.
  */
-export type ExplainTokenClass = ExplainSpanClass | "operator" | "unclassified";
+export type ExplainTokenClass =
+	| ExplainSpanClass
+	| "operator"
+	| "arg"
+	| "unclassified";
 
 export interface ExplainToken extends ExplainSpanRange {
 	/**
@@ -617,6 +631,7 @@ const EV = {
 	transport: "e8",
 	values: "e9",
 	operators: "e10",
+	args: "e11",
 } as const;
 
 type EvidenceKey = keyof typeof EV;
@@ -696,6 +711,13 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		id: EV.operators,
 		source: "canonicalizer",
 		probe: "operatorSpans",
+		basis: "heuristic",
+		outcome: "ok",
+	},
+	args: {
+		id: EV.args,
+		source: "canonicalizer",
+		probe: "argSpans",
 		basis: "heuristic",
 		outcome: "ok",
 	},
@@ -1125,29 +1147,39 @@ export function explainCommand(
 	// `spans` (proof-only: comment + variables) claims first; every later fill
 	// sees only the residual left by the fills before it, so a structural
 	// ambiguity (`/` path vs division, `,` arg sep vs concat) resolves by which
-	// analyzer came first. `operatorSpans` is the first such fill.
-	//
-	// **The path and arg fills belong BEFORE `operatorSpans`, not after.** The
-	// intended end state is that `pathresolve.ts` has already claimed the `/`
-	// and `args.ts` the `=` by the time the operator scanner runs, so it only
-	// ever sees bytes nobody else wanted. Until those fills exist, the operator
-	// fill buys the same safety by abstaining wherever a byte is structurally
-	// path or argument (see `operator-tokens.ts` — three grounded abstentions).
-	// Inserting a fill after it would leave those abstentions doing work they
-	// should not have to do, and the scanner can relax them only once the fill
-	// that owns those bytes runs first:
+	// analyzer came first. `argSpans` is the second such fill, `operatorSpans`
+	// the third — the intended end state is
+	// `const fills: TokenFill[] = [spans, argSpans, opSpans];` so `args.ts` has
+	// claimed the `=` before the operator scanner runs (#293 design decision 1).
+	// Until the path fill exists, the operator fill still abstains on `, / -`
+	// outside `( )` wherever a path byte would be, but for `=` the arg fill now
+	// owns the byte first, so the operator conservatism is no longer load-bearing
+	// for `=` (it stays for `, / -`). Inserting a fill after `operatorSpans`
+	// would leave those abstentions doing work they should not have to do, and
+	// the scanner can relax them only once the fill that owns those bytes runs
+	// first:
 	// const pathSpans = pathSpansOnResidual(analyzed, residual0, ...);
 	// const residual1 = residualRanges(analyzed.length, [...spans, ...pathSpans]);
-	// const opSpans = operatorSpans(analyzed, residual1);
-	// const fills: TokenFill[] = [spans, pathSpans, opSpans];
+	// const argSpansList = argSpans(analyzed, residual1, argCandidates);
+	// const residual2 = residualRanges(analyzed.length, [...spans, ...pathSpans, ...argSpansList]);
+	// const opSpans = operatorSpans(analyzed, residual2);
+	// const fills: TokenFill[] = [spans, pathSpans, argSpansList, opSpans];
 	//
 	// Gate the scan on `options.tokens` — no residual work when the caller
 	// did not ask for `data.tokens`. Future B2 fills belong inside this branch.
 	let tokens: ExplainToken[] | undefined;
 	if (options.tokens === true) {
 		const residual0 = residualRanges(analyzed.length, spans);
-		const opSpans = operatorSpans(analyzed, residual0);
-		const fills: TokenFill[] = [spans, opSpans];
+		const argCandidates = statements.flatMap((s) =>
+			s.arguments?.read === true ? s.arguments.tokens : [],
+		);
+		const argSpansList = argSpans(analyzed, residual0, argCandidates);
+		const residual1 = residualRanges(analyzed.length, [
+			...spans,
+			...argSpansList,
+		]);
+		const opSpans = operatorSpans(analyzed, residual1);
+		const fills: TokenFill[] = [spans, argSpansList, opSpans];
 		tokens = buildTokens(analyzed, fills);
 	}
 
