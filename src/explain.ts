@@ -1126,11 +1126,23 @@ export function explainCommand(
 	// sees only the residual left by the fills before it, so a structural
 	// ambiguity (`/` path vs division, `,` arg sep vs concat) resolves by which
 	// analyzer came first. `operatorSpans` is the first such fill.
+	//
+	// **The path and arg fills belong BEFORE `operatorSpans`, not after.** The
+	// intended end state is that `pathresolve.ts` has already claimed the `/`
+	// and `args.ts` the `=` by the time the operator scanner runs, so it only
+	// ever sees bytes nobody else wanted. Until those fills exist, the operator
+	// fill buys the same safety by abstaining wherever a byte is structurally
+	// path or argument (see `operator-tokens.ts` — three grounded abstentions).
+	// Inserting a fill after it would leave those abstentions doing work they
+	// should not have to do, and the scanner can relax them only once the fill
+	// that owns those bytes runs first:
+	// const pathSpans = pathSpansOnResidual(analyzed, residual0, ...);
+	// const residual1 = residualRanges(analyzed.length, [...spans, ...pathSpans]);
+	// const opSpans = operatorSpans(analyzed, residual1);
+	// const fills: TokenFill[] = [spans, pathSpans, opSpans];
+	//
 	// Gate the scan on `options.tokens` — no residual work when the caller
-	// did not ask for `data.tokens`. Future B2 fills belong inside this branch
-	// as well, each against the residual of prior fills:
-	// const residual1 = residualRanges(analyzed.length, [...spans, ...opSpans]);
-	// const pathSpans = pathSpansOnResidual(analyzed, residual1, ...);
+	// did not ask for `data.tokens`. Future B2 fills belong inside this branch.
 	let tokens: ExplainToken[] | undefined;
 	if (options.tokens === true) {
 		const residual0 = residualRanges(analyzed.length, spans);
