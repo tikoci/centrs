@@ -25,6 +25,7 @@ import { loweredSpellings, routerosOperators } from "./operators.ts";
 import { scanQuotedString } from "./quoted-string.ts";
 
 const WORD_OPERATORS = new Set(["and", "or", "in", "any"]);
+const TOP_LEVEL_CONSERVATIVE = new Set([",", "/", "=", "-"]);
 
 const PUNCT_ONLY_DOT_GUARD = ".";
 
@@ -109,7 +110,7 @@ export function operatorSpans(
 				i = scan.end;
 				continue;
 			}
-			// Unterminated single quote — advance one
+			// Unterminated double-quoted string — advance one so the scan makes progress
 			i++;
 			continue;
 		}
@@ -199,7 +200,7 @@ export function operatorSpans(
 
 			// Top-level conservatism — leaves `, / = -` for path/arg fills.
 			// `->` is explicitly allowed even at depth 0.
-			if (depth === 0 && [",", "/", "=", "-"].includes(spell)) continue;
+			if (depth === 0 && TOP_LEVEL_CONSERVATIVE.has(spell)) continue;
 
 			matched = spell;
 			break;
@@ -219,5 +220,5 @@ export function operatorSpans(
 		i++;
 	}
 
-	return out.sort((a, b) => a.start - b.start || a.end - b.end);
+	return out;
 }

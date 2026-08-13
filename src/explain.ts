@@ -1126,14 +1126,18 @@ export function explainCommand(
 	// sees only the residual left by the fills before it, so a structural
 	// ambiguity (`/` path vs division, `,` arg sep vs concat) resolves by which
 	// analyzer came first. `operatorSpans` is the first such fill.
-	const residual0 = residualRanges(analyzed.length, spans);
-	const opSpans = operatorSpans(analyzed, residual0);
-	// Future B2 fills insert here, each against the residual of prior fills:
+	// Gate the scan on `options.tokens` — no residual work when the caller
+	// did not ask for `data.tokens`. Future B2 fills belong inside this branch
+	// as well, each against the residual of prior fills:
 	// const residual1 = residualRanges(analyzed.length, [...spans, ...opSpans]);
 	// const pathSpans = pathSpansOnResidual(analyzed, residual1, ...);
-	const fills: TokenFill[] = [spans, opSpans];
-	const tokens =
-		options.tokens === true ? buildTokens(analyzed, fills) : undefined;
+	let tokens: ExplainToken[] | undefined;
+	if (options.tokens === true) {
+		const residual0 = residualRanges(analyzed.length, spans);
+		const opSpans = operatorSpans(analyzed, residual0);
+		const fills: TokenFill[] = [spans, opSpans];
+		tokens = buildTokens(analyzed, fills);
+	}
 
 	return {
 		input: {

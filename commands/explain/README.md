@@ -1220,7 +1220,7 @@ partition whose `class` is provisional until #264 B5 (every unclaimed byte is
 and resolved variable occurrences); **`#290`'s operator fill is the first B2
 fill** — `src/explain/operator-tokens.ts` claims `operator` bytes on the
 residual left by spans, with fill order enforced by argument order to
-`buildTokens` ([#290 design decision 1](../..//../src/explain.ts)). `ExplainTokenClass` is `ExplainSpanClass | "operator" | "unclassified"` — one provisional `operator` class for all 26 spellings + 2 aliases, not per-operator or per-category (`#264` B5). `ExplainSpanClass` and `data.spans[]` stay proof-only; `src/explain/operators.ts` remains data plus accessors, and the operator table above is its source. The `centrs → highlight` projection is B4 and reads both.
+`buildTokens` ([#290 design decision 1](../../src/explain.ts)). `ExplainTokenClass` is `ExplainSpanClass | "operator" | "unclassified"` — one provisional `operator` class for all 26 spellings + 2 aliases, not per-operator or per-category (`#264` B5). `ExplainSpanClass` and `data.spans[]` stay proof-only; `src/explain/operators.ts` remains data plus accessors, and the operator table above is its source. The `centrs → highlight` projection is B4 and reads both.
 
 ### Designed, not implemented (the CLI surface, #202b)
 
