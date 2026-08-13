@@ -1214,9 +1214,14 @@ And the grounded complement — asked, and refused:
   percentage.
   <!-- END GENERATED token-census -->
 
-B1's `data.tokens[]` is live behind `--tokens` — a total, gapless byte partition whose `class` is provisional until #264 B5 (every unclaimed byte is `unclassified`). `src/explain/operators.ts` is still data plus accessors; the operator fill for that partition is #264's B2 and the
-`centrs → highlight` projection is B4, and both read this table rather than
-re-deriving it.
+B1's `data.tokens[]` is live behind `--tokens` — a total, gapless byte
+partition whose `class` is provisional until #264 B5 (every unclaimed byte is
+`unclassified`). Its only fill source today is `data.spans[]`, so an operator
+fill needs a claim seam of its own: `spans[]` is the proof-only facet (comment
+runs and resolved variable occurrences) and must not grow an operator class.
+`src/explain/operators.ts` is still data plus accessors; the operator fill for
+that partition is #264's B2 and the `centrs → highlight` projection is B4, and
+both read this table rather than re-deriving it.
 
 ### Designed, not implemented (the CLI surface, #202b)
 

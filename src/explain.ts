@@ -858,7 +858,11 @@ export function buildTokens(
 				start: cursor,
 				end: s.start,
 				class: "unclassified",
-				ev: "e0", // B1: provisional — B2 fills carry the pass that claimed the byte
+				// The pass that produced an UNCLAIMED byte is the one that produced
+				// the analyzed surface it sits on — `analyzeCoordinates`, not the
+				// execute canonicalizer. A B2 fill replaces this with the pass that
+				// claimed the byte.
+				ev: EV.coordinates,
 			});
 		}
 		out.push({ start: s.start, end: s.end, class: s.class, ev: s.ev });
@@ -869,7 +873,7 @@ export function buildTokens(
 			start: cursor,
 			end: len,
 			class: "unclassified",
-			ev: "e0", // B1: provisional — see above
+			ev: EV.coordinates, // see above
 		});
 	}
 	return out;
@@ -1767,6 +1771,23 @@ function renderExplainText(
 			lines.push(
 				`  ${span(occurrence.span).padEnd(12)} ${renderValue(occurrence)}`,
 			);
+	}
+	// `--tokens` is opt-in, so it must CHANGE this surface — a flag that only
+	// moves `--json` reads as a no-op from the default format. The header is the
+	// #289 deliverable (a coverage number) for this one input; the rows are the
+	// partition itself, `unclassified` runs included.
+	if (data.tokens !== undefined) {
+		const classified = data.tokens.reduce(
+			(sum, t) => sum + (t.class === "unclassified" ? 0 : t.end - t.start),
+			0,
+		);
+		const bytes = data.input.bytes;
+		const pct = bytes === 0 ? 0 : (classified / bytes) * 100;
+		lines.push(
+			`tokens: ${data.tokens.length} token(s), ${classified}/${bytes} byte(s) classified (${pct.toFixed(1)}%), class provisional`,
+		);
+		for (const t of data.tokens)
+			lines.push(`  ${span(t).padEnd(12)} ${t.class}`);
 	}
 	if (data.diagnostics.length > 0) {
 		lines.push("diagnostics:");

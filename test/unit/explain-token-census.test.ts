@@ -16,7 +16,13 @@ import {
 	type TokenCensus,
 } from "../../scripts/explain-token-census.ts";
 import { analyzeCoordinates } from "../../src/explain/coordinates.ts";
-import { explainCommand } from "../../src/explain.ts";
+import {
+	buildTokens,
+	type ExplainSpan,
+	explainCommand,
+	explainEnvelope,
+	renderExplainEnvelope,
+} from "../../src/explain.ts";
 
 const README = readFileSync(
 	new URL("../../commands/explain/README.md", import.meta.url),
@@ -111,8 +117,10 @@ describe("#289 B1 — token partition invariant over representative inputs", () 
 			tokens: true,
 		});
 		expect(data.tokens?.every((t) => typeof t.class === "string")).toBe(true);
+		// `ev` is the pass that produced the byte: an UNCLAIMED byte comes from
+		// the coordinate analysis (`e1`), not the execute canonicalizer (`e0`).
 		expect(data.tokens).toEqual([
-			{ start: 0, end: 3, class: "unclassified", ev: "e0" },
+			{ start: 0, end: 3, class: "unclassified", ev: "e1" },
 		]);
 		// The pinned census still has unclassified bytes (the deliverable number)
 		expect(fixture.corpus.classCounts["unclassified"]).toBeGreaterThan(0);
@@ -131,6 +139,98 @@ describe("#289 B1 — token partition invariant over representative inputs", () 
 			.join("");
 		expect(recon).toBe(analyzed);
 		expect(data.tokens?.at(-1)?.end).toBe(analyzed.length);
+	});
+});
+
+describe("#289 B1 — buildTokens rejects a span set it cannot partition", () => {
+	// These guards are unreachable from `explainCommand` today (the only span
+	// producers are the comment and symbol walkers, and 40k fuzzed inputs never
+	// trip them). Reachable only by calling `buildTokens` directly — which is
+	// exactly why they need a direct test, or nothing goes red when one is
+	// deleted.
+	const span = (start: number, end: number): ExplainSpan => ({
+		start,
+		end,
+		class: "comment",
+		ev: "e2",
+	});
+
+	test("a non-integer offset", () => {
+		expect(() => buildTokens("abcdef", [span(0.5, 3)])).toThrow(
+			/non-integer span/,
+		);
+	});
+
+	test("a negative start reports bounds, not overlap", () => {
+		expect(() => buildTokens("abcdef", [span(-1, 3)])).toThrow(
+			/span out of bounds/,
+		);
+	});
+
+	test("an end past the input", () => {
+		expect(() => buildTokens("abcdef", [span(2, 99)])).toThrow(
+			/span out of bounds/,
+		);
+	});
+
+	test("an empty or reversed span", () => {
+		expect(() => buildTokens("abcdef", [span(3, 3)])).toThrow(
+			/span out of bounds/,
+		);
+		expect(() => buildTokens("abcdef", [span(5, 3)])).toThrow(
+			/span out of bounds/,
+		);
+	});
+
+	test("two spans that overlap, in either input order", () => {
+		expect(() => buildTokens("abcdef", [span(0, 4), span(2, 6)])).toThrow(
+			/overlapping spans/,
+		);
+		expect(() => buildTokens("abcdef", [span(2, 6), span(0, 4)])).toThrow(
+			/overlapping spans/,
+		);
+	});
+
+	test("unsorted but disjoint spans still partition", () => {
+		expect(buildTokens("abcdef", [span(4, 6), span(0, 2)])).toEqual([
+			{ start: 0, end: 2, class: "comment", ev: "e2" },
+			{ start: 2, end: 4, class: "unclassified", ev: "e1" },
+			{ start: 4, end: 6, class: "comment", ev: "e2" },
+		]);
+	});
+
+	test("empty input has no tokens", () => {
+		expect(buildTokens("", [])).toEqual([]);
+	});
+});
+
+describe("#289 B1 — `--tokens` changes the DEFAULT surface, not just `--json`", () => {
+	const input = ":local x 1 # note $x";
+
+	test("the text render gains a tokens section with the coverage number", () => {
+		const off = renderExplainEnvelope(explainEnvelope(input), "text");
+		const on = renderExplainEnvelope(
+			explainEnvelope(input, { tokens: true }),
+			"text",
+		);
+		expect(off).not.toContain("tokens:");
+		expect(on).toContain("tokens:");
+		const header = splitLines(on).find((l) => l.startsWith("tokens:"));
+		expect(header).toMatch(
+			/^tokens: \d+ token\(s\), \d+\/\d+ byte\(s\) classified \(\d+\.\d%\), class provisional$/,
+		);
+	});
+
+	test("every token is a row, `unclassified` runs included", () => {
+		const envelope = explainEnvelope(input, { tokens: true });
+		const rows = splitLines(renderExplainEnvelope(envelope, "text"));
+		const at = rows.findIndex((l) => l.startsWith("tokens:"));
+		const tokens = envelope.data.tokens ?? [];
+		expect(tokens.length).toBeGreaterThan(1);
+		expect(rows.slice(at + 1, at + 1 + tokens.length)).toEqual(
+			tokens.map((t) => `  ${`[${t.start},${t.end})`.padEnd(12)} ${t.class}`),
+		);
+		expect(tokens.some((t) => t.class === "unclassified")).toBe(true);
 	});
 });
 
