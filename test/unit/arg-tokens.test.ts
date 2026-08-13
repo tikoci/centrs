@@ -55,8 +55,9 @@ function attr(
 
 describe("#293 arg fill — direct residual scanner", () => {
 	test("single attribute → single coalesced arg token [name=]", () => {
-		// "address=1.1.1.1" name=[0,8) `=` at 7? Actually valueSpan.start = 8, so name [0,7) wait check: name=address len 7? Let's use synthetic.
-		// Use analyzed "address=1" where name=address (0..7), = at 7, valueSpan [8,9)
+		// `address` is 7 bytes, so for "address=1" the name run is [0,7), the `=`
+		// is the single byte [7,8) — derived as `valueSpan.start - 1` — and the
+		// value is valueSpan [8,9). The fill claims [0,8) as one `arg` run.
 		const analyzed = "address=1";
 		expect(
 			argsDirect(
@@ -191,7 +192,7 @@ describe("#293 arg fill — direct residual scanner", () => {
 		// residual has holes for " b=2 " interior
 		const residual = [
 			{ start: 0, end: 3 }, // "a=1"
-			{ start: 7, end: 11 }, // "c=3" plus leading space?
+			{ start: 7, end: 11 }, // " c=3" — the space at 7 plus "c=3" at [8,11)
 		];
 		// Provide three candidates, middle one should be fully clipped
 		expect(
@@ -249,7 +250,7 @@ describe("#293 arg fill — direct residual scanner", () => {
 
 	test("clipToResidual binary-search path — residual far from start", () => {
 		// residual single far interval, candidate before it
-		const analyzed = "x".repeat(1000) + "address=1";
+		const analyzed = `${"x".repeat(1000)}address=1`;
 		const base = 1000;
 		expect(
 			argsDirect(
@@ -401,5 +402,27 @@ describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 			{ start: 0, end: 1 },
 			{ start: 3, end: 5 },
 		]);
+	});
+
+	test("mixed document: a read statement claims, an unread one does not", () => {
+		// The `read === true` filter is applied per STATEMENT, and the residual is
+		// document-global — so one refusing statement must not suppress a readable
+		// one, and must not let the fill spill into its own bytes. `gateway=$gw`
+		// is `a variable value`, which `lexArguments` refuses wholesale.
+		const input = "/ip/address/add address=1.1.1.1\n/ip/route/add gateway=$gw";
+		const data = explainCommand(input, { tokens: true });
+		const args = (data.tokens ?? []).filter((t) => t.class === "arg");
+		expect(args.map((t) => input.slice(t.start, t.end))).toEqual(["address="]);
+		// Every claimed byte is in the FIRST statement.
+		const secondStart = input.indexOf("\n") + 1;
+		for (const t of args) expect(t.end).toBeLessThanOrEqual(secondStart);
+		// The refused statement's `gateway=` bytes stay unclassified — not `arg`.
+		const gatewayEq = input.indexOf("gateway=");
+		const atGateway = (data.tokens ?? []).find(
+			(t) => t.start <= gatewayEq && t.end > gatewayEq,
+		);
+		expect(atGateway?.class).toBe("unclassified");
+		// e11 is cited because SOME statement produced arg tokens.
+		expect(data.evidence.some((e) => e.id === "e11")).toBe(true);
 	});
 });

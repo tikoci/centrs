@@ -714,11 +714,22 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		basis: "heuristic",
 		outcome: "ok",
 	},
+	/**
+	 * `heuristic`, not `direct`, even though the span arithmetic is exact.
+	 *
+	 * `basis` describes the FACT, not the arithmetic. The fact here is "these
+	 * bytes are an argument name and its `=`", and it rests on `argsAt` — the
+	 * verb boundary, which `EV.statements` already records as `heuristic` and
+	 * which this type's own doc names as the example of a rule a live probe
+	 * could overturn. A misread boundary shifts every token this fill emits.
+	 * `operatorSpans` sits at `heuristic` on identical grounds: deterministic
+	 * byte arithmetic over a grounded table, downstream of an offline rule.
+	 */
 	args: {
 		id: EV.args,
 		source: "canonicalizer",
 		probe: "argSpans",
-		basis: "direct",
+		basis: "heuristic",
 		outcome: "ok",
 	},
 };

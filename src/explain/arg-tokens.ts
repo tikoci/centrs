@@ -106,6 +106,11 @@ export function argSpans(
 		)
 			continue;
 		if (nameStart < 0 || eqEnd > len) continue;
+		// Non-empty name. This is also what rejects `valueSpan.start === 0`, where
+		// `eqStart` would be -1: `nameEnd` is -1 too, so any `nameStart >= 0` trips
+		// it. `analyzed[-1]` on the next line would be `undefined` and continue
+		// anyway, so the order is safe either way — but the name check is the one
+		// that carries the intent.
 		if (nameStart >= nameEnd) continue;
 		// The whole token's `=` byte must be `=` in the analyzed text — a cheap
 		// shape check that catches a caller that passed un-rebased or misaligned
@@ -116,24 +121,15 @@ export function argSpans(
 		if (candidate.valueSpan.start < 0 || candidate.valueSpan.end > len)
 			continue;
 
-		// Clip each run to the residual — a `variable-*` span may already claim
-		// bytes that look like an arg name/value (e.g. `comment=$c` is unread,
-		// so it never reaches here, but a future variable inside a quoted value
-		// would). Offering only residual keeps `buildTokens`'s cross-fill overlap
-		// throw as a safety net rather than a production path.
-		// A `variable-*` claiming the `=` does not imply it claims the name
-		// bytes, so the name and the `=` are clipped separately.
-		const nameClipped = clipToResidual(nameStart, nameEnd, residual);
-		const eqClipped = clipToResidual(eqStart, eqEnd, residual);
-		for (const r of nameClipped) {
-			out.push({
-				start: r.start,
-				end: r.end,
-				class: "arg" as const,
-				ev: "e11",
-			});
-		}
-		for (const r of eqClipped) {
+		// The name run and the `=` are contiguous (`nameEnd === eqStart`), so
+		// clip them as ONE range per candidate. That yields the maximal `[name=]`
+		// run for free — split only where the residual itself has a hole — and
+		// makes cross-candidate fusion structurally impossible rather than merely
+		// unreachable: coalescing adjacent runs globally would merge two distinct
+		// attributes into one token if `lexArguments` ever stopped guaranteeing a
+		// separator between them. A `variable-*` span claiming only the `=` still
+		// leaves the name run behind, because the residual hole does the splitting.
+		for (const r of clipToResidual(nameStart, eqEnd, residual)) {
 			out.push({
 				start: r.start,
 				end: r.end,
@@ -144,24 +140,5 @@ export function argSpans(
 	}
 
 	out.sort((a, b) => a.start - b.start || a.end - b.end);
-	// Coalesce adjacent `arg` runs that were split only by the name/`=` boundary
-	// when both were residual: `[name][=]` of the same attribute becomes one
-	// maximal `arg` run rather than two adjacent tokens of the same class. The
-	// two bytes remain distinguishable by the `=` position, but the partition
-	// itself need not multiply tokens for a single name+separator.
-	const coalesced: ExplainToken[] = [];
-	for (const t of out) {
-		const last = coalesced[coalesced.length - 1];
-		if (
-			last !== undefined &&
-			last.class === t.class &&
-			last.ev === t.ev &&
-			last.end === t.start
-		) {
-			last.end = t.end;
-		} else {
-			coalesced.push({ ...t });
-		}
-	}
-	return coalesced;
+	return out;
 }
