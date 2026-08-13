@@ -66,27 +66,34 @@ export function census(scripts: readonly string[]): TokenCensus {
 	const classByteCounts: Record<string, number> = {};
 	const invariantFailures: string[] = [];
 
-	for (const text of scripts) {
+	for (const [index, text] of scripts.entries()) {
 		const data = explainCommand(text, { tokens: true });
 		const tokensLocal = data.tokens ?? [];
 		const bytes = data.input.bytes;
 		totalBytes += bytes;
 		totalTokens += tokensLocal.length;
 
+		// A failure has to name the script that produced it. `gap/overlap at 17`
+		// on its own is unactionable in CI: the corpus is not in this repo, so
+		// without the row index and a snippet there is nothing to go look at.
+		const fail = (what: string): void => {
+			invariantFailures.push(
+				`script #${index} (${JSON.stringify(text.slice(0, 60))}${text.length > 60 ? "…" : ""}): ${what}`,
+			);
+		};
+
 		// Invariant checks (also the fact B1 must not break).
 		if (bytes === 0) {
-			if (tokensLocal.length !== 0)
-				invariantFailures.push("empty input should have 0 tokens");
+			if (tokensLocal.length !== 0) fail("empty input should have 0 tokens");
 			continue;
 		}
 		if (tokensLocal.length === 0) {
-			invariantFailures.push(`no tokens for non-empty input of ${bytes} bytes`);
+			fail(`no tokens for non-empty input of ${bytes} bytes`);
 			continue;
 		}
-		if (tokensLocal[0]?.start !== 0)
-			invariantFailures.push("first token not at 0");
+		if (tokensLocal[0]?.start !== 0) fail("first token not at 0");
 		if (tokensLocal[tokensLocal.length - 1]?.end !== bytes)
-			invariantFailures.push("last token not at bytes");
+			fail("last token not at bytes");
 		let hasInvalidRange = false;
 		for (const t of tokensLocal) {
 			if (
@@ -97,9 +104,7 @@ export function census(scripts: readonly string[]): TokenCensus {
 				t.end > bytes ||
 				t.start >= bytes
 			) {
-				invariantFailures.push(
-					`invalid token range [${t.start},${t.end}) for bytes ${bytes}`,
-				);
+				fail(`invalid token range [${t.start},${t.end}) for bytes ${bytes}`);
 				hasInvalidRange = true;
 				break;
 			}
@@ -109,7 +114,9 @@ export function census(scripts: readonly string[]): TokenCensus {
 				const cur = tokensLocal[i] as { start: number; end: number };
 				const prev = tokensLocal[i - 1] as { start: number; end: number };
 				if (cur.start !== prev.end) {
-					invariantFailures.push(`gap/overlap at ${i}`);
+					fail(
+						`gap/overlap at token ${i}: [${prev.start},${prev.end}) then [${cur.start},${cur.end})`,
+					);
 					break;
 				}
 			}
@@ -119,7 +126,7 @@ export function census(scripts: readonly string[]): TokenCensus {
 			const recon = tokensLocal
 				.map((t) => analyzed.slice(t.start, t.end))
 				.join("");
-			if (recon !== analyzed) invariantFailures.push("join(slice) !== input");
+			if (recon !== analyzed) fail("join(slice) !== input");
 		}
 
 		for (const t of tokensLocal) {
@@ -253,7 +260,11 @@ export function diffAgainstFixture(
 			}
 			continue;
 		}
-		// classifiedPct is derived; compare with tolerance to 2 decimal places.
+		// `classifiedPct` is DERIVED from `classifiedBytes` / `totalBytes`, and
+		// both of those are compared exactly above — so real drift is already
+		// caught there. This epsilon absorbs float round-trip noise through
+		// JSON; it is not a drift allowance, and must stay far tighter than the
+		// 2 decimal places the README block renders.
 		if (key === "classifiedPct") {
 			const da = typeof a === "number" ? a : 0;
 			const db = typeof b === "number" ? b : 0;
