@@ -22,6 +22,7 @@ import {
 	explainCommand,
 	explainEnvelope,
 	renderExplainEnvelope,
+	residualRanges,
 } from "../../src/explain.ts";
 
 const README = readFileSync(
@@ -281,5 +282,101 @@ describe("#289 B1 — token-census drift gate", () => {
 				fixture.corpus,
 			),
 		).toEqual([]);
+	});
+});
+
+describe("#290 B2 — residualRanges seam and multi-fill buildTokens", () => {
+	test("residual of empty claimed is the whole input", () => {
+		expect(residualRanges(5, [])).toEqual([{ start: 0, end: 5 }]);
+		expect(residualRanges(0, [])).toEqual([]);
+	});
+
+	test("residual coalesces and sorts claimed spans", () => {
+		expect(
+			residualRanges(6, [
+				{ start: 4, end: 6 },
+				{ start: 0, end: 2 },
+			]),
+		).toEqual([{ start: 2, end: 4 }]);
+	});
+
+	test("buildTokens output is byte-ordered whatever order the fills arrive in", () => {
+		// Fill order IS the fill order (#290 design decision 1), but it decides
+		// who may CLAIM a byte — not the emitted order. The partition is always
+		// sorted by `start`, so passing the same two fills either way round is the
+		// same stream. A fill offering only residual can never overlap; the throw
+		// below is the safety net for a caller that violates that.
+		const op: ExplainSpan = { start: 2, end: 4, class: "comment", ev: "e10" };
+		const comment: ExplainSpan = {
+			start: 0,
+			end: 2,
+			class: "comment",
+			ev: "e2",
+		};
+		const spansFirst = buildTokens("abcdef", [[comment], [op]]);
+		const opFirst = buildTokens("abcdef", [[op], [comment]]);
+		expect(spansFirst).toEqual(opFirst);
+		expect(spansFirst.map((t) => t.start)).toEqual([0, 2, 4]);
+		// The trailing gap is `unclassified`, attributed to the coordinates pass.
+		expect(spansFirst.map((t) => t.ev)).toEqual(["e2", "e10", "e1"]);
+		expect(spansFirst[2]?.class).toBe("unclassified");
+		// Overlap across fills is a hard throw, not a silent merge.
+		expect(() =>
+			buildTokens("abcdef", [
+				[{ start: 0, end: 4, class: "comment", ev: "e2" }],
+				[{ start: 2, end: 6, class: "comment", ev: "e10" }],
+			]),
+		).toThrow(/overlapping spans/);
+	});
+
+	test("operator class is a first-class token class with ev e10", () => {
+		const data = explainCommand(":put (1+2)", { tokens: true });
+		const ops = (data.tokens ?? []).filter((t) => t.class === "operator");
+		expect(ops.length).toBeGreaterThan(0);
+		for (const t of ops) expect(t.ev).toBe("e10");
+		// `spans` stays proof-only — no operator class there.
+		expect(data.spans.some((s) => (s.class as string) === "operator")).toBe(
+			false,
+		);
+		// Evidence cites e10 only when operator tokens exist.
+		const hasOperatorEvidence = data.evidence.some((e) => e.id === "e10");
+		expect(hasOperatorEvidence).toBe(true);
+		const noOp = explainCommand("/ip address add address=1.1.1.1", {
+			tokens: true,
+		});
+		expect(noOp.evidence.some((e) => e.id === "e10")).toBe(false);
+		expect(fixture.corpus.classCounts["operator"]).toBeGreaterThan(0);
+		expect(fixture.corpus.classByteCounts["operator"]).toBeGreaterThan(0);
+	});
+
+	test("fill order conservatism: top-level , / = - stay unclassified for path/arg fills", () => {
+		const commaTop = explainCommand(":put 1,2", { tokens: true });
+		expect(
+			commaTop.tokens?.some((t) => t.class === "operator" && t.start === 7),
+		).toBe(false);
+		const commaInside = explainCommand(":put (1,2)", { tokens: true });
+		expect(
+			commaInside.tokens?.some((t) => t.class === "operator" && t.start === 7),
+		).toBe(true);
+		// Slash and equals share the same conservatism.
+		expect(
+			explainCommand(":put 1 / 2", { tokens: true }).tokens?.some(
+				(t) => t.class === "operator",
+			),
+		).toBe(false);
+		expect(
+			explainCommand(":put (1 / 2)", { tokens: true }).tokens?.some(
+				(t) => t.class === "operator",
+			),
+		).toBe(true);
+		// …and a `[ ]` is a command substitution, so it does NOT lift the
+		// conservatism the way a `( )` does: every byte of this line is path or
+		// argument structure and none of it is an operator.
+		expect(
+			explainCommand(
+				":put [/ip/route/find where dst-address=0.0.0.0/0 gateway-status=reachable]",
+				{ tokens: true },
+			).tokens?.some((t) => t.class === "operator"),
+		).toBe(false);
 	});
 });

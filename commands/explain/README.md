@@ -1206,8 +1206,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 391,474 are classified (27.44%), the remaining
-  1,035,257 are `unclassified`. The census emits 46,580 tokens (avg 49.1 per
+  1,426,731 analyzed bytes, 403,516 are classified (28.28%), the remaining
+  1,023,215 are `unclassified`. The census emits 63,416 tokens (avg 66.9 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is
   provisional until #264 B5. Each B2 fill should move the classified
@@ -1216,12 +1216,34 @@ And the grounded complement — asked, and refused:
 
 B1's `data.tokens[]` is live behind `--tokens` — a total, gapless byte
 partition whose `class` is provisional until #264 B5 (every unclaimed byte is
-`unclassified`). Its only fill source today is `data.spans[]`, so an operator
-fill needs a claim seam of its own: `spans[]` is the proof-only facet (comment
-runs and resolved variable occurrences) and must not grow an operator class.
-`src/explain/operators.ts` is still data plus accessors; the operator fill for
-that partition is #264's B2 and the `centrs → highlight` projection is B4, and
-both read this table rather than re-deriving it.
+`unclassified`). Since B1 its only fill source was `data.spans[]` (comment runs
+and resolved variable occurrences); **`#290`'s operator fill is the first B2
+fill** — `src/explain/operator-tokens.ts` claims `operator` bytes on the
+residual left by spans, with fill order enforced by argument order to
+`buildTokens` ([#290 design decision 1](../../src/explain.ts)).
+`ExplainTokenClass` is `ExplainSpanClass | "operator" | "unclassified"` — one
+provisional `operator` class for all 26 spellings + 2 aliases, not per-operator
+or per-category (`#264` B5). `ExplainSpanClass` and `data.spans[]` stay
+proof-only; `src/explain/operators.ts` remains data plus accessors, and the
+operator table above is its source. The `centrs → highlight` projection is B4
+and reads both.
+
+**Where the operator fill abstains.** Fill order is the resolution mechanism, so
+a byte that is structurally part of a path or an argument is left
+`unclassified` for the path/arg fills rather than claimed. Three abstentions,
+each grounded on the corpus device oracle (`parseil_results.il_text`):
+
+| Abstention | Grounding |
+| ---------- | --------- |
+| `, / = -` outside a `( )` group. `(` opens an expression; `[` opens a **command substitution** and `{` a block or array literal. | The IL for `[ /system/identity/get value-name=name ]` is `(evl /system/identity/get value-name=name)` — path separators and an argument separator, no division and no comparison node. |
+| A spelling glued immediately after an argument `=`. | `in-interface-list=!LAN`, `.id=*2`, `oid=.1.3.6.1.2.1` — the byte after an argument `=` starts the value. |
+| A spelling glued into an argument **name**. | `:foreach x in=$list` is `/foreach counter=$x` with no `(in …)` node anywhere; the IL keeps `security.authentication-types=wpa2-psk` as one name and renders `.id` as the single symbol `$.id`, never `(. …)`. |
+
+The first abstention has a measured cost: `find where name="x"` inside `[ … ]`
+*does* lower to a real `(= $name x)` node, so 224 of the corpus's 1,259
+bracket-interior `=` bytes are genuine comparisons that now stay
+`unclassified` — against 1,035 that were plain `arg=value`. A `where`-aware
+fill can take them back later; claiming all 1,259 would be 82% wrong.
 
 ### Designed, not implemented (the CLI surface, #202b)
 

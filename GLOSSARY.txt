@@ -702,3 +702,10 @@ punct # short for punctuation — the shape class for a candidate spelling made 
 gapless # of a token partition: every byte in [0, input.bytes) belongs to exactly one token, sorted by start, no gaps (#289 B1)
 SCIP # Source Code Intelligence Protocol — the symbol-identity axis for `data.tokens[]`'s later vocabulary (#264 B5)
 unclassified # the provisional token class for a byte no analyzer claims; a first-class answer in the gapless partition (#289 B1)
+
+# #290 B2 operator-fill test vocabulary
+xand
+andx
+alnum
+wpa # `security.authentication-types=wpa2-psk` — a wifi argument name whose interior dot the operator fill must not read as concatenation
+psk # pre-shared key — the value half of the same grounded `wpa2-psk` example
