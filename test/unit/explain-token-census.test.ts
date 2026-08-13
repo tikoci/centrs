@@ -22,6 +22,7 @@ import {
 	explainCommand,
 	explainEnvelope,
 	renderExplainEnvelope,
+	residualRanges,
 } from "../../src/explain.ts";
 
 const README = readFileSync(
@@ -281,5 +282,84 @@ describe("#289 B1 — token-census drift gate", () => {
 				fixture.corpus,
 			),
 		).toEqual([]);
+	});
+});
+
+describe("#290 B2 — residualRanges seam and multi-fill buildTokens", () => {
+	test("residual of empty claimed is the whole input", () => {
+		expect(residualRanges(5, [])).toEqual([{ start: 0, end: 5 }]);
+		expect(residualRanges(0, [])).toEqual([]);
+	});
+
+	test("residual coalesces and sorts claimed spans", () => {
+		expect(
+			residualRanges(6, [
+				{ start: 4, end: 6 },
+				{ start: 0, end: 2 },
+			]),
+		).toEqual([{ start: 2, end: 4 }]);
+	});
+
+	test("buildTokens with ordered fills concatenates in argument order", () => {
+		// Fill order IS the fill order (#290 design decision 1) — the scanner
+		// achieves impossibility by offering only residual; the throw is the safety
+		// net. Assert the hard throw when a caller violates it.
+		const op: ExplainSpan = { start: 2, end: 4, class: "comment", ev: "e10" };
+		const comment: ExplainSpan = {
+			start: 0,
+			end: 2,
+			class: "comment",
+			ev: "e2",
+		};
+		expect(() => buildTokens("abcdef", [[comment], [op]])).not.toThrow();
+		// Overlap across fills is a hard throw, not a silent merge.
+		expect(() =>
+			buildTokens("abcdef", [
+				[{ start: 0, end: 4, class: "comment", ev: "e2" }],
+				[{ start: 2, end: 6, class: "comment", ev: "e10" }],
+			]),
+		).toThrow(/overlapping spans/);
+	});
+
+	test("operator class is a first-class token class with ev e10", () => {
+		const data = explainCommand(":put (1+2)", { tokens: true });
+		const ops = (data.tokens ?? []).filter((t) => t.class === "operator");
+		expect(ops.length).toBeGreaterThan(0);
+		for (const t of ops) expect(t.ev).toBe("e10");
+		// `spans` stays proof-only — no operator class there.
+		expect(data.spans.some((s) => (s.class as string) === "operator")).toBe(
+			false,
+		);
+		// Evidence cites e10 only when operator tokens exist.
+		const hasOperatorEvidence = data.evidence.some((e) => e.id === "e10");
+		expect(hasOperatorEvidence).toBe(true);
+		const noOp = explainCommand("/ip address add address=1.1.1.1", {
+			tokens: true,
+		});
+		expect(noOp.evidence.some((e) => e.id === "e10")).toBe(false);
+		expect(fixture.corpus.classCounts["operator"]).toBeGreaterThan(0);
+		expect(fixture.corpus.classByteCounts["operator"]).toBeGreaterThan(0);
+	});
+
+	test("fill order conservatism: top-level , / = - stay unclassified for path/arg fills", () => {
+		const commaTop = explainCommand(":put 1,2", { tokens: true });
+		expect(
+			commaTop.tokens?.some((t) => t.class === "operator" && t.start === 7),
+		).toBe(false);
+		const commaInside = explainCommand(":put (1,2)", { tokens: true });
+		expect(
+			commaInside.tokens?.some((t) => t.class === "operator" && t.start === 7),
+		).toBe(true);
+		// Slash and equals share the same conservatism.
+		expect(
+			explainCommand(":put 1 / 2", { tokens: true }).tokens?.some(
+				(t) => t.class === "operator",
+			),
+		).toBe(false);
+		expect(
+			explainCommand(":put (1 / 2)", { tokens: true }).tokens?.some(
+				(t) => t.class === "operator",
+			),
+		).toBe(true);
 	});
 });

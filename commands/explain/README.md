@@ -1206,8 +1206,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 391,474 are classified (27.44%), the remaining
-  1,035,257 are `unclassified`. The census emits 46,580 tokens (avg 49.1 per
+  1,426,731 analyzed bytes, 408,307 are classified (28.62%), the remaining
+  1,018,424 are `unclassified`. The census emits 72,264 tokens (avg 76.2 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is
   provisional until #264 B5. Each B2 fill should move the classified
@@ -1216,12 +1216,11 @@ And the grounded complement — asked, and refused:
 
 B1's `data.tokens[]` is live behind `--tokens` — a total, gapless byte
 partition whose `class` is provisional until #264 B5 (every unclaimed byte is
-`unclassified`). Its only fill source today is `data.spans[]`, so an operator
-fill needs a claim seam of its own: `spans[]` is the proof-only facet (comment
-runs and resolved variable occurrences) and must not grow an operator class.
-`src/explain/operators.ts` is still data plus accessors; the operator fill for
-that partition is #264's B2 and the `centrs → highlight` projection is B4, and
-both read this table rather than re-deriving it.
+`unclassified`). Since B1 its only fill source was `data.spans[]` (comment runs
+and resolved variable occurrences); **`#290`'s operator fill is the first B2
+fill** — `src/explain/operator-tokens.ts` claims `operator` bytes on the
+residual left by spans, with fill order enforced by argument order to
+`buildTokens` ([#290 design decision 1](../..//../src/explain.ts)). `ExplainTokenClass` is `ExplainSpanClass | "operator" | "unclassified"` — one provisional `operator` class for all 26 spellings + 2 aliases, not per-operator or per-category (`#264` B5). `ExplainSpanClass` and `data.spans[]` stay proof-only; `src/explain/operators.ts` remains data plus accessors, and the operator table above is its source. The `centrs → highlight` projection is B4 and reads both.
 
 ### Designed, not implemented (the CLI surface, #202b)
 

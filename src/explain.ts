@@ -105,6 +105,7 @@ import {
 	type DefectCode,
 	isPositionalFact,
 } from "./explain/defects.ts";
+import { operatorSpans } from "./explain/operator-tokens.ts";
 import { type Resolution, resolveDocument } from "./explain/pathresolve.ts";
 import { collectStringEscapeDefects } from "./explain/quoted-string.ts";
 import { segmentStatements } from "./explain/segment.ts";
@@ -407,6 +408,21 @@ export interface ExplainSpan extends ExplainSpanRange {
 }
 
 /**
+ * One analyzer's contribution to the token partition.
+ *
+ * A fill is already-sorted, non-overlapping spans in document (analyzed-byte)
+ * space. `buildTokens` takes fills **in order** — fill 0 claims first, fill 1
+ * sees only the residual, and so on — so the argument order IS the fill order
+ * (#290 design decision 1) and a structural ambiguity (`/` path sep vs `division`)
+ * resolves by which analyzer came first rather than by a smarter byte scanner.
+ *
+ * A fill is typed as `ExplainToken[]` because B2 fills (operator, then
+ * path/arg) introduce classes outside `ExplainSpanClass`; the proof-only
+ * `spans[]` (ExplainSpan[]) remains a subtype and so fits the same slot.
+ */
+export type TokenFill = readonly ExplainToken[];
+
+/**
  * A token in the total, gapless byte partition (B1).
  *
  * Every byte of the analyzed input belongs to exactly one token — a
@@ -420,7 +436,7 @@ export interface ExplainSpan extends ExplainSpanRange {
  * `unclassified`. Filling those holes is B2, one PR per fill. `unclassified`
  * is a first-class answer, not a placeholder to be avoided.
  */
-export type ExplainTokenClass = ExplainSpanClass | "unclassified";
+export type ExplainTokenClass = ExplainSpanClass | "operator" | "unclassified";
 
 export interface ExplainToken extends ExplainSpanRange {
 	/**
@@ -600,6 +616,7 @@ const EV = {
 	symbols: "e7",
 	transport: "e8",
 	values: "e9",
+	operators: "e10",
 } as const;
 
 type EvidenceKey = keyof typeof EV;
@@ -672,6 +689,13 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		id: EV.values,
 		source: "canonicalizer",
 		probe: "valueShapeHints",
+		basis: "heuristic",
+		outcome: "ok",
+	},
+	operators: {
+		id: EV.operators,
+		source: "canonicalizer",
+		probe: "operatorSpans",
 		basis: "heuristic",
 		outcome: "ok",
 	},
@@ -818,31 +842,93 @@ const SPAN_CLASS_OF_SYMBOL: Record<string, ExplainSpanClass> = {
 };
 
 /**
+ * Complement of claimed spans within `[0, len)` — the residual runs a fill
+ * sees.
+ *
+ * Factored out of `buildTokens` so every fill can compute it and so tests can
+ * assert it directly. `claimed` need not be sorted; the result is sorted and
+ * coalesced with no gaps or overlaps relative to the claimed set.
+ */
+export function residualRanges(
+	len: number,
+	claimed: readonly ExplainSpanRange[],
+): { start: number; end: number }[] {
+	if (len === 0) return [];
+	const sorted = [...claimed].sort(
+		(a, b) => a.start - b.start || a.end - b.end,
+	);
+	let cursor = 0;
+	const out: { start: number; end: number }[] = [];
+	for (const r of sorted) {
+		if (cursor < r.start) out.push({ start: cursor, end: r.start });
+		cursor = Math.max(cursor, r.end);
+	}
+	if (cursor < len) out.push({ start: cursor, end: len });
+	return out;
+}
+
+/**
  * Build the total, gapless token partition (B1).
  *
  * Every byte of `[0, bytes)` belongs to exactly one token: `spans` are
  * placed sorted, no gaps become `unclassified`, and the result is sorted by
  * `start` with no overlaps and `join(slice) === input`. The `class` field is
  * provisional until #264 B5.
+ *
+ * B2: `buildTokens` now takes an **ordered list of fills**. Fill 0 claims
+ * first, fill 1 sees only the residual of fill 0, and so on — the argument
+ * order IS the fill order (#290 design decision 1). An overlap across fills is
+ * a hard throw (structural impossibility is achieved by callers offering only
+ * residual; the throw is the safety net). For backward compatibility a single
+ * fill may be passed as a flat span array.
  */
 export function buildTokens(
 	analyzed: string,
-	spans: readonly ExplainSpan[],
+	spansOrFills: readonly ExplainSpan[] | readonly TokenFill[],
 ): ExplainToken[] {
 	const len = analyzed.length;
-	const sorted = [...spans].sort((a, b) => a.start - b.start || a.end - b.end);
-	// Validate preconditions: spans sorted, non-overlapping, in bounds.
-	// B1 reuses existing analyzers — overlaps or out-of-bounds are a bug, not a fill.
+	// Normalize the overload: a flat span array is one fill.
+	let fills: readonly TokenFill[];
+	if (spansOrFills.length === 0) {
+		fills = [];
+	} else {
+		const first = spansOrFills[0] as unknown as Record<string, unknown>;
+		const isFlatSpan =
+			first !== null &&
+			typeof first === "object" &&
+			"class" in first &&
+			"ev" in first &&
+			"start" in first;
+		fills = isFlatSpan
+			? ([spansOrFills] as unknown as readonly TokenFill[])
+			: (spansOrFills as readonly TokenFill[]);
+	}
+	// Validate each fill internally (non-integer, bounds, overlap within fill).
+	for (const fill of fills) {
+		const sorted = [...fill].sort((a, b) => a.start - b.start || a.end - b.end);
+		let prev = 0;
+		for (const s of sorted) {
+			if (!Number.isInteger(s.start) || !Number.isInteger(s.end))
+				throw new Error(
+					`buildTokens: non-integer span [${s.start},${s.end}) for length ${len}`,
+				);
+			if (s.start < 0 || s.end <= s.start || s.end > len)
+				throw new Error(
+					`buildTokens: span out of bounds [${s.start},${s.end}) for length ${len}`,
+				);
+			if (s.start < prev)
+				throw new Error(
+					`buildTokens: overlapping spans at [${s.start},${s.end})`,
+				);
+			prev = Math.max(prev, s.end);
+		}
+	}
+	const flat: ExplainToken[] = fills.flatMap((fill) => [...fill]);
+	const sorted = [...flat].sort((a, b) => a.start - b.start || a.end - b.end);
+	// Cross-fill overlap is also a hard throw — callers achieve impossibility by
+	// offering only residual; this is the safety net.
 	let prev = 0;
 	for (const s of sorted) {
-		if (!Number.isInteger(s.start) || !Number.isInteger(s.end))
-			throw new Error(
-				`buildTokens: non-integer span [${s.start},${s.end}) for length ${len}`,
-			);
-		if (s.start < 0 || s.end <= s.start || s.end > len)
-			throw new Error(
-				`buildTokens: span out of bounds [${s.start},${s.end}) for length ${len}`,
-			);
 		if (s.start < prev)
 			throw new Error(
 				`buildTokens: overlapping spans at [${s.start},${s.end})`,
@@ -1035,6 +1121,20 @@ export function explainCommand(
 		ev: EV.write,
 	};
 
+	// B2 fill order — the argument order IS the order (#290 design decision 1).
+	// `spans` (proof-only: comment + variables) claims first; every later fill
+	// sees only the residual left by the fills before it, so a structural
+	// ambiguity (`/` path vs division, `,` arg sep vs concat) resolves by which
+	// analyzer came first. `operatorSpans` is the first such fill.
+	const residual0 = residualRanges(analyzed.length, spans);
+	const opSpans = operatorSpans(analyzed, residual0);
+	// Future B2 fills insert here, each against the residual of prior fills:
+	// const residual1 = residualRanges(analyzed.length, [...spans, ...opSpans]);
+	// const pathSpans = pathSpansOnResidual(analyzed, residual1, ...);
+	const fills: TokenFill[] = [spans, opSpans];
+	const tokens =
+		options.tokens === true ? buildTokens(analyzed, fills) : undefined;
+
 	return {
 		input: {
 			bytes: coordinates.analyzed.length,
@@ -1055,9 +1155,7 @@ export function explainCommand(
 		symbols: symbolFacts,
 		values: valueFacts,
 		spans,
-		...(options.tokens === true
-			? { tokens: buildTokens(analyzed, spans) }
-			: {}),
+		...(tokens === undefined ? {} : { tokens }),
 		diagnostics,
 		evidence: citedEvidence(
 			structure,
@@ -1065,6 +1163,7 @@ export function explainCommand(
 			spans,
 			symbolFacts,
 			valueFacts,
+			tokens,
 		),
 		runtimeAcceptance: "not-proven",
 	};
@@ -1431,6 +1530,7 @@ function citedEvidence(
 	spans: readonly ExplainSpan[],
 	symbols: ExplainSymbols,
 	values: ExplainValues,
+	tokens?: readonly ExplainToken[] | readonly ExplainSpan[] | undefined,
 ): ExplainEvidence[] {
 	// `canonical` and `input` carry no `ev` of their own — they are whole-result
 	// fields, not entries in a list — so their two passes are seeded here.
@@ -1452,6 +1552,7 @@ function citedEvidence(
 		if (occurrence.facts.schemaType !== undefined)
 			cited.add(occurrence.facts.schemaType.ev);
 	}
+	if (tokens !== undefined) for (const t of tokens) cited.add(t.ev);
 	return Object.values(EVIDENCE)
 		.filter((e) => cited.has(e.id))
 		.sort((a, b) => a.id.localeCompare(b.id));
