@@ -188,8 +188,12 @@ async function probeVersion(requested: string): Promise<FloorProbe> {
 				':put [:typeof [:tobool "yes"]]; :put [:tostr [:tobool "yes"]]; :put [:tostr [:tobool "no"]]; :put [:tostr [:tobool 0]]; :put [:tostr [:tobool 1]]',
 			),
 		);
-		// Five `:put`s, one line each. On <= 7.21.x lines 1 and 2 come back empty
-		// because `[:tobool "yes"]` is `nil`, so index — never filter — the lines.
+		// Five `:put`s, one line each, in the order they appear above. On <= 7.21.x
+		// `[:tobool "yes"]` is `nil`, so the `:typeof` line reads "nil" while the
+		// two `:tostr` lines for "yes"/"no" come back EMPTY — 7.21.5 answers
+		// "nil\n\n\nfalse\ntrue". Index the lines, never filter them: dropping the
+		// empties would slide the numeric results up into the string slots and the
+		// row would report 7.21.x as coercing strings.
 		const toboolLines = toboolRaw.split("\n");
 
 		const classes = await highlightClasses(chr, PROPLIST_INPUT);
