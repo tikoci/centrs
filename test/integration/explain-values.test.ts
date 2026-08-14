@@ -6,8 +6,11 @@ import { resolveSymbols } from "../../src/explain/symbols.ts";
 import { explainCommand } from "../../src/explain.ts";
 import {
 	isChrIntegrationEnabled,
+	PROPLIST_HIGHLIGHT_SPLIT_SINCE,
 	recordIntegrationEvidence,
+	routerOsAtLeast,
 	startIntegrationChr,
+	TOBOOL_STRING_COERCED_SINCE,
 } from "./chr.ts";
 
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
@@ -102,7 +105,15 @@ describeFast("explain value facts against CHR", () => {
 					':put [:typeof [:tobool "yes"]]; :put [:tostr [:tobool "yes"]]; :put [:tostr [:tobool "no"]]; :put [:tostr [:tobool 0]]; :put [:tostr [:tobool 1]]',
 				),
 			);
-			expect(toBool).toBe("bool\ntrue\nfalse\nfalse\ntrue");
+			// #296: :tobool string coercion split — 7.21.x returns nil/empty for "yes"/"no",
+			// ≥ 7.22 coerces to bool. Numeric 0/1 agree on both.
+			const toBoolExpected = routerOsAtLeast(
+				started.chr.state.version,
+				TOBOOL_STRING_COERCED_SINCE,
+			)
+				? "bool\ntrue\nfalse\nfalse\ntrue"
+				: "nil\n\n\nfalse\ntrue";
+			expect(toBool).toBe(toBoolExpected);
 
 			for (const [suffix, disabled] of [
 				["yes", "true"],
@@ -535,14 +546,23 @@ describeFast("explain value facts against CHR", () => {
 				":log info message={1;2}",
 			]) {
 				const classes = await highlightClasses(started.chr, input);
-				expect(classes.indexOf("error")).toBe(input.indexOf("{"));
+				// #296: 7.21.x highlights .proplist itself (byte 17, ".") not the brace (27)
+				const expectedError =
+					input === "/interface/print .proplist={name;comment}" &&
+					!routerOsAtLeast(
+						started.chr.state.version,
+						PROPLIST_HIGHLIGHT_SPLIT_SINCE,
+					)
+						? input.indexOf(".proplist")
+						: input.indexOf("{");
+				expect(classes.indexOf("error")).toBe(expectedError);
 				expect(
 					outputOf(
 						await started.chr.exec(
 							`:put [:parse ${routerOsStringLiteral(input)}]`,
 						),
 					),
-				).toMatch(/error/);
+				).toMatch(/syntax error|expected end of command/);
 				expect(explainCommand(input).values.occurrences).toEqual([]);
 			}
 			for (const input of [

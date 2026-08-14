@@ -123,6 +123,23 @@ export const VALIDATION_REJECT_CODES: readonly string[] = [
 ];
 
 /**
+ * :tobool string handling split (#296).
+ *   - ≥ 7.22: [:tobool "yes"] → bool/true, [:tobool "no"] → bool/false
+ *     (verified on 7.22, 7.22.1, 7.23beta5, 7.23.3)
+ *   - ≤ 7.21.x: [:tobool "yes"/"no"] → nil/empty (numeric 0/1 still bool)
+ *     (7.21.5, 7.20.8)
+ * Use routerOsAtLeast(version, "7.22") to select.
+ */
+export const TOBOOL_STRING_COERCED_SINCE = "7.22";
+
+/**
+ * highlight offset for /interface/print .proplist={name;comment} (#296).
+ *   - ≥ 7.23beta1: first error at "{" (byte 27) — verified on 7.23beta5 + 7.23.3
+ *   - ≤ 7.22.x: first error at "." of ".proplist" (byte 17) — 7.21.5, 7.22, 7.22.1
+ */
+export const PROPLIST_HIGHLIGHT_SPLIT_SINCE = "7.23beta1";
+
+/**
  * Compare two RouterOS version strings (e.g. "7.21.4 (long-term) ...", "7.23",
  * "7.23beta2"). Returns true when `running` ≥ `target`, ordering on
  * major.minor.patch, then prerelease stage (beta < rc < release), then the stage
