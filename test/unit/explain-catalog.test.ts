@@ -512,6 +512,63 @@ describe("explain/catalog — parsing published pages", () => {
 		}
 	});
 
+	/**
+	 * #282 — git converts these fixtures to CRLF on a Windows checkout, and the
+	 * parser used to split on `"\n"` alone. Every line then kept a trailing `\r`,
+	 * so `**Type:** Menu` yielded the kind `"Menu\r"`, no entry ever matched a
+	 * Type, and six tests in this block failed on `windows-latest` while passing
+	 * on macOS.
+	 *
+	 * Asserting the two parses are IDENTICAL (rather than merely both non-empty)
+	 * is what covers the whole surface the AC lists — preamble, headings,
+	 * Type/gate markers, ArgTable rows and both marker reconciliations — on every
+	 * frozen page, and keeps covering it as the fixtures change.
+	 */
+	test("parses a CRLF checkout identically to LF", async () => {
+		/** `fields` is a Set; freeze it to a sorted array so entries compare. */
+		const comparable = (entries: ReturnType<typeof parsePage>) =>
+			entries.map((entry) => ({ ...entry, fields: [...entry.fields].sort() }));
+
+		for (const name of [
+			"partitions.md",
+			"tool__mac-server.md",
+			"system__health__health.md",
+		]) {
+			const lf = await readFixture(name);
+			const crlf = lf.replaceAll("\n", "\r\n");
+			expect(crlf).toContain("\r\n");
+
+			expect(comparable(parsePage(name, crlf))).toEqual(
+				comparable(parsePage(name, lf)),
+			);
+			expect(countTypeMarkers(crlf)).toBe(countTypeMarkers(lf));
+			expect(countRowMarkers(crlf)).toBe(countRowMarkers(lf));
+
+			// Both reconciliations must still HOLD under CRLF, not merely agree
+			// with the LF run — two equally broken parses would also be equal.
+			const parsed = parsePage(name, crlf);
+			expect(countTypeMarkers(crlf)).toBe(parsed.length);
+			expect(countRowMarkers(crlf)).toBe(
+				parsed.reduce((sum, entry) => sum + entry.rows, 0),
+			);
+			expect(parsed.length).toBeGreaterThan(0);
+		}
+	});
+
+	/**
+	 * Normalizing line endings must not have made the parser lenient about a page
+	 * whose format actually moved (#282: "do not weaken unknown-source-format
+	 * failures"). A CRLF page with a bad Type still has to throw.
+	 */
+	test("still refuses an unknown Type when the page is CRLF", () => {
+		expect(() =>
+			parsePage(
+				"x",
+				"import {A} from 'b';\r\n\r\n## x/y\r\n\r\n**Type:** Mystery\r\n",
+			),
+		).toThrow(/Mystery/);
+	});
+
 	/** A fenced example must not be mistaken for structure. */
 	test("ignores headings and markers inside a code fence", () => {
 		const entries = parsePage(

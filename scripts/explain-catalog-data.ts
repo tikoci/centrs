@@ -316,9 +316,17 @@ export function discoverSlugs(
  * Drop the Docusaurus preamble: the H1 title and the `import {…}` lines. The
  * page body starts after the last import, which is what makes every remaining
  * heading an entry heading.
+ *
+ * Splits on `\r?\n` and rejoins with `\n`, so the body every caller re-splits is
+ * already normalized (#282). A Windows checkout converts these fixtures to CRLF,
+ * which left a trailing `\r` on every line: `parsePage` matches marker VALUES
+ * exactly, so `**Type:** Menu` arrived as `"Menu\r"` and no entry ever found its
+ * Type — six frozen-page tests failed on `windows-latest` and passed on macOS.
+ * This normalizes line endings ONLY; every fail-loud check downstream is
+ * unchanged, because a page whose format really moved must still throw.
  */
 function pageBody(markdown: string): { body: string; startLine: number } {
-	const lines = markdown.split("\n");
+	const lines = markdown.split(/\r?\n/);
 	let lastImport = -1;
 	for (let index = 0; index < lines.length; index++)
 		if (/^import\s*\{/.test(lines[index] ?? "")) lastImport = index;
