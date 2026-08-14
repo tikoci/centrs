@@ -534,8 +534,14 @@ describe("explain/catalog — parsing published pages", () => {
 			"tool__mac-server.md",
 			"system__health__health.md",
 		]) {
-			const lf = await readFixture(name);
+			// Normalize BEFORE building the CRLF copy. On the very platform this
+			// test protects, the checkout already gives CRLF, so converting the raw
+			// fixture would yield `\r\r\n` — `/\r?\n/` eats one `\r` and leaves the
+			// other on every line, failing the test on Windows for a reason that has
+			// nothing to do with the parser.
+			const lf = (await readFixture(name)).replace(/\r\n?/g, "\n");
 			const crlf = lf.replaceAll("\n", "\r\n");
+			expect(lf).not.toContain("\r");
 			expect(crlf).toContain("\r\n");
 
 			expect(comparable(parsePage(name, crlf))).toEqual(
