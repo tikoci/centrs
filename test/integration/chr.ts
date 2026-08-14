@@ -123,6 +123,67 @@ export const VALIDATION_REJECT_CODES: readonly string[] = [
 ];
 
 /**
+ * `:tobool` string-argument coercion changed mid-7.x (#296).
+ *   - ≥ 7.22: `[:tobool "yes"]` → `bool`/`true`, `[:tobool "no"]` → `bool`/`false`
+ *   - ≤ 7.21.x: `[:tobool "yes"/"no"]` → `nil`/empty. Numeric `0`/`1` agree on
+ *     both, so only the string arguments move.
+ *
+ * Measured on booted CHRs: old on 7.20.8 and 7.21.5, new on 7.22, 7.22.1,
+ * 7.23beta5, 7.23 and 7.23.3. 7.21.5 and 7.22 are adjacent releases, so this
+ * threshold sits exactly on the observed change.
+ *
+ * Re-derive with `bun run explain:probe:version-floors`.
+ */
+export const TOBOOL_STRING_COERCED_SINCE = "7.22";
+
+/**
+ * Where the highlighter starts the error run for
+ * `/interface/print .proplist={name;comment}` (#296).
+ *   - new: first `error` byte is the `{` (offset 27)
+ *   - old: first `error` byte is the `.` of `.proplist` (offset 17)
+ *
+ * Measured on booted CHRs: old on 7.21.5, 7.22 and 7.22.1; new on 7.23beta5,
+ * 7.23 and 7.23.3. **7.23beta1..beta4 were never booted**, so the change is
+ * only bracketed to `(7.22.1, 7.23beta5]` — this constant names the first build
+ * of the 7.23 line because every version any QA channel runs classifies the
+ * same for any threshold inside that gap. Booting a 7.23beta1..4 is what would
+ * narrow it; until then do not read this value as a measured first-affected
+ * build.
+ *
+ * Note the split is about the DEVICE's offset, not about what `explain` should
+ * say for a brace array in an argument — that is #259.
+ *
+ * Re-derive with `bun run explain:probe:version-floors`.
+ */
+export const PROPLIST_HIGHLIGHT_SPLIT_SINCE = "7.23beta1";
+
+/**
+ * How a `:parse` REJECTION reads, as an accepted set rather than one wording
+ * (#296) — the `VALIDATION_REJECT_CODES` pattern applied to raw device text.
+ *
+ * `syntax error (line L column C)` is the usual form, but 7.21.5 answers
+ * `expected end of command (line 1 column 18)` for
+ * `/interface/print .proplist={name;comment}` — which contains no "error" at
+ * all, so the obvious `/error/` test silently accepts nothing and the older
+ * wording reads as a PASS on the wrong grounds.
+ *
+ * Measured across the wordings all four QA channels currently produce for the
+ * five brace inputs in `explain-values.test.ts`: 7.21.5 (long-term), 7.23.3
+ * (stable) and 7.24rc4 (testing/development) emit only these two forms.
+ * Re-derive with `bun run explain:probe:version-floors`.
+ */
+export const PARSE_REJECTED = /syntax error|expected end of command/;
+
+/**
+ * Any hint that `:parse` rejected, for asserting that a command parsed CLEANLY.
+ *
+ * Deliberately WIDER than {@link PARSE_REJECTED}: a positive assertion should
+ * name the wordings it accepts, but a negative one must not let an unrecognized
+ * complaint through just because it is not on the list.
+ */
+export const PARSE_REJECTED_HINT = /error|expected end of command/;
+
+/**
  * Compare two RouterOS version strings (e.g. "7.21.4 (long-term) ...", "7.23",
  * "7.23beta2"). Returns true when `running` ≥ `target`, ordering on
  * major.minor.patch, then prerelease stage (beta < rc < release), then the stage

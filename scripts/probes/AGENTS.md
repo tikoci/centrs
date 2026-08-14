@@ -25,6 +25,7 @@ that lands under `test/fixtures/` is durable.
 | `explain-symbol-arms-score.ts` | the historical Q13 candidate arms and shipped resolver over a full highlight capture | the symbol decisions in `src/explain/symbols.ts` |
 | `explain-symbol-bad-sigil-replay.ts` | recorded K2 hard-error offsets | the F8 anchors in `test/unit/explain-symbols.test.ts` |
 | `explain-symbol-classes-replay.ts` | recorded K3 per-occurrence variable classes | the F7 anchors in `test/unit/explain-symbols.test.ts` |
+| `explain-version-floors.ts` | the RouterOS version at which `:tobool` string coercion and the `.proplist` highlight offset change, and the `:parse` wording every channel produces (#296) | `TOBOOL_STRING_COERCED_SINCE` + `PROPLIST_HIGHLIGHT_SPLIT_SINCE` in `test/integration/chr.ts` |
 
 ## Rules a probe here must follow
 

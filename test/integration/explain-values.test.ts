@@ -6,8 +6,13 @@ import { resolveSymbols } from "../../src/explain/symbols.ts";
 import { explainCommand } from "../../src/explain.ts";
 import {
 	isChrIntegrationEnabled,
+	PARSE_REJECTED,
+	PARSE_REJECTED_HINT,
+	PROPLIST_HIGHLIGHT_SPLIT_SINCE,
 	recordIntegrationEvidence,
+	routerOsAtLeast,
 	startIntegrationChr,
+	TOBOOL_STRING_COERCED_SINCE,
 } from "./chr.ts";
 
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
@@ -102,7 +107,15 @@ describeFast("explain value facts against CHR", () => {
 					':put [:typeof [:tobool "yes"]]; :put [:tostr [:tobool "yes"]]; :put [:tostr [:tobool "no"]]; :put [:tostr [:tobool 0]]; :put [:tostr [:tobool 1]]',
 				),
 			);
-			expect(toBool).toBe("bool\ntrue\nfalse\nfalse\ntrue");
+			// #296: :tobool string coercion split — 7.21.x returns nil/empty for "yes"/"no",
+			// ≥ 7.22 coerces to bool. Numeric 0/1 agree on both.
+			const toBoolExpected = routerOsAtLeast(
+				started.chr.state.version,
+				TOBOOL_STRING_COERCED_SINCE,
+			)
+				? "bool\ntrue\nfalse\nfalse\ntrue"
+				: "nil\n\n\nfalse\ntrue";
+			expect(toBool).toBe(toBoolExpected);
 
 			for (const [suffix, disabled] of [
 				["yes", "true"],
@@ -527,22 +540,37 @@ describeFast("explain value facts against CHR", () => {
 			expect(await members("{1;}")).toEqual(["0|num|1|num"]);
 
 			// Where a brace array is legal, byte for byte with the highlighter.
+			// #296: this is the one input whose first `error` byte moves between
+			// versions, so it is named rather than spelled twice — an edit to the
+			// literal must not silently detach the gate below from the loop.
+			const proplistInput = "/interface/print .proplist={name;comment}";
 			for (const input of [
 				"/ip/route/add comment={1;2}",
 				"/ip/dns/set servers={1.1.1.1;8.8.8.8}",
-				"/interface/print .proplist={name;comment}",
+				proplistInput,
 				"ip route add comment={1;2}",
 				":log info message={1;2}",
 			]) {
 				const classes = await highlightClasses(started.chr, input);
-				expect(classes.indexOf("error")).toBe(input.indexOf("{"));
+				// #296: up to 7.22.x the error run starts at `.proplist` itself
+				// (byte 17), from the 7.23 line at the brace (byte 27). Still a
+				// byte-exact assertion on every version — just not the same byte.
+				const expectedError =
+					input === proplistInput &&
+					!routerOsAtLeast(
+						started.chr.state.version,
+						PROPLIST_HIGHLIGHT_SPLIT_SINCE,
+					)
+						? input.indexOf(".proplist")
+						: input.indexOf("{");
+				expect(classes.indexOf("error")).toBe(expectedError);
 				expect(
 					outputOf(
 						await started.chr.exec(
 							`:put [:parse ${routerOsStringLiteral(input)}]`,
 						),
 					),
-				).toMatch(/error/);
+				).toMatch(PARSE_REJECTED);
 				expect(explainCommand(input).values.occurrences).toEqual([]);
 			}
 			for (const input of [
@@ -559,7 +587,9 @@ describeFast("explain value facts against CHR", () => {
 						`:put [:parse ${routerOsStringLiteral(input)}]`,
 					),
 				);
-				expect(parseOutput).not.toMatch(/error/);
+				// #296 found a rejection wording with no "error" in it, so the
+				// negative side has to look for that too or it passes blind.
+				expect(parseOutput).not.toMatch(PARSE_REJECTED_HINT);
 				if (input === ":foreach i in={1;2} do={:put $i}") {
 					// A bare outer `$i` disappears before `:parse` and turns this into
 					// `:put` with no operand. Pin the parser's real variable-bearing IL.
