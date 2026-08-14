@@ -15,6 +15,7 @@ import {
 	recordIntegrationEvidence,
 	splitQuickChrAuth,
 	startIntegrationChr,
+	VALIDATION_REJECT_CODES,
 } from "./chr.ts";
 
 const runFastIntegration = isChrIntegrationEnabled();
@@ -145,8 +146,13 @@ describeFast("centrs MCP server against CHR", () => {
 					target: chr.restUrl,
 					command: "/ip/route/add dst-address=10.99.0.0/24 nonexistentattr=1",
 				});
+				// #283: RouterOS names the offending parameter only from 7.23
+				// (`bad parameter`, via /console/inspect) → `unknown-attribute`.
+				// On ≤ 7.21.x the `:parse` gate rejects generically first → `syntax`.
+				// What this example proves is that the gate REJECTED and nothing ran,
+				// which both codes assert; the sub-code is the device's wording.
 				expect(validBad.ok).toBe(false);
-				expect(validBad.error?.code).toBe("validation/unknown-attribute");
+				expect(VALIDATION_REJECT_CODES).toContain(validBad.error?.code ?? "");
 
 				// Example 5: retrieve returns a structured record.
 				const resource = await callTool(client, "centrs_retrieve", {
