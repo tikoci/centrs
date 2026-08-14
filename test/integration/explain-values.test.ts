@@ -6,6 +6,8 @@ import { resolveSymbols } from "../../src/explain/symbols.ts";
 import { explainCommand } from "../../src/explain.ts";
 import {
 	isChrIntegrationEnabled,
+	PARSE_REJECTED,
+	PARSE_REJECTED_HINT,
 	PROPLIST_HIGHLIGHT_SPLIT_SINCE,
 	recordIntegrationEvidence,
 	routerOsAtLeast,
@@ -538,17 +540,23 @@ describeFast("explain value facts against CHR", () => {
 			expect(await members("{1;}")).toEqual(["0|num|1|num"]);
 
 			// Where a brace array is legal, byte for byte with the highlighter.
+			// #296: this is the one input whose first `error` byte moves between
+			// versions, so it is named rather than spelled twice — an edit to the
+			// literal must not silently detach the gate below from the loop.
+			const proplistInput = "/interface/print .proplist={name;comment}";
 			for (const input of [
 				"/ip/route/add comment={1;2}",
 				"/ip/dns/set servers={1.1.1.1;8.8.8.8}",
-				"/interface/print .proplist={name;comment}",
+				proplistInput,
 				"ip route add comment={1;2}",
 				":log info message={1;2}",
 			]) {
 				const classes = await highlightClasses(started.chr, input);
-				// #296: 7.21.x highlights .proplist itself (byte 17, ".") not the brace (27)
+				// #296: up to 7.22.x the error run starts at `.proplist` itself
+				// (byte 17), from the 7.23 line at the brace (byte 27). Still a
+				// byte-exact assertion on every version — just not the same byte.
 				const expectedError =
-					input === "/interface/print .proplist={name;comment}" &&
+					input === proplistInput &&
 					!routerOsAtLeast(
 						started.chr.state.version,
 						PROPLIST_HIGHLIGHT_SPLIT_SINCE,
@@ -562,7 +570,7 @@ describeFast("explain value facts against CHR", () => {
 							`:put [:parse ${routerOsStringLiteral(input)}]`,
 						),
 					),
-				).toMatch(/syntax error|expected end of command/);
+				).toMatch(PARSE_REJECTED);
 				expect(explainCommand(input).values.occurrences).toEqual([]);
 			}
 			for (const input of [
@@ -579,7 +587,9 @@ describeFast("explain value facts against CHR", () => {
 						`:put [:parse ${routerOsStringLiteral(input)}]`,
 					),
 				);
-				expect(parseOutput).not.toMatch(/error/);
+				// #296 found a rejection wording with no "error" in it, so the
+				// negative side has to look for that too or it passes blind.
+				expect(parseOutput).not.toMatch(PARSE_REJECTED_HINT);
 				if (input === ":foreach i in={1;2} do={:put $i}") {
 					// A bare outer `$i` disappears before `:parse` and turns this into
 					// `:put` with no operand. Pin the parser's real variable-bearing IL.
