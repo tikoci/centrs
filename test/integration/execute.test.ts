@@ -365,6 +365,10 @@ describeFast("execute against CHR", () => {
 				"validation/syntax",
 			);
 
+			// Same version-dependent reject as the rest-api twin above (#283): on
+			// ≤ 7.21.x the `:parse` gate rejects generically before RouterOS names
+			// the parameter, so the code is `validation/syntax` there. Either way
+			// the command was rejected before it could mutate.
 			expectExecuteFailure(
 				await executeEnvelope({
 					...base,
@@ -373,7 +377,7 @@ describeFast("execute against CHR", () => {
 					yes: true,
 				}),
 				"native-api",
-				"validation/unknown-attribute",
+				VALIDATION_REJECT_CODES,
 			);
 
 			const trap = expectExecuteFailure(
