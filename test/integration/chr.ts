@@ -107,6 +107,28 @@ export function exampleIds(count: number): number[] {
 	return Array.from({ length: count }, (_, index) => index + 1);
 }
 
+// ---------------------------------------------------------------------------
+// Device-behaviour contracts (#297)
+//
+// RouterOS answers the same question differently across releases. Every such
+// split is DECLARED here rather than inline in a test, so it is visible in a
+// diff and the next reader learns it instead of rediscovering it from a red
+// `long-term` gate. Add to this section rather than hard-coding one version's
+// answer at a call site; see `test/AGENTS.md` → "Device-dependent expectations".
+//
+// Two shapes, and they are not interchangeable:
+//   - an ACCEPTED SET, when several answers are all correct and centrs cannot
+//     (and need not) tell them apart — `VALIDATION_REJECT_CODES`, `PARSE_REJECTED`
+//   - a VERSION BOUNDARY, when the behaviour genuinely changed and the test must
+//     still assert exactly, just differently per side — the `*_SINCE` constants,
+//     read through `routerOsAtLeast(started.chr.state.version, …)`
+//
+// Gate on the running VERSION, never the channel name: channels move, and a
+// version is what the device actually reports. State whether a boundary was
+// measured on both sides or merely bracketed — `PROPLIST_HIGHLIGHT_SPLIT_SINCE`
+// is the worked example of an honest bracket.
+// ---------------------------------------------------------------------------
+
 /**
  * RouterOS classifies a *validation reject* differently across versions. For an
  * unknown attribute (e.g. `no-such-arg=x`), the RouterOS `:parse` output differs:

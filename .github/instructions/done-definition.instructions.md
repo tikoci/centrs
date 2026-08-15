@@ -25,7 +25,20 @@ Before writing "done", "implemented", "complete", or advancing a MATRIX cell:
 2. If no integration test covers the new behavior, add one in
    `test/integration/` that exercises the corresponding line(s) of
    `commands/<name>/examples.md`.
-3. Record the CHR result (pass/fail, RouterOS version) in the commit message
+3. If any assertion reads **device output**, run that file once against
+   `long-term` as well — the default is stable, and a stable-only run cannot
+   see a version split:
+
+   ```sh
+   CENTRS_CHR_CHANNEL=long-term CENTRS_RUN_FAST_INTEGRATION=1 \
+     bun test test/integration/<touched>.test.ts
+   ```
+
+   ~22s for one file. Express whatever differs through the contracts in
+   `test/integration/chr.ts` — see `test/AGENTS.md` → "Device-dependent
+   expectations" for which contract fits and why gating on the channel name is
+   wrong (#297).
+4. Record the CHR result (pass/fail, RouterOS version) in the commit message
    that advances the cell.
 
 `bun run test` (unit only) is not sufficient. Unit tests cannot substitute for
