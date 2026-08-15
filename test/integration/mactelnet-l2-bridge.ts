@@ -240,8 +240,22 @@ export async function startMacTelnetL2Bridge(
 					// to the socket's `error` event, and the client here is a CLI
 					// SUBPROCESS that legitimately exits while the guest is still
 					// chattering — its port is then closed and this send cannot land.
-					udp.send(payload, udpClient.port, udpClient.address, (error) => {
-						if (error) noteRelayError(error);
+					const target = udpClient;
+					udp.send(payload, target.port, target.address, (error) => {
+						if (!error) return;
+						noteRelayError(error);
+						// Stop relaying to a peer that is provably gone — but only if it
+						// is STILL the registered client. A late error must never unhook
+						// a client that has since registered, which is why this lives in
+						// the send callback (where the destination is known) and not in
+						// the socket-level handler (where it is not).
+						if (
+							udpClient &&
+							udpClient.port === target.port &&
+							udpClient.address === target.address
+						) {
+							udpClient = undefined;
+						}
 					});
 				}
 			}
@@ -264,17 +278,33 @@ export async function startMacTelnetL2Bridge(
 		});
 	});
 
-	const udpPort: number = await new Promise((resolve, reject) => {
-		// `noteRelayError` is already attached, so a bind failure would throw from
-		// there before rejecting. Drop it for the bind, restore it after.
-		udp.removeListener("error", noteRelayError);
-		udp.once("error", reject);
-		udp.bind(0, "127.0.0.1", () => {
-			udp.removeListener("error", reject);
-			udp.on("error", noteRelayError);
-			resolve((udp.address() as net.AddressInfo).port);
+	let udpPort: number;
+	try {
+		udpPort = await new Promise<number>((resolve, reject) => {
+			// `noteRelayError` is already attached, so a bind failure would throw from
+			// there before rejecting. Drop it for the bind, restore it after.
+			udp.removeListener("error", noteRelayError);
+			udp.once("error", reject);
+			udp.bind(0, "127.0.0.1", () => {
+				udp.removeListener("error", reject);
+				udp.on("error", noteRelayError);
+				resolve((udp.address() as net.AddressInfo).port);
+			});
 		});
-	});
+	} catch (error) {
+		// The TCP server is already listening by now. Rejecting without closing it
+		// leaks a listening handle that can keep the test process from exiting, and
+		// the caller never gets a `close()` to call.
+		udp.removeAllListeners("error");
+		try {
+			udp.close();
+		} catch {
+			// Never bound, so there is nothing to close.
+		}
+		conn?.destroy();
+		await new Promise<void>((resolve) => server.close(() => resolve()));
+		throw error;
+	}
 
 	return {
 		tcpPort,
