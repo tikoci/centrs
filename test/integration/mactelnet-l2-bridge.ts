@@ -108,6 +108,12 @@ export interface MacTelnetL2BridgeStats {
 	frames: number;
 	macTelnetFrames: number;
 	injected: number;
+	/**
+	 * Relayed datagrams the UDP client was no longer there to receive. Counted
+	 * rather than ignored, so "the relay peer went away" stays visible instead of
+	 * becoming an invisible swallow. Nonzero is normal at end of test.
+	 */
+	relayPeerGone: number;
 }
 
 export interface MacTelnetL2Bridge {
@@ -156,6 +162,7 @@ export async function startMacTelnetL2Bridge(
 		frames: 0,
 		macTelnetFrames: 0,
 		injected: 0,
+		relayPeerGone: 0,
 	};
 
 	// Wrap a MAC-Telnet datagram in a broadcast L2 frame and write it to the guest.
@@ -177,6 +184,30 @@ export async function startMacTelnetL2Bridge(
 	// guest and remember the sender to relay guest replies back.
 	let udpClient: dgram.RemoteInfo | undefined;
 	const udp = dgram.createSocket("udp4");
+
+	/**
+	 * The relay's peer is a CLI subprocess that exits when its command is done,
+	 * while the guest keeps sending MAC-Telnet frames. Relaying to the departed
+	 * port draws an ICMP port-unreachable, which Linux queues onto this socket
+	 * and libuv surfaces as `ECONNREFUSED` on the next recv (`ECONNRESET` on
+	 * Windows). That says nothing about what the test asserts — it is the normal
+	 * end state of a connectionless relay — so it is counted, not fatal.
+	 *
+	 * Anything else still throws. This is not a blanket socket-error swallow:
+	 * before this, the ONLY `error` listener was the stale `once(reject)` left
+	 * over from `bind`, which absorbed the first error as a no-op on an already
+	 * settled promise and let the SECOND crash the test process. That is the
+	 * long-term QA failure in `terminal-mac-telnet.test.ts`.
+	 */
+	const RELAY_PEER_GONE = new Set(["ECONNREFUSED", "ECONNRESET"]);
+	const noteRelayError = (error: unknown): void => {
+		if (RELAY_PEER_GONE.has((error as NodeJS.ErrnoException).code ?? "")) {
+			stats.relayPeerGone += 1;
+			return;
+		}
+		throw error;
+	};
+	udp.on("error", noteRelayError);
 	udp.on("message", (message, rinfo) => {
 		udpClient = rinfo;
 		injectToGuest(new Uint8Array(message));
@@ -205,7 +236,27 @@ export async function startMacTelnetL2Bridge(
 				}
 				handler?.(payload);
 				if (udpClient) {
-					udp.send(payload, udpClient.port, udpClient.address);
+					// Callback supplied on purpose: without one a failed send escalates
+					// to the socket's `error` event, and the client here is a CLI
+					// SUBPROCESS that legitimately exits while the guest is still
+					// chattering — its port is then closed and this send cannot land.
+					const target = udpClient;
+					udp.send(payload, target.port, target.address, (error) => {
+						if (!error) return;
+						noteRelayError(error);
+						// Stop relaying to a peer that is provably gone — but only if it
+						// is STILL the registered client. A late error must never unhook
+						// a client that has since registered, which is why this lives in
+						// the send callback (where the destination is known) and not in
+						// the socket-level handler (where it is not).
+						if (
+							udpClient &&
+							udpClient.port === target.port &&
+							udpClient.address === target.address
+						) {
+							udpClient = undefined;
+						}
+					});
 				}
 			}
 		});
@@ -216,19 +267,44 @@ export async function startMacTelnetL2Bridge(
 		socket.on("error", stop);
 	});
 
+	// Both listen/bind handlers are REMOVED on success. Left attached they are a
+	// one-shot that fires `reject` on an already-settled promise — silently
+	// eating the first later error, and leaving the next one unhandled.
 	const tcpPort: number = await new Promise((resolve, reject) => {
 		server.once("error", reject);
 		server.listen(0, "127.0.0.1", () => {
+			server.removeListener("error", reject);
 			resolve((server.address() as net.AddressInfo).port);
 		});
 	});
 
-	const udpPort: number = await new Promise((resolve, reject) => {
-		udp.once("error", reject);
-		udp.bind(0, "127.0.0.1", () => {
-			resolve((udp.address() as net.AddressInfo).port);
+	let udpPort: number;
+	try {
+		udpPort = await new Promise<number>((resolve, reject) => {
+			// `noteRelayError` is already attached, so a bind failure would throw from
+			// there before rejecting. Drop it for the bind, restore it after.
+			udp.removeListener("error", noteRelayError);
+			udp.once("error", reject);
+			udp.bind(0, "127.0.0.1", () => {
+				udp.removeListener("error", reject);
+				udp.on("error", noteRelayError);
+				resolve((udp.address() as net.AddressInfo).port);
+			});
 		});
-	});
+	} catch (error) {
+		// The TCP server is already listening by now. Rejecting without closing it
+		// leaks a listening handle that can keep the test process from exiting, and
+		// the caller never gets a `close()` to call.
+		udp.removeAllListeners("error");
+		try {
+			udp.close();
+		} catch {
+			// Never bound, so there is nothing to close.
+		}
+		conn?.destroy();
+		await new Promise<void>((resolve) => server.close(() => resolve()));
+		throw error;
+	}
 
 	return {
 		tcpPort,
