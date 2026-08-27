@@ -35,36 +35,7 @@
  */
 
 import type { ExplainToken, ExplainValueOccurrence } from "../explain.ts";
-
-function clipToResidual(
-	start: number,
-	end: number,
-	residual: readonly { start: number; end: number }[],
-): { start: number; end: number }[] {
-	if (start >= end) return [];
-	if (residual.length === 0) return [];
-	let lo = 0;
-	let hi = residual.length - 1;
-	let first = residual.length;
-	while (lo <= hi) {
-		const mid = (lo + hi) >> 1;
-		const r = residual[mid] as { start: number; end: number };
-		if (r.end <= start) lo = mid + 1;
-		else {
-			first = mid;
-			hi = mid - 1;
-		}
-	}
-	const out: { start: number; end: number }[] = [];
-	for (let i = first; i < residual.length; i++) {
-		const r = residual[i] as { start: number; end: number };
-		if (r.start >= end) break;
-		const oStart = Math.max(start, r.start);
-		const oEnd = Math.min(end, r.end);
-		if (oStart < oEnd) out.push({ start: oStart, end: oEnd });
-	}
-	return out;
-}
+import { clipToResidual } from "./token-ranges.ts";
 
 /**
  * Leaf value + array-member spans on the residual.

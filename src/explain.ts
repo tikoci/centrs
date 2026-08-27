@@ -107,6 +107,7 @@ import {
 	isPositionalFact,
 } from "./explain/defects.ts";
 import { operatorSpans } from "./explain/operator-tokens.ts";
+import { type PathTokenCandidate, pathSpans } from "./explain/path-tokens.ts";
 import { type Resolution, resolveDocument } from "./explain/pathresolve.ts";
 import { collectStringEscapeDefects } from "./explain/quoted-string.ts";
 import { segmentStatements } from "./explain/segment.ts";
@@ -418,8 +419,8 @@ export interface ExplainSpan extends ExplainSpanRange {
  * (#290 design decision 1) and a structural ambiguity (`/` path sep vs `division`)
  * resolves by which analyzer came first rather than by a smarter byte scanner.
  *
- * A fill is typed as `ExplainToken[]` because B2 fills (operator, arg, then
- * path) introduce classes outside `ExplainSpanClass`; the proof-only
+ * A fill is typed as `ExplainToken[]` because B2 fills (path, argument, value,
+ * then operator) introduce classes outside `ExplainSpanClass`; the proof-only
  * `spans[]` (ExplainSpan[]) remains a subtype and so fits the same slot.
  */
 export type TokenFill = readonly ExplainToken[];
@@ -438,18 +439,18 @@ export type TokenFill = readonly ExplainToken[];
  * `unclassified`. Filling those holes is B2, one PR per fill. `unclassified`
  * is a first-class answer, not a placeholder to be avoided.
  *
- * B2 so far: `operator` (26 spellings + 2 aliases, `syntax-meta` is a residual
+ * B2 so far: `dir` / `cmd` (resolved path and verb bytes, including valid path
+ * slashes), `operator` (26 spellings + 2 aliases, `syntax-meta` is a residual
  * merge, never a source, #255), `arg` (argument names and their `=` as located
- * by `args.ts` — the name run is `[span.start, valueSpan.start - 1)` and the `=`
- * is the single byte at `valueSpan.start - 1`), and `value` (argument value
- * bytes and leaf array-literal members from `data.values.occurrences` — leaves
- * only, quotes included, #295). `arg` covers both the name bytes and the `=`
- * byte in one provisional class and `value` covers every leaf value span
- * (emit first, name later); whether the `=` or per-shape `value` later deserve
- * their own classes is #264 B5 vocabulary and does not move the byte coverage.
+ * by `args.ts`), and `value` (argument value bytes and leaf array-literal
+ * members from `data.values.occurrences`, quotes included, #295). Whether
+ * separators or per-shape values later deserve distinct classes is #264 B5
+ * vocabulary and does not move byte coverage.
  */
 export type ExplainTokenClass =
 	| ExplainSpanClass
+	| "dir"
+	| "cmd"
 	| "operator"
 	| "arg"
 	| "value"
@@ -635,6 +636,7 @@ const EV = {
 	values: "e9",
 	operators: "e10",
 	args: "e11",
+	paths: "e12",
 } as const;
 
 type EvidenceKey = keyof typeof EV;
@@ -732,6 +734,13 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		id: EV.args,
 		source: "canonicalizer",
 		probe: "argSpans",
+		basis: "heuristic",
+		outcome: "ok",
+	},
+	paths: {
+		id: EV.paths,
+		source: "canonicalizer",
+		probe: "pathSpans",
 		basis: "heuristic",
 		outcome: "ok",
 	},
@@ -1158,54 +1167,74 @@ export function explainCommand(
 	};
 
 	// B2 fill order — the argument order IS the order (#290 design decision 1).
-	// `spans` (proof-only: comment + variables) claims first; every later fill
-	// sees only the residual left by the fills before it, so a structural
-	// ambiguity (`/` path vs division, `,` arg sep vs concat) resolves by which
-	// analyzer came first. `argSpans` is the second such fill, `valueSpans`
-	// the third and `operatorSpans` the fourth — the intended end state is
-	// `const fills: TokenFill[] = [spans, argSpans, valueSpans, opSpans];` so
-	// `args.ts` has claimed the `=` before the value and operator scanners run
-	// (#293/#295 design decision). Until the path fill exists, the operator fill
-	// still abstains on `, / -` outside `( )` wherever a path byte would be, but
-	// for `=` and `.` inside values the newer fills now own the bytes first, so
-	// that operator conservatism is no longer load-bearing (it stays for `, / -`).
-	// Inserting a fill after `operatorSpans` would leave those abstentions doing
-	// work they should not have to do, and the scanner can relax them only once
-	// the fill that owns those bytes runs first:
-	// const pathSpans = pathSpansOnResidual(analyzed, residual0, ...);
-	// const residual1 = residualRanges(analyzed.length, [...spans, ...pathSpans]);
-	// const argSpansList = argSpans(analyzed, residual1, argCandidates);
-	// const residual2 = residualRanges(analyzed.length, [...spans, ...pathSpans, ...argSpansList]);
-	// const valueSpansList = valueSpans(analyzed, residual2, valueFacts.occurrences);
-	// const residual3 = residualRanges(analyzed.length, [...spans, ...pathSpans, ...argSpansList, ...valueSpansList]);
-	// const opSpans = operatorSpans(analyzed, residual3);
-	// const fills: TokenFill[] = [spans, pathSpans, argSpansList, valueSpansList, opSpans];
+	// `spans` (proof-only: comment + variables) claims first; path, argument,
+	// value, then operator fills each see only the residual left before them.
+	// Structural ambiguity (`/` path vs division, `=` arg sep vs comparison)
+	// therefore resolves by the analyzer that already proved ownership, not by a
+	// wider byte scanner. The operator scanner keeps its conservative guards for
+	// bytes no earlier fill can decide.
 	//
 	// Gate the scan on `options.tokens` — no residual work when the caller
 	// did not ask for `data.tokens`. Future B2 fills belong inside this branch.
 	let tokens: ExplainToken[] | undefined;
 	if (options.tokens === true) {
 		const residual0 = residualRanges(analyzed.length, spans);
+		const pathCandidates: PathTokenCandidate[] = [
+			...verbs.splits.map((split) => ({
+				text: split.text,
+				span: split.span,
+				split,
+				ev: EV.paths,
+			})),
+			...brackets.resolutions.flatMap((resolution) => {
+				if (resolution.unresolved !== undefined || resolution.path === null)
+					return [];
+				return [
+					{
+						text: resolution.inner,
+						span: {
+							start: resolution.span.start + 1,
+							end: resolution.span.end - 1,
+						},
+						split: resolveVerb(resolution.inner, resolution.context),
+						ev: EV.paths,
+					},
+				];
+			}),
+		];
+		const pathSpansList = pathSpans(analyzed, residual0, pathCandidates);
+		const residual1 = residualRanges(analyzed.length, [
+			...spans,
+			...pathSpansList,
+		]);
 		const argCandidates = statements.flatMap((s) =>
 			s.arguments?.read === true ? s.arguments.tokens : [],
 		);
-		const argSpansList = argSpans(analyzed, residual0, argCandidates);
-		const residual1 = residualRanges(analyzed.length, [
+		const argSpansList = argSpans(analyzed, residual1, argCandidates);
+		const residual2 = residualRanges(analyzed.length, [
 			...spans,
+			...pathSpansList,
 			...argSpansList,
 		]);
 		const valueSpansList = valueSpans(
 			analyzed,
-			residual1,
+			residual2,
 			valueFacts.occurrences,
 		);
-		const residual2 = residualRanges(analyzed.length, [
+		const residual3 = residualRanges(analyzed.length, [
 			...spans,
+			...pathSpansList,
 			...argSpansList,
 			...valueSpansList,
 		]);
-		const opSpans = operatorSpans(analyzed, residual2);
-		const fills: TokenFill[] = [spans, argSpansList, valueSpansList, opSpans];
+		const opSpans = operatorSpans(analyzed, residual3);
+		const fills: TokenFill[] = [
+			spans,
+			pathSpansList,
+			argSpansList,
+			valueSpansList,
+			opSpans,
+		];
 		tokens = buildTokens(analyzed, fills);
 	}
 

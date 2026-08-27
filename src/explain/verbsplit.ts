@@ -110,6 +110,8 @@ interface Word {
 	start: number;
 	/** offset just past its last character, exclusive. */
 	end: number;
+	/** Source span of each character retained in `name`. */
+	chars: Span[];
 }
 
 /**
@@ -151,20 +153,21 @@ function asciiWordSpans(text: string): Word[] {
 			continue;
 		}
 		if (current === null) {
-			current = { name: c, start: i, end: i + 1 };
+			current = {
+				name: c,
+				start: i,
+				end: i + 1,
+				chars: [{ start: i, end: i + 1 }],
+			};
 			out.push(current);
 		} else {
 			current.name += c;
 			current.end = i + 1;
+			current.chars.push({ start: i, end: i + 1 });
 		}
 		i++;
 	}
 	return out;
-}
-
-/** Just the names, for the rules that ask what the words ARE, not where. */
-function asciiWords(text: string): string[] {
-	return asciiWordSpans(text).map((w) => w.name);
 }
 
 /**
@@ -183,6 +186,26 @@ export interface RunToken {
 	sep: Sep;
 }
 
+/** A run token mapped back to the statement bytes that spell it. */
+export interface LocatedRunToken extends RunToken {
+	/** Name bytes, split where a `\<newline>` continuation interrupts them. */
+	nameSpans: Span[];
+	/** One valid `/` immediately before this token, if present. */
+	slashBefore?: Span;
+	/** One trailing `/` after this token, if present. */
+	slashAfter?: Span;
+}
+
+function coalesceChars(chars: readonly Span[]): Span[] {
+	const out: Span[] = [];
+	for (const char of chars) {
+		const last = out.at(-1);
+		if (last !== undefined && last.end === char.start) last.end = char.end;
+		else out.push({ start: char.start, end: char.end });
+	}
+	return out;
+}
+
 /**
  * The leading path-token run WITH separators preserved (V1). Same stopping
  * rules as `pathresolve`'s run (V2/V3), so the two stay comparable: a slash-
@@ -191,27 +214,69 @@ export interface RunToken {
  * at any word carrying a non-`BARE_WORD` segment (a variable segment truncates
  * the run before the verb).
  */
-export function runTokens(text: string): RunToken[] {
-	const out: RunToken[] = [];
-	for (const word of asciiWords(text)) {
-		if (word.includes("=") || RUN_TERMINATOR.test(word)) break;
-		const parts = word.split("/").filter((p) => p.length > 0);
+export function locatedRunTokens(text: string): LocatedRunToken[] {
+	const out: LocatedRunToken[] = [];
+	for (const word of asciiWordSpans(text)) {
+		if (word.name.includes("=") || RUN_TERMINATOR.test(word.name)) break;
+		const parts: {
+			name: string;
+			start: number;
+			end: number;
+			slashBefore?: Span;
+		}[] = [];
+		let start = 0;
+		for (let i = 0; i <= word.name.length; i++) {
+			if (i < word.name.length && word.name[i] !== "/") continue;
+			if (start < i) {
+				const slashRunStart = start;
+				let slashCount = 0;
+				while (
+					slashRunStart - slashCount - 1 >= 0 &&
+					word.name[slashRunStart - slashCount - 1] === "/"
+				)
+					slashCount++;
+				const slashIndex = slashCount === 1 ? slashRunStart - 1 : -1;
+				parts.push({
+					name: word.name.slice(start, i),
+					start,
+					end: i,
+					...(slashIndex < 0 ? {} : { slashBefore: word.chars[slashIndex] }),
+				});
+			}
+			start = i + 1;
+		}
 		if (parts.length === 0) continue;
-		if (!parts.every((p) => BARE_WORD.test(p))) break;
+		if (!parts.every((p) => BARE_WORD.test(p.name))) break;
 		for (let i = 0; i < parts.length; i++) {
-			const leadingSlash = word.startsWith("/") && i === 0;
+			const part = parts[i] as (typeof parts)[number];
+			const leadingSlash = word.name.startsWith("/") && i === 0;
+			const trailingSlash =
+				i === parts.length - 1 &&
+				word.name.endsWith("/") &&
+				!word.name.endsWith("//")
+					? word.chars.at(-1)
+					: undefined;
 			out.push({
-				name: parts[i] as string,
+				name: part.name,
 				sep:
 					out.length === 0
 						? "start"
 						: i > 0 || leadingSlash
 							? "slash"
 							: "space",
+				nameSpans: coalesceChars(word.chars.slice(part.start, part.end)),
+				...(part.slashBefore === undefined
+					? {}
+					: { slashBefore: part.slashBefore }),
+				...(trailingSlash === undefined ? {} : { slashAfter: trailingSlash }),
 			});
 		}
 	}
 	return out;
+}
+
+export function runTokens(text: string): RunToken[] {
+	return locatedRunTokens(text).map(({ name, sep }) => ({ name, sep }));
 }
 
 /** True when the statement is a scripting directive (`:x`, or a bare `x do={…}`). */

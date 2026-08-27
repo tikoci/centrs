@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolveStatements } from "../../src/explain/pathresolve.ts";
 import {
 	describeStatement,
+	locatedRunTokens,
 	resolveVerb,
 	resolveVerbs,
 	runTokens,
@@ -144,6 +145,33 @@ describe("run tokenizing preserves separators (V1)", () => {
 			{ name: "firewall", sep: "space" },
 			{ name: "filter", sep: "space" },
 			{ name: "add", sep: "space" },
+		]);
+	});
+
+	test("located tokens preserve slash and continuation source ranges", () => {
+		expect(locatedRunTokens("/ip/route add")).toEqual([
+			{
+				name: "ip",
+				sep: "start",
+				nameSpans: [{ start: 1, end: 3 }],
+				slashBefore: { start: 0, end: 1 },
+			},
+			{
+				name: "route",
+				sep: "slash",
+				nameSpans: [{ start: 4, end: 9 }],
+				slashBefore: { start: 3, end: 4 },
+			},
+			{
+				name: "add",
+				sep: "space",
+				nameSpans: [{ start: 10, end: 13 }],
+			},
+		]);
+		// cspell:disable-next-line -- intentional mid-word continuation fragment
+		expect(locatedRunTokens("/ip/rou\\\nte add")[1]?.nameSpans).toEqual([
+			{ start: 4, end: 7 },
+			{ start: 9, end: 11 },
 		]);
 	});
 
