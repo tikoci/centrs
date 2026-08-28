@@ -259,7 +259,7 @@
 		{
 			"id": "C15",
 			"class": "ratified lab corner",
-			"name": "S19 `-` terminates a bare reference and starts an operator",
+			"name": "S19 `-` inside a name vs `-` as an operator",
 			"input": ":local octive 4\n:put ($octive-1)",
 			"expect": [
 				{
@@ -271,7 +271,7 @@
 					"cls": "local"
 				}
 			],
-			"rule": "S19 — `-` always terminates a bare `$name`; only the quoted `$\"set-dns\"` spelling reaches a hyphenated declaration. In `($octive-1)`, the remaining bytes are scanned independently as subtraction and its right operand."
+			"rule": "S19 — `-` is legal inside a name (`set-dns`) AND is the operator. The document's own declarations break the tie: the full run `octive-1` does not resolve, the prefix `octive` does. Same longest-resolving-prefix move Q0 rev 3 used for fused `path+arg` slugs."
 		},
 		{
 			"id": "C16",
