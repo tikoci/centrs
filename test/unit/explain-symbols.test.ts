@@ -495,7 +495,7 @@ describe("explain/symbols — spans are analyzed-byte offsets", () => {
 		expect(input.slice(declaration?.start, declaration?.end)).toBe('"set-dns"');
 	});
 
-	test("S19 stops the span at the resolving prefix, not the operator", () => {
+	test("S19 stops a bare reference span at the hyphen", () => {
 		const input = ":local octive 4\n:put ($octive-1)";
 		const reference = resolveSymbols(input).occurrences.at(-1);
 		expect(reference?.name).toBe("octive");
@@ -1302,30 +1302,64 @@ describe("explain/symbols — F8 mid-statement defect (#201)", () => {
 			expect(stop(clean)).toBeNull();
 	});
 
-	test("K4 a bare hyphenated reference to a quoted declaration", () => {
-		// CHR 7.23.2: `:global "set-dns" 1` + `:put $set-dns` ERRORS at the `-` and
-		// reads only `$set` as `variable-parameter` — a bare `$name` reference never
-		// carries a hyphen, whatever the document declared, and `$"set-dns"` is the
-		// spelling that resolves. S19 tries the FULL run first, so this reports a
-		// confident `global` where the device errors out.
-		//
-		// Pre-existing and NOT part of F7: the same rows failed identically on the
-		// pre-F7 module. Found by the F7 probe rounds and pinned here so a fix to
-		// S19 flips it on purpose.
+	test("a bare reference stops at a hyphen; only the quoted spelling reaches a hyphenated name (#219)", () => {
+		// CHR 7.23.2 reads only `$set` as `variable-parameter`, regardless of the
+		// quoted declaration. In a string `-dns` is literal; in code the ungrouped
+		// spelling errors at `-`. The symbol resolver owns the name boundary, not
+		// the surrounding expression diagnostic.
 		expect(
 			resolveSymbols(':global "set-dns" 1\n:put $set-dns').occurrences.map(
+				(o) => [o.name, o.cls, o.start, o.end],
+			),
+		).toEqual([
+			["set-dns", "global", 8, 17],
+			["set", "parameter", 26, 29],
+		]);
+		expect(
+			resolveSymbols(':global "set-dns" 1\n:put "$set-dns"').occurrences.map(
 				(o) => [o.name, o.cls],
 			),
 		).toEqual([
 			["set-dns", "global"],
-			["set-dns", "global"],
+			["set", "parameter"],
 		]);
-		// the quoted reference is the one the device accepts, and agrees already
+		// The quoted reference is the one the device accepts.
 		expect(
 			resolveSymbols(':global "set-dns" 1\n:put $"set-dns"').occurrences.map(
 				(o) => o.cls,
 			),
 		).toEqual(["global", "global"]);
+	});
+
+	test("a hyphen in an expression separates independently resolved operands (#219)", () => {
+		expect(
+			resolveSymbols(":local a 1\n:local b 2\n:put ($a-b)").occurrences.map(
+				(o) => [o.name, o.cls],
+			),
+		).toEqual([
+			["a", "local"],
+			["b", "local"],
+			["a", "local"],
+			["b", "local"],
+		]);
+		expect(
+			resolveSymbols(":local octive 1\n:put ($octive-1)").occurrences.map(
+				(o) => o.name,
+			),
+		).toEqual(["octive", "octive"]);
+	});
+
+	test("the token partition claims only the device's bare variable span (#219)", () => {
+		const input = ':global "set-dns" 1\n:put $set-dns';
+		const data = centrs.explainCommand(input, { tokens: true });
+		expect(
+			data.tokens
+				?.filter((token) => token.class.startsWith("variable-"))
+				.map((token) => [input.slice(token.start, token.end), token.class]),
+		).toEqual([
+			['"set-dns"', "variable-global"],
+			["set", "variable-parameter"],
+		]);
 	});
 
 	test("a bare `//` at statement start does stop (F5, no word to carry it)", () => {

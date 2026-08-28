@@ -43,7 +43,7 @@
  * so an occurrence offset is also its offset in the device's highlight byte
  * stream — which is what made scoring against that stream possible at all.
  * An occurrence's `name` is the key it binds as, which is not always its span's
- * text (S11 quotes, S19 prefixes); slice the span for display text.
+ * text (S11 quotes); slice the span for display text.
  *
  * The rules, as ratified (S-numbers are the lab's):
  *   S1  `:local NAME` declares NAME `local` from the declaration to the end of
@@ -74,15 +74,16 @@
  *       segment, never a symbol.
  *   S13 Bare literals (`true`/`false`/`yes`/`no`/`nothing`, anything starting
  *       with a digit) are values.
- *   S14 The reference-name boundary is not the argument-name charset: `->`
- *       and `.` terminate a name.
+ *   S14 The reference-name boundary is not the argument-name charset: `-` and
+ *       `.` terminate a bare name.
  *   S15 A bare word right after `=` or `,` is a VALUE.
  *   S16 A bare word continuing a space-separated menu path is a path segment.
  *   S17 `or` / `and` / `not` / `in` are operators, not symbols.
  *   S18 `:onerror NAME` binds NAME `local` (in TWO places — see F7).
- *   S19 `-` is both legal inside a name (`$set-dns`) and the subtraction
- *       operator (`$octive-1`); the tie is broken by the longest prefix that
- *       resolves against the document's OWN declarations.
+ *   S19 `-` always terminates a bare `$name`; hyphenated names are reachable
+ *       only through the quoted `$"set-dns"` spelling. In expression position
+ *       the remaining bytes are scanned independently, so `($a-b)` resolves
+ *       both operands while `"$set-dns"` leaves `-dns` as string content.
  *
  * EIGHT behaviors go beyond the lab SUT. None is invented: the probe declared the
  * first two and left them unmodeled (it was throwaway and depth-scoped), F2 is
@@ -290,23 +291,11 @@
  * Measured on the frozen split (`test/fixtures/explain/corpus-partition.json`,
  * promoted in #186 — it is the leakage guard, and only scores taken on the
  * SAME split are comparable to the ones below) against
- * the per-occurrence highlight streams for 7.23.2 AND 7.24rc2: **holdout 99.98%
- * precision on decided (6155/6156), 4.25% abstention, 14 missed; dev 99.79%
- * (8733/8751), 5.40%, 34 missed.**
- *
- * ONE KNOWN LIMIT is carried as measured, pinned by an explicit test and tracked
- * in the lexical-boundary issue (#201) rather than patched here:
- *
- *   K4  A BARE `$name-with-hyphen` reference never carries the hyphen on the
- *       device, whatever the document declared. `:global "set-dns" 1` +
- *       `:put $set-dns` ERRORS at the `-` and reads only `$set`
- *       (`variable-parameter`); the quoted spelling `$"set-dns"` is the one that
- *       resolves. S19 tries the FULL run first and so reports a confident
- *       `global` where the device errors. Pre-existing — the same rows fail
- *       identically on the pre-F7 module — and it belongs to S19/S11 rather than
- *       to scope resolution, so it is carried here and tracked on its own issue.
- *       (Numbered in the K series, not the S series: `S3` and `S4` are already
- *       taken by the rules above.)
+ * the per-occurrence highlight streams for 7.23.2 AND 7.24rc2. On 7.23.2:
+ * **holdout 99.89% precision on decided (6144/6151), 3.60% abstention, 19
+ * missed; dev 99.79% (8733/8751), 4.20%, 32 missed.** On 7.24rc2 the decided
+ * precision is unchanged (holdout 6144/6151; dev 8747/8765), with 3.63%/4.22%
+ * abstention and 19/30 missed.
  *
  * The scan is a single left-to-right pass with an explicit delimiter stack (no
  * recursion, Q17 posture) and never throws; structural surprises land in
@@ -360,10 +349,10 @@ export interface SymbolOccurrence {
 	end: number;
 	/**
 	 * the symbol's name — the key it binds/resolves as, which is NOT always the
-	 * span's text: a quoted declaration's span includes its quotes (S11) and a
-	 * `$octive-1` span stops at the resolving prefix (S19). Slice `start`/`end`
-	 * out of the original for display text. Names are read off the `analyzed`
-	 * surface, so a non-ASCII byte in a name reads as the `SUB` placeholder.
+	 * span's text: a quoted declaration's span includes its quotes (S11). Slice
+	 * `start`/`end` out of the original for display text. Names are read off the
+	 * `analyzed` surface, so a non-ASCII byte in a name reads as the `SUB`
+	 * placeholder.
 	 */
 	name: string;
 	/** true when written with the `$` sigil. */
@@ -730,7 +719,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		pathOpen = frame.pathOpen;
 	};
 
-	/** Record a `$`-sigilled reference, applying S5/S6/S19. */
+	/** Record a `$`-sigilled reference, applying S5/S6. */
 	const pushRef = (
 		r: { start: number; end: number; name: string },
 		note?: string,
@@ -750,37 +739,11 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			});
 			return;
 		}
-		let name = r.name;
-		let end = r.end;
-		let binding = lookup(name, r.start);
-		// S19 — a greedy scan takes `octive-1` where the device reads the variable
-		// `octive` and the subtraction operator. The document's own declarations
-		// break the tie without a schema: if the full run does not resolve but a
-		// prefix ending at a `-` does, the reference is that prefix.
-		// Only the bare `$name` form has span === name text; `$"quoted-name"` and
-		// `${…}` start their span on the delimiter, so a prefix cut there would
-		// land inside the quotes. Gate on the two agreeing.
-		const spanIsName = r.end - r.start === r.name.length;
-		if (binding === null && spanIsName && name.includes("-")) {
-			for (
-				let cut = name.lastIndexOf("-");
-				cut > 0;
-				cut = name.lastIndexOf("-", cut - 1)
-			) {
-				const prefix = name.slice(0, cut);
-				const hit = lookup(prefix, r.start);
-				if (hit !== null) {
-					binding = hit;
-					name = prefix;
-					end = r.start + prefix.length;
-					break;
-				}
-			}
-		}
+		const binding = lookup(r.name, r.start);
 		occurrences.push({
 			start: r.start,
-			end,
-			name,
+			end: r.end,
+			name: r.name,
 			sigil: true,
 			declaration: false,
 			role: "reference",
@@ -1500,15 +1463,13 @@ function readRef(
 	if (text[i] === "[" || text[i] === "(") return null; // substitution, not a name
 	const start = i;
 	// S14 — the reference-name boundary is NOT the argument-name charset:
-	//   `->`  indexing. `$vlanbytes->0` is `vlanbytes` then an operator; a
-	//         `-`-greedy scan yields `vlanbytes-`, fails lookup, and degrades to
-	//         `parameter`. A lone `-` inside a name is legal (`$my-var`), so only
-	//         `-` FOLLOWED BY `>` terminates.
+	//   `-`   always terminates a bare reference. `$set-dns` is `$set` followed
+	//         by subtraction/string content; only `$"set-dns"` names a
+	//         hyphenated variable. This also covers `->` indexing.
 	//   `.`   property access. `$ipprefix.0` is `ipprefix` then `.0`.
 	while (i < text.length) {
 		const ch = text[i] as string;
-		if (ch === ".") break;
-		if (ch === "-" && text[i + 1] === ">") break;
+		if (ch === "." || ch === "-") break;
 		if (!isIdent(ch)) break;
 		i++;
 	}
