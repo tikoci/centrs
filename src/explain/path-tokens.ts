@@ -91,6 +91,7 @@ export function pathSpans(
 				break;
 			}
 		}
+		if (candidate.text[coveredEnd] === "/") malformedSlash = true;
 		if (malformedSlash) continue;
 		if (directiveColon) {
 			out.push(

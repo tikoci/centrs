@@ -417,7 +417,12 @@ describe("#290 B2 — residualRanges seam and multi-fill buildTokens", () => {
 	});
 
 	test("ambiguous, malformed, and source-unmapped runs remain unclassified", () => {
-		for (const input of ["/not/a/known/path", "/ip//address print"]) {
+		for (const input of [
+			"/not/a/known/path",
+			"/ip//address print",
+			"/ip//",
+			"/ip///",
+		]) {
 			const data = explainCommand(input, { tokens: true });
 			expect(
 				data.tokens?.some(

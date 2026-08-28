@@ -1220,22 +1220,21 @@ partition whose `class` is provisional until #264 B5 (every unclaimed byte is
 and resolved variable occurrences); **the path fill claims resolved menu and
 command-name bytes as provisional `dir` / `cmd` tokens**, including valid path
 slashes and nested command substitutions, while ambiguous, malformed, and
-source-unmapped runs stay unclassified. **`#290`'s operator fill** then claims
-`operator` bytes on the residual left by earlier structural fills;
-**`#293`'s arg fill** in `src/explain/arg-tokens.ts` claims argument names and
+source-unmapped runs stay unclassified. **`#293`'s arg fill** in
+`src/explain/arg-tokens.ts` then claims argument names and
 their `=` (name run
 `[span.start, valueSpan.start - 1)` plus the single `=` byte at
 `valueSpan.start - 1`) on the residual left by spans, before operators see it
-— and **`#295`'s value fill is the third** — `src/explain/value-tokens.ts`
+— and **`#295`'s value fill follows it** — `src/explain/value-tokens.ts`
 claims argument value bytes and leaf array-literal members
 (`data.values.occurrences`, leaves only via `parent` containment,
-quotes-included) on the residual left by `spans`+`arg`, before the operator
+quotes-included) on the residual left by `spans`+`path`+`arg`, before the operator
 fill sees it. Fill order is enforced by argument order to `buildTokens`
 ([#290 design decision 1](../../src/explain.ts)): `spans` claims first, then
-`arg`, then `value`, then `operator` sees only what none of them wanted — which
-is why the operator fill can abstain on `, / = -` outside `( )`, on bytes glued
-after an argument `=`, and on bytes glued into an argument name without a
-smarter operator scanner.
+`path`, `arg`, and `value`, and finally `operator` sees only what none of them
+wanted — which is why the operator fill can abstain on `, / = -` outside `( )`,
+on bytes glued after an argument `=`, and on bytes glued into an argument name
+without a smarter operator scanner.
 `ExplainTokenClass` is
 `ExplainSpanClass | "dir" | "cmd" | "operator" | "arg" | "value" |
 "unclassified"` — one
