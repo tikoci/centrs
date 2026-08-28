@@ -1331,6 +1331,17 @@ describe("explain/symbols — F8 mid-statement defect (#201)", () => {
 		).toEqual(["global", "global"]);
 	});
 
+	test("braced forms do not resolve RouterOS variable references (#219)", () => {
+		const open = "${";
+		for (const reference of [`${open}set-dns}`, `${open}"set-dns"}`]) {
+			expect(
+				resolveSymbols(
+					`:global "set-dns" 1\n:put ${reference}`,
+				).occurrences.map((o) => [o.name, o.cls, o.role]),
+			).toEqual([["set-dns", "global", "declaration"]]);
+		}
+	});
+
 	test("a hyphen in an expression separates independently resolved operands (#219)", () => {
 		expect(
 			resolveSymbols(":local a 1\n:local b 2\n:put ($a-b)").occurrences.map(

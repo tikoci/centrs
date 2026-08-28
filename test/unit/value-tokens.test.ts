@@ -16,7 +16,13 @@
 import { describe, expect, test } from "bun:test";
 import { analyzeCoordinates } from "../../src/explain/coordinates.ts";
 import { valueSpans } from "../../src/explain/value-tokens.ts";
-import { explainCommand, residualRanges } from "../../src/explain.ts";
+import {
+	type ExplainValueOccurrence,
+	explainCommand,
+	residualRanges,
+} from "../../src/explain.ts";
+
+type DirectOccurrence = Pick<ExplainValueOccurrence, "id" | "span" | "parent">;
 
 function valuesViaExplain(input: string): string[] {
 	const data = explainCommand(input, { tokens: true });
@@ -29,15 +35,17 @@ function valuesViaExplain(input: string): string[] {
 function valuesDirect(
 	analyzed: string,
 	residual: { start: number; end: number }[],
-	occurrences: {
-		id: string;
-		span: { start: number; end: number };
-		parent?: string;
-	}[],
+	occurrences: DirectOccurrence[],
 ): string[] {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	return valueSpans(analyzed, residual, occurrences as unknown as any).map(
-		(s) => analyzed.slice(s.start, s.end),
+	const complete: ExplainValueOccurrence[] = occurrences.map((occurrence) => ({
+		...occurrence,
+		tokenSpan: occurrence.span,
+		kind: occurrence.parent === undefined ? "attribute" : "element",
+		quoted: false,
+		facts: {},
+	}));
+	return valueSpans(analyzed, residual, complete).map((s) =>
+		analyzed.slice(s.start, s.end),
 	);
 }
 
@@ -57,7 +65,7 @@ describe("#295 value fill — direct residual scanner", () => {
 		// corpus it never appears alone (array members imply parent), but the
 		// scanner must not invent a discard rule that throws away a one-member
 		// scalar container that happens to be the only occurrence.
-		expect(valuesDirect(analyzed, residual, [listed[0] as never])).toEqual([
+		expect(valuesDirect(analyzed, residual, listed.slice(0, 1))).toEqual([
 			"{1;2;3}",
 		]);
 	});

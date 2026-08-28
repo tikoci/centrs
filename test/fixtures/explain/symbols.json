@@ -271,7 +271,7 @@
 					"cls": "local"
 				}
 			],
-			"rule": "S19 — `-` always terminates a bare `$name`; only the quoted `$\"set-dns\"` spelling reaches a hyphenated declaration. In `($octive-1)`, the remaining bytes are scanned independently as subtraction and its right operand."
+			"rule": "S19 — `-` always terminates a bare `$name`; only the quoted `$\"set-dns\"` spelling reaches a hyphenated declaration. `${...}` is rejected by RouterOS at `{` and resolves no reference. In `($octive-1)`, the remaining bytes are scanned independently as subtraction and its right operand."
 		},
 		{
 			"id": "C16",

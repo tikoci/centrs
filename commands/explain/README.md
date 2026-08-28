@@ -631,9 +631,10 @@ and its phase is named below.
   symbol structure, not flow analysis: value/type inference remains #239 S2
   after the expression/parser foundation in #225. A hyphen always terminates a
   bare `$name`: `$set-dns` reads `$set`, while `$"set-dns"` is the spelling that
-  reaches a hyphenated declaration. In an expression the remaining `-dns` is
-  scanned as subtraction plus its right operand; inside a string it is literal
-  text.
+  reaches a hyphenated declaration. Braced forms such as `${set-dns}` and
+  `${"set-dns"}` are rejected by RouterOS at `{` and resolve no reference. In
+  an expression the remaining `-dns` is scanned as subtraction plus its right
+  operand; inside a string it is literal text.
 - **Evidence is offline-shaped, not the whole contract.** The bullet above says
   an evidence entry carries `source` (`canonicalizer` vs `live-inspect`) and a
   RouterOS version stamp; phase 1 emits neither the live source nor the stamp,
@@ -1210,8 +1211,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 843,468 are classified (59.12%), the remaining
-  583,263 are `unclassified`. The census emits 179,503 tokens (avg 189.3 per
+  1,426,731 analyzed bytes, 843,416 are classified (59.12%), the remaining
+  583,315 are `unclassified`. The census emits 179,483 tokens (avg 189.3 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is
   provisional until #264 B5. Each B2 fill should move the classified

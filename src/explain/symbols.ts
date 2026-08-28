@@ -81,9 +81,11 @@
  *   S17 `or` / `and` / `not` / `in` are operators, not symbols.
  *   S18 `:onerror NAME` binds NAME `local` (in TWO places — see F7).
  *   S19 `-` always terminates a bare `$name`; hyphenated names are reachable
- *       only through the quoted `$"set-dns"` spelling. In expression position
- *       the remaining bytes are scanned independently, so `($a-b)` resolves
- *       both operands while `"$set-dns"` leaves `-dns` as string content.
+ *       only through the quoted `$"set-dns"` spelling. `${...}` is not a
+ *       RouterOS reference form and is skipped rather than resolved. In
+ *       expression position the remaining bytes are scanned independently, so
+ *       `($a-b)` resolves both operands while `"$set-dns"` leaves `-dns` as
+ *       string content.
  *
  * EIGHT behaviors go beyond the lab SUT. None is invented: the probe declared the
  * first two and left them unmodeled (it was throwaway and depth-scoped), F2 is
@@ -813,7 +815,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				const r = readRef(text, i, true);
 				if (r !== null) {
 					// S9 — interpolated references classify like any other.
-					pushRef(r, "in-string");
+					if (r.name !== null) pushRef({ ...r, name: r.name }, "in-string");
 					i = r.next - 1;
 				}
 			}
@@ -1074,7 +1076,7 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		if (c === "$") {
 			const r = readRef(text, i, false);
 			if (r !== null) {
-				pushRef(r);
+				if (r.name !== null) pushRef({ ...r, name: r.name });
 				i = r.next - 1;
 			}
 			continue;
@@ -1425,19 +1427,21 @@ const BARE_WORD_NOTE =
 	"S7 bare word in expression position: menu field vs undefined name needs a schema";
 
 /**
- * Read a `$name`, `${name}` or `$"quoted name"` reference at `at`.
+ * Read a `$name` or `$"quoted name"` reference at `at`.
  *
- * `next` is where the scan RESUMES, which is not always `end`: the `${…}` and
- * `$"…"` forms consume their own closing delimiter, while a bare `$name` stops
- * ON its terminator, which the caller still has to see. Conflating the two made
- * every `$var]` swallow its bracket in the lab's first run, drifting the
- * nesting depth upward across a whole script.
+ * `next` is where the scan RESUMES, which is not always `end`: `$"…"` consumes
+ * its closing delimiter, while a bare `$name` stops ON its terminator, which
+ * the caller still has to see. `${…}` is rejected by RouterOS at `{`; consume
+ * the invalid form without producing an occurrence so its contents cannot be
+ * mistaken for symbols or scope. Conflating `next` and `end` made every `$var]`
+ * swallow its bracket in the lab's first run, drifting the nesting depth upward
+ * across a whole script.
  */
 function readRef(
 	text: string,
 	at: number,
 	inString: boolean,
-): { start: number; end: number; name: string; next: number } | null {
+): { start: number; end: number; name: string | null; next: number } | null {
 	let i = at + 1;
 	if (text[i] === "{") {
 		const close = text.indexOf("}", i);
@@ -1445,7 +1449,7 @@ function readRef(
 		return {
 			start: i + 1,
 			end: close,
-			name: text.slice(i + 1, close),
+			name: null,
 			next: close + 1,
 		};
 	}
