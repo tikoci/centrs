@@ -1206,8 +1206,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 843,554 are classified (59.12%), the remaining
-  583,177 are `unclassified`. The census emits 179,504 tokens (avg 189.4 per
+  1,426,731 analyzed bytes, 843,524 are classified (59.12%), the remaining
+  583,207 are `unclassified`. The census emits 179,501 tokens (avg 189.3 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is
   provisional until #264 B5. Each B2 fill should move the classified
