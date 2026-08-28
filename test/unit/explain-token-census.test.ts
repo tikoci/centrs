@@ -349,6 +349,97 @@ describe("#290 B2 — residualRanges seam and multi-fill buildTokens", () => {
 		expect(fixture.corpus.classByteCounts["operator"]).toBeGreaterThan(0);
 	});
 
+	test("resolved path and verb bytes are dir/cmd tokens with ev e12", () => {
+		const input = "/ip/route/add dst-address=10.0.0.0/8";
+		const data = explainCommand(input, { tokens: true });
+		const pathTokens = (data.tokens ?? []).filter(
+			(token) => token.class === "dir" || token.class === "cmd",
+		);
+		expect(
+			pathTokens.map((token) => ({
+				text: input.slice(token.start, token.end),
+				class: token.class,
+				ev: token.ev,
+			})),
+		).toEqual([
+			{ text: "/ip/route/", class: "dir", ev: "e12" },
+			{ text: "add", class: "cmd", ev: "e12" },
+		]);
+		expect(data.spans.some((span) => ["dir", "cmd"].includes(span.class))).toBe(
+			false,
+		);
+		expect(data.evidence.some((evidence) => evidence.id === "e12")).toBe(true);
+	});
+
+	test("navigation and nested command paths fill without claiming spaces or brackets", () => {
+		const navigation = explainCommand("/ip route", { tokens: true });
+		expect(
+			navigation.tokens
+				?.filter((token) => token.class === "dir")
+				.map((token) => "/ip route".slice(token.start, token.end)),
+		).toEqual(["/ip", "route"]);
+
+		const nestedInput = "/ip route remove [find comment=x]";
+		const nested = explainCommand(nestedInput, { tokens: true });
+		expect(
+			nested.tokens
+				?.filter((token) => token.class === "cmd")
+				.map((token) => nestedInput.slice(token.start, token.end)),
+		).toEqual(["remove", "find"]);
+		expect(
+			nested.tokens?.find(
+				(token) =>
+					token.start <= nestedInput.indexOf("[") &&
+					token.end > nestedInput.indexOf("["),
+			),
+		).toMatchObject({ class: "unclassified" });
+	});
+
+	test("colon directives use the same stripped-body coordinates as verb resolution", () => {
+		for (const input of [
+			":put 1",
+			':log info "hi"',
+			":foreach i in={1;2} do={ :put $i }",
+			":put [:len $x]",
+		]) {
+			const data = explainCommand(input, { tokens: true });
+			expect(
+				data.tokens
+					?.filter((token) => token.class === "cmd")
+					.map((token) => input.slice(token.start, token.end)),
+			).toContain(input.startsWith(":log") ? "info" : "put");
+			expect(
+				data.tokens
+					?.filter((token) => token.class === "dir")
+					.map((token) => input.slice(token.start, token.end)),
+			).toContainEqual(expect.stringMatching(/^:/));
+		}
+	});
+
+	test("ambiguous, malformed, and source-unmapped runs remain unclassified", () => {
+		for (const input of [
+			"/not/a/known/path",
+			"/ip//address print",
+			"/ip//",
+			"/ip///",
+		]) {
+			const data = explainCommand(input, { tokens: true });
+			expect(
+				data.tokens?.some(
+					(token) => token.class === "dir" || token.class === "cmd",
+				),
+			).toBe(false);
+		}
+		const normalized = explainCommand("/ip/route add comment=🚀", {
+			tokens: true,
+		});
+		expect(
+			normalized.tokens?.some(
+				(token) => token.class === "dir" || token.class === "cmd",
+			),
+		).toBe(false);
+	});
+
 	test("fill order conservatism: top-level , / = - stay unclassified for path/arg fills", () => {
 		const commaTop = explainCommand(":put 1,2", { tokens: true });
 		expect(

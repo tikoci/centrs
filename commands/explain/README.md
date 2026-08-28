@@ -1206,8 +1206,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 678,451 are classified (47.55%), the remaining
-  748,280 are `unclassified`. The census emits 111,290 tokens (avg 117.4 per
+  1,426,731 analyzed bytes, 843,524 are classified (59.12%), the remaining
+  583,207 are `unclassified`. The census emits 179,501 tokens (avg 189.3 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is
   provisional until #264 B5. Each B2 fill should move the classified
@@ -1217,24 +1217,27 @@ And the grounded complement — asked, and refused:
 B1's `data.tokens[]` is live behind `--tokens` — a total, gapless byte
 partition whose `class` is provisional until #264 B5 (every unclaimed byte is
 `unclassified`). Since B1 its only fill source was `data.spans[]` (comment runs
-and resolved variable occurrences); **`#290`'s operator fill is the first B2
-fill** — `src/explain/operator-tokens.ts` claims `operator` bytes on the
-residual left by spans — **`#293`'s arg fill is the second** —
-`src/explain/arg-tokens.ts` claims argument names and their `=` (name run
+and resolved variable occurrences); **the path fill claims resolved menu and
+command-name bytes as provisional `dir` / `cmd` tokens**, including valid path
+slashes and nested command substitutions, while ambiguous, malformed, and
+source-unmapped runs stay unclassified. **`#293`'s arg fill** in
+`src/explain/arg-tokens.ts` then claims argument names and
+their `=` (name run
 `[span.start, valueSpan.start - 1)` plus the single `=` byte at
 `valueSpan.start - 1`) on the residual left by spans, before operators see it
-— and **`#295`'s value fill is the third** — `src/explain/value-tokens.ts`
+— and **`#295`'s value fill follows it** — `src/explain/value-tokens.ts`
 claims argument value bytes and leaf array-literal members
 (`data.values.occurrences`, leaves only via `parent` containment,
-quotes-included) on the residual left by `spans`+`arg`, before the operator
+quotes-included) on the residual left by `spans`+`path`+`arg`, before the operator
 fill sees it. Fill order is enforced by argument order to `buildTokens`
 ([#290 design decision 1](../../src/explain.ts)): `spans` claims first, then
-`arg`, then `value`, then `operator` sees only what none of them wanted — which
-is why the operator fill can abstain on `, / = -` outside `( )`, on bytes glued
-after an argument `=`, and on bytes glued into an argument name without a
-smarter operator scanner.
+`path`, `arg`, and `value`, and finally `operator` sees only what none of them
+wanted — which is why the operator fill can abstain on `, / = -` outside `( )`,
+on bytes glued after an argument `=`, and on bytes glued into an argument name
+without a smarter operator scanner.
 `ExplainTokenClass` is
-`ExplainSpanClass | "operator" | "arg" | "value" | "unclassified"` — one
+`ExplainSpanClass | "dir" | "cmd" | "operator" | "arg" | "value" |
+"unclassified"` — one
 provisional `operator` class for all 26 spellings + 2 aliases, one provisional
 `arg` class for both the name bytes and the `=` separator, and one provisional
 `value` class for every leaf value span (emit first, name later — whether the
