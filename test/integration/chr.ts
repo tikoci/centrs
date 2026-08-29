@@ -117,11 +117,9 @@ export function exampleIds(count: number): number[] {
 // answer at a call site; see `test/AGENTS.md` → "Device-dependent expectations".
 //
 // Two shapes, and they are not interchangeable:
-//   - an ACCEPTED SET, when several answers are all correct and centrs cannot
-//     (and need not) tell them apart — `VALIDATION_REJECT_CODES`, `PARSE_REJECTED`
-//   - a VERSION BOUNDARY, when the behaviour genuinely changed and the test must
-//     still assert exactly, just differently per side — the `*_SINCE` constants,
-//     read through `routerOsAtLeast(started.chr.state.version, …)`
+//   - an ACCEPTED SET, when several codes are all correct — `VALIDATION_REJECT_CODES`
+//   - a WORDING CONTRACT, when device error wording differs — `PARSE_REJECTED`, `PARSE_REJECTED_HINT`
+//   - a VERSION BOUNDARY, when the behaviour genuinely changed — the `*_SINCE` constants, via `routerOsAtLeast(...)`
 //
 // Gate on the running VERSION, never the channel name: channels move, and a
 // version is what the device actually reports. State whether a boundary was
