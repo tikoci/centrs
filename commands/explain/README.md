@@ -555,7 +555,7 @@ and its phase is named below.
 | `evidence[]` | the **offline subset**: `source` is always `canonicalizer` and there is no RouterOS version stamp |
 | `structure.statements[].command` | `path` + `verb`, plus **`args` where the argument list was read** (#202c-1); the ordered token list is `statements[].arguments.tokens` |
 | `structure.statements[].transport` | complete for commands: `api-candidate`, `execute`, or fail-closed `unknown`, with an equivalent `centrs` invocation and opt-in `curl` for tested REST mappings (#202c-2). The `basis` names the evidence for the route it chose or refused |
-| `symbols.occurrences[]` | Q13 name/span/class plus semantic `role`, result-local `bindingIds`, sigil spelling, and an abstention note where needed; **no value shape or type** |
+| `symbols.occurrences[]` | Q13 name/span/class plus semantic `role`, result-local `bindingIds`, sigil spelling, and an abstention note where needed; **plus** (#239 S2) `valueId` on declarations/assignments with a literal RHS in the same statement, and `reachingValueIds` + `reachingUnknown` on references (flow-sensitive, branch → set, loop/non-literal → `unknown`, no RHS evaluation) |
 | `values.occurrences[]` | result-local value id/span plus three separate fact homes: offline `shapeHints`; live `observedType` and `schemaType` remain absent until phase 2. `kind: "element"` rows are array members, carrying `parent` and, for a keyed member, `name` |
 | `spans` | comment runs and resolved variable classes only; **no value shape or type** |
 | `schema`, `completion` | absent — live evidence, phase 2 |
@@ -621,20 +621,28 @@ and its phase is named below.
   omitted rather than rendered as a guess. The Q12 vocabulary over
   path/verb/argument bytes wants device `highlight` as its oracle. A subset is
   not a claim that the vocabulary is closed.
-- **`symbols` is the semantic Q13 projection.** Each occurrence carries its
-  source name/span, resolved class (or `null` when offline abstains), role
-  (`declaration`, `binding`, `assignment`, `reference`, or filter `field`), and
-  result-local binding identities. Those identities distinguish shadowed names
-  and connect `:set`/reference sites to their declaration; they are stable only
-  within one result. When `:onerror` establishes two bindings, the list is
-  ordered outer-scope binding first, statement-scope binding second. This is
-  symbol structure, not flow analysis: value/type inference remains #239 S2
-  after the expression/parser foundation in #225. A hyphen always terminates a
-  bare `$name`: `$set-dns` reads `$set`, while `$"set-dns"` is the spelling that
-  reaches a hyphenated declaration. Braced forms such as `${set-dns}` and
-  `${"set-dns"}` are rejected by RouterOS at `{` and resolve no reference. In
-  an expression the remaining `-dns` is scanned as subtraction plus its right
-  operand; inside a string it is literal text.
+- **`symbols` is the semantic Q13 projection plus flow-sensitive value refs
+  (#239 S2).** Each occurrence carries its source name/span, resolved class
+  (or `null` when offline abstains), role (`declaration`, `binding`,
+  `assignment`, `reference`, or filter `field`), and result-local binding
+  identities. Those identities distinguish shadowed names and connect `:set`/
+  reference sites to their declaration; they are stable only within one result.
+  When `:onerror` establishes two bindings, the list is ordered outer-scope
+  binding first, statement-scope binding second. A declaration/binding/
+  assignment with a literal RHS in the same statement carries `valueId`
+  pointing at its `values.occurrences[]` row; a reference carries
+  `reachingValueIds` (the set of literal ids that may reach it) and
+  `reachingUnknown` when the set is incomplete. Linear code is last-write-wins;
+  a branch merge is a set; a loop merge or a non-literal RHS (`$x`,
+  `[find …]`, an expression) is `unknown` — no RHS evaluation, so a
+  `reachingUnknown` reference must not be read as a type assertion. The three
+  value facts themselves stay on `values.occurrences[].facts`; symbols only
+  *refer* to them. A hyphen always terminates a bare `$name`: `$set-dns` reads
+  `$set`, while `$"set-dns"` is the spelling that reaches a hyphenated
+  declaration. Braced forms such as `${set-dns}` and `${"set-dns"}` are
+  rejected by RouterOS at `{` and resolve no reference. In an expression the
+  remaining `-dns` is scanned as subtraction plus its right operand; inside a
+  string it is literal text.
 - **Evidence is offline-shaped, not the whole contract.** The bullet above says
   an evidence entry carries `source` (`canonicalizer` vs `live-inspect`) and a
   RouterOS version stamp; phase 1 emits neither the live source nor the stamp,
@@ -1223,8 +1231,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 843,423 are classified (59.12%), the remaining
-  583,308 are `unclassified`. The census emits 179,486 tokens (avg 189.3 per
+  1,426,731 analyzed bytes, 990,982 are classified (69.46%), the remaining
+  435,749 are `unclassified`. The census emits 205,068 tokens (avg 216.3 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is
   provisional until #264 B5. Each B2 fill should move the classified
@@ -1245,21 +1253,26 @@ their `=` (name run
 — and **`#295`'s value fill follows it** — `src/explain/value-tokens.ts`
 claims argument value bytes and leaf array-literal members
 (`data.values.occurrences`, leaves only via `parent` containment,
-quotes-included) on the residual left by `spans`+`path`+`arg`, before the operator
-fill sees it. Fill order is enforced by argument order to `buildTokens`
-([#290 design decision 1](../../src/explain.ts)): `spans` claims first, then
-`path`, `arg`, and `value`, and finally `operator` sees only what none of them
-wanted — which is why the operator fill can abstain on `, / = -` outside `( )`,
-on bytes glued after an argument `=`, and on bytes glued into an argument name
-without a smarter operator scanner.
+quotes-included) on the residual left by `spans`+`path`+`arg`, before the
+**B3 string/brace fills** see it — `src/explain/string-tokens.ts` claims
+quoted-string runs (delimiters included) and `src/explain/brace-tokens.ts`
+claims scope-brace delimiters (`{`/`}`) on the residual left by
+`spans`+`path`+`arg`+`value`, and finally `operator` sees only what none of
+them wanted — which is why the operator fill can abstain on `, / = -` outside
+`( )`, on bytes glued after an argument `=`, and on bytes glued into an
+argument name without a smarter operator scanner. Fill order is enforced by
+argument order to `buildTokens` ([#290 design decision 1](../../src/explain.ts)):
+`spans` claims first, then `path`, `arg`, `value`, `string`, `brace`, and
+finally `operator`.
 `ExplainTokenClass` is
-`ExplainSpanClass | "dir" | "cmd" | "operator" | "arg" | "value" |
-"unclassified"` — one
+`ExplainSpanClass | "dir" | "cmd" | "operator" | "arg" | "value" | "string" |
+"brace" | "unclassified"` — one
 provisional `operator` class for all 26 spellings + 2 aliases, one provisional
-`arg` class for both the name bytes and the `=` separator, and one provisional
-`value` class for every leaf value span (emit first, name later — whether the
-`=` or per-shape `value` later deserve their own classes is #264 B5 and does
-not move the byte coverage), not per-operator/per-category/shape (`#264` B5).
+`arg` class for both the name bytes and the `=` separator, one provisional
+`value` class for every leaf value span, plus provisional `string` (quoted
+runs) and `brace` (scope delimiters) — emit first, name later (whether the `=`
+or per-shape `value` later deserve their own classes is #264 B5 and does not
+move the byte coverage), not per-operator/per-category/shape (`#264` B5).
 `ExplainSpanClass` and `data.spans[]` stay proof-only; `src/explain/operators.ts`
 remains data plus accessors, and the operator table above is its source. The
 `centrs → highlight` projection is B4 and reads both.

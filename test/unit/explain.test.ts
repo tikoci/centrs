@@ -340,13 +340,13 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(out).toContain("symbols:");
 		expect(out.split("\n").filter((line) => line.includes('name="x"'))).toEqual(
 			[
-				'  [8,9)        local     declaration name="x" bindings=b0',
-				'  [30,31)      local     reference   name="x" bindings=b0',
-				'  [39,40)      local     assignment  name="x" bindings=b0',
-				'  [54,55)      local     reference   name="x" bindings=b0',
+				'  [8,9)        local     declaration name="x" bindings=b0 value=v0',
+				'  [30,31)      local     reference   name="x" bindings=b0 reaching=[v0]',
+				'  [39,40)      local     assignment  name="x" bindings=b0 value=v1',
+				'  [54,55)      local     reference   name="x" bindings=b0 reaching=[v1]',
 			],
 		);
-		expect(out).toContain('declaration name="z" bindings=b1');
+		expect(out).toContain('declaration name="z" bindings=b1 value=v2');
 		expect(out).toContain('binding     name="i" bindings=b2');
 		expect(out).toContain('binding     name="v" bindings=b3');
 		expect(out).not.toContain('name="d"');
