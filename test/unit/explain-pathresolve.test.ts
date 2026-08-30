@@ -205,6 +205,22 @@ describe("Q17 over-depth — bounded traversal abstains instead of overflowing",
 	}, 30_000);
 });
 
+test("64 KiB separator-free input has bounded reverse-lookback cost (#248)", () => {
+	const input = '"a" {1} '.repeat(8_192);
+	expect(input.length).toBe(64 * 1_024);
+
+	const started = performance.now();
+	const result = resolveDocument(input);
+	const elapsed = performance.now() - started;
+
+	expect(result.resolutions).toEqual([]);
+	expect(result.defects).toEqual([]);
+	// Roughly 300 ms on the oldest supported Intel development machine. This
+	// deliberately wide budget catches the former multi-minute growth without
+	// turning normal CI scheduling or runtime variance into a flaky failure.
+	expect(elapsed).toBeLessThan(2_000);
+}, 10_000);
+
 test("never throws on adversarial input", () => {
 	const nasty = [
 		"",

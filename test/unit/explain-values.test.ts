@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { lexValueAnchors } from "../../src/explain/args.ts";
-import { braceArraySlotPairs } from "../../src/explain/brace-slots.ts";
+import {
+	braceArraySlotPairs,
+	braceProgramSlotPairs,
+} from "../../src/explain/brace-slots.ts";
 import {
 	VALUE_SHAPES,
 	type ValueShape,
@@ -590,7 +593,7 @@ describe("value anchors", () => {
 	 * rules out a schema-shaped explanation. `(1,2)` in the same slot parses, so
 	 * only the brace is gated.
 	 */
-	test("a brace array is refused outside a scripting directive's value", () => {
+	test("a brace array is rejected outside a scripting directive's value", () => {
 		for (const input of [
 			"/ip/route/add comment={1;2}",
 			"/ip/dns/set servers={1.1.1.1;8.8.8.8}",
@@ -599,7 +602,7 @@ describe("value anchors", () => {
 			":log info message={1;2}",
 		]) {
 			expect(explainCommand(input).values.occurrences).toEqual([]);
-			expect(explainCommand(input).verdict).toBe("pass");
+			expect(explainCommand(input).verdict).toBe("fail");
 		}
 		// The same bytes one position over, where the device does accept them.
 		for (const input of [
@@ -786,6 +789,12 @@ describe("value anchors", () => {
 			.map((row) => `${row.verb} ${row.slot}`)
 			.sort();
 		expect(braceArraySlotPairs()).toEqual(device);
+		expect(braceProgramSlotPairs()).toEqual(
+			rows
+				.filter((row) => row.outcome === "code" || row.outcome === "text")
+				.map((row) => `${row.verb} ${row.slot}`)
+				.sort(),
+		);
 		// The same name is an array on one verb and a code block on another, which
 		// is why a bare name set cannot express this.
 		expect(device).toContain("foreach in");
@@ -853,6 +862,68 @@ describe("value anchors", () => {
 				input,
 				array: false,
 			});
+	});
+
+	test("a brace array in a command argument is a located syntax error", () => {
+		for (const input of [
+			"/ip/route/add comment={1;2}",
+			"/ip/dns/set servers={1.1.1.1;8.8.8.8}",
+			"/interface/print .proplist={name;comment}",
+			"/ip/route/print where comment={1;2}",
+			"ip route add comment={1;2}",
+			":log info message={1;2}",
+			":delay {1;2}",
+			":beep {1;2}",
+			":local name={1;2}",
+			":if condition={1;2}",
+		]) {
+			const data = explainCommand(input);
+			const at = input.indexOf("{");
+			expect({
+				input,
+				verdict: data.verdict,
+				diagnostic: data.diagnostics.find((diagnostic) =>
+					diagnostic.code.endsWith("/invalid-command-brace"),
+				),
+			}).toMatchObject({
+				input,
+				verdict: "fail",
+				diagnostic: {
+					severity: "error",
+					span: { start: at, end: at + 1 },
+				},
+			});
+		}
+	});
+
+	test("legal expression and stored-script braces are not command-brace errors", () => {
+		for (const input of [
+			"/ip/route/add comment=({1;2})",
+			"/ip/route/add comment=[:tostr {1;2}]",
+			"/system/script/add name=x source={1;2}",
+			"/system/scheduler/add name=x on-event={:put 1}",
+			":local z {1;2}",
+			":foreach i in={1;2} do={:put $i}",
+			":execute {1;2}",
+			":execute script={1;2}",
+			":onerror e in={1;2} do={}",
+			"/ip { firewall { filter { print count-only } } }",
+		])
+			expect(
+				explainCommand(input).diagnostics.some((diagnostic) =>
+					diagnostic.code.endsWith("/invalid-command-brace"),
+				),
+			).toBeFalse();
+	});
+
+	test("a relative menu brace does not hide a later invalid command brace", () => {
+		const input = "/system {identity print} /ip/route/add comment={1;2}";
+		const brace = input.lastIndexOf("{");
+		expect(
+			explainCommand(input).diagnostics.find((diagnostic) =>
+				diagnostic.code.endsWith("/invalid-command-brace"),
+			)?.span,
+		).toEqual({ start: brace, end: brace + 1 });
 	});
 
 	test("a literal the device rejects never keeps its array shape", () => {

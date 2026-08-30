@@ -92,6 +92,7 @@ import {
 import { argSpans } from "./explain/arg-tokens.ts";
 import {
 	type ArgumentKind,
+	invalidCommandBraceOffsets,
 	lexArguments,
 	lexValueAnchors,
 	type ValueAnchorKind,
@@ -106,6 +107,7 @@ import {
 	type DefectCode,
 	isPositionalFact,
 } from "./explain/defects.ts";
+import { isKnownMenuPath } from "./explain/is-known-menu.ts";
 import { operatorSpans } from "./explain/operator-tokens.ts";
 import { type PathTokenCandidate, pathSpans } from "./explain/path-tokens.ts";
 import { type Resolution, resolveDocument } from "./explain/pathresolve.ts";
@@ -1112,6 +1114,7 @@ export function explainCommand(
 				ev,
 			};
 		}),
+		...invalidCommandBraceDiagnostics(verbs.splits, analyzed),
 		...statements.flatMap((s) => diagnosticsForStatement(s)),
 	].sort(
 		(a, b) =>
@@ -1405,6 +1408,48 @@ function argumentsOf(
 			positional: lexed.positional,
 		},
 	};
+}
+
+function invalidCommandBraceDiagnostics(
+	splits: readonly DocumentVerbSplit[],
+	analyzed: string,
+): ExplainDiagnostic[] {
+	const out: ExplainDiagnostic[] = [];
+	for (const split of splits) {
+		if (split.resolution !== "resolved" || split.argsAt === null) continue;
+		const { start, end } = split.span;
+		const text = analyzed.slice(start, end);
+		if (text !== split.text) continue;
+		// The verb splitter cannot yet flatten every relative nested menu block.
+		// Do not reinterpret a known submenu's leading `{` as an argument value,
+		// but retain diagnostics for rejected braces later in the same split.
+		const argsText = text.slice(split.argsAt);
+		const leadingBraceAt = argsText.search(/\S/);
+		const menuBraceAt =
+			leadingBraceAt >= 0 &&
+			argsText[leadingBraceAt] === "{" &&
+			split.candidates.some((candidate) =>
+				isKnownMenuPath(candidate.split("/").filter(Boolean)),
+			)
+				? split.argsAt + leadingBraceAt
+				: null;
+		for (const at of invalidCommandBraceOffsets(
+			text,
+			split.argsAt,
+			split.path === "/" ? split.verb : undefined,
+		)) {
+			if (at === menuBraceAt) continue;
+			out.push({
+				code: "explain/canonicalizer/invalid-command-brace",
+				severity: "error",
+				message:
+					"brace arrays are not valid in command arguments — use a parenthesized comma list such as `(1,2)`, or a bare comma list where the argument schema accepts one",
+				span: { start: start + at, end: start + at + 1 },
+				ev: EV.values,
+			});
+		}
+	}
+	return out;
 }
 
 /** Compose safely located literals into the three-axis #225 value surface. */

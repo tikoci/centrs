@@ -417,8 +417,16 @@ describe("commands/explain/examples.md — offline", () => {
 				(value) => value.span.start >= secondStatement,
 			),
 		).toBe(false);
-		expect(data.verdict).toBe("pass");
-		expect(code).toBe(0);
+		expect(data.verdict).toBe("fail");
+		expect(
+			data.diagnostics.find((diagnostic) =>
+				diagnostic.code.endsWith("/invalid-command-brace"),
+			)?.span,
+		).toEqual({
+			start: input.indexOf("{", secondStatement),
+			end: input.indexOf("{", secondStatement) + 1,
+		});
+		expect(code).toBe(2);
 	});
 
 	test("28b. The comma spelling is accepted everywhere, and means two things (#225)", async () => {

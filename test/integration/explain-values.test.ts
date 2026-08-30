@@ -571,7 +571,17 @@ describeFast("explain value facts against CHR", () => {
 						),
 					),
 				).toMatch(PARSE_REJECTED);
-				expect(explainCommand(input).values.occurrences).toEqual([]);
+				const offline = explainCommand(input);
+				expect(offline.values.occurrences).toEqual([]);
+				expect(offline.verdict).toBe("fail");
+				expect(
+					offline.diagnostics.find((diagnostic) =>
+						diagnostic.code.endsWith("/invalid-command-brace"),
+					)?.span,
+				).toEqual({
+					start: input.indexOf("{"),
+					end: input.indexOf("{") + 1,
+				});
 			}
 			for (const input of [
 				":local z {1;2}",
@@ -599,6 +609,17 @@ describeFast("explain value facts against CHR", () => {
 					explainCommand(input).values.occurrences[0]?.facts.shapeHints?.values,
 				).toEqual(["array"]);
 			}
+
+			const relativeMenuBlocks =
+				"/ip { firewall { filter { print count-only } } }";
+			expect(
+				outputOf(await started.chr.exec(relativeMenuBlocks)).trim(),
+			).toMatch(/^\d+$/);
+			expect(
+				explainCommand(relativeMenuBlocks).diagnostics.some((diagnostic) =>
+					diagnostic.code.endsWith("/invalid-command-brace"),
+				),
+			).toBeFalse();
 
 			// The short IPv4 spelling is octet-bounded in both positions.
 			for (const [literal, type] of [

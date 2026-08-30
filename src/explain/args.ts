@@ -50,7 +50,7 @@
  */
 
 import { isScopeBrace } from "./blocks.ts";
-import { braceSlotTakesArray } from "./brace-slots.ts";
+import { braceSlotAcceptsBrace, braceSlotTakesArray } from "./brace-slots.ts";
 import { braceStartsStatements } from "./scope-brace.ts";
 import { maskComments, scanQuotedString } from "./segment.ts";
 
@@ -1321,4 +1321,83 @@ export function lexValueAnchors(
 		}
 	}
 	return { complete: true, anchors };
+}
+
+/**
+ * Locate top-level `{...}` values that RouterOS rejects in command arguments.
+ *
+ * Parentheses and substitutions restore expression context, where a brace
+ * literal is legal. Stored-script attributes are also excluded: their brace is
+ * a script body, not an array. The caller applies this only to non-root
+ * commands; root scripting directives use the `(verb, slot)` table instead.
+ */
+export function invalidCommandBraceOffsets(
+	text: string,
+	from: number,
+	directiveVerb?: string,
+): number[] {
+	const structural = maskComments(text);
+	const offsets: number[] = [];
+	const stack: string[] = [];
+	let i = Math.max(0, from);
+	let tokenStart: number | null = null;
+	let positionals = 0;
+	while (i < structural.length) {
+		const c = structural[i] as string;
+		if (
+			stack.length === 0 &&
+			(c === " " || c === "\t" || c === "\r" || c === "\n")
+		) {
+			if (tokenStart !== null) {
+				const token = structural.slice(tokenStart, i);
+				if (
+					!token.startsWith("?") &&
+					unquotedEquals(token, 0, token.length) === null
+				)
+					positionals++;
+				tokenStart = null;
+			}
+			i++;
+			continue;
+		}
+		if (stack.length === 0 && tokenStart === null) tokenStart = i;
+		if (c === '"') {
+			i = scanQuotedString(structural, i).end;
+			continue;
+		}
+		if (c === "[" || c === "(") {
+			stack.push(c);
+			i++;
+			continue;
+		}
+		if (c === "]" || c === ")") {
+			const want = c === "]" ? "[" : "(";
+			if (stack.at(-1) === want) stack.pop();
+			i++;
+			continue;
+		}
+		if (c !== "{" || stack.length > 0) {
+			i++;
+			continue;
+		}
+
+		const end = delimitedEnd(structural, i);
+		const owner =
+			tokenStart === null
+				? undefined
+				: braceValueOwner(structural, tokenStart, i);
+		const slot = owner === null ? `#${positionals}` : owner;
+		if (
+			braceStartsStatements(structural, i) ||
+			(directiveVerb !== undefined &&
+				slot !== undefined &&
+				braceSlotAcceptsBrace(directiveVerb, slot))
+		) {
+			i = end ?? structural.length;
+			continue;
+		}
+		offsets.push(i);
+		i = end ?? i + 1;
+	}
+	return offsets;
 }

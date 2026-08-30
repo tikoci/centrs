@@ -817,7 +817,11 @@ and its phase is named below.
   draws it too — and a `(…)` or `[…]` around a brace restores the expression
   context. The braces a
   command argument does take are script bodies (`source=`, `on-event=`), and
-  those are not arrays either — they are refused earlier as scope blocks. An empty member is a
+  those are not arrays either — they are refused earlier as scope blocks. A
+  top-level brace value in any other command argument emits
+  `explain/canonicalizer/invalid-command-brace` at the `{`; parentheses or a
+  `[…]` substitution restore the expression context where the same literal is
+  legal. An empty member is a
   syntax error (`{;}`, `{;1}`, `{1;;2}`, `(1,)`) and withdraws the enclosing
   `array` shape with it; a single trailing separator is legal in the brace form
   only (`{1;}` and `{1;2;}` parse, `{1;2,}` and `{2,}` do not).
