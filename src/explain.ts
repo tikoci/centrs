@@ -110,7 +110,11 @@ import {
 import { isKnownMenuPath } from "./explain/is-known-menu.ts";
 import { operatorSpans } from "./explain/operator-tokens.ts";
 import { type PathTokenCandidate, pathSpans } from "./explain/path-tokens.ts";
-import { type Resolution, resolveDocument } from "./explain/pathresolve.ts";
+import {
+	type Resolution,
+	resolveDocument,
+	resolveStatements,
+} from "./explain/pathresolve.ts";
 import { collectStringEscapeDefects } from "./explain/quoted-string.ts";
 import { maskComments, segmentStatements } from "./explain/segment.ts";
 import {
@@ -127,10 +131,13 @@ import { type ValueShape, valueShapeHints } from "./explain/values.ts";
 import {
 	type DocumentVerbSplit,
 	resolveVerb,
-	resolveVerbs,
+	resolveVerbsFromStatements,
 	type VerbSplit,
 } from "./explain/verbsplit.ts";
-import { containsWrite, type WriteVerdict } from "./explain/write.ts";
+import {
+	containsWriteFromAnalyses,
+	type WriteVerdict,
+} from "./explain/write.ts";
 import {
 	type ResolvedSetting,
 	resolveStringSetting,
@@ -1062,9 +1069,10 @@ export function explainCommand(
 	// string-escape walk from re-deriving the same string.
 	const analyzed = new TextDecoder().decode(coordinates.analyzed);
 	const segmented = segmentStatements(input);
-	const verbs = resolveVerbs(input);
+	const statementAnalysis = resolveStatements(input);
+	const verbs = resolveVerbsFromStatements(statementAnalysis);
 	const brackets = resolveDocument(input);
-	const write = containsWrite(input);
+	const write = containsWriteFromAnalyses(statementAnalysis, brackets);
 	const symbols = resolveSymbols(input);
 
 	// Every analyzer re-derives the document's defects from its own walk, so a

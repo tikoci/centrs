@@ -79,6 +79,10 @@ interface StatementIndex {
 
 const boundaryCache = new Map<string, StatementIndex>();
 let boundaryCacheBytes = 0;
+// Most probes in one walk ask about the same document. Bypass Map's string-key
+// lookup for that hot path without retaining anything outside the bounded cache.
+let recentBoundaryText: string | undefined;
+let recentBoundaryIndex: StatementIndex | undefined;
 
 function boundaryCacheEntryBytes(text: string, index: StatementIndex): number {
 	// JavaScript strings use at most two bytes per UTF-16 code unit. Include the
@@ -91,9 +95,9 @@ function boundaryCacheEntryBytes(text: string, index: StatementIndex): number {
 	);
 }
 
-function cacheStatementIndex(text: string, index: StatementIndex): void {
+function cacheStatementIndex(text: string, index: StatementIndex): boolean {
 	const entryBytes = boundaryCacheEntryBytes(text, index);
-	if (entryBytes > BOUNDARY_CACHE_BYTE_LIMIT) return;
+	if (entryBytes > BOUNDARY_CACHE_BYTE_LIMIT) return false;
 
 	while (
 		boundaryCache.size >= BOUNDARY_CACHE_LIMIT ||
@@ -103,15 +107,26 @@ function cacheStatementIndex(text: string, index: StatementIndex): void {
 		if (oldest === undefined) break;
 		boundaryCache.delete(oldest[0]);
 		boundaryCacheBytes -= boundaryCacheEntryBytes(oldest[0], oldest[1]);
+		if (recentBoundaryText === oldest[0]) {
+			recentBoundaryText = undefined;
+			recentBoundaryIndex = undefined;
+		}
 	}
 	boundaryCache.set(text, index);
 	boundaryCacheBytes += entryBytes;
+	return true;
 }
 
 /** Statement-boundary and prefix facts for every source offset, in one pass. */
 function statementIndex(text: string): StatementIndex {
+	if (recentBoundaryText === text && recentBoundaryIndex !== undefined)
+		return recentBoundaryIndex;
 	const cached = boundaryCache.get(text);
-	if (cached !== undefined) return cached;
+	if (cached !== undefined) {
+		recentBoundaryText = text;
+		recentBoundaryIndex = cached;
+		return cached;
+	}
 
 	const boundaries = new Int32Array(text.length + 1);
 	boundaries.fill(-1);
@@ -151,7 +166,10 @@ function statementIndex(text: string): StatementIndex {
 	lastForbidden[text.length] = forbidden;
 
 	const index = { boundaries, firstContent, lastForbidden };
-	cacheStatementIndex(text, index);
+	if (cacheStatementIndex(text, index)) {
+		recentBoundaryText = text;
+		recentBoundaryIndex = index;
+	}
 	return index;
 }
 

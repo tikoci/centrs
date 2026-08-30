@@ -774,8 +774,17 @@ export function containsWrite(text: string): WriteAnalysis {
 	// One resolution pass each for the statement walk (Q4) and the bracket walk
 	// (Q3); both are re-entrant over the same segmentation and neither is cheap
 	// on adversarial input, so they are not re-run for the defects.
-	const statements = resolveStatements(text);
-	const brackets = resolveDocument(text);
+	return containsWriteFromAnalyses(
+		resolveStatements(text),
+		resolveDocument(text),
+	);
+}
+
+/** Reuse the Q3/Q4 walks when a composed analysis already performed them. */
+export function containsWriteFromAnalyses(
+	statements: StatementAnalysis,
+	brackets: DocumentAnalysis,
+): WriteAnalysis {
 	const found = collect(statements, brackets);
 	const defects = mergeDefects(statements.defects, brackets.defects);
 	const writes = found.filter((o) => o.klass === "write").length;
