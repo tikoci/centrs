@@ -137,6 +137,9 @@ const OPERATORS: readonly RouterosOperator[] = [
 	// Arity 1 is NOT "less than with one operand": `(> x)` is the deferred
 	// expression form, `(>[…])`, whose runtime type is `op`. Same spelling,
 	// different operator, and arity is the only thing that separates them.
+	// Offline value-shape hints abstain on every such form: identical
+	// `(> …)` syntax can be `op` or `array` at runtime and `:parse` IL cannot
+	// distinguish them, so `op` lives only as a live `observedType` (#288).
 	op(">", [1, 2], 5, "left", "relational", ">"),
 	op("=", [2], 5, "left", "relational", "="),
 	op("<=", [2], 5, "left", "relational", "<="),

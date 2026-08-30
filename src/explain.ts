@@ -69,9 +69,12 @@
  *     integers. The type OBSERVED from a live reading and the SCHEMA type have
  *     separate optional homes but no offline producer. Each fact has its own
  *     provenance; no hint validates a value or becomes a diagnostic. The
- *     decision and the probe matrix are #225; this module
- *     is deliberately type-blind, which is why a verdict that looks wrong around
- *     a value is a type-axis question before it is a lexical one.
+ *     decision and the probe matrix are #225; `op` is deliberately not a shape
+ *     hint — `(> …)` abstains offline and is reported only as a live
+ *     `observedType` because identical syntax can be `op` or `array` and
+ *     `:parse` IL cannot distinguish them (#288). This module is deliberately
+ *     type-blind, which is why a verdict that looks wrong around a value is a
+ *     type-axis question before it is a lexical one.
  *   - **`runtimeAcceptance` is always `"not-proven"`**, offline and live alike.
  *     It is the inspect-vs-runtime gap made machine-readable, not a placeholder.
  */
