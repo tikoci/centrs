@@ -1009,6 +1009,7 @@ function collectBrackets(
 	defects: Defect[],
 	contextCertain: boolean,
 	loc: Loc,
+	inLiteral = false,
 ): void {
 	// Bound the recursion (bracket nesting AND literal-brace descent) so
 	// untrusted deeply nested input abstains instead of overflowing the stack.
@@ -1047,10 +1048,8 @@ function collectBrackets(
 			// brackets only; scope bodies are walked by walk().
 			const end = matchDelim(masked, i, "{", "}");
 			const body = masked.slice(i + 1, end);
-			if (
-				scopeNameFromMasked(masked, i) === null &&
-				(body.includes("[") || body.includes("{"))
-			)
+			const isScope = !inLiteral && scopeNameFromMasked(masked, i) !== null;
+			if (!isScope && (body.includes("[") || body.includes("{")))
 				collectBrackets(
 					body,
 					ctx,
@@ -1059,6 +1058,7 @@ function collectBrackets(
 					defects,
 					contextCertain,
 					nest(loc, i + 1, loc.fallback),
+					true,
 				);
 			i = end;
 			continue;

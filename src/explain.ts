@@ -112,7 +112,7 @@ import { operatorSpans } from "./explain/operator-tokens.ts";
 import { type PathTokenCandidate, pathSpans } from "./explain/path-tokens.ts";
 import { type Resolution, resolveDocument } from "./explain/pathresolve.ts";
 import { collectStringEscapeDefects } from "./explain/quoted-string.ts";
-import { segmentStatements } from "./explain/segment.ts";
+import { maskComments, segmentStatements } from "./explain/segment.ts";
 import {
 	resolveSymbols,
 	type SymbolClass,
@@ -1423,16 +1423,37 @@ function invalidCommandBraceDiagnostics(
 		// The verb splitter cannot yet flatten every relative nested menu block.
 		// Do not reinterpret a known submenu's leading `{` as an argument value,
 		// but retain diagnostics for rejected braces later in the same split.
+		// Require evidence that the brace actually opens a menu container
+		// (body starts with a submenu name), so `/ip/route/print {1;2}` and
+		// `/ip { firewall/filter/print {1;2} }` still diagnose the `{1;2}` array.
 		const argsText = text.slice(split.argsAt);
 		const leadingBraceAt = argsText.search(/\S/);
-		const menuBraceAt =
+		let menuBraceAt: number | null = null;
+		if (
 			leadingBraceAt >= 0 &&
 			argsText[leadingBraceAt] === "{" &&
 			split.candidates.some((candidate) =>
 				isKnownMenuPath(candidate.split("/").filter(Boolean)),
 			)
-				? split.argsAt + leadingBraceAt
-				: null;
+		) {
+			const braceAt = split.argsAt + leadingBraceAt;
+			const structural = maskComments(text);
+			const trimmed = structural.slice(braceAt + 1).trimStart();
+			if (trimmed.length === 0 || trimmed[0] === "}") {
+				menuBraceAt = braceAt;
+			} else {
+				const match = /^\/?([A-Za-z][A-Za-z0-9._-]*)/.exec(trimmed);
+				if (match) {
+					const firstWord = match[1] as string;
+					const isMenuContainer = split.candidates.some((candidate) => {
+						const segments = candidate.split("/").filter(Boolean);
+						if (!isKnownMenuPath(segments)) return false;
+						return isKnownMenuPath([...segments, firstWord]);
+					});
+					if (isMenuContainer) menuBraceAt = braceAt;
+				}
+			}
+		}
 		for (const at of invalidCommandBraceOffsets(
 			text,
 			split.argsAt,

@@ -526,6 +526,18 @@ describe("Q14 C3b — a lost context poisons dependent statements", () => {
 		expect(res.every((s) => s.contextCertain)).toBe(true);
 		expect(res.some((s) => s.unresolved !== undefined)).toBe(false);
 	});
+
+	test("a member-named brace inside a literal does not block substitution collection", () => {
+		// `:local x {do={[/system/resource/print]}}` is an array literal whose
+		// member is `do={[/system/resource/print]}`. The inner `do={` looks like
+		// a scope (`do` is a closed-set scope name) but inside a literal it is a
+		// member name, so the `[/system/resource/print]` substitution must still
+		// be collected.
+		const res = resolveDocument(
+			":local x {do={[/system/resource/print]}}",
+		).resolutions;
+		expect(res.some((r) => r.inner === "/system/resource/print")).toBeTrue();
+	});
 });
 
 /**

@@ -926,6 +926,22 @@ describe("value anchors", () => {
 		).toEqual({ start: brace, end: brace + 1 });
 	});
 
+	test("an invalid leading brace after a resolved command is not confused with a menu container", () => {
+		// `/ip { firewall/filter/print {1;2} }` is navigation `/ip` then
+		// `firewall/filter/print` at `/ip` with `{1;2}` as a positional array
+		// literal — not a submenu container. Before the menu-container evidence
+		// check, the known-menu test (`/ip/firewall` is a menu) suppressed this
+		// leading `{` and the diagnostic was lost.
+		const input = "/ip { firewall/filter/print {1;2} }";
+		const brace = input.indexOf("{1;2}");
+		expect(
+			explainCommand(input).diagnostics.find((diagnostic) =>
+				diagnostic.code.endsWith("/invalid-command-brace"),
+			)?.span,
+		).toEqual({ start: brace, end: brace + 1 });
+		expect(explainCommand(input).verdict).toBe("fail");
+	});
+
 	test("a literal the device rejects never keeps its array shape", () => {
 		// The falsifier for the nested case, scored one-sided: a literal `:parse`
 		// rejects must not come back as a COMPLETE reading that calls those bytes
