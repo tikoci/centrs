@@ -116,7 +116,7 @@ export function exampleIds(count: number): number[] {
 // `long-term` gate. Add to this section rather than hard-coding one version's
 // answer at a call site; see `test/AGENTS.md` → "Device-dependent expectations".
 //
-// Two shapes, and they are not interchangeable:
+// Three shapes, and they are not interchangeable:
 //   - an ACCEPTED SET, when several codes are all correct — `VALIDATION_REJECT_CODES`
 //   - a WORDING CONTRACT, when device error wording differs — `PARSE_REJECTED`, `PARSE_REJECTED_HINT`
 //   - a VERSION BOUNDARY, when the behaviour genuinely changed — the `*_SINCE` constants, via `routerOsAtLeast(...)`
