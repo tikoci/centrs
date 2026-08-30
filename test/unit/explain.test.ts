@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExplainData, ExplainEnvelope } from "../../src/explain.ts";
+import {
+	type ExplainData,
+	type ExplainEnvelope,
+	explainCommand,
+} from "../../src/explain.ts";
 import { runCliCaptured as run } from "./cli-capture.ts";
 
 /**
@@ -417,8 +421,16 @@ describe("commands/explain/examples.md — offline", () => {
 				(value) => value.span.start >= secondStatement,
 			),
 		).toBe(false);
-		expect(data.verdict).toBe("pass");
-		expect(code).toBe(0);
+		expect(data.verdict).toBe("fail");
+		expect(
+			data.diagnostics.find((diagnostic) =>
+				diagnostic.code.endsWith("/invalid-command-brace"),
+			)?.span,
+		).toEqual({
+			start: input.indexOf("{", secondStatement),
+			end: input.indexOf("{", secondStatement) + 1,
+		});
+		expect(code).toBe(2);
 	});
 
 	test("28b. The comma spelling is accepted everywhere, and means two things (#225)", async () => {
@@ -458,6 +470,21 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(code).toBe(0);
 	});
 });
+
+test("64 KiB separator-free input stays bounded through public explain (#248)", () => {
+	const input = '"a" {1} '.repeat(8_192);
+	expect(input.length).toBe(64 * 1_024);
+
+	const started = performance.now();
+	explainCommand(input);
+	const elapsed = performance.now() - started;
+
+	// Roughly 1–2.5 s on the oldest supported Intel development machine. The
+	// former end-to-end path took minutes; keep scheduling noise away from that
+	// order-of-magnitude regression signal. The tighter resolver gate sits beside
+	// this test in explain-pathresolve.test.ts.
+	expect(elapsed).toBeLessThan(5_000);
+}, 10_000);
 
 /**
  * The surface itself, beyond the numbered examples: the conditional-arity

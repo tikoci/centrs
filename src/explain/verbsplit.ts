@@ -71,7 +71,11 @@ import { scopeBodies } from "./blocks.ts";
 import { commandVerbIndex } from "./catalog.ts";
 import type { Defect } from "./defects.ts";
 import { isKnownMenuPath } from "./is-known-menu.ts";
-import { resolveStatements, type Span } from "./pathresolve.ts";
+import {
+	resolveStatements,
+	type Span,
+	type StatementAnalysis,
+} from "./pathresolve.ts";
 import { SUBMENU_DIRECTIVES, VERBS } from "./verbs.ts";
 
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
@@ -787,7 +791,14 @@ export interface VerbAnalysis {
  * pair this array with `segmentStatements` by index.
  */
 export function resolveVerbs(text: string): VerbAnalysis {
-	const { statements, defects } = resolveStatements(text);
+	return resolveVerbsFromStatements(resolveStatements(text));
+}
+
+/** Reuse an existing Q4 walk when a composed analysis already performed it. */
+export function resolveVerbsFromStatements({
+	statements,
+	defects,
+}: StatementAnalysis): VerbAnalysis {
 	return {
 		splits: statements.map((s) => ({
 			...(s.unresolved

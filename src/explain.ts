@@ -92,6 +92,7 @@ import {
 import { argSpans } from "./explain/arg-tokens.ts";
 import {
 	type ArgumentKind,
+	invalidCommandBraceOffsets,
 	lexArguments,
 	lexValueAnchors,
 	type ValueAnchorKind,
@@ -106,11 +107,16 @@ import {
 	type DefectCode,
 	isPositionalFact,
 } from "./explain/defects.ts";
+import { isKnownMenuPath } from "./explain/is-known-menu.ts";
 import { operatorSpans } from "./explain/operator-tokens.ts";
 import { type PathTokenCandidate, pathSpans } from "./explain/path-tokens.ts";
-import { type Resolution, resolveDocument } from "./explain/pathresolve.ts";
+import {
+	type Resolution,
+	resolveDocument,
+	resolveStatements,
+} from "./explain/pathresolve.ts";
 import { collectStringEscapeDefects } from "./explain/quoted-string.ts";
-import { segmentStatements } from "./explain/segment.ts";
+import { maskComments, segmentStatements } from "./explain/segment.ts";
 import {
 	resolveSymbols,
 	type SymbolClass,
@@ -125,10 +131,13 @@ import { type ValueShape, valueShapeHints } from "./explain/values.ts";
 import {
 	type DocumentVerbSplit,
 	resolveVerb,
-	resolveVerbs,
+	resolveVerbsFromStatements,
 	type VerbSplit,
 } from "./explain/verbsplit.ts";
-import { containsWrite, type WriteVerdict } from "./explain/write.ts";
+import {
+	containsWriteFromAnalyses,
+	type WriteVerdict,
+} from "./explain/write.ts";
 import {
 	type ResolvedSetting,
 	resolveStringSetting,
@@ -1060,9 +1069,10 @@ export function explainCommand(
 	// string-escape walk from re-deriving the same string.
 	const analyzed = new TextDecoder().decode(coordinates.analyzed);
 	const segmented = segmentStatements(input);
-	const verbs = resolveVerbs(input);
+	const statementAnalysis = resolveStatements(input);
+	const verbs = resolveVerbsFromStatements(statementAnalysis);
 	const brackets = resolveDocument(input);
-	const write = containsWrite(input);
+	const write = containsWriteFromAnalyses(statementAnalysis, brackets);
 	const symbols = resolveSymbols(input);
 
 	// Every analyzer re-derives the document's defects from its own walk, so a
@@ -1112,6 +1122,7 @@ export function explainCommand(
 				ev,
 			};
 		}),
+		...invalidCommandBraceDiagnostics(verbs.splits, analyzed),
 		...statements.flatMap((s) => diagnosticsForStatement(s)),
 	].sort(
 		(a, b) =>
@@ -1405,6 +1416,69 @@ function argumentsOf(
 			positional: lexed.positional,
 		},
 	};
+}
+
+function invalidCommandBraceDiagnostics(
+	splits: readonly DocumentVerbSplit[],
+	analyzed: string,
+): ExplainDiagnostic[] {
+	const out: ExplainDiagnostic[] = [];
+	for (const split of splits) {
+		if (split.resolution !== "resolved" || split.argsAt === null) continue;
+		const { start, end } = split.span;
+		const text = analyzed.slice(start, end);
+		if (text !== split.text) continue;
+		// The verb splitter cannot yet flatten every relative nested menu block.
+		// Do not reinterpret a known submenu's leading `{` as an argument value,
+		// but retain diagnostics for rejected braces later in the same split.
+		// Require evidence that the brace actually opens a menu container
+		// (body starts with a submenu name), so `/ip/route/print {1;2}` and
+		// `/ip { firewall/filter/print {1;2} }` still diagnose the `{1;2}` array.
+		const argsText = text.slice(split.argsAt);
+		const leadingBraceAt = argsText.search(/\S/);
+		let menuBraceAt: number | null = null;
+		if (
+			leadingBraceAt >= 0 &&
+			argsText[leadingBraceAt] === "{" &&
+			split.candidates.some((candidate) =>
+				isKnownMenuPath(candidate.split("/").filter(Boolean)),
+			)
+		) {
+			const braceAt = split.argsAt + leadingBraceAt;
+			const structural = maskComments(text);
+			const trimmed = structural.slice(braceAt + 1).trimStart();
+			if (trimmed.length === 0 || trimmed[0] === "}") {
+				menuBraceAt = braceAt;
+			} else {
+				const match = /^\/?([A-Za-z][A-Za-z0-9._-]*)/.exec(trimmed);
+				if (match) {
+					const firstWord = match[1] as string;
+					const isMenuContainer = split.candidates.some((candidate) => {
+						const segments = candidate.split("/").filter(Boolean);
+						if (!isKnownMenuPath(segments)) return false;
+						return isKnownMenuPath([...segments, firstWord]);
+					});
+					if (isMenuContainer) menuBraceAt = braceAt;
+				}
+			}
+		}
+		for (const at of invalidCommandBraceOffsets(
+			text,
+			split.argsAt,
+			split.path === "/" ? split.verb : undefined,
+		)) {
+			if (at === menuBraceAt) continue;
+			out.push({
+				code: "explain/canonicalizer/invalid-command-brace",
+				severity: "error",
+				message:
+					"brace arrays are not valid in command arguments — use a parenthesized comma list such as `(1,2)`, or a bare comma list where the argument schema accepts one",
+				span: { start: start + at, end: start + at + 1 },
+				ev: EV.values,
+			});
+		}
+	}
+	return out;
 }
 
 /** Compose safely located literals into the three-axis #225 value surface. */

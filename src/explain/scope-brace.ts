@@ -9,26 +9,11 @@
 
 import { scanQuotedString } from "./quoted-string.ts";
 
-const ASCII_WHITESPACE = /[ \t\r\n]+/;
-
 /** Error-variable shape for `:onerror V { … }` — a bare/`$`-prefixed name. */
 const ERROR_VAR = /^\$?[A-Za-z][A-Za-z0-9._-]*$/;
 
 function isAsciiWhitespace(char: string | undefined): boolean {
 	return char === " " || char === "\t" || char === "\r" || char === "\n";
-}
-
-function trimAscii(text: string): string {
-	let start = 0;
-	let end = text.length;
-	while (start < end && isAsciiWhitespace(text[start])) start++;
-	while (end > start && isAsciiWhitespace(text[end - 1])) end--;
-	return text.slice(start, end);
-}
-
-function asciiWords(text: string): string[] {
-	const trimmed = trimAscii(text);
-	return trimmed.length === 0 ? [] : trimmed.split(ASCII_WHITESPACE);
 }
 
 /**
@@ -86,18 +71,33 @@ const DIRECTIVE_POSITIONAL_ARITY: Readonly<Record<string, number>> = {
 
 const BOUNDARY_CACHE_LIMIT = 4;
 const BOUNDARY_CACHE_BYTE_LIMIT = 8 * 1024 * 1024;
-const boundaryCache = new Map<string, Int32Array>();
-let boundaryCacheBytes = 0;
-
-function boundaryCacheEntryBytes(text: string, boundaries: Int32Array): number {
-	// JavaScript strings use at most two bytes per UTF-16 code unit. Include the
-	// key as well as the typed array so unusually large sources cannot be retained.
-	return text.length * 2 + boundaries.byteLength;
+interface StatementIndex {
+	boundaries: Int32Array;
+	firstContent: Int32Array;
+	lastForbidden: Int32Array;
 }
 
-function cacheStatementBoundaries(text: string, boundaries: Int32Array): void {
-	const entryBytes = boundaryCacheEntryBytes(text, boundaries);
-	if (entryBytes > BOUNDARY_CACHE_BYTE_LIMIT) return;
+const boundaryCache = new Map<string, StatementIndex>();
+let boundaryCacheBytes = 0;
+// Most probes in one walk ask about the same document. Bypass Map's string-key
+// lookup for that hot path without retaining anything outside the bounded cache.
+let recentBoundaryText: string | undefined;
+let recentBoundaryIndex: StatementIndex | undefined;
+
+function boundaryCacheEntryBytes(text: string, index: StatementIndex): number {
+	// JavaScript strings use at most two bytes per UTF-16 code unit. Include the
+	// key as well as the typed array so unusually large sources cannot be retained.
+	return (
+		text.length * 2 +
+		index.boundaries.byteLength +
+		index.firstContent.byteLength +
+		index.lastForbidden.byteLength
+	);
+}
+
+function cacheStatementIndex(text: string, index: StatementIndex): boolean {
+	const entryBytes = boundaryCacheEntryBytes(text, index);
+	if (entryBytes > BOUNDARY_CACHE_BYTE_LIMIT) return false;
 
 	while (
 		boundaryCache.size >= BOUNDARY_CACHE_LIMIT ||
@@ -107,67 +107,117 @@ function cacheStatementBoundaries(text: string, boundaries: Int32Array): void {
 		if (oldest === undefined) break;
 		boundaryCache.delete(oldest[0]);
 		boundaryCacheBytes -= boundaryCacheEntryBytes(oldest[0], oldest[1]);
+		if (recentBoundaryText === oldest[0]) {
+			recentBoundaryText = undefined;
+			recentBoundaryIndex = undefined;
+		}
 	}
-	boundaryCache.set(text, boundaries);
+	boundaryCache.set(text, index);
 	boundaryCacheBytes += entryBytes;
+	return true;
 }
 
-/** Last unquoted statement boundary before every source offset, in one pass. */
-function statementBoundaries(text: string): Int32Array {
+/** Statement-boundary and prefix facts for every source offset, in one pass. */
+function statementIndex(text: string): StatementIndex {
+	if (recentBoundaryText === text && recentBoundaryIndex !== undefined)
+		return recentBoundaryIndex;
 	const cached = boundaryCache.get(text);
-	if (cached !== undefined) return cached;
+	if (cached !== undefined) {
+		recentBoundaryText = text;
+		recentBoundaryIndex = cached;
+		return cached;
+	}
 
 	const boundaries = new Int32Array(text.length + 1);
 	boundaries.fill(-1);
+	const firstContent = new Int32Array(text.length + 1);
+	firstContent.fill(-1);
+	const lastForbidden = new Int32Array(text.length + 1);
+	lastForbidden.fill(-1);
 	let boundary = -1;
+	let first = -1;
+	let forbidden = -1;
 	let i = 0;
 	while (i < text.length) {
 		boundaries[i] = boundary;
+		firstContent[i] = first;
+		lastForbidden[i] = forbidden;
 		const c = text[i] as string;
 		if (c === '"') {
 			const end = Math.min(scanQuotedString(text, i).end, text.length);
 			boundaries.fill(boundary, i + 1, end + 1);
+			firstContent.fill(first === -1 ? i : first, i + 1, end + 1);
+			lastForbidden.fill(i, i + 1, end + 1);
+			if (first === -1) first = i;
+			forbidden = i;
 			i = end;
 			continue;
 		}
-		if (c === "\n" || c === ";" || c === "{" || c === "[") boundary = i;
+		if (first === -1 && !isAsciiWhitespace(c)) first = i;
+		if (c === "=" || c === "[" || c === "(" || c === "$") forbidden = i;
+		if (c === "\n" || c === ";" || c === "{" || c === "[") {
+			boundary = i;
+			first = -1;
+		}
 		i++;
 	}
 	boundaries[text.length] = boundary;
+	firstContent[text.length] = first;
+	lastForbidden[text.length] = forbidden;
 
-	cacheStatementBoundaries(text, boundaries);
-	return boundaries;
+	const index = { boundaries, firstContent, lastForbidden };
+	if (cacheStatementIndex(text, index)) {
+		recentBoundaryText = text;
+		recentBoundaryIndex = index;
+	}
+	return index;
 }
 
-function statementPrefix(text: string, open: number): string {
-	const braceBoundary = text.lastIndexOf("{", open - 1);
-	if (braceBoundary !== -1) {
-		const afterBrace = text.slice(braceBoundary + 1, open);
-		if (!/[\n;["]/.test(afterBrace)) return afterBrace;
+function trailingName(text: string, start: number, end: number): string | null {
+	let i = end - 1;
+	while (i >= start && isAsciiWhitespace(text[i])) i--;
+	if (text[i] !== "=") return null;
+	i--;
+	const nameEnd = i + 1;
+	while (i >= start && /[A-Za-z0-9.-]/.test(text[i] as string)) i--;
+	let nameStart = i + 1;
+	while (nameStart < nameEnd && !/[A-Za-z]/.test(text[nameStart] as string))
+		nameStart++;
+	if (nameStart === nameEnd || !/[A-Za-z]/.test(text[nameStart] as string))
+		return null;
+	return text.slice(nameStart, nameEnd);
+}
+
+function leadingWords(
+	text: string,
+	start: number,
+	end: number,
+	limit: number,
+	removeContinuations = false,
+): string[] {
+	const words: string[] = [];
+	let word = "";
+	for (let i = start; i < end && words.length < limit; i++) {
+		if (
+			removeContinuations &&
+			text[i] === "\\" &&
+			(text[i + 1] === "\n" || (text[i + 1] === "\r" && text[i + 2] === "\n"))
+		) {
+			i += text[i + 1] === "\r" ? 2 : 1;
+			continue;
+		}
+		const c = text[i] as string;
+		if (isAsciiWhitespace(c)) {
+			if (word.length > 0) {
+				words.push(word);
+				word = "";
+			}
+		} else {
+			word += c;
+		}
 	}
-	const baseBoundary = Math.max(
-		text.lastIndexOf("\n", open - 1),
-		text.lastIndexOf(";", open - 1),
-		braceBoundary,
-	);
-	const suffix = text.slice(baseBoundary + 1, open);
-	const bracket = suffix.lastIndexOf("[");
-	const naiveBoundary =
-		bracket === -1 ? baseBoundary : baseBoundary + bracket + 1;
-	// The fast path is the original bounded reverse lookup. A quote after its
-	// candidate means that candidate may be string content, so only then pay for
-	// the shared quote-aware forward index (#246 review).
-	//
-	// The guard is exact for every offset a walker can ask about. Differential
-	// fuzz over 300k delimiter-dense random inputs (alphabet `"{}[]();\n =a\\$/#:p`)
-	// found 0 disagreements with the always-quote-aware index across the 426,488
-	// `{`/`#` offsets reachable outside a string — with and without an
-	// unterminated string present. Disagreements exist ONLY at offsets inside a
-	// quoted run, and every caller consumes a string whole before it can ask.
-	const boundary = suffix.slice(bracket + 1).includes('"')
-		? (statementBoundaries(text)[open] ?? -1)
-		: naiveBoundary;
-	return text.slice(boundary + 1, open);
+	if (word.length > 0 && words.length < limit) words.push(word);
+	return words;
 }
 
 /** Scope name for an already comment-masked source view. */
@@ -175,14 +225,19 @@ export function scopeNameFromMasked(
 	masked: string,
 	open: number,
 ): string | null {
-	const before = statementPrefix(masked, open);
-	const named = before.match(/([A-Za-z][A-Za-z0-9.-]*)=[ \t\r\n]*$/);
-	if (named) {
-		const name = (named[1] as string).toLowerCase();
+	const index = statementIndex(masked);
+	const start = (index.boundaries[open] ?? -1) + 1;
+	const named = trailingName(masked, start, open);
+	if (named !== null) {
+		const name = named.toLowerCase();
 		if (SCOPE_ARG_NAMES.has(name)) return name;
 		const heads = HEAD_SCOPED_ARG_NAMES[name];
 		if (heads !== undefined) {
-			const head = (asciiWords(before)[0] ?? "").toLowerCase();
+			const first = index.firstContent[open] ?? -1;
+			const head =
+				first < start
+					? ""
+					: (leadingWords(masked, first, open, 1)[0] ?? "").toLowerCase();
 			return heads.has(head) ? name : null;
 		}
 		return null;
@@ -190,9 +245,13 @@ export function scopeNameFromMasked(
 	// `:do {`, `:retry {`, `:onerror Err {` — the directive may carry ONE bare
 	// error-variable word before the brace. A second token that is not an
 	// identifier (`:onerror [find] {`) is not this form, so the brace is a value.
-	const words = asciiWords(before);
-	const first = (words[0] ?? "").toLowerCase();
-	const body = DIRECTIVE_BODY[first];
+	const firstContentOffset = index.firstContent[open] ?? -1;
+	const words =
+		firstContentOffset < start
+			? []
+			: leadingWords(masked, firstContentOffset, open, 3);
+	const firstWord = (words[0] ?? "").toLowerCase();
+	const body = DIRECTIVE_BODY[firstWord];
 	if (body === undefined) return null;
 	if (words.length === 1) return body;
 	if (words.length === 2 && ERROR_VAR.test(words[1] as string)) return body;
@@ -202,13 +261,18 @@ export function scopeNameFromMasked(
 /** Whether this brace begins a context in which statement-leading comments exist. */
 export function braceStartsStatements(text: string, open: number): boolean {
 	if (scopeNameFromMasked(text, open) !== null) return true;
-	const before = statementPrefix(text, open);
-	const named = before.match(/([A-Za-z][A-Za-z0-9.-]*)=[ \t\r\n]*$/);
-	if (named) return SCRIPT_BODY_ARG.test((named[1] as string).toLowerCase());
+	const index = statementIndex(text);
+	const boundary = index.boundaries[open] ?? -1;
+	const start = boundary + 1;
+	const named = trailingName(text, start, open);
+	if (named !== null) return SCRIPT_BODY_ARG.test(named.toLowerCase());
 
 	// H7's bare `{...}` and `/menu {...}` containers are statement bodies too.
-	const prefix = trimAscii(before);
-	return prefix === "" || (prefix.startsWith("/") && !/[=[($"]/.test(prefix));
+	const first = index.firstContent[open] ?? -1;
+	return (
+		first < start ||
+		(text[first] === "/" && (index.lastForbidden[open] ?? -1) < start)
+	);
 }
 
 /**
@@ -232,9 +296,10 @@ export function hashStartsHardError(
 	while (previous >= 0 && isAsciiWhitespace(text[previous])) previous--;
 	if (text[previous] === "}") return true;
 
-	const words = asciiWords(
-		statementPrefix(text, at).replaceAll(/\\\r?\n/g, ""),
-	);
+	const index = statementIndex(text);
+	const start = (index.boundaries[at] ?? -1) + 1;
+	const first = index.firstContent[at] ?? -1;
+	const words = first < start ? [] : leadingWords(text, first, at, 3, true);
 	const rawHead = (words[0] ?? "").toLowerCase();
 	if (!rawHead.startsWith(":") && !rawHead.startsWith("/")) return false;
 	const head = rawHead.slice(1);

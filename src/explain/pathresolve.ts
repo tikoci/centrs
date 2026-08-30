@@ -90,7 +90,7 @@
  * certainty, because R4 has it REPLACE the context rather than extend it.
  */
 
-import { isScopeBrace, scopeBlocks, scopeBodies } from "./blocks.ts";
+import { scopeBlocks, scopeBodies } from "./blocks.ts";
 import { commandVerbIndex } from "./catalog.ts";
 import {
 	type Defect,
@@ -99,7 +99,11 @@ import {
 	rebaseDefects,
 } from "./defects.ts";
 import { isKnownMenuPath } from "./is-known-menu.ts";
-import { braceStartsStatements, hashStartsHardError } from "./scope-brace.ts";
+import {
+	braceStartsStatements,
+	hashStartsHardError,
+	scopeNameFromMasked,
+} from "./scope-brace.ts";
 import {
 	maskComments,
 	type SegmentResult,
@@ -1005,6 +1009,7 @@ function collectBrackets(
 	defects: Defect[],
 	contextCertain: boolean,
 	loc: Loc,
+	inLiteral = false,
 ): void {
 	// Bound the recursion (bracket nesting AND literal-brace descent) so
 	// untrusted deeply nested input abstains instead of overflowing the stack.
@@ -1042,15 +1047,18 @@ function collectBrackets(
 			// substitutions: `{[/terminal/inkey]}` lowers the bracket. Descend for
 			// brackets only; scope bodies are walked by walk().
 			const end = matchDelim(masked, i, "{", "}");
-			if (!isScopeBrace(masked, i))
+			const body = masked.slice(i + 1, end);
+			const isScope = !inLiteral && scopeNameFromMasked(masked, i) !== null;
+			if (!isScope && (body.includes("[") || body.includes("{")))
 				collectBrackets(
-					masked.slice(i + 1, end),
+					body,
 					ctx,
 					depth + 1,
 					out,
 					defects,
 					contextCertain,
 					nest(loc, i + 1, loc.fallback),
+					true,
 				);
 			i = end;
 			continue;

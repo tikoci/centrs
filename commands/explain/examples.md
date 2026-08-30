@@ -524,8 +524,10 @@ is `id`) — and adds hexadecimal, which is a number here (`0x10` is 16, while
 `0X10` is a variable). Expressions and substitutions abstain: `{1+1}`,
 `{"a"."b"}`, `{[:parse ":put 1"]}` and `{$x}` produce no member hint.
 
-The second statement produces **no value record at all**. A `{…}` array literal
-is legal only in a scripting directive's value slot: `/console/inspect` classes
+The second statement produces **no value record** and an
+`explain/canonicalizer/invalid-command-brace` error at its `{`. A `{…}` array
+literal is legal only in a scripting directive's value slot:
+`/console/inspect` classes
 the `{` byte `error` and `:parse` refuses `/ip/route/add comment={1;2}`,
 `/ip/dns/set servers={1.1.1.1;8.8.8.8}` — whose attribute really is list-typed,
 which is what rules out a schema-shaped reading — `.proplist={name;comment}`,
@@ -539,8 +541,9 @@ those are refused earlier as scope blocks rather than read as arrays.
 
 An empty member is a device syntax error (`{;}`, `{;1}`, `{1;;2}`, `(1,)`), so
 the enclosing `array` shape is withdrawn with it; a single trailing separator is
-legal (`{1;}` is a one-member array). The verdict stays `pass` throughout —
-a shape hint never becomes a diagnostic, and neither does its absence.
+legal (`{1;}` is a one-member array). Shape hints never become diagnostics.
+The command-brace error is a separate, device-grounded syntax fact rather than
+an inference from the missing hint.
 
 ### 28c. Which slot the brace sits in decides whether it is an array
 

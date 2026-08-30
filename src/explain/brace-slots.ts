@@ -87,10 +87,39 @@ const BRACE_ARRAY_SLOTS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
 	).map(([verb, slots]) => [verb, new Set<string>(slots)]),
 );
 
+/** Slots that accept a brace as code or verbatim script text, not as an array. */
+const BRACE_PROGRAM_SLOTS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+	(
+		[
+			["set", ["do"]],
+			["do", ["#0", "#1", "command", "on-error"]],
+			["execute", ["#0", "script"]],
+			["for", ["do", "on-error"]],
+			["foreach", ["do", "on-error"]],
+			["global", ["do"]],
+			["grep", ["#0", "script"]],
+			["if", ["do", "else"]],
+			["local", ["do"]],
+			["onerror", ["#1", "do", "in"]],
+			["retry", ["#0", "#1", "command", "on-error"]],
+			["time", ["#0", "#1", "command"]],
+			["while", ["do"]],
+		] as const
+	).map(([verb, slots]) => [verb, new Set<string>(slots)]),
+);
+
 /** The table as flat `verb slot` pairs, for the fixture-drift assertion. */
 export function braceArraySlotPairs(): string[] {
 	const pairs: string[] = [];
 	for (const [verb, slots] of BRACE_ARRAY_SLOTS)
+		for (const slot of slots) pairs.push(`${verb} ${slot}`);
+	return pairs.sort();
+}
+
+/** The code/text table as flat pairs, for the same fixture-drift assertion. */
+export function braceProgramSlotPairs(): string[] {
+	const pairs: string[] = [];
+	for (const [verb, slots] of BRACE_PROGRAM_SLOTS)
 		for (const slot of slots) pairs.push(`${verb} ${slot}`);
 	return pairs.sort();
 }
@@ -103,4 +132,12 @@ export function braceArraySlotPairs(): string[] {
  */
 export function braceSlotTakesArray(verb: string, slot: string): boolean {
 	return BRACE_ARRAY_SLOTS.get(verb)?.has(slot) === true;
+}
+
+/** Whether the device sweep proved this root-directive slot accepts `{...}`. */
+export function braceSlotAcceptsBrace(verb: string, slot: string): boolean {
+	return (
+		braceSlotTakesArray(verb, slot) ||
+		BRACE_PROGRAM_SLOTS.get(verb)?.has(slot) === true
+	);
 }
