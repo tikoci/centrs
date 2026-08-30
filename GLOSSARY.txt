@@ -712,3 +712,9 @@ psk # pre-shared key — the value half of the same grounded `wpa2-psk` example
 
 # #293 B2 arg-fill vocabulary
 retag # B5 may retag the `=` separator from the provisional `arg` class without moving byte coverage
+
+# #239 S2 flow-sensitive symbol→value
+occ # short for occurrence — local variable in symbol-values flow analysis
+vid # short for valueId — result-local value occurrence identifier (v0, v1)
+idx # short for index — loop/event index in flow merging
+mis # prefix in mis-linking — hyphenated in comments for symbol-values guard
