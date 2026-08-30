@@ -1251,4 +1251,37 @@ describe("explain value facts", () => {
 		expect(occurrence?.tokenSpan).toEqual({ start: start - 8, end: start + 7 });
 		expect(bytes.subarray(start, start + 7).toString()).toBe("1.1.1.1");
 	});
+
+	test("deferred expressions abstain offline; op lives only as observedType (#288)", () => {
+		expect(VALUE_SHAPES).not.toContain("op" as never);
+		expect(VALUE_SHAPES).not.toContain("code" as never);
+		expect(VALUE_SHAPES).not.toContain("nil" as never);
+		for (const input of [
+			":local x (>1)",
+			":local x (> 1)",
+			":global f (>[:return 1])",
+			':global g (>{"a"=1})',
+			":local x (>$x)",
+			":put (>1)",
+		]) {
+			const data = explainCommand(input);
+			expect(data.values.occurrences).toEqual([]);
+			expect(
+				data.values.occurrences.some((occurrence) =>
+					occurrence.facts.shapeHints?.values.includes("op" as never),
+				),
+			).toBe(false);
+			expect(
+				data.values.occurrences.every(
+					(occurrence) => occurrence.facts.observedType === undefined,
+				),
+			).toBe(true);
+		}
+		// A parenthesized comma still proves array, while the deferred form does
+		// not, even though both start with `(`.
+		expect(
+			explainCommand(":local z (1,2)").values.occurrences[0]?.facts.shapeHints
+				?.values,
+		).toEqual(["array"]);
+	});
 });

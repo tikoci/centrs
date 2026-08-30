@@ -653,7 +653,8 @@ and its phase is named below.
 
   The stable/testing CHR matrix fixes the offline lexicon: `num`, `ip`,
   `ip-prefix`, `ip6`, `ip6-prefix`, `id`, `time`, `array`, `mac`, `bool`, and
-  `str`; quoted literals
+  `str` — `op` is deliberately not a member: a deferred `(> …)` abstains
+  offline and is reported only as a live `observedType` (#288); quoted literals
   hint only `str`, while malformed and out-of-range address-like controls
   abstain even in named attributes. Most vocabulary borrows RouterOS scripting
   type names (with the explicit `macAddr` schema exception below), so a hint
@@ -681,7 +682,14 @@ and its phase is named below.
   abstains on the whole concat expression and leaves its result type to #236.
   `[:parse "…"]` similarly produces the observed but undocumented `code` type,
   and `[:nothing]` produces `nil`; neither has a standalone literal spelling,
-  so neither becomes an offline shape member.
+  so neither becomes an offline shape member. `(> …)` deferred expressions
+  are the same case with a different outcome: `(>[:return 1])` is `op` and
+  `(>{"a"=1})` is `array` at runtime, but both lower to `(> …)` with arity
+  1 and identical `:parse` IL — only `:typeof` distinguishes them
+  (`test/fixtures/explain/operators.json` → `sweep.runtime`
+  `typeof-deferred`/`deferred-array-typeof` and `sweep.opAxis` `defer-*` on
+  7.21.5, 7.23.3, 7.24rc4). Offline abstains on every such form; `op` lives
+  only as a live `observedType` (#288, a bounded #225 decision).
   Shape remains non-authoritative: `100000w` is time-shaped but observed as
   `str`. Argument context remains separate: on 7.23.3 and 7.24rc3, both
   `/ip/address address=2.2` and firewall `src-address=2.2` canonicalize it to
