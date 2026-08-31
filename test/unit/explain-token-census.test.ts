@@ -349,6 +349,37 @@ describe("#290 B2 — residualRanges seam and multi-fill buildTokens", () => {
 		expect(fixture.corpus.classByteCounts["operator"]).toBeGreaterThan(0);
 	});
 
+	test("B3 string scanning cannot start from a quote owned by a comment", () => {
+		const input = '# unmatched "\n:put {1}';
+		const tokens = explainCommand(input, { tokens: true }).tokens ?? [];
+		const statementStart = input.indexOf(":put");
+		expect(
+			tokens.some(
+				(token) => token.start >= statementStart && token.class === "string",
+			),
+		).toBe(false);
+		expect(
+			tokens
+				.filter((token) => token.class === "brace")
+				.map((token) => input.slice(token.start, token.end)),
+		).toEqual(["{", "}"]);
+	});
+
+	test("B3 strings stay on the residual around higher-priority symbol spans", () => {
+		const input = ':put "a $x b"';
+		const tokens = explainCommand(input, { tokens: true }).tokens ?? [];
+		expect(
+			tokens
+				.filter((token) => token.class === "string")
+				.map((token) => input.slice(token.start, token.end)),
+		).toEqual(['"a $', ' b"']);
+		expect(
+			tokens
+				.filter((token) => token.class === "variable-parameter")
+				.map((token) => input.slice(token.start, token.end)),
+		).toEqual(["x"]);
+	});
+
 	test("resolved path and verb bytes are dir/cmd tokens with ev e12", () => {
 		const input = "/ip/route/add dst-address=10.0.0.0/8";
 		const data = explainCommand(input, { tokens: true });

@@ -32,7 +32,6 @@ interface BlockInfo {
 	start: number;
 	end: number;
 	isLoop: boolean;
-	name: string;
 }
 
 type BindingState = {
@@ -65,6 +64,7 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
 function collectBlocks(
 	text: string,
 	base: number,
+	analyzed: string,
 	splits: readonly DocumentVerbSplit[],
 ): BlockInfo[] {
 	const out: BlockInfo[] = [];
@@ -72,25 +72,23 @@ function collectBlocks(
 		const start = base + b.start;
 		const end = start + b.body.length;
 		const bracePos = start - 1;
-		let isLoop = false;
-		for (const split of splits) {
-			const span = split.span;
-			if (span.start <= bracePos && bracePos < span.end) {
-				const verb = (split as unknown as { verb?: string | null }).verb;
-				if (verb !== undefined && verb !== null) {
-					const lower = verb.toLowerCase();
-					if (lower === "foreach" || lower === "for" || lower === "while")
-						isLoop = true;
-				}
-				break;
-			}
-		}
-		if (!isLoop) {
-			const before = text.slice(Math.max(0, b.start - 50), b.start);
-			if (/\b(?:foreach|for|while)\b/i.test(before)) isLoop = true;
-		}
-		out.push({ start, end, isLoop, name: b.name });
-		out.push(...collectBlocks(b.body, start, splits));
+		const ownerIndex = owningSplitIndex(
+			analyzed,
+			splits,
+			bracePos,
+			bracePos + 1,
+		);
+		const owner = ownerIndex === undefined ? undefined : splits[ownerIndex];
+		// If source mapping cannot identify the owning statement, use loop-like
+		// merging: an incomplete reaching set is safer than treating an unknown
+		// repeated body as a one-shot branch. Otherwise the resolved verb, not a
+		// nearby word or string, decides loop semantics.
+		const isLoop =
+			owner === undefined ||
+			(owner.verb !== null &&
+				["foreach", "for", "while"].includes(owner.verb.toLowerCase()));
+		out.push({ start, end, isLoop });
+		out.push(...collectBlocks(b.body, start, analyzed, splits));
 	}
 	return out;
 }
@@ -104,10 +102,35 @@ function collectBlocks(
  * link `i` to the `in` attribute. Only the same statement's values are
  * candidates, which also prevents cross-statement mis-linking.
  */
+function owningSplitIndex(
+	analyzed: string,
+	splits: readonly DocumentVerbSplit[],
+	start: number,
+	end: number,
+): number | undefined {
+	let owner: number | undefined;
+	let ownerLength = Number.POSITIVE_INFINITY;
+	for (let i = 0; i < splits.length; i++) {
+		const split = splits[i] as DocumentVerbSplit;
+		if (split.span.start > start || end > split.span.end) continue;
+		// A widened fallback span cannot prove statement ownership. Match the
+		// same addressability gate used by `valuesOf`/`argumentsOf`.
+		if (analyzed.slice(split.span.start, split.span.end) !== split.text)
+			continue;
+		const length = split.span.end - split.span.start;
+		if (length < ownerLength) {
+			owner = i;
+			ownerLength = length;
+		}
+	}
+	return owner;
+}
+
 function defValueId(
 	occurrence: SymbolOccurrence,
-	splits: readonly DocumentVerbSplit[],
+	splitIndex: number | undefined,
 	values: readonly ExplainValueOccurrence[],
+	valueSplitIndexes: readonly (number | undefined)[],
 ): string | undefined {
 	if (
 		occurrence.role !== "declaration" &&
@@ -122,53 +145,28 @@ function defValueId(
 	if (occurrence.cls !== "local" && occurrence.cls !== "global")
 		return undefined;
 
-	let split: DocumentVerbSplit | undefined;
-	for (const s of splits)
-		if (s.span.start <= occurrence.start && occurrence.start < s.span.end) {
-			split = s;
-			break;
-		}
-	if (split === undefined) return undefined;
+	if (splitIndex === undefined) return undefined;
 
 	let best: ExplainValueOccurrence | undefined;
 	let bestDist = Number.POSITIVE_INFINITY;
-	for (const value of values) {
-		if (value.span.start < split.span.start || value.span.end > split.span.end)
-			continue;
+	for (let i = 0; i < values.length; i++) {
+		const value = values[i] as ExplainValueOccurrence;
+		// Parent statement spans include their scope bodies. Requiring the
+		// innermost addressable statement to match prevents `:local f do={:put
+		// 1}` from claiming the body's `1`, and prevents one branch from lending
+		// a literal to a non-literal definition in another branch.
+		if (valueSplitIndexes[i] !== splitIndex) continue;
 		if (value.kind === "element") continue;
 		if (value.span.start <= occurrence.start) continue;
-		// Prefer positional directly after the declaration; an attribute with
-		// the same span would be the wrong kind.
-		if (value.kind !== "positional" && value.kind !== "attribute") continue;
-		// For a declaration, the RHS should be positional, not an attribute
-		// named `do`/`else` etc. Skip attribute values that are scope names.
-		if (value.kind === "attribute" && value.name !== undefined) {
-			const lower = value.name.toLowerCase();
-			if (lower === "do" || lower === "else" || lower === "in") continue;
-		}
-		if (value.kind === "positional") {
-			const dist = value.span.start - occurrence.end;
-			if (dist < 0 || dist >= bestDist) continue;
-			bestDist = dist;
-			best = value;
-		} else if (best === undefined || best.kind !== "positional") {
-			// Attribute candidate only if no positional is closer
-			const dist = value.span.start - occurrence.end;
-			if (dist < 0 || dist >= bestDist) continue;
-			bestDist = dist;
-			best = value;
-		}
+		// RouterOS declaration/assignment RHS syntax is positional. Attribute
+		// values in the same statement belong to the directive, not this symbol.
+		if (value.kind !== "positional") continue;
+		const dist = value.span.start - occurrence.end;
+		if (dist < 0 || dist >= bestDist) continue;
+		bestDist = dist;
+		best = value;
 	}
-	if (best !== undefined) {
-		// Distance guard: a value far from the name is likely a later
-		// positional (e.g. `:local x 1; :local y 2` — x should not claim y's 2).
-		// The RHS of a `:local`/`:global`/`:set` starts within a few bytes of
-		// the name; a gap beyond 60 bytes is a different token. Guard avoids
-		// mis-linking when the same split holds multiple declarations.
-		if (bestDist > 60) return undefined;
-		return best.id;
-	}
-	return undefined;
+	return best?.id;
 }
 
 /**
@@ -186,15 +184,27 @@ export function augmentSymbolOccurrences(
 	splits: readonly DocumentVerbSplit[],
 ): ExplainSymbolOccurrence[] {
 	const augmented: ExplainSymbolOccurrence[] = [];
+	const symbolSplitIndexes = symbols.map((occ) =>
+		owningSplitIndex(analyzed, splits, occ.start, occ.end),
+	);
+	const valueSplitIndexes = values.map((value) =>
+		owningSplitIndex(analyzed, splits, value.span.start, value.span.end),
+	);
+	const valueOrder = new Map(values.map((value, index) => [value.id, index]));
 	// Map from occurrence index -> valueId for quick lookup during flow pass
 	const defMap = new Map<number, string>();
 	for (let i = 0; i < symbols.length; i++) {
 		const occ = symbols[i] as SymbolOccurrence;
-		const vid = defValueId(occ, splits, values);
+		const vid = defValueId(
+			occ,
+			symbolSplitIndexes[i],
+			values,
+			valueSplitIndexes,
+		);
 		if (vid !== undefined) defMap.set(i, vid);
 	}
 
-	const blocks = collectBlocks(analyzed, 0, splits);
+	const blocks = collectBlocks(analyzed, 0, analyzed, splits);
 	const events: { offset: number; type: "enter" | "exit"; isLoop: boolean }[] =
 		[];
 	for (const b of blocks) {
@@ -214,11 +224,6 @@ export function augmentSymbolOccurrences(
 	let current = new Map<string, BindingState>();
 	const stack: { snapshot: Map<string, BindingState>; isLoop: boolean }[] = [];
 	let eventIdx = 0;
-	const refReaching = new Map<
-		number,
-		{ valueIds: string[]; unknown: boolean }
-	>();
-
 	const processEventsUpTo = (pos: number): void => {
 		while (eventIdx < events.length) {
 			const ev = events[eventIdx] as {
@@ -264,16 +269,6 @@ export function augmentSymbolOccurrences(
 								unknown: true,
 							});
 						}
-					} else if (
-						(snap !== undefined && snap.unknown) ||
-						(cur !== undefined && cur.unknown)
-					) {
-						const base = snap ?? cur;
-						if (base !== undefined)
-							merged.set(id, {
-								valueIds: new Set(base.valueIds),
-								unknown: true,
-							});
 					}
 				}
 				// Loops make every variable assigned inside unknown after exit,
@@ -351,27 +346,17 @@ export function augmentSymbolOccurrences(
 				// visible declaration later? Q13's lookup already ensures we only
 				// query after declaration, so undefined here is truly unknown.
 				if (!anyDefined) unknown = true;
-				const ids = [...unionIds].sort();
+				const ids = [...unionIds].sort(
+					(a, b) =>
+						(valueOrder.get(a) ?? Number.POSITIVE_INFINITY) -
+						(valueOrder.get(b) ?? Number.POSITIVE_INFINITY),
+				);
 				(
 					base as {
 						reachingValueIds?: string[];
 						reachingUnknown?: boolean;
 					}
 				).reachingValueIds = ids;
-				if (unknown || ids.length > 1) {
-					// Mark unknown when set is plural due to branch merge or
-					// when a non-literal def contributed. For linear single
-					// literal, unknown stays false.
-					if (unknown || ids.length > 1) {
-						// For branch merges we keep ids but also flag unknown when
-						// the merge was conservative. Preserve ids for callers to
-						// inspect shapes; unknown says the set may be incomplete.
-						// We flag unknown only when the flow state said so or
-						// when the definition was unknown (empty set with unknown).
-						// For a clean branch of two literals, unknown is false
-						// but ids length >1 signals the set.
-					}
-				}
 				(base as { reachingUnknown?: boolean }).reachingUnknown = unknown
 					? true
 					: undefined;
@@ -382,7 +367,6 @@ export function augmentSymbolOccurrences(
 					delete (base as { reachingValueIds?: string[] }).reachingValueIds;
 					delete (base as { reachingUnknown?: boolean }).reachingUnknown;
 				}
-				refReaching.set(index, { valueIds: ids, unknown });
 			}
 		}
 		augmented.push(base);

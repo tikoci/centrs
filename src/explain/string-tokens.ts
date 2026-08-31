@@ -32,6 +32,11 @@ export function stringSpans(
 	const raw: { start: number; end: number }[] = [];
 	for (let i = 0; i < analyzed.length; i++) {
 		if (analyzed[i] !== '"') continue;
+		// Earlier fills own semantic regions. In particular, a quote inside a
+		// comment must not open a string that paints later statements when that
+		// comment has no matching quote. A real residual string always has its
+		// opening delimiter on the residual; already-owned strings need no fill.
+		if (clipToResidual(i, i + 1, residual).length === 0) continue;
 		const scan = scanQuotedString(analyzed, i);
 		if (!scan.closed) {
 			// Unterminated strings are already a defect; claim from opener to
