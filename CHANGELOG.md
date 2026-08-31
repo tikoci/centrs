@@ -8,76 +8,44 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
-### Changed
+## 0.1.4 — 2026-08-31
 
-- **Local Git gates now stop at the useful feedback boundary.** Pre-commit runs
-  the near-instant Biome check; pre-push runs the same `lint:ci` repo-check gate
-  as GitHub (source/type checks, generated-doc drift, Markdown, spelling, and
-  secrets) without serially duplicating the required unit-test and build jobs.
-  The hosted repo-check job no longer runs its source subset twice, while unit,
-  build, and stable CHR smoke coverage remain unchanged. The three
-  bounded-traversal tests identified in #277 also have a 30-second runner budget
-  so host contention does not turn their structural bounds into a laptop-speed
-  assertion.
+Preview release. `@tikoci/centrs@0.1.4` on npm's `next` tag.
 
 ### Added
 
-- **`explain` reads the array members an `=` makes, instead of abstaining at
-  the sign.** #256 read a `{…}` literal member by member but dropped every
-  member whose `=` did not bind a key, which is three readings the device has:
-  `{a=}` is not an empty-valued key but a positional `str` holding the name
-  (the device drops the sign — and `{1.1=}` is the string `1.1`, not the
-  address), `{$a=1}`/`{(a)=1}`/`{[:timestamp]=1}` are comparisons and therefore
-  one `bool` member, and a leading `-` belongs to the key (`{-1=1}`). A key
-  binds only where the name TOUCHES the sign, so `{a =1}` compares and `{a=1}`
-  does not. `bool` is claimed only where the `=` is the member's top operator —
-  `{a b=1}` and `{$a=1,2}` nest it under an operator whose type is its
-  operands', and both still abstain — and an empty side, a syntax error in all
-  14 spellings asked, now withdraws the literal instead of leaving it reported
-  as an array. That withdrawal keys on positive evidence that the left side is
-  an expression, never on the key reader failing to recognize it, because the
-  member-key grammar is not the identifier grammar and was swept rather than
-  assumed: `.`, `-` and `/` are name bytes anywhere (`{.id=1}`, `{.=1}`,
-  `{a/b=1}`), `_` is not (`{a_b=1}` compares), and `@` is not a member
-  character at any position. Two member faults that predate the `=` axis are
-  checked with it: a `$` takes an alphanumeric or a quote and nothing else
-  (`$"a b"` is a name, `$.id` and `$_a` are syntax errors), and no run may end
-  on a dangling operator (`{a-}`, `{$a.}`). Grounded on CHR 7.23.3 across ten
-  probe rounds; the 186 device
-  rows are `interiorGrounding.keyBinding` in `test/fixtures/explain/values.json`
-  and are scored one-sided (abstention always allowed, a contradicted type
-  never) by a new unit test. The value census is unchanged: no statement in the
-  948-script corpus reaches any of these spellings (#258, part of #225).
+- **Offline `explain` is now a real CLI and library surface.** It analyzes
+  RouterOS commands and scripts without a router, CDB, or network connection,
+  returning canonical structure, diagnostics, write-shape and transport
+  classification, optional `curl` rendering, symbols, value-shape hints, and a
+  gapless token partition. Try it with
+  `bunx @tikoci/centrs@next explain '/ip/address print' --json`.
+- **Generated RouterOS structure evidence.** Pinned inspect trees and
+  MikroTik's published CLI Reference now help distinguish known menus from
+  commands while preserving the fail-closed rule: missing catalog entries never
+  become rejections, schema claims, or runtime-acceptance claims.
+- **Named quickchr targets.** Router-facing commands can resolve an ephemeral
+  quickchr instance with `--quickchr <name>` through the shared target-provider
+  path.
 
-- **`LICENSE` — centrs is MIT.** The repository carried no `LICENSE` file and
-  the published `@tikoci/centrs` tarball carried no license text, so GitHub
-  reported `licenseInfo: null` and consumers had only a bare `"license": "MIT"`
-  string in `package.json` to go on — no grant they could actually read, quote,
-  or redistribute, which is a problem for anything bundling centrs (a VS Code
-  extension, say) (#208). The file now exists to back the declaration, and is in
-  the npm `files` allowlist so it ships.
-- **`bun run corpus:fetch` — the `explain` censuses run from a bare clone and
-  in CI.** `scripts/corpus-pin.json` records which snapshot of the RouterOS
-  script corpus centrs measures against (a commit in `tikoci/lsp-routeros-ts`
-  plus the blob's sha256); `corpus:fetch` downloads it to a gitignored cache and
-  verifies the hash, and a mismatch is a hard error rather than a silent
-  re-download. `explain:corpus-census` and `explain:value-census` previously
-  resolved the corpus *only* as a sibling checkout, so they ran on one machine
-  and never on a PR; both now fall back to the pinned snapshot and announce the
-  source and hash they used. A new CI job gates the fetch and posts both
-  censuses to the run summary (#186).
-- **The `explain` value census is drift-gated, not just re-derivable.** Its
-  figures live in three places — the census itself, the `corpus` block of
-  `test/fixtures/explain/values.json`, and prose in `commands/explain/README.md`
-  — and #256 shipped with the README still quoting pre-change numbers, caught by
-  review rather than CI. Each link now has a gate keyed to the data it needs:
-  `bun run explain:value-census:check` re-runs the census against the committed
-  fixture in the CI corpus job, while the README paragraph became a generated
-  projection of that fixture (`bun run explain:value-census:readme`) checked by
-  `bun run explain:value-census:readme:check` in `lint:ci` and in `bun test`,
-  needing no corpus at all. The generated prose reports the invariants as
-  counters rather than asserting they hold, so regenerating after a regression
-  states it instead of reading as reassurance (#260).
+### Changed
+
+- **Offline analysis is substantially more precise and robust.** Grounded
+  handling now covers RouterOS comments, escapes, operators, arrays, value
+  shapes, path context, and flow-sensitive symbol-to-value references; bounded
+  traversal and shared statement indexes keep large inputs near-linear.
+- **Release and QA coverage is broader.** Recency-aware RouterOS channel
+  selection, long-term-version expectations, generated-artifact drift checks,
+  corpus gates, and faster local Git gates make the published preview easier to
+  reproduce and audit.
+
+### Fixed
+
+- **Validation now reads RouterOS `:parse` results instead of accepting the
+  transport round-trip alone**, and retrieve errors retain the rejected
+  parameter. Parser, catalog, cross-platform QA, and MAC-Telnet edge cases were
+  also hardened.
+- **The npm package now carries the MIT license text.**
 
 ## 0.1.3 — 2026-07-06
 

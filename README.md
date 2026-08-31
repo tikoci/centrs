@@ -4,11 +4,16 @@
 CLI (with MCP, TUI, and HTTP proxy frontends planned) for talking to MikroTik
 RouterOS devices through a regularized, validated interface.
 
-Preview builds are published on npm. To inspect the CLI without installing it:
+Preview builds are published on npm. To try the current offline analyzer without
+installing centrs or connecting to a router:
 
 ```bash
-bunx @tikoci/centrs --help
+bunx @tikoci/centrs@next explain '/ip/address print' --json
 ```
+
+Use `bunx @tikoci/centrs@next --help` to inspect the full preview CLI. The
+explicit `@next` matters: `0.1.x` preview releases do not move npm's `latest`
+tag.
 
 The full flag reference for every command is generated from the CLI metadata
 into [`docs/CLI.md`](docs/CLI.md); per-command behavior lives in
@@ -21,9 +26,12 @@ them. It does **not** hide RouterOS behind helpers like `createVlanOnBridge()`
 — you still speak RouterOS. Validation and structured diagnostics are the
 product; without them this would just be a worse `curl`.
 
-> **Status:** early npm preview, active development. `@tikoci/centrs` is
-> published on npm, but command flags and envelopes may still change before a
-> stable release. Check current dist-tags with
+> **Status:** early npm preview under active development. It is not
+> production-ready: expect bugs and breaking changes before 1.0, and exercise
+> router-writing workflows on lab or disposable targets first. Offline
+> `explain` does not contact a router, but its analysis is intentionally
+> conservative and never proves that RouterOS will accept a command at runtime.
+> Check current dist-tags with
 > `npm view @tikoci/centrs dist-tags --json`. The library, device registry, and
 > first MCP server phases are CHR-verified; the CLI is wired (`coded`);
 > encrypted-CDB writes are still blocked, and the TUI/proxy frontends are planned.
