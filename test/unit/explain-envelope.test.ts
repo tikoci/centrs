@@ -689,6 +689,7 @@ describe("symbols", () => {
 				bindingIds: ["b0"],
 				sigil: false,
 				ev: "e7",
+				valueId: "v0",
 			},
 			{
 				name: "x",
@@ -698,6 +699,7 @@ describe("symbols", () => {
 				bindingIds: ["b0"],
 				sigil: false,
 				ev: "e7",
+				valueId: "v1",
 			},
 			{
 				name: "x",
@@ -707,6 +709,7 @@ describe("symbols", () => {
 				bindingIds: ["b0"],
 				sigil: true,
 				ev: "e7",
+				reachingValueIds: ["v1"],
 			},
 		]);
 	});

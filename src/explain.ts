@@ -101,6 +101,7 @@ import {
 	type ValueAnchorKind,
 } from "./explain/args.ts";
 import { scopeBlocks } from "./explain/blocks.ts";
+import { braceSpans } from "./explain/brace-tokens.ts";
 import {
 	analyzeCoordinates,
 	type CoordinateAnalysis,
@@ -120,6 +121,8 @@ import {
 } from "./explain/pathresolve.ts";
 import { collectStringEscapeDefects } from "./explain/quoted-string.ts";
 import { maskComments, segmentStatements } from "./explain/segment.ts";
+import { stringSpans } from "./explain/string-tokens.ts";
+import { augmentSymbolOccurrences } from "./explain/symbol-values.ts";
 import {
 	resolveSymbols,
 	type SymbolClass,
@@ -466,6 +469,8 @@ export type ExplainTokenClass =
 	| "operator"
 	| "arg"
 	| "value"
+	| "string"
+	| "brace"
 	| "unclassified";
 
 export interface ExplainToken extends ExplainSpanRange {
@@ -492,6 +497,28 @@ export interface ExplainSymbolOccurrence {
 	/** The resolver's reason for an abstention or special reading. */
 	note?: string;
 	ev: string;
+	/**
+	 * For a declaration/binding/assignment with a literal RHS in the same
+	 * statement, the `ExplainValueOccurrence.id` that spells it. Absent when
+	 * the RHS is a variable, substitution, expression, or absent.
+	 *
+	 * No RHS evaluation (#239 S2): only a directly literal positional value
+	 * in the same statement is linked.
+	 */
+	valueId?: string;
+	/**
+	 * For a reference, the set of literal `valueId`s that may reach this
+	 * program point (flow-sensitive, conservative). Linear code is
+	 * last-write-wins (single element); a branch merge is a set; a loop merge
+	 * or a non-literal assignment is `unknown`. Branch/loop bodies are scope
+	 * blocks; an optional branch unions the pre-block and block-final values,
+	 * while an exhaustive `if`/`else` unions the two arm-final values.
+	 * `reachingUnknown` true means the set may be incomplete; callers should
+	 * treat the shape as `unknown` rather than the listed ids.
+	 */
+	reachingValueIds?: string[];
+	/** True when the reaching set is incomplete or otherwise unknown. */
+	reachingUnknown?: boolean;
 }
 
 /** Semantic symbol facts; `spans` remains the token/LSP-oriented projection. */
@@ -649,6 +676,8 @@ const EV = {
 	operators: "e10",
 	args: "e11",
 	paths: "e12",
+	strings: "e13",
+	braces: "e14",
 } as const;
 
 type EvidenceKey = keyof typeof EV;
@@ -753,6 +782,20 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		id: EV.paths,
 		source: "canonicalizer",
 		probe: "pathSpans",
+		basis: "heuristic",
+		outcome: "ok",
+	},
+	strings: {
+		id: EV.strings,
+		source: "canonicalizer",
+		probe: "stringSpans",
+		basis: "heuristic",
+		outcome: "ok",
+	},
+	braces: {
+		id: EV.braces,
+		source: "canonicalizer",
+		probe: "braceSpans",
 		basis: "heuristic",
 		outcome: "ok",
 	},
@@ -1133,6 +1176,7 @@ export function explainCommand(
 			severityRank(b.severity) - severityRank(a.severity),
 	);
 
+	const valueFacts = valuesOf(verbs.splits, analyzed);
 	const spans: ExplainSpan[] = [
 		...segmented.comments.map((c) => ({
 			start: c.start,
@@ -1150,20 +1194,13 @@ export function explainCommand(
 		}),
 	].sort((a, b) => a.start - b.start || a.end - b.end);
 	const symbolFacts: ExplainSymbols = {
-		occurrences: symbols.occurrences.map((o) => ({
-			name: o.name,
-			span: { start: o.start, end: o.end },
-			// `undefined` is a live-device class Q13 forbids offline. Fail closed if
-			// the lower-level vocabulary ever grows a producer accidentally.
-			class: o.cls === "undefined" ? null : o.cls,
-			role: o.role,
-			bindingIds: [...o.bindingIds],
-			sigil: o.sigil,
-			...(o.note === undefined ? {} : { note: o.note }),
-			ev: EV.symbols,
-		})),
+		occurrences: augmentSymbolOccurrences(
+			analyzed,
+			symbols.occurrences,
+			valueFacts.occurrences,
+			verbs.splits,
+		),
 	};
-	const valueFacts = valuesOf(verbs.splits, analyzed);
 
 	const structure: ExplainStructure = {
 		statementCount: statements.length,
@@ -1180,16 +1217,16 @@ export function explainCommand(
 		ev: EV.write,
 	};
 
-	// B2 fill order — the argument order IS the order (#290 design decision 1).
+	// B2/B3 fill order — the argument order IS the order (#290 design decision 1).
 	// `spans` (proof-only: comment + variables) claims first; path, argument,
-	// value, then operator fills each see only the residual left before them.
-	// Structural ambiguity (`/` path vs division, `=` arg sep vs comparison)
-	// therefore resolves by the analyzer that already proved ownership, not by a
-	// wider byte scanner. The operator scanner keeps its conservative guards for
-	// bytes no earlier fill can decide.
+	// value, then string/brace, then operator fills each see only the residual
+	// left before them. Structural ambiguity (`/` path vs division, `=` arg sep
+	// vs comparison) therefore resolves by the analyzer that already proved
+	// ownership, not by a wider byte scanner. The operator scanner keeps its
+	// conservative guards for bytes no earlier fill can decide.
 	//
 	// Gate the scan on `options.tokens` — no residual work when the caller
-	// did not ask for `data.tokens`. Future B2 fills belong inside this branch.
+	// did not ask for `data.tokens`. Future fills belong inside this branch.
 	let tokens: ExplainToken[] | undefined;
 	if (options.tokens === true) {
 		const residual0 = residualRanges(analyzed.length, spans);
@@ -1241,12 +1278,31 @@ export function explainCommand(
 			...argSpansList,
 			...valueSpansList,
 		]);
-		const opSpans = operatorSpans(analyzed, residual3);
+		const stringSpansList = stringSpans(analyzed, residual3);
+		const residual4 = residualRanges(analyzed.length, [
+			...spans,
+			...pathSpansList,
+			...argSpansList,
+			...valueSpansList,
+			...stringSpansList,
+		]);
+		const braceSpansList = braceSpans(analyzed, residual4);
+		const residual5 = residualRanges(analyzed.length, [
+			...spans,
+			...pathSpansList,
+			...argSpansList,
+			...valueSpansList,
+			...stringSpansList,
+			...braceSpansList,
+		]);
+		const opSpans = operatorSpans(analyzed, residual5);
 		const fills: TokenFill[] = [
 			spans,
 			pathSpansList,
 			argSpansList,
 			valueSpansList,
+			stringSpansList,
+			braceSpansList,
 			opSpans,
 		];
 		tokens = buildTokens(analyzed, fills);
@@ -1957,8 +2013,16 @@ function renderSymbol(occurrence: ExplainSymbolOccurrence): string {
 		occurrence.bindingIds.length === 0
 			? ""
 			: ` bindings=${occurrence.bindingIds.join(",")}`;
+	const value =
+		occurrence.valueId !== undefined ? ` value=${occurrence.valueId}` : "";
+	const reaching =
+		occurrence.reachingValueIds !== undefined
+			? ` reaching=[${occurrence.reachingValueIds.join(",")}]${occurrence.reachingUnknown ? "+unknown" : ""}`
+			: occurrence.reachingUnknown
+				? " reaching=unknown"
+				: "";
 	const note = occurrence.note === undefined ? "" : `  (${occurrence.note})`;
-	return `${(occurrence.class ?? "unknown").padEnd(9)} ${occurrence.role.padEnd(11)} name=${JSON.stringify(occurrence.name)}${binding}${note}`;
+	return `${(occurrence.class ?? "unknown").padEnd(9)} ${occurrence.role.padEnd(11)} name=${JSON.stringify(occurrence.name)}${binding}${value}${reaching}${note}`;
 }
 
 function renderValue(occurrence: ExplainValueOccurrence): string {
