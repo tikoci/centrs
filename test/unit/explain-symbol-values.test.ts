@@ -38,7 +38,7 @@ describe("239 S2 — flow-sensitive symbol → value", () => {
 		expect(assignments[0]?.valueId).toBeUndefined();
 		expect(assignments[1]?.valueId).toBe("v2");
 		const ref = data.symbols.occurrences.at(-1);
-		expect(ref?.reachingValueIds).toEqual(["v0", "v2"]);
+		expect(ref?.reachingValueIds).toEqual(["v2"]);
 		expect(ref?.reachingUnknown).toBe(true);
 	});
 
@@ -72,7 +72,28 @@ describe("239 S2 — flow-sensitive symbol → value", () => {
 			":local x 1; :if (true) do={ :set x 2 } else={ :set x 3 }; :put $x",
 		);
 		const ref = data.symbols.occurrences.at(-1);
-		expect(ref?.reachingValueIds?.sort()).toEqual(["v0", "v1", "v2"].sort());
+		expect(ref?.reachingValueIds).toEqual(["v1", "v2"]);
+		expect(ref?.reachingUnknown).toBeUndefined();
+	});
+
+	test("an exhaustive arm that does not assign preserves the prior value", () => {
+		const data = explainCommand(
+			":local x 1; :if true do={ :set x 2 } else={ :put 3 }; :put $x",
+		);
+		const ref = data.symbols.occurrences.at(-1);
+		expect(ref?.reachingValueIds).toEqual(["v0", "v2"]);
+		expect(ref?.reachingUnknown).toBeUndefined();
+	});
+
+	test("a non-literal assignment takes effect after its RHS references", () => {
+		const data = explainCommand(":local x 1; :set x $x; :put $x");
+		const [, assignment, rhsReference, laterReference] =
+			data.symbols.occurrences;
+		expect(assignment?.valueId).toBeUndefined();
+		expect(rhsReference?.reachingValueIds).toEqual(["v0"]);
+		expect(rhsReference?.reachingUnknown).toBeUndefined();
+		expect(laterReference?.reachingValueIds).toEqual([]);
+		expect(laterReference?.reachingUnknown).toBe(true);
 	});
 
 	test("plural reaching ids retain value-occurrence order past v9", () => {

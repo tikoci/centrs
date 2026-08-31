@@ -511,13 +511,13 @@ export interface ExplainSymbolOccurrence {
 	 * program point (flow-sensitive, conservative). Linear code is
 	 * last-write-wins (single element); a branch merge is a set; a loop merge
 	 * or a non-literal assignment is `unknown`. Branch/loop bodies are scope
-	 * blocks; after one, the set is the union of the pre-block and
-	 * block-final values. `reachingUnknown` true means the set may be
-	 * incomplete; callers should treat the shape as `unknown` rather than the
-	 * listed ids.
+	 * blocks; an optional branch unions the pre-block and block-final values,
+	 * while an exhaustive `if`/`else` unions the two arm-final values.
+	 * `reachingUnknown` true means the set may be incomplete; callers should
+	 * treat the shape as `unknown` rather than the listed ids.
 	 */
 	reachingValueIds?: string[];
-	/** True when the reaching set is unknown (branch/loop merge or non-literal def). */
+	/** True when the reaching set is incomplete or otherwise unknown. */
 	reachingUnknown?: boolean;
 }
 

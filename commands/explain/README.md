@@ -1256,7 +1256,8 @@ claims argument value bytes and leaf array-literal members
 quotes-included) on the residual left by `spans`+`path`+`arg`, before the
 **B3 string/brace fills** see it — `src/explain/string-tokens.ts` claims
 quoted-string runs (delimiters included) and `src/explain/brace-tokens.ts`
-claims scope-brace delimiters (`{`/`}`) on the residual left by
+claims every residual brace delimiter (`{`/`}`), including delimiters from
+invalid braced references, on the residual left by
 `spans`+`path`+`arg`+`value`, and finally `operator` sees only what none of
 them wanted — which is why the operator fill can abstain on `, / = -` outside
 `( )`, on bytes glued after an argument `=`, and on bytes glued into an
