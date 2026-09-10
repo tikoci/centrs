@@ -9,14 +9,21 @@ This file is short on purpose. Resist the urge to grow it.
 
 ## What centrs is
 
-A typed library, with CLI/MCP/TUI/proxy frontends, that reaches RouterOS over
-multiple protocols and gives the caller **validated** access plus structured,
-actionable diagnostics. The TypeScript API is the root surface; everything else
-is an adapter over it.
+A typed library for RouterOS analysis and **validated** device access, with
+CLI/MCP/TUI/proxy frontends and structured, actionable diagnostics. The
+TypeScript API is the root surface; everything else is an adapter over it.
+The initial consumers are other TIKOCI tools and developers building integrations.
 
 The product is *not* "REST/SSH/native API wrappers." The product is
 **validation + structured envelopes + identity resolution** on top of those
 transports. Without those, this is a worse `curl`.
+
+`explain` is shared analysis across transports and a useful offline capability
+in its own right. It exposes source structure, facts, uncertainty, and evidence
+without executing the input. Those facts can support future diagnostics in
+other commands' envelopes; that integration is not implemented by declaring
+this boundary. Analysis findings do not grant execution permission or replace
+the runners' validation gates.
 
 centrs also speaks a small set of MikroTik **peer protocols** that are *not*
 RouterOS-command transports — currently the **bandwidth test** (`btest`), which
@@ -29,8 +36,10 @@ friendly errors, but the "validate a RouterOS-shaped command" gate below does
 
 ## Validation is the product
 
-Every RouterOS-shaped call goes through canonicalize → validate → run →
-re-validate-server-side. Validation is not optional polish.
+Every RouterOS-shaped operation sent to a device goes through canonicalize →
+validate → run → re-validate-server-side. Analysis-only `explain` never runs
+the analyzed input; offline analysis opens no connection. Validation on the
+runners is not optional polish.
 
 - `retrieve` and other read-shaped calls validate against
   `/console/inspect request=syntax path=...,print` (path joined by commas) and
@@ -397,22 +406,38 @@ default), so key auth is the normal sftp path.
 
 ## Done definition
 
-A feature is done when its **CHR integration test is green** against a real
-RouterOS CHR booted by `@tikoci/quickchr`. Not when code exists. Not when unit
-tests pass. Not when the spec says so. This is the **normative** done
-definition; `AGENTS.md` and
+Done requires executable evidence for the capability being claimed. Device
+operations and live analysis require **green CHR integration tests** against a
+real RouterOS CHR booted by `@tikoci/quickchr`, via `bun run test:integration`.
+Code existing or unit tests passing cannot establish live behavior. This is
+the **normative** done definition; `AGENTS.md` and
 `.github/instructions/done-definition.instructions.md` point here (the latter
 carries the Copilot-workflow procedure for satisfying it).
 
-`docs/MATRIX.md` is the single source of truth for *what* is done and defines the
-cell states (`not-started` / `designed` / `coded` / `CHR-passed`). A cell
-advances only with the matching evidence in the same change, and the commit that
-advances it must include the test name and CHR version.
+Offline analysis is `verified` when its applicable command examples and
+contract checks pass without a router, its RouterOS semantic claims have
+committed CHR-grounded evidence, and the command's baseline acceptance criteria
+are satisfied. New or changed RouterOS semantics still require live grounding
+with accepted and rejected controls plus a reproducible capture/replay path;
+offline tests do not establish new device facts. Changes to shared execution
+or transport behavior still require `bun run test:integration`. The offline
+call itself never needs a router merely to satisfy a workflow label.
+
+`docs/MATRIX.md` owns capability status and the selected work track. A
+capability's acceptance criteria — like `explain`'s Offline baseline
+acceptance — live in its `commands/<name>/README.md`; GitHub issues own the
+tasks and dependencies that satisfy those criteria, not the criteria
+themselves. Umbrella issues index that work rather than replacing capability
+status. Status advances only with matching evidence in the same change.
+Record test names, fixture provenance, and CHR versions where applicable.
+Offline verification never advances a live protocol cell to `CHR-passed`.
 
 ## Boundaries
 
 centrs does:
 
+- Analyze RouterOS source independently of a connection, preserving ordered
+  structure, source locations, evidence, and ambiguous/unknown readings.
 - Resolve devices/groups from explicit input, env, CDB, MNDP cache.
 - Choose protocols per the table above and configure them.
 - Validate before execute; re-validate server-side immediately before run.
@@ -425,7 +450,9 @@ centrs does:
 
 centrs does not:
 
-- Replace RouterOS syntax with high-level abstractions.
+- Replace RouterOS syntax with high-level configuration helpers. Normalized
+  representations that preserve its semantics are in scope; reconstructing
+  final device state or predicting network behavior is not an offline parse claim.
 - Treat passive discovery (MNDP) as authoritative inventory.
 - Run write-shaped operations without an explicit target and validation policy.
 - Make generated output the hand-edited source of truth.

@@ -9,20 +9,13 @@ a path, with completion-style candidates for building the right command.
 validation): the cheap, safe knowledge tier in front of the runners
 (`execute` / `api` / `retrieve`).
 
-Status: `designed` over `rest-api` and `native-api` — the transports the live
-inspection probes ride; every other cell is `—`. The offline mode is
-protocol-connection-less, and **`centrs explain '<input>'` runs today** (issues #202b
-and #202c): the row stays `designed` because the grid tracks protocol cells and
-offline occupies none. See `docs/MATRIX.md` for the row. A first design round
-(2026-07-19, recorded in #90) settled the surface shape and the offline model;
-the **phase-0 canonicalization grounding lab (#185) is complete and this spec
-is now ratified** — every ratification-gating question was answered with cited
-evidence (see [Phase-0 ratification](#phase-0-ratification-185)). The findings
-folded in below; a few of them **amend** the surface (tristate `containsWrite`,
-an `ambiguous` canonicalizer verdict, a defect-region diagnostics contract, a
-byte-count-preserving coordinate rule, the native-api `:parse` readout). Flag
-names and sizing thresholds stay provisional — those are implementation opens,
-not ratification blockers.
+Status: offline baseline `coded`; live probes over `rest-api` and `native-api`
+`designed`. **`centrs explain '<input>'` runs today**, without a router or CDB.
+[`docs/MATRIX.md`](../../docs/MATRIX.md#offline-analysis) tracks these separately;
+[#90](https://github.com/tikoci/centrs/issues/90) indexes the remaining tasks.
+The spec is ratified on the [phase-0 grounding lab](#phase-0-ratification-185).
+The current finish line is [Offline baseline acceptance](#offline-baseline-acceptance),
+not completion of the live protocol cells.
 Load-bearing rules — envelope, errors, settings precedence, identity,
 validation, protocol selection — live in
 [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md).
@@ -62,6 +55,10 @@ validation, protocol selection — live in
 
 ## Where `explain` sits
 
+- **Shared analysis across transports.** The offline result is independently
+  useful to libraries, agents, and editors. Its facts can later accompany
+  other commands' envelopes, irrespective of their transport; the rich
+  analysis is not currently applied as a runner policy gate.
 - **Never executes, never mutates.** All live probes (`/console/inspect`
   highlight/completion/syntax/child and `:put [:parse …]`) are read-only
   inspection. Execution-based probes (required-argument discovery via
@@ -83,6 +80,16 @@ validation, protocol selection — live in
   thin adapters. centrs ships no LSP server, but the library API must be able
   to **support one**: hover, diagnostics, completion, and semantic-token needs
   of `lsp-routeros-ts`/tikbook are first-class consumers of the export shape.
+
+Normalized source structure is the foundation for possible configuration
+checks. Preserve command order, selectors, source locations, literal/computed
+value distinctions, and unknowns; an input fragment does not establish final
+device state. Script-variable bindings are not yet an object-reference model
+for interfaces, bridges, or other configuration entities. Security advice,
+rule collections, and a browser/Monaco inspector are possible consumers, not
+new requirements to implement those products during the offline baseline.
+quickchr owns the CHR provisioning/test machinery; rosetta supplies docs and
+reference knowledge. This direction adds no runtime dependency on either.
 
 ## Canonicalization is the core
 
@@ -262,7 +269,10 @@ command accepts.
 Offline mode does ship two generated **structure** tables, baked at build time
 from pinned sources and read as ordinary closed lists. They may say whether a
 path is navigation or a command; they never describe what a command accepts.
-Absence from either abstains and never rejects.
+Absence from either abstains and never rejects. Regenerate with
+`bun run explain:menus` / `bun run explain:catalog`; `--check` drift-gates both
+in QA. Do not hand-edit them — each file's header carries its source pin and
+rationale.
 
 - `src/explain/menus.ts` (#207) — container paths from pinned restraml
   `/console/inspect` trees. **Read today** to confirm navigation, on its own by
@@ -1314,12 +1324,11 @@ That is the difference — an accepted flag must do something observable.
 
 ## MCP and library surfaces
 
-- **The cross-project handoff is the structure layer, not the token layer.**
-  `explain`'s data is three layers: byte ranges and their classes
-  (`spans`, and `tokens` when #264 lands) — centrs-owned, and nothing outside
-  centrs consumes them; the resolved reading (`structure`, `symbols`,
-  `values`) — path, verb, argument names, value spans; and doc/version
-  enrichment, which is rosetta's (#175). A consumer that wants enrichment takes
+- **Consumers use the layer that answers their question.** Byte ranges and
+  their classes (`spans` and the shipped `tokens` facet) serve editor/token
+  consumers; the resolved reading (`structure`, `symbols`, `values`) carries
+  path, verb, arguments, and value facts; doc/version enrichment belongs to
+  rosetta (#175). A consumer that wants enrichment takes
   the **middle** layer: given `{path, verb, args}` plus a version it does its
   own lookups, whereas handing it tokens would make it re-derive from bytes a
   path centrs already resolved. So #223 is a decision about the structure
@@ -1350,8 +1359,10 @@ That is the difference — an accepted flag must do something observable.
   shapes. `lsp-routeros-ts` and
   tikbook are the intended external consumers (hover/diagnostics/completion/
   semantic tokens over these calls); an LSP *protocol* surface on centrs
-  stays out of scope (#90) — but the export shape is validated against a real
-  LSP consumption spike before it hardens (staging phase 4).
+  stays out of scope (#90). A bounded offline browser/editor consumption check
+  now precedes vocabulary stabilization (#264 B5); full live LSP integration
+  remains later work. The current public module imports execution and
+  retrieval code and is not yet a verified browser entry point.
 
 ## Non-goals
 
@@ -1557,71 +1568,64 @@ They keep their homes in staging: **Q7** is now concrete as #201 (lexical
 boundaries — sigil spellings, escape validity, statement-start eligibility)
 and #199 (the shared scanner's `$[…]`-in-string blind spot), both raised by the
 Q13 promotion and both spanning already-promoted modules; **Q5** and **Q9** are
-phase-1 measurements; **Q12** is spec open item 2 and hardens in phase 4. The
+phase-1 measurements; **Q12** is spec open item 2 and hardens through #264
+B4/B5 with the offline consumer check. The
 probe framework's disposition (reuse of the mutation suite, coordinate
 fixtures, and adversarial generators as product test fixtures) is tracked in
 issue #186 rather than carried into mainline.
 
 ## Definition of done and staging
 
-`designed` on the strength of this README. When implementation starts, offline
-examples gate via unit/fixture tests and each live cell advances to
-`CHR-passed` only when its `examples.md` entries run green via
-`bun run test:integration` (constitution: done definition). Suggested staging
-(sequence, not schedule):
+Verification follows the [constitution](../../docs/CONSTITUTION.md#done-definition).
+The phase-0 grounding and promoted phase-1 CLI/library core (#185/#202) are
+already in the product. The remaining task graph is maintained in #90; issue
+closure for an earlier slice does not establish the baseline below.
 
-- **Phase 0 — canonicalization grounding lab — COMPLETE (#185).** Experiments (corpus +
-   CHR cross-checks against `:parse`/highlight) established what offline parsing
-   can actually achieve: statement segmentation, block/scope resolution,
-   sub-command path re-constitution, stateful-per-document path context, symbol
-   scope, transport classification, write-shape, malformed-input recovery,
-   coordinates, and stress invariants. Every ratification-gating question was
-   answered with cited evidence; the findings are folded into the surface above
-   and summarized in [Phase-0 ratification](#phase-0-ratification-185). This
-   spec is ratified on that basis.
-- **Phase 0.5 — product contract fixtures — SUBSTANTIALLY COMPLETE (#186).**
-   Promote a minimal, reviewed subset of the lab into product-owned tests; do
-   not import or execute `.scratch/` code. One vertical-slice PR per lab suite,
-   each landing an exported module under `src/explain/` plus frozen fixtures
-   under `test/fixtures/explain/`. Shipped: Q15 coordinates (#188 →
-   `coordinates.ts`), Q1 segmentation (#189 → `segment.ts`), Q2–Q4 path
-   resolution (#191 → `pathresolve.ts`), Q17 single-pass container walker
-   (#194 → `blocks.ts`, closing #190), Q6 verb/menu boundary (#193 →
-   `verbsplit.ts`), Q16 write-shape tristate (#195 → `write.ts`), Q14 cascade /
-   context-certainty (#197), Q13 symbol scope (#200 → `symbols.ts`). These pin
-   the ratified thresholds: no confident command invented after a defect, zero
-   false negatives on statically obvious writes, 100% coordinate invariants,
-   deterministic/well-formed spans, bounded depth, no throw, and roughly linear
-   scaling. **Remaining:** #192 (Q14 defect-*region* spans and the
-   `ambiguous`/`unknown` verdict vocabulary — the verdict half wants the phase-1
-   envelope). The lab framework and its two ~7.5 MB per-character highlight
-   captures stay out of mainline (#186). What durable files CITE does not stay
-   out: the frozen dev/holdout split, the Q8 REST probe capture, a stratified
-   slice of the highlight streams, and the three device re-derivation probes
-   are committed under `test/fixtures/explain/` and `scripts/probes/`.
-- **Phase 1 — offline core** — the grown canonicalizer: structure + gate
-   verdict + per-statement resolution and transport classification +
-   diagnostics (+ `--curl` rendering), and the CLI/MCP surface over it. Phase
-   0.5 shipped the analysis modules as library exports only; phase 1 composes
-   them behind one entry point, adds the envelope and `src/cli/explain.ts`, and
-   turns `examples.md` green. **Landing in four PRs:** #192a defect regions
-   (#222), #202a composition + envelope (#224), **#202b the CLI surface + the
-   offline examples**, then #202c-1 argument reading and #202c-2 transport
-   classification + `--curl`, which close #202. Carried in with it: the lexical-boundary
-   hardening (#201) and the shared-scanner substitution blind spot (#199), both
-   found during Q13 and both spanning modules already promoted; plus the
-   deferred lab questions Q5 (expression depth) and Q9 (potential-command
-   taxonomy), which become focused tests as this surface hardens.
-- **Phase 2 — live probes** — highlight + `:parse` (+
-   completion/child/syntax facets) over rest-api/native-api with the safety rules
-   above, including the
-   broad-query describe ladder, smart sizing, and CHR-backed anchors for Q6,
-   Q8, Q10, and Q11.
-- **Phase 3 — facet polish** — `--complete`/`--schema` ergonomics, truncation
-   counts/hints, `--full`.
-- **Phase 4 — library/LSP alignment** — export shape hardened against a real
-   lsp-routeros-ts consumption spike (semantic tokens via the centrs span
-   vocabulary + color map).
+### Offline baseline acceptance
+
+The offline capability can advance from `coded` to `verified` when:
+
+- **Examples and diagnostics:** the offline examples and focused analysis/CLI
+  contract tests pass. Known false confident readings in the baseline task
+  list, starting with #311's missing separator, are fixed with source-located
+  diagnostics and accepted/malformed controls. Unknown or ambiguous input
+  remains explicit; no fabricated statements, paths, values, or runtime acceptance.
+- **Bounded execution:** the existing public `explainCommand` performance,
+  coordinate, depth, no-throw, and determinism contracts pass. A reproduced
+  performance failure is investigated before changing its threshold (#313).
+- **Measured token surface:** the total, gapless `--tokens` partition and
+  generated censuses remain reproducible; #264 B4 / #263 adds the projection
+  and device-agreement report. Report decided errors, abstentions, version/state
+  differences, and corpus bias separately. Classified-byte percentage is not
+  syntax coverage, and agreement is a trend, not a new numerical pass gate.
+- **Usable library contract:** one bounded browser/editor consumer imports a
+  documented public offline entry point, runs analysis without transport/CDB
+  dependencies, and verifies structure, diagnostics, tokens, and source-position
+  mapping against the CLI/library result (#312). #264 B5 settles the token vocabulary
+  that this consumer needs. A complete editor, LSP server, palette reproduction,
+  or SCIP implementation is not required to prove this contract.
+- **Reachable evidence and explicit residue:** changed RouterOS semantic claims
+  have committed CHR-grounded controls and a reproducible capture/replay path.
+  Every remaining issue has a stated scope and dependency; #225 distinguishes
+  offline value work from live types, #272 owns evidence reachability, and #211's
+  unlisted-path decision retains the current abstention until separately decided.
+
+Retain the existing checks: `bun run lint`, `bun run test`, `bun run build`, and
+`bun run lint:ci`, plus the affected CHR grounding/integration procedure from
+the constitution. Add the consumer and agreement checks with their implementation.
+No new rules engine, schema snapshot, final-state interpreter, or network-behavior
+test framework is part of this baseline.
+
+### Following capabilities
+
+- **Live probes (#236, phase 2):** highlight + `:parse` and
+  completion/child/syntax over rest-api/native-api. B4's projection/agreement
+  informs this work; each live cell requires its own CHR-passing examples.
+- **MCP alignment (#223):** the deliberate flat-to-rich response migration,
+  coordinated with rosetta. Independent of the offline token vocabulary.
+- **Facet polish (phase 3):** live sizing, `--full`, completion/schema ergonomics.
+- **Full LSP integration (phase 4):** consume live and offline results in
+  `lsp-routeros-ts`, building on the earlier offline consumer check.
 
 ## Decisions (2026-07-19 round) and remaining opens
 
@@ -1694,8 +1698,9 @@ Still open (implementation opens — none block ratification):
    degrade. Phase 0 pinned the raw inputs (Q13's per-occurrence highlight-class
    corpus; the observed 19 classes on 7.23.2 plus drift on 7.24rc2) but the
    centrs-owned class list and color map are a **draft** (lab question Q12,
-   non-ratification-gating); they harden in staging phase 4 against the real
-   lsp-routeros-ts consumption spike.
+   non-ratification-gating); the offline vocabulary hardens through #264 B4/B5
+   and the offline consumer check. Live mappings and full LSP integration
+   follow separately.
 3. Whether the live describe ladder needs result caching per target+version
    (probe cost vs freshness) — deferred to implementation evidence.
 

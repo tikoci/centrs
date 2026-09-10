@@ -6,20 +6,22 @@ applyTo: "src/**,test/**,commands/**,docs/MATRIX.md,docs/CONSTITUTION.md,AGENTS.
 
 Read `docs/CONSTITUTION.md` before changing anything that touches RouterOS,
 errors, settings, or the result envelope. Read `docs/MATRIX.md` to find the
-cell you're working on. Read `commands/<name>/README.md` and
+capability and selected work track. Read `commands/<name>/README.md` and
 `commands/<name>/examples.md` for the executable spec.
 
-## A feature is done when its CHR integration test is green
+## Evidence follows the capability
 
 The **normative** done definition lives in
 [`docs/CONSTITUTION.md` → Done definition](../../docs/CONSTITUTION.md#done-definition);
 this section is the Copilot-workflow procedure for satisfying it.
-"Coded" is not "done." "Unit-tested" is not "done." A cell in
-`docs/MATRIX.md` advances to `CHR-passed` only when every example in
-`commands/<name>/examples.md` passes against a real RouterOS CHR booted by
-`@tikoci/quickchr`.
+Offline analysis follows the constitution's `verified` criteria and the
+baseline acceptance criteria in the command README. Run the named offline
+examples and contract checks; retain reproducible CHR evidence for semantic
+claims. New or changed RouterOS semantics require live grounding with controls.
+Changes to shared execution/transport behavior also require the procedure below.
+Offline verification does not advance a live protocol cell.
 
-Before writing "done", "implemented", "complete", or advancing a MATRIX cell:
+For live capabilities, before claiming completion or advancing to `CHR-passed`:
 
 1. Run `bun run test:integration` and confirm it passes.
 2. If no integration test covers the new behavior, add one in
@@ -41,9 +43,9 @@ Before writing "done", "implemented", "complete", or advancing a MATRIX cell:
 4. Record the CHR result (pass/fail, RouterOS version) in the commit message
    that advances the cell.
 
-`bun run test` (unit only) is not sufficient. Unit tests cannot substitute for
-CHR validation because RouterOS behavior cannot be reliably inferred from code
-review alone.
+For live behavior, `bun run test` (unit only) is not sufficient. Unit tests
+cannot substitute for CHR validation because RouterOS behavior cannot be
+reliably inferred from code review alone.
 
 ## Validation is the product
 
@@ -80,14 +82,15 @@ drift:
   assume a running router.
 - Guard each test with `if (!process.env.CENTRS_RUN_FAST_INTEGRATION) return`.
   The `bun run test:integration` script sets the flag.
-- A test that always passes without a real RouterOS round-trip provides no
-  value. Each integration test must prove at least one real REST or API call
-  succeeded.
+- A live integration test must prove a real RouterOS round-trip succeeded.
+  Keep offline analysis examples in their named unit/fixture suites; the
+  fixture-backed `devices`/`settings` integration suites retain their existing
+  command contracts.
 
 ## What not to do
 
-- Do not add a new doc to capture status. `docs/MATRIX.md` is the only status
-  surface.
+- Do not add a new doc to capture status. `docs/MATRIX.md` owns capability
+  status; GitHub issues own the selected track's tasks and dependencies.
 - Do not add a new spec/work/roadmap directory. Per-command files in
   `commands/<name>/` are the local surface.
 - Do not write prose explaining what code does; if the constitution and the

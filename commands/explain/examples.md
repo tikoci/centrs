@@ -4,9 +4,10 @@ Each numbered example is an executable spec. Once `explain` is implemented,
 offline examples run under `test/unit/explain.test.ts` and live examples under
 `test/integration/explain.test.ts` (rest-api) and
 `test/integration/native-api-explain.test.ts` (native-api) against a CHR booted by
-`@tikoci/quickchr` — one assertion per example (example N ↔ assertion N).
-The offline examples are **green** as of #202c-2, including 1, 2, 6 and 23's
-`transport`/`--curl` assertions. The live examples are still the **target**:
+`@tikoci/quickchr` — one named test per example (example N ↔ named test N); a
+named test may carry several assertions. The offline examples are **green**
+as of #202c-2, including 1, 2, 6 and 23's `transport`/`--curl` assertions.
+The live examples are still the **target**:
 those cells are `designed`, and flag and field names track the ratified surface
 in `README.md`.
 

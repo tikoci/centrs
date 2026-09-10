@@ -178,7 +178,9 @@ and the comment grammar — lives in `commands/devices/README.md` and
 
 The load-bearing contract — envelope shape, error model, protocol selection,
 settings precedence, and the "done" definition — lives in
-`docs/CONSTITUTION.md`. The command×protocol status grid is `docs/MATRIX.md`.
+`docs/CONSTITUTION.md`. Capability status and the selected work track,
+including the command×protocol grid and offline analysis, live in
+`docs/MATRIX.md`.
 
 ## Repository layout
 
@@ -187,13 +189,15 @@ code and authority docs live.
 
 - **`docs/CONSTITUTION.md`** — load-bearing rules (validation, envelope, error
   model, settings precedence, identity/CDB, protocol selection, done).
-- **`docs/MATRIX.md`** — command×protocol grid; the only status surface.
+- **`docs/MATRIX.md`** — capability status and the selected work track (the
+  command×protocol grid plus offline analysis and frontend surfaces); the
+  only status surface.
 - **`commands/<name>/`** — per-command README and executable examples.
 - **`src/`** — Bun/TypeScript source.
 - **`test/`** — unit and CHR-backed integration tests.
 
-There is no `docs/specs/`, no `work/`, no roadmap doc. The matrix is the
-roadmap.
+There is no `docs/specs/`, no `work/`, no roadmap doc. The matrix and the
+GitHub issues it links are the roadmap.
 
 ## Development
 

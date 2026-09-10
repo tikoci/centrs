@@ -1,11 +1,15 @@
 # Matrix
 
-The product is a 2D grid of commands × protocols. This file is the **only**
-source of truth for what is done. No alpha gates, no milestones, no roadmap
-prose.
+This file owns **capability status and the selected work track**. The
+command × protocol grid covers live operations; offline analysis, frontends,
+and peer measurement have separate entries below. A capability's acceptance
+criteria live in its `commands/<name>/README.md`; GitHub issues own the tasks
+and dependencies that satisfy them.
 
-Pick the highest-priority cell that is not `CHR-passed`. That is the next
-work. See `docs/CONSTITUTION.md` for the cell-state definitions.
+Start with [Current priority](#current-priority), then the command's README,
+examples, and linked issue. Verification follows `docs/CONSTITUTION.md` →
+Done definition. A completed implementation slice is not proof that the whole
+capability is complete.
 
 ## Cell states
 
@@ -15,9 +19,14 @@ work. See `docs/CONSTITUTION.md` for the cell-state definitions.
 | `not-started` | No code and no design                                           |
 | `designed`     | `commands/<name>/README.md` describes intent and flags          |
 | `coded`        | Implementation exists in `src/`                                 |
+| `verified`     | Offline capability meets its command README's baseline acceptance criteria in full (examples, contract checks, measured/consumer gates, and CHR-grounded evidence). |
 | `CHR-passed`   | Every example in `commands/<name>/examples.md` is green on CHR  |
 
 A cell advances only with the matching evidence in the same change.
+
+`verified` applies to offline capabilities; it does not advance a live protocol
+cell. Existing `CHR-passed` fixture-backed `devices`/`settings` entries retain
+their command-specific evidence contracts.
 
 ## Grid
 
@@ -37,8 +46,8 @@ A cell advances only with the matching evidence in the same change.
 ## Status pointers
 
 Detailed command contracts live in `commands/<name>/README.md`; example evidence
-lives in `commands/<name>/examples.md` and the named integration tests. Keep this
-section short enough that the grid remains the status surface.
+lives in `commands/<name>/examples.md` and the named tests. Keep task history
+and implementation sequencing in the linked issues.
 
 - `devices` is transport-less, so its row stays `—`; command state is
   `CHR-passed` by fixture-backed integration tests in `test/integration/devices.test.ts`.
@@ -60,42 +69,13 @@ section short enough that the grid remains the status surface.
   `winbox-terminal` stay `not-started`. Its per-host fan-out is the machinery the
   IP-scan discovery (#149) will iterate; the L2-default timing evidence (#136) is
   recorded in the README before the cells advance past `designed`.
-- `explain` is `designed` (`commands/explain/README.md`): the explain →
-  validate → run knowledge tier — canonical structure, LSP-like
-  spans/diagnostics, transport classification (api-able vs execute, `curl`
-  rendering), and live schema/completion facts. Its offline mode is the
-  canonicalizer only and opens no protocol connection (evidence is
-  unit/fixture tests); the
-  live probes (`/console/inspect` + `:parse`) ride rest-api/native-api, so
-  those two cells are `designed`. The surface was decided in the 2026-07-19
-  design round (#90) and the spec is **ratified** on the phase-0 grounding
-  lab (#185, ratification PR #187). Phase 0.5 has since promoted the ratified
-  lab logic into the library — `src/explain/{segment,blocks,coordinates,defects,
-  pathresolve,verbsplit,write,symbols,menus,verbs,args,values,brace-slots}.ts`
-  with frozen fixtures under `test/fixtures/explain/` — and phase 1 has composed
-  them into one analysis and envelope in `src/explain.ts` (`explainCommand` /
-  `explainEnvelope`, #202a). **`centrs explain '<input>'` is a real command as
-  of #202b** (`src/cli/explain.ts`), and #202c adds statement argument reading,
-  the closed Q8 transport classifier, equivalent centrs invocations, and
-  opt-in `--curl`. All offline examples, including 1, 2, 6 and 23, run green in
-  `test/unit/explain.test.ts`. The row nonetheless stays `designed`: offline
-  mode occupies no protocol cell, and the two `designed` cells are the live
-  `/console/inspect` + `:parse` probes, which are phase 2. The live grammar
+- `explain`'s two `designed` protocol cells are the future live probes
+  (`/console/inspect` + `:parse`, #236). The live grammar
   (`explain <router> '<input>'`) is parsed and refused with
-  `usage/not-implemented` rather than degraded to an offline run. Cells advance
-  only when the live probes land and their examples run green per the done rule.
-  `src/explain/menus.ts` and `src/explain/catalog.ts` are the **generated**
-  files in that set — the RouterOS menu-vs-command table (#207, from pinned
-  restraml typed trees) and the path catalog (#228, those trees unioned with
-  MikroTik's published CLI Reference, carrying kind, per-entry provenance and
-  the published applicability gate). Regenerate with `bun run explain:menus` /
-  `bun run explain:catalog`; both are drift-checked in QA. They keep the offline
-  analyzer offline; do not hand-edit them. The catalog's **command axis is read**
-  by `pathresolve.ts`, `verbsplit.ts` and `write.ts` (#228 step 2); #235 also
-  reads its menu/settings kind, unioned with `menus.ts` behind
-  `src/explain/is-known-menu.ts`, for both a context-applied relative bare path
-  and an absolute one. Both changes are inside the offline canonicalizer, so
-  this grid is unchanged by them.
+  `usage/not-implemented`, never degraded to an offline run. Offline analysis
+  has its own capability entry below. The generated structure tables
+  `src/explain/menus.ts` and `src/explain/catalog.ts` keep analysis offline;
+  their ownership and regeneration contracts live in `commands/explain/README.md`.
 - `transfer / ssh` means the SFTP-backed transfer method. Deferred file-transfer
   methods such as `scp`, `fetch`, and `ftp` are tracked in
   `commands/transfer/README.md`; `fetch` is not a grid column.
@@ -108,9 +88,20 @@ section short enough that the grid remains the status surface.
 - Transport wire-format and delivery caveats belong in `src/protocols/*.ts`
   module headers. Do not expand this file with per-packet or per-router findings.
 
-Beyond the grid: post-`CHR-passed` hardening, ergonomics, and research work is
-tracked in GitHub issues (`dry-july` and successors). Those issues may point back
-to this matrix for current status, but they are not additional cell states.
+### Offline analysis
+
+This capability opens no protocol connection. It is usable independently and
+provides shared analysis for future integrations across the command grid.
+
+| Capability | State | Contract and evidence | Work |
+| ---------- | ----- | --------------------- | ---- |
+| explain / offline baseline | `coded` | `commands/explain/README.md` → Offline baseline acceptance; offline examples in `test/unit/explain.test.ts`, focused `test/unit/explain-*` suites, and CHR captures under `test/fixtures/explain/`. | #90 indexes correctness, token agreement (#264/#263), and consumer verification. |
+
+The CLI/library already expose structure, diagnostics, token partitions, symbols,
+and flow-sensitive value facts. `coded` acknowledges that implementation while
+the baseline still has open acceptance work; it is not a parser-coverage score.
+Live probes (#236), MCP response alignment (#223), and future configuration
+policies are distinct work, not prerequisites for using offline analysis.
 
 ### Transport-base readiness
 
@@ -126,8 +117,8 @@ single home for wire-format, auth, and delivery facts.
 
 ### Frontend surfaces (orthogonal to the command grid)
 
-The grid tracks the core (commands × protocols). Frontends are adapters over that
-core and carry their own state, tracked here:
+Frontends adapt the shared analysis and device-operation core and carry their
+own state, tracked here:
 
 | Surface | State | Spec | Notes |
 | ------- | ----- | ---- | ----- |
@@ -157,11 +148,24 @@ its own capability axis and is exempt from the RouterOS command-validation gate.
 Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 `src/protocols/btest*.ts` / `src/protocols/ec-srp5.ts` module headers.
 
-## Priority order
+## Current priority
 
-Do not start a later item until the earlier cell or dependency checkpoint has
-matching evidence. The grid above is the live status; per-item detail lives in
-the linked `commands/<name>/`.
+**Offline `explain` baseline** is the selected track. Start with
+[the #90 task index](https://github.com/tikoci/centrs/issues/90) and
+[`commands/explain/README.md` → Offline baseline acceptance](../commands/explain/README.md#offline-baseline-acceptance).
+The sequence is correctness and performance, token projection/agreement
+(#264 B4 / #263), then a bounded browser/editor consumer check and the vocabulary
+it needs (#264 B5). Independent consumer-boundary work may proceed alongside
+measurement. The issue index owns the individual tasks and their dependencies.
+
+Unfinished SNMP, RoMON, TUI, or other protocol/frontend cells do not preempt this
+track. Live `explain` (#236) remains a separate next capability. Change this
+selection when the maintainer selects another track.
+
+### Protocol backlog order
+
+Retained for protocol work when selected; this is not a dependency chain for
+offline analysis. Per-item detail lives in the linked `commands/<name>/`.
 
 1. **retrieve / rest-api** — `CHR-passed` (`commands/retrieve/`).
 2. **CDB resolution + metadata overrides** — `CHR-passed` (`commands/devices/`).

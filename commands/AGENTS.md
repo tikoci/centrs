@@ -3,9 +3,11 @@
 Each `commands/<name>/` holds the **executable spec** for one command:
 
 - `README.md` — intent, flags, behavior. The "designed" tier.
-- `examples.md` — numbered, runnable examples. Each example is one assertion in
-  the matching `test/integration/<name>.test.ts`; example N ↔ assertion N. This
-  is what `CHR-passed` is measured against.
+- `examples.md` — numbered, runnable examples mapped to named tests:
+  example N ↔ named test N. Live examples require CHR integration; offline
+  examples use the unit/fixture tests named by the command — a named test may
+  carry several assertions. Verification follows `docs/CONSTITUTION.md` →
+  Done definition.
 
 **Implemented** flags are generated from `CliCommandMetadata` into
 `docs/CLI.md` (`bun run docs:cli`; drift-gated in CI) — a command README keeps
@@ -19,7 +21,8 @@ keys, ambiguity, `__default__`, comment-kv allowlist, write strategy) lives in
 `commands/devices/README.md` — the registry command owns it; the constitution
 keeps only the identity/CDB principle. A command file covers only what is
 specific to that command. `docs/MATRIX.md` is the only status surface; a
-README's "Status" line must agree with it.
+README's "Status" line must agree with it. GitHub issues track the tasks and
+dependencies within the selected capability; they do not replace its status.
 
 ## Verb vocabulary
 
