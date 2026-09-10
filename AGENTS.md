@@ -16,10 +16,10 @@ When those three are clear, write code or tests. Do not write more prose.
 
 Live capabilities require examples green on real CHR via
 `bun run test:integration`. Offline analysis requires its command README's
-baseline acceptance criteria in full — examples, contract checks, measured/
-consumer gates, and committed CHR-grounded semantic evidence; offline
-verification does not advance a live protocol cell. The **normative**
-definition is
+baseline acceptance criteria in full — examples, contract checks,
+measured/consumer gates, and committed CHR-grounded semantic evidence;
+offline verification does not advance a live protocol cell. The
+**normative** definition is
 [`docs/CONSTITUTION.md` → Done definition](docs/CONSTITUTION.md#done-definition);
 the integration-test procedure is in
 `.github/instructions/done-definition.instructions.md`.

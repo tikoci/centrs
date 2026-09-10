@@ -6,8 +6,9 @@ applyTo: ".github/workflows/*.yaml,.github/workflows/*.yml,package.json,CHANGELO
 
 How much testing runs when, and how versions signal pre-release vs release.
 This is policy; `docs/CONSTITUTION.md` (Done definition) still governs what
-"done" means for a single feature (its CHR integration test green via
-`@tikoci/quickchr`).
+"done" means for a single feature — a live capability's CHR integration test
+green via `@tikoci/quickchr`, or an offline capability's baseline acceptance
+criteria in its command README.
 
 ## Test tiers
 
