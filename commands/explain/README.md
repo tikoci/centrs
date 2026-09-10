@@ -269,7 +269,10 @@ command accepts.
 Offline mode does ship two generated **structure** tables, baked at build time
 from pinned sources and read as ordinary closed lists. They may say whether a
 path is navigation or a command; they never describe what a command accepts.
-Absence from either abstains and never rejects.
+Absence from either abstains and never rejects. Regenerate with
+`bun run explain:menus` / `bun run explain:catalog`; `--check` drift-gates both
+in QA. Do not hand-edit them — each file's header carries its source pin and
+rationale.
 
 - `src/explain/menus.ts` (#207) — container paths from pinned restraml
   `/console/inspect` trees. **Read today** to confirm navigation, on its own by

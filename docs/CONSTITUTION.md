@@ -423,12 +423,14 @@ offline tests do not establish new device facts. Changes to shared execution
 or transport behavior still require `bun run test:integration`. The offline
 call itself never needs a router merely to satisfy a workflow label.
 
-`docs/MATRIX.md` owns capability status and the selected work track. GitHub
-issues own tasks, dependencies, and acceptance criteria within that track;
-umbrella issues index that work rather than replacing capability status.
-Status advances only with matching evidence in the same change. Record test
-names, fixture provenance, and CHR versions where applicable. Offline
-verification never advances a live protocol cell to `CHR-passed`.
+`docs/MATRIX.md` owns capability status and the selected work track. A
+capability's acceptance criteria — like `explain`'s Offline baseline
+acceptance — live in its `commands/<name>/README.md`; GitHub issues own the
+tasks and dependencies that satisfy those criteria, not the criteria
+themselves. Umbrella issues index that work rather than replacing capability
+status. Status advances only with matching evidence in the same change.
+Record test names, fixture provenance, and CHR versions where applicable.
+Offline verification never advances a live protocol cell to `CHR-passed`.
 
 ## Boundaries
 

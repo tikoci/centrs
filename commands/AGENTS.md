@@ -4,9 +4,10 @@ Each `commands/<name>/` holds the **executable spec** for one command:
 
 - `README.md` — intent, flags, behavior. The "designed" tier.
 - `examples.md` — numbered, runnable examples mapped to named tests:
-  example N ↔ assertion N. Live examples require CHR integration; offline
-  examples use the unit/fixture tests named by the command. Verification
-  follows `docs/CONSTITUTION.md` → Done definition.
+  example N ↔ named test N. Live examples require CHR integration; offline
+  examples use the unit/fixture tests named by the command — a named test may
+  carry several assertions. Verification follows `docs/CONSTITUTION.md` →
+  Done definition.
 
 **Implemented** flags are generated from `CliCommandMetadata` into
 `docs/CLI.md` (`bun run docs:cli`; drift-gated in CI) — a command README keeps

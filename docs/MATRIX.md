@@ -18,7 +18,7 @@ capability is complete.
 | `not-started` | No code and no design                                           |
 | `designed`     | `commands/<name>/README.md` describes intent and flags          |
 | `coded`        | Implementation exists in `src/`                                 |
-| `verified`     | Offline capability meets its examples, contract checks, and CHR-grounded evidence requirements. |
+| `verified`     | Offline capability meets its command README's baseline acceptance criteria in full (examples, contract checks, measured/consumer gates, and CHR-grounded evidence). |
 | `CHR-passed`   | Every example in `commands/<name>/examples.md` is green on CHR  |
 
 A cell advances only with the matching evidence in the same change.
