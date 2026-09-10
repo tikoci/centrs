@@ -384,6 +384,16 @@ evl
 # as "(evl /putmessage=x)", ":global n v" as "(evl /globalname=$n;value=v)" (GH#230).
 putmessage
 globalname
+# localname/setnote/runnumber: more of the same head rendering, quoted verbatim as
+# evidence for the missing-separator rule (GH#311). ":put [:parse …]" joins the IL
+# array with NO separator, so the path and its first argument run together —
+# ":local a v" is "(evl /localname=$a;value=v)", "/system/note set note=hello" is
+# "(evl /system/note/setnote=hello)", "/system/script/run /ip/route" is
+# "(evl /system/script/runnumber=/ip/route)". Artefacts of the rendering, not
+# RouterOS argument names; kept unsplit because the quote must match the bytes.
+localname
+setnote
+runnumber
 # unconfigured: a freshly-flashed RouterOS device with no IP — the mac-telnet use case.
 unconfigured
 unwired

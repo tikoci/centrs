@@ -1013,7 +1013,8 @@ navigated, so the context stays as unknown as it already was.
     (string-internal unknown/lowercase-hex/truncated — CHR `highlight` `error`
       `:parse` `expected message value`, grounded stable+testing #247),
     `bad-sigil`,
-    `invalid-hash`. Seven classes the device itself rejects.
+    `invalid-hash`, `missing-statement-separator` (#311, below). Eight classes
+    the device itself rejects.
   - `warning` — `over-depth`, because it is centrs's own resource bound and says
     nothing about whether the input is legal; and an `ambiguous`/`unknown`
     resolution, never an error, so the default `--fail-on error` cannot fail a
@@ -1022,6 +1023,103 @@ navigated, so the context stays as unknown as it already was.
   - `info` — `bom`/`non-ascii` (positional facts: a legal command must not
     fail), and `context-lost`, which reports a reading that is correct while the
     document's menu context was already gone.
+
+### The missing statement separator (#311)
+
+Two commands written with no `;` or newline between them used to read as one
+command with extra operands, and offline reported `pass`: `/ip/address add
+interface=ether1 /ip/route add gateway=192.168.88.1` published `gateway` as an
+attribute of `/ip/address add`. The rule that closes it is a known **menu path**
+in operand position followed by a console **verb** — never "a `/` after the
+verb", because a slash-shaped operand is legal and `/file remove
+/flash/skins/foo.html` lowers cleanly to `numbers=/flash/skins/foo.html`. The
+menu spelling may be slashed, spaced, or mixed (Q3 R4); the device rejects
+`/ip route add` exactly as it rejects `/ip/route add`.
+
+**The device evidence is not what the report said, and the correction widened
+the rule.** #311 gave the error byte as the `=` of the trailing attribute
+(`expected end of command (line 1 column 55)`). That byte is an artefact of that
+head: `add` abbreviates `/ip/address/add`'s own `address=` argument, so the
+console reads `add gateway` as `address=gateway` and only complains at the `=`
+after it. Change the head so the second verb abbreviates nothing and the answer
+changes shape — `/system/note set note=hello /ip/route add gateway=1.2.3.4` is
+no hard reject at all; `:parse` returns IL carrying `bad parameter /ip/route
+(line 1 column 38)`, naming the second **path**. Both are refusals, and which
+one appears depends on per-menu argument names, which offline does not have. So
+the grounded claim is the negative one: across every probed spelling on CHR
+7.24.2 and 7.23.5, RouterOS answers `bad parameter <path>` or `expected end of
+command`, and never accepts the shape. A trailing attribute is therefore **not**
+required, which #311's own example had made it look like.
+
+The head-dependence goes one step further than "which wording", and it bounds
+what the diagnostic may say. On a head whose own value slot takes a bare
+positional, the second path is absorbed into that slot and the device refuses
+the **verb** instead: `:put /ip/route print` lowers to `/putmessage=/ip/route`
+and answers `bad parameter print`, and `:local a /ip/route add` lowers to
+`/localname=$a;value=/ip/route` and answers `bad parameter add`. Both are still
+refusals — `/system/script/run /ip/route`, the same shape with no verb after
+the path, lowers cleanly to `number=/ip/route` — so the offline `error` stands.
+But the message says the bytes **read as** a second command, which is centrs's
+heuristic reading, and never that the device starts one there or which token it
+will name. Every row above is pinned in
+`test/integration/explain-separator.test.ts`.
+
+**The contradicted reading is withdrawn, not patched.** The statement stays
+`resolved` — `/ip/address add` really is the head, and `highlight` agrees. What
+is withdrawn is withdrawn by three separate gates, each with its own trigger:
+
+1. **The argument list.** `withoutSeparatedArguments` drops `command.args` and
+   sets `arguments.read` to `false`. This is the same all-or-nothing move
+   `enforceGateParity` makes for a gate/analysis disagreement, but it is a
+   distinct gate on a distinct trigger — the two never consult each other. The
+   device says the move is right rather than merely cautious:
+   `… /ip/route add placeholder` lowers to
+   `address=placeholder;;interface=ether1`, a phantom attribute the source never
+   wrote, because the second run's words can abbreviate the HEAD's argument
+   names.
+2. **The invocation.** `rejectedBySeparator(runs)` sets the new
+   `ExplainTransportInput.rejected`, which `classifyExplainTransport` honours
+   ahead of every mapping rule and answers `unknown`. Without it the degraded
+   `arguments` would fall through to `execute` and print a ready-to-paste
+   `centrs execute '<router>' '<the malformed text>'` for bytes the same result
+   calls a syntax error. **Unread is not rejected** — an unread argument list
+   still legitimately rides the raw CLI surface, and that path is unchanged.
+3. **The value facts from the run onward.** `values.occurrences` is an axis of
+   its own, not a projection of `arguments` — the value census above pins how
+   many values it retains in statements whose strict REST reading abstains — so
+   gate 1 does not reach it and a cut is needed. The cut is the run's first byte, and
+   the device draws the line in the same place: `:parse` reads `gateway` as the
+   VALUE of `/ip/address/add`'s own `address=`, never as an attribute NAME,
+   while the head's `interface=ether1` survives into the IL (as `note=hello`
+   does in the `/system/note set` row). Values before the cut therefore stay;
+   values reaching into or past it are dropped, and with them the `value` token
+   class over those bytes.
+
+**Abstentions, stated.** A menu path with no verb after it (`… /ip/route`) and a
+bare operand a menu does not accept (`… placeholder`, `/file remove a b`) also draw
+`bad parameter`, but that is the generic "no such positional" complaint;
+deciding it needs the per-menu positional list, which `catalog.ts` deliberately
+is not, and a separator is not necessarily the fix. Both abstain. The shape
+filter over a candidate path does admit a leading digit, because
+`/interface/6to4` is a real menu in both structure tables; presence in those
+tables, never the filter, is what decides. Over the 948-script pinned corpus the
+rule fires **0 times**, so no published census figure moves; the 38 corpus
+scripts the device answers `expected end of command` for are all other causes
+(line continuations, `<tab>`/`<VALUE>` placeholders, pasted shell and Python,
+stray parens), which is #203's genre bias showing.
+
+**One reach limit, not an abstention.** `lexArguments` is all-or-nothing: the
+first token it declines aborts the walk and the reading carries no tokens, so a
+statement holding a variable has no token list for this rule to read.
+`/ip/address add interface=ether1 /ip/route add gateway=$g` therefore reports
+`pass` where its literal twin reports the separator. Nothing there decides the
+shape is acceptable — the rule simply never runs, and neither does any other
+token-level rule: the strict lexer refuses 48.2% of the corpus's resolved
+argument lists. Closing it needs a prefix-tolerant argument walk of the kind
+`lexValueAnchors` already does for values, which is
+[#316](https://github.com/tikoci/centrs/issues/316) with its corpus sizing and
+its two candidate designs. Until then the limit is pinned by an anchor test
+rather than left to be rediscovered.
 
 ### String escape validation (#247, #252)
 

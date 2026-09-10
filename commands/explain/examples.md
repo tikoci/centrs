@@ -605,3 +605,38 @@ No members are emitted for a bare comma run, because whether it splits at all is
 the schema's answer. The `(1,2)` spelling is different — its delimiters prove
 the array — so `servers=(1.1.1.1,8.8.8.8)` yields the array plus two `["ip"]`
 members.
+
+### 29. A second command-shaped run is a missing separator, not an operand
+
+```bash
+centrs explain '/ip/address add interface=ether1 /ip/route add gateway=192.168.88.1' --json
+```
+
+`data.verdict` is `fail` with one
+`explain/canonicalizer/missing-statement-separator` **error** spanning the whole
+second run (`[33,46)` — `/ip/route add`), whose message says to insert `;` or a
+newline before it.
+
+The source stays **one** statement: `resolution` is `"resolved"` on
+`/ip/address add`, because that head really was read and the device's own
+`highlight` agrees. What is withdrawn is the reading the run contradicts —
+`command.args` is absent, `arguments.read` is `false`, and `transport.
+classification` is `"unknown"`, so no `centrs execute` line is offered for bytes
+the same result rejects. `data.values.occurrences` is cut at the same byte: it
+keeps `interface` and drops `gateway`, which the device reads as the value of
+`/ip/address/add`'s own `address=` rather than as an attribute name.
+
+The rule is a known **menu path** followed by a console **verb**, never "a `/`
+after the verb": `/file remove /flash/skins/foo.html` is legal and lowers to
+`numbers=/flash/skins/foo.html`. It abstains on a menu path with no verb after
+it and on an operand no structure table lists, both of which draw the device's
+generic `bad parameter` and need per-menu positional schema to decide.
+
+### 29b. The same commands, separated, read as two
+
+```bash
+centrs explain '/ip/address add interface=ether1; /ip/route add gateway=192.168.88.1' --json
+```
+
+`data.verdict` is `pass` with no diagnostics, two statements, and each keeps its
+own `command.args`. The newline spelling is identical.

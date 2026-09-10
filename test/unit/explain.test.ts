@@ -469,6 +469,64 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(data.verdict).toBe("pass");
 		expect(code).toBe(0);
 	});
+
+	test("29. A second command-shaped run is a missing separator, not an operand (#311)", async () => {
+		const input =
+			"/ip/address add interface=ether1 /ip/route add gateway=192.168.88.1";
+		const { data, code } = await explainJson([input]);
+		expect(data.verdict).toBe("fail");
+		expect(
+			data.diagnostics.map((d) => [
+				d.code,
+				d.severity,
+				d.span.start,
+				d.span.end,
+			]),
+		).toEqual([
+			["explain/canonicalizer/missing-statement-separator", "error", 33, 46],
+		]);
+		expect(input.slice(33, 46)).toBe("/ip/route add");
+		expect(data.diagnostics[0]?.message).toContain("insert `;` or a newline");
+
+		// One statement, its head kept, the reading the run contradicts withdrawn.
+		expect(data.structure.statementCount).toBe(1);
+		const [only] = data.structure.statements;
+		expect(only?.resolution).toBe("resolved");
+		// `args` is present exactly when the argument list read, so the exact
+		// object is the same claim as `args === undefined` plus "the head kept".
+		expect(only?.command).toEqual({ path: "/ip/address", verb: "add" });
+		expect(only?.arguments?.read).toBe(false);
+		expect(only?.transport?.classification).toBe("unknown");
+
+		// `values` is cut at the run's first byte too: `gateway` is what the device
+		// reads as the VALUE of `/ip/address/add`'s own `address=`, never as an
+		// attribute name, while the head's `interface=ether1` survives into the IL.
+		expect(data.values.occurrences.map((v) => v.name)).toEqual(["interface"]);
+
+		// The rule is a menu path plus a verb, never "a slash after the verb".
+		const legal = await explainJson(["/file remove /flash/skins/foo.html"]);
+		expect(legal.data.verdict).toBe("pass");
+		expect(legal.data.diagnostics).toEqual([]);
+		// `2` is the documented "diagnostics met `--fail-on`" exit, not a failure.
+		expect(code).toBe(2);
+	});
+
+	test("29b. The same commands, separated, read as two (#311)", async () => {
+		for (const input of [
+			"/ip/address add interface=ether1; /ip/route add gateway=192.168.88.1",
+			"/ip/address add interface=ether1\n/ip/route add gateway=192.168.88.1",
+		]) {
+			const { data, code } = await explainJson([input]);
+			expect(data.verdict).toBe("pass");
+			expect(data.diagnostics).toEqual([]);
+			expect(data.structure.statementCount).toBe(2);
+			expect(data.structure.statements.map((s) => s.command)).toEqual([
+				{ path: "/ip/address", verb: "add", args: { interface: "ether1" } },
+				{ path: "/ip/route", verb: "add", args: { gateway: "192.168.88.1" } },
+			]);
+			expect(code).toBe(0);
+		}
+	});
 });
 
 test("64 KiB separator-free input stays bounded through public explain (#248)", () => {
