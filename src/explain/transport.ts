@@ -101,6 +101,16 @@ export interface ExplainTransportInput {
 	arguments: ExplainArguments;
 	/** The statement exactly as written, for the execute invocation. */
 	source: string;
+	/**
+	 * Why the statement is not accepted by RouterOS, when the analysis has decided
+	 * that it is not (#311).
+	 *
+	 * Distinct from an unread argument list, which means "offline cannot name the
+	 * request" and correctly falls through to `execute` — the raw CLI surface can
+	 * still carry those bytes. Here the bytes themselves are the defect, so no
+	 * centrs surface should be offered for them and none is rendered.
+	 */
+	rejected?: string;
 }
 
 export interface ExplainTransportOptions {
@@ -423,6 +433,13 @@ export function classifyExplainTransport(
 ): ExplainTransport {
 	const { path, verb, args = {} } = input.command;
 	const lower = verb.toLowerCase();
+
+	// Before every mapping rule: a statement the analysis has REJECTED gets no
+	// invocation at all. Falling through to `execute` here would print a
+	// ready-to-paste `centrs execute` line for bytes the same result declares a
+	// syntax error, which is the false confident reading in a second place.
+	if (input.rejected !== undefined)
+		return unknown(input.rejected, options.evidenceId);
 
 	// Root scripting directives have no RouterOS REST path. They always ride the
 	// raw execute surface, regardless of whether their operands are literal.

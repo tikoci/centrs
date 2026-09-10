@@ -121,6 +121,10 @@ import {
 } from "./explain/pathresolve.ts";
 import { collectStringEscapeDefects } from "./explain/quoted-string.ts";
 import { maskComments, segmentStatements } from "./explain/segment.ts";
+import {
+	findMissingSeparators,
+	type MissingSeparator,
+} from "./explain/separator.ts";
 import { stringSpans } from "./explain/string-tokens.ts";
 import { augmentSymbolOccurrences } from "./explain/symbol-values.ts";
 import {
@@ -678,6 +682,7 @@ const EV = {
 	paths: "e12",
 	strings: "e13",
 	braces: "e14",
+	separators: "e15",
 } as const;
 
 type EvidenceKey = keyof typeof EV;
@@ -796,6 +801,19 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		id: EV.braces,
 		source: "canonicalizer",
 		probe: "braceSpans",
+		basis: "heuristic",
+		outcome: "ok",
+	},
+	/**
+	 * `heuristic`: the run is decided from the frozen verb vocabulary and the
+	 * shipped structure table, both of which a live probe could overturn on a
+	 * menu the table does not list. The rejection it reports is device-grounded
+	 * (`src/explain/separator.ts`); which byte runs are that shape is not.
+	 */
+	separators: {
+		id: EV.separators,
+		source: "canonicalizer",
+		probe: "findMissingSeparators",
 		basis: "heuristic",
 		outcome: "ok",
 	},
@@ -1148,13 +1166,26 @@ export function explainCommand(
 		statementOf(split, analyzed),
 	);
 	const canonical = canonicalizeExecuteCommand(input);
+	// #311: the second command-shaped run is found on the statement's OWN
+	// argument tokens, then the reading is degraded — in that order, because the
+	// tokens are the evidence for the diagnostic and the refusal both. Transport
+	// runs after, so it classifies the degraded reading rather than a list the
+	// device never accepted.
+	const separators = readStatements.map((statement) =>
+		statement.resolution === "resolved" && statement.arguments?.read === true
+			? findMissingSeparators(statement.arguments.tokens)
+			: [],
+	);
 	const statements = enforceGateParity(readStatements, canonical).map(
-		(statement, index) =>
-			withStatementTransport(
-				statement,
+		(statement, index) => {
+			const runs = separators[index] ?? [];
+			return withStatementTransport(
+				withoutSeparatedArguments(statement, runs),
 				verbs.splits[index]?.text ?? "",
 				options,
-			),
+				runs.length === 0 ? undefined : rejectedBySeparator(runs),
+			);
+		},
 	);
 
 	const diagnostics: ExplainDiagnostic[] = [
@@ -1169,6 +1200,7 @@ export function explainCommand(
 			};
 		}),
 		...invalidCommandBraceDiagnostics(verbs.splits, analyzed),
+		...separators.flatMap((runs) => runs.map(missingSeparatorDiagnostic)),
 		...statements.flatMap((s) => diagnosticsForStatement(s)),
 	].sort(
 		(a, b) =>
@@ -1176,7 +1208,7 @@ export function explainCommand(
 			severityRank(b.severity) - severityRank(a.severity),
 	);
 
-	const valueFacts = valuesOf(verbs.splits, analyzed);
+	const valueFacts = valuesOf(verbs.splits, analyzed, separators);
 	const spans: ExplainSpan[] = [
 		...segmented.comments.map((c) => ({
 			start: c.start,
@@ -1347,6 +1379,7 @@ function withStatementTransport(
 	statement: ExplainStatement,
 	source: string,
 	options: ExplainCommandOptions,
+	rejected?: string,
 ): ExplainStatement {
 	if (statement.kind !== "command" || statement.arguments === undefined)
 		return statement;
@@ -1357,6 +1390,7 @@ function withStatementTransport(
 				command: statement.command,
 				arguments: statement.arguments,
 				source,
+				...(rejected === undefined ? {} : { rejected }),
 			},
 			{ renderCurl: options.curl, evidenceId: EV.transport },
 		),
@@ -1477,6 +1511,71 @@ function argumentsOf(
 	};
 }
 
+/**
+ * A second command-shaped run, said out loud (#311).
+ *
+ * `error`, not `warning`: the abstention vocabulary is for input with several
+ * valid schema-free readings, and this one has none — RouterOS answers every
+ * probed spelling of this shape with `bad parameter <token>` or
+ * `expected end of command` (`src/explain/separator.ts`). What the message may
+ * claim is bounded by the same head-dependence: it says the bytes READ as a
+ * second command, which is centrs's own heuristic reading, and that RouterOS
+ * rejects the statement, which is the grounded part. It does not say which byte
+ * the device will name, because that is per-menu schema — on a head whose value
+ * slot takes a bare positional the path is absorbed into it and the VERB is
+ * refused instead (`:put /ip/route print` → `/putmessage=/ip/route` plus
+ * `bad parameter print`, CHR 7.24.2). The span is the whole second run so an
+ * editor can highlight what has to move; `insertAt` is where the separator
+ * goes, which is that span's start.
+ */
+function missingSeparatorDiagnostic(run: MissingSeparator): ExplainDiagnostic {
+	return {
+		code: "explain/canonicalizer/missing-statement-separator",
+		severity: "error",
+		message: `missing statement separator: \`${run.path}\` is a menu path and \`${run.verb}\` a command verb, so this reads as a second command with no separator before it, and RouterOS rejects the statement (\`bad parameter\` or \`expected end of command\`, on a token that depends on the head's own argument names) — insert \`;\` or a newline before \`${run.path}\``,
+		span: { start: run.span.start, end: run.span.end },
+		ev: EV.separators,
+	};
+}
+
+/**
+ * Withdraw an argument reading the second run contradicts (#311).
+ *
+ * Same move `enforceGateParity` makes, for the same reason: the argument list is
+ * all-or-nothing because a partially-read one changes what the rendered command
+ * means. Reporting `gateway=` as an attribute of `/ip/address add` is the false
+ * confident reading #311 names, and the device says the withdrawal is right
+ * rather than merely cautious — `/ip/address add interface=ether1 /ip/route add
+ * placeholder` lowers to `address=placeholder;;interface=ether1` on CHR 7.24.2, a phantom
+ * attribute the source never wrote, because the second run's words can
+ * abbreviate the HEAD's argument names. Which head arguments exist is schema,
+ * so offline cannot predict when that happens and must not publish either
+ * reading.
+ *
+ * The statement itself stays `resolved`: `/ip/address add` really is the head,
+ * the device highlight agrees, and the source is one invalid statement rather
+ * than two fabricated valid ones.
+ */
+function withoutSeparatedArguments(
+	statement: ExplainStatement,
+	runs: readonly MissingSeparator[],
+): ExplainStatement {
+	if (runs.length === 0 || statement.kind !== "command") return statement;
+	if (statement.arguments?.read !== true) return statement;
+	const { args: _dropped, ...command } = statement.command;
+	return {
+		...statement,
+		command,
+		arguments: { read: false, why: rejectedBySeparator(runs) },
+	};
+}
+
+/** The one sentence both the withdrawn argument list and transport refuse on. */
+function rejectedBySeparator(runs: readonly MissingSeparator[]): string {
+	const first = runs[0];
+	return `a second command-shaped run (\`${first?.path} ${first?.verb}\`) sits in this operand stream with no \`;\` or newline before it, so this is not one accepted statement`;
+}
+
 function invalidCommandBraceDiagnostics(
 	splits: readonly DocumentVerbSplit[],
 	analyzed: string,
@@ -1540,14 +1639,34 @@ function invalidCommandBraceDiagnostics(
 	return out;
 }
 
-/** Compose safely located literals into the three-axis #225 value surface. */
+/**
+ * Compose safely located literals into the three-axis #225 value surface.
+ *
+ * `separators` is indexed by split, and its first run is a CUT (#311): from that
+ * byte on, the operand stream belongs to a second command the device never let
+ * start, so no value there can be attributed. On the two probed rows the device
+ * itself draws the line in the same place — `/ip/address add interface=ether1
+ * /ip/route add gateway=…` is read with `gateway` as the VALUE of `address=`
+ * (never as an attribute name), while the head's own `interface=ether1` survives
+ * into the IL, and `/system/note set note=hello /ip/route add …` likewise keeps
+ * `note=hello`. So the cut withdraws what the run contradicts and keeps what it
+ * does not.
+ *
+ * Not "every value in a degraded statement": `values` is deliberately an axis of
+ * its own rather than a projection of `arguments`, and the value census pins a
+ * large retained population in statements whose strict REST reading abstains
+ * (`commands/explain/README.md`, generated block). Widening this to the whole
+ * statement would contradict that measured contract.
+ */
 function valuesOf(
 	splits: readonly DocumentVerbSplit[],
 	analyzed: string,
+	separators: readonly (readonly MissingSeparator[])[],
 ): ExplainValues {
 	const occurrences: ExplainValueOccurrence[] = [];
-	for (const split of splits) {
+	for (const [splitIndex, split] of splits.entries()) {
 		if (split.resolution !== "resolved" || split.argsAt === null) continue;
+		const cut = separators[splitIndex]?.[0]?.insertAt;
 		const { start, end } = split.span;
 		const text = analyzed.slice(start, end);
 		if (text !== split.text) continue;
@@ -1563,6 +1682,11 @@ function valuesOf(
 		// advisory and never turn the later refusal reason into a diagnostic.
 		const ids = new Map<number, string>();
 		for (const [index, anchor] of anchored.anchors.entries()) {
+			// A token that reaches into the second run is not this statement's to
+			// name. Token spans never straddle the cut — the run's path is its own
+			// positional token, so a `{…}` or quoted value either ends before it or
+			// starts after it — which is why a dropped array cannot orphan a member.
+			if (cut !== undefined && start + anchor.tokenSpan.end > cut) continue;
 			const hints: ValueShape[] =
 				// A source-proved shape wins outright: the delimiters prove `array`,
 				// and an `=` that binds no key proves `str` or `bool` (#258). None is
