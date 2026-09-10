@@ -4,18 +4,20 @@ Three files cover this project. Read them in this order:
 
 1. `docs/CONSTITUTION.md` — the load-bearing rules. Validation, envelope,
    errors, settings, identity, protocol selection, done definition.
-2. `docs/MATRIX.md` — the command×protocol grid. The only status surface.
-   Find the highest-priority not-`CHR-passed` cell; that is the next work.
+2. `docs/MATRIX.md` — capability status and the selected work track, including
+   offline analysis. Follow its current priority and linked GitHub tasks;
+   unfinished protocol cells do not automatically outrank that track.
 3. `commands/<name>/README.md` and `commands/<name>/examples.md` — the
-   executable spec for the cell you're working on.
+   executable spec for the capability you're working on.
 
 When those three are clear, write code or tests. Do not write more prose.
 
 ## Done definition
 
-A feature is done when its examples in `commands/<name>/examples.md` are green
-on real CHR via `bun run test:integration`. Code existing is not done. Unit
-tests passing is not done. The **normative** definition is
+Live capabilities require examples green on real CHR via
+`bun run test:integration`. Offline analysis requires its examples, contract
+checks, and committed CHR-grounded semantic evidence; offline verification
+does not advance a live protocol cell. The **normative** definition is
 [`docs/CONSTITUTION.md` → Done definition](docs/CONSTITUTION.md#done-definition);
 the integration-test procedure is in
 `.github/instructions/done-definition.instructions.md`.
