@@ -196,8 +196,8 @@ code and authority docs live.
 - **`src/`** — Bun/TypeScript source.
 - **`test/`** — unit and CHR-backed integration tests.
 
-There is no `docs/specs/`, no `work/`, no roadmap doc. The matrix is the
-roadmap.
+There is no `docs/specs/`, no `work/`, no roadmap doc. The matrix and the
+GitHub issues it links are the roadmap.
 
 ## Development
 

@@ -1568,7 +1568,8 @@ They keep their homes in staging: **Q7** is now concrete as #201 (lexical
 boundaries — sigil spellings, escape validity, statement-start eligibility)
 and #199 (the shared scanner's `$[…]`-in-string blind spot), both raised by the
 Q13 promotion and both spanning already-promoted modules; **Q5** and **Q9** are
-phase-1 measurements; **Q12** is spec open item 2 and hardens in phase 4. The
+phase-1 measurements; **Q12** is spec open item 2 and hardens through #264
+B4/B5 with the offline consumer check. The
 probe framework's disposition (reuse of the mutation suite, coordinate
 fixtures, and adversarial generators as product test fixtures) is tracked in
 issue #186 rather than carried into mainline.

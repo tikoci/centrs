@@ -2,8 +2,9 @@
 
 This file owns **capability status and the selected work track**. The
 command × protocol grid covers live operations; offline analysis, frontends,
-and peer measurement have separate entries below. GitHub issues own the
-tasks, dependencies, and acceptance criteria within a track.
+and peer measurement have separate entries below. A capability's acceptance
+criteria live in its `commands/<name>/README.md`; GitHub issues own the tasks
+and dependencies that satisfy them.
 
 Start with [Current priority](#current-priority), then the command's README,
 examples, and linked issue. Verification follows `docs/CONSTITUTION.md` →
