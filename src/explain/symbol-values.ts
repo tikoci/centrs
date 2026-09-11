@@ -119,10 +119,11 @@ function collectBlocks(
 		else list.push(entry);
 	}
 	const exhaustiveGroups = new Set<number>();
-	for (const candidate of blocks) {
-		if (candidate.ownerIndex === undefined) continue;
-		if (candidate.owner?.verb?.toLowerCase() !== "if") continue;
-		const siblings = byOwner.get(candidate.ownerIndex) ?? [];
+	// One pass per owner, not per block: every sibling of an `if` reaches the
+	// same verdict, so asking each of them re-runs both filters over the whole
+	// group. Siblings share an owner index, so they share the owner itself.
+	for (const [ownerIndex, siblings] of byOwner) {
+		if (siblings[0]?.owner?.verb?.toLowerCase() !== "if") continue;
 		const doBlocks = siblings.filter(
 			(other) => other.block.name.toLowerCase() === "do",
 		);
@@ -135,7 +136,7 @@ function collectBlocks(
 			(doBlocks[0]?.block.start ?? Number.POSITIVE_INFINITY) <
 				(elseBlocks[0]?.block.start ?? Number.NEGATIVE_INFINITY)
 		)
-			exhaustiveGroups.add(candidate.ownerIndex);
+			exhaustiveGroups.add(ownerIndex);
 	}
 
 	for (const { block: b, ownerIndex, owner } of blocks) {

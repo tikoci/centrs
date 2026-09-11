@@ -13,7 +13,7 @@ documenting cross-cutting shifts that affect contributors and consumers.
 - **Offline `explain` answers statement-ownership from an index, not a scan.**
   The symbol/value surface asked "which statement owns this span" once per
   symbol, value and scope brace by scanning every statement split, so cost grew
-  quadratically with symbol-dense input: 500 KiB of declarations took 4.3 s and
+  quadratically with symbol-dense input: 253 KiB of declarations took 4.3 s and
   was still steepening. Output is unchanged — all 1,896 `explainCommand` hashes
   over the pinned corpus match byte for byte under both facet settings — and the
   growth-ratio guard now covers a symbol-dense input shape alongside the
