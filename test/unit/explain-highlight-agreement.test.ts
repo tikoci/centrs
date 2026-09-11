@@ -489,6 +489,32 @@ describe("#263 — transformed text: the scorer refuses what it cannot align", (
 		expect(data.input.bytes).toBe(bytes);
 		expect(data.tokens?.at(-1)?.end).toBe(bytes);
 	});
+
+	test("two captures that reconstruct different text are refused", () => {
+		// One analysis serves every version, which is only sound because every
+		// capture sent the same bytes. If they did not, the report would score two
+		// answers about two programs as if they were one — the #269 failure, one
+		// layer up — and a per-byte version comparison would be meaningless.
+		const crossVersion = {
+			baseVersion: "7.23.2",
+			versions: [
+				{ version: "7.23.2", routerosVersion: "7.23.2" },
+				{ version: "7.24rc2", routerosVersion: "7.24rc2" },
+			],
+			selection: { selected: 1, versionDiffering: 1 },
+			scripts: {
+				"synthetic.rsc": {
+					split: "dev" as const,
+					chars: 9,
+					streams: {
+						"7.23.2": [["/ip print", "cmd"]] as [string, string][],
+						"7.24rc2": [["/ip write", "cmd"]] as [string, string][],
+					},
+				},
+			},
+		} as unknown as Parameters<typeof measure>[0];
+		expect(() => measure(crossVersion)).toThrow(/bytes differ from 7\.23\.2/);
+	});
 });
 
 describe("#263 — the README block is a projection of the fixture", () => {

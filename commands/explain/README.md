@@ -1422,7 +1422,7 @@ are not judgments about syntax at all:
 | Kind | Classes | Why it cannot be scored as agreement |
 | ---- | ------- | ------------------------------------ |
 | syntax | `cmd` `dir` `arg` `arg-dot` `arg-scope` `comment` `escaped` `syntax-meta` `variable-local` `variable-global` `variable-auto` `variable-parameter` | — this is the region that can be scored |
-| non-syntax | `obj-inactive` `obj-dynamic` `obj-disabled` `variable-undefined` `syntax-obsolete` | The source text alone does not decide these, and centrs abstains on them by construction — `ExplainSymbolClass` deliberately excludes `undefined`. *Why* each one is out of reach is a second question, answered per byte rather than per class; see applicability below. |
+| non-syntax | `obj-inactive` `obj-dynamic` `obj-disabled` `variable-undefined` `syntax-obsolete` | The source text alone does not decide these. centrs has no class for most of them at all — `ExplainSymbolClass` deliberately excludes `undefined` — and where it *does* claim the byte (an `arg` the device calls `obj-inactive`) it is the **scorer** that abstains, because the device was not making a syntax judgement there. *Why* each one is out of reach is a second question, answered per byte rather than per class; see applicability below. |
 | silence | `none` | The device's abstention, not a class named "none". Agreeing with silence is not agreement. |
 | parser-stop | `error` | The device gives up here — see below. |
 

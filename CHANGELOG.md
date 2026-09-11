@@ -16,8 +16,8 @@ documenting cross-cutting shifts that affect contributors and consumers.
   reports where the two agree, over the committed capture slice — no router, no
   corpus, no network. The report separates what it can score from what it
   cannot: each side's abstentions, and the tail after the device's own one-byte
-  `error`, where it stops classifying and never recovers (half the slice's
-  bytes). A second axis says why an answer was out of reach — offline-decidable,
+  `error` — half the slice's bytes, where 7.23.2 falls silent for the rest of
+  the script and 7.24rc2 mostly does. A second axis says why an answer was out of reach — offline-decidable,
   schema-dependent, state-dependent or version-dependent — assigned per byte
   from context rather than by class name, since one highlight class carries more
   than one category. Representative source fragments ship with the counts.

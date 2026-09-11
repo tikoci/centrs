@@ -32,9 +32,12 @@
  * - **non-syntax** — `obj-inactive`, `obj-dynamic`, `obj-disabled`,
  *   `variable-undefined`, `syntax-obsolete`. The source text alone does not
  *   decide these, so they are reported as their own bucket and never as a
- *   wrong answer. Saying *why* each one is out of reach is a separate
- *   question, and it is deliberately **not** answered by the class name —
- *   see `applicabilityOf` below.
+ *   wrong answer. Note what abstains: centrs has no class for most of them
+ *   (`ExplainSymbolClass` excludes `undefined`), but where it *does* claim the
+ *   byte — an `arg` the device calls `obj-inactive` — the token stands and it
+ *   is the SCORER that declines to grade it. Saying *why* each one is out of
+ *   reach is a separate question, and it is deliberately **not** answered by
+ *   the class name — see `applicabilityOf` below.
  * - **silence** — `none`. The device assigned no class. It is the device's
  *   abstention, not a class named "none", so agreeing with it is not an
  *   agreement (probes: "an abstention is not a disagreement").
