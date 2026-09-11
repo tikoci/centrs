@@ -686,6 +686,7 @@ mmips # RouterOS architecture (multi-core MIPS), named in `conditions:` gates
 CRS # MikroTik Cloud Router Switch — carries the switch-chip menus no CHR has
 CCR # MikroTik Cloud Core Router
 superlinear # growth faster than linear, used for resolveDocument wall-clock on separator-free input (#248)
+superlinearity # the property a growth-ratio guard bounds; `superlinear+` is NOT usable here, cspell's compound form forbids the bare word (#313)
 stmts # `explainCommand` corpus measurement: statement count (shorthand for `statements`)
 argCandidates # `explainCommand` corpus measurement: arg-bearing candidates
 argReadable # `explainCommand` corpus measurement: readable statements
@@ -728,3 +729,6 @@ occ # short for occurrence — local variable in symbol-values flow analysis
 vid # short for valueId — result-local value occurrence identifier (v0, v1)
 idx # short for index — loop/event index in flow merging
 mis # prefix in mis-linking — hyphenated in comments for symbol-values guard
+
+# #313 offline performance vocabulary
+JIT # just-in-time compiler — warmed before either half of the growth-ratio timing so the two sizes are compared in the same compilation state

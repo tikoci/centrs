@@ -188,7 +188,13 @@ export type Continuation = "none" | "escape" | "comment";
  * can slice the original for content. Idempotent.
  */
 export function maskComments(original: string): string {
-	const out = original.split("");
+	// Masked output is built from whole slices, and only once a comment is
+	// actually found: comment-free input is returned as the SAME string object.
+	// `split("")` allocated one string per character of every call — 16 walks
+	// over a 64 KiB document made a million of them — where a document's comment
+	// runs are a handful of slices (#313).
+	let pieces: string[] | undefined;
+	let copied = 0;
 	const contexts: { char: "{" | "[" | "("; statements: boolean }[] = [];
 	let atLead = true;
 	let cont: Continuation = "none";
@@ -219,10 +225,14 @@ export function maskComments(original: string): string {
 		// newline + `  # c`) and content when it is not (`:put a\` + newline +
 		// `  # x`, which the device classes `error`) — exactly what `atLead` says.
 		if (c === "#" && (atLead || contComment)) {
-			while (i < original.length && original[i] !== "\n") {
-				out[i] = " ";
-				i++;
-			}
+			const commentStart = i;
+			while (i < original.length && original[i] !== "\n") i++;
+			if (pieces === undefined) pieces = [];
+			pieces.push(
+				original.slice(copied, commentStart),
+				" ".repeat(i - commentStart),
+			);
+			copied = i;
 			if (contComment) {
 				// The comment line does not end the statement: step over its newline
 				// (the loop's i++) with the continuation still pending.
@@ -263,7 +273,9 @@ export function maskComments(original: string): string {
 			atLead = contexts.at(-1)?.statements ?? true;
 		} else if (c !== " " && c !== "\t" && c !== "\r") atLead = false;
 	}
-	return out.join("");
+	if (pieces === undefined) return original;
+	pieces.push(original.slice(copied));
+	return pieces.join("");
 }
 
 /**
