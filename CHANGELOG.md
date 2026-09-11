@@ -8,6 +8,17 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Changed
+
+- **Offline `explain` answers statement-ownership from an index, not a scan.**
+  The symbol/value surface asked "which statement owns this span" once per
+  symbol, value and scope brace by scanning every statement split, so cost grew
+  quadratically with symbol-dense input: 500 KiB of declarations took 4.3 s and
+  was still steepening. Output is unchanged — all 1,896 `explainCommand` hashes
+  over the pinned corpus match byte for byte under both facet settings — and the
+  growth-ratio guard now covers a symbol-dense input shape alongside the
+  separator-free one (#317).
+
 ## 0.1.4 — 2026-08-31
 
 Preview release. `@tikoci/centrs@0.1.4` on npm's `next` tag.

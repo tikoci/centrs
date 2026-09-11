@@ -25,6 +25,8 @@ import type {
 	ExplainValueOccurrence,
 } from "../explain.ts";
 import { scopeBlocks } from "./blocks.ts";
+import type { SplitOwnerIndex } from "./split-owner.ts";
+import { buildSplitOwnerIndex } from "./split-owner.ts";
 import type { SymbolOccurrence } from "./symbols.ts";
 import type { DocumentVerbSplit } from "./verbsplit.ts";
 
@@ -92,32 +94,35 @@ function mergeExhaustiveBranches(
 function collectBlocks(
 	text: string,
 	base: number,
-	analyzed: string,
+	owners: SplitOwnerIndex,
 	splits: readonly DocumentVerbSplit[],
 ): BlockInfo[] {
 	const out: BlockInfo[] = [];
 	const blocks = scopeBlocks(text).map((block) => {
 		const start = base + block.start;
 		const bracePos = start - 1;
-		const ownerIndex = owningSplitIndex(
-			analyzed,
-			splits,
-			bracePos,
-			bracePos + 1,
-		);
+		const ownerIndex = owners.ownerOf(bracePos, bracePos + 1);
 		return {
 			block,
 			ownerIndex,
 			owner: ownerIndex === undefined ? undefined : splits[ownerIndex],
 		};
 	});
+	// Group the siblings once. Re-filtering `blocks` inside a loop over
+	// `blocks` is the same quadratic shape #317 removed from the owner lookup,
+	// and a `do={…}`-heavy document grows both factors together.
+	const byOwner = new Map<number, typeof blocks>();
+	for (const entry of blocks) {
+		if (entry.ownerIndex === undefined) continue;
+		const list = byOwner.get(entry.ownerIndex);
+		if (list === undefined) byOwner.set(entry.ownerIndex, [entry]);
+		else list.push(entry);
+	}
 	const exhaustiveGroups = new Set<number>();
 	for (const candidate of blocks) {
 		if (candidate.ownerIndex === undefined) continue;
 		if (candidate.owner?.verb?.toLowerCase() !== "if") continue;
-		const siblings = blocks.filter(
-			(other) => other.ownerIndex === candidate.ownerIndex,
-		);
+		const siblings = byOwner.get(candidate.ownerIndex) ?? [];
 		const doBlocks = siblings.filter(
 			(other) => other.block.name.toLowerCase() === "do",
 		);
@@ -156,7 +161,7 @@ function collectBlocks(
 				? { branchGroup: ownerIndex, branchArm }
 				: {}),
 		});
-		out.push(...collectBlocks(b.body, start, analyzed, splits));
+		out.push(...collectBlocks(b.body, start, owners, splits));
 	}
 	return out;
 }
@@ -170,35 +175,11 @@ function collectBlocks(
  * link `i` to the `in` attribute. Only the same statement's values are
  * candidates, which also prevents cross-statement mis-linking.
  */
-function owningSplitIndex(
-	analyzed: string,
-	splits: readonly DocumentVerbSplit[],
-	start: number,
-	end: number,
-): number | undefined {
-	let owner: number | undefined;
-	let ownerLength = Number.POSITIVE_INFINITY;
-	for (let i = 0; i < splits.length; i++) {
-		const split = splits[i] as DocumentVerbSplit;
-		if (split.span.start > start || end > split.span.end) continue;
-		// A widened fallback span cannot prove statement ownership. Match the
-		// same addressability gate used by `valuesOf`/`argumentsOf`.
-		if (analyzed.slice(split.span.start, split.span.end) !== split.text)
-			continue;
-		const length = split.span.end - split.span.start;
-		if (length < ownerLength) {
-			owner = i;
-			ownerLength = length;
-		}
-	}
-	return owner;
-}
-
 function defValueId(
 	occurrence: SymbolOccurrence,
 	splitIndex: number | undefined,
 	values: readonly ExplainValueOccurrence[],
-	valueSplitIndexes: readonly (number | undefined)[],
+	positionalValuesBySplit: ReadonlyMap<number, readonly number[]>,
 ): string | undefined {
 	if (
 		occurrence.role !== "declaration" &&
@@ -217,18 +198,15 @@ function defValueId(
 
 	let best: ExplainValueOccurrence | undefined;
 	let bestDist = Number.POSITIVE_INFINITY;
-	for (let i = 0; i < values.length; i++) {
+	// Parent statement spans include their scope bodies. Requiring the
+	// innermost addressable statement to match prevents `:local f do={:put 1}`
+	// from claiming the body's `1`, and prevents one branch from lending a
+	// literal to a non-literal definition in another branch. That same
+	// requirement is what lets the candidates be bucketed per statement once
+	// instead of re-scanned per symbol (#317).
+	for (const i of positionalValuesBySplit.get(splitIndex) ?? []) {
 		const value = values[i] as ExplainValueOccurrence;
-		// Parent statement spans include their scope bodies. Requiring the
-		// innermost addressable statement to match prevents `:local f do={:put
-		// 1}` from claiming the body's `1`, and prevents one branch from lending
-		// a literal to a non-literal definition in another branch.
-		if (valueSplitIndexes[i] !== splitIndex) continue;
-		if (value.kind === "element") continue;
 		if (value.span.start <= occurrence.start) continue;
-		// RouterOS declaration/assignment RHS syntax is positional. Attribute
-		// values in the same statement belong to the directive, not this symbol.
-		if (value.kind !== "positional") continue;
 		const dist = value.span.start - occurrence.end;
 		if (dist < 0 || dist >= bestDist) continue;
 		bestDist = dist;
@@ -252,12 +230,25 @@ export function augmentSymbolOccurrences(
 	splits: readonly DocumentVerbSplit[],
 ): ExplainSymbolOccurrence[] {
 	const augmented: ExplainSymbolOccurrence[] = [];
+	const owners = buildSplitOwnerIndex(analyzed, splits);
 	const symbolSplitIndexes = symbols.map((occ) =>
-		owningSplitIndex(analyzed, splits, occ.start, occ.end),
+		owners.ownerOf(occ.start, occ.end),
 	);
-	const valueSplitIndexes = values.map((value) =>
-		owningSplitIndex(analyzed, splits, value.span.start, value.span.end),
-	);
+	// RouterOS declaration/assignment RHS syntax is positional, so an attribute
+	// value in the same statement belongs to the directive, not to the symbol —
+	// `:foreach i in={…}` must not link `i` to the `in` attribute. Bucketing
+	// only the positional values keeps `defValueId`'s search inside the one
+	// statement that can supply the RHS.
+	const positionalValuesBySplit = new Map<number, number[]>();
+	for (let i = 0; i < values.length; i++) {
+		const value = values[i] as ExplainValueOccurrence;
+		if (value.kind !== "positional") continue;
+		const splitIndex = owners.ownerOf(value.span.start, value.span.end);
+		if (splitIndex === undefined) continue;
+		const list = positionalValuesBySplit.get(splitIndex);
+		if (list === undefined) positionalValuesBySplit.set(splitIndex, [i]);
+		else list.push(i);
+	}
 	const valueOrder = new Map(values.map((value, index) => [value.id, index]));
 	// Map from occurrence index -> valueId for quick lookup during flow pass
 	const defMap = new Map<number, string>();
@@ -267,12 +258,12 @@ export function augmentSymbolOccurrences(
 			occ,
 			symbolSplitIndexes[i],
 			values,
-			valueSplitIndexes,
+			positionalValuesBySplit,
 		);
 		if (vid !== undefined) defMap.set(i, vid);
 	}
 
-	const blocks = collectBlocks(analyzed, 0, analyzed, splits);
+	const blocks = collectBlocks(analyzed, 0, owners, splits);
 	type FlowEvent =
 		| {
 				offset: number;

@@ -594,16 +594,18 @@ test("64 KiB separator-free input stays bounded through public explain (#248)", 
  * failing on machine noise instead. The measured ratio is logged so a future
  * failure is diagnosable from the run that produced it.
  */
-test("public explain cost grows with input size, not faster (#313)", () => {
-	const small = '"a" {1} '.repeat(4_096);
-	const big = '"a" {1} '.repeat(16_384);
+function minGrowthRatio(
+	warm: string,
+	small: string,
+	big: string,
+): { ratio: number; trials: string[] } {
 	const time = (input: string): number => {
 		const started = performance.now();
 		explainCommand(input);
 		return performance.now() - started;
 	};
 
-	explainCommand('"a" {1} '.repeat(256)); // warm the JIT before either timing
+	explainCommand(warm); // warm the JIT before either timing
 	let bestRatio = Number.POSITIVE_INFINITY;
 	const trials: string[] = [];
 	for (let trial = 0; trial < 3; trial++) {
@@ -612,11 +614,71 @@ test("public explain cost grows with input size, not faster (#313)", () => {
 		trials.push(`${smallMs.toFixed(0)}/${bigMs.toFixed(0)}ms`);
 		bestRatio = Math.min(bestRatio, bigMs / smallMs);
 	}
+	return { ratio: bestRatio, trials };
+}
+
+test("public explain cost grows with input size, not faster (#313)", () => {
+	const { ratio, trials } = minGrowthRatio(
+		'"a" {1} '.repeat(256),
+		'"a" {1} '.repeat(4_096),
+		'"a" {1} '.repeat(16_384),
+	);
 	console.log(
-		`#313 growth ratio: ${bestRatio.toFixed(2)} (4x size step; trials ${trials.join(", ")})`,
+		`#313 growth ratio: ${ratio.toFixed(2)} (4x size step; trials ${trials.join(", ")})`,
 	);
 
-	expect(bestRatio).toBeLessThan(6);
+	expect(ratio).toBeLessThan(6);
+}, 120_000);
+
+/**
+ * The same shape guard on SYMBOL-dense input (#317).
+ *
+ * #313's input (`"a" {1} ` repeated) carries no symbols and no values, so it
+ * never calls the symbol/value machinery at all — which is exactly how a
+ * second quadratic survived that fix. `owningSplitIndex` answered "which
+ * statement owns this span" by scanning every statement split, once per symbol,
+ * once per value and once per scope brace; on 62 KiB of declarations that was
+ * 25.2 M split visits and 42% of total analysis time.
+ *
+ * This input grows symbols, values and splits together, which is the product
+ * that goes quadratic. Restoring the linear scan (`buildSplitOwnerIndex`'s
+ * crossing fallback used unconditionally) as the only change, back to back on
+ * this machine:
+ *
+ * | build | 125 KiB | 500 KiB | reported minimum, in-suite | alone |
+ * | ----- | ------- | ------- | -------------------------- | ----- |
+ * | index | 219-518 ms | 999-1,945 ms | 3.55, 3.72, 3.79 | 2.75 |
+ * | linear scan | 621-699 ms | 7,709-9,293 ms | 11.32 | 10.11 |
+ *
+ * The 4x step and the bound of 6 are #313's, unchanged, and sit between those
+ * populations: 1.6x above the indexed reading, 1.9x below the scan's. Running
+ * inside the suite rather than alone inflates the SMALL side more than the big
+ * one, which lifts the indexed ratio — so the in-suite column, not the cleaner
+ * standalone one, is what the bound has to clear.
+ *
+ * The size pair is four times #313's because the per-call fixed cost is a larger
+ * share of this shape's work: at 62 KiB/259 KiB the same restored scan reported
+ * only 7.56 in-suite against an indexed 3.31, which is too near the line to rely
+ * on. The same honest limit applies — a bound of 6 at a 4x step admits up to
+ * ~n^1.29, so this catches the n^2 class a per-element cost proportional to n
+ * produces, not an arbitrarily small superlinearity.
+ */
+test("symbol-dense explain cost grows with input size, not faster (#317)", () => {
+	const declarations = (count: number): string => {
+		let out = "";
+		for (let i = 0; i < count; i++) out += `:local v${i} ${i}; :put $v${i}; `;
+		return out;
+	};
+	const { ratio, trials } = minGrowthRatio(
+		declarations(128),
+		declarations(4_096),
+		declarations(16_384),
+	);
+	console.log(
+		`#317 growth ratio: ${ratio.toFixed(2)} (4x size step; trials ${trials.join(", ")})`,
+	);
+
+	expect(ratio).toBeLessThan(6);
 }, 120_000);
 
 /**
