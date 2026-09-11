@@ -732,3 +732,6 @@ mis # prefix in mis-linking — hyphenated in comments for symbol-values guard
 
 # #313 offline performance vocabulary
 JIT # just-in-time compiler — warmed before either half of the growth-ratio timing so the two sizes are compared in the same compilation state
+
+# #317 statement-ownership index vocabulary
+laminarity # the property of a set of spans in which every pair is nested or disjoint, never crossing — what makes the shortest containing span reachable by a parent walk
