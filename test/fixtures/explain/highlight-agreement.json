@@ -1,0 +1,682 @@
+{
+	"_note": "centrs → RouterOS `highlight` agreement, raw per-byte confusion matrix only — see scripts/explain-highlight-agreement.ts (#264 B4 / #263). Re-derive with `bun run explain:highlight-agreement --json`. Buckets and percentages are DERIVED at render time from this matrix plus src/explain/highlight-projection.ts; nothing here is a pass threshold.",
+	"slice": {
+		"path": "test/fixtures/explain/highlight-streams.slice.json",
+		"sha256": "de67f66d19e64b5ff8edf78d41601d3a2e08646a5ea809ffa3b60acc6cf8cd8a",
+		"baseVersion": "7.23.2",
+		"scripts": 70,
+		"versionDiffering": 27
+	},
+	"versions": {
+		"7.23.2": {
+			"routerosVersion": "7.23.2",
+			"dev": {
+				"scripts": 42,
+				"bytes": 62735,
+				"scriptsWithParserStop": 24,
+				"stoppedBytes": 36652,
+				"live": {
+					"arg|arg-dot|same": 6,
+					"arg|arg-scope|same": 41,
+					"arg|arg|same": 820,
+					"arg|none|same": 19,
+					"arg|obj-inactive|same": 260,
+					"arg|syntax-meta|same": 131,
+					"brace|syntax-meta|same": 99,
+					"cmd|cmd|same": 1222,
+					"cmd|none|same": 16,
+					"cmd|obj-inactive|same": 15,
+					"comment|comment|same": 9602,
+					"dir|dir|same": 1088,
+					"dir|none|same": 58,
+					"dir|obj-inactive|same": 98,
+					"operator|arg|same": 2,
+					"operator|none|same": 1,
+					"operator|obj-inactive|same": 6,
+					"operator|syntax-meta|same": 157,
+					"operator|variable-undefined|same": 1,
+					"string|arg|same": 8,
+					"string|cmd|same": 33,
+					"string|dir|same": 17,
+					"string|escaped|same": 314,
+					"string|none|same": 2839,
+					"string|syntax-meta|same": 315,
+					"string|variable-undefined|same": 13,
+					"unclassified|arg-dot|same": 12,
+					"unclassified|arg-scope|same": 108,
+					"unclassified|arg|same": 945,
+					"unclassified|cmd|same": 90,
+					"unclassified|comment|same": 183,
+					"unclassified|dir|same": 41,
+					"unclassified|escaped|same": 137,
+					"unclassified|none|differs": 25,
+					"unclassified|none|same": 2318,
+					"unclassified|obj-disabled|same": 7,
+					"unclassified|obj-dynamic|same": 20,
+					"unclassified|obj-inactive|same": 83,
+					"unclassified|syntax-meta|differs": 1,
+					"unclassified|syntax-meta|same": 1856,
+					"unclassified|syntax-obsolete|same": 2,
+					"unclassified|variable-local|same": 259,
+					"unclassified|variable-parameter|same": 15,
+					"unclassified|variable-undefined|differs": 23,
+					"unclassified|variable-undefined|same": 40,
+					"value|escaped|same": 27,
+					"value|none|same": 1516,
+					"value|syntax-meta|same": 93,
+					"value|variable-undefined|same": 21,
+					"variable-auto|variable-auto|same": 44,
+					"variable-global|variable-global|same": 235,
+					"variable-local|variable-local|same": 592,
+					"variable-parameter|variable-parameter|same": 209
+				},
+				"stopped": {
+					"arg|none|same": 5327,
+					"brace|none|differs": 15,
+					"brace|none|same": 65,
+					"cmd|none|differs": 93,
+					"cmd|none|same": 1277,
+					"comment|none|same": 1055,
+					"dir|none|differs": 25,
+					"dir|none|same": 1352,
+					"operator|none|differs": 4,
+					"operator|none|same": 63,
+					"string|error|same": 1,
+					"string|none|differs": 3,
+					"string|none|same": 5052,
+					"unclassified|error|differs": 4,
+					"unclassified|error|same": 18,
+					"unclassified|none|differs": 276,
+					"unclassified|none|same": 13264,
+					"value|error|same": 1,
+					"value|none|differs": 6,
+					"value|none|same": 7556,
+					"variable-auto|none|same": 10,
+					"variable-global|none|same": 40,
+					"variable-local|none|differs": 35,
+					"variable-local|none|same": 653,
+					"variable-parameter|none|differs": 61,
+					"variable-parameter|none|same": 396
+				}
+			},
+			"holdout": {
+				"scripts": 28,
+				"bytes": 22794,
+				"scriptsWithParserStop": 19,
+				"stoppedBytes": 6765,
+				"live": {
+					"arg|arg-dot|same": 2,
+					"arg|arg-scope|same": 12,
+					"arg|arg|same": 65,
+					"arg|syntax-meta|same": 10,
+					"brace|syntax-meta|same": 94,
+					"cmd|cmd|same": 763,
+					"cmd|dir|same": 12,
+					"cmd|none|same": 10,
+					"cmd|obj-inactive|same": 6,
+					"comment|comment|same": 8404,
+					"dir|dir|same": 470,
+					"dir|obj-inactive|same": 34,
+					"operator|none|same": 6,
+					"operator|obj-inactive|same": 1,
+					"operator|syntax-meta|same": 75,
+					"string|cmd|same": 9,
+					"string|dir|same": 2,
+					"string|escaped|same": 77,
+					"string|none|same": 588,
+					"string|syntax-meta|same": 168,
+					"string|variable-undefined|same": 6,
+					"unclassified|arg|same": 290,
+					"unclassified|cmd|same": 47,
+					"unclassified|comment|same": 167,
+					"unclassified|dir|same": 45,
+					"unclassified|escaped|same": 8,
+					"unclassified|none|differs": 19,
+					"unclassified|none|same": 1347,
+					"unclassified|obj-inactive|same": 61,
+					"unclassified|syntax-meta|same": 1360,
+					"unclassified|syntax-obsolete|same": 1,
+					"unclassified|variable-local|same": 51,
+					"unclassified|variable-parameter|same": 45,
+					"unclassified|variable-undefined|same": 35,
+					"value|none|same": 614,
+					"value|syntax-meta|same": 45,
+					"variable-auto|variable-auto|same": 48,
+					"variable-global|variable-global|same": 347,
+					"variable-local|variable-local|same": 496,
+					"variable-parameter|variable-parameter|same": 189
+				},
+				"stopped": {
+					"arg|error|differs": 1,
+					"arg|none|differs": 59,
+					"arg|none|same": 122,
+					"brace|error|same": 1,
+					"brace|none|differs": 3,
+					"brace|none|same": 42,
+					"cmd|none|differs": 31,
+					"cmd|none|same": 339,
+					"comment|none|differs": 353,
+					"comment|none|same": 601,
+					"dir|error|same": 3,
+					"dir|none|differs": 54,
+					"dir|none|same": 305,
+					"operator|error|same": 1,
+					"operator|none|differs": 1,
+					"operator|none|same": 28,
+					"string|none|differs": 2,
+					"string|none|same": 1014,
+					"unclassified|error|differs": 4,
+					"unclassified|error|same": 9,
+					"unclassified|none|differs": 57,
+					"unclassified|none|same": 2838,
+					"value|none|same": 712,
+					"variable-auto|none|same": 14,
+					"variable-local|none|same": 113,
+					"variable-parameter|none|same": 58
+				}
+			}
+		},
+		"7.24rc2": {
+			"routerosVersion": "7.24rc2",
+			"dev": {
+				"scripts": 42,
+				"bytes": 62735,
+				"scriptsWithParserStop": 21,
+				"stoppedBytes": 36009,
+				"live": {
+					"arg|arg-dot|same": 6,
+					"arg|arg-scope|same": 41,
+					"arg|arg|same": 820,
+					"arg|none|same": 19,
+					"arg|obj-inactive|same": 260,
+					"arg|syntax-meta|same": 131,
+					"brace|syntax-meta|differs": 15,
+					"brace|syntax-meta|same": 99,
+					"cmd|cmd|differs": 81,
+					"cmd|cmd|same": 1222,
+					"cmd|none|same": 16,
+					"cmd|obj-inactive|differs": 12,
+					"cmd|obj-inactive|same": 15,
+					"comment|comment|same": 9602,
+					"dir|dir|differs": 25,
+					"dir|dir|same": 1088,
+					"dir|none|same": 58,
+					"dir|obj-inactive|same": 98,
+					"operator|arg|same": 2,
+					"operator|none|same": 2,
+					"operator|obj-inactive|same": 6,
+					"operator|syntax-meta|differs": 4,
+					"operator|syntax-meta|same": 157,
+					"operator|variable-undefined|same": 1,
+					"string|arg|same": 8,
+					"string|cmd|same": 33,
+					"string|dir|same": 17,
+					"string|escaped|same": 314,
+					"string|none|same": 2865,
+					"string|syntax-meta|differs": 2,
+					"string|syntax-meta|same": 315,
+					"string|variable-undefined|same": 13,
+					"unclassified|arg-dot|same": 12,
+					"unclassified|arg-scope|same": 108,
+					"unclassified|arg|differs": 37,
+					"unclassified|arg|same": 945,
+					"unclassified|cmd|same": 90,
+					"unclassified|comment|same": 183,
+					"unclassified|dir|same": 41,
+					"unclassified|escaped|same": 137,
+					"unclassified|none|differs": 5,
+					"unclassified|none|same": 2464,
+					"unclassified|obj-disabled|same": 7,
+					"unclassified|obj-dynamic|same": 20,
+					"unclassified|obj-inactive|differs": 88,
+					"unclassified|obj-inactive|same": 83,
+					"unclassified|syntax-meta|differs": 121,
+					"unclassified|syntax-meta|same": 1856,
+					"unclassified|syntax-obsolete|same": 2,
+					"unclassified|variable-local|same": 259,
+					"unclassified|variable-parameter|same": 15,
+					"unclassified|variable-undefined|same": 40,
+					"value|escaped|same": 27,
+					"value|none|same": 1543,
+					"value|syntax-meta|differs": 6,
+					"value|syntax-meta|same": 93,
+					"value|variable-undefined|same": 21,
+					"variable-auto|variable-auto|same": 44,
+					"variable-global|variable-global|same": 235,
+					"variable-local|variable-local|differs": 35,
+					"variable-local|variable-local|same": 592,
+					"variable-parameter|variable-parameter|differs": 61,
+					"variable-parameter|variable-parameter|same": 209
+				},
+				"stopped": {
+					"arg|none|same": 5327,
+					"brace|none|same": 65,
+					"cmd|none|same": 1277,
+					"comment|none|same": 1055,
+					"dir|none|same": 1352,
+					"operator|none|same": 62,
+					"string|error|differs": 1,
+					"string|error|same": 1,
+					"string|none|same": 5026,
+					"unclassified|error|same": 18,
+					"unclassified|none|same": 13118,
+					"unclassified|obj-inactive|differs": 78,
+					"value|error|same": 1,
+					"value|none|same": 7529,
+					"variable-auto|none|same": 10,
+					"variable-global|none|same": 40,
+					"variable-local|none|same": 653,
+					"variable-parameter|none|same": 396
+				}
+			},
+			"holdout": {
+				"scripts": 28,
+				"bytes": 22794,
+				"scriptsWithParserStop": 15,
+				"stoppedBytes": 6055,
+				"live": {
+					"arg|arg-dot|same": 2,
+					"arg|arg-scope|same": 12,
+					"arg|arg|differs": 45,
+					"arg|arg|same": 65,
+					"arg|obj-inactive|differs": 9,
+					"arg|syntax-meta|differs": 6,
+					"arg|syntax-meta|same": 10,
+					"brace|syntax-meta|differs": 3,
+					"brace|syntax-meta|same": 94,
+					"cmd|cmd|differs": 31,
+					"cmd|cmd|same": 763,
+					"cmd|dir|same": 12,
+					"cmd|none|same": 10,
+					"cmd|obj-inactive|same": 6,
+					"comment|comment|differs": 353,
+					"comment|comment|same": 8404,
+					"dir|dir|differs": 44,
+					"dir|dir|same": 470,
+					"dir|obj-inactive|differs": 9,
+					"dir|obj-inactive|same": 34,
+					"operator|none|same": 6,
+					"operator|obj-inactive|same": 1,
+					"operator|syntax-meta|differs": 1,
+					"operator|syntax-meta|same": 75,
+					"string|cmd|same": 9,
+					"string|dir|same": 2,
+					"string|escaped|same": 77,
+					"string|none|same": 643,
+					"string|syntax-meta|differs": 2,
+					"string|syntax-meta|same": 168,
+					"string|variable-undefined|same": 6,
+					"unclassified|arg|differs": 2,
+					"unclassified|arg|same": 290,
+					"unclassified|cmd|same": 47,
+					"unclassified|comment|differs": 5,
+					"unclassified|comment|same": 167,
+					"unclassified|dir|same": 45,
+					"unclassified|escaped|same": 8,
+					"unclassified|none|same": 1427,
+					"unclassified|obj-inactive|differs": 19,
+					"unclassified|obj-inactive|same": 61,
+					"unclassified|syntax-meta|differs": 20,
+					"unclassified|syntax-meta|same": 1360,
+					"unclassified|syntax-obsolete|same": 1,
+					"unclassified|variable-local|differs": 16,
+					"unclassified|variable-local|same": 51,
+					"unclassified|variable-parameter|same": 45,
+					"unclassified|variable-undefined|same": 35,
+					"value|none|same": 643,
+					"value|syntax-meta|same": 45,
+					"variable-auto|variable-auto|same": 48,
+					"variable-global|variable-global|same": 347,
+					"variable-local|variable-local|same": 496,
+					"variable-parameter|variable-parameter|same": 189
+				},
+				"stopped": {
+					"arg|none|same": 122,
+					"brace|error|same": 1,
+					"brace|none|same": 42,
+					"cmd|none|same": 339,
+					"comment|none|same": 601,
+					"dir|error|differs": 1,
+					"dir|error|same": 3,
+					"dir|none|same": 305,
+					"operator|error|same": 1,
+					"operator|none|same": 28,
+					"string|none|same": 959,
+					"unclassified|error|same": 9,
+					"unclassified|none|same": 2758,
+					"unclassified|obj-inactive|differs": 18,
+					"value|none|same": 683,
+					"variable-auto|none|same": 14,
+					"variable-local|none|same": 113,
+					"variable-parameter|none|same": 58
+				}
+			}
+		}
+	},
+	"examples": {
+		"arg|arg-dot|same": {
+			"text": ".",
+			"runs": 8,
+			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
+			"offset": 1511
+		},
+		"arg|arg-scope|same": {
+			"text": "channel",
+			"runs": 4,
+			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
+			"offset": 1504
+		},
+		"arg|arg|same": {
+			"text": "name",
+			"runs": 38,
+			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
+			"offset": 419
+		},
+		"arg|none|same": {
+			"text": "name",
+			"runs": 2,
+			"path": "forum/rextended/topic-149189-post-0007-snippet-02.rsc",
+			"offset": 229
+		},
+		"arg|obj-inactive|same": {
+			"text": "default-vlan-id",
+			"runs": 16,
+			"path": "forum/amm0/topic-163038-router-dies-after-10-exact-minutes/post-0011-snippet-01.rsc",
+			"offset": 931
+		},
+		"arg|syntax-meta|same": {
+			"text": "=",
+			"runs": 141,
+			"path": "forum/amm0/topic-141645-ip-route-check-command-disappeared/post-0025-snippet-01.rsc",
+			"offset": 240
+		},
+		"brace|syntax-meta|same": {
+			"text": "{",
+			"runs": 101,
+			"path": "eworm/ppp-on-up.rsc",
+			"offset": 276
+		},
+		"cmd|cmd|same": {
+			"text": "set",
+			"runs": 109,
+			"path": "eworm/ppp-on-up.rsc",
+			"offset": 743
+		},
+		"cmd|dir|same": {
+			"text": "address-list",
+			"runs": 1,
+			"path": "forum/amm0/topic-180595-resutt-of-print-command-to-variable-adress-list/post-0009-snippet-01.rsc",
+			"offset": 332
+		},
+		"cmd|none|same": {
+			"text": "add",
+			"runs": 1,
+			"path": "forum/amm0/topic-163810-7-8beta2-adds-new-package-rose-storage/post-0056-snippet-01.rsc",
+			"offset": 275
+		},
+		"cmd|obj-inactive|same": {
+			"text": "get",
+			"runs": 1,
+			"path": "forum/rextended/topic-103825-post-0021-snippet-01.rsc",
+			"offset": 178
+		},
+		"comment|comment|same": {
+			"text": "# Extracted from: code-block",
+			"runs": 68,
+			"path": "forum/amm0/topic-141645-ip-route-check-command-disappeared/post-0025-snippet-01.rsc",
+			"offset": 188
+		},
+		"dir|dir|same": {
+			"text": ":",
+			"runs": 338,
+			"path": "eworm/ppp-on-up.rsc",
+			"offset": 242
+		},
+		"dir|none|same": {
+			"text": "interface",
+			"runs": 2,
+			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
+			"offset": 2622
+		},
+		"dir|obj-inactive|same": {
+			"text": "zerotier",
+			"runs": 4,
+			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
+			"offset": 2484
+		},
+		"operator|arg|same": {
+			"text": "in",
+			"runs": 1,
+			"path": "forum/amm0/topic-169456-having-the-where-filter-in-scripting-signifantly-increases-the-execution-time-an/post-0006-snippet-01.rsc",
+			"offset": 615
+		},
+		"operator|none|same": {
+			"text": "in",
+			"runs": 3,
+			"path": "forum/amm0/topic-168376-find-addresses-with-same-octets/post-0027-snippet-04.rsc",
+			"offset": 544
+		},
+		"operator|obj-inactive|same": {
+			"text": ".",
+			"runs": 2,
+			"path": "forum/amm0/topic-168376-find-addresses-with-same-octets/post-0027-snippet-04.rsc",
+			"offset": 864
+		},
+		"operator|syntax-meta|same": {
+			"text": "=",
+			"runs": 41,
+			"path": "eworm/ppp-on-up.rsc",
+			"offset": 624
+		},
+		"operator|variable-undefined|same": {
+			"text": ".",
+			"runs": 1,
+			"path": "forum/rextended/topic-164329-post-0017-snippet-01.rsc",
+			"offset": 174
+		},
+		"string|arg|same": {
+			"text": "as-value",
+			"runs": 1,
+			"path": "forum/amm0/topic-266499-how-to-condense-variables-passed-through-to-function/post-0020-snippet-01.rsc",
+			"offset": 279
+		},
+		"string|cmd|same": {
+			"text": "pick",
+			"runs": 7,
+			"path": "forum/amm0/topic-163557-a-few-undocumented-operators-that-are-kind-of-neat/post-0012-snippet-01.rsc",
+			"offset": 1016
+		},
+		"string|dir|same": {
+			"text": ":",
+			"runs": 9,
+			"path": "forum/amm0/topic-155978-zerotier-on-mikrotik-a-rosetta-stone-v7-1-1/post-0001-snippet-01.rsc",
+			"offset": 1793
+		},
+		"string|escaped|same": {
+			"text": "\\\"",
+			"runs": 53,
+			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
+			"offset": 559
+		},
+		"string|none|same": {
+			"text": " ",
+			"runs": 18,
+			"path": "forum/amm0/topic-155978-zerotier-on-mikrotik-a-rosetta-stone-v7-1-1/post-0001-snippet-01.rsc",
+			"offset": 1797
+		},
+		"string|syntax-meta|same": {
+			"text": "\"",
+			"runs": 311,
+			"path": "eworm/ppp-on-up.rsc",
+			"offset": 435
+		},
+		"string|variable-undefined|same": {
+			"text": "apikey",
+			"runs": 1,
+			"path": "forum/amm0/topic-155978-zerotier-on-mikrotik-a-rosetta-stone-v7-1-1/post-0001-snippet-01.rsc",
+			"offset": 1572
+		},
+		"unclassified|arg-dot|same": {
+			"text": ".",
+			"runs": 12,
+			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
+			"offset": 1392
+		},
+		"unclassified|arg-scope|same": {
+			"text": "configuration",
+			"runs": 6,
+			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
+			"offset": 1820
+		},
+		"unclassified|arg|same": {
+			"text": "do",
+			"runs": 67,
+			"path": "eworm/ppp-on-up.rsc",
+			"offset": 422
+		},
+		"unclassified|cmd|same": {
+			"text": "find",
+			"runs": 19,
+			"path": "eworm/ppp-on-up.rsc",
+			"offset": 939
+		},
+		"unclassified|comment|same": {
+			"text": "\n",
+			"runs": 350,
+			"path": "eworm/ppp-on-up.rsc",
+			"offset": 17
+		},
+		"unclassified|dir|same": {
+			"text": ":",
+			"runs": 5,
+			"path": "eworm/ppp-on-up.rsc",
+			"offset": 528
+		},
+		"unclassified|escaped|same": {
+			"text": "\\\n    ",
+			"runs": 22,
+			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
+			"offset": 674
+		},
+		"unclassified|none|differs": {
+			"text": "name",
+			"runs": 4,
+			"path": "forum/amm0/topic-176267-2fa-configuration-to-mikrotik-router-issue/post-0006-snippet-01.rsc",
+			"offset": 363
+		},
+		"unclassified|none|same": {
+			"text": " ",
+			"runs": 1222,
+			"path": "eworm/ppp-on-up.rsc",
+			"offset": 248
+		},
+		"unclassified|obj-disabled|same": {
+			"text": "www-ssl",
+			"runs": 1,
+			"path": "forum/amm0/topic-263305-tikbooktm-notebook-and-tools-for-visual-studio-code-including-routeros-lsp/post-0001-snippet-01.rsc",
+			"offset": 354
+		},
+		"unclassified|obj-dynamic|same": {
+			"text": "main",
+			"runs": 5,
+			"path": "forum/amm0/topic-163178-routing-rule-use-cases/post-0006-snippet-01.rsc",
+			"offset": 276
+		},
+		"unclassified|obj-inactive|same": {
+			"text": "adding",
+			"runs": 3,
+			"path": "forum/amm0/topic-168376-find-addresses-with-same-octets/post-0027-snippet-04.rsc",
+			"offset": 520
+		},
+		"unclassified|syntax-meta|differs": {
+			"text": "-",
+			"runs": 1,
+			"path": "forum/rextended/topic-103825-post-0017-snippet-01.rsc",
+			"offset": 285
+		},
+		"unclassified|syntax-meta|same": {
+			"text": "=",
+			"runs": 245,
+			"path": "eworm/ppp-on-up.rsc",
+			"offset": 424
+		},
+		"unclassified|syntax-obsolete|same": {
+			"text": " ",
+			"runs": 3,
+			"path": "forum/amm0/topic-162737-need-some-scripting-help-bounty-available/post-0002-snippet-01.rsc",
+			"offset": 1783
+		},
+		"unclassified|variable-local|same": {
+			"text": "default-name",
+			"runs": 13,
+			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
+			"offset": 1780
+		},
+		"unclassified|variable-parameter|same": {
+			"text": "initramfs",
+			"runs": 3,
+			"path": "forum/amm0/topic-267809-netinstall-for-macos/post-0014-snippet-01.rsc",
+			"offset": 225
+		},
+		"unclassified|variable-undefined|differs": {
+			"text": "default",
+			"runs": 2,
+			"path": "forum/amm0/topic-163038-router-dies-after-10-exact-minutes/post-0011-snippet-01.rsc",
+			"offset": 1364
+		},
+		"unclassified|variable-undefined|same": {
+			"text": "....................",
+			"runs": 1,
+			"path": "forum/rextended/topic-164329-post-0017-snippet-01.rsc",
+			"offset": 175
+		},
+		"value|escaped|same": {
+			"text": "\\00",
+			"runs": 1,
+			"path": "forum/rextended/topic-164329-post-0017-snippet-01.rsc",
+			"offset": 243
+		},
+		"value|none|same": {
+			"text": "0",
+			"runs": 25,
+			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
+			"offset": 2408
+		},
+		"value|syntax-meta|same": {
+			"text": "\"",
+			"runs": 88,
+			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
+			"offset": 1436
+		},
+		"value|variable-undefined|same": {
+			"text": ".....................",
+			"runs": 1,
+			"path": "forum/rextended/topic-164329-post-0017-snippet-01.rsc",
+			"offset": 260
+		},
+		"variable-auto|variable-auto|same": {
+			"text": "v",
+			"runs": 15,
+			"path": "forum/amm0/topic-162737-need-some-scripting-help-bounty-available/post-0002-snippet-01.rsc",
+			"offset": 1188
+		},
+		"variable-global|variable-global|same": {
+			"text": "JSONLoads",
+			"runs": 14,
+			"path": "forum/amm0/topic-155978-zerotier-on-mikrotik-a-rosetta-stone-v7-1-1/post-0001-snippet-01.rsc",
+			"offset": 1925
+		},
+		"variable-local|variable-local|same": {
+			"text": "ret",
+			"runs": 28,
+			"path": "forum/amm0/topic-162737-need-some-scripting-help-bounty-available/post-0002-snippet-01.rsc",
+			"offset": 1118
+		},
+		"variable-parameter|variable-parameter|same": {
+			"text": "1",
+			"runs": 18,
+			"path": "forum/amm0/topic-162737-need-some-scripting-help-bounty-available/post-0002-snippet-01.rsc",
+			"offset": 767
+		}
+	}
+}

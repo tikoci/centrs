@@ -95,7 +95,7 @@ provides shared analysis for future integrations across the command grid.
 
 | Capability | State | Contract and evidence | Work |
 | ---------- | ----- | --------------------- | ---- |
-| explain / offline baseline | `coded` | `commands/explain/README.md` → Offline baseline acceptance; offline examples in `test/unit/explain.test.ts`, focused `test/unit/explain-*` suites, and CHR captures under `test/fixtures/explain/`. | #90 indexes correctness, token agreement (#264/#263), and consumer verification. |
+| explain / offline baseline | `coded` | `commands/explain/README.md` → Offline baseline acceptance; offline examples in `test/unit/explain.test.ts`, focused `test/unit/explain-*` suites, and CHR captures under `test/fixtures/explain/`. The token partition is scored against device `highlight` by `test/unit/explain-highlight-agreement.test.ts` and `test/fixtures/explain/highlight-agreement.json`. | #90 indexes correctness, token agreement (#264/#263), and consumer verification. |
 
 The CLI/library already expose structure, diagnostics, token partitions, symbols,
 and flow-sensitive value facts. `coded` acknowledges that implementation while
@@ -155,7 +155,9 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 [`commands/explain/README.md` → Offline baseline acceptance](../commands/explain/README.md#offline-baseline-acceptance).
 The sequence is correctness and performance, token projection/agreement
 (#264 B4 / #263), then a bounded browser/editor consumer check and the vocabulary
-it needs (#264 B5). Independent consumer-boundary work may proceed alongside
+it needs (#264 B5). The projection and its device-agreement report have landed
+(`bun run explain:highlight-agreement`); its `unprojected` residue is the
+evidence B5 reads. Independent consumer-boundary work may proceed alongside
 measurement. The issue index owns the individual tasks and their dependencies.
 
 Unfinished SNMP, RoMON, TUI, or other protocol/frontend cells do not preempt this

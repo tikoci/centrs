@@ -114,6 +114,21 @@ jobs:
           name: coverage-report
           path: /tmp/coverage-report.txt
           retention-days: 14
+      # Report-only, and corpus-free: the agreement scorer reads the committed
+      # highlight slice, so the trend is visible on every PR without the 10 MB
+      # corpus the censuses need. Drift is already gated — the fixture by
+      # test/unit/explain-highlight-agreement.test.ts above, the README block by
+      # `lint:ci` in the checks job — so this step only publishes the figures.
+      - name: Surface the explain device-agreement report
+        if: always()
+        continue-on-error: true
+        run: |
+          set -eo pipefail
+          {
+            echo "## explain — token partition vs device highlight"
+            echo ""
+            bun run explain:highlight-agreement 2>/dev/null
+          } >> "$GITHUB_STEP_SUMMARY"
       # Non-blocking: emits annotations only, so coverage stays a trend signal.
       - name: Coverage thresholds (non-blocking annotations)
         if: always() && steps.coverage.outcome == 'success'

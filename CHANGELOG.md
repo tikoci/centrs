@@ -8,6 +8,22 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Added
+
+- **Offline `explain`'s token partition is now scored against the device.**
+  `bun run explain:highlight-agreement` projects each centrs token class onto
+  the RouterOS `/console/inspect request=highlight` class it predicts and
+  reports where the two agree, over the committed capture slice — no router, no
+  corpus, no network. The report separates what it can score from what it
+  cannot: each side's abstentions, and the tail after the device's own one-byte
+  `error`, where it stops classifying and never recovers (half the slice's
+  bytes). A second axis says why an answer was out of reach — offline-decidable,
+  schema-dependent, state-dependent or version-dependent — assigned per byte
+  from context rather than by class name, since one highlight class carries more
+  than one category. Representative source fragments ship with the counts.
+  Figures are a trend line over a known-biased corpus, never a pass threshold
+  (#264 B4, #263).
+
 ### Changed
 
 - **Offline `explain` answers statement-ownership from an index, not a scan.**

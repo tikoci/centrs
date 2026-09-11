@@ -1403,6 +1403,179 @@ bracket-interior `=` bytes are genuine comparisons that now stay
 `unclassified` — against 1,035 that were plain `arg=value`. A `where`-aware
 fill can take them back later; claiming all 1,259 would be 82% wrong.
 
+### Device agreement for the token partition (#264 B4, #263)
+
+The census above counts what offline analysis *claimed*. This counts what the
+device *agreed with*. The oracle is the committed stratified slice of the Q13
+`/console/inspect request=highlight` captures
+([`test/fixtures/explain/highlight-streams.slice.json`](../../test/fixtures/explain/highlight-streams.slice.json)),
+so the scorer needs no router, no corpus and no network, and gates in the unit
+suite rather than in the corpus job. Both oracles must see the same bytes, so
+the source text is reconstructed from the device's own run-length pairs — never
+from the corpus row, which still holds the non-ASCII the capture replaced
+(the #269 rule, one layer up).
+
+**`highlight` is not one oracle; it is four kinds of answer.** Scoring a byte
+means first knowing what kind of answer came back, because three of the four
+are not judgments about syntax at all:
+
+| Kind | Classes | Why it cannot be scored as agreement |
+| ---- | ------- | ------------------------------------ |
+| syntax | `cmd` `dir` `arg` `arg-dot` `arg-scope` `comment` `escaped` `syntax-meta` `variable-local` `variable-global` `variable-auto` `variable-parameter` | — this is the region that can be scored |
+| non-syntax | `obj-inactive` `obj-dynamic` `obj-disabled` `variable-undefined` `syntax-obsolete` | The source text alone does not decide these, and centrs abstains on them by construction — `ExplainSymbolClass` deliberately excludes `undefined`. *Why* each one is out of reach is a second question, answered per byte rather than per class; see applicability below. |
+| silence | `none` | The device's abstention, not a class named "none". Agreeing with silence is not agreement. |
+| parser-stop | `error` | The device gives up here — see below. |
+
+**Applicability is a second axis, and it is not the class name.** #263's four
+categories — offline-decidable, schema-dependent, state-dependent,
+version-dependent — are assigned from the *pair* (what centrs read the byte as,
+what the device called it) plus whether the two captures even agreed, because
+one highlight class carries more than one category. `obj-inactive` on an
+argument name means the menu's schema has no such field (**schema**); the same
+class on a menu or command name means the package is not installed on this box
+(**state**: `/zerotier`, `/user-manager`, `/container`, and `default-vlan-id`
+under `/interface ethernet switch port`, a menu a CHR does not have).
+`obj-dynamic` on the routing table `main` is a live object (**state**).
+`syntax-obsolete` is this version's deprecation table talking, landing on the
+whitespace where modern syntax wants `=` (`} else {`, `:foreach conn in
+$conns`) — **version**. And `variable-undefined` is deliberately left
+**uncategorized**: an undefined reference may be an external global, a
+query/filter field name or a lexical spelling, nothing committed here separates
+the three, and an absent binding in *this* document is not evidence of a
+runtime undefined variable either. Leaving it explicit is the answer, not a gap
+to be filled by assumption.
+
+**The device stops classifying at its first `error`, and does not recover.**
+Measured over the slice, `error` appears **at most once per script and is
+always exactly one byte wide**; at 7.23.2 *every one* of the 43,374 bytes after
+it comes back `none`. Half the slice's bytes sit in that tail. A percentage
+computed over the whole stream therefore measures the device giving up, not the
+parser, which is why the tail is its own outcome and is never folded into
+agreement. (The rule is not absolute across versions: at 7.24rc2 a post-`error`
+`obj-inactive` run appears, and seven fewer scripts stop at all.)
+
+**The projection is declared, never fitted.** `src/explain/highlight-projection.ts`
+maps each centrs token class to the device classes it predicts, justified by
+what the class was *defined* to mean rather than by where it happened to land.
+A projection tuned to the measurement would make the measurement circular. So a
+class whose intent has no single device counterpart — `string`, which spans a
+delimiter the device calls `syntax-meta`, escapes it calls `escaped` and an
+interior it declines to classify, and `value`, for which the device has no class
+at all — projects nowhere, and its bytes are counted as `unprojected` with the
+device's own answers tabulated beside them. That table is the evidence #264 B5
+needs in order to decide which provisional merge deserves to be split; it is not
+a score.
+
+<!-- cspell:disable — the example table quotes corpus script paths verbatim, forum-thread typos included -->
+<!-- BEGIN GENERATED highlight-agreement — regenerate with `bun run explain:highlight-agreement:readme` -->
+The agreement report is re-derivable with
+`bun run explain:highlight-agreement` and needs no router and no corpus: it
+scores the token partition against
+`test/fixtures/explain/highlight-streams.slice.json`, 70 stratified scripts of
+committed `/console/inspect request=highlight` output. The figures below are
+generated from `test/fixtures/explain/highlight-agreement.json` by
+`bun run explain:highlight-agreement:readme`, gated against it by
+`bun run explain:highlight-agreement:readme:check`, and the fixture itself is
+gated against a fresh measurement by
+`test/unit/explain-highlight-agreement.test.ts`. Of 85,529 bytes at 7.23.2,
+25,235 are bytes **both** sides decided a syntax class for, and 99.39% of
+those agree (dev 99.07%, holdout 99.80%). Set `comment` aside — it is 71.35%
+of that decided region and mostly the corpus's harness-injected `# Source:`
+banner (#203) — and the remaining 7,229 bytes agree 97.86%. The device stops
+classifying at its one-byte `error`: 43 of 70 scripts carry one, and the
+43,417 bytes from there on are not a judgment about anything. The oracle
+itself moves between captures: 43 stop at 7.23.2 and 36 stop at 7.24rc2, and
+27 of the 70 streams differ between them. **This is a trend line, not a pass
+gate** — the slice is a per-(split, class) quota over a corpus that is 96.8%
+two authors, so the percentage describes this slice.
+
+| centrs class | projects to | agree | disagree | unprojected | of decided |
+| ------------ | ----------- | ----: | -------: | ----------: | ---------: |
+| `comment` | `comment` | 18,006 | 0 | 0 | 100.00% |
+| `variable-local` | `variable-local` | 1,088 | 0 | 0 | 100.00% |
+| `variable-global` | `variable-global` | 582 | 0 | 0 | 100.00% |
+| `variable-auto` | `variable-auto` | 92 | 0 | 0 | 100.00% |
+| `variable-parameter` | `variable-parameter` | 398 | 0 | 0 | 100.00% |
+| `dir` | `dir` | 1,558 | 0 | 0 | 100.00% |
+| `cmd` | `cmd` | 1,985 | 12 | 0 | 99.40% |
+| `arg` | `arg`, `arg-dot`, `arg-scope` | 946 | 141 | 0 | 87.03% |
+| `operator` | `syntax-meta` | 232 | 2 | 0 | 99.15% |
+| `brace` | `syntax-meta` | 193 | 0 | 0 | 100.00% |
+| `string` | *abstains* | 0 | 0 | 943 | — |
+| `value` | *abstains* | 0 | 0 | 165 | — |
+
+| outcome | bytes @7.23.2 | bytes @7.24rc2 |
+| ------- | ----: | ----: |
+| agree — both decided, projection accepts | 25,080 | 25,778 |
+| disagree — both decided, projection rejects | 155 | 161 |
+| unprojected — no declared projection covers the pair | 1,108 | 1,118 |
+| offline-silent — device decided, centrs abstained | 5,660 | 5,860 |
+| non-syntax — the device answered something syntax cannot decide | 733 | 847 |
+| device-silent — centrs decided, device said `none` | 5,667 | 5,805 |
+| both-silent | 3,709 | 3,896 |
+| parser-stopped — at/after the device's `error` byte | 43,417 | 42,064 |
+
+Where the device decided and offline analysis did not (5,660 bytes at 7.23.2,
+the next fill's target list): `syntax-meta` 3,217, `arg` 1,235, `comment` 350,
+`variable-local` 310, `escaped` 145, `cmd` 137, 266 across the rest. Most of
+the `syntax-meta` share is whitespace the device merged into an adjacent
+structure run rather than a token centrs missed.
+
+**Applicability** is the second axis (#263): of the bytes the device did
+answer, what kind of fact was it answering? Assigned from the pair — what
+centrs read the byte as and what the device called it — plus whether the
+captures agreed, never by tarring a whole class with one category.
+`version-dependent` here counts only bytes inside the live region, so it
+excludes the larger version difference — where the two captures stop parsing
+at all, reported above.
+
+| applicability @7.23.2 | bytes | leading cells |
+| ---------------------------- | ----: | ------------- |
+| offline-decidable | 32,002 | `comment` → `comment` 18,006, `unclassified` → `syntax-meta` 3,216, `cmd` → `cmd` 1,985 |
+| schema-dependent | 260 | `arg` → `obj-inactive` 260 |
+| state-dependent | 180 | `dir` → `obj-inactive` 132, `cmd` → `obj-inactive` 21, `unclassified` → `obj-dynamic` 20 |
+| version-dependent | 27 | `unclassified` → `variable-undefined` 23, `unclassified` → `syntax-obsolete` 3, `unclassified` → `syntax-meta` 1 |
+| uncategorized | 267 | `unclassified` → `obj-inactive` 144, `unclassified` → `variable-undefined` 75, `value` → `variable-undefined` 21 |
+| no-device-answer | 52,793 | `none`, plus the post-`error` tail |
+
+One representative run per cell, so B5 reads a fragment rather than a count.
+`runs` is how often that exact fragment occurs; the location is a slice script
+and a byte offset into the stream the device saw.
+
+| outcome | cell | fragment | runs | first at |
+| ------- | ---- | -------- | ---: | -------- |
+| disagree | `arg` → `syntax-meta` | `=` | 141 | `forum/amm0/topic-141645-ip-route-check-command-disappeared/post-0025-snippet-01.rsc` @240 |
+| disagree | `cmd` → `dir` | `address-list` | 1 | `forum/amm0/topic-180595-resutt-of-print-command-to-variable-adress-list/post-0009-snippet-01.rsc` @332 |
+| disagree | `operator` → `arg` | `in` | 1 | `forum/amm0/topic-169456-having-the-where-filter-in-scripting-signifantly-increases-the-execution-time-an/post-0006-snippet-01.rsc` @615 |
+| unprojected | `string` → `syntax-meta` | `"` | 311 | `eworm/ppp-on-up.rsc` @435 |
+| unprojected | `string` → `escaped` | `\"` | 53 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @559 |
+| unprojected | `value` → `syntax-meta` | `"` | 88 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @1436 |
+| unprojected | `string` → `cmd` | `pick` | 7 | `forum/amm0/topic-163557-a-few-undocumented-operators-that-are-kind-of-neat/post-0012-snippet-01.rsc` @1016 |
+| unprojected | `value` → `escaped` | `\00` | 1 | `forum/rextended/topic-164329-post-0017-snippet-01.rsc` @243 |
+<!-- END GENERATED highlight-agreement -->
+<!-- cspell:enable -->
+
+**What the disagreements are.** Three cells carry all of them, and none is a
+lexing accident:
+
+- `arg` → `syntax-meta`: the `=` byte the `arg` class merges in. The device
+  reads a separator as structure. This is the measured cost of the merge the
+  token-census block already flags, and it is the single largest reason `arg`
+  scores below the other name-coincident classes.
+- `cmd` → `dir`: a bare menu path carrying arguments and no verb
+  (`/ip/firewall/address-list name=… timeout=…`), where `verbsplit` takes the
+  last segment as the verb and the device keeps reading it as a menu.
+- `operator` → `arg`: the space-separated `in` of `:foreach conn in $conns`,
+  which the device reads as the argument **name** `in`. The two oracles
+  genuinely differ here — `:parse` IL carries `in` in the operator set, and the
+  operator-abstention table above already records that `:foreach x in=$list`
+  lowers with no `(in …)` node.
+
+The `unprojected` residue carries the B5 findings: a quoted string swallows any
+`$[…]` substitution inside it, so bytes the device resolves to `cmd`, `dir` or
+`arg` are claimed as one `string` run — the first thing an editor consumer
+(#312) will notice — and `value` bytes are, to the device, simply unclassified.
+
 ### Designed, not implemented (the CLI surface, #202b)
 
 `src/cli/explain.ts` ships the offline command; implemented flags are generated
@@ -1702,10 +1875,14 @@ The offline capability can advance from `coded` to `verified` when:
   growth guard states which analyzers its input reaches and is mutation-tested
   against the term it removed.
 - **Measured token surface:** the total, gapless `--tokens` partition and
-  generated censuses remain reproducible; #264 B4 / #263 adds the projection
-  and device-agreement report. Report decided errors, abstentions, version/state
-  differences, and corpus bias separately. Classified-byte percentage is not
-  syntax coverage, and agreement is a trend, not a new numerical pass gate.
+  generated censuses remain reproducible; #264 B4 / #263's projection and
+  device-agreement report are in
+  [Device agreement](#device-agreement-for-the-token-partition-264-b4-263),
+  re-derivable without a router or the corpus. Report decided errors,
+  abstentions, version/state differences, and corpus bias separately — the
+  report's outcome buckets and its four applicability categories are that
+  separation. Classified-byte percentage is not syntax coverage, and agreement
+  is a trend, not a new numerical pass gate.
 - **Usable library contract:** one bounded browser/editor consumer imports a
   documented public offline entry point, runs analysis without transport/CDB
   dependencies, and verifies structure, diagnostics, tokens, and source-position
