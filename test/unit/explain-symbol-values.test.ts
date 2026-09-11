@@ -184,4 +184,46 @@ describe("239 S2 — flow-sensitive symbol → value", () => {
 		expect(decl?.valueId).toBeDefined();
 		expect(ref?.reachingValueIds).toEqual([decl?.valueId as string]);
 	});
+
+	/**
+	 * The two block-edge transitions #320's journal introduced (#321 review).
+	 *
+	 * The block-dense growth guard measures elapsed time, so it would stay green
+	 * if a nested write reached the wrong scope; the corpus/generated hash gates
+	 * that caught exactly that during the change are run by hand, not committed.
+	 * These two are the committed protection.
+	 */
+	test("a write inside a nested block still merges at the OUTER edge", () => {
+		// The inner `if`/`else` is exhaustive, so it decides `a` on its own: one
+		// of 2 or 3. The outer `if` has no `else` and may not have run at all,
+		// which is what has to put the pre-block `1` back in the reaching set —
+		// and that only happens if the inner block's write is recorded against
+		// the outer block as well as its own.
+		const data = explainCommand(
+			":local a 1; :if ($z) do={ :if ($y) do={ :set a 2 } else={ :set a 3 } }; :put $a",
+		);
+		const ref = data.symbols.occurrences.at(-1);
+		expect(ref?.name).toBe("a");
+		expect(ref?.reachingValueIds).toEqual(["v0", "v1", "v2"]);
+	});
+
+	test("an arm-only write reaches an enclosing read from both arms", () => {
+		// Only the `do` arm assigns, so the `else` arm has to be reading the
+		// state from BEFORE the `if` — not the one the `do` arm left behind.
+		const fromDo = explainCommand(
+			":local a 1; :if ($z) do={ :set a 2 } else={ :put 0 }; :put $a",
+		);
+		expect(fromDo.symbols.occurrences.at(-1)?.reachingValueIds).toEqual([
+			"v0",
+			"v1",
+		]);
+		// The mirror image: the arm that assigns is the second one.
+		const fromElse = explainCommand(
+			":local a 1; :if ($z) do={ :put 0 } else={ :set a 2 }; :put $a",
+		);
+		expect(fromElse.symbols.occurrences.at(-1)?.reachingValueIds).toEqual([
+			"v0",
+			"v2",
+		]);
+	});
 });
