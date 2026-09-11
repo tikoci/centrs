@@ -1544,14 +1544,14 @@ and a byte offset into the stream the device saw.
 
 | outcome | cell | fragment | runs | first at |
 | ------- | ---- | -------- | ---: | -------- |
-| disagree | `arg` → `syntax-meta` | `=` | 141 | `forum/amm0/topic-141645-ip-route-check-command-disappeared/post-0025-snippet-01.rsc` @240 |
-| disagree | `cmd` → `dir` | `address-list` | 1 | `forum/amm0/topic-180595-resutt-of-print-command-to-variable-adress-list/post-0009-snippet-01.rsc` @332 |
-| disagree | `operator` → `arg` | `in` | 1 | `forum/amm0/topic-169456-having-the-where-filter-in-scripting-signifantly-increases-the-execution-time-an/post-0006-snippet-01.rsc` @615 |
-| unprojected | `string` → `syntax-meta` | `"` | 311 | `eworm/ppp-on-up.rsc` @435 |
-| unprojected | `string` → `escaped` | `\"` | 53 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @559 |
-| unprojected | `value` → `syntax-meta` | `"` | 88 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @1436 |
-| unprojected | `string` → `cmd` | `pick` | 7 | `forum/amm0/topic-163557-a-few-undocumented-operators-that-are-kind-of-neat/post-0012-snippet-01.rsc` @1016 |
-| unprojected | `value` → `escaped` | `\00` | 1 | `forum/rextended/topic-164329-post-0017-snippet-01.rsc` @243 |
+| disagree | `arg` → `syntax-meta` | `"="` | 141 | `forum/amm0/topic-141645-ip-route-check-command-disappeared/post-0025-snippet-01.rsc` @240 |
+| disagree | `cmd` → `dir` | `"address-list"` | 1 | `forum/amm0/topic-180595-resutt-of-print-command-to-variable-adress-list/post-0009-snippet-01.rsc` @332 |
+| disagree | `operator` → `arg` | `"in"` | 1 | `forum/amm0/topic-169456-having-the-where-filter-in-scripting-signifantly-increases-the-execution-time-an/post-0006-snippet-01.rsc` @615 |
+| unprojected | `string` → `syntax-meta` | `"\""` | 311 | `eworm/ppp-on-up.rsc` @435 |
+| unprojected | `string` → `escaped` | `"\\\""` | 53 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @559 |
+| unprojected | `value` → `syntax-meta` | `"\""` | 88 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @1436 |
+| unprojected | `string` → `cmd` | `"pick"` | 7 | `forum/amm0/topic-163557-a-few-undocumented-operators-that-are-kind-of-neat/post-0012-snippet-01.rsc` @1016 |
+| unprojected | `value` → `escaped` | `"\\00"` | 1 | `forum/rextended/topic-164329-post-0017-snippet-01.rsc` @243 |
 <!-- END GENERATED highlight-agreement -->
 <!-- cspell:enable -->
 

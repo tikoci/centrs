@@ -37,6 +37,7 @@ import {
 	perClassUnprojected,
 	readFixture,
 	readSlice,
+	renderFragment,
 	renderReadmeBlock,
 	splitLines,
 } from "../../scripts/explain-highlight-agreement.ts";
@@ -385,6 +386,33 @@ describe("#263 — representative examples, and the text they were taken from", 
 	test("examples are capped, so a fixture cannot grow a corpus excerpt", () => {
 		for (const [key, example] of Object.entries(fixture.examples))
 			expect(example.text.length, key).toBeLessThanOrEqual(40);
+	});
+
+	test("a rendered fragment reverses back to the exact bytes", () => {
+		// A hand-rolled escape chain that rewrites `\n` without first rewriting
+		// `\` renders a literal backslash-n and a newline identically — and these
+		// fragments really do carry literal backslashes (`\00` inside a string).
+		// Reversibility is the property that rules that class of bug out.
+		const tricky = [
+			"\\00",
+			'\\"',
+			"a|b",
+			"\\|",
+			"\n",
+			"\t",
+			'"',
+			"=",
+			"",
+			...Object.values(fixture.examples).map((example) => example.text),
+		];
+		for (const text of tricky) {
+			const rendered = renderFragment(text);
+			expect(rendered.startsWith("`") && rendered.endsWith("`"), text).toBe(
+				true,
+			);
+			const inner = rendered.slice(1, -1).replaceAll("\\|", "|");
+			expect(JSON.parse(inner), JSON.stringify(text)).toBe(text);
+		}
 	});
 });
 

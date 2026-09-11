@@ -861,10 +861,24 @@ export function renderReadmeBlock(report: HighlightAgreement): string[] {
 			const example = exampleForPair(report, pair);
 			if (example === undefined) continue;
 			lines.push(
-				`| ${bucket} | ${renderPair(pair)} | \`${example.text.replace(/\n/g, "\\n").replace(/\t/g, "\\t").replace(/\|/g, "\\|")}\` | ${count(example.runs)} | \`${example.path}\` @${example.offset} |`,
+				`| ${bucket} | ${renderPair(pair)} | ${renderFragment(example.text)} | ${count(example.runs)} | \`${example.path}\` @${example.offset} |`,
 			);
 		}
 	return lines;
+}
+
+/**
+ * One source fragment, for a markdown table cell.
+ *
+ * `JSON.stringify` rather than a hand-rolled escape chain, because a chain that
+ * rewrites `\n` → `\\n` without first rewriting `\` → `\\` renders a fragment
+ * containing a literal backslash-n identically to one containing a newline —
+ * and these fragments do carry literal backslashes (`\00` inside a string).
+ * JSON escaping is total and reversible; only `|` is left, since GFM splits a
+ * table cell on it even inside a code span.
+ */
+export function renderFragment(text: string): string {
+	return `\`${JSON.stringify(text).replace(/\|/g, "\\|")}\``;
 }
 
 /** `"<centrs>|<device>"` for a markdown table cell — a literal `|` splits it. */
