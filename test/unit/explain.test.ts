@@ -682,6 +682,54 @@ test("symbol-dense explain cost grows with input size, not faster (#317)", () =>
 }, 120_000);
 
 /**
+ * The same shape guard on BLOCK-dense input (#320).
+ *
+ * A guard is only a guard for the analyzers its input reaches, and the two
+ * above reach neither block edge: #313's input (`"a" {1} ` repeated) carries no
+ * symbols at all, and #317's (`:local v<i> <i>; :put $v<i>;`) carries no
+ * `do={…}`. The flow pass snapshotted the WHOLE binding map on entering a block
+ * and rebuilt it on leaving — 3.1 M binding copies on 89 KiB — so blocks and
+ * bindings, both growing with the document, multiplied.
+ *
+ * This input grows blocks, branches, loops and bindings together. Restoring the
+ * whole-map clone (`cloneStateMap` per edge) as the only change, three runs each
+ * way in-suite on this machine:
+ *
+ * | build | 45 KiB | 184 KiB | reported minimum, in-suite |
+ * | ----- | ------ | ------- | -------------------------- |
+ * | journal | 129-152 ms | 516-560 ms | 3.60, 3.81, 3.94 |
+ * | whole-map clone | 272-385 ms | 3,008-4,373 ms | 9.36, 10.33, 10.46 |
+ *
+ * Six competing CPU spinners moved the minimum to 2.80 and 3.49 — down, not up,
+ * which is the same asymmetry #313 documents: contention inflates individual
+ * trials, so the minimum stays the least corrupted reading. The 4x step and the
+ * bound of 6 are #313's, unchanged, and sit 1.5x above the journal's worst
+ * reading and 1.56x below the defect's best.
+ *
+ * The same honest limit applies: a bound of 6 at a 4x step admits up to ~n^1.29,
+ * so this catches the n^2 class a per-element cost proportional to n produces,
+ * not an arbitrarily small superlinearity.
+ */
+test("block-dense explain cost grows with input size, not faster (#320)", () => {
+	const blocks = (count: number): string => {
+		let out = "";
+		for (let i = 0; i < count; i++)
+			out += `:if ($a > ${i}) do={ :foreach j in=[/ip/route find] do={ :set b ${i} } } else={ :set b 0 }\n`;
+		return out;
+	};
+	const { ratio, trials } = minGrowthRatio(
+		blocks(128),
+		blocks(512),
+		blocks(2_048),
+	);
+	console.log(
+		`#320 growth ratio: ${ratio.toFixed(2)} (4x size step; trials ${trials.join(", ")})`,
+	);
+
+	expect(ratio).toBeLessThan(6);
+}, 120_000);
+
+/**
  * The surface itself, beyond the numbered examples: the conditional-arity
  * grammar and the phase boundary it guards. No other centrs command has an
  * optional target where arity changes meaning, so these are the cases a shared

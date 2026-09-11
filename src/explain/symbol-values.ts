@@ -38,50 +38,71 @@ interface BlockInfo {
 	branchArm?: "do" | "else";
 }
 
+/**
+ * One binding's reaching literals at a program point.
+ *
+ * Treated as immutable: a state is replaced, never edited in place, so the same
+ * object can sit in the live map and in a journal entry at once. That aliasing
+ * is what makes an unchanged binding cost nothing at a block edge (#320).
+ */
 type BindingState = {
-	valueIds: Set<string>;
-	unknown: boolean;
+	readonly valueIds: ReadonlySet<string>;
+	readonly unknown: boolean;
 };
 
-function cloneStateMap(
-	source: Map<string, BindingState>,
-): Map<string, BindingState> {
-	const out = new Map<string, BindingState>();
-	for (const [k, v] of source)
-		out.set(k, { valueIds: new Set(v.valueIds), unknown: v.unknown });
-	return out;
-}
-
-function setsEqual(a: Set<string>, b: Set<string>): boolean {
+function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
 	if (a.size !== b.size) return false;
 	for (const v of a) if (!b.has(v)) return false;
 	return true;
 }
 
-function mergeExhaustiveBranches(
-	left: Map<string, BindingState>,
-	right: Map<string, BindingState>,
-): Map<string, BindingState> {
-	const merged = new Map<string, BindingState>();
-	const allIds = new Set<string>([...left.keys(), ...right.keys()]);
-	for (const id of allIds) {
-		const a = left.get(id);
-		const b = right.get(id);
-		if (a === undefined || b === undefined) {
-			const present = a ?? b;
-			if (present !== undefined)
-				merged.set(id, {
-					valueIds: new Set(present.valueIds),
-					unknown: true,
-				});
-			continue;
-		}
-		merged.set(id, {
-			valueIds: new Set([...a.valueIds, ...b.valueIds]),
-			unknown: a.unknown || b.unknown,
-		});
+/**
+ * Merge one binding across a non-exhaustive block edge: the block may not have
+ * run, so the state after it admits both the pre-block value and whatever the
+ * block left. A loop body may also have run more than once, which is what makes
+ * a changed binding `unknown` even when both ends spell the same literal.
+ *
+ * Returning `snap` itself when the block did not change the binding is
+ * deliberate: it is the case that used to cost a full map copy.
+ */
+function mergeBlockExit(
+	snap: BindingState | undefined,
+	current: BindingState,
+	isLoop: boolean,
+): BindingState {
+	// Introduced inside the block: after the block it may never have been set.
+	if (snap === undefined)
+		return { valueIds: new Set(current.valueIds), unknown: true };
+	if (
+		!snap.unknown &&
+		!current.unknown &&
+		setsEqual(snap.valueIds, current.valueIds)
+	)
+		return snap;
+	return {
+		valueIds: new Set([...snap.valueIds, ...current.valueIds]),
+		unknown: snap.unknown || current.unknown || isLoop,
+	};
+}
+
+/**
+ * Merge one binding across an exhaustive `if`/`else` pair. Exactly one arm runs,
+ * so a value seen in both arms stays known and the reaching set is their union;
+ * a binding only one arm defines is `unknown` after the merge.
+ */
+function mergeBranchArms(
+	left: BindingState | undefined,
+	right: BindingState | undefined,
+): BindingState | undefined {
+	if (left === undefined || right === undefined) {
+		const present = left ?? right;
+		if (present === undefined) return undefined;
+		return { valueIds: new Set(present.valueIds), unknown: true };
 	}
-	return merged;
+	return {
+		valueIds: new Set([...left.valueIds, ...right.valueIds]),
+		unknown: left.unknown || right.unknown,
+	};
 }
 
 /**
@@ -323,18 +344,51 @@ export function augmentSymbolOccurrences(
 
 	// Occurrences are already sorted by start
 	const ordered = symbols.map((occ, index) => ({ occ, index }));
-	// Flow state
-	let current = new Map<string, BindingState>();
-	const stack: {
-		snapshot: Map<string, BindingState>;
+	// Flow state.
+	//
+	// One live map, plus a journal per open block recording the pre-block value
+	// of every binding that block writes. A block edge then costs what the block
+	// CHANGED, not what the document declares (#320): snapshotting the whole map
+	// at every enter and rebuilding it at every exit made a branch-dense script
+	// quadratic — 3.1 M binding copies on 89 KiB — because blocks and bindings
+	// both grow with the document.
+	const current = new Map<string, BindingState>();
+	type Frame = {
+		/** binding id -> its value when this block was entered (absent = new). */
+		journal: Map<string, BindingState | undefined>;
 		isLoop: boolean;
 		branchGroup?: number;
 		branchArm?: "do" | "else";
-	}[] = [];
+	};
+	const stack: Frame[] = [];
+	/** Per exhaustive `if` group: the `do` arm's pre/post pair per touched id. */
 	const branchGroups = new Map<
 		number,
-		{ doFinal: Map<string, BindingState> }
+		Map<string, { snap: BindingState | undefined; doFinal: BindingState }>
 	>();
+	/** Record a binding's pre-block value once per frame; later writes keep it. */
+	const note = (
+		frame: Frame | undefined,
+		id: string,
+		before: BindingState | undefined,
+	): void => {
+		if (frame !== undefined && !frame.journal.has(id))
+			frame.journal.set(id, before);
+	};
+	const setBinding = (id: string, state: BindingState): void => {
+		note(stack[stack.length - 1], id, current.get(id));
+		current.set(id, state);
+	};
+	/** Write a merged/rewound value for a binding the enclosing frame now owns. */
+	const applyToParent = (
+		id: string,
+		before: BindingState | undefined,
+		after: BindingState | undefined,
+	): void => {
+		note(stack[stack.length - 1], id, before);
+		if (after === undefined) current.delete(id);
+		else current.set(id, after);
+	};
 	let eventIdx = 0;
 	const processEventsUpTo = (pos: number): void => {
 		while (eventIdx < events.length) {
@@ -343,86 +397,64 @@ export function augmentSymbolOccurrences(
 			eventIdx++;
 			if (ev.type === "unknown-definition") {
 				for (const bid of ev.bindingIds)
-					current.set(bid, { valueIds: new Set(), unknown: true });
+					setBinding(bid, { valueIds: new Set(), unknown: true });
 				continue;
 			}
 			if (ev.type === "enter") {
 				stack.push({
-					snapshot: cloneStateMap(current),
+					journal: new Map(),
 					isLoop: ev.isLoop,
 					...(ev.branchGroup === undefined || ev.branchArm === undefined
 						? {}
 						: { branchGroup: ev.branchGroup, branchArm: ev.branchArm }),
 				});
-			} else {
-				const top = stack.pop();
-				if (top === undefined) continue;
-				const snapshot = top.snapshot;
-				const isLoop = top.isLoop;
-				if (top.branchGroup !== undefined && top.branchArm === "do") {
-					branchGroups.set(top.branchGroup, {
-						doFinal: cloneStateMap(current),
-					});
-					current = cloneStateMap(snapshot);
+				continue;
+			}
+			const top = stack.pop();
+			if (top === undefined) continue;
+			// A binding the block never wrote has the same state on both sides of
+			// the edge, and every merge rule below maps that pair back to itself.
+			// So the journal — the bindings the block DID write — is the whole
+			// edge, whatever else the document has declared.
+			if (top.branchGroup !== undefined && top.branchArm === "do") {
+				const arm = new Map<
+					string,
+					{ snap: BindingState | undefined; doFinal: BindingState }
+				>();
+				for (const [id, snap] of top.journal) {
+					arm.set(id, { snap, doFinal: current.get(id) as BindingState });
+					// Rewind: the `else` arm starts from the state before the `if`.
+					if (snap === undefined) current.delete(id);
+					else current.set(id, snap);
+				}
+				branchGroups.set(top.branchGroup, arm);
+				continue;
+			}
+			if (top.branchGroup !== undefined && top.branchArm === "else") {
+				const arm = branchGroups.get(top.branchGroup);
+				if (arm !== undefined) {
+					const touched = new Set<string>([
+						...arm.keys(),
+						...top.journal.keys(),
+					]);
+					for (const id of touched) {
+						const recorded = arm.get(id);
+						// Untouched by one arm means that arm left the pre-`if` value.
+						const before =
+							recorded === undefined ? top.journal.get(id) : recorded.snap;
+						const left = recorded === undefined ? before : recorded.doFinal;
+						applyToParent(id, before, mergeBranchArms(left, current.get(id)));
+					}
+					branchGroups.delete(top.branchGroup);
 					continue;
 				}
-				if (top.branchGroup !== undefined && top.branchArm === "else") {
-					const group = branchGroups.get(top.branchGroup);
-					if (group !== undefined) {
-						current = mergeExhaustiveBranches(group.doFinal, current);
-						branchGroups.delete(top.branchGroup);
-						continue;
-					}
-				}
-				const merged = cloneStateMap(snapshot);
-				const allIds = new Set<string>([...snapshot.keys(), ...current.keys()]);
-				for (const id of allIds) {
-					const snap = snapshot.get(id);
-					const cur = current.get(id);
-					if (snap === undefined && cur !== undefined) {
-						// Defined inside block only — after block it may not have run
-						merged.set(id, {
-							valueIds: new Set(cur.valueIds),
-							unknown: true,
-						});
-					} else if (snap !== undefined && cur !== undefined) {
-						const equal =
-							!snap.unknown &&
-							!cur.unknown &&
-							setsEqual(snap.valueIds, cur.valueIds);
-						if (!equal) {
-							const union = new Set<string>([
-								...snap.valueIds,
-								...cur.valueIds,
-							]);
-							const unknown = snap.unknown || cur.unknown || isLoop;
-							merged.set(id, { valueIds: union, unknown });
-						} else if (snap.unknown || cur.unknown) {
-							merged.set(id, {
-								valueIds: new Set(snap.valueIds),
-								unknown: true,
-							});
-						}
-					}
-				}
-				// Loops make every variable assigned inside unknown after exit,
-				// even if the pre/post sets happen to match (e.g. same literal)
-				if (isLoop) {
-					for (const id of current.keys()) {
-						const snap = snapshot.get(id);
-						const cur = current.get(id);
-						if (cur === undefined) continue;
-						if (snap === undefined) {
-							const m = merged.get(id);
-							if (m !== undefined) m.unknown = true;
-						} else if (!setsEqual(snap.valueIds, cur.valueIds)) {
-							const m = merged.get(id);
-							if (m !== undefined) m.unknown = true;
-						}
-					}
-				}
-				current = merged;
 			}
+			for (const [id, snap] of top.journal)
+				applyToParent(
+					id,
+					snap,
+					mergeBlockExit(snap, current.get(id) as BindingState, top.isLoop),
+				);
 		}
 	};
 
@@ -445,7 +477,7 @@ export function augmentSymbolOccurrences(
 			(base as { valueId?: string }).valueId = vid;
 			// Update flow state for this binding
 			for (const bid of occ.bindingIds) {
-				current.set(bid, { valueIds: new Set([vid]), unknown: false });
+				setBinding(bid, { valueIds: new Set([vid]), unknown: false });
 			}
 		} else if (
 			occ.role === "declaration" ||
@@ -455,7 +487,7 @@ export function augmentSymbolOccurrences(
 			// Defining occurrence with no literal RHS — introduces unknown
 			if (occ.bindingIds.length > 0 && !deferredDefinitions.has(index)) {
 				for (const bid of occ.bindingIds) {
-					current.set(bid, { valueIds: new Set(), unknown: true });
+					setBinding(bid, { valueIds: new Set(), unknown: true });
 				}
 			}
 		} else if (occ.role === "reference" || occ.role === "field") {
