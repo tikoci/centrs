@@ -198,8 +198,8 @@ export function projectTokenClass(
  * has one of each.
  *
  * The categories are #263's, and the load-bearing instruction there is that
- * they are assigned **from context, never by tarring a whole highlight class
- * with one bucket**. So the input is the *pair* — what centrs read the byte as
+ * they are assigned **from context, never by assigning a whole highlight class
+ * to one bucket**. So the input is the *pair* — what centrs read the byte as
  * and what the device called it — plus whether the captured versions even
  * agreed on the device's answer.
  */
@@ -221,18 +221,22 @@ export type Applicability =
  * Categorize one byte's device answer.
  *
  * `versionsAgree` is whether every captured version gave this byte the same
- * class. It is checked **first**: when the two captures disagree there is no
- * single device answer to be schema- or state-dependent about, and that
- * disagreement is itself the fact worth reporting.
+ * class. It is checked **first**, ahead even of the device's own silence: when
+ * the captures disagree there is no single device answer to be schema- or
+ * state-dependent about, and the disagreement is itself the fact worth
+ * reporting. That ordering matters in practice — a byte one build classifies
+ * and the next leaves `none` is a version difference, not an absence, and
+ * checking silence first would file it as "the device said nothing" on the
+ * strength of whichever build happens to be the base.
  */
 export function applicabilityOf(
 	centrsClass: string,
 	deviceClass: string,
 	versionsAgree: boolean,
 ): Applicability {
+	if (!versionsAgree) return "version-dependent";
 	const kind = deviceClassKind(deviceClass);
 	if (kind === "silence" || kind === "parser-stop") return "no-device-answer";
-	if (!versionsAgree) return "version-dependent";
 	if (kind === "syntax") return "offline-decidable";
 	// `syntax-obsolete` is the running version's deprecation table talking: the
 	// same bytes are unremarkable on an older build. Measured on the slice it

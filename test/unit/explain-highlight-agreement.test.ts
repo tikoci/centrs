@@ -287,9 +287,14 @@ describe("#263 — applicability is assigned from context, not from the class na
 			expect(applicabilityOf("cmd", deviceClass, false)).toBe(
 				"version-dependent",
 			);
-		// …except where the device never answered: there is nothing to disagree on.
-		expect(applicabilityOf("cmd", "none", false)).toBe("no-device-answer");
-		expect(applicabilityOf("cmd", "error", false)).toBe("no-device-answer");
+		// Including the device's own silence: a byte one build classifies and the
+		// next leaves `none` is a version difference, not an absence, and filing
+		// it as "no answer" would decide that on whichever build is the base.
+		expect(applicabilityOf("cmd", "none", false)).toBe("version-dependent");
+		expect(applicabilityOf("cmd", "error", false)).toBe("version-dependent");
+		// When the captures DO agree, silence is an absence again.
+		expect(applicabilityOf("cmd", "none", true)).toBe("no-device-answer");
+		expect(applicabilityOf("cmd", "error", true)).toBe("no-device-answer");
 	});
 
 	test("a deprecation the running version names is version-dependent", () => {
@@ -358,6 +363,27 @@ describe("#263 — representative examples, and the text they were taken from", 
 		);
 		for (const key of Object.keys(fixture.examples))
 			expect(base.live[key], key).toBeGreaterThan(0);
+	});
+
+	test("a stream key that is absent is not the same as one that is `null`", () => {
+		// `null` is the slice's "byte-identical to the base" marker; a missing key
+		// is a malformed slice. `??` cannot tell them apart, so the scorer must.
+		const bad = {
+			baseVersion: "7.23.2",
+			versions: [
+				{ version: "7.23.2", routerosVersion: "7.23.2" },
+				{ version: "7.24rc2", routerosVersion: "7.24rc2" },
+			],
+			selection: { selected: 1, versionDiffering: 0 },
+			scripts: {
+				"synthetic.rsc": {
+					split: "dev" as const,
+					chars: 3,
+					streams: { "7.23.2": [["/ip", "dir"]] as [string, string][] },
+				},
+			},
+		} as unknown as Parameters<typeof measure>[0];
+		expect(() => measure(bad)).toThrow(/no stream entry for 7\.24rc2/);
 	});
 
 	test("an example's text really occurs at the offset it names", () => {

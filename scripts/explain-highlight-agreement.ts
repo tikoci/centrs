@@ -422,7 +422,16 @@ export function measure(
 		const perVersionDevice = new Map<string, string[]>();
 		for (const { version } of slice.versions) {
 			// `null` on a non-base version means "byte-identical to the base",
-			// which is how the slice avoids committing a second copy.
+			// which is how the slice avoids committing a second copy. An ABSENT
+			// key means something else entirely — a truncated or malformed slice —
+			// and `??` cannot tell the two apart, so it would silently score that
+			// version against the base stream and still produce a valid-looking
+			// report.
+			if (!Object.hasOwn(entry.streams, version))
+				throw new Error(
+					`${path}: no stream entry for ${version}; the slice must carry the key ` +
+						"even when it is `null` for a byte-identical capture",
+				);
 			const pairs = entry.streams[version] ?? base;
 			if (!Array.isArray(pairs))
 				throw new Error(`${path}: no stream at ${version}`);
@@ -823,7 +832,7 @@ export function renderReadmeBlock(report: HighlightAgreement): string[] {
 			"**Applicability** is the second axis (#263): of the bytes the device did " +
 				"answer, what kind of fact was it answering? Assigned from the pair — what " +
 				"centrs read the byte as and what the device called it — plus whether the " +
-				"captures agreed, never by tarring a whole class with one category. " +
+				"captures agreed, never by assigning a whole class to one category. " +
 				"`version-dependent` here counts only bytes inside the live region, so it " +
 				"excludes the larger version difference — where the two captures stop " +
 				"parsing at all, reported above.",
@@ -837,7 +846,7 @@ export function renderReadmeBlock(report: HighlightAgreement): string[] {
 		const bytes = applicability.get(category) ?? 0;
 		const leading =
 			category === "no-device-answer"
-				? "`none`, plus the post-`error` tail"
+				? "`none` where the captures agree, plus the post-`error` tail"
 				: cellsInApplicability(baseAll, category)
 						.slice(0, 3)
 						.map(([cell, n]) => `${renderPair(cell)} ${count(n)}`)
@@ -966,6 +975,10 @@ export function diffAgainstFixture(
 			);
 			continue;
 		}
+		if (a.routerosVersion !== b.routerosVersion)
+			drift.push(
+				`${version}.routerosVersion: fixture ${b.routerosVersion}, measured ${a.routerosVersion}`,
+			);
 		for (const split of ["dev", "holdout"] as const) {
 			for (const key of [
 				"scripts",

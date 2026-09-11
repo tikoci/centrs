@@ -1430,7 +1430,9 @@ are not judgments about syntax at all:
 categories — offline-decidable, schema-dependent, state-dependent,
 version-dependent — are assigned from the *pair* (what centrs read the byte as,
 what the device called it) plus whether the two captures even agreed, because
-one highlight class carries more than one category. `obj-inactive` on an
+one highlight class carries more than one category. Version disagreement is
+checked first, ahead even of the device's own silence: a byte one build
+classifies and the next leaves `none` is a version difference, not an absence. `obj-inactive` on an
 argument name means the menu's schema has no such field (**schema**); the same
 class on a menu or command name means the package is not installed on this box
 (**state**: `/zerotier`, `/user-manager`, `/container`, and `default-vlan-id`
@@ -1524,7 +1526,7 @@ structure run rather than a token centrs missed.
 **Applicability** is the second axis (#263): of the bytes the device did
 answer, what kind of fact was it answering? Assigned from the pair — what
 centrs read the byte as and what the device called it — plus whether the
-captures agreed, never by tarring a whole class with one category.
+captures agreed, never by assigning a whole class to one category.
 `version-dependent` here counts only bytes inside the live region, so it
 excludes the larger version difference — where the two captures stop parsing
 at all, reported above.
@@ -1534,9 +1536,9 @@ at all, reported above.
 | offline-decidable | 32,002 | `comment` → `comment` 18,006, `unclassified` → `syntax-meta` 3,216, `cmd` → `cmd` 1,985 |
 | schema-dependent | 260 | `arg` → `obj-inactive` 260 |
 | state-dependent | 180 | `dir` → `obj-inactive` 132, `cmd` → `obj-inactive` 21, `unclassified` → `obj-dynamic` 20 |
-| version-dependent | 27 | `unclassified` → `variable-undefined` 23, `unclassified` → `syntax-obsolete` 3, `unclassified` → `syntax-meta` 1 |
+| version-dependent | 71 | `unclassified` → `none` 44, `unclassified` → `variable-undefined` 23, `unclassified` → `syntax-obsolete` 3 |
 | uncategorized | 267 | `unclassified` → `obj-inactive` 144, `unclassified` → `variable-undefined` 75, `value` → `variable-undefined` 21 |
-| no-device-answer | 52,793 | `none`, plus the post-`error` tail |
+| no-device-answer | 52,749 | `none` where the captures agree, plus the post-`error` tail |
 
 One representative run per cell, so B5 reads a fragment rather than a count.
 `runs` is how often that exact fragment occurs; the location is a slice script
