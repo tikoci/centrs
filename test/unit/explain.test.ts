@@ -559,33 +559,64 @@ test("64 KiB separator-free input stays bounded through public explain (#248)", 
  * 13 s on this very input. A RATIO between two sizes timed back to back cancels
  * that out, because both halves see the same throttle.
  *
- * Quadrupling the input must roughly quadruple the work. Measured back to back
- * on this machine, restoring the #313 defect (the statement-index fast path
- * re-comparing a whole document string on every hit) as the only change: 3.94
- * linear versus 10.72 with the defect. 7 sits between them with ~1.7x of room
- * on each side, and the pair is deliberately large enough that fixed per-call
- * setup does not dilute the growing term — at 2 K/8 K the same defect measured
- * only 7.69, too near the line to be a guard.
+ * "Back to back" has to mean adjacent SAMPLES, not adjacent groups: timing every
+ * small run and then every large run leaves seconds between the two halves, and
+ * the throttle moves on that scale, so a shift between the groups would score an
+ * otherwise linear implementation as superlinear. Each trial therefore times one
+ * small and one large run next to each other and forms its own ratio, and the
+ * assertion takes the smallest of those ratios. A scheduling hiccup or a throttle
+ * step can only inflate a ratio — the minimum is the least corrupted reading
+ * available — while a cost that really grows faster than the input cannot produce
+ * a low ratio in any trial.
+ *
+ * Quadrupling the input must roughly quadruple the work, so the two measured
+ * populations are far apart. Restoring the #313 defect (the statement-index fast
+ * path re-comparing a whole document string on every hit) as the only change,
+ * five rounds each way, plus five more linear rounds under six competing CPU
+ * spinners:
+ *
+ * | build | reported minimum |
+ * | ----- | ---------------- |
+ * | linear, idle | 3.31–4.14 |
+ * | linear, contended | 2.50–4.14 |
+ * | #313 defect | 9.26–10.42 |
+ *
+ * Contention inflates individual trials (one reached 4.72) but not the minimum,
+ * which is why the minimum is the statistic asserted. 6 leaves 1.45x above the
+ * linear worst case and 1.54x below the defect's best, and the size pair is
+ * deliberately large enough that fixed per-call setup does not dilute the growing
+ * term — at 2 K/8 K the same defect measured only 7.69, too near any usable line.
+ *
+ * State the limit honestly: at a 4x step a bound of 6 admits up to ~n^1.29, so
+ * this catches a growth term that lifts the whole exponent — the n^2 class a
+ * per-element cost proportional to n produces, which is what #313 was — and not
+ * an arbitrarily small superlinearity. No timing bound can do the latter without
+ * failing on machine noise instead. The measured ratio is logged so a future
+ * failure is diagnosable from the run that produced it.
  */
 test("public explain cost grows with input size, not faster (#313)", () => {
-	const fastest = (n: number): number => {
-		const input = '"a" {1} '.repeat(n);
-		let best = Number.POSITIVE_INFINITY;
-		// Three trials, keep the fastest: a scheduling hiccup can only inflate a
-		// sample, so the minimum is the closest available reading of real cost.
-		for (let trial = 0; trial < 3; trial++) {
-			const started = performance.now();
-			explainCommand(input);
-			best = Math.min(best, performance.now() - started);
-		}
-		return best;
+	const small = '"a" {1} '.repeat(4_096);
+	const big = '"a" {1} '.repeat(16_384);
+	const time = (input: string): number => {
+		const started = performance.now();
+		explainCommand(input);
+		return performance.now() - started;
 	};
 
 	explainCommand('"a" {1} '.repeat(256)); // warm the JIT before either timing
-	const small = fastest(4_096);
-	const big = fastest(16_384);
+	let bestRatio = Number.POSITIVE_INFINITY;
+	const trials: string[] = [];
+	for (let trial = 0; trial < 3; trial++) {
+		const smallMs = time(small);
+		const bigMs = time(big);
+		trials.push(`${smallMs.toFixed(0)}/${bigMs.toFixed(0)}ms`);
+		bestRatio = Math.min(bestRatio, bigMs / smallMs);
+	}
+	console.log(
+		`#313 growth ratio: ${bestRatio.toFixed(2)} (4x size step; trials ${trials.join(", ")})`,
+	);
 
-	expect(big / small).toBeLessThan(7);
+	expect(bestRatio).toBeLessThan(6);
 }, 120_000);
 
 /**
