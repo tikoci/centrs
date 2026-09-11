@@ -1696,8 +1696,11 @@ The offline capability can advance from `coded` to `verified` when:
   ratio between two sizes timed back to back, and an absolute threshold is never
   raised in place of finding the growing term. One input shape is not enough —
   #313's separator-free input carries no symbols, so it never reaches the
-  symbol/value machinery where the next growth term was hiding (#317), and a
-  guarded shape is only guarded for the analyzers it actually runs.
+  symbol/value machinery where the next growth term was hiding (#317), and
+  neither of those carries a `do={…}`, which is where the third one was (#320).
+  A guarded shape is only guarded for the analyzers it actually runs, so a new
+  growth guard states which analyzers its input reaches and is mutation-tested
+  against the term it removed.
 - **Measured token surface:** the total, gapless `--tokens` partition and
   generated censuses remain reproducible; #264 B4 / #263 adds the projection
   and device-agreement report. Report decided errors, abstentions, version/state
