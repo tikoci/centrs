@@ -1690,7 +1690,11 @@ The offline capability can advance from `coded` to `verified` when:
   remains explicit; no fabricated statements, paths, values, or runtime acceptance.
 - **Bounded execution:** the existing public `explainCommand` performance,
   coordinate, depth, no-throw, and determinism contracts pass. A reproduced
-  performance failure is investigated before changing its threshold (#313).
+  performance failure is investigated before changing its threshold (#313). Cost
+  must grow with input size and no faster: a wall-clock budget on a thermally
+  throttled machine measures the machine, so the growth **shape** is pinned by a
+  ratio between two sizes timed back to back, and an absolute threshold is never
+  raised in place of finding the growing term.
 - **Measured token surface:** the total, gapless `--tokens` partition and
   generated censuses remain reproducible; #264 B4 / #263 adds the projection
   and device-agreement report. Report decided errors, abstentions, version/state

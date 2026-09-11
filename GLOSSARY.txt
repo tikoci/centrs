@@ -728,3 +728,6 @@ occ # short for occurrence — local variable in symbol-values flow analysis
 vid # short for valueId — result-local value occurrence identifier (v0, v1)
 idx # short for index — loop/event index in flow merging
 mis # prefix in mis-linking — hyphenated in comments for symbol-values guard
+
+# #313 offline performance vocabulary
+JIT # just-in-time compiler — warmed before either half of the growth-ratio timing so the two sizes are compared in the same compilation state

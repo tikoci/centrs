@@ -541,8 +541,52 @@ test("64 KiB separator-free input stays bounded through public explain (#248)", 
 	// former end-to-end path took minutes; keep scheduling noise away from that
 	// order-of-magnitude regression signal. The tighter resolver gate sits beside
 	// this test in explain-pathresolve.test.ts.
+	//
+	// #313 left the threshold alone and removed the growth instead: this input
+	// measured 0.33 s after the statement-index slot fix against 2.9 s before it,
+	// back to back at the same CPU throttle. A wall-clock budget still measures
+	// the machine as much as the code, so the growth SHAPE is pinned separately
+	// below — that is the check that actually fails on a regression.
 	expect(elapsed).toBeLessThan(5_000);
 }, 10_000);
+
+/**
+ * The shape guard behind the wall-clock budget above (#313).
+ *
+ * An absolute millisecond threshold on a thermally throttled machine measures
+ * the machine: this 2020 Intel i9 runs between 20% and 46% `CPU_Speed_Limit`,
+ * and driving the throttle down alone moved the unchanged code from 1.5 s to
+ * 13 s on this very input. A RATIO between two sizes timed back to back cancels
+ * that out, because both halves see the same throttle.
+ *
+ * Quadrupling the input must roughly quadruple the work. Measured back to back
+ * on this machine, restoring the #313 defect (the statement-index fast path
+ * re-comparing a whole document string on every hit) as the only change: 3.94
+ * linear versus 10.72 with the defect. 7 sits between them with ~1.7x of room
+ * on each side, and the pair is deliberately large enough that fixed per-call
+ * setup does not dilute the growing term — at 2 K/8 K the same defect measured
+ * only 7.69, too near the line to be a guard.
+ */
+test("public explain cost grows with input size, not faster (#313)", () => {
+	const fastest = (n: number): number => {
+		const input = '"a" {1} '.repeat(n);
+		let best = Number.POSITIVE_INFINITY;
+		// Three trials, keep the fastest: a scheduling hiccup can only inflate a
+		// sample, so the minimum is the closest available reading of real cost.
+		for (let trial = 0; trial < 3; trial++) {
+			const started = performance.now();
+			explainCommand(input);
+			best = Math.min(best, performance.now() - started);
+		}
+		return best;
+	};
+
+	explainCommand('"a" {1} '.repeat(256)); // warm the JIT before either timing
+	const small = fastest(4_096);
+	const big = fastest(16_384);
+
+	expect(big / small).toBeLessThan(7);
+}, 120_000);
 
 /**
  * The surface itself, beyond the numbered examples: the conditional-arity

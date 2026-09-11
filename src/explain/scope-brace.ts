@@ -80,9 +80,32 @@ interface StatementIndex {
 const boundaryCache = new Map<string, StatementIndex>();
 let boundaryCacheBytes = 0;
 // Most probes in one walk ask about the same document. Bypass Map's string-key
-// lookup for that hot path without retaining anything outside the bounded cache.
+// lookup for that hot path. The slot holds ONE string reference, which may be a
+// content-equal twin of a cache key rather than the key itself (see
+// `adoptBoundaryText`), so retention is the bounded cache plus that one string.
 let recentBoundaryText: string | undefined;
 let recentBoundaryIndex: StatementIndex | undefined;
+
+/**
+ * Adopt `text` as the single-slot key.
+ *
+ * A walk asks about several string objects with IDENTICAL content — the
+ * `analyzed` surface, the raw input, and a comment mask with nothing to mask
+ * are equal strings built by different steps. JavaScript cannot compare string
+ * identity, so `recentBoundaryText === text` across two such objects is a full
+ * content comparison: measured at 10 us per hit on a 64 KiB document versus
+ * 0.01 us when the slot already holds that object. Leaving the slot pointing at
+ * the first object made every later probe pay that comparison — a per-call cost
+ * that grows with the document, which is the shape #313 saw as superlinear
+ * growth through the public entry. Adopting the object on a hit pays it once.
+ *
+ * Sound because the index is a pure function of content: an index built for one
+ * string describes every string equal to it.
+ */
+function adoptBoundaryText(text: string, index: StatementIndex): void {
+	recentBoundaryText = text;
+	recentBoundaryIndex = index;
+}
 
 function boundaryCacheEntryBytes(text: string, index: StatementIndex): number {
 	// JavaScript strings use at most two bytes per UTF-16 code unit. Include the
@@ -119,12 +142,14 @@ function cacheStatementIndex(text: string, index: StatementIndex): boolean {
 
 /** Statement-boundary and prefix facts for every source offset, in one pass. */
 function statementIndex(text: string): StatementIndex {
-	if (recentBoundaryText === text && recentBoundaryIndex !== undefined)
-		return recentBoundaryIndex;
+	if (recentBoundaryText === text && recentBoundaryIndex !== undefined) {
+		const hit = recentBoundaryIndex;
+		adoptBoundaryText(text, hit);
+		return hit;
+	}
 	const cached = boundaryCache.get(text);
 	if (cached !== undefined) {
-		recentBoundaryText = text;
-		recentBoundaryIndex = cached;
+		adoptBoundaryText(text, cached);
 		return cached;
 	}
 
@@ -166,10 +191,7 @@ function statementIndex(text: string): StatementIndex {
 	lastForbidden[text.length] = forbidden;
 
 	const index = { boundaries, firstContent, lastForbidden };
-	if (cacheStatementIndex(text, index)) {
-		recentBoundaryText = text;
-		recentBoundaryIndex = index;
-	}
+	if (cacheStatementIndex(text, index)) adoptBoundaryText(text, index);
 	return index;
 }
 
