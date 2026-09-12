@@ -130,6 +130,7 @@ import {
 	type DefectCode,
 	isPositionalFact,
 } from "./explain/defects.ts";
+import { escapeSpans } from "./explain/escape-tokens.ts";
 import { isKnownMenuPath } from "./explain/is-known-menu.ts";
 import { operatorSpans } from "./explain/operator-tokens.ts";
 import { type PathTokenCandidate, pathSpans } from "./explain/path-tokens.ts";
@@ -138,7 +139,7 @@ import {
 	resolveDocument,
 	resolveStatements,
 } from "./explain/pathresolve.ts";
-import { collectStringEscapeDefects } from "./explain/quoted-string.ts";
+import { walkStringEscapes } from "./explain/quoted-string.ts";
 import { maskComments, segmentStatements } from "./explain/segment.ts";
 import {
 	findMissingSeparators,
@@ -513,6 +514,18 @@ export type ExplainTokenClass =
 	| "arg-sep"
 	| "value"
 	| "string"
+	/**
+	 * One valid string-internal escape sequence — the `\` and the bytes it
+	 * escapes (#264).
+	 *
+	 * The one split B5's rule admits that naming the `=` did not make. A valid
+	 * escape is recoverable from no other published surface: only INVALID
+	 * escapes appear elsewhere, as `bad-string-escape` diagnostics. Both come
+	 * from the same walk (`walkStringEscapes`), so a token and a diagnostic
+	 * cannot disagree about which bytes are an escape, and past the first
+	 * invalid escape the walk stops claiming rather than guess.
+	 */
+	| "escaped"
 	| "brace"
 	| "unclassified";
 
@@ -723,6 +736,7 @@ const EV = {
 	strings: "e13",
 	braces: "e14",
 	separators: "e15",
+	escapes: "e16",
 } as const;
 
 type EvidenceKey = keyof typeof EV;
@@ -834,6 +848,26 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		id: EV.strings,
 		source: "canonicalizer",
 		probe: "stringSpans",
+		basis: "heuristic",
+		outcome: "ok",
+	},
+	/**
+	 * `heuristic`, and #252 is the reason rather than caution: the accepted
+	 * escape set is a ratified offline rule that a live probe CAN overturn, and
+	 * once did. The manual's "Constant Escape Sequences" table turned out to be
+	 * a lower bound — the CHR byte sweep found `\?` missing from it — so the
+	 * set pinned in `src/explain/quoted-string.ts` is the best current reading
+	 * of a device's answer, not a deterministic reading of the input bytes.
+	 * A future RouterOS could accept one more.
+	 *
+	 * Cited by the `escaped` tokens AND by `bad-string-escape`: one walk, one
+	 * evidence entry. That defect used to cite `resolveSymbols`, which never
+	 * produced it — `symbols.ts` raises the different `bad-escape` code.
+	 */
+	escapes: {
+		id: EV.escapes,
+		source: "canonicalizer",
+		probe: "walkStringEscapes",
 		basis: "heuristic",
 		outcome: "ok",
 	},
@@ -1179,6 +1213,21 @@ export function explainCommand(
 	const write = containsWriteFromAnalyses(statementAnalysis, brackets);
 	const symbols = resolveSymbols(input);
 
+	// ONE escape walk, read twice (#264): its invalid half is a
+	// `bad-string-escape` diagnostic and its valid half is the `escaped` token
+	// fill further down. Walking separately for each would let the diagnostics
+	// and the token stream disagree about which bytes are an escape.
+	//
+	// The third argument only decides whether the valid spans are RETAINED, not
+	// whether they are validated, so gating it on the token facet cannot change
+	// a diagnostic — it just stops a caller who never asked for `data.tokens`
+	// from paying for a span object per escape.
+	const stringEscapes = walkStringEscapes(
+		analyzed,
+		segmented.comments,
+		options.tokens === true,
+	);
+
 	// Every analyzer re-derives the document's defects from its own walk, so a
 	// defect two analyzers both see must be reported once — and tagged with the
 	// analyzer that RAISED it, not with whichever list was merged first. The
@@ -1188,13 +1237,19 @@ export function explainCommand(
 	// the segmenter's delimiter stack is a `direct` reading). Attributing all of
 	// them to the segmenter said "direct/segmentStatements" about a fact the
 	// segmenter cannot produce.
+	//
+	// `bad-string-escape` is the same mistake one module over, and #264 is what
+	// made it fixable: it cited `resolveSymbols`, which never produced it —
+	// `symbols.ts` raises the DIFFERENT `bad-escape` code. Until the escape walk
+	// had an evidence entry of its own there was nothing truer to cite; now
+	// there is, and the token and the diagnostic cite the same one.
 	const defects = attributeDefects([
 		[EV.segment, segmented.defects],
 		[EV.statements, verbs.defects],
 		[EV.subcommands, brackets.defects],
 		[EV.write, write.defects],
 		[EV.symbols, symbols.defects],
-		[EV.symbols, collectStringEscapeDefects(analyzed, segmented.comments)],
+		[EV.escapes, stringEscapes.defects],
 	]);
 
 	// From the SPLITS, not from the segmentation. The resolver flattens `do={…}`
@@ -1301,8 +1356,8 @@ export function explainCommand(
 
 	// B2/B3 fill order — the argument order IS the order (#290 design decision 1).
 	// `spans` (proof-only: comment + variables) claims first; path, argument,
-	// value, then string/brace, then operator fills each see only the residual
-	// left before them. Structural ambiguity (`/` path vs division, `=` arg sep
+	// escape, value, then string/brace, then operator fills each see only the
+	// residual left before them. Structural ambiguity (`/` path vs division, `=` arg sep
 	// vs comparison) therefore resolves by the analyzer that already proved
 	// ownership, not by a wider byte scanner. The operator scanner keeps its
 	// conservative guards for bytes no earlier fill can decide.
@@ -1362,39 +1417,58 @@ export function explainCommand(
 			...pathSpansList,
 			...argSpansList,
 		]);
-		const valueSpansList = valueSpans(
+		// An escape is interior to a quoted run, so it claims BEFORE the two
+		// fills that would otherwise swallow it whole (#264) — it takes the
+		// residual `value` used to see, and `value` and `string` then fragment
+		// around what it claimed.
+		const escapeSpansList = escapeSpans(
 			analyzed,
 			residual2,
-			valueFacts.occurrences,
+			stringEscapes.escapes,
 		);
 		const residual3 = residualRanges(analyzed.length, [
 			...spans,
 			...pathSpansList,
 			...argSpansList,
-			...valueSpansList,
+			...escapeSpansList,
 		]);
-		const stringSpansList = stringSpans(analyzed, residual3);
+		const valueSpansList = valueSpans(
+			analyzed,
+			residual3,
+			valueFacts.occurrences,
+		);
 		const residual4 = residualRanges(analyzed.length, [
 			...spans,
 			...pathSpansList,
 			...argSpansList,
+			...escapeSpansList,
 			...valueSpansList,
-			...stringSpansList,
 		]);
-		const braceSpansList = braceSpans(analyzed, residual4);
+		const stringSpansList = stringSpans(analyzed, residual4);
 		const residual5 = residualRanges(analyzed.length, [
 			...spans,
 			...pathSpansList,
 			...argSpansList,
+			...escapeSpansList,
+			...valueSpansList,
+			...stringSpansList,
+		]);
+		const braceSpansList = braceSpans(analyzed, residual5);
+		const residual6 = residualRanges(analyzed.length, [
+			...spans,
+			...pathSpansList,
+			...argSpansList,
+			...escapeSpansList,
 			...valueSpansList,
 			...stringSpansList,
 			...braceSpansList,
 		]);
-		const opSpans = operatorSpans(analyzed, residual5);
+		const opSpans = operatorSpans(analyzed, residual6);
 		const fills: TokenFill[] = [
 			spans,
 			pathSpansList,
 			argSpansList,
+			escapeSpansList,
 			valueSpansList,
 			stringSpansList,
 			braceSpansList,

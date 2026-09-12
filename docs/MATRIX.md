@@ -169,10 +169,14 @@ cannot recover from another published surface): the argument `=` became
 the tolerant reading reaches the envelope as the token partition rather than by
 loosening `statements[].arguments` — see
 [The vocabulary](../commands/explain/README.md#the-vocabulary-and-what-earns-a-class-264-b5).
-What remains on the track is #322 (depth-axis growth) and the one split B5's
-rule admits but did not make: a valid string escape, which is a fill change
-rather than a retag and stays on #264. The issue index owns the individual
-tasks and their dependencies.
+**#264 is now closed**: the one further split that rule admitted has been made,
+giving a valid string escape its own `escaped` class from the same walk that
+already produced `bad-string-escape`. It is a retag — 19,960 corpus bytes
+change class with classified coverage identical to the last decimal — and it
+takes the device slice's `unprojected` residue from 1,051 to 633 bytes on
+100.00% agreement for the new class. What remains on the track is **#322** (depth-axis
+growth), which still blocks the bounded-execution acceptance criterion. The
+issue index owns the individual tasks and their dependencies.
 
 Unfinished SNMP, RoMON, TUI, or other protocol/frontend cells do not preempt this
 track. Live `explain` (#236) remains a separate next capability. Change this

@@ -18,10 +18,10 @@
  * fitted", which is not a fact about the parser. So a centrs class whose
  * *intent* has no single device counterpart projects to `null` and the report
  * counts those bytes as `unprojected`, reporting what the device said about
- * them as its own table. That table is the evidence #264 B5 read to decide
- * which provisional merges deserved to be split — one did (`arg-sep`), and
- * `commands/explain/README.md` -> *The vocabulary, and what earns a class*
- * records why the rest stay merged.
+ * them as its own table. That table is the evidence #264 read to decide
+ * which provisional merges deserved to be split — two did, `arg-sep` (B5) and
+ * `escaped` — and `commands/explain/README.md` -> *The vocabulary, and what
+ * earns a class* records why the rest stay merged.
  *
  * ## Why the device stream is not one oracle but four
  *
@@ -182,12 +182,17 @@ export const HIGHLIGHT_PROJECTION: Readonly<
 	string: {
 		accepts: null,
 		because:
-			"the token spans the whole quoted run, which the device splits three ways — delimiters `syntax-meta`, escape sequences `escaped`, and the interior it declines to classify at all. No single device class answers for the run",
+			"the token spans the quoted run MINUS its escapes, which the device still splits two ways — delimiters `syntax-meta` and the interior it declines to classify at all. Naming the escapes (#264) removed the third way and is why this entry's residue is now delimiters, not delimiters plus escapes; the run still has no single device class, so the abstention stands",
+	},
+	escaped: {
+		accepts: ["escaped"],
+		because:
+			"name-coincident: the class means one valid string-internal escape sequence, which is the run the device also calls `escaped`. Declared from meaning before it was measured — `escaped` was already in `DEVICE_CLASS_KIND` as a syntax class, and the agreement report's `unprojected` table is what showed the bytes were being merged away rather than what chose the target",
 	},
 	value: {
 		accepts: null,
 		because:
-			"the device has no value class. It classifies an argument's value only when the value is itself something else (a substitution, an object name), so a `value` token has no device counterpart to be right or wrong about",
+			"the device has no value class. It classifies an argument's value only when the value is itself something else (a substitution, an object name, an escape — the last of which #264 split out), so a `value` token has no device counterpart to be right or wrong about",
 	},
 	unclassified: {
 		accepts: null,
