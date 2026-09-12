@@ -1739,12 +1739,12 @@ That is the difference — an accepted flag must do something observable.
   semantic tokens over these calls); an LSP *protocol* surface on centrs
   stays out of scope (#90). A bounded offline browser/editor consumption check
   now precedes vocabulary stabilization (#264 B5); full live LSP integration
-  remains later work. The entry is `centrs/explain` and it is browser-verified —
+  remains later work. The entry is `@tikoci/centrs/explain` and it is browser-verified —
   see [The offline package entry](#the-offline-package-entry-312).
 
 ### The offline package entry (#312)
 
-**`centrs/explain` -> `src/explain.ts`** is the documented public entry for
+**`@tikoci/centrs/explain` -> `src/explain.ts`** is the documented public entry for
 offline analysis. It is a real boundary, not a naming convention: the module
 graph reachable from it opens no connection, reads no CDB, and touches no
 filesystem, so it bundles and runs in a browser, a Worker, or an editor host.
@@ -1790,6 +1790,16 @@ field: structure, diagnostics, tokens, spans, `canonical`, and
 multi-statement and nested input, three malformed classes, Unicode, astral, a
 leading BOM, IPv6, empty input, and the facets switched off. All fourteen are
 byte-identical today.
+
+Two things the bundle deliberately exercises rather than bypasses. It imports
+through the **published subpath** `@tikoci/centrs/explain`, not
+`../src/explain.ts`, so a typo in `package.json`'s `exports` map fails the gate
+instead of leaving it green while every real consumer breaks (the graph walk
+additionally asserts that the `exports` entry and the measured file are the same
+path). And it calls `resolveExplainFormat(undefined)`, whose `env` default is
+the `typeof`-guarded `hostEnv()` — nothing else reaches that parameter, so
+without this a regression to a bare `Bun.env` would pass every case here while a
+browser caller of that exported function got a `TypeError`.
 
 The shadowing is **measured from inside the bundle**, not assumed: the worker
 reports which host globals it could still see, and an empty list is part of the
@@ -2075,7 +2085,7 @@ The offline capability can advance from `coded` to `verified` when:
 - **Usable library contract:** one bounded browser/editor consumer imports a
   documented public offline entry point, runs analysis without transport/CDB
   dependencies, and verifies structure, diagnostics, tokens, and source-position
-  mapping against the CLI/library result (#312). **Met** by `centrs/explain` and
+  mapping against the CLI/library result (#312). **Met** by `@tikoci/centrs/explain` and
   `bun run explain:browser-consumer` — see
   [The offline package entry](#the-offline-package-entry-312); the boundary is a
   module-graph gate and the consumer proof executes the browser bundle rather

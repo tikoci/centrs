@@ -17,9 +17,15 @@
  * Communication is one-way on purpose. The cases are compiled in from
  * `explain-browser-cases.ts`, so there is no inbound `onmessage` handler to
  * accept work from — the worker computes and posts once.
+ *
+ * The analysis is imported through the PUBLISHED subpath
+ * `@tikoci/centrs/explain`, not through `../src/explain.ts`. Importing the
+ * source directly would leave this gate green while a typo in `package.json`'s
+ * `exports` map broke every real consumer — the entry is what is being proven,
+ * so the entry is what must resolve.
  */
 
-import { explainCommand } from "../src/explain.ts";
+import { explainCommand, resolveExplainFormat } from "@tikoci/centrs/explain";
 import {
 	BROWSER_CONSUMER_CASES,
 	caseOptions,
@@ -68,10 +74,23 @@ const reachableHostGlobals = (
 	.filter(([, kind]) => kind !== "undefined")
 	.map(([name]) => name);
 
+/**
+ * The settings ladder's default parameter, evaluated INSIDE the bundle.
+ *
+ * `resolveExplainFormat`'s `env` default is `hostEnv()`, which exists because a
+ * bare `Bun.env` default is evaluated on the first call and `Bun` does not
+ * exist here. Nothing else in this file reaches that parameter, so a regression
+ * back to `Bun.env` would leave every case below green while a browser caller
+ * of this exported function got a `TypeError` — calling it with no `env` is
+ * what makes the guard load-bearing in the gate.
+ */
+const defaultFormat = resolveExplainFormat(undefined).value;
+
 try {
 	self.postMessage({
 		ok: true,
 		reachableHostGlobals,
+		defaultFormat,
 		// Serialized here so the comparison is over bytes that crossed the thread
 		// boundary, not over an object the structured clone might have reshaped.
 		results: BROWSER_CONSUMER_CASES.map((testCase) =>

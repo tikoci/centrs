@@ -7,7 +7,7 @@
  * that claim:
  *
  *   BOUNDARY — walk the module graph reachable from the documented entry
- *     (`centrs/explain` -> `src/explain.ts`) and fail if it reaches a transport,
+ *     (`@tikoci/centrs/explain` -> `src/explain.ts`) and fail if it reaches a transport,
  *     a resolver/CDB module, the CLI, or any Node builtin outside
  *     {@link ALLOWED_BUILTINS}. This is the check that names the offending
  *     edge, which a bundler error does not: the defect #312 reported surfaced
@@ -46,7 +46,11 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { type ExplainData, explainCommand } from "../src/explain.ts";
+import {
+	type ExplainData,
+	explainCommand,
+	resolveExplainFormat,
+} from "../src/explain.ts";
 import {
 	BROWSER_CONSUMER_CASES,
 	type ConsumerCase,
@@ -57,6 +61,9 @@ export { BROWSER_CONSUMER_CASES, type ConsumerCase };
 
 const ROOT = resolve(import.meta.dir, "..");
 const ENTRY = resolve(ROOT, "src/explain.ts");
+
+/** The published subpath the worker entry imports, and this gate measures. */
+const PUBLISHED_SUBPATH = "./explain";
 
 /**
  * Node builtins the offline entry may reach, and why each one is tolerable.
@@ -206,6 +213,22 @@ export function checkBoundary(): BoundaryReport {
 		if (ALLOWED_BUILTINS.has(specifier)) continue;
 		violations.push(`${specifier} — host builtin, via ${chain.join(" -> ")}`);
 	}
+	// The gate measures ENTRY, but consumers import the PUBLISHED subpath. If the
+	// two drift — a typo in `exports`, a moved file — every check below stays
+	// green while `@tikoci/centrs/explain` fails to resolve for everyone else.
+	const manifest = JSON.parse(
+		readFileSync(resolve(ROOT, "package.json"), "utf8"),
+	) as { exports?: Record<string, string> };
+	const published = manifest.exports?.[PUBLISHED_SUBPATH];
+	if (published === undefined)
+		violations.push(
+			`package.json exports has no "${PUBLISHED_SUBPATH}" entry — the documented entry is not importable`,
+		);
+	else if (resolve(ROOT, published) !== ENTRY)
+		violations.push(
+			`package.json exports "${PUBLISHED_SUBPATH}" is ${published}, but this gate measures ${relative(ROOT, ENTRY)}`,
+		);
+
 	// A specifier the walk cannot resolve is a hole in the gate, not a pass.
 	if (unresolvedDynamic > 0)
 		violations.push(
@@ -300,6 +323,13 @@ export interface ConsumerReport {
 	 * and every case reported "identical" was produced with host APIs in reach.
 	 */
 	reachableHostGlobals: string[];
+	/**
+	 * `resolveExplainFormat(undefined).value` as computed INSIDE the bundle,
+	 * where there is no host environment. Must match the Bun-native value under
+	 * an explicitly empty env; a mismatch or a thrown worker means the settings
+	 * ladder's default parameter stopped being host-safe.
+	 */
+	defaultFormat: string;
 	cases: ConsumerResult[];
 	ok: boolean;
 }
@@ -312,14 +342,17 @@ export interface ConsumerReport {
  * Handlers are attached in the same synchronous block as the construction, so
  * the worker's single message cannot be missed.
  */
-async function runBundleInWorker(
-	bundlePath: string,
-): Promise<{ results: string[]; reachableHostGlobals: string[] }> {
+async function runBundleInWorker(bundlePath: string): Promise<{
+	results: string[];
+	reachableHostGlobals: string[];
+	defaultFormat: string;
+}> {
 	const worker = new Worker(bundlePath);
 	try {
 		return await new Promise<{
 			results: string[];
 			reachableHostGlobals: string[];
+			defaultFormat: string;
 		}>((settle, fail) => {
 			const timer = setTimeout(
 				() => fail(new Error("browser consumer worker timed out after 60s")),
@@ -331,6 +364,7 @@ async function runBundleInWorker(
 					ok: boolean;
 					results?: string[];
 					reachableHostGlobals?: string[];
+					defaultFormat?: string;
 					error?: string;
 				};
 				if (!data.ok) fail(new Error(data.error ?? "worker reported failure"));
@@ -338,6 +372,7 @@ async function runBundleInWorker(
 					settle({
 						results: data.results ?? [],
 						reachableHostGlobals: data.reachableHostGlobals ?? [],
+						defaultFormat: data.defaultFormat ?? "",
 					});
 			};
 			worker.onerror = (event: ErrorEvent) => {
@@ -399,6 +434,7 @@ export async function runBrowserConsumerCheck(): Promise<ConsumerReport> {
 			boundary,
 			bundleBytes: 0,
 			reachableHostGlobals: [],
+			defaultFormat: "",
 			cases: [],
 			ok: false,
 		};
@@ -406,6 +442,7 @@ export async function runBrowserConsumerCheck(): Promise<ConsumerReport> {
 	const directory = mkdtempSync(join(tmpdir(), "centrs-explain-browser-"));
 	let bundled: string[];
 	let reachableHostGlobals: string[];
+	let defaultFormat: string;
 	let bundleBytes: number;
 	try {
 		const bundle = await buildBrowserWorkerBundle(directory);
@@ -413,6 +450,7 @@ export async function runBrowserConsumerCheck(): Promise<ConsumerReport> {
 		const run = await runBundleInWorker(bundle.path);
 		bundled = run.results;
 		reachableHostGlobals = run.reachableHostGlobals;
+		defaultFormat = run.defaultFormat;
 	} finally {
 		rmSync(directory, { recursive: true, force: true });
 	}
@@ -438,12 +476,18 @@ export async function runBrowserConsumerCheck(): Promise<ConsumerReport> {
 		throw new Error(
 			`worker returned ${bundled.length} results for ${BROWSER_CONSUMER_CASES.length} cases`,
 		);
+	// A browser has no environment, so the native comparison uses an empty one.
+	const nativeDefaultFormat = resolveExplainFormat(undefined, {}).value;
 	return {
 		boundary,
 		bundleBytes,
 		reachableHostGlobals,
+		defaultFormat,
 		cases: results,
-		ok: reachableHostGlobals.length === 0 && results.every((r) => r.identical),
+		ok:
+			reachableHostGlobals.length === 0 &&
+			defaultFormat === nativeDefaultFormat &&
+			results.every((r) => r.identical),
 	};
 }
 
@@ -455,6 +499,7 @@ function render(report: ConsumerReport): string {
 		`host builtins reached: ${report.boundary.builtins.join(", ") || "none"}`,
 		`browser bundle: ${(report.bundleBytes / 1024).toFixed(1)} KiB`,
 		`host globals reachable from inside the bundle: ${report.reachableHostGlobals.join(", ") || "none"}`,
+		`settings default resolved inside the bundle: ${report.defaultFormat || "(not run)"}`,
 		"",
 	];
 	if (report.boundary.violations.length > 0) {

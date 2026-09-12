@@ -80,7 +80,7 @@
  *
  * ## This module is the public offline entry — its imports are a contract
  *
- * `centrs/explain` resolves here, and the claim that offline analysis is a
+ * `@tikoci/centrs/explain` resolves here, and the claim that offline analysis is a
  * LIBRARY capability rests on what this file imports: nothing in the graph below
  * it may open a connection, read CDB, or touch the filesystem, so the module
  * bundles and runs in a browser, a Worker, or an editor host (#312).

@@ -43,7 +43,11 @@ import { explainCommand } from "../../src/explain.ts";
  *     (60 modules, seven host builtins);
  *   - truncating `tokens` in the worker entry fails 13 of the 14 cases with the
  *     differing path reported (`tokens-off` has none to truncate);
- *   - dropping the shadowing wrapper reports `Bun, process` as reachable.
+ *   - dropping the shadowing wrapper reports `Bun, process` as reachable;
+ *   - pointing `package.json`'s `exports["./explain"]` at another file fails
+ *     the boundary gate naming both paths;
+ *   - reverting `resolveExplainFormat`'s `env` default to a bare `Bun.env`
+ *     makes the worker throw inside the bundle.
  */
 describe("offline explain entry stays browser-consumable (#312)", () => {
 	test("the entry's module graph reaches no transport, CDB, or CLI module", () => {
@@ -80,6 +84,9 @@ describe("offline explain entry stays browser-consumable (#312)", () => {
 		// shadowing wrapper stopped being emitted, every "identical" above would
 		// have been produced with host APIs in reach and would prove nothing.
 		expect(report.reachableHostGlobals).toEqual([]);
+		// The settings ladder's host-safe default, evaluated where there is no
+		// host. Nothing else in the bundle reaches that parameter.
+		expect(report.defaultFormat).toBe("text");
 		expect(report.cases).toHaveLength(BROWSER_CONSUMER_CASES.length);
 		expect(report.ok).toBe(true);
 		// The bundle is the real analysis, not an empty module that trivially
