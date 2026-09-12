@@ -423,6 +423,41 @@ describe("the `escaped` token fill (#264)", () => {
 		expect(tokens.some((t) => t.class === "escaped")).toBe(false);
 	});
 
+	test("the token and the diagnostic cite the SAME evidence entry", () => {
+		// `bad-string-escape` used to cite `resolveSymbols`, which never produced
+		// it — `symbols.ts` raises the different `bad-escape` code. Now both
+		// halves of the one walk cite `walkStringEscapes`.
+		const bad = explainCommand(':put "c\\qd"', { tokens: true });
+		const diagnostic = bad.diagnostics.find((d) =>
+			d.code.endsWith("bad-string-escape"),
+		);
+		expect(diagnostic).toBeDefined();
+		const cited = bad.evidence.find((e) => e.id === diagnostic?.ev);
+		expect(cited?.probe).toBe("walkStringEscapes");
+		// `heuristic`, not `direct`: #252 found the manual's escape table was a
+		// lower bound, so a live probe can overturn this set and once did.
+		expect(cited?.basis).toBe("heuristic");
+
+		const good = explainCommand(':put "a\\nb"', { tokens: true });
+		const token = (good.tokens ?? []).find((t) => t.class === "escaped");
+		expect(token).toBeDefined();
+		expect(good.evidence.find((e) => e.id === token?.ev)?.probe).toBe(
+			"walkStringEscapes",
+		);
+	});
+
+	test("escape spans are not retained when tokens were not requested", () => {
+		// Validation is identical either way — the gate only decides retention,
+		// so a diagnostic cannot depend on the token facet.
+		const input = ':put "a\\nb" ; :put "c\\qd"';
+		const withTokens = explainCommand(input, { tokens: true });
+		const without = explainCommand(input);
+		expect(without.diagnostics.map((d) => [d.code, d.ev])).toEqual(
+			withTokens.diagnostics.map((d) => [d.code, d.ev]),
+		);
+		expect(without.tokens).toBeUndefined();
+	});
+
 	test("one walk: the escapes and the defect are the same reading", () => {
 		for (const input of [
 			':put "a\\nb"',

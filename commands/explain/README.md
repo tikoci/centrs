@@ -2370,9 +2370,10 @@ The offline capability can advance from `coded` to `verified` when:
   [The offline package entry](#the-offline-package-entry-312); the boundary is a
   module-graph gate and the consumer proof executes the browser bundle rather
   than only compiling it. The token vocabulary that consumer reads is settled by
-  #264 B5 — [The vocabulary](#the-vocabulary-and-what-earns-a-class-264-b5) —
-  on a stated rule, with the merges it keeps and the one split it admits but
-  does not make each recorded there. A complete editor, LSP server, palette
+  #264 — [The vocabulary](#the-vocabulary-and-what-earns-a-class-264-b5) —
+  on a stated rule, with the two splits it makes (`arg-sep`, then `escaped`)
+  and the merges it keeps each recorded there with the surface that already
+  carries the distinction. A complete editor, LSP server, palette
   reproduction, or SCIP implementation is not required to prove this contract.
 - **Reachable evidence and explicit residue:** changed RouterOS semantic claims
   have committed CHR-grounded controls and a reproducible capture/replay path.

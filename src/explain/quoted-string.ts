@@ -232,10 +232,18 @@ export interface StringEscapeWalk {
  * prefix the validator actually vouched for — past a malformed escape the
  * string boundaries themselves are in doubt, and painting `escaped` there
  * would be a claim this walk cannot support.
+ *
+ * `collectEscapes: false` validates without retaining the valid spans. The
+ * default `explainCommand` path consumes only `defects`, and materializing a
+ * span per escape for a caller that never asked for `data.tokens` is the kind
+ * of cost #313/#317/#320 were about — work nobody requested. Validation is identical
+ * either way — only the retention differs, so the two callers cannot diverge
+ * on what counts as an escape.
  */
 export function walkStringEscapes(
 	text: string,
 	comments: readonly { start: number; end: number }[] = [],
+	collectEscapes = true,
 ): StringEscapeWalk {
 	const escapes: StringEscapeSpan[] = [];
 	const frames: string[] = [];
@@ -257,7 +265,8 @@ export function walkStringEscapes(
 		}
 		const res = stepFrame(text, i, frames, (at) => {
 			const step = stringEscapeValidated(text, at);
-			if (typeof step === "number") escapes.push({ start: at, end: at + step });
+			if (collectEscapes && typeof step === "number")
+				escapes.push({ start: at, end: at + step });
 			return step;
 		});
 		if (typeof res !== "number") return { escapes, defects: [res] };
@@ -270,12 +279,13 @@ export function walkStringEscapes(
 /**
  * Collect the first invalid string-internal escape in `text`, if any.
  *
- * The defect half of {@link walkStringEscapes}. Callers that also need the
- * valid escapes should call the walk directly rather than walking twice.
+ * The defect half of {@link walkStringEscapes}, retaining no escape spans.
+ * Callers that also need the valid escapes should call the walk directly
+ * rather than walking twice.
  */
 export function collectStringEscapeDefects(
 	text: string,
 	comments: readonly { start: number; end: number }[] = [],
 ): Defect[] {
-	return walkStringEscapes(text, comments).defects;
+	return walkStringEscapes(text, comments, false).defects;
 }

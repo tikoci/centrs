@@ -852,17 +852,23 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		outcome: "ok",
 	},
 	/**
-	 * `direct`: unlike the surrounding fills, which decide which byte runs are
-	 * an argument or a value, this one reads a closed grammar — the device's
-	 * own accepted escape set, swept byte by byte on CHR (#252) and pinned in
-	 * `src/explain/quoted-string.ts`. Whether a `\` inside a string frame
-	 * opens a valid escape is decided, not inferred.
+	 * `heuristic`, and #252 is the reason rather than caution: the accepted
+	 * escape set is a ratified offline rule that a live probe CAN overturn, and
+	 * once did. The manual's "Constant Escape Sequences" table turned out to be
+	 * a lower bound — the CHR byte sweep found `\?` missing from it — so the
+	 * set pinned in `src/explain/quoted-string.ts` is the best current reading
+	 * of a device's answer, not a deterministic reading of the input bytes.
+	 * A future RouterOS could accept one more.
+	 *
+	 * Cited by the `escaped` tokens AND by `bad-string-escape`: one walk, one
+	 * evidence entry. That defect used to cite `resolveSymbols`, which never
+	 * produced it — `symbols.ts` raises the different `bad-escape` code.
 	 */
 	escapes: {
 		id: EV.escapes,
 		source: "canonicalizer",
 		probe: "walkStringEscapes",
-		basis: "direct",
+		basis: "heuristic",
 		outcome: "ok",
 	},
 	braces: {
@@ -1211,7 +1217,16 @@ export function explainCommand(
 	// `bad-string-escape` diagnostic and its valid half is the `escaped` token
 	// fill further down. Walking separately for each would let the diagnostics
 	// and the token stream disagree about which bytes are an escape.
-	const stringEscapes = walkStringEscapes(analyzed, segmented.comments);
+	//
+	// The third argument only decides whether the valid spans are RETAINED, not
+	// whether they are validated, so gating it on the token facet cannot change
+	// a diagnostic — it just stops a caller who never asked for `data.tokens`
+	// from paying for a span object per escape.
+	const stringEscapes = walkStringEscapes(
+		analyzed,
+		segmented.comments,
+		options.tokens === true,
+	);
 
 	// Every analyzer re-derives the document's defects from its own walk, so a
 	// defect two analyzers both see must be reported once — and tagged with the
@@ -1222,13 +1237,19 @@ export function explainCommand(
 	// the segmenter's delimiter stack is a `direct` reading). Attributing all of
 	// them to the segmenter said "direct/segmentStatements" about a fact the
 	// segmenter cannot produce.
+	//
+	// `bad-string-escape` is the same mistake one module over, and #264 is what
+	// made it fixable: it cited `resolveSymbols`, which never produced it —
+	// `symbols.ts` raises the DIFFERENT `bad-escape` code. Until the escape walk
+	// had an evidence entry of its own there was nothing truer to cite; now
+	// there is, and the token and the diagnostic cite the same one.
 	const defects = attributeDefects([
 		[EV.segment, segmented.defects],
 		[EV.statements, verbs.defects],
 		[EV.subcommands, brackets.defects],
 		[EV.write, write.defects],
 		[EV.symbols, symbols.defects],
-		[EV.symbols, stringEscapes.defects],
+		[EV.escapes, stringEscapes.defects],
 	]);
 
 	// From the SPLITS, not from the segmentation. The resolver flattens `do={…}`
