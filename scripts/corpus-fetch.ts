@@ -123,9 +123,41 @@ export function cachePath(pin: CorpusPin): string {
 	return resolve(CACHE_DIR, `corpus-${pin.sha256.slice(0, 12)}.sqlite`);
 }
 
+/**
+ * Hash a file's exact bytes — for a BINARY artifact whose identity is its bytes.
+ *
+ * The corpus snapshot is the case this exists for: the pin must name what was
+ * downloaded, byte for byte, and any transformation would defeat it. Do not
+ * reach for this to pin a TEXT file in the repo; see {@link sha256TextFile}.
+ */
 export function sha256File(path: string): string {
 	return new Bun.CryptoHasher("sha256")
 		.update(readFileSync(path))
+		.digest("hex");
+}
+
+/**
+ * Hash a committed TEXT file's content, with `\r\n` read as `\n`.
+ *
+ * A repo text file does not have one byte sequence: git stores LF and hands a
+ * Windows checkout CRLF, so `sha256File` over one of these is a hash of the
+ * CHECKOUT, not of the content. That made `test/fixtures/explain/highlight-
+ * streams.slice.json` hash `de67f66d19e6` on Linux/macOS and `4b85f4971c36` on
+ * Windows, and the #263 agreement fixture — which pins that hash as the
+ * provenance of what it measured — went red on the Windows unit leg with every
+ * measured CELL still identical. The measurement was never platform-dependent;
+ * the provenance claim was.
+ *
+ * Normalizing is lossless for these files rather than merely convenient: a raw
+ * CR inside JSON text is spelled `\r` (two characters), so a CRLF in the file
+ * can only be formatting between tokens. The slice carries zero raw CR bytes.
+ *
+ * The value this returns for an LF working tree is the value `sha256File`
+ * returned, so committed hashes do not move.
+ */
+export function sha256TextFile(path: string): string {
+	return new Bun.CryptoHasher("sha256")
+		.update(readFileSync(path, "utf8").replaceAll("\r\n", "\n"))
 		.digest("hex");
 }
 
