@@ -135,7 +135,7 @@ export interface CellExample {
 }
 
 /**
- * The eight outcomes a byte can have. Exhaustive and disjoint, so they sum to
+ * The nine outcomes a byte can have. Exhaustive and disjoint, so they sum to
  * the measured byte count — the same discipline the token partition itself
  * keeps.
  */
@@ -154,8 +154,18 @@ export interface Buckets {
 	deviceSilent: number;
 	/** Both abstained. */
 	bothSilent: number;
-	/** At or after the device's one-byte `error`, where it stops classifying. */
+	/** At or after the device's one-byte `error`, and silent from there on. */
 	parserStopped: number;
+	/**
+	 * Past the `error`, and the device classified again anyway.
+	 *
+	 * Its own bucket rather than part of the stopped tail because "the device
+	 * gives up at its first error" is a claim, and this is the number that
+	 * says how far it holds: zero on 7.23.2, non-zero on 7.24rc2. Folding these
+	 * bytes into `parserStopped` would let the report assert a rule its own
+	 * measurement contradicts.
+	 */
+	parserRecovered: number;
 }
 
 const BUCKET_ORDER: readonly (keyof Buckets)[] = [
@@ -167,6 +177,7 @@ const BUCKET_ORDER: readonly (keyof Buckets)[] = [
 	"deviceSilent",
 	"bothSilent",
 	"parserStopped",
+	"parserRecovered",
 ];
 
 export function emptyBuckets(): Buckets {
@@ -179,6 +190,7 @@ export function emptyBuckets(): Buckets {
 		deviceSilent: 0,
 		bothSilent: 0,
 		parserStopped: 0,
+		parserRecovered: 0,
 	};
 }
 
@@ -219,11 +231,38 @@ export function bucketOf(
 	// it in its own line.
 	if (kind === "unknown") return "unprojected";
 	if (centrsClass === "unclassified") return "offlineSilent";
+	// The device side above absorbs upstream drift; this side must NOT. A centrs
+	// class the projection does not name means the committed matrix predates the
+	// vocabulary, and these functions run over fixture keys — data, not types —
+	// so the cast below would otherwise surface as a bare `undefined.accepts`
+	// TypeError inside `lint:ci` instead of naming the stale fixture.
+	if (!Object.hasOwn(HIGHLIGHT_PROJECTION, centrsClass))
+		throw new Error(
+			`no declared projection for centrs class \`${centrsClass}\`; the committed ` +
+				"matrix predates src/explain/highlight-projection.ts. Repin with " +
+				"`bun run explain:highlight-agreement --json > test/fixtures/explain/highlight-agreement.json`",
+		);
 	const accepts = projectTokenClass(
 		centrsClass as keyof typeof HIGHLIGHT_PROJECTION,
 	);
 	if (accepts === null) return "unprojected";
 	return accepts.includes(deviceClass) ? "agree" : "disagree";
+}
+
+/**
+ * Which bucket one cell of the STOPPED matrix falls into.
+ *
+ * Everything past the `error` byte used to be counted as `parserStopped`
+ * wholesale, which threw away the one measurement that tests the claim: 7.24rc2
+ * classifies 96 bytes after its `error`, and folding them into the stopped tail
+ * made the report assert "the device does not recover" while its own fixture
+ * said otherwise. The `error` byte itself is the stop marker, not a recovery.
+ */
+export function stoppedBucketOf(deviceClass: string): keyof Buckets {
+	const kind = deviceClassKind(deviceClass);
+	return kind === "parser-stop" || kind === "silence"
+		? "parserStopped"
+		: "parserRecovered";
 }
 
 export function bucketsOf(measurement: SplitMeasurement): Buckets {
@@ -232,7 +271,10 @@ export function bucketsOf(measurement: SplitMeasurement): Buckets {
 		const { centrsClass, deviceClass } = parseCell(key);
 		out[bucketOf(centrsClass, deviceClass)] += count;
 	}
-	out.parserStopped += measurement.stoppedBytes;
+	for (const [key, count] of Object.entries(measurement.stopped)) {
+		const { deviceClass } = parseCell(key);
+		out[stoppedBucketOf(deviceClass)] += count;
+	}
 	return out;
 }
 
@@ -270,21 +312,26 @@ export function cellsInBucket(
 	return [...folded].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 
-/** Bytes per applicability category over the live region (#263). */
+/**
+ * Bytes per applicability category, over EVERY measured byte (#263).
+ *
+ * The post-`error` tail runs through the same rule as the live region rather
+ * than being folded into `no-device-answer` wholesale. It has to: where one
+ * capture stops parsing and the next does not, the tail is precisely a
+ * version disagreement, and counting it as "the device said nothing" would
+ * decide that on the strength of whichever build happens to be the base — the
+ * same error the precedence fix removed one level down.
+ */
 export function applicabilityOfSplit(
 	measurement: SplitMeasurement,
 ): Map<Applicability, number> {
 	const out = new Map<Applicability, number>();
-	for (const [key, count] of Object.entries(measurement.live)) {
-		const { centrsClass, deviceClass, versionsAgree } = parseCell(key);
-		const category = applicabilityOf(centrsClass, deviceClass, versionsAgree);
-		out.set(category, (out.get(category) ?? 0) + count);
-	}
-	// The post-`error` tail is the device not answering, whatever centrs said.
-	out.set(
-		"no-device-answer",
-		(out.get("no-device-answer") ?? 0) + measurement.stoppedBytes,
-	);
+	for (const region of [measurement.live, measurement.stopped])
+		for (const [key, count] of Object.entries(region)) {
+			const { centrsClass, deviceClass, versionsAgree } = parseCell(key);
+			const category = applicabilityOf(centrsClass, deviceClass, versionsAgree);
+			out.set(category, (out.get(category) ?? 0) + count);
+		}
 	return out;
 }
 
@@ -294,13 +341,14 @@ export function cellsInApplicability(
 	category: Applicability,
 ): [string, number][] {
 	const folded = new Map<string, number>();
-	for (const [key, count] of Object.entries(measurement.live)) {
-		const { centrsClass, deviceClass, versionsAgree } = parseCell(key);
-		if (applicabilityOf(centrsClass, deviceClass, versionsAgree) !== category)
-			continue;
-		const pair = `${centrsClass}|${deviceClass}`;
-		folded.set(pair, (folded.get(pair) ?? 0) + count);
-	}
+	for (const region of [measurement.live, measurement.stopped])
+		for (const [key, count] of Object.entries(region)) {
+			const { centrsClass, deviceClass, versionsAgree } = parseCell(key);
+			if (applicabilityOf(centrsClass, deviceClass, versionsAgree) !== category)
+				continue;
+			const pair = `${centrsClass}|${deviceClass}`;
+			folded.set(pair, (folded.get(pair) ?? 0) + count);
+		}
 	return [...folded].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 
@@ -727,7 +775,10 @@ const BUCKET_LABEL: Readonly<Record<keyof Buckets, string>> = {
 	nonSyntax: "non-syntax — the device answered something syntax cannot decide",
 	deviceSilent: "device-silent — centrs decided, device said `none`",
 	bothSilent: "both-silent",
-	parserStopped: "parser-stopped — at/after the device's `error` byte",
+	parserStopped:
+		"parser-stopped — at/after the device's `error` byte, and silent from there",
+	parserRecovered:
+		"parser-recovered — past that `error`, and the device classified anyway",
 };
 
 export function renderReadmeBlock(report: HighlightAgreement): string[] {
@@ -833,9 +884,9 @@ export function renderReadmeBlock(report: HighlightAgreement): string[] {
 				"answer, what kind of fact was it answering? Assigned from the pair — what " +
 				"centrs read the byte as and what the device called it — plus whether the " +
 				"captures agreed, never by assigning a whole class to one category. " +
-				"`version-dependent` here counts only bytes inside the live region, so it " +
-				"excludes the larger version difference — where the two captures stop " +
-				"parsing at all, reported above.",
+				"It covers every measured byte, the post-`error` tail included: where one " +
+				"capture stops parsing and the next does not, that tail IS the version " +
+				"disagreement, which is why it dominates the category.",
 		),
 		"",
 		`| applicability @${baseVersion} | bytes | leading cells |`,
@@ -846,7 +897,7 @@ export function renderReadmeBlock(report: HighlightAgreement): string[] {
 		const bytes = applicability.get(category) ?? 0;
 		const leading =
 			category === "no-device-answer"
-				? "`none` where the captures agree, plus the post-`error` tail"
+				? "`none` where the captures agree, wherever it falls"
 				: cellsInApplicability(baseAll, category)
 						.slice(0, 3)
 						.map(([cell, n]) => `${renderPair(cell)} ${count(n)}`)

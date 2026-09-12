@@ -40,6 +40,7 @@ import {
 	renderFragment,
 	renderReadmeBlock,
 	splitLines,
+	stoppedBucketOf,
 } from "../../scripts/explain-highlight-agreement.ts";
 import {
 	applicabilityOf,
@@ -239,6 +240,37 @@ describe("#264 B4 — the projection is total, declared, and abstains on merges"
 		expect(bucketOf("cmd", "some-new-7.99-class")).toBe("unprojected");
 	});
 
+	test("a post-`error` class the device still emits is not 'stopped'", () => {
+		// Folding the whole suffix into `parserStopped` threw away the one
+		// measurement that tests "the device does not recover" — and 7.24rc2
+		// contradicts it. The `error` byte itself is the marker, not a recovery.
+		expect(stoppedBucketOf("error")).toBe("parserStopped");
+		expect(stoppedBucketOf("none")).toBe("parserStopped");
+		for (const cls of ["obj-inactive", "cmd", "arg", "some-new-7.99-class"])
+			expect(stoppedBucketOf(cls), cls).toBe("parserRecovered");
+	});
+
+	test("the slice carries the recovery the README refuses to rule out", () => {
+		// 7.23.2 really does stay silent; 7.24rc2 really does not. If both ever
+		// read zero, the report's careful "mostly does not recover" is describing
+		// a capture pair that no longer exists.
+		const perVersion = Object.entries(fixture.versions).map(
+			([version, measurement]) =>
+				[version, bucketsOf(allSplits(measurement)).parserRecovered] as const,
+		);
+		expect(perVersion.some(([, n]) => n === 0)).toBe(true);
+		expect(perVersion.some(([, n]) => n > 0)).toBe(true);
+	});
+
+	test("a centrs class the projection does not name names the stale fixture", () => {
+		// The device side absorbs upstream drift; this side must not. These
+		// functions run over fixture keys — data, not types — so without the guard
+		// a stale matrix surfaces as `undefined.accepts` inside `lint:ci`.
+		expect(() => bucketOf("some-retired-class", "cmd")).toThrow(
+			/no declared projection for centrs class/,
+		);
+	});
+
 	test("a non-syntax answer and device silence never score as agreement", () => {
 		for (const cls of ["obj-inactive", "obj-dynamic", "variable-undefined"])
 			expect(bucketOf("cmd", cls)).toBe("nonSyntax");
@@ -337,6 +369,24 @@ describe("#263 — applicability is assigned from context, not from the class na
 			const sum = cells.reduce((total, [, n]) => total + n, 0);
 			expect(sum, category).toBe(byCategory.get(category) ?? 0);
 		}
+	});
+
+	test("the post-`error` tail is categorized, not force-fed to 'no answer'", () => {
+		// Where one capture stops parsing and the next does not, the tail IS the
+		// version disagreement. Folding it into `no-device-answer` wholesale would
+		// decide that on whichever build happens to be the base.
+		const base = allSplits(
+			fixture.versions[fixture.slice.baseVersion] as never,
+		);
+		const byCategory = applicabilityOfSplit(base);
+		const liveOnly = Object.entries(base.live).reduce((sum, [key, n]) => {
+			const { centrsClass, deviceClass, versionsAgree } = parseCell(key);
+			return applicabilityOf(centrsClass, deviceClass, versionsAgree) ===
+				"version-dependent"
+				? sum + n
+				: sum;
+		}, 0);
+		expect(byCategory.get("version-dependent") ?? 0).toBeGreaterThan(liveOnly);
 	});
 
 	test("the slice really does carry all four categories", () => {
@@ -603,6 +653,7 @@ describe("#263 — the derived tables agree with the raw matrix", () => {
 			"deviceSilent",
 			"bothSilent",
 			"parserStopped",
+			"parserRecovered",
 		] as const)
 			for (const [cell] of cellsInBucket(base, bucket)) bucketed.push(cell);
 		expect(bucketed.sort()).toEqual(cells);

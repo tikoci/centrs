@@ -43,9 +43,12 @@
  *   agreement (probes: "an abstention is not a disagreement").
  * - **parser-stop** — `error`. Measured over the committed slice this byte
  *   appears **at most once per script, always exactly one byte wide**, and on
- *   7.23.2 every one of the 43,374 bytes after it is `none`: the device stops
- *   classifying rather than recovering. Half the slice's bytes sit in that
- *   tail, so a percentage that ignores it measures the device giving up.
+ *   7.23.2 every byte after it is `none`: the device stops classifying rather
+ *   than recovering. Most of the slice's bytes sit in that tail, so a
+ *   percentage that ignores it measures the device giving up. 7.24rc2 does
+ *   classify again after its `error` in one run, which is why the report gives
+ *   that a bucket of its own instead of asserting the rule (the counts live in
+ *   the generated README block, not here, so they cannot go stale).
  *
  * ## Upstream drift
  *
@@ -213,7 +216,12 @@ export type Applicability =
 	| "schema-dependent"
 	/** Needs runtime objects or session state outside the input. */
 	| "state-dependent"
-	/** The captured RouterOS versions disagree, so there is no single device answer. */
+	/**
+	 * Deciding needs version context: either the captured RouterOS versions
+	 * disagree about this byte, so there is no single device answer, or the
+	 * device's answer is itself a statement about the running version
+	 * (`syntax-obsolete`) even where the captures agree.
+	 */
 	| "version-dependent"
 	/** No supported basis for a category. Explicit, never a silent default. */
 	| "uncategorized"

@@ -1432,12 +1432,13 @@ version-dependent — are assigned from the *pair* (what centrs read the byte as
 what the device called it) plus whether the two captures even agreed, because
 one highlight class carries more than one category. Version disagreement is
 checked first, ahead even of the device's own silence: a byte one build
-classifies and the next leaves `none` is a version difference, not an absence. `obj-inactive` on an
-argument name means the menu's schema has no such field (**schema**); the same
-class on a menu or command name means the package is not installed on this box
-(**state**: `/zerotier`, `/user-manager`, `/container`, and `default-vlan-id`
-under `/interface ethernet switch port`, a menu a CHR does not have).
-`obj-dynamic` on the routing table `main` is a live object (**state**).
+classifies and the next leaves `none` is a version difference, not an absence.
+`obj-inactive` on an argument name means the menu's schema has no such field
+(**schema** — `default-vlan-id`, under an `/interface ethernet switch port` a
+CHR does not have); the same class on a menu or command name means the package
+is not installed on this box (**state**: `/zerotier`, `/user-manager`,
+`/container`). `obj-dynamic` on the routing table `main` is a live object
+(**state**).
 `syntax-obsolete` is this version's deprecation table talking, landing on the
 whitespace where modern syntax wants `=` (`} else {`, `:foreach conn in
 $conns`) — **version**. And `variable-undefined` is deliberately left
@@ -1447,14 +1448,17 @@ the three, and an absent binding in *this* document is not evidence of a
 runtime undefined variable either. Leaving it explicit is the answer, not a gap
 to be filled by assumption.
 
-**The device stops classifying at its first `error`, and does not recover.**
-Measured over the slice, `error` appears **at most once per script and is
-always exactly one byte wide**; at 7.23.2 *every one* of the 43,374 bytes after
-it comes back `none`. Half the slice's bytes sit in that tail. A percentage
-computed over the whole stream therefore measures the device giving up, not the
-parser, which is why the tail is its own outcome and is never folded into
-agreement. (The rule is not absolute across versions: at 7.24rc2 a post-`error`
-`obj-inactive` run appears, and seven fewer scripts stop at all.)
+**The device stops classifying at its first `error`, and mostly does not
+recover.** Measured over the slice, `error` appears **at most once per script
+and is always exactly one byte wide**, and on 7.23.2 every byte after it comes
+back `none`. Most of the slice sits in that tail. A percentage computed over
+the whole stream therefore measures the device giving up, not the parser, which
+is why the tail is its own outcome and is never folded into agreement. The rule
+is not absolute across versions, so the report does not assert it: 7.24rc2
+classifies again after its `error` in one run and stops on fewer scripts, and
+`parser-recovered` in the table below is the figure that says by how much —
+zero would have been the claim, and it is not zero. Both counts are generated,
+not quoted here, so neither can go stale against the fixture.
 
 **The projection is declared, never fitted.** `src/explain/highlight-projection.ts`
 maps each centrs token class to the device classes it predicts, justified by
@@ -1515,7 +1519,8 @@ two authors, so the percentage describes this slice.
 | non-syntax — the device answered something syntax cannot decide | 733 | 847 |
 | device-silent — centrs decided, device said `none` | 5,667 | 5,805 |
 | both-silent | 3,709 | 3,896 |
-| parser-stopped — at/after the device's `error` byte | 43,417 | 42,064 |
+| parser-stopped — at/after the device's `error` byte, and silent from there | 43,417 | 41,968 |
+| parser-recovered — past that `error`, and the device classified anyway | 0 | 96 |
 
 Where the device decided and offline analysis did not (5,660 bytes at 7.23.2,
 the next fill's target list): `syntax-meta` 3,217, `arg` 1,235, `comment` 350,
@@ -1526,19 +1531,19 @@ structure run rather than a token centrs missed.
 **Applicability** is the second axis (#263): of the bytes the device did
 answer, what kind of fact was it answering? Assigned from the pair — what
 centrs read the byte as and what the device called it — plus whether the
-captures agreed, never by assigning a whole class to one category.
-`version-dependent` here counts only bytes inside the live region, so it
-excludes the larger version difference — where the two captures stop parsing
-at all, reported above.
+captures agreed, never by assigning a whole class to one category. It covers
+every measured byte, the post-`error` tail included: where one capture stops
+parsing and the next does not, that tail IS the version disagreement, which is
+why it dominates the category.
 
 | applicability @7.23.2 | bytes | leading cells |
 | ---------------------------- | ----: | ------------- |
 | offline-decidable | 32,002 | `comment` → `comment` 18,006, `unclassified` → `syntax-meta` 3,216, `cmd` → `cmd` 1,985 |
 | schema-dependent | 260 | `arg` → `obj-inactive` 260 |
 | state-dependent | 180 | `dir` → `obj-inactive` 132, `cmd` → `obj-inactive` 21, `unclassified` → `obj-dynamic` 20 |
-| version-dependent | 71 | `unclassified` → `none` 44, `unclassified` → `variable-undefined` 23, `unclassified` → `syntax-obsolete` 3 |
+| version-dependent | 1,158 | `unclassified` → `none` 377, `comment` → `none` 353, `cmd` → `none` 124 |
 | uncategorized | 267 | `unclassified` → `obj-inactive` 144, `unclassified` → `variable-undefined` 75, `value` → `variable-undefined` 21 |
-| no-device-answer | 52,749 | `none` where the captures agree, plus the post-`error` tail |
+| no-device-answer | 51,662 | `none` where the captures agree, wherever it falls |
 
 One representative run per cell, so B5 reads a fragment rather than a count.
 `runs` is how often that exact fragment occurs; the location is a slice script
@@ -1566,7 +1571,10 @@ lexing accident:
   scores below the other name-coincident classes.
 - `cmd` → `dir`: a bare menu path carrying arguments and no verb
   (`/ip/firewall/address-list name=… timeout=…`), where `verbsplit` takes the
-  last segment as the verb and the device keeps reading it as a menu.
+  last segment as the verb and the device keeps reading it as a menu. Both
+  premises are available offline and both say no — the path is in `MENU_PATHS`
+  and the segment is not in `VERBS` — so this is a confident reading that
+  should be an abstention ([#324](https://github.com/tikoci/centrs/issues/324)).
 - `operator` → `arg`: the space-separated `in` of `:foreach conn in $conns`,
   which the device reads as the argument **name** `in`. The two oracles
   genuinely differ here — `:parse` IL carries `in` in the operator set, and the
@@ -1575,8 +1583,11 @@ lexing accident:
 
 The `unprojected` residue carries the B5 findings: a quoted string swallows any
 `$[…]` substitution inside it, so bytes the device resolves to `cmd`, `dir` or
-`arg` are claimed as one `string` run — the first thing an editor consumer
-(#312) will notice — and `value` bytes are, to the device, simply unclassified.
+`arg` are claimed as one `string` run — even though `structure.subcommands`
+has already resolved that same span, which makes it a fill-order carve-out
+rather than a parsing gap, and the first thing an editor consumer (#312) will
+notice ([#325](https://github.com/tikoci/centrs/issues/325)). And `value` bytes
+are, to the device, simply unclassified.
 
 ### Designed, not implemented (the CLI surface, #202b)
 
