@@ -1194,6 +1194,21 @@ device's context-dependent answer over 2.5x as many bytes as before, and it
 gives #264 B5 a concrete, counted reason to split the `=` into its own class:
 doing so relabels those runs without moving byte coverage at all.
 
+**The one residue, sized so it is not mistaken for a defect.** A `\<newline>`
+continuation inside an argument leaves its token `undecided`, because the bytes
+of a continued value are not contiguous and a `valueSpan` over them would be a
+lie (`args.ts` → *What it refuses*). The conservative case is a token whose
+value is already complete BEFORE the continuation, which is then withheld
+needlessly. Measured on the 948-script corpus: 109 statements make the strict
+lexer refuse for this reason, the tolerant walk reaches 114 statements carrying
+138 such tokens, and **all 138 put the continuation immediately after the `=`**
+— the value really does live on the next line. Exactly **one** token
+(`mode=none\<newline>`) has a complete value in front of its continuation. So
+narrowing the rule would recover one token, and deciding it correctly needs the
+device-grounded answer for what a continuation does to a value's INTERIOR, which
+is #225's probe-matrix territory rather than a lexer tweak. Recorded there; not
+carried as pending work here.
+
 **What the public surface gained, and what it did not.** The package root
 exports the reading itself — `lexExplainArgumentTokens` and
 `ExplainArgumentTokenReading` — for the same reason `lexExplainValueAnchors` is
