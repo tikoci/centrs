@@ -502,3 +502,85 @@ describe("#290 B2 — residualRanges seam and multi-fill buildTokens", () => {
 		).toBe(false);
 	});
 });
+
+/**
+ * #325 — the string fill yields to a substitution the structure already read.
+ *
+ * The fill order already put `path` ahead of `string`, so nothing about the
+ * ORDER was wrong; the path fill was handed a span computed as `span ± 1` and
+ * refused every candidate whose slice did not match, which inside a string is
+ * all of them (`span` starts at the `$`). The result was one opaque `string`
+ * run over a command `data.structure.subcommands` reports as resolved — the
+ * first thing that looks wrong in an editor next to a real console (#312).
+ *
+ * Byte coverage does not move. What moves is which fill owns those bytes, and
+ * on the committed device slice the three cells this empties are
+ * `string` → `cmd` 42 → 3, `string` → `dir` 19 → 1, with the same fix also
+ * recovering padded bare brackets from `offline-silent`
+ * (`bun run explain:highlight-agreement`).
+ */
+describe("#325 — the token partition reaches inside `$[…]` and `[ … ]`", () => {
+	/** `class:"text"` per token, which is what a fill-order bug is visible in. */
+	function shape(input: string): string[] {
+		return (explainCommand(input, { tokens: true }).tokens ?? []).map(
+			(t) => `${t.class}:${input.slice(t.start, t.end)}`,
+		);
+	}
+
+	test("an interpolated substitution's path and verb are classified, not swallowed", () => {
+		expect(shape(':put "$[/ip address print as-value]"')).toEqual([
+			"dir::",
+			"cmd:put",
+			"unclassified: ",
+			'string:"$[',
+			"dir:/ip",
+			"string: ",
+			"dir:address",
+			"string: ",
+			"cmd:print",
+			'string: as-value]"',
+		]);
+	});
+
+	test("…and the literal remainder is still one `string` run per gap", () => {
+		// The delimiters, the sigil and the literal text keep today's `string`
+		// class. Whether `$`, `[` and `]` deserve their own class is #264 B5's
+		// call (the device calls them `syntax-meta`); this changes ownership of
+		// the COMMAND bytes only.
+		expect(shape(':local k "x"\n:put "len=$[:len $k]"')).toContain(
+			'string:"len=$[',
+		);
+		expect(shape(':local k "x"\n:put "len=$[:len $k]"')).toContain("cmd:len");
+		expect(shape(':local k "x"\n:put "len=$[:len $k]"')).toContain(
+			"variable-local:k",
+		);
+	});
+
+	test("padded bare brackets were dropped by the same arithmetic", () => {
+		// Not inside a string at all: `[ /ip address print ]` trims to `inner`,
+		// so `span.start + 1` landed on the space and the candidate was refused.
+		expect(shape(":put [ /ip address print ]")).toEqual([
+			"dir::",
+			"cmd:put",
+			"unclassified: [ ",
+			"dir:/ip",
+			"unclassified: ",
+			"dir:address",
+			"unclassified: ",
+			"cmd:print",
+			"unclassified: ]",
+		]);
+	});
+
+	test("an interior the resolver cannot locate keeps its bytes unclaimed", () => {
+		// A non-ASCII statement widens the resolution's spans to the statement,
+		// so the path fill's slice check refuses. Fail-closed: no `dir`/`cmd`
+		// lands on bytes the resolver could not locate.
+		const tokens = explainCommand(':put "ü$[/ip address print]"', {
+			tokens: true,
+		}).tokens;
+		expect(tokens?.some((t) => t.class === "dir" || t.class === "cmd")).toBe(
+			false,
+		);
+	});
+});

@@ -77,6 +77,50 @@ describe("Q4 per-statement canonical paths (resolveStatements)", () => {
 	}
 });
 
+/**
+ * #325 — `innerSpan` is published because it is NOT derivable from `span`.
+ *
+ * `span` covers `[…]` for a bare substitution but `$[…]` for an interpolated
+ * one (the sigil is part of it), and `inner` is trimmed on top of that. A
+ * consumer doing `span.start + 1` therefore read one byte early inside a
+ * string and two bytes wrong whenever the brackets were padded — and the token
+ * path fill, which checks its slice against `inner`, silently dropped every
+ * such candidate. That is how a resolved command inside `"$[…]"` came back as
+ * opaque `string` bytes.
+ */
+describe("#325 — `innerSpan` locates `inner`, in every bracket spelling", () => {
+	test("bare, sigil-prefixed, padded and nested all slice back to `inner`", () => {
+		for (const text of [
+			":put [/ip address print]",
+			":put $[/ip address print]",
+			':put "$[/ip address print]"',
+			":put [ /ip address print ]",
+			':put "  $[  /ip address print  ]  "',
+			':if (true) do={ :put "$[/ip address print]" }',
+		]) {
+			const resolutions = resolveDocument(text).resolutions;
+			expect(resolutions.length).toBeGreaterThan(0);
+			for (const r of resolutions) {
+				expect(text.slice(r.innerSpan.start, r.innerSpan.end)).toBe(r.inner);
+				// It is interior to the delimited span, never equal to it.
+				expect(r.innerSpan.start).toBeGreaterThan(r.span.start);
+				expect(r.innerSpan.end).toBeLessThan(r.span.end);
+			}
+		}
+	});
+
+	test("a widened `Loc` widens `innerSpan` with `span`, so the slice check fails", () => {
+		// The fail-closed half: a non-ASCII statement cannot map interior offsets,
+		// so both spans widen to the statement and the slice no longer equals
+		// `inner`. A consumer must check — which is what `pathSpans` does, and
+		// why the tokens below stay unclaimed rather than landing on wrong bytes.
+		const text = ':put "ü$[/ip address print]"';
+		const r = resolveDocument(text).resolutions[0];
+		expect(r?.innerSpan).toEqual(r?.span as { start: number; end: number });
+		expect(text.slice(r?.innerSpan.start, r?.innerSpan.end)).not.toBe(r?.inner);
+	});
+});
+
 describe("well-formed corners report no structural defects", () => {
 	for (const c of [...fixtures.document, ...fixtures.statements]) {
 		// The pasted-prompt corner is well-formed text (the device rejects it, but
@@ -602,6 +646,28 @@ describe("R9 — pathresolve and verbsplit cannot contradict each other", () => 
 			expect(stmt?.isNav).toBe(true);
 			expect(stmt?.path).toBe(path);
 			expect(next?.path).toBe(`${path}/add`);
+		}
+	});
+
+	test("…and neither module claims a reading of a menu path with arguments (#324)", () => {
+		// The other direction of the same seam. `verbsplit` used to answer
+		// `/ip/firewall/address-list name=x` with verb `address-list` at
+		// `/ip/firewall` while the whole run is a known MENU — a verb nobody
+		// could confirm. It now abstains, and an abstention contradicts nothing:
+		// `pathresolve` keeps its greedy full-run `path`, which is the menu.
+		for (const [text, menu] of [
+			["/ip/firewall/address-list name=x", "/ip/firewall/address-list"],
+			["/ip firewall address-list name=x", "/ip/firewall/address-list"],
+			["/user-manager user [find] attributes=x", "/user-manager/user"],
+		] as const) {
+			const split = resolveVerbs(text).splits[0];
+			const stmt = resolveStatements(text).statements[0];
+			expect(split?.resolution).toBe("ambiguous");
+			expect(split?.verb).toBeNull();
+			// Not navigation either — arguments follow, so `pathresolve` does not
+			// promote it to a menu visit that would move the document context.
+			expect(stmt?.isNav).toBe(false);
+			expect(stmt?.path).toBe(menu);
 		}
 	});
 

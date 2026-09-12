@@ -892,11 +892,11 @@ and its phase is named below.
   `bun run explain:value-census:readme` and gated against it by
   `bun run explain:value-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:value-census:check`. Of the
-  13,168 emitted values in a statement the strict argument lexer ALSO read, 0
+  13,161 emitted values in a statement the strict argument lexer ALSO read, 0
   disagree with it on half-open byte span or decoded text, while the
-  prefix-safe scan retains a further 6,540 values across 569 statements whose
-  strict REST reading abstains. Of 19,708 emitted occurrences, 5,636 are array
-  members (529 keyed, 1,147 nested inside another member) and 813 are arrays;
+  prefix-safe scan retains a further 6,538 values across 568 statements whose
+  strict REST reading abstains. Of 19,699 emitted occurrences, 5,636 are array
+  members (529 keyed, 1,147 nested inside another member) and 808 are arrays;
   the corpus holds no source-literal `id` example. The three structural
   counters — spans addressing bytes outside their own source, members naming a
   container that does not exist, members escaping the container they name —
@@ -1121,6 +1121,77 @@ argument lists. Closing it needs a prefix-tolerant argument walk of the kind
 its two candidate designs. Until then the limit is pinned by an anchor test
 rather than left to be rediscovered.
 
+### The menu path with arguments (#324)
+
+A run that is nothing but a **known menu**, with arguments after it and no
+verb, used to come back `resolved` with a verb the analyzer made up.
+`/ip/firewall/address-list name=ytkids timeout=1h` reported path
+`/ip/firewall`, verb `address-list`; the spaced spelling
+`/ip firewall address-list name=x` promoted `firewall`, one level higher
+still. The punctuation half of the ratified Q6 rule is what fires — "no space
+token, arguments follow, so the last run token is the verb", or "the first
+space token is the verb" — and neither premise it needs was ever checked:
+
+```text
+isKnownMenuPath(/ip/firewall/address-list)  ->  true      (it is a menu)
+VERBS.has("address-list")                   ->  false     (it is not a verb)
+```
+
+This is the **symmetric half of R9**. R9 (#211 B1) made `pathresolve`'s
+`menuNavPath` consult `VERBS` so it could not claim navigation where
+`verbsplit` had decided a verb; this makes `resolveVerb` consult the menu
+tables so it cannot claim a verb where the whole run names a menu and the
+segment it would promote is not a verb. The reading degrades to **`ambiguous`**
+with the standard located `explain/canonicalizer/ambiguous-statement` warning,
+naming both premises. The adjacent readings are untouched —
+`/ip/firewall/address-list add name=x` resolves, the bare path is navigation,
+`/system/reboot` is a command — which is what makes this a seam rather than a
+parser limit.
+
+**It abstains; it does not reject.** Offline knows it cannot name a verb here,
+and that needs no device evidence. Whether RouterOS refuses the shape outright
+is a *device* claim, so unlike #311's CHR-grounded `error` this stays a
+warning and the statement carries no verdict about acceptance.
+
+**Four exclusions, each for its own reason.** A frozen-vocabulary hit is
+excluded by the `VERBS` premise itself (a vocabulary split promotes a `VERBS`
+member by construction). A **published command** is excluded by `catalogAt`:
+first-order evidence about that exact path outranks a container listing of its
+prefix, which is what keeps `/system/gps/monitor once` resolved. A scripting
+**directive** is excluded by R10, which is measured. And a `{` after the run is
+excluded by shape: that is a menu *container* body (`/system {identity print}`,
+H7) where the run legitimately names a menu and no verb is missing —
+abstaining there would drop the `invalid-command-brace` error the statement
+after it carries.
+
+**Priced before landing, as #211 B2 asks.** Over the frozen dev/holdout
+partition (948-script corpus, 17,212 statements) **10 statements flip, all
+`resolved` → `ambiguous`**: 1 dev, 9 holdout. **None is a genuine no-verb
+command.** Three are real RouterOS missing a verb —
+`/ip/firewall/address-list name=ytkids …`, `/interface bridge [find]
+vlan-filtering=yes`, `/user-manager user [find …] attributes=…` — and seven
+are pasted non-RouterOS prose: five Python traceback `File "…"` lines,
+`User ID: 506`, and `port 80`. Those seven reach the rule at all because
+`/file`, `/user` and `/port` are real menus and the table lookup folds case,
+which is #203's genre bias arriving through a second door. Every one of the
+ten was a fabrication, so the abstention has no measured false-positive cost
+on this corpus.
+
+**The execute gate is unmoved**, as the constitution requires: `canonical`
+still reports `mode: "structured"`, path `/ip/firewall`, verb `address-list`
+for this input, because that is what `canonicalizeExecuteCommand` decides and
+an explain-only abstention may not reinterpret it. `enforceGateParity` is
+about the argument *list* of a `kind: "command"` reading, so it does not fire
+on a statement that carries no reading at all — the gate and the analysis are
+two answers to two questions, and only one of them changed.
+
+The invariant this closes — `pathresolve` and `verbsplit` never contradict
+each other on one statement — is asserted in
+`test/unit/explain-pathresolve.test.ts` beside R9's own cases. Presence in the
+shipped structure tables still narrows a reading and absence still decides
+nothing (#207/#228), so an unlisted menu spelled `…/address-list` is read
+exactly as before.
+
 ### String escape validation (#247, #252)
 
 The accepted set is the **device's**, not the manual's. The
@@ -1339,8 +1410,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 990,840 are classified (69.45%), the remaining
-  435,891 are `unclassified`. The census emits 205,072 tokens (avg 216.3 per
+  1,426,731 analyzed bytes, 995,435 are classified (69.77%), the remaining
+  431,296 are `unclassified`. The census emits 207,962 tokens (avg 219.4 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is
   provisional until #264 B5. Each B2 fill should move the classified
@@ -1353,7 +1424,17 @@ partition whose `class` is provisional until #264 B5 (every unclaimed byte is
 and resolved variable occurrences); **the path fill claims resolved menu and
 command-name bytes as provisional `dir` / `cmd` tokens**, including valid path
 slashes and nested command substitutions, while ambiguous, malformed, and
-source-unmapped runs stay unclassified. **`#293`'s arg fill** in
+source-unmapped runs stay unclassified. A substitution's bytes are located by
+the resolution's published **`innerSpan`**, never by arithmetic on its `span`:
+`span` covers `[…]` for a bare substitution but `$[…]` for one interpolated
+inside a string (the sigil is part of it), and `inner` is trimmed on top of
+that, so `span.start + 1` was one byte early in a string and two bytes wrong
+for `[ … ]`. Both refused the fill's slice check and fell through to the
+string fill, which is how a command `structure.subcommands` had already
+resolved came back as opaque `string` bytes (#325). The check itself stays:
+where `Loc` widens the resolution to its statement, the slice no longer equals
+`inner` and the bytes are left unclaimed rather than landed on the wrong
+place. **`#293`'s arg fill** in
 `src/explain/arg-tokens.ts` then claims argument names and
 their `=` (name run
 `[span.start, valueSpan.start - 1)` plus the single `=` byte at
@@ -1484,10 +1565,10 @@ generated from `test/fixtures/explain/highlight-agreement.json` by
 `bun run explain:highlight-agreement:readme:check`, and the fixture itself is
 gated against a fresh measurement by
 `test/unit/explain-highlight-agreement.test.ts`. Of 85,529 bytes at 7.23.2,
-25,235 are bytes **both** sides decided a syntax class for, and 99.39% of
-those agree (dev 99.07%, holdout 99.80%). Set `comment` aside — it is 71.35%
+25,412 are bytes **both** sides decided a syntax class for, and 99.44% of
+those agree (dev 99.07%, holdout 99.91%). Set `comment` aside — it is 70.86%
 of that decided region and mostly the corpus's harness-injected `# Source:`
-banner (#203) — and the remaining 7,229 bytes agree 97.86%. The device stops
+banner (#203) — and the remaining 7,406 bytes agree 98.07%. The device stops
 classifying at its one-byte `error`: 43 of 70 scripts carry one, and the
 43,417 bytes from there on are not a judgment about anything. The oracle
 itself moves between captures: 43 stop at 7.23.2 and 36 stop at 7.24rc2, and
@@ -1502,31 +1583,31 @@ two authors, so the percentage describes this slice.
 | `variable-global` | `variable-global` | 582 | 0 | 0 | 100.00% |
 | `variable-auto` | `variable-auto` | 92 | 0 | 0 | 100.00% |
 | `variable-parameter` | `variable-parameter` | 398 | 0 | 0 | 100.00% |
-| `dir` | `dir` | 1,558 | 0 | 0 | 100.00% |
-| `cmd` | `cmd` | 1,985 | 12 | 0 | 99.40% |
+| `dir` | `dir` | 1,606 | 0 | 0 | 100.00% |
+| `cmd` | `cmd` | 2,126 | 0 | 0 | 100.00% |
 | `arg` | `arg`, `arg-dot`, `arg-scope` | 946 | 141 | 0 | 87.03% |
 | `operator` | `syntax-meta` | 232 | 2 | 0 | 99.15% |
 | `brace` | `syntax-meta` | 193 | 0 | 0 | 100.00% |
-| `string` | *abstains* | 0 | 0 | 943 | — |
+| `string` | *abstains* | 0 | 0 | 886 | — |
 | `value` | *abstains* | 0 | 0 | 165 | — |
 
 | outcome | bytes @7.23.2 | bytes @7.24rc2 |
 | ------- | ----: | ----: |
-| agree — both decided, projection accepts | 25,080 | 25,778 |
-| disagree — both decided, projection rejects | 155 | 161 |
-| unprojected — no declared projection covers the pair | 1,108 | 1,118 |
-| offline-silent — device decided, centrs abstained | 5,660 | 5,860 |
+| agree — both decided, projection accepts | 25,269 | 25,967 |
+| disagree — both decided, projection rejects | 143 | 149 |
+| unprojected — no declared projection covers the pair | 1,051 | 1,061 |
+| offline-silent — device decided, centrs abstained | 5,540 | 5,740 |
 | non-syntax — the device answered something syntax cannot decide | 733 | 847 |
-| device-silent — centrs decided, device said `none` | 5,667 | 5,805 |
-| both-silent | 3,709 | 3,896 |
+| device-silent — centrs decided, device said `none` | 5,663 | 5,801 |
+| both-silent | 3,713 | 3,900 |
 | parser-stopped — at/after the device's `error` byte, and silent from there | 43,417 | 41,968 |
 | parser-recovered — past that `error`, and the device classified anyway | 0 | 96 |
 
-Where the device decided and offline analysis did not (5,660 bytes at 7.23.2,
+Where the device decided and offline analysis did not (5,540 bytes at 7.23.2,
 the next fill's target list): `syntax-meta` 3,217, `arg` 1,235, `comment` 350,
-`variable-local` 310, `escaped` 145, `cmd` 137, 266 across the rest. Most of
-the `syntax-meta` share is whitespace the device merged into an adjacent
-structure run rather than a token centrs missed.
+`variable-local` 310, `escaped` 145, `arg-scope` 108, 175 across the rest.
+Most of the `syntax-meta` share is whitespace the device merged into an
+adjacent structure run rather than a token centrs missed.
 
 **Applicability** is the second axis (#263): of the bytes the device did
 answer, what kind of fact was it answering? Assigned from the pair — what
@@ -1538,11 +1619,11 @@ why it dominates the category.
 
 | applicability @7.23.2 | bytes | leading cells |
 | ---------------------------- | ----: | ------------- |
-| offline-decidable | 32,002 | `comment` → `comment` 18,006, `unclassified` → `syntax-meta` 3,216, `cmd` → `cmd` 1,985 |
+| offline-decidable | 32,002 | `comment` → `comment` 18,006, `unclassified` → `syntax-meta` 3,216, `cmd` → `cmd` 2,126 |
 | schema-dependent | 260 | `arg` → `obj-inactive` 260 |
-| state-dependent | 180 | `dir` → `obj-inactive` 132, `cmd` → `obj-inactive` 21, `unclassified` → `obj-dynamic` 20 |
+| state-dependent | 168 | `dir` → `obj-inactive` 120, `cmd` → `obj-inactive` 21, `unclassified` → `obj-dynamic` 20 |
 | version-dependent | 1,158 | `unclassified` → `none` 377, `comment` → `none` 353, `cmd` → `none` 124 |
-| uncategorized | 267 | `unclassified` → `obj-inactive` 144, `unclassified` → `variable-undefined` 75, `value` → `variable-undefined` 21 |
+| uncategorized | 279 | `unclassified` → `obj-inactive` 156, `unclassified` → `variable-undefined` 75, `value` → `variable-undefined` 21 |
 | no-device-answer | 51,662 | `none` where the captures agree, wherever it falls |
 
 One representative run per cell, so B5 reads a fragment rather than a count.
@@ -1552,42 +1633,55 @@ and a byte offset into the stream the device saw.
 | outcome | cell | fragment | runs | first at |
 | ------- | ---- | -------- | ---: | -------- |
 | disagree | `arg` → `syntax-meta` | `"="` | 141 | `forum/amm0/topic-141645-ip-route-check-command-disappeared/post-0025-snippet-01.rsc` @240 |
-| disagree | `cmd` → `dir` | `"address-list"` | 1 | `forum/amm0/topic-180595-resutt-of-print-command-to-variable-adress-list/post-0009-snippet-01.rsc` @332 |
 | disagree | `operator` → `arg` | `"in"` | 1 | `forum/amm0/topic-169456-having-the-where-filter-in-scripting-signifantly-increases-the-execution-time-an/post-0006-snippet-01.rsc` @615 |
 | unprojected | `string` → `syntax-meta` | `"\""` | 311 | `eworm/ppp-on-up.rsc` @435 |
 | unprojected | `string` → `escaped` | `"\\\""` | 53 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @559 |
 | unprojected | `value` → `syntax-meta` | `"\""` | 88 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @1436 |
-| unprojected | `string` → `cmd` | `"pick"` | 7 | `forum/amm0/topic-163557-a-few-undocumented-operators-that-are-kind-of-neat/post-0012-snippet-01.rsc` @1016 |
 | unprojected | `value` → `escaped` | `"\\00"` | 1 | `forum/rextended/topic-164329-post-0017-snippet-01.rsc` @243 |
+| unprojected | `string` → `arg` | `"as-value"` | 1 | `forum/amm0/topic-266499-how-to-condense-variables-passed-through-to-function/post-0020-snippet-01.rsc` @279 |
 <!-- END GENERATED highlight-agreement -->
 <!-- cspell:enable -->
 
-**What the disagreements are.** Three cells carry all of them, and none is a
+**What the disagreements are.** Two cells carry all of them, and neither is a
 lexing accident:
 
 - `arg` → `syntax-meta`: the `=` byte the `arg` class merges in. The device
   reads a separator as structure. This is the measured cost of the merge the
   token-census block already flags, and it is the single largest reason `arg`
   scores below the other name-coincident classes.
-- `cmd` → `dir`: a bare menu path carrying arguments and no verb
-  (`/ip/firewall/address-list name=… timeout=…`), where `verbsplit` takes the
-  last segment as the verb and the device keeps reading it as a menu. Both
-  premises are available offline and both say no — the path is in `MENU_PATHS`
-  and the segment is not in `VERBS` — so this is a confident reading that
-  should be an abstention ([#324](https://github.com/tikoci/centrs/issues/324)).
 - `operator` → `arg`: the space-separated `in` of `:foreach conn in $conns`,
   which the device reads as the argument **name** `in`. The two oracles
   genuinely differ here — `:parse` IL carries `in` in the operator set, and the
   operator-abstention table above already records that `:foreach x in=$list`
   lowers with no `(in …)` node.
 
-The `unprojected` residue carries the B5 findings: a quoted string swallows any
-`$[…]` substitution inside it, so bytes the device resolves to `cmd`, `dir` or
-`arg` are claimed as one `string` run — even though `structure.subcommands`
-has already resolved that same span, which makes it a fill-order carve-out
-rather than a parsing gap, and the first thing an editor consumer (#312) will
-notice ([#325](https://github.com/tikoci/centrs/issues/325)). And `value` bytes
-are, to the device, simply unclassified.
+The third cell is gone. `cmd` → `dir` was the whole of #324 — a known menu path
+carrying arguments and no verb, where `verbsplit` promoted the last segment;
+those 12 bytes now abstain instead of disagreeing, and the 14 `dir` bytes the
+same statements contributed to `agree` abstain with them. That is the price,
+and [the fix states it](#the-menu-path-with-arguments-324): withdrawing a
+fabricated verb also withdraws the menu reading it was built on.
+
+The `unprojected` residue is what #264 B5 reads. It was also where #325 lived:
+a quoted string claimed any `$[…]` substitution inside it, so bytes the device
+resolves to `cmd` or `dir` came back as one opaque `string` run even though
+`structure.subcommands` had already resolved that same span. Those cells have
+largely emptied (`string` → `cmd` 42 → 3, `string` → `dir` 19 → 1, with the
+same fix recovering padded bare brackets `[ … ]` from `offline-silent`), and
+the two residues left are stated rather than fixed:
+
+- `$(…)` — a **parenthesized** interpolation carrying a bracket, as in
+  `apikey-len=$([:len $apikey])`. Only `$[` is scanned inside a string, so the
+  inner command is not resolved there in the first place; this is a parser
+  reach, not a fill-order question (4 bytes on the slice).
+- a bare-word **argument** inside a substitution — `as-value` in
+  `:put "$[/ip address print as-value]"`. The path fill claims the path and
+  verb; the argument fill reads `statements[].arguments`, and a substitution is
+  not a statement, so it has no candidate to claim (8 bytes).
+
+Whether the `$` sigil and the `[` / `]` delimiters stay `string`, become
+`brace`, or get a class of their own is #264 B5's call — the device calls them
+`syntax-meta`. And `value` bytes are, to the device, simply unclassified.
 
 ### Designed, not implemented (the CLI surface, #202b)
 

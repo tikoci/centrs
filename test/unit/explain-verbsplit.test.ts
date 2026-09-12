@@ -711,6 +711,114 @@ describe("resolveVerbs — document walk over the certainty contract", () => {
 	}, 30_000);
 });
 
+/**
+ * #324 — the symmetric half of R9, priced on the frozen partition.
+ *
+ * `verbsplit` promoted a path segment to a verb whenever arguments followed,
+ * without asking whether the run named a MENU or whether the segment was a
+ * VERB. Both premises are offline facts and both said no, so the reading was a
+ * fabrication reported as `resolved`.
+ *
+ * Priced on the frozen dev/holdout partition (948-script corpus, 17,212
+ * statements): **10 statements flip, all `resolved` → `ambiguous`** — 1 dev, 9
+ * holdout. None is a genuine no-verb command. Three are real RouterOS missing
+ * a verb (`/ip/firewall/address-list name=ytkids …`, `/interface bridge [find]
+ * vlan-filtering=yes`, `/user-manager user [find …] attributes=…`) and seven
+ * are pasted non-RouterOS prose the case-insensitive table had been confirming
+ * as commands: five Python traceback `File "…"` lines, `User ID: 506`, and
+ * `port 80` — `/file`, `/user` and `/port` are all real menus (#203's genre
+ * bias, reaching the table through a lookup that folds case).
+ */
+describe("#324 — a known menu path with arguments does not invent a verb", () => {
+	test("both spellings abstain instead of promoting a path segment", () => {
+		// Slashed: the punctuation rule's "no space token, arguments follow —
+		// last segment" fallback promoted the LEAF. Spaced: the first space token
+		// is promoted, which is one level HIGHER and worse.
+		for (const [text, promoted] of [
+			["/ip/firewall/address-list name=ytkids timeout=1h", "address-list"],
+			["/ip firewall address-list name=x", "firewall"],
+		] as const) {
+			const got = resolveVerb(text, "/");
+			expect(got).toMatchObject({
+				resolution: "ambiguous",
+				kind: null,
+				path: null,
+				verb: null,
+				verbAt: null,
+			});
+			expect(got.why).toContain("`/ip/firewall/address-list` is a known");
+			expect(got.why).toContain(`\`${promoted}\` is not a console verb`);
+		}
+	});
+
+	test("the adjacent readings are untouched — this narrows nothing else", () => {
+		expect(
+			resolveVerb("/ip/firewall/address-list add name=x", "/"),
+		).toMatchObject({
+			resolution: "resolved",
+			path: "/ip/firewall/address-list",
+			verb: "add",
+		});
+		expect(resolveVerb("/ip/firewall/address-list", "/")).toMatchObject({
+			resolution: "navigation",
+			path: "/ip/firewall/address-list",
+		});
+	});
+
+	test("a vocabulary verb is never overruled — the `VERBS` test excludes it", () => {
+		// `print` IS in the frozen vocabulary, so the promoted token passes the
+		// verb premise and the guard cannot reach a statement like this one even
+		// though its run prefix is a known menu.
+		expect(
+			resolveVerb("/ip/firewall/address-list print name=x", "/"),
+		).toMatchObject({
+			resolution: "resolved",
+			path: "/ip/firewall/address-list",
+			verb: "print",
+		});
+	});
+
+	test("a published command outranks the container listing of its prefix", () => {
+		// `catalogVerbAt` is first-order evidence about THAT path; the menu table
+		// only says the prefix is a container. `/system/gps` is a menu and
+		// `monitor` is not a frozen verb, so without the `catalogAt` exclusion
+		// this statement would newly abstain.
+		expect(resolveVerb("/system/gps/monitor once", "/")).toMatchObject({
+			resolution: "resolved",
+			path: "/system/gps",
+			verb: "monitor",
+		});
+	});
+
+	test("R10's directives are left alone", () => {
+		expect(resolveVerb(':log info "x"', "/")).toMatchObject({
+			resolution: "resolved",
+			path: "/log",
+			verb: "info",
+		});
+	});
+
+	test("absence still decides nothing — an unlisted run keeps today's reading", () => {
+		// The fail-closed direction is unchanged: PRESENCE in the tables narrows
+		// the reading, absence never widens it. A menu neither table carries
+		// spelled the same way is read exactly as before.
+		expect(resolveVerb("/foo/bar/baz name=x", "/")).toMatchObject({
+			resolution: "resolved",
+			path: "/foo/bar",
+			verb: "baz",
+		});
+	});
+
+	test("a `{` after the run is a menu CONTAINER body, not a missing verb", () => {
+		// `/system {identity print}` (H7) names a menu and opens its body; no verb
+		// is missing. Abstaining here would drop the `invalid-command-brace`
+		// ERROR that `invalidCommandBraceDiagnostics` finds through `argsAt`.
+		expect(resolveVerb("/system {identity print}", "/").resolution).toBe(
+			"resolved",
+		);
+	});
+});
+
 test("verb/menu API is re-exported from the library barrel", () => {
 	expect(centrs.resolveVerb).toBe(resolveVerb);
 	expect(centrs.resolveVerbs).toBe(resolveVerbs);

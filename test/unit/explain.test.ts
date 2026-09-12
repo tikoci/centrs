@@ -527,6 +527,84 @@ describe("commands/explain/examples.md — offline", () => {
 			expect(code).toBe(0);
 		}
 	});
+
+	test("30. A known menu path with arguments invents no verb (#324)", async () => {
+		const { data, code } = await explainJson([
+			"/ip/firewall/address-list name=ytkids timeout=1h",
+		]);
+		const [statement] = data.structure.statements;
+		expect(statement?.resolution).toBe("ambiguous");
+		expect(statement?.command).toBeUndefined();
+		expect(data.diagnostics).toEqual([
+			{
+				code: "explain/canonicalizer/ambiguous-statement",
+				severity: "warning",
+				message: statement?.unresolved as string,
+				span: { start: 0, end: 48 },
+				ev: statement?.ev as string,
+			},
+		]);
+		expect(statement?.unresolved).toContain(
+			"`/ip/firewall/address-list` is a known RouterOS menu",
+		);
+		expect(statement?.unresolved).toContain(
+			"`address-list` is not a console verb",
+		);
+		// A refusal is a warning, so the default `--fail-on error` still exits 0.
+		expect(data.verdict).toBe("warn");
+		expect(code).toBe(0);
+
+		// The spaced spelling promoted a segment one level higher still.
+		const spaced = await explainJson(["/ip firewall address-list name=x"]);
+		expect(spaced.data.structure.statements[0]?.resolution).toBe("ambiguous");
+
+		// Adding the verb, or dropping the arguments, resolves it again.
+		const withVerb = await explainJson([
+			"/ip/firewall/address-list add name=ytkids",
+		]);
+		expect(withVerb.data.structure.statements[0]).toMatchObject({
+			resolution: "resolved",
+			kind: "command",
+			command: { path: "/ip/firewall/address-list", verb: "add" },
+		});
+		const bare = await explainJson(["/ip/firewall/address-list"]);
+		expect(bare.data.structure.statements[0]).toMatchObject({
+			resolution: "resolved",
+			kind: "menu",
+			command: { path: "/ip/firewall/address-list" },
+		});
+	});
+
+	test("31. A substitution inside a string keeps its own tokens (#325)", async () => {
+		const input = ':put "$[/ip address print as-value]"';
+		const { data, code } = await explainJson([input, "--tokens"]);
+		expect(data.structure.subcommands[0]).toMatchObject({
+			resolution: "resolved",
+			kind: "command",
+			command: { path: "/ip/address", verb: "print" },
+		});
+		expect(
+			(data.tokens ?? []).map(
+				(t) => `${t.class}:${input.slice(t.start, t.end)}`,
+			),
+		).toEqual([
+			"dir::",
+			"cmd:put",
+			"unclassified: ",
+			'string:"$[',
+			"dir:/ip",
+			"string: ",
+			"dir:address",
+			"string: ",
+			"cmd:print",
+			'string: as-value]"',
+		]);
+		// Still total and gapless — only the OWNER of those bytes moved.
+		expect(
+			(data.tokens ?? []).map((t) => input.slice(t.start, t.end)).join(""),
+		).toBe(input);
+		expect(code).toBe(0);
+	});
 });
 
 test("64 KiB separator-free input stays bounded through public explain (#248)", () => {

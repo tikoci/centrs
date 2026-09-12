@@ -60,6 +60,18 @@
  * its precedence over the punctuation guess, and the two places it deliberately
  * does not apply. `splitRun` is again untouched — both tables are consumed here.
  *
+ * **The other direction closes too (#324).** R9 kept `pathresolve` from
+ * claiming navigation where a verb was decided; the symmetric rule keeps
+ * `resolveVerb` from claiming a verb where the whole run names a known MENU
+ * and the segment it would promote is not in `VERBS`. `splitRun`'s punctuation
+ * fallback used to read `/ip/firewall/address-list name=ytkids` as verb
+ * `address-list` at `/ip/firewall` — a verb assembled from a path segment, on
+ * a statement whose verb is simply missing. It degrades to `ambiguous`. Priced
+ * on the frozen partition: 10 of 17,212 statements flip, every one of them a
+ * fabrication withdrawn (`commands/explain/README.md` → The menu path with
+ * arguments). Both tables stay floors — presence narrows, absence decides
+ * nothing.
+ *
  * Like `blocks.ts`, this ships only the boundary primitives. Argument parsing
  * (`k=v` / `?query` after the verb) belongs to the phase-1 canonical assembly,
  * not to the Q6 question. `resolveVerb(text, context)` takes the enclosing menu
@@ -587,6 +599,25 @@ function unknownSplit(why: string): VerbSplitRefusal {
 }
 
 /**
+ * What follows the leading run: an operand stream, a brace body, or unknown.
+ *
+ * Only the tail's FIRST byte is read, and only three answers come out of it, so
+ * this stays a shape test rather than a second parser. `"body"` is the `{` of a
+ * menu container or a scope block; `"argument"` is anything else that is there;
+ * `"none"` is a run with nothing after it (V4's bare path) or a tail whose
+ * offset `describeStatement` could not establish.
+ */
+function operandTail(
+	text: string,
+	runEnd: number | null,
+): "argument" | "body" | "none" {
+	if (runEnd === null) return "none";
+	const tail = trimAsciiStart(text.slice(runEnd));
+	if (tail.length === 0) return "none";
+	return tail.startsWith("{") ? "body" : "argument";
+}
+
+/**
  * Resolve one statement's verb/menu boundary, applying the enclosing menu
  * `context`. Mirrors `pathresolve`'s base rule: a `:`/bare directive and an
  * absolute (`/`) statement resolve at the root; everything else inherits
@@ -657,6 +688,58 @@ export function resolveVerb(text: string, context: string): VerbSplit {
 					ambiguous: false,
 					why: `published command \`${candidates[catalogAt]}\``,
 				};
+	// #324 — the symmetric half of R9. R9 made `pathresolve`'s `menuNavPath`
+	// consult `VERBS` so it could not claim navigation where a verb was decided;
+	// this stops the punctuation rule claiming a verb where the run names a
+	// known MENU and the token it would promote is not a console verb.
+	// `/ip/firewall/address-list name=ytkids` has no verb in it: the punctuation
+	// rule's "no space token, arguments follow — last segment" fallback promotes
+	// `address-list`, and the spaced spelling `/ip firewall address-list name=x`
+	// promotes `firewall`, one level higher still. Both premises are available
+	// offline and both say no, so the reading is a fabrication rather than a
+	// guess with a basis.
+	//
+	// Only the fail-closed direction: PRESENCE in the tables decides, absence
+	// decides nothing, so an unlisted menu spelled `…/address-list` keeps
+	// today's reading. The vocabulary hit is excluded by the `VERBS` test itself
+	// (a vocabulary split promotes a `VERBS` member by construction), the
+	// published-command axis by `catalogAt` — first-order evidence about that
+	// exact path outranks a container listing of its prefix — and directives by
+	// R10, which is measured.
+	//
+	// This abstains, it does not reject: offline knows it cannot name a verb
+	// here, which needs no device evidence. Whether RouterOS refuses the shape
+	// outright is a device claim and is deliberately not made (contrast #311's
+	// `error`, which is CHR-grounded).
+	//
+	// One shape is excluded by the tail rather than by a table: a `{` after the
+	// run is a menu CONTAINER body (`/system {identity print}`, H7), where the
+	// run legitimately names a menu and no verb is missing at all.
+	// `invalidCommandBraceDiagnostics` reads that statement's `argsAt` to find
+	// the brace, so abstaining here would drop a real `error` on the statement
+	// after it. A tail this cannot see (`runEnds` null) is not classified, and
+	// the guard stands down there too.
+	if (
+		!directive &&
+		catalogAt === null &&
+		!split.ambiguous &&
+		split.verbAt !== null &&
+		!VERBS.has((run[split.verbAt] as RunToken).name) &&
+		operandTail(text, runEnds[run.length - 1] ?? null) === "argument"
+	) {
+		const full = candidates[candidates.length - 1] as string;
+		if (isKnownMenuPath(full.split("/").filter(Boolean)))
+			return {
+				resolution: "ambiguous",
+				kind: null,
+				path: null,
+				verb: null,
+				verbAt: null,
+				argsAt: null,
+				candidates,
+				why: `\`${full}\` is a known RouterOS menu and \`${(run[split.verbAt] as RunToken).name}\` is not a console verb: this run names a menu and the verb is missing, so offline will not promote a path segment to one`,
+			};
+	}
 	if (split.ambiguous) {
 		// V4's bare path, the one case `proposed` refuses — and the one the baked
 		// container table can answer (#210). The lookup reads the LAST candidate,

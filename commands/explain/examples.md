@@ -640,3 +640,40 @@ centrs explain '/ip/address add interface=ether1; /ip/route add gateway=192.168.
 
 `data.verdict` is `pass` with no diagnostics, two statements, and each keeps its
 own `command.args`. The newline spelling is identical.
+
+### 30. A known menu path with arguments does not get an invented verb
+
+```bash
+centrs explain '/ip/firewall/address-list name=ytkids timeout=1h' --json
+```
+
+One statement with `resolution: "ambiguous"` and no `command` at all, plus an
+`explain/canonicalizer/ambiguous-statement` **warning** over the whole
+statement naming both premises: `/ip/firewall/address-list` is a known menu,
+and `address-list` is not a console verb. `data.verdict` is `warn`, so the
+default `--fail-on error` still exits `0` — offline is saying it cannot read
+this, not that RouterOS rejects it.
+
+It used to answer `resolution: "resolved"`, `command.path: "/ip/firewall"`,
+`command.verb: "address-list"` — a verb assembled out of a path segment. The
+spaced spelling `/ip firewall address-list name=x` was worse, promoting
+`firewall` and reporting the menu as `/ip`. Adding the verb resolves it again
+(`/ip/firewall/address-list add name=ytkids` is `resolved`/`command`), and the
+bare path without arguments is still `resolved`/`menu` (example 18b's rule).
+
+### 31. A command substitution inside a string keeps its own tokens
+
+```bash
+centrs explain ':put "$[/ip address print as-value]"' --tokens --json
+```
+
+`data.structure.subcommands[0]` resolves `/ip/address` verb `print` — it always
+did — and `data.tokens[]` now agrees with it: `dir` over `/ip` and `address`,
+`cmd` over `print`, with the quote, the `$[`, the separators and the trailing
+`as-value]"` left as `string`. The whole quoted run used to be one opaque
+`string` token, so an editor rendering the partition painted a command centrs
+had already read as flat text.
+
+Byte coverage does not change — the partition is still total and gapless — only
+which fill owns those bytes. Whether the `$` sigil and the `[` / `]` delimiters
+deserve a class of their own is #264 B5; the device calls them `syntax-meta`.
