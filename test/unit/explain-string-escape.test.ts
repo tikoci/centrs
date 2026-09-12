@@ -392,6 +392,31 @@ describe("the `escaped` token fill (#264)", () => {
 		expect(partition(input)).toContain("unclassified( (true) \\\n    )");
 	});
 
+	test("an escaped `$` is an escape, not a variable sigil", () => {
+		// The two fills have to agree about this byte, and the token stream is
+		// where that shows: `\$` must reach `escaped` whole, with no
+		// `variable-*` span carving into it. The unescaped spelling is the
+		// control — same bytes minus the backslash, and `b` IS a variable there.
+		expect(partition(':local b 1; :put "a\\$b"')).toContain(
+			'string("a) escaped(\\$) string(b")',
+		);
+		expect(partition(':local b 1; :put "a$b"')).toContain(
+			'string("a$) variable-local(b) string(")',
+		);
+	});
+
+	test("a truncated escape at end of input claims nothing", () => {
+		// `\` with nothing after it is invalid, so the walk stops rather than
+		// emit a one-byte `escaped`. Every `escaped` token is at least 2 bytes.
+		for (const input of [':put "a\\', ':put "\\', ':put "\\0"']) {
+			const tokens = explainCommand(input, { tokens: true }).tokens ?? [];
+			expect(
+				tokens.some((t) => t.class === "escaped"),
+				input,
+			).toBe(false);
+		}
+	});
+
 	test("a backslash inside a comment is not an escape", () => {
 		const input = "# a \\n comment\n:put 1";
 		const tokens = explainCommand(input, { tokens: true }).tokens ?? [];
