@@ -34,12 +34,16 @@ import { explainCommand } from "../../src/explain.ts";
  *     tokens, spans — field for field against this process's Bun-native
  *     result.
  *
- * All three assertions are mutation-tested rather than assumed: re-adding an
- * `./execute.ts` import to `explain.ts` fails the boundary gate naming
- * `src/protocols/mac-telnet.ts` and the `node:crypto` chain; truncating
- * `tokens` in the worker entry fails 10 of the 14 cases with the differing path
- * (`$.tokens.length: 24 vs 1`) reported; and dropping the shadowing wrapper
- * reports `Bun, process` as reachable.
+ * Every assertion is mutation-tested rather than assumed:
+ *
+ *   - re-adding an `./execute.ts` import to `explain.ts` fails the boundary
+ *     gate naming `src/protocols/mac-telnet.ts` and the `node:crypto` chain;
+ *   - reaching the same module through `export { … } from "./execute.ts"`
+ *     instead — a runtime edge an import-only scan does not see — fails it too
+ *     (60 modules, seven host builtins);
+ *   - truncating `tokens` in the worker entry fails 13 of the 14 cases with the
+ *     differing path reported (`tokens-off` has none to truncate);
+ *   - dropping the shadowing wrapper reports `Bun, process` as reachable.
  */
 describe("offline explain entry stays browser-consumable (#312)", () => {
 	test("the entry's module graph reaches no transport, CDB, or CLI module", () => {

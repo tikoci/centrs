@@ -84,13 +84,17 @@ const FORBIDDEN_PREFIXES: readonly { prefix: string; why: string }[] = [
 function reachableGraph(entry: string): {
 	modules: string[];
 	builtins: { specifier: string; chain: string[] }[];
+	unresolvedDynamic: number;
 } {
 	const seen = new Map<string, string[]>();
 	const builtins: { specifier: string; chain: string[] }[] = [];
+	let unresolvedDynamic = 0;
 	const visit = (file: string, chain: string[]): void => {
 		if (seen.has(file)) return;
 		seen.set(file, chain);
-		for (const specifier of runtimeImports(file)) {
+		const read = runtimeImports(file);
+		unresolvedDynamic += read.unresolvedDynamic;
+		for (const specifier of read.specifiers) {
 			if (!specifier.startsWith(".")) {
 				if (specifier.startsWith("node:") || specifier === "bun")
 					builtins.push({
@@ -107,33 +111,80 @@ function reachableGraph(entry: string): {
 	return {
 		modules: [...seen.keys()].map((f) => relative(ROOT, f)).sort(),
 		builtins,
+		unresolvedDynamic,
 	};
 }
 
 /**
- * Module specifiers `file` imports AT RUNTIME.
+ * Module specifiers `file` pulls in AT RUNTIME.
  *
- * `import type { … }` and a clause whose every specifier is `type`-prefixed
- * both erase, so counting them would fail the gate on edges that do not exist
- * in the emitted graph — `src/core/envelope.ts` imports `RouterOsProtocol` from
- * the protocols barrel that way, and always has.
+ * Four forms carry a runtime edge, and missing any one leaves the gate blind:
+ * `import … from "x"`, a bare side-effect `import "x"`, a re-export
+ * `export {…}/* from "x"` (this repo has one inside the explain tree —
+ * `explain/verbsplit.ts` re-exports `verbs.ts`, which an import-only scan does
+ * not see), and a dynamic `import("x")` with a literal specifier.
+ *
+ * Type-only edges are excluded because they ERASE: `import type {…}`,
+ * `export type {…}`, and a clause whose every specifier is `type`-prefixed
+ * produce no emitted import. Counting them would fail the gate on edges that do
+ * not exist — `src/core/envelope.ts` names `RouterOsProtocol` from the
+ * protocols barrel that way, and always has.
+ *
+ * A dynamic import with a NON-literal specifier cannot be resolved statically;
+ * {@link DYNAMIC_IMPORT_UNRESOLVED} reports it rather than passing silently.
  */
-function runtimeImports(file: string): string[] {
+function runtimeImports(file: string): {
+	specifiers: string[];
+	unresolvedDynamic: number;
+} {
 	const source = readFileSync(file, "utf8");
-	const out: string[] = [];
-	const pattern = /^import\s+(type\s+)?([\s\S]*?)from\s+"([^"]+)";/gm;
-	let match: RegExpExecArray | null = pattern.exec(source);
-	for (; match !== null; match = pattern.exec(source)) {
+	const specifiers: string[] = [];
+
+	// `import …/export … from "x"` — skip `import type`/`export type` outright,
+	// then skip an all-`type` specifier clause.
+	const fromPattern =
+		/^(?:import|export)\s+(type\s+)?([\s\S]*?)from\s+"([^"]+)";/gm;
+	for (
+		let match = fromPattern.exec(source);
+		match !== null;
+		match = fromPattern.exec(source)
+	) {
 		if (match[1]) continue;
 		const names = (match[2] ?? "")
 			.replace(/[{}]/g, "")
 			.split(",")
 			.map((n) => n.trim())
 			.filter(Boolean);
+		// `export * from "x"` has no named clause and is always a runtime edge.
 		if (names.length > 0 && names.every((n) => n.startsWith("type "))) continue;
-		out.push(match[3] ?? "");
+		specifiers.push(match[3] ?? "");
 	}
-	return out;
+
+	// Bare side-effect `import "x";`.
+	const barePattern = /^import\s+"([^"]+)";/gm;
+	for (
+		let match = barePattern.exec(source);
+		match !== null;
+		match = barePattern.exec(source)
+	) {
+		specifiers.push(match[1] ?? "");
+	}
+
+	// Dynamic `import("x")`, literal only. `import.meta` is not an import.
+	let unresolvedDynamic = 0;
+	const dynamicPattern = /(?<!\.)\bimport\s*\(\s*([^)]*?)\s*\)/g;
+	for (
+		let match = dynamicPattern.exec(source);
+		match !== null;
+		match = dynamicPattern.exec(source)
+	) {
+		const argument = (match[1] ?? "").trim();
+		const literal = /^"([^"]+)"$/.exec(argument);
+		if (literal) specifiers.push(literal[1] ?? "");
+		else if (argument.length > 0) unresolvedDynamic++;
+	}
+
+	return { specifiers, unresolvedDynamic };
 }
 
 export interface BoundaryReport {
@@ -144,7 +195,7 @@ export interface BoundaryReport {
 
 /** The BOUNDARY half: does the entry's graph stay offline and host-free? */
 export function checkBoundary(): BoundaryReport {
-	const { modules, builtins } = reachableGraph(ENTRY);
+	const { modules, builtins, unresolvedDynamic } = reachableGraph(ENTRY);
 	const violations: string[] = [];
 	for (const module of modules) {
 		const hit = FORBIDDEN_PREFIXES.find((f) => module.startsWith(f.prefix));
@@ -154,6 +205,12 @@ export function checkBoundary(): BoundaryReport {
 		if (ALLOWED_BUILTINS.has(specifier)) continue;
 		violations.push(`${specifier} — host builtin, via ${chain.join(" -> ")}`);
 	}
+	// A specifier the walk cannot resolve is a hole in the gate, not a pass.
+	if (unresolvedDynamic > 0)
+		violations.push(
+			`${unresolvedDynamic} dynamic import(s) with a non-literal specifier — ` +
+				"the graph below them is unmeasured",
+		);
 	return {
 		moduleCount: modules.length,
 		violations,
