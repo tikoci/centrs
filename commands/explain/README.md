@@ -1516,7 +1516,7 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
   1,426,731 analyzed bytes, 1,023,405 are classified (71.73%), the remaining
-  403,326 are `unclassified`. The census emits 231,026 tokens (avg 243.7 per
+  403,326 are `unclassified`. The census emits 241,663 tokens (avg 254.9 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is the
   vocabulary #264 B5 settled. Each B2 fill should move the classified
@@ -1547,24 +1547,29 @@ before operators see it
 — and **`#295`'s value fill follows it** — `src/explain/value-tokens.ts`
 claims argument value bytes and leaf array-literal members
 (`data.values.occurrences`, leaves only via `parent` containment,
-quotes-included) on the residual left by `spans`+`path`+`arg`, before the
+quotes-included) on the residual left by `spans`+`path`+`arg`+`escaped`, before the
 **B3 string/brace fills** see it — `src/explain/string-tokens.ts` claims
-quoted-string runs (delimiters included) and `src/explain/brace-tokens.ts`
+quoted-string runs (delimiters included, escapes already taken) and `src/explain/brace-tokens.ts`
 claims every residual brace delimiter (`{`/`}`), including delimiters from
 invalid braced references, on the residual left by
-`spans`+`path`+`arg`+`value`, and finally `operator` sees only what none of
+`spans`+`path`+`arg`+`escaped`+`value`, and finally `operator` sees only what none of
 them wanted — which is why the operator fill can abstain on `, / = -` outside
 `( )`, on bytes glued after an argument `=`, and on bytes glued into an
-argument name without a smarter operator scanner. Fill order is enforced by
+argument name without a smarter operator scanner. **`src/explain/escape-tokens.ts`
+claims valid string-internal escapes as `escaped`** between `arg` and `value`:
+an escape is interior to a quoted run, so it has to claim before the two fills
+that would otherwise swallow it whole, and it splits their runs into fragments
+around it the same way a `variable-*` span already did. Fill order is enforced by
 argument order to `buildTokens` ([#290 design decision 1](../../src/explain.ts)):
-`spans` claims first, then `path`, `arg`, `value`, `string`, `brace`, and
-finally `operator`.
+`spans` claims first, then `path`, `arg`, `escaped`, `value`, `string`, `brace`,
+and finally `operator`.
 `ExplainTokenClass` is
 `ExplainSpanClass | "dir" | "cmd" | "operator" | "arg" | "arg-sep" | "value" |
-"string" | "brace" | "unclassified"` — one `operator` class for all 26
+"string" | "escaped" | "brace" | "unclassified"` — one `operator` class for all 26
 spellings + 2 aliases, `arg` for an argument's name bytes and `arg-sep` for the
 single `=` that binds it to its value, one `value` class for every leaf value
-span, plus `string` (quoted runs) and `brace` (scope delimiters). #264 B5
+span, plus `string` (quoted runs minus their escapes), `escaped` (one valid
+string-internal escape sequence) and `brace` (scope delimiters). #264
 settled which of those merges keep their name and which do not, on a stated
 rule rather than taste — see
 [The vocabulary](#the-vocabulary-and-what-earns-a-class-264-b5).
@@ -1670,10 +1675,10 @@ generated from `test/fixtures/explain/highlight-agreement.json` by
 `bun run explain:highlight-agreement:readme:check`, and the fixture itself is
 gated against a fresh measurement by
 `test/unit/explain-highlight-agreement.test.ts`. Of 85,529 bytes at 7.23.2,
-26,794 are bytes **both** sides decided a syntax class for, and 99.99% of
-those agree (dev 99.99%, holdout 100.00%). Set `comment` aside — it is 67.20%
+27,212 are bytes **both** sides decided a syntax class for, and 99.99% of
+those agree (dev 99.99%, holdout 100.00%). Set `comment` aside — it is 66.17%
 of that decided region and mostly the corpus's harness-injected `# Source:`
-banner (#203) — and the remaining 8,788 bytes agree 99.98%. The device stops
+banner (#203) — and the remaining 9,206 bytes agree 99.98%. The device stops
 classifying at its one-byte `error`: 43 of 70 scripts carry one, and the
 43,417 bytes from there on are not a judgment about anything. The oracle
 itself moves between captures: 43 stop at 7.23.2 and 36 stop at 7.24rc2, and
@@ -1694,14 +1699,15 @@ two authors, so the percentage describes this slice.
 | `arg-sep` | `syntax-meta` | 358 | 0 | 0 | 100.00% |
 | `operator` | `syntax-meta` | 232 | 2 | 0 | 99.15% |
 | `brace` | `syntax-meta` | 193 | 0 | 0 | 100.00% |
-| `string` | *abstains* | 0 | 0 | 886 | — |
-| `value` | *abstains* | 0 | 0 | 165 | — |
+| `string` | *abstains* | 0 | 0 | 495 | — |
+| `escaped` | `escaped` | 418 | 0 | 0 | 100.00% |
+| `value` | *abstains* | 0 | 0 | 138 | — |
 
 | outcome | bytes @7.23.2 | bytes @7.24rc2 |
 | ------- | ----: | ----: |
-| agree — both decided, projection accepts | 26,792 | 27,546 |
+| agree — both decided, projection accepts | 27,210 | 27,964 |
 | disagree — both decided, projection rejects | 2 | 2 |
-| unprojected — no declared projection covers the pair | 1,051 | 1,061 |
+| unprojected — no declared projection covers the pair | 633 | 643 |
 | offline-silent — device decided, centrs abstained | 4,158 | 4,308 |
 | non-syntax — the device answered something syntax cannot decide | 733 | 847 |
 | device-silent — centrs decided, device said `none` | 5,674 | 5,815 |
@@ -1740,10 +1746,10 @@ and a byte offset into the stream the device saw.
 | ------- | ---- | -------- | ---: | -------- |
 | disagree | `operator` → `arg` | `"in"` | 1 | `forum/amm0/topic-169456-having-the-where-filter-in-scripting-signifantly-increases-the-execution-time-an/post-0006-snippet-01.rsc` @615 |
 | unprojected | `string` → `syntax-meta` | `"\""` | 311 | `eworm/ppp-on-up.rsc` @435 |
-| unprojected | `string` → `escaped` | `"\\\""` | 53 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @559 |
 | unprojected | `value` → `syntax-meta` | `"\""` | 88 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @1436 |
-| unprojected | `value` → `escaped` | `"\\00"` | 1 | `forum/rextended/topic-164329-post-0017-snippet-01.rsc` @243 |
 | unprojected | `string` → `arg` | `"as-value"` | 1 | `forum/amm0/topic-266499-how-to-condense-variables-passed-through-to-function/post-0020-snippet-01.rsc` @279 |
+| unprojected | `string` → `cmd` | `"len"` | 1 | `forum/amm0/topic-155978-zerotier-on-mikrotik-a-rosetta-stone-v7-1-1/post-0001-snippet-01.rsc` @1794 |
+| unprojected | `string` → `dir` | `":"` | 1 | `forum/amm0/topic-155978-zerotier-on-mikrotik-a-rosetta-stone-v7-1-1/post-0001-snippet-01.rsc` @1793 |
 <!-- END GENERATED highlight-agreement -->
 <!-- cspell:enable -->
 
@@ -1819,7 +1825,7 @@ one passes:
 | `operator` — 26 spellings + 2 aliases | slice the input at the token's span: the spelling *is* the bytes, and `src/explain/operators.ts` maps it to its IL node | keep |
 | `value` — every leaf, whatever its shape | join `data.values.occurrences[]` on the offset; #225's three axes (shape, observed, schema) live there, and a class per shape would be a fourth copy free to contradict them | keep |
 | `brace` — scope and array delimiters | `structure.blocks[]` locates every scope block; an array container is the `values.occurrences[]` entry that is some other occurrence's `parent` | keep |
-| `string` — delimiters, escapes, interior | the opening delimiter is the run's first byte and, where the run is closed, the last is its partner (an unterminated one is already a located defect). The **escapes are a different answer** — see below | keep, with one admitted candidate |
+| `string` — delimiters, escapes, interior | the opening delimiter is the run's first byte and, where the run is closed, the last is its partner (an unterminated one is already a located defect). The **escapes were a different answer** — see below | **partly split** → `escaped`; delimiters and interior stay merged |
 
 Re-derive the `arg-sep` figures with `bun run explain:arg-reach`, which prices
 the same gap it prices the reach fork with.
@@ -1882,18 +1888,61 @@ of the same abstention would be free to disagree with it. A consumer that needs
 the reason imports `lexExplainArgumentTokens` from the package root — which is
 why that export exists.
 
-**The one candidate the rule admits and this change does not make.** A *valid*
-string escape is recoverable from nothing: only invalid ones surface, as
-`bad-string-escape` diagnostics, and finding the rest means walking the escape
-grammar (uppercase-hex `\XX`, the whitespace continuation, the twelve
-single-character forms) that
-[String escape validation](#string-escape-validation-247-252) already owns. The
-device does class them. On the slice that is 53 `string` → `escaped` runs and 1
-`value` → `escaped`, today counted `unprojected` because neither class has a
-device counterpart for the whole run; splitting escapes out would let the
-report score those bytes for the first time. It is a **fill change, not a retag** — the
-grammar has to be walked inside both `string` and `value` runs — so it is its
-own task, sized here rather than assumed, and it stays on #264.
+**The second split the rule admits, now made: `escaped`.** A *valid* string
+escape is recoverable from nothing. Only INVALID ones surface elsewhere, as
+`bad-string-escape` diagnostics, so a consumer holding `tokens[]` has no
+published surface to join against to find the valid ones — and the device does
+class them, as one of the 19 highlight classes. Both halves of the rule hold,
+so the class is earned.
+
+Unlike `arg-sep` this is a **fill change** rather than a pure relabel of one
+analyzer's own output: the escape grammar (uppercase-hex `\XX`, the whitespace
+continuation, the twelve single-character forms) has to be walked, and the
+bytes come out of two fills at once rather than one.
+`src/explain/escape-tokens.ts` runs between `arg` and `value`.
+
+**The walk is not new, and deliberately not a second one.**
+[String escape validation](#string-escape-validation-247-252) already owned this
+grammar for `bad-string-escape`. `walkStringEscapes` now returns *both* halves
+of that one reading — the valid escapes and the first invalid one — so an
+`escaped` token and a `bad-string-escape` diagnostic cannot disagree about which
+bytes are an escape. Deriving them from two walks would have made that
+disagreement possible, and the document is walked once rather than twice. The
+walk stops at the first invalid escape, so `escaped` is the prefix the validator
+vouched for: past a malformed escape the string boundaries are themselves in
+doubt, and painting there would be a claim the walk cannot support.
+
+**What the split cost: nothing, and the census proves it.** On the corpus
+`escaped` claims **19,960 bytes over 7,408 tokens**, and every one of those
+bytes came from a fill that already held it — `string` gives up 17,672 and
+`value` 2,288, which is exactly 19,960. Classified bytes are **identical to the
+last decimal**, 1,023,405 of 1,426,731 (71.73076073906013%), so in byte terms
+this is a retag even though it took a new walk to make. Only the token count
+moves, 231,026 → 241,663, because a run carrying an escape becomes three.
+
+**What it bought.** Against the committed device slice `escaped` claims **418
+bytes on 100.00% agreement, 0 disagreements** — the 53 `string` → `escaped`
+runs and the 1 `value` → `escaped` that were `unprojected` before, scored for
+the first time. Total `unprojected` falls **1,051 → 633 bytes** (−39.8%) and the
+both-decided region grows 26,794 → 27,212. No byte changed which analyzer found
+it and no disagreement was introduced.
+
+The projection entry was again **declared before it was measured**: `escaped`
+predicts `escaped` because the class means one valid string-internal escape and
+that is the run the device gives the same name. `escaped` was already listed in
+`DEVICE_CLASS_KIND` as a syntax class; the agreement report's `unprojected`
+table showed the bytes were being merged away, it did not pick the target.
+
+**The residue this does not claim, sized.** 145 bytes across 24 runs in 4 slice
+scripts stay `unclassified` where the device says `escaped`, and every one of
+them is the same shape: a `\`-newline **line continuation in code**, outside any
+string (`… != true) \<newline>      do={`). The device's run there swallows the
+next line's indentation too, so the 145 bytes are 48 of `\`+terminator and 97 of
+trailing whitespace. That is a different claim from a string escape — centrs has
+no continuation token, and matching the device would mean deciding how much
+following whitespace a continuation owns — so it is **not** folded in here. It
+belongs with the continuation question #225 already owns (what a continuation
+does to a value's interior); this paragraph is its size, not a plan.
 
 Delimiters are the near miss that shows the rule discriminates rather than
 rubber-stamps: `"` bytes are 311 `string` → `syntax-meta` runs and 88

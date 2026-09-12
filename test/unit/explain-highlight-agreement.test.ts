@@ -221,6 +221,7 @@ describe("#264 B4 — the projection is total, declared, and abstains on merges"
 		"arg-sep",
 		"value",
 		"string",
+		"escaped",
 		"brace",
 		"unclassified",
 	];

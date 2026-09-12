@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	collectStringEscapeDefects,
 	scanQuotedString,
+	walkStringEscapes,
 } from "../../src/explain/quoted-string.ts";
 import { explainCommand } from "../../src/explain.ts";
 
@@ -293,6 +294,126 @@ describe("string escape validation (#247)", () => {
 		for (const n of [254, 255]) {
 			const bad = inside(n, '"a\\qb"');
 			expect(collectStringEscapeDefects(bad).length).toBe(n === 254 ? 1 : 0);
+		}
+	});
+});
+
+/**
+ * The `escaped` token class (#264) — the second split B5's rule admits.
+ *
+ * These live beside the escape-grammar tests on purpose: the token and the
+ * `bad-string-escape` diagnostic are two halves of ONE walk
+ * (`walkStringEscapes`), and the point of that design is that they cannot
+ * disagree about which bytes are an escape. A test file that checked them
+ * apart would not notice if they did.
+ */
+describe("the `escaped` token fill (#264)", () => {
+	/** `class(text)` for every token, so a whole partition reads in one line. */
+	function partition(input: string): string {
+		const tokens = explainCommand(input, { tokens: true }).tokens ?? [];
+		return tokens
+			.map((t) => `${t.class}(${input.slice(t.start, t.end)})`)
+			.join(" ");
+	}
+
+	test("a valid escape splits the `string` run that contains it", () => {
+		expect(partition(':put "a\\nb"')).toBe(
+			'dir(:) cmd(put) unclassified( ) string("a) escaped(\\n) string(b")',
+		);
+	});
+
+	test("an uppercase-hex escape claims all three of its bytes", () => {
+		expect(partition(':put "\\FF"')).toBe(
+			'dir(:) cmd(put) unclassified( ) string(") escaped(\\FF) string(")',
+		);
+	});
+
+	test("it splits a `value` run too, not only a `string` one", () => {
+		// An array literal's members are value occurrences (`kind: "element"`),
+		// which is the shape the corpus's `value` -> `escaped` bytes live in —
+		// a plain `comment="a\nb"` never reaches here because the value anchor
+		// lexer refuses a string carrying an escape, so `string` claims it.
+		expect(partition(':local CP {"\\00";"\\C3\\BD"}')).toBe(
+			"dir(:) cmd(local) unclassified( ) variable-local(CP) unclassified( ) " +
+				'value({") escaped(\\00) value(";") escaped(\\C3) escaped(\\BD) value("})',
+		);
+	});
+
+	test("the partition stays total and gapless across the new fill", () => {
+		for (const input of [
+			':put "a\\nb"',
+			':local CP {"\\00";"\\C3\\BD"}',
+			'/ip route add comment="x\\ty"',
+			':put "\\FF"',
+		]) {
+			const tokens = explainCommand(input, { tokens: true }).tokens ?? [];
+			expect(tokens.map((t) => input.slice(t.start, t.end)).join("")).toBe(
+				input,
+			);
+			let cursor = 0;
+			for (const t of tokens) {
+				expect(t.start, input).toBe(cursor);
+				expect(t.end, input).toBeGreaterThan(t.start);
+				cursor = t.end;
+			}
+			expect(cursor).toBe(input.length);
+		}
+	});
+
+	test("the walk stops claiming at the first INVALID escape", () => {
+		// `\q` is not an escape. The escape before it is painted, the two valid
+		// escapes after it are not: past a malformed escape the string
+		// boundaries are themselves in doubt, so the fill withholds rather than
+		// guesses. The diagnostic and the tokens come from the same walk, which
+		// is why the cut-off is at the same byte for both.
+		const input = ':put "a\\nb" ; :put "c\\qd" ; :put "e\\nf"';
+		const result = explainCommand(input, { tokens: true });
+		const escaped = (result.tokens ?? []).filter((t) => t.class === "escaped");
+		expect(escaped).toHaveLength(1);
+		expect(input.slice(escaped[0]?.start, escaped[0]?.end)).toBe("\\n");
+		expect(
+			result.diagnostics.some((d) => d.code.endsWith("bad-string-escape")),
+		).toBe(true);
+		// The later valid escapes stayed inside their unsplit `string` runs.
+		expect(partition(input)).toContain('string("e\\nf")');
+	});
+
+	test("a `\\`-newline continuation in CODE is not an escape", () => {
+		// The device DOES class this `escaped`, and centrs deliberately does not:
+		// its run swallows the next line's indentation, so matching it means
+		// deciding how much whitespace a continuation owns — the question #225
+		// owns. Measured on the committed slice this is the whole remaining
+		// `escaped` residue: 145 bytes over 24 runs in 4 scripts (48 bytes of
+		// `\`+terminator, 97 of trailing indentation). Pinned so that if a later
+		// change starts claiming it, that is a decision and not a drift.
+		const input = ":if (true) \\\n    do={ :put 1 }";
+		const tokens = explainCommand(input, { tokens: true }).tokens ?? [];
+		expect(tokens.some((t) => t.class === "escaped")).toBe(false);
+		expect(partition(input)).toContain("unclassified( (true) \\\n    )");
+	});
+
+	test("a backslash inside a comment is not an escape", () => {
+		const input = "# a \\n comment\n:put 1";
+		const tokens = explainCommand(input, { tokens: true }).tokens ?? [];
+		expect(tokens.some((t) => t.class === "escaped")).toBe(false);
+	});
+
+	test("one walk: the escapes and the defect are the same reading", () => {
+		for (const input of [
+			':put "a\\nb"',
+			':put "c\\qd"',
+			':put "a\\nb" ; :put "c\\qd"',
+			"# a \\n comment\n:put 1",
+			':put "\\FF" ; :put "\\Fg"',
+		]) {
+			const walk = walkStringEscapes(input);
+			expect(walk.defects, input).toEqual(collectStringEscapeDefects(input));
+			// Every claimed escape is inside the input and at least two bytes —
+			// the grammar has no one-byte form.
+			for (const e of walk.escapes) {
+				expect(e.end - e.start, input).toBeGreaterThanOrEqual(2);
+				expect(input[e.start], input).toBe("\\");
+			}
 		}
 	});
 });

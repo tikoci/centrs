@@ -97,7 +97,7 @@ function escapeLength(text: string, at: number): 2 | 3 {
 // ---------------------------------------------------------------------------
 // Single source of truth for the frame grammar (#253).
 //
-// Both `scanQuotedString` and `collectStringEscapeDefects` walk the same
+// Both `scanQuotedString` and `walkStringEscapes` walk the same
 // nesting: a `"` frame is string phase, anything else is code phase where
 // `$[`/`$(` inside a string push a bracket frame and brackets nest until
 // matched. The helpers below own the transitions, the depth guard, and the
@@ -200,19 +200,44 @@ export function scanQuotedString(text: string, open: number): QuotedStringScan {
 	return { end: text.length, closed: false };
 }
 
+/** One string-internal escape: `[start, end)` over the `\` and what it escapes. */
+export interface StringEscapeSpan {
+	start: number;
+	end: number;
+}
+
 /**
- * Collect the first invalid string-internal escape in `text`, if any.
- *
- * Walks the entire document with the same frame model as `scanQuotedString`,
- * but validates each `\` inside a string frame against the documented escape
- * table (capital hex, truncated, unknown). Returns an array with at most one
- * defect at the first invalid escape. Comment spans are skipped: a `"` inside
- * a comment is not a string.
+ * What one document-wide escape walk found: the valid escapes, and the first
+ * invalid one if the walk hit one.
  */
-export function collectStringEscapeDefects(
+export interface StringEscapeWalk {
+	/** Valid escapes in document order, up to (not including) the first invalid one. */
+	escapes: StringEscapeSpan[];
+	/** At most one defect, at the first invalid escape. */
+	defects: Defect[];
+}
+
+/**
+ * Walk every string-internal escape in `text`, once.
+ *
+ * Same frame model as `scanQuotedString`, validating each `\` inside a string
+ * frame against the documented escape table (capital hex, truncated, unknown).
+ * Comment spans are skipped: a `"` inside a comment is not a string.
+ *
+ * The walk yields BOTH answers because they are the same reading (#264): a
+ * valid escape becomes an `escaped` token and an invalid one becomes a
+ * `bad-string-escape` diagnostic, and deriving them from two walks would let
+ * the token stream and the diagnostics disagree about which bytes are an
+ * escape. It stops at the first invalid escape, so the escapes list is the
+ * prefix the validator actually vouched for — past a malformed escape the
+ * string boundaries themselves are in doubt, and painting `escaped` there
+ * would be a claim this walk cannot support.
+ */
+export function walkStringEscapes(
 	text: string,
 	comments: readonly { start: number; end: number }[] = [],
-): Defect[] {
+): StringEscapeWalk {
+	const escapes: StringEscapeSpan[] = [];
 	const frames: string[] = [];
 	let i = 0;
 	let ci = 0;
@@ -230,12 +255,27 @@ export function collectStringEscapeDefects(
 				continue;
 			}
 		}
-		const res = stepFrame(text, i, frames, (at) =>
-			stringEscapeValidated(text, at),
-		);
-		if (typeof res !== "number") return [res];
+		const res = stepFrame(text, i, frames, (at) => {
+			const step = stringEscapeValidated(text, at);
+			if (typeof step === "number") escapes.push({ start: at, end: at + step });
+			return step;
+		});
+		if (typeof res !== "number") return { escapes, defects: [res] };
 		if (res === 0) break;
 		i += res;
 	}
-	return [];
+	return { escapes, defects: [] };
+}
+
+/**
+ * Collect the first invalid string-internal escape in `text`, if any.
+ *
+ * The defect half of {@link walkStringEscapes}. Callers that also need the
+ * valid escapes should call the walk directly rather than walking twice.
+ */
+export function collectStringEscapeDefects(
+	text: string,
+	comments: readonly { start: number; end: number }[] = [],
+): Defect[] {
+	return walkStringEscapes(text, comments).defects;
 }
