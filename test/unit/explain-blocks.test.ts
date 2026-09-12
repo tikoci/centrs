@@ -206,7 +206,7 @@ describe("a nested region's mask is the document's mask restricted to it (#322)"
 		],
 		["empty body", ":if ($a) do={}"],
 		["head-scoped `in`", ":onerror e in={ :put 1 }"],
-		["colonless directive body", "do { :put 1 }"],
+		["bare directive body (no colon)", "do { :put 1 }"],
 		["CRLF", ":if ($a) do={\r\n# c\r\n:put 1\r\n}"],
 		[
 			"a comment at every level",
