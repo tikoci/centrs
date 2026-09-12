@@ -38,11 +38,18 @@
  * and painting `name=` runs inside it would be that same claim in lexical
  * clothing.
  *
- * Vocabulary is provisional until #264 B5: one `arg` class for both the name
- * bytes and the `=` separator (design decision 2 of #293 — emit first, name
- * later; `highlight`'s `syntax-meta` is a residual merge and never a source).
- * If B5 splits the `=` into its own class, the byte coverage does not move,
- * only the retag.
+ * **B5 split the `=` from the name** (#264). #293 emitted one `arg` class for
+ * both — emit first, name later — and #316 then priced that merge twice over:
+ * it is the ENTIRE `arg` disagreement against the device (one cell, 358 runs on
+ * the agreement slice, the device reading a separator as `syntax-meta`), and it
+ * is not recoverable from the envelope, because 30.8% of the runs this fill
+ * paints (5,088 of 16,526 on the 948-script corpus, in 436 of those scripts)
+ * belong to a statement whose strict `arguments` reading refused — so there is
+ * no published `ExplainArgumentToken.valueSpan` to subtract one from. `do=`
+ * alone, the block binder of every `:if` / `:foreach` / `:while`, is 2,038 of
+ * them. The name run stays `arg`; the single `=` byte is `arg-sep`. Byte
+ * coverage does not move — this is a retag, and both runs keep `e11`, because
+ * the evidence is how `args.ts` located the bytes, not what they are called.
  */
 
 import type { ExplainArgumentToken, ExplainToken } from "../explain.ts";
@@ -57,8 +64,8 @@ export type ArgCandidate = ExplainArgumentToken;
  * checks); `residual` is the gap set left by earlier fills (sorted, no
  * overlaps); `candidates` are the already-rebased `Argument` tokens of the
  * statements `explain.ts` decided may be painted. Every emitted span's bytes are fully inside
- * `residual`, sorted by `start`, non-overlapping, and carry
- * `class: "arg"` + `ev: "e11"`.
+ * `residual`, sorted by `start`, non-overlapping, and carry `ev: "e11"` with
+ * `class: "arg"` on the name run and `class: "arg-sep"` on the `=`.
  */
 export function argSpans(
 	analyzed: string,
@@ -102,19 +109,31 @@ export function argSpans(
 		if (candidate.valueSpan.start < 0 || candidate.valueSpan.end > len)
 			continue;
 
-		// The name run and the `=` are contiguous (`nameEnd === eqStart`), so
-		// clip them as ONE range per candidate. That yields the maximal `[name=]`
-		// run for free — split only where the residual itself has a hole — and
-		// makes cross-candidate fusion structurally impossible rather than merely
-		// unreachable: coalescing adjacent runs globally would merge two distinct
+		// Two clips, not one, and in that order: the name run `[nameStart, eqStart)`
+		// then the single `=` byte `[eqStart, eqEnd)`. Each is offered to the
+		// residual on its own, so a `variable-*` span claiming only the `=` still
+		// leaves the name run behind and vice versa — the residual hole does the
+		// splitting, exactly as when the two were clipped together.
+		//
+		// Splitting here is also what makes cross-candidate fusion structurally
+		// impossible rather than merely unreachable. Two `arg` runs can never be
+		// adjacent, because every candidate puts an `arg-sep` byte after its name;
+		// coalescing adjacent runs globally would otherwise merge two distinct
 		// attributes into one token if `lexArguments` ever stopped guaranteeing a
-		// separator between them. A `variable-*` span claiming only the `=` still
-		// leaves the name run behind, because the residual hole does the splitting.
-		for (const r of clipToResidual(nameStart, eqEnd, residual)) {
+		// separator between them.
+		for (const r of clipToResidual(nameStart, eqStart, residual)) {
 			out.push({
 				start: r.start,
 				end: r.end,
 				class: "arg" as const,
+				ev: "e11",
+			});
+		}
+		for (const r of clipToResidual(eqStart, eqEnd, residual)) {
+			out.push({
+				start: r.start,
+				end: r.end,
+				class: "arg-sep" as const,
 				ev: "e11",
 			});
 		}

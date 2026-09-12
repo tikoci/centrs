@@ -40,8 +40,10 @@
  *    `security.authentication-types=wpa2-psk` as one name and renders `.id` as
  *    the single symbol `$.id`, never a `(. …)` concat.
  *
- * Vocabulary is provisional: one `operator` class for all 26 spellings + the
- * two aliases (`&&`, `||`). Per-operator/per-category legend is #264 B5.
+ * One `operator` class for all 26 spellings + the two aliases (`&&`, `||`).
+ * #264 B5 kept that merge: a consumer that wants the spelling slices the input
+ * at the token's span, and `src/explain/operators.ts` maps it to its IL node,
+ * so a per-operator legend would restate what the bytes already say.
  * `<>` is **not** one token — it re-lexes to `<` then `>` as two tokens.
  * `syntax-meta` is residual and merged, never a source (#255).
  */

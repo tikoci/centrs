@@ -218,6 +218,7 @@ describe("#264 B4 — the projection is total, declared, and abstains on merges"
 		"cmd",
 		"operator",
 		"arg",
+		"arg-sep",
 		"value",
 		"string",
 		"brace",
@@ -256,6 +257,18 @@ describe("#264 B4 — the projection is total, declared, and abstains on merges"
 		const accepts = projectTokenClass("arg") ?? [];
 		expect([...accepts].sort()).toEqual(["arg", "arg-dot", "arg-scope"]);
 		expect(accepts).not.toContain("syntax-meta");
+	});
+
+	// The other half of the same claim (#264 B5). `arg` giving up `syntax-meta`
+	// only means something if the bytes it gave up went somewhere, and the split
+	// is worthless if the two classes ever predict the same device answer: that
+	// would make the name and the separator interchangeable again, which is the
+	// merge the split undid.
+	test("`arg-sep` takes the `=`, and the two never predict the same class", () => {
+		const sep = projectTokenClass("arg-sep") ?? [];
+		expect([...sep].sort()).toEqual(["syntax-meta"]);
+		const name = new Set(projectTokenClass("arg") ?? []);
+		for (const accepted of sep) expect(name.has(accepted)).toBe(false);
 	});
 
 	test("the device class table covers every class the slice carries", () => {

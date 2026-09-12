@@ -5,9 +5,10 @@
  * delimiters remain unclassified (container excluded to avoid overlap). Scope
  * braces (`do={...}` etc.) are never array values. Both families therefore
  * appear on the residual after the `value` and `string` fills, so this fill
- * claims every remaining `{` / `}` byte there as provisional `brace`. Whether
- * scope vs array braces later deserve distinct classes is #264 B5 and does not
- * move byte coverage.
+ * claims every remaining `{` / `}` byte there as `brace`. #264 B5 kept scope
+ * and array delimiters in one class: `structure.blocks[]` already locates every
+ * scope block, and an array container is the `data.values.occurrences[]` entry
+ * that is some other occurrence's `parent`, so the distinction is a join away.
  */
 
 import type { ExplainToken } from "../explain.ts";

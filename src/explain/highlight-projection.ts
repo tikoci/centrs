@@ -18,8 +18,10 @@
  * fitted", which is not a fact about the parser. So a centrs class whose
  * *intent* has no single device counterpart projects to `null` and the report
  * counts those bytes as `unprojected`, reporting what the device said about
- * them as its own table. That table is the evidence #264 B5 needs to decide
- * whether a provisional merge deserves to be split.
+ * them as its own table. That table is the evidence #264 B5 read to decide
+ * which provisional merges deserved to be split — one did (`arg-sep`), and
+ * `commands/explain/README.md` -> *The vocabulary, and what earns a class*
+ * records why the rest stay merged.
  *
  * ## Why the device stream is not one oracle but four
  *
@@ -160,7 +162,12 @@ export const HIGHLIGHT_PROJECTION: Readonly<
 	arg: {
 		accepts: ["arg", "arg-dot", "arg-scope"],
 		because:
-			"argument-name bytes; the device splits dotted spellings (`.id`, `security.authentication-types`) into `arg-dot` / `arg-scope` and centrs deliberately does not, so all three are the same claim. The `=` byte the class also merges in is NOT covered — the device reads it as `syntax-meta`, and that mismatch is a measured cost of the merge, not a lexer fault (#264 B5)",
+			"argument-name bytes; the device splits dotted spellings (`.id`, `security.authentication-types`) into `arg-dot` / `arg-scope` and centrs deliberately does not, so all three are the same claim. The `=` is no longer part of this class — #264 B5 gave it `arg-sep`, which is why this entry now predicts only name classes",
+	},
+	"arg-sep": {
+		accepts: ["syntax-meta"],
+		because:
+			"the `=` binding one argument name to its value is structure punctuation, not part of the name, and `syntax-meta` is the device's only class for structure. Declared from what the class means, not fitted: before #264 B5 split it out these bytes were the whole of the `arg` -> `syntax-meta` disagreement (one cell, 358 runs), which is the measurement that made the split worth its name",
 	},
 	operator: {
 		accepts: ["syntax-meta"],
@@ -262,7 +269,13 @@ export function applicabilityOf(
 		// device is saying the menu's schema has no such field; on a menu or
 		// command name it is saying the package or menu is not present on this
 		// box.
-		if (centrsClass === "arg") return "schema-dependent";
+		//
+		// `arg-sep` rides with `arg` because it is the same fact about the same
+		// attribute: the device marking an attribute inactive marks the `=` that
+		// binds it too, and what it is saying there is still "this menu has no
+		// such field". Splitting the class (#264 B5) did not split the reason.
+		if (centrsClass === "arg" || centrsClass === "arg-sep")
+			return "schema-dependent";
 		if (centrsClass === "dir" || centrsClass === "cmd")
 			return "state-dependent";
 		return "uncategorized";

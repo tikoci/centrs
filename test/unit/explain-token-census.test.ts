@@ -218,7 +218,7 @@ describe("#289 B1 — `--tokens` changes the DEFAULT surface, not just `--json`"
 		expect(on).toContain("tokens:");
 		const header = splitLines(on).find((l) => l.startsWith("tokens:"));
 		expect(header).toMatch(
-			/^tokens: \d+ token\(s\), \d+\/\d+ byte\(s\) classified \(\d+\.\d%\), class provisional$/,
+			/^tokens: \d+ token\(s\), \d+\/\d+ byte\(s\) classified \(\d+\.\d%\)$/,
 		);
 	});
 

@@ -51,6 +51,26 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Changed
 
+- **Offline `explain`'s token vocabulary is no longer provisional, and the
+  argument `=` has its own class.** `ExplainTokenClass` gains `arg-sep`: an
+  argument's name bytes stay `arg`, and the single `=` binding it to its value
+  is now named separately. #264 B5 settled the whole vocabulary on a stated
+  rule — a merged class is split only where a consumer needs the distinction
+  AND cannot recover it by joining `tokens[]` to another published surface on
+  byte offsets — so the per-spelling `operator`, per-shape `value`,
+  scope-versus-array `brace` and string-delimiter merges stay merged, each with
+  the surface that already carries the distinction named. The `=` was the one
+  that failed the test: 30.8% of the `=` runs the fill paints (5,088 of 16,526
+  on the pinned corpus) belong to a statement whose strict `arguments` reading
+  refused, led by the `do=` of every `:if`/`:foreach`/`:while`, so there is no
+  published `valueSpan` to derive the boundary from. **Byte coverage does not
+  move** — classified bytes are identical to the last decimal; this is a retag,
+  and the token count rises only because one run became two. Against the
+  committed device slice, projection disagreements fall 360 → 2 as centrs stops
+  calling a separator a name. Consumers reading `data.tokens[]` for `arg` must
+  now also read `arg-sep` to see the bytes they used to get in one run
+  (#264 B5, #316).
+
 - **Offline `explain` answers statement-ownership from an index, not a scan.**
   The symbol/value surface asked "which statement owns this span" once per
   symbol, value and scope brace by scanning every statement split, so cost grew

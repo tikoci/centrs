@@ -3,13 +3,17 @@
  *
  * Second B2 fill after the operator fill. Claims argument names and their `=`
  * on the residual left by `spans` (comment + variable-*), before `operatorSpans`
- * sees it. Vocabulary is provisional: one `arg` class (ev e11) for both name
- * bytes and the `=` separator — the `=` is derived from `valueSpan.start - 1`,
- * never by scanning.
+ * sees it. Since #264 B5 the two are DIFFERENT classes (both ev e11): the name
+ * run is `arg`, the single `=` byte is `arg-sep`, and the `=` is still derived
+ * from `valueSpan.start - 1`, never by scanning.
+ *
+ * Every expectation below is spelled `class:text` for that reason. The merged
+ * spelling these tests used to carry (`"address="`) cannot tell a correct split
+ * from a fill that emits both runs under one class, which is the merge B5 undid.
  *
  * Traps: positional/query have no `name`/`valueSpan` and abstain; `Argument.value`
  * vs `text` is not read; normalized statements are not addressable; variable-*
- * overlap is clipped to residual; coalescing `[name][=]` → one maximal run.
+ * overlap is clipped to residual, and either run can survive alone.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -22,8 +26,8 @@ function argsViaExplain(input: string): string[] {
 	const data = explainCommand(input, { tokens: true });
 	const analyzed = new TextDecoder().decode(analyzeCoordinates(input).analyzed);
 	return (data.tokens ?? [])
-		.filter((t) => t.class === "arg")
-		.map((t) => analyzed.slice(t.start, t.end));
+		.filter((t) => t.class === "arg" || t.class === "arg-sep")
+		.map((t) => `${t.class}:${analyzed.slice(t.start, t.end)}`);
 }
 
 function argsDirect(
@@ -31,8 +35,8 @@ function argsDirect(
 	residual: { start: number; end: number }[],
 	candidates: readonly ExplainArgumentToken[],
 ): string[] {
-	return argSpans(analyzed, residual, candidates as never).map((s) =>
-		analyzed.slice(s.start, s.end),
+	return argSpans(analyzed, residual, candidates as never).map(
+		(s) => `${s.class}:${analyzed.slice(s.start, s.end)}`,
 	);
 }
 
@@ -54,10 +58,10 @@ function attr(
 }
 
 describe("#293 arg fill — direct residual scanner", () => {
-	test("single attribute → single coalesced arg token [name=]", () => {
+	test("single attribute → an `arg` name run and an `arg-sep` `=`", () => {
 		// `address` is 7 bytes, so for "address=1" the name run is [0,7), the `=`
 		// is the single byte [7,8) — derived as `valueSpan.start - 1` — and the
-		// value is valueSpan [8,9). The fill claims [0,8) as one `arg` run.
+		// value is valueSpan [8,9). The fill claims [0,7) `arg` and [7,8) `arg-sep`.
 		const analyzed = "address=1";
 		expect(
 			argsDirect(
@@ -65,10 +69,10 @@ describe("#293 arg fill — direct residual scanner", () => {
 				[{ start: 0, end: analyzed.length }],
 				[attr(0, 9, 8, 9, "address")],
 			),
-		).toEqual(["address="]);
+		).toEqual(["arg:address", "arg-sep:="]);
 	});
 
-	test("coalesced even though name and = clipped separately", () => {
+	test("two attributes stay four runs, in byte order", () => {
 		const analyzed = "address=1 interface=ether1";
 		// Two attributes: address= at [0,8) and interface= at [10,20)
 		expect(
@@ -77,7 +81,7 @@ describe("#293 arg fill — direct residual scanner", () => {
 				[{ start: 0, end: analyzed.length }],
 				[attr(0, 9, 8, 9, "address"), attr(10, 20, 20, 26, "interface")],
 			),
-		).toEqual(["address=", "interface="]);
+		).toEqual(["arg:address", "arg-sep:=", "arg:interface", "arg-sep:="]);
 	});
 
 	test("dotted names and hyphenated names", () => {
@@ -87,14 +91,14 @@ describe("#293 arg fill — direct residual scanner", () => {
 				[{ start: 0, end: 22 }],
 				[attr(0, 22, 10, 22, ".proplist")],
 			),
-		).toEqual([".proplist="]);
+		).toEqual(["arg:.proplist", "arg-sep:="]);
 		expect(
 			argsDirect(
 				"configuration.ssid=test",
 				[{ start: 0, end: 22 }],
 				[attr(0, 22, 19, 22, "configuration.ssid")],
 			),
-		).toEqual(["configuration.ssid="]);
+		).toEqual(["arg:configuration.ssid", "arg-sep:="]);
 		const wpa = "security.authentication-types=wpa2-psk";
 		expect(
 			argsDirect(
@@ -110,7 +114,7 @@ describe("#293 arg fill — direct residual scanner", () => {
 					),
 				],
 			),
-		).toEqual(["security.authentication-types="]);
+		).toEqual(["arg:security.authentication-types", "arg-sep:="]);
 	});
 
 	test("positional is ignored even with valueSpan", () => {
@@ -168,7 +172,7 @@ describe("#293 arg fill — direct residual scanner", () => {
 				],
 				[attr(0, 9, 8, 9, "address")],
 			),
-		).toEqual(["addr"]);
+		).toEqual(["arg:addr"]);
 		// Only "=" claimed, name fully masked
 		expect(
 			argsDirect(
@@ -176,7 +180,7 @@ describe("#293 arg fill — direct residual scanner", () => {
 				[{ start: 7, end: 8 }],
 				[attr(0, 9, 8, 9, "address")],
 			),
-		).toEqual(["="]);
+		).toEqual(["arg-sep:="]);
 		// Whole name+ = outside residual → nothing
 		expect(
 			argsDirect(
@@ -201,7 +205,7 @@ describe("#293 arg fill — direct residual scanner", () => {
 				attr(4, 7, 6, 7, "b"),
 				attr(8, 11, 10, 11, "c"),
 			]),
-		).toEqual(["a=", "c="]);
+		).toEqual(["arg:a", "arg-sep:=", "arg:c", "arg-sep:="]);
 	});
 
 	test("misaligned or out-of-bounds candidates are ignored", () => {
@@ -245,7 +249,7 @@ describe("#293 arg fill — direct residual scanner", () => {
 				[{ start: 0, end: 7 }],
 				[attr(4, 7, 6, 7, "a"), attr(0, 3, 2, 3, "b")],
 			),
-		).toEqual(["b=", "a="]);
+		).toEqual(["arg:b", "arg-sep:=", "arg:a", "arg-sep:="]);
 	});
 
 	test("clipToResidual binary-search path — residual far from start", () => {
@@ -261,26 +265,33 @@ describe("#293 arg fill — direct residual scanner", () => {
 					attr(0, 1, 0, 1, "x"),
 				],
 			),
-		).toEqual(["address="]);
+		).toEqual(["arg:address", "arg-sep:="]);
 	});
 });
 
 describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 	test.each([
-		["/ip/address/add address=1.1.1.1", ["address="]],
+		["/ip/address/add address=1.1.1.1", ["arg:address", "arg-sep:="]],
 		[
 			"/ip/address/add address=1.1.1.1 interface=ether1",
-			["address=", "interface="],
+			["arg:address", "arg-sep:=", "arg:interface", "arg-sep:="],
 		],
 		[
 			"/ip route add dst-address=1.1.1.1 gateway=1.1.1.2",
-			["dst-address=", "gateway="],
+			["arg:dst-address", "arg-sep:=", "arg:gateway", "arg-sep:="],
 		],
-		["/interface/print .proplist=name,comment", [".proplist="]],
-		["/ip/address/print where address=1.1.1.1", ["address="]],
+		["/interface/print .proplist=name,comment", ["arg:.proplist", "arg-sep:="]],
+		["/ip/address/print where address=1.1.1.1", ["arg:address", "arg-sep:="]],
 		[
 			"/ip/firewall/filter/add chain=forward action=accept in-interface-list=!LAN",
-			["chain=", "action=", "in-interface-list="],
+			[
+				"arg:chain",
+				"arg-sep:=",
+				"arg:action",
+				"arg-sep:=",
+				"arg:in-interface-list",
+				"arg-sep:=",
+			],
 		],
 	])("%s → %j", (input, expected) => {
 		expect(argsViaExplain(input as string)).toEqual(expected as string[]);
@@ -291,7 +302,8 @@ describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 		expect(argsViaExplain("/ip address print count-only")).toEqual([]);
 		expect(argsViaExplain("/ip/address/print ?address=1.1.1.1")).toEqual([]);
 		expect(argsViaExplain("/ip address print where chain=forward")).toEqual([
-			"chain=",
+			"arg:chain",
+			"arg-sep:=",
 		]); // where is positional, chain is arg
 	});
 
@@ -301,24 +313,31 @@ describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 		// bytes stay unclaimed here either way — `argSpans` never claims them.
 		expect(
 			argsViaExplain("/ip route add dst-address=1.1.1.1 gateway=$gw"),
-		).toEqual(["dst-address=", "gateway="]);
+		).toEqual(["arg:dst-address", "arg-sep:=", "arg:gateway", "arg-sep:="]);
 		expect(
 			argsViaExplain(
 				"/ip route add dst-address=1.1.1.1 gateway=$gw comment=$c",
 			),
-		).toEqual(["dst-address=", "gateway=", "comment="]);
+		).toEqual([
+			"arg:dst-address",
+			"arg-sep:=",
+			"arg:gateway",
+			"arg-sep:=",
+			"arg:comment",
+			"arg-sep:=",
+		]);
 		// substitution
 		expect(
 			argsViaExplain("/ip address add address=[/ip/route/get $x]"),
-		).toEqual(["address="]);
+		).toEqual(["arg:address", "arg-sep:="]);
 		// array/block value
 		expect(
 			argsViaExplain("/system script add name=s source={ :put 1 }"),
-		).toEqual(["name=", "source="]);
+		).toEqual(["arg:name", "arg-sep:=", "arg:source", "arg-sep:="]);
 		// A literal value was never the thing at issue.
 		expect(
 			argsViaExplain("/ip route add dst-address=1.1.1.1 gateway=1.1.1.2"),
-		).toEqual(["dst-address=", "gateway="]);
+		).toEqual(["arg:dst-address", "arg-sep:=", "arg:gateway", "arg-sep:="]);
 	});
 
 	test("a token whose NAME is not a name claims nothing (#316)", () => {
@@ -326,7 +345,8 @@ describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 		// The tolerant walk locates the token but refuses to call it an attribute,
 		// so no `arg` span is emitted over bytes that are not an argument name.
 		expect(argsViaExplain("/ip/route/add {a=1;b=2} gateway=1.1.1.2")).toEqual([
-			"gateway=",
+			"arg:gateway",
+			"arg-sep:=",
 		]);
 	});
 
@@ -334,34 +354,47 @@ describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 		expect(argsViaExplain('/system identity set name="router-🚀"')).toEqual([]);
 	});
 
-	test("value bytes are not arg — only name+=", () => {
+	test("value bytes are neither arg nor arg-sep", () => {
 		const input = "/ip/address/add address=1.1.1.1";
 		const data = explainCommand(input, { tokens: true });
 		const analyzed = new TextDecoder().decode(
 			analyzeCoordinates(input).analyzed,
 		);
 		const tokens = data.tokens ?? [];
-		// "address=" is arg, "1.1.1.1" is unclassified (value fill not yet)
+		// "address" is arg, "=" is arg-sep, "1.1.1.1" is unclassified (value fill
+		// not yet). Joining the two classes back together must still be exactly the
+		// bytes the merged class used to claim — that is the retag invariant.
 		const argText = tokens
 			.filter((t) => t.class === "arg")
 			.map((t) => analyzed.slice(t.start, t.end))
 			.join("");
-		expect(argText).toBe("address=");
-		// Ensure value span is not arg
+		expect(argText).toBe("address");
+		const sepText = tokens
+			.filter((t) => t.class === "arg-sep")
+			.map((t) => analyzed.slice(t.start, t.end))
+			.join("");
+		expect(sepText).toBe("=");
+		// Ensure value span is neither
 		const valueSlice = analyzed.slice(24, 31);
 		expect(valueSlice).toBe("1.1.1.1");
 		const valueTokens = tokens.filter((t) => t.start >= 24 && t.end <= 31);
-		expect(valueTokens.every((t) => t.class !== "arg")).toBe(true);
+		expect(
+			valueTokens.every((t) => t.class !== "arg" && t.class !== "arg-sep"),
+		).toBe(true);
 	});
 
-	test("every arg token carries ev e11 and evidence cites it", () => {
+	test("every arg AND arg-sep token carries ev e11 and evidence cites it", () => {
 		const data = explainCommand(
 			"/ip/address/add address=1.1.1.1 interface=ether1",
 			{ tokens: true },
 		);
 		const args = (data.tokens ?? []).filter((t) => t.class === "arg");
 		expect(args.length).toBe(2);
-		for (const t of args) expect(t.ev).toBe("e11");
+		// The split did NOT split the evidence: `e11` is how `args.ts` located the
+		// bytes, which is the same walk for the name and for the `=`.
+		const separators = (data.tokens ?? []).filter((t) => t.class === "arg-sep");
+		expect(separators.length).toBe(2);
+		for (const t of [...args, ...separators]) expect(t.ev).toBe("e11");
 		expect(data.evidence.some((e) => e.id === "e11")).toBe(true);
 		// No arg → no e11
 		const noArg = explainCommand("/ip address print", { tokens: true });
@@ -380,12 +413,16 @@ describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 			tokens: true,
 		});
 		expect(data.spans.some((s) => (s.class as string) === "arg")).toBe(false);
+		expect(data.spans.some((s) => (s.class as string) === "arg-sep")).toBe(
+			false,
+		);
 	});
 
 	test("fill order: arg owns = before operator (expression = stays operator)", () => {
 		// Attribute `=` is arg
 		expect(argsViaExplain("/ip/address/add address=1.1.1.1")).toEqual([
-			"address=",
+			"arg:address",
+			"arg-sep:=",
 		]);
 		const attrEq = explainCommand("/ip/address/add address=1.1.1.1", {
 			tokens: true,
@@ -397,6 +434,9 @@ describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 		const expr = explainCommand(":put (1=2)", { tokens: true });
 		expect(expr.tokens?.some((t) => t.class === "operator")).toBe(true);
 		expect(expr.tokens?.some((t) => t.class === "arg")).toBe(false);
+		// The new class must not become a magnet for every `=` in the document:
+		// a comparison `=` is an operator and stays one.
+		expect(expr.tokens?.some((t) => t.class === "arg-sep")).toBe(false);
 		// Top-level slash stays unclassified for path fill, not operator
 		expect(
 			explainCommand(":put 1 / 2", { tokens: true }).tokens?.some(
@@ -426,8 +466,12 @@ describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 		const input =
 			'/ip/address/add address=1.1.1.1\n/system/identity/set name="router-🚀"';
 		const data = explainCommand(input, { tokens: true });
-		const args = (data.tokens ?? []).filter((t) => t.class === "arg");
-		expect(args.map((t) => input.slice(t.start, t.end))).toEqual(["address="]);
+		const args = (data.tokens ?? []).filter(
+			(t) => t.class === "arg" || t.class === "arg-sep",
+		);
+		expect(
+			args.map((t) => `${t.class}:${input.slice(t.start, t.end)}`),
+		).toEqual(["arg:address", "arg-sep:="]);
 		// Every claimed byte is in the FIRST statement.
 		const secondStart = input.indexOf("\n") + 1;
 		for (const t of args) expect(t.end).toBeLessThanOrEqual(secondStart);
@@ -449,7 +493,8 @@ describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 		const run = "/ip/address add interface=ether1 /ip/route add gateway=$g";
 		expect(argsViaExplain(run)).toEqual([]);
 		expect(argsViaExplain("/ip/address add interface=ether1")).toEqual([
-			"interface=",
+			"arg:interface",
+			"arg-sep:=",
 		]);
 	});
 });
