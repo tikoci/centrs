@@ -1275,10 +1275,12 @@ export function explainCommand(
 				return [
 					{
 						text: resolution.inner,
-						span: {
-							start: resolution.span.start + 1,
-							end: resolution.span.end - 1,
-						},
+						// `innerSpan`, never `span ± 1`: `span` covers `[…]` for a bare
+						// substitution but `$[…]` for an interpolated one, so the
+						// arithmetic was one byte early inside a string and `pathSpans`
+						// dropped every such candidate on its text check — leaving a
+						// resolved command to the string fill (#325).
+						span: resolution.innerSpan,
 						split: resolveVerb(resolution.inner, resolution.context),
 						ev: EV.paths,
 					},

@@ -381,6 +381,21 @@ export interface Resolution {
 	 * {@link Loc}.
 	 */
 	span: Span;
+	/**
+	 * Where {@link inner} itself sits, in the same document byte space.
+	 *
+	 * Not derivable from `span`: the two bracket spellings do not agree on what
+	 * `span` covers. `collectBrackets` spans `[…]`, so `inner` starts one byte
+	 * in; `scanInterpolations` spans `$[…]` **from the sigil** (that `$` is part
+	 * of the substitution), so it starts two. `inner` is also trimmed, so any
+	 * leading whitespace shifts it further right again. A consumer that guessed
+	 * `span.start + 1` therefore read one byte early on every interpolated
+	 * substitution and, finding the text did not match, silently dropped the
+	 * resolution — which is how a `$[…]` inside a string lost its path tokens to
+	 * the string fill (#325). Widens with `span` when interior offsets cannot be
+	 * mapped, so a consumer must still check the slice against `inner`.
+	 */
+	innerSpan: Span;
 }
 
 /** The canonical path of one statement in source order (Q4). */
@@ -1065,11 +1080,16 @@ function collectBrackets(
 		}
 		if (c !== "[") continue;
 		const end = matchDelim(masked, i, "[", "]");
-		const inner = trimAscii(masked.slice(i + 1, end));
+		const raw = masked.slice(i + 1, end);
+		const inner = trimAscii(raw);
+		// `inner` is the trimmed slice of `masked` starting at i+1; the leading
+		// whitespace trim shifts it further right.
+		const innerAt = i + 1 + (raw.length - trimAsciiStart(raw).length);
 		// The span covers the whole `[…]`, closing bracket included.
 		out.push({
 			...resolveInner(inner, ctx, depth, contextCertain),
 			span: spanIn(loc, i, Math.min(end + 1, text.length)),
+			innerSpan: spanIn(loc, innerAt, innerAt + inner.length),
 		});
 		// R6 — nested brackets inherit from this one's resolution.
 		const nestedCtx = out[out.length - 1]?.path ?? ctx;
@@ -1080,16 +1100,7 @@ function collectBrackets(
 			out,
 			defects,
 			nestedCertainty(out[out.length - 1], contextCertain),
-			// `inner` is the trimmed slice of `masked` starting at i+1; the leading
-			// whitespace trim shifts it further right.
-			nest(
-				loc,
-				i +
-					1 +
-					(masked.slice(i + 1, end).length -
-						trimAsciiStart(masked.slice(i + 1, end)).length),
-				loc.fallback,
-			),
+			nest(loc, innerAt, loc.fallback),
 		);
 		i = end;
 	}
@@ -1121,10 +1132,13 @@ function scanInterpolations(
 		const end = matchDelim(body, i + 1, "[", "]");
 		const raw = body.slice(i + 2, end);
 		const inner = trimAscii(raw);
-		// Span the `$[…]` from its sigil through the closing bracket.
+		const innerAt = i + 2 + (raw.length - trimAsciiStart(raw).length);
+		// Span the `$[…]` from its sigil through the closing bracket; `innerSpan`
+		// is the two-byte-in start that difference makes non-derivable.
 		out.push({
 			...resolveInner(inner, ctx, depth, contextCertain),
 			span: spanIn(loc, i, Math.min(end + 1, body.length)),
+			innerSpan: spanIn(loc, innerAt, innerAt + inner.length),
 		});
 		collectBrackets(
 			inner,
@@ -1133,11 +1147,7 @@ function scanInterpolations(
 			out,
 			defects,
 			nestedCertainty(out[out.length - 1], contextCertain),
-			nest(
-				loc,
-				i + 2 + (raw.length - trimAsciiStart(raw).length),
-				loc.fallback,
-			),
+			nest(loc, innerAt, loc.fallback),
 		);
 		i = end;
 	}
@@ -1191,7 +1201,7 @@ function resolveInner(
 	ctx: string,
 	depth: number,
 	contextCertain: boolean,
-): Omit<Resolution, "span"> {
+): Omit<Resolution, "span" | "innerSpan"> {
 	const absolute = inner.startsWith("/");
 	const klass = classify(inner, absolute, depth);
 	if (klass === "cli-prompt-artifact")

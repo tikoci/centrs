@@ -24,6 +24,31 @@ documenting cross-cutting shifts that affect contributors and consumers.
   Figures are a trend line over a known-biased corpus, never a pass threshold
   (#264 B4, #263).
 
+### Fixed
+
+- **Offline `explain` no longer invents a verb for a menu path with
+  arguments.** `/ip/firewall/address-list name=ytkids timeout=1h` reported
+  `resolved`, path `/ip/firewall`, verb `address-list` — and the spaced
+  spelling `/ip firewall address-list name=x` promoted `firewall`, one level
+  higher still. Both premises were already offline facts and both said no: the
+  whole run is a known menu, and the promoted segment is not a console verb.
+  The reading is now an `ambiguous` abstention with a located diagnostic saying
+  which menu and which segment. Priced on the frozen dev/holdout partition, 10
+  of 17,212 statements flip, every one of them a fabrication withdrawn — three
+  real RouterOS statements missing their verb and seven lines of pasted
+  non-RouterOS prose. Presence in the shipped structure tables still narrows a
+  reading and absence still decides nothing, so an unlisted menu is read
+  exactly as before (#324).
+- **Offline `explain`'s token partition reaches inside a command
+  substitution.** `:put "$[/ip address print as-value]"` came back as one
+  opaque `string` run over a command `data.structure.subcommands` already
+  reported as resolved, so an editor rendering `data.tokens[]` painted an
+  interpolated string flat. The path fill was being handed a span computed as
+  "one byte inside the brackets", which is wrong for `$[…]` (the sigil is part
+  of the span) and for `[ … ]` (the inner text is trimmed); both spellings now
+  carry a published `innerSpan` instead. Byte coverage does not move — what
+  moves is which fill owns those bytes (#325).
+
 ### Changed
 
 - **Offline `explain` answers statement-ownership from an index, not a scan.**

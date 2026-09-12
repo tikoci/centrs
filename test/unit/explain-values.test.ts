@@ -170,14 +170,14 @@ describe("#225 value-shape grounding matrix", () => {
 			"bun run explain:value-census --json",
 		);
 		expect(fixture.corpus.sourceScripts).toBe(948);
-		expect(fixture.corpus.strictComparableAnchors).toBe(13_168);
-		expect(fixture.corpus.valueOccurrences).toBe(19_708);
-		expect(fixture.corpus.unreadStatementsWithAnchors).toBe(569);
-		expect(fixture.corpus.recoveredPrefixAnchors).toBe(6_540);
+		expect(fixture.corpus.strictComparableAnchors).toBe(13_161);
+		expect(fixture.corpus.valueOccurrences).toBe(19_699);
+		expect(fixture.corpus.unreadStatementsWithAnchors).toBe(568);
+		expect(fixture.corpus.recoveredPrefixAnchors).toBe(6_538);
 		expect(fixture.corpus.elementOccurrences).toBe(5_636);
 		expect(fixture.corpus.keyedElements).toBe(529);
 		expect(fixture.corpus.nestedElements).toBe(1_147);
-		expect(fixture.corpus.shapeCounts).toMatchObject({ array: 813, mac: 3 });
+		expect(fixture.corpus.shapeCounts).toMatchObject({ array: 808, mac: 3 });
 		// The four invariants, none of which is a measurement of taste: where both
 		// readings exist they agree, every span addresses its own bytes, every
 		// member names a container, and every member sits strictly inside it.
