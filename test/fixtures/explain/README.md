@@ -6,10 +6,11 @@ the notes below.
 
 Most files are the promoted phase-0.5 lab corners consumed directly by
 `test/unit/explain-*.test.ts` (`segments`, `blocks`, `verbsplit`, `symbols`,
-`pathresolve`, `write`, `defects`, `coordinates`, `values`). The four below are
-different: they are **method artifacts**, promoted out of `.scratch/` by #186
-because durable files were citing them and a `.scratch/` wipe would have taken
-the citation's referent with it.
+`pathresolve`, `write`, `defects`, `coordinates`, `values`). Four of them —
+`corpus-partition.json`, `highlight-streams.slice.json`, the `transport-rest-q8`
+pair and `symbol-probes/` — are different: they are **method artifacts**,
+promoted out of `.scratch/` by #186 because durable files were citing them and a
+`.scratch/` wipe would have taken the citation's referent with it.
 
 ## `corpus-partition.json` — the frozen dev/holdout split
 
@@ -73,3 +74,30 @@ because their throwaway probes queried the wrong `/system/resource` field; the
 version, channel, build time, input, offsets, and highlight classes are the
 verbatim device output. The two fuzz summaries were not promoted because they
 contain no recorded cases either replay can consume.
+
+## `highlight-agreement.json` — the token partition scored against the slice
+
+The per-byte confusion matrix of centrs token class × device `highlight` class,
+over the slice above: dev/holdout apart, before/after the device's one-byte
+`error` apart, once per captured version. A matrix key is
+`"<centrs class>|<device class>|<same|differs>"`, where the third component is
+whether *every* captured version gave that byte the same class — it rides the
+key so #263's version-dependent category stays derivable rather than baked in.
+`examples` carries one representative source fragment per cell, with a slice
+path and byte offset, so a disagreement can be read instead of counted.
+
+**Only the matrix and those examples are committed** — both raw observation.
+Every percentage, bucket, applicability category and table in
+`commands/explain/README.md` is derived from them at render time through
+`src/explain/highlight-projection.ts`, so a change to the projection or to the
+applicability rule moves the README without moving this file and shows up as a
+reviewable diff.
+
+Re-derive with `bun run explain:highlight-agreement --json`; it needs nothing
+but the slice. `test/unit/explain-highlight-agreement.test.ts` gates the
+re-derivation, and `bun run explain:highlight-agreement:readme:check`
+(in `lint:ci`) gates the README against it.
+
+The figures it yields are a **trend line over a known-biased corpus**, not a
+threshold: the slice is a per-(split, class) quota over a corpus that is 96.8%
+two forum authors. Nothing may be made to pass by moving a number here.

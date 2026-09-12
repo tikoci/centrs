@@ -735,3 +735,6 @@ JIT # just-in-time compiler — warmed before either half of the growth-ratio ti
 
 # #317 statement-ownership index vocabulary
 laminarity # the property of a set of spans in which every pair is nested or disjoint, never crossing — what makes the shortest containing span reachable by a parent walk
+
+# #264 B4 / #263 device-agreement vocabulary
+unprojected # of a byte whose offline/device class PAIR the declared projection does not cover, so it can neither agree nor disagree: an offline class that deliberately maps to no RouterOS `highlight` class, or a device class this build has never seen (#264 B4)
