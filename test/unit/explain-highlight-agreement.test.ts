@@ -87,10 +87,12 @@ describe("#263 — the committed report is what a fresh run measures", () => {
 		const dir = mkdtempSync(join(tmpdir(), "centrs-slice-eol-"));
 		try {
 			const crlf = join(dir, "slice.json");
-			writeFileSync(
-				crlf,
-				readFileSync(SLICE_PATH, "utf8").replaceAll("\n", "\r\n"),
-			);
+			// Normalize BEFORE spelling CRLF. On a Windows checkout the read already
+			// yields `\r\n`, so converting every `\n` would write `\r\r\n` — which
+			// `sha256TextFile` collapses to `\r\n`, not `\n`, and the guard would go
+			// red on the one platform it exists for. Found in review of this PR.
+			const lfText = readFileSync(SLICE_PATH, "utf8").replaceAll("\r\n", "\n");
+			writeFileSync(crlf, lfText.replaceAll("\n", "\r\n"));
 			// Through `measure`, not through the helper directly: what has to hold
 			// is that the REPORT pins the same slice from either checkout, so this
 			// goes red if the script reverts to hashing raw bytes.
