@@ -10,10 +10,13 @@
  * and the device does name them — `escaped` is one of the 19 classes the Q13
  * capture observed.
  *
- * Unlike `arg-sep` this is a fill change rather than a retag: the escape
- * grammar has to be walked, and the bytes it claims come from two places at
- * once — inside `string` runs, inside `value` runs, and (the part the
- * agreement report made visible) from bytes no fill claimed at all.
+ * Unlike `arg-sep` this needs a real walk rather than a relabel of one
+ * analyzer's own output, and it takes bytes out of TWO fills at once rather
+ * than one. In byte terms it is still a retag: measured over the corpus
+ * `escaped` claims 19,960 bytes, `string` gives up 17,672 and `value` 2,288,
+ * and classified coverage is identical to the last decimal. Nothing that was
+ * `unclassified` becomes claimed — an escape only ever lives inside a run some
+ * fill already held.
  *
  * The walk is not this module's. `src/explain/quoted-string.ts` already owned
  * the escape grammar for `bad-string-escape`, and `walkStringEscapes` now
