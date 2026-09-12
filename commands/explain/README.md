@@ -1775,16 +1775,33 @@ execute.ts -> mac-telnet-console.ts -> mac-telnet.ts`) rather than leaving a
 reader with the bundler's polyfill complaint four modules downstream.
 
 **What "runs in a browser" is proven by.** Compilation is not the proof. A
-bundler silently substitutes browser polyfills, so the check bundles the entry
-with `--target browser` and **executes that bundle** in a Worker with every host
-global (`Bun`, `process`, `require`, `module`, `exports`, `__dirname`,
-`__filename`) shadowed out of scope — `Bun` is a non-configurable global, so
-shadowing, not deletion, is what makes the absence real. It then compares the
-whole `ExplainData` against the Bun-native run, field for field: structure,
-diagnostics, tokens, spans, `canonical`, and `runtimeAcceptance`. Fourteen
-cases, covering normal and write-shaped commands, multi-statement and nested
-input, three malformed classes, Unicode, astral, a leading BOM, IPv6, empty
-input, and the facets switched off. All fourteen are byte-identical today.
+bundler silently substitutes browser polyfills, so the check bundles a worker
+entry around the module with `--target browser`, wraps the output in a function
+that shadows every host global (`Bun`, `process`, `require`, `module`,
+`exports`, `__dirname`, `__filename`), and **spawns that bundle as the Worker**.
+`Bun` is a non-configurable global — `delete globalThis.Bun` throws — so
+shadowing, not deletion, is what makes the absence real, and doing it in the
+bundler's banner keeps the harness free of `eval`/`new Function` while making
+the bundle text on disk the artifact that carries the claim.
+
+It then compares the whole `ExplainData` against the Bun-native run, field for
+field: structure, diagnostics, tokens, spans, `canonical`, and
+`runtimeAcceptance`. Fourteen cases, covering normal and write-shaped commands,
+multi-statement and nested input, three malformed classes, Unicode, astral, a
+leading BOM, IPv6, empty input, and the facets switched off. All fourteen are
+byte-identical today.
+
+The shadowing is **measured from inside the bundle**, not assumed: the worker
+reports which host globals it could still see, and an empty list is part of the
+gate. Without it, a wrapper that silently stopped being emitted would leave
+every "identical" above produced with host APIs in reach, proving nothing. Only
+`Bun` and `process` are probed, because they are the only two of the seven a
+bundle can honestly observe — Bun constant-folds `typeof require` to
+`"function"` at build time, mentioning `__dirname`/`__filename` makes it inject
+the build machine's absolute paths as local constants (the probe would cause
+what it reports), and mentioning `module`/`exports` reclassifies the entry as
+CommonJS, whose top-level `export default` is a syntax error inside the wrapper.
+All seven stay shadowed regardless.
 
 The one tolerated host builtin is **`node:net`**, for `isIP` in
 `src/explain/values.ts` — a pure predicate with no socket in it. A bundler

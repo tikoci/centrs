@@ -14,12 +14,19 @@
  *     as `node:crypto` missing `randomInt`, four modules away from its cause
  *     (`explain.ts -> execute.ts -> mac-telnet-console.ts -> mac-telnet.ts`).
  *
- *   CONSUMER — bundle that entry with `--target browser`, execute the bundle
- *     in a Worker with every host global shadowed, and compare its analysis
- *     against this process's Bun-native one, field for field. Compilation is
- *     not the proof: a bundler substitutes browser polyfills silently (see
+ *   CONSUMER — bundle a worker entry around that module with `--target
+ *     browser`, wrap the output in a function that shadows every host global,
+ *     spawn THAT BUNDLE as a Worker, and compare its analysis against this
+ *     process's Bun-native one, field for field. Compilation is not the proof:
+ *     a bundler substitutes browser polyfills silently (see
  *     `ALLOWED_BUILTINS`), so only running the bundled code shows whether the
  *     substituted implementation agrees.
+ *
+ *     The shadowing is applied at BUILD time, not by evaluating the bundle
+ *     inside a wrapper here. `Bun` is a non-configurable global, so the absence
+ *     has to be created lexically; doing it in the banner keeps the harness
+ *     free of `eval`/`new Function` and makes the shipped bundle text itself
+ *     the thing that demonstrates host independence.
  *
  * ```
  * bun run explain:browser-consumer          # report
@@ -35,9 +42,17 @@
  * measured parser evidence lives in the censuses and the agreement report.
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
 import { type ExplainData, explainCommand } from "../src/explain.ts";
+import {
+	BROWSER_CONSUMER_CASES,
+	type ConsumerCase,
+	caseOptions,
+} from "./explain-browser-cases.ts";
+
+export { BROWSER_CONSUMER_CASES, type ConsumerCase };
 
 const ROOT = resolve(import.meta.dir, "..");
 const ENTRY = resolve(ROOT, "src/explain.ts");
@@ -63,68 +78,6 @@ const FORBIDDEN_PREFIXES: readonly { prefix: string; why: string }[] = [
 	{ prefix: "src/resolver/index.ts", why: "CDB/settings resolution barrel" },
 	{ prefix: "src/cli/", why: "CLI surface" },
 	{ prefix: "src/mcp", why: "MCP server surface" },
-];
-
-/** One input class the browser consumer must reproduce. */
-export interface ConsumerCase {
-	name: string;
-	input: string;
-	/** `explainCommand` options; both facets on unless a case needs otherwise. */
-	options?: { tokens?: boolean; curl?: boolean };
-}
-
-/**
- * The boundary corpus — the input classes #312 names, plus the two this
- * module's own substitutions put at risk.
- *
- * `unicode` and `astral` are here because the browser bundle re-derives every
- * span from `analyzeCoordinates`: a position-mapping divergence shows up as a
- * span mismatch on exactly these, and on nothing else. `ipv6*` are here for the
- * polyfilled `isIP` (see {@link ALLOWED_BUILTINS}) — a value-shape hint is the
- * only place its verdict is observable.
- */
-export const BROWSER_CONSUMER_CASES: readonly ConsumerCase[] = [
-	{ name: "normal-command", input: "/ip address print" },
-	{
-		name: "normal-write",
-		input: "/ip address add address=10.0.0.1/24 interface=ether1",
-	},
-	{
-		name: "multi-statement",
-		input:
-			"/ip address add address=1.1.1.1/24;\n/ip route print\n:put [/system identity get name]",
-	},
-	{
-		name: "nested-block",
-		input:
-			':foreach i in=[/ip/route find] do={ :put $i; :if ($i > 1) do={ /log info message="x" } }',
-	},
-	{ name: "malformed-paren", input: "/ip) address\nadd address=1.1.1.1/24" },
-	{
-		name: "malformed-unterminated-string",
-		input: '/log info message="unterminated',
-	},
-	{
-		name: "malformed-missing-separator",
-		input: "/ip address print /ip route print",
-	},
-	{ name: "unicode", input: '/system identity set name="café-日本語"' },
-	{ name: "astral", input: '/log info message="emoji 🇯🇵🧑‍🚀 tail"' },
-	{ name: "bom-leading", input: "﻿/system identity print" },
-	{
-		name: "ipv6-address",
-		input: "/ipv6 address add address=2001:db8::1/64 interface=ether1",
-	},
-	{
-		name: "ipv6-ambiguous",
-		input: '/log info message="::ffff:192.0.2.1 and 1::2::3"',
-	},
-	{ name: "empty", input: "" },
-	{
-		name: "tokens-off",
-		input: "/ip address print",
-		options: { tokens: false, curl: false },
-	},
 ];
 
 /** Module-graph walk: every runtime import reachable from `entry`. */
@@ -209,19 +162,41 @@ export function checkBoundary(): BoundaryReport {
 }
 
 /**
- * Bundle the entry for a browser through a shim that assigns the namespace to a
- * caller-supplied sink instead of exporting it.
+ * The host globals the bundle is denied.
  *
- * The sink is what makes the bundle runnable inside a `new Function` body: an
- * ESM `export` statement is a syntax error there, and the Function wrapper is
- * how every host global gets shadowed (see the worker).
+ * Shadowed as parameters of a wrapper function the bundler emits around the
+ * whole bundle, so a bare `Bun`/`process`/`require` inside it reads `undefined`
+ * instead of this runtime's real one. `self` is deliberately absent: the worker
+ * posts its result through it, and a browser Worker has it too.
  */
-async function buildBrowserBundle(): Promise<string> {
-	const shim = resolve(ROOT, "scripts/explain-browser-shim.ts");
+const SHADOWED_GLOBALS = [
+	"Bun",
+	"process",
+	"require",
+	"module",
+	"exports",
+	"__dirname",
+	"__filename",
+] as const;
+
+/**
+ * Build the worker entry for a browser, wrapped so every host global is out of
+ * scope, and write it where a `Worker` can be pointed at it.
+ *
+ * The wrapper is a banner/footer pair rather than a runtime `new Function`:
+ * same lexical shadowing, no `eval` in the harness, and the property that the
+ * bundle ON DISK is the artifact that demonstrates host independence.
+ */
+async function buildBrowserWorkerBundle(
+	directory: string,
+): Promise<{ path: string; bytes: number }> {
+	const entry = resolve(ROOT, "scripts/explain-browser-worker-entry.ts");
 	const built = await Bun.build({
-		entrypoints: [shim],
+		entrypoints: [entry],
 		target: "browser",
 		format: "esm",
+		banner: `(function (${SHADOWED_GLOBALS.join(", ")}) {`,
+		footer: "})();",
 	});
 	if (!built.success)
 		throw new Error(
@@ -234,7 +209,21 @@ async function buildBrowserBundle(): Promise<string> {
 		);
 	const output = built.outputs[0];
 	if (output === undefined) throw new Error("browser build produced no output");
-	return await output.text();
+	const code = await output.text();
+	// The wrapper is a function body, which cannot hold a top-level `export`.
+	// Bun emits one when it classifies the entry as CommonJS — which merely
+	// MENTIONING `module`/`exports` is enough to trigger. Caught here because the
+	// alternative is a bare "SyntaxError: Unexpected export" from the Worker with
+	// nothing pointing at the cause.
+	if (/^export\s/m.test(code))
+		throw new Error(
+			"browser bundle emitted a top-level export, which cannot sit inside the " +
+				"host-shadowing wrapper. Check whether the worker entry mentions " +
+				"`module`/`exports` and so was classified as CommonJS.",
+		);
+	const path = join(directory, "explain-browser-bundle.js");
+	await Bun.write(path, code);
+	return { path, bytes: code.length };
 }
 
 export interface ConsumerResult {
@@ -247,20 +236,33 @@ export interface ConsumerResult {
 export interface ConsumerReport {
 	boundary: BoundaryReport;
 	bundleBytes: number;
+	/**
+	 * Host globals the bundle could still see, measured from inside it. Empty is
+	 * the contract; a non-empty list means the shadowing silently stopped working
+	 * and every "identical" below was produced with host APIs in reach.
+	 */
+	reachableHostGlobals: string[];
 	cases: ConsumerResult[];
 	ok: boolean;
 }
 
-/** Run the bundled analysis in a Worker with every host global shadowed. */
-async function runInWorker(
-	code: string,
-	cases: readonly ConsumerCase[],
-): Promise<string[]> {
-	const worker = new Worker(
-		new URL("./explain-browser-worker.ts", import.meta.url).href,
-	);
+/**
+ * Run the browser bundle as a Worker and collect what it posts.
+ *
+ * One-way: the cases are compiled into the bundle, so there is no inbound
+ * message handler and nothing this side sends can influence what executes.
+ * Handlers are attached in the same synchronous block as the construction, so
+ * the worker's single message cannot be missed.
+ */
+async function runBundleInWorker(
+	bundlePath: string,
+): Promise<{ results: string[]; reachableHostGlobals: string[] }> {
+	const worker = new Worker(bundlePath);
 	try {
-		return await new Promise<string[]>((settle, fail) => {
+		return await new Promise<{
+			results: string[];
+			reachableHostGlobals: string[];
+		}>((settle, fail) => {
 			const timer = setTimeout(
 				() => fail(new Error("browser consumer worker timed out after 60s")),
 				60_000,
@@ -270,22 +272,20 @@ async function runInWorker(
 				const data = event.data as {
 					ok: boolean;
 					results?: string[];
+					reachableHostGlobals?: string[];
 					error?: string;
 				};
 				if (!data.ok) fail(new Error(data.error ?? "worker reported failure"));
-				else settle(data.results ?? []);
+				else
+					settle({
+						results: data.results ?? [],
+						reachableHostGlobals: data.reachableHostGlobals ?? [],
+					});
 			};
 			worker.onerror = (event: ErrorEvent) => {
 				clearTimeout(timer);
 				fail(new Error(String(event.message ?? event)));
 			};
-			worker.postMessage({
-				code,
-				cases: cases.map((c) => ({
-					input: c.input,
-					options: c.options ?? { tokens: true, curl: true },
-				})),
-			});
 		});
 	} finally {
 		worker.terminate();
@@ -323,38 +323,69 @@ function firstDifference(a: unknown, b: unknown, path = "$"): string | null {
 	return `${path}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`;
 }
 
-/** Boundary gate plus executed consumer comparison. */
-export async function runBrowserConsumerCheck(
-	cases: readonly ConsumerCase[] = BROWSER_CONSUMER_CASES,
-): Promise<ConsumerReport> {
+/**
+ * Boundary gate plus executed consumer comparison.
+ *
+ * The corpus is not a parameter: {@link BROWSER_CONSUMER_CASES} is compiled
+ * into the bundle as well as read here, which is what makes both sides provably
+ * the same list. A caller wanting another input adds it there.
+ */
+export async function runBrowserConsumerCheck(): Promise<ConsumerReport> {
 	const boundary = checkBoundary();
 	// Report the offending EDGE before bundling. A boundary break also breaks the
 	// build, but as a polyfill complaint several modules away from its cause
 	// (#312's own symptom), so letting the bundler fail first would throw away
 	// the one diagnostic this gate exists to produce.
 	if (boundary.violations.length > 0)
-		return { boundary, bundleBytes: 0, cases: [], ok: false };
-	const code = await buildBrowserBundle();
-	const bundled = await runInWorker(code, cases);
-	const results: ConsumerResult[] = cases.map((testCase, index) => {
-		const native: ExplainData = explainCommand(
-			testCase.input,
-			testCase.options ?? { tokens: true, curl: true },
+		return {
+			boundary,
+			bundleBytes: 0,
+			reachableHostGlobals: [],
+			cases: [],
+			ok: false,
+		};
+
+	const directory = mkdtempSync(join(tmpdir(), "centrs-explain-browser-"));
+	let bundled: string[];
+	let reachableHostGlobals: string[];
+	let bundleBytes: number;
+	try {
+		const bundle = await buildBrowserWorkerBundle(directory);
+		bundleBytes = bundle.bytes;
+		const run = await runBundleInWorker(bundle.path);
+		bundled = run.results;
+		reachableHostGlobals = run.reachableHostGlobals;
+	} finally {
+		rmSync(directory, { recursive: true, force: true });
+	}
+
+	const results: ConsumerResult[] = BROWSER_CONSUMER_CASES.map(
+		(testCase, index) => {
+			const native: ExplainData = explainCommand(
+				testCase.input,
+				caseOptions(testCase),
+			);
+			const nativeJson = JSON.stringify(native);
+			const bundledJson = bundled[index] ?? "";
+			if (nativeJson === bundledJson)
+				return { name: testCase.name, identical: true };
+			const detail =
+				firstDifference(native, JSON.parse(bundledJson || "null")) ??
+				"serialized forms differ with no structural difference (key order)";
+			return { name: testCase.name, identical: false, detail };
+		},
+	);
+	// A short reply would otherwise score as "everything matched".
+	if (bundled.length !== BROWSER_CONSUMER_CASES.length)
+		throw new Error(
+			`worker returned ${bundled.length} results for ${BROWSER_CONSUMER_CASES.length} cases`,
 		);
-		const nativeJson = JSON.stringify(native);
-		const bundledJson = bundled[index] ?? "";
-		if (nativeJson === bundledJson)
-			return { name: testCase.name, identical: true };
-		const detail =
-			firstDifference(native, JSON.parse(bundledJson || "null")) ??
-			"serialized forms differ with no structural difference (key order)";
-		return { name: testCase.name, identical: false, detail };
-	});
 	return {
 		boundary,
-		bundleBytes: code.length,
+		bundleBytes,
+		reachableHostGlobals,
 		cases: results,
-		ok: boundary.violations.length === 0 && results.every((r) => r.identical),
+		ok: reachableHostGlobals.length === 0 && results.every((r) => r.identical),
 	};
 }
 
@@ -365,6 +396,7 @@ function render(report: ConsumerReport): string {
 		`entry: src/explain.ts  |  modules reachable: ${report.boundary.moduleCount}`,
 		`host builtins reached: ${report.boundary.builtins.join(", ") || "none"}`,
 		`browser bundle: ${(report.bundleBytes / 1024).toFixed(1)} KiB`,
+		`host globals reachable from inside the bundle: ${report.reachableHostGlobals.join(", ") || "none"}`,
 		"",
 	];
 	if (report.boundary.violations.length > 0) {

@@ -4,6 +4,7 @@ import {
 	checkBoundary,
 	runBrowserConsumerCheck,
 } from "../../scripts/explain-browser-consumer.ts";
+import { explainCommand } from "../../src/explain.ts";
 
 /**
  * The offline analysis entry's dependency boundary and its consumer proof
@@ -26,15 +27,19 @@ import {
  *   - The CONSUMER gate bundles for a browser and RUNS it, because compilation
  *     is not proof: a bundler silently substitutes browser polyfills (see
  *     `ALLOWED_BUILTINS` — `node:net`'s `isIP` becomes a regex pair), so only
- *     executing the bundle shows whether the substitute agrees. It compares the
- *     whole `ExplainData` — structure, diagnostics, tokens, spans — field for
- *     field against this process's Bun-native result.
+ *     executing the bundle shows whether the substitute agrees. The bundle is
+ *     wrapped at build time in a function shadowing every host global and then
+ *     spawned as the Worker, so the artifact under test is the browser build
+ *     itself. It compares the whole `ExplainData` — structure, diagnostics,
+ *     tokens, spans — field for field against this process's Bun-native
+ *     result.
  *
- * Both halves are mutation-tested rather than assumed: re-adding an
+ * All three assertions are mutation-tested rather than assumed: re-adding an
  * `./execute.ts` import to `explain.ts` fails the boundary gate naming
- * `src/protocols/mac-telnet.ts` and the `node:crypto` chain, and truncating
- * `tokens` in the bundled namespace fails 10 of the 14 cases with the differing
- * path (`$.tokens.length: 24 vs 1`) reported.
+ * `src/protocols/mac-telnet.ts` and the `node:crypto` chain; truncating
+ * `tokens` in the worker entry fails 10 of the 14 cases with the differing path
+ * (`$.tokens.length: 24 vs 1`) reported; and dropping the shadowing wrapper
+ * reports `Bun, process` as reachable.
  */
 describe("offline explain entry stays browser-consumable (#312)", () => {
 	test("the entry's module graph reaches no transport, CDB, or CLI module", () => {
@@ -67,6 +72,10 @@ describe("offline explain entry stays browser-consumable (#312)", () => {
 			.filter((c) => !c.identical)
 			.map((c) => `${c.name}: ${c.detail}`);
 		expect(differing).toEqual([]);
+		// Measured from INSIDE the bundle, not asserted by the build step: if the
+		// shadowing wrapper stopped being emitted, every "identical" above would
+		// have been produced with host APIs in reach and would prove nothing.
+		expect(report.reachableHostGlobals).toEqual([]);
 		expect(report.cases).toHaveLength(BROWSER_CONSUMER_CASES.length);
 		expect(report.ok).toBe(true);
 		// The bundle is the real analysis, not an empty module that trivially
@@ -75,14 +84,22 @@ describe("offline explain entry stays browser-consumable (#312)", () => {
 	}, 60_000);
 
 	test("offline analysis never claims runtime acceptance, browser or Bun", async () => {
-		const report = await runBrowserConsumerCheck([
-			{ name: "write-shaped", input: "/ip address add address=1.1.1.1/24" },
-		]);
+		const writeShaped = BROWSER_CONSUMER_CASES.find(
+			(c) => c.name === "normal-write",
+		);
+		expect(writeShaped).toBeDefined();
 
-		// The three-axis contract's floor (`commands/explain/README.md`): a
-		// reading is never an acceptance, and a consumer that bundles the library
-		// itself must not be able to lose that. Equality with the native run is
-		// what carries it — the native value is asserted in `explain.test.ts`.
-		expect(report.cases[0]?.identical).toBe(true);
-	});
+		// The three-axis contract's floor (`commands/explain/README.md`): a reading
+		// is never an acceptance, and the most tempting case to get wrong is the
+		// write-shaped one a consumer might treat as validated.
+		const native = explainCommand(writeShaped?.input ?? "", { tokens: true });
+		expect(native.runtimeAcceptance).toBe("not-proven");
+
+		// Equality with the native run is what carries that across the boundary: a
+		// bundle that dropped or altered the field fails here, not silently.
+		const report = await runBrowserConsumerCheck();
+		expect(report.cases.find((c) => c.name === "normal-write")?.identical).toBe(
+			true,
+		);
+	}, 60_000);
 });
