@@ -90,7 +90,7 @@
  * certainty, because R4 has it REPLACE the context rather than extend it.
  */
 
-import { type ScopeBlock, scopeBlocksIn, scopeBodies } from "./blocks.ts";
+import { type ScopeBlock, scopeBlocksIn } from "./blocks.ts";
 import { commandVerbIndex } from "./catalog.ts";
 import {
 	type Defect,
@@ -258,11 +258,14 @@ function structuralDefectIn(range: MaskedRange): string | null {
 const CONTEXT_LOST = "context lost to an earlier unreadable statement";
 
 /** R11 — a directive written without its colon, told by its scope block. */
-function isBareDirective(trimmed: string): boolean {
+function isBareDirective(text: string, range: MaskedRange): boolean {
+	const start = trimmedStart(text, 0, text.length);
+	const end = trimmedEnd(text, start, text.length);
+	const trimmed = text.slice(start, end);
 	return (
 		!trimmed.startsWith(":") &&
 		!trimmed.startsWith("/") &&
-		scopeBodies(trimmed).length > 0
+		scopeBlocksIn(nestedRange(range, start, end)).length > 0
 	);
 }
 
@@ -271,9 +274,9 @@ function isBareDirective(trimmed: string): boolean {
  * context? Mirrors `canonicalPath`'s `base` exactly — absolute, `:` directive,
  * or bare directive (R11) all resolve at the root.
  */
-function isContextIndependent(text: string): boolean {
+function isContextIndependent(text: string, range: MaskedRange): boolean {
 	const t = trimAscii(text);
-	return t.startsWith(":") || t.startsWith("/") || isBareDirective(t);
+	return t.startsWith(":") || t.startsWith("/") || isBareDirective(text, range);
 }
 
 /**
@@ -283,9 +286,9 @@ function isContextIndependent(text: string): boolean {
  * at the root but hands its body the context in force (R5), so `:foreach … do={
  * add … }` still depends on an upstream context its own path does not.
  */
-function isBodyContextIndependent(text: string): boolean {
+function isBodyContextIndependent(text: string, range: MaskedRange): boolean {
 	const t = trimAscii(text);
-	return t.startsWith("/") || isBareDirective(t);
+	return t.startsWith("/") || isBareDirective(text, range);
 }
 
 /**
@@ -369,12 +372,16 @@ function isUnreadableAbsolute(text: string): boolean {
  * anchors nothing, in EITHER spelling: `statementPath` derives a base from a
  * relative one too (`route/$verb remove [find]` yields `<ctx>/route/$verb`).
  */
-function handsKnownContext(text: string, contextCertain: boolean): boolean {
+function handsKnownContext(
+	text: string,
+	contextCertain: boolean,
+	range: MaskedRange,
+): boolean {
 	// Either spelling of an unreadable menu anchors nothing. `statementPath`
 	// derives a base from a RELATIVE one too (`route/$verb remove [find]` yields
 	// `<ctx>/route/$verb`), so this cannot test only the absolute form.
 	if (isUnreadableAbsolute(text) || isUnreadablePath(text)) return false;
-	return contextCertain || isBodyContextIndependent(text);
+	return contextCertain || isBodyContextIndependent(text, range);
 }
 
 /** A re-constituted `[…]` command substitution (Q3). */
@@ -667,7 +674,7 @@ function walk(
 	for (const unit of units) {
 		const { text, loc, range } = unit;
 		// R4 — a menu-navigation statement moves the document context.
-		const nav = menuNavPath(text, ctx);
+		const nav = menuNavPath(text, ctx, range);
 		if (nav !== null) {
 			const relative = !trimAscii(text).startsWith("/");
 			// A `..` read against an unknown context stays unknown; an absolute
@@ -687,16 +694,16 @@ function walk(
 		}
 		// #235 — a relative bare-word that abstained (neither table) poisons
 		// downstream context, so the next relative statement cannot fabricate.
-		const poisonAbstention = isAbstainedRelativeNav(text, ctx);
+		const poisonAbstention = isAbstainedRelativeNav(text, ctx, range);
 		// R3 — the statement's own path is the context its brackets see.
-		const stmtCtx = statementPath(text, ctx);
+		const stmtCtx = statementPath(text, ctx, range);
 		// Derived BEFORE the poison, from the certainty in force at this statement:
 		// `handsKnownContext` answers about the context this statement HANDS DOWN,
 		// which its own unreadability already governs. An abstained nav poisons
 		// what follows, so its own body must already be uncertain.
 		const stmtCertain = poisonAbstention
 			? false
-			: handsKnownContext(text, certain);
+			: handsKnownContext(text, certain, range);
 		if (isUnreadableAbsolute(text) || poisonAbstention) certain = false;
 		collectBrackets(range, stmtCtx, 0, out, defects, stmtCertain, loc);
 		// R5 — block bodies inherit the context in force here.
@@ -712,7 +719,7 @@ function walk(
 			}
 			const bodyLoc = nest(loc, block.start, unit.span);
 			const body = locate(
-				segmentStatements(block.body),
+				segmentStatements(block.body, bodyRange(range, block)),
 				bodyLoc,
 				bodyRange(range, block),
 			);
@@ -746,7 +753,7 @@ function walkStatements(
 	let certain = contextCertain;
 	for (const unit of units) {
 		const { text, span, range } = unit;
-		const nav = menuNavPath(text, ctx);
+		const nav = menuNavPath(text, ctx, range);
 		if (nav !== null) {
 			// `..` ascends FROM the context, so it cannot be read while the context
 			// is unknown. A `/`-led navigation (and a bare `/`) REPLACES it (R4) and
@@ -796,17 +803,19 @@ function walkStatements(
 		// #235 — a relative bare-word that abstained (neither table) poisons
 		// downstream context. Capture before the push so the current statement's
 		// own `contextCertain` stays true while the following statements lose it.
-		const poisonAbstention = isAbstainedRelativeNav(text, ctx);
+		const poisonAbstention = isAbstainedRelativeNav(text, ctx, range);
 		// Q14 C3b — the cascade. A statement that CONSUMES the context cannot be
 		// resolved against a value the resolver has already admitted it lost.
 		// Applied to the RESOLUTION, not ahead of it, so a statement that would
 		// have refused on its own terms keeps its own — more specific — reason.
-		const resolved = canonicalPath(text, ctx);
+		const resolved = canonicalPath(text, ctx, range);
 		out.push({
 			text,
 			isNav: false,
 			context: ctx,
-			...(resolved.path !== null && !certain && !isContextIndependent(text)
+			...(resolved.path !== null &&
+			!certain &&
+			!isContextIndependent(text, range)
 				? { path: null, unresolved: CONTEXT_LOST }
 				: resolved),
 			contextCertain: certain,
@@ -817,10 +826,10 @@ function walkStatements(
 		// knowable, when the statement spells its path out or is a bare directive,
 		// and unknowable when the statement's own path could not be read. Same
 		// predicate and same order as the bracket walk, per the lockstep rule.
-		const stmtCtx = statementPath(text, ctx);
+		const stmtCtx = statementPath(text, ctx, range);
 		const bodyCertain = poisonAbstention
 			? false
-			: handsKnownContext(text, certain);
+			: handsKnownContext(text, certain, range);
 		if (isUnreadableAbsolute(text) || poisonAbstention) certain = false;
 		for (const block of scopeBlocksIn(range)) {
 			if (blockDepth >= MAX_DEPTH) {
@@ -832,7 +841,7 @@ function walkStatements(
 			}
 			const bodyLoc = nest(unit.loc, block.start, span);
 			const body = locate(
-				segmentStatements(block.body),
+				segmentStatements(block.body, bodyRange(range, block)),
 				bodyLoc,
 				bodyRange(range, block),
 			);
@@ -893,7 +902,11 @@ function walkStatements(
  * now disagree CONFIDENTLY rather than one of them refusing. The same test pins
  * the invariant for both rules.
  */
-function menuNavPath(text: string, ctx: string): string | null {
+function menuNavPath(
+	text: string,
+	ctx: string,
+	range: MaskedRange,
+): string | null {
 	const trimmed = trimAscii(text);
 	if (trimmed === "/") return "/";
 	if (/^\.\.(?:[ \t\r\n]|$)/.test(trimmed)) {
@@ -903,7 +916,7 @@ function menuNavPath(text: string, ctx: string): string | null {
 	}
 	if (!trimmed.startsWith("/")) {
 		// #235 R13 — relative bare-word menu navigation.
-		const reading = readRelativeBare(text, ctx);
+		const reading = readRelativeBare(text, ctx, range);
 		return reading?.kind === "nav" ? reading.path : null;
 	}
 	if (/[=[({"$]/.test(trimmed)) return null;
@@ -948,6 +961,7 @@ type RelativeBareReading = { kind: "nav"; path: string } | { kind: "abstain" };
 function readRelativeBare(
 	text: string,
 	ctx: string,
+	range: MaskedRange,
 ): RelativeBareReading | null {
 	const trimmed = trimAscii(text);
 	if (
@@ -957,7 +971,7 @@ function readRelativeBare(
 		trimmed.startsWith("$") ||
 		trimmed.startsWith("[") ||
 		trimmed.startsWith("(") ||
-		isBareDirective(trimmed)
+		isBareDirective(text, range)
 	)
 		return null;
 	// Whitespace and `/` are interchangeable on the device, so the run is read
@@ -985,13 +999,18 @@ function readRelativeBare(
  * Presence in a table → nav; absence → abstain → poison downstream, so the
  * next relative statement cannot resolve against a context that may have moved.
  */
-function isAbstainedRelativeNav(text: string, ctx: string): boolean {
-	return readRelativeBare(text, ctx)?.kind === "abstain";
+function isAbstainedRelativeNav(
+	text: string,
+	ctx: string,
+	range: MaskedRange,
+): boolean {
+	return readRelativeBare(text, ctx, range)?.kind === "abstain";
 }
 
 function canonicalPath(
 	text: string,
 	ctx: string,
+	range: MaskedRange,
 ): { path: string | null; candidates?: string[]; unresolved?: string } {
 	const t = trimAscii(text);
 	if (t.startsWith("$") || t.startsWith("[") || t.startsWith("("))
@@ -1005,10 +1024,11 @@ function canonicalPath(
 	// R11 — a scripting directive written WITHOUT its colon is still at the root.
 	// A statement that carries a SCOPE-valued block is a directive, because no
 	// menu command takes one — a schema-free tell.
-	const bareDirective = isBareDirective(t);
+	const bareDirective = isBareDirective(text, range);
 	// The cascade contract reads this same split to decide which statements may
 	// keep resolving once the context is lost, so both must come from one place.
-	const base = isContextIndependent(t) ? "/" : ctx;
+	const base =
+		t.startsWith(":") || t.startsWith("/") || bareDirective ? "/" : ctx;
 	// R7 — a variable segment anywhere in the leading run leaves the path
 	// unresolved, INCLUDING after a static word. `statementRun` drops the whole
 	// word carrying the variable, so `/ip route/$menu/remove` would otherwise
@@ -1057,15 +1077,15 @@ function statementRun(text: string): string[] {
  * [find …]` that is `/ip/route`: the leading path run minus its last token,
  * which is the verb (Q6's reading, right ~93.7% of the time).
  */
-function statementPath(text: string, ctx: string): string {
+function statementPath(text: string, ctx: string, range: MaskedRange): string {
 	const t = trimAsciiStart(text);
 	// R11 — a bare directive is at the root, so the context it hands its body is
 	// the root too, not `<ctx>/while`.
-	if (isBareDirective(trimAscii(t))) return "/";
+	if (isBareDirective(text, range)) return "/";
 	const lead = leadingRun(text);
 	if (lead.length === 0) return ctx;
 	// Same split `isBodyContextIndependent` reports to the cascade contract.
-	const base = isBodyContextIndependent(t) ? "/" : ctx;
+	const base = t.startsWith("/") ? "/" : ctx;
 	return joinPath(base, lead.slice(0, -1).join("/"));
 }
 
@@ -1260,7 +1280,9 @@ function scanInterpolations(
 			innerSpan: spanIn(loc, innerAt - lo, innerEnd - lo),
 		});
 		collectBrackets(
-			rangeAt(range, innerAt, innerEnd),
+			// The document mask leaves strings opaque. Crossing from string text
+			// into interpolation code starts a fresh statement/comment context.
+			documentRange(inner),
 			out[out.length - 1]?.path ?? ctx,
 			depth + 1,
 			out,

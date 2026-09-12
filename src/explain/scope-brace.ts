@@ -202,6 +202,18 @@ function statementIndex(text: string): StatementIndex {
 	return index;
 }
 
+/**
+ * Whether the index itself starts a fresh statement at `start`.
+ *
+ * Most readers index a comment mask, but segmentation must retain the raw
+ * comments. A quote in an earlier comment can make that raw index skip a real
+ * body opener as string content. Such a body must build its own local index:
+ * clamping lookback alone cannot restore boundaries the outer index skipped.
+ */
+export function isIndexedStatementStart(text: string, start: number): boolean {
+	return start === 0 || statementIndex(text).boundaries[start] === start - 1;
+}
+
 function trailingName(text: string, start: number, end: number): string | null {
 	let i = end - 1;
 	while (i >= start && isAsciiWhitespace(text[i])) i--;

@@ -1238,9 +1238,14 @@ export function explainCommand(
 	const analyzedRange = documentRange(analyzed);
 	const segmented = segmentStatements(input);
 	const statementAnalysis = resolveStatements(input);
-	const verbs = resolveVerbsFromStatements(statementAnalysis);
+	const sourceRange = coordinates.ascii ? analyzedRange : undefined;
+	const verbs = resolveVerbsFromStatements(statementAnalysis, sourceRange);
 	const brackets = resolveDocument(input);
-	const write = containsWriteFromAnalyses(statementAnalysis, brackets);
+	const write = containsWriteFromAnalyses(
+		statementAnalysis,
+		brackets,
+		sourceRange,
+	);
 	const symbols = resolveSymbols(input);
 
 	// ONE escape walk, read twice (#264): its invalid half is a

@@ -6,7 +6,9 @@ import {
 } from "../../src/explain/coordinates.ts";
 import { type Defect, hasStructuralDefect } from "../../src/explain/defects.ts";
 import {
+	documentRange,
 	maskComments,
+	nestedRange,
 	type Segment,
 	scanQuotedString,
 	segmentStatements,
@@ -55,6 +57,74 @@ const corners: Corner[] = JSON.parse(
 		"utf8",
 	),
 ).corners;
+
+describe("document-anchored segmentation (#322)", () => {
+	test("a quote in an earlier comment cannot hide the body's index boundaries", () => {
+		for (const prefix of ['# "\n:if (true) do={', ':do {# "\n:do {']) {
+			for (const body of [
+				":local a {# bad\n1}",
+				":local a 1 # bad\n:put 2",
+				':do {# ignored [\n:put "ok"}',
+			]) {
+				const range = nestedRange(
+					documentRange(`${prefix}${body}}`),
+					prefix.length,
+					prefix.length + body.length,
+				);
+				expect(segmentStatements(body, range)).toEqual(segmentStatements(body));
+			}
+		}
+	});
+
+	for (const corner of corners) {
+		test(`a nested range preserves every field: ${corner.name}`, () => {
+			const prefix = ':put "before"; :if (true) do={';
+			const text = `${prefix}${corner.input}}; :put "after"`;
+			const range = nestedRange(
+				documentRange(text),
+				prefix.length,
+				prefix.length + corner.input.length,
+			);
+			expect(segmentStatements(corner.input, range)).toEqual(
+				segmentStatements(corner.input),
+			);
+		});
+	}
+
+	test("non-ASCII bodies keep analyzed-byte coordinates and positional facts", () => {
+		for (const body of [
+			'\uFEFF:put "é"; :do {# [ignored]\n:put "路由器"}',
+			":local é 1; :put $é; :local x {# invalid\n1}",
+		]) {
+			const prefix = ":if (true) do={";
+			const range = nestedRange(
+				documentRange(`${prefix}${body}}`),
+				prefix.length,
+				prefix.length + body.length,
+			);
+			expect(segmentStatements(body, range)).toEqual(segmentStatements(body));
+			expect(segmentStatements(body, range).ascii).toBe(false);
+		}
+	});
+
+	test("original comments retain continuation state and local comment spans", () => {
+		const body = ":local \\\n# [ignored] {\n\nvalue 1; :put $value";
+		const prefix = ":do {";
+		const range = nestedRange(
+			documentRange(`${prefix}${body}}`),
+			prefix.length,
+			prefix.length + body.length,
+		);
+		const result = segmentStatements(body, range);
+		expect(result).toEqual(segmentStatements(body));
+		expect(result.comments).toEqual([{ start: 9, end: 22 }]);
+		expect(result.segments.map((s) => s.text)).toEqual([
+			":local \\\n# [ignored] {",
+			"value 1",
+			":put $value",
+		]);
+	});
+});
 
 describe("ratified statement boundaries (Q1 corners) — text sequence", () => {
 	for (const c of corners) {

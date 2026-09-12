@@ -81,7 +81,11 @@ import {
 } from "./coordinates.ts";
 import { type Defect, defectAt, mergeDefects } from "./defects.ts";
 import { scanQuotedString as scanQuotedStringShared } from "./quoted-string.ts";
-import { braceStartsStatements, hashStartsHardError } from "./scope-brace.ts";
+import {
+	braceStartsStatements,
+	hashStartsHardError,
+	isIndexedStatementStart,
+} from "./scope-brace.ts";
 
 /** One top-level statement located in analyzed-byte space. */
 export interface Segment {
@@ -459,8 +463,19 @@ const MAX_CONTAINER_DEPTH = 256;
 /**
  * Segment `original` into top-level statements. Spans are analyzed-byte offsets
  * (see module header); `text` is the original substring for each span.
+ *
+ * A statement-bearing `range` may anchor the same `original` text in its
+ * enclosing document. On ASCII input, structural lookback can reuse that
+ * document's statement index instead of indexing every nested body (#322).
+ * The scan still reads the original bytes, including comments: replacing them
+ * with the mask would lose comment spans and H5 continuation state. Non-ASCII
+ * input, or a body opener skipped by the raw document index (a quote inside an
+ * earlier comment), keeps the standalone analyzed-byte scan.
  */
-export function segmentStatements(original: string): SegmentResult {
+export function segmentStatements(
+	original: string,
+	range?: MaskedRange,
+): SegmentResult {
 	const analysis = analyzeCoordinates(original);
 	// `analyzed` is pure ASCII, so a string built from it has index === byte.
 	// When the INPUT was already ASCII the two are the same sequence, so the
@@ -468,7 +483,13 @@ export function segmentStatements(original: string): SegmentResult {
 	const ascii = analysis.ascii
 		? original
 		: new TextDecoder().decode(analysis.analyzed);
-	const raw = scanAscii(ascii);
+	const anchored =
+		analysis.ascii &&
+		range !== undefined &&
+		isIndexedStatementStart(range.text, range.start)
+			? range
+			: undefined;
+	const raw = scanAscii(ascii, anchored);
 	// Recover the human-readable `text` for each segment from the original.
 	const segments = raw.segments.map((s) => ({
 		...s,
@@ -549,11 +570,19 @@ interface Frame {
  * flattening H7 containers inline. Returns spans only; `segmentStatements`
  * recovers each `text` from the original afterward.
  */
-function scanAscii(ascii: string): {
+function scanAscii(
+	ascii: string,
+	range?: MaskedRange,
+): {
 	segments: RawSegment[];
 	comments: { start: number; end: number }[];
 	defects: Defect[];
 } {
+	// Local indices remain local in the result; only index-backed questions use
+	// document coordinates. The floor prevents an enclosing head from becoming
+	// the head of the body being segmented.
+	const indexed = range?.text ?? ascii;
+	const floor = range?.start ?? 0;
 	const comments: { start: number; end: number }[] = [];
 	const defects: Defect[] = [];
 	const overDepth: number[] = [];
@@ -779,7 +808,12 @@ function scanAscii(ascii: string): {
 		if (
 			c === "#" &&
 			!hardHashSeen &&
-			hashStartsHardError(ascii, i, delimStack.at(-1)?.statements === false)
+			hashStartsHardError(
+				indexed,
+				floor + i,
+				delimStack.at(-1)?.statements === false,
+				floor,
+			)
 		) {
 			defects.push(defectAt("invalid-hash", i, "#"));
 			hardHashSeen = true;
@@ -842,7 +876,9 @@ function scanAscii(ascii: string): {
 				const enclosing = delimStack.at(-1)?.statements ?? true;
 				const statements =
 					c === "[" ||
-					(c === "{" && enclosing && braceStartsStatements(ascii, i));
+					(c === "{" &&
+						enclosing &&
+						braceStartsStatements(indexed, floor + i, floor));
 				delimStack.push({ char: c, at: i, statements });
 				f.atLead = statements;
 			}

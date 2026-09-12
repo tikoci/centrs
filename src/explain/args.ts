@@ -620,7 +620,7 @@ function scanToken(
 			const end = delimitedEnd(structural, i);
 			if (end === null)
 				return unbounded("an unclosed structured argument value");
-			if (hasUnquotedHash(structural, i, end)) {
+			if (hasUnquotedHash(structural, i, end, options.range)) {
 				const abort = refuse("an invalid hash in a structured argument value");
 				if (abort !== undefined) return abort;
 			}
@@ -716,7 +716,12 @@ function structuredRefusal(
  *
  * Skipping whole `[…]` regions instead would wrongly accept rows 3 and 4.
  */
-function hasUnquotedHash(text: string, start: number, end: number): boolean {
+function hasUnquotedHash(
+	text: string,
+	start: number,
+	end: number,
+	range?: MaskedRange,
+): boolean {
 	// `start` is the `{`/`(` of an array-or-group value: not a statement context.
 	const statements: boolean[] = [false];
 	for (let i = start + 1; i < end - 1; i++) {
@@ -732,7 +737,14 @@ function hasUnquotedHash(text: string, start: number, end: number): boolean {
 			// scope; nested in an array it is another array, so the role is known
 			// without the reverse-prefix scan. The short-circuit is what keeps this
 			// O(1) per brace on the deep-nesting inputs `explain-write` and Q17 pin.
-			statements.push(enclosing && braceStartsStatements(text, i));
+			statements.push(
+				enclosing &&
+					braceStartsStatements(
+						range?.masked ?? text,
+						(range?.start ?? 0) + i,
+						range?.start ?? 0,
+					),
+			);
 		else if (c === "(") statements.push(false);
 		else if (c === "]" || c === "}" || c === ")") {
 			if (statements.length > 1) statements.pop();
