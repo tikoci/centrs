@@ -77,6 +77,22 @@
  *     type-axis question before it is a lexical one.
  *   - **`runtimeAcceptance` is always `"not-proven"`**, offline and live alike.
  *     It is the inspect-vs-runtime gap made machine-readable, not a placeholder.
+ *
+ * ## This module is the public offline entry — its imports are a contract
+ *
+ * `centrs/explain` resolves here, and the claim that offline analysis is a
+ * LIBRARY capability rests on what this file imports: nothing in the graph below
+ * it may open a connection, read CDB, or touch the filesystem, so the module
+ * bundles and runs in a browser, a Worker, or an editor host (#312).
+ *
+ * That is easy to break with one line, and it was: `toYaml` and
+ * `canonicalizeExecuteCommand` are pure, but importing them from `retrieve.ts`
+ * and `execute.ts` pulled mac-telnet (`node:dgram`), native-api (`node:crypto`)
+ * and ssh in behind them. Both now live in `src/core/`. **Before adding an
+ * import here, check it is pure** — `bun run explain:browser-consumer` walks the
+ * graph and names the offending edge, and
+ * `test/unit/explain-browser-entry.test.ts` gates it. A pure helper that lives
+ * in a transport-reaching module belongs in `src/core/`, not in an import here.
  */
 
 import type {
