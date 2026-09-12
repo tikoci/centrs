@@ -49,6 +49,15 @@ interface Reach {
 	scripts: number;
 	/** Resolved statements carrying an argument list this lexer may read. */
 	candidates: number;
+	/**
+	 * Statements EXCLUDED from `candidates` because their bytes are not
+	 * addressable — a normalized (non-ASCII) statement, or one whose span was
+	 * widened to the enclosing statement. Reported rather than silently dropped,
+	 * so the denominator above is honest: `explain.ts` refuses these too
+	 * (`its text was normalized`), and a sweep that lexed them anyway would be
+	 * measuring a reading the product does not offer.
+	 */
+	notAddressable: number;
 	strictRead: number;
 	strictRefused: number;
 	/** Of the refused, those whose decoded PREFIX is non-empty (design A's reach). */
@@ -74,6 +83,7 @@ export function sweep(scripts: readonly string[]): Reach {
 	const out: Reach = {
 		scripts: scripts.length,
 		candidates: 0,
+		notAddressable: 0,
 		strictRead: 0,
 		strictRefused: 0,
 		refusedWithPrefix: 0,
@@ -99,7 +109,10 @@ export function sweep(scripts: readonly string[]): Reach {
 			if (split.argsAt === null) continue;
 			const { start, end } = split.span;
 			const slice = analyzed.slice(start, end);
-			if (slice !== split.text) continue;
+			if (slice !== split.text) {
+				out.notAddressable++;
+				continue;
+			}
 			out.candidates++;
 
 			const strict = lexArguments(slice, split.argsAt);
@@ -200,6 +213,7 @@ Scripts: ${r.scripts} · candidate statements: ${r.candidates}
 - refused with an EMPTY prefix, reached only by B: ${r.onlyReachedByB}
 - tokens published \`undecided\` (located, no value): ${r.undecidedTokens}
 - statements where even B stops early (unterminated/unbalanced/\`;\`): ${r.incomplete}
+- excluded as not addressable, so outside every column: ${r.notAddressable}
 - boundary mismatches between the two walks: ${r.boundaryMismatches.length}
 
 | strict refusal reason | statements |
@@ -217,6 +231,16 @@ ${
 
 export async function main(args: readonly string[]): Promise<number> {
 	const at = args.indexOf("--db");
+	// A bare trailing `--db` would otherwise fall through to the environment, a
+	// sibling checkout or the cache, and announce THAT snapshot as the measured
+	// one. Which bytes were measured is the whole provenance claim here.
+	if (at >= 0 && args[at + 1] === undefined) {
+		console.error(
+			"::error title=explain arg reach sweep::`--db` needs a path to a corpus " +
+				"sqlite; omit the flag entirely to use the pinned snapshot.",
+		);
+		return 1;
+	}
 	const resolution = resolveCorpusDb(at < 0 ? undefined : args[at + 1]);
 	const dbPath = resolution.path;
 	if (dbPath === undefined || !(await Bun.file(dbPath).exists())) {

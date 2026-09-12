@@ -1150,6 +1150,12 @@ one implementation — design A is the tolerant token list truncated at its firs
 | argument tokens | 16,652 | 20,481 | 31,310 |
 | missing-separator runs found | 0 | 0 | 0 |
 
+A further 58 statements sit outside every column because their bytes are not
+addressable (normalized, or a span widened to the enclosing statement); the
+sweep counts them rather than dropping them silently, since `explain.ts` refuses
+those too and lexing them here would measure a reading the product does not
+offer.
+
 A recovers 3,369 statements; the 3,513 statements whose FIRST interesting token
 is the undecodable one have an empty prefix and are reached only by B — so the
 cheaper design leaves slightly more behind than it recovers. The separator row

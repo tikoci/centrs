@@ -83,6 +83,17 @@ describe("the reach sweep counts what it says it counts", () => {
 		expect(split.strictRefused).toBe(0);
 	});
 
+	test("a statement that is not addressable is excluded, and said so", () => {
+		// `explain.ts` refuses these too (`its text was normalized`), so lexing
+		// them here would measure a reading the product does not offer. Counting
+		// them is what keeps the reach denominator honest.
+		const r = sweep(['/system/identity/set name="router-🚀"']);
+		expect(r.candidates).toBe(0);
+		expect(r.notAddressable).toBe(1);
+		expect(r.strictRead).toBe(0);
+		expect(r.strictRefused).toBe(0);
+	});
+
 	test("an empty corpus counts nothing and asserts nothing", () => {
 		const r = sweep([]);
 		expect(r.scripts).toBe(0);
