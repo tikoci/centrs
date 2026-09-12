@@ -45,7 +45,7 @@
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import {
 	type ExplainData,
 	explainCommand,
@@ -62,75 +62,167 @@ export { BROWSER_CONSUMER_CASES, type ConsumerCase };
 const ROOT = resolve(import.meta.dir, "..");
 const ENTRY = resolve(ROOT, "src/explain.ts");
 
+/**
+ * How long the worker may take before the check gives up on it.
+ *
+ * Deliberately well under the unit test's own timeout, and the ordering is the
+ * point: this timer starts only AFTER the graph walk and the bundle build, so
+ * if the two were close the generic per-test timeout could fire first and
+ * replace a specific "the worker never reported" message with an unhelpful one
+ * (CodeRabbit). The whole check runs in ~300 ms, so 30 s is ~100x headroom;
+ * raising the TEST timeout instead would have kept a failing run slow for no
+ * extra signal.
+ */
+export const WORKER_TIMEOUT_MS = 30_000;
+
 /** The published subpath the worker entry imports, and this gate measures. */
 const PUBLISHED_SUBPATH = "./explain";
 
 /**
- * Node builtins the offline entry may reach, and why each one is tolerable.
+ * The ONE host-builtin edge the offline entry may contain, pinned to its
+ * importer and to the names it may take.
  *
- * `node:net` is here for `isIP` in `src/explain/values.ts` — a pure predicate
+ * `src/explain/values.ts` imports `isIP` from `node:net` — a pure predicate
  * with no socket in it. A bundler replaces the whole module with a regex
  * polyfill, so the browser build runs a DIFFERENT `isIP` than Bun does; that
  * substitution is exactly what the consumer comparison is for, and
  * {@link BROWSER_CONSUMER_CASES} carries address-shaped inputs on purpose.
  *
- * Anything else reaching this list is a boundary regression, not a new entry to
- * add: a builtin that polyfills to a stub (`node:fs`) or throws (`node:dgram`)
- * cannot be checked the way `isIP` is.
+ * Keyed this narrowly on purpose. A specifier-only allowlist would also admit
+ * `node:net`'s `Socket` from any module in the graph, which is the opposite of
+ * what this entry claims. Anything reaching this list is a boundary regression,
+ * not a new entry to add: a builtin that polyfills to a stub (`node:fs`) or
+ * throws (`node:dgram`) cannot be checked the way `isIP` is.
  */
-const ALLOWED_BUILTINS = new Set(["node:net"]);
+const ALLOWED_BUILTIN_EDGES: readonly {
+	importer: string;
+	specifier: string;
+	names: readonly string[];
+}[] = [
+	{ importer: "src/explain/values.ts", specifier: "node:net", names: ["isIP"] },
+];
 
-/** Directories the offline entry must never reach, with the reason for each. */
+/**
+ * Paths the offline entry must never reach, with the reason for each.
+ *
+ * `src/resolver/` is forbidden as a DIRECTORY with one leaf exempted, not by
+ * naming the barrel: `index.ts` is what reaches CDB and the filesystem today,
+ * but forbidding only that name lets a future `resolver/cdb.ts` import slip
+ * straight past. `settings.ts` is the exemption because it is pure — types plus
+ * `CentrsError` — and `explain.ts` genuinely needs `resolveStringSetting` and
+ * `toCoreSource` from it. A CodeRabbit review proposed forbidding the whole
+ * directory; that fails the gate today, on the one resolver module that belongs
+ * in the graph.
+ */
 const FORBIDDEN_PREFIXES: readonly { prefix: string; why: string }[] = [
 	{ prefix: "src/protocols/", why: "transport implementation" },
-	{ prefix: "src/resolver/index.ts", why: "CDB/settings resolution barrel" },
+	{ prefix: "src/resolver/", why: "CDB/settings resolution" },
 	{ prefix: "src/cli/", why: "CLI surface" },
 	{ prefix: "src/mcp", why: "MCP server surface" },
 ];
 
+/** Modules inside a {@link FORBIDDEN_PREFIXES} directory that are pure. */
+const FORBIDDEN_PREFIX_EXEMPTIONS: readonly string[] = [
+	"src/resolver/settings.ts",
+];
+
+/** A module edge the walk could not follow, and therefore could not measure. */
+interface UnmeasuredEdge {
+	from: string;
+	specifier: string;
+	why: string;
+}
+
+/** Repo-relative path with `/` separators, so prefix tests hold on Windows. */
+function repoPath(file: string): string {
+	return relative(ROOT, file).split(sep).join("/");
+}
+
 /** Module-graph walk: every runtime import reachable from `entry`. */
 function reachableGraph(entry: string): {
 	modules: string[];
-	builtins: { specifier: string; chain: string[] }[];
-	unresolvedDynamic: number;
+	builtins: {
+		importer: string;
+		specifier: string;
+		names: string[];
+		chain: string[];
+	}[];
+	unmeasured: UnmeasuredEdge[];
 } {
 	const seen = new Map<string, string[]>();
-	const builtins: { specifier: string; chain: string[] }[] = [];
-	let unresolvedDynamic = 0;
+	const builtins: {
+		importer: string;
+		specifier: string;
+		names: string[];
+		chain: string[];
+	}[] = [];
+	const unmeasured: UnmeasuredEdge[] = [];
 	const visit = (file: string, chain: string[]): void => {
 		if (seen.has(file)) return;
 		seen.set(file, chain);
-		const read = runtimeImports(file);
-		unresolvedDynamic += read.unresolvedDynamic;
-		for (const specifier of read.specifiers) {
+		const read = runtimeImportsOf(file);
+		for (const edge of read.unmeasured)
+			unmeasured.push({ from: repoPath(file), ...edge });
+		for (const { specifier, names } of read.edges) {
 			if (!specifier.startsWith(".")) {
-				if (specifier.startsWith("node:") || specifier === "bun")
+				if (specifier.startsWith("node:") || specifier === "bun") {
 					builtins.push({
+						importer: repoPath(file),
 						specifier,
-						chain: [...chain, file].map((f) => relative(ROOT, f)),
+						names,
+						chain: [...chain, file].map(repoPath),
 					});
+					continue;
+				}
+				// A third-party package's own graph can reach anything, and this walk
+				// does not enter `node_modules`. Reporting it is the honest answer:
+				// silently skipping would let a dependency drag the filesystem back in
+				// with the gate still green.
+				unmeasured.push({
+					from: repoPath(file),
+					specifier,
+					why: "bare package specifier — its own graph is not traversed",
+				});
 				continue;
 			}
 			const target = resolve(dirname(file), specifier);
 			if (existsSync(target)) visit(target, [...chain, file]);
+			else
+				unmeasured.push({
+					from: repoPath(file),
+					specifier,
+					why: "relative specifier does not resolve to a file on disk",
+				});
 		}
 	};
 	visit(entry, []);
 	return {
-		modules: [...seen.keys()].map((f) => relative(ROOT, f)).sort(),
+		modules: [...seen.keys()].map(repoPath).sort(),
 		builtins,
-		unresolvedDynamic,
+		unmeasured,
 	};
 }
 
+/** One runtime module edge: the specifier, plus the names taken from it. */
+export interface ModuleEdge {
+	specifier: string;
+	/** Value names imported. Empty for `export *`, bare and dynamic imports. */
+	names: string[];
+}
+
 /**
- * Module specifiers `file` pulls in AT RUNTIME.
+ * Module edges `source` pulls in AT RUNTIME.
  *
  * Four forms carry a runtime edge, and missing any one leaves the gate blind:
  * `import … from "x"`, a bare side-effect `import "x"`, a re-export
- * `export {…}/* from "x"` (this repo has one inside the explain tree —
+ * `export {…}/`*`from "x"` (this repo has one inside the explain tree —
  * `explain/verbsplit.ts` re-exports `verbs.ts`, which an import-only scan does
  * not see), and a dynamic `import("x")` with a literal specifier.
+ *
+ * Both quote styles and an optional trailing semicolon are accepted. Biome
+ * normalizes this repo to double quotes and semicolons, so nothing is missed
+ * today — but a boundary gate that is only sound while a formatter config holds
+ * is not sound, and the failure mode is a silent false-clean (CodeRabbit).
  *
  * Type-only edges are excluded because they ERASE: `import type {…}`,
  * `export type {…}`, and a clause whose every specifier is `type`-prefixed
@@ -138,48 +230,55 @@ function reachableGraph(entry: string): {
  * not exist — `src/core/envelope.ts` names `RouterOsProtocol` from the
  * protocols barrel that way, and always has.
  *
- * A dynamic import with a NON-literal specifier cannot be resolved statically;
- * {@link DYNAMIC_IMPORT_UNRESOLVED} reports it rather than passing silently.
+ * This is a regex scanner, not a parser: it reads declarations at the start of
+ * a line, which is where every one in this repo sits. A specifier it cannot
+ * read is reported as unmeasured rather than dropped.
  */
-function runtimeImports(file: string): {
-	specifiers: string[];
-	unresolvedDynamic: number;
+export function runtimeImports(source: string): {
+	edges: ModuleEdge[];
+	unmeasured: { specifier: string; why: string }[];
 } {
-	const source = readFileSync(file, "utf8");
-	const specifiers: string[] = [];
+	const edges: ModuleEdge[] = [];
+	const unmeasured: { specifier: string; why: string }[] = [];
 
 	// `import …/export … from "x"` — skip `import type`/`export type` outright,
 	// then skip an all-`type` specifier clause.
 	const fromPattern =
-		/^(?:import|export)\s+(type\s+)?([\s\S]*?)from\s+"([^"]+)";/gm;
+		/^(?:import|export)\s+(type\s+)?([\s\S]*?)from\s+(['"])([^'"]+)\3\s*;?[ \t]*$/gm;
 	for (
 		let match = fromPattern.exec(source);
 		match !== null;
 		match = fromPattern.exec(source)
 	) {
 		if (match[1]) continue;
-		const names = (match[2] ?? "")
+		const clause = match[2] ?? "";
+		const names = clause
 			.replace(/[{}]/g, "")
 			.split(",")
 			.map((n) => n.trim())
 			.filter(Boolean);
 		// `export * from "x"` has no named clause and is always a runtime edge.
 		if (names.length > 0 && names.every((n) => n.startsWith("type "))) continue;
-		specifiers.push(match[3] ?? "");
+		edges.push({
+			specifier: match[4] ?? "",
+			names: names
+				.filter((n) => !n.startsWith("type "))
+				.map((n) => (n.split(/\s+as\s+/)[0] ?? "").trim())
+				.filter(Boolean),
+		});
 	}
 
 	// Bare side-effect `import "x";`.
-	const barePattern = /^import\s+"([^"]+)";/gm;
+	const barePattern = /^import\s+(['"])([^'"]+)\1\s*;?[ \t]*$/gm;
 	for (
 		let match = barePattern.exec(source);
 		match !== null;
 		match = barePattern.exec(source)
 	) {
-		specifiers.push(match[1] ?? "");
+		edges.push({ specifier: match[2] ?? "", names: [] });
 	}
 
 	// Dynamic `import("x")`, literal only. `import.meta` is not an import.
-	let unresolvedDynamic = 0;
 	const dynamicPattern = /(?<!\.)\bimport\s*\(\s*([^)]*?)\s*\)/g;
 	for (
 		let match = dynamicPattern.exec(source);
@@ -187,12 +286,21 @@ function runtimeImports(file: string): {
 		match = dynamicPattern.exec(source)
 	) {
 		const argument = (match[1] ?? "").trim();
-		const literal = /^"([^"]+)"$/.exec(argument);
-		if (literal) specifiers.push(literal[1] ?? "");
-		else if (argument.length > 0) unresolvedDynamic++;
+		const literal = /^(['"])([^'"]+)\1$/.exec(argument);
+		if (literal) edges.push({ specifier: literal[2] ?? "", names: [] });
+		else if (argument.length > 0)
+			unmeasured.push({
+				specifier: argument,
+				why: "dynamic import with a non-literal specifier",
+			});
 	}
 
-	return { specifiers, unresolvedDynamic };
+	return { edges, unmeasured };
+}
+
+/** {@link runtimeImports} for a file on disk. */
+function runtimeImportsOf(file: string): ReturnType<typeof runtimeImports> {
+	return runtimeImports(readFileSync(file, "utf8"));
 }
 
 export interface BoundaryReport {
@@ -203,16 +311,32 @@ export interface BoundaryReport {
 
 /** The BOUNDARY half: does the entry's graph stay offline and host-free? */
 export function checkBoundary(): BoundaryReport {
-	const { modules, builtins, unresolvedDynamic } = reachableGraph(ENTRY);
+	const { modules, builtins, unmeasured } = reachableGraph(ENTRY);
 	const violations: string[] = [];
+
 	for (const module of modules) {
+		if (FORBIDDEN_PREFIX_EXEMPTIONS.includes(module)) continue;
 		const hit = FORBIDDEN_PREFIXES.find((f) => module.startsWith(f.prefix));
 		if (hit) violations.push(`${module} — ${hit.why}`);
 	}
-	for (const { specifier, chain } of builtins) {
-		if (ALLOWED_BUILTINS.has(specifier)) continue;
-		violations.push(`${specifier} — host builtin, via ${chain.join(" -> ")}`);
+
+	for (const { importer, specifier, names, chain } of builtins) {
+		const allowed = ALLOWED_BUILTIN_EDGES.find(
+			(e) => e.importer === importer && e.specifier === specifier,
+		);
+		if (allowed === undefined) {
+			violations.push(`${specifier} — host builtin, via ${chain.join(" -> ")}`);
+			continue;
+		}
+		// Same module, same builtin, wider API: `isIP` is tolerable, `Socket` from
+		// the same import is not.
+		const extra = names.filter((n) => !allowed.names.includes(n));
+		if (extra.length > 0)
+			violations.push(
+				`${importer} imports ${extra.join(", ")} from ${specifier} — only ${allowed.names.join(", ")} is allowed`,
+			);
 	}
+
 	// The gate measures ENTRY, but consumers import the PUBLISHED subpath. If the
 	// two drift — a typo in `exports`, a moved file — every check below stays
 	// green while `@tikoci/centrs/explain` fails to resolve for everyone else.
@@ -226,15 +350,13 @@ export function checkBoundary(): BoundaryReport {
 		);
 	else if (resolve(ROOT, published) !== ENTRY)
 		violations.push(
-			`package.json exports "${PUBLISHED_SUBPATH}" is ${published}, but this gate measures ${relative(ROOT, ENTRY)}`,
+			`package.json exports "${PUBLISHED_SUBPATH}" is ${published}, but this gate measures ${repoPath(ENTRY)}`,
 		);
 
-	// A specifier the walk cannot resolve is a hole in the gate, not a pass.
-	if (unresolvedDynamic > 0)
-		violations.push(
-			`${unresolvedDynamic} dynamic import(s) with a non-literal specifier — ` +
-				"the graph below them is unmeasured",
-		);
+	// An edge the walk cannot follow is a hole in the gate, not a pass.
+	for (const edge of unmeasured)
+		violations.push(`${edge.from} -> ${edge.specifier} — ${edge.why}`);
+
 	return {
 		moduleCount: modules.length,
 		violations,
@@ -355,8 +477,13 @@ async function runBundleInWorker(bundlePath: string): Promise<{
 			defaultFormat: string;
 		}>((settle, fail) => {
 			const timer = setTimeout(
-				() => fail(new Error("browser consumer worker timed out after 60s")),
-				60_000,
+				() =>
+					fail(
+						new Error(
+							`browser consumer worker timed out after ${WORKER_TIMEOUT_MS / 1_000}s`,
+						),
+					),
+				WORKER_TIMEOUT_MS,
 			);
 			worker.onmessage = (event: MessageEvent) => {
 				clearTimeout(timer);
