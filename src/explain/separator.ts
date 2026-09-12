@@ -39,25 +39,29 @@
  * `catalog.ts` deliberately is not, and a separator is not necessarily the fix.
  * They abstain.
  *
- * The rule reads only what the argument lexer already decided. It never
- * re-scans bytes, so a `[…]` substitution (whose statement reads no arguments
- * at all), a `{…}` body (a separate flattened statement), a quoted operand and
- * a `/` inside a VALUE are all outside its input by construction rather than by
- * a guard it could get wrong.
+ * The rule reads only what the argument lexer already DECIDED. It never
+ * re-scans bytes, so a `[…]` substitution (a located token the lexer declined
+ * to decode, hence no `value` and no operand), a `{…}` body (a separate
+ * flattened statement), a quoted operand and a `/` inside a VALUE are all
+ * outside its input by construction rather than by a guard it could get wrong.
+ * `bareOperand` is that construction: `value` absent is the lexer saying it
+ * decoded nothing, whatever the token's bytes spell.
  *
- * ## The reach that buys, stated
+ * ## The reach it has, stated
  *
- * `lexArguments` is all-or-nothing: the first token it declines aborts the walk
- * and the reading carries no tokens at all. So a statement the STRICT lexer
- * refuses — most commonly one holding a variable, `… gateway=$g` — has no token
- * list for this rule to read, and the run in it is missed:
- * `/ip/address add interface=ether1 /ip/route add gateway=$g` reports `pass`
- * while its literal twin reports the separator. That is a reach limit, not a
- * judgement: nothing here decides the shape is acceptable. Closing it needs a
- * prefix-tolerant walk of the kind `lexValueAnchors` already does for values —
- * tracked with its corpus sizing and the stop-at-refusal vs skip-and-continue
- * fork in #316. Until then the limit is pinned by an anchor test so it cannot
- * quietly become a claim.
+ * The input is `lexArgumentTokens`, the skip-tolerant reading (#316), never the
+ * strict `lexArguments`. The strict lexer discards every token it decoded as
+ * soon as it declines one, so a statement holding a variable — `… gateway=$g` —
+ * used to carry no token list for this rule at all and the run in it was missed
+ * while its literal twin was found. The tolerant reading locates the
+ * undecodable token and keeps walking, so the run is found on either side of
+ * it; that the strict reading still refuses the statement is correct and
+ * separate, since nothing here makes `$g` renderable.
+ *
+ * What remains out of reach is an unterminated string and an unbalanced
+ * delimiter, where no walk can find a boundary to resume from. That is still a
+ * reach limit rather than a judgement: nothing here decides those shapes are
+ * acceptable.
  */
 
 import type { Argument } from "./args.ts";

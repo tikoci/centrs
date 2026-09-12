@@ -159,9 +159,13 @@ it needs (#264 B5). The projection and its device-agreement report have landed
 (`bun run explain:highlight-agreement`); its `unprojected` residue is the
 evidence B5 reads. The consumer boundary has landed too (#312): `@tikoci/centrs/explain`
 is the documented entry, and `bun run explain:browser-consumer` gates both the
-module graph and an executed browser bundle. What remains on the track is #322
-(depth-axis growth) and #264 B5. The issue index owns the individual tasks and
-their dependencies.
+module graph and an executed browser bundle. #316 has since separated the
+reading a token-level rule uses from the strict REST one, which took the
+argument token stream from 51.8% of the corpus's argument-bearing statements to
+100% and moved the classified-byte census to 71.73%; the `=` byte it newly
+disagrees with the device about is counted evidence for B5. What remains on the
+track is #322 (depth-axis growth) and #264 B5. The issue index owns the
+individual tasks and their dependencies.
 
 Unfinished SNMP, RoMON, TUI, or other protocol/frontend cells do not preempt this
 track. Live `explain` (#236) remains a separate next capability. Change this

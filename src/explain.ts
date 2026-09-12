@@ -112,8 +112,10 @@ import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { argSpans } from "./explain/arg-tokens.ts";
 import {
 	type ArgumentKind,
+	type Argument as ExplainArgument,
 	invalidCommandBraceOffsets,
 	lexArguments,
+	lexArgumentTokens,
 	lexValueAnchors,
 	type ValueAnchorKind,
 } from "./explain/args.ts";
@@ -1182,27 +1184,37 @@ export function explainCommand(
 		statementOf(split, analyzed),
 	);
 	const canonical = canonicalizeExecuteCommand(input);
+	// The skip-tolerant token stream every TOKEN-LEVEL rule reads (#316), one
+	// list per split. It is not `statement.arguments`: that reading stays
+	// all-or-nothing because its consumer renders a runnable request, and a token
+	// carrying `undecided` has no value to render. These two never disagree about
+	// where a token starts or ends — `args.ts` owns the one boundary walk.
+	const argumentTokens = readStatements.map((statement, index) => {
+		const split = verbs.splits[index];
+		return split === undefined || statement.kind !== "command"
+			? []
+			: argumentTokensOf(split, analyzed);
+	});
 	// #311: the second command-shaped run is found on the statement's OWN
 	// argument tokens, then the reading is degraded — in that order, because the
 	// tokens are the evidence for the diagnostic and the refusal both. Transport
 	// runs after, so it classifies the degraded reading rather than a list the
 	// device never accepted.
-	const separators = readStatements.map((statement) =>
-		statement.resolution === "resolved" && statement.arguments?.read === true
-			? findMissingSeparators(statement.arguments.tokens)
+	const separators = readStatements.map((statement, index) =>
+		statement.resolution === "resolved"
+			? findMissingSeparators(argumentTokens[index] ?? [])
 			: [],
 	);
-	const statements = enforceGateParity(readStatements, canonical).map(
-		(statement, index) => {
-			const runs = separators[index] ?? [];
-			return withStatementTransport(
-				withoutSeparatedArguments(statement, runs),
-				verbs.splits[index]?.text ?? "",
-				options,
-				runs.length === 0 ? undefined : rejectedBySeparator(runs),
-			);
-		},
-	);
+	const gated = enforceGateParity(readStatements, canonical);
+	const statements = gated.map((statement, index) => {
+		const runs = separators[index] ?? [];
+		return withStatementTransport(
+			withoutSeparatedArguments(statement, runs),
+			verbs.splits[index]?.text ?? "",
+			options,
+			runs.length === 0 ? undefined : rejectedBySeparator(runs),
+		);
+	});
 
 	const diagnostics: ExplainDiagnostic[] = [
 		...defects.map(({ defect: d, ev }) => {
@@ -1308,8 +1320,19 @@ export function explainCommand(
 			...spans,
 			...pathSpansList,
 		]);
-		const argCandidates = statements.flatMap((s) =>
-			s.arguments?.read === true ? s.arguments.tokens : [],
+		// Every WITHDRAWN reading contributes nothing, exactly as before #316: a
+		// second command-shaped run (`withoutSeparatedArguments`) and a gate-parity
+		// disagreement (`enforceGateParity`) both mean centrs cannot say which
+		// bytes are this command's arguments, and painting `name=` runs inside one
+		// would be that claim in lexical clothing. Everything else now paints from
+		// the tolerant stream, so `gateway=$g` gets its name and `=` claimed where
+		// the strict reading left the whole statement `unclassified`.
+		const argCandidates = gated.flatMap((statement, index) =>
+			(separators[index]?.length ?? 0) > 0 ||
+			(readStatements[index]?.arguments?.read === true &&
+				statement.arguments?.read !== true)
+				? []
+				: (argumentTokens[index] ?? []),
 		);
 		const argSpansList = argSpans(analyzed, residual1, argCandidates);
 		const residual2 = residualRanges(analyzed.length, [
@@ -1527,6 +1550,39 @@ function argumentsOf(
 			positional: lexed.positional,
 		},
 	};
+}
+
+/**
+ * The statement's skip-tolerant argument token stream, rebased into document
+ * space (#316).
+ *
+ * Same two guards as {@link argumentsOf}, for the same reason: `argsAt` indexes
+ * the statement's own text, so offsets are only rebased when the analyzed
+ * slice really is that text. What differs is only the reading — the tokens come
+ * back with the undecodable ones located rather than the whole list discarded.
+ * A statement that is not addressable, or has no verb, yields no tokens at all, which is the
+ * same silence the strict reading gives it.
+ */
+function argumentTokensOf(
+	split: DocumentVerbSplit,
+	analyzed: string,
+): ExplainArgument[] {
+	if (split.argsAt === null) return [];
+	const { start, end } = split.span;
+	const text = analyzed.slice(start, end);
+	if (text !== split.text) return [];
+	return lexArgumentTokens(text, split.argsAt).tokens.map((token) => ({
+		...token,
+		span: { start: start + token.span.start, end: start + token.span.end },
+		...(token.valueSpan === undefined
+			? {}
+			: {
+					valueSpan: {
+						start: start + token.valueSpan.start,
+						end: start + token.valueSpan.end,
+					},
+				}),
+	}));
 }
 
 /**

@@ -295,28 +295,39 @@ describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 		]); // where is positional, chain is arg
 	});
 
-	test("all-or-nothing: variable value refuses whole statement", () => {
-		// gateway=$gw is a variable value → read:false → no arg tokens at all
+	test("an undecodable VALUE no longer costs the statement its names (#316)", () => {
+		// The fill reads the skip-tolerant token stream, so a token whose value
+		// only the device knows still contributes its `name=` bytes. The VALUE
+		// bytes stay unclaimed here either way — `argSpans` never claims them.
 		expect(
 			argsViaExplain("/ip route add dst-address=1.1.1.1 gateway=$gw"),
-		).toEqual([]);
+		).toEqual(["dst-address=", "gateway="]);
 		expect(
 			argsViaExplain(
 				"/ip route add dst-address=1.1.1.1 gateway=$gw comment=$c",
 			),
-		).toEqual([]);
+		).toEqual(["dst-address=", "gateway=", "comment="]);
 		// substitution
 		expect(
 			argsViaExplain("/ip address add address=[/ip/route/get $x]"),
-		).toEqual([]);
+		).toEqual(["address="]);
 		// array/block value
 		expect(
 			argsViaExplain("/system script add name=s source={ :put 1 }"),
-		).toEqual([]);
-		// But without a refusing value, args appear
+		).toEqual(["name=", "source="]);
+		// A literal value was never the thing at issue.
 		expect(
 			argsViaExplain("/ip route add dst-address=1.1.1.1 gateway=1.1.1.2"),
 		).toEqual(["dst-address=", "gateway="]);
+	});
+
+	test("a token whose NAME is not a name claims nothing (#316)", () => {
+		// `{a=1;b=2}` fuses an array literal into what looks like `name=value`.
+		// The tolerant walk locates the token but refuses to call it an attribute,
+		// so no `arg` span is emitted over bytes that are not an argument name.
+		expect(argsViaExplain("/ip/route/add {a=1;b=2} gateway=1.1.1.2")).toEqual([
+			"gateway=",
+		]);
 	});
 
 	test("normalized input yields no arg tokens", () => {
@@ -355,10 +366,12 @@ describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 		// No arg → no e11
 		const noArg = explainCommand("/ip address print", { tokens: true });
 		expect(noArg.evidence.some((e) => e.id === "e11")).toBe(false);
-		const noArg2 = explainCommand(
-			"/ip route add dst-address=1.1.1.1 gateway=$gw",
-			{ tokens: true },
-		);
+		// A statement that is not ADDRESSABLE is the remaining no-arg case: #316 put
+		// undecodable VALUES back in reach, but a normalized statement's offsets
+		// still do not map back, so no token is rebased and none is claimed.
+		const noArg2 = explainCommand('/system identity set name="router-🚀"', {
+			tokens: true,
+		});
 		expect(noArg2.evidence.some((e) => e.id === "e11")).toBe(false);
 	});
 
@@ -404,25 +417,39 @@ describe("#293 arg fill — via explainCommand (masking + evidence)", () => {
 		]);
 	});
 
-	test("mixed document: a read statement claims, an unread one does not", () => {
-		// The `read === true` filter is applied per STATEMENT, and the residual is
-		// document-global — so one refusing statement must not suppress a readable
-		// one, and must not let the fill spill into its own bytes. `gateway=$gw`
-		// is `a variable value`, which `lexArguments` refuses wholesale.
-		const input = "/ip/address/add address=1.1.1.1\n/ip/route/add gateway=$gw";
+	test("mixed document: a statement that is not addressable still claims nothing", () => {
+		// The per-STATEMENT filter is applied against a document-global residual,
+		// so one statement out of reach must not suppress a readable one and must
+		// not let the fill spill into its own bytes. Since #316 an undecodable
+		// value is no longer what puts a statement out of reach; a NORMALIZED one
+		// still is, because its offsets do not map back to the source bytes.
+		const input =
+			'/ip/address/add address=1.1.1.1\n/system/identity/set name="router-🚀"';
 		const data = explainCommand(input, { tokens: true });
 		const args = (data.tokens ?? []).filter((t) => t.class === "arg");
 		expect(args.map((t) => input.slice(t.start, t.end))).toEqual(["address="]);
 		// Every claimed byte is in the FIRST statement.
 		const secondStart = input.indexOf("\n") + 1;
 		for (const t of args) expect(t.end).toBeLessThanOrEqual(secondStart);
-		// The refused statement's `gateway=` bytes stay unclassified — not `arg`.
-		const gatewayEq = input.indexOf("gateway=");
-		const atGateway = (data.tokens ?? []).find(
-			(t) => t.start <= gatewayEq && t.end > gatewayEq,
+		// Its `name=` bytes stay unclassified, because none of its spans rebase.
+		const nameEq = input.indexOf("name=");
+		const atName = (data.tokens ?? []).find(
+			(t) => t.start <= nameEq && t.end > nameEq,
 		);
-		expect(atGateway?.class).toBe("unclassified");
+		expect(atName?.class).toBe("unclassified");
 		// e11 is cited because SOME statement produced arg tokens.
 		expect(data.evidence.some((e) => e.id === "e11")).toBe(true);
+	});
+
+	test("a withdrawn reading claims nothing (#311 + #316)", () => {
+		// A second command-shaped run withdraws the argument reading, and the
+		// tolerant stream is withdrawn with it: centrs cannot say which bytes are
+		// this command's arguments, and claiming `name=` runs would be that same
+		// claim in lexical clothing. The literal twin is the control.
+		const run = "/ip/address add interface=ether1 /ip/route add gateway=$g";
+		expect(argsViaExplain(run)).toEqual([]);
+		expect(argsViaExplain("/ip/address add interface=ether1")).toEqual([
+			"interface=",
+		]);
 	});
 });

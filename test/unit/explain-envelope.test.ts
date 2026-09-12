@@ -792,4 +792,29 @@ describe("public export surface", () => {
 		expect(typeof centrs.explainValueShapeHints).toBe("function");
 		expect(centrs.VALUE_SHAPES).toContain("ip-prefix");
 	});
+
+	test("all three argument readings are reachable from the root (#316)", () => {
+		const text = "/ip/route/add gateway=$g comment=x";
+		const from = "/ip/route/add".length;
+
+		// Strict: the reading a renderer may have. It refuses, and says why.
+		const strict = centrs.lexExplainArguments(text, from);
+		expect(strict.read).toBeFalse();
+
+		// Skip-tolerant: the reading a token-level RULE wants. It reaches both
+		// tokens, and the one it could not decode carries no value — which is the
+		// property that keeps the strict reading's guarantee intact.
+		const tolerant = centrs.lexExplainArgumentTokens(text, from);
+		expect(tolerant.complete).toBeTrue();
+		expect(tolerant.tokens).toHaveLength(2);
+		expect(tolerant.tokens[0]?.undecided).toBe(
+			strict.read ? "" : (strict as { why: string }).why,
+		);
+		expect(tolerant.tokens[0]?.value).toBeUndefined();
+		expect(tolerant.tokens[1]?.value).toBe("x");
+		expect(tolerant.tokens[1]?.undecided).toBeUndefined();
+
+		// Prefix-safe value anchoring is the third, and is unchanged by #316.
+		expect(typeof centrs.lexExplainValueAnchors).toBe("function");
+	});
 });

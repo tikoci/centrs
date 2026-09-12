@@ -122,6 +122,7 @@
 		"explain:value-census:check": "bun run scripts/explain-value-census.ts --check",
 		"explain:value-census:readme": "bun run scripts/explain-value-census.ts --readme",
 		"explain:value-census:readme:check": "bun run scripts/explain-value-census.ts --readme --check",
+		"explain:arg-reach": "bun run scripts/explain-arg-reach-sweep.ts",
 		"explain:token-census": "bun run scripts/explain-token-census.ts",
 		"explain:token-census:check": "bun run scripts/explain-token-census.ts --check",
 		"explain:token-census:readme": "bun run scripts/explain-token-census.ts --readme",

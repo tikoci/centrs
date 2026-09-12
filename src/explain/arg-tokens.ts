@@ -13,19 +13,30 @@
  * already rebased into document analyzed-byte space by `src/explain.ts`. The
  * name run is `[span.start, valueSpan.start - 1)` and the `=` is the single
  * byte at `valueSpan.start - 1`; the value itself is `valueSpan` and is left
- * for the next fill (see #293). A `positional` has no `name`/`valueSpan` and a
- * `query` is a `?` word whose interior `args.ts` explicitly refuses to split
- * (see `Argument.value`'s doc comment), so both are ignored — the `=` is
- * derived from the token shape, never by scanning for the byte.
+ * for the next fill (see #293). A `positional` has no `name` and a `query` is a
+ * `?` word whose interior `args.ts` explicitly refuses to split (see
+ * `Argument.value`'s doc comment), so both are ignored on `kind` before any
+ * span is read — the `=` is derived from the token shape, never by scanning for
+ * the byte.
  *
  * `Argument.value` is not `Argument.text` and is never read: `value` is absent
  * whenever the source spells a substitution or an escape this phase does not
  * decode. This slice claims `span`/`valueSpan` *positions* only.
  *
- * A statement whose bytes were normalized is not addressable: `explain.ts`
- * already refuses those (`its text was normalized`), and this fill inherits the
- * refusal — it only sees tokens from `read === true` statements, which are
- * exactly the addressable ones.
+ * The candidates are the SKIP-TOLERANT reading (#316), not `statement.arguments`:
+ * a token whose value only the device knows still has a `name=` run that is
+ * plainly an argument name, and abstaining on the whole statement because of its
+ * value left 48.2% of the corpus's argument lists unpainted. `value` was never
+ * read here (see below), so nothing about this fill's claim changes — only how
+ * many tokens reach it.
+ *
+ * Two things still reach it as nothing at all. A statement whose bytes were
+ * normalized is not addressable: `explain.ts` already refuses those (`its text
+ * was normalized`), and no token is rebased. And a WITHDRAWN reading — a
+ * second command-shaped run (#311) or a gate-parity disagreement — contributes
+ * nothing either: centrs cannot say which bytes are that command's arguments,
+ * and painting `name=` runs inside it would be that same claim in lexical
+ * clothing.
  *
  * Vocabulary is provisional until #264 B5: one `arg` class for both the name
  * bytes and the `=` separator (design decision 2 of #293 — emit first, name
@@ -44,8 +55,8 @@ export type ArgCandidate = ExplainArgumentToken;
  *
  * `analyzed` is the ASCII-normalized document text (only used for length
  * checks); `residual` is the gap set left by earlier fills (sorted, no
- * overlaps); `candidates` are the already-rebased `Argument` tokens from
- * `read === true` statements. Every emitted span's bytes are fully inside
+ * overlaps); `candidates` are the already-rebased `Argument` tokens of the
+ * statements `explain.ts` decided may be painted. Every emitted span's bytes are fully inside
  * `residual`, sorted by `start`, non-overlapping, and carry
  * `class: "arg"` + `ev: "e11"`.
  */
