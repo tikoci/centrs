@@ -15,16 +15,19 @@
  * Both are measured from ONE implementation: `lexArgumentTokens` is B, and A is
  * exactly its token list truncated at the first `undecided` token, because the
  * two walks share `args.ts`'s boundary rules and so agree token for token up to
- * that point. The `--verify` pass asserts that equivalence against the strict
- * lexer on every corpus statement rather than assuming it.
+ * that point. The sweep asserts that equivalence rather than assuming it, on
+ * every corpus statement and in both directions — a READ statement's strict
+ * tokens must be the tolerant walk's prefix, and a REFUSED one's design-A
+ * prefix must be what the strict lexer returns when handed exactly those bytes.
+ * It exits non-zero if any statement disagrees.
  *
  * The reported figure that decides the fork is **separator runs found**: the
  * reach numbers alone make A look adequate, and the run counts are what show it
  * is not.
  *
  * ```
- * bun run scripts/probes/explain-arg-reach-sweep.ts
- * bun run scripts/probes/explain-arg-reach-sweep.ts --json
+ * bun run explain:arg-reach
+ * bun run explain:arg-reach --json
  * ```
  *
  * The corpus is not in this repo; see `scripts/corpus-fetch.ts` / #186.
@@ -124,8 +127,24 @@ export function sweep(scripts: readonly string[]): Reach {
 				out.strictRefused++;
 				out.refusalReasons[strict.why] =
 					(out.refusalReasons[strict.why] ?? 0) + 1;
-				if (designA.length > 0) out.refusedWithPrefix++;
-				else if (tolerant.tokens.length > 0) out.onlyReachedByB++;
+				if (designA.length > 0) {
+					out.refusedWithPrefix++;
+					// The claim "design A is the prefix the strict walk discards" is not
+					// observable on a refused statement — `lexArguments` publishes
+					// nothing — so verify it against the only thing that can: the strict
+					// lexer handed exactly those bytes. The cut is at a token start,
+					// hence at a whitespace boundary, so the slice is a well-formed
+					// argument list on its own.
+					const cutAt = tolerant.tokens[firstUndecided]?.span.start ?? 0;
+					const prefixOnly = lexArguments(slice.slice(0, cutAt), split.argsAt);
+					if (
+						!prefixOnly.read ||
+						JSON.stringify(prefixOnly.tokens) !== JSON.stringify(designA)
+					)
+						out.boundaryMismatches.push(
+							`script #${index}: design A's prefix is not what the strict lexer returns for those bytes at ${JSON.stringify(slice.slice(0, 80))}`,
+						);
+				} else if (tolerant.tokens.length > 0) out.onlyReachedByB++;
 				// Design A's prefix IS the strict walk's discarded prefix, so the
 				// refusal reason the two report must be the same string.
 				if (

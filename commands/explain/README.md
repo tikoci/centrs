@@ -1130,9 +1130,10 @@ the first token it declines discards every token already decoded, which put
 **48.2%** of the corpus's argument-bearing statements out of reach of every
 token-level rule and of the `arg` token fill.
 
-`lexArgumentTokens` is the second reading: same text, same `from`, the same
-boundary walk and the same refusal strings, differing only in what a refusal
-does. Where the strict reading discards the list, this one publishes the token
+`lexArgumentTokens` is a third reading over the same walk — alongside strict
+`lexArguments` and the prefix-safe `lexValueAnchors` values already use. Same
+text, same `from`, the same boundary rules and the same refusal strings,
+differing only in what a refusal does. Where the strict reading discards the list, this one publishes the token
 it could not decode with its bytes located, `undecided` set to that same reason
 and **no `value`**, then carries on to the next token. `statement.arguments` is
 unchanged and still strict; nothing that renders a command gained reach.
@@ -1163,7 +1164,11 @@ and fails if any statement disagrees (0 do).
 `(`/`[`/`{` have no knowable end, so there is no boundary to resume from. A `;`
 is a third and deliberately so: it is a statement boundary the segmenter owns,
 and resuming after it would read the next statement's bytes as this one's
-arguments. No corpus statement reaches any of the three. The unbalanced case is
+arguments. No corpus statement reaches any of the three, and that is a property
+of the pipeline rather than luck: an unterminated string and an unbalanced
+delimiter are document defects the segmenter and resolver answer first, so no
+addressable statement with an argument list is produced at all, and a `;` is
+split into two statements before any argument is lexed. The unbalanced case is
 also the one place the two readings name a different reason, and it follows from
 what each needed: the strict walk refuses a `[…]` on sight and never asks where
 it ends, while the tolerant walk asks — because the answer is what it would
@@ -1183,11 +1188,18 @@ device's context-dependent answer over 2.5x as many bytes as before, and it
 gives #264 B5 a concrete, counted reason to split the `=` into its own class:
 doing so relabels those runs without moving byte coverage at all.
 
-**The public surface did not change.** `undecided` never appears on an
-`ExplainArguments` reading, because the strict lexer publishes no token it could
-not decide. Whether the tolerant stream should be published in its own right —
-so a browser consumer can see a located `gateway=` whose value is a runtime
-expression — is a #264 B5 decision, not one this change made.
+**What the public surface gained, and what it did not.** The package root
+exports the reading itself — `lexExplainArgumentTokens` and
+`ExplainArgumentTokenReading` — for the same reason `lexExplainValueAnchors` is
+exported: a consumer building its own token-level rule needs the reading a rule
+wants, not the one a renderer wants. What did NOT change is the *envelope*:
+`explainCommand`'s `structure.statements[].arguments` is still the strict
+reading, `ExplainArgumentToken` carries no `undecided` field, and `undecided`
+never appears on an `ExplainArguments` reading, because the strict lexer
+publishes no token it could not decide. Whether the tolerant stream should reach
+the envelope in its own right — so a browser consumer reading `explainCommand`'s
+result can see a located `gateway=` whose value is a runtime expression — is
+a #264 B5 decision, not one this change made.
 
 ### The menu path with arguments (#324)
 
