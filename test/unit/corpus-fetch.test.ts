@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -21,6 +21,7 @@ import {
 	readPin,
 	resolveCorpusDb,
 	sha256File,
+	sha256TextFile,
 	unreachableMessage,
 } from "../../scripts/corpus-fetch.ts";
 
@@ -107,6 +108,39 @@ describe("corpus resolution", () => {
 			if (r.path === undefined || r.sha256 === undefined) return;
 			expect(r.sha256).toBe(sha256File(r.path));
 		});
+	});
+
+	test("a TEXT pin survives a CRLF checkout; a BINARY pin must not", () => {
+		// The defect this pins: `sha256File` over a committed TEXT file hashes the
+		// CHECKOUT, not the content. Git stores LF and hands a Windows checkout
+		// CRLF, so the #263 agreement fixture's slice pin read `de67f66d19e6` on
+		// Linux/macOS and `4b85f4971c36` on Windows, reddening the Windows unit
+		// leg while every measured cell stayed identical. No CI leg on this
+		// platform can see that, so it is pinned here by writing both spellings.
+		const dir = mkdtempSync(join(tmpdir(), "centrs-eol-"));
+		try {
+			const body = '{\n  "a": 1,\n  "b": "x\\r\\ny"\n}\n';
+			const lf = join(dir, "lf.json");
+			const crlf = join(dir, "crlf.json");
+			writeFileSync(lf, body);
+			writeFileSync(crlf, body.replaceAll("\n", "\r\n"));
+
+			// The content is one thing, so the text hash is one value.
+			expect(sha256TextFile(crlf)).toBe(sha256TextFile(lf));
+			// And on an LF tree it is the value the byte hash already gave, which
+			// is why adopting it moved no committed pin.
+			expect(sha256TextFile(lf)).toBe(sha256File(lf));
+			// The byte hash keeps its own meaning — the corpus snapshot pin needs
+			// exactly this, so the two must not be collapsed into one helper.
+			expect(sha256File(crlf)).not.toBe(sha256File(lf));
+
+			// Normalizing is lossless for JSON: an escaped `\r` is two characters
+			// and is untouched, so only formatting between tokens can differ.
+			expect(JSON.parse(readFileSync(crlf, "utf8")).b).toBe("x\r\ny");
+			expect(JSON.parse(readFileSync(lf, "utf8")).b).toBe("x\r\ny");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 
 	test("a cache entry whose bytes miss the pin does not resolve", () => {

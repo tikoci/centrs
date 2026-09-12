@@ -49,7 +49,7 @@ import {
 	projectTokenClass,
 } from "../src/explain/highlight-projection.ts";
 import { explainCommand } from "../src/explain.ts";
-import { sha256File } from "./corpus-fetch.ts";
+import { sha256TextFile } from "./corpus-fetch.ts";
 
 /** A run-length `[text, class]` pair, exactly as the device emitted it. */
 type Pair = [text: string, cls: string];
@@ -374,7 +374,8 @@ export function mergeSplits(...splits: SplitMeasurement[]): SplitMeasurement {
 	};
 }
 
-const SLICE_PATH = join(
+/** Where the committed slice lives; exported so a test can read the same bytes. */
+export const SLICE_PATH = join(
 	import.meta.dir,
 	"..",
 	"test",
@@ -554,7 +555,9 @@ export function measure(
 			"here is a pass threshold.",
 		slice: {
 			path: "test/fixtures/explain/highlight-streams.slice.json",
-			sha256: sha256File(slicePath),
+			// Line-ending-independent: the slice is a committed TEXT file, so its
+			// raw bytes depend on the checkout while its content does not.
+			sha256: sha256TextFile(slicePath),
 			baseVersion: slice.baseVersion,
 			scripts: slice.selection.selected,
 			versionDiffering: slice.selection.versionDiffering,

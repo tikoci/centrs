@@ -16,7 +16,9 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	addBuckets,
 	allSplits,
@@ -39,6 +41,7 @@ import {
 	readSlice,
 	renderFragment,
 	renderReadmeBlock,
+	SLICE_PATH,
 	splitLines,
 	stoppedBucketOf,
 } from "../../scripts/explain-highlight-agreement.ts";
@@ -72,6 +75,36 @@ describe("#263 — the committed report is what a fresh run measures", () => {
 		expect(fixture.slice.sha256).toMatch(/^[0-9a-f]{64}$/);
 		expect(fixture.slice.baseVersion).toBe(slice.baseVersion);
 		expect(fixture.slice.scripts).toBe(Object.keys(slice.scripts).length);
+	});
+
+	test("that pin is a fact about the slice, not about the checkout", () => {
+		// The slice is a committed TEXT file, so git hands a Windows checkout CRLF
+		// and a hash of its raw bytes is a hash of the working tree. That is what
+		// reddened the Windows unit leg for three pushes: `de67f66d19e6` here,
+		// `4b85f4971c36` there, with every measured cell identical — the
+		// measurement was never platform-dependent, the provenance claim was.
+		// This platform cannot produce the CRLF spelling on its own, so write it.
+		const dir = mkdtempSync(join(tmpdir(), "centrs-slice-eol-"));
+		try {
+			const crlf = join(dir, "slice.json");
+			// Normalize BEFORE spelling CRLF. On a Windows checkout the read already
+			// yields `\r\n`, so converting every `\n` would write `\r\r\n` — which
+			// `sha256TextFile` collapses to `\r\n`, not `\n`, and the guard would go
+			// red on the one platform it exists for. Found in review of this PR.
+			const lfText = readFileSync(SLICE_PATH, "utf8").replaceAll("\r\n", "\n");
+			writeFileSync(crlf, lfText.replaceAll("\n", "\r\n"));
+			// Through `measure`, not through the helper directly: what has to hold
+			// is that the REPORT pins the same slice from either checkout, so this
+			// goes red if the script reverts to hashing raw bytes.
+			expect(measure(readSlice(crlf), crlf).slice.sha256).toBe(
+				fixture.slice.sha256,
+			);
+			// The slice really does round-trip through the other line ending, which
+			// is what makes normalizing lossless rather than merely convenient.
+			expect(readSlice(crlf)).toEqual(slice);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 
 	test("every captured version is measured", () => {
