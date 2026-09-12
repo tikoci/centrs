@@ -2307,12 +2307,18 @@ validity check: `.scratch/q203-blocker-validity.ts`.
 **Non-blocking / deferred (not ratification-gating):** Q5 expression depth, Q7
 tokenizer corners, Q9 potential-command taxonomy, Q12 span-vocabulary draft —
 these refine the surface during implementation but did not gate ratification.
-They keep their homes in staging: **Q7** is now concrete as #201 (lexical
-boundaries — sigil spellings, escape validity, statement-start eligibility)
-and #199 (the shared scanner's `$[…]`-in-string blind spot), both raised by the
-Q13 promotion and both spanning already-promoted modules; **Q5** and **Q9** are
-phase-1 measurements; **Q12** is spec open item 2 and hardens through #264
-B4/B5 with the offline consumer check. The
+Two of the four have since closed. **Q7** became #201 (lexical boundaries —
+sigil spellings, escape validity, statement-start eligibility) and #199 (the
+shared scanner's `$[…]`-in-string blind spot), both raised by the Q13 promotion
+and both now closed. **#199**'s fix is the one shared scanner,
+`src/explain/quoted-string.ts`, which is what keeps the segmenter, the brace
+classifier and the block scan from drifting on where a string ends; **#201** is
+the wider one, spanning statement context, sigil/escape reading and defect
+detection across several already-promoted modules.
+**Q12** closed with #264: the vocabulary is settled on a stated rule and is no
+longer provisional — see
+[The vocabulary](#the-vocabulary-and-what-earns-a-class-264-b5). **Q5** and
+**Q9** remain phase-1 measurements. The
 probe framework's disposition (reuse of the mutation suite, coordinate
 fixtures, and adversarial generators as product test fixtures) is tracked in
 issue #186 rather than carried into mainline.
@@ -2464,14 +2470,17 @@ Still open (implementation opens — none block ratification):
 
 1. Final flag names (`--full`, `--curl`, facet names) and the smart-sizing
    thresholds (what counts as "cheap", what triggers truncation).
-2. The centrs span vocabulary itself: class list, mapping table from RouterOS
-   highlight classes (and their colors), and how unknown/new upstream classes
-   degrade. Phase 0 pinned the raw inputs (Q13's per-occurrence highlight-class
-   corpus; the observed 19 classes on 7.23.2 plus drift on 7.24rc2) but the
-   centrs-owned class list and color map are a **draft** (lab question Q12,
-   non-ratification-gating); the offline vocabulary hardens through #264 B4/B5
-   and the offline consumer check. Live mappings and full LSP integration
-   follow separately.
+2. The mapping table from RouterOS highlight classes to **colors**, and how
+   unknown/new upstream classes degrade. Phase 0 pinned the raw inputs (Q13's
+   per-occurrence highlight-class corpus; the observed 19 classes on 7.23.2 plus
+   drift on 7.24rc2). The centrs-owned **class list is no longer open**: #264 B5
+   settled it on a stated rule and `data.tokens[].class` is no longer provisional
+   ([The vocabulary](#the-vocabulary-and-what-earns-a-class-264-b5)), and the
+   projection onto the device's own classes is reported by
+   `bun run explain:highlight-agreement`
+   ([Device agreement](#device-agreement-for-the-token-partition-264-b4-263)).
+   What stays open here is the color map and the drift policy. Live mappings
+   and full LSP integration follow separately.
 3. Whether the live describe ladder needs result caching per target+version
    (probe cost vs freshness) — deferred to implementation evidence.
 
