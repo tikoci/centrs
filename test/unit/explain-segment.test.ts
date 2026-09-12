@@ -576,3 +576,60 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 		}
 	});
 });
+
+/**
+ * The comment mask is memoized, and a memo on a pure function cannot move an
+ * answer (#322).
+ *
+ * A statement walk asks for the mask of the same text several times over — the
+ * structural-defect scan, the scope-block scan, the bracket scan and the
+ * bare-directive test each take one — and a statement's text carries its whole
+ * nested `do={…}` subtree, so the repetition was paid once per enclosing level.
+ * What is asserted here is the only thing a cache can get wrong: that a repeat
+ * ask, a CONTENT-EQUAL twin built by a different step, and an ask made after
+ * other documents have pushed the entry out all return the same mask as the
+ * first ask did.
+ */
+describe("comment mask memo (#322)", () => {
+	const commented = '# lead\n:local x 1 # not a comment\n:put "#h" # tail\n';
+
+	test("a repeat ask, a twin, and an evicted ask all return the first answer", () => {
+		const first = maskComments(commented);
+		// Same content, different string object — what a mask built by a
+		// different step looks like.
+		const twin = `${commented.slice(0, 4)}${commented.slice(4)}`;
+		expect(twin).toBe(commented);
+		expect(maskComments(commented)).toBe(first);
+		expect(maskComments(twin)).toBe(first);
+
+		// Push the entry out with unrelated documents, then ask again.
+		for (let i = 0; i < 12; i++) maskComments(`:put ${i} # c${i}\n`.repeat(3));
+		expect(maskComments(commented)).toBe(first);
+	});
+
+	test("masking stays idempotent and length-preserving across the memo", () => {
+		const masked = maskComments(commented);
+		expect(masked.length).toBe(commented.length);
+		expect(maskComments(masked)).toBe(masked);
+		// Comment-free input is still returned as the same object.
+		const plain = ":put 1\n:put 2\n";
+		expect(maskComments(plain)).toBe(plain);
+	});
+
+	test("interleaved documents do not borrow each other's mask", () => {
+		const a = "# a\n:put 1\n";
+		const b = ':put "#b"\n# b\n';
+		const maskedA = maskComments(a);
+		const maskedB = maskComments(b);
+		expect(maskedA).not.toBe(maskedB);
+		for (let i = 0; i < 3; i++) {
+			expect(maskComments(a)).toBe(maskedA);
+			expect(maskComments(b)).toBe(maskedB);
+		}
+		// Each one masks its own statement-leading hash, and neither masks the
+		// other's — `b`'s first `#` is inside a string, so it survives.
+		expect(maskedA.slice(0, 4)).toBe("   \n");
+		expect(maskedB.indexOf("#")).toBe(6);
+		expect(maskedB.slice(10, 13)).toBe("   ");
+	});
+});

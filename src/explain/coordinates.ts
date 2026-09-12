@@ -87,9 +87,31 @@ export interface CoordinateAnalysis {
 	/** Pure-ASCII surface; `analyzed.length === originalU8.length`. */
 	analyzed: Uint8Array;
 	originalU8: Uint8Array;
+	/**
+	 * One run per code point.
+	 *
+	 * On the {@link CoordinateAnalysis.ascii} path this array is built ON FIRST
+	 * READ, not by `analyzeCoordinates`: every caller that only needs an offset
+	 * or a position can answer from arithmetic there, and materializing one
+	 * object per character was the single largest allocation in the analyzer
+	 * (#322). Reading it is always sound — the contract is the array, and the
+	 * lazy path builds the same one the eager path would have.
+	 */
 	runs: CharRun[];
 	/** Byte offset of each line's first character (index === 0-based line). */
 	lineStarts: number[];
+	/**
+	 * True when every code point of `original` is ASCII, so `analyzed`,
+	 * `originalU8` and `original` agree byte for byte and a byte offset IS a
+	 * UTF-16 offset.
+	 *
+	 * This is the property the three coordinate spaces were defined to make
+	 * checkable, and it is what lets a caller skip the mapping rather than
+	 * re-derive an identity one. It is a FACT about the input, never a mode: the
+	 * non-ASCII path below is unchanged and stays the only reading of a
+	 * non-ASCII document.
+	 */
+	ascii: boolean;
 }
 
 /** UTF-8 byte length of a Unicode scalar value. */
@@ -115,11 +137,33 @@ function utf8Encode(cp: number): number[] {
 }
 
 /**
+ * Any code point outside ASCII.
+ *
+ * `u`-mode, so the test is over CODE POINTS: an astral character is one match
+ * rather than two halves, and a lone surrogate — which is not a scalar value
+ * and therefore not ASCII either — matches as itself. That is the same
+ * population the walk below normalizes, so the two cannot disagree about what
+ * "all ASCII" means.
+ */
+const NON_ASCII = /[^\p{ASCII}]/u;
+
+/**
  * Build the coordinate analysis of `original`: its UTF-8 encoding, the
  * byte-count-preserving `analyzed` surface, and one {@link CharRun} per code
  * point locating it in all three spaces.
+ *
+ * An ALL-ASCII input takes the identity path. Nothing about the contract
+ * changes there — the three spaces coincide, which is what the
+ * byte-count-preserving rule above was chosen to guarantee — so the mapping is
+ * arithmetic and the per-character {@link CharRun} array is deferred to its
+ * first reader. The analyzer re-derived that map for every nested block body it
+ * descended into, and `pathresolve`'s own `locate` discards the coordinate
+ * facts of a body anyway (they are properties of the root input): on a 60 KiB
+ * document nested 64 deep it decoded 7.9 MiB and allocated a run object per
+ * byte of it, a quarter of total analysis time (#322).
  */
 export function analyzeCoordinates(original: string): CoordinateAnalysis {
+	if (!NON_ASCII.test(original)) return asciiCoordinates(original);
 	const runs: CharRun[] = [];
 	const u8: number[] = [];
 	const analyzed: number[] = [];
@@ -175,7 +219,76 @@ export function analyzeCoordinates(original: string): CoordinateAnalysis {
 		originalU8: Uint8Array.from(u8),
 		runs,
 		lineStarts,
+		ascii: false,
 	};
+}
+
+/**
+ * The identity analysis of an all-ASCII input.
+ *
+ * One byte per code unit, so `analyzed`, `originalU8` and `original` are the
+ * same sequence and every offset is the same number in all three spaces. Only
+ * `lineStarts` needs a scan; `runs` is built on demand by {@link asciiRuns}
+ * because most callers never ask for it.
+ */
+function asciiCoordinates(original: string): CoordinateAnalysis {
+	const len = original.length;
+	const u8 = new Uint8Array(len);
+	const lineStarts = [0];
+	for (let i = 0; i < len; i++) {
+		const code = original.charCodeAt(i);
+		u8[i] = code;
+		if (code === 0x0a) lineStarts.push(i + 1);
+	}
+	let runs: CharRun[] | undefined;
+	return {
+		original,
+		// `analyzed` and `originalU8` are equal by definition here, but they stay
+		// separate arrays: they are separately typed, separately indexed surfaces
+		// and a shared buffer would let a write through one be read through the
+		// other.
+		analyzed: u8,
+		originalU8: u8.slice(),
+		get runs(): CharRun[] {
+			runs ??= asciiRuns(original, lineStarts);
+			return runs;
+		},
+		lineStarts,
+		ascii: true,
+	};
+}
+
+/** The per-character runs of an all-ASCII input, built on first read. */
+function asciiRuns(original: string, lineStarts: readonly number[]): CharRun[] {
+	const runs: CharRun[] = new Array(original.length);
+	let line = 0;
+	for (let i = 0; i < original.length; i++) {
+		const codePoint = original.charCodeAt(i);
+		runs[i] = {
+			codePoint,
+			utf16Start: i,
+			utf16Len: 1,
+			byteStart: i,
+			byteLen: 1,
+			ascii: true,
+			line,
+			col: i - (lineStarts[line] as number),
+		};
+		if (codePoint === 0x0a) line++;
+	}
+	return runs;
+}
+
+/** 0-based line containing `byte` — the last line start at or before it. */
+function lineAtByte(lineStarts: readonly number[], byte: number): number {
+	let lo = 0;
+	let hi = lineStarts.length - 1;
+	while (lo < hi) {
+		const mid = (lo + hi + 1) >> 1;
+		if ((lineStarts[mid] as number) <= byte) lo = mid;
+		else hi = mid - 1;
+	}
+	return lo;
 }
 
 /**
@@ -188,6 +301,21 @@ export function runAtByte(a: CoordinateAnalysis, byte: number): CharRun {
 		throw new Error(
 			`runAtByte: ${byte} is not a valid interior byte offset; expected an integer in [0, ${len})`,
 		);
+	// On the identity path the run IS the byte, so answer it rather than build
+	// (and then binary-search) an array of one object per character.
+	if (a.ascii) {
+		const line = lineAtByte(a.lineStarts, byte);
+		return {
+			codePoint: a.original.charCodeAt(byte),
+			utf16Start: byte,
+			utf16Len: 1,
+			byteStart: byte,
+			byteLen: 1,
+			ascii: true,
+			line,
+			col: byte - (a.lineStarts[line] as number),
+		};
+	}
 	let lo = 0;
 	let hi = a.runs.length - 1;
 	while (lo <= hi) {
@@ -214,6 +342,12 @@ export function byteToPosition(a: CoordinateAnalysis, byte: number): Position {
 			`byteToPosition: ${byte} is not a valid cursor offset; expected an integer in [0, ${len}]`,
 		);
 	if (byte === len) {
+		// The identity path reads the same answer off `lineStarts`: a trailing
+		// newline has already pushed the line that the cursor sits at column 0 of.
+		if (a.ascii) {
+			const line = a.lineStarts.length - 1;
+			return { line, col: len - (a.lineStarts[line] as number) };
+		}
 		const last = a.runs.at(-1);
 		if (!last) return { line: 0, col: 0 };
 		if (last.codePoint === 0x0a) return { line: last.line + 1, col: 0 };
@@ -264,6 +398,9 @@ export function byteSpanToRange(
  * as part of its `non-ascii` run like any other character.
  */
 export function coordinateDefects(a: CoordinateAnalysis): Defect[] {
+	// Both classes are non-ASCII code points by definition (U+FEFF included), so
+	// an all-ASCII input has neither and the runs never need building.
+	if (a.ascii) return [];
 	const defects: Defect[] = [];
 	const first = a.runs[0];
 	const hasBom = first !== undefined && first.codePoint === BOM;
@@ -308,6 +445,24 @@ export function positionToByte(
 		throw new Error(
 			`positionToByte: (line ${line}, col ${col}) is not a valid position; expected non-negative integers`,
 		);
+	// On the identity path a position is arithmetic: the column IS the byte
+	// offset from the line start. The bound is the line's own end (its next line
+	// start, minus the newline) so a column past the end of THAT line still
+	// throws, exactly as the scan below does.
+	if (a.ascii) {
+		if (line >= a.lineStarts.length)
+			throw new Error(
+				`positionToByte: no character boundary at (line ${line}, col ${col})`,
+			);
+		const start = a.lineStarts[line] as number;
+		const next = a.lineStarts[line + 1];
+		const end = next === undefined ? a.original.length : (next as number) - 1;
+		if (start + col > end)
+			throw new Error(
+				`positionToByte: no character boundary at (line ${line}, col ${col})`,
+			);
+		return start + col;
+	}
 	// Single pass: return an exact (line, col) hit immediately; otherwise keep
 	// the last run seen on the target line to resolve a just-past-the-end column.
 	let lastOnLine: CharRun | undefined;

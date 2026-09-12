@@ -253,3 +253,90 @@ describe("worked examples — concrete coordinates from the spec", () => {
 		expect((repl as NonNullable<typeof repl>).byteLen).toBe(3);
 	});
 });
+
+/**
+ * The all-ASCII identity path (#322).
+ *
+ * `analyzeCoordinates` answers an all-ASCII input by arithmetic — the three
+ * coordinate spaces coincide there, which is exactly what the byte-count-
+ * preserving rule was chosen to guarantee — and defers the per-character
+ * {@link CharRun} array to its first reader. That is a claim about COST, never
+ * about the answer, so it is tested as a DIFFERENTIAL rather than with its own
+ * expectations: appending one non-ASCII character forces the same input down
+ * the general per-code-point walk, and every shared offset must read the same.
+ *
+ * The one offset that legitimately differs is end-of-input: `s.length` is the
+ * cursor past the last character of `s`, but it addresses the appended
+ * character in the twin. Those two positions are the same position — which is
+ * why the end-of-input rule is asserted against the twin's reading of it
+ * rather than skipped.
+ */
+describe("identity path — ASCII answers what the general walk answers (#322)", () => {
+	const cases: [string, string][] = [
+		["empty", ""],
+		["one line", "/ip address print"],
+		["multi-line", "/ip address\nadd address=1.1.1.1/32\nprint\n"],
+		["trailing newline", ":put 1\n"],
+		["blank lines and tabs", ":local x 1;\n\n\t:put $x\r\n:put 2"],
+		["a nested block", ':if ($a) do={ :local d 1; :put "x" } else={ :put 2 }'],
+		["comment and continuation", "# c\n:local \\\n  x 1\n:put $x"],
+	];
+
+	for (const [name, text] of cases) {
+		test(`${name}: every shared offset agrees with the non-ASCII twin`, () => {
+			const ascii = analyzeCoordinates(text);
+			// The twin is the same text with one non-ASCII character appended, so
+			// the general walk runs over an identical prefix.
+			const twin = analyzeCoordinates(`${text}é`);
+
+			expect(ascii.ascii).toBe(true);
+			expect(twin.ascii).toBe(false);
+			expect(ascii.analyzed.length).toBe(text.length);
+			expect(ascii.lineStarts).toEqual(twin.lineStarts);
+
+			for (let byte = 0; byte < text.length; byte++) {
+				expect(runAtByte(ascii, byte)).toEqual(runAtByte(twin, byte));
+				expect(byteToPosition(ascii, byte)).toEqual(byteToPosition(twin, byte));
+				expect(ascii.analyzed[byte]).toBe(twin.analyzed[byte] as number);
+				expect(ascii.originalU8[byte]).toBe(twin.originalU8[byte] as number);
+			}
+
+			// The lazily built array is the one the eager walk would have built.
+			expect(ascii.runs.length).toBe(text.length);
+			expect(ascii.runs).toEqual(twin.runs.slice(0, text.length));
+
+			// End of input: the cursor past the last character of `text` is the
+			// position the twin gives its appended character.
+			expect(byteToPosition(ascii, text.length)).toEqual(
+				byteToPosition(twin, text.length),
+			);
+
+			// And every position round-trips back to the byte it came from.
+			for (let byte = 0; byte <= text.length; byte++) {
+				const pos = byteToPosition(ascii, byte);
+				expect(positionToByte(ascii, pos.line, pos.col)).toBe(byte);
+			}
+		});
+	}
+
+	test("a position past the end of its line has no boundary", () => {
+		const a = analyzeCoordinates("ab\ncd");
+		expect(a.ascii).toBe(true);
+		// col 2 is the cursor at the newline; col 3 addresses nothing.
+		expect(positionToByte(a, 0, 2)).toBe(2);
+		expect(() => positionToByte(a, 0, 3)).toThrow("no character boundary");
+		expect(() => positionToByte(a, 2, 0)).toThrow("no character boundary");
+	});
+
+	test("an all-ASCII input raises no coordinate defect and normalizes nothing", () => {
+		const data = centrs.explainCommand("/ip address print");
+		expect(data.input.normalized).toBe(false);
+		expect(data.input.positionMap).toEqual([
+			{
+				analyzed: { start: 0, end: 17 },
+				originalUtf16: { start: 0, end: 17 },
+			},
+		]);
+		expect(centrs.explainCommand("").input.positionMap).toEqual([]);
+	});
+});

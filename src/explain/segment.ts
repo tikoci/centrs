@@ -188,6 +188,72 @@ export type Continuation = "none" | "escape" | "comment";
  * can slice the original for content. Idempotent.
  */
 export function maskComments(original: string): string {
+	if (recentMaskInput === original && recentMaskOutput !== undefined)
+		return recentMaskOutput;
+	const cached = maskCache.get(original);
+	if (cached !== undefined) {
+		adoptMask(original, cached);
+		return cached;
+	}
+	const masked = maskUncached(original);
+	if (cacheMask(original, masked)) adoptMask(original, masked);
+	return masked;
+}
+
+const MASK_CACHE_LIMIT = 4;
+const MASK_CACHE_BYTE_LIMIT = 8 * 1024 * 1024;
+const maskCache = new Map<string, string>();
+let maskCacheBytes = 0;
+// Same shape, and the same reason, as `scope-brace.ts`'s boundary cache: one
+// slot for the hot object, a small bounded map behind it, and adoption on a hit
+// so a content-equal twin is compared once rather than on every call.
+let recentMaskInput: string | undefined;
+let recentMaskOutput: string | undefined;
+
+/** Adopt `original` as the single-slot key (see `scope-brace.ts` → `adoptBoundaryText`). */
+function adoptMask(original: string, masked: string): void {
+	recentMaskInput = original;
+	recentMaskOutput = masked;
+}
+
+function maskCacheEntryBytes(original: string, masked: string): number {
+	// Comment-free input is its own mask, so that entry holds one string.
+	return (original.length + (masked === original ? 0 : masked.length)) * 2;
+}
+
+function cacheMask(original: string, masked: string): boolean {
+	const entryBytes = maskCacheEntryBytes(original, masked);
+	if (entryBytes > MASK_CACHE_BYTE_LIMIT) return false;
+	while (
+		maskCache.size >= MASK_CACHE_LIMIT ||
+		maskCacheBytes + entryBytes > MASK_CACHE_BYTE_LIMIT
+	) {
+		const oldest = maskCache.entries().next().value;
+		if (oldest === undefined) break;
+		maskCache.delete(oldest[0]);
+		maskCacheBytes -= maskCacheEntryBytes(oldest[0], oldest[1]);
+		if (recentMaskInput === oldest[0]) {
+			recentMaskInput = undefined;
+			recentMaskOutput = undefined;
+		}
+	}
+	maskCache.set(original, masked);
+	maskCacheBytes += entryBytes;
+	return true;
+}
+
+/**
+ * The mask itself. Pure, so the memo above cannot change an answer — only how
+ * often it is computed.
+ *
+ * The walk asks for the mask of the SAME statement several times over: the
+ * structural-defect scan, the scope-block scan and the bracket scan each take
+ * one, and the bare-directive test takes another over the trimmed spelling.
+ * Each of those re-ran this scan AND, through `braceStartsStatements`, the
+ * statement index behind it — and a statement's text carries its whole nested
+ * subtree, so the repetition was paid once per enclosing level (#322).
+ */
+function maskUncached(original: string): string {
 	// Masked output is built from whole slices, and only once a comment is
 	// actually found: comment-free input is returned as the SAME string object.
 	// `split("")` allocated one string per character of every call — 16 walks
@@ -298,7 +364,11 @@ const MAX_CONTAINER_DEPTH = 256;
 export function segmentStatements(original: string): SegmentResult {
 	const analysis = analyzeCoordinates(original);
 	// `analyzed` is pure ASCII, so a string built from it has index === byte.
-	const ascii = new TextDecoder().decode(analysis.analyzed);
+	// When the INPUT was already ASCII the two are the same sequence, so the
+	// original is that string and the decode is skipped (#322).
+	const ascii = analysis.ascii
+		? original
+		: new TextDecoder().decode(analysis.analyzed);
 	const raw = scanAscii(ascii);
 	// Recover the human-readable `text` for each segment from the original.
 	const segments = raw.segments.map((s) => ({
@@ -326,7 +396,8 @@ function originalSlice(
 /** UTF-16 offset in the original for an analyzed-byte boundary. */
 function utf16At(a: CoordinateAnalysis, byte: number): number {
 	if (byte >= a.analyzed.length) return a.original.length;
-	return runAtByte(a, byte).utf16Start;
+	// Identity on an all-ASCII input: one byte per code unit in both spaces.
+	return a.ascii ? byte : runAtByte(a, byte).utf16Start;
 }
 
 /** A located statement before its `text` is recovered from the original. */
