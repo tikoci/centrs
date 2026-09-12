@@ -2310,9 +2310,11 @@ these refine the surface during implementation but did not gate ratification.
 Two of the four have since closed. **Q7** became #201 (lexical boundaries —
 sigil spellings, escape validity, statement-start eligibility) and #199 (the
 shared scanner's `$[…]`-in-string blind spot), both raised by the Q13 promotion
-and both now closed; the shared scanner they were consolidated into is
+and both now closed. **#199**'s fix is the one shared scanner,
 `src/explain/quoted-string.ts`, which is what keeps the segmenter, the brace
-classifier and the block scan from drifting on where a string ends.
+classifier and the block scan from drifting on where a string ends; **#201** is
+the wider one, spanning statement context, sigil/escape reading and defect
+detection across several already-promoted modules.
 **Q12** closed with #264: the vocabulary is settled on a stated rule and is no
 longer provisional — see
 [The vocabulary](#the-vocabulary-and-what-earns-a-class-264-b5). **Q5** and
