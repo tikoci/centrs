@@ -140,7 +140,13 @@ import {
 	resolveStatements,
 } from "./explain/pathresolve.ts";
 import { walkStringEscapes } from "./explain/quoted-string.ts";
-import { maskComments, segmentStatements } from "./explain/segment.ts";
+import {
+	documentRange,
+	type MaskedRange,
+	nestedRange,
+	rangeMask,
+	segmentStatements,
+} from "./explain/segment.ts";
 import {
 	findMissingSeparators,
 	type MissingSeparator,
@@ -1219,6 +1225,17 @@ export function explainCommand(
 	const analyzed = coordinates.ascii
 		? input
 		: new TextDecoder().decode(coordinates.analyzed);
+	// The whole document as a masked range, in `analyzed` coordinates, derived
+	// ONCE.
+	//
+	// Four passes below read the same statement — the strict argument reading,
+	// the tolerant token stream, the brace diagnostic and the value anchors —
+	// and each masked that statement's text for itself. A statement's text
+	// carries its whole nested `do={…}` subtree, so on a 60 KiB document nested
+	// 64 deep those four passes masked 15.8 MB between them. A statement's mask
+	// is this mask restricted to its span (see `segment.ts` → `MaskedRange`), and
+	// `analyzed` is ASCII by construction, so the offsets need no coordinate test.
+	const analyzedRange = documentRange(analyzed);
 	const segmented = segmentStatements(input);
 	const statementAnalysis = resolveStatements(input);
 	const verbs = resolveVerbsFromStatements(statementAnalysis);
@@ -1271,7 +1288,7 @@ export function explainCommand(
 	// the first block. Each split carries its own document-space span.
 	//
 	const readStatements: ExplainStatement[] = verbs.splits.map((split) =>
-		statementOf(split, analyzed),
+		statementOf(split, analyzed, analyzedRange),
 	);
 	const canonical = canonicalizeExecuteCommand(input);
 	// The skip-tolerant token stream every TOKEN-LEVEL rule reads (#316), one
@@ -1283,7 +1300,7 @@ export function explainCommand(
 		const split = verbs.splits[index];
 		return split === undefined || statement.kind !== "command"
 			? []
-			: argumentTokensOf(split, analyzed);
+			: argumentTokensOf(split, analyzed, analyzedRange);
 	});
 	// #311: the second command-shaped run is found on the statement's OWN
 	// argument tokens, then the reading is degraded — in that order, because the
@@ -1317,7 +1334,7 @@ export function explainCommand(
 				ev,
 			};
 		}),
-		...invalidCommandBraceDiagnostics(verbs.splits, analyzed),
+		...invalidCommandBraceDiagnostics(verbs.splits, analyzed, analyzedRange),
 		...separators.flatMap((runs) => runs.map(missingSeparatorDiagnostic)),
 		...statements.flatMap((s) => diagnosticsForStatement(s)),
 	].sort(
@@ -1326,7 +1343,12 @@ export function explainCommand(
 			severityRank(b.severity) - severityRank(a.severity),
 	);
 
-	const valueFacts = valuesOf(verbs.splits, analyzed, separators);
+	const valueFacts = valuesOf(
+		verbs.splits,
+		analyzed,
+		analyzedRange,
+		separators,
+	);
 	const spans: ExplainSpan[] = [
 		...segmented.comments.map((c) => ({
 			start: c.start,
@@ -1565,12 +1587,13 @@ function withStatementTransport(
 function statementOf(
 	split: DocumentVerbSplit,
 	analyzed: string,
+	analyzedRange: MaskedRange,
 ): ExplainStatement {
 	const reading = readingOf(split);
 	return {
 		span: { start: split.span.start, end: split.span.end },
 		...(reading.kind === "command"
-			? withArguments(reading, split, analyzed)
+			? withArguments(reading, split, analyzed, analyzedRange)
 			: reading),
 		contextCertain: split.contextCertain,
 		ev: EV.statements,
@@ -1594,8 +1617,9 @@ function withArguments(
 	reading: ExplainCommandReading,
 	split: DocumentVerbSplit,
 	analyzed: string,
+	analyzedRange: MaskedRange,
 ): ExplainCommandReading {
-	const read = argumentsOf(split, analyzed);
+	const read = argumentsOf(split, analyzed, analyzedRange);
 	return {
 		...reading,
 		command:
@@ -1620,6 +1644,7 @@ function withArguments(
 function argumentsOf(
 	split: DocumentVerbSplit,
 	analyzed: string,
+	analyzedRange: MaskedRange,
 ): { arguments: ExplainArguments; args?: Record<string, string> } {
 	if (split.argsAt === null)
 		return {
@@ -1637,7 +1662,11 @@ function argumentsOf(
 				why: "this statement's bytes are not addressable: its text was normalized (non-ASCII), or its span was widened to the enclosing statement",
 			},
 		};
-	const lexed = lexArguments(text, split.argsAt);
+	const lexed = lexArguments(
+		text,
+		split.argsAt,
+		nestedRange(analyzedRange, start, end),
+	);
 	if (!lexed.read) return { arguments: lexed };
 	return {
 		args: lexed.args,
@@ -1675,12 +1704,17 @@ function argumentsOf(
 function argumentTokensOf(
 	split: DocumentVerbSplit,
 	analyzed: string,
+	analyzedRange: MaskedRange,
 ): ExplainArgument[] {
 	if (split.argsAt === null) return [];
 	const { start, end } = split.span;
 	const text = analyzed.slice(start, end);
 	if (text !== split.text) return [];
-	return lexArgumentTokens(text, split.argsAt).tokens.map((token) => ({
+	return lexArgumentTokens(
+		text,
+		split.argsAt,
+		nestedRange(analyzedRange, start, end),
+	).tokens.map((token) => ({
 		...token,
 		span: { start: start + token.span.start, end: start + token.span.end },
 		...(token.valueSpan === undefined
@@ -1762,6 +1796,7 @@ function rejectedBySeparator(runs: readonly MissingSeparator[]): string {
 function invalidCommandBraceDiagnostics(
 	splits: readonly DocumentVerbSplit[],
 	analyzed: string,
+	analyzedRange: MaskedRange,
 ): ExplainDiagnostic[] {
 	const out: ExplainDiagnostic[] = [];
 	for (const split of splits) {
@@ -1786,7 +1821,7 @@ function invalidCommandBraceDiagnostics(
 			)
 		) {
 			const braceAt = split.argsAt + leadingBraceAt;
-			const structural = maskComments(text);
+			const structural = rangeMask(nestedRange(analyzedRange, start, end));
 			const trimmed = structural.slice(braceAt + 1).trimStart();
 			if (trimmed.length === 0 || trimmed[0] === "}") {
 				menuBraceAt = braceAt;
@@ -1807,6 +1842,7 @@ function invalidCommandBraceDiagnostics(
 			text,
 			split.argsAt,
 			split.path === "/" ? split.verb : undefined,
+			nestedRange(analyzedRange, start, end),
 		)) {
 			if (at === menuBraceAt) continue;
 			out.push({
@@ -1844,6 +1880,7 @@ function invalidCommandBraceDiagnostics(
 function valuesOf(
 	splits: readonly DocumentVerbSplit[],
 	analyzed: string,
+	analyzedRange: MaskedRange,
 	separators: readonly (readonly MissingSeparator[])[],
 ): ExplainValues {
 	const occurrences: ExplainValueOccurrence[] = [];
@@ -1854,6 +1891,7 @@ function valuesOf(
 		const text = analyzed.slice(start, end);
 		if (text !== split.text) continue;
 		const anchored = lexValueAnchors(text, split.argsAt, {
+			range: nestedRange(analyzedRange, start, end),
 			// A `{…}` array literal is legal only in a ROOT scripting directive's
 			// value slot; `/ip/dns/set servers={…}` and `:log info message={…}` are
 			// both device syntax errors at the `{`. `path` is how that position is

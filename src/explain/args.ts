@@ -76,10 +76,15 @@
  * re-announce; the abstention reason names it instead.
  */
 
-import { isScopeBrace } from "./blocks.ts";
+import { isScopeBrace, isScopeBraceIn } from "./blocks.ts";
 import { braceSlotAcceptsBrace, braceSlotTakesArray } from "./brace-slots.ts";
 import { braceStartsStatements } from "./scope-brace.ts";
-import { maskComments, scanQuotedString } from "./segment.ts";
+import {
+	type MaskedRange,
+	maskComments,
+	maskOf,
+	scanQuotedString,
+} from "./segment.ts";
 
 /** A RouterOS argument name: bare word, optionally dotted (`.id`, `.proplist`). */
 const ARGUMENT_NAME = /^\.?[A-Za-z][A-Za-z0-9._-]*$/;
@@ -247,9 +252,51 @@ interface ScanToken {
 	why?: string;
 }
 
+/**
+ * Whether the `{` at `at` opens a scope, reading the document's mask when the
+ * caller anchored this statement and masking `text` itself otherwise.
+ *
+ * `at` is relative to `text` either way, so callers need no offset arithmetic.
+ */
+function scopeBraceAt(
+	text: string,
+	at: number,
+	range: MaskedRange | undefined,
+): boolean {
+	return range === undefined
+		? isScopeBrace(text, at)
+		: isScopeBraceIn(range, at);
+}
+
+/**
+ * `{ range }` when the caller supplied one, otherwise nothing — so an omitted
+ * range stays absent rather than becoming an explicit `undefined` under
+ * `exactOptionalPropertyTypes`.
+ */
+function rangeOption(range: MaskedRange | undefined): { range?: MaskedRange } {
+	return range === undefined ? {} : { range };
+}
+
 interface WalkOptions {
 	/** Locate `{…}`/`(…)` literals instead of refusing the statement at one. */
 	allowArrayValues?: boolean;
+	/**
+	 * Where `text` sits in its document, with that document's comment mask.
+	 *
+	 * A statement's text carries its whole nested `do={…}` subtree, and every
+	 * pass over the document asks a different one of these readers for the same
+	 * statement — so each re-derived a mask over bytes the last one had already
+	 * read, once per pass and once per enclosing level (#322). A caller holding
+	 * the document's mask passes the statement's range of it instead; the mask of
+	 * a statement IS the document's mask restricted to that statement, because a
+	 * statement boundary begins a comment context (see `segment.ts` →
+	 * `MaskedRange`). Omitted, this reader masks `text` itself as before.
+	 *
+	 * Offsets in and out of these readers stay relative to `text`. The range is
+	 * read for the mask, and for the questions whose answer depends on the
+	 * DOCUMENT's statement index rather than this statement's.
+	 */
+	range?: MaskedRange;
 	/**
 	 * Publish a token the walk cannot DECODE instead of aborting at it (#316).
 	 *
@@ -339,7 +386,7 @@ function* walkArguments(
 	from: number,
 	options: WalkOptions = {},
 ): Generator<ReadArgument | string> {
-	const structural = maskComments(text);
+	const structural = maskOf(options.range) ?? maskComments(text);
 	let i = Math.max(0, from);
 	// How many positionals have been read, which is the NEXT positional's index.
 	let positionals = 0;
@@ -416,9 +463,13 @@ function* walkArguments(
  * that hands over the ORIGINAL text of a non-ASCII statement would get spans
  * that do not map back — `src/explain.ts` verifies the two agree before calling.
  */
-export function lexArguments(text: string, from: number): ArgumentReading {
+export function lexArguments(
+	text: string,
+	from: number,
+	range?: MaskedRange,
+): ArgumentReading {
 	const tokens: Argument[] = [];
-	for (const step of walkArguments(text, from)) {
+	for (const step of walkArguments(text, from, rangeOption(range))) {
 		if (typeof step === "string") return unread(step);
 		const publicToken = { ...step };
 		delete publicToken.literalQuoted;
@@ -470,9 +521,13 @@ export function lexArguments(text: string, from: number): ArgumentReading {
 export function lexArgumentTokens(
 	text: string,
 	from: number,
+	range?: MaskedRange,
 ): ArgumentTokenReading {
 	const tokens: Argument[] = [];
-	for (const step of walkArguments(text, from, { tolerant: true })) {
+	for (const step of walkArguments(text, from, {
+		tolerant: true,
+		...rangeOption(range),
+	})) {
 		if (typeof step === "string") return { complete: false, tokens, why: step };
 		const publicToken = { ...step };
 		delete publicToken.literalQuoted;
@@ -637,7 +692,8 @@ function structuredRefusal(
 		return c === "("
 			? "a substitution or expression value"
 			: "an array or block value";
-	if (c === "{" && isScopeBrace(text, at)) return "a scope block value";
+	if (c === "{" && scopeBraceAt(text, at, options.range))
+		return "a scope block value";
 	if (c === "{" && !braceOpensArray(text, start, at, positionalIndex, options))
 		return "a brace value RouterOS does not read as an array here";
 	return undefined;
@@ -746,13 +802,14 @@ function isArraySource(
 	structural: string,
 	start: number,
 	end: number,
+	range: MaskedRange | undefined,
 ): boolean {
 	const open = text[start];
 	if (open !== "(" && open !== "{") return false;
 	if (delimitedEnd(structural, start) !== end) return false;
 	if (open === "{")
 		return (
-			!isScopeBrace(text, start) &&
+			!scopeBraceAt(text, start, range) &&
 			structural.slice(start + 1, end - 1).trim().length > 0
 		);
 
@@ -795,7 +852,7 @@ function readToken(
 		return divergent ?? { kind: "query", span, name: raw.slice(1), text: raw };
 	}
 	if (options.allowArrayValues && startsStructuredSource(text, start)) {
-		if (isArraySource(text, structural, start, end))
+		if (isArraySource(text, structural, start, end, options.range))
 			return {
 				kind: "positional",
 				span,
@@ -832,7 +889,7 @@ function readToken(
 	if (!ARGUMENT_NAME.test(name))
 		return `\`${name}=\` is not a RouterOS argument name`;
 	if (options.allowArrayValues && startsStructuredSource(text, eq + 1)) {
-		if (isArraySource(text, structural, eq + 1, end))
+		if (isArraySource(text, structural, eq + 1, end, options.range))
 			return {
 				kind: "attribute",
 				span,
@@ -1329,6 +1386,7 @@ function pushArrayMembers(
 	contentEnd: number,
 	separator: ";" | ",",
 	depth: number,
+	range: MaskedRange | undefined,
 ): string | null {
 	// Past the bound the interior is UNVERIFIED, and an unverified interior can
 	// hold a fault that makes the whole statement a syntax error — `:parse`
@@ -1470,7 +1528,7 @@ function pushArrayMembers(
 		}
 		const fault = parenMemberFault(text, structural, valueStart, member.end);
 		if (fault !== null) return fault;
-		if (isArraySource(text, structural, valueStart, member.end)) {
+		if (isArraySource(text, structural, valueStart, member.end, range)) {
 			const at = anchors.length;
 			anchors.push({ ...anchor, sourceShape: "array" });
 			const nested = pushArrayMembers(
@@ -1482,6 +1540,7 @@ function pushArrayMembers(
 				member.end - 1,
 				text[valueStart] === "{" ? ";" : ",",
 				depth + 1,
+				range,
 			);
 			if (nested !== null) return nested;
 			continue;
@@ -1503,6 +1562,7 @@ function pushArrayMembers(
 				member.end,
 				",",
 				depth + 1,
+				range,
 			);
 			if (nested !== null) return nested;
 			continue;
@@ -1533,12 +1593,13 @@ function pushArrayMembers(
 export function lexValueAnchors(
 	text: string,
 	from: number,
-	options: { directiveVerb?: string } = {},
+	options: { directiveVerb?: string; range?: MaskedRange } = {},
 ): ValueAnchorReading {
 	const anchors: ValueAnchor[] = [];
-	const structural = maskComments(text);
+	const structural = maskOf(options.range) ?? maskComments(text);
 	for (const read of walkArguments(text, from, {
 		allowArrayValues: true,
+		...rangeOption(options.range),
 		...(options.directiveVerb === undefined
 			? {}
 			: { directiveVerb: options.directiveVerb }),
@@ -1566,6 +1627,7 @@ export function lexValueAnchors(
 					read.valueSpan.end - 1,
 					text[read.valueSpan.start] === "{" ? ";" : ",",
 					0,
+					options.range,
 				);
 				if (unparsed !== null) {
 					anchors.length = at;
@@ -1599,8 +1661,9 @@ export function invalidCommandBraceOffsets(
 	text: string,
 	from: number,
 	directiveVerb?: string,
+	range?: MaskedRange,
 ): number[] {
-	const structural = maskComments(text);
+	const structural = maskOf(range) ?? maskComments(text);
 	const offsets: number[] = [];
 	const stack: string[] = [];
 	let i = Math.max(0, from);
@@ -1652,7 +1715,14 @@ export function invalidCommandBraceOffsets(
 				: braceValueOwner(structural, tokenStart, i);
 		const slot = owner === null ? `#${positionals}` : owner;
 		if (
-			braceStartsStatements(structural, i) ||
+			// Asked of the DOCUMENT when the caller anchored this statement, so the
+			// statement index behind it is the document's one index rather than a
+			// fresh one over this statement's text — which carries its whole nested
+			// subtree, and so was rebuilt once per enclosing level (#322). The floor
+			// makes the two readings the same answer (`scope-brace.ts`).
+			(range === undefined
+				? braceStartsStatements(structural, i)
+				: braceStartsStatements(range.masked, range.start + i, range.start)) ||
 			(directiveVerb !== undefined &&
 				slot !== undefined &&
 				braceSlotAcceptsBrace(directiveVerb, slot))

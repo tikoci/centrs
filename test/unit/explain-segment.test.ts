@@ -492,6 +492,7 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 				},
 			],
 			comments: [{ start: 8, end: 11 }],
+			ascii: true,
 			defects: [],
 		});
 		// CRLF is the same shape one byte later.

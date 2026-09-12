@@ -5,10 +5,15 @@ import {
 	matchBrace,
 	SCOPE_ARG_NAMES,
 	scopeBlocks,
+	scopeBlocksIn,
 	scopeBodies,
 	scopeNameAt,
 } from "../../src/explain/blocks.ts";
-import { segmentStatements } from "../../src/explain/segment.ts";
+import {
+	maskComments,
+	scanQuotedString,
+	segmentStatements,
+} from "../../src/explain/segment.ts";
 import * as centrs from "../../src/index.ts";
 
 /**
@@ -146,4 +151,168 @@ test("scope-classification API is re-exported from the library barrel", () => {
 	expect(centrs.scopeBlocks).toBe(scopeBlocks);
 	expect(centrs.scopeNameAt).toBe(scopeNameAt);
 	expect(centrs.scopeBodies).toBe(scopeBodies);
+});
+
+/**
+ * The claim the document-wide comment mask rests on (#322).
+ *
+ * Every reader below the statement walk used to mask the text it was handed;
+ * since a statement's text carries its whole nested `do={…}` subtree, each
+ * enclosing level re-derived a mask over bytes an inner level had already read.
+ * They now read a RANGE of the document's one mask instead
+ * (`segment.ts` → `MaskedRange`), which is sound only if a nested region's mask
+ * really is the document's mask restricted to it.
+ *
+ * That is a property of WHERE the regions come from, not of slicing: a comment
+ * is decided by the statement context its `#` sits in, and both a statement
+ * boundary and a scope body begin one — statement-leading, no continuation
+ * pending, an enclosing context that admits statements. So the two readings
+ * agree for exactly the regions the walkers descend into, and the cases below
+ * are the ones where a context could plausibly leak across the boundary:
+ * continuations spanning it, comment bodies carrying delimiters, array literals
+ * (which do NOT admit statement-leading comments), strings holding braces and
+ * hashes, and unbalanced input where the region has no clean end.
+ */
+describe("a nested region's mask is the document's mask restricted to it (#322)", () => {
+	const CASES: [string, string][] = [
+		["continuation into a body", "do={\\\n# c\n:put 1}"],
+		["continuation before a body", ":put a\\\n# x\n:if ($a) do={ :put b }"],
+		["blank lines inside a continuation run", "do={ \\\n\\\n\\\n:put 1 }"],
+		["two arms", ":retry command={:put 1} on-error={# c\n:put 2}"],
+		[
+			"comment body carrying delimiters",
+			":if ($a) do={ # } ; = [ ( $\n:put 1 }",
+		],
+		["comment before the statement", "# ; { [ (\n:if ($a) do={ :put 1 }"],
+		[
+			"array literal beside a scope",
+			':foreach t in={ "a"; "b" } do={ :put $t }',
+		],
+		[
+			"string holding a brace and a hash",
+			':if ($a) do={ :put "} # { ;" ; :put 2 }',
+		],
+		[
+			"interpolated substitution",
+			':put "$[/ip/address/find]"; :if ($a) do={ :put "#" }',
+		],
+		["unterminated string in a body", ':if ($a) do={ :put "abc }'],
+		["unclosed body", ":if ($a) do={ :put 1 "],
+		["stray closers in a body", ":if ($a) do={ ) ] } :put 1 }"],
+		["hash after a closing brace", ":if ($a) do={ :put 1 }\n# c\n:put 2"],
+		[
+			"comment at the tail of a nested body",
+			":if ($a) do={ :if ($b) do={ :put 1 } # c\n }",
+		],
+		["empty body", ":if ($a) do={}"],
+		["head-scoped `in`", ":onerror e in={ :put 1 }"],
+		["bare directive body (no colon)", "do { :put 1 }"],
+		["CRLF", ":if ($a) do={\r\n# c\r\n:put 1\r\n}"],
+		[
+			"a comment at every level",
+			":if ($a) do={ # L1\n:if ($b) do={ # L2\n:put 1 } }",
+		],
+	];
+
+	for (const [label, input] of CASES) {
+		test(label, () => {
+			const documentMask = maskComments(input);
+			let regions = 0;
+			// Mirrors `pathresolve`'s descent: segment the region, then take each
+			// statement's depth-0 scope bodies and recurse into those.
+			const descend = (base: number, region: string, depth: number): void => {
+				if (depth > 8) return;
+				for (const segment of segmentStatements(region).segments) {
+					// Only ASCII regions are anchored, and these fixtures are ASCII,
+					// so an analyzed-byte offset is a JS string index throughout.
+					const start = base + segment.start;
+					for (const block of scopeBlocks(segment.text)) {
+						const at = start + block.start;
+						regions++;
+						expect(input.slice(at, at + block.body.length)).toBe(block.body);
+						expect(documentMask.slice(at, at + block.body.length)).toBe(
+							maskComments(block.body),
+						);
+						descend(at, block.body, depth + 1);
+					}
+				}
+			};
+			descend(0, input, 0);
+			// A case that descends into nothing would pass vacuously.
+			expect(regions).toBeGreaterThan(0);
+		});
+	}
+});
+
+/**
+ * `scanQuotedString`'s `limit`, which is what keeps a ranged reader from
+ * borrowing a later region's closing quote (#322).
+ */
+describe("a bounded string scan stops at the region's end (#322)", () => {
+	test("an unterminated string inside the range is not closed by later text", () => {
+		const text = ':put "abc ; :put "def"';
+		// Unbounded, the quote opened at 5 is closed by the one at 17.
+		expect(scanQuotedString(text, 5)).toEqual({ end: 18, closed: true });
+		// Bounded at the region end, it is unterminated — the same answer the
+		// region taken as a string of its own gives.
+		expect(scanQuotedString(text, 5, 10)).toEqual({ end: 10, closed: false });
+		expect(scanQuotedString(text.slice(0, 10), 5)).toEqual({
+			end: 10,
+			closed: false,
+		});
+	});
+
+	test("a lookahead past the limit cannot change the reported end", () => {
+		// `$[` and `\<x>` are the two advances that read ahead; both are clamped.
+		for (const text of [':put "a$[b]"', ':put "a\\nb"']) {
+			for (let limit = 6; limit <= text.length; limit++) {
+				expect(scanQuotedString(text, 5, limit)).toEqual(
+					scanQuotedString(text.slice(0, limit), 5),
+				);
+			}
+		}
+	});
+});
+
+/**
+ * The ranged scan answers what the region-as-its-own-document scan answers.
+ *
+ * `scopeBlocksIn` reads the document's mask at absolute offsets, so the
+ * statement lookback behind `scopeNameFromMasked` can see bytes that precede
+ * the region; `floor` is what stops it. These cases put a scope name, an `=`, a
+ * directive head or a comment immediately OUTSIDE each region, which is what
+ * such a lookback would reach.
+ *
+ * None of them is known to need the clamp — it fires on corpus input but has
+ * not been seen to change an answer (`scope-brace.ts` → `scopeNameFromMasked`).
+ * What this pins is the equality itself, which is the property the ranged
+ * readers depend on, not the mechanism that happens to deliver it today.
+ */
+test("a ranged scope scan matches the region read on its own (#322)", () => {
+	const CASES = [
+		":if ($a) do={ {1;2} }",
+		":if ($a) do={ do={ :put 1 } }",
+		":if ($a) do={ x={1} }",
+		":onerror e in={ :onerror f in={ :put 1 } }",
+		':foreach t in={ "a" } do={ :foreach u in={ "b" } do={ :put 1 } }',
+		":if ($a) do={ /ip/address { :put 1 } }",
+		":retry command={ :retry command={ :put 1 } }",
+		":if ($a) do={ source={ :put 1 } }",
+		":if ($a) do={ # c\n{ :put 1 } }",
+	];
+	for (const input of CASES) {
+		for (const block of scopeBlocks(input)) {
+			const at = block.start;
+			// The region read as a document of its own — what every level used to
+			// do — against the same region read in place.
+			expect(
+				scopeBlocksIn({
+					text: input,
+					masked: maskComments(input),
+					start: at,
+					end: at + block.body.length,
+				}),
+			).toEqual(scopeBlocks(block.body));
+		}
+	}
 });

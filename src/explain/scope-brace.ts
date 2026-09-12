@@ -149,6 +149,13 @@ function statementIndex(text: string): StatementIndex {
 	}
 	const cached = boundaryCache.get(text);
 	if (cached !== undefined) {
+		// Move to the most-recent end. Eviction walks the Map in INSERTION order,
+		// so without this the cache is FIFO: the document-wide index every ranged
+		// reader shares is re-read constantly but never re-inserted, and a stream
+		// of one-off statement indices ages it out and makes the next reader
+		// rebuild it over the whole document (#322).
+		boundaryCache.delete(text);
+		boundaryCache.set(text, cached);
 		adoptBoundaryText(text, cached);
 		return cached;
 	}
@@ -242,13 +249,34 @@ function leadingWords(
 	return words;
 }
 
-/** Scope name for an already comment-masked source view. */
+/**
+ * Scope name for an already comment-masked source view.
+ *
+ * `floor` is the start of the region the caller is reading, defaulting to the
+ * whole view. Clamping the statement start to it makes an answer read off a
+ * RANGE of a document identical to the same answer read off that range taken as
+ * a string of its own: a fresh call cannot see before index 0, so a ranged call
+ * must not see before `floor` (#322).
+ *
+ * It is a guard, not a correction. The clamp does fire on ordinary input —
+ * 7,448 times over the 948-script corpus, where a region begins somewhere the
+ * preceding boundary character does not — but removing it leaves every one of
+ * those 948 results byte-identical, because the extra bytes a wider lookback
+ * sees do not spell a scope name. What it buys is that the equality holds by
+ * CONSTRUCTION rather than by a property of where today's ranges happen to
+ * start, which is what the next reader to take a range will rely on.
+ *
+ * Nothing else needs clamping — `firstContent` and `lastForbidden` are only
+ * ever compared against `start`, so a value from before the floor is already
+ * excluded by being less than it.
+ */
 export function scopeNameFromMasked(
 	masked: string,
 	open: number,
+	floor = 0,
 ): string | null {
 	const index = statementIndex(masked);
-	const start = (index.boundaries[open] ?? -1) + 1;
+	const start = Math.max((index.boundaries[open] ?? -1) + 1, floor);
 	const named = trailingName(masked, start, open);
 	if (named !== null) {
 		const name = named.toLowerCase();
@@ -280,12 +308,20 @@ export function scopeNameFromMasked(
 	return null;
 }
 
-/** Whether this brace begins a context in which statement-leading comments exist. */
-export function braceStartsStatements(text: string, open: number): boolean {
-	if (scopeNameFromMasked(text, open) !== null) return true;
+/**
+ * Whether this brace begins a context in which statement-leading comments exist.
+ *
+ * `floor` bounds the lookback exactly as in {@link scopeNameFromMasked}.
+ */
+export function braceStartsStatements(
+	text: string,
+	open: number,
+	floor = 0,
+): boolean {
+	if (scopeNameFromMasked(text, open, floor) !== null) return true;
 	const index = statementIndex(text);
 	const boundary = index.boundaries[open] ?? -1;
-	const start = boundary + 1;
+	const start = Math.max(boundary + 1, floor);
 	const named = trailingName(text, start, open);
 	if (named !== null) return SCRIPT_BODY_ARG.test(named.toLowerCase());
 
@@ -310,16 +346,19 @@ export function hashStartsHardError(
 	text: string,
 	at: number,
 	inExpression: boolean,
+	floor = 0,
 ): boolean {
 	if (inExpression) return true;
-	if (at <= 0 || !isAsciiWhitespace(text[at - 1])) return false;
+	if (at <= floor || !isAsciiWhitespace(text[at - 1])) return false;
 
 	let previous = at - 1;
-	while (previous >= 0 && isAsciiWhitespace(text[previous])) previous--;
-	if (text[previous] === "}") return true;
+	while (previous >= floor && isAsciiWhitespace(text[previous])) previous--;
+	// The `}` must be inside the region: a fresh call on the region alone runs
+	// off index 0 and finds nothing, so a ranged call must stop at `floor`.
+	if (previous >= floor && text[previous] === "}") return true;
 
 	const index = statementIndex(text);
-	const start = (index.boundaries[at] ?? -1) + 1;
+	const start = Math.max((index.boundaries[at] ?? -1) + 1, floor);
 	const first = index.firstContent[at] ?? -1;
 	const words = first < start ? [] : leadingWords(text, first, at, 3, true);
 	const rawHead = (words[0] ?? "").toLowerCase();

@@ -24,7 +24,8 @@ import type {
 	ExplainSymbolOccurrence,
 	ExplainValueOccurrence,
 } from "../explain.ts";
-import { scopeBlocks } from "./blocks.ts";
+import { scopeBlocksIn } from "./blocks.ts";
+import { documentRange, type MaskedRange, nestedRange } from "./segment.ts";
 import type { SplitOwnerIndex } from "./split-owner.ts";
 import { buildSplitOwnerIndex } from "./split-owner.ts";
 import type { SymbolOccurrence } from "./symbols.ts";
@@ -106,21 +107,26 @@ function mergeBranchArms(
 }
 
 /**
- * Collect all scope blocks in `text`, rebased to `base`, recursively.
+ * Collect all scope blocks in `range`, recursively.
  *
  * `splits` are the flattened statement splits for the same document; they are
  * used to decide whether a `do={...}` body belongs to a loop verb (`foreach`,
  * `for`, `while`) or to a branch (`if`, `do`, `else`, `on-error`).
+ *
+ * The range replaces the `(text, base)` pair it used to take — `base` was
+ * already the body's offset in the document, so nothing is lost, and the
+ * document's comment mask now descends with it instead of being re-derived over
+ * each nested body. A body carries every body below it, so that re-derivation
+ * was the O(bytes x depth) term (#322).
  */
 function collectBlocks(
-	text: string,
-	base: number,
+	range: MaskedRange,
 	owners: SplitOwnerIndex,
 	splits: readonly DocumentVerbSplit[],
 ): BlockInfo[] {
 	const out: BlockInfo[] = [];
-	const blocks = scopeBlocks(text).map((block) => {
-		const start = base + block.start;
+	const blocks = scopeBlocksIn(range).map((block) => {
+		const start = range.start + block.start;
 		const bracePos = start - 1;
 		const ownerIndex = owners.ownerOf(bracePos, bracePos + 1);
 		return {
@@ -161,7 +167,7 @@ function collectBlocks(
 	}
 
 	for (const { block: b, ownerIndex, owner } of blocks) {
-		const start = base + b.start;
+		const start = range.start + b.start;
 		const end = start + b.body.length;
 		// If source mapping cannot identify the owning statement, use loop-like
 		// merging: an incomplete reaching set is safer than treating an unknown
@@ -183,7 +189,13 @@ function collectBlocks(
 				? { branchGroup: ownerIndex, branchArm }
 				: {}),
 		});
-		out.push(...collectBlocks(b.body, start, owners, splits));
+		out.push(
+			...collectBlocks(
+				nestedRange(range, b.start, b.start + b.body.length),
+				owners,
+				splits,
+			),
+		);
 	}
 	return out;
 }
@@ -285,7 +297,7 @@ export function augmentSymbolOccurrences(
 		if (vid !== undefined) defMap.set(i, vid);
 	}
 
-	const blocks = collectBlocks(analyzed, 0, owners, splits);
+	const blocks = collectBlocks(documentRange(analyzed), owners, splits);
 	type FlowEvent =
 		| {
 				offset: number;

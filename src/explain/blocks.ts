@@ -31,7 +31,12 @@ import {
 	SCOPE_ARG_NAMES,
 	scopeNameFromMasked,
 } from "./scope-brace.ts";
-import { maskComments, scanQuotedString } from "./segment.ts";
+import {
+	documentRange,
+	type MaskedRange,
+	maskComments,
+	scanQuotedString,
+} from "./segment.ts";
 
 export { DIRECTIVE_BODY, HEAD_SCOPED_ARG_NAMES, SCOPE_ARG_NAMES };
 /** One depth-0 scope block found in a statement: its name and raw body text. */
@@ -65,35 +70,62 @@ export function isScopeBrace(text: string, open: number): boolean {
 }
 
 /**
+ * {@link isScopeBrace} for a reader that already holds the document's mask,
+ * with `open` relative to `range` rather than to the whole document.
+ *
+ * The string form has to mask the text it is given, and a statement's text
+ * carries its whole nested `do={…}` subtree — so asking it this question once
+ * per brace re-derived a mask over that subtree once per enclosing level
+ * (#322). Same answer: the floor is what makes a ranged reading identical to
+ * the region read on its own (`scope-brace.ts` → `scopeNameFromMasked`).
+ */
+export function isScopeBraceIn(range: MaskedRange, open: number): boolean {
+	return (
+		scopeNameFromMasked(range.masked, range.start + open, range.start) !== null
+	);
+}
+
+/**
  * The depth-0 scope `{…}` in a statement, with names and raw body text. A
  * single left-to-right pass (no recursion): each scope's body is returned raw
  * for the caller to segment/recurse under its own depth budget. Literal `{…}`
  * values are skipped, not descended.
  */
 export function scopeBlocks(text: string): ScopeBlock[] {
+	return scopeBlocksIn(documentRange(text));
+}
+
+/**
+ * The same scan over a RANGE of a document, reading the document's own mask.
+ *
+ * `ScopeBlock.start` stays relative to the range, which is what its contract
+ * already promises ("within the text `scopeBlocks` was given") and what a
+ * caller rebasing through `Loc` needs. Every other offset here is absolute.
+ */
+export function scopeBlocksIn(range: MaskedRange): ScopeBlock[] {
 	// Scan a comment-masked copy for structure so a `#`-comment `}`/`[` cannot
 	// truncate a body or shift depth; slice the ORIGINAL for the body text.
-	const masked = maskComments(text);
+	const { text, masked, start: lo, end: hi } = range;
 	const blocks: ScopeBlock[] = [];
 	let depth = 0;
-	for (let i = 0; i < masked.length; i++) {
+	for (let i = lo; i < hi; i++) {
 		const c = masked[i];
 		if (c === '"') {
-			i = scanQuotedString(masked, i).end - 1;
+			i = scanQuotedString(masked, i, hi).end - 1;
 			continue;
 		}
 		if (c === "[" || c === "(") depth++;
 		else if (c === "]" || c === ")") {
 			if (depth > 0) depth--;
 		} else if (c === "{") {
-			const end = matchBraceInMasked(masked, i);
+			const end = matchBraceInMasked(masked, i, hi);
 			if (depth === 0) {
-				const name = scopeNameFromMasked(masked, i);
+				const name = scopeNameFromMasked(masked, i, lo);
 				if (name !== null)
 					blocks.push({
 						name,
 						body: text.slice(i + 1, end),
-						start: i + 1,
+						start: i + 1 - lo,
 					});
 			}
 			i = end;
@@ -109,12 +141,16 @@ export function scopeBodies(text: string): string[] {
 	return scopeBlocks(text).map((b) => b.body);
 }
 
-function matchBraceInMasked(masked: string, open: number): number {
+function matchBraceInMasked(
+	masked: string,
+	open: number,
+	limit: number = masked.length,
+): number {
 	let depth = 0;
-	for (let i = open; i < masked.length; i++) {
+	for (let i = open; i < limit; i++) {
 		const c = masked[i];
 		if (c === '"') {
-			i = scanQuotedString(masked, i).end - 1;
+			i = scanQuotedString(masked, i, limit).end - 1;
 			continue;
 		}
 		if (c === "{") depth++;
@@ -123,7 +159,7 @@ function matchBraceInMasked(masked: string, open: number): number {
 			if (depth === 0) return i;
 		}
 	}
-	return masked.length;
+	return limit;
 }
 
 /** Index of the `}` matching the `{` at `open`, honoring strings and comments. */
