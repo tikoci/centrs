@@ -585,10 +585,18 @@ describe("scanQuotedString — substitution frames inside a string", () => {
  * structural-defect scan, the scope-block scan, the bracket scan and the
  * bare-directive test each take one — and a statement's text carries its whole
  * nested `do={…}` subtree, so the repetition was paid once per enclosing level.
- * What is asserted here is the only thing a cache can get wrong: that a repeat
- * ask, a CONTENT-EQUAL twin built by a different step, and an ask made after
- * other documents have pushed the entry out all return the same mask as the
- * first ask did.
+ *
+ * These assert the ANSWER, through every path into the memo: the hot slot, a
+ * content-equal twin built by a different step, an entry pushed out by other
+ * documents, and an entry too large to cache at all. They deliberately do NOT
+ * assert that a hit was a hit. `maskComments` returns a string, and JavaScript
+ * cannot tell a cached string from an equal recomputed one, so proving that
+ * would mean exporting a counter from production for a test to read — a gate on
+ * an implementation detail that the eventual fix for #322 (threading the mask
+ * rather than memoizing it) would have to delete. Whether the memo actually
+ * saves work is a COST claim, and this repo answers cost claims with a
+ * measurement: PR #332 prices it by disabling the memo in place, which moved a
+ * 60 KiB depth-64 document from ~1,450 ms to 1,571 ms.
  */
 describe("comment mask memo (#322)", () => {
 	const commented = '# lead\n:local x 1 # not a comment\n:put "#h" # tail\n';
@@ -605,6 +613,23 @@ describe("comment mask memo (#322)", () => {
 		// Push the entry out with unrelated documents, then ask again.
 		for (let i = 0; i < 12; i++) maskComments(`:put ${i} # c${i}\n`.repeat(3));
 		expect(maskComments(commented)).toBe(first);
+	});
+
+	test("an entry too large to cache is still masked correctly", () => {
+		// Over the cache's byte limit, so `cacheMask` refuses it and the answer
+		// comes from the uncached walk every time. Same answer, twice.
+		const huge = `# c\n:put 1\n`.repeat(300_000);
+		// The precondition cannot be read back off a string, so it is asserted
+		// rather than assumed: an entry is the input plus its mask at two bytes
+		// per UTF-16 unit, against `MASK_CACHE_BYTE_LIMIT`. Shrink the input and
+		// this fails loudly instead of quietly testing the cached path twice.
+		expect(huge.length * 2 * 2).toBeGreaterThan(8 * 1024 * 1024);
+		const masked = maskComments(huge);
+		expect(masked.length).toBe(huge.length);
+		expect(masked.slice(0, 4)).toBe("   \n");
+		expect(maskComments(huge)).toBe(masked);
+		// And it did not evict its way through the small entries' correctness.
+		expect(maskComments(commented)).toBe(maskComments(commented));
 	});
 
 	test("masking stays idempotent and length-preserving across the memo", () => {
