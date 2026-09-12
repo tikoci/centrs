@@ -1153,7 +1153,7 @@ and that needs no device evidence. Whether RouterOS refuses the shape outright
 is a *device* claim, so unlike #311's CHR-grounded `error` this stays a
 warning and the statement carries no verdict about acceptance.
 
-**Three exclusions, each for its own reason.** A frozen-vocabulary hit is
+**Four exclusions, each for its own reason.** A frozen-vocabulary hit is
 excluded by the `VERBS` premise itself (a vocabulary split promotes a `VERBS`
 member by construction). A **published command** is excluded by `catalogAt`:
 first-order evidence about that exact path outranks a container listing of its
