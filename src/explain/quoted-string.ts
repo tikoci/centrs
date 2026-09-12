@@ -186,18 +186,30 @@ function stringEscapeValidated(text: string, at: number): number | Defect {
  *
  * A `$[…]` or `$(…)` substitution inside a string is code and may contain
  * nested strings, so the next quote is not necessarily the outer close.
+ *
+ * `limit` is the end of the region the caller is reading, defaulting to the
+ * whole text. A reader working on a RANGE of a larger document must pass it:
+ * a string left unterminated inside the range would otherwise be closed by a
+ * quote belonging to later text, which is not the answer the same reader gets
+ * from the range taken as a string of its own (#322). Lookahead past `limit`
+ * cannot change the result — every advance that reads ahead is at least one
+ * byte, so it can only overshoot an end that is reported clamped either way.
  */
-export function scanQuotedString(text: string, open: number): QuotedStringScan {
+export function scanQuotedString(
+	text: string,
+	open: number,
+	limit: number = text.length,
+): QuotedStringScan {
 	const frames: string[] = ['"'];
 	let i = open + 1;
-	while (i < text.length) {
+	while (i < limit) {
 		const res = stepFrame(text, i, frames, (at) => stringEscapeSkip(text, at));
 		if (typeof res !== "number") break;
 		if (res === 0) break;
 		i += res;
 		if (frames.length === 0) return { end: i, closed: true };
 	}
-	return { end: text.length, closed: false };
+	return { end: limit, closed: false };
 }
 
 /** One string-internal escape: `[start, end)` over the `\` and what it escapes. */

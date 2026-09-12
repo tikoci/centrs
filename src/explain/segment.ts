@@ -109,6 +109,13 @@ export interface SegmentResult {
 	/** comment spans (analyzed-byte offsets), dropped from the statement stream. */
 	comments: { start: number; end: number }[];
 	/**
+	 * The input was pure ASCII, so an analyzed-byte offset into it is also a JS
+	 * string index — the test a caller needs before it may treat the spans above
+	 * as offsets into `original` itself. Published from the coordinate pass this
+	 * result already ran rather than re-derived, so the two cannot disagree.
+	 */
+	ascii: boolean;
+	/**
 	 * Unbalanced delimiters and other structural surprises, each located; never
 	 * a throw. Includes the two coordinate-pass classes (`bom`, `non-ascii`).
 	 */
@@ -154,8 +161,12 @@ export interface QuotedStringScan {
  * can reach it, which is malformed by construction; sequential substitutions
  * (`"$[a]$[b]…"`) pop and never accumulate.
  */
-export function scanQuotedString(text: string, open: number): QuotedStringScan {
-	return scanQuotedStringShared(text, open);
+export function scanQuotedString(
+	text: string,
+	open: number,
+	limit: number = text.length,
+): QuotedStringScan {
+	return scanQuotedStringShared(text, open, limit);
 }
 
 /**
@@ -192,6 +203,10 @@ export function maskComments(original: string): string {
 		return recentMaskOutput;
 	const cached = maskCache.get(original);
 	if (cached !== undefined) {
+		// Refresh recency — see `scope-brace.ts` → `statementIndex` for why an
+		// insertion-ordered eviction loses exactly the entry worth keeping.
+		maskCache.delete(original);
+		maskCache.set(original, cached);
 		adoptMask(original, cached);
 		return cached;
 	}
@@ -240,6 +255,90 @@ function cacheMask(original: string, masked: string): boolean {
 	maskCache.set(original, masked);
 	maskCacheBytes += entryBytes;
 	return true;
+}
+
+/**
+ * A region of one document, carried with that document's comment mask.
+ *
+ * Every reader below the statement walk asks its questions of a statement's
+ * `text` or of a `do={…}` body — and a statement's text CONTAINS its whole
+ * nested subtree, so each enclosing level re-derived the mask, and the
+ * statement index behind it, over bytes an inner level had already read. That
+ * is the O(bytes x depth) term: a 60 KiB document nested 64 deep masked 27.7 MB
+ * (#322).
+ *
+ * A range replaces the substring. `text` and `masked` are always the WHOLE
+ * document; `start` and `end` say which part of it this reader may look at. The
+ * mask is then derived once per document and every nested reading is an offset
+ * into it.
+ *
+ * Soundness is a property of where the ranges come from, not of this type: a
+ * comment mask is decided by the statement context a byte sits in, and a
+ * statement boundary and a scope body both begin one — statement-leading, no
+ * continuation pending, an enclosing context that admits statements. So the
+ * mask of such a region is the document's mask restricted to it. Readers still
+ * have to be told the floor (see `scope-brace.ts` → `scopeNameFromMasked`) so
+ * that lookback stops where a fresh call on the region alone would stop.
+ */
+export interface MaskedRange {
+	/** The whole document. Offsets below index into this, never into a slice. */
+	readonly text: string;
+	/** `maskComments(text)`. */
+	readonly masked: string;
+	readonly start: number;
+	readonly end: number;
+}
+
+/** The range covering all of `text`, masking it once. */
+export function documentRange(text: string): MaskedRange {
+	return { text, masked: maskComments(text), start: 0, end: text.length };
+}
+
+/**
+ * The sub-range `[start, end)` of `parent`, in `parent`'s own coordinates.
+ *
+ * Offsets must be JS string indices — for a statement span that means the
+ * document was ASCII ({@link SegmentResult.ascii}), which is the only case in
+ * which an analyzed-byte offset is one.
+ */
+export function nestedRange(
+	parent: MaskedRange,
+	start: number,
+	end: number,
+): MaskedRange {
+	return {
+		text: parent.text,
+		masked: parent.masked,
+		start: parent.start + start,
+		end: parent.start + end,
+	};
+}
+
+/**
+ * The range `[start, end)` of the same document, in ABSOLUTE offsets.
+ *
+ * The counterpart to {@link nestedRange}, for a reader that is already working
+ * in the document's own offsets rather than in a parent's.
+ */
+export function rangeAt(
+	parent: MaskedRange,
+	start: number,
+	end: number,
+): MaskedRange {
+	return { text: parent.text, masked: parent.masked, start, end };
+}
+
+/** The comment mask of what this range covers. */
+export function rangeMask(range: MaskedRange): string {
+	return range.masked.slice(range.start, range.end);
+}
+
+/**
+ * {@link rangeMask}, tolerating no range — for readers that take one OPTIONALLY
+ * and fall back to masking their own text: `maskOf(range) ?? maskComments(text)`.
+ */
+export function maskOf(range: MaskedRange | undefined): string | undefined {
+	return range === undefined ? undefined : rangeMask(range);
 }
 
 /**
@@ -378,6 +477,7 @@ export function segmentStatements(original: string): SegmentResult {
 	return {
 		segments,
 		comments: raw.comments,
+		ascii: analysis.ascii,
 		// Coordinate-pass regions first: they are facts about the input as
 		// received, and they exist even when the scan finds nothing structural.
 		defects: mergeDefects(coordinateDefects(analysis), raw.defects),

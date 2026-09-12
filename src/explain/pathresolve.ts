@@ -90,7 +90,7 @@
  * certainty, because R4 has it REPLACE the context rather than extend it.
  */
 
-import { scopeBlocks, scopeBodies } from "./blocks.ts";
+import { type ScopeBlock, scopeBlocksIn, scopeBodies } from "./blocks.ts";
 import { commandVerbIndex } from "./catalog.ts";
 import {
 	type Defect,
@@ -105,7 +105,10 @@ import {
 	scopeNameFromMasked,
 } from "./scope-brace.ts";
 import {
-	maskComments,
+	documentRange,
+	type MaskedRange,
+	nestedRange,
+	rangeAt,
 	type SegmentResult,
 	scanQuotedString,
 	segmentStatements,
@@ -205,16 +208,19 @@ const MAX_DEPTH = 256;
  * statement must never yield a confident command, so the resolver degrades it
  * to `unresolved` and does not descend into it. Statement-local; the
  * segmenter's document-level defects are surfaced separately on the envelope.
+ *
+ * Reads a RANGE of the document's own comment mask rather than masking the
+ * statement's text, which carries its whole nested subtree (#322).
  */
-function structuralDefect(text: string): string | null {
+function structuralDefectIn(range: MaskedRange): string | null {
 	// Mask comments so a `#`-comment `}`/`)` is not counted as a real delimiter.
-	const masked = maskComments(text);
+	const { masked, start: lo, end: hi } = range;
 	const openOf: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
 	const stack: { char: string; statements: boolean }[] = [];
-	for (let i = 0; i < masked.length; i++) {
+	for (let i = lo; i < hi; i++) {
 		const c = masked[i];
 		if (c === '"') {
-			const str = scanQuotedString(masked, i);
+			const str = scanQuotedString(masked, i, hi);
 			if (!str.closed)
 				return "structural defect: unbalanced delimiter or string";
 			i = str.end - 1;
@@ -222,7 +228,7 @@ function structuralDefect(text: string): string | null {
 		}
 		if (
 			c === "#" &&
-			hashStartsHardError(masked, i, stack.at(-1)?.statements === false)
+			hashStartsHardError(masked, i, stack.at(-1)?.statements === false, lo)
 		)
 			return "structural defect: invalid unquoted hash";
 		if (c === "(" || c === "[" || c === "{")
@@ -232,7 +238,7 @@ function structuralDefect(text: string): string | null {
 					c === "[" ||
 					(c === "{" &&
 						(stack.at(-1)?.statements ?? true) &&
-						braceStartsStatements(masked, i)),
+						braceStartsStatements(masked, i, lo)),
 			});
 		else if (c === ")" || c === "]" || c === "}") {
 			if (stack.pop()?.char !== openOf[c])
@@ -543,6 +549,12 @@ interface Located {
 	text: string;
 	span: Span;
 	loc: Loc;
+	/**
+	 * This statement as a range of the document, with the document's comment
+	 * mask. Every reader that would otherwise re-mask `text` — which carries the
+	 * whole nested subtree — takes this instead (#322).
+	 */
+	range: MaskedRange;
 }
 
 /**
@@ -555,6 +567,7 @@ interface Located {
 function locate(
 	segmented: SegmentResult,
 	loc: Loc,
+	parent: MaskedRange | null,
 ): { units: Located[]; defects: Defect[] } {
 	const units = segmented.segments.map((s) => {
 		const span = spanIn(loc, s.start, s.end);
@@ -569,6 +582,15 @@ function locate(
 				loc.base < 0 || !asciiOnly
 					? { base: -1, fallback: span }
 					: { base: loc.base + s.start, fallback: span },
+			// A statement is a range of its parent whenever the parent offered one
+			// AND the text just segmented was pure ASCII — the only case in which
+			// `s.start`/`s.end`, which are analyzed BYTES, are also JS string
+			// indices into it. Decided per level, so one non-ASCII body drops just
+			// its own subtree back to a mask of its own, exactly as before (#322).
+			range:
+				parent !== null && segmented.ascii
+					? nestedRange(parent, s.start, s.end)
+					: documentRange(s.text),
 		};
 	});
 	// STRUCTURAL defects only. `segmentStatements` merges `coordinateDefects`
@@ -591,6 +613,30 @@ function locate(
  */
 const DOCUMENT_LOC: Loc = { base: 0, fallback: { start: 0, end: 0 } };
 
+/**
+ * The document-wide masked range a walk descends through, or null.
+ *
+ * Null for a non-ASCII document: the walk's offsets are analyzed BYTES, and
+ * only in an all-ASCII document is such an offset also a JS string index. There
+ * every level re-derives its own mask, which is what every level did before
+ * (#322) — the anchored reading is a fast path, never a second answer.
+ */
+function rootRange(text: string, segmented: SegmentResult): MaskedRange | null {
+	return segmented.ascii ? documentRange(text) : null;
+}
+
+/**
+ * A scope body as a range of the statement that carries it.
+ *
+ * `ScopeBlock.start` is a JS index into the statement's text by construction —
+ * `scopeBlocksIn` walks the mask, which is code-unit-for-code-unit with it — so
+ * this needs no ASCII test of its own. Whether the body's own STATEMENTS may
+ * then be nested is decided by `locate`, against that body's segmentation.
+ */
+function bodyRange(range: MaskedRange, block: ScopeBlock): MaskedRange {
+	return nestedRange(range, block.start, block.start + block.body.length);
+}
+
 /** Q3 — resolve every `[…]` command substitution in `text`. */
 export function resolveDocument(text: string): DocumentAnalysis {
 	// Segment ONCE and hand the result to `locate` — `containsWrite` calls both
@@ -602,7 +648,7 @@ export function resolveDocument(text: string): DocumentAnalysis {
 	// substring's coordinate space.
 	const defects: Defect[] = [...segmented.defects];
 	const resolutions: Resolution[] = [];
-	const top = locate(segmented, DOCUMENT_LOC);
+	const top = locate(segmented, DOCUMENT_LOC, rootRange(text, segmented));
 	defects.push(...top.defects);
 	walk(top.units, "/", resolutions, 0, defects, true);
 	return { resolutions, defects: mergeDefects(defects) };
@@ -619,7 +665,7 @@ function walk(
 	let ctx = context;
 	let certain = contextCertain;
 	for (const unit of units) {
-		const { text, loc } = unit;
+		const { text, loc, range } = unit;
 		// R4 — a menu-navigation statement moves the document context.
 		const nav = menuNavPath(text, ctx);
 		if (nav !== null) {
@@ -635,7 +681,7 @@ function walk(
 		// bracket path and is not descended. It may have been a navigation, so the
 		// context after it is unknown (Q14 C3b, the same contract the statement
 		// walk applies — these two walks must move in lockstep).
-		if (structuralDefect(text) !== null) {
+		if (structuralDefectIn(range) !== null) {
 			certain = false;
 			continue;
 		}
@@ -652,9 +698,9 @@ function walk(
 			? false
 			: handsKnownContext(text, certain);
 		if (isUnreadableAbsolute(text) || poisonAbstention) certain = false;
-		collectBrackets(text, stmtCtx, 0, out, defects, stmtCertain, loc);
+		collectBrackets(range, stmtCtx, 0, out, defects, stmtCertain, loc);
 		// R5 — block bodies inherit the context in force here.
-		for (const block of scopeBlocks(text)) {
+		for (const block of scopeBlocksIn(range)) {
 			if (blockDepth >= MAX_DEPTH) {
 				// The BLOCK that exceeded the limit, not the whole statement —
 				// narrowing regions is what this channel is for.
@@ -665,7 +711,11 @@ function walk(
 				continue;
 			}
 			const bodyLoc = nest(loc, block.start, unit.span);
-			const body = locate(segmentStatements(block.body), bodyLoc);
+			const body = locate(
+				segmentStatements(block.body),
+				bodyLoc,
+				bodyRange(range, block),
+			);
 			defects.push(...body.defects);
 			walk(body.units, stmtCtx, out, blockDepth + 1, defects, stmtCertain);
 		}
@@ -678,7 +728,7 @@ export function resolveStatements(text: string): StatementAnalysis {
 	// As `resolveDocument`: coordinate facts come from the root only.
 	const defects: Defect[] = [...segmented.defects];
 	const statements: StatementResolution[] = [];
-	const top = locate(segmented, DOCUMENT_LOC);
+	const top = locate(segmented, DOCUMENT_LOC, rootRange(text, segmented));
 	defects.push(...top.defects);
 	walkStatements(top.units, "/", statements, 0, defects, true);
 	return { statements, defects: mergeDefects(defects) };
@@ -695,7 +745,7 @@ function walkStatements(
 	let ctx = context;
 	let certain = contextCertain;
 	for (const unit of units) {
-		const { text, span } = unit;
+		const { text, span, range } = unit;
 		const nav = menuNavPath(text, ctx);
 		if (nav !== null) {
 			// `..` ascends FROM the context, so it cannot be read while the context
@@ -729,7 +779,7 @@ function walkStatements(
 		// Q14 fail-closed — a malformed statement degrades to unresolved and is
 		// not descended; it does not move the context either. It may however have
 		// BEEN a navigation, so what the context now is becomes unknown.
-		const defectReason = structuralDefect(text);
+		const defectReason = structuralDefectIn(range);
 		if (defectReason !== null) {
 			out.push({
 				text,
@@ -772,7 +822,7 @@ function walkStatements(
 			? false
 			: handsKnownContext(text, certain);
 		if (isUnreadableAbsolute(text) || poisonAbstention) certain = false;
-		for (const block of scopeBlocks(text)) {
+		for (const block of scopeBlocksIn(range)) {
 			if (blockDepth >= MAX_DEPTH) {
 				defects.push({
 					code: "over-depth",
@@ -781,7 +831,11 @@ function walkStatements(
 				continue;
 			}
 			const bodyLoc = nest(unit.loc, block.start, span);
-			const body = locate(segmentStatements(block.body), bodyLoc);
+			const body = locate(
+				segmentStatements(block.body),
+				bodyLoc,
+				bodyRange(range, block),
+			);
 			defects.push(...body.defects);
 			walkStatements(
 				body.units,
@@ -1039,8 +1093,21 @@ function joinPath(base: string, rest: string): string {
 	return `/${stack.join("/")}`;
 }
 
+/**
+ * Q3's bracket scan over one range of a document.
+ *
+ * Reads `range.masked` and never `range.text`: comments hold no valid inner
+ * command (`#` mid-`[…]` is not statement-leading), so an inner command is the
+ * same text in either view, and the recursion already descended into masked
+ * slices before this took a range. What changed is who masks — the caller hands
+ * down the document's one mask instead of each level re-deriving its own over a
+ * subtree an inner level has already read (#322).
+ *
+ * Offsets are absolute, while `loc` stays anchored at the range start, so every
+ * `nest`/`spanIn` here passes a range-relative index.
+ */
 function collectBrackets(
-	text: string,
+	range: MaskedRange,
 	ctx: string,
 	depth: number,
 	out: Resolution[],
@@ -1049,33 +1116,30 @@ function collectBrackets(
 	loc: Loc,
 	inLiteral = false,
 ): void {
+	const { masked, start: lo, end: hi } = range;
 	// Bound the recursion (bracket nesting AND literal-brace descent) so
 	// untrusted deeply nested input abstains instead of overflowing the stack.
 	if (depth >= MAX_DEPTH) {
-		// `text` is empty when the nesting bottoms out on an empty body (`[]`),
-		// which `regionIn` widens rather than emitting a zero-width region.
-		defects.push({ code: "over-depth", ...regionIn(loc, 0, text.length) });
+		// The region is empty when the nesting bottoms out on an empty body
+		// (`[]`), which `regionIn` widens rather than emitting a zero-width one.
+		defects.push({ code: "over-depth", ...regionIn(loc, 0, hi - lo) });
 		return;
 	}
-	// Scan a comment-masked copy so a `#`-comment `[`/`{` is not treated as a
-	// substitution or scope. Comments never hold valid inner commands (`#` mid
-	// `[…]` is not statement-leading), so masked slices equal the originals.
-	const masked = maskComments(text);
-	for (let i = 0; i < masked.length; i++) {
+	for (let i = lo; i < hi; i++) {
 		const c = masked[i];
 		if (c === '"') {
 			// A string is opaque EXCEPT for `$[ … ]` interpolation, a real command
 			// substitution: `:put "$[:pick $ip 0 $n]"` lowers with `/pick` inside
 			// (topic-…/post-0003-snippet-01 @ 7.22.1).
-			const strEnd = stringEnd(masked, i);
+			const strEnd = stringEnd(masked, i, hi);
 			scanInterpolations(
-				masked.slice(i + 1, strEnd),
+				rangeAt(range, i + 1, strEnd),
 				ctx,
 				depth,
 				out,
 				defects,
 				contextCertain,
-				nest(loc, i + 1, loc.fallback),
+				nest(loc, i + 1 - lo, loc.fallback),
 			);
 			i = strEnd;
 			continue;
@@ -1084,49 +1148,71 @@ function collectBrackets(
 			// A literal body is a value (Q2), but can still contain command
 			// substitutions: `{[/terminal/inkey]}` lowers the bracket. Descend for
 			// brackets only; scope bodies are walked by walk().
-			const end = matchDelim(masked, i, "{", "}");
-			const body = masked.slice(i + 1, end);
-			const isScope = !inLiteral && scopeNameFromMasked(masked, i) !== null;
-			if (!isScope && (body.includes("[") || body.includes("{")))
+			const end = matchDelim(masked, i, "{", "}", hi);
+			const isScope = !inLiteral && scopeNameFromMasked(masked, i, lo) !== null;
+			if (!isScope && hasBracketOrBrace(masked, i + 1, end))
 				collectBrackets(
-					body,
+					rangeAt(range, i + 1, end),
 					ctx,
 					depth + 1,
 					out,
 					defects,
 					contextCertain,
-					nest(loc, i + 1, loc.fallback),
+					nest(loc, i + 1 - lo, loc.fallback),
 					true,
 				);
 			i = end;
 			continue;
 		}
 		if (c !== "[") continue;
-		const end = matchDelim(masked, i, "[", "]");
-		const raw = masked.slice(i + 1, end);
-		const inner = trimAscii(raw);
-		// `inner` is the trimmed slice of `masked` starting at i+1; the leading
+		const end = matchDelim(masked, i, "[", "]", hi);
+		// `inner` is the trimmed region of `masked` starting at i+1; the leading
 		// whitespace trim shifts it further right.
-		const innerAt = i + 1 + (raw.length - trimAsciiStart(raw).length);
+		const innerAt = trimmedStart(masked, i + 1, end);
+		const innerEnd = trimmedEnd(masked, innerAt, end);
+		const inner = masked.slice(innerAt, innerEnd);
 		// The span covers the whole `[…]`, closing bracket included.
 		out.push({
 			...resolveInner(inner, ctx, depth, contextCertain),
-			span: spanIn(loc, i, Math.min(end + 1, text.length)),
-			innerSpan: spanIn(loc, innerAt, innerAt + inner.length),
+			span: spanIn(loc, i - lo, Math.min(end + 1, hi) - lo),
+			innerSpan: spanIn(loc, innerAt - lo, innerEnd - lo),
 		});
 		// R6 — nested brackets inherit from this one's resolution.
 		const nestedCtx = out[out.length - 1]?.path ?? ctx;
 		collectBrackets(
-			inner,
+			rangeAt(range, innerAt, innerEnd),
 			nestedCtx,
 			depth + 1,
 			out,
 			defects,
 			nestedCertainty(out[out.length - 1], contextCertain),
-			nest(loc, innerAt, loc.fallback),
+			nest(loc, innerAt - lo, loc.fallback),
 		);
 		i = end;
 	}
+}
+
+/** First non-ASCII-whitespace index in `[start, end)`, or `end`. */
+function trimmedStart(text: string, start: number, end: number): number {
+	let i = start;
+	while (i < end && isAsciiWhitespace(text[i])) i++;
+	return i;
+}
+
+/** One past the last non-ASCII-whitespace index in `[start, end)`. */
+function trimmedEnd(text: string, start: number, end: number): number {
+	let i = end;
+	while (i > start && isAsciiWhitespace(text[i - 1])) i--;
+	return i;
+}
+
+/** Whether `[start, end)` holds a `[` or a `{` — the literal-descent test. */
+function hasBracketOrBrace(text: string, start: number, end: number): boolean {
+	for (let i = start; i < end; i++) {
+		const c = text[i];
+		if (c === "[" || c === "{") return true;
+	}
+	return false;
 }
 
 /**
@@ -1135,14 +1221,23 @@ function collectBrackets(
  * does not end the outer one early and cut `scanInterpolations`' body short
  * (#199).
  */
-function stringEnd(text: string, open: number): number {
-	const str = scanQuotedString(text, open);
-	return str.closed ? str.end - 1 : text.length;
+function stringEnd(
+	text: string,
+	open: number,
+	limit: number = text.length,
+): number {
+	const str = scanQuotedString(text, open, limit);
+	return str.closed ? str.end - 1 : limit;
 }
 
-/** `$[ … ]` command substitutions inside a string body. */
+/**
+ * `$[ … ]` command substitutions inside the string body `[lo, hi)`.
+ *
+ * As {@link collectBrackets}: offsets are absolute into the document mask and
+ * `loc` is anchored at `lo`.
+ */
 function scanInterpolations(
-	body: string,
+	range: MaskedRange,
 	ctx: string,
 	depth: number,
 	out: Resolution[],
@@ -1150,27 +1245,28 @@ function scanInterpolations(
 	contextCertain: boolean,
 	loc: Loc,
 ): void {
-	for (let i = 0; i < body.length - 1; i++) {
-		if (body[i] !== "$" || body[i + 1] !== "[") continue;
-		const end = matchDelim(body, i + 1, "[", "]");
-		const raw = body.slice(i + 2, end);
-		const inner = trimAscii(raw);
-		const innerAt = i + 2 + (raw.length - trimAsciiStart(raw).length);
+	const { masked, start: lo, end: hi } = range;
+	for (let i = lo; i < hi - 1; i++) {
+		if (masked[i] !== "$" || masked[i + 1] !== "[") continue;
+		const end = matchDelim(masked, i + 1, "[", "]", hi);
+		const innerAt = trimmedStart(masked, i + 2, end);
+		const innerEnd = trimmedEnd(masked, innerAt, end);
+		const inner = masked.slice(innerAt, innerEnd);
 		// Span the `$[…]` from its sigil through the closing bracket; `innerSpan`
 		// is the two-byte-in start that difference makes non-derivable.
 		out.push({
 			...resolveInner(inner, ctx, depth, contextCertain),
-			span: spanIn(loc, i, Math.min(end + 1, body.length)),
-			innerSpan: spanIn(loc, innerAt, innerAt + inner.length),
+			span: spanIn(loc, i - lo, Math.min(end + 1, hi) - lo),
+			innerSpan: spanIn(loc, innerAt - lo, innerEnd - lo),
 		});
 		collectBrackets(
-			inner,
+			rangeAt(range, innerAt, innerEnd),
 			out[out.length - 1]?.path ?? ctx,
 			depth + 1,
 			out,
 			defects,
 			nestedCertainty(out[out.length - 1], contextCertain),
-			nest(loc, innerAt, loc.fallback),
+			nest(loc, innerAt - lo, loc.fallback),
 		);
 		i = end;
 	}
@@ -1339,12 +1435,13 @@ function matchDelim(
 	start: number,
 	open: string,
 	close: string,
+	limit: number = text.length,
 ): number {
 	let depth = 0;
-	for (let i = start; i < text.length; i++) {
+	for (let i = start; i < limit; i++) {
 		const c = text[i];
 		if (c === '"') {
-			i = scanQuotedString(text, i).end - 1;
+			i = scanQuotedString(text, i, limit).end - 1;
 			continue;
 		}
 		if (c === open) depth++;
@@ -1353,5 +1450,5 @@ function matchDelim(
 			if (depth === 0) return i;
 		}
 	}
-	return text.length;
+	return limit;
 }
