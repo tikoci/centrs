@@ -34,6 +34,7 @@ import {
 	isCommandNode,
 	pathTokens,
 } from "./core/inspect.ts";
+import { toYaml } from "./core/yaml.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { promptForWriteConfirmation } from "./execute.ts";
 import {
@@ -64,7 +65,6 @@ import {
 	resolveTarget,
 	toCoreSource,
 } from "./resolver/index.ts";
-import { toYaml } from "./retrieve.ts";
 
 export const apiOutputFormats = ["json", "yaml", "text"] as const;
 export type ApiOutputFormat = (typeof apiOutputFormats)[number];

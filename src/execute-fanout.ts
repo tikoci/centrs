@@ -36,6 +36,7 @@ import {
 	runFanout,
 	summarizeFanout,
 } from "./core/fanout.ts";
+import { toYaml } from "./core/yaml.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import {
 	buildExecuteErrorEnvelopeFromResolved,
@@ -60,7 +61,6 @@ import {
 	type SelectionResolveInput,
 	type TargetSelection,
 } from "./resolver/index.ts";
-import { toYaml } from "./retrieve.ts";
 
 /** Compact description of the selector that produced the fan-out. */
 export interface ExecuteSelectionSummary {

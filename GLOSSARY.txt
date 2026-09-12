@@ -745,3 +745,6 @@ unprojected # of a byte whose offline/device class PAIR the declared projection 
 # bytes the device saw.
 ytkids # an address-list name in the corpus line `/ip/firewall/address-list name=ytkids timeout=1h` — the #324 exemplar
 apikey # a local variable in the corpus line `apikey-len=$([:len $apikey])` — the `$(…)` interpolation #325 deliberately leaves unreached
+
+# #312 offline-entry boundary vocabulary
+dgram # Node's `node:dgram` UDP socket module — reached by `mac-telnet`, and one of the builtins that made the old `explain` import graph unusable outside Bun; named in the boundary gate's allowlist rationale

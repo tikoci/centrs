@@ -86,12 +86,13 @@ import type {
 	EnvelopeMeta,
 } from "./core/envelope.ts";
 import { buildTip, type Tip, type Warning } from "./core/envelope.ts";
-import { CentrsError, serializeCentrsError } from "./errors.ts";
 import {
 	type CanonicalExecuteCommand,
 	canonicalizeExecuteCommand,
 	isWriteShaped,
-} from "./execute.ts";
+} from "./core/execute-command.ts";
+import { toYaml } from "./core/yaml.ts";
+import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { argSpans } from "./explain/arg-tokens.ts";
 import {
 	type ArgumentKind,
@@ -153,7 +154,6 @@ import {
 	resolveStringSetting,
 	toCoreSource,
 } from "./resolver/settings.ts";
-import { toYaml } from "./retrieve.ts";
 
 /** A half-open analyzed-byte span, the coordinate contract of `coordinates.ts`. */
 export interface ExplainSpanRange {
@@ -2002,6 +2002,23 @@ export interface ExplainEnvelopeOptions {
 	warnings?: readonly Warning[];
 }
 
+/**
+ * The host process environment, or an empty one where there is no host.
+ *
+ * A bare `Bun.env` default parameter is what a browser consumer of this module
+ * trips over (#312): the reference is evaluated on the first settings-ladder
+ * call, and `Bun` does not exist there. `typeof` is safe on an undeclared
+ * identifier, so the guard costs nothing and changes nothing under Bun — the
+ * ladder still reads the real environment, and a browser caller that never
+ * passes one gets the documented "no env tier" behavior rather than a crash.
+ *
+ * Only the offline analysis entry runs outside Bun; the other commands keep
+ * their `Bun.env` defaults because they open connections regardless.
+ */
+function hostEnv(): Record<string, string | undefined> {
+	return typeof Bun === "undefined" ? {} : Bun.env;
+}
+
 function settingsMeta(
 	format: ResolvedSetting<ExplainOutputFormat> | undefined,
 ): CommonSettingsMeta {
@@ -2017,7 +2034,7 @@ function settingsMeta(
  */
 export function resolveExplainFormat(
 	explicit: string | undefined,
-	env: Record<string, string | undefined> = Bun.env,
+	env: Record<string, string | undefined> = hostEnv(),
 	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<ExplainOutputFormat> {
 	return resolveStringSetting(

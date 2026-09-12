@@ -31,6 +31,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./cli": "./src/cli.ts",
+		"./explain": "./src/explain.ts",
 		"./mcp": "./src/mcp.ts",
 		"./tui": "./src/tui.ts",
 		"./webproxy": "./src/webproxy.ts",
@@ -92,6 +93,7 @@
 		"docs:cli": "bun run scripts/gen-cli-docs.ts",
 		"docs:cli:check": "bun run scripts/gen-cli-docs.ts --check",
 		"docs:errors": "bun run scripts/gen-error-pages.ts",
+		"explain:browser-consumer": "bun run scripts/explain-browser-consumer.ts",
 		"explain:catalog": "bun run scripts/gen-explain-catalog.ts",
 		"explain:catalog:check": "bun run scripts/gen-explain-catalog.ts --check",
 		"explain:corpus-census": "bun run scripts/explain-corpus-census.ts",
