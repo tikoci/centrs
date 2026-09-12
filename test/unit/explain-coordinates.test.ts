@@ -278,6 +278,9 @@ describe("identity path — ASCII answers what the general walk answers (#322)",
 		["multi-line", "/ip address\nadd address=1.1.1.1/32\nprint\n"],
 		["trailing newline", ":put 1\n"],
 		["blank lines and tabs", ":local x 1;\n\n\t:put $x\r\n:put 2"],
+		// The shape whose empty middle line has a cursor position no round-trip
+		// names: `(1, 1)` is just past that line's newline.
+		["empty middle line", "a\n\nb"],
 		["a nested block", ':if ($a) do={ :local d 1; :put "x" } else={ :put 2 }'],
 		["comment and continuation", "# c\n:local \\\n  x 1\n:put $x"],
 	];
@@ -316,17 +319,34 @@ describe("identity path — ASCII answers what the general walk answers (#322)",
 				const pos = byteToPosition(ascii, byte);
 				expect(positionToByte(ascii, pos.line, pos.col)).toBe(byte);
 			}
+
+			// EVERY (line, col) the original can address, not only the ones a
+			// round-trip happens to produce. The round-trip alone missed a bound
+			// that refused `(0, 2)` of `a\n\nb` — the cursor just past an empty
+			// line's newline — because `byteToPosition` never names that position.
+			for (let line = 0; line < ascii.lineStarts.length; line++) {
+				const start = ascii.lineStarts[line] as number;
+				// One past the line's last character; on a line ending in a newline
+				// that character IS the newline, so the bound is the next start.
+				const end = (ascii.lineStarts[line + 1] ?? text.length) as number;
+				for (let col = 0; col <= end - start; col++) {
+					expect(positionToByte(ascii, line, col)).toBe(start + col);
+					expect(positionToByte(ascii, line, col)).toBe(
+						positionToByte(twin, line, col),
+					);
+				}
+				// Past that bound addresses nothing. The twin is not asked: it has
+				// one more character on its last line, so it legitimately answers
+				// where the original cannot.
+				expect(() => positionToByte(ascii, line, end - start + 1)).toThrow(
+					"no character boundary",
+				);
+			}
+			expect(() => positionToByte(ascii, ascii.lineStarts.length, 0)).toThrow(
+				"no character boundary",
+			);
 		});
 	}
-
-	test("a position past the end of its line has no boundary", () => {
-		const a = analyzeCoordinates("ab\ncd");
-		expect(a.ascii).toBe(true);
-		// col 2 is the cursor at the newline; col 3 addresses nothing.
-		expect(positionToByte(a, 0, 2)).toBe(2);
-		expect(() => positionToByte(a, 0, 3)).toThrow("no character boundary");
-		expect(() => positionToByte(a, 2, 0)).toThrow("no character boundary");
-	});
 
 	test("an all-ASCII input raises no coordinate defect and normalizes nothing", () => {
 		const data = centrs.explainCommand("/ip address print");

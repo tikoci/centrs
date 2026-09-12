@@ -446,17 +446,21 @@ export function positionToByte(
 			`positionToByte: (line ${line}, col ${col}) is not a valid position; expected non-negative integers`,
 		);
 	// On the identity path a position is arithmetic: the column IS the byte
-	// offset from the line start. The bound is the line's own end (its next line
-	// start, minus the newline) so a column past the end of THAT line still
-	// throws, exactly as the scan below does.
+	// offset from the line start.
+	//
+	// The bound is the byte one PAST the line's last character, and on a line
+	// that ends in a newline that last character is the newline — so the bound
+	// is the next line's start, not one before it. That is the boundary the scan
+	// below reaches through `lastOnLine`, whose last run on the line is the
+	// newline itself; getting it wrong refused (line 0, col 2) of `a\n\nb`,
+	// which the scan answers with byte 2.
 	if (a.ascii) {
 		if (line >= a.lineStarts.length)
 			throw new Error(
 				`positionToByte: no character boundary at (line ${line}, col ${col})`,
 			);
 		const start = a.lineStarts[line] as number;
-		const next = a.lineStarts[line + 1];
-		const end = next === undefined ? a.original.length : (next as number) - 1;
+		const end = (a.lineStarts[line + 1] ?? a.original.length) as number;
 		if (start + col > end)
 			throw new Error(
 				`positionToByte: no character boundary at (line ${line}, col ${col})`,
