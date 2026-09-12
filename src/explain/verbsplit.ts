@@ -147,8 +147,14 @@ interface Word {
  * offset from a name is therefore wrong on continued statements, and
  * {@link describeStatement} only ever publishes the run's END.
  */
-function asciiWordSpans(text: string): Word[] {
-	const out: Word[] = [];
+function* asciiWordSpans(text: string): Generator<Word> {
+	// Yielded ONE WORD AT A TIME rather than returned as a list. Both readers
+	// stop at the first word the leading run cannot take, and a statement's text
+	// carries its whole nested `do={…}` subtree — so building a word (and a span
+	// per character of it) for the rest of that subtree was work no caller ever
+	// looked at, once per enclosing level (#322). A word is complete when the
+	// next one starts, which is why the yield happens on the following boundary
+	// rather than at the point the word is opened.
 	let current: Word | null = null;
 	let i = 0;
 	while (i < text.length) {
@@ -164,6 +170,7 @@ function asciiWordSpans(text: string): Word[] {
 			continue;
 		}
 		if (isAsciiWhitespace(c)) {
+			if (current !== null) yield current;
 			current = null;
 			i++;
 			continue;
@@ -175,7 +182,6 @@ function asciiWordSpans(text: string): Word[] {
 				end: i + 1,
 				chars: [{ start: i, end: i + 1 }],
 			};
-			out.push(current);
 		} else {
 			current.name += c;
 			current.end = i + 1;
@@ -183,7 +189,7 @@ function asciiWordSpans(text: string): Word[] {
 		}
 		i++;
 	}
-	return out;
+	if (current !== null) yield current;
 }
 
 /**
@@ -343,20 +349,30 @@ export function describeStatement(text: string): {
 	// V4 — did the run consume every whitespace-separated word? A slash-joined
 	// word expands to several run tokens, so compare against the SOURCE words the
 	// run covers, not the run length.
-	const words = asciiWordSpans(body);
 	let covered = 0;
+	let words = 0;
 	let index = 0;
+	// A word the run cannot take is proof there is one more word than the run
+	// covered, which is the whole of V4's question — so the walk stops there
+	// instead of counting the rest of the statement.
+	let everyWordCovered = true;
 	const runEnds: (number | null)[] = run.map(() => null);
-	for (const word of words) {
+	for (const word of asciiWordSpans(body)) {
+		words++;
 		const parts = word.name.split("/").filter((p) => p.length > 0);
 		if (parts.length === 0) continue;
-		if (index + parts.length > run.length) break;
+		if (index + parts.length > run.length) {
+			everyWordCovered = false;
+			break;
+		}
 		if (
 			!parts.every(
 				(p, i) => (run[index + i] as RunToken | undefined)?.name === p,
 			)
-		)
+		) {
+			everyWordCovered = false;
 			break;
+		}
 		// Only the word's LAST part ends where the word does; an earlier part is
 		// followed by more path inside the same word.
 		runEnds[index + parts.length - 1] = base + word.end;
@@ -366,7 +382,7 @@ export function describeStatement(text: string): {
 	return {
 		run,
 		directive: isDirective(text),
-		whole: covered === words.length && run.length > 0,
+		whole: everyWordCovered && covered === words && run.length > 0,
 		runEnds,
 	};
 }

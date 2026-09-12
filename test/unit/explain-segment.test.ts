@@ -576,3 +576,85 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 		}
 	});
 });
+
+/**
+ * The comment mask is memoized, and a memo on a pure function cannot move an
+ * answer (#322).
+ *
+ * A statement walk asks for the mask of the same text several times over — the
+ * structural-defect scan, the scope-block scan, the bracket scan and the
+ * bare-directive test each take one — and a statement's text carries its whole
+ * nested `do={…}` subtree, so the repetition was paid once per enclosing level.
+ *
+ * These assert the ANSWER, through every path into the memo: the hot slot, a
+ * content-equal twin built by a different step, an entry pushed out by other
+ * documents, and an entry too large to cache at all. They deliberately do NOT
+ * assert that a hit was a hit. `maskComments` returns a string, and JavaScript
+ * cannot tell a cached string from an equal recomputed one, so proving that
+ * would mean exporting a counter from production for a test to read — a gate on
+ * an implementation detail that the eventual fix for #322 (threading the mask
+ * rather than memoizing it) would have to delete. Whether the memo actually
+ * saves work is a COST claim, and this repo answers cost claims with a
+ * measurement: PR #332 prices it by disabling the memo in place, which moved a
+ * 60 KiB depth-64 document from ~1,450 ms to 1,571 ms.
+ */
+describe("comment mask memo (#322)", () => {
+	const commented = '# lead\n:local x 1 # not a comment\n:put "#h" # tail\n';
+
+	test("a repeat ask, a twin, and an evicted ask all return the first answer", () => {
+		const first = maskComments(commented);
+		// Same content, different string object — what a mask built by a
+		// different step looks like.
+		const twin = `${commented.slice(0, 4)}${commented.slice(4)}`;
+		expect(twin).toBe(commented);
+		expect(maskComments(commented)).toBe(first);
+		expect(maskComments(twin)).toBe(first);
+
+		// Push the entry out with unrelated documents, then ask again.
+		for (let i = 0; i < 12; i++) maskComments(`:put ${i} # c${i}\n`.repeat(3));
+		expect(maskComments(commented)).toBe(first);
+	});
+
+	test("an entry too large to cache is still masked correctly", () => {
+		// Over the cache's byte limit, so `cacheMask` refuses it and the answer
+		// comes from the uncached walk every time. Same answer, twice.
+		const huge = `# c\n:put 1\n`.repeat(300_000);
+		// The precondition cannot be read back off a string, so it is asserted
+		// rather than assumed: an entry is the input plus its mask at two bytes
+		// per UTF-16 unit, against `MASK_CACHE_BYTE_LIMIT`. Shrink the input and
+		// this fails loudly instead of quietly testing the cached path twice.
+		expect(huge.length * 2 * 2).toBeGreaterThan(8 * 1024 * 1024);
+		const masked = maskComments(huge);
+		expect(masked.length).toBe(huge.length);
+		expect(masked.slice(0, 4)).toBe("   \n");
+		expect(maskComments(huge)).toBe(masked);
+		// And it did not evict its way through the small entries' correctness.
+		expect(maskComments(commented)).toBe(maskComments(commented));
+	});
+
+	test("masking stays idempotent and length-preserving across the memo", () => {
+		const masked = maskComments(commented);
+		expect(masked.length).toBe(commented.length);
+		expect(maskComments(masked)).toBe(masked);
+		// Comment-free input is still returned as the same object.
+		const plain = ":put 1\n:put 2\n";
+		expect(maskComments(plain)).toBe(plain);
+	});
+
+	test("interleaved documents do not borrow each other's mask", () => {
+		const a = "# a\n:put 1\n";
+		const b = ':put "#b"\n# b\n';
+		const maskedA = maskComments(a);
+		const maskedB = maskComments(b);
+		expect(maskedA).not.toBe(maskedB);
+		for (let i = 0; i < 3; i++) {
+			expect(maskComments(a)).toBe(maskedA);
+			expect(maskComments(b)).toBe(maskedB);
+		}
+		// Each one masks its own statement-leading hash, and neither masks the
+		// other's — `b`'s first `#` is inside a string, so it survives.
+		expect(maskedA.slice(0, 4)).toBe("   \n");
+		expect(maskedB.indexOf("#")).toBe(6);
+		expect(maskedB.slice(10, 13)).toBe("   ");
+	});
+});

@@ -159,6 +159,29 @@ function asciiWords(text: string): string[] {
 	return trimmed.length === 0 ? [] : trimmed.split(ASCII_WHITESPACE);
 }
 
+/**
+ * The same words, yielded one at a time.
+ *
+ * For the readers that STOP at the first word which is not a path segment — the
+ * leading run, and the unreadable-menu test. A statement's text carries its
+ * whole nested `do={…}` subtree, so splitting all of it to look at the first
+ * two words was work repeated once per enclosing level (#322). Equivalent to
+ * {@link asciiWords} by construction: a trim followed by a split on runs of
+ * ASCII whitespace is exactly the maximal non-whitespace runs.
+ */
+function* asciiWordsIter(text: string): Generator<string> {
+	let i = 0;
+	while (i < text.length) {
+		if (isAsciiWhitespace(text[i])) {
+			i++;
+			continue;
+		}
+		const start = i;
+		while (i < text.length && !isAsciiWhitespace(text[i])) i++;
+		yield text.slice(start, i);
+	}
+}
+
 function isAbsolutePathToken(token: string): boolean {
 	if (!token.startsWith("/")) return false;
 	const parts = token.split("/").filter(Boolean);
@@ -287,7 +310,7 @@ function isUnreadablePath(text: string): boolean {
 	if (t.length === 0) return false;
 	// A head that is not path-shaped names no menu.
 	if (/^[$[("':]/.test(t)) return false;
-	for (const word of asciiWords(t)) {
+	for (const word of asciiWordsIter(t)) {
 		// Arguments begin: everything before this was readable. A `$` word
 		// STANDING ALONE is a positional operand (`get $item time`), not a path
 		// segment — only a `$` slash-joined inside a word is a menu segment.
@@ -965,7 +988,7 @@ function canonicalPath(
  */
 function statementRun(text: string): string[] {
 	const out: string[] = [];
-	for (const t of asciiWords(text)) {
+	for (const t of asciiWordsIter(text)) {
 		if (t.includes("=") || /^[[({"$:]/.test(t)) break;
 		const parts = t.split("/").filter((p) => p.length > 0);
 		if (parts.length === 0) continue;
@@ -995,7 +1018,7 @@ function statementPath(text: string, ctx: string): string {
 /** Leading bare/path tokens, stopping at the first argument or group. */
 function leadingRun(text: string): string[] {
 	const out: string[] = [];
-	for (const t of asciiWords(text)) {
+	for (const t of asciiWordsIter(text)) {
 		if (t.includes("=") || /^[[({"$:]/.test(t)) break;
 		for (const part of t.split("/")) if (part.length > 0) out.push(part);
 		if (out.length === 0 && t === "/") out.push("");
@@ -1304,7 +1327,7 @@ function classify(inner: string, absolute: boolean, depth: number): string {
 	if (CLI_PROMPT_RE.test(trimAscii(inner))) return "cli-prompt-artifact";
 	if (depth > 0) return "nested-bracket";
 	if (absolute) return "absolute-inner-path";
-	const head = (asciiWords(inner)[0] ?? "").toLowerCase();
+	const head = (asciiWordsIter(inner).next().value ?? "").toLowerCase();
 	if (head.startsWith("$")) return "dynamic-invocation";
 	if (head.startsWith(":")) return "scripting-directive";
 	if (head === "find") return "bare-find";

@@ -823,3 +823,51 @@ test("verb/menu API is re-exported from the library barrel", () => {
 	expect(centrs.resolveVerb).toBe(resolveVerb);
 	expect(centrs.resolveVerbs).toBe(resolveVerbs);
 });
+
+/**
+ * The word walk stops where the run does (#322).
+ *
+ * `asciiWordSpans` yields one word at a time, because both readers stop at the
+ * first word the leading run cannot take and a statement's text carries its
+ * whole nested `do={…}` subtree — so the words of that subtree were built, one
+ * span object per character, once per enclosing level and never looked at.
+ *
+ * V4's `whole` is the one answer that used to be read off a COUNT of all the
+ * words, so it is what these pin: it stays true only when the run really did
+ * consume every word, and a statement whose extra words are an entire nested
+ * body still reports false without the walk reaching the end of that body.
+ */
+describe("V4 whole is decided at the first uncovered word (#322)", () => {
+	test("a run that covers every word is still whole", () => {
+		expect(describeStatement("/ip/address").whole).toBe(true);
+		expect(describeStatement("  /ip firewall filter  ").whole).toBe(true);
+		expect(describeStatement(":global myvar").whole).toBe(true);
+	});
+
+	test("one trailing word is enough to make it not whole", () => {
+		expect(describeStatement("/ip/address add name=x").whole).toBe(false);
+		expect(describeStatement("/ip/address print where x=1").whole).toBe(false);
+		expect(describeStatement("/ip/address print [find]").whole).toBe(false);
+	});
+
+	test("a nested body decides it without being walked", () => {
+		const body = ":local v 1; :put $v; ".repeat(200);
+		const statement = `:if ($a) do={ ${body}}`;
+		const described = describeStatement(statement);
+		expect(described.whole).toBe(false);
+		// The run itself stopped at `($a)`, so only `if` was ever taken.
+		expect(described.run.map((t) => t.name)).toEqual(["if"]);
+		expect(described.directive).toBe(true);
+	});
+
+	test("run ends still survive a continuation inside a covered word", () => {
+		// H5 joins a word split across a `\<newline>`; the END is the offset
+		// published, and it counts the continuation bytes the name does not.
+		// cspell:disable-next-line -- intentional mid-word continuation fragment
+		const continued = "/ip/rou\\\nte print";
+		const described = describeStatement(continued);
+		expect(described.run.map((t) => t.name)).toEqual(["ip", "route", "print"]);
+		expect(described.whole).toBe(true);
+		expect(described.runEnds.at(-1)).toBe(continued.length);
+	});
+});

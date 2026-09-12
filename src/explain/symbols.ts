@@ -477,7 +477,10 @@ const isIdentStart = (c: string): boolean => /[A-Za-z_]/.test(c);
 export function resolveSymbols(original: string): SymbolAnalysis {
 	const analysis = analyzeCoordinates(original);
 	// `analyzed` is pure ASCII, so a string built from it has index === byte.
-	const text = new TextDecoder().decode(analysis.analyzed);
+	// An already-ASCII input is that string, so the decode is skipped (#322).
+	const text = analysis.ascii
+		? original
+		: new TextDecoder().decode(analysis.analyzed);
 
 	// S7's "inside a `(…)` expression" test, precomputed in one forward pass.
 	// Scanning backward per bare word was O(n²) on a long single-line script: an

@@ -746,3 +746,54 @@ test("path-resolution API is re-exported from the library barrel", () => {
 	expect(centrs.resolveDocument).toBe(resolveDocument);
 	expect(centrs.resolveStatements).toBe(resolveStatements);
 });
+
+/**
+ * A statement's own reading does not depend on the size of its body (#322).
+ *
+ * The leading-run readers walk words one at a time now, stopping at the first
+ * word that cannot be a path segment. A statement's `text` carries its whole
+ * nested `do={…}` subtree, so every one of those readers used to split that
+ * subtree into words to look at the first two — once per enclosing level.
+ *
+ * The property that makes the change safe is stated here rather than assumed:
+ * growing the body changes where the inner statements are, and nothing about
+ * how the OUTER statement reads.
+ */
+describe("leading-run reading is a function of the head (#322)", () => {
+	const head = "/ip/firewall/filter add chain=forward";
+	const smallBody = ":put 1";
+	const bigBody = ":local v 1; :put $v; ".repeat(300);
+
+	test("the outer statement resolves identically however big its body is", () => {
+		const small = resolveStatements(`:foreach i in=[find] do={ ${smallBody} }`);
+		const big = resolveStatements(`:foreach i in=[find] do={ ${bigBody}}`);
+		const outerOf = (a: ReturnType<typeof resolveStatements>) => {
+			const first = a.statements[0];
+			expect(first).toBeDefined();
+			const {
+				text: _text,
+				span: _span,
+				...rest
+			} = first as NonNullable<typeof first>;
+			return rest;
+		};
+		expect(outerOf(big)).toEqual(outerOf(small));
+	});
+
+	test("an unreadable menu stays unreadable whatever follows it", () => {
+		const one = resolveStatements(`/ip/$menu/remove do={ ${smallBody} }`);
+		const many = resolveStatements(`/ip/$menu/remove do={ ${bigBody}}`);
+		expect(one.statements[0]?.unresolved).toBe("variable path segment");
+		expect(many.statements[0]?.unresolved).toBe("variable path segment");
+	});
+
+	test("a bracket inside a big body is still found, and only once", () => {
+		const document = `${head} do={ ${bigBody}:put [/ip/route find] }`;
+		const brackets = resolveDocument(document);
+		const inner = brackets.resolutions.filter((r) =>
+			r.inner.includes("/ip/route"),
+		);
+		expect(inner).toHaveLength(1);
+		expect(inner[0]?.tokens).toEqual(["ip", "route", "find"]);
+	});
+});

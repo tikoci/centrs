@@ -1002,6 +1002,17 @@ function attributeDefects(
 
 /** Build `input.positionMap`: coalesced identity runs, one entry per non-ASCII code point. */
 function positionMap(a: CoordinateAnalysis): ExplainPositionMapEntry[] {
+	// An all-ASCII input coalesces to the single identity run the loop below
+	// would build, so say it rather than walk one object per character (#322).
+	if (a.ascii)
+		return a.original.length === 0
+			? []
+			: [
+					{
+						analyzed: { start: 0, end: a.original.length },
+						originalUtf16: { start: 0, end: a.original.length },
+					},
+				];
 	const out: ExplainPositionMapEntry[] = [];
 	let run: ExplainPositionMapEntry | null = null;
 	for (const r of a.runs) {
@@ -1205,7 +1216,9 @@ export function explainCommand(
 	// one byte standing in for every non-ASCII one, so an index into it IS a
 	// document byte offset. Decoding it once here keeps `statementOf` and the
 	// string-escape walk from re-deriving the same string.
-	const analyzed = new TextDecoder().decode(coordinates.analyzed);
+	const analyzed = coordinates.ascii
+		? input
+		: new TextDecoder().decode(coordinates.analyzed);
 	const segmented = segmentStatements(input);
 	const statementAnalysis = resolveStatements(input);
 	const verbs = resolveVerbsFromStatements(statementAnalysis);
@@ -1480,7 +1493,7 @@ export function explainCommand(
 	return {
 		input: {
 			bytes: coordinates.analyzed.length,
-			normalized: coordinates.runs.some((r) => !r.ascii),
+			normalized: !coordinates.ascii,
 			truncated: false,
 			positionMap: positionMap(coordinates),
 		},
