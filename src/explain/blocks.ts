@@ -70,6 +70,22 @@ export function isScopeBrace(text: string, open: number): boolean {
 }
 
 /**
+ * {@link isScopeBrace} for a reader that already holds the document's mask,
+ * with `open` relative to `range` rather than to the whole document.
+ *
+ * The string form has to mask the text it is given, and a statement's text
+ * carries its whole nested `do={…}` subtree — so asking it this question once
+ * per brace re-derived a mask over that subtree once per enclosing level
+ * (#322). Same answer: the floor is what makes a ranged reading identical to
+ * the region read on its own (`scope-brace.ts` → `scopeNameFromMasked`).
+ */
+export function isScopeBraceIn(range: MaskedRange, open: number): boolean {
+	return (
+		scopeNameFromMasked(range.masked, range.start + open, range.start) !== null
+	);
+}
+
+/**
  * The depth-0 scope `{…}` in a statement, with names and raw body text. A
  * single left-to-right pass (no recursion): each scope's body is returned raw
  * for the caller to segment/recurse under its own depth budget. Literal `{…}`

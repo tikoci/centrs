@@ -76,7 +76,7 @@
  * re-announce; the abstention reason names it instead.
  */
 
-import { isScopeBrace } from "./blocks.ts";
+import { isScopeBrace, isScopeBraceIn } from "./blocks.ts";
 import { braceSlotAcceptsBrace, braceSlotTakesArray } from "./brace-slots.ts";
 import { braceStartsStatements } from "./scope-brace.ts";
 import {
@@ -250,6 +250,22 @@ function unread(why: string): ArgumentsUnread {
 interface ScanToken {
 	end: number;
 	why?: string;
+}
+
+/**
+ * Whether the `{` at `at` opens a scope, reading the document's mask when the
+ * caller anchored this statement and masking `text` itself otherwise.
+ *
+ * `at` is relative to `text` either way, so callers need no offset arithmetic.
+ */
+function scopeBraceAt(
+	text: string,
+	at: number,
+	range: MaskedRange | undefined,
+): boolean {
+	return range === undefined
+		? isScopeBrace(text, at)
+		: isScopeBraceIn(range, at);
 }
 
 /**
@@ -676,7 +692,8 @@ function structuredRefusal(
 		return c === "("
 			? "a substitution or expression value"
 			: "an array or block value";
-	if (c === "{" && isScopeBrace(text, at)) return "a scope block value";
+	if (c === "{" && scopeBraceAt(text, at, options.range))
+		return "a scope block value";
 	if (c === "{" && !braceOpensArray(text, start, at, positionalIndex, options))
 		return "a brace value RouterOS does not read as an array here";
 	return undefined;
@@ -785,13 +802,14 @@ function isArraySource(
 	structural: string,
 	start: number,
 	end: number,
+	range: MaskedRange | undefined,
 ): boolean {
 	const open = text[start];
 	if (open !== "(" && open !== "{") return false;
 	if (delimitedEnd(structural, start) !== end) return false;
 	if (open === "{")
 		return (
-			!isScopeBrace(text, start) &&
+			!scopeBraceAt(text, start, range) &&
 			structural.slice(start + 1, end - 1).trim().length > 0
 		);
 
@@ -834,7 +852,7 @@ function readToken(
 		return divergent ?? { kind: "query", span, name: raw.slice(1), text: raw };
 	}
 	if (options.allowArrayValues && startsStructuredSource(text, start)) {
-		if (isArraySource(text, structural, start, end))
+		if (isArraySource(text, structural, start, end, options.range))
 			return {
 				kind: "positional",
 				span,
@@ -871,7 +889,7 @@ function readToken(
 	if (!ARGUMENT_NAME.test(name))
 		return `\`${name}=\` is not a RouterOS argument name`;
 	if (options.allowArrayValues && startsStructuredSource(text, eq + 1)) {
-		if (isArraySource(text, structural, eq + 1, end))
+		if (isArraySource(text, structural, eq + 1, end, options.range))
 			return {
 				kind: "attribute",
 				span,
@@ -1368,6 +1386,7 @@ function pushArrayMembers(
 	contentEnd: number,
 	separator: ";" | ",",
 	depth: number,
+	range: MaskedRange | undefined,
 ): string | null {
 	// Past the bound the interior is UNVERIFIED, and an unverified interior can
 	// hold a fault that makes the whole statement a syntax error — `:parse`
@@ -1509,7 +1528,7 @@ function pushArrayMembers(
 		}
 		const fault = parenMemberFault(text, structural, valueStart, member.end);
 		if (fault !== null) return fault;
-		if (isArraySource(text, structural, valueStart, member.end)) {
+		if (isArraySource(text, structural, valueStart, member.end, range)) {
 			const at = anchors.length;
 			anchors.push({ ...anchor, sourceShape: "array" });
 			const nested = pushArrayMembers(
@@ -1521,6 +1540,7 @@ function pushArrayMembers(
 				member.end - 1,
 				text[valueStart] === "{" ? ";" : ",",
 				depth + 1,
+				range,
 			);
 			if (nested !== null) return nested;
 			continue;
@@ -1542,6 +1562,7 @@ function pushArrayMembers(
 				member.end,
 				",",
 				depth + 1,
+				range,
 			);
 			if (nested !== null) return nested;
 			continue;
@@ -1606,6 +1627,7 @@ export function lexValueAnchors(
 					read.valueSpan.end - 1,
 					text[read.valueSpan.start] === "{" ? ";" : ",",
 					0,
+					options.range,
 				);
 				if (unparsed !== null) {
 					anchors.length = at;
