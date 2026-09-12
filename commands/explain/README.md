@@ -1918,7 +1918,11 @@ bytes came from a fill that already held it — `string` gives up 17,672 and
 `value` 2,288, which is exactly 19,960. Classified bytes are **identical to the
 last decimal**, 1,023,405 of 1,426,731 (71.73076073906013%), so in byte terms
 this is a retag even though it took a new walk to make. Only the token count
-moves, 231,026 → 241,663, because a run carrying an escape becomes three.
+moves, 231,026 → 241,663: the 7,408 new `escaped` tokens plus the 3,229
+fragments they leave behind when they split a run they sit inside (`string`
++2,643, `value` +586). That second number is well under one per escape because
+escapes cluster — adjacent ones like `\C3\BD`, and ones flush against a
+delimiter, add no fragment at all.
 
 **What it bought.** Against the committed device slice `escaped` claims **418
 bytes on 100.00% agreement, 0 disagreements** — the 53 `string` → `escaped`
