@@ -141,11 +141,6 @@ export function scopeBodies(text: string): string[] {
 	return scopeBlocks(text).map((b) => b.body);
 }
 
-/** Whether a range holds any depth-0 scope `{…}` — `scopeBodies().length > 0`. */
-export function hasScopeBlockIn(range: MaskedRange): boolean {
-	return scopeBlocksIn(range).length > 0;
-}
-
 function matchBraceInMasked(
 	masked: string,
 	open: number,
