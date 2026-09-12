@@ -2,11 +2,11 @@
  * B2 value fill — claims argument value bytes and array-literal interiors on the residual.
  *
  * This is the third B2 fill of #264, after the argument `name=` fill. It runs
- * **after** proof-only `spans` (comment + variable-*) and the `arg` fill and
- * **before** the operator fill, so the fill order is structural:
- * `spans → arg → value → operator`. That ordering retires the glued-dot residue
- * already noted in `operator-tokens.ts`: once value bytes are claimed a `.`
- * inside a value is no longer read as concatenation.
+ * **after** proof-only `spans` (comment + variable-*), the `arg` fill and the
+ * `escaped` fill, and **before** the operator fill, so the fill order is
+ * structural: `spans → arg → escaped → value → operator`. That ordering retires
+ * the glued-dot residue already noted in `operator-tokens.ts`: once value bytes
+ * are claimed a `.` inside a value is no longer read as concatenation.
  *
  * Source is `data.values.occurrences` (already rebased into document analyzed-byte
  * space by `src/explain.ts`), not `Argument.valueSpan`. That is the load-bearing
@@ -20,8 +20,11 @@
  * that is nobody's `parent`. Container detection is `Set` of `parent` ids — no
  * tree walk, members follow their container in the same flat list.
  *
- * `span` is quotes-INCLUDED by contract (deliberate; the quotes/escapes fill is
- * a separate staging row and must not double-claim them).
+ * `span` is quotes-INCLUDED by contract, and the quotes stay part of the `value`
+ * run — a consumer recovers them from its own first and last byte (#264 B5).
+ * Escapes do NOT: the `escaped` fill claims them one stage earlier, so a value
+ * carrying one arrives here already holed and this fill emits a fragment either
+ * side. Nothing double-claims, because that fill offered only residual.
  *
  * One `value` class for every leaf span, regardless of shape/observed/schema
  * type — the three #225 facts stay where they already are, in `data.values[]`,
