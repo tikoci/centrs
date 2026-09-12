@@ -51,6 +51,26 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Changed
 
+- **A valid string escape is now its own token class in offline `explain`.**
+  `ExplainTokenClass` gains `escaped`, the second and last split #264's rule
+  admits: only INVALID escapes surfaced anywhere else, as `bad-string-escape`
+  diagnostics, so a consumer holding `tokens[]` had no published surface to join
+  against to find the valid ones — and the device names them. The escape grammar
+  is not walked a second time to do it: `walkStringEscapes` now returns both
+  halves of the one reading `bad-string-escape` already came from, so a token
+  and a diagnostic cannot disagree about which bytes are an escape, and it stops
+  claiming at the first invalid escape rather than guess past a malformed one.
+  **Byte coverage does not move** — classified bytes are identical to the last
+  decimal; `escaped`'s 19,960 corpus bytes come out of `string` (−17,672) and
+  `value` (−2,288) exactly, and the token count rises only because a run
+  carrying an escape becomes three. Against the committed device slice the class
+  agrees on 418 of 418 bytes and the `unprojected` residue falls 1,051 → 633.
+  Consumers reading `data.tokens[]` for `string` or `value` must now also read
+  `escaped` to see bytes they used to get inside one run. A `\`-newline line
+  continuation in **code** is deliberately not claimed — the device calls it
+  `escaped` too, but its run swallows the next line's indentation, and what a
+  continuation owns is #225's question (#264).
+
 - **Offline `explain`'s token vocabulary is no longer provisional, and the
   argument `=` has its own class.** `ExplainTokenClass` gains `arg-sep`: an
   argument's name bytes stay `arg`, and the single `=` binding it to its value
