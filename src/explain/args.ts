@@ -9,14 +9,37 @@
  * `[…]` selectors and `?` queries at statement scope, and it was parked until
  * `--curl` made it load-bearing. This is that lexer.
  *
- * ## It abstains for the WHOLE statement, never per token
+ * ## Three readings, one walk
  *
- * The consumer is a REST mapping that renders a runnable `curl` body. A
- * partially-read argument list is worse there than no list at all: dropping one
- * token silently changes what the rendered command DOES, which is the
- * fabrication the fail-closed floor exists to prevent. So every token must be
- * decided, or {@link lexArguments} decides nothing and says why. The price is
- * measured rather than assumed — see the abstention rates in the #202c PR body.
+ * `walkArguments` owns the boundary rules — where a token starts, where it ends,
+ * and where it stops being decodable — and three exported readings differ only
+ * in what they do at a refusal. They can never disagree about a boundary,
+ * because there is only one of them.
+ *
+ *   - {@link lexArguments} — **strict, all-or-nothing.** The consumer is a REST
+ *     mapping that renders a runnable `curl` body. A partially-read argument
+ *     list is worse there than no list at all: dropping one token silently
+ *     changes what the rendered command DOES, which is the fabrication the
+ *     fail-closed floor exists to prevent. So every token must be decided, or
+ *     this decides nothing and says why. The price is measured rather than
+ *     assumed — see the abstention rates in the #202c PR body.
+ *   - {@link lexValueAnchors} — **prefix-safe.** An unreadable later expression
+ *     must not erase an earlier, independently bounded literal, so it keeps
+ *     every anchor found before the first refusal and stops there (#225 V1).
+ *   - {@link lexArgumentTokens} — **skip-tolerant.** The reading a token-level
+ *     RULE wants (#316). A refusal whose token boundary is still knowable is
+ *     published as a located token with `undecided` set and no `value`, and the
+ *     walk carries on. It reaches 100% of the corpus's argument-bearing
+ *     statements against the strict reading's 51.8%; the skip-vs-prefix fork is
+ *     priced by `bun run explain:arg-reach` and decided in
+ *     `commands/explain/README.md` → *The token stream a rule reads*.
+ *
+ * A refusal reason is a fact about the input, not a reading-specific message:
+ * all three name the same one for the same byte. The one place they differ is
+ * where the tolerant walk needs something the strict one never asked for — an
+ * unclosed `[…]` is `a substitution or expression value` to a reading that
+ * refuses it on sight, and `an unclosed structured argument value` to the one
+ * that went looking for the boundary it would have resumed from.
  *
  * ## What it refuses, and why each refusal is a fact rather than a gap
  *
@@ -37,6 +60,10 @@
  *     contiguous, so a `valueSpan` over them would be a lie. `verbsplit.ts`'s
  *     word scanner handles continuations for the run END; a VALUE needs its
  *     interior, which is exactly what a continuation breaks.
+ *
+ * Each of those is a refusal of the VALUE, and the tolerant reading publishes
+ * the token anyway with the same reason attached — which is sound precisely
+ * because `Argument.value` stays absent. None of them becomes renderable.
  *
  * ## It emits no defects
  *
@@ -88,10 +115,30 @@ export interface Argument {
 	 * lexer's claim to make.
 	 */
 	value?: string;
-	/** Where the value sits, quotes INCLUDED. Absent whenever `value` is. */
+	/**
+	 * Where the value sits, quotes INCLUDED.
+	 *
+	 * In the strict {@link lexArguments} reading this is absent whenever `value`
+	 * is. The tolerant {@link lexArgumentTokens} reading also publishes it for a
+	 * value whose BYTES are located but whose literal is unknown
+	 * (`interface=$x`), which is what lets a positional fill claim the `name=`
+	 * run of a token no consumer may render. `undecided` is the field that says
+	 * which of the two this is.
+	 */
 	valueSpan?: { start: number; end: number };
 	/** The token verbatim, for a positional and for rendering. */
 	text: string;
+	/**
+	 * Why this token's value or shape was not decoded — tolerant reading only.
+	 *
+	 * Never set by {@link lexArguments}: the strict reading publishes no token it
+	 * could not decide, so a consumer holding an {@link ArgumentsRead} never sees
+	 * this field. {@link lexArgumentTokens} sets it on exactly the tokens the
+	 * strict walk would have aborted at, carrying the same reason string the
+	 * strict refusal would have carried. A token with `undecided` set has no
+	 * `value` and must never be rendered into a runnable command.
+	 */
+	undecided?: string;
 }
 
 /** Internal token classification; quote state is stripped from the REST view. */
@@ -176,6 +223,14 @@ export interface ValueAnchor {
 	parent?: number;
 }
 
+/**
+ * Skip-tolerant argument tokens; `complete: false` explains where the walk
+ * stopped, which is a rarer event than in the strict reading.
+ */
+export type ArgumentTokenReading =
+	| { complete: true; tokens: Argument[] }
+	| { complete: false; tokens: Argument[]; why: string };
+
 /** Prefix-safe value anchoring; `complete: false` explains where scanning stopped. */
 export type ValueAnchorReading =
 	| { complete: true; anchors: ValueAnchor[] }
@@ -186,9 +241,26 @@ function unread(why: string): ArgumentsUnread {
 	return { read: false, why };
 }
 
+/** Where a token ends, and — tolerant walk only — why it was not decoded. */
+interface ScanToken {
+	end: number;
+	why?: string;
+}
+
 interface WalkOptions {
 	/** Locate `{…}`/`(…)` literals instead of refusing the statement at one. */
 	allowArrayValues?: boolean;
+	/**
+	 * Publish a token the walk cannot DECODE instead of aborting at it (#316).
+	 *
+	 * Off, every refusal stops the walk — the reading the REST/`curl` consumer
+	 * needs. On, a refusal whose token boundary is still knowable becomes an
+	 * {@link Argument} with `undecided` set and no `value`, and the walk carries
+	 * on to the next token. The boundary rules do not move: both walks agree
+	 * about where every token starts and ends, and the tolerant one only differs
+	 * in whether it returns there.
+	 */
+	tolerant?: boolean;
 	/**
 	 * The root scripting directive whose slots decide whether a `{…}` here is an
 	 * array literal, or undefined when this statement has none.
@@ -298,10 +370,33 @@ function* walkArguments(
 			yield token;
 			return;
 		}
-		const read = readToken(text, structural, i, token.end, options);
-		if (typeof read === "string") {
-			yield read;
+		// A refusal whose extent collapsed to nothing leaves no boundary to resume
+		// from — resuming at `i` would scan the same byte forever. The tolerant
+		// walk stops there exactly as the strict one does.
+		if (token.why !== undefined && token.end <= i) {
+			yield token.why;
 			return;
+		}
+		// `readToken` is skipped entirely for an undecodable token rather than
+		// having its result stripped: `literalValue` would read `$x` as the bare
+		// run `$x` and publish it as a literal, which is precisely the fabrication
+		// the refusal exists to prevent. Shape only, never a value.
+		const read =
+			token.why === undefined
+				? readToken(text, structural, i, token.end, options)
+				: undecidedToken(text, i, token.end, token.why);
+		if (typeof read === "string") {
+			if (options.tolerant !== true) {
+				yield read;
+				return;
+			}
+			// A `readToken` refusal already knows the token's extent — `scanToken`
+			// found it — so the tolerant walk publishes the shape and moves on.
+			const located = undecidedToken(text, i, token.end, read);
+			if (located.kind === "positional") positionals++;
+			yield located;
+			i = token.end;
+			continue;
 		}
 		if (read.kind === "positional") positionals++;
 		yield read;
@@ -343,6 +438,50 @@ export function lexArguments(text: string, from: number): ArgumentReading {
 }
 
 /**
+ * Lex the arguments of ONE statement as a TOKEN STREAM, skipping what it cannot
+ * decode (#316).
+ *
+ * Same text, same `from`, same boundary rules and the same reason strings as
+ * {@link lexArguments} — the difference is only what a refusal does. Where the
+ * strict reading discards the whole list, this one publishes the token it could
+ * not decode with `undecided` set, no `value`, and its bytes located, then
+ * carries on to the next token. It is the reading every TOKEN-LEVEL rule wants
+ * (`findMissingSeparators`, the `arg` fill), and the one no RENDERING consumer
+ * may have: a token with `undecided` set has no value to send.
+ *
+ * ## Skip-and-continue, not stop-at-refusal
+ *
+ * The cheaper design — publish the prefix decoded before the first refusal,
+ * which is what {@link lexValueAnchors} does for values — was measured and
+ * rejected. On the 948-script pinned corpus the prefix reading recovers 3,841
+ * argument tokens and finds **zero** additional missing-separator runs, because
+ * a refusal is usually the FIRST interesting token in the statement
+ * (`… interface=$x /ip/route add …` has an empty prefix). Skipping past it is
+ * what reaches the rest of the operand stream, and the corpus numbers for both
+ * designs are in `commands/explain/README.md` → *The token stream a rule reads*.
+ *
+ * ## Where it still stops
+ *
+ * Two constructs have no knowable end, so neither walk can resume past them: an
+ * unterminated string and an unbalanced `(`/`[`/`{`. A `;` is a third, and
+ * deliberately so — it is a statement boundary the segmenter owns, and resuming
+ * after it would read the NEXT statement's bytes as this one's arguments.
+ */
+export function lexArgumentTokens(
+	text: string,
+	from: number,
+): ArgumentTokenReading {
+	const tokens: Argument[] = [];
+	for (const step of walkArguments(text, from, { tolerant: true })) {
+		if (typeof step === "string") return { complete: false, tokens, why: step };
+		const publicToken = { ...step };
+		delete publicToken.literalQuoted;
+		tokens.push(publicToken);
+	}
+	return { complete: true, tokens };
+}
+
+/**
  * Length of the `\<newline>` continuation at `at`, or 0 — the ONE boundary rule
  * this module and `verbsplit.ts`'s word scanner share.
  *
@@ -374,54 +513,134 @@ function scanToken(
 	start: number,
 	positionalIndex: number,
 	options: WalkOptions,
-): { end: number } | string {
+): ScanToken | string {
 	let i = start;
+	// The first refusal seen while still able to find the token's END. Only the
+	// tolerant walk ever sets it; the strict walk returns on the first refusal,
+	// so `refuse` hands the reason straight back to be returned (#316).
+	let why: string | undefined;
+	function refuse(reason: string): string | undefined {
+		if (options.tolerant !== true) return reason;
+		if (why === undefined) why = reason;
+		return undefined;
+	}
+	// A construct whose END is not knowable. The token stops in FRONT of it,
+	// keeping the reason its own bytes earned, and the walk resumes at the
+	// construct — where this runs again with nothing scanned (`i === start`) and
+	// hands back the unbounded reason, which is why the walk stops. Reporting the
+	// recorded reason there instead would say the walk stopped at a value it
+	// normally skips, when it stopped because there was no boundary to skip to.
+	function unbounded(reason: string): ScanToken | string {
+		return why === undefined || i <= start ? reason : { end: i, why };
+	}
 	while (i < text.length) {
 		const c = structural[i] as string;
 		if (c === " " || c === "\t" || c === "\r" || c === "\n") break;
 		if (c === '"') {
 			const scan = scanQuotedString(structural, i);
-			if (!scan.closed) return "unterminated string in an argument";
+			if (!scan.closed) return unbounded("unterminated string in an argument");
 			i = scan.end;
 			continue;
 		}
-		if (c === "[") return "a substitution or expression value";
-		if (c === "(" || c === "{") {
-			if (!options.allowArrayValues)
-				return c === "("
-					? "a substitution or expression value"
-					: "an array or block value";
-			if (c === "{" && isScopeBrace(text, i)) return "a scope block value";
-			if (
-				c === "{" &&
-				!braceOpensArray(text, start, i, positionalIndex, options)
-			)
-				return "a brace value RouterOS does not read as an array here";
+		if (c === "[" || c === "(" || c === "{") {
+			const declined = structuredRefusal(
+				text,
+				c,
+				start,
+				i,
+				positionalIndex,
+				options,
+			);
+			if (declined !== undefined) {
+				const abort = refuse(declined);
+				if (abort !== undefined) return abort;
+				// The reason is recorded; the extent is still the balanced run, which
+				// is what lets the walk carry on past a value it cannot decode.
+				const skip = delimitedEnd(structural, i);
+				if (skip === null)
+					return unbounded("an unclosed structured argument value");
+				i = skip;
+				continue;
+			}
 			const end = delimitedEnd(structural, i);
-			if (end === null) return "an unclosed structured argument value";
-			if (hasUnquotedHash(structural, i, end))
-				return "an invalid hash in a structured argument value";
+			if (end === null)
+				return unbounded("an unclosed structured argument value");
+			if (hasUnquotedHash(structural, i, end)) {
+				const abort = refuse("an invalid hash in a structured argument value");
+				if (abort !== undefined) return abort;
+			}
 			i = end;
 			const next = nextNonWhitespace(structural, i);
-			if (continuesExpression(structural, i, next))
-				return "an expression continuing after a structured value";
+			if (continuesExpression(structural, i, next)) {
+				const abort = refuse(
+					"an expression continuing after a structured value",
+				);
+				if (abort !== undefined) return abort;
+			}
 			continue;
 		}
-		if (c === "$") return "a variable value";
+		if (c === "$") {
+			const abort = refuse("a variable value");
+			if (abort !== undefined) return abort;
+			i++;
+			continue;
+		}
 		if (c === "\\") {
-			if (continuationLength(text, i) > 0)
-				return "a line continuation inside an argument";
+			if (continuationLength(text, i) > 0) {
+				const abort = refuse("a line continuation inside an argument");
+				if (abort !== undefined) return abort;
+				// The token's BYTES stay contiguous across the continuation even
+				// though its value does not, and `verbsplit.ts`'s word scanner already
+				// reads them as one word for the run end. So the span is honest while
+				// the value stays absent — which is the whole tolerant contract.
+				i += continuationLength(text, i);
+				continue;
+			}
 			// The #201 rule: in code a backslash is valid only before whitespace.
 			// `symbols.ts` already located the defect; refusing is enough here.
-			if (text[i + 1] !== " " && text[i + 1] !== "\t")
-				return "an invalid escape in an argument";
+			if (text[i + 1] !== " " && text[i + 1] !== "\t") {
+				const abort = refuse("an invalid escape in an argument");
+				if (abort !== undefined) return abort;
+				i++;
+				continue;
+			}
 			i += 2;
 			continue;
 		}
-		if (c === ";") return "a statement separator inside an argument";
+		// A `;` is a BOUNDARY the segmenter should already have split on, not a
+		// value this walk may skip: resuming after it would read the next
+		// statement's bytes as this one's arguments. Both walks stop.
+		if (c === ";") return unbounded("a statement separator inside an argument");
 		i++;
 	}
-	return { end: i };
+	return why === undefined ? { end: i } : { end: i, why };
+}
+
+/**
+ * Why a `[`/`(`/`{` at `at` is not a value this lexer reads, or `undefined`
+ * when {@link WalkOptions.allowArrayValues} accepts it as an array literal.
+ *
+ * Split out of {@link scanToken} so the strict and tolerant walks choose the
+ * same reason for the same byte — the tolerant walk then skips the balanced run
+ * instead of returning, which is the only difference between them.
+ */
+function structuredRefusal(
+	text: string,
+	c: string,
+	start: number,
+	at: number,
+	positionalIndex: number,
+	options: WalkOptions,
+): string | undefined {
+	if (c === "[") return "a substitution or expression value";
+	if (!options.allowArrayValues)
+		return c === "("
+			? "a substitution or expression value"
+			: "an array or block value";
+	if (c === "{" && isScopeBrace(text, at)) return "a scope block value";
+	if (c === "{" && !braceOpensArray(text, start, at, positionalIndex, options))
+		return "a brace value RouterOS does not read as an array here";
+	return undefined;
 }
 
 /**
@@ -638,6 +857,51 @@ function readToken(
 		valueSpan: { start: eq + 1, end },
 		literalQuoted: value.quoted,
 		text: raw,
+	};
+}
+
+/**
+ * One located token whose value this phase does not decode (#316).
+ *
+ * Shape only: the `?`/`name=`/bare split comes from bytes the scanner already
+ * bounded, and NOTHING here reads a value — `undecided` is set and `value` stays
+ * absent, whatever the source spells. A left side that is not a RouterOS name is
+ * not promoted to an attribute (`{a=1;b=2}` stays one bare token), which is the
+ * same call {@link readToken} makes when it refuses that shape outright.
+ */
+function undecidedToken(
+	text: string,
+	start: number,
+	end: number,
+	why: string,
+): ReadArgument {
+	const raw = text.slice(start, end);
+	const span = { start, end };
+	if (raw.startsWith("?"))
+		return {
+			kind: "query",
+			span,
+			name: raw.slice(1),
+			text: raw,
+			undecided: why,
+		};
+	const eq = unquotedEquals(text, start, end);
+	const name = eq === null ? null : text.slice(start, eq);
+	if (eq !== null && name !== null && ARGUMENT_NAME.test(name))
+		return {
+			kind: "attribute",
+			span,
+			name,
+			valueSpan: { start: eq + 1, end },
+			text: raw,
+			undecided: why,
+		};
+	return {
+		kind: "positional",
+		span,
+		valueSpan: span,
+		text: raw,
+		undecided: why,
 	};
 }
 

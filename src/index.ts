@@ -305,13 +305,20 @@ export {
 // relative to the statement it was handed; the `Token` is that rebased into
 // document space by `explainCommand`. A consumer reading `explainCommand`'s
 // result wants the latter.
+//
+// `lexExplainArgumentTokens` is the skip-tolerant reading (#316) and is
+// exported for the same reason `lexExplainValueAnchors` is: a consumer building
+// its own token-level rule needs the reading a rule wants, not the one a
+// renderer wants. Its `undecided` tokens carry no `value` and never become one.
 export {
 	type Argument as ExplainArgument,
 	type ArgumentKind as ExplainArgumentKind,
 	type ArgumentReading as ExplainArgumentReading,
 	type ArgumentsRead as ExplainArgumentsRead,
 	type ArgumentsUnread as ExplainArgumentsUnread,
+	type ArgumentTokenReading as ExplainArgumentTokenReading,
 	lexArguments as lexExplainArguments,
+	lexArgumentTokens as lexExplainArgumentTokens,
 	lexValueAnchors as lexExplainValueAnchors,
 	type ValueAnchor as ExplainValueAnchor,
 	type ValueAnchorKind as ExplainValueAnchorKind,

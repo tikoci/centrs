@@ -147,26 +147,38 @@ describe("explain/separator — the second command-shaped run (#311)", () => {
 		});
 	});
 
-	describe("the reach limit, pinned so it stays a limit", () => {
-		// An ANCHOR test: this is what the code does, not what is correct. The
-		// strict argument lexer aborts its whole walk at the first token it
-		// declines, so a statement holding a variable carries no tokens for the
-		// rule to read and the run in it is missed. Nothing here decides the shape
-		// is acceptable — RouterOS refuses it exactly as it refuses the literal
-		// twin below. Tracked as #316. If a prefix-tolerant walk ever lands, this
-		// flips to `toHaveLength(1)` and the README paragraph goes with it.
-		test("a variable in the statement puts the run out of reach", () => {
-			const withVariable =
-				"/ip/address add interface=ether1 /ip/route add gateway=$g";
-			const [only] = explainCommand(withVariable, {}).structure.statements;
+	describe("the reach the tolerant token stream buys (#316)", () => {
+		// This was the pinned reach LIMIT until #316: the strict lexer aborted its
+		// whole walk at the first token it declined, so a statement holding a
+		// variable carried no tokens for the rule to read. The rule now reads
+		// `lexArgumentTokens`, which publishes the undecodable token located and
+		// keeps walking, so the run is found wherever it sits relative to it.
+		test.each([
+			["after the undecodable token", "gateway=$g", "interface=ether1"],
+			// Design A (prefix only) reaches the row above and NOT this one: the
+			// prefix is empty here, which is why the fork mattered.
+			["before it", "gateway=1.1.1.1", "interface=$x"],
+		])("a variable %s still finds the run", (_label, tail, head) => {
+			const input = `/ip/address add ${head} /ip/route add ${tail}`;
+			const [only] = explainCommand(input, {}).structure.statements;
+			// The STRICT reading still refuses — the tolerant stream is a second
+			// reading for rules, never a relaxation of what may be rendered.
 			expect(only?.arguments?.read).toBe(false);
-			expect(flags(withVariable)).toHaveLength(0);
+			expect(flags(input)).toHaveLength(1);
+		});
 
-			// The same bytes with a literal do fire, which is what makes the miss a
-			// property of the lexer's reach rather than of the rule.
+		test("the literal twin is unchanged", () => {
 			expect(
 				flags("/ip/address add interface=ether1 /ip/route add gateway=1.1.1.1"),
 			).toHaveLength(1);
+		});
+
+		// Still out of reach, and still not a judgement: an unterminated string has
+		// no knowable end, so neither walk can resume past it.
+		test("an unterminated string stops both walks", () => {
+			expect(
+				flags('/ip/address add comment="oops /ip/route add gateway=1.1.1.1'),
+			).toHaveLength(0);
 		});
 	});
 

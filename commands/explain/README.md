@@ -1108,18 +1108,86 @@ scripts the device answers `expected end of command` for are all other causes
 (line continuations, `<tab>`/`<VALUE>` placeholders, pasted shell and Python,
 stray parens), which is #203's genre bias showing.
 
-**One reach limit, not an abstention.** `lexArguments` is all-or-nothing: the
-first token it declines aborts the walk and the reading carries no tokens, so a
-statement holding a variable has no token list for this rule to read.
-`/ip/address add interface=ether1 /ip/route add gateway=$g` therefore reports
-`pass` where its literal twin reports the separator. Nothing there decides the
-shape is acceptable — the rule simply never runs, and neither does any other
-token-level rule: the strict lexer refuses 48.2% of the corpus's resolved
-argument lists. Closing it needs a prefix-tolerant argument walk of the kind
-`lexValueAnchors` already does for values, which is
-[#316](https://github.com/tikoci/centrs/issues/316) with its corpus sizing and
-its two candidate designs. Until then the limit is pinned by an anchor test
-rather than left to be rediscovered.
+**The reach limit is closed (#316).** This rule used to read
+`statement.arguments.tokens`, the all-or-nothing strict reading, so a statement
+holding a variable carried no tokens and the run in it was missed:
+`/ip/address add interface=ether1 /ip/route add gateway=$g` reported `pass`
+where its literal twin reported the separator. It now reads the skip-tolerant
+token stream described below, and both spellings report the separator — as does
+`/ip/address add interface=$x /ip/route add gateway=1.1.1.1`, where the
+undecodable token comes FIRST and a prefix-only reading would still have missed
+it. The corpus count is unchanged at **0** for the same reason it always was
+(#203's genre bias), so this buys reach rather than a number. What still stops
+the rule is an unterminated string or an unbalanced delimiter, because neither
+walk can find a boundary to resume from.
+
+### The token stream a rule reads (#316)
+
+`lexArguments` is all-or-nothing by design: its consumer renders a runnable REST
+request, and a partially-read argument list changes what the rendered command
+DOES. That is the right reading for a renderer and the wrong one for a rule —
+the first token it declines discards every token already decoded, which put
+**48.2%** of the corpus's argument-bearing statements out of reach of every
+token-level rule and of the `arg` token fill.
+
+`lexArgumentTokens` is the second reading: same text, same `from`, the same
+boundary walk and the same refusal strings, differing only in what a refusal
+does. Where the strict reading discards the list, this one publishes the token
+it could not decode with its bytes located, `undecided` set to that same reason
+and **no `value`**, then carries on to the next token. `statement.arguments` is
+unchanged and still strict; nothing that renders a command gained reach.
+
+**Skip-and-continue, measured against stop-at-first-refusal.** #316 named two
+designs and said the fork was load-bearing rather than cosmetic. It is. Both are
+priced by `bun run explain:arg-reach` over the 948-script pinned corpus, from
+one implementation — design A is the tolerant token list truncated at its first
+`undecided` token, which is exactly the prefix the strict walk discards:
+
+| | strict | A — prefix | B — skip |
+| --- | ---: | ---: | ---: |
+| statements reached, of 14,267 | 7,385 (51.8%) | 10,754 (75.4%) | 14,267 (100.0%) |
+| argument tokens | 16,652 | 20,481 | 31,310 |
+| missing-separator runs found | 0 | 0 | 0 |
+
+A recovers 3,369 statements; the 3,513 statements whose FIRST interesting token
+is the undecodable one have an empty prefix and are reached only by B — so the
+cheaper design leaves slightly more behind than it recovers. The separator row
+is 0 across all three and is reported rather than buried: on this corpus neither
+design finds a run the strict reading missed, which is what #203's genre bias
+predicts for a typo class published scripts do not carry. The sweep also asserts
+what makes the A column trustworthy — that the strict tokens are the tolerant
+walk's prefix byte for byte, and that both walks name the same refusal reason —
+and fails if any statement disagrees (0 do).
+
+**Where both walks still stop.** An unterminated string and an unbalanced
+`(`/`[`/`{` have no knowable end, so there is no boundary to resume from. A `;`
+is a third and deliberately so: it is a statement boundary the segmenter owns,
+and resuming after it would read the next statement's bytes as this one's
+arguments. No corpus statement reaches any of the three. The unbalanced case is
+also the one place the two readings name a different reason, and it follows from
+what each needed: the strict walk refuses a `[…]` on sight and never asks where
+it ends, while the tolerant walk asks — because the answer is what it would
+resume from — and says `an unclosed structured argument value` when there is
+none.
+
+**What it moved, including the cost.** The `arg` fill now paints the `name=` run
+of a token whose value only the device knows, so classified bytes go 69.77% →
+**71.73%** (`arg` tokens 11,438 → 16,526). On the device-agreement slice the
+bytes where the device decided and centrs abstained drop 5,540 → 4,158, and two
+whole cells (`unclassified` → `arg-dot`, `unclassified` → `arg-scope`) empty
+out. Against that, projection disagreements rise 143 → 360, and **every one of
+the 217 new bytes is the `=` of an attribute**: `arg` → `syntax-meta`, one cell,
+358 runs. That is not a new wrong assertion. It is #293's provisional
+vocabulary — one `arg` class for both the name bytes and the `=` — meeting the
+device's context-dependent answer over 2.5x as many bytes as before, and it
+gives #264 B5 a concrete, counted reason to split the `=` into its own class:
+doing so relabels those runs without moving byte coverage at all.
+
+**The public surface did not change.** `undecided` never appears on an
+`ExplainArguments` reading, because the strict lexer publishes no token it could
+not decide. Whether the tolerant stream should be published in its own right —
+so a browser consumer can see a located `gateway=` whose value is a runtime
+expression — is a #264 B5 decision, not one this change made.
 
 ### The menu path with arguments (#324)
 
@@ -1410,8 +1478,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 995,435 are classified (69.77%), the remaining
-  431,296 are `unclassified`. The census emits 207,962 tokens (avg 219.4 per
+  1,426,731 analyzed bytes, 1,023,405 are classified (71.73%), the remaining
+  403,326 are `unclassified`. The census emits 214,503 tokens (avg 226.3 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is
   provisional until #264 B5. Each B2 fill should move the classified
@@ -1565,10 +1633,10 @@ generated from `test/fixtures/explain/highlight-agreement.json` by
 `bun run explain:highlight-agreement:readme:check`, and the fixture itself is
 gated against a fresh measurement by
 `test/unit/explain-highlight-agreement.test.ts`. Of 85,529 bytes at 7.23.2,
-25,412 are bytes **both** sides decided a syntax class for, and 99.44% of
-those agree (dev 99.07%, holdout 99.91%). Set `comment` aside — it is 70.86%
+26,794 are bytes **both** sides decided a syntax class for, and 98.66% of
+those agree (dev 98.13%, holdout 99.38%). Set `comment` aside — it is 67.20%
 of that decided region and mostly the corpus's harness-injected `# Source:`
-banner (#203) — and the remaining 7,406 bytes agree 98.07%. The device stops
+banner (#203) — and the remaining 8,788 bytes agree 95.90%. The device stops
 classifying at its one-byte `error`: 43 of 70 scripts carry one, and the
 43,417 bytes from there on are not a judgment about anything. The oracle
 itself moves between captures: 43 stop at 7.23.2 and 36 stop at 7.24rc2, and
@@ -1585,7 +1653,7 @@ two authors, so the percentage describes this slice.
 | `variable-parameter` | `variable-parameter` | 398 | 0 | 0 | 100.00% |
 | `dir` | `dir` | 1,606 | 0 | 0 | 100.00% |
 | `cmd` | `cmd` | 2,126 | 0 | 0 | 100.00% |
-| `arg` | `arg`, `arg-dot`, `arg-scope` | 946 | 141 | 0 | 87.03% |
+| `arg` | `arg`, `arg-dot`, `arg-scope` | 2,111 | 358 | 0 | 85.50% |
 | `operator` | `syntax-meta` | 232 | 2 | 0 | 99.15% |
 | `brace` | `syntax-meta` | 193 | 0 | 0 | 100.00% |
 | `string` | *abstains* | 0 | 0 | 886 | — |
@@ -1593,19 +1661,19 @@ two authors, so the percentage describes this slice.
 
 | outcome | bytes @7.23.2 | bytes @7.24rc2 |
 | ------- | ----: | ----: |
-| agree — both decided, projection accepts | 25,269 | 25,967 |
-| disagree — both decided, projection rejects | 143 | 149 |
+| agree — both decided, projection accepts | 26,434 | 27,164 |
+| disagree — both decided, projection rejects | 360 | 384 |
 | unprojected — no declared projection covers the pair | 1,051 | 1,061 |
-| offline-silent — device decided, centrs abstained | 5,540 | 5,740 |
+| offline-silent — device decided, centrs abstained | 4,158 | 4,308 |
 | non-syntax — the device answered something syntax cannot decide | 733 | 847 |
-| device-silent — centrs decided, device said `none` | 5,663 | 5,801 |
-| both-silent | 3,713 | 3,900 |
+| device-silent — centrs decided, device said `none` | 5,674 | 5,815 |
+| both-silent | 3,702 | 3,886 |
 | parser-stopped — at/after the device's `error` byte, and silent from there | 43,417 | 41,968 |
 | parser-recovered — past that `error`, and the device classified anyway | 0 | 96 |
 
-Where the device decided and offline analysis did not (5,540 bytes at 7.23.2,
-the next fill's target list): `syntax-meta` 3,217, `arg` 1,235, `comment` 350,
-`variable-local` 310, `escaped` 145, `arg-scope` 108, 175 across the rest.
+Where the device decided and offline analysis did not (4,158 bytes at 7.23.2,
+the next fill's target list): `syntax-meta` 3,000, `comment` 350,
+`variable-local` 310, `arg` 190, `escaped` 145, `dir` 68, 95 across the rest.
 Most of the `syntax-meta` share is whitespace the device merged into an
 adjacent structure run rather than a token centrs missed.
 
@@ -1619,11 +1687,11 @@ why it dominates the category.
 
 | applicability @7.23.2 | bytes | leading cells |
 | ---------------------------- | ----: | ------------- |
-| offline-decidable | 32,002 | `comment` → `comment` 18,006, `unclassified` → `syntax-meta` 3,216, `cmd` → `cmd` 2,126 |
-| schema-dependent | 260 | `arg` → `obj-inactive` 260 |
+| offline-decidable | 32,002 | `comment` → `comment` 18,006, `unclassified` → `syntax-meta` 2,999, `cmd` → `cmd` 2,126 |
+| schema-dependent | 326 | `arg` → `obj-inactive` 326 |
 | state-dependent | 168 | `dir` → `obj-inactive` 120, `cmd` → `obj-inactive` 21, `unclassified` → `obj-dynamic` 20 |
-| version-dependent | 1,158 | `unclassified` → `none` 377, `comment` → `none` 353, `cmd` → `none` 124 |
-| uncategorized | 279 | `unclassified` → `obj-inactive` 156, `unclassified` → `variable-undefined` 75, `value` → `variable-undefined` 21 |
+| version-dependent | 1,158 | `comment` → `none` 353, `unclassified` → `none` 285, `arg` → `none` 151 |
+| uncategorized | 213 | `unclassified` → `obj-inactive` 90, `unclassified` → `variable-undefined` 75, `value` → `variable-undefined` 21 |
 | no-device-answer | 51,662 | `none` where the captures agree, wherever it falls |
 
 One representative run per cell, so B5 reads a fragment rather than a count.
@@ -1632,7 +1700,7 @@ and a byte offset into the stream the device saw.
 
 | outcome | cell | fragment | runs | first at |
 | ------- | ---- | -------- | ---: | -------- |
-| disagree | `arg` → `syntax-meta` | `"="` | 141 | `forum/amm0/topic-141645-ip-route-check-command-disappeared/post-0025-snippet-01.rsc` @240 |
+| disagree | `arg` → `syntax-meta` | `"="` | 358 | `eworm/ppp-on-up.rsc` @424 |
 | disagree | `operator` → `arg` | `"in"` | 1 | `forum/amm0/topic-169456-having-the-where-filter-in-scripting-signifantly-increases-the-execution-time-an/post-0006-snippet-01.rsc` @615 |
 | unprojected | `string` → `syntax-meta` | `"\""` | 311 | `eworm/ppp-on-up.rsc` @435 |
 | unprojected | `string` → `escaped` | `"\\\""` | 53 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @559 |
@@ -2081,7 +2149,11 @@ The offline capability can advance from `coded` to `verified` when:
   abstentions, version/state differences, and corpus bias separately — the
   report's outcome buckets and its four applicability categories are that
   separation. Classified-byte percentage is not syntax coverage, and agreement
-  is a trend, not a new numerical pass gate.
+  is a trend, not a new numerical pass gate. A token-level rule and a token fill
+  read the skip-tolerant argument stream, never the strict REST reading (#316);
+  the two share one boundary walk, the strict reading's reach is unchanged, and
+  the skip-vs-prefix fork is priced rather than assumed —
+  [The token stream a rule reads](#the-token-stream-a-rule-reads-316).
 - **Usable library contract:** one bounded browser/editor consumer imports a
   documented public offline entry point, runs analysis without transport/CDB
   dependencies, and verifies structure, diagnostics, tokens, and source-position

@@ -42,7 +42,11 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { lexArguments, lexValueAnchors } from "../../src/explain/args.ts";
+import {
+	lexArguments,
+	lexArgumentTokens,
+	lexValueAnchors,
+} from "../../src/explain/args.ts";
 import { explainCommand } from "../../src/explain.ts";
 
 /** Lex a whole statement's arguments from the first space, the common case. */
@@ -648,5 +652,161 @@ describe("the gate and the analysis never contradict each other about arguments"
 		if (statement?.kind !== "command") throw new Error("expected a command");
 		expect(statement.arguments?.read).toBe(false);
 		expect(statement.command.args).toBeUndefined();
+	});
+});
+
+/**
+ * The THIRD reading (#316): same walk, same reasons, different answer to a
+ * refusal. What is pinned here is the relationship between the three, because
+ * that relationship is the whole safety argument — a rule gets reach, and
+ * nothing that renders a command does.
+ */
+describe("the skip-tolerant token stream (#316)", () => {
+	test("the strict tokens are the tolerant walk's prefix, reason included", () => {
+		const text = "/ip/route add dst-address=1.2.3.0/24 gateway=$g comment=x";
+		const from = "/ip/route add".length;
+		const strict = lexArguments(text, from);
+		const tolerant = lexArgumentTokens(text, from);
+		expect(strict.read).toBeFalse();
+
+		// Everything the strict walk decided before it aborted is here, unchanged.
+		const decided = tolerant.tokens.filter((t) => t.undecided === undefined);
+		expect(decided[0]).toEqual({
+			kind: "attribute",
+			span: { start: 14, end: 36 },
+			name: "dst-address",
+			value: "1.2.3.0/24",
+			valueSpan: { start: 26, end: 36 },
+			text: "dst-address=1.2.3.0/24",
+		});
+		// And the token it aborted AT carries that abort's own reason.
+		const stopped = tolerant.tokens.find((t) => t.undecided !== undefined);
+		expect(stopped?.undecided).toBe(strict.read ? "" : strict.why);
+		// Which is what the strict walk never reached: the tokens AFTER it.
+		expect(tolerant.tokens.at(-1)?.value).toBe("x");
+		expect(tolerant.complete).toBeTrue();
+	});
+
+	test.each([
+		["a variable", "gateway=$g", "a variable value"],
+		[
+			"a substitution",
+			"gateway=[/ip/route/get 0]",
+			"a substitution or expression value",
+		],
+		["an expression", "gateway=(1+2)", "a substitution or expression value"],
+		["an array", "gateway={1;2}", "an array or block value"],
+		[
+			"an escape in a quoted value",
+			'comment="a\\nb"',
+			"an escape in a quoted argument value",
+		],
+		[
+			"a substitution in a quoted value",
+			'comment="a$xb"',
+			"a substitution in a quoted argument value",
+		],
+	])(
+		"%s is located, never decoded, and does not stop the walk",
+		(_label, token, why) => {
+			const text = `/ip/route add ${token} comment=after`;
+			const from = "/ip/route add".length;
+			expect(lexArguments(text, from).read).toBeFalse();
+
+			const tolerant = lexArgumentTokens(text, from);
+			expect(tolerant.complete).toBeTrue();
+			const [first, second] = tolerant.tokens;
+			expect(first?.text).toBe(token);
+			expect(first?.undecided).toBe(why);
+			// The one invariant a renderer depends on: located is not decoded.
+			expect(first?.value).toBeUndefined();
+			// The walk carried on, which is the difference from design A.
+			expect(second?.value).toBe("after");
+		},
+	);
+
+	test("a left side that is not a RouterOS name is not promoted to an attribute", () => {
+		const text = "/ip/route/add {a=1;b=2} gateway=1.1.1.2";
+		const tolerant = lexArgumentTokens(text, "/ip/route/add".length);
+		const [first] = tolerant.tokens;
+		expect(first?.kind).toBe("positional");
+		expect(first?.name).toBeUndefined();
+		expect(first?.value).toBeUndefined();
+		expect(first?.undecided).toBe("an array or block value");
+	});
+
+	test("an attribute's `=` stays locatable even when its value is not", () => {
+		const text = "/ip/route add gateway=$g";
+		const [only] = lexArgumentTokens(text, "/ip/route add".length).tokens;
+		expect(only?.kind).toBe("attribute");
+		expect(only?.name).toBe("gateway");
+		// `valueSpan.start - 1` is the `=`, which is how the `arg` fill finds it.
+		expect(only?.valueSpan).toEqual({ start: 22, end: 24 });
+		expect(text[(only?.valueSpan?.start ?? 0) - 1]).toBe("=");
+		expect(only?.value).toBeUndefined();
+	});
+
+	test.each([
+		[
+			"an unterminated string",
+			'/ip/route add comment="oops gateway=1.1.1.1',
+			"unterminated string in an argument",
+		],
+		[
+			"a statement separator",
+			"/ip/route add gateway=1.1.1.1;comment=x",
+			"a statement separator inside an argument",
+		],
+	])(
+		"%s stops BOTH walks — no boundary to resume from",
+		(_label, text, why) => {
+			const from = "/ip/route add".length;
+			const strict = lexArguments(text, from);
+			expect(strict.read ? "" : strict.why).toBe(why);
+			const tolerant = lexArgumentTokens(text, from);
+			expect(tolerant.complete).toBeFalse();
+			expect(tolerant.complete ? "" : tolerant.why).toBe(why);
+		},
+	);
+
+	test("an unbalanced delimiter stops both walks, for different reasons", () => {
+		// The one place the two readings name a different reason, and it follows
+		// from what each needed to know. The strict walk refuses a `[…]` on sight
+		// and never asks where it ends; the tolerant walk asks, because the answer
+		// is what it would resume from — and there is no answer here.
+		const text = "/ip/route add gateway=[find name=x";
+		const from = "/ip/route add".length;
+		const strict = lexArguments(text, from);
+		expect(strict.read ? "" : strict.why).toBe(
+			"a substitution or expression value",
+		);
+		const tolerant = lexArgumentTokens(text, from);
+		expect(tolerant.complete).toBeFalse();
+		expect(tolerant.complete ? "" : tolerant.why).toBe(
+			"an unclosed structured argument value",
+		);
+		// It keeps the bytes it did bound — `gateway=` is an argument name and its
+		// `=` whatever follows them — and publishes no value for a value it never
+		// found the end of.
+		expect(tolerant.tokens).toHaveLength(1);
+		expect(tolerant.tokens[0]?.name).toBe("gateway");
+		expect(tolerant.tokens[0]?.text).toBe("gateway=");
+		expect(tolerant.tokens[0]?.value).toBeUndefined();
+		expect(tolerant.tokens[0]?.undecided).toBe(
+			"a substitution or expression value",
+		);
+	});
+
+	test("`undecided` never appears on a strict reading", () => {
+		for (const text of [
+			"/ip/route add dst-address=1.2.3.0/24 gateway=1.1.1.1",
+			"/ip/address/print ?address=1.1.1.1",
+			"/ip address print where chain=forward",
+			"/file remove a",
+		]) {
+			const read = lexArguments(text, text.indexOf(" ", 1));
+			if (!read.read) throw new Error(read.why);
+			for (const token of read.tokens) expect(token.undecided).toBeUndefined();
+		}
 	});
 });
