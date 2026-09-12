@@ -25,6 +25,15 @@
  * reach numbers alone make A look adequate, and the run counts are what show it
  * is not.
  *
+ * It also prices the reach one layer up, which is what #264 B5 read to split
+ * the `=` out of `arg`. `tokens[]` paints from the tolerant reading, but the
+ * ENVELOPE publishes `structure.statements[].arguments` only where the STRICT
+ * one read. The `envelope*` figures count how many painted `arg-sep` runs a
+ * consumer could NOT have located for itself by subtracting one from a
+ * published `ExplainArgumentToken.valueSpan`, and name the argument spellings
+ * that dominate them. That gap is measured through `explainCommand` rather than
+ * the lexer, because it is a claim about the shipped result.
+ *
  * ```
  * bun run explain:arg-reach
  * bun run explain:arg-reach --json
@@ -39,6 +48,7 @@ import { analyzeCoordinates } from "../src/explain/coordinates.ts";
 import { resolveStatements } from "../src/explain/pathresolve.ts";
 import { findMissingSeparators } from "../src/explain/separator.ts";
 import { resolveVerbsFromStatements } from "../src/explain/verbsplit.ts";
+import { explainCommand } from "../src/explain.ts";
 import {
 	describeResolution,
 	resolveCorpusDb,
@@ -77,6 +87,17 @@ interface Reach {
 	refusalReasons: Record<string, number>;
 	/** Boundary agreement between the strict walk and the tolerant one. */
 	boundaryMismatches: string[];
+	/** `arg-sep` runs in `data.tokens[]` — one per attribute the fill painted. */
+	envelopeSeparators: number;
+	/**
+	 * Of those, the ones NOT inside any published `ExplainArgumentToken` span, so
+	 * a consumer holding the envelope has no `valueSpan` to derive them from.
+	 */
+	envelopeSeparatorsUnpublished: number;
+	/** Scripts carrying at least one of those. */
+	envelopeScriptsAffected: number;
+	/** The argument NAMES that dominate the unpublished set, most frequent first. */
+	envelopeTopUnpublished: [string, number][];
 }
 
 export function sweep(scripts: readonly string[]): Reach {
@@ -98,12 +119,18 @@ export function sweep(scripts: readonly string[]): Reach {
 		separatorRunsDesignB: 0,
 		refusalReasons: {},
 		boundaryMismatches: [],
+		envelopeSeparators: 0,
+		envelopeSeparatorsUnpublished: 0,
+		envelopeScriptsAffected: 0,
+		envelopeTopUnpublished: [],
 	};
+	const unpublishedNames = new Map<string, number>();
 
 	for (const [index, text] of scripts.entries()) {
 		const analyzed = new TextDecoder().decode(
 			analyzeCoordinates(text).analyzed,
 		);
+		measureEnvelopeGap(text, analyzed, out, unpublishedNames);
 		const verbs = resolveVerbsFromStatements(resolveStatements(text));
 		for (const split of verbs.splits) {
 			if (split.argsAt === null) continue;
@@ -186,7 +213,58 @@ export function sweep(scripts: readonly string[]): Reach {
 			out.separatorRunsDesignB += findMissingSeparators(tolerant.tokens).length;
 		}
 	}
+	out.envelopeTopUnpublished = [...unpublishedNames.entries()]
+		.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+		.slice(0, 6);
 	return out;
+}
+
+/**
+ * How much of the painted `arg-sep` stream the envelope cannot account for.
+ *
+ * Measured through `explainCommand` on purpose: the claim is about the SHIPPED
+ * result, not about what the lexer could reach. The fill withdraws statements
+ * the lexer knows nothing about (#311's second command-shaped run, a gate-parity
+ * disagreement, a normalized statement), so counting tolerant tokens here would
+ * over-report. A separator is "published" when some read statement's
+ * `ExplainArgumentToken` span covers it — that is exactly the case where a
+ * consumer could have derived the `=` as `valueSpan.start - 1` for itself.
+ *
+ * A throw here is deliberately NOT caught. `explainCommand` carries a no-throw
+ * contract (`commands/explain/README.md` -> Offline baseline acceptance), so
+ * swallowing one would hide a contract violation behind a report that still
+ * printed a number.
+ */
+function measureEnvelopeGap(
+	text: string,
+	analyzed: string,
+	out: Reach,
+	names: Map<string, number>,
+): void {
+	const data = explainCommand(text, { tokens: true });
+	const published: { start: number; end: number }[] = [];
+	for (const statement of data.structure.statements) {
+		const args = statement.arguments;
+		if (args?.read !== true) continue;
+		for (const token of args.tokens) published.push(token.span);
+	}
+	let affected = false;
+	for (const token of data.tokens ?? []) {
+		if (token.class !== "arg-sep") continue;
+		out.envelopeSeparators++;
+		if (published.some((s) => token.start >= s.start && token.end <= s.end))
+			continue;
+		out.envelopeSeparatorsUnpublished++;
+		affected = true;
+		// The name run is the bytes immediately before the `=`, back to the last
+		// whitespace or delimiter — enough to name the spelling in the report.
+		let from = token.start;
+		while (from > 0 && /[^\s={};[\]()]/.test(analyzed[from - 1] as string))
+			from--;
+		const name = `${analyzed.slice(from, token.start)}=`;
+		if (name.length > 1) names.set(name, (names.get(name) ?? 0) + 1);
+	}
+	if (affected) out.envelopeScriptsAffected++;
 }
 
 function render(r: Reach): string {
@@ -219,6 +297,22 @@ Scripts: ${r.scripts} · candidate statements: ${r.candidates}
 | strict refusal reason | statements |
 | --- | ---: |
 ${reasons}
+
+## What the envelope cannot account for (#264 B5)
+
+\`tokens[]\` paints an \`arg-sep\` run per attribute; the envelope publishes an
+\`ExplainArgumentToken\` only where the STRICT reading read. The difference is
+what a consumer could not have derived as \`valueSpan.start - 1\` for itself,
+and it is why B5 gave the \`=\` its own class rather than leaving it merged
+into \`arg\`.
+
+- \`arg-sep\` runs painted: ${r.envelopeSeparators}
+- of those, NOT covered by any published argument token: **${r.envelopeSeparatorsUnpublished}** (${pct(r.envelopeSeparatorsUnpublished, r.envelopeSeparators)})
+- scripts carrying at least one: ${r.envelopeScriptsAffected} of ${r.scripts}
+
+| unpublished spelling | runs |
+| --- | ---: |
+${r.envelopeTopUnpublished.map(([name, n]) => `| \`${name}\` | ${n} |`).join("\n")}
 ${
 	r.boundaryMismatches.length === 0
 		? ""

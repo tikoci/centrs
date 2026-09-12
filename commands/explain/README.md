@@ -1191,8 +1191,9 @@ the 217 new bytes is the `=` of an attribute**: `arg` → `syntax-meta`, one cel
 358 runs. That is not a new wrong assertion. It is #293's provisional
 vocabulary — one `arg` class for both the name bytes and the `=` — meeting the
 device's context-dependent answer over 2.5x as many bytes as before, and it
-gives #264 B5 a concrete, counted reason to split the `=` into its own class:
-doing so relabels those runs without moving byte coverage at all.
+gave #264 B5 a concrete, counted reason to split the `=` into its own class.
+It did, and the relabel moved no byte coverage at all: disagreements fell
+360 → 2 and the classified-byte census did not change by a digit.
 
 **The one residue, sized so it is not mistaken for a defect.** A `\<newline>`
 continuation inside an argument leaves its token `undecided`, because the bytes
@@ -1219,8 +1220,11 @@ reading, `ExplainArgumentToken` carries no `undecided` field, and `undecided`
 never appears on an `ExplainArguments` reading, because the strict lexer
 publishes no token it could not decide. Whether the tolerant stream should reach
 the envelope in its own right — so a browser consumer reading `explainCommand`'s
-result can see a located `gateway=` whose value is a runtime expression — is
-a #264 B5 decision, not one this change made.
+result can see a located `gateway=` whose value is a runtime expression — was
+left to #264 B5, which decided it reaches the envelope **as the token
+partition** and nowhere else: naming the `=` `arg-sep` locates the argument
+without loosening `arguments`, and `undecided` stays off the envelope. See
+[The vocabulary](#the-vocabulary-and-what-earns-a-class-264-b5).
 
 ### The menu path with arguments (#324)
 
@@ -1512,16 +1516,16 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
   1,426,731 analyzed bytes, 1,023,405 are classified (71.73%), the remaining
-  403,326 are `unclassified`. The census emits 214,503 tokens (avg 226.3 per
+  403,326 are `unclassified`. The census emits 231,026 tokens (avg 243.7 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
-  gaps, no overlaps, `join(slice) === input` — and the `class` field is
-  provisional until #264 B5. Each B2 fill should move the classified
+  gaps, no overlaps, `join(slice) === input` — and the `class` field is the
+  vocabulary #264 B5 settled. Each B2 fill should move the classified
   percentage.
   <!-- END GENERATED token-census -->
 
 B1's `data.tokens[]` is live behind `--tokens` — a total, gapless byte
-partition whose `class` is provisional until #264 B5 (every unclaimed byte is
-`unclassified`). Since B1 its only fill source was `data.spans[]` (comment runs
+partition whose `class` draws on the vocabulary #264 B5 settled (every unclaimed
+byte is `unclassified`). Since B1 its only fill source was `data.spans[]` (comment runs
 and resolved variable occurrences); **the path fill claims resolved menu and
 command-name bytes as provisional `dir` / `cmd` tokens**, including valid path
 slashes and nested command substitutions, while ambiguous, malformed, and
@@ -1536,10 +1540,10 @@ resolved came back as opaque `string` bytes (#325). The check itself stays:
 where `Loc` widens the resolution to its statement, the slice no longer equals
 `inner` and the bytes are left unclaimed rather than landed on the wrong
 place. **`#293`'s arg fill** in
-`src/explain/arg-tokens.ts` then claims argument names and
-their `=` (name run
-`[span.start, valueSpan.start - 1)` plus the single `=` byte at
-`valueSpan.start - 1`) on the residual left by spans, before operators see it
+`src/explain/arg-tokens.ts` then claims argument names as `arg` (name run
+`[span.start, valueSpan.start - 1)`) and the single `=` byte at
+`valueSpan.start - 1` as `arg-sep` (#264 B5) on the residual left by spans,
+before operators see it
 — and **`#295`'s value fill follows it** — `src/explain/value-tokens.ts`
 claims argument value bytes and leaf array-literal members
 (`data.values.occurrences`, leaves only via `parent` containment,
@@ -1556,14 +1560,14 @@ argument order to `buildTokens` ([#290 design decision 1](../../src/explain.ts))
 `spans` claims first, then `path`, `arg`, `value`, `string`, `brace`, and
 finally `operator`.
 `ExplainTokenClass` is
-`ExplainSpanClass | "dir" | "cmd" | "operator" | "arg" | "value" | "string" |
-"brace" | "unclassified"` — one
-provisional `operator` class for all 26 spellings + 2 aliases, one provisional
-`arg` class for both the name bytes and the `=` separator, one provisional
-`value` class for every leaf value span, plus provisional `string` (quoted
-runs) and `brace` (scope delimiters) — emit first, name later (whether the `=`
-or per-shape `value` later deserve their own classes is #264 B5 and does not
-move the byte coverage), not per-operator/per-category/shape (`#264` B5).
+`ExplainSpanClass | "dir" | "cmd" | "operator" | "arg" | "arg-sep" | "value" |
+"string" | "brace" | "unclassified"` — one `operator` class for all 26
+spellings + 2 aliases, `arg` for an argument's name bytes and `arg-sep` for the
+single `=` that binds it to its value, one `value` class for every leaf value
+span, plus `string` (quoted runs) and `brace` (scope delimiters). #264 B5
+settled which of those merges keep their name and which do not, on a stated
+rule rather than taste — see
+[The vocabulary](#the-vocabulary-and-what-earns-a-class-264-b5).
 `ExplainSpanClass` and `data.spans[]` stay proof-only; `src/explain/operators.ts`
 remains data plus accessors, and the operator table above is its source. The
 `centrs → highlight` projection is B4 and reads both.
@@ -1666,10 +1670,10 @@ generated from `test/fixtures/explain/highlight-agreement.json` by
 `bun run explain:highlight-agreement:readme:check`, and the fixture itself is
 gated against a fresh measurement by
 `test/unit/explain-highlight-agreement.test.ts`. Of 85,529 bytes at 7.23.2,
-26,794 are bytes **both** sides decided a syntax class for, and 98.66% of
-those agree (dev 98.13%, holdout 99.38%). Set `comment` aside — it is 67.20%
+26,794 are bytes **both** sides decided a syntax class for, and 99.99% of
+those agree (dev 99.99%, holdout 100.00%). Set `comment` aside — it is 67.20%
 of that decided region and mostly the corpus's harness-injected `# Source:`
-banner (#203) — and the remaining 8,788 bytes agree 95.90%. The device stops
+banner (#203) — and the remaining 8,788 bytes agree 99.98%. The device stops
 classifying at its one-byte `error`: 43 of 70 scripts carry one, and the
 43,417 bytes from there on are not a judgment about anything. The oracle
 itself moves between captures: 43 stop at 7.23.2 and 36 stop at 7.24rc2, and
@@ -1686,7 +1690,8 @@ two authors, so the percentage describes this slice.
 | `variable-parameter` | `variable-parameter` | 398 | 0 | 0 | 100.00% |
 | `dir` | `dir` | 1,606 | 0 | 0 | 100.00% |
 | `cmd` | `cmd` | 2,126 | 0 | 0 | 100.00% |
-| `arg` | `arg`, `arg-dot`, `arg-scope` | 2,111 | 358 | 0 | 85.50% |
+| `arg` | `arg`, `arg-dot`, `arg-scope` | 2,111 | 0 | 0 | 100.00% |
+| `arg-sep` | `syntax-meta` | 358 | 0 | 0 | 100.00% |
 | `operator` | `syntax-meta` | 232 | 2 | 0 | 99.15% |
 | `brace` | `syntax-meta` | 193 | 0 | 0 | 100.00% |
 | `string` | *abstains* | 0 | 0 | 886 | — |
@@ -1694,8 +1699,8 @@ two authors, so the percentage describes this slice.
 
 | outcome | bytes @7.23.2 | bytes @7.24rc2 |
 | ------- | ----: | ----: |
-| agree — both decided, projection accepts | 26,434 | 27,164 |
-| disagree — both decided, projection rejects | 360 | 384 |
+| agree — both decided, projection accepts | 26,792 | 27,546 |
+| disagree — both decided, projection rejects | 2 | 2 |
 | unprojected — no declared projection covers the pair | 1,051 | 1,061 |
 | offline-silent — device decided, centrs abstained | 4,158 | 4,308 |
 | non-syntax — the device answered something syntax cannot decide | 733 | 847 |
@@ -1723,7 +1728,7 @@ why it dominates the category.
 | offline-decidable | 32,002 | `comment` → `comment` 18,006, `unclassified` → `syntax-meta` 2,999, `cmd` → `cmd` 2,126 |
 | schema-dependent | 326 | `arg` → `obj-inactive` 326 |
 | state-dependent | 168 | `dir` → `obj-inactive` 120, `cmd` → `obj-inactive` 21, `unclassified` → `obj-dynamic` 20 |
-| version-dependent | 1,158 | `comment` → `none` 353, `unclassified` → `none` 285, `arg` → `none` 151 |
+| version-dependent | 1,158 | `comment` → `none` 353, `unclassified` → `none` 285, `arg` → `none` 128 |
 | uncategorized | 213 | `unclassified` → `obj-inactive` 90, `unclassified` → `variable-undefined` 75, `value` → `variable-undefined` 21 |
 | no-device-answer | 51,662 | `none` where the captures agree, wherever it falls |
 
@@ -1733,7 +1738,6 @@ and a byte offset into the stream the device saw.
 
 | outcome | cell | fragment | runs | first at |
 | ------- | ---- | -------- | ---: | -------- |
-| disagree | `arg` → `syntax-meta` | `"="` | 358 | `eworm/ppp-on-up.rsc` @424 |
 | disagree | `operator` → `arg` | `"in"` | 1 | `forum/amm0/topic-169456-having-the-where-filter-in-scripting-signifantly-increases-the-execution-time-an/post-0006-snippet-01.rsc` @615 |
 | unprojected | `string` → `syntax-meta` | `"\""` | 311 | `eworm/ppp-on-up.rsc` @435 |
 | unprojected | `string` → `escaped` | `"\\\""` | 53 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @559 |
@@ -1763,7 +1767,9 @@ same statements contributed to `agree` abstain with them. That is the price,
 and [the fix states it](#the-menu-path-with-arguments-324): withdrawing a
 fabricated verb also withdraws the menu reading it was built on.
 
-The `unprojected` residue is what #264 B5 reads. It was also where #325 lived:
+The `unprojected` residue is what #264 B5 read to decide which merges to
+split — [The vocabulary](#the-vocabulary-and-what-earns-a-class-264-b5) records
+the verdict on each. It was also where #325 lived:
 a quoted string claimed any `$[…]` substitution inside it, so bytes the device
 resolves to `cmd` or `dir` came back as one opaque `string` run even though
 `structure.subcommands` had already resolved that same span. Those cells have
@@ -1780,9 +1786,122 @@ the two residues left are stated rather than fixed:
   verb; the argument fill reads `statements[].arguments`, and a substitution is
   not a statement, so it has no candidate to claim (8 bytes).
 
-Whether the `$` sigil and the `[` / `]` delimiters stay `string`, become
-`brace`, or get a class of their own is #264 B5's call — the device calls them
-`syntax-meta`. And `value` bytes are, to the device, simply unclassified.
+The `$` sigil and the `[` / `]` delimiters stay `string`, and `value` bytes
+are, to the device, simply unclassified — both settled by
+[The vocabulary](#the-vocabulary-and-what-earns-a-class-264-b5) below.
+
+### The vocabulary, and what earns a class (#264 B5)
+
+`data.tokens[]` shipped with its `class` marked provisional from B1 onward —
+emit first, name later (#293 design decision 2). This is the "name later", and
+the vocabulary below is what `@tikoci/centrs/explain` offers a consumer. It is
+no longer provisional.
+
+**The rule a class has to pass.** A merged class is split when both hold, and
+stays merged otherwise:
+
+1. **A consumer needs the distinction** — it changes what that consumer renders
+   or decides, not just how a token dump reads.
+2. **The envelope cannot already supply it** — the distinction is not
+   recoverable by joining `tokens[]` to another published surface on byte
+   offsets.
+
+The second test is the one that does the work. A class that restates a fact
+`structure`, `symbols` or `values` already publishes is a second place for that
+fact to go stale, and the two copies can then disagree about the same bytes. So
+the question is never "would a name here be nice"; it is "what would a consumer
+have to do without it". Applied to the five merges the fills carried, exactly
+one passes:
+
+| merge | what a consumer would do without it | verdict |
+| ----- | ----------------------------------- | ------- |
+| `arg` — the name bytes **and** the `=` | subtract one from `arguments[].valueSpan.start`, which exists only where the STRICT reading read. **5,088 of the 16,526 `=` runs the fill paints (30.8%, in 436 of 948 corpus scripts) sit in a statement whose `arguments` refused** — led by `do=` (2,393), `else=` (328) and `in=` (212), the block binder of every `:if`, `:foreach` and `:while`. For those there is nothing to subtract from. | **split** → `arg-sep` |
+| `operator` — 26 spellings + 2 aliases | slice the input at the token's span: the spelling *is* the bytes, and `src/explain/operators.ts` maps it to its IL node | keep |
+| `value` — every leaf, whatever its shape | join `data.values.occurrences[]` on the offset; #225's three axes (shape, observed, schema) live there, and a class per shape would be a fourth copy free to contradict them | keep |
+| `brace` — scope and array delimiters | `structure.blocks[]` locates every scope block; an array container is the `values.occurrences[]` entry that is some other occurrence's `parent` | keep |
+| `string` — delimiters, escapes, interior | the opening delimiter is the run's first byte and, where the run is closed, the last is its partner (an unterminated one is already a located defect). The **escapes are a different answer** — see below | keep, with one admitted candidate |
+
+Re-derive the `arg-sep` figures with `bun run explain:arg-reach`, which prices
+the same gap it prices the reach fork with.
+
+**What the split cost.** Nothing, which was the claim and is now the
+measurement. Classified bytes are identical — 1,023,405 of 1,426,731 (71.73%),
+equal to the last recorded decimal before and after — and `arg` gave up exactly
+the 16,526 bytes `arg-sep` claims, one per attribute. Token count rises 214,503
+→ 231,026 because one run became two. **This is a retag.**
+
+One count is not a clean split: `arg`'s own run count falls 16,526 → 16,523.
+Three attributes lost their name run entirely, because an earlier `variable-*`
+span had already claimed the name bytes — `set $ifcId ssid=$ssid`, and two
+`on-error=` in one snippet — leaving only the `=` on the residual. Before the
+split those three emitted a token *called* `arg` that contained nothing but an
+`=`. That is the merge in miniature, and it is why the number goes down.
+
+**The agreement number moved a long way, and it is still not a score.** Against
+the committed device slice, projection disagreements fall **360 → 2** and the
+decided region goes 98.66% → 99.99% (`arg` alone 85.50% → 100.00%). Read that
+as the withdrawal of a wrong assertion, not as a parser that got better: centrs
+stopped calling a separator a name over the 358 runs the device had been
+reading as `syntax-meta` all along, and not one byte changed which analyzer
+found it. The two survivors are the `operator` → `arg` `in` of
+`:foreach conn in $conns`, where the two oracles genuinely differ.
+
+The projection entry was **declared before the measurement, never fitted to
+it**: `arg-sep` predicts `syntax-meta` because a separator is structure
+punctuation, the same reason `brace` and `operator` predict it. The slice then
+put 358 of 358 there.
+
+**Where the tolerant reading reaches the envelope (#316's open decision).** It
+reaches it *as the token partition*, and that is the only place it should.
+`structure.statements[].arguments` stays the strict all-or-nothing reading,
+because its consumer renders a runnable request and a half-read argument list
+changes what the rendered command does. But with the `=` named, `tokens[]`
+locates the argument on its own:
+
+```text
+/ip route add dst-address=1.1.1.1 gateway=$gw
+  arguments: { read: false, why: "a variable value" }
+  tokens:    … arg("gateway") arg-sep("=") unclassified("$") variable-parameter("gw")
+
+:if ($x = 1) do={ :put "hi" }
+  arguments: { read: false, why: "a substitution or expression value" }
+  tokens:    … operator("=") … arg("do") arg-sep("=") brace("{") …
+```
+
+Neither statement publishes a single argument, and in both a browser consumer
+can still see a located `gateway=` / `do=`. The second line is the
+discrimination working as well: the same `=` byte is `operator` inside
+`($x = 1)` and `arg-sep` in `do=`, decided by fill order and meaning rather
+than by a byte scan.
+
+What `tokens[]` still does **not** carry is the *reason* a value was not
+decoded. `undecided` stays off `ExplainArgumentToken` and out of the
+envelope: the envelope's value-fact surface is `data.values.occurrences[]`,
+where absence at an offset already *is* the abstention, and a second spelling
+of the same abstention would be free to disagree with it. A consumer that needs
+the reason imports `lexExplainArgumentTokens` from the package root — which is
+why that export exists.
+
+**The one candidate the rule admits and this change does not make.** A *valid*
+string escape is recoverable from nothing: only invalid ones surface, as
+`bad-string-escape` diagnostics, and finding the rest means walking the escape
+grammar (uppercase-hex `\XX`, the whitespace continuation, the twelve
+single-character forms) that
+[String escape validation](#string-escape-validation-247-252) already owns. The
+device does class them. On the slice that is 53 `string` → `escaped` runs and 1
+`value` → `escaped`, today counted `unprojected` because neither class has a
+device counterpart for the whole run; splitting escapes out would let the
+report score those bytes for the first time. It is a **fill change, not a retag** — the
+grammar has to be walked inside both `string` and `value` runs — so it is its
+own task, sized here rather than assumed, and it stays on #264.
+
+Delimiters are the near miss that shows the rule discriminates rather than
+rubber-stamps: `"` bytes are 311 `string` → `syntax-meta` runs and 88
+`value` → `syntax-meta`, the device classes them too, and they stay merged
+anyway, because a consumer can find them by looking at the run's own first and
+last byte. The `$` sigil and the `[` / `]` of a substitution stay `string` on
+the same ground — `structure.subcommands` already publishes the resolution, and
+its `innerSpan` locates the brackets around it.
 
 ### Designed, not implemented (the CLI surface, #202b)
 
@@ -2186,7 +2305,10 @@ The offline capability can advance from `coded` to `verified` when:
   read the skip-tolerant argument stream, never the strict REST reading (#316);
   the two share one boundary walk, the strict reading's reach is unchanged, and
   the skip-vs-prefix fork is priced rather than assumed —
-  [The token stream a rule reads](#the-token-stream-a-rule-reads-316).
+  [The token stream a rule reads](#the-token-stream-a-rule-reads-316). That
+  stream reaches the envelope as the token partition and nowhere else, which is
+  what makes the `=` boundary visible to a consumer whose statement published
+  no arguments at all (#264 B5).
 - **Usable library contract:** one bounded browser/editor consumer imports a
   documented public offline entry point, runs analysis without transport/CDB
   dependencies, and verifies structure, diagnostics, tokens, and source-position
@@ -2194,9 +2316,11 @@ The offline capability can advance from `coded` to `verified` when:
   `bun run explain:browser-consumer` — see
   [The offline package entry](#the-offline-package-entry-312); the boundary is a
   module-graph gate and the consumer proof executes the browser bundle rather
-  than only compiling it. #264 B5 settles the token vocabulary
-  that this consumer needs. A complete editor, LSP server, palette reproduction,
-  or SCIP implementation is not required to prove this contract.
+  than only compiling it. The token vocabulary that consumer reads is settled by
+  #264 B5 — [The vocabulary](#the-vocabulary-and-what-earns-a-class-264-b5) —
+  on a stated rule, with the merges it keeps and the one split it admits but
+  does not make each recorded there. A complete editor, LSP server, palette
+  reproduction, or SCIP implementation is not required to prove this contract.
 - **Reachable evidence and explicit residue:** changed RouterOS semantic claims
   have committed CHR-grounded controls and a reproducible capture/replay path.
   Every remaining issue has a stated scope and dependency; #225 distinguishes

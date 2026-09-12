@@ -605,6 +605,33 @@ describe("commands/explain/examples.md — offline", () => {
 		).toBe(input);
 		expect(code).toBe(0);
 	});
+
+	test("32. A block binder the envelope cannot publish is still located (#264 B5)", async () => {
+		const input = ':if ($x = 1) do={ :put "hi" }';
+		const { data, code } = await explainJson([input, "--tokens"]);
+		// The envelope publishes NOTHING for this statement's arguments: the
+		// strict reading is all-or-nothing and its consumer renders a runnable
+		// request. This is the case the `=` split exists for.
+		expect(data.structure.statements[0]?.arguments).toEqual({
+			read: false,
+			why: "a substitution or expression value",
+		});
+		const classAt = (offset: number): string | undefined =>
+			(data.tokens ?? []).find((t) => t.start <= offset && t.end > offset)
+				?.class;
+		// `do` and its `=` are located even though no argument token was published.
+		const doAt = input.indexOf("do=");
+		expect(classAt(doAt)).toBe("arg");
+		expect(classAt(doAt + 2)).toBe("arg-sep");
+		// The OTHER `=` in the same command is a comparison and stays an operator,
+		// so the new class is not a magnet for every `=` byte.
+		expect(classAt(input.indexOf("$x = 1") + 3)).toBe("operator");
+		// Total and gapless, as always.
+		expect(
+			(data.tokens ?? []).map((t) => input.slice(t.start, t.end)).join(""),
+		).toBe(input);
+		expect(code).toBe(0);
+	});
 });
 
 test("64 KiB separator-free input stays bounded through public explain (#248)", () => {

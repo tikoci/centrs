@@ -471,18 +471,29 @@ export type TokenFill = readonly ExplainToken[];
  * Byte-exact, inheriting the #215/#252 offset discipline. Offsets are on the
  * analyzed text; `input.positionMap` applies when normalized.
  *
- * `class` is **explicitly provisional until #264 B5** — the vocabulary here is
- * not the final LSP/SCIP legend, and every byte no analyzer claims becomes
- * `unclassified`. Filling those holes is B2, one PR per fill. `unclassified`
- * is a first-class answer, not a placeholder to be avoided.
+ * `class` is the vocabulary #264 B5 settled (see below); it is not an LSP/SCIP
+ * legend and does not try to be one. Every byte no analyzer claims becomes
+ * `unclassified`, which is a first-class answer, not a placeholder to be
+ * avoided.
  *
  * B2 so far: `dir` / `cmd` (resolved path and verb bytes, including valid path
  * slashes), `operator` (26 spellings + 2 aliases, `syntax-meta` is a residual
- * merge, never a source, #255), `arg` (argument names and their `=` as located
- * by `args.ts`), and `value` (argument value bytes and leaf array-literal
- * members from `data.values.occurrences`, quotes included, #295). Whether
- * separators or per-shape values later deserve distinct classes is #264 B5
- * vocabulary and does not move byte coverage.
+ * merge, never a source, #255), `arg` / `arg-sep` (argument names and the `=`
+ * that binds each one to its value, both located by `args.ts`), and `value`
+ * (argument value bytes and leaf array-literal members from
+ * `data.values.occurrences`, quotes included, #295).
+ *
+ * **B5 settled which merges get their own name** (`commands/explain/README.md`
+ * -> *The vocabulary, and what earns a class*, where the figures live beside
+ * the generated blocks that keep them honest): a class is split only where a
+ * consumer holding the whole envelope could not recover the distinction by
+ * joining `tokens[]` to another published surface on byte offsets. `arg-sep` is
+ * the one split that test forced, because a large minority of the `=` runs the
+ * arg fill paints belong to a statement whose strict `arguments` reading
+ * refused, so there is no `ExplainArgumentToken.valueSpan` to subtract one
+ * from. The per-spelling `operator`, per-shape `value`, and scope-versus-array
+ * `brace` merges all stay merged — the bytes, `data.values.occurrences[]`, and
+ * `structure.blocks[]` already carry those distinctions.
  */
 export type ExplainTokenClass =
 	| ExplainSpanClass
@@ -490,6 +501,16 @@ export type ExplainTokenClass =
 	| "cmd"
 	| "operator"
 	| "arg"
+	/**
+	 * The single `=` byte binding one argument name to its value (#264 B5).
+	 *
+	 * Never a comparison `=`, and the separation is fill order rather than a
+	 * byte scan: the `arg` fill offers only the `=` its own located token names,
+	 * so a comparison inside a `( )` group falls through to `operator`, and one
+	 * inside a `[ … ]` substitution stays `unclassified` where the operator fill
+	 * abstains (`src/explain/operator-tokens.ts`).
+	 */
+	| "arg-sep"
 	| "value"
 	| "string"
 	| "brace"
@@ -497,7 +518,8 @@ export type ExplainTokenClass =
 
 export interface ExplainToken extends ExplainSpanRange {
 	/**
-	 * Provisional until #264 B5 — do not treat as the final vocabulary.
+	 * The vocabulary #264 B5 settled — see {@link ExplainTokenClass} for what
+	 * earns a class and why the remaining merges are deliberate.
 	 * `unclassified` means no analyzer claimed this byte.
 	 */
 	class: ExplainTokenClass;
@@ -648,8 +670,8 @@ export interface ExplainData {
 	 * `--schema` / `--curl` facet pattern. Every byte belongs to exactly one
 	 * token, sorted by `start`, with no gaps and no overlaps:
 	 * `tokens.map(t => input.slice(t.start, t.end)).join("") === input`.
-	 * The `class` field is provisional until #264 B5; every byte no analyzer
-	 * claims is `unclassified`.
+	 * `class` is the vocabulary #264 B5 settled ({@link ExplainTokenClass});
+	 * every byte no analyzer claims is `unclassified`.
 	 */
 	tokens?: ExplainToken[];
 	diagnostics: ExplainDiagnostic[];
@@ -1008,8 +1030,8 @@ export function residualRanges(
  *
  * Every byte of `[0, bytes)` belongs to exactly one token: `spans` are
  * placed sorted, no gaps become `unclassified`, and the result is sorted by
- * `start` with no overlaps and `join(slice) === input`. The `class` field is
- * provisional until #264 B5.
+ * `start` with no overlaps and `join(slice) === input`. See
+ * {@link ExplainTokenClass} for what `class` may be and why.
  *
  * B2: `buildTokens` now takes an **ordered list of fills**. Fill 0 claims
  * first, fill 1 sees only the residual of fill 0, and so on — the argument
@@ -1128,8 +1150,8 @@ export interface ExplainCommandOptions {
 	 * Emit the total, gapless token partition behind `data.tokens[]`.
 	 *
 	 * Mirrors `--complete` / `--schema` / `--curl`: an opt-in facet whose
-	 * presence changes the result. The `class` field is provisional until
-	 * #264 B5.
+	 * presence changes the result. See {@link ExplainTokenClass} for the
+	 * vocabulary `class` draws on (#264 B5).
 	 */
 	tokens?: boolean;
 }
@@ -2065,8 +2087,8 @@ export interface ExplainEnvelopeOptions {
 	/**
 	 * Include the gapless token partition behind `data.tokens[]`.
 	 *
-	 * Mirrors `--complete` / `--schema` / `--curl` facet pattern. Provisional
-	 * vocabulary until #264 B5.
+	 * Mirrors `--complete` / `--schema` / `--curl` facet pattern. The vocabulary
+	 * is `ExplainTokenClass` (#264 B5).
 	 */
 	tokens?: boolean;
 	tips?: readonly Tip[];
@@ -2344,7 +2366,7 @@ function renderExplainText(
 		const bytes = data.input.bytes;
 		const pct = bytes === 0 ? 0 : (classified / bytes) * 100;
 		lines.push(
-			`tokens: ${data.tokens.length} token(s), ${classified}/${bytes} byte(s) classified (${pct.toFixed(1)}%), class provisional`,
+			`tokens: ${data.tokens.length} token(s), ${classified}/${bytes} byte(s) classified (${pct.toFixed(1)}%)`,
 		);
 		for (const t of data.tokens)
 			lines.push(`  ${span(t).padEnd(12)} ${t.class}`);

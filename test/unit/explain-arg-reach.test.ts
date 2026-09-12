@@ -117,3 +117,89 @@ describe("the reach sweep counts what it says it counts", () => {
 		expect(r.boundaryMismatches).toEqual([]);
 	});
 });
+
+/**
+ * The envelope gap (#264 B5) — the published number behind the `=` split.
+ *
+ * Same rule as the reach columns above: this figure is quoted in
+ * `commands/explain/README.md` and was the evidence for giving the `=` its own
+ * class, so its arithmetic is pinned here rather than trusted. These counters
+ * are measured through `explainCommand`, not the lexer, so they can drift for
+ * reasons the reach columns cannot see — a change to the fill's withdrawal
+ * rules moves them while every assertion above still passes.
+ */
+describe("the sweep counts what the envelope cannot account for", () => {
+	test("a statement the strict reading READ publishes every separator", () => {
+		const r = sweep(["/ip/route/add dst-address=0.0.0.0/0 gateway=1.1.1.1"]);
+		expect(r.envelopeSeparators).toBe(2);
+		expect(r.envelopeSeparatorsUnpublished).toBe(0);
+		expect(r.envelopeScriptsAffected).toBe(0);
+		expect(r.envelopeTopUnpublished).toEqual([]);
+	});
+
+	test("one refusal leaves the WHOLE statement's separators unpublished", () => {
+		// The load-bearing case, and the reason the gap is as large as it is:
+		// `arguments` is all-or-nothing, so `dst-address=` goes unpublished too
+		// even though it decodes perfectly. A consumer has no `valueSpan` for
+		// either one. Contrast the reach columns above, where this same input
+		// gives design A a one-token prefix.
+		const r = sweep(["/ip/route/add dst-address=0.0.0.0/0 gateway=$g"]);
+		expect(r.strictRefused).toBe(1);
+		expect(r.envelopeSeparators).toBe(2);
+		expect(r.envelopeSeparatorsUnpublished).toBe(2);
+		expect(r.envelopeScriptsAffected).toBe(1);
+		expect(r.envelopeTopUnpublished).toEqual([
+			["dst-address=", 1],
+			["gateway=", 1],
+		]);
+	});
+
+	test("a block binder is named, which is what dominates the corpus figure", () => {
+		const r = sweep([':if ($x = 1) do={ :put "hi" }']);
+		expect(r.envelopeSeparators).toBe(1);
+		expect(r.envelopeSeparatorsUnpublished).toBe(1);
+		expect(r.envelopeTopUnpublished).toEqual([["do=", 1]]);
+	});
+
+	test("a withdrawn reading paints nothing, so it counts nothing", () => {
+		// #311's second command-shaped run withdraws the argument reading, and the
+		// fill paints no `arg-sep` at all. Counting tolerant tokens here instead
+		// would over-report the gap — which is why this is measured through
+		// `explainCommand` rather than `lexArgumentTokens`.
+		const r = sweep([
+			"/ip/address add interface=ether1 /ip/route add gateway=$g",
+		]);
+		expect(r.envelopeSeparators).toBe(0);
+		expect(r.envelopeSeparatorsUnpublished).toBe(0);
+		expect(r.envelopeScriptsAffected).toBe(0);
+	});
+
+	test("the unpublished tally ranks by frequency and counts scripts once", () => {
+		const r = sweep([
+			":if ($a) do={ :put 1 }",
+			":foreach x in={1;2} do={ :put $x }",
+			"/ip/route/add gateway=1.1.1.1",
+		]);
+		// Four separators painted, three of them unpublished: the literal
+		// `gateway=` in the third script is the one the envelope does publish,
+		// so the gap is a real subset rather than "everything the fill painted".
+		expect(r.envelopeSeparators).toBe(4);
+		expect(r.envelopeSeparatorsUnpublished).toBe(3);
+		// Two scripts contribute; the third publishes everything it paints.
+		expect(r.envelopeScriptsAffected).toBe(2);
+		// Ranked by frequency, and `do=` occurs in both — so the tally is over
+		// runs, not over scripts.
+		expect(r.envelopeTopUnpublished).toEqual([
+			["do=", 2],
+			["in=", 1],
+		]);
+	});
+
+	test("an empty corpus reports an empty gap, not a missing one", () => {
+		const r = sweep([]);
+		expect(r.envelopeSeparators).toBe(0);
+		expect(r.envelopeSeparatorsUnpublished).toBe(0);
+		expect(r.envelopeScriptsAffected).toBe(0);
+		expect(r.envelopeTopUnpublished).toEqual([]);
+	});
+});

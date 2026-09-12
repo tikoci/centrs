@@ -16,12 +16,12 @@
 				"scriptsWithParserStop": 24,
 				"stoppedBytes": 36652,
 				"live": {
+					"arg-sep|syntax-meta|same": 288,
 					"arg|arg-dot|same": 18,
 					"arg|arg-scope|same": 149,
 					"arg|arg|same": 1674,
 					"arg|none|same": 23,
 					"arg|obj-inactive|same": 324,
-					"arg|syntax-meta|same": 288,
 					"brace|syntax-meta|same": 99,
 					"cmd|cmd|same": 1323,
 					"cmd|none|same": 16,
@@ -67,9 +67,11 @@
 					"variable-parameter|variable-parameter|same": 209
 				},
 				"stopped": {
+					"arg-sep|none|differs": 16,
+					"arg-sep|none|same": 1124,
 					"arg|error|differs": 1,
-					"arg|none|differs": 82,
-					"arg|none|same": 11007,
+					"arg|none|differs": 66,
+					"arg|none|same": 9883,
 					"brace|none|differs": 15,
 					"brace|none|same": 65,
 					"cmd|none|differs": 93,
@@ -103,12 +105,12 @@
 				"scriptsWithParserStop": 19,
 				"stoppedBytes": 6765,
 				"live": {
+					"arg-sep|syntax-meta|same": 70,
 					"arg|arg-dot|same": 2,
 					"arg|arg-scope|same": 12,
 					"arg|arg|same": 256,
 					"arg|none|differs": 7,
 					"arg|obj-inactive|same": 2,
-					"arg|syntax-meta|same": 70,
 					"brace|syntax-meta|same": 94,
 					"cmd|cmd|same": 803,
 					"cmd|none|same": 6,
@@ -146,9 +148,12 @@
 					"variable-parameter|variable-parameter|same": 189
 				},
 				"stopped": {
-					"arg|error|differs": 2,
-					"arg|none|differs": 62,
-					"arg|none|same": 285,
+					"arg-sep|error|differs": 1,
+					"arg-sep|none|differs": 7,
+					"arg-sep|none|same": 39,
+					"arg|error|differs": 1,
+					"arg|none|differs": 55,
+					"arg|none|same": 246,
 					"brace|error|same": 1,
 					"brace|none|differs": 3,
 					"brace|none|same": 42,
@@ -183,6 +188,8 @@
 				"scriptsWithParserStop": 21,
 				"stoppedBytes": 36009,
 				"live": {
+					"arg-sep|syntax-meta|differs": 16,
+					"arg-sep|syntax-meta|same": 288,
 					"arg|arg-dot|same": 18,
 					"arg|arg-scope|same": 149,
 					"arg|arg|differs": 30,
@@ -190,8 +197,6 @@
 					"arg|none|same": 33,
 					"arg|obj-inactive|differs": 37,
 					"arg|obj-inactive|same": 324,
-					"arg|syntax-meta|differs": 16,
-					"arg|syntax-meta|same": 288,
 					"brace|syntax-meta|differs": 15,
 					"brace|syntax-meta|same": 99,
 					"cmd|cmd|differs": 81,
@@ -247,7 +252,8 @@
 					"variable-parameter|variable-parameter|same": 209
 				},
 				"stopped": {
-					"arg|none|same": 10997,
+					"arg-sep|none|same": 1124,
+					"arg|none|same": 9873,
 					"brace|none|same": 65,
 					"cmd|none|same": 1289,
 					"comment|none|same": 1055,
@@ -273,14 +279,14 @@
 				"scriptsWithParserStop": 15,
 				"stoppedBytes": 6055,
 				"live": {
+					"arg-sep|syntax-meta|differs": 8,
+					"arg-sep|syntax-meta|same": 70,
 					"arg|arg-dot|same": 2,
 					"arg|arg-scope|same": 12,
 					"arg|arg|differs": 47,
 					"arg|arg|same": 256,
 					"arg|obj-inactive|differs": 16,
 					"arg|obj-inactive|same": 2,
-					"arg|syntax-meta|differs": 8,
-					"arg|syntax-meta|same": 70,
 					"brace|syntax-meta|differs": 3,
 					"brace|syntax-meta|same": 94,
 					"cmd|cmd|differs": 31,
@@ -328,7 +334,8 @@
 					"variable-parameter|variable-parameter|same": 189
 				},
 				"stopped": {
-					"arg|none|same": 285,
+					"arg-sep|none|same": 39,
+					"arg|none|same": 246,
 					"brace|error|same": 1,
 					"brace|none|same": 42,
 					"cmd|none|same": 347,
@@ -351,6 +358,12 @@
 		}
 	},
 	"examples": {
+		"arg-sep|syntax-meta|same": {
+			"text": "=",
+			"runs": 358,
+			"path": "eworm/ppp-on-up.rsc",
+			"offset": 424
+		},
 		"arg|arg-dot|same": {
 			"text": ".",
 			"runs": 20,
@@ -386,12 +399,6 @@
 			"runs": 16,
 			"path": "forum/amm0/topic-163038-router-dies-after-10-exact-minutes/post-0011-snippet-01.rsc",
 			"offset": 931
-		},
-		"arg|syntax-meta|same": {
-			"text": "=",
-			"runs": 358,
-			"path": "eworm/ppp-on-up.rsc",
-			"offset": 424
 		},
 		"brace|syntax-meta|same": {
 			"text": "{",

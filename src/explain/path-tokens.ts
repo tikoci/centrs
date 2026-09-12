@@ -9,7 +9,7 @@
  * separators remain unclassified. A `\<newline>` inside a name interrupts the
  * emitted range so the continuation bytes remain available to the escape fill.
  *
- * Vocabulary is provisional until #264 B5: `dir` and `cmd` mirror the useful
+ * Vocabulary settled by #264 B5: `dir` and `cmd` mirror the useful
  * lexical distinction already produced by RouterOS highlight, but are
  * centrs-owned classes.
  */

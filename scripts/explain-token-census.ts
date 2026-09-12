@@ -5,8 +5,8 @@
  * B1 emits `data.tokens[]`: a total, gapless byte partition where every byte in
  * `[0, input.bytes)` belongs to exactly one token, sorted by `start`, with no
  * gaps and `join(slice) === input`. Every byte no analyzer claims is
- * `unclassified`; filling those holes is B2. The `class` field is provisional
- * until #264 B5, and the deliverable here is a **number**: percent of corpus
+ * `unclassified`; filling those holes is B2. The `class` field draws on the
+ * vocabulary #264 B5 settled, and the deliverable here is a **number**: percent of corpus
  * bytes classified (not `unclassified`), reported the way the other census
  * figures are — a counter in a generated block, never prose (#260).
  *
@@ -215,7 +215,7 @@ export function renderReadmeBlock(result: TokenCensus): string[] {
 			`The census emits ${count(result.totalTokens)} tokens ` +
 			`(avg ${result.avgTokensPerScript.toFixed(1)} per script). ` +
 			"Every byte belongs to exactly one token — sorted by `start`, no gaps, no overlaps, " +
-			"`join(slice) === input` — and the `class` field is provisional until #264 B5. " +
+			"`join(slice) === input` — and the `class` field is the vocabulary #264 B5 settled. " +
 			"Each B2 fill should move the classified percentage.",
 	);
 }

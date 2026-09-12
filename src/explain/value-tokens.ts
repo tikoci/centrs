@@ -23,11 +23,11 @@
  * `span` is quotes-INCLUDED by contract (deliberate; the quotes/escapes fill is
  * a separate staging row and must not double-claim them).
  *
- * Vocabulary is provisional until #264 B5: one `value` class for every leaf span,
- * regardless of shape/observed/schema type — the three #225 facts stay where
- * they already are, in `data.values[]`, joined by offset. Do not read
- * `ExplainValueOccurrence.facts` to pick a class. Whether `value` later splits
- * per shape is B5 and does not move byte coverage.
+ * One `value` class for every leaf span, regardless of shape/observed/schema
+ * type — the three #225 facts stay where they already are, in `data.values[]`,
+ * joined by offset. Do not read `ExplainValueOccurrence.facts` to pick a class.
+ * #264 B5 kept this merge for that reason: a class per shape would be a fourth
+ * copy of those axes, free to contradict the three that are already published.
  *
  * ~1,720 leaf bytes are already held by `variable-*` spans (a variable inside
  * a quoted value). Reuses the clipping shape from `arg-tokens.ts`: offer only

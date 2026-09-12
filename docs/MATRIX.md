@@ -156,16 +156,23 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 The sequence is correctness and performance, token projection/agreement
 (#264 B4 / #263), then a bounded browser/editor consumer check and the vocabulary
 it needs (#264 B5). The projection and its device-agreement report have landed
-(`bun run explain:highlight-agreement`); its `unprojected` residue is the
-evidence B5 reads. The consumer boundary has landed too (#312): `@tikoci/centrs/explain`
+(`bun run explain:highlight-agreement`); its `unprojected` residue was the
+evidence B5 read. The consumer boundary has landed too (#312): `@tikoci/centrs/explain`
 is the documented entry, and `bun run explain:browser-consumer` gates both the
 module graph and an executed browser bundle. #316 has since separated the
 reading a token-level rule uses from the strict REST one, which took the
 argument token stream from 51.8% of the corpus's argument-bearing statements to
-100% and moved the classified-byte census to 71.73%; the `=` byte it newly
-disagrees with the device about is counted evidence for B5. What remains on the
-track is #322 (depth-axis growth) and #264 B5. The issue index owns the
-individual tasks and their dependencies.
+100% and moved the classified-byte census to 71.73%. **#264 B5 has since
+settled the vocabulary** on a stated rule (split only what a consumer needs and
+cannot recover from another published surface): the argument `=` became
+`arg-sep`, the other four merges were kept with their recovery path named, and
+the tolerant reading reaches the envelope as the token partition rather than by
+loosening `statements[].arguments` — see
+[The vocabulary](../commands/explain/README.md#the-vocabulary-and-what-earns-a-class-264-b5).
+What remains on the track is #322 (depth-axis growth) and the one split B5's
+rule admits but did not make: a valid string escape, which is a fill change
+rather than a retag and stays on #264. The issue index owns the individual
+tasks and their dependencies.
 
 Unfinished SNMP, RoMON, TUI, or other protocol/frontend cells do not preempt this
 track. Live `explain` (#236) remains a separate next capability. Change this

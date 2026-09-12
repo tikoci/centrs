@@ -92,7 +92,7 @@ export const explainCliCommand: CliCommandMetadata = {
 		{
 			flag: "--tokens",
 			description:
-				"Emit the total, gapless token partition behind `data.tokens[]` (provisional `class` until #264 B5: every byte not claimed by an analyzer is `unclassified`).",
+				"Emit the total, gapless token partition behind `data.tokens[]` (every byte not claimed by an analyzer is `unclassified`).",
 		},
 		{
 			flag: "--format",

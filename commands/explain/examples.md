@@ -675,5 +675,28 @@ did — and `data.tokens[]` now agrees with it: `dir` over `/ip` and `address`,
 had already read as flat text.
 
 Byte coverage does not change — the partition is still total and gapless — only
-which fill owns those bytes. Whether the `$` sigil and the `[` / `]` delimiters
-deserve a class of their own is #264 B5; the device calls them `syntax-meta`.
+which fill owns those bytes. The `$` sigil and the `[` / `]` delimiters stay
+`string`: #264 B5 kept them there because `structure.subcommands` already
+publishes the resolution and its `innerSpan` locates the brackets around it.
+
+### 32. A block binder the envelope cannot publish is still located
+
+```bash
+centrs explain ':if ($x = 1) do={ :put "hi" }' --tokens --json
+```
+
+`data.structure.statements[0].arguments` is `{ read: false, why: "a
+substitution or expression value" }` — the strict reading is all-or-nothing and
+a runnable request cannot be rendered from a half-read argument list, so the
+envelope publishes no `ExplainArgumentToken` here at all. `data.tokens[]` still
+locates the argument: `arg` over `do`, `arg-sep` over its `=`, `brace` over the
+`{`.
+
+That is why #264 B5 gave the `=` its own class. A consumer holding only the
+envelope would otherwise have to derive the name/value boundary from
+`arguments[].valueSpan.start - 1`, and for 30.8% of the corpus's `=` runs —
+`do=` first among them — there is no published `valueSpan` to derive it from.
+
+The same command also shows the two `=` bytes staying apart: the one in
+`($x = 1)` is a comparison and comes back `operator`, decided by fill order
+rather than by a scan for the byte.

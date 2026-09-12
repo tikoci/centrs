@@ -12,10 +12,14 @@
  * `src/explain/quoted-string.ts` (`scanQuotedString`), the same primitive the
  * segmenter and symbol resolver use, so boundaries cannot drift.
  *
- * Vocabulary is provisional until #264 B5: one `string` class for every quoted
- * run (delimiters included), regardless of whether the string is a literal
- * value, a name, or code. Whether escapes or interpolations later deserve a
- * distinct class is B5 and does not move byte coverage.
+ * One `string` class for every quoted run, delimiters included, regardless of
+ * whether the string is a literal value, a name, or code. The delimiters are
+ * part of the run because they are its own first and last byte, so nothing is
+ * gained by naming them separately (#264 B5). A valid ESCAPE inside the run is
+ * not separated either, and that is the weaker of the two reasons: locating one
+ * means walking the escape grammar that `collectStringEscapeDefects` owns,
+ * which is a fill change rather than a retag, so this fill claims the whole run
+ * and the escape question stays open on #264.
  */
 
 import type { ExplainToken } from "../explain.ts";
