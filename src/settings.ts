@@ -24,6 +24,7 @@ import type {
 	Warning,
 } from "./core/envelope.ts";
 import { buildTip } from "./core/envelope.ts";
+import { toYaml } from "./core/yaml.ts";
 import { loadCdb, resolveDevicesSettings } from "./devices.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
@@ -37,7 +38,7 @@ import {
 	readSettingsFileRaw,
 	resolveOptionalIntegerSetting,
 } from "./resolver/index.ts";
-import { retrieveOutputFormats, toYaml } from "./retrieve.ts";
+import { retrieveOutputFormats } from "./retrieve.ts";
 
 // ── Envelope shape ───────────────────────────────────────────────────────────
 

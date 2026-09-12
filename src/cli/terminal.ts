@@ -6,6 +6,7 @@
  * `process.*`); the core relay in `../terminal.ts` stays io-agnostic.
  */
 
+import { toYaml } from "../core/yaml.ts";
 import {
 	asCentrsError,
 	CentrsError,
@@ -18,7 +19,6 @@ import {
 	type TerminalIo,
 	type TerminalRequest,
 } from "../index.ts";
-import { toYaml } from "../retrieve.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,

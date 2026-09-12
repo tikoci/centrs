@@ -23,10 +23,10 @@ import {
 	renderBtestClientEnvelope,
 	renderBtestServerEnvelope,
 } from "../btest.ts";
+import { toYaml } from "../core/yaml.ts";
 import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
 import { describeCentrs, parseDuration } from "../index.ts";
 import type { BtestDirection, BtestProtocol } from "../protocols/btest.ts";
-import { toYaml } from "../retrieve.ts";
 import {
 	type CliCommandMetadata,
 	type CliCommandOption,

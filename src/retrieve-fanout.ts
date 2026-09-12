@@ -46,6 +46,7 @@ import {
 	runFanout,
 	summarizeFanout,
 } from "./core/fanout.ts";
+import { toYaml } from "./core/yaml.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
@@ -71,7 +72,6 @@ import {
 	resolveRetrieveGlobalContext,
 	resolveRetrieveRequest,
 	runResolvedRetrieve,
-	toYaml,
 	validateRetrieveRequestShape,
 } from "./retrieve.ts";
 

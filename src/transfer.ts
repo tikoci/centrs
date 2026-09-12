@@ -29,6 +29,7 @@ import type {
 	EnvelopeValidationMeta,
 	Warning,
 } from "./core/envelope.ts";
+import { toYaml } from "./core/yaml.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import {
 	createProtocolAdapter,
@@ -54,7 +55,6 @@ import {
 	resolveTarget,
 	toCoreSource,
 } from "./resolver/index.ts";
-import { toYaml } from "./retrieve.ts";
 
 export const transferOutputFormats = ["text", "json", "yaml"] as const;
 export type TransferOutputFormat = (typeof transferOutputFormats)[number];

@@ -1739,8 +1739,100 @@ That is the difference — an accepted flag must do something observable.
   semantic tokens over these calls); an LSP *protocol* surface on centrs
   stays out of scope (#90). A bounded offline browser/editor consumption check
   now precedes vocabulary stabilization (#264 B5); full live LSP integration
-  remains later work. The current public module imports execution and
-  retrieval code and is not yet a verified browser entry point.
+  remains later work. The entry is `@tikoci/centrs/explain` and it is browser-verified —
+  see [The offline package entry](#the-offline-package-entry-312).
+
+### The offline package entry (#312)
+
+**`@tikoci/centrs/explain` -> `src/explain.ts`** is the documented public entry for
+offline analysis. It is a real boundary, not a naming convention: the module
+graph reachable from it opens no connection, reads no CDB, and touches no
+filesystem, so it bundles and runs in a browser, a Worker, or an editor host.
+
+```sh
+bun run explain:browser-consumer          # boundary + executed consumer report
+bun run explain:browser-consumer --json   # machine-readable
+```
+
+Both halves are gated in the unit suite by
+`test/unit/explain-browser-entry.test.ts`, so neither needs a router or the
+corpus.
+
+**Why a gate and not a note.** The entry reached the transport stack until this
+landed, for two *pure* helpers: `toYaml` (from `retrieve.ts`) and
+`canonicalizeExecuteCommand`/`isWriteShaped` (from `execute.ts`). Importing
+either dragged in `mac-telnet` (`node:dgram`, `node:os`), `native-api`
+(`node:crypto`) and `ssh`. Both now live in `src/core/` — `src/core/yaml.ts` and
+`src/core/execute-command.ts` — moved character for character, with `execute.ts`
+re-exporting the gate because it remains that gate's documented public home.
+**Nothing about the script-vs-structured gate moved with them**; the locked
+contract table in `test/unit/execute-canonicalize-contract.test.ts` still imports
+from `execute` and still passes.
+
+That coupling was re-introduced once already by a one-line import, which is why
+the static half of the check names the offending **edge** (`explain.ts ->
+execute.ts -> mac-telnet-console.ts -> mac-telnet.ts`) rather than leaving a
+reader with the bundler's polyfill complaint four modules downstream.
+
+**What "runs in a browser" is proven by.** Compilation is not the proof. A
+bundler silently substitutes browser polyfills, so the check bundles a worker
+entry around the module with `--target browser`, wraps the output in a function
+that shadows every host global (`Bun`, `process`, `require`, `module`,
+`exports`, `__dirname`, `__filename`), and **spawns that bundle as the Worker**.
+`Bun` is a non-configurable global — `delete globalThis.Bun` throws — so
+shadowing, not deletion, is what makes the absence real, and doing it in the
+bundler's banner keeps the harness free of `eval`/`new Function` while making
+the bundle text on disk the artifact that carries the claim.
+
+It then compares the whole `ExplainData` against the Bun-native run, field for
+field: structure, diagnostics, tokens, spans, `canonical`, and
+`runtimeAcceptance`. Fourteen cases, covering normal and write-shaped commands,
+multi-statement and nested input, three malformed classes, Unicode, astral, a
+leading BOM, IPv6, empty input, and the facets switched off. All fourteen are
+byte-identical today.
+
+Two things the bundle deliberately exercises rather than bypasses. It imports
+through the **published subpath** `@tikoci/centrs/explain`, not
+`../src/explain.ts`, so a typo in `package.json`'s `exports` map fails the gate
+instead of leaving it green while every real consumer breaks (the graph walk
+additionally asserts that the `exports` entry and the measured file are the same
+path). And it calls `resolveExplainFormat(undefined)`, whose `env` default is
+the `typeof`-guarded `hostEnv()` — nothing else reaches that parameter, so
+without this a regression to a bare `Bun.env` would pass every case here while a
+browser caller of that exported function got a `TypeError`.
+
+The shadowing is **measured from inside the bundle**, not assumed: the worker
+reports which host globals it could still see, and an empty list is part of the
+gate. Without it, a wrapper that silently stopped being emitted would leave
+every "identical" above produced with host APIs in reach, proving nothing. Only
+`Bun` and `process` are probed, because they are the only two of the seven a
+bundle can honestly observe — Bun constant-folds `typeof require` to
+`"function"` at build time, mentioning `__dirname`/`__filename` makes it inject
+the build machine's absolute paths as local constants (the probe would cause
+what it reports), and mentioning `module`/`exports` reclassifies the entry as
+CommonJS, whose top-level `export default` is a syntax error inside the wrapper.
+All seven stay shadowed regardless.
+
+The one tolerated host builtin is **`node:net`**, for `isIP` in
+`src/explain/values.ts` — a pure predicate with no socket in it. A bundler
+replaces it with a regex pair, so the browser build genuinely runs a *different*
+`isIP` than Bun does; the two IPv6 cases exist to price that substitution, which
+is the only place its verdict is observable. A builtin that polyfills to a stub
+(`node:fs`) or throws (`node:dgram`) could not be checked this way, so the
+allowlist is a boundary, not a list to extend.
+
+**What it does not claim.** Not that the `centrs` package works in a browser —
+it does not, and is not meant to. Not DOM integration, no real browser engine.
+And these cases are a boundary corpus, not a parser-coverage corpus; measured
+parser evidence stays in the censuses and
+[Device agreement](#device-agreement-for-the-token-partition-264-b4-263).
+
+**What this hands #264 B5.** The comparison serializes the entire public result,
+so it pins the vocabulary a consumer actually depends on: every `tokens[]` class
+name, every span pair, and the `ExplainData` key set are now load-bearing across
+a process boundary. A B5 rename is therefore a visible break here rather than a
+silent one — which is the point of settling the vocabulary before an external
+consumer commits to it.
 
 ## Non-goals
 
@@ -1993,7 +2085,11 @@ The offline capability can advance from `coded` to `verified` when:
 - **Usable library contract:** one bounded browser/editor consumer imports a
   documented public offline entry point, runs analysis without transport/CDB
   dependencies, and verifies structure, diagnostics, tokens, and source-position
-  mapping against the CLI/library result (#312). #264 B5 settles the token vocabulary
+  mapping against the CLI/library result (#312). **Met** by `@tikoci/centrs/explain` and
+  `bun run explain:browser-consumer` — see
+  [The offline package entry](#the-offline-package-entry-312); the boundary is a
+  module-graph gate and the consumer proof executes the browser bundle rather
+  than only compiling it. #264 B5 settles the token vocabulary
   that this consumer needs. A complete editor, LSP server, palette reproduction,
   or SCIP implementation is not required to prove this contract.
 - **Reachable evidence and explicit residue:** changed RouterOS semantic claims

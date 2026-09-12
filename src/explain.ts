@@ -77,6 +77,22 @@
  *     type-axis question before it is a lexical one.
  *   - **`runtimeAcceptance` is always `"not-proven"`**, offline and live alike.
  *     It is the inspect-vs-runtime gap made machine-readable, not a placeholder.
+ *
+ * ## This module is the public offline entry — its imports are a contract
+ *
+ * `@tikoci/centrs/explain` resolves here, and the claim that offline analysis is a
+ * LIBRARY capability rests on what this file imports: nothing in the graph below
+ * it may open a connection, read CDB, or touch the filesystem, so the module
+ * bundles and runs in a browser, a Worker, or an editor host (#312).
+ *
+ * That is easy to break with one line, and it was: `toYaml` and
+ * `canonicalizeExecuteCommand` are pure, but importing them from `retrieve.ts`
+ * and `execute.ts` pulled mac-telnet (`node:dgram`), native-api (`node:crypto`)
+ * and ssh in behind them. Both now live in `src/core/`. **Before adding an
+ * import here, check it is pure** — `bun run explain:browser-consumer` walks the
+ * graph and names the offending edge, and
+ * `test/unit/explain-browser-entry.test.ts` gates it. A pure helper that lives
+ * in a transport-reaching module belongs in `src/core/`, not in an import here.
  */
 
 import type {
@@ -86,12 +102,13 @@ import type {
 	EnvelopeMeta,
 } from "./core/envelope.ts";
 import { buildTip, type Tip, type Warning } from "./core/envelope.ts";
-import { CentrsError, serializeCentrsError } from "./errors.ts";
 import {
 	type CanonicalExecuteCommand,
 	canonicalizeExecuteCommand,
 	isWriteShaped,
-} from "./execute.ts";
+} from "./core/execute-command.ts";
+import { toYaml } from "./core/yaml.ts";
+import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { argSpans } from "./explain/arg-tokens.ts";
 import {
 	type ArgumentKind,
@@ -153,7 +170,6 @@ import {
 	resolveStringSetting,
 	toCoreSource,
 } from "./resolver/settings.ts";
-import { toYaml } from "./retrieve.ts";
 
 /** A half-open analyzed-byte span, the coordinate contract of `coordinates.ts`. */
 export interface ExplainSpanRange {
@@ -2002,6 +2018,23 @@ export interface ExplainEnvelopeOptions {
 	warnings?: readonly Warning[];
 }
 
+/**
+ * The host process environment, or an empty one where there is no host.
+ *
+ * A bare `Bun.env` default parameter is what a browser consumer of this module
+ * trips over (#312): the reference is evaluated on the first settings-ladder
+ * call, and `Bun` does not exist there. `typeof` is safe on an undeclared
+ * identifier, so the guard costs nothing and changes nothing under Bun — the
+ * ladder still reads the real environment, and a browser caller that never
+ * passes one gets the documented "no env tier" behavior rather than a crash.
+ *
+ * Only the offline analysis entry runs outside Bun; the other commands keep
+ * their `Bun.env` defaults because they open connections regardless.
+ */
+function hostEnv(): Record<string, string | undefined> {
+	return typeof Bun === "undefined" ? {} : Bun.env;
+}
+
 function settingsMeta(
 	format: ResolvedSetting<ExplainOutputFormat> | undefined,
 ): CommonSettingsMeta {
@@ -2017,7 +2050,7 @@ function settingsMeta(
  */
 export function resolveExplainFormat(
 	explicit: string | undefined,
-	env: Record<string, string | undefined> = Bun.env,
+	env: Record<string, string | undefined> = hostEnv(),
 	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<ExplainOutputFormat> {
 	return resolveStringSetting(
