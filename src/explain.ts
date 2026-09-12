@@ -484,14 +484,15 @@ export type TokenFill = readonly ExplainToken[];
  * `data.values.occurrences`, quotes included, #295).
  *
  * **B5 settled which merges get their own name** (`commands/explain/README.md`
- * -> *The vocabulary, and what earns a class*): a class is split only where a
+ * -> *The vocabulary, and what earns a class*, where the figures live beside
+ * the generated blocks that keep them honest): a class is split only where a
  * consumer holding the whole envelope could not recover the distinction by
  * joining `tokens[]` to another published surface on byte offsets. `arg-sep` is
- * the one split that test forced, because 30.8% of the `arg` runs this fill
- * paints belong to a statement whose strict `arguments` reading refused, so
- * there is no `ExplainArgumentToken.valueSpan` to subtract one from. The
- * per-spelling `operator`, per-shape `value`, and scope-versus-array `brace`
- * merges all stay merged — the bytes, `data.values.occurrences[]`, and
+ * the one split that test forced, because a large minority of the `=` runs the
+ * arg fill paints belong to a statement whose strict `arguments` reading
+ * refused, so there is no `ExplainArgumentToken.valueSpan` to subtract one
+ * from. The per-spelling `operator`, per-shape `value`, and scope-versus-array
+ * `brace` merges all stay merged — the bytes, `data.values.occurrences[]`, and
  * `structure.blocks[]` already carry those distinctions.
  */
 export type ExplainTokenClass =

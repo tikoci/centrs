@@ -167,7 +167,7 @@ export const HIGHLIGHT_PROJECTION: Readonly<
 	"arg-sep": {
 		accepts: ["syntax-meta"],
 		because:
-			"the `=` binding one argument name to its value is structure punctuation, not part of the name, and `syntax-meta` is the device's only class for structure. Declared from what the class means, not fitted: before #264 B5 split it out these bytes were the whole of the `arg` -> `syntax-meta` disagreement (one cell, 358 runs), which is the measurement that made the split worth its name",
+			"the `=` binding one argument name to its value is structure punctuation, not part of the name, and `syntax-meta` is the device's only class for structure. Declared from what the class means, not fitted: before #264 B5 split it out these bytes were the whole of the `arg` -> `syntax-meta` disagreement, which is the measurement that made the split worth its name (the count is in the generated agreement block, so it cannot go stale here)",
 	},
 	operator: {
 		accepts: ["syntax-meta"],

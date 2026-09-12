@@ -39,17 +39,24 @@
  * clothing.
  *
  * **B5 split the `=` from the name** (#264). #293 emitted one `arg` class for
- * both — emit first, name later — and #316 then priced that merge twice over:
- * it is the ENTIRE `arg` disagreement against the device (one cell, 358 runs on
- * the agreement slice, the device reading a separator as `syntax-meta`), and it
- * is not recoverable from the envelope, because 30.8% of the runs this fill
- * paints (5,088 of 16,526 on the 948-script corpus, in 436 of those scripts)
- * belong to a statement whose strict `arguments` reading refused — so there is
- * no published `ExplainArgumentToken.valueSpan` to subtract one from. `do=`
- * alone, the block binder of every `:if` / `:foreach` / `:while`, is 2,038 of
- * them. The name run stays `arg`; the single `=` byte is `arg-sep`. Byte
- * coverage does not move — this is a retag, and both runs keep `e11`, because
- * the evidence is how `args.ts` located the bytes, not what they are called.
+ * both — emit first, name later — and two measurements then priced that merge:
+ * the `=` was the ENTIRE `arg` disagreement against the device, which reads a
+ * separator as `syntax-meta`, and it is not recoverable from the envelope,
+ * because a large minority of the runs this fill paints belong to a statement
+ * whose strict `arguments` reading refused — so there is no published
+ * `ExplainArgumentToken.valueSpan` to subtract one from. The spellings that
+ * dominate that share are the block binders (`do=`, `else=`, `in=`), which no
+ * strict reading ever publishes. The name run stays `arg`; the single `=` byte
+ * is `arg-sep`. Byte coverage does not move — this is a retag, and both runs
+ * keep `e11`, because the evidence is how `args.ts` located the bytes, not what
+ * they are called.
+ *
+ * The figures are deliberately not restated here: `bun run explain:arg-reach`
+ * re-derives the envelope gap and the leading spellings, and the agreement
+ * report re-derives the device cell. Both move when the corpus or the capture
+ * slice moves, and a count pasted into this header would not.
+ * `commands/explain/README.md` -> *The vocabulary, and what earns a class*
+ * carries them next to the generated blocks that keep them honest.
  */
 
 import type { ExplainArgumentToken, ExplainToken } from "../explain.ts";
