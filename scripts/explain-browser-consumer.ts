@@ -38,8 +38,9 @@
  * It does not claim the whole `centrs` package works in a browser — it does
  * not, and is not meant to. It does not run a real browser engine, so it
  * proves host-API independence and output equality, not DOM integration. And
- * the cases below are a boundary corpus, not a parser-coverage corpus: the
- * measured parser evidence lives in the censuses and the agreement report.
+ * {@link BROWSER_CONSUMER_CASES} is a boundary corpus, not a parser-coverage
+ * corpus: the measured parser evidence lives in the censuses and the agreement
+ * report.
  */
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -63,7 +64,7 @@ const ENTRY = resolve(ROOT, "src/explain.ts");
  * `node:net` is here for `isIP` in `src/explain/values.ts` — a pure predicate
  * with no socket in it. A bundler replaces the whole module with a regex
  * polyfill, so the browser build runs a DIFFERENT `isIP` than Bun does; that
- * substitution is exactly what the consumer comparison below is for, and
+ * substitution is exactly what the consumer comparison is for, and
  * {@link BROWSER_CONSUMER_CASES} carries address-shaped inputs on purpose.
  *
  * Anything else reaching this list is a boundary regression, not a new entry to
@@ -296,7 +297,7 @@ export interface ConsumerReport {
 	/**
 	 * Host globals the bundle could still see, measured from inside it. Empty is
 	 * the contract; a non-empty list means the shadowing silently stopped working
-	 * and every "identical" below was produced with host APIs in reach.
+	 * and every case reported "identical" was produced with host APIs in reach.
 	 */
 	reachableHostGlobals: string[];
 	cases: ConsumerResult[];
