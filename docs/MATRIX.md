@@ -150,42 +150,29 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 
 ## Current priority
 
-**Offline `explain` baseline** is the selected track. Start with
-[the #90 task index](https://github.com/tikoci/centrs/issues/90) and
-[`commands/explain/README.md` → Offline baseline acceptance](../commands/explain/README.md#offline-baseline-acceptance).
-The sequence is correctness and performance, token projection/agreement
-(#264 B4 / #263), then a bounded browser/editor consumer check and the vocabulary
-it needs (#264 B5). The projection and its device-agreement report have landed
-(`bun run explain:highlight-agreement`); its `unprojected` residue was the
-evidence B5 read. The consumer boundary has landed too (#312): `@tikoci/centrs/explain`
-is the documented entry, and `bun run explain:browser-consumer` gates both the
-module graph and an executed browser bundle. #316 has since separated the
-reading a token-level rule uses from the strict REST one, which took the
-argument token stream from 51.8% of the corpus's argument-bearing statements to
-100% and moved the classified-byte census to 71.73%. **#264 B5 has since
-settled the vocabulary** on a stated rule (split only what a consumer needs and
-cannot recover from another published surface): the argument `=` became
-`arg-sep`, the other four merges were kept with their recovery path named, and
-the tolerant reading reaches the envelope as the token partition rather than by
-loosening `statements[].arguments` — see
-[The vocabulary](../commands/explain/README.md#the-vocabulary-and-what-earns-a-class-264-b5).
-**#264 is now closed**: the one further split that rule admitted has been made,
-giving a valid string escape its own `escaped` class from the same walk that
-already produced `bad-string-escape`. It is a retag — 19,960 corpus bytes
-change class with classified coverage identical to the last decimal — and it
-takes the device slice's `unprojected` residue from 1,051 to 633 bytes on
-100.00% agreement for the new class. **#322 now closes the final baseline gap**:
-scope-body segmentation skips already-indexed child bodies, structural and
-brace queries reuse document-wide indexes, the public 16× depth-axis guard clears
-its bound, and deterministic guards cover the shapes hidden by any single
-timing input, including interpolation-bearing strings. The offline baseline is
-therefore `verified`. The issue index
-owns the individual tasks and their dependencies; live probes (#236) and MCP
-alignment (#223) remain following capabilities, not an automatic new selection.
+**Live `explain` (#236)** is the selected track. The offline baseline is
+`verified`: #264 closed the measured token vocabulary and #322 closed the final
+bounded-execution gap, including the public depth-axis guard. Start with
+[the #90 task index](https://github.com/tikoci/centrs/issues/90), then follow
+[`commands/explain/README.md`](../commands/explain/README.md) and the live
+examples in [`commands/explain/examples.md`](../commands/explain/examples.md).
+
+The live pass is the device-backed cross-check on the offline result, not a
+replacement for it. It adds read-only `/console/inspect` and `:parse` evidence,
+the describe/completion facets, and the live `observedType`/`schemaType`
+producers owned with #225. REST and native-api cells advance only when their
+applicable examples pass on CHR via `bun run test:integration`.
+
+Open offline follow-ups remain explicit but do not reopen the verified baseline.
+Issue #211 retains the fail-closed unlisted-path decision; #272 owns
+non-authoritative `.scratch/` citation cleanup; #335 refreshes the generated
+structure tables to 7.24.2; and #336 waits on an upstream 7.25beta corpus capture.
+Issue #223 is a separate MCP response migration. If live evidence finds a wrong
+offline assertion, give that defect a bounded issue and matching CHR-grounded
+controls rather than folding it silently into the live implementation.
 
 Unfinished SNMP, RoMON, TUI, or other protocol/frontend cells do not preempt this
-track. Live `explain` (#236) remains a separate next capability. Change this
-selection when the maintainer selects another track.
+track. Change this selection when the maintainer selects another track.
 
 ### Protocol backlog order
 

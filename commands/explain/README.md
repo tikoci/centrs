@@ -2397,9 +2397,9 @@ the constitution. Add the consumer and agreement checks with their implementatio
 No new rules engine, schema snapshot, final-state interpreter, or network-behavior
 test framework is part of this baseline.
 
-### Following capabilities
+### Current and following capabilities
 
-- **Live probes (#236, phase 2):** highlight + `:parse` and
+- **Current — live probes (#236, phase 2):** highlight + `:parse` and
   completion/child/syntax over rest-api/native-api. B4's projection/agreement
   informs this work; each live cell requires its own CHR-passing examples.
 - **MCP alignment (#223):** the deliberate flat-to-rich response migration,
