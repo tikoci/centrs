@@ -351,9 +351,12 @@ function scanStringInterpolationWithin(
 	frameBudget: number,
 ): { end: number; range: MaskedRange } {
 	const local = text.slice(open, limit);
+	// Masking must find each code-level string boundary comment-aware. Reuse
+	// those answers below instead of recursively scanning the same strings again.
+	const quotedEnds = new Map<number, number>();
 	const range: MaskedRange = {
 		text: local,
-		masked: maskUncached(local, frameBudget),
+		masked: maskUncached(local, frameBudget, quotedEnds),
 		start: 0,
 		end: local.length,
 	};
@@ -362,14 +365,9 @@ function scanStringInterpolationWithin(
 	for (let i = 1; i < range.end; i++) {
 		const c = range.masked[i];
 		if (c === '"') {
-			i =
-				scanQuotedStringShared(
-					range.masked,
-					i,
-					range.end,
-					undefined,
-					frameBudget - frames.length,
-				).end - 1;
+			const quotedEnd = quotedEnds.get(i);
+			if (quotedEnd === undefined) return { end: limit, range };
+			i = quotedEnd - 1;
 			continue;
 		}
 		if (c === "[" || c === "(" || c === "{") {
@@ -447,6 +445,7 @@ export function maskOf(range: MaskedRange | undefined): string | undefined {
 function maskUncached(
 	original: string,
 	frameBudget: number = MAX_STRING_FRAME_DEPTH,
+	quotedEnds?: Map<number, number>,
 ): string {
 	// Masked output is built from whole slices, and only once a comment is
 	// actually found: comment-free input is returned as the SAME string object.
@@ -477,13 +476,14 @@ function maskUncached(
 		}
 		if (c === '"') {
 			atLead = false;
-			i =
-				scanQuotedStringWithin(
-					original,
-					i,
-					original.length,
-					frameBudget - contexts.length,
-				).end - 1;
+			const end = scanQuotedStringWithin(
+				original,
+				i,
+				original.length,
+				frameBudget - contexts.length,
+			).end;
+			quotedEnds?.set(i, end);
+			i = end - 1;
 			continue; // i rests on the closing quote (or past end)
 		}
 		// H4 is unchanged and H5 only ADDS the immediate-line-start case: an

@@ -151,6 +151,20 @@ describe("interpolation enters its own comment context (#333 review)", () => {
 		expect(explainCommand(write).structure.containsWrite).toBe(true);
 	});
 
+	test("a nested quoted interpolation ignores delimiters in its comments", () => {
+		const input = ':put "$[:put "$[# [ ignored\n:put [/ip/route/print]]"]"';
+		const result = resolveDocument(input);
+		expect(result.defects).toEqual([]);
+		expect(
+			result.resolutions.some((r) => r.inner === "/ip/route/print"),
+		).toBeTrue();
+		for (const resolution of result.resolutions) {
+			expect(
+				input.slice(resolution.innerSpan.start, resolution.innerSpan.end),
+			).toBe(resolution.inner);
+		}
+	});
+
 	test("Unicode keeps conservative enclosing spans while comments remain opaque", () => {
 		const input = ':put "α😀 $[# [find]\n:put [/ip/route/print]]"';
 		const result = resolveDocument(input);
