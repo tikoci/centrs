@@ -80,7 +80,10 @@ import {
 	runAtByte,
 } from "./coordinates.ts";
 import { type Defect, defectAt, mergeDefects } from "./defects.ts";
-import { scanQuotedString as scanQuotedStringShared } from "./quoted-string.ts";
+import {
+	MAX_STRING_FRAME_DEPTH,
+	scanQuotedString as scanQuotedStringShared,
+} from "./quoted-string.ts";
 import {
 	braceStartsStatements,
 	canRetainStatementIndex,
@@ -171,7 +174,28 @@ export function scanQuotedString(
 	open: number,
 	limit: number = text.length,
 ): QuotedStringScan {
-	return scanQuotedStringShared(text, open, limit);
+	return scanQuotedStringWithin(text, open, limit, MAX_STRING_FRAME_DEPTH);
+}
+
+function scanQuotedStringWithin(
+	text: string,
+	open: number,
+	limit: number,
+	frameBudget: number,
+): QuotedStringScan {
+	return scanQuotedStringShared(
+		text,
+		open,
+		limit,
+		(source, bracket, end, frameDepth) =>
+			scanStringInterpolationWithin(
+				source,
+				bracket,
+				end,
+				frameBudget - frameDepth,
+			).end,
+		frameBudget,
+	);
 }
 
 /**
@@ -300,6 +324,69 @@ export function documentRange(text: string): MaskedRange {
 }
 
 /**
+ * Locate one `$[…]` body's closing bracket using its own comment context.
+ *
+ * The document mask deliberately leaves an enclosing string opaque. Once `$[`
+ * enters code, statement-leading comments are real again, so brackets inside
+ * them cannot close or extend the substitution. The returned range starts at
+ * `open` and retains that local mask for the readers of the body.
+ */
+export function scanStringInterpolation(
+	text: string,
+	open: number,
+	limit: number = text.length,
+): { end: number; range: MaskedRange } {
+	return scanStringInterpolationWithin(
+		text,
+		open,
+		limit,
+		MAX_STRING_FRAME_DEPTH - 1,
+	);
+}
+
+function scanStringInterpolationWithin(
+	text: string,
+	open: number,
+	limit: number,
+	frameBudget: number,
+): { end: number; range: MaskedRange } {
+	const local = text.slice(open, limit);
+	const range: MaskedRange = {
+		text: local,
+		masked: maskUncached(local, frameBudget),
+		start: 0,
+		end: local.length,
+	};
+	if (frameBudget < 1) return { end: limit, range };
+	const frames: string[] = ["["];
+	for (let i = 1; i < range.end; i++) {
+		const c = range.masked[i];
+		if (c === '"') {
+			i =
+				scanQuotedStringShared(
+					range.masked,
+					i,
+					range.end,
+					undefined,
+					frameBudget - frames.length,
+				).end - 1;
+			continue;
+		}
+		if (c === "[" || c === "(" || c === "{") {
+			if (frames.length >= frameBudget) return { end: limit, range };
+			frames.push(c);
+			continue;
+		}
+		if (c !== "]" && c !== ")" && c !== "}") continue;
+		const want = c === "]" ? "[" : c === ")" ? "(" : "{";
+		if (frames.at(-1) !== want) continue;
+		frames.pop();
+		if (frames.length === 0) return { end: open + i, range };
+	}
+	return { end: limit, range };
+}
+
+/**
  * The sub-range `[start, end)` of `parent`, in `parent`'s own coordinates.
  *
  * Offsets must be JS string indices — for a statement span that means the
@@ -357,7 +444,10 @@ export function maskOf(range: MaskedRange | undefined): string | undefined {
  * statement index behind it — and a statement's text carries its whole nested
  * subtree, so the repetition was paid once per enclosing level (#322).
  */
-function maskUncached(original: string): string {
+function maskUncached(
+	original: string,
+	frameBudget: number = MAX_STRING_FRAME_DEPTH,
+): string {
 	// Masked output is built from whole slices, and only once a comment is
 	// actually found: comment-free input is returned as the SAME string object.
 	// `split("")` allocated one string per character of every call — 16 walks
@@ -387,7 +477,13 @@ function maskUncached(original: string): string {
 		}
 		if (c === '"') {
 			atLead = false;
-			i = scanQuotedString(original, i).end - 1;
+			i =
+				scanQuotedStringWithin(
+					original,
+					i,
+					original.length,
+					frameBudget - contexts.length,
+				).end - 1;
 			continue; // i rests on the closing quote (or past end)
 		}
 		// H4 is unchanged and H5 only ADDS the immediate-line-start case: an

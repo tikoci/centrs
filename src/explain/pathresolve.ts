@@ -111,6 +111,7 @@ import {
 	rangeAt,
 	type SegmentResult,
 	scanQuotedString,
+	scanStringInterpolation,
 	segmentStatements,
 } from "./segment.ts";
 import { VERBS } from "./verbs.ts";
@@ -432,6 +433,15 @@ export interface Resolution {
 	 * mapped, so a consumer must still check the slice against `inner`.
 	 */
 	innerSpan: Span;
+}
+
+const resolutionRanges = new WeakMap<Resolution, MaskedRange>();
+
+/** The exact masked view used to read one resolution's inner text. */
+export function rangeForResolution(
+	resolution: Resolution,
+): MaskedRange | undefined {
+	return resolutionRanges.get(resolution);
 }
 
 /** The canonical path of one statement in source order (Q4). */
@@ -1192,20 +1202,22 @@ function collectBrackets(
 		const innerEnd = trimmedEnd(masked, innerAt, end);
 		const inner = masked.slice(innerAt, innerEnd);
 		// The span covers the whole `[…]`, closing bracket included.
-		out.push({
+		const resolution: Resolution = {
 			...resolveInner(inner, ctx, depth, contextCertain),
 			span: spanIn(loc, i - lo, Math.min(end + 1, hi) - lo),
 			innerSpan: spanIn(loc, innerAt - lo, innerEnd - lo),
-		});
+		};
+		out.push(resolution);
+		resolutionRanges.set(resolution, rangeAt(range, innerAt, innerEnd));
 		// R6 — nested brackets inherit from this one's resolution.
-		const nestedCtx = out[out.length - 1]?.path ?? ctx;
+		const nestedCtx = resolution.path ?? ctx;
 		collectBrackets(
 			rangeAt(range, innerAt, innerEnd),
 			nestedCtx,
 			depth + 1,
 			out,
 			defects,
-			nestedCertainty(out[out.length - 1], contextCertain),
+			nestedCertainty(resolution, contextCertain),
 			nest(loc, innerAt - lo, loc.fallback),
 		);
 		i = end;
@@ -1265,29 +1277,40 @@ function scanInterpolations(
 	contextCertain: boolean,
 	loc: Loc,
 ): void {
-	const { masked, start: lo, end: hi } = range;
+	const { text, start: lo, end: hi } = range;
 	for (let i = lo; i < hi - 1; i++) {
-		if (masked[i] !== "$" || masked[i + 1] !== "[") continue;
-		const end = matchDelim(masked, i + 1, "[", "]", hi);
-		const innerAt = trimmedStart(masked, i + 2, end);
-		const innerEnd = trimmedEnd(masked, innerAt, end);
-		const inner = masked.slice(innerAt, innerEnd);
+		if (text[i] !== "$" || text[i + 1] !== "[") continue;
+		const scanned = scanStringInterpolation(text, i + 1, hi);
+		const end = scanned.end;
+		const innerAt = trimmedStart(text, i + 2, end);
+		const innerEnd = trimmedEnd(text, innerAt, end);
+		const inner = text.slice(innerAt, innerEnd);
+		const innerRange = rangeAt(
+			scanned.range,
+			innerAt - (i + 1),
+			innerEnd - (i + 1),
+		);
+		const maskedInner = innerRange.masked.slice(
+			innerRange.start,
+			innerRange.end,
+		);
 		// Span the `$[…]` from its sigil through the closing bracket; `innerSpan`
 		// is the two-byte-in start that difference makes non-derivable.
-		out.push({
-			...resolveInner(inner, ctx, depth, contextCertain),
+		const resolution: Resolution = {
+			...resolveInner(maskedInner, ctx, depth, contextCertain),
+			inner,
 			span: spanIn(loc, i - lo, Math.min(end + 1, hi) - lo),
 			innerSpan: spanIn(loc, innerAt - lo, innerEnd - lo),
-		});
+		};
+		out.push(resolution);
+		resolutionRanges.set(resolution, innerRange);
 		collectBrackets(
-			// The document mask leaves strings opaque. Crossing from string text
-			// into interpolation code starts a fresh statement/comment context.
-			documentRange(inner),
-			out[out.length - 1]?.path ?? ctx,
+			innerRange,
+			resolution.path ?? ctx,
 			depth + 1,
 			out,
 			defects,
-			nestedCertainty(out[out.length - 1], contextCertain),
+			nestedCertainty(resolution, contextCertain),
 			nest(loc, innerAt - lo, loc.fallback),
 		);
 		i = end;

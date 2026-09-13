@@ -93,6 +93,7 @@ import { type Defect, hasStructuralDefect, mergeDefects } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
 import {
 	type DocumentAnalysis,
+	rangeForResolution,
 	resolveDocument,
 	resolveStatements,
 	type StatementAnalysis,
@@ -708,13 +709,7 @@ function collect(
 	for (const bracket of brackets.resolutions) {
 		const inner = bracket.inner.trim();
 		if (inner.length === 0) continue;
-		const bracketRange =
-			range !== undefined &&
-			bracket.innerSpan.start >= range.start &&
-			bracket.innerSpan.end <= range.end &&
-			range.text.slice(bracket.innerSpan.start, bracket.innerSpan.end) === inner
-				? rangeAt(range, bracket.innerSpan.start, bracket.innerSpan.end)
-				: undefined;
+		const bracketRange = rangeForResolution(bracket) ?? documentRange(inner);
 		const described = describeStatement(inner, bracketRange);
 		if (isDynamicForm(inner, described)) {
 			out.push({

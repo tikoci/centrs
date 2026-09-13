@@ -136,6 +136,7 @@ import { operatorSpans } from "./explain/operator-tokens.ts";
 import { type PathTokenCandidate, pathSpans } from "./explain/path-tokens.ts";
 import {
 	type Resolution,
+	rangeForResolution,
 	resolveDocument,
 	resolveStatements,
 } from "./explain/pathresolve.ts";
@@ -144,7 +145,6 @@ import {
 	documentRange,
 	type MaskedRange,
 	nestedRange,
-	rangeAt,
 	rangeMask,
 	segmentStatements,
 } from "./explain/segment.ts";
@@ -1389,9 +1389,7 @@ export function explainCommand(
 			ev: EV.blocks,
 		})),
 		containsWrite: renderWriteVerdict(write.verdict),
-		subcommands: brackets.resolutions.map((resolution) =>
-			subcommandOf(resolution, sourceRange),
-		),
+		subcommands: brackets.resolutions.map(subcommandOf),
 		// `containsWrite` is the fact `structure` itself asserts; the statements
 		// and subcommands beside it carry their own.
 		ev: EV.write,
@@ -1432,7 +1430,7 @@ export function explainCommand(
 						split: resolveVerb(
 							resolution.inner,
 							resolution.context,
-							resolutionInnerRange(resolution, sourceRange),
+							rangeForResolution(resolution) ?? documentRange(resolution.inner),
 						),
 						ev: EV.paths,
 					},
@@ -2016,22 +2014,7 @@ function enforceGateParity(
 }
 
 /** One `[…]` substitution in the envelope's vocabulary. See {@link ExplainSubcommand}. */
-function resolutionInnerRange(
-	r: Resolution,
-	range: MaskedRange | undefined,
-): MaskedRange | undefined {
-	return range !== undefined &&
-		r.innerSpan.start >= range.start &&
-		r.innerSpan.end <= range.end &&
-		range.text.slice(r.innerSpan.start, r.innerSpan.end) === r.inner
-		? rangeAt(range, r.innerSpan.start, r.innerSpan.end)
-		: undefined;
-}
-
-function subcommandOf(
-	r: Resolution,
-	range: MaskedRange | undefined,
-): ExplainSubcommand {
+function subcommandOf(r: Resolution): ExplainSubcommand {
 	// Q3 refused: the bracket is unreadable and Q6's reading of the same text
 	// cannot promote it.
 	const reading =
@@ -2041,7 +2024,11 @@ function subcommandOf(
 					unresolved: r.unresolved ?? "no reading of this substitution",
 				}
 			: readingOf(
-					resolveVerb(r.inner, r.context, resolutionInnerRange(r, range)),
+					resolveVerb(
+						r.inner,
+						r.context,
+						rangeForResolution(r) ?? documentRange(r.inner),
+					),
 				);
 	return {
 		span: { start: r.span.start, end: r.span.end },

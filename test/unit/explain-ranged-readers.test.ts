@@ -17,6 +17,7 @@ import {
 	resolveVerbsFromStatements,
 } from "../../src/explain/verbsplit.ts";
 import { containsWriteFromAnalyses } from "../../src/explain/write.ts";
+import { explainCommand } from "../../src/explain.ts";
 
 describe("ranged directive and argument readers (#322, #333 review)", () => {
 	test("composed readers use absolute statement spans within a nonzero range", () => {
@@ -119,6 +120,8 @@ describe("interpolation enters its own comment context (#333 review)", () => {
 			':put "$[# [find]\n:put 1]"',
 			':put "$[# [find] {[]}\n:put [/ip/route/print]]"',
 			':if (true) do={ :put "before $[ # [find]\n:put [/ip/route/print]] after" }',
+			':put "$[# ] ignored\n:put [/ip/route/print]]"',
+			':put "$[# [ ignored\n:put [/ip/route/print]]"',
 		]) {
 			const result = resolveDocument(input);
 			expect(result.defects).toEqual([]);
@@ -134,6 +137,18 @@ describe("interpolation enters its own comment context (#333 review)", () => {
 				input.includes("/ip/route/print") ? ["/ip/route/print"] : [],
 			);
 		}
+	});
+
+	test("verb and write readers use the interpolation's local mask", () => {
+		const read = '/ip/route\n:put "$[find\n# do={ignored}\n]"';
+		expect(explainCommand(read).structure.subcommands[0]).toMatchObject({
+			resolution: "resolved",
+			kind: "command",
+			command: { path: "/ip/route", verb: "find" },
+		});
+
+		const write = '/ip/route\n:put "$[set numbers=0\n# do={ignored}\n]"';
+		expect(explainCommand(write).structure.containsWrite).toBe(true);
 	});
 
 	test("Unicode keeps conservative enclosing spans while comments remain opaque", () => {

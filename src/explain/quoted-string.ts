@@ -9,7 +9,7 @@
 import { type Defect, defectAt } from "./defects.ts";
 
 /** Analyzer resource bound, not a RouterOS grammar limit. */
-const MAX_STRING_FRAME_DEPTH = 256;
+export const MAX_STRING_FRAME_DEPTH = 256;
 
 /** Where a double-quoted string ends, and whether it was closed at all. */
 export interface QuotedStringScan {
@@ -17,6 +17,13 @@ export interface QuotedStringScan {
 	end: number;
 	closed: boolean;
 }
+
+type InterpolationEnd = (
+	text: string,
+	open: number,
+	limit: number,
+	frameDepth: number,
+) => number;
 
 /**
  * Valid single-char escapes after `\` inside a RouterOS string.
@@ -117,8 +124,9 @@ function stepFrame(
 	i: number,
 	frames: string[],
 	onStringEscape: (at: number) => number | Defect,
+	maxFrameDepth: number = MAX_STRING_FRAME_DEPTH,
 ): number | Defect {
-	if (frames.length > MAX_STRING_FRAME_DEPTH) return 0;
+	if (frames.length > maxFrameDepth) return 0;
 	const top = frames[frames.length - 1] as string | undefined;
 	const c = text[i] as string;
 	if (top === '"') {
@@ -199,11 +207,31 @@ export function scanQuotedString(
 	text: string,
 	open: number,
 	limit: number = text.length,
+	interpolationEnd?: InterpolationEnd,
+	maxFrameDepth: number = MAX_STRING_FRAME_DEPTH,
 ): QuotedStringScan {
+	if (maxFrameDepth < 1) return { end: limit, closed: false };
 	const frames: string[] = ['"'];
 	let i = open + 1;
 	while (i < limit) {
-		const res = stepFrame(text, i, frames, (at) => stringEscapeSkip(text, at));
+		if (
+			frames.at(-1) === '"' &&
+			text[i] === "$" &&
+			text[i + 1] === "[" &&
+			interpolationEnd !== undefined
+		) {
+			const end = interpolationEnd(text, i + 1, limit, frames.length);
+			if (end >= limit) return { end: limit, closed: false };
+			i = end + 1;
+			continue;
+		}
+		const res = stepFrame(
+			text,
+			i,
+			frames,
+			(at) => stringEscapeSkip(text, at),
+			maxFrameDepth,
+		);
 		if (typeof res !== "number") break;
 		if (res === 0) break;
 		i += res;
