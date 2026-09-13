@@ -101,6 +101,7 @@ import {
 import { isKnownMenuPath } from "./is-known-menu.ts";
 import {
 	braceStartsStatements,
+	canRetainStatementIndex,
 	hashStartsHardError,
 	scopeNameFromMasked,
 } from "./scope-brace.ts";
@@ -112,6 +113,7 @@ import {
 	type SegmentResult,
 	scanQuotedString,
 	scanStringInterpolation,
+	segmentScopeBody,
 	segmentStatements,
 } from "./segment.ts";
 import { VERBS } from "./verbs.ts";
@@ -213,8 +215,76 @@ const MAX_DEPTH = 256;
  * Reads a RANGE of the document's own comment mask rather than masking the
  * statement's text, which carries its whole nested subtree (#322).
  */
+interface StructuralIndex {
+	wellNested: boolean;
+	hardHashes: number[];
+}
+
+let recentStructuralText: string | undefined;
+let recentStructuralIndex: StructuralIndex | undefined;
+
+function structuralIndex(masked: string): StructuralIndex {
+	if (recentStructuralText === masked && recentStructuralIndex !== undefined)
+		return recentStructuralIndex;
+
+	let wellNested = true;
+	const hardHashes: number[] = [];
+	const openOf: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
+	const stack: { char: string; statements: boolean }[] = [];
+	for (let i = 0; i < masked.length; i++) {
+		const c = masked[i];
+		if (c === '"') {
+			const str = scanQuotedString(masked, i);
+			if (!str.closed) wellNested = false;
+			i = str.end - 1;
+			continue;
+		}
+		if (
+			c === "#" &&
+			hashStartsHardError(masked, i, stack.at(-1)?.statements === false, 0)
+		)
+			hardHashes.push(i);
+		if (c === "(" || c === "[" || c === "{")
+			stack.push({
+				char: c,
+				statements:
+					c === "[" ||
+					(c === "{" &&
+						(stack.at(-1)?.statements ?? true) &&
+						braceStartsStatements(masked, i, 0)),
+			});
+		else if (c === ")" || c === "]" || c === "}") {
+			if (stack.pop()?.char !== openOf[c]) wellNested = false;
+		}
+	}
+	if (stack.length > 0) wellNested = false;
+	const index = { wellNested, hardHashes };
+	if (canRetainStatementIndex(masked)) {
+		recentStructuralText = masked;
+		recentStructuralIndex = index;
+	}
+	return index;
+}
+
 function structuralDefectIn(range: MaskedRange): string | null {
-	// Mask comments so a `#`-comment `}`/`)` is not counted as a real delimiter.
+	// The document mask makes comments opaque before this shared topology pass.
+	const index = structuralIndex(range.masked);
+	if (!index.wellNested) return structuralDefectByScan(range);
+	const defects = index.hardHashes;
+	let lo = 0;
+	let hi = defects.length;
+	while (lo < hi) {
+		const mid = (lo + hi) >>> 1;
+		if ((defects[mid] as number) < range.start) lo = mid + 1;
+		else hi = mid;
+	}
+	const defect = defects[lo];
+	return defect !== undefined && defect < range.end
+		? "structural defect: invalid unquoted hash"
+		: null;
+}
+
+function structuralDefectByScan(range: MaskedRange): string | null {
 	const { masked, start: lo, end: hi } = range;
 	const openOf: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
 	const stack: { char: string; statements: boolean }[] = [];
@@ -639,7 +709,7 @@ const DOCUMENT_LOC: Loc = { base: 0, fallback: { start: 0, end: 0 } };
  * (#322) — the anchored reading is a fast path, never a second answer.
  */
 function rootRange(text: string, segmented: SegmentResult): MaskedRange | null {
-	return segmented.ascii ? documentRange(text) : null;
+	return segmented.ascii ? documentRange(text, true) : null;
 }
 
 /**
@@ -729,7 +799,7 @@ function walk(
 			}
 			const bodyLoc = nest(loc, block.start, unit.span);
 			const body = locate(
-				segmentStatements(block.body, bodyRange(range, block)),
+				segmentScopeBody(block.body, bodyRange(range, block)),
 				bodyLoc,
 				bodyRange(range, block),
 			);
@@ -851,7 +921,7 @@ function walkStatements(
 			}
 			const bodyLoc = nest(unit.loc, block.start, span);
 			const body = locate(
-				segmentStatements(block.body, bodyRange(range, block)),
+				segmentScopeBody(block.body, bodyRange(range, block)),
 				bodyLoc,
 				bodyRange(range, block),
 			);

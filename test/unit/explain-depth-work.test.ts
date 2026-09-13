@@ -14,20 +14,28 @@ import { explainCommand } from "../../src/explain.ts";
  * argument/value reading, symbols and token fills. The bare directive and the
  * array/substitution/scope shapes expose readers the colon-led shape skips.
  */
-for (const [name, open, close] of [
-	["if", ":if (true) do={", "}"],
-	["bare do", "do={", "}"],
-	["retry command", ":retry command={", "}"],
-	["array substitution scope", ":local a {[:do {", "}]}"],
-	["bracketed bare directive", "$[do={", "}]"],
+for (const [name, open, close, lead] of [
+	["if", ":if (true) do={", "}", ""],
+	["bare do", "do={", "}", ""],
+	["retry command", ":retry command={", "}", ""],
+	["array substitution scope", ":local a {[:do {", "}]}", ""],
+	["bracketed bare directive", "$[do={", "}]", ""],
+	[
+		"interpolated string in a scope",
+		":if (true) do={",
+		"}",
+		':put "$[/ip/route/print]";',
+	],
 ] as const) {
 	test(`large structural index inputs stay bounded across depth: ${name}`, async () => {
+		const structuralQueries: number[] = [];
 		for (const depth of [4, 64]) {
 			const shell = open.repeat(depth);
 			const tail = close.repeat(depth);
 			const leaf = ":local v 1; :put $v;";
 			const budget = 60 * 1024 - shell.length - tail.length;
-			const body = leaf.repeat(Math.floor(budget / leaf.length));
+			const fill = budget - lead.length;
+			const body = lead + leaf.repeat(Math.floor(fill / leaf.length));
 			const text = shell + body.padEnd(budget, " ") + tail;
 			expect(text.length).toBe(60 * 1024);
 			const braces = spyOn(scopeBrace, "braceStartsStatements");
@@ -46,6 +54,11 @@ for (const [name, open, close] of [
 					(sum, source) => sum + source.length,
 					0,
 				);
+				structuralQueries.push(
+					braces.mock.calls.length +
+						scopes.mock.calls.length +
+						hashes.mock.calls.length,
+				);
 				expect(bytes).toBeGreaterThanOrEqual(text.length);
 				// Original and comment-masked document plus one boundary-local view
 				// are permitted. A single per-level reader exceeds this at depth 64.
@@ -56,5 +69,8 @@ for (const [name, open, close] of [
 				hashes.mockRestore();
 			}
 		}
+		const [shallow, deep] = structuralQueries;
+		expect(shallow).toBeGreaterThan(0);
+		expect(deep).toBeLessThanOrEqual((shallow as number) * 20);
 	}, 20_000);
 }

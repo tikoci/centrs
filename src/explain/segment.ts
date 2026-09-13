@@ -89,6 +89,8 @@ import {
 	canRetainStatementIndex,
 	hashStartsHardError,
 	isIndexedStatementStart,
+	matchingBraceEnd,
+	scopeNameFromMasked,
 } from "./scope-brace.ts";
 
 /** One top-level statement located in analyzed-byte space. */
@@ -316,11 +318,22 @@ export interface MaskedRange {
 	readonly masked: string;
 	readonly start: number;
 	readonly end: number;
+	/** This range's string indices are analyzed-byte offsets. */
+	readonly coordinateIdentity?: true;
 }
 
 /** The range covering all of `text`, masking it once. */
-export function documentRange(text: string): MaskedRange {
-	return { text, masked: maskComments(text), start: 0, end: text.length };
+export function documentRange(
+	text: string,
+	coordinateIdentity = false,
+): MaskedRange {
+	return {
+		text,
+		masked: maskComments(text),
+		start: 0,
+		end: text.length,
+		...(coordinateIdentity ? { coordinateIdentity: true as const } : {}),
+	};
 }
 
 /**
@@ -401,6 +414,7 @@ export function nestedRange(
 		masked: parent.masked,
 		start: parent.start + start,
 		end: parent.start + end,
+		...(parent.coordinateIdentity ? { coordinateIdentity: true as const } : {}),
 	};
 }
 
@@ -415,7 +429,13 @@ export function rangeAt(
 	start: number,
 	end: number,
 ): MaskedRange {
-	return { text: parent.text, masked: parent.masked, start, end };
+	return {
+		text: parent.text,
+		masked: parent.masked,
+		start,
+		end,
+		...(parent.coordinateIdentity ? { coordinateIdentity: true as const } : {}),
+	};
 }
 
 /** The comment mask of what this range covers. */
@@ -573,33 +593,63 @@ export function segmentStatements(
 	original: string,
 	range?: MaskedRange,
 ): SegmentResult {
-	const analysis = analyzeCoordinates(original);
+	return segmentStatementsInternal(original, range, false);
+}
+
+/** Segment one known scope body while treating its child scopes as opaque. */
+export function segmentScopeBody(
+	original: string,
+	range: MaskedRange,
+): SegmentResult {
+	return segmentStatementsInternal(
+		original,
+		range,
+		range.coordinateIdentity === true,
+	);
+}
+
+function segmentStatementsInternal(
+	original: string,
+	range: MaskedRange | undefined,
+	opaqueChildScopes: boolean,
+): SegmentResult {
+	const identity =
+		range?.coordinateIdentity === true &&
+		range.end - range.start === original.length;
+	const analysis = identity ? undefined : analyzeCoordinates(original);
 	// `analyzed` is pure ASCII, so a string built from it has index === byte.
 	// When the INPUT was already ASCII the two are the same sequence, so the
 	// original is that string and the decode is skipped (#322).
-	const ascii = analysis.ascii
-		? original
-		: new TextDecoder().decode(analysis.analyzed);
+	const ascii =
+		analysis === undefined || analysis.ascii
+			? original
+			: new TextDecoder().decode(analysis.analyzed);
 	const anchored =
-		analysis.ascii &&
+		(analysis === undefined || analysis.ascii) &&
 		range !== undefined &&
 		canRetainStatementIndex(range.text) &&
 		isIndexedStatementStart(range.text, range.start)
 			? range
 			: undefined;
-	const raw = scanAscii(ascii, anchored);
+	const raw = scanAscii(ascii, anchored, opaqueChildScopes);
 	// Recover the human-readable `text` for each segment from the original.
 	const segments = raw.segments.map((s) => ({
 		...s,
-		text: originalSlice(analysis, s.start, s.end),
+		text:
+			analysis === undefined
+				? original.slice(s.start, s.end)
+				: originalSlice(analysis, s.start, s.end),
 	}));
 	return {
 		segments,
 		comments: raw.comments,
-		ascii: analysis.ascii,
+		ascii: analysis?.ascii ?? true,
 		// Coordinate-pass regions first: they are facts about the input as
 		// received, and they exist even when the scan finds nothing structural.
-		defects: mergeDefects(coordinateDefects(analysis), raw.defects),
+		defects: mergeDefects(
+			analysis === undefined ? [] : coordinateDefects(analysis),
+			raw.defects,
+		),
 	};
 }
 
@@ -671,6 +721,7 @@ interface Frame {
 function scanAscii(
 	ascii: string,
 	range?: MaskedRange,
+	opaqueChildScopes = false,
 ): {
 	segments: RawSegment[];
 	comments: { start: number; end: number }[];
@@ -680,6 +731,7 @@ function scanAscii(
 	// document coordinates. The floor prevents an enclosing head from becoming
 	// the head of the body being segmented.
 	const indexed = range?.text ?? ascii;
+	const structural = range?.masked ?? ascii;
 	const floor = range?.start ?? 0;
 	const comments: { start: number; end: number }[] = [];
 	const defects: Defect[] = [];
@@ -972,6 +1024,19 @@ function scanAscii(
 			} else {
 				ensureStmt(f, i);
 				const enclosing = delimStack.at(-1)?.statements ?? true;
+				if (
+					opaqueChildScopes &&
+					c === "{" &&
+					atContainerLevel() &&
+					scopeNameFromMasked(structural, floor + i, floor) !== null
+				) {
+					const end = matchingBraceEnd(structural, floor + i);
+					if (end !== undefined && end < floor + ascii.length) {
+						f.atLead = false;
+						i = end - floor + 1;
+						continue;
+					}
+				}
 				const statements =
 					c === "[" ||
 					(c === "{" &&

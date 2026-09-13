@@ -75,6 +75,7 @@ interface StatementIndex {
 	boundaries: Int32Array;
 	firstContent: Int32Array;
 	lastForbidden: Int32Array;
+	matchingBrace: Map<number, number>;
 }
 
 const boundaryCache = new Map<string, StatementIndex>();
@@ -114,7 +115,8 @@ function boundaryCacheEntryBytes(text: string, index: StatementIndex): number {
 		text.length * 2 +
 		index.boundaries.byteLength +
 		index.firstContent.byteLength +
-		index.lastForbidden.byteLength
+		index.lastForbidden.byteLength +
+		index.matchingBrace.size * 32
 	);
 }
 
@@ -129,6 +131,7 @@ export function canRetainStatementIndex(text: string): boolean {
 function cacheStatementIndex(text: string, index: StatementIndex): boolean {
 	if (!canRetainStatementIndex(text)) return false;
 	const entryBytes = boundaryCacheEntryBytes(text, index);
+	if (entryBytes > BOUNDARY_CACHE_BYTE_LIMIT) return false;
 
 	while (
 		boundaryCache.size >= BOUNDARY_CACHE_LIMIT ||
@@ -174,6 +177,8 @@ function statementIndex(text: string): StatementIndex {
 	firstContent.fill(-1);
 	const lastForbidden = new Int32Array(text.length + 1);
 	lastForbidden.fill(-1);
+	const matchingBrace = new Map<number, number>();
+	const delimiters: { char: string; at: number }[] = [];
 	let boundary = -1;
 	let first = -1;
 	let forbidden = -1;
@@ -193,6 +198,14 @@ function statementIndex(text: string): StatementIndex {
 			i = end;
 			continue;
 		}
+		if (c === "{" || c === "[" || c === "(") {
+			delimiters.push({ char: c, at: i });
+		} else if (c === "}" || c === "]" || c === ")") {
+			const want = c === "}" ? "{" : c === "]" ? "[" : "(";
+			const delimiter = delimiters.pop();
+			if (delimiter?.char === want && c === "}")
+				matchingBrace.set(delimiter.at, i);
+		}
 		if (first === -1 && !isAsciiWhitespace(c)) first = i;
 		if (c === "=" || c === "[" || c === "(" || c === "$") forbidden = i;
 		if (c === "\n" || c === ";" || c === "{" || c === "[") {
@@ -204,10 +217,22 @@ function statementIndex(text: string): StatementIndex {
 	boundaries[text.length] = boundary;
 	firstContent[text.length] = first;
 	lastForbidden[text.length] = forbidden;
-
-	const index = { boundaries, firstContent, lastForbidden };
+	const index = {
+		boundaries,
+		firstContent,
+		lastForbidden,
+		matchingBrace,
+	};
 	if (cacheStatementIndex(text, index)) adoptBoundaryText(text, index);
 	return index;
+}
+
+/** Closing `}` paired with `open`, outside strings/comments, when one exists. */
+export function matchingBraceEnd(
+	text: string,
+	open: number,
+): number | undefined {
+	return statementIndex(text).matchingBrace.get(open);
 }
 
 /**

@@ -12,6 +12,7 @@ import {
 	nestedRange,
 	type Segment,
 	scanQuotedString,
+	segmentScopeBody,
 	segmentStatements,
 } from "../../src/explain/segment.ts";
 import * as centrs from "../../src/index.ts";
@@ -124,6 +125,26 @@ describe("document-anchored segmentation (#322)", () => {
 			"value 1",
 			":put $value",
 		]);
+	});
+
+	test("scope-body segmentation preserves its own statements while skipping children", () => {
+		for (const body of [
+			":put 1; :if (true) do={ :put 2; :put 3 }; :put 4",
+			"do={ retry command={ :put 1 }; :put 2 }; /ip/route/print",
+			":onerror e in={ :retry command={ :put 1 } } do={ :put 2 }",
+		]) {
+			const prefix = ":if (true) do={";
+			const document = `${prefix}${body}}`;
+			const range = nestedRange(
+				documentRange(document, true),
+				prefix.length,
+				prefix.length + body.length,
+			);
+			const ranged = segmentScopeBody(body, range);
+			const standalone = segmentStatements(body);
+			expect(ranged.segments).toEqual(standalone.segments);
+			expect(ranged.defects).toEqual([]);
+		}
 	});
 });
 

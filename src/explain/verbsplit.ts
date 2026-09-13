@@ -916,7 +916,7 @@ export function resolveVerbs(text: string): VerbAnalysis {
 		analysis,
 		analysis.defects.some((d) => d.code === "bom" || d.code === "non-ascii")
 			? undefined
-			: documentRange(text),
+			: documentRange(text, true),
 	);
 }
 

@@ -835,6 +835,49 @@ test("block-dense explain cost grows with input size, not faster (#320)", () => 
 }, 120_000);
 
 /**
+ * The depth-axis guard for #322. Size stays fixed while nesting grows 16x, so
+ * an enclosing-level re-scan cannot hide behind the ordinary byte-axis gates.
+ * The body reaches statement/path/verb/write, argument/value, symbol and token
+ * readers; `explain-depth-work.test.ts` adds the bare-directive, retry, array,
+ * and bracket shapes this colon-led form cannot expose, and deterministically
+ * catches restoration of the child-scope traversal removed here. This ratio
+ * pins the public surface's total bound without making wall time the only gate.
+ */
+test("public explain cost stays bounded as nesting depth grows (#322)", () => {
+	const nested = (depth: number, bytes = 60 * 1024): string => {
+		const head = ":if ($a) do={".repeat(depth);
+		const tail = "}".repeat(depth);
+		const leaf = ":local v 1; :put $v;";
+		const budget = bytes - head.length - tail.length;
+		return (
+			head +
+			leaf.repeat(Math.floor(budget / leaf.length)).padEnd(budget, " ") +
+			tail
+		);
+	};
+	const time = (input: string): number => {
+		const started = performance.now();
+		explainCommand(input, { tokens: true, curl: true });
+		return performance.now() - started;
+	};
+	const shallow = nested(4);
+	const deep = nested(64);
+	explainCommand(shallow, { tokens: true, curl: true });
+	let bestRatio = Number.POSITIVE_INFINITY;
+	const trials: string[] = [];
+	for (let trial = 0; trial < 3; trial++) {
+		const shallowMs = time(shallow);
+		const deepMs = time(deep);
+		trials.push(`${shallowMs.toFixed(0)}/${deepMs.toFixed(0)}ms`);
+		bestRatio = Math.min(bestRatio, deepMs / shallowMs);
+	}
+	console.log(
+		`#322 growth ratio: ${bestRatio.toFixed(2)} (16x depth step; trials ${trials.join(", ")})`,
+	);
+	expect(bestRatio).toBeLessThan(6);
+}, 120_000);
+
+/**
  * The surface itself, beyond the numbered examples: the conditional-arity
  * grammar and the phase boundary it guards. No other centrs command has an
  * optional target where arity changes meaning, so these are the cases a shared

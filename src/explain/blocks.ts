@@ -28,6 +28,7 @@
 import {
 	DIRECTIVE_BODY,
 	HEAD_SCOPED_ARG_NAMES,
+	matchingBraceEnd,
 	SCOPE_ARG_NAMES,
 	scopeNameFromMasked,
 } from "./scope-brace.ts";
@@ -118,7 +119,13 @@ export function scopeBlocksIn(range: MaskedRange): ScopeBlock[] {
 		else if (c === "]" || c === ")") {
 			if (depth > 0) depth--;
 		} else if (c === "{") {
-			const end = matchBraceInMasked(masked, i, hi);
+			const indexedEnd = range.coordinateIdentity
+				? matchingBraceEnd(masked, i)
+				: undefined;
+			const end =
+				indexedEnd !== undefined && indexedEnd < hi
+					? indexedEnd
+					: matchBraceInMasked(masked, i, hi);
 			if (depth === 0) {
 				const name = scopeNameFromMasked(masked, i, lo);
 				if (name !== null)
