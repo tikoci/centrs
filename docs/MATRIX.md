@@ -166,7 +166,8 @@ applicable examples pass on CHR via `bun run test:integration`.
 Open offline follow-ups remain explicit but do not reopen the verified baseline.
 Issue #211 retains the fail-closed unlisted-path decision; #272 owns
 non-authoritative `.scratch/` citation cleanup; #335 refreshes the generated
-structure tables to 7.24.2; and #336 waits on an upstream 7.25beta corpus capture.
+structure tables and adopts the current CLI-Reference drift; and #336 repins the
+now-published 7.24.2/7.25beta3 corpus captures and remeasures the offline reports.
 Issue #223 is a separate MCP response migration. If live evidence finds a wrong
 offline assertion, give that defect a bounded issue and matching CHR-grounded
 controls rather than folding it silently into the live implementation.

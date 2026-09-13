@@ -2172,7 +2172,8 @@ of 913). The ratified answers hold for what was measured; they are **not**
 evidence of coverage over device configuration, which is the genre most likely
 to be handed to `explain` and the one that concentrates Q4 path context and
 Q6's bare-path ambiguity. Quote phase-0 numbers per genre, never as one blended
-figure. #203 tracks the capture and the re-score.
+figure. #203 records the capture decision and caveat; #336 owns the current
+corpus repin and remeasurement.
 
 Those figures are re-derivable, not eyeballed: `bun run explain:corpus-census`
 (`scripts/explain-corpus-census.ts`) reproduces the whole genre table from
@@ -2184,8 +2185,8 @@ literals, and DHCP client-ids as `:` directives, which under-counts exactly the
 config genre in question). Since phase 0 the corpus has grown to 948 with a
 `tangentsoft` stratum of 35 genuine `/export … terse` device captures, taking
 export-banner share to 4.6%; **that stratum is not part of any phase-0 figure
-above**, and no promoted module has been scored against it yet (#203
-deliverable 2).
+above**. Current whole-corpus offline censuses include its source text, while
+issue #336 owns remeasurement against the newer device captures.
 
 The corpus itself is not in this repo and is not moving here — `lsp-routeros-ts`
 owns producing snapshots, centrs owns which snapshot it measures against.
