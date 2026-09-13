@@ -118,9 +118,17 @@ function boundaryCacheEntryBytes(text: string, index: StatementIndex): number {
 	);
 }
 
+/** Whether one statement index fits the bounded cache's per-entry ceiling. */
+export function canRetainStatementIndex(text: string): boolean {
+	return (
+		text.length * 2 + (text.length + 1) * Int32Array.BYTES_PER_ELEMENT * 3 <=
+		BOUNDARY_CACHE_BYTE_LIMIT
+	);
+}
+
 function cacheStatementIndex(text: string, index: StatementIndex): boolean {
+	if (!canRetainStatementIndex(text)) return false;
 	const entryBytes = boundaryCacheEntryBytes(text, index);
-	if (entryBytes > BOUNDARY_CACHE_BYTE_LIMIT) return false;
 
 	while (
 		boundaryCache.size >= BOUNDARY_CACHE_LIMIT ||

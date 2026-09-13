@@ -89,7 +89,6 @@
  * genuine false negatives the tristate exists to prevent.
  */
 
-import { analyzeCoordinates } from "./coordinates.ts";
 import { type Defect, hasStructuralDefect, mergeDefects } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
 import {
@@ -605,11 +604,23 @@ function catalogVerbOf(
  * consumes this only as a rollup, so it cannot repeat that failure.
  */
 export function occurrences(text: string): Occurrence[] {
+	const statements = resolveStatements(text);
 	return collect(
-		resolveStatements(text),
+		statements,
 		resolveDocument(text),
-		analyzeCoordinates(text).ascii ? documentRange(text) : undefined,
+		sourceRange(text, statements),
 	);
+}
+
+function sourceRange(
+	text: string,
+	analysis: StatementAnalysis,
+): MaskedRange | undefined {
+	return analysis.defects.some(
+		(d) => d.code === "bom" || d.code === "non-ascii",
+	)
+		? undefined
+		: documentRange(text);
 }
 
 function collect(
@@ -697,7 +708,14 @@ function collect(
 	for (const bracket of brackets.resolutions) {
 		const inner = bracket.inner.trim();
 		if (inner.length === 0) continue;
-		const described = describeStatement(inner);
+		const bracketRange =
+			range !== undefined &&
+			bracket.innerSpan.start >= range.start &&
+			bracket.innerSpan.end <= range.end &&
+			range.text.slice(bracket.innerSpan.start, bracket.innerSpan.end) === inner
+				? rangeAt(range, bracket.innerSpan.start, bracket.innerSpan.end)
+				: undefined;
+		const described = describeStatement(inner, bracketRange);
 		if (isDynamicForm(inner, described)) {
 			out.push({
 				kind: "bracket",
@@ -795,10 +813,11 @@ export function containsWrite(text: string): WriteAnalysis {
 	// One resolution pass each for the statement walk (Q4) and the bracket walk
 	// (Q3); both are re-entrant over the same segmentation and neither is cheap
 	// on adversarial input, so they are not re-run for the defects.
+	const statements = resolveStatements(text);
 	return containsWriteFromAnalyses(
-		resolveStatements(text),
+		statements,
 		resolveDocument(text),
-		analyzeCoordinates(text).ascii ? documentRange(text) : undefined,
+		sourceRange(text, statements),
 	);
 }
 

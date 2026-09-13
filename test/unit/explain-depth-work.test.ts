@@ -19,6 +19,7 @@ for (const [name, open, close] of [
 	["bare do", "do={", "}"],
 	["retry command", ":retry command={", "}"],
 	["array substitution scope", ":local a {[:do {", "}]}"],
+	["bracketed bare directive", "$[do={", "}]"],
 ] as const) {
 	test(`large structural index inputs stay bounded across depth: ${name}`, async () => {
 		for (const depth of [4, 64]) {

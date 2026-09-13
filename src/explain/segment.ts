@@ -83,6 +83,7 @@ import { type Defect, defectAt, mergeDefects } from "./defects.ts";
 import { scanQuotedString as scanQuotedStringShared } from "./quoted-string.ts";
 import {
 	braceStartsStatements,
+	canRetainStatementIndex,
 	hashStartsHardError,
 	isIndexedStatementStart,
 } from "./scope-brace.ts";
@@ -486,6 +487,7 @@ export function segmentStatements(
 	const anchored =
 		analysis.ascii &&
 		range !== undefined &&
+		canRetainStatementIndex(range.text) &&
 		isIndexedStatementStart(range.text, range.start)
 			? range
 			: undefined;

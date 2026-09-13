@@ -81,7 +81,6 @@
 
 import { scopeBlocksIn } from "./blocks.ts";
 import { commandVerbIndex } from "./catalog.ts";
-import { analyzeCoordinates } from "./coordinates.ts";
 import type { Defect } from "./defects.ts";
 import { isKnownMenuPath } from "./is-known-menu.ts";
 import {
@@ -912,9 +911,12 @@ export interface VerbAnalysis {
  * pair this array with `segmentStatements` by index.
  */
 export function resolveVerbs(text: string): VerbAnalysis {
+	const analysis = resolveStatements(text);
 	return resolveVerbsFromStatements(
-		resolveStatements(text),
-		analyzeCoordinates(text).ascii ? documentRange(text) : undefined,
+		analysis,
+		analysis.defects.some((d) => d.code === "bom" || d.code === "non-ascii")
+			? undefined
+			: documentRange(text),
 	);
 }
 

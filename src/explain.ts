@@ -144,6 +144,7 @@ import {
 	documentRange,
 	type MaskedRange,
 	nestedRange,
+	rangeAt,
 	rangeMask,
 	segmentStatements,
 } from "./explain/segment.ts";
@@ -1388,7 +1389,9 @@ export function explainCommand(
 			ev: EV.blocks,
 		})),
 		containsWrite: renderWriteVerdict(write.verdict),
-		subcommands: brackets.resolutions.map(subcommandOf),
+		subcommands: brackets.resolutions.map((resolution) =>
+			subcommandOf(resolution, sourceRange),
+		),
 		// `containsWrite` is the fact `structure` itself asserts; the statements
 		// and subcommands beside it carry their own.
 		ev: EV.write,
@@ -1426,7 +1429,11 @@ export function explainCommand(
 						// dropped every such candidate on its text check — leaving a
 						// resolved command to the string fill (#325).
 						span: resolution.innerSpan,
-						split: resolveVerb(resolution.inner, resolution.context),
+						split: resolveVerb(
+							resolution.inner,
+							resolution.context,
+							resolutionInnerRange(resolution, sourceRange),
+						),
 						ev: EV.paths,
 					},
 				];
@@ -2009,7 +2016,22 @@ function enforceGateParity(
 }
 
 /** One `[…]` substitution in the envelope's vocabulary. See {@link ExplainSubcommand}. */
-function subcommandOf(r: Resolution): ExplainSubcommand {
+function resolutionInnerRange(
+	r: Resolution,
+	range: MaskedRange | undefined,
+): MaskedRange | undefined {
+	return range !== undefined &&
+		r.innerSpan.start >= range.start &&
+		r.innerSpan.end <= range.end &&
+		range.text.slice(r.innerSpan.start, r.innerSpan.end) === r.inner
+		? rangeAt(range, r.innerSpan.start, r.innerSpan.end)
+		: undefined;
+}
+
+function subcommandOf(
+	r: Resolution,
+	range: MaskedRange | undefined,
+): ExplainSubcommand {
 	// Q3 refused: the bracket is unreadable and Q6's reading of the same text
 	// cannot promote it.
 	const reading =
@@ -2018,7 +2040,9 @@ function subcommandOf(r: Resolution): ExplainSubcommand {
 					resolution: "unknown" as const,
 					unresolved: r.unresolved ?? "no reading of this substitution",
 				}
-			: readingOf(resolveVerb(r.inner, r.context));
+			: readingOf(
+					resolveVerb(r.inner, r.context, resolutionInnerRange(r, range)),
+				);
 	return {
 		span: { start: r.span.start, end: r.span.end },
 		context: r.context,

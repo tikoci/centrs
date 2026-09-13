@@ -1,10 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
 	analyzeCoordinates,
 	byteToPosition,
 } from "../../src/explain/coordinates.ts";
 import { type Defect, hasStructuralDefect } from "../../src/explain/defects.ts";
+import * as scopeBrace from "../../src/explain/scope-brace.ts";
 import {
 	documentRange,
 	maskComments,
@@ -728,4 +729,32 @@ describe("comment mask memo (#322)", () => {
 		expect(maskedB.indexOf("#")).toBe(6);
 		expect(maskedB.slice(10, 13)).toBe("   ");
 	});
+});
+
+test("ranged segmentation keeps an uncached large document out of nested index queries", () => {
+	const body = "do={:put 1}";
+	const start = 700_000;
+	const document = `${" ".repeat(start)}${body}`;
+	const range = nestedRange(
+		documentRange(document),
+		start,
+		start + body.length,
+	);
+	// One index retains the source plus three Int32Arrays. This document is over
+	// the production ceiling, while the nested body remains cheaply cacheable.
+	expect(
+		document.length * 2 +
+			(document.length + 1) * Int32Array.BYTES_PER_ELEMENT * 3,
+	).toBeGreaterThan(8 * 1024 * 1024);
+	const braces = spyOn(scopeBrace, "braceStartsStatements");
+	try {
+		expect(segmentStatements(body, range).segments.map((s) => s.text)).toEqual([
+			body,
+		]);
+		expect(new Set(braces.mock.calls.map(([source]) => source))).toEqual(
+			new Set([body]),
+		);
+	} finally {
+		braces.mockRestore();
+	}
 });
