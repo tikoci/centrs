@@ -621,7 +621,7 @@ function sourceRange(
 		(d) => d.code === "bom" || d.code === "non-ascii",
 	)
 		? undefined
-		: documentRange(text);
+		: documentRange(text, true);
 }
 
 function collect(

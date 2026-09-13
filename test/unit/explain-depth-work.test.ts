@@ -22,6 +22,7 @@ for (const [name, open, close] of [
 	["bracketed bare directive", "$[do={", "}]"],
 ] as const) {
 	test(`large structural index inputs stay bounded across depth: ${name}`, async () => {
+		const structuralQueries: number[] = [];
 		for (const depth of [4, 64]) {
 			const shell = open.repeat(depth);
 			const tail = close.repeat(depth);
@@ -46,6 +47,11 @@ for (const [name, open, close] of [
 					(sum, source) => sum + source.length,
 					0,
 				);
+				structuralQueries.push(
+					braces.mock.calls.length +
+						scopes.mock.calls.length +
+						hashes.mock.calls.length,
+				);
 				expect(bytes).toBeGreaterThanOrEqual(text.length);
 				// Original and comment-masked document plus one boundary-local view
 				// are permitted. A single per-level reader exceeds this at depth 64.
@@ -56,5 +62,8 @@ for (const [name, open, close] of [
 				hashes.mockRestore();
 			}
 		}
+		const [shallow, deep] = structuralQueries;
+		expect(shallow).toBeGreaterThan(0);
+		expect(deep).toBeLessThanOrEqual((shallow as number) * 20);
 	}, 20_000);
 }

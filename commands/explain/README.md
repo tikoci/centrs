@@ -9,7 +9,7 @@ a path, with completion-style candidates for building the right command.
 validation): the cheap, safe knowledge tier in front of the runners
 (`execute` / `api` / `retrieve`).
 
-Status: offline baseline `coded`; live probes over `rest-api` and `native-api`
+Status: offline baseline `verified`; live probes over `rest-api` and `native-api`
 `designed`. **`centrs explain '<input>'` runs today**, without a router or CDB.
 [`docs/MATRIX.md`](../../docs/MATRIX.md#offline-analysis) tracks these separately;
 [#90](https://github.com/tikoci/centrs/issues/90) indexes the remaining tasks.
@@ -2351,7 +2351,11 @@ The offline capability can advance from `coded` to `verified` when:
   neither of those carries a `do={…}`, which is where the third one was (#320).
   A guarded shape is only guarded for the analyzers it actually runs, so a new
   growth guard states which analyzers its input reaches and is mutation-tested
-  against the term it removed.
+  against the term it removed. **Met:** #322's fixed-size depth guard grows
+  nesting 16× (depth 4 → 64) under the public token/curl path and stays below
+  the 6× bound; deterministic companion guards cover colon-led, bare-directive,
+  retry, array/substitution, and bracket shapes and fail when child-scope
+  traversal is restored.
 - **Measured token surface:** the total, gapless `--tokens` partition and
   generated censuses remain reproducible; #264 B4 / #263's projection and
   device-agreement report are in

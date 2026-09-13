@@ -102,6 +102,9 @@ import { isKnownMenuPath } from "./is-known-menu.ts";
 import {
 	braceStartsStatements,
 	hashStartsHardError,
+	hasIndexedHash,
+	hasIndexedInterpolation,
+	hasIndexedStructuralError,
 	scopeNameFromMasked,
 } from "./scope-brace.ts";
 import {
@@ -112,6 +115,7 @@ import {
 	type SegmentResult,
 	scanQuotedString,
 	scanStringInterpolation,
+	segmentScopeBody,
 	segmentStatements,
 } from "./segment.ts";
 import { VERBS } from "./verbs.ts";
@@ -216,6 +220,13 @@ const MAX_DEPTH = 256;
 function structuralDefectIn(range: MaskedRange): string | null {
 	// Mask comments so a `#`-comment `}`/`)` is not counted as a real delimiter.
 	const { masked, start: lo, end: hi } = range;
+	if (
+		!hasIndexedHash(masked, lo, hi) &&
+		!hasIndexedInterpolation(masked, lo, hi)
+	)
+		return hasIndexedStructuralError(masked, lo, hi)
+			? "structural defect: unbalanced delimiter or string"
+			: null;
 	const openOf: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
 	const stack: { char: string; statements: boolean }[] = [];
 	for (let i = lo; i < hi; i++) {
@@ -639,7 +650,7 @@ const DOCUMENT_LOC: Loc = { base: 0, fallback: { start: 0, end: 0 } };
  * (#322) — the anchored reading is a fast path, never a second answer.
  */
 function rootRange(text: string, segmented: SegmentResult): MaskedRange | null {
-	return segmented.ascii ? documentRange(text) : null;
+	return segmented.ascii ? documentRange(text, true) : null;
 }
 
 /**
@@ -729,7 +740,7 @@ function walk(
 			}
 			const bodyLoc = nest(loc, block.start, unit.span);
 			const body = locate(
-				segmentStatements(block.body, bodyRange(range, block)),
+				segmentScopeBody(block.body, bodyRange(range, block)),
 				bodyLoc,
 				bodyRange(range, block),
 			);
@@ -851,7 +862,7 @@ function walkStatements(
 			}
 			const bodyLoc = nest(unit.loc, block.start, span);
 			const body = locate(
-				segmentStatements(block.body, bodyRange(range, block)),
+				segmentScopeBody(block.body, bodyRange(range, block)),
 				bodyLoc,
 				bodyRange(range, block),
 			);

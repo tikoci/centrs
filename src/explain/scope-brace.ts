@@ -75,6 +75,10 @@ interface StatementIndex {
 	boundaries: Int32Array;
 	firstContent: Int32Array;
 	lastForbidden: Int32Array;
+	matchingBrace: Map<number, number>;
+	structuralErrors: number[];
+	hashes: number[];
+	interpolatedStrings: number[];
 }
 
 const boundaryCache = new Map<string, StatementIndex>();
@@ -114,7 +118,12 @@ function boundaryCacheEntryBytes(text: string, index: StatementIndex): number {
 		text.length * 2 +
 		index.boundaries.byteLength +
 		index.firstContent.byteLength +
-		index.lastForbidden.byteLength
+		index.lastForbidden.byteLength +
+		index.matchingBrace.size * 32 +
+		(index.structuralErrors.length +
+			index.hashes.length +
+			index.interpolatedStrings.length) *
+			8
 	);
 }
 
@@ -129,6 +138,7 @@ export function canRetainStatementIndex(text: string): boolean {
 function cacheStatementIndex(text: string, index: StatementIndex): boolean {
 	if (!canRetainStatementIndex(text)) return false;
 	const entryBytes = boundaryCacheEntryBytes(text, index);
+	if (entryBytes > BOUNDARY_CACHE_BYTE_LIMIT) return false;
 
 	while (
 		boundaryCache.size >= BOUNDARY_CACHE_LIMIT ||
@@ -174,6 +184,11 @@ function statementIndex(text: string): StatementIndex {
 	firstContent.fill(-1);
 	const lastForbidden = new Int32Array(text.length + 1);
 	lastForbidden.fill(-1);
+	const matchingBrace = new Map<number, number>();
+	const structuralErrors: number[] = [];
+	const hashes: number[] = [];
+	const interpolatedStrings: number[] = [];
+	const delimiters: { char: string; at: number }[] = [];
 	let boundary = -1;
 	let first = -1;
 	let forbidden = -1;
@@ -184,7 +199,15 @@ function statementIndex(text: string): StatementIndex {
 		lastForbidden[i] = forbidden;
 		const c = text[i] as string;
 		if (c === '"') {
-			const end = Math.min(scanQuotedString(text, i).end, text.length);
+			const quoted = scanQuotedString(text, i);
+			const end = Math.min(quoted.end, text.length);
+			for (let j = i + 1; j + 1 < end; j++) {
+				if (text[j] === "$" && text[j + 1] === "[") {
+					interpolatedStrings.push(i);
+					break;
+				}
+			}
+			if (!quoted.closed) structuralErrors.push(i);
 			boundaries.fill(boundary, i + 1, end + 1);
 			firstContent.fill(first === -1 ? i : first, i + 1, end + 1);
 			lastForbidden.fill(i, i + 1, end + 1);
@@ -192,6 +215,15 @@ function statementIndex(text: string): StatementIndex {
 			forbidden = i;
 			i = end;
 			continue;
+		}
+		if (c === "#") hashes.push(i);
+		if (c === "{" || c === "[" || c === "(") {
+			delimiters.push({ char: c, at: i });
+		} else if (c === "}" || c === "]" || c === ")") {
+			const want = c === "}" ? "{" : c === "]" ? "[" : "(";
+			const delimiter = delimiters.pop();
+			if (delimiter?.char !== want) structuralErrors.push(i);
+			else if (c === "}") matchingBrace.set(delimiter.at, i);
 		}
 		if (first === -1 && !isAsciiWhitespace(c)) first = i;
 		if (c === "=" || c === "[" || c === "(" || c === "$") forbidden = i;
@@ -204,10 +236,70 @@ function statementIndex(text: string): StatementIndex {
 	boundaries[text.length] = boundary;
 	firstContent[text.length] = first;
 	lastForbidden[text.length] = forbidden;
+	for (const delimiter of delimiters) structuralErrors.push(delimiter.at);
+	structuralErrors.sort((a, b) => a - b);
 
-	const index = { boundaries, firstContent, lastForbidden };
+	const index = {
+		boundaries,
+		firstContent,
+		lastForbidden,
+		matchingBrace,
+		structuralErrors,
+		hashes,
+		interpolatedStrings,
+	};
 	if (cacheStatementIndex(text, index)) adoptBoundaryText(text, index);
 	return index;
+}
+
+/** Closing `}` paired with `open`, outside strings/comments, when one exists. */
+export function matchingBraceEnd(
+	text: string,
+	open: number,
+): number | undefined {
+	return statementIndex(text).matchingBrace.get(open);
+}
+
+function hasOffset(
+	offsets: readonly number[],
+	start: number,
+	end: number,
+): boolean {
+	let lo = 0;
+	let hi = offsets.length;
+	while (lo < hi) {
+		const mid = (lo + hi) >>> 1;
+		if ((offsets[mid] as number) < start) lo = mid + 1;
+		else hi = mid;
+	}
+	return lo < offsets.length && (offsets[lo] as number) < end;
+}
+
+/** Whether `[start,end)` contains an unmatched/mismatched delimiter or string. */
+export function hasIndexedStructuralError(
+	text: string,
+	start: number,
+	end: number,
+): boolean {
+	return hasOffset(statementIndex(text).structuralErrors, start, end);
+}
+
+/** Whether `[start,end)` contains any unmasked hash requiring the semantic check. */
+export function hasIndexedHash(
+	text: string,
+	start: number,
+	end: number,
+): boolean {
+	return hasOffset(statementIndex(text).hashes, start, end);
+}
+
+/** Whether `[start,end)` contains a string with a bracket interpolation. */
+export function hasIndexedInterpolation(
+	text: string,
+	start: number,
+	end: number,
+): boolean {
+	return hasOffset(statementIndex(text).interpolatedStrings, start, end);
 }
 
 /**

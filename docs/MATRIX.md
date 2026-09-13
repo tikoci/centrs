@@ -95,11 +95,11 @@ provides shared analysis for future integrations across the command grid.
 
 | Capability | State | Contract and evidence | Work |
 | ---------- | ----- | --------------------- | ---- |
-| explain / offline baseline | `coded` | `commands/explain/README.md` → Offline baseline acceptance; offline examples in `test/unit/explain.test.ts`, focused `test/unit/explain-*` suites, and CHR captures under `test/fixtures/explain/`. The token partition is scored against device `highlight` by `test/unit/explain-highlight-agreement.test.ts` and `test/fixtures/explain/highlight-agreement.json`. The public entry is `@tikoci/centrs/explain`; its dependency boundary and executed browser-consumer proof are gated by `test/unit/explain-browser-entry.test.ts` (`bun run explain:browser-consumer`). | #90 indexes correctness, token agreement (#264/#263), and consumer verification. |
+| explain / offline baseline | `verified` | `commands/explain/README.md` → Offline baseline acceptance; offline examples in `test/unit/explain.test.ts`, focused `test/unit/explain-*` suites, and CHR captures under `test/fixtures/explain/`. The token partition is scored against device `highlight` by `test/unit/explain-highlight-agreement.test.ts` and `test/fixtures/explain/highlight-agreement.json`. The public entry is `@tikoci/centrs/explain`; its dependency boundary and executed browser-consumer proof are gated by `test/unit/explain-browser-entry.test.ts` (`bun run explain:browser-consumer`). #322's fixed-size 16× depth guard and deterministic structural-work guards close the bounded-execution criterion. | #90 indexes correctness, token agreement (#264/#263), consumer verification, and bounded execution (#322). |
 
-The CLI/library already expose structure, diagnostics, token partitions, symbols,
-and flow-sensitive value facts. `coded` acknowledges that implementation while
-the baseline still has open acceptance work; it is not a parser-coverage score.
+The CLI/library expose structure, diagnostics, token partitions, symbols, and
+flow-sensitive value facts. `verified` records the offline acceptance evidence;
+it is not a parser-coverage score and does not advance either live protocol cell.
 Live probes (#236), MCP response alignment (#223), and future configuration
 policies are distinct work, not prerequisites for using offline analysis.
 
@@ -174,9 +174,13 @@ giving a valid string escape its own `escaped` class from the same walk that
 already produced `bad-string-escape`. It is a retag — 19,960 corpus bytes
 change class with classified coverage identical to the last decimal — and it
 takes the device slice's `unprojected` residue from 1,051 to 633 bytes on
-100.00% agreement for the new class. What remains on the track is **#322** (depth-axis
-growth), which still blocks the bounded-execution acceptance criterion. The
-issue index owns the individual tasks and their dependencies.
+100.00% agreement for the new class. **#322 now closes the final baseline gap**:
+scope-body segmentation skips already-indexed child bodies, structural and
+brace queries reuse the document index, the public 16× depth-axis guard clears
+its bound, and deterministic guards cover the shapes hidden by any single
+timing input. The offline baseline is therefore `verified`. The issue index
+owns the individual tasks and their dependencies; live probes (#236) and MCP
+alignment (#223) remain following capabilities, not an automatic new selection.
 
 Unfinished SNMP, RoMON, TUI, or other protocol/frontend cells do not preempt this
 track. Live `explain` (#236) remains a separate next capability. Change this
