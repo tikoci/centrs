@@ -14,7 +14,7 @@
  *
  * ## Two first-order sources, different axes
  *
- * `src/explain/menus.ts` (#207) bakes the container set from four pinned
+ * `src/explain/menus.ts` (#207) bakes the container set from six pinned
  * `/console/inspect` trees. That answers "is this navigation?" and nothing else:
  * it has no command axis at all, and no tree can carry a menu gated to hardware
  * no CHR has.
@@ -38,8 +38,8 @@
  * about the **definition structs and their gates**. This table unions them and
  * records, per entry, which one carried it.
  *
- * Measured across 968 exactly-matching paths, three RouterOS versions and two
- * architectures, the two sources have **zero kind contradictions** — they have
+ * Measured across the pinned RouterOS versions and both architectures, the two
+ * sources have **zero kind contradictions** — they have
  * never disagreed about whether something is a menu or a command. That is the
  * assertion this generator aborts on, and the one worth watching.
  *
@@ -730,8 +730,8 @@ export function build(
 	if (contradictions.length > 0)
 		throw new Error(
 			"CLI Reference and the pinned inspect trees disagree about what these paths ARE.\n" +
-				"That has never happened before (0 across 906 exact matches, three versions,\n" +
-				"two architectures), so it is a real event, not noise: decide it by hand\n" +
+				"That has never happened in a reviewed source set, so it is a real event,\n" +
+				"not noise: decide it by hand\n" +
 				"rather than letting either source win silently.\n  " +
 				contradictions.join("\n  "),
 		);
@@ -824,6 +824,8 @@ export function render(rows: readonly CatalogRow[], counts: Counts): string {
 		return true;
 	});
 	const ungatedRows = ungated.length.toLocaleString("en-US");
+	const ungatedPathNoun = ungated.length === 1 ? "path" : "paths";
+	const ungatedVerb = ungated.length === 1 ? "looks" : "look";
 	const residueRows = residue.length.toLocaleString("en-US");
 
 	const trees = counts.trees
@@ -847,7 +849,7 @@ export function render(rows: readonly CatalogRow[], counts: Counts): string {
  *    ${counts.pages.toLocaleString("en-US")} pages, ${counts.publishedEntries.toLocaleString("en-US")} entries — first-order about the definition
  *    structs and their build-time gates. Since #285 every page is a leaf whose
  *    slug is the CLI path, so no spelling has to be rewritten to be looked up.
- * 2. Four pinned restraml \`/console/inspect\` trees
+ * 2. ${counts.trees.length} pinned restraml \`/console/inspect\` trees
  *    (\`https://tikoci.github.io/restraml/\`) — first-order about the CLI surface:
  *
  * | Tree | Arch | RouterOS | Nodes |
@@ -877,7 +879,7 @@ ${byKind("settings")}
  *
  * **Gates conjoin down a path, so read them with {@link effectiveGates}, not
  * row by row.** A row states only what the publication stated at that entry.
- * Read row-wise, ${ungatedRows} published-only paths look ungated; read with
+ * Read row-wise, ${ungatedRows} published-only ${ungatedPathNoun} ${ungatedVerb} ungated; read with
  * ancestry, the residue carrying no published explanation for its absence at
  * all is ${residueRows}.
  *
@@ -1029,7 +1031,7 @@ export interface CatalogGate {
  * parent's \`syscap\` applies even though the child entry states none: the gates
  * up a path CONJOIN, they do not override.
  *
- * Read row-wise, ${ungatedRows} published-only paths look ungated; read with
+ * Read row-wise, ${ungatedRows} published-only ${ungatedPathNoun} ${ungatedVerb} ungated; read with
  * ancestry the residue is ${residueRows}. The gap between the two is the
  * conjunction, and it is what a caller has to reproduce: a child's silence about
  * a gate is not the absence of one. #228's finding — that a published-only path

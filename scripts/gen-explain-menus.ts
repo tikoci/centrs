@@ -26,7 +26,7 @@
  * ## Source selection (pinned, deliberately)
  *
  * The pin lives in `scripts/restraml-trees.ts`, shared with
- * `gen-explain-catalog.ts` so both tables are built from the same four trees.
+ * `gen-explain-catalog.ts` so both tables are built from the same six trees.
  * That file carries the rationale for the pin and for arm64.
  *
  * ## Absence is safe; presence is load-bearing
@@ -54,14 +54,14 @@
  * per-table provenance that cannot be stated per entry.
  *
  * `src/explain/catalog.ts` (`gen-explain-catalog.ts`) is where the published
- * source landed instead: the same four trees unioned with CLI Reference, but
+ * source landed instead: the same six trees unioned with CLI Reference, but
  * with `provenance` carried per entry. It is additive and does not reinterpret
  * anything here. Read that generator for the alias allowlist, the published
  * applicability gates, and the kind-contradiction assertion.
  *
  * What is NOT a reason, and used to be claimed here: that 79 of cliref's 81
  * tree-only dirs are "phantoms never observed on any device". Measured against
- * these four trees (#228), that is wrong. They are overwhelmingly REAL menus
+ * the then-pinned trees (#228), that is wrong. They are overwhelmingly REAL menus
  * gated to hardware no CHR has — switch-chip QoS/ACL/FDB, PoE, LCD, w60g, PTP,
  * MSRP, partitions, SwOS — and 105 of the 112 published paths absent from every
  * tree carry a `package`/`conditions`/`syscap` gate that predicts the absence.
@@ -112,6 +112,7 @@ function render(
 		)
 		.join("\n");
 	const entries = paths.map((p) => `\t"${p}",`).join("\n");
+	const versions = new Set(extracts.map((extract) => extract.version)).size;
 	return `/**
  * RouterOS menu (container) paths — GENERATED, do not hand-edit.
  *
@@ -119,7 +120,7 @@ function render(
  * the drift gate. The generator (\`scripts/gen-explain-menus.ts\`) carries the
  * full rationale, the source pin, and why absence here is safe.
  *
- * Union of the \`dir\` and \`path\` nodes in four pinned restraml typed trees
+ * Union of the \`dir\` and \`path\` nodes in ${extracts.length} pinned restraml typed trees
  * (\`https://tikoci.github.io/restraml/\`), all extra-packages builds:
  *
  * | Tree | Arch | RouterOS | Nodes | Containers |
@@ -127,7 +128,7 @@ function render(
 ${provenance}
  *
  * Zero node-type conflicts across those trees — no \`dir\`↔\`cmd\` flip across
- * three versions or across architectures — which is what makes the union
+ * ${versions} versions or across architectures — which is what makes the union
  * version-less rather than version-keyed. Generation aborts if that ever stops
  * holding.
  *

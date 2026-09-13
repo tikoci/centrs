@@ -5,18 +5,20 @@
  * the drift gate. The generator (`scripts/gen-explain-menus.ts`) carries the
  * full rationale, the source pin, and why absence here is safe.
  *
- * Union of the `dir` and `path` nodes in four pinned restraml typed trees
+ * Union of the `dir` and `path` nodes in 6 pinned restraml typed trees
  * (`https://tikoci.github.io/restraml/`), all extra-packages builds:
  *
  * | Tree | Arch | RouterOS | Nodes | Containers |
  * | ---- | ---- | -------- | ----- | ---------- |
  * | `7.10.2/extra/inspect.json` | x86 | 7.10.2 | 29,086 | 458 |
  * | `7.16/extra/inspect.json` | x86 | 7.16 | 34,876 | 522 |
- * | `7.23.2/extra/deep-inspect.x86.json` | x86 | 7.23.2 | 40,595 | 550 |
- * | `7.24rc2/extra/deep-inspect.arm64.json` | arm64 | 7.24rc2 | 42,690 | 575 |
+ * | `7.24.2/extra/deep-inspect.x86.json` | x86 | 7.24.2 | 41,345 | 554 |
+ * | `7.24.2/extra/deep-inspect.arm64.json` | arm64 | 7.24.2 | 42,691 | 575 |
+ * | `7.25beta3/extra/deep-inspect.x86.json` | x86 | 7.25beta3 | 41,798 | 557 |
+ * | `7.25beta3/extra/deep-inspect.arm64.json` | arm64 | 7.25beta3 | 43,148 | 578 |
  *
  * Zero node-type conflicts across those trees — no `dir`↔`cmd` flip across
- * three versions or across architectures — which is what makes the union
+ * 4 versions or across architectures — which is what makes the union
  * version-less rather than version-keyed. Generation aborts if that ever stops
  * holding.
  *
@@ -125,6 +127,7 @@ export const MENU_PATHS: ReadonlySet<string> = new Set([
 	"/interface/eoip",
 	"/interface/eoipv6",
 	"/interface/ethernet",
+	"/interface/ethernet/pon",
 	"/interface/ethernet/switch",
 	"/interface/ethernet/switch/host",
 	"/interface/ethernet/switch/port",
@@ -226,6 +229,7 @@ export const MENU_PATHS: ReadonlySet<string> = new Set([
 	"/interface/wireless/sniffer/packet",
 	"/interface/wireless/snooper",
 	"/interface/wireless/wds",
+	"/interface/xfrm",
 	"/iot",
 	"/iot/bluetooth",
 	"/iot/bluetooth/advertisers",
@@ -309,7 +313,6 @@ export const MENU_PATHS: ReadonlySet<string> = new Set([
 	"/ip/ipsec/installed-sa",
 	"/ip/ipsec/key",
 	"/ip/ipsec/key/psk",
-	"/ip/ipsec/key/qkd",
 	"/ip/ipsec/key/rsa",
 	"/ip/ipsec/mode-config",
 	"/ip/ipsec/peer",
@@ -354,6 +357,7 @@ export const MENU_PATHS: ReadonlySet<string> = new Set([
 	"/ip/socks/users",
 	"/ip/socksify",
 	"/ip/ssh",
+	"/ip/ssh/known-hosts",
 	"/ip/tftp",
 	"/ip/tftp/settings",
 	"/ip/traffic-flow",

@@ -9,7 +9,7 @@
  *
  * ## Source selection (pinned, deliberately)
  *
- * Four extra-packages trees, two architectures, spanning 7.10.2 → 7.24rc2.
+ * Six extra-packages trees, two architectures, spanning 7.10.2 → 7.25beta3.
  * The pin is the point: `--check` must be reproducible, so adopting a newer
  * RouterOS tree is a deliberate edit to {@link RESTRAML_SOURCES}, reviewed like
  * any other change. It is *not* version tracking — the emitted tables are
@@ -35,9 +35,12 @@ export interface RestramlSource {
 }
 
 /**
- * The pinned trees. Two x86 points early in 7.x for menus that existed then and
- * were later renamed away, the phase-0 pinned pair (7.23.2 / 7.24rc2) for
- * current breadth, and arm64 for the hardware-only menus above.
+ * The pinned trees. Two x86 points early in 7.x retain menus that existed then
+ * and were later renamed away. Both architectures of the current stable
+ * (7.24.2) establish the released breadth; both architectures of the next beta
+ * (7.25beta3) retain the established stable-plus-prerelease early-warning
+ * coverage. Keeping each current version architecture-paired makes an added
+ * path attributable to RouterOS version rather than to an architecture swap.
  *
  * `extra/` is the extra-packages build throughout — a bare CHR under-covers.
  * Before 7.20.8 restraml published no arch-split deep-inspect, so the early
@@ -47,14 +50,24 @@ export const RESTRAML_SOURCES: readonly RestramlSource[] = [
 	{ version: "7.10.2", arch: "x86", file: "7.10.2/extra/inspect.json" },
 	{ version: "7.16", arch: "x86", file: "7.16/extra/inspect.json" },
 	{
-		version: "7.23.2",
+		version: "7.24.2",
 		arch: "x86",
-		file: "7.23.2/extra/deep-inspect.x86.json",
+		file: "7.24.2/extra/deep-inspect.x86.json",
 	},
 	{
-		version: "7.24rc2",
+		version: "7.24.2",
 		arch: "arm64",
-		file: "7.24rc2/extra/deep-inspect.arm64.json",
+		file: "7.24.2/extra/deep-inspect.arm64.json",
+	},
+	{
+		version: "7.25beta3",
+		arch: "x86",
+		file: "7.25beta3/extra/deep-inspect.x86.json",
+	},
+	{
+		version: "7.25beta3",
+		arch: "arm64",
+		file: "7.25beta3/extra/deep-inspect.arm64.json",
 	},
 ];
 
@@ -130,8 +143,8 @@ export async function fetchTree(
  * Merge the extracts into one path → node-type map, aborting on any path whose
  * type differs between trees.
  *
- * Measured across these four trees the conflict count is ZERO — no `dir`↔`cmd`
- * flip across three versions or across architectures — which is what makes a
+ * Measured across these six trees the conflict count is ZERO — no `dir`↔`cmd`
+ * flip across four versions or across architectures — which is what makes a
  * version-less union sound at all. If RouterOS ever does flip one, that is a
  * fact neither generated table can represent, so generation must stop and force
  * a human decision rather than letting whichever tree sorted last win.
