@@ -80,8 +80,16 @@ import {
 	runAtByte,
 } from "./coordinates.ts";
 import { type Defect, defectAt, mergeDefects } from "./defects.ts";
-import { scanQuotedString as scanQuotedStringShared } from "./quoted-string.ts";
-import { braceStartsStatements, hashStartsHardError } from "./scope-brace.ts";
+import {
+	MAX_STRING_FRAME_DEPTH,
+	scanQuotedString as scanQuotedStringShared,
+} from "./quoted-string.ts";
+import {
+	braceStartsStatements,
+	canRetainStatementIndex,
+	hashStartsHardError,
+	isIndexedStatementStart,
+} from "./scope-brace.ts";
 
 /** One top-level statement located in analyzed-byte space. */
 export interface Segment {
@@ -166,7 +174,28 @@ export function scanQuotedString(
 	open: number,
 	limit: number = text.length,
 ): QuotedStringScan {
-	return scanQuotedStringShared(text, open, limit);
+	return scanQuotedStringWithin(text, open, limit, MAX_STRING_FRAME_DEPTH);
+}
+
+function scanQuotedStringWithin(
+	text: string,
+	open: number,
+	limit: number,
+	frameBudget: number,
+): QuotedStringScan {
+	return scanQuotedStringShared(
+		text,
+		open,
+		limit,
+		(source, bracket, end, frameDepth) =>
+			scanStringInterpolationWithin(
+				source,
+				bracket,
+				end,
+				frameBudget - frameDepth,
+			).end,
+		frameBudget,
+	);
 }
 
 /**
@@ -295,6 +324,67 @@ export function documentRange(text: string): MaskedRange {
 }
 
 /**
+ * Locate one `$[…]` body's closing bracket using its own comment context.
+ *
+ * The document mask deliberately leaves an enclosing string opaque. Once `$[`
+ * enters code, statement-leading comments are real again, so brackets inside
+ * them cannot close or extend the substitution. The returned range starts at
+ * `open` and retains that local mask for the readers of the body.
+ */
+export function scanStringInterpolation(
+	text: string,
+	open: number,
+	limit: number = text.length,
+): { end: number; range: MaskedRange } {
+	return scanStringInterpolationWithin(
+		text,
+		open,
+		limit,
+		MAX_STRING_FRAME_DEPTH - 1,
+	);
+}
+
+function scanStringInterpolationWithin(
+	text: string,
+	open: number,
+	limit: number,
+	frameBudget: number,
+): { end: number; range: MaskedRange } {
+	const local = text.slice(open, limit);
+	// Masking must find each code-level string boundary comment-aware. Reuse
+	// those answers below instead of recursively scanning the same strings again.
+	const quotedEnds = new Map<number, number>();
+	const range: MaskedRange = {
+		text: local,
+		masked: maskUncached(local, frameBudget, quotedEnds),
+		start: 0,
+		end: local.length,
+	};
+	if (frameBudget < 1) return { end: limit, range };
+	const frames: string[] = ["["];
+	for (let i = 1; i < range.end; i++) {
+		const c = range.masked[i];
+		if (c === '"') {
+			const quotedEnd = quotedEnds.get(i);
+			if (quotedEnd === undefined) return { end: limit, range };
+			i = quotedEnd - 1;
+			continue;
+		}
+		if (c === "[" || c === "(" || c === "{") {
+			if (frames.length >= frameBudget) return { end: limit, range };
+			frames.push(c);
+			continue;
+		}
+		if (c !== "]" && c !== ")" && c !== "}") continue;
+		const want = c === "]" ? "[" : c === ")" ? "(" : "{";
+		if (frames.at(-1) !== want) continue;
+		frames.pop();
+		if (frames.length === 0) return { end: open + i, range };
+	}
+	return { end: limit, range };
+}
+
+/**
  * The sub-range `[start, end)` of `parent`, in `parent`'s own coordinates.
  *
  * Offsets must be JS string indices — for a statement span that means the
@@ -352,7 +442,11 @@ export function maskOf(range: MaskedRange | undefined): string | undefined {
  * statement index behind it — and a statement's text carries its whole nested
  * subtree, so the repetition was paid once per enclosing level (#322).
  */
-function maskUncached(original: string): string {
+function maskUncached(
+	original: string,
+	frameBudget: number = MAX_STRING_FRAME_DEPTH,
+	quotedEnds?: Map<number, number>,
+): string {
 	// Masked output is built from whole slices, and only once a comment is
 	// actually found: comment-free input is returned as the SAME string object.
 	// `split("")` allocated one string per character of every call — 16 walks
@@ -382,7 +476,14 @@ function maskUncached(original: string): string {
 		}
 		if (c === '"') {
 			atLead = false;
-			i = scanQuotedString(original, i).end - 1;
+			const end = scanQuotedStringWithin(
+				original,
+				i,
+				original.length,
+				frameBudget - contexts.length,
+			).end;
+			quotedEnds?.set(i, end);
+			i = end - 1;
 			continue; // i rests on the closing quote (or past end)
 		}
 		// H4 is unchanged and H5 only ADDS the immediate-line-start case: an
@@ -459,8 +560,19 @@ const MAX_CONTAINER_DEPTH = 256;
 /**
  * Segment `original` into top-level statements. Spans are analyzed-byte offsets
  * (see module header); `text` is the original substring for each span.
+ *
+ * A statement-bearing `range` may anchor the same `original` text in its
+ * enclosing document. On ASCII input, structural lookback can reuse that
+ * document's statement index instead of indexing every nested body (#322).
+ * The scan still reads the original bytes, including comments: replacing them
+ * with the mask would lose comment spans and H5 continuation state. Non-ASCII
+ * input, or a body opener skipped by the raw document index (a quote inside an
+ * earlier comment), keeps the standalone analyzed-byte scan.
  */
-export function segmentStatements(original: string): SegmentResult {
+export function segmentStatements(
+	original: string,
+	range?: MaskedRange,
+): SegmentResult {
 	const analysis = analyzeCoordinates(original);
 	// `analyzed` is pure ASCII, so a string built from it has index === byte.
 	// When the INPUT was already ASCII the two are the same sequence, so the
@@ -468,7 +580,14 @@ export function segmentStatements(original: string): SegmentResult {
 	const ascii = analysis.ascii
 		? original
 		: new TextDecoder().decode(analysis.analyzed);
-	const raw = scanAscii(ascii);
+	const anchored =
+		analysis.ascii &&
+		range !== undefined &&
+		canRetainStatementIndex(range.text) &&
+		isIndexedStatementStart(range.text, range.start)
+			? range
+			: undefined;
+	const raw = scanAscii(ascii, anchored);
 	// Recover the human-readable `text` for each segment from the original.
 	const segments = raw.segments.map((s) => ({
 		...s,
@@ -549,11 +668,19 @@ interface Frame {
  * flattening H7 containers inline. Returns spans only; `segmentStatements`
  * recovers each `text` from the original afterward.
  */
-function scanAscii(ascii: string): {
+function scanAscii(
+	ascii: string,
+	range?: MaskedRange,
+): {
 	segments: RawSegment[];
 	comments: { start: number; end: number }[];
 	defects: Defect[];
 } {
+	// Local indices remain local in the result; only index-backed questions use
+	// document coordinates. The floor prevents an enclosing head from becoming
+	// the head of the body being segmented.
+	const indexed = range?.text ?? ascii;
+	const floor = range?.start ?? 0;
 	const comments: { start: number; end: number }[] = [];
 	const defects: Defect[] = [];
 	const overDepth: number[] = [];
@@ -779,7 +906,12 @@ function scanAscii(ascii: string): {
 		if (
 			c === "#" &&
 			!hardHashSeen &&
-			hashStartsHardError(ascii, i, delimStack.at(-1)?.statements === false)
+			hashStartsHardError(
+				indexed,
+				floor + i,
+				delimStack.at(-1)?.statements === false,
+				floor,
+			)
 		) {
 			defects.push(defectAt("invalid-hash", i, "#"));
 			hardHashSeen = true;
@@ -842,7 +974,9 @@ function scanAscii(ascii: string): {
 				const enclosing = delimStack.at(-1)?.statements ?? true;
 				const statements =
 					c === "[" ||
-					(c === "{" && enclosing && braceStartsStatements(ascii, i));
+					(c === "{" &&
+						enclosing &&
+						braceStartsStatements(indexed, floor + i, floor));
 				delimStack.push({ char: c, at: i, statements });
 				f.atLead = statements;
 			}

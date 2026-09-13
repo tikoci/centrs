@@ -93,11 +93,13 @@ import { type Defect, hasStructuralDefect, mergeDefects } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
 import {
 	type DocumentAnalysis,
+	rangeForResolution,
 	resolveDocument,
 	resolveStatements,
 	type StatementAnalysis,
 	type StatementResolution,
 } from "./pathresolve.ts";
+import { documentRange, type MaskedRange, rangeAt } from "./segment.ts";
 import {
 	catalogVerbAt,
 	describeStatement,
@@ -603,12 +605,29 @@ function catalogVerbOf(
  * consumes this only as a rollup, so it cannot repeat that failure.
  */
 export function occurrences(text: string): Occurrence[] {
-	return collect(resolveStatements(text), resolveDocument(text));
+	const statements = resolveStatements(text);
+	return collect(
+		statements,
+		resolveDocument(text),
+		sourceRange(text, statements),
+	);
+}
+
+function sourceRange(
+	text: string,
+	analysis: StatementAnalysis,
+): MaskedRange | undefined {
+	return analysis.defects.some(
+		(d) => d.code === "bom" || d.code === "non-ascii",
+	)
+		? undefined
+		: documentRange(text);
 }
 
 function collect(
 	statements: StatementAnalysis,
 	brackets: DocumentAnalysis,
+	range?: MaskedRange,
 ): Occurrence[] {
 	const out: Occurrence[] = [];
 	const list = statements.statements;
@@ -627,7 +646,21 @@ function collect(
 		if (t.length === 0) continue;
 		// One parse per statement, threaded through every rule below: the Q6
 		// boundary reads the same run three or four times otherwise.
-		const described = describeStatement(t);
+		const trimStart = statement.text.length - statement.text.trimStart().length;
+		const described = describeStatement(
+			t,
+			range !== undefined &&
+				statement.span.start >= range.start &&
+				statement.span.end <= range.end &&
+				range.text.slice(statement.span.start, statement.span.end) ===
+					statement.text
+				? rangeAt(
+						range,
+						statement.span.start + trimStart,
+						statement.span.start + trimStart + t.length,
+					)
+				: undefined,
+		);
 		const catalogAt = catalogVerbOf(t, described, statement.context);
 		if (isDynamicForm(t, described)) {
 			out.push({
@@ -676,7 +709,8 @@ function collect(
 	for (const bracket of brackets.resolutions) {
 		const inner = bracket.inner.trim();
 		if (inner.length === 0) continue;
-		const described = describeStatement(inner);
+		const bracketRange = rangeForResolution(bracket) ?? documentRange(inner);
+		const described = describeStatement(inner, bracketRange);
 		if (isDynamicForm(inner, described)) {
 			out.push({
 				kind: "bracket",
@@ -774,18 +808,25 @@ export function containsWrite(text: string): WriteAnalysis {
 	// One resolution pass each for the statement walk (Q4) and the bracket walk
 	// (Q3); both are re-entrant over the same segmentation and neither is cheap
 	// on adversarial input, so they are not re-run for the defects.
+	const statements = resolveStatements(text);
 	return containsWriteFromAnalyses(
-		resolveStatements(text),
+		statements,
 		resolveDocument(text),
+		sourceRange(text, statements),
 	);
 }
 
-/** Reuse the Q3/Q4 walks when a composed analysis already performed them. */
+/**
+ * Reuse the Q3/Q4 walks when a composed analysis already performed them.
+ * `range`, if supplied, belongs to the same ASCII document as the analyses;
+ * statements outside that range keep their standalone reading.
+ */
 export function containsWriteFromAnalyses(
 	statements: StatementAnalysis,
 	brackets: DocumentAnalysis,
+	range?: MaskedRange,
 ): WriteAnalysis {
-	const found = collect(statements, brackets);
+	const found = collect(statements, brackets, range);
 	const defects = mergeDefects(statements.defects, brackets.defects);
 	const writes = found.filter((o) => o.klass === "write").length;
 	const blockers = found.filter((o) => BLOCKING.has(o.klass));

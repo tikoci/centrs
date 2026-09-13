@@ -118,9 +118,17 @@ function boundaryCacheEntryBytes(text: string, index: StatementIndex): number {
 	);
 }
 
+/** Whether one statement index fits the bounded cache's per-entry ceiling. */
+export function canRetainStatementIndex(text: string): boolean {
+	return (
+		text.length * 2 + (text.length + 1) * Int32Array.BYTES_PER_ELEMENT * 3 <=
+		BOUNDARY_CACHE_BYTE_LIMIT
+	);
+}
+
 function cacheStatementIndex(text: string, index: StatementIndex): boolean {
+	if (!canRetainStatementIndex(text)) return false;
 	const entryBytes = boundaryCacheEntryBytes(text, index);
-	if (entryBytes > BOUNDARY_CACHE_BYTE_LIMIT) return false;
 
 	while (
 		boundaryCache.size >= BOUNDARY_CACHE_LIMIT ||
@@ -200,6 +208,18 @@ function statementIndex(text: string): StatementIndex {
 	const index = { boundaries, firstContent, lastForbidden };
 	if (cacheStatementIndex(text, index)) adoptBoundaryText(text, index);
 	return index;
+}
+
+/**
+ * Whether the index itself starts a fresh statement at `start`.
+ *
+ * Most readers index a comment mask, but segmentation must retain the raw
+ * comments. A quote in an earlier comment can make that raw index skip a real
+ * body opener as string content. Such a body must build its own local index:
+ * clamping lookback alone cannot restore boundaries the outer index skipped.
+ */
+export function isIndexedStatementStart(text: string, start: number): boolean {
+	return start === 0 || statementIndex(text).boundaries[start] === start - 1;
 }
 
 function trailingName(text: string, start: number, end: number): string | null {

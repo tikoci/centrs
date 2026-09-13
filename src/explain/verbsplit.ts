@@ -79,7 +79,7 @@
  * resolver's context-certainty contract (#192).
  */
 
-import { scopeBodies } from "./blocks.ts";
+import { scopeBlocksIn } from "./blocks.ts";
 import { commandVerbIndex } from "./catalog.ts";
 import type { Defect } from "./defects.ts";
 import { isKnownMenuPath } from "./is-known-menu.ts";
@@ -88,6 +88,12 @@ import {
 	type Span,
 	type StatementAnalysis,
 } from "./pathresolve.ts";
+import {
+	documentRange,
+	type MaskedRange,
+	nestedRange,
+	rangeAt,
+} from "./segment.ts";
 import { SUBMENU_DIRECTIVES, VERBS } from "./verbs.ts";
 
 const BARE_WORD = /^[A-Za-z][A-Za-z0-9._-]*$/;
@@ -302,14 +308,25 @@ export function runTokens(text: string): RunToken[] {
 }
 
 /** True when the statement is a scripting directive (`:x`, or a bare `x do={…}`). */
-export function isDirective(text: string): boolean {
+export function isDirective(text: string, range?: MaskedRange): boolean {
 	const t = trimAscii(text);
 	if (t.startsWith(":")) return true;
-	return !t.startsWith("/") && scopeBodies(t).length > 0;
+	if (t.startsWith("/")) return false;
+	const start = text.length - trimAsciiStart(text).length;
+	return (
+		scopeBlocksIn(
+			range === undefined
+				? documentRange(t)
+				: nestedRange(range, start, start + t.length),
+		).length > 0
+	);
 }
 
 /** Everything the boundary rule needs from one statement's text. */
-export function describeStatement(text: string): {
+export function describeStatement(
+	text: string,
+	range?: MaskedRange,
+): {
 	run: RunToken[];
 	directive: boolean;
 	whole: boolean;
@@ -381,7 +398,7 @@ export function describeStatement(text: string): {
 	}
 	return {
 		run,
-		directive: isDirective(text),
+		directive: isDirective(text, range),
 		whole: everyWordCovered && covered === words && run.length > 0,
 		runEnds,
 	};
@@ -640,12 +657,16 @@ function operandTail(
  * `context`. Substitution-headed and variable-segment statements are `unknown`
  * — offline refuses rather than guessing (the Q3/Q4/Q14 fail-closed floor).
  */
-export function resolveVerb(text: string, context: string): VerbSplit {
+export function resolveVerb(
+	text: string,
+	context: string,
+	range?: MaskedRange,
+): VerbSplit {
 	const t = trimAscii(text);
 	if (t.startsWith("$") || t.startsWith("[") || t.startsWith("("))
 		return unknownSplit("dynamic or substitution-headed statement");
 
-	const { run, directive, whole, runEnds } = describeStatement(text);
+	const { run, directive, whole, runEnds } = describeStatement(text, range);
 	if (run.length === 0) return unknownSplit("no leading path token");
 
 	// `directive` already folds in the bare-directive case (`isDirective`), so it
@@ -890,19 +911,41 @@ export interface VerbAnalysis {
  * pair this array with `segmentStatements` by index.
  */
 export function resolveVerbs(text: string): VerbAnalysis {
-	return resolveVerbsFromStatements(resolveStatements(text));
+	const analysis = resolveStatements(text);
+	return resolveVerbsFromStatements(
+		analysis,
+		analysis.defects.some((d) => d.code === "bom" || d.code === "non-ascii")
+			? undefined
+			: documentRange(text),
+	);
 }
 
-/** Reuse an existing Q4 walk when a composed analysis already performed it. */
-export function resolveVerbsFromStatements({
-	statements,
-	defects,
-}: StatementAnalysis): VerbAnalysis {
+/**
+ * Reuse an existing Q4 walk when a composed analysis already performed it.
+ * `range`, if supplied, belongs to the same ASCII document as the analysis;
+ * statement spans are absolute document offsets, even within a partial range.
+ */
+export function resolveVerbsFromStatements(
+	{ statements, defects }: StatementAnalysis,
+	range?: MaskedRange,
+): VerbAnalysis {
 	return {
 		splits: statements.map((s) => ({
 			...(s.unresolved
 				? unknownSplit(s.unresolved)
-				: resolveVerb(s.text, s.context)),
+				: resolveVerb(
+						s.text,
+						s.context,
+						// The caller supplies a range only for ASCII input; widened
+						// fallback spans must still match the statement's own text.
+						range !== undefined &&
+							s.span.start >= range.start &&
+							s.span.end <= range.end &&
+							s.text.length === s.span.end - s.span.start &&
+							range.text.slice(s.span.start, s.span.end) === s.text
+							? rangeAt(range, s.span.start, s.span.end)
+							: undefined,
+					)),
 			span: s.span,
 			text: s.text,
 			contextCertain: s.contextCertain,

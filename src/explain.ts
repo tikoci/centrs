@@ -136,6 +136,7 @@ import { operatorSpans } from "./explain/operator-tokens.ts";
 import { type PathTokenCandidate, pathSpans } from "./explain/path-tokens.ts";
 import {
 	type Resolution,
+	rangeForResolution,
 	resolveDocument,
 	resolveStatements,
 } from "./explain/pathresolve.ts";
@@ -1238,9 +1239,14 @@ export function explainCommand(
 	const analyzedRange = documentRange(analyzed);
 	const segmented = segmentStatements(input);
 	const statementAnalysis = resolveStatements(input);
-	const verbs = resolveVerbsFromStatements(statementAnalysis);
+	const sourceRange = coordinates.ascii ? analyzedRange : undefined;
+	const verbs = resolveVerbsFromStatements(statementAnalysis, sourceRange);
 	const brackets = resolveDocument(input);
-	const write = containsWriteFromAnalyses(statementAnalysis, brackets);
+	const write = containsWriteFromAnalyses(
+		statementAnalysis,
+		brackets,
+		sourceRange,
+	);
 	const symbols = resolveSymbols(input);
 
 	// ONE escape walk, read twice (#264): its invalid half is a
@@ -1421,7 +1427,11 @@ export function explainCommand(
 						// dropped every such candidate on its text check — leaving a
 						// resolved command to the string fill (#325).
 						span: resolution.innerSpan,
-						split: resolveVerb(resolution.inner, resolution.context),
+						split: resolveVerb(
+							resolution.inner,
+							resolution.context,
+							rangeForResolution(resolution) ?? documentRange(resolution.inner),
+						),
 						ev: EV.paths,
 					},
 				];
@@ -2013,7 +2023,13 @@ function subcommandOf(r: Resolution): ExplainSubcommand {
 					resolution: "unknown" as const,
 					unresolved: r.unresolved ?? "no reading of this substitution",
 				}
-			: readingOf(resolveVerb(r.inner, r.context));
+			: readingOf(
+					resolveVerb(
+						r.inner,
+						r.context,
+						rangeForResolution(r) ?? documentRange(r.inner),
+					),
+				);
 	return {
 		span: { start: r.span.start, end: r.span.end },
 		context: r.context,
