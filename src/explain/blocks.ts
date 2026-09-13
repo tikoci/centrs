@@ -28,7 +28,6 @@
 import {
 	DIRECTIVE_BODY,
 	HEAD_SCOPED_ARG_NAMES,
-	hasIndexedInterpolation,
 	matchingBraceEnd,
 	SCOPE_ARG_NAMES,
 	scopeNameFromMasked,
@@ -120,9 +119,9 @@ export function scopeBlocksIn(range: MaskedRange): ScopeBlock[] {
 		else if (c === "]" || c === ")") {
 			if (depth > 0) depth--;
 		} else if (c === "{") {
-			const indexedEnd = hasIndexedInterpolation(masked, i, hi)
-				? undefined
-				: matchingBraceEnd(masked, i);
+			const indexedEnd = range.coordinateIdentity
+				? matchingBraceEnd(masked, i)
+				: undefined;
 			const end =
 				indexedEnd !== undefined && indexedEnd < hi
 					? indexedEnd

@@ -88,7 +88,6 @@ import {
 	braceStartsStatements,
 	canRetainStatementIndex,
 	hashStartsHardError,
-	hasIndexedInterpolation,
 	isIndexedStatementStart,
 	matchingBraceEnd,
 	scopeNameFromMasked,
@@ -602,7 +601,11 @@ export function segmentScopeBody(
 	original: string,
 	range: MaskedRange,
 ): SegmentResult {
-	return segmentStatementsInternal(original, range, true);
+	return segmentStatementsInternal(
+		original,
+		range,
+		range.coordinateIdentity === true,
+	);
 }
 
 function segmentStatementsInternal(
@@ -1027,13 +1030,7 @@ function scanAscii(
 					atContainerLevel() &&
 					scopeNameFromMasked(structural, floor + i, floor) !== null
 				) {
-					const end = hasIndexedInterpolation(
-						structural,
-						floor + i,
-						floor + ascii.length,
-					)
-						? undefined
-						: matchingBraceEnd(structural, floor + i);
+					const end = matchingBraceEnd(structural, floor + i);
 					if (end !== undefined && end < floor + ascii.length) {
 						f.atLead = false;
 						i = end - floor + 1;

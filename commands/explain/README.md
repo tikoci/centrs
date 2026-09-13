@@ -2354,8 +2354,8 @@ The offline capability can advance from `coded` to `verified` when:
   against the term it removed. **Met:** #322's fixed-size depth guard grows
   nesting 16× (depth 4 → 64) under the public token/curl path and stays below
   the 6× bound; deterministic companion guards cover colon-led, bare-directive,
-  retry, array/substitution, and bracket shapes and fail when child-scope
-  traversal is restored.
+  retry, array/substitution, bracket, and string-interpolation shapes and fail
+  when child-scope traversal is restored.
 - **Measured token surface:** the total, gapless `--tokens` partition and
   generated censuses remain reproducible; #264 B4 / #263's projection and
   device-agreement report are in

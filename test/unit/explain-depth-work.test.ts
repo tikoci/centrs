@@ -14,12 +14,18 @@ import { explainCommand } from "../../src/explain.ts";
  * argument/value reading, symbols and token fills. The bare directive and the
  * array/substitution/scope shapes expose readers the colon-led shape skips.
  */
-for (const [name, open, close] of [
-	["if", ":if (true) do={", "}"],
-	["bare do", "do={", "}"],
-	["retry command", ":retry command={", "}"],
-	["array substitution scope", ":local a {[:do {", "}]}"],
-	["bracketed bare directive", "$[do={", "}]"],
+for (const [name, open, close, lead] of [
+	["if", ":if (true) do={", "}", ""],
+	["bare do", "do={", "}", ""],
+	["retry command", ":retry command={", "}", ""],
+	["array substitution scope", ":local a {[:do {", "}]}", ""],
+	["bracketed bare directive", "$[do={", "}]", ""],
+	[
+		"interpolated string in a scope",
+		":if (true) do={",
+		"}",
+		':put "$[/ip/route/print]";',
+	],
 ] as const) {
 	test(`large structural index inputs stay bounded across depth: ${name}`, async () => {
 		const structuralQueries: number[] = [];
@@ -28,7 +34,8 @@ for (const [name, open, close] of [
 			const tail = close.repeat(depth);
 			const leaf = ":local v 1; :put $v;";
 			const budget = 60 * 1024 - shell.length - tail.length;
-			const body = leaf.repeat(Math.floor(budget / leaf.length));
+			const fill = budget - lead.length;
+			const body = lead + leaf.repeat(Math.floor(fill / leaf.length));
 			const text = shell + body.padEnd(budget, " ") + tail;
 			expect(text.length).toBe(60 * 1024);
 			const braces = spyOn(scopeBrace, "braceStartsStatements");

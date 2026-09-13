@@ -176,9 +176,10 @@ change class with classified coverage identical to the last decimal — and it
 takes the device slice's `unprojected` residue from 1,051 to 633 bytes on
 100.00% agreement for the new class. **#322 now closes the final baseline gap**:
 scope-body segmentation skips already-indexed child bodies, structural and
-brace queries reuse the document index, the public 16× depth-axis guard clears
+brace queries reuse document-wide indexes, the public 16× depth-axis guard clears
 its bound, and deterministic guards cover the shapes hidden by any single
-timing input. The offline baseline is therefore `verified`. The issue index
+timing input, including interpolation-bearing strings. The offline baseline is
+therefore `verified`. The issue index
 owns the individual tasks and their dependencies; live probes (#236) and MCP
 alignment (#223) remain following capabilities, not an automatic new selection.
 

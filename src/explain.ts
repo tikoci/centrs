@@ -1236,7 +1236,7 @@ export function explainCommand(
 	// 64 deep those four passes masked 15.8 MB between them. A statement's mask
 	// is this mask restricted to its span (see `segment.ts` → `MaskedRange`), and
 	// `analyzed` is ASCII by construction, so the offsets need no coordinate test.
-	const analyzedRange = documentRange(analyzed, true);
+	const analyzedRange = documentRange(analyzed, coordinates.ascii);
 	const segmented = segmentStatements(input);
 	const statementAnalysis = resolveStatements(input);
 	const sourceRange = coordinates.ascii ? analyzedRange : undefined;
