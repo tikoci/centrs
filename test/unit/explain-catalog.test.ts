@@ -318,9 +318,10 @@ describe("explain/catalog — effectiveGates", () => {
 	 * seven paths #228 named were an artifact of the module-page corpus:
 	 * `serial-interface` and `dashboard` are now published as their own gated
 	 * menus, and the recovered `<dir>/<basename>` leaves carry the gates their
-	 * children inherit. Row-wise the residue is 2; ancestry-aware it is
-	 * `/interface/xfrm` alone — the one published path that explains its absence
-	 * from a CHR tree in no way at all. A growing set would be a real event.
+	 * children inherit. The #335 refresh then device-confirmed `/interface/xfrm`
+	 * and the publication removed `/root`, leaving its still-published child
+	 * `/root/terminal` as the sole path with no stated gate. A growing set would
+	 * be a real event.
 	 */
 	test("the unexplained residue is one path", () => {
 		const residue = [...PATH_CATALOG]
@@ -329,7 +330,7 @@ describe("explain/catalog — effectiveGates", () => {
 				return effectiveGates(path.split("/").filter(Boolean)).length === 0;
 			})
 			.map(([path]) => path);
-		expect(residue).toEqual(["/interface/xfrm"]);
+		expect(residue).toEqual(["/root/terminal"]);
 	});
 });
 

@@ -172,16 +172,16 @@ today's path/verb/args split and script-vs-structured gate:
   The *container* half of that pair is since decidable. `src/explain/menus.ts`
   (#207) bakes only the menu-vs-command node type — not a schema — and it is
   version-less because the pinned trees show no `dir`↔`cmd` flip across
-  7.10.2 → 7.24rc2 or across architectures. So `/ip/route` now resolves as
+  7.10.2 → 7.25beta3 or across architectures. So `/ip/route` now resolves as
   `navigation` (#210). The floor is unmoved: the table is deliberately
   incomplete, absence from it decides nothing, and every rule above it still
   refuses rather than guesses.
 
   The *command* half is what #228 addressed, by adding a second first-order
   source rather than a schema. MikroTik's CLI Reference is generated from the
-  definition structs, and measured against the same four pinned trees it has
-  **zero navigation-vs-command contradictions** across 968 exactly-matching
-  paths, three RouterOS versions and two architectures; all but one of the 102
+  definition structs, and measured against the same six pinned trees it has
+  **zero navigation-vs-command contradictions** across 959 exactly-matching
+  paths, four RouterOS versions and two architectures; all but one of the 94
   published paths absent from every tree carry a `package`/`conditions`/`syscap`
   gate — their own or an ancestor's — that predicts the absence.
   `src/explain/catalog.ts` unions the two with per-entry provenance, which is
@@ -204,6 +204,22 @@ today's path/verb/args split and script-vs-structured gate:
   asserts that every category dir still contributes its leaf, so the next
   inventory reshape fails loudly instead of shrinking the table (#285,
   tikoci/rosetta#137).
+
+  **Source refresh (#335, accepted 2026-09-13).** The inspect pins retain the
+  7.10.2 and 7.16 history anchors, then pair x86 and arm64 for both current
+  stable 7.24.2 and prerelease 7.25beta3. Pairing architectures makes additions
+  attributable to version rather than to an architecture swap while preserving
+  the hardware-only menu floor. Reviewed independently, the inspect union moves
+  from 615 to 617 menus: 7.24.2 removes `/ip/ipsec/key/qkd`, and 7.25beta3 adds
+  `/interface/ethernet/pon`, `/interface/xfrm`, and `/ip/ssh/known-hosts`.
+  Separately, the current CLI Reference moves from 1,070 pages / 1,077 entries
+  to 1,053 / 1,060: it adds
+  `/interface/ethernet/switch/rule/reset-counters`, removes the five
+  `/interface/bridge/msrp` paths plus `/root`, moves 12 paths from `both` to
+  `inspect`, and changes 16 published gate strings. Those current-only
+  publication changes are accepted: none introduces a kind contradiction. The
+  coherent generated catalog has 1,120 paths: 959 `both`, 67 `inspect`, and 94
+  `published`; it still reports zero navigation-vs-command contradictions.
 
 There are real unknowns in how far offline parsing can go (expression
 grammar, scope fidelity vs `:parse`, `[]`-nesting corner cases). Grounding

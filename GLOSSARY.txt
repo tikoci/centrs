@@ -149,10 +149,12 @@ npk # MikroTik package format
 nvme-over-tcp # supported by RouterOS **with** rose-storage.npk extra-package
 OID
 PII # Personally Identifiable Information
+PON # passive optical network; RouterOS /interface/ethernet/pon menu
 POV
 PRGA
 proplist
 pywinauto
+QKD # quantum key distribution; RouterOS IPsec/keymat-provider vocabulary
 QML
 qll # CodeQL library file extension (.qll), e.g. CleartextLoggingCustomizations.qll
 qmljsdebugger
@@ -702,7 +704,7 @@ llms # `llms.txt` — MikroTik's published page inventory; the only one listing 
 musicswitch # syscap gate: the Marvell-era switch-chip menu shape — one half of the `/interface/ethernet/switch` pair published under two gates
 rbswitch # syscap gate: the RouterBOARD switch-chip menu shape — the other half of that pair
 prestera # Marvell Prestera switch chip — named in the `crs_prestera` syscap gate on `/interface/ethernet/switch/qos`
-xfrm # `/interface/xfrm` — the IPsec transform interface, and the one published path with no gate anywhere in its ancestry to explain its absence from a CHR tree
+xfrm # `/interface/xfrm` — the IPsec transform interface, device-confirmed by the pinned 7.25beta3 trees and published by the CLI Reference
 btrfs # the Linux B-tree filesystem, a `/disk/btrfs/...` menu on RouterOS 7.20+
 
 # #255 operator-axis vocabulary: the device-grounded operator surface.

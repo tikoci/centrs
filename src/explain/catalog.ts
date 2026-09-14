@@ -9,23 +9,25 @@
  * Union of two first-order sources (#228):
  *
  * 1. MikroTik's published CLI Reference (`https://manual.mikrotik.com/docs/cli-reference/`),
- *    1,070 pages, 1,077 entries — first-order about the definition
+ *    1,053 pages, 1,060 entries — first-order about the definition
  *    structs and their build-time gates. Since #285 every page is a leaf whose
  *    slug is the CLI path, so no spelling has to be rewritten to be looked up.
- * 2. Four pinned restraml `/console/inspect` trees
+ * 2. 6 pinned restraml `/console/inspect` trees
  *    (`https://tikoci.github.io/restraml/`) — first-order about the CLI surface:
  *
  * | Tree | Arch | RouterOS | Nodes |
  * | ---- | ---- | -------- | ----- |
  * | `7.10.2/extra/inspect.json` | x86 | 7.10.2 | 29,086 |
  * | `7.16/extra/inspect.json` | x86 | 7.16 | 34,876 |
- * | `7.23.2/extra/deep-inspect.x86.json` | x86 | 7.23.2 | 40,595 |
- * | `7.24rc2/extra/deep-inspect.arm64.json` | arm64 | 7.24rc2 | 42,690 |
+ * | `7.24.2/extra/deep-inspect.x86.json` | x86 | 7.24.2 | 41,345 |
+ * | `7.24.2/extra/deep-inspect.arm64.json` | arm64 | 7.24.2 | 42,691 |
+ * | `7.25beta3/extra/deep-inspect.x86.json` | x86 | 7.25beta3 | 41,798 |
+ * | `7.25beta3/extra/deep-inspect.arm64.json` | arm64 | 7.25beta3 | 43,148 |
  *
  * | Kind | Total | `both` | `inspect` | `published` |
  * | ---- | ----- | ------ | --------- | ----------- |
- * | `menu` | 558 | 454 | 54 | 50 |
- * | `command` | 450 | 407 | 0 | 43 |
+ * | `menu` | 554 | 443 | 67 | 44 |
+ * | `command` | 450 | 409 | 0 | 41 |
  * | `settings` | 116 | 107 | 0 | 9 |
  *
  * Zero navigation-vs-command contradictions between the two sources. Generation
@@ -45,7 +47,7 @@
  *
  * **Gates conjoin down a path, so read them with {@link effectiveGates}, not
  * row by row.** A row states only what the publication stated at that entry.
- * Read row-wise, 2 published-only paths look ungated; read with
+ * Read row-wise, 1 published-only path looks ungated; read with
  * ancestry, the residue carrying no published explanation for its absence at
  * all is 1.
  *
@@ -87,7 +89,7 @@ export interface CatalogEntry {
  * `path|kind|provenance|package|conditions|syscap` — with trailing empty
  * columns trimmed. Lower-cased, slash-led and sorted by path.
  *
- * Text rather than ~1,124 object literals so that one path is one line in a
+ * Text rather than ~1,120 object literals so that one path is one line in a
  * review diff, and so the formatter has nothing to re-wrap.
  */
 const ROWS = `
@@ -152,7 +154,7 @@ const ROWS = `
 /certificate/settings|settings|both
 /certificate/sign|command|both
 /certificate/sign-certificate-request|command|both
-/console|menu|both
+/console|menu|inspect
 /console/inspect|command|both
 /console/settings|settings|both
 /container|menu|both|container
@@ -239,7 +241,7 @@ const ROWS = `
 /interface/bonding|menu|both
 /interface/bonding/monitor|command|both
 /interface/bonding/monitor-slaves|command|both
-/interface/bridge|menu|both||MSRP_ENABLE
+/interface/bridge|menu|both
 /interface/bridge/calea|menu|both
 /interface/bridge/calea/reset-counters|command|both
 /interface/bridge/calea/reset-counters-all|command|both
@@ -249,11 +251,6 @@ const ROWS = `
 /interface/bridge/host|menu|both
 /interface/bridge/mdb|menu|both
 /interface/bridge/monitor|command|both
-/interface/bridge/msrp|menu|published||MSRP_ENABLE
-/interface/bridge/msrp/attributes|menu|published||MSRP_ENABLE
-/interface/bridge/msrp/domain|menu|published||MSRP_ENABLE
-/interface/bridge/msrp/domain/attributes|menu|published||MSRP_ENABLE
-/interface/bridge/msrp/domain/monitor|command|published||MSRP_ENABLE
 /interface/bridge/msti|menu|both
 /interface/bridge/msti/monitor|command|both
 /interface/bridge/nat|menu|both
@@ -280,14 +277,15 @@ const ROWS = `
 /interface/dot1x/server/state|menu|both||!smips
 /interface/eoip|menu|both
 /interface/eoipv6|menu|both
-/interface/ethernet|menu|both||i386
+/interface/ethernet|menu|both
 /interface/ethernet/blink|command|both
 /interface/ethernet/cable-test|command|both
-/interface/ethernet/monitor|command|both||i386
+/interface/ethernet/monitor|command|both
 /interface/ethernet/poe|menu|published|||(poe or poe-in)
 /interface/ethernet/poe/monitor|command|published|||(poe or poe-in)
 /interface/ethernet/poe/power-cycle|command|published|||(poe or poe-in)
 /interface/ethernet/poe/settings|settings|published|||(poe or poe-in) and poesettings
+/interface/ethernet/pon|menu|inspect
 /interface/ethernet/reset-counters|command|both
 /interface/ethernet/reset-mac-address|command|both
 /interface/ethernet/switch|menu|both
@@ -329,6 +327,7 @@ const ROWS = `
 /interface/ethernet/switch/reserved-fdb|menu|published|||musicswitch
 /interface/ethernet/switch/reset-counters|command|both
 /interface/ethernet/switch/rule|menu|both|||rbswitch
+/interface/ethernet/switch/rule/reset-counters|command|both|||rbswitch
 /interface/ethernet/switch/shaper|menu|published|||musicswitch
 /interface/ethernet/switch/stats|settings|published||!smips|musicswitch
 /interface/ethernet/switch/trunk|menu|published|||musicswitch
@@ -365,7 +364,7 @@ const ROWS = `
 /interface/lte/monitor|command|both||!smips
 /interface/lte/run-modem-update|command|published||!smips
 /interface/lte/scan|command|both||!smips
-/interface/lte/settings|settings|both||!smips, !i386, !mips, !powerpc
+/interface/lte/settings|settings|both||!smips
 /interface/lte/show-capabilities|command|both||!smips
 /interface/macsec|menu|both||!smips
 /interface/macsec/monitor|command|both||!smips
@@ -418,7 +417,7 @@ const ROWS = `
 /interface/sstp-server/monitor|command|both
 /interface/sstp-server/server|settings|both
 /interface/veth|menu|both||!smips|container
-/interface/vlan|menu|both||!smips
+/interface/vlan|menu|both
 /interface/vpls|menu|both||!smips
 /interface/vpls/monitor|command|both||!smips
 /interface/vrrp|menu|both
@@ -531,7 +530,7 @@ const ROWS = `
 /interface/wireless/wds/monitor|command|both|wireless-rep
 /interface/wireless/wps-client|command|both|wireless-rep
 /interface/wireless/wps-push-button|command|both|wireless-rep
-/interface/xfrm|menu|published
+/interface/xfrm|menu|both
 /iot|menu|inspect
 /iot/bluetooth|menu|both|iot
 /iot/bluetooth/advertisers|menu|both|iot
@@ -602,7 +601,7 @@ const ROWS = `
 /ip/cloud/advanced|settings|both
 /ip/cloud/back-to-home-file|menu|both|||cloud-vpn
 /ip/cloud/back-to-home-file/settings|settings|both|||cloud-vpn
-/ip/cloud/back-to-home-file/settings/remove-certificate|command|published|||cloud-vpn
+/ip/cloud/back-to-home-file/settings/remove-certificate|command|both|||cloud-vpn
 /ip/cloud/back-to-home-user|menu|both|||cloud-vpn
 /ip/cloud/back-to-home-user/show-client-config|command|both|||cloud-vpn
 /ip/cloud/force-update|command|both
@@ -674,7 +673,7 @@ const ROWS = `
 /ip/hotspot/walled-garden/ip|menu|both
 /ip/hotspot/walled-garden/reset-counters|command|both
 /ip/hotspot/walled-garden/reset-counters-all|command|both
-/ip/ipsec|menu|both
+/ip/ipsec|menu|inspect
 /ip/ipsec/active-peers|menu|both
 /ip/ipsec/active-peers/kill-connections|command|both
 /ip/ipsec/identity|menu|both
@@ -683,7 +682,6 @@ const ROWS = `
 /ip/ipsec/key|menu|both
 /ip/ipsec/key/psk|menu|both
 /ip/ipsec/key/psk/generate|command|both
-/ip/ipsec/key/qkd|menu|inspect
 /ip/ipsec/key/rsa|menu|both
 /ip/ipsec/key/rsa/export-pub-key|command|both
 /ip/ipsec/key/rsa/generate-key|command|both
@@ -746,6 +744,7 @@ const ROWS = `
 /ip/ssh|settings|both
 /ip/ssh/export-host-key|command|both
 /ip/ssh/import-host-key|command|both
+/ip/ssh/known-hosts|menu|inspect
 /ip/ssh/regenerate-host-key|command|both
 /ip/tftp|menu|both
 /ip/tftp/settings|settings|both
@@ -850,7 +849,7 @@ const ROWS = `
 /password|command|both
 /port|menu|both
 /port/remote-access|menu|both
-/ppp|menu|both
+/ppp|menu|inspect
 /ppp/aaa|settings|both
 /ppp/active|menu|both
 /ppp/l2tp-secret|menu|both
@@ -874,12 +873,11 @@ const ROWS = `
 /radius/monitor|command|both
 /radius/reset-counters|command|both
 /redo|command|both
-/root|menu|published||CONSOLE_DEBUG
 /root/terminal|menu|published
 /routing|menu|inspect
-/routing/bfd|menu|both||BFD_AUTHENTICATION
+/routing/bfd|menu|inspect
 /routing/bfd/authentication|menu|published||BFD_AUTHENTICATION
-/routing/bfd/configuration|menu|both||BFD_AUTHENTICATION
+/routing/bfd/configuration|menu|both
 /routing/bfd/session|menu|both
 /routing/bgp|menu|both||!smips
 /routing/bgp/advertisements|menu|both||!smips
@@ -897,7 +895,7 @@ const ROWS = `
 /routing/bgp/vpn|menu|both||!smips
 /routing/discourse|command|both
 /routing/fantasy|menu|both
-/routing/filter|menu|both
+/routing/filter|menu|inspect
 /routing/filter/chain|menu|both
 /routing/filter/community-ext-list|menu|both
 /routing/filter/community-large-list|menu|both
@@ -913,7 +911,7 @@ const ROWS = `
 /routing/igmp-proxy|settings|both
 /routing/igmp-proxy/interface|menu|both
 /routing/igmp-proxy/mfc|menu|both
-/routing/isis|menu|both
+/routing/isis|menu|inspect
 /routing/isis/instance|menu|both
 /routing/isis/interface|menu|both
 /routing/isis/interface-template|menu|both
@@ -921,7 +919,7 @@ const ROWS = `
 /routing/isis/neighbor|menu|both
 /routing/nexthop|menu|both
 /routing/nexthop/dump-dot|command|both
-/routing/ospf|menu|both
+/routing/ospf|menu|inspect
 /routing/ospf/area|menu|both
 /routing/ospf/area/range|menu|both
 /routing/ospf/instance|menu|both
@@ -943,7 +941,7 @@ const ROWS = `
 /routing/pimsm/static-rp|menu|both||!smips
 /routing/pimsm/uib-g|menu|both||!smips
 /routing/pimsm/uib-sg|menu|both||!smips
-/routing/rip|menu|both
+/routing/rip|menu|inspect
 /routing/rip/instance|menu|both
 /routing/rip/interface|menu|both
 /routing/rip/interface-template|menu|both
@@ -958,7 +956,7 @@ const ROWS = `
 /routing/rpki/session|menu|both
 /routing/rule|menu|both
 /routing/settings|settings|both
-/routing/stats|menu|both||!smips
+/routing/stats|menu|inspect
 /routing/stats/memory|menu|both
 /routing/stats/origin|menu|both
 /routing/stats/pcap|menu|both||!smips
@@ -973,7 +971,7 @@ const ROWS = `
 /snmp/send-trap|command|both
 /special-login|menu|both
 /system|menu|inspect
-/system/backup|menu|both
+/system/backup|menu|inspect
 /system/backup/cloud|menu|both
 /system/backup/cloud/download-file|command|both
 /system/backup/cloud/remove-file|command|both
@@ -993,11 +991,11 @@ const ROWS = `
 /system/default-configuration/wps-sync-mode-script|settings|published|||wpssync
 /system/device-mode|settings|both
 /system/device-mode/update|command|both
-/system/gps|settings|both|gps|mmips
+/system/gps|settings|both|gps
 /system/gps/monitor|command|both|gps
 /system/hardware|menu|inspect
-/system/health|menu|both||!i386
-/system/health/settings|settings|both||!i386, tile|health and health-settings
+/system/health|menu|both
+/system/health/settings|settings|both||!i386|health and health-settings
 /system/health/settings/detect-fans|command|both||!i386|health and health-settings
 /system/history|menu|both
 /system/identity|settings|both
@@ -1015,7 +1013,7 @@ const ROWS = `
 /system/logging/action|menu|both
 /system/logging/action/clear|command|both
 /system/note|settings|both
-/system/ntp|menu|both
+/system/ntp|menu|inspect
 /system/ntp/client|settings|both
 /system/ntp/client/reset-freq-drift|command|both
 /system/ntp/client/servers|menu|both
@@ -1048,9 +1046,9 @@ const ROWS = `
 /system/reboot|command|both
 /system/regulatory|settings|both
 /system/reset-configuration|command|both
-/system/resource|settings|both||!powerpc, !smips
+/system/resource|settings|both
 /system/resource/cpu|menu|both
-/system/resource/hardware|menu|both||!powerpc, !smips, i386
+/system/resource/hardware|menu|both||!powerpc, !smips
 /system/resource/hardware/authorize|command|both||!powerpc, !smips
 /system/resource/hardware/usb-power-reset|command|both||!powerpc, !smips, i386
 /system/resource/hardware/usb-settings|settings|both||!powerpc, !smips
@@ -1060,10 +1058,10 @@ const ROWS = `
 /system/resource/pci|menu|inspect
 /system/resource/usb|menu|inspect
 /system/resource/usb/settings|menu|inspect
-/system/routerboard|settings|both||!i386, !i386, !mipsel, !powerpc
+/system/routerboard|settings|both||!i386
 /system/routerboard/mode-button|settings|both||!i386
 /system/routerboard/reset-button|settings|both||!i386
-/system/routerboard/settings|settings|both||!i386, !i386
+/system/routerboard/settings|settings|both||!i386
 /system/routerboard/settings/keep-frequency|command|published||!i386, mipsel
 /system/routerboard/upgrade|command|both||!i386
 /system/routerboard/usb|settings|both||!i386, !i386, !mipsel, !powerpc
@@ -1110,7 +1108,7 @@ const ROWS = `
 /tool/dns-update|command|both
 /tool/e-mail|settings|both
 /tool/e-mail/send|command|both
-/tool/fetch|command|both||arm64
+/tool/fetch|command|both
 /tool/flood-ping|command|both||!smips
 /tool/graphing|settings|both
 /tool/graphing/interface|menu|both
@@ -1161,7 +1159,7 @@ const ROWS = `
 /tool/traffic-generator/quick|command|both
 /tool/traffic-generator/raw-packet-template|menu|both
 /tool/traffic-generator/start|command|both
-/tool/traffic-generator/stats|menu|both
+/tool/traffic-generator/stats|menu|inspect
 /tool/traffic-generator/stats/latency-distribution|menu|both
 /tool/traffic-generator/stats/port|menu|both
 /tool/traffic-generator/stats/raw|menu|both
@@ -1320,7 +1318,7 @@ export interface CatalogGate {
  * parent's `syscap` applies even though the child entry states none: the gates
  * up a path CONJOIN, they do not override.
  *
- * Read row-wise, 2 published-only paths look ungated; read with
+ * Read row-wise, 1 published-only path looks ungated; read with
  * ancestry the residue is 1. The gap between the two is the
  * conjunction, and it is what a caller has to reproduce: a child's silence about
  * a gate is not the absence of one. #228's finding — that a published-only path
