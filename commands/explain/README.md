@@ -1361,8 +1361,9 @@ for the three issue rows `:put "\q"` / `:put "\x0a"` / `:put "\0a"` vs
 - Scoring a defect rule against the corpus needs the right oracle.
   `parseil_results.ok` is **not** one: `:parse` never throws, it returns a
   diagnostic *value*, so the capture records `ok=1 / status="ok"` for scripts
-  the device rejected (only 3 of 2739 rows are `ok=0`, and those are capture
-  failures). The verdict is in `il_text` — plain prose such as
+  the device rejected (only 5 of 4635 rows are `ok=0`, and those are capture
+  failures — one `edge-cases/oversize-32k.rsc` REST `413` per captured
+  version). The verdict is in `il_text` — plain prose such as
   `expected input value (line 7 column 49)` means rejected, IL means accepted.
 
 ### The operator surface (#255)
@@ -1378,6 +1379,31 @@ any channel is evidence rather than an assumption. Re-cut the fixture with
 below is generated from `src/explain/operators.ts` by
 `bun run explain:operator-readme` and gated by
 `bun run explain:operator-readme:check`.
+
+**The census is a candidate generator, and boilerplate defeats its own
+tie-breaker.** `scripts/explain-operator-census.ts` reports every head-position
+token in the device IL, tagged by shape, because IL is a debug rendering that
+does not quote strings: a string literal is emitted bare, so string content is
+indistinguishable from a node head. Its stated honesty rule is that
+`distinctScripts` beats frequency — "a head seen in one script is one author's
+string, a head seen in three hundred is a language feature". The 7.24.2 /
+7.25beta3 capture added parseIL coverage for the 35-script `tangentsoft`
+device-`/export` stratum and showed that rule has a blind spot, because a
+stock string replicated across a whole stratum of device exports looks exactly
+like a language feature by script count:
+
+| word-shaped head | scripts | what it actually is |
+| ---------------- | ------: | ------------------- |
+| `for` | 2 → 22 | the defconf comment `accept to local loopback (for CAPsMAN)` — in 20 of the 35 device exports, plus the 2 forum scripts that already carried it |
+| `line` | 53 → 84 | device diagnostic prose, `bad parameter hw-offload (line 33 column 147)` |
+
+Neither is an operator, and both are `word`-shaped — the same bucket #255's
+`not` would have appeared in. So the sweep, not the census, still decides; a
+head that arrives with a whole stratum at once is boilerplate until the device
+says otherwise. The two heads the capture added outright,
+`configuration.mode=` and `[system`, are `other`-shaped and are the documented
+string-noise class: a dotted wifi property name emitted bare, and text inside
+an embedded `/system script add source=` value.
 
 **`:parse` IL is the oracle, and `highlight` cannot be.** IL is prefix form with
 the operator as its node's head, so it names the operator and shows its
@@ -2201,8 +2227,17 @@ literals, and DHCP client-ids as `:` directives, which under-counts exactly the
 config genre in question). Since phase 0 the corpus has grown to 948 with a
 `tangentsoft` stratum of 35 genuine `/export … terse` device captures, taking
 export-banner share to 4.6%; **that stratum is not part of any phase-0 figure
-above**. Current whole-corpus offline censuses include its source text, while
-issue #336 owns remeasurement against the newer device captures.
+above**. Current whole-corpus offline censuses include its source text.
+
+The pinned snapshot now carries device captures at **7.24.2 and 7.25beta3**
+alongside the original three parseIL versions (7.20.8, 7.22.1, 7.23rc1) and
+three highlight versions (7.9.2, 7.23.2, 7.24rc2). `source_scripts` is
+byte-identical across that repin, so every text-derived report — the token and
+value censuses, `explain:arg-reach`, the browser-consumer proof — is unchanged
+by construction, and only the IL-derived operator census moved. The two new
+versions are also the first to cover the `tangentsoft` stratum in parseIL (35
+scripts each, 947 of 948 `ok` per version), which is what made the
+export genre visible to the operator axis at all.
 
 The corpus itself is not in this repo and is not moving here — `lsp-routeros-ts`
 owns producing snapshots, centrs owns which snapshot it measures against.

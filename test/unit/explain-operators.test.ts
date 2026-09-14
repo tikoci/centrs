@@ -318,9 +318,11 @@ describe("what the device does that the manual does not say", () => {
 	});
 
 	test("`any` has been an operator since at least 7.20.8", () => {
-		// Offline corroboration: the corpus IL census (7.20.8, 7.22.1, 7.23rc1)
-		// already saw head `any` with `any|7.20.8:2`.
-		expect(fixture.corpus.headOccurrences["any"]).toBe(6);
+		// Offline corroboration: the corpus IL census (7.20.8, 7.22.1, 7.23rc1,
+		// 7.24.2, 7.25beta3) already saw head `any` with `any|7.20.8:2`. The
+		// per-version tally is what carries the age claim — the total moved with
+		// the 7.24.2/7.25beta3 capture, the 7.20.8 row did not.
+		expect(fixture.corpus.headOccurrences["any"]).toBe(10);
 		expect(fixture.corpus.headVersions["any|7.20.8"]).toBe(2);
 		// Live corroboration on the oldest branch swept. The runtime rows above
 		// come from the PRIMARY capture only, so asserting one of them again
@@ -447,7 +449,7 @@ describe("what the device does that the manual does not say", () => {
 describe("the corpus census that generated the candidates", () => {
 	test("`not` never appears as an IL head in 948 corpus scripts", () => {
 		// Corroboration, not proof: the corpus can only falsify. But a spelling
-		// the device never emits as a head in 1,710 accepted parses is not one it
+		// the device never emits as a head in 2,944 accepted parses is not one it
 		// has an operator for.
 		expect(fixture.corpus.headOccurrences["not"]).toBeUndefined();
 	});
