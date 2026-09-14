@@ -47,8 +47,8 @@
  * table**, and stays that way after #228 adopted it elsewhere. This table is a
  * DEVICE-CONFIRMED floor: every entry was observed as a container on at least
  * one real `/console/inspect` tree, which is what its header is allowed to
- * claim. 65 published container paths are confirmed by no tree at all — the
- * `published`-provenance `menu` (54) and `settings` (11) rows of
+ * claim. 53 published container paths are confirmed by no tree at all — the
+ * `published`-provenance `menu` (44) and `settings` (9) rows of
  * `src/explain/catalog.ts` — necessarily so, since this table *is* the union of
  * those trees. Merging them in would quietly retire that guarantee for a
  * per-table provenance that cannot be stated per entry.
@@ -65,8 +65,8 @@
  * gated to hardware no CHR has — switch-chip QoS/ACL/FDB, PoE, LCD, w60g, PTP,
  * MSRP, partitions, SwOS — and 105 of the 112 published paths absent from every
  * tree carry a `package`/`conditions`/`syscap` gate that predicts the absence.
- * The unexplained residue is 7 paths. Across 906 exactly-matching paths the two
- * sources have ZERO kind contradictions.
+ * At that point the unexplained residue was 7 paths; across 906 exactly-matching
+ * paths the two sources had ZERO kind contradictions.
  *
  * Usage:
  *   bun run explain:menus          # regenerate src/explain/menus.ts
