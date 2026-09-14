@@ -1389,12 +1389,12 @@ indistinguishable from a node head. Its stated honesty rule is that
 string, a head seen in three hundred is a language feature". The 7.24.2 /
 7.25beta3 capture added parseIL coverage for the 35-script `tangentsoft`
 device-`/export` stratum and showed that rule has a blind spot, because a
-stock string replicated across every device export looks exactly like a
-language feature by script count:
+stock string replicated across a whole stratum of device exports looks exactly
+like a language feature by script count:
 
 | word-shaped head | scripts | what it actually is |
 | ---------------- | ------: | ------------------- |
-| `for` | 2 → 22 | the defconf comment `accept to local loopback (for CAPsMAN)`, carried by every device export |
+| `for` | 2 → 22 | the defconf comment `accept to local loopback (for CAPsMAN)` — in 20 of the 35 device exports, plus the 2 forum scripts that already carried it |
 | `line` | 53 → 84 | device diagnostic prose, `bad parameter hw-offload (line 33 column 147)` |
 
 Neither is an operator, and both are `word`-shaped — the same bucket #255's
