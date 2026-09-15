@@ -8,6 +8,8 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+## 0.1.5 — 2026-09-15
+
 ### Added
 
 - **Offline `explain`'s token partition is now scored against the device.**
