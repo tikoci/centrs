@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "../../src/cli.ts";
 import {
+	collapsePrintWrapping,
 	isChrIntegrationEnabled,
 	readEnv,
 	recordIntegrationEvidence,
@@ -102,10 +103,15 @@ describeFast("terminal over ssh (host ssh relay)", () => {
 				args: base,
 				stdin: "/system/identity/print\n/quit\n",
 			});
+			// Asserted on the printed `name: <identity>` line, with the device's column
+			// wrapping rejoined: a one-property `print`'s layout is not stable across
+			// RouterOS builds (GH#352 — see collapsePrintWrapping). Matching the
+			// printed line (not the bare identity) also keeps the relay's own prompt,
+			// `[user@<identity>] >`, from satisfying the assertion on its own.
 			expect(
-				ts1.stdoutText,
+				collapsePrintWrapping(ts1.stdoutText),
 				`terminal/ssh exit ${ts1.exitCode}; stderr=${ts1.stderrText}`,
-			).toContain(identity);
+			).toContain(`name: ${identity}`);
 
 			// TS2 — rest-api has no terminal capability (short-circuits before connect).
 			const ts2 = await runCliProcess({

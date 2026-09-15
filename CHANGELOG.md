@@ -8,6 +8,29 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Fixed
+
+- **CI: the three console reads that RouterOS 7.23.6/7.24.3/7.25beta4 broke.**
+  Those builds print a settings menu that has exactly one property — of the
+  menus centrs reads, only `/system/identity` — one character per line, so
+  `name: CHR` comes back with `C`, `H` and `R` on three lines under the label.
+  It is neither a terminal-width effect nor transport-specific: REST `POST /rest/execute` wraps identically to the
+  ssh and mac-telnet consoles, and every multi-property `print` is unaffected
+  (measured on stock CHR 7.24.2 vs 7.24.3). `execute --via ssh`,
+  `execute --via mac-telnet`, and `terminal --via ssh` now assert the identity
+  they read with `print` column wrapping collapsed on both sides, so the
+  examples are evidence about the console round-trip rather than about a
+  device layout MikroTik is free to change (#352).
+- **CI: the CHR image cache now rotates with the RouterOS point release.**
+  `actions/cache` only writes on an exact-key miss, so the old static key froze
+  the first image it ever saw: every stable bump was re-downloaded from
+  download.mikrotik.com on *every* job and never saved. A 186s cold download
+  duly timed out the 300s `chr-smoke` test on the 7.24.2 → 7.24.3 bump. The key
+  now carries the version the job will boot (`scripts/chr-cache-key.ts`), the
+  smoke test gets the headroom a cold download needs, and the QA leg's own
+  timeout absorbs one — a cold download had also been cancelling a whole
+  channel leg mid-suite with every assertion green (#352).
+
 ## 0.1.5 — 2026-09-15
 
 ### Added

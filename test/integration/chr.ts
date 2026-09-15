@@ -204,6 +204,44 @@ export const PARSE_REJECTED = /syntax error|expected end of command/;
 export const PARSE_REJECTED_HINT = /error|expected end of command/;
 
 /**
+ * Rejoin RouterOS `print` column wrapping so an assertion reads the VALUE a
+ * console read returned, not the device's line layout.
+ *
+ * Grounded on CHR 7.24.2 vs 7.24.3 (GH#352; the same break lands on 7.23.6 and
+ * 7.25beta4). A settings menu with exactly ONE property — `/system/identity` is
+ * the only one centrs reads — started printing its value one character per
+ * line, each continuation indented to the value column:
+ *
+ * ```text
+ * 7.24.2   "  name: CHR"
+ * 7.24.3   "  name: C\n        H\n        R"
+ * ```
+ *
+ * It is **not** a terminal-width effect and **not** transport-specific: REST
+ * `POST /rest/execute` wraps identically to the ssh and mac-telnet consoles
+ * (measured on a stock CHR with no client width negotiated at all), and every
+ * multi-property `print` — `/system/resource`, `/system/clock`, `/system/note`,
+ * `/system/health`, and every table `print` — is unaffected on both builds.
+ * `:put [/system/identity/get name]` also stays clean.
+ *
+ * So the layout of a one-property `print` is not stable across RouterOS
+ * versions and must not be asserted on. This removes exactly the wrap join — a
+ * newline plus the continuation indent — and nothing else, so a value's own
+ * inner spacing survives and an assertion still has to match the label and the
+ * single-space separator RouterOS prints (`name: CHR`), not merely the identity
+ * text loose in the stream. On an unwrapped build it is a no-op.
+ *
+ * What it cannot recover: an identity containing whitespace. The device wraps
+ * that whitespace onto a line of its own, which the console's trailing-padding
+ * trim then erases — the information is gone before any client sees it. The
+ * fixtures use quickchr's whitespace-free identity, and these examples are
+ * evidence about the console round-trip, not about identity spelling.
+ */
+export function collapsePrintWrapping(text: string): string {
+	return text.replace(/\r?\n[ \t]+/g, "");
+}
+
+/**
  * Compare two RouterOS version strings (e.g. "7.21.4 (long-term) ...", "7.23",
  * "7.23beta2"). Returns true when `running` ≥ `target`, ordering on
  * major.minor.patch, then prerelease stage (beta < rc < release), then the stage

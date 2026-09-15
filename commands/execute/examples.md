@@ -285,6 +285,10 @@ Envelope: `ok: true`, `meta.via=mac-telnet`, `data.ret` is the console output an
 contains the device identity (cross-checked against REST). `meta.validation.source`
 is `:put [:parse ...] over mac-telnet`.
 
+RouterOS 7.23.6/7.24.3/7.25beta4 print a one-property menu's value one
+character per line (GH#352), so the comparison collapses `print` column
+wrapping on both sides rather than asserting the device's layout.
+
 ### 21. Write (add) over mac-telnet
 
 ```bash
@@ -328,6 +332,10 @@ centrs execute 127.0.0.1 '/system/identity/print' --via ssh --port $SSH_PORT --u
 Envelope: `ok: true`, `meta.via=ssh`, `data.ret` is the cleaned console output and
 contains the device identity (cross-checked against REST). `meta.validation.source`
 is `:put [:parse ...] over ssh`.
+
+RouterOS 7.23.6/7.24.3/7.25beta4 print a one-property menu's value one
+character per line (GH#352), so the comparison collapses `print` column
+wrapping on both sides rather than asserting the device's layout.
 
 ### S2. Multi-line read returns cleaned, column-aligned output
 
