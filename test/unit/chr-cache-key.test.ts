@@ -99,3 +99,13 @@ describe("cacheSafe", () => {
 		expect(cacheSafe("")).toBe(UNRESOLVED);
 	});
 });
+
+describe("cache-key length", () => {
+	test("an over-long dispatch input cannot blow the 512-char key ceiling", () => {
+		// `routeros_version` is a free-text workflow_dispatch input; a long one
+		// would otherwise fail the cache step rather than just miss.
+		const key = `chr-cache-Linux-stable-${cacheSafe("7".repeat(600))}`;
+		expect(key.length).toBeLessThan(512);
+		expect(cacheSafe("7.25beta4")).toBe("7.25beta4");
+	});
+});

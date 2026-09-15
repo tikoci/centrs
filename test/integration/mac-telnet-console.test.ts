@@ -88,13 +88,14 @@ describeFast("execute over mac-telnet (console reader + command path)", () => {
 			const primeMs = Date.now() - primeStart;
 			expect(cons.isReady).toBe(true);
 
-			// Column wrapping collapsed on both sides: a one-property `print`'s layout
-			// is not stable across RouterOS builds (GH#352 — see collapsePrintWrapping).
+			// Asserted on the printed `name: <identity>` line, with the device's column
+			// wrapping rejoined: a one-property `print`'s layout is not stable across
+			// RouterOS builds (GH#352 — see collapsePrintWrapping).
 			expect(
 				collapsePrintWrapping(
 					(await cons.run("/system/identity/print")).output,
 				),
-			).toContain(collapsePrintWrapping(String(identityRest ?? "")));
+			).toContain(`name: ${identityRest ?? ""}`);
 			const validCli =
 				"/ip/address/add address=198.51.100.30/32 interface=ether1";
 			await cons.parseGate(validCli); // valid → no throw
@@ -132,7 +133,7 @@ describeFast("execute over mac-telnet (console reader + command path)", () => {
 			if (!read.ok) return;
 			expect(read.meta.via).toBe("mac-telnet");
 			expect(collapsePrintWrapping(retOf(read.data))).toContain(
-				collapsePrintWrapping(String(identityRest ?? "")),
+				`name: ${identityRest ?? ""}`,
 			);
 
 			// 20 — write (add) with --yes; success prints nothing; verify via REST.

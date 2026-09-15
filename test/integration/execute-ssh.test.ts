@@ -118,10 +118,11 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 			expect(read.ok, read.ok ? "" : JSON.stringify(read.error)).toBe(true);
 			if (!read.ok) return;
 			expect(read.meta.via).toBe("ssh");
-			// Column wrapping collapsed on both sides: a one-property `print`'s layout
-			// is not stable across RouterOS builds (GH#352 — see collapsePrintWrapping).
+			// Asserted on the printed `name: <identity>` line, with the device's column
+			// wrapping rejoined: a one-property `print`'s layout is not stable across
+			// RouterOS builds (GH#352 — see collapsePrintWrapping).
 			expect(collapsePrintWrapping(retOf(read.data))).toContain(
-				collapsePrintWrapping(identity),
+				`name: ${identity}`,
 			);
 
 			// S2 — a multi-line read returns the cleaned, column-aligned output.

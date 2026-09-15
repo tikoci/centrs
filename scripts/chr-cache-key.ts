@@ -43,14 +43,22 @@ import {
 export const UNRESOLVED = "unresolved";
 
 /**
+ * A RouterOS version is `7.25beta4`-shaped; anything past this is not one, and
+ * a cache key has a 512-character ceiling that a long `routeros_version`
+ * dispatch input could otherwise blow (which fails the cache step outright).
+ */
+const MAX_VERSION_LENGTH = 32;
+
+/**
  * Reduce a version to the characters a cache key may carry, so a suffixed build
  * (`7.25beta4`) stays readable and nothing else — a comma, a newline, an
- * `$GITHUB_OUTPUT` directive — can reach the key. An empty result degrades to
- * {@link UNRESOLVED} rather than an empty key component.
+ * `$GITHUB_OUTPUT` directive — can reach the key. Over-long input is truncated
+ * to {@link MAX_VERSION_LENGTH}; an empty result degrades to {@link UNRESOLVED}
+ * rather than an empty key component.
  */
 export function cacheSafe(version: string): string {
 	const safe = version.replace(/[^0-9A-Za-z.-]/g, "");
-	return safe.length > 0 ? safe : UNRESOLVED;
+	return safe.length > 0 ? safe.slice(0, MAX_VERSION_LENGTH) : UNRESOLVED;
 }
 
 /** The version `channel` currently resolves to, or {@link UNRESOLVED}. */
