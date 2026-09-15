@@ -70,6 +70,30 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Changed
 
+- **Every live fixture is re-swept onto the current release channels.** The
+  operator sweep was pinned to 7.23.3 stable / 7.24rc4 testing / 7.21.5
+  long-term and the highlight slice to 7.23.2 / 7.24rc2 — none of them a
+  current channel, and none a build the corpus covers with both oracles, so the
+  operator axis and the token partition were never scored on the same firmware.
+  Both now run on the three builds the corpus classes `complete`: stable
+  **7.24.2**, long-term **7.23.5**, development **7.25beta3**. The slice bases
+  on stable, where development serializes as `null` throughout and only the 33
+  long-term splits cost bytes. The sweep keeps **7.21.5** as a fourth build,
+  explicitly an age anchor rather than a channel claim — it is the only live
+  evidence that the operator surface behaves the same on a pre-7.23 branch, and
+  dropping it would have retired a fact rather than refreshed one (#342, #336).
+- **The live sweep independently reproduces the corpus's channel split.**
+  Highlight agreement is byte-identical between stable and development in every
+  bucket and differs on long-term — the same shape the corpus IL showed at
+  87/11 and 33/0. Two oracles, two capture paths, same conclusion.
+- **Array comparison is not fixed on current long-term.** `:put ({2;1} >
+  {1;2;3})` evaluates on 7.24.2 and 7.25beta3 and errors on 7.23.5 and 7.21.5.
+  7.23.5 is *newer* than the 7.23.3 this was first measured on and still errors,
+  so the change rode the 7.24 line and was never backported —
+  `ARRAY_COMPARISON_NOTE` now says so. The device's post-`error` recovery flipped
+  with the same realignment: `parser-recovered` is 0 on long-term and 96 bytes
+  on both stable and development.
+
 - **The bracket-`=` abstention figure is generated and gated instead of
   asserted.** `commands/explain/README.md` and `src/explain/operator-tokens.ts`
   both quoted a `224` / `1,259` / `1,035` split for the cost of leaving `=`

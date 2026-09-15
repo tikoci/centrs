@@ -143,14 +143,23 @@ describe("operator table vs the device sweep", () => {
 		}
 	});
 
-	test("the sweep covered a stable, a testing and a long-term build", () => {
-		// All three release channels. `7.23.3` is primary because every other
-		// explain fixture is grounded there; `7.24rc4` is where array comparison
-		// landed; `7.21.5` is the oldest branch still supported, and the only way
-		// a claim about long-term is evidence rather than an assumption.
+	test("the sweep covered every current channel, plus an age anchor", () => {
+		// Realigned to the CURRENT channels (#342): the previous set — 7.23.3
+		// stable, 7.24rc4 testing, 7.21.5 long-term — had gone stale, and none of
+		// those three is a build the corpus covers with both oracles, so the
+		// operator axis and the token partition were never scored on the same
+		// firmware. These first three are exactly the corpus's `complete` builds.
+		//
+		// `7.21.5` is kept as a fourth on purpose, and it is NOT a channel claim:
+		// it is the age anchor. It is the only live evidence that the operator
+		// surface behaves the same on a pre-7.23 branch, and dropping it to
+		// "align to current channels" would have retired a fact rather than
+		// refreshed one. Two builds report `(long-term)` because both held that
+		// channel; 7.23.5 is the current one.
 		expect(fixture.sweep._source.versions).toEqual([
-			"7.23.3 (stable) (x86_64)",
-			"7.24rc4 (testing) (x86_64)",
+			"7.24.2 (stable) (x86_64)",
+			"7.23.5 (long-term) (x86_64)",
+			"7.25beta3 (x86_64)",
 			"7.21.5 (long-term) (x86_64)",
 		]);
 	});
@@ -406,7 +415,12 @@ describe("what the device does that the manual does not say", () => {
 		expect(
 			new Set(fixture.sweep.versionDifferences.map((row) => row["id"])),
 		).toEqual(new Set(["array-compare"]));
-		expect(ARRAY_COMPARISON_NOTE).toContain("7.24rc4");
+		// The boundary moved with the channel realignment (#342), and the new
+		// evidence is sharper than "it landed in 7.24rc4": current long-term
+		// 7.23.5 is NEWER than the 7.23.3 first measured and still errors, so the
+		// change rode the 7.24 line and was never backported.
+		expect(ARRAY_COMPARISON_NOTE).toContain("7.24.2");
+		expect(ARRAY_COMPARISON_NOTE).toContain("not fixed on current long-term");
 	});
 
 	test("the version diff covers every axis the table publishes", () => {
@@ -415,13 +429,17 @@ describe("what the device does that the manual does not say", () => {
 		// and precedence conformance as well as runtime; a version that re-ranked
 		// `->` used to be reported as identical. Guarded by mutation: flip any
 		// one of those in a capture and a row appears here.
+		//
+		// Four builds since #342, not three. Both diff rows come from the two
+		// long-term captures (7.23.5 and 7.21.5); 7.25beta3 matches the primary
+		// exactly, which is why the count of rows is 2 rather than 3.
 		const kinds = new Set(
 			fixture.sweep.versionDifferences.map((row) => row["kind"]),
 		);
 		expect(kinds.has("precedence")).toBe(false);
 		expect(kinds.has("associativity")).toBe(false);
 		expect(kinds.has("opAxis")).toBe(false);
-		expect(fixture.sweep._source.versions).toHaveLength(3);
+		expect(fixture.sweep._source.versions).toHaveLength(4);
 	});
 
 	test("outer-count separates `never outer` from `never measured`", () => {

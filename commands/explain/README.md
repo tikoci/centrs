@@ -1372,9 +1372,12 @@ Grounded, not transcribed, for the same reason the escape set above is: the
 [manual's operator list](https://manual.mikrotik.com/docs/developer-guides/scripting/index.md#operators)
 is a lower bound. `bun run explain:probe:operators` sweeps the manual's list
 **plus** plausible non-operators (`not`, `..`, `xor`, `mod`, `is`, `div`, …)
-**plus** every IL head the corpus census saw, on CHR 7.23.3 stable, 7.24rc4
-testing and 7.21.5 long-term — one build per release channel, so a claim about
-any channel is evidence rather than an assumption. Re-cut the fixture with
+**plus** every IL head the corpus census saw, on CHR 7.24.2 stable, 7.23.5
+long-term and 7.25beta3 development — the same three builds the pinned corpus
+classes `complete`, so the operator axis and the token partition are finally
+scored on the same firmware (#342) — plus 7.21.5 as an **age anchor**, which is
+not a channel claim but the only live evidence that the surface behaves the same
+on a pre-7.23 branch. Re-cut the fixture with
 `bun run explain:operator-slice`; the table
 below is generated from `src/explain/operators.ts` by
 `bun run explain:operator-readme` and gated by
@@ -1449,7 +1452,7 @@ Five things the device says that the manual does not:
 3. **`$`, `[`, `]` are syntax, not operator heads.** `$x` stays an atom in the
    IL and `[:tostr 1]` lowers to an `evl` node. Those bytes belong to the
    substitution axis.
-4. **`any` is an operator** (prefix, arity 1) and is not in the manual's list — a **nil-check**: `:typeof (any x)` is `bool`, `false` only for `nil`/`nothing` (the value of an undefined `:local` and of `[:nothing]`), `true` for everything else including `0`, `""` and `false`.  It is the idiom `:if (any $x) ...` to test a variable that may be `nil`; `(true any false)` is not infix at all but juxtaposition `(  true (any false))`, and `(1 . any [:nothing])` is concat `1`+`false`.  Present since at least 7.20.8 (corpus `headFirstSeen[any] = 7.20.8`, the oldest captured build, and swept live on 7.21.5 long-term, 7.23.3 stable and 7.24rc4 testing with no difference between them).
+4. **`any` is an operator** (prefix, arity 1) and is not in the manual's list — a **nil-check**: `:typeof (any x)` is `bool`, `false` only for `nil`/`nothing` (the value of an undefined `:local` and of `[:nothing]`), `true` for everything else including `0`, `""` and `false`.  It is the idiom `:if (any $x) ...` to test a variable that may be `nil`; `(true any false)` is not infix at all but juxtaposition `(  true (any false))`, and `(1 . any [:nothing])` is concat `1`+`false`.  Present since at least 7.20.8 (corpus `headFirstSeen[any] = 7.20.8`, the oldest captured build, and swept live on 7.21.5 and 7.23.5 long-term, 7.24.2 stable and 7.25beta3 development with no difference between them).
 5. **`&&` and `||` are spellings**, lowering to the `and` and `or` nodes.
 
 The `(>…)` and `<%%` forms are in the table on the same footing as `+`.
@@ -1465,7 +1468,7 @@ their `precedence` is honestly `null`. That is "unmeasured", not "unknown": the
 sweep asks them separately, every `(U 1 B 2)` and `(1 B U 2)` for
 `U`∈`!`,`any`,`~`,`-`,`>` against all 24 binaries — 240 probes, recorded in the
 fixture's `unary` block. All 240 are accepted and the **binary is outer in every
-one**, on all three versions, so each prefix operator binds tighter than every
+one**, on all four swept builds, so each prefix operator binds tighter than every
 binary including `->` (14) and `<%%` (13). The table stores one `precedence` per
 spelling, which is the binary level; `~`, `-` and `>` are here because their
 unary reading has no other record.
@@ -1477,8 +1480,14 @@ not concat at all** — `1.` lexes as a *variable name* and the row comes back a
 juxtaposition, `(  $1. 2)`. A rule that claims every `.` byte for the operator
 emits a span the device does not have.
 
-Everything in the sweep is identical across 7.21.5, 7.23.3 and 7.24rc4 except
-one runtime row: `:put ({2;1} > {1;2;3})` evaluates to `true` only on 7.24rc4.
+Everything in the sweep is identical across all four builds except one runtime
+row: `:put ({2;1} > {1;2;3})` evaluates to `true` on 7.24.2 and 7.25beta3 and
+errors on both long-term builds. **Array comparison is not fixed on current
+long-term** — 7.23.5 is newer than the 7.23.3 this was first measured on and
+still errors — so the change rode the 7.24 line and was not backported. The two
+errors also differ: 7.23.5 says `cannot compare if array is more than array`,
+7.21.5 says `cannot compare if nothing is more than nothing`, so on 7.21.5 the
+operands did not survive to the comparison at all.
 Identical is measured, not assumed — the slice diffs verdict, arity, precedence,
 associativity, `highlight` run, unary placement and op-axis per version. So the
 operator table needs no version gate; anything reporting what a comparison
@@ -1732,12 +1741,13 @@ to be filled by assumption.
 
 **The device stops classifying at its first `error`, and mostly does not
 recover.** Measured over the slice, `error` appears **at most once per script
-and is always exactly one byte wide**, and on 7.23.2 every byte after it comes
-back `none`. Most of the slice sits in that tail. A percentage computed over
-the whole stream therefore measures the device giving up, not the parser, which
-is why the tail is its own outcome and is never folded into agreement. The rule
-is not absolute across versions, so the report does not assert it: 7.24rc2
-classifies again after its `error` in one run and stops on fewer scripts, and
+and is always exactly one byte wide**, and on long-term 7.23.5 every byte after
+it comes back `none`. Most of the slice sits in that tail. A percentage computed
+over the whole stream therefore measures the device giving up, not the parser,
+which is why the tail is its own outcome and is never folded into agreement. The
+rule is not absolute across versions, so the report does not assert it: stable
+7.24.2 and development 7.25beta3 classify again after the `error` in one run and
+stop on fewer scripts, and
 `parser-recovered` in the table below is the figure that says by how much —
 zero would have been the claim, and it is not zero. Both counts are generated,
 not quoted here, so neither can go stale against the fixture.
@@ -1765,50 +1775,50 @@ generated from `test/fixtures/explain/highlight-agreement.json` by
 `bun run explain:highlight-agreement:readme`, gated against it by
 `bun run explain:highlight-agreement:readme:check`, and the fixture itself is
 gated against a fresh measurement by
-`test/unit/explain-highlight-agreement.test.ts`. Of 85,529 bytes at 7.23.2,
-27,212 are bytes **both** sides decided a syntax class for, and 99.99% of
-those agree (dev 99.99%, holdout 100.00%). Set `comment` aside — it is 66.17%
+`test/unit/explain-highlight-agreement.test.ts`. Of 85,529 bytes at 7.24.2,
+27,966 are bytes **both** sides decided a syntax class for, and 99.99% of
+those agree (dev 99.99%, holdout 100.00%). Set `comment` aside — it is 65.65%
 of that decided region and mostly the corpus's harness-injected `# Source:`
-banner (#203) — and the remaining 9,206 bytes agree 99.98%. The device stops
-classifying at its one-byte `error`: 43 of 70 scripts carry one, and the
-43,417 bytes from there on are not a judgment about anything. The oracle
-itself moves between captures: 43 stop at 7.23.2 and 36 stop at 7.24rc2, and
-27 of the 70 streams differ between them. **This is a trend line, not a pass
-gate** — the slice is a per-(split, class) quota over a corpus that is 96.8%
-two authors, so the percentage describes this slice.
+banner (#203) — and the remaining 9,607 bytes agree 99.98%. The device stops
+classifying at its one-byte `error`: 36 of 70 scripts carry one, and the
+41,968 bytes from there on are not a judgment about anything. The oracle
+itself moves between captures: 36 stop at 7.24.2 and 43 stop at 7.23.5 and 36
+stop at 7.25beta3, and 27 of the 70 streams differ between them. **This is a
+trend line, not a pass gate** — the slice is a per-(split, class) quota over a
+corpus that is 96.8% two authors, so the percentage describes this slice.
 
 | centrs class | projects to | agree | disagree | unprojected | of decided |
 | ------------ | ----------- | ----: | -------: | ----------: | ---------: |
-| `comment` | `comment` | 18,006 | 0 | 0 | 100.00% |
-| `variable-local` | `variable-local` | 1,088 | 0 | 0 | 100.00% |
+| `comment` | `comment` | 18,359 | 0 | 0 | 100.00% |
+| `variable-local` | `variable-local` | 1,123 | 0 | 0 | 100.00% |
 | `variable-global` | `variable-global` | 582 | 0 | 0 | 100.00% |
 | `variable-auto` | `variable-auto` | 92 | 0 | 0 | 100.00% |
-| `variable-parameter` | `variable-parameter` | 398 | 0 | 0 | 100.00% |
-| `dir` | `dir` | 1,606 | 0 | 0 | 100.00% |
-| `cmd` | `cmd` | 2,126 | 0 | 0 | 100.00% |
-| `arg` | `arg`, `arg-dot`, `arg-scope` | 2,111 | 0 | 0 | 100.00% |
-| `arg-sep` | `syntax-meta` | 358 | 0 | 0 | 100.00% |
-| `operator` | `syntax-meta` | 232 | 2 | 0 | 99.15% |
-| `brace` | `syntax-meta` | 193 | 0 | 0 | 100.00% |
-| `string` | *abstains* | 0 | 0 | 495 | — |
+| `variable-parameter` | `variable-parameter` | 459 | 0 | 0 | 100.00% |
+| `dir` | `dir` | 1,675 | 0 | 0 | 100.00% |
+| `cmd` | `cmd` | 2,238 | 0 | 0 | 100.00% |
+| `arg` | `arg`, `arg-dot`, `arg-scope` | 2,188 | 0 | 0 | 100.00% |
+| `arg-sep` | `syntax-meta` | 382 | 0 | 0 | 100.00% |
+| `operator` | `syntax-meta` | 237 | 2 | 0 | 99.16% |
+| `brace` | `syntax-meta` | 211 | 0 | 0 | 100.00% |
+| `string` | *abstains* | 0 | 0 | 499 | — |
 | `escaped` | `escaped` | 418 | 0 | 0 | 100.00% |
-| `value` | *abstains* | 0 | 0 | 138 | — |
+| `value` | *abstains* | 0 | 0 | 144 | — |
 
-| outcome | bytes @7.23.2 | bytes @7.24rc2 |
-| ------- | ----: | ----: |
-| agree — both decided, projection accepts | 27,210 | 27,964 |
-| disagree — both decided, projection rejects | 2 | 2 |
-| unprojected — no declared projection covers the pair | 633 | 643 |
-| offline-silent — device decided, centrs abstained | 4,158 | 4,308 |
-| non-syntax — the device answered something syntax cannot decide | 733 | 847 |
-| device-silent — centrs decided, device said `none` | 5,674 | 5,815 |
-| both-silent | 3,702 | 3,886 |
-| parser-stopped — at/after the device's `error` byte, and silent from there | 43,417 | 41,968 |
-| parser-recovered — past that `error`, and the device classified anyway | 0 | 96 |
+| outcome | bytes @7.24.2 | bytes @7.23.5 | bytes @7.25beta3 |
+| ------- | ----: | ----: | ----: |
+| agree — both decided, projection accepts | 27,964 | 27,210 | 27,964 |
+| disagree — both decided, projection rejects | 2 | 2 | 2 |
+| unprojected — no declared projection covers the pair | 643 | 633 | 643 |
+| offline-silent — device decided, centrs abstained | 4,308 | 4,158 | 4,308 |
+| non-syntax — the device answered something syntax cannot decide | 847 | 733 | 847 |
+| device-silent — centrs decided, device said `none` | 5,815 | 5,674 | 5,815 |
+| both-silent | 3,886 | 3,702 | 3,886 |
+| parser-stopped — at/after the device's `error` byte, and silent from there | 41,968 | 43,417 | 41,968 |
+| parser-recovered — past that `error`, and the device classified anyway | 96 | 0 | 96 |
 
-Where the device decided and offline analysis did not (4,158 bytes at 7.23.2,
-the next fill's target list): `syntax-meta` 3,000, `comment` 350,
-`variable-local` 310, `arg` 190, `escaped` 145, `dir` 68, 95 across the rest.
+Where the device decided and offline analysis did not (4,308 bytes at 7.24.2,
+the next fill's target list): `syntax-meta` 3,122, `comment` 355,
+`variable-local` 326, `arg` 197, `escaped` 145, `dir` 68, 95 across the rest.
 Most of the `syntax-meta` share is whitespace the device merged into an
 adjacent structure run rather than a token centrs missed.
 
@@ -1820,12 +1830,12 @@ every measured byte, the post-`error` tail included: where one capture stops
 parsing and the next does not, that tail IS the version disagreement, which is
 why it dominates the category.
 
-| applicability @7.23.2 | bytes | leading cells |
+| applicability @7.24.2 | bytes | leading cells |
 | ---------------------------- | ----: | ------------- |
 | offline-decidable | 32,002 | `comment` → `comment` 18,006, `unclassified` → `syntax-meta` 2,999, `cmd` → `cmd` 2,126 |
 | schema-dependent | 326 | `arg` → `obj-inactive` 326 |
 | state-dependent | 168 | `dir` → `obj-inactive` 120, `cmd` → `obj-inactive` 21, `unclassified` → `obj-dynamic` 20 |
-| version-dependent | 1,158 | `comment` → `none` 353, `unclassified` → `none` 285, `arg` → `none` 128 |
+| version-dependent | 1,158 | `comment` → `comment` 353, `unclassified` → `obj-inactive` 159, `unclassified` → `syntax-meta` 123 |
 | uncategorized | 213 | `unclassified` → `obj-inactive` 90, `unclassified` → `variable-undefined` 75, `value` → `variable-undefined` 21 |
 | no-device-answer | 51,662 | `none` where the captures agree, wherever it falls |
 
