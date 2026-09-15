@@ -75,6 +75,50 @@ describe("the query rule is the verb, not the word `where`", () => {
 	});
 });
 
+describe("malformed and adversarial source", () => {
+	test("a mismatched closer does not discard the enclosing opener", () => {
+		// `)` must not pop a `[`. If it did, every later `=` in the script would
+		// move to top level and drop out of the universe — and 37 of the 948
+		// corpus scripts carry a mismatched closer, so this is not hypothetical.
+		const sites = bracketSites("[find x=1) y=2]");
+		expect(sites.length).toBe(2);
+		expect(sites.every((site) => site.opener === "[")).toBe(true);
+	});
+
+	test("a matching closer still pops", () => {
+		// The guard must not make the stack sticky: after `]` the `=` is top level.
+		expect(bracketSites("[find x=1] y=2")).toHaveLength(1);
+	});
+
+	test("`find` in VALUE position does not arm the query rule", () => {
+		// `[set comment=find other=x]` is two argument separators, not a query.
+		// The corpus carries three such spellings, one the pathological
+		// `find=.id=*8;name=find`.
+		const sites = bracketSites("[set comment=find other=x]");
+		expect(sites.length).toBe(2);
+		expect(sites.every((site) => site.query)).toBe(false);
+	});
+
+	test("`$find` as a variable does not arm the query rule", () => {
+		expect(bracketSites("[set x=$find other=y]").every((s) => s.query)).toBe(
+			false,
+		);
+	});
+
+	test("a quoted value before a word does not arm the query rule", () => {
+		expect(
+			bracketSites('[set comment="a" find other=y]')
+				.map((s) => s.query)
+				.includes(true),
+		).toBe(true);
+		// …but the word after the quote is still command position only when it is
+		// not glued to the quote; the guard covers the glued case.
+		expect(bracketSites('[set c="x"find other=y]').every((s) => !s.query)).toBe(
+			true,
+		);
+	});
+});
+
 describe("strings and comments are not source structure", () => {
 	test("a bracket inside a quoted string opens nothing", () => {
 		expect(bracketSites(':log info "[find name=x]"')).toEqual([]);
@@ -117,13 +161,23 @@ describe("the committed corpus figures", () => {
 		// fill's reach has genuinely changed and the README prose needs rewriting
 		// rather than just regenerating.
 		expect(fixture.bracketEqualsByClass["arg-sep"] ?? 0).toBe(0);
-		expect(fixture.bracketEqualsByClass["unclassified"]).toBe(1063);
+		expect(fixture.bracketEqualsByClass["unclassified"]).toBe(1067);
 		expect(fixture.bracketEquals).toBe(1079);
+		// Every bracket `=` is accounted for by exactly one class. Before the
+		// coordinate-space fix a stray `cmd` bucket of 4 appeared here — the
+		// non-ASCII offset shift, showing up as bytes attributed to a token they
+		// were never in. The sum holding is what says the join is sound.
+		const classTotal = Object.values(fixture.bracketEqualsByClass).reduce(
+			(a, b) => a + b,
+			0,
+		);
+		expect(classTotal).toBe(fixture.bracketEquals);
+		expect(fixture.bracketEqualsByClass["cmd"]).toBeUndefined();
 	});
 
 	test("the split is the cost the abstention actually pays", () => {
-		expect(fixture.unclassifiedQuery).toBe(446);
-		expect(fixture.unclassifiedArgument).toBe(617);
+		expect(fixture.unclassifiedQuery).toBe(448);
+		expect(fixture.unclassifiedArgument).toBe(619);
 		expect(fixture.unclassifiedQuery + fixture.unclassifiedArgument).toBe(
 			fixture.bracketEqualsByClass["unclassified"] ?? 0,
 		);
@@ -153,9 +207,9 @@ describe("the README projection", () => {
 	test("renders every load-bearing number from the fixture", () => {
 		const block = renderReadmeBlock(fixture).join("\n");
 		expect(block).toContain("1,079");
-		expect(block).toContain("1,063");
-		expect(block).toContain("446");
-		expect(block).toContain("617");
+		expect(block).toContain("1,067");
+		expect(block).toContain("448");
+		expect(block).toContain("619");
 		expect(block).toContain("7.24.2");
 	});
 });

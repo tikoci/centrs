@@ -31,11 +31,17 @@
  * ## The measurement
  *
  * The universe is **source-structural**: every `=` byte whose innermost open
- * delimiter is `[`, scanning raw text with quoted strings and `#` comments
- * skipped. That is a property of the corpus, not of the pipeline, so it is
- * stable across fill-order changes — which is exactly what the old figure was
- * not. `source_scripts` is byte-identical across both #336 repins, so this
+ * delimiter is `[`, with quoted strings and `#` comments skipped. That is a
+ * property of the corpus, not of the pipeline, so it is stable across
+ * fill-order changes — which is exactly what the old figure was not.
+ * `source_scripts` is byte-identical across both #336 repins, so this
  * denominator cannot move without the corpus moving.
+ *
+ * The scan runs on the ANALYZED surface, not the original string: token offsets
+ * are UTF-8 byte counts, and 112 of the 948 scripts carry non-ASCII. Mixing the
+ * two coordinate spaces shifted the class attribution on the 35 of those that
+ * also carry a bracket `=`. Both sides go through `analyzeCoordinates`, the
+ * same helper `explainCommand` uses.
  *
  * Each such byte is then reported by the class `explainCommand` actually gives
  * it. Nothing re-derives the fill's delimiter stack, so nothing here can
@@ -73,6 +79,7 @@
 import { Database } from "bun:sqlite";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { analyzeCoordinates } from "../src/explain/coordinates.ts";
 import { scanQuotedString } from "../src/explain/quoted-string.ts";
 import { explainCommand } from "../src/explain.ts";
 import {
@@ -183,7 +190,16 @@ export function scanEqualsSites(text: string): EqualsSite[] {
 	const openers: string[] = [];
 	/** Whether a `find`/`where` has been seen in the current group. */
 	const queryFlags: boolean[] = [];
+	/** The byte that closes each open delimiter, innermost last. */
+	const expectedClosers: string[] = [];
 	let word = "";
+	/**
+	 * Offset where the current word began, so the byte IMMEDIATELY before it can
+	 * be inspected. Immediacy is the whole point: `comment=find` is a value and
+	 * `comment="a" find` is not, and a "last non-space byte" rule cannot tell
+	 * them apart — it blocked both.
+	 */
+	let wordStart = -1;
 	let i = 0;
 	while (i < text.length) {
 		const ch = text[i] as string;
@@ -201,23 +217,44 @@ export function scanEqualsSites(text: string): EqualsSite[] {
 		}
 		if (OPENERS.includes(ch)) {
 			openers.push(ch);
+			expectedClosers.push(CLOSERS[OPENERS.indexOf(ch)] as string);
 			queryFlags.push(false);
 			word = "";
 			i++;
 			continue;
 		}
 		if (CLOSERS.includes(ch)) {
-			openers.pop();
-			queryFlags.pop();
+			// Pop only a MATCHING closer. A stray `)` in `[find x=1) y=2]` would
+			// otherwise discard the `[` and move every later `=` in that script to
+			// top level — and 37 of the 948 corpus scripts carry a mismatched
+			// closer, so this is not a hypothetical. An unmatched closer is
+			// malformed source: leave the stack alone and keep reading.
+			if (expectedClosers[expectedClosers.length - 1] === ch) {
+				openers.pop();
+				expectedClosers.pop();
+				queryFlags.pop();
+			}
 			word = "";
 			i++;
 			continue;
 		}
 		if (/[A-Za-z-]/.test(ch)) {
+			if (word === "") wordStart = i;
 			word += ch;
 			i++;
-			// A query verb governs every `k=v` after it, to the end of its group.
-			if (QUERY_VERBS.has(word) && !/[A-Za-z-]/.test(text[i] ?? "")) {
+			// A query verb governs every `k=v` after it, to the end of its group —
+			// but only in COMMAND position. After `=` or `$` the word is a value or
+			// a variable name, and `[set comment=find other=x]` must not read as a
+			// query. The corpus carries three such spellings, one of them the
+			// pathological `find=.id=*8;name=find`.
+			const before = wordStart > 0 ? (text[wordStart - 1] as string) : "";
+			if (
+				QUERY_VERBS.has(word) &&
+				!/[A-Za-z-]/.test(text[i] ?? "") &&
+				before !== "=" &&
+				before !== "$" &&
+				before !== '"'
+			) {
 				if (queryFlags.length > 0) queryFlags[queryFlags.length - 1] = true;
 			}
 			continue;
@@ -235,14 +272,38 @@ export function scanEqualsSites(text: string): EqualsSite[] {
 	return out;
 }
 
-/** The class `explainCommand` assigns to each `=` byte. */
-function classesOfEquals(text: string): Map<number, string> {
+/**
+ * The class `explainCommand` assigns to each `=` byte, keyed by ANALYZED offset.
+ *
+ * Token offsets index the analyzed surface — UTF-8 byte counts with every
+ * non-ASCII byte substituted — not the original UTF-16 string. 112 of the 948
+ * corpus scripts carry non-ASCII, 35 of them alongside a bracket `=`, so
+ * indexing the original here shifted or missed the byte on every one of them.
+ * Both sides now work in the analyzed space; see {@link analyzedSurface}.
+ */
+function classesOfEquals(analyzed: string, text: string): Map<number, string> {
 	const classes = new Map<number, string>();
 	const result = explainCommand(text, { tokens: true });
 	for (const token of result.tokens ?? [])
 		for (let at = token.start; at < token.end; at++)
-			if (text[at] === "=") classes.set(at, token.class);
+			if (analyzed[at] === "=") classes.set(at, token.class);
 	return classes;
+}
+
+/**
+ * The surface `explainCommand` analyzes, as a string one char per byte.
+ *
+ * `analyzeCoordinates` is the same helper `explainCommand` uses, so this cannot
+ * drift from it. Non-ASCII bytes arrive substituted, which is exactly right for
+ * a structural scan: a substituted byte is never `=`, `[`, `"` or `#`, so it
+ * can neither open a group nor be counted as a separator.
+ */
+function analyzedSurface(text: string): string {
+	const bytes = analyzeCoordinates(text).analyzed;
+	let out = "";
+	for (let i = 0; i < bytes.length; i++)
+		out += String.fromCharCode(bytes[i] as number);
+	return out;
 }
 
 export function census(
@@ -269,8 +330,11 @@ export function census(
 		},
 	};
 	for (const { text, il } of scripts) {
-		const sites = scanEqualsSites(text);
-		const classes = classesOfEquals(text);
+		// Both sides in the ANALYZED coordinate space, or the class attribution
+		// silently shifts on every script carrying non-ASCII.
+		const analyzed = analyzedSurface(text);
+		const sites = scanEqualsSites(analyzed);
+		const classes = classesOfEquals(analyzed, text);
 		let bracketHere = 0;
 		for (const site of sites) {
 			if (site.opener === "(") result.expressionEquals++;
@@ -502,6 +566,19 @@ export async function main(args: readonly string[]): Promise<number> {
 	const result = census(scripts, ilComparisonNodes);
 
 	if (args.includes("--check")) {
+		// A gate cannot pass on an unstated premise. `resolveCorpusDb` prefers a
+		// sibling checkout over the pinned cache and only WARNS when it is not the
+		// pin, so without this a green "matches the committed fixture" could have
+		// been measured against a corpus nobody else has. Same guard, same reason,
+		// as `explain-operator-census.ts`.
+		if (resolution.warning) {
+			console.error(
+				"::error title=explain bracket equals::refusing to check against a " +
+					"corpus that is not the pinned snapshot — the result would not be " +
+					"comparable to CI's.",
+			);
+			return 1;
+		}
 		const committed = readFixtureCensus();
 		const drift: string[] = [];
 		for (const [key, value] of Object.entries(result)) {

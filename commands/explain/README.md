@@ -1661,15 +1661,15 @@ what was wrong was the accounting of it. They are re-derived by
 <!-- BEGIN GENERATED bracket-equals — regenerate with `bun run explain:bracket-equals:readme` -->
 Measured by `bun run explain:bracket-equals` over the pinned corpus:
 **1,079** `=` bytes sit inside `[ … ]`, across
-263 of 948 scripts, and **1,063** of them come back
+263 of 948 scripts, and **1,067** of them come back
 `unclassified` — the operator fill abstains on essentially all of it. No
 later fill rescues them: the `arg` fill claims **0**, because it offers only
 the `=` its own located argument token names and a `[ … ]` substitution is
 not where it locates arguments.
 
-Of those 1,063, **446** are governed by a `find`/`where` query and are
+Of those 1,067, **448** are governed by a `find`/`where` query and are
 genuine comparisons — the device lowers `[find address=$IP]` to
-`(= $address $IP)` — against **617** plain `arg=value`. So abstaining is
+`(= $address $IP)` — against **619** plain `arg=value`. So abstaining is
 42.0% wrong and claiming the lot would be 58.0% wrong; a `where`-aware
 fill can take the query half later. For contrast the fill does claim
 **1,402** `=` bytes whose innermost opener is `(`.

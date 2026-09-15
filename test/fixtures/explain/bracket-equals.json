@@ -6,12 +6,11 @@
 	"argumentSeparators": 619,
 	"expressionEquals": 1402,
 	"bracketEqualsByClass": {
-		"unclassified": 1063,
-		"operator": 12,
-		"cmd": 4
+		"unclassified": 1067,
+		"operator": 12
 	},
-	"unclassifiedQuery": 446,
-	"unclassifiedArgument": 617,
+	"unclassifiedQuery": 448,
+	"unclassifiedArgument": 619,
 	"ilComparisonNodes": {
 		"7.23.5": 1233,
 		"7.24.2": 1240,
