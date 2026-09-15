@@ -79,9 +79,9 @@ documenting cross-cutting shifts that affect contributors and consumers.
   invalidate. `bun run explain:bracket-equals` now derives it, with `--check`
   and `--readme --check` gates on the corpus → fixture → README chain like the
   other censuses, and the README block is generated. Measured: **1,079** `=`
-  bytes inside `[ … ]` across 263 of 948 scripts, **1,063** left
-  `unclassified` — **446** genuine `find`/`where` query comparisons against
-  **617** plain `arg=value`. The `arg` fill rescues **none** of them, contrary
+  bytes inside `[ … ]` across 263 of 948 scripts, **1,067** left
+  `unclassified` — **448** genuine `find`/`where` query comparisons against
+  **619** plain `arg=value`. The `arg` fill rescues **none** of them, contrary
   to the obvious guess, because it offers only the `=` its own located argument
   token names. The query reading is the device's: on 7.24.2, 93 of the 109
   scripts that parsed carry at least as many `(= …)` IL nodes, and the
