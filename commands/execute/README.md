@@ -75,13 +75,33 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   terminal width, so each transport handles width differently. **mac-telnet** is
   the only one that negotiates a size: `src/protocols/mac-telnet-console.ts`
   answers the device's terminal-size probe with a deliberately tall/wide screen,
-  so captured columns are neither wrapped nor paginated. **SSH execute** runs
-  *without* a pseudo-tty (`src/protocols/ssh.ts`), so RouterOS emits no
-  terminal-wrapped output to begin with — there is nothing to negotiate.
-  **REST/native-api** are not consoles, so terminal width never applies (they
-  return structured records, or a string `ret` for script-mode). There is
-  therefore no per-call `--width` knob today — an explicit width override is
-  deferred until a concrete need appears.
+  so captured columns are neither paginated nor wrapped *at the negotiated
+  width*. **SSH execute** runs *without* a pseudo-tty (`src/protocols/ssh.ts`),
+  so no width is negotiated at all. **REST/native-api** are not consoles, so a
+  terminal width never applies (they return structured records, or a string
+  `ret` for script-mode). There is therefore no per-call `--width` knob today —
+  an explicit width override is deferred until a concrete need appears.
+- **A device-side wrap that no width negotiation reaches (GH#352).** Declaring a
+  width is not sufficient, because RouterOS can wrap for reasons that are not
+  about width. On 7.23.6 / 7.24.3 / 7.25beta4 a settings menu with exactly one
+  property prints its value **one character per line**: `/system/identity/print`
+  returns `name: C` / `H` / `R` where 7.24.2 returns `name: CHR`. Measured on
+  stock CHR, the wrap is identical over REST `POST /rest/execute`, over
+  `ssh user@host "<cmd>"`, and over the mac-telnet console — including the
+  mac-telnet reader that has already answered the size probe with 512 columns,
+  and the ssh client that negotiates nothing. The console login modifiers
+  (`+c512w200h`, `+ct`, `+e`) do not change it, and it is not proportional to
+  the value's length. Every multi-property `print` is unaffected on the same
+  build, as is `:put [/system/identity/get name]`.
+
+  Consequence for this command: `data.ret` carries the device's console text
+  **verbatim**, wrap included — centrs cannot tell a layout newline from
+  content, and inventing a de-wrapper would corrupt legitimate output. Callers
+  that need a value rather than a rendering should read it structurally
+  (`retrieve`, or `api`) or ask the device for the scalar
+  (`:put [<menu>/get <property>]`). The integration examples compare identities
+  with `print` column wrapping collapsed for this reason — see
+  `collapsePrintWrapping` in `test/integration/chr.ts`.
 - Attribute values pass through **verbatim** — centrs does not guess types or
   coerce them (RouterOS REST tolerates string values; the native API is
   all-strings). Unlike `jo`-style KV builders, there is no per-value

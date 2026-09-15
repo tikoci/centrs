@@ -174,7 +174,14 @@ jobs:
     name: CHR • ${{ matrix.routeros_channel }}${{ inputs.routeros_version && format(' • {0}', inputs.routeros_version) || '' }}
     needs: resolve-matrix
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # 35, not 25: a leg whose image cache missed pays for one cold download from
+    # download.mikrotik.com first, and MikroTik serves runners at ~0.19-0.23 MB/s
+    # — 4 to 8 minutes for a 43 MB image, plus the 300s a first attempt can burn
+    # timing out inside it. That is what cancelled the `development` leg of run
+    # 35015436683 mid-suite with every assertion green. The version-keyed image
+    # cache makes the cold download a once-per-release event; this absorbs it
+    # when it does happen instead of losing the whole leg's signal (GH#352).
+    timeout-minutes: 35
     # The matrix axis is the recency-aware active set resolved by resolve-matrix
     # (released channels always + any pre-release at/ahead of stable). Only the
     # released channels are *must-pass*: a beta flake on a pre-release leg (e.g.
@@ -207,18 +214,34 @@ jobs:
           else
            echo "::warning::/dev/kvm is unavailable; quickchr will use slower TCG emulation."
           fi
-      - name: Cache CHR images
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/quickchr/cache
-          key: chr-cache-${{ runner.os }}-${{ matrix.routeros_channel }}-v1
-          restore-keys: chr-cache-${{ runner.os }}-
       - name: Setup Bun 1.3.14
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
         with:
           bun-version: 1.3.14
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      # The image cache key must name the RouterOS build this leg will boot:
+      # actions/cache only writes on an exact-key MISS, so a static key freezes
+      # the first image it ever saw and every later point release is re-downloaded
+      # (and never saved). An explicit `routeros_version` pins the leg, so it is
+      # the key too. See scripts/chr-cache-key.ts and GH#352.
+      - name: Resolve CHR image version for the cache key
+        id: chr_version
+        env:
+          REQUESTED_VERSION: ${{ inputs.routeros_version || '' }}
+          CHANNEL: ${{ matrix.routeros_channel }}
+        run: |
+          bun run scripts/chr-cache-key.ts \
+            --channel "$CHANNEL" \
+            --version "$REQUESTED_VERSION"
+      - name: Cache CHR images
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/share/quickchr/cache
+          key: chr-cache-${{ runner.os }}-${{ matrix.routeros_channel }}-${{ steps.chr_version.outputs.version }}
+          restore-keys: |
+            chr-cache-${{ runner.os }}-${{ matrix.routeros_channel }}-
+            chr-cache-${{ runner.os }}-
       - name: Test against CHR
         id: chr_test
         env:
@@ -253,6 +276,16 @@ jobs:
           done
           echo "::endgroup::"
           exit "$status"
+      # actions/cache saves the whole quickchr cache dir in its post-step, and a
+      # prefix `restore-keys` hit brings the previous release's images along, so
+      # without a bound each point release would grow the saved entry by another
+      # 128 MiB image. Keep the newest few (quickchr's own auto-prune cap is
+      # 2 GiB — far too loose against the 10 GB repo-wide cache budget). Never
+      # fatal: a pruning problem must not red a green test run.
+      - name: Bound the saved CHR image cache
+        if: always()
+        continue-on-error: true
+        run: bunx quickchr cache prune --max-size 384M
       # Surface the failing tests (not the whole log) to the run summary so an
       # agent reads the signal directly (github-actions-rich-data instruction).
       - name: Surface result to job summary
