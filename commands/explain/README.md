@@ -1313,6 +1313,51 @@ shipped structure tables still narrows a reading and absence still decides
 nothing (#207/#228), so an unlisted menu spelled `…/address-list` is read
 exactly as before.
 
+### Two spellings the device accepts and offline used to reject (#347, #348)
+
+Both were found the same way, and the method is worth keeping: run the analyzer
+over all 948 corpus scripts and compare its verdict to that build's own `:parse`
+verdict, which the corpus already stores. The number that matters is the **false
+reject** — a script the device ACCEPTS that offline analysis fails — because
+that is validation blocking input RouterOS is happy with. It was 4, identical on
+7.23.5, 7.24.2 and 7.25beta3; it is now 1.
+
+The converse count is not a parser score and is not quoted as one: the corpus is
+whole forum posts including prose output, so most of what the device rejects and
+offline passes is #203's genre bias rather than a gap.
+
+**The `=` is optional on a scope slot (#347).** `:if (…) do={…} else={…}`,
+`:if (…) do={…} else {…}` and `:if (…) do {…} else {…}` are the same construct:
+`:parse` lowers all three to byte-identical IL (`…;do=;(evl …);else=;(evl …)`)
+on CHR 7.21.5, 7.23.5, 7.24.2 and 7.25beta3. The MikroTik manual documents only
+the `else={…}` spelling, so this is a real-but-undocumented form. The rule is
+deliberately narrower than "any word before a brace": only the four
+`SCOPE_ARG_NAMES` members may drop the `=`, and the word may not be the
+statement's own leading directive — otherwise `:local z {1;2}` would stop
+reading its brace as an array, and `:do {` would have its slot renamed away from
+the `command` the IL uses. The control is `elsy {`, rejected as `expected end of
+command` on all four builds, which is what makes the acceptance a device fact
+rather than a probe artefact.
+
+**A relative menu-scope block composes the path (#348).** `/ip { address {
+print } }` is `(evl (evl (evl /ip/address/print)))` on device and
+`/interface { ethernet { print } }` the same way; the ABSOLUTE spelling
+`/ip/address { print }` already passed offline, and only the nested relative
+form failed. A menu block's body is a statement list, so it may open with a
+submenu, with one of the thirteen frozen CRUD verbs (`verbs.ts`), with a
+catalog-named command, with a `:` scripting directive, or with an absolute
+command — corpus 521 is the directive case, `ethernet { :put … }`.
+
+That last rule is bounded by what a STATEMENT can start with, which is what
+keeps `{1;2}` an array literal: an array member opens with a digit or a quote
+and never reaches the identifier branch. It is also deliberately not widened
+into a claim of existence. Menu-scope resolution is schema-dependent —
+`/ip { zzznotamenu { print } }` is a `syntax error` on device — and offline has
+no schema, so a catalog MISS abstains rather than being decided either way.
+That is the catalog's own "a hit is decisive, a miss says nothing" contract, and
+turning such a miss into an acceptance would be the mirror-image defect of the
+one being fixed here.
+
 ### String escape validation (#247, #252)
 
 The accepted set is the **device's**, not the manual's. The
@@ -1776,10 +1821,10 @@ generated from `test/fixtures/explain/highlight-agreement.json` by
 `bun run explain:highlight-agreement:readme:check`, and the fixture itself is
 gated against a fresh measurement by
 `test/unit/explain-highlight-agreement.test.ts`. Of 85,529 bytes at 7.24.2,
-27,966 are bytes **both** sides decided a syntax class for, and 99.99% of
-those agree (dev 99.99%, holdout 100.00%). Set `comment` aside — it is 65.65%
+27,974 are bytes **both** sides decided a syntax class for, and 99.99% of
+those agree (dev 99.99%, holdout 100.00%). Set `comment` aside — it is 65.63%
 of that decided region and mostly the corpus's harness-injected `# Source:`
-banner (#203) — and the remaining 9,607 bytes agree 99.98%. The device stops
+banner (#203) — and the remaining 9,615 bytes agree 99.98%. The device stops
 classifying at its one-byte `error`: 36 of 70 scripts carry one, and the
 41,968 bytes from there on are not a judgment about anything. The oracle
 itself moves between captures: 36 stop at 7.24.2 and 43 stop at 7.23.5 and 36
@@ -1794,8 +1839,8 @@ corpus that is 96.8% two authors, so the percentage describes this slice.
 | `variable-global` | `variable-global` | 582 | 0 | 0 | 100.00% |
 | `variable-auto` | `variable-auto` | 92 | 0 | 0 | 100.00% |
 | `variable-parameter` | `variable-parameter` | 459 | 0 | 0 | 100.00% |
-| `dir` | `dir` | 1,675 | 0 | 0 | 100.00% |
-| `cmd` | `cmd` | 2,238 | 0 | 0 | 100.00% |
+| `dir` | `dir` | 1,677 | 0 | 0 | 100.00% |
+| `cmd` | `cmd` | 2,244 | 0 | 0 | 100.00% |
 | `arg` | `arg`, `arg-dot`, `arg-scope` | 2,188 | 0 | 0 | 100.00% |
 | `arg-sep` | `syntax-meta` | 382 | 0 | 0 | 100.00% |
 | `operator` | `syntax-meta` | 237 | 2 | 0 | 99.16% |
@@ -1806,19 +1851,19 @@ corpus that is 96.8% two authors, so the percentage describes this slice.
 
 | outcome | bytes @7.24.2 | bytes @7.23.5 | bytes @7.25beta3 |
 | ------- | ----: | ----: | ----: |
-| agree — both decided, projection accepts | 27,964 | 27,210 | 27,964 |
+| agree — both decided, projection accepts | 27,972 | 27,218 | 27,972 |
 | disagree — both decided, projection rejects | 2 | 2 | 2 |
 | unprojected — no declared projection covers the pair | 643 | 633 | 643 |
-| offline-silent — device decided, centrs abstained | 4,308 | 4,158 | 4,308 |
+| offline-silent — device decided, centrs abstained | 4,300 | 4,150 | 4,300 |
 | non-syntax — the device answered something syntax cannot decide | 847 | 733 | 847 |
 | device-silent — centrs decided, device said `none` | 5,815 | 5,674 | 5,815 |
 | both-silent | 3,886 | 3,702 | 3,886 |
 | parser-stopped — at/after the device's `error` byte, and silent from there | 41,968 | 43,417 | 41,968 |
 | parser-recovered — past that `error`, and the device classified anyway | 96 | 0 | 96 |
 
-Where the device decided and offline analysis did not (4,308 bytes at 7.24.2,
+Where the device decided and offline analysis did not (4,300 bytes at 7.24.2,
 the next fill's target list): `syntax-meta` 3,122, `comment` 355,
-`variable-local` 326, `arg` 197, `escaped` 145, `dir` 68, 95 across the rest.
+`variable-local` 326, `arg` 197, `escaped` 145, `dir` 66, 89 across the rest.
 Most of the `syntax-meta` share is whitespace the device merged into an
 adjacent structure run rather than a token centrs missed.
 
@@ -1832,7 +1877,7 @@ why it dominates the category.
 
 | applicability @7.24.2 | bytes | leading cells |
 | ---------------------------- | ----: | ------------- |
-| offline-decidable | 32,002 | `comment` → `comment` 18,006, `unclassified` → `syntax-meta` 2,999, `cmd` → `cmd` 2,126 |
+| offline-decidable | 32,002 | `comment` → `comment` 18,006, `unclassified` → `syntax-meta` 2,999, `cmd` → `cmd` 2,132 |
 | schema-dependent | 326 | `arg` → `obj-inactive` 326 |
 | state-dependent | 168 | `dir` → `obj-inactive` 120, `cmd` → `obj-inactive` 21, `unclassified` → `obj-dynamic` 20 |
 | version-dependent | 1,158 | `comment` → `comment` 353, `unclassified` → `obj-inactive` 159, `unclassified` → `syntax-meta` 123 |

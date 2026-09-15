@@ -121,6 +121,7 @@ import {
 } from "./explain/args.ts";
 import { scopeBlocks } from "./explain/blocks.ts";
 import { braceSpans } from "./explain/brace-tokens.ts";
+import { lookupPath } from "./explain/catalog.ts";
 import {
 	analyzeCoordinates,
 	type CoordinateAnalysis,
@@ -169,6 +170,7 @@ import {
 	type DocumentVerbSplit,
 	resolveVerb,
 	resolveVerbsFromStatements,
+	VERBS,
 	type VerbSplit,
 } from "./explain/verbsplit.ts";
 import {
@@ -1835,14 +1837,42 @@ function invalidCommandBraceDiagnostics(
 			const trimmed = structural.slice(braceAt + 1).trimStart();
 			if (trimmed.length === 0 || trimmed[0] === "}") {
 				menuBraceAt = braceAt;
+			} else if (trimmed[0] === ":" || trimmed[0] === "/") {
+				// A menu block body is a statement list, and a statement may be a
+				// scripting directive or an ABSOLUTE command — neither of which the
+				// enclosing menu can vouch for, and neither of which any array literal
+				// can start with. `/interface { ethernet { :put x } }` is corpus 521,
+				// accepted on 7.21.5/7.23.5/7.24.2/7.25beta3 as
+				// `(evl /interface/ethernet/ (evl /putmessage=…))` — #348.
+				menuBraceAt = braceAt;
 			} else {
-				const match = /^\/?([A-Za-z][A-Za-z0-9._-]*)/.exec(trimmed);
+				const match = /^([A-Za-z][A-Za-z0-9._-]*)/.exec(trimmed);
 				if (match) {
 					const firstWord = match[1] as string;
+					// A menu block's body may open with a SUBMENU (`/ip { firewall …`)
+					// or with a COMMAND of the menu itself (`/ip { address { print } }`,
+					// whose inner brace is a body over `/ip/address`) — #348. Requiring
+					// a submenu rejected the second shape, and the device accepts it:
+					// `:parse` lowers it to `(evl (evl (evl /ip/address/print)))` on
+					// 7.21.5 and 7.24.2, and `/interface { ethernet { print } }` the same
+					// way, while `/ip { zzznotamenu { print } }` is rejected there.
+					//
+					// The command half asks the FROZEN verb vocabulary and the catalog,
+					// never a per-menu schema: `VERBS` is the thirteen CRUD verbs that
+					// exist at essentially every configuration menu (`verbs.ts`), and
+					// `lookupPath` names the menu-specific commands. The catalog carries
+					// no `/ip/address/print` row and never will — that is decision 3, not
+					// a gap to fill. An array literal opens with a digit or a quote and
+					// never reaches this identifier branch at all, so `{1;2}` is still
+					// diagnosed.
 					const isMenuContainer = split.candidates.some((candidate) => {
 						const segments = candidate.split("/").filter(Boolean);
 						if (!isKnownMenuPath(segments)) return false;
-						return isKnownMenuPath([...segments, firstWord]);
+						return (
+							isKnownMenuPath([...segments, firstWord]) ||
+							VERBS.has(firstWord) ||
+							lookupPath([...segments, firstWord])?.kind === "command"
+						);
 					});
 					if (isMenuContainer) menuBraceAt = braceAt;
 				}

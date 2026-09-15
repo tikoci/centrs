@@ -103,6 +103,33 @@
 			"expect": "",
 			"why": "a literal does not become a scope by sitting next to other arguments",
 			"verified": "CHR 7.23.2: IL keeps source literal even beside comment=y (args alphabetized, source body raw)."
+		},
+		{
+			"name": "bare-brace-else-is-the-same-scope-as-else-equals",
+			"input": ":if (1=1) do={ :put a } else { :put b }",
+			"expect": "do[]else[]",
+			"why": "#347 — the `=` is optional punctuation on a scope slot, not part of it.",
+			"verified": "CHR 7.21.5/7.23.5/7.24.2/7.25beta3: `:parse` lowers this to IL byte-identical to the `else={…}` spelling (…;do=;(evl …);else=;(evl …)). Control `elsy {` is rejected on all four."
+		},
+		{
+			"name": "bare-brace-do-in-an-argument-slot",
+			"input": ":if (1=1) do { :put a } else { :put b }",
+			"expect": "do[]else[]",
+			"why": "#347 — `do {` as an ARGUMENT of :if, distinct from `:do {` as a head directive.",
+			"verified": "CHR 7.21.5/7.23.5/7.24.2/7.25beta3: same IL as the do={…} else={…} spelling."
+		},
+		{
+			"name": "bare-brace-on-error-slot",
+			"input": ":onerror e in={ :put a } do { :put b }",
+			"expect": "do[]in[]",
+			"why": "#347 — the bare form reaches the other program slots too.",
+			"verified": "CHR 7.21.5/7.23.5/7.24.2/7.25beta3: (evl /onerrordo=;(evl (evl /putmessage=b));error=$e;in=;(evl (evl /putmessage=a)))."
+		},
+		{
+			"name": "a-bare-non-scope-word-before-a-brace-is-not-a-scope",
+			"input": ":local z {1;2}",
+			"expect": "",
+			"why": "#347 control — only SCOPE_ARG_NAMES members may drop the `=`. A positional keeps its brace an ARRAY literal, which is why the bare rule is not `any preceding word`."
 		}
 	]
 }
