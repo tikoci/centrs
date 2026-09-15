@@ -967,7 +967,7 @@ async function validateApiRequest(
 		// Only reject when inspect actually surfaced the command's arguments; if it
 		// returns none, skip rather than false-reject a valid command.
 		if (isCommand && Object.keys(resolved.body).length > 0) {
-			const available = await inspectApiAttributes(backend, tokens);
+			const available = await inspectArgumentNames(backend, tokens);
 			if (available.length > 0) {
 				const requested = Object.keys(resolved.body);
 				const missing = requested.filter(
@@ -1010,7 +1010,7 @@ async function validateApiRequest(
 	}
 
 	if (resolved.verb === "add" || resolved.verb === "set") {
-		const available = await inspectApiAttributes(backend, [
+		const available = await inspectArgumentNames(backend, [
 			...tokens,
 			resolved.verb,
 		]);
@@ -1071,13 +1071,6 @@ function unknownPathError(resolved: ResolvedApiRequest): CentrsError {
 			validationSource: "/console/inspect request=child",
 		},
 	});
-}
-
-async function inspectApiAttributes(
-	backend: ProtocolAdapter,
-	commandTokens: readonly string[],
-): Promise<string[]> {
-	return inspectArgumentNames(backend, commandTokens);
 }
 
 async function assertApiWriteConfirmed(
