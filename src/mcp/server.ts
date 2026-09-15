@@ -10,6 +10,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { centrsVersion } from "../core/version.ts";
 import { type CentrsMcpConfig, resolveMcpConfig } from "./config.ts";
 import {
 	buildDevicesResource,
@@ -79,7 +80,7 @@ export function createCentrsMcpServer(
 	config: CentrsMcpConfig = resolveMcpConfig(),
 ): McpServer {
 	const server = new McpServer(
-		{ name: "centrs-mcp", version: "0.1.0" },
+		{ name: "centrs-mcp", version: centrsVersion },
 		{ instructions: SERVER_INSTRUCTIONS },
 	);
 

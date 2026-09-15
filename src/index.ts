@@ -1,5 +1,3 @@
-export const centrsVersion = "0.1.0";
-
 export {
 	type ApiEnvelope,
 	type ApiErrorEnvelope,
@@ -110,6 +108,7 @@ export {
 	type InspectChildItem,
 	type InspectCompletionItem,
 	type InspectRequestKind,
+	inspectArgumentNames,
 	inspectChildren,
 	inspectChildrenOrEmpty,
 	inspectCompletions,
@@ -136,6 +135,7 @@ export {
 	versionFactFromComment,
 	versionInRange,
 } from "./core/preflight.ts";
+export { centrsVersion } from "./core/version.ts";
 export {
 	encodeMndpPacket,
 	MNDP_BROADCAST_ADDRESS,
@@ -679,6 +679,7 @@ export {
 	transferFanout,
 } from "./transfer-fanout.ts";
 
+import { centrsVersion } from "./core/version.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 
 export const plannedSurfaces = ["api", "cli", "tui", "mcp", "proxy"] as const;

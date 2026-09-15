@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { centrsVersion } from "../../src/core/version.ts";
 import { encodeOpenWinBoxCdb } from "../../src/data/winbox-cdb.ts";
 import { addDevice, loadCdb } from "../../src/devices.ts";
 import { resolveMcpConfig } from "../../src/mcp/config.ts";
@@ -90,6 +91,10 @@ describeFast("centrs MCP server against CHR", () => {
 				server.connect(serverTransport),
 				client.connect(clientTransport),
 			]);
+			expect(client.getServerVersion()).toEqual({
+				name: "centrs-mcp",
+				version: centrsVersion,
+			});
 
 			try {
 				// Example 1: explain (offline canonicalization).

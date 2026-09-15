@@ -26,11 +26,8 @@ import type {
 } from "./core/envelope.ts";
 import { buildTip } from "./core/envelope.ts";
 import {
-	extractCompletionNames,
-	inspectChildren,
+	inspectArgumentNames,
 	inspectChildrenOrEmpty,
-	inspectCompletions,
-	isArgumentNode,
 	isCommandNode,
 	pathTokens,
 } from "./core/inspect.ts";
@@ -913,8 +910,8 @@ interface ApiValidationResult {
 
 /**
  * The structured-input gate. Because the input is a path (not a CLI string) the
- * validator is `/console/inspect`, never `:put [:parse]`. Path existence via
- * `request=child`; add/set attribute validity via `request=child`+`completion`. A
+ * validator is `/console/inspect`, never `:put [:parse]`. Path existence and
+ * add/set attribute validity use `request=child`. A
  * `/execute` script is a CLI string → `semantic: not-applicable`.
  */
 async function validateApiRequest(
@@ -988,7 +985,7 @@ async function validateApiRequest(
 							parameter: missing[0],
 							requestedAttributes: requested,
 							availableAttributes: available,
-							validationSource: "/console/inspect request=child+completion",
+							validationSource: "/console/inspect request=child",
 						},
 					});
 				}
@@ -1033,14 +1030,14 @@ async function validateApiRequest(
 					parameter: missing[0],
 					requestedAttributes: requested,
 					availableAttributes: available,
-					validationSource: "/console/inspect request=child+completion",
+					validationSource: "/console/inspect request=child",
 				},
 			});
 		}
 		return {
 			validation: {
 				enabled: true,
-				source: "/console/inspect request=child+completion",
+				source: "/console/inspect request=child",
 				result: "passed",
 				syntax: false,
 				semantic: true,
@@ -1080,17 +1077,7 @@ async function inspectApiAttributes(
 	backend: ProtocolAdapter,
 	commandTokens: readonly string[],
 ): Promise<string[]> {
-	const children = await inspectChildren(backend, commandTokens);
-	const childAttributes = children
-		.filter(isArgumentNode)
-		.map((child) => child.name)
-		.filter(
-			(name): name is string => typeof name === "string" && name.length > 0,
-		);
-	const completionRows = await inspectCompletions(backend, commandTokens);
-	return [
-		...new Set([...childAttributes, ...extractCompletionNames(completionRows)]),
-	].sort();
+	return inspectArgumentNames(backend, commandTokens);
 }
 
 async function assertApiWriteConfirmed(

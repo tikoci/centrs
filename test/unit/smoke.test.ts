@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import packageMetadata from "../../package.json" with { type: "json" };
 import {
+	centrsVersion,
 	describeCentrs,
 	getProtocolPlan,
 	plannedDeviceSources,
@@ -11,6 +13,7 @@ import {
 
 describe("centrs project baseline", () => {
 	test("exports the planned public surface", () => {
+		expect(centrsVersion).toBe(packageMetadata.version);
 		expect(projectSummary.name).toBe("centrs");
 		expect(describeCentrs()).toContain("RouterOS interaction hub");
 		expect(plannedSurfaces).toContain("cli");

@@ -80,8 +80,8 @@ benchmarked RouterOS agent support. Load-bearing findings that shape this design
   rejected. RouterOS 7.23 no longer reproduces that exact `blackhole=yes` case,
   but the lesson stands: schema-presence is not parser-acceptance.
   `:put [:parse "<cmd>"]` runs the real parser, and centrs runs **both** `:parse`
-  and `/console/inspect`, so the MCP exposes validation as a first-class
-  **dry-run** tool (`centrs_validate`) that never mutates.
+  and `/console/inspect request=child`, so the MCP exposes validation as a
+  first-class **dry-run** tool (`centrs_validate`) that never mutates.
 - **Stateful intents need device-validate-before-apply.** Gold using
   `interface=ether2` fails on a CHR exposing only `ether1`. Pair `execute` with
   cheap readback (`retrieve`).

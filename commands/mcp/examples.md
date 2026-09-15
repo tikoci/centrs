@@ -65,8 +65,8 @@ matters for the bench gold-bug in example 4.
 ```
 
 Envelope: `ok: false`, `error.code = "validation/unknown-attribute"` — the
-`/console/inspect` semantic gate rejects the unknown attribute and **no route is
-created**. This proves the validate tool fails closed on bad input.
+`/console/inspect request=child` semantic gate rejects the unknown attribute and
+**no route is created**. This proves the validate tool fails closed on bad input.
 
 > Bench note: the bench's original gold-bug command
 > `/ip/route/add dst-address=10.99.0.0/24 blackhole=yes` (where `/console/inspect`

@@ -14,13 +14,7 @@ import {
 	canonicalizeExecuteCommand,
 	isWriteShaped,
 } from "./core/execute-command.ts";
-import {
-	extractCompletionNames,
-	inspectChildren,
-	inspectCompletions,
-	isArgumentNode,
-	pathTokens,
-} from "./core/inspect.ts";
+import { inspectArgumentNames, pathTokens } from "./core/inspect.ts";
 import { mapRouterOsError } from "./core/routeros-errors.ts";
 import { routerOsStringLiteral } from "./core/routeros-string.ts";
 import { toYaml } from "./core/yaml.ts";
@@ -653,7 +647,10 @@ async function validateExecuteCommand(
 		};
 	}
 
-	const availableAttributes = await inspectExecuteAttributes(resolved, backend);
+	const availableAttributes = await inspectArgumentNames(backend, [
+		...pathTokens(resolved.canonical.path),
+		resolved.canonical.verb,
+	]);
 	const requested = Object.keys(resolved.canonical.attributes);
 	const missing = requested.filter(
 		(attribute) => !availableAttributes.includes(attribute),
@@ -670,7 +667,7 @@ async function validateExecuteCommand(
 				parameter: missing[0],
 				requestedAttributes: requested,
 				availableAttributes,
-				validationSource: "/console/inspect request=child+completion",
+				validationSource: "/console/inspect request=child",
 			},
 		});
 	}
@@ -799,27 +796,6 @@ async function runSyntaxGate(
  */
 function isPreflightTransportError(error: CentrsError): boolean {
 	return error.code.startsWith("transport/") || error.code.startsWith("auth/");
-}
-
-async function inspectExecuteAttributes(
-	resolved: ResolvedExecuteRequest,
-	backend: ProtocolAdapter,
-): Promise<string[]> {
-	const commandTokens = [
-		...pathTokens(resolved.canonical.path),
-		resolved.canonical.verb,
-	];
-	const children = await inspectChildren(backend, commandTokens);
-	const childAttributes = children
-		.filter(isArgumentNode)
-		.map((child) => child.name)
-		.filter(
-			(name): name is string => typeof name === "string" && name.length > 0,
-		);
-	const completionRows = await inspectCompletions(backend, commandTokens);
-	return [
-		...new Set([...childAttributes, ...extractCompletionNames(completionRows)]),
-	].sort();
 }
 
 async function runCommand(
