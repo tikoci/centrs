@@ -429,6 +429,10 @@ describe("what the device does that the manual does not say", () => {
 		// and precedence conformance as well as runtime; a version that re-ranked
 		// `->` used to be reported as identical. Guarded by mutation: flip any
 		// one of those in a capture and a row appears here.
+		//
+		// Four builds since #342, not three. Both diff rows come from the two
+		// long-term captures (7.23.5 and 7.21.5); 7.25beta3 matches the primary
+		// exactly, which is why the count of rows is 2 rather than 3.
 		const kinds = new Set(
 			fixture.sweep.versionDifferences.map((row) => row["kind"]),
 		);

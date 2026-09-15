@@ -1468,7 +1468,7 @@ their `precedence` is honestly `null`. That is "unmeasured", not "unknown": the
 sweep asks them separately, every `(U 1 B 2)` and `(1 B U 2)` for
 `U`∈`!`,`any`,`~`,`-`,`>` against all 24 binaries — 240 probes, recorded in the
 fixture's `unary` block. All 240 are accepted and the **binary is outer in every
-one**, on all three versions, so each prefix operator binds tighter than every
+one**, on all four swept builds, so each prefix operator binds tighter than every
 binary including `->` (14) and `<%%` (13). The table stores one `precedence` per
 spelling, which is the binary level; `~`, `-` and `>` are here because their
 unary reading has no other record.

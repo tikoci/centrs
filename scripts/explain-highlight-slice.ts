@@ -61,8 +61,10 @@ import {
  * RouterOS versions captured, base first. The base carries the pairs.
  *
  * These are the three builds the pinned corpus classes `complete`
- * (`v_version_coverage.coverage_class`) — one per current release channel:
- * stable 7.24.2, long-term 7.23.5, development 7.25beta3. Before #342 this was
+ * (`v_version_coverage.coverage_class`), and they cover all four current
+ * release channels: stable 7.24.2, long-term 7.23.5, development 7.25beta3 —
+ * and **testing, which is the same 7.24.2 build as stable**, so it is measured
+ * here rather than missing from it. Before #342 this was
  * `7.23.2` / `7.24rc2`, neither of which was a current channel and neither of
  * which the corpus covers with both oracles, so the token-partition score and
  * the operator axis were never about the same firmware.
