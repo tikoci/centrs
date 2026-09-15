@@ -933,6 +933,22 @@ describe("value anchors", () => {
 		}
 	});
 
+	test("a COLON-prefixed scope word is a directive, not an argument (#347)", () => {
+		// The device draws this line sharply: `:if (1=1) do { :put a }` parses,
+		// but `:if (1=1) :do { :put a }` is `expected end of command` on both
+		// 7.21.5 and 7.24.2 — a colon makes the word a directive, and a directive
+		// cannot sit in an argument slot. Offline must not accept what the device
+		// refuses, so the bare rule is spelled without the colon.
+		expect(explainCommand(":if (1=1) do { :put a }").verdict).toBe("pass");
+		expect(explainCommand(":if (1=1) :do { :put a }").verdict).toBe("fail");
+		expect(
+			explainCommand(":if (1=1) do={ :put a } :else { :put b }").verdict,
+		).toBe("fail");
+		// …and the statement-HEAD `:do {` is untouched: it reads its body through
+		// DIRECTIVE_BODY, which is the branch the colon form is left to.
+		expect(explainCommand(":do { :put a } while=(false)").verdict).toBe("pass");
+	});
+
 	test("a bare word that is not a scope name keeps its brace an array (#347)", () => {
 		// The control the device supplies: `elsy {` is rejected on all four builds
 		// (`expected end of command`), so only SCOPE_ARG_NAMES members may drop the

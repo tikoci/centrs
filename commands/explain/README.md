@@ -1335,9 +1335,12 @@ deliberately narrower than "any word before a brace": only the four
 `SCOPE_ARG_NAMES` members may drop the `=`, and the word may not be the
 statement's own leading directive — otherwise `:local z {1;2}` would stop
 reading its brace as an array, and `:do {` would have its slot renamed away from
-the `command` the IL uses. The control is `elsy {`, rejected as `expected end of
-command` on all four builds, which is what makes the acceptance a device fact
-rather than a probe artefact.
+the `command` the IL uses. A COLON also disqualifies the word: the device parses
+`:if (1=1) do {…}` but refuses `:if (1=1) :do {…}` with `expected end of command`
+on 7.21.5 and 7.24.2, because a colon makes it a directive and a directive
+cannot occupy an argument slot. The control is `elsy {`, rejected on all four
+builds, which is what makes the acceptance a device fact rather than a probe
+artefact.
 
 **A relative menu-scope block composes the path (#348).** `/ip { address {
 print } }` is `(evl (evl (evl /ip/address/print)))` on device and

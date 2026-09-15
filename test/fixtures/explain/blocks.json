@@ -130,6 +130,13 @@
 			"input": ":local z {1;2}",
 			"expect": "",
 			"why": "#347 control — only SCOPE_ARG_NAMES members may drop the `=`. A positional keeps its brace an ARRAY literal, which is why the bare rule is not `any preceding word`."
+		},
+		{
+			"name": "a-colon-prefixed-scope-word-is-not-an-argument-slot",
+			"input": ":if (1=1) :do { :put a }",
+			"expect": "",
+			"why": "#347 control — a colon makes the word a DIRECTIVE, which cannot occupy an argument slot, so its brace is not a scope here.",
+			"verified": "CHR 7.21.5 and 7.24.2: `expected end of command`, while the bare `:if (1=1) do { :put a }` parses to (evl /ifcondition=(= 1 1);do=;(evl (evl /putmessage=a)))."
 		}
 	]
 }

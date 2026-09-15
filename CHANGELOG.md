@@ -38,7 +38,9 @@ documenting cross-cutting shifts that affect contributors and consumers.
     `:parse` lowers all of the spellings to byte-identical IL on CHR 7.21.5,
     7.23.5, 7.24.2 and 7.25beta3, with `elsy {` rejected on all four as the
     control. Only the four `SCOPE_ARG_NAMES` members may drop it, so
-    `:local z {1;2}` still reads its brace as an array literal (#347).
+    `:local z {1;2}` still reads its brace as an array literal, and a colon
+    disqualifies the word — the device parses `do {…}` but refuses `:do {…}` in
+    an argument slot, since a colon makes it a directive (#347).
   - A relative menu-scope block composes the path: `/ip { address { print } }`
     is `(evl (evl (evl /ip/address/print)))` on the device, and a block body may
     open with a submenu, one of the thirteen frozen CRUD verbs, a scripting

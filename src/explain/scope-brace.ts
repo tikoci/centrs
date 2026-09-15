@@ -279,10 +279,13 @@ function trailingBareScopeName(
 	if (nameStart === nameEnd) return null;
 	const name = text.slice(nameStart, nameEnd).toLowerCase();
 	if (!SCOPE_ARG_NAMES.has(name)) return null;
-	// A leading `:` belongs to the directive word, so back over it before asking
-	// whether anything precedes this one — otherwise `:do {` looks preceded.
-	const wordStart = text[nameStart - 1] === ":" ? nameStart - 1 : nameStart;
-	if (leadingWords(text, start, wordStart, 1).length === 0) return null;
+	// A COLON makes it a directive, never an argument name, and the device is
+	// emphatic: `:if (1=1) :do { :put a }` is `expected end of command` on both
+	// 7.21.5 and 7.24.2, while the bare `:if (1=1) do { :put a }` parses. So the
+	// colon form is refused here and left to the `DIRECTIVE_BODY` branch below,
+	// which is what legitimately reads a statement-head `:do { … }`.
+	if (text[nameStart - 1] === ":") return null;
+	if (leadingWords(text, start, nameStart, 1).length === 0) return null;
 	return name;
 }
 
