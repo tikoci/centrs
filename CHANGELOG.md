@@ -70,6 +70,24 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Changed
 
+- **The bracket-`=` abstention figure is generated and gated instead of
+  asserted.** `commands/explain/README.md` and `src/explain/operator-tokens.ts`
+  both quoted a `224` / `1,259` / `1,035` split for the cost of leaving `=`
+  inside `[ … ]` unclaimed. No script produced it, no `:check` gated it, and no
+  universe reproduces it — it was written once in PR #292 and had been prose
+  ever since, which is exactly the condition a corpus repin can silently
+  invalidate. `bun run explain:bracket-equals` now derives it, with `--check`
+  and `--readme --check` gates on the corpus → fixture → README chain like the
+  other censuses, and the README block is generated. Measured: **1,079** `=`
+  bytes inside `[ … ]` across 263 of 948 scripts, **1,063** left
+  `unclassified` — **446** genuine `find`/`where` query comparisons against
+  **617** plain `arg=value`. The `arg` fill rescues **none** of them, contrary
+  to the obvious guess, because it offers only the `=` its own located argument
+  token names. The query reading is the device's: on 7.24.2, 93 of the 109
+  scripts that parsed carry at least as many `(= …)` IL nodes, and the
+  shortfalls are scripts whose enclosing menu the capture build could not
+  resolve (#341).
+
 - **The operator census reads only version-comparable RouterOS builds.** The
   corpus is repinned to `lsp-routeros-ts` `7d62355` (schema v4), which carries
   three *complete* builds — long-term 7.23.5, stable 7.24.2 and development

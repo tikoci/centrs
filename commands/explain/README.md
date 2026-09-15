@@ -1650,11 +1650,40 @@ each grounded on the corpus device oracle (`parseil_results.il_text`):
 | A spelling glued immediately after an argument `=`. | `in-interface-list=!LAN`, `.id=*2`, `oid=.1.3.6.1.2.1` — the byte after an argument `=` starts the value. |
 | A spelling glued into an argument **name**. | `:foreach x in=$list` is `/foreach counter=$x` with no `(in …)` node anywhere; the IL keeps `security.authentication-types=wpa2-psk` as one name and renders `.id` as the single symbol `$.id`, never `(. …)`. |
 
-The first abstention has a measured cost: `find where name="x"` inside `[ … ]`
-*does* lower to a real `(= $name x)` node, so 224 of the corpus's 1,259
-bracket-interior `=` bytes are genuine comparisons that now stay
-`unclassified` — against 1,035 that were plain `arg=value`. A `where`-aware
-fill can take them back later; claiming all 1,259 would be 82% wrong.
+The first abstention has a measured cost, and it is now generated rather than
+asserted. The figures below were prose with no script behind them and no gate
+on them for three releases, quoting a `224` / `1,259` / `1,035` split that no
+universe reproduces (#341). The abstention itself is as wide as it ever was —
+what was wrong was the accounting of it. They are re-derived by
+`bun run explain:bracket-equals` and gated by
+`bun run explain:bracket-equals:readme:check`.
+
+<!-- BEGIN GENERATED bracket-equals — regenerate with `bun run explain:bracket-equals:readme` -->
+Measured by `bun run explain:bracket-equals` over the pinned corpus:
+**1,079** `=` bytes sit inside `[ … ]`, across
+263 of 948 scripts, and **1,063** of them come back
+`unclassified` — the operator fill abstains on essentially all of it. No
+later fill rescues them: the `arg` fill claims **0**, because it offers only
+the `=` its own located argument token names and a `[ … ]` substitution is
+not where it locates arguments.
+
+Of those 1,063, **446** are governed by a `find`/`where` query and are
+genuine comparisons — the device lowers `[find address=$IP]` to
+`(= $address $IP)` — against **617** plain `arg=value`. So abstaining is
+42.0% wrong and claiming the lot would be 58.0% wrong; a `where`-aware
+fill can take the query half later. For contrast the fill does claim
+**1,402** `=` bytes whose innermost opener is `(`.
+
+The query reading is the device's, not a guess: on 7.24.2, 93 of the
+137 scripts carrying one have IL with at least as many `(= …)` nodes.
+Of the rest, 28 are scripts the console refused outright — their IL is prose,
+with no nodes of any kind — and 16 use a menu the capture build could not
+resolve (a forum snippet on `/interface wireless` answers `bad command name
+wireless`), so the device never reached the query to lower it. Neither is a
+counter-example to the reading. Whole-corpus `(= …)` head nodes, which also
+count expression comparisons the fill already claims:
+7.23.5 1,233, 7.24.2 1,240, 7.25beta3 1,240.
+<!-- END GENERATED bracket-equals -->
 
 ### Device agreement for the token partition (#264 B4, #263)
 
