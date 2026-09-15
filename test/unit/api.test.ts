@@ -11,6 +11,7 @@ import {
 	normalizeApiEndpoint,
 	type ResolvedApiRequest,
 	renderApiEnvelope,
+	resolveApiRequest,
 } from "../../src/api.ts";
 
 describe("normalizeApiEndpoint", () => {
@@ -365,5 +366,68 @@ describe("renderApiEnvelope --raw", () => {
 		const parsed = JSON.parse(rendered) as { code: string; message: string };
 		expect(parsed.code).toBe("routeros/invalid-value");
 		expect(parsed.message).toBe("bad value");
+	});
+});
+
+describe("`--raw` is a precedence layer for --validate, not an override (#154)", () => {
+	// `--raw` strips the envelope and was always MEANT to default validation off,
+	// but `--raw --validate=true` is the intended way to debug `api` when centrs
+	// itself is suspect — the gate runs and the failure renders through the
+	// `--raw` error contract. The old code short-circuited the whole resolution
+	// ladder, silently discarding an explicit `--validate=true` along with env,
+	// CDB comment-kv and config.
+	const base = {
+		endpoint: "/ip/address",
+		host: "192.0.2.1",
+		username: "u",
+		password: "p",
+	} as const;
+
+	test("an explicit --validate outranks --raw in both directions", async () => {
+		const on = await resolveApiRequest(
+			{ ...base, raw: true, validate: true },
+			{},
+		);
+		expect(on.validate.value).toBe(true);
+		expect(on.validate.source.kind).toBe("explicit");
+
+		const off = await resolveApiRequest(
+			{ ...base, raw: true, validate: false },
+			{},
+		);
+		expect(off.validate.value).toBe(false);
+		expect(off.validate.source.kind).toBe("explicit");
+	});
+
+	test("--raw alone still defaults validation off, and says so", async () => {
+		const resolved = await resolveApiRequest({ ...base, raw: true }, {});
+		expect(resolved.validate.value).toBe(false);
+		// The provenance is kept: "off because --raw", not an anonymous default.
+		expect(resolved.validate.source).toEqual({ kind: "cli", key: "--raw" });
+	});
+
+	test("--raw outranks the ambient sources, so it behaves the same everywhere", async () => {
+		const resolved = await resolveApiRequest(
+			{ ...base, raw: true },
+			{
+				CENTRS_VALIDATE: "true",
+			},
+		);
+		expect(resolved.validate.value).toBe(false);
+		expect(resolved.validate.source).toEqual({ kind: "cli", key: "--raw" });
+	});
+
+	test("without --raw the ladder is untouched", async () => {
+		expect((await resolveApiRequest({ ...base }, {})).validate.value).toBe(
+			true,
+		);
+		const env = await resolveApiRequest(
+			{ ...base },
+			{
+				CENTRS_VALIDATE: "false",
+			},
+		);
+		expect(env.validate.value).toBe(false);
+		expect(env.validate.source.kind).toBe("env");
 	});
 });

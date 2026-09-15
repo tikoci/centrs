@@ -114,7 +114,7 @@ Usage: centrs api <router> <endpoint> [flags]
 | `--query / --filter` | `<expr>` | RouterOS-side row filter, AND-combined, repeatable: name=value, name!=value, name>value, name<value, name. |
 | `--raw-query` | `<word>` | Verbatim RouterOS query word (repeatable) for OR / absence / stack expressions. |
 | `--attribute / --proplist` | `<a,b>` | Property projection → `.proplist`. |
-| `--raw` |  | Strip the envelope; emit bare RouterOS JSON. Implies `--validate=false`; does not imply `--yes`. |
+| `--raw` |  | Strip the envelope; emit bare RouterOS JSON. Defaults `--validate` to false (an explicit `--validate=true` still runs the gate); does not imply `--yes`. |
 | `--yes` |  | Confirm a mutating (non-read) request in non-interactive runs. |
 | `--stream / --listen` |  | Follow changes as an NDJSON envelope stream (native-api only; the `/listen` endpoint infers it). Ends with a summary envelope. |
 | `--count` | `<n>` | Stop a `--stream` after N change frames. |

@@ -51,6 +51,17 @@ documenting cross-cutting shifts that affect contributors and consumers.
   bytes of the committed slice, all of them moving out of *offline-silent* into
   *agree*, with no new disagreements.
 
+- **`centrs api --raw` no longer silently discards an explicit `--validate`.**
+  `--raw` short-circuited the whole settings ladder, so `--raw --validate=true`
+  ran no preflight at all — and `CENTRS_VALIDATE`, the CDB comment-kv override
+  and config lost to it just as quietly. It is now a precedence layer: the
+  explicit `--validate` flag wins, then `--raw`, then the ambient sources, then
+  the `true` default. `--raw` alone is unchanged and still behaves identically
+  on every machine whatever the environment holds, while `--raw --validate=true`
+  runs the gate and reports a rejection in the `--raw` error shape
+  (`{code,message}` on stderr, nonzero exit, no `data` key) — the intended way
+  to debug `api` when centrs itself is the suspect (#154).
+
 - **`execute`/`api` validation no longer probes command-level
   `request=completion`.** On RouterOS 7.12.2 that request shape never answers:
   REST hangs past the client timeout (then surfaces the router's own session

@@ -94,7 +94,7 @@ export const apiCommand: CliCommandMetadata = {
 		{
 			flag: "--raw",
 			description:
-				"Strip the envelope; emit bare RouterOS JSON. Implies `--validate=false`; does not imply `--yes`.",
+				"Strip the envelope; emit bare RouterOS JSON. Defaults `--validate` to false (an explicit `--validate=true` still runs the gate); does not imply `--yes`.",
 		},
 		{
 			flag: "--yes",

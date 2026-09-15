@@ -115,9 +115,18 @@ Default on. Because the input is a structured path (not a CLI string), the gate 
   so the inspect gate is `not-applicable` (`meta.validation.semantic`); RouterOS
   re-validates on the run.
 
-`--validate=false` (and `--raw`, which implies it) skip the preflight; RouterOS
-still re-validates writes server-side. Disabling validation to make a call pass is
-forbidden (constitution: validation is the product).
+`--validate=false` skips the preflight; RouterOS still re-validates writes
+server-side. Disabling validation to make a call pass is forbidden (constitution:
+validation is the product).
+
+`--raw` **defaults** `--validate` to false — it does not override it (GH#154).
+The resolution order is the explicit `--validate` flag, then `--raw`, then
+`CENTRS_VALIDATE` / the CDB comment-kv / config, then the `true` default. So
+`--raw` alone behaves as it always has and behaves the same on every machine
+whatever the environment holds, while `--raw --validate=true` runs the gate and
+reports a rejection in the `--raw` error shape (`{code,message}` on stderr,
+nonzero exit, no `data` key) — which is how you debug `api` when centrs itself is
+the suspect.
 
 ## Write confirmation
 

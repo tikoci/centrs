@@ -94,7 +94,11 @@ export interface ApiRequest {
 	rawQuery?: readonly string[];
 	/** `--proplist` / `--attribute` property projection. */
 	proplist?: readonly string[];
-	/** `--raw`: bare RouterOS body passthrough; implies `--validate=false`. */
+	/**
+	 * `--raw`: bare RouterOS body passthrough. DEFAULTS `--validate` to false; an
+	 * explicit `validate` still wins, and its failures render through the `--raw`
+	 * error contract (#154).
+	 */
 	raw?: boolean;
 	/** `--listen`: native-api-only open-ended follow (later phase; rejected here). */
 	listen?: boolean;
@@ -571,19 +575,35 @@ export async function resolveApiRequest(
 			)));
 	const via = resolveApiProtocol(request, env, listen, cdbResolution, config);
 	const format = resolveApiFormat(request, env, config);
-	// `--raw` forces validation off (constitution: --raw waiver); otherwise the
-	// inspect gate is on by default.
-	const validate: ResolvedSetting<boolean> = raw
-		? { value: false, source: { kind: "cli", key: "--raw" } }
-		: resolveBooleanSetting(
-				request.validate,
-				env,
-				"CENTRS_VALIDATE",
-				true,
-				"validate",
-				cdbResolution?.overrides.validate,
-				config,
-			);
+	// `--raw` is a PRECEDENCE LAYER, not an override (#154). It ranks below an
+	// explicit `--validate` and above every ambient source, so:
+	//
+	//   --validate=true|false   explicit CLI flag   ← wins
+	//   --raw                   → validate=false
+	//   CENTRS_VALIDATE / CDB comment-kv / config
+	//   default                 → validate=true
+	//
+	// It used to short-circuit the whole ladder, which silently discarded an
+	// explicit `--validate=true` — and env, CDB and config with it. `--raw
+	// --validate=true` is the intended way to debug `api` when centrs itself is
+	// suspect: the gate runs and a failure renders through `rawErrorPayload` as
+	// `{code,message}` on stderr with a nonzero exit, which is the `--raw` error
+	// contract for any other preflight failure. `--raw` still outranks the
+	// ambient sources rather than merely lowering the default, so it behaves the
+	// same on every machine regardless of a `CENTRS_VALIDATE` in the environment.
+	const requestedValidate = resolveBooleanSetting(
+		request.validate,
+		env,
+		"CENTRS_VALIDATE",
+		true,
+		"validate",
+		cdbResolution?.overrides.validate,
+		config,
+	);
+	const validate: ResolvedSetting<boolean> =
+		raw && request.validate === undefined
+			? { value: false, source: { kind: "cli", key: "--raw" } }
+			: requestedValidate;
 	const timeoutMs = resolveApiTimeout(
 		request.timeout,
 		env,
