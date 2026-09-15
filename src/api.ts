@@ -911,7 +911,8 @@ interface ApiValidationResult {
 /**
  * The structured-input gate. Because the input is a path (not a CLI string) the
  * validator is `/console/inspect`, never `:put [:parse]`. Path existence and
- * add/set attribute validity use `request=child`. A
+ * add/set attribute validity both come from `request=child` — command-level
+ * `request=completion` is unsafe on RouterOS 7.12.2 (`core/inspect.ts`). A
  * `/execute` script is a CLI string → `semantic: not-applicable`.
  */
 async function validateApiRequest(
