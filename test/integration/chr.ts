@@ -204,6 +204,35 @@ export const PARSE_REJECTED = /syntax error|expected end of command/;
 export const PARSE_REJECTED_HINT = /error|expected end of command/;
 
 /**
+ * Collapse RouterOS `print` column wrapping so an assertion reads the VALUE a
+ * console read returned, not the device's line layout.
+ *
+ * Grounded on CHR 7.24.2 vs 7.24.3 (GH#352; the same break lands on 7.23.6 and
+ * 7.25beta4). A settings menu with exactly ONE property — `/system/identity` is
+ * the only one centrs reads — started printing its value one character per line:
+ *
+ * ```text
+ * 7.24.2   "  name: CHR"
+ * 7.24.3   "  name: C\n        H\n        R"
+ * ```
+ *
+ * It is **not** a terminal-width effect and **not** transport-specific: REST
+ * `POST /rest/execute` wraps identically to the ssh and mac-telnet consoles
+ * (measured on a stock CHR with no client width negotiated at all), and every
+ * multi-property `print` — `/system/resource`, `/system/clock`, `/system/note`,
+ * `/system/health`, and every table `print` — is unaffected on both builds.
+ * `:put [/system/identity/get name]` also stays clean.
+ *
+ * So the layout of a one-property `print` is not stable across RouterOS
+ * versions and must not be asserted on. Collapse it on both sides and assert
+ * the value instead; that still proves the console round-trip carried the
+ * device's identity, which is what these examples are evidence for.
+ */
+export function collapsePrintWrapping(text: string): string {
+	return text.replace(/\s+/g, "");
+}
+
+/**
  * Compare two RouterOS version strings (e.g. "7.21.4 (long-term) ...", "7.23",
  * "7.23beta2"). Returns true when `running` ≥ `target`, ordering on
  * major.minor.patch, then prerelease stage (beta < rc < release), then the stage

@@ -24,6 +24,7 @@ import { executeEnvelope } from "../../src/execute.ts";
 import { parseMac } from "../../src/protocols/mac-telnet.ts";
 import { MacTelnetConsole } from "../../src/protocols/mac-telnet-console.ts";
 import {
+	collapsePrintWrapping,
 	isChrIntegrationEnabled,
 	recordIntegrationEvidence,
 	startIntegrationChr,
@@ -87,9 +88,13 @@ describeFast("execute over mac-telnet (console reader + command path)", () => {
 			const primeMs = Date.now() - primeStart;
 			expect(cons.isReady).toBe(true);
 
-			expect((await cons.run("/system/identity/print")).output).toContain(
-				identityRest ?? "",
-			);
+			// Column wrapping collapsed on both sides: a one-property `print`'s layout
+			// is not stable across RouterOS builds (GH#352 — see collapsePrintWrapping).
+			expect(
+				collapsePrintWrapping(
+					(await cons.run("/system/identity/print")).output,
+				),
+			).toContain(collapsePrintWrapping(String(identityRest ?? "")));
 			const validCli =
 				"/ip/address/add address=198.51.100.30/32 interface=ether1";
 			await cons.parseGate(validCli); // valid → no throw
@@ -126,7 +131,9 @@ describeFast("execute over mac-telnet (console reader + command path)", () => {
 			expect(read.ok, read.ok ? "" : JSON.stringify(read.error)).toBe(true);
 			if (!read.ok) return;
 			expect(read.meta.via).toBe("mac-telnet");
-			expect(retOf(read.data)).toContain(identityRest ?? "");
+			expect(collapsePrintWrapping(retOf(read.data))).toContain(
+				collapsePrintWrapping(String(identityRest ?? "")),
+			);
 
 			// 20 — write (add) with --yes; success prints nothing; verify via REST.
 			const write = await executeEnvelope({

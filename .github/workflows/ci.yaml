@@ -275,20 +275,29 @@ jobs:
           else
            echo "::warning::/dev/kvm is unavailable; quickchr will use slower TCG emulation."
           fi
-      # Cache the downloaded CHR .img across runs to cut the stable-channel boot
-      # time (quickchr caches at $HOME/.local/share/quickchr/cache; getDataDir()).
-      - name: Cache CHR images
-        uses: actions/cache@v6
-        with:
-          path: ~/.local/share/quickchr/cache
-          key: chr-cache-${{ runner.os }}-stable-v1
-          restore-keys: chr-cache-${{ runner.os }}-
       - name: Setup Bun 1.3.14
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
         with:
           bun-version: 1.3.14
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      # The image cache key must name the RouterOS build this job will boot:
+      # actions/cache only writes on an exact-key MISS, so a static key freezes
+      # the first image it ever saw and every later point release is re-downloaded
+      # (and never saved). See scripts/chr-cache-key.ts and GH#352.
+      - name: Resolve CHR image version for the cache key
+        id: chr_version
+        run: bun run scripts/chr-cache-key.ts --channel stable
+      # Cache the downloaded CHR .img across runs to cut the stable-channel boot
+      # time (quickchr caches at $HOME/.local/share/quickchr/cache; getDataDir()).
+      - name: Cache CHR images
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/share/quickchr/cache
+          key: chr-cache-${{ runner.os }}-stable-${{ steps.chr_version.outputs.version }}
+          restore-keys: |
+            chr-cache-${{ runner.os }}-stable-
+            chr-cache-${{ runner.os }}-
       - name: CHR smoke (stable channel)
         id: smoke
         env:
@@ -301,6 +310,16 @@ jobs:
           bun run test:integration:smoke 2>&1 | tee /tmp/smoke-output.txt || status=$?
           echo "::endgroup::"
           exit "$status"
+      # actions/cache saves the whole quickchr cache dir in its post-step, and a
+      # prefix `restore-keys` hit brings the previous release's images along, so
+      # without a bound each point release would grow the saved entry by another
+      # 128 MiB image. Keep the newest few (quickchr's own auto-prune cap is
+      # 2 GiB — far too loose against the 10 GB repo-wide cache budget). Never
+      # fatal: a pruning problem must not red a green test run.
+      - name: Bound the saved CHR image cache
+        if: always()
+        continue-on-error: true
+        run: bunx quickchr cache prune --max-size 384M
       - name: Surface smoke result to job summary
         if: always()
         run: |

@@ -42,6 +42,9 @@ printf '/system/identity/print\n' | centrs terminal $MAC --via mac-telnet --host
 ```
 
 stdout contains the device identity (cross-checked against REST). Exit code `0`.
+RouterOS 7.23.6/7.24.3/7.25beta4 print a one-property menu's value one
+character per line (GH#352), so the comparison collapses `print` column
+wrapping on both sides rather than asserting the device's layout.
 
 ### T2. `--via rest-api` has no terminal capability
 
@@ -99,7 +102,10 @@ analog of T4** (a piped subprocess stdin cannot be a TTY), not in CI.
 printf '/system/identity/print\n/quit\n' | centrs terminal 127.0.0.1 --via ssh --port $SSH_PORT --username $U --ssh-key $KEY --insecure
 ```
 
-stdout contains the device identity (cross-checked against REST). centrs returns
+stdout contains the device identity (cross-checked against REST).
+RouterOS 7.23.6/7.24.3/7.25beta4 print a one-property menu's value one
+character per line (GH#352), so the comparison collapses `print` column
+wrapping on both sides rather than asserting the device's layout. centrs returns
 ssh's exit code (a no-PTY console closed by EOF can exit non-zero — that is the
 device/ssh's result, not a centrs failure; a clean `/quit` from a real TTY exits
 `0`).

@@ -21,6 +21,7 @@ import { join } from "node:path";
 import { runCli } from "../../src/cli.ts";
 import { executeEnvelope } from "../../src/execute.ts";
 import {
+	collapsePrintWrapping,
 	isChrIntegrationEnabled,
 	readEnv,
 	recordIntegrationEvidence,
@@ -117,7 +118,11 @@ describeFast("execute over ssh (per-command ssh host)", () => {
 			expect(read.ok, read.ok ? "" : JSON.stringify(read.error)).toBe(true);
 			if (!read.ok) return;
 			expect(read.meta.via).toBe("ssh");
-			expect(retOf(read.data)).toContain(identity);
+			// Column wrapping collapsed on both sides: a one-property `print`'s layout
+			// is not stable across RouterOS builds (GH#352 — see collapsePrintWrapping).
+			expect(collapsePrintWrapping(retOf(read.data))).toContain(
+				collapsePrintWrapping(identity),
+			);
 
 			// S2 — a multi-line read returns the cleaned, column-aligned output.
 			const resource = await executeEnvelope({

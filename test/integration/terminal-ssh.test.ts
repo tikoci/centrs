@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "../../src/cli.ts";
 import {
+	collapsePrintWrapping,
 	isChrIntegrationEnabled,
 	readEnv,
 	recordIntegrationEvidence,
@@ -102,10 +103,12 @@ describeFast("terminal over ssh (host ssh relay)", () => {
 				args: base,
 				stdin: "/system/identity/print\n/quit\n",
 			});
+			// Column wrapping collapsed on both sides: a one-property `print`'s layout
+			// is not stable across RouterOS builds (GH#352 — see collapsePrintWrapping).
 			expect(
-				ts1.stdoutText,
+				collapsePrintWrapping(ts1.stdoutText),
 				`terminal/ssh exit ${ts1.exitCode}; stderr=${ts1.stderrText}`,
-			).toContain(identity);
+			).toContain(collapsePrintWrapping(identity));
 
 			// TS2 — rest-api has no terminal capability (short-circuits before connect).
 			const ts2 = await runCliProcess({

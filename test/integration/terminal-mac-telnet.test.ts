@@ -16,6 +16,7 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+	collapsePrintWrapping,
 	isChrIntegrationEnabled,
 	recordIntegrationEvidence,
 	startIntegrationChr,
@@ -87,7 +88,11 @@ describeFast("terminal over mac-telnet (interactive relay)", () => {
 				t1.exitCode,
 				`terminal exit ${t1.exitCode}; stderr=${t1.stderrText}`,
 			).toBe(0);
-			expect(t1.stdoutText).toContain(identity);
+			// Column wrapping collapsed on both sides: a one-property `print`'s layout
+			// is not stable across RouterOS builds (GH#352 — see collapsePrintWrapping).
+			expect(collapsePrintWrapping(t1.stdoutText)).toContain(
+				collapsePrintWrapping(identity),
+			);
 
 			// T2 — rest-api has no terminal capability (short-circuits before connect).
 			const t2 = await runCliProcess({

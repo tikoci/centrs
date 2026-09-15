@@ -155,5 +155,11 @@ describeFast("CHR smoke (single boot, core paths)", () => {
 			capture.restore();
 			await chr.destroy();
 		}
-	}, 300_000);
+		// 600s, not the usual 300s: this test's boot may include a cold CHR image
+		// download, and quickchr budgets 407s for that alone — more than the whole
+		// 300s budget. A 7.24.2 → 7.24.3 stable bump duly timed this out at 300s
+		// (run 34997014684, GH#352) after a 186s download. The version-keyed image
+		// cache (scripts/chr-cache-key.ts) makes that download a once-per-release
+		// event; this headroom keeps it from reading as a smoke regression.
+	}, 600_000);
 });
