@@ -79,6 +79,7 @@
 import { Database } from "bun:sqlite";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { compareRouterOsVersion } from "../src/core/preflight.ts";
 import { analyzeCoordinates } from "../src/explain/coordinates.ts";
 import { scanQuotedString } from "../src/explain/quoted-string.ts";
 import { explainCommand } from "../src/explain.ts";
@@ -407,7 +408,10 @@ function pct(part: number, whole: number): string {
 export function renderReadmeBlock(c: BracketEqualsCensus): string[] {
 	const argSep = c.bracketEqualsByClass["arg-sep"] ?? 0;
 	const unclassified = c.bracketEqualsByClass["unclassified"] ?? 0;
-	const builds = Object.keys(c.ilComparisonNodes).sort();
+	// Version order, not lexicographic: a plain `.sort()` puts `7.10` before
+	// `7.9`. The three current builds happen to sort correctly either way,
+	// which is exactly why this would have gone unnoticed.
+	const builds = Object.keys(c.ilComparisonNodes).sort(compareRouterOsVersion);
 	const co = c.ilCorroboration;
 	return [
 		`Measured by \`bun run explain:bracket-equals\` over the pinned corpus:`,
@@ -500,6 +504,7 @@ function renderMarkdown(c: BracketEqualsCensus): string {
 			`${c.unclassifiedArgument} argument = ` +
 			`${c.unclassifiedQuery + c.unclassifiedArgument}`,
 		`IL \`(= …)\` nodes: ${Object.entries(c.ilComparisonNodes)
+			.sort(([a], [b]) => compareRouterOsVersion(a, b))
 			.map(([v, n]) => `${v} ${n}`)
 			.join(", ")}`,
 	].join("\n");

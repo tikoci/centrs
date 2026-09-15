@@ -38,7 +38,13 @@ describe("the delimiter stack, not a depth counter", () => {
 	});
 
 	test("a `{ … }` block governs neither", () => {
-		expect(bracketSites(":if (1) do={ :set a 1 }")).toEqual([]);
+		// The `=` must be INSIDE the brace. In `:if (1) do={ :set a 1 }` the only
+		// `=` is `do=`, which occurs before `{` is pushed, so the assertion would
+		// pass even if `{` were treated as `[` — a vacuous test.
+		const sites = scanEqualsSites(":if (1) do={ /ip/address set x=1 }");
+		const inner = sites.filter((site) => site.opener === "{");
+		expect(inner).toHaveLength(1);
+		expect(bracketSites(":if (1) do={ /ip/address set x=1 }")).toEqual([]);
 	});
 });
 

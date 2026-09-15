@@ -96,8 +96,9 @@ documenting cross-cutting shifts that affect contributors and consumers.
   found, so the added build inflated every head count by ~20% while
   `distinctScripts`, the column carrying the argument, did not move at all. It
   now filters on the new `v_version_coverage.coverage_class = 'complete'` view,
-  giving a rectangular 3 × 947 universe, and states its version set so a gate
-  cannot compare two different universes. Presence *is* monotone in coverage, so
+  giving a rectangular universe of 2,841 parse-IL rows — 3 builds × the 947 of
+  948 scripts that produce IL — and states its version set so a gate cannot
+  compare two different universes. Presence *is* monotone in coverage, so
   the partial builds keep one job: a new `headFirstSeen` axis dates each head
   against every captured build — which is what still grounds the `any` operator
   at 7.20.8, a build the counting side no longer reads. `source_scripts` is
