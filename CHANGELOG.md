@@ -26,8 +26,10 @@ documenting cross-cutting shifts that affect contributors and consumers.
   the first image it ever saw: every stable bump was re-downloaded from
   download.mikrotik.com on *every* job and never saved. A 186s cold download
   duly timed out the 300s `chr-smoke` test on the 7.24.2 → 7.24.3 bump. The key
-  now carries the version the job will boot (`scripts/chr-cache-key.ts`), and
-  the smoke test gets the headroom a cold download needs (#352).
+  now carries the version the job will boot (`scripts/chr-cache-key.ts`), the
+  smoke test gets the headroom a cold download needs, and the QA leg's own
+  timeout absorbs one — a cold download had also been cancelling a whole
+  channel leg mid-suite with every assertion green (#352).
 
 ## 0.1.5 — 2026-09-15
 
