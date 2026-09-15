@@ -1386,24 +1386,44 @@ token in the device IL, tagged by shape, because IL is a debug rendering that
 does not quote strings: a string literal is emitted bare, so string content is
 indistinguishable from a node head. Its stated honesty rule is that
 `distinctScripts` beats frequency — "a head seen in one script is one author's
-string, a head seen in three hundred is a language feature". The 7.24.2 /
-7.25beta3 capture added parseIL coverage for the 35-script `tangentsoft`
-device-`/export` stratum and showed that rule has a blind spot, because a
-stock string replicated across a whole stratum of device exports looks exactly
-like a language feature by script count:
+string, a head seen in three hundred is a language feature". Only the complete
+builds carry parseIL for the 35-script `tangentsoft` device-`/export` stratum,
+and that stratum showed the rule has a blind spot, because a stock string
+replicated across a whole stratum of device exports looks exactly like a
+language feature by script count:
 
-| word-shaped head | scripts | what it actually is |
-| ---------------- | ------: | ------------------- |
+| word-shaped head | scripts, partial builds → complete | what it actually is |
+| ---------------- | ---------------------------------: | ------------------- |
 | `for` | 2 → 22 | the defconf comment `accept to local loopback (for CAPsMAN)` — in 20 of the 35 device exports, plus the 2 forum scripts that already carried it |
 | `line` | 53 → 84 | device diagnostic prose, `bad parameter hw-offload (line 33 column 147)` |
+
+Those arrows are a **coverage** step, not a version step: the left column is
+what a 913-script capture could see, the right what a 948-script one sees.
 
 Neither is an operator, and both are `word`-shaped — the same bucket #255's
 `not` would have appeared in. So the sweep, not the census, still decides; a
 head that arrives with a whole stratum at once is boilerplate until the device
-says otherwise. The two heads the capture added outright,
+says otherwise. The two heads that stratum added outright,
 `configuration.mode=` and `[system`, are `other`-shaped and are the documented
 string-noise class: a dotted wifi property name emitted bare, and text inside
 an embedded `/system script add source=` value.
+
+**The census counts only the complete builds; a separate axis dates heads.**
+Occurrences are summed across versions, so admitting a partial capture would
+scale every figure by what happened to be captured — on this snapshot, letting
+all six builds in inflated the headline by ~20% while `distinctScripts`, the
+column that actually carries the argument, did not move at all. So
+`headOccurrences` / `headVersions` / `headArities` read
+`coverage_class = 'complete'` only, and the census states its version set in
+`versions` so a gate cannot silently compare two different universes.
+
+Presence, unlike frequency, *is* monotone in coverage — a 913-of-948 capture
+that shows a head proves that build had it — so the partial builds keep one
+job: `headFirstSeen` dates each head against every captured build. That is what
+still grounds the `any` claim below at 7.20.8, a build the counting side no
+longer reads. Read a *late* first-seen as "not captured before here", never as
+"new in": the only two heads that do not reach 7.20.8 are the `tangentsoft`
+pair above, which no partial build could have seen.
 
 **`:parse` IL is the oracle, and `highlight` cannot be.** IL is prefix form with
 the operator as its node's head, so it names the operator and shows its
@@ -1429,7 +1449,7 @@ Five things the device says that the manual does not:
 3. **`$`, `[`, `]` are syntax, not operator heads.** `$x` stays an atom in the
    IL and `[:tostr 1]` lowers to an `evl` node. Those bytes belong to the
    substitution axis.
-4. **`any` is an operator** (prefix, arity 1) and is not in the manual's list — a **nil-check**: `:typeof (any x)` is `bool`, `false` only for `nil`/`nothing` (the value of an undefined `:local` and of `[:nothing]`), `true` for everything else including `0`, `""` and `false`.  It is the idiom `:if (any $x) ...` to test a variable that may be `nil`; `(true any false)` is not infix at all but juxtaposition `(  true (any false))`, and `(1 . any [:nothing])` is concat `1`+`false`.  Present since at least 7.20.8 (corpus `any|7.20.8:2`, and swept live on 7.21.5 long-term, 7.23.3 stable and 7.24rc4 testing with no difference between them).
+4. **`any` is an operator** (prefix, arity 1) and is not in the manual's list — a **nil-check**: `:typeof (any x)` is `bool`, `false` only for `nil`/`nothing` (the value of an undefined `:local` and of `[:nothing]`), `true` for everything else including `0`, `""` and `false`.  It is the idiom `:if (any $x) ...` to test a variable that may be `nil`; `(true any false)` is not infix at all but juxtaposition `(  true (any false))`, and `(1 . any [:nothing])` is concat `1`+`false`.  Present since at least 7.20.8 (corpus `headFirstSeen[any] = 7.20.8`, the oldest captured build, and swept live on 7.21.5 long-term, 7.23.3 stable and 7.24rc4 testing with no difference between them).
 5. **`&&` and `||` are spellings**, lowering to the `and` and `or` nodes.
 
 The `(>…)` and `<%%` forms are in the table on the same footing as `+`.
@@ -2229,15 +2249,31 @@ config genre in question). Since phase 0 the corpus has grown to 948 with a
 export-banner share to 4.6%; **that stratum is not part of any phase-0 figure
 above**. Current whole-corpus offline censuses include its source text.
 
-The pinned snapshot now carries device captures at **7.24.2 and 7.25beta3**
-alongside the original three parseIL versions (7.20.8, 7.22.1, 7.23rc1) and
-three highlight versions (7.9.2, 7.23.2, 7.24rc2). `source_scripts` is
-byte-identical across that repin, so every text-derived report — the token and
-value censuses, `explain:arg-reach`, the browser-consumer proof — is unchanged
-by construction, and only the IL-derived operator census moved. The two new
-versions are also the first to cover the `tangentsoft` stratum in parseIL (35
-scripts each, 947 of 948 `ok` per version), which is what made the
-export genre visible to the operator axis at all.
+The pinned snapshot carries **three complete builds** — long-term `7.23.5`,
+stable `7.24.2` and development `7.25beta3` — each with *both* oracles over all
+948 scripts, alongside six partial captures (parseIL at 7.20.8, 7.22.1,
+7.23rc1; highlight at 7.9.2, 7.23.2, 7.24rc2) that cover only 913. Schema v4
+names that split rather than leaving it to be discovered by hand: the
+`v_version_coverage` view classifies each build, and
+`coverage_class = 'complete'` is the filter every version-comparable query uses.
+`source_scripts` is byte-identical across both repins that reached this
+snapshot, so every text-derived report — the token and value censuses,
+`explain:arg-reach`, the browser-consumer proof — is unchanged by construction,
+and only the IL-derived operator census moved.
+
+**The three complete builds do not agree with each other, and that is the
+finding.** Scored over all 948 scripts:
+
+| oracle | long-term 7.23.5 ↔ stable 7.24.2 | stable 7.24.2 ↔ development 7.25beta3 |
+| ------ | -------------------------------: | ------------------------------------: |
+| `:parse` IL (`il_sha256`) | 87 scripts differ | 11 |
+| `highlight` (count + class set) | 33 | 0 |
+
+Stable and development are the same build for these purposes; long-term is the
+one that moves. So an operator-axis or token-partition figure is a claim *about
+a channel*, not about RouterOS — which is why the census reports its builds as
+separate columns and states its version set, rather than collapsing them to one
+number. Long-term is also the channel a real device most likely runs.
 
 The corpus itself is not in this repo and is not moving here — `lsp-routeros-ts`
 owns producing snapshots, centrs owns which snapshot it measures against.

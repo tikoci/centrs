@@ -70,6 +70,28 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Changed
 
+- **The operator census reads only version-comparable RouterOS builds.** The
+  corpus is repinned to `lsp-routeros-ts` `7d62355` (schema v4), which carries
+  three *complete* builds — long-term 7.23.5, stable 7.24.2 and development
+  7.25beta3, each with both oracles over all 948 scripts — beside six partial
+  captures covering 913. The census summed occurrences across every version it
+  found, so the added build inflated every head count by ~20% while
+  `distinctScripts`, the column carrying the argument, did not move at all. It
+  now filters on the new `v_version_coverage.coverage_class = 'complete'` view,
+  giving a rectangular 3 × 947 universe, and states its version set so a gate
+  cannot compare two different universes. Presence *is* monotone in coverage, so
+  the partial builds keep one job: a new `headFirstSeen` axis dates each head
+  against every captured build — which is what still grounds the `any` operator
+  at 7.20.8, a build the counting side no longer reads. `source_scripts` is
+  byte-identical across the repin, so every text-derived report — the token and
+  value censuses, `explain:arg-reach`, the browser-consumer proof — is
+  unchanged by construction (#336, #342).
+- **The three complete builds are recorded as disagreeing.** `:parse` IL differs
+  on 87 of 948 scripts between long-term 7.23.5 and stable 7.24.2 but on only 11
+  between stable and development 7.25beta3; `highlight` differs on 33 and 0. So
+  an operator-axis or token-partition figure is a claim about a *channel*, not
+  about RouterOS, and `commands/explain/README.md` now says so rather than
+  collapsing the builds to one number.
 - **A valid string escape is now its own token class in offline `explain`.**
   `ExplainTokenClass` gains `escaped`, the second and last split #264's rule
   admits: only INVALID escapes surfaced anywhere else, as `bad-string-escape`
