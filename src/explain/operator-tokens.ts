@@ -26,11 +26,15 @@
  *    `(evl /system/identity/get value-name=name)` — the `/` are path
  *    separators and the `=` is an argument separator, with no division and no
  *    comparison node. So the `, / = -` conservatism holds everywhere except
- *    directly inside `(`. Measured cost: `find where name="x"` inside `[…]`
- *    *does* lower to a real `(= $name x)` node, and those `=` bytes now stay
- *    `unclassified` — 224 of the corpus's 1,259 bracket `=` against 1,035 that
- *    were plain `arg=value`. Abstaining on all of them beats claiming 82%
- *    wrong; a `where`-aware fill can take them later.
+ *    directly inside `(`. Measured cost: `find address=$IP` inside `[…]` *does*
+ *    lower to real `(= $address $IP)` nodes, and those `=` bytes stay
+ *    `unclassified`. The figures are generated, not asserted here — see
+ *    `scripts/explain-bracket-equals.ts` and the gated block in
+ *    `commands/explain/README.md`. The split runs roughly 40/60 query against
+ *    `arg=value`, so abstaining beats claiming; a `where`-aware fill can take
+ *    the query half later. The numbers this comment used to carry (224 of
+ *    1,259 against 1,035) were unreproducible and ungated, which is what #341
+ *    fixed — do not re-inline a figure here.
  * 2. **Glued after `=` is an argument value.** `in-interface-list=!LAN`,
  *    `.id=*2`, `oid=.1.3.6.1.2.1` — the byte after an argument `=` starts the
  *    value, never an operator.

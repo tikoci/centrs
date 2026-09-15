@@ -1,0 +1,26 @@
+{
+	"scripts": 948,
+	"scriptsWithBracketEquals": 263,
+	"bracketEquals": 1079,
+	"queryComparisons": 460,
+	"argumentSeparators": 619,
+	"expressionEquals": 1402,
+	"bracketEqualsByClass": {
+		"unclassified": 1067,
+		"operator": 12
+	},
+	"unclassifiedQuery": 448,
+	"unclassifiedArgument": 619,
+	"ilComparisonNodes": {
+		"7.23.5": 1233,
+		"7.24.2": 1240,
+		"7.25beta3": 1240
+	},
+	"ilCorroboration": {
+		"build": "7.24.2",
+		"scriptsWithQueryEquals": 137,
+		"corroborated": 93,
+		"commandUnresolved": 16,
+		"rejectedParse": 28
+	}
+}

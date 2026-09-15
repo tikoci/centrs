@@ -29,9 +29,14 @@ interface OperatorFixture {
 	corpus: {
 		acceptedRows: number;
 		rejectedRows: number;
+		/** The version-comparable builds only; see `explain-operator-census.ts`. */
+		versions: string;
 		headOccurrences: Record<string, number>;
 		headShapes: Record<string, string>;
 		headVersions: Record<string, number>;
+		/** `head` -> oldest captured build, read across partial captures too. */
+		headFirstSeen: Record<string, string>;
+		firstSeenVersions: string;
 	};
 	sweep: {
 		_source: {
@@ -318,12 +323,21 @@ describe("what the device does that the manual does not say", () => {
 	});
 
 	test("`any` has been an operator since at least 7.20.8", () => {
-		// Offline corroboration: the corpus IL census (7.20.8, 7.22.1, 7.23rc1,
-		// 7.24.2, 7.25beta3) already saw head `any` with `any|7.20.8:2`. The
-		// per-version tally is what carries the age claim — the total moved with
-		// the 7.24.2/7.25beta3 capture, the 7.20.8 row did not.
-		expect(fixture.corpus.headOccurrences["any"]).toBe(10);
-		expect(fixture.corpus.headVersions["any|7.20.8"]).toBe(2);
+		// Offline corroboration: the corpus IL shows head `any` on 7.20.8, the
+		// oldest build captured. That fact now rides `headFirstSeen`, NOT the
+		// counting tallies: the census counts only the version-comparable builds
+		// (`coverage_class = 'complete'`), and 7.20.8 is a partial capture, so it
+		// contributes no occurrences at all. Presence is monotone in coverage
+		// though — a 913-of-948 capture that shows `any` still proves 7.20.8 had
+		// it — which is exactly the age axis's job.
+		expect(fixture.corpus.headFirstSeen["any"]).toBe("7.20.8");
+		expect(fixture.corpus.firstSeenVersions).toContain("7.20.8");
+		// The counting side is the three complete builds, and `any` is on all
+		// three. This is what the census can compare; the line above is what it
+		// can date.
+		expect(fixture.corpus.versions).toBe("7.23.5,7.24.2,7.25beta3");
+		expect(fixture.corpus.headOccurrences["any"]).toBe(6);
+		expect(fixture.corpus.headVersions["any|7.23.5"]).toBe(2);
 		// Live corroboration on the oldest branch swept. The runtime rows above
 		// come from the PRIMARY capture only, so asserting one of them again
 		// would prove nothing about long-term — the evidence that 7.21.5 answers
@@ -449,9 +463,29 @@ describe("what the device does that the manual does not say", () => {
 describe("the corpus census that generated the candidates", () => {
 	test("`not` never appears as an IL head in 948 corpus scripts", () => {
 		// Corroboration, not proof: the corpus can only falsify. But a spelling
-		// the device never emits as a head in 2,944 accepted parses is not one it
-		// has an operator for.
+		// the device never emits as a head in 1,833 accepted parses is not one it
+		// has an operator for. Stronger than the count suggests: `not` is absent
+		// from `headFirstSeen` too, which reads every captured build including
+		// the partial ones, so no version ever emitted it.
 		expect(fixture.corpus.headOccurrences["not"]).toBeUndefined();
+		expect(fixture.corpus.headFirstSeen["not"]).toBeUndefined();
+	});
+
+	test("a late first-seen build is a coverage artifact, not a new operator", () => {
+		// The partial captures have no `tangentsoft` stratum, so a head that only
+		// occurs in those 35 device `/export` files cannot date earlier than the
+		// first complete build however old it actually is. Exactly two heads are
+		// in that position, and both are `other`-shaped string noise — the class
+		// the census already refuses to trust. If a `punctuation` or `word` head
+		// ever lands here, that is a real version claim to go and check, not a
+		// number to adopt.
+		const late = Object.entries(fixture.corpus.headFirstSeen)
+			.filter(([, version]) => version !== "7.20.8")
+			.map(([head]) => head)
+			.sort();
+		expect(late).toEqual(["[system", "configuration.mode="]);
+		for (const head of late)
+			expect(fixture.corpus.headShapes[head]).toBe("other");
 	});
 
 	test("every operator in the table that the corpus saw is a punctuation or word head", () => {

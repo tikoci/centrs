@@ -70,6 +70,47 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Changed
 
+- **The bracket-`=` abstention figure is generated and gated instead of
+  asserted.** `commands/explain/README.md` and `src/explain/operator-tokens.ts`
+  both quoted a `224` / `1,259` / `1,035` split for the cost of leaving `=`
+  inside `[ … ]` unclaimed. No script produced it, no `:check` gated it, and no
+  universe reproduces it — it was written once in PR #292 and had been prose
+  ever since, which is exactly the condition a corpus repin can silently
+  invalidate. `bun run explain:bracket-equals` now derives it, with `--check`
+  and `--readme --check` gates on the corpus → fixture → README chain like the
+  other censuses, and the README block is generated. Measured: **1,079** `=`
+  bytes inside `[ … ]` across 263 of 948 scripts, **1,067** left
+  `unclassified` — **448** genuine `find`/`where` query comparisons against
+  **619** plain `arg=value`. The `arg` fill rescues **none** of them, contrary
+  to the obvious guess, because it offers only the `=` its own located argument
+  token names. The query reading is the device's: on 7.24.2, 93 of the 109
+  scripts that parsed carry at least as many `(= …)` IL nodes, and the
+  shortfalls are scripts whose enclosing menu the capture build could not
+  resolve (#341).
+
+- **The operator census reads only version-comparable RouterOS builds.** The
+  corpus is repinned to `lsp-routeros-ts` `7d62355` (schema v4), which carries
+  three *complete* builds — long-term 7.23.5, stable 7.24.2 and development
+  7.25beta3, each with both oracles over all 948 scripts — beside six partial
+  captures covering 913. The census summed occurrences across every version it
+  found, so the added build inflated every head count by ~20% while
+  `distinctScripts`, the column carrying the argument, did not move at all. It
+  now filters on the new `v_version_coverage.coverage_class = 'complete'` view,
+  giving a rectangular universe of 2,841 parse-IL rows — 3 builds × the 947 of
+  948 scripts that produce IL — and states its version set so a gate cannot
+  compare two different universes. Presence *is* monotone in coverage, so
+  the partial builds keep one job: a new `headFirstSeen` axis dates each head
+  against every captured build — which is what still grounds the `any` operator
+  at 7.20.8, a build the counting side no longer reads. `source_scripts` is
+  byte-identical across the repin, so every text-derived report — the token and
+  value censuses, `explain:arg-reach`, the browser-consumer proof — is
+  unchanged by construction (#336, #342).
+- **The three complete builds are recorded as disagreeing.** `:parse` IL differs
+  on 87 of 948 scripts between long-term 7.23.5 and stable 7.24.2 but on only 11
+  between stable and development 7.25beta3; `highlight` differs on 33 and 0. So
+  an operator-axis or token-partition figure is a claim about a *channel*, not
+  about RouterOS, and `commands/explain/README.md` now says so rather than
+  collapsing the builds to one number.
 - **A valid string escape is now its own token class in offline `explain`.**
   `ExplainTokenClass` gains `escaped`, the second and last split #264's rule
   admits: only INVALID escapes surfaced anywhere else, as `bad-string-escape`

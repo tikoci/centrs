@@ -252,6 +252,8 @@ jobs:
         run: bun run explain:operator-census:check
       - name: Token partition census matches the committed fixture
         run: bun run explain:token-census:check
+      - name: Bracket-`=` census matches the committed fixture
+        run: bun run explain:bracket-equals:check
 
   chr-smoke:
     name: CHR smoke (stable)
