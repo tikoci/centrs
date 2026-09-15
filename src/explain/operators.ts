@@ -373,13 +373,15 @@ function notOp(
  * anything that reports what a comparison MEANS does.
  */
 export const ARRAY_COMPARISON_NOTE =
-	"array comparison with `>` errors on 7.21.5 and 7.23.3 and evaluates on " +
-	"7.24rc4; the operator table itself is identical on all three. The two " +
-	"errors are not the same error: 7.23.3 says `cannot compare if array is " +
-	"more than array` and 7.21.5 says `cannot compare if nothing is more than " +
-	"nothing`, so on 7.21.5 the `{2;1}` operands did not survive to the " +
-	"comparison at all. That is a RUNTIME difference either way — no version " +
-	"disagrees about what `>` is";
+	"array comparison with `>` evaluates on 7.24.2 and 7.25beta3 and errors on " +
+	"7.23.5 and 7.21.5; the operator table itself is identical on all four. " +
+	"**It is not fixed on current long-term**: 7.23.5 is newer than the 7.23.3 " +
+	"this was first measured on and still errors, so the change rode the 7.24 " +
+	"line and was not backported. The two errors are not the same error: " +
+	"7.23.5 says `cannot compare if array is more than array` and 7.21.5 says " +
+	"`cannot compare if nothing is more than nothing`, so on 7.21.5 the " +
+	"`{2;1}` operands did not survive to the comparison at all. That is a " +
+	"RUNTIME difference either way — no version disagrees about what `>` is";
 
 const BY_SPELLING: ReadonlyMap<string, RouterosOperator> = new Map(
 	OPERATORS.map((entry) => [entry.spelling, entry]),

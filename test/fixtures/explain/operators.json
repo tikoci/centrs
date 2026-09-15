@@ -1147,13 +1147,15 @@
 	"sweep": {
 		"_source": {
 			"versions": [
-				"7.23.3 (stable) (x86_64)",
-				"7.24rc4 (testing) (x86_64)",
+				"7.24.2 (stable) (x86_64)",
+				"7.23.5 (long-term) (x86_64)",
+				"7.25beta3 (x86_64)",
 				"7.21.5 (long-term) (x86_64)"
 			],
 			"buildTimes": [
-				"2026-07-30 11:17:12",
-				"2026-08-11 12:43:51",
+				"2026-09-03 09:57:14",
+				"2026-09-04 05:32:46",
+				"2026-09-02 09:02:51",
 				"2026-07-03 10:23:40"
 			],
 			"probe": "bun run explain:probe:operators",
@@ -2075,7 +2077,7 @@
 			{
 				"id": "array-compare",
 				"source": ":put ({2;1} > {1;2;3})",
-				"output": "Script Error: cannot compare if array is more than array (:put; line 1)"
+				"output": "true"
 			}
 		],
 		"versionDifferences": [
@@ -2083,14 +2085,14 @@
 				"kind": "runtime",
 				"id": "array-compare",
 				"source": ":put ({2;1} > {1;2;3})",
-				"7.23.3 (stable)": "Script Error: cannot compare if array is more than array (:put; line 1)",
-				"7.24rc4 (testing)": "true"
+				"7.24.2 (stable)": "true",
+				"7.23.5 (long-term)": "Script Error: cannot compare if array is more than array (:put; line 1)"
 			},
 			{
 				"kind": "runtime",
 				"id": "array-compare",
 				"source": ":put ({2;1} > {1;2;3})",
-				"7.23.3 (stable)": "Script Error: cannot compare if array is more than array (:put; line 1)",
+				"7.24.2 (stable)": "true",
 				"7.21.5 (long-term)": "Script Error: cannot compare if nothing is more than nothing"
 			}
 		]

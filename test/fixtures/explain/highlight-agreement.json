@@ -2,14 +2,192 @@
 	"_note": "centrs → RouterOS `highlight` agreement, raw per-byte confusion matrix only — see scripts/explain-highlight-agreement.ts (#264 B4 / #263). Re-derive with `bun run explain:highlight-agreement --json`. Buckets and percentages are DERIVED at render time from this matrix plus src/explain/highlight-projection.ts; nothing here is a pass threshold.",
 	"slice": {
 		"path": "test/fixtures/explain/highlight-streams.slice.json",
-		"sha256": "de67f66d19e64b5ff8edf78d41601d3a2e08646a5ea809ffa3b60acc6cf8cd8a",
-		"baseVersion": "7.23.2",
+		"sha256": "c1724b87c278515149ba2caa38ea64cadc0712d80cd5886206a99476baddc030",
+		"baseVersion": "7.24.2",
 		"scripts": 70,
 		"versionDiffering": 27
 	},
 	"versions": {
-		"7.23.2": {
-			"routerosVersion": "7.23.2",
+		"7.24.2": {
+			"routerosVersion": "7.24.2",
+			"dev": {
+				"scripts": 42,
+				"bytes": 62735,
+				"scriptsWithParserStop": 21,
+				"stoppedBytes": 36009,
+				"live": {
+					"arg-sep|syntax-meta|differs": 16,
+					"arg-sep|syntax-meta|same": 288,
+					"arg|arg-dot|same": 18,
+					"arg|arg-scope|same": 149,
+					"arg|arg|differs": 30,
+					"arg|arg|same": 1674,
+					"arg|none|same": 33,
+					"arg|obj-inactive|differs": 37,
+					"arg|obj-inactive|same": 324,
+					"brace|syntax-meta|differs": 15,
+					"brace|syntax-meta|same": 99,
+					"cmd|cmd|differs": 81,
+					"cmd|cmd|same": 1323,
+					"cmd|none|same": 16,
+					"cmd|obj-inactive|differs": 12,
+					"cmd|obj-inactive|same": 15,
+					"comment|comment|same": 9602,
+					"dir|dir|differs": 25,
+					"dir|dir|same": 1105,
+					"dir|none|same": 58,
+					"dir|obj-inactive|same": 98,
+					"escaped|escaped|same": 341,
+					"escaped|none|same": 13,
+					"operator|arg|same": 2,
+					"operator|none|same": 2,
+					"operator|obj-inactive|same": 6,
+					"operator|syntax-meta|differs": 4,
+					"operator|syntax-meta|same": 157,
+					"operator|variable-undefined|same": 1,
+					"string|arg|same": 8,
+					"string|none|same": 2852,
+					"string|syntax-meta|differs": 2,
+					"string|syntax-meta|same": 315,
+					"string|variable-undefined|same": 13,
+					"unclassified|arg|differs": 7,
+					"unclassified|arg|same": 91,
+					"unclassified|cmd|same": 22,
+					"unclassified|comment|same": 183,
+					"unclassified|dir|same": 41,
+					"unclassified|escaped|same": 137,
+					"unclassified|none|differs": 5,
+					"unclassified|none|same": 2450,
+					"unclassified|obj-disabled|same": 7,
+					"unclassified|obj-dynamic|same": 20,
+					"unclassified|obj-inactive|differs": 51,
+					"unclassified|obj-inactive|same": 19,
+					"unclassified|syntax-meta|differs": 105,
+					"unclassified|syntax-meta|same": 1699,
+					"unclassified|syntax-obsolete|same": 2,
+					"unclassified|variable-local|same": 259,
+					"unclassified|variable-parameter|same": 15,
+					"unclassified|variable-undefined|same": 40,
+					"value|none|same": 1543,
+					"value|syntax-meta|differs": 6,
+					"value|syntax-meta|same": 93,
+					"value|variable-undefined|same": 21,
+					"variable-auto|variable-auto|same": 44,
+					"variable-global|variable-global|same": 235,
+					"variable-local|variable-local|differs": 35,
+					"variable-local|variable-local|same": 592,
+					"variable-parameter|variable-parameter|differs": 61,
+					"variable-parameter|variable-parameter|same": 209
+				},
+				"stopped": {
+					"arg-sep|none|same": 1124,
+					"arg|none|same": 9873,
+					"brace|none|same": 65,
+					"cmd|none|same": 1289,
+					"comment|none|same": 1055,
+					"dir|none|same": 1346,
+					"escaped|none|same": 415,
+					"operator|none|same": 62,
+					"string|error|differs": 1,
+					"string|error|same": 1,
+					"string|none|same": 4589,
+					"unclassified|error|same": 18,
+					"unclassified|none|same": 7464,
+					"unclassified|obj-inactive|differs": 78,
+					"value|error|same": 1,
+					"value|none|same": 7529,
+					"variable-auto|none|same": 10,
+					"variable-global|none|same": 40,
+					"variable-local|none|same": 653,
+					"variable-parameter|none|same": 396
+				}
+			},
+			"holdout": {
+				"scripts": 28,
+				"bytes": 22794,
+				"scriptsWithParserStop": 15,
+				"stoppedBytes": 6055,
+				"live": {
+					"arg-sep|syntax-meta|differs": 8,
+					"arg-sep|syntax-meta|same": 70,
+					"arg|arg-dot|same": 2,
+					"arg|arg-scope|same": 12,
+					"arg|arg|differs": 47,
+					"arg|arg|same": 256,
+					"arg|obj-inactive|differs": 16,
+					"arg|obj-inactive|same": 2,
+					"brace|syntax-meta|differs": 3,
+					"brace|syntax-meta|same": 94,
+					"cmd|cmd|differs": 31,
+					"cmd|cmd|same": 803,
+					"cmd|none|same": 6,
+					"cmd|obj-inactive|same": 6,
+					"comment|comment|differs": 353,
+					"comment|comment|same": 8404,
+					"dir|dir|differs": 44,
+					"dir|dir|same": 501,
+					"dir|obj-inactive|differs": 9,
+					"dir|obj-inactive|same": 22,
+					"escaped|escaped|same": 77,
+					"operator|none|same": 6,
+					"operator|obj-inactive|same": 1,
+					"operator|syntax-meta|differs": 1,
+					"operator|syntax-meta|same": 75,
+					"string|cmd|same": 3,
+					"string|dir|same": 1,
+					"string|none|same": 643,
+					"string|syntax-meta|differs": 2,
+					"string|syntax-meta|same": 168,
+					"string|variable-undefined|same": 6,
+					"unclassified|arg|same": 99,
+					"unclassified|cmd|same": 13,
+					"unclassified|comment|differs": 5,
+					"unclassified|comment|same": 167,
+					"unclassified|dir|same": 27,
+					"unclassified|escaped|same": 8,
+					"unclassified|none|same": 1431,
+					"unclassified|obj-inactive|differs": 12,
+					"unclassified|obj-inactive|same": 71,
+					"unclassified|syntax-meta|differs": 18,
+					"unclassified|syntax-meta|same": 1300,
+					"unclassified|syntax-obsolete|same": 1,
+					"unclassified|variable-local|differs": 16,
+					"unclassified|variable-local|same": 51,
+					"unclassified|variable-parameter|same": 45,
+					"unclassified|variable-undefined|same": 35,
+					"value|none|same": 643,
+					"value|syntax-meta|same": 45,
+					"variable-auto|variable-auto|same": 48,
+					"variable-global|variable-global|same": 347,
+					"variable-local|variable-local|same": 496,
+					"variable-parameter|variable-parameter|same": 189
+				},
+				"stopped": {
+					"arg-sep|none|same": 39,
+					"arg|none|same": 246,
+					"brace|error|same": 1,
+					"brace|none|same": 42,
+					"cmd|none|same": 347,
+					"comment|none|same": 601,
+					"dir|error|differs": 1,
+					"dir|error|same": 3,
+					"dir|none|same": 316,
+					"escaped|none|same": 30,
+					"operator|error|same": 1,
+					"operator|none|same": 28,
+					"string|none|same": 910,
+					"unclassified|error|same": 9,
+					"unclassified|none|same": 2603,
+					"unclassified|obj-inactive|differs": 18,
+					"value|none|same": 675,
+					"variable-auto|none|same": 14,
+					"variable-local|none|same": 113,
+					"variable-parameter|none|same": 58
+				}
+			}
+		},
+		"7.23.5": {
+			"routerosVersion": "7.23.5",
 			"dev": {
 				"scripts": 42,
 				"bytes": 62735,
@@ -182,8 +360,8 @@
 				}
 			}
 		},
-		"7.24rc2": {
-			"routerosVersion": "7.24rc2",
+		"7.25beta3": {
+			"routerosVersion": "7.25beta3",
 			"dev": {
 				"scripts": 42,
 				"bytes": 62735,
@@ -362,6 +540,12 @@
 		}
 	},
 	"examples": {
+		"arg-sep|syntax-meta|differs": {
+			"text": "=",
+			"runs": 24,
+			"path": "forum/amm0/topic-167597-can-someone-give-me-the-command-line-to-delete-pppoe-out1/post-0014-snippet-01.rsc",
+			"offset": 394
+		},
 		"arg-sep|syntax-meta|same": {
 			"text": "=",
 			"runs": 358,
@@ -380,23 +564,29 @@
 			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
 			"offset": 1820
 		},
+		"arg|arg|differs": {
+			"text": "do",
+			"runs": 6,
+			"path": "forum/rextended/topic-103825-post-0021-snippet-01.rsc",
+			"offset": 225
+		},
 		"arg|arg|same": {
 			"text": "do",
 			"runs": 67,
 			"path": "eworm/ppp-on-up.rsc",
 			"offset": 422
 		},
-		"arg|none|differs": {
-			"text": "enabled",
-			"runs": 1,
-			"path": "forum/amm0/topic-167597-can-someone-give-me-the-command-line-to-delete-pppoe-out1/post-0014-snippet-01.rsc",
-			"offset": 387
-		},
 		"arg|none|same": {
 			"text": "name",
+			"runs": 3,
+			"path": "forum/rextended/topic-145326-post-0056-snippet-01.rsc",
+			"offset": 362
+		},
+		"arg|obj-inactive|differs": {
+			"text": "disabled",
 			"runs": 2,
-			"path": "forum/rextended/topic-149189-post-0007-snippet-02.rsc",
-			"offset": 229
+			"path": "forum/rextended/topic-103825-post-0021-snippet-01.rsc",
+			"offset": 270
 		},
 		"arg|obj-inactive|same": {
 			"text": "default-vlan-id",
@@ -404,11 +594,23 @@
 			"path": "forum/amm0/topic-163038-router-dies-after-10-exact-minutes/post-0011-snippet-01.rsc",
 			"offset": 931
 		},
+		"brace|syntax-meta|differs": {
+			"text": "}",
+			"runs": 10,
+			"path": "forum/amm0/topic-184067-routeros-lsp-for-better-syntax-checking-command-completion-in-editors-like-vscod/post-0020-snippet-01.rsc",
+			"offset": 372
+		},
 		"brace|syntax-meta|same": {
 			"text": "{",
 			"runs": 101,
 			"path": "eworm/ppp-on-up.rsc",
 			"offset": 276
+		},
+		"cmd|cmd|differs": {
+			"text": "set",
+			"runs": 6,
+			"path": "forum/amm0/topic-176267-2fa-configuration-to-mikrotik-router-issue/post-0006-snippet-01.rsc",
+			"offset": 643
 		},
 		"cmd|cmd|same": {
 			"text": "set",
@@ -422,17 +624,35 @@
 			"path": "forum/amm0/topic-163810-7-8beta2-adds-new-package-rose-storage/post-0056-snippet-01.rsc",
 			"offset": 275
 		},
+		"cmd|obj-inactive|differs": {
+			"text": "add",
+			"runs": 1,
+			"path": "forum/rextended/topic-145326-post-0056-snippet-01.rsc",
+			"offset": 358
+		},
 		"cmd|obj-inactive|same": {
 			"text": "get",
 			"runs": 1,
 			"path": "forum/rextended/topic-103825-post-0021-snippet-01.rsc",
 			"offset": 178
 		},
+		"comment|comment|differs": {
+			"text": "# if desired, to prevent radius from cre",
+			"runs": 1,
+			"path": "forum/amm0/topic-176267-2fa-configuration-to-mikrotik-router-issue/post-0006-snippet-01.rsc",
+			"offset": 683
+		},
 		"comment|comment|same": {
 			"text": "# Extracted from: code-block",
 			"runs": 68,
 			"path": "forum/amm0/topic-141645-ip-route-check-command-disappeared/post-0025-snippet-01.rsc",
 			"offset": 188
+		},
+		"dir|dir|differs": {
+			"text": ":",
+			"runs": 14,
+			"path": "forum/amm0/topic-183944-v7-20beta-testing-is-released/post-0052-snippet-01.rsc",
+			"offset": 411
 		},
 		"dir|dir|same": {
 			"text": ":",
@@ -445,6 +665,12 @@
 			"runs": 2,
 			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
 			"offset": 2622
+		},
+		"dir|obj-inactive|differs": {
+			"text": "container",
+			"runs": 1,
+			"path": "forum/amm0/topic-183944-v7-20beta-testing-is-released/post-0052-snippet-01.rsc",
+			"offset": 424
 		},
 		"dir|obj-inactive|same": {
 			"text": "zerotier",
@@ -482,6 +708,12 @@
 			"path": "forum/amm0/topic-168376-find-addresses-with-same-octets/post-0027-snippet-04.rsc",
 			"offset": 864
 		},
+		"operator|syntax-meta|differs": {
+			"text": "=",
+			"runs": 3,
+			"path": "forum/rextended/topic-145326-post-0056-snippet-01.rsc",
+			"offset": 239
+		},
 		"operator|syntax-meta|same": {
 			"text": "=",
 			"runs": 41,
@@ -518,6 +750,12 @@
 			"path": "forum/amm0/topic-155978-zerotier-on-mikrotik-a-rosetta-stone-v7-1-1/post-0001-snippet-01.rsc",
 			"offset": 1797
 		},
+		"string|syntax-meta|differs": {
+			"text": "\"",
+			"runs": 4,
+			"path": "forum/amm0/topic-167597-can-someone-give-me-the-command-line-to-delete-pppoe-out1/post-0014-snippet-01.rsc",
+			"offset": 415
+		},
 		"string|syntax-meta|same": {
 			"text": "\"",
 			"runs": 311,
@@ -530,6 +768,12 @@
 			"path": "forum/amm0/topic-155978-zerotier-on-mikrotik-a-rosetta-stone-v7-1-1/post-0001-snippet-01.rsc",
 			"offset": 1572
 		},
+		"unclassified|arg|differs": {
+			"text": "options",
+			"runs": 1,
+			"path": "forum/amm0/topic-261912-amm0-s-forum-plugins-tests-routeros-graphviz-diagrams-colors/post-0001-snippet-02.rsc",
+			"offset": 546
+		},
 		"unclassified|arg|same": {
 			"text": "where",
 			"runs": 11,
@@ -541,6 +785,12 @@
 			"runs": 2,
 			"path": "forum/amm0/topic-162737-need-some-scripting-help-bounty-available/post-0002-snippet-01.rsc",
 			"offset": 815
+		},
+		"unclassified|comment|differs": {
+			"text": "\n",
+			"runs": 5,
+			"path": "forum/amm0/topic-176267-2fa-configuration-to-mikrotik-router-issue/post-0006-snippet-01.rsc",
+			"offset": 549
 		},
 		"unclassified|comment|same": {
 			"text": "\n",
@@ -561,14 +811,14 @@
 			"offset": 674
 		},
 		"unclassified|none|differs": {
-			"text": "name",
-			"runs": 4,
-			"path": "forum/amm0/topic-176267-2fa-configuration-to-mikrotik-router-issue/post-0006-snippet-01.rsc",
-			"offset": 363
+			"text": "wlan1",
+			"runs": 1,
+			"path": "forum/rextended/topic-103825-post-0017-snippet-01.rsc",
+			"offset": 291
 		},
 		"unclassified|none|same": {
 			"text": " ",
-			"runs": 1221,
+			"runs": 1283,
 			"path": "eworm/ppp-on-up.rsc",
 			"offset": 248
 		},
@@ -584,6 +834,12 @@
 			"path": "forum/amm0/topic-163178-routing-rule-use-cases/post-0006-snippet-01.rsc",
 			"offset": 276
 		},
+		"unclassified|obj-inactive|differs": {
+			"text": "name",
+			"runs": 5,
+			"path": "forum/amm0/topic-176267-2fa-configuration-to-mikrotik-router-issue/post-0006-snippet-01.rsc",
+			"offset": 363
+		},
 		"unclassified|obj-inactive|same": {
 			"text": "adding",
 			"runs": 3,
@@ -591,10 +847,10 @@
 			"offset": 520
 		},
 		"unclassified|syntax-meta|differs": {
-			"text": "-",
-			"runs": 1,
-			"path": "forum/rextended/topic-103825-post-0017-snippet-01.rsc",
-			"offset": 285
+			"text": "]",
+			"runs": 14,
+			"path": "forum/amm0/topic-167597-can-someone-give-me-the-command-line-to-delete-pppoe-out1/post-0014-snippet-01.rsc",
+			"offset": 423
 		},
 		"unclassified|syntax-meta|same": {
 			"text": "$",
@@ -608,6 +864,12 @@
 			"path": "forum/amm0/topic-162737-need-some-scripting-help-bounty-available/post-0002-snippet-01.rsc",
 			"offset": 1783
 		},
+		"unclassified|variable-local|differs": {
+			"text": "comment",
+			"runs": 1,
+			"path": "forum/amm0/topic-183944-v7-20beta-testing-is-released/post-0052-snippet-01.rsc",
+			"offset": 395
+		},
 		"unclassified|variable-local|same": {
 			"text": "default-name",
 			"runs": 13,
@@ -620,12 +882,6 @@
 			"path": "forum/amm0/topic-267809-netinstall-for-macos/post-0014-snippet-01.rsc",
 			"offset": 225
 		},
-		"unclassified|variable-undefined|differs": {
-			"text": "default",
-			"runs": 2,
-			"path": "forum/amm0/topic-163038-router-dies-after-10-exact-minutes/post-0011-snippet-01.rsc",
-			"offset": 1364
-		},
 		"unclassified|variable-undefined|same": {
 			"text": "....................",
 			"runs": 1,
@@ -637,6 +893,12 @@
 			"runs": 25,
 			"path": "forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc",
 			"offset": 2408
+		},
+		"value|syntax-meta|differs": {
+			"text": "\"",
+			"runs": 6,
+			"path": "forum/amm0/topic-261912-amm0-s-forum-plugins-tests-routeros-graphviz-diagrams-colors/post-0001-snippet-02.rsc",
+			"offset": 604
 		},
 		"value|syntax-meta|same": {
 			"text": "\"",
@@ -662,11 +924,23 @@
 			"path": "forum/amm0/topic-155978-zerotier-on-mikrotik-a-rosetta-stone-v7-1-1/post-0001-snippet-01.rsc",
 			"offset": 1925
 		},
+		"variable-local|variable-local|differs": {
+			"text": "varID",
+			"runs": 6,
+			"path": "forum/rextended/topic-145326-post-0056-snippet-01.rsc",
+			"offset": 261
+		},
 		"variable-local|variable-local|same": {
 			"text": "ret",
 			"runs": 28,
 			"path": "forum/amm0/topic-162737-need-some-scripting-help-bounty-available/post-0002-snippet-01.rsc",
 			"offset": 1118
+		},
+		"variable-parameter|variable-parameter|differs": {
+			"text": "varName",
+			"runs": 3,
+			"path": "forum/rextended/topic-145326-post-0056-snippet-01.rsc",
+			"offset": 216
 		},
 		"variable-parameter|variable-parameter|same": {
 			"text": "1",
