@@ -79,6 +79,7 @@ export {
 	type EnvelopeMeta,
 	type EnvelopeTargetMeta,
 	type EnvelopeValidationMeta,
+	type EnvelopeValidationStage,
 	type FanoutData,
 	type FanoutSummary,
 	normalizeWarnings,
@@ -485,6 +486,14 @@ export {
 	explainOutputFormats,
 	renderExplainEnvelope,
 } from "./explain.ts";
+export {
+	assertOfflineSyntax,
+	isOfflineGateRejection,
+	OFFLINE_GATE_SOURCE,
+	type OfflineGateFinding,
+	type OfflineGateResult,
+	type ValidationStageName,
+} from "./offline-gate.ts";
 export {
 	type ApiVerb,
 	createProtocolAdapter,

@@ -554,7 +554,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "validation/syntax",
-		summary: "RouterOS rejected the command syntax during the :parse gate.",
+		summary:
+			"The command syntax was rejected by the validation gate — offline analysis, or the RouterOS :parse probe.",
 	},
 	{
 		code: "validation/unknown-attribute",

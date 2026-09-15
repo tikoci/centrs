@@ -111,6 +111,27 @@ export interface EnvelopeTargetMeta {
 	sources?: Record<string, SettingSource>;
 }
 
+/**
+ * One stage of the two-stage validation gate (GH#354).
+ *
+ * `offline` is the corpus-gated analyzer (`src/offline-gate.ts`): it opens no
+ * connection, so a `failed` offline stage means the device was never contacted.
+ * `device` is the RouterOS-side preflight — `:put [:parse …]` and/or
+ * `/console/inspect request=child`, depending on the command and transport.
+ *
+ * Stages appear in the order they run, and a stage that did not run is still
+ * listed with `result: "skipped"`. That is the point of the array: a reader must
+ * be able to tell "the device accepted it" from "the device was never asked".
+ */
+export interface EnvelopeValidationStage {
+	stage: "offline" | "device";
+	/** Validator identity, e.g. `offline explain (canonicalizer)` or `:put [:parse]`. */
+	source: string;
+	result: "passed" | "failed" | "skipped";
+	/** Why a stage was skipped, when the reason is not simply `validate=false`. */
+	reason?: string;
+}
+
 export interface EnvelopeValidationMeta {
 	enabled: boolean;
 	/** Validator identity, e.g. `/console/inspect` or `:put [:parse]`. */
@@ -121,6 +142,15 @@ export interface EnvelopeValidationMeta {
 	/** Semantic `/console/inspect` gate status, or not-applicable for script mode. */
 	semantic?: boolean | "not-applicable";
 	availableAttributes?: readonly string[];
+	/**
+	 * Per-stage detail for the gate described in
+	 * `docs/CONSTITUTION.md` → "Validation is the product".
+	 *
+	 * The flat `source` / `syntax` / `semantic` fields above stay the summary
+	 * view and keep their meaning; this is the breakdown behind them. Absent on
+	 * surfaces that have no RouterOS-command gate at all (`btest`).
+	 */
+	stages?: readonly EnvelopeValidationStage[];
 }
 
 export interface EnvelopeTimingMeta {

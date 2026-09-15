@@ -41,6 +41,36 @@ validate → run → re-validate-server-side. Analysis-only `explain` never runs
 the analyzed input; offline analysis opens no connection. Validation on the
 runners is not optional polish.
 
+The `validate` step itself has **two stages, in this order** (GH#354):
+
+1. **Offline** — the same corpus-gated analyzer `explain` publishes, run over
+   the input with no connection (`src/offline-gate.ts`). A rejection is a byte
+   span and no round trip; the protocol adapter is never dialed. This stage runs
+   on every transport, for `execute` and for `api`'s `/execute` script mode.
+2. **Device** — the RouterOS-side probe below: `:put [:parse "…"]` and/or
+   `/console/inspect request=child`, depending on the command shape and the
+   transport.
+
+The stages are not interchangeable and neither subsumes the other. Offline has
+no per-menu schema (decision 3 — no offline schema snapshot), so it cannot see
+an unknown attribute; the device probe is version-fragile (GH#343), so where it
+is unsafe the offline stage is what keeps the gate from degrading to nothing. A
+clean offline pass is **necessary, never sufficient** — `explain` publishes
+`runtimeAcceptance: "not-proven"` for exactly this reason. An offline `warn` is
+an ABSTENTION and passes through to the device stage; only a `fail` rejects.
+
+`meta.validation.stages[]` reports what each stage concluded, including a stage
+that was skipped and why. A reader must always be able to tell "the device
+accepted it" from "the device was never asked".
+
+`--validate=false` disables **both** stages — one flag, one meaning. A bypass
+that covered only the device stage would leave a caller stranded behind a
+stage-1 defect with no escape at all, and the analyzer is demonstrably wrong in
+both directions today (GH#355 is a live false accept, GH#351 a live false
+reject). That is a reason for the flag to reach both stages, not a license to
+use it: the rule below still holds — a wrong rejection is fixed in the
+validator, with CHR evidence.
+
 - `retrieve` and other read-shaped calls validate against
   `/console/inspect request=syntax path=...,print` (path joined by commas) and
   attribute inspection. The path syntax (commas, no leading slash, last token

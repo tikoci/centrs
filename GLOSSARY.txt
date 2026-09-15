@@ -755,4 +755,5 @@ dgram # Node's `node:dgram` UDP socket module — reached by `mac-telnet`, and o
 # NON-words: each is the rejected half of a CHR-confirmed accepted/rejected
 # pair, so its spelling is load-bearing and must not be "corrected".
 elsy # the misspelled `else` in `:if (1=1) do={…} elsy {…}` — rejected as `expected end of command` on CHR 7.21.5/7.23.5/7.24.2/7.25beta3, which is what proves the bare-brace `else {` acceptance is a real device fact and not a probe artifact (#347)
+prnt # a misspelt `print` verb — `/ip/address/prnt` is the offline analyzer's ABSTENTION fixture (`verdict: warn`, not `fail`), which is what proves the two-stage validation gate passes an abstention through to the device rather than refusing it (#354)
 zzznotamenu # a menu name no RouterOS build has — `/ip { zzznotamenu { print } }` is a `syntax error` on device, so menu-scope resolution is schema-dependent and a catalog MISS must abstain rather than accept (#348)

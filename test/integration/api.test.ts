@@ -11,6 +11,15 @@ import {
 
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
 
+interface ValidationStages {
+	stages?: readonly {
+		stage: string;
+		source: string;
+		result: string;
+		reason?: string;
+	}[];
+}
+
 interface SuccessEnvelope {
 	ok: true;
 	data: unknown;
@@ -20,7 +29,7 @@ interface SuccessEnvelope {
 			source?: string;
 			semantic?: boolean | string;
 			enabled?: boolean;
-		};
+		} & ValidationStages;
 		operation?: { request?: { path?: string } };
 	};
 }
@@ -28,7 +37,7 @@ interface SuccessEnvelope {
 interface FailureEnvelope {
 	ok: false;
 	error: { code?: string; context?: Record<string, unknown> };
-	meta: { via: string | null };
+	meta: { via: string | null; validation?: ValidationStages };
 }
 
 function expectApiSuccess(
@@ -308,6 +317,42 @@ describeFast("api against CHR (rest-api)", () => {
 			);
 			expect(JSON.stringify(script.data)).toContain(identity);
 			expect(script.meta.validation?.semantic).toBe("not-applicable");
+			// The device stage has nothing to inspect for a CLI string, so the
+			// offline analyzer is the whole gate on this surface (GH#354).
+			expect(script.meta.validation?.stages?.[0]).toMatchObject({
+				stage: "offline",
+				result: "passed",
+			});
+			expect(script.meta.validation?.stages?.[1]).toMatchObject({
+				stage: "device",
+				result: "skipped",
+			});
+
+			// 16b. The /execute script is gated offline, and the gate opens no
+			// connection — an unreachable port still yields the syntax rejection
+			// rather than a `transport/*` code. Before GH#354 this surface ran no
+			// preflight at all and the script reached the device.
+			const offlineScript = expectApiFailure(
+				await apiEnvelope({
+					...base,
+					targetInput: "127.0.0.1:1",
+					endpoint: "execute",
+					method: "POST",
+					fields: { script: ":put [" },
+					yes: true,
+				}),
+				"validation/syntax",
+			);
+			expect(offlineScript.error.context?.["validationStage"]).toBe("offline");
+			expect(offlineScript.error.context?.["surface"]).toBe("api /execute");
+			expect(offlineScript.error.context?.["span"]).toEqual({
+				start: 5,
+				end: 6,
+			});
+			expect(offlineScript.meta.validation?.stages?.[1]).toMatchObject({
+				stage: "device",
+				result: "skipped",
+			});
 
 			// 17. --via rest-api --listen is rejected.
 			expectApiFailure(
@@ -425,7 +470,7 @@ describeFast("api against CHR (rest-api)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(21),
+				exampleIds: [...exampleIds(21), "16b"],
 			});
 		} finally {
 			await chr.destroy();

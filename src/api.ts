@@ -35,6 +35,11 @@ import { toYaml } from "./core/yaml.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import { promptForWriteConfirmation } from "./execute.ts";
 import {
+	assertOfflineSyntax,
+	isOfflineGateRejection,
+	OFFLINE_GATE_SOURCE,
+} from "./offline-gate.ts";
+import {
 	type ApiVerb,
 	createProtocolAdapter,
 	type ProtocolAdapter,
@@ -962,13 +967,46 @@ async function validateApiRequest(
 	backend: ProtocolAdapter,
 ): Promise<ApiValidationResult> {
 	if (resolved.scriptMode) {
+		// `/execute` carries a CLI string, so `/console/inspect` has nothing to
+		// inspect — which until GH#354 meant the script was sent with NO gate at
+		// all (`syntax: false`, `semantic: "not-applicable"`, `result: "passed"`).
+		// The offline analyzer is the whole gate here: a syntax fault is now a
+		// byte span and no round trip, where before it reached the device.
+		const script = scriptOf(resolved);
+		const offline = script
+			? assertOfflineSyntax(script, {
+					surface: "api /execute",
+					via: resolved.via.value,
+				})
+			: undefined;
+		const offlineReason =
+			offline === undefined
+				? "no `script` field to analyze"
+				: offline.verdict === "warn"
+					? "analyzer abstained on part of the input"
+					: undefined;
 		return {
 			validation: {
 				enabled: true,
-				source: "/console/inspect (script, not-applicable)",
+				source: offline === undefined ? "not-applicable" : OFFLINE_GATE_SOURCE,
 				result: "passed",
-				syntax: false,
+				syntax: offline !== undefined,
 				semantic: "not-applicable",
+				stages: [
+					{
+						stage: "offline",
+						source: OFFLINE_GATE_SOURCE,
+						result: offline === undefined ? "skipped" : "passed",
+						...(offlineReason ? { reason: offlineReason } : {}),
+					},
+					{
+						stage: "device",
+						source: "/console/inspect request=child",
+						result: "skipped",
+						reason:
+							"`/execute` is a CLI string, not a menu path; RouterOS re-validates it on the run",
+					},
+				],
 			},
 			tips: [],
 		};
@@ -1100,6 +1138,21 @@ async function validateApiRequest(
 		},
 		tips,
 	};
+}
+
+/**
+ * The `/execute` script body, when there is one to analyze.
+ *
+ * A missing or blank `script` is not this gate's error to raise:
+ * {@link buildProtocolApiRequest} already rejects it with an actionable
+ * `input/invalid-command` naming the three ways to pass one. Reporting a syntax
+ * fault for an absent field would be the wrong diagnosis.
+ */
+function scriptOf(resolved: ResolvedApiRequest): string | undefined {
+	const script = resolved.body["script"];
+	return typeof script === "string" && script.trim().length > 0
+		? script
+		: undefined;
 }
 
 function unknownPathError(resolved: ResolvedApiRequest): CentrsError {
@@ -1345,17 +1398,83 @@ export function buildApiErrorEnvelopeFromResolved(
 		error: serializeCentrsError(centrsError),
 		warnings: [...resolved.warnings],
 		tips: [],
-		meta: metaFromResolved(resolved, {
-			enabled: resolved.validate.value,
-			source: resolved.validate.value ? "/console/inspect" : "disabled",
-			result: resolved.validate.value ? "failed" : "skipped",
+		meta: metaFromResolved(
+			resolved,
+			failedApiValidationMeta(resolved, centrsError),
+		),
+	};
+}
+
+/**
+ * `meta.validation` for an api error envelope. A stage-1 rejection opened no
+ * connection, so the meta must not report `/console/inspect` as the validator
+ * that failed (GH#354).
+ */
+function failedApiValidationMeta(
+	resolved: ResolvedApiRequest,
+	error: CentrsError,
+): EnvelopeValidationMeta {
+	if (!resolved.validate.value) {
+		return {
+			enabled: false,
+			source: "disabled",
+			result: "skipped",
 			syntax: false,
-			semantic: resolved.validate.value
-				? resolved.scriptMode
-					? "not-applicable"
-					: false
-				: false,
-		}),
+			semantic: false,
+		};
+	}
+	if (isOfflineGateRejection(error)) {
+		return {
+			enabled: true,
+			source: OFFLINE_GATE_SOURCE,
+			result: "failed",
+			syntax: false,
+			semantic: "not-applicable",
+			stages: [
+				{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "failed" },
+				{
+					stage: "device",
+					source: "/console/inspect request=child",
+					result: "skipped",
+					reason: "offline analysis rejected the script; no connection opened",
+				},
+			],
+		};
+	}
+	// `stages` is only asserted when a `validation/*` error identifies the device
+	// stage as the rejecter. This builder also catches everything downstream — a
+	// RouterOS fault on the run, a transport drop — which passed both stages.
+	const deviceRejected = error.code.startsWith("validation/");
+	return {
+		enabled: true,
+		source: "/console/inspect",
+		result: "failed",
+		syntax: false,
+		semantic: resolved.scriptMode ? "not-applicable" : false,
+		...(deviceRejected
+			? {
+					stages: [
+						{
+							stage: "offline" as const,
+							source: OFFLINE_GATE_SOURCE,
+							result: resolved.scriptMode
+								? ("passed" as const)
+								: ("skipped" as const),
+							...(resolved.scriptMode
+								? {}
+								: {
+										reason:
+											"structured path request; not a CLI string (GH#354)",
+									}),
+						},
+						{
+							stage: "device" as const,
+							source: "/console/inspect request=child",
+							result: "failed" as const,
+						},
+					],
+				}
+			: {}),
 	};
 }
 

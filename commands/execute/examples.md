@@ -364,6 +364,59 @@ centrs execute 127.0.0.1 '/ip/address/add address=198.51.100.51/32 interface=eth
 Envelope: `ok: false`, `error.code=validation/unknown-attribute`, `meta.via=ssh`,
 and no address is added — the console `:parse` gate catches `bogus` pre-mutation.
 
+## Offline gate (stage 1)
+
+Validation runs offline before it runs on the device
+([`docs/CONSTITUTION.md` → Validation is the product](../../docs/CONSTITUTION.md#validation-is-the-product),
+GH#354). These two prove the stage exists and that a stage-1 rejection reaches no
+router. Run by `test/integration/execute.test.ts`.
+
+### V1. Offline reject, with the device stage never asked
+
+`:put [` is an unclosed bracket. The old local quote preflight counted quotes
+only, so this used to cost a full round trip to be told no; the analyzer rejects
+it with a byte span before anything is dialed.
+
+```bash
+centrs execute $R ':put [' --via rest-api --username $U --password $P --json
+```
+
+Envelope: `ok: false`, `error.code=validation/syntax`,
+`error.context.validationStage="offline"`,
+`error.context.span={"start":5,"end":6}`,
+`error.context.diagnostics[0].code="explain/canonicalizer/unclosed"`,
+`error.position` absent (the offline byte offset is never dressed up as a
+RouterOS-reported one), `meta.validation.source` is the offline analyzer, and
+`meta.validation.stages` is `offline: failed` followed by `device: skipped`.
+
+### V2. The same rejection with no reachable router at all
+
+The proof that stage 1 opens no connection: point the same command at a port
+nothing is listening on. A gate that dialed first would report a
+`transport/*` error or hang until the timeout.
+
+```bash
+centrs execute 127.0.0.1:1 ':put [' --via rest-api --username $U --password $P --json
+```
+
+Envelope: identical to V1 — `ok: false`, `error.code=validation/syntax`,
+`error.context.validationStage="offline"` — and **not** a `transport/*` code.
+
+### V3. `--validate=false` disables the offline stage too
+
+One flag, one meaning. The escape hatch has to reach stage 1, or a caller hitting
+an analyzer defect would have no way past it. RouterOS then rejects the command
+itself on the run.
+
+```bash
+centrs execute $R ':put [' --via rest-api --username $U --password $P --json --validate=false
+```
+
+Envelope: `ok: false`, `error.code=routeros/request-failed` with RouterOS's own
+`syntax error (line 1 column 7)` in the summary — the **device** rejecting it, not
+centrs — plus `meta.validation.enabled=false`, `meta.validation.result="skipped"`,
+and no `meta.validation.stages`.
+
 ## Target selection (fan-out)
 
 These exercise the shared target-selection grammar
