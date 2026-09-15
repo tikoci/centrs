@@ -125,6 +125,23 @@ export interface ApiRequest {
 	confirm?: (prompt: string) => Promise<boolean>;
 }
 
+/**
+ * The `--raw` / `--validate` precedence for a summary built BEFORE (or instead
+ * of) full resolution — a usage error, or a fan-out member that never reached
+ * `resolveApiRequest`.
+ *
+ * Ambient sources are deliberately out of reach here: this runs where the CDB
+ * and config tiers have not been loaded, so it reports the two layers it CAN
+ * see. That is why it is a shared helper rather than an inlined expression —
+ * both call sites used to spell `request.raw ? false : …`, which contradicted
+ * the resolved request by reporting `validate: false` for an explicit
+ * `--raw --validate=true` (#154).
+ */
+function summarizedValidate(request: ApiRequest): boolean {
+	if (request.validate !== undefined) return request.validate;
+	return !(request.raw ?? false);
+}
+
 export interface NormalizedApiEndpoint {
 	/** Canonical slash path with the leading `/rest` and any trailing id/`listen` removed. */
 	path: string;
@@ -591,19 +608,24 @@ export async function resolveApiRequest(
 	// contract for any other preflight failure. `--raw` still outranks the
 	// ambient sources rather than merely lowering the default, so it behaves the
 	// same on every machine regardless of a `CENTRS_VALIDATE` in the environment.
-	const requestedValidate = resolveBooleanSetting(
-		request.validate,
-		env,
-		"CENTRS_VALIDATE",
-		true,
-		"validate",
-		cdbResolution?.overrides.validate,
-		config,
-	);
+	//
+	// The `--raw` arm must SHORT-CIRCUIT, not merely win a comparison: resolving
+	// the ambient layer first would parse `CENTRS_VALIDATE` even when `--raw`
+	// decides the value, so a malformed ambient value threw `settings/invalid-
+	// boolean` out of a call `--raw` had already settled — the same
+	// machine-dependence this layer exists to remove.
 	const validate: ResolvedSetting<boolean> =
 		raw && request.validate === undefined
 			? { value: false, source: { kind: "cli", key: "--raw" } }
-			: requestedValidate;
+			: resolveBooleanSetting(
+					request.validate,
+					env,
+					"CENTRS_VALIDATE",
+					true,
+					"validate",
+					cdbResolution?.overrides.validate,
+					config,
+				);
 	const timeoutMs = resolveApiTimeout(
 		request.timeout,
 		env,
@@ -1300,7 +1322,7 @@ export function buildApiErrorEnvelope(
 						: false,
 					listen: request.listen ?? false,
 					yes: request.yes ?? false,
-					validate: request.raw ? false : (request.validate ?? true),
+					validate: summarizedValidate(request),
 					raw: request.raw ?? false,
 					format: resolveErrorFormat(request, env),
 				},
@@ -1526,7 +1548,7 @@ export function apiRequestSummaryFromRequest(
 		write: parsed ? isApiMutating(parsed, normalized.path) : false,
 		listen,
 		yes: request.yes ?? false,
-		validate: request.raw ? false : (request.validate ?? true),
+		validate: summarizedValidate(request),
 		raw: request.raw ?? false,
 		format: resolveErrorFormat(request, env),
 		query: buildApiQuery(request),

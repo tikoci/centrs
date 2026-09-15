@@ -209,6 +209,20 @@ proplist). Combining an id with `--query`/`--proplist` folds the id into the RES
 matching the native `?.id=` read. (Plain id-only reads still use the `GET …/$ID`
 URL form; see example 5's re-read.)
 
+### 22. `--raw --validate=true` still runs the gate (#154)
+
+```bash
+centrs api $R ip/no-such-menu --raw --validate=true --username $U --password $P
+```
+
+`--raw` only **defaults** `--validate` to false, so an explicit `--validate=true`
+wins and the `/console/inspect` preflight runs. The rejection comes back in the
+`--raw` error shape, not the envelope: stdout empty, stderr a compact
+`{"code":"validation/unknown-path","message":…}`, nonzero exit, and no `data`
+key. Contrast example 13, where bare `--raw` skips the preflight entirely. This
+pair is how you tell a RouterOS rejection from a centrs bug while staying on the
+bare-passthrough surface.
+
 ## native-api (`--via native-api`)
 
 The same contract over the binary API. Validation still runs through

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { apiEnvelope } from "../../src/api.ts";
+import { apiEnvelope, renderApiEnvelope } from "../../src/api.ts";
 import {
 	exampleIds,
 	isChrIntegrationEnabled,
@@ -63,7 +63,7 @@ function idOf(data: unknown): string {
 }
 
 describeFast("api against CHR (rest-api)", () => {
-	test("runs rest-api examples 1-21", async () => {
+	test("runs rest-api examples 1-22", async () => {
 		const started = await startIntegrationChr();
 		const chr = started.chr;
 		try {
@@ -382,6 +382,29 @@ describeFast("api against CHR (rest-api)", () => {
 			expect(projectedRow["address"]).toBe("198.51.100.11/32");
 			for (const key of Object.keys(projectedRow)) {
 				expect(["address", ".id"]).toContain(key);
+			}
+
+			// 22. `--raw --validate=true`: `--raw` only DEFAULTS validation off, so
+			// the explicit flag wins and the preflight still runs and still
+			// rejects. Contrast 13, where bare `--raw` skips it (#154).
+			const rawValidated = await apiEnvelope({
+				...base,
+				endpoint: "ip/no-such-menu",
+				raw: true,
+				validate: true,
+			});
+			expect(rawValidated.ok).toBe(false);
+			expect(rawValidated.meta.validation?.enabled).toBe(true);
+			if (!rawValidated.ok) {
+				expect(rawValidated.error.code).toBe("validation/unknown-path");
+				// The `--raw` render of that rejection is the compact payload: a
+				// `{code,message}` object with no envelope keys around it.
+				const payload = JSON.parse(
+					renderApiEnvelope(rawValidated, "json", { raw: true }),
+				);
+				expect(payload.code).toBe("validation/unknown-path");
+				expect(payload).not.toHaveProperty("data");
+				expect(payload).not.toHaveProperty("ok");
 			}
 
 			// Clean up the rows added above.
