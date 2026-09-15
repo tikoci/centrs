@@ -4,6 +4,7 @@ import {
 	apiEnvelope,
 	buildApiBody,
 	buildApiErrorEnvelope,
+	buildApiErrorEnvelopeFromResolved,
 	buildApiQuery,
 	buildProtocolApiRequest,
 	isApiMutating,
@@ -11,7 +12,9 @@ import {
 	normalizeApiEndpoint,
 	type ResolvedApiRequest,
 	renderApiEnvelope,
+	resolveApiRequest,
 } from "../../src/api.ts";
+import { CentrsError } from "../../src/errors.ts";
 
 describe("normalizeApiEndpoint", () => {
 	test("lenient variants canonicalize to one slash path", () => {
@@ -365,5 +368,153 @@ describe("renderApiEnvelope --raw", () => {
 		const parsed = JSON.parse(rendered) as { code: string; message: string };
 		expect(parsed.code).toBe("routeros/invalid-value");
 		expect(parsed.message).toBe("bad value");
+	});
+});
+
+describe("`--raw` is a precedence layer for --validate, not an override (#154)", () => {
+	// `--raw` strips the envelope and was always MEANT to default validation off,
+	// but `--raw --validate=true` is the intended way to debug `api` when centrs
+	// itself is suspect — the gate runs and the failure renders through the
+	// `--raw` error contract. The old code short-circuited the whole resolution
+	// ladder, silently discarding an explicit `--validate=true` along with env,
+	// CDB comment-kv and config.
+	const base = {
+		endpoint: "/ip/address",
+		host: "192.0.2.1",
+		username: "u",
+		password: "p",
+	} as const;
+
+	test("an explicit --validate outranks --raw in both directions", async () => {
+		const on = await resolveApiRequest(
+			{ ...base, raw: true, validate: true },
+			{},
+		);
+		expect(on.validate.value).toBe(true);
+		expect(on.validate.source.kind).toBe("explicit");
+
+		const off = await resolveApiRequest(
+			{ ...base, raw: true, validate: false },
+			{},
+		);
+		expect(off.validate.value).toBe(false);
+		expect(off.validate.source.kind).toBe("explicit");
+	});
+
+	test("--raw alone still defaults validation off, and says so", async () => {
+		const resolved = await resolveApiRequest({ ...base, raw: true }, {});
+		expect(resolved.validate.value).toBe(false);
+		// The provenance is kept: "off because --raw", not an anonymous default.
+		expect(resolved.validate.source).toEqual({ kind: "cli", key: "--raw" });
+	});
+
+	test("--raw outranks the ambient sources, so it behaves the same everywhere", async () => {
+		const resolved = await resolveApiRequest(
+			{ ...base, raw: true },
+			{
+				CENTRS_VALIDATE: "true",
+			},
+		);
+		expect(resolved.validate.value).toBe(false);
+		expect(resolved.validate.source).toEqual({ kind: "cli", key: "--raw" });
+	});
+
+	test("a rejection under --raw --validate=true is the raw error contract", async () => {
+		// #154's actual deliverable: it is not enough that the gate RUNS — the
+		// rejection has to come back in the `--raw` shape, or the flag pair is
+		// useless for the debugging it exists for. No new rendering code was
+		// added for this; the assertion is that the existing contract covers a
+		// validation rejection exactly as it covers any other preflight failure.
+		const resolved = await resolveApiRequest(
+			{ ...base, raw: true, validate: true },
+			{},
+		);
+		expect(resolved.validate.value).toBe(true);
+
+		const envelope = buildApiErrorEnvelopeFromResolved(
+			resolved,
+			new CentrsError({
+				code: "validation/unknown-attribute",
+				summary: "Unknown RouterOS attribute nope for /ip/address/print.",
+				remediation: "Check the attribute name against `/console/inspect`.",
+			}),
+		);
+		// The summary must agree with the request that was actually made.
+		expect(envelope.meta.operation?.request.validate).toBe(true);
+		expect(envelope.meta.operation?.request.raw).toBe(true);
+
+		const rendered = JSON.parse(
+			renderApiEnvelope(envelope, "json", { raw: true }),
+		);
+		expect(rendered).toMatchObject({
+			code: "validation/unknown-attribute",
+			message: "Unknown RouterOS attribute nope for /ip/address/print.",
+		});
+		// No envelope, and above all no `data` key — the CLI keys its exit code
+		// and its stdout/stderr split off `ok`, which the raw payload drops.
+		expect(rendered).not.toHaveProperty("data");
+		expect(rendered).not.toHaveProperty("ok");
+	});
+
+	test("a pre-resolution summary reports the same precedence", () => {
+		// `buildApiErrorEnvelope` and `apiRequestSummaryFromRequest` run where the
+		// CDB and config tiers are not loaded, so they used to spell the coupling a
+		// second time as `raw ? false : …` — and contradicted the resolved request
+		// for `--raw --validate=true`.
+		const envelope = buildApiErrorEnvelope(
+			{ ...base, raw: true, validate: true },
+			new CentrsError({ code: "usage/invalid-flag", summary: "nope." }),
+			{},
+		);
+		expect(envelope.meta.operation?.request.validate).toBe(true);
+
+		const off = buildApiErrorEnvelope(
+			{ ...base, raw: true },
+			new CentrsError({ code: "usage/invalid-flag", summary: "nope." }),
+			{},
+		);
+		expect(off.meta.operation?.request.validate).toBe(false);
+	});
+
+	test("a malformed ambient value cannot break a call --raw already settled", async () => {
+		// The `--raw` arm has to SHORT-CIRCUIT rather than win a comparison:
+		// resolving the ambient layer first parsed `CENTRS_VALIDATE` even when
+		// `--raw` decided the value, so a junk env var threw out of a call that
+		// never needed it — reintroducing the machine-dependence this layer removes.
+		const resolved = await resolveApiRequest(
+			{ ...base, raw: true },
+			{
+				CENTRS_VALIDATE: "maybe",
+			},
+		);
+		expect(resolved.validate.value).toBe(false);
+		// An explicit `--validate` short-circuits the ladder for the same reason,
+		// so it does not read the junk value either — that is how every setting
+		// resolves, not something special to `--raw`.
+		const explicit = await resolveApiRequest(
+			{ ...base, raw: true, validate: true },
+			{ CENTRS_VALIDATE: "maybe" },
+		);
+		expect(explicit.validate.value).toBe(true);
+
+		// The junk value is still reported where it is actually consulted: no
+		// `--raw`, no explicit flag, so the ambient layer is the deciding one.
+		expect(
+			resolveApiRequest({ ...base }, { CENTRS_VALIDATE: "maybe" }),
+		).rejects.toThrow(/boolean/i);
+	});
+
+	test("without --raw the ladder is untouched", async () => {
+		expect((await resolveApiRequest({ ...base }, {})).validate.value).toBe(
+			true,
+		);
+		const env = await resolveApiRequest(
+			{ ...base },
+			{
+				CENTRS_VALIDATE: "false",
+			},
+		);
+		expect(env.validate.value).toBe(false);
+		expect(env.validate.source.kind).toBe("env");
 	});
 });

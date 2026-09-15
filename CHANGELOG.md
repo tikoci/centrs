@@ -26,6 +26,44 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Fixed
 
+- **Offline `explain` no longer rejects two RouterOS spellings every tested
+  build accepts.** Measured, not guessed: running the analyzer over all 948
+  corpus scripts and comparing to each build's own `:parse` verdict found four
+  device-accepted scripts that offline analysis hard-failed, identical on
+  7.23.5, 7.24.2 and 7.25beta3. They were two language gaps, and both are now
+  fixed — the count is 1, and the one that remains is the device tolerating a
+  genuinely extra `}`, where explain is arguably the stricter of the two.
+  - A scope slot may drop the `=` before its brace: `:if (…) do={…} else {…}`
+    and `do {…}` are the same construct as the documented `else={…}` form.
+    `:parse` lowers all of the spellings to byte-identical IL on CHR 7.21.5,
+    7.23.5, 7.24.2 and 7.25beta3, with `elsy {` rejected on all four as the
+    control. Only the four `SCOPE_ARG_NAMES` members may drop it, so
+    `:local z {1;2}` still reads its brace as an array literal, and a colon
+    disqualifies the word — the device parses `do {…}` but refuses `:do {…}` in
+    an argument slot, since a colon makes it a directive (#347).
+  - A relative menu-scope block composes the path: `/ip { address { print } }`
+    is `(evl (evl (evl /ip/address/print)))` on the device, and a block body may
+    open with a submenu, one of the thirteen frozen CRUD verbs, a scripting
+    directive, or an absolute command. The absolute spelling already worked; the
+    nested relative one hard-failed. An unknown menu still does not become a
+    pass — the catalog's "a miss says nothing" contract means it abstains rather
+    than being claimed either way (#348).
+
+  As a side effect the offline token partition agrees with the device on 8 more
+  bytes of the committed slice, all of them moving out of *offline-silent* into
+  *agree*, with no new disagreements.
+
+- **`centrs api --raw` no longer silently discards an explicit `--validate`.**
+  `--raw` short-circuited the whole settings ladder, so `--raw --validate=true`
+  ran no preflight at all — and `CENTRS_VALIDATE`, the CDB comment-kv override
+  and config lost to it just as quietly. It is now a precedence layer: the
+  explicit `--validate` flag wins, then `--raw`, then the ambient sources, then
+  the `true` default. `--raw` alone is unchanged and still behaves identically
+  on every machine whatever the environment holds, while `--raw --validate=true`
+  runs the gate and reports a rejection in the `--raw` error shape
+  (`{code,message}` on stderr, nonzero exit, no `data` key) — the intended way
+  to debug `api` when centrs itself is the suspect (#154).
+
 - **`execute`/`api` validation no longer probes command-level
   `request=completion`.** On RouterOS 7.12.2 that request shape never answers:
   REST hangs past the client timeout (then surfaces the router's own session

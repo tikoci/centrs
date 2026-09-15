@@ -916,6 +916,91 @@ describe("value anchors", () => {
 			).toBeFalse();
 	});
 
+	test("a scope slot may drop its `=` before the brace (#347)", () => {
+		// CHR 7.21.5/7.23.5/7.24.2/7.25beta3: `:parse` lowers all three spellings
+		// below to BYTE-IDENTICAL IL (`…;do=;(evl …);else=;(evl …)`), so the `=` is
+		// optional punctuation rather than part of the slot.
+		for (const input of [
+			":if (1=1) do={ :put a } else={ :put b }",
+			":if (1=1) do={ :put a } else { :put b }",
+			":if (1=1) do { :put a } else { :put b }",
+			":onerror e in={ :put a } do { :put b }",
+		]) {
+			expect({ input, verdict: explainCommand(input).verdict }).toEqual({
+				input,
+				verdict: "pass",
+			});
+		}
+	});
+
+	test("a COLON-prefixed scope word is a directive, not an argument (#347)", () => {
+		// The device draws this line sharply: `:if (1=1) do { :put a }` parses,
+		// but `:if (1=1) :do { :put a }` is `expected end of command` on both
+		// 7.21.5 and 7.24.2 — a colon makes the word a directive, and a directive
+		// cannot sit in an argument slot. Offline must not accept what the device
+		// refuses, so the bare rule is spelled without the colon.
+		expect(explainCommand(":if (1=1) do { :put a }").verdict).toBe("pass");
+		expect(explainCommand(":if (1=1) :do { :put a }").verdict).toBe("fail");
+		expect(
+			explainCommand(":if (1=1) do={ :put a } :else { :put b }").verdict,
+		).toBe("fail");
+		// …and the statement-HEAD `:do {` is untouched: it reads its body through
+		// DIRECTIVE_BODY, which is the branch the colon form is left to.
+		expect(explainCommand(":do { :put a } while=(false)").verdict).toBe("pass");
+	});
+
+	test("a bare word that is not a scope name keeps its brace an array (#347)", () => {
+		// The control the device supplies: `elsy {` is rejected on all four builds
+		// (`expected end of command`), so only SCOPE_ARG_NAMES members may drop the
+		// `=`. A positional must not be promoted to a slot either, or
+		// `:local z {1;2}` would stop reading its brace as an array literal.
+		expect(
+			explainCommand(":if (1=1) do={ :put a } elsy { :put b }").verdict,
+		).toBe("fail");
+		expect(
+			explainCommand(":local z {1;2}").diagnostics.some((diagnostic) =>
+				diagnostic.code.endsWith("/invalid-command-brace"),
+			),
+		).toBeFalse();
+	});
+
+	test("a relative menu block composes the path instead of failing (#348)", () => {
+		// The device composes nested menu scopes: `:parse` lowers
+		// `/ip { address { print } }` to `(evl (evl (evl /ip/address/print)))` and
+		// `/interface { ethernet { print } }` the same way, on CHR 7.21.5, 7.23.5,
+		// 7.24.2 and 7.25beta3. Only the ABSOLUTE spelling used to pass offline;
+		// the relative one hard-failed as a brace array in command arguments.
+		for (const input of [
+			"/ip { address { print } }",
+			"/ip { address print }",
+			"/interface { ethernet { print } }",
+			// A body statement need not be a menu command: corpus 521 nests a
+			// scripting directive, and an absolute command is a statement too.
+			"/interface { ethernet { :put x } }",
+			"/ip { address { /log info x } }",
+		]) {
+			const data = explainCommand(input);
+			expect({
+				input,
+				brace: data.diagnostics.some((diagnostic) =>
+					diagnostic.code.endsWith("/invalid-command-brace"),
+				),
+			}).toEqual({ input, brace: false });
+		}
+	});
+
+	test("a menu block still does not launder an array literal (#348)", () => {
+		// The widening is bounded by what a STATEMENT can start with. A body that
+		// opens with a digit is an array literal, and the device agrees:
+		// `/ip { zzznotamenu { print } }` is a `syntax error` on 7.21.5 and 7.24.2,
+		// so an unknown menu must not become a pass either — it abstains rather
+		// than hard-failing, which is the catalog's "a miss says nothing" contract.
+		expect(explainCommand("/ip { address { 1;2 } }").verdict).toBe("fail");
+		expect(explainCommand("/ip { zzznotamenu { print } }").verdict).not.toBe(
+			"pass",
+		);
+	});
+
 	test("a relative menu brace does not hide a later invalid command brace", () => {
 		const input = "/system {identity print} /ip/route/add comment={1;2}";
 		const brace = input.lastIndexOf("{");

@@ -247,6 +247,48 @@ export function isIndexedStatementStart(text: string, start: number): boolean {
 	return start === 0 || statementIndex(text).boundaries[start] === start - 1;
 }
 
+/**
+ * The bare scope-slot word before a `{`, when the `=` is simply omitted (#347).
+ *
+ * The device settles this: `:if (1=1) do={…} else={…}`,
+ * `:if (1=1) do={…} else {…}` and `:if (1=1) do {…} else {…}` all lower to
+ * BYTE-IDENTICAL IL (`…;do=;(evl …);else=;(evl …)`) on 7.21.5, 7.23.5, 7.24.2
+ * and 7.25beta3, with `:if (1=1) do={…} elsy {…}` rejected on all four as the
+ * control. The `=` is optional punctuation, not part of the slot.
+ *
+ * Deliberately narrower than {@link trailingName} in two ways, because a bare
+ * word is far weaker evidence than `name=`:
+ *
+ *   - the word must already be a {@link SCOPE_ARG_NAMES} member, so a positional
+ *     never becomes a slot — `:local z {1;2}` keeps `z` a positional and its
+ *     brace an array;
+ *   - it may not be the statement's own leading directive. `:do {` reads its
+ *     body through {@link DIRECTIVE_BODY} (as `command`, the IL name), and
+ *     letting the head word match here would rename that slot to `do`.
+ */
+function trailingBareScopeName(
+	text: string,
+	start: number,
+	end: number,
+): string | null {
+	let i = end - 1;
+	while (i >= start && isAsciiWhitespace(text[i])) i--;
+	const nameEnd = i + 1;
+	while (i >= start && /[A-Za-z0-9.-]/.test(text[i] as string)) i--;
+	const nameStart = i + 1;
+	if (nameStart === nameEnd) return null;
+	const name = text.slice(nameStart, nameEnd).toLowerCase();
+	if (!SCOPE_ARG_NAMES.has(name)) return null;
+	// A COLON makes it a directive, never an argument name, and the device is
+	// emphatic: `:if (1=1) :do { :put a }` is `expected end of command` on both
+	// 7.21.5 and 7.24.2, while the bare `:if (1=1) do { :put a }` parses. So the
+	// colon form is refused here and left to the `DIRECTIVE_BODY` branch below,
+	// which is what legitimately reads a statement-head `:do { … }`.
+	if (text[nameStart - 1] === ":") return null;
+	if (leadingWords(text, start, nameStart, 1).length === 0) return null;
+	return name;
+}
+
 function trailingName(text: string, start: number, end: number): string | null {
 	let i = end - 1;
 	while (i >= start && isAsciiWhitespace(text[i])) i--;
@@ -337,6 +379,11 @@ export function scopeNameFromMasked(
 		}
 		return null;
 	}
+	// `else {` / `do {` / `on-error {` — the same slot with the `=` left off.
+	// Checked before the directive-body branch so the ARGUMENT reading wins over
+	// the head reading for a word that can be either.
+	const bare = trailingBareScopeName(masked, start, open);
+	if (bare !== null) return bare;
 	// `:do {`, `:retry {`, `:onerror Err {` — the directive may carry ONE bare
 	// error-variable word before the brace. A second token that is not an
 	// identifier (`:onerror [find] {`) is not this form, so the brace is a value.
