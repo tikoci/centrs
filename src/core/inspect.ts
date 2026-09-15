@@ -5,10 +5,16 @@
  * (path tokenizing, the comma-path join, node-type predicates, completion-name
  * extraction). This module is the single home so a third consumer — `api`, and a
  * future `explain`/`check` — reuses one grounded implementation instead of
- * forking a fourth. It deliberately holds only the transport-agnostic
- * *primitives*; each command composes its own discovery strategy on top (their
- * strategies differ: `retrieve` probes print/get support, `execute` unions
- * child-args with completions), so the strategy stays in the command.
+ * forking a fourth. It holds the transport-agnostic *primitives* plus the one
+ * discovery strategy that is shared verbatim: {@link inspectArgumentNames},
+ * command-level `request=child` only, used by `execute` and `api`. Strategies
+ * that differ stay in the command — `retrieve` probes print/get support and
+ * reads argument-level completion (`print,proplist` / `get,value-name`) with a
+ * child fallback.
+ *
+ * Command-level `request=completion` is not part of any argument-discovery
+ * strategy: on RouterOS 7.12.2 it hangs the REST handler and closes the
+ * native-API connection. See {@link inspectArgumentNames}.
  *
  * Grounding: the request modes mirror `tikoci/lsp-routeros-ts`
  * (`server/src/routeros.ts` `InspectRequest`). The behavioral facts (the array-
