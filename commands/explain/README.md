@@ -1634,8 +1634,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 1,023,405 are classified (71.73%), the remaining
-  403,326 are `unclassified`. The census emits 241,663 tokens (avg 254.9 per
+  1,426,731 analyzed bytes, 1,023,413 are classified (71.73%), the remaining
+  403,318 are `unclassified`. The census emits 241,669 tokens (avg 254.9 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is the
   vocabulary #264 B5 settled. Each B2 fill should move the classified
@@ -1985,6 +1985,13 @@ equal to the last recorded decimal before and after — and `arg` gave up exactl
 the 16,526 bytes `arg-sep` claims, one per attribute. Token count rises 214,503
 → 231,026 because one run became two. **This is a retag.**
 
+(Those totals are the corpus as it stood for THIS measurement. The classified
+total is 1,023,413 today: #347/#348 later classified 8 further bytes. The
+identity being claimed here is between the two sides of the split, not with any
+later total — restating it against today's figure would credit this retag with a
+movement a different change made. The generated block above carries the current
+numbers.)
+
 One count is not a clean split: `arg`'s own run count falls 16,526 → 16,523.
 Three attributes lost their name run entirely, because an earlier `variable-*`
 span had already claimed the name bytes — `set $ifcId ssid=$ssid`, and two
@@ -2066,7 +2073,9 @@ doubt, and painting there would be a claim the walk cannot support.
 bytes came from a fill that already held it — `string` gives up 17,672 and
 `value` 2,288, which is exactly 19,960. Classified bytes are **identical to the
 last decimal**, 1,023,405 of 1,426,731 (71.73076073906013%), so in byte terms
-this is a retag even though it took a new walk to make. Only the token count
+this is a retag even though it took a new walk to make — again, the identity is
+between this change's own before and after, and the corpus total has since moved
+to 1,023,413 / 241,669 tokens under #347/#348. Only the token count
 moves, 231,026 → 241,663: the 7,408 new `escaped` tokens plus the 3,229
 fragments they leave behind when they split a run they sit inside (`string`
 +2,643, `value` +586). That second number is well under one per escape because
