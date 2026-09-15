@@ -5,10 +5,16 @@
  * (path tokenizing, the comma-path join, node-type predicates, completion-name
  * extraction). This module is the single home so a third consumer — `api`, and a
  * future `explain`/`check` — reuses one grounded implementation instead of
- * forking a fourth. It deliberately holds only the transport-agnostic
- * *primitives*; each command composes its own discovery strategy on top (their
- * strategies differ: `retrieve` probes print/get support, `execute` unions
- * child-args with completions), so the strategy stays in the command.
+ * forking a fourth. It holds the transport-agnostic *primitives* plus the one
+ * discovery strategy that is shared verbatim: {@link inspectArgumentNames},
+ * command-level `request=child` only, used by `execute` and `api`. Strategies
+ * that differ stay in the command — `retrieve` probes print/get support and
+ * reads argument-level completion (`print,proplist` / `get,value-name`) with a
+ * child fallback.
+ *
+ * Command-level `request=completion` is not part of any argument-discovery
+ * strategy: on RouterOS 7.12.2 it hangs the REST handler and closes the
+ * native-API connection. See {@link inspectArgumentNames}.
  *
  * Grounding: the request modes mirror `tikoci/lsp-routeros-ts`
  * (`server/src/routeros.ts` `InspectRequest`). The behavioral facts (the array-
@@ -129,6 +135,32 @@ export async function inspectChildren(
 		"child",
 		inspectPath(tokens),
 	)) as InspectChildItem[];
+}
+
+/**
+ * Return the argument names exposed by `request=child` at a command path.
+ *
+ * Do not supplement this with a command-level `request=completion`: RouterOS
+ * 7.12.2 hangs the REST handler and closes the native-API connection for that
+ * request shape, while `child` returns the complete argument list immediately.
+ * Argument-level completion (for example `print,proplist`) is a distinct probe
+ * and remains available through {@link inspectCompletions}.
+ */
+export async function inspectArgumentNames(
+	backend: InspectBackend,
+	tokens: readonly string[],
+): Promise<string[]> {
+	const children = await inspectChildren(backend, tokens);
+	return [
+		...new Set(
+			children
+				.filter(isArgumentNode)
+				.map((child) => child.name)
+				.filter(
+					(name): name is string => typeof name === "string" && name.length > 0,
+				),
+		),
+	].sort();
 }
 
 /** `request=completion` for a token path. */

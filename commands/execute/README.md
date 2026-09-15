@@ -22,8 +22,10 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   throws; its return value's printed form (`(evl …)` / `(evl bad parameter …)` /
   `(<%% bad command name …)`) is read from the REST/native `ret` *and* the
   console output. That check is necessary, not sufficient: value-type errors pass
-  it, and the `/console/inspect` / server re-validation semantic checks are
-  separate.
+  it, and the `/console/inspect request=child` / server re-validation semantic
+  checks are separate. Command-level `request=completion` is deliberately not
+  used: it hangs REST and closes native API on RouterOS 7.12.2 (GH#343), while
+  `child` returns the complete argument-name set immediately.
   The outer RouterOS string literal escapes backslash, quote, and dollar so
   validation parses the caller's exact command rather than expanding variables
   in the wrapper.

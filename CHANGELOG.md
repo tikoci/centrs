@@ -26,6 +26,25 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Fixed
 
+- **`execute`/`api` validation no longer probes command-level
+  `request=completion`.** On RouterOS 7.12.2 that request shape never answers:
+  REST hangs past the client timeout (then surfaces the router's own session
+  close mislabeled as `validation/syntax`) and the native API closes the
+  connection outright, so every validated call — plain reads included — failed
+  on that build while `--no-validate` succeeded instantly. The attribute set
+  those two commands check against now comes from command-level
+  `request=child` alone, through the shared `inspectArgumentNames` helper;
+  `child` returns the complete argument list in single-digit milliseconds on
+  the same 7.12.2 controls, so nothing is lost by dropping the union.
+  `meta.validation.source` reads `/console/inspect request=child`.
+  `retrieve` is unchanged — its argument-level completion probe
+  (`print,proplist` / `get,value-name`) is a different request shape and
+  answers normally on 7.12.2 (#343).
+- **The reported package version is the real one.** The library's
+  `centrsVersion` and the MCP `initialize` handshake both announced a
+  hard-coded `0.1.0` regardless of what was published, so a bug report from an
+  MCP client named the wrong build. Both now derive from `package.json`
+  through `src/core/version.ts`, and a unit test holds them to it (#343).
 - **Offline `explain` no longer invents a verb for a menu path with
   arguments.** `/ip/firewall/address-list name=ytkids timeout=1h` reported
   `resolved`, path `/ip/firewall`, verb `address-list` — and the spaced

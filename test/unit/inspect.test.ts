@@ -4,6 +4,7 @@ import {
 	type InspectBackend,
 	type InspectChildItem,
 	type InspectCompletionItem,
+	inspectArgumentNames,
 	inspectChildren,
 	inspectChildrenOrEmpty,
 	inspectCompletions,
@@ -117,6 +118,27 @@ describe("inspectChildren / inspectCompletions", () => {
 		await inspectCompletions(completions.backend, ["ip", "address", "print"]);
 		expect(completions.calls).toEqual([
 			{ request: "completion", path: "ip,address,print" },
+		]);
+	});
+});
+
+describe("inspectArgumentNames", () => {
+	test("uses only request=child at the command path", async () => {
+		const inspected = recordingBackend([
+			{ name: "print", type: "self" },
+			{ name: "without-paging", "node-type": "arg" },
+			{ name: "as-value", type: "arg" },
+			{ name: "as-value", type: "arg" },
+		]);
+		expect(
+			await inspectArgumentNames(inspected.backend, [
+				"system",
+				"identity",
+				"print",
+			]),
+		).toEqual(["as-value", "without-paging"]);
+		expect(inspected.calls).toEqual([
+			{ request: "child", path: "system,identity,print" },
 		]);
 	});
 });

@@ -183,10 +183,22 @@ green on CHR 7.23.1.
   not `print`/`get`), so it is a `POST` and **write-classed** → needs `--yes`.
 - **CONFIRMED — the inspect gate over both transports.** Path existence
   (`request=child` empty ⇒ `validation/unknown-path`) and add/set attribute
-  validity (`request=child`+`completion` ⇒ `validation/unknown-attribute`) fire
+  validity (`request=child` ⇒ `validation/unknown-attribute`) fire
   identically over rest-api and native-api, **before** any write — no `:put
   [:parse]` involved (api input is a path, not a CLI string). A `/execute` script
   is a CLI string ⇒ `meta.validation.semantic = "not-applicable"`.
+
+## CONFIRMED ON CHR (RouterOS 7.12.2 compatibility — GH#343, 2026-09-14)
+
+- **Command-level `request=completion` is unsafe on 7.12.2.** For
+  `path=system,identity,print`, REST did not answer before the 10 s client
+  timeout and native API closed the connection immediately. Adding
+  `.proplist=completion` did not change either result. The preceding `:parse`
+  and `request=child` controls returned in 1–8 ms on both transports, and
+  `child` contained the complete command argument list. Execute/API attribute
+  validation therefore uses command-level `request=child` only. This does not
+  prohibit argument-level completion probes such as `print,proplist`, which are
+  a separate shape and returned immediately on the same 7.12.2 controls.
 
 ## CONFIRMED ON CHR (Phase 4 `--stream` follow — CHR 7.23.1, 2026-06-30)
 

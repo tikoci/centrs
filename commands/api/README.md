@@ -104,7 +104,13 @@ Default on. Because the input is a structured path (not a CLI string), the gate 
 
 - Path existence + per-verb attribute validity via `request=child`
   (`validation/unknown-path`, `validation/unknown-attribute`).
-- Value-level advice via `request=completion` (+`input=`) feeding `tips`/`warnings`.
+- **Designed, not implemented:** value-level advice via `request=completion`
+  (+`input=`) feeding `tips`/`warnings`. Whatever implements it must not fall
+  back to `request=completion` at a *command* path (`path=` ending at the verb):
+  that shape hangs REST and closes native API on RouterOS 7.12.2, and no centrs
+  code uses it. Completion at an *argument* path (`print,proplist`, as `retrieve`
+  does) answers normally on the same build. See the 7.12.2 finding in
+  `AGENTS.md` (GH#343).
 - **Carve-out:** a script-shaped `POST /rest/execute` is a CLI string, not a path,
   so the inspect gate is `not-applicable` (`meta.validation.semantic`); RouterOS
   re-validates on the run.
