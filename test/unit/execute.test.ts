@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { CentrsError } from "../../src/errors.ts";
 import {
+	buildExecuteErrorEnvelopeFromResolved,
 	canonicalizeExecuteCommand,
 	execute,
 	executeEnvelope,
@@ -9,6 +10,10 @@ import {
 	resolvedExecuteTips,
 	resolveExecuteRequest,
 } from "../../src/execute.ts";
+import {
+	assertOfflineSyntax,
+	OFFLINE_GATE_SOURCE,
+} from "../../src/offline-gate.ts";
 
 describe("execute canonicalization", () => {
 	test("extracts path, verb, attributes, and quoted values", () => {
@@ -235,5 +240,153 @@ describe("resolvedExecuteTips — mac-telnet no-credentials tip (JG-24)", () => 
 				resolvedExecuteTips(stub({ via, passwordProvided: false })),
 			).toEqual([]);
 		}
+	});
+});
+
+describe("validation metadata survives the error boundary (#354, PR #356 review)", () => {
+	async function resolveFor(
+		command: string,
+		overrides: Partial<Parameters<typeof resolveExecuteRequest>[0]> = {},
+	): Promise<ResolvedExecuteRequest> {
+		return resolveExecuteRequest(
+			{
+				targetInput: "127.0.0.1",
+				command,
+				via: "rest-api",
+				...overrides,
+			},
+			{},
+		);
+	}
+
+	test("a post-validation RouterOS fault does not claim the gate failed", async () => {
+		// The gate finished — both stages green — and the command then failed on the
+		// device. Rebuilding `meta.validation` here used to report
+		// `result: "failed"` with no stages, erasing a completed validation.
+		const resolved = await resolveFor("/ip/address/print");
+		const passed = {
+			enabled: true,
+			source: ":put [:parse] + /console/inspect",
+			result: "passed" as const,
+			syntax: true,
+			semantic: true,
+			stages: [
+				{
+					stage: "offline" as const,
+					source: OFFLINE_GATE_SOURCE,
+					result: "passed" as const,
+				},
+				{
+					stage: "device" as const,
+					source: ":put [:parse] + /console/inspect",
+					result: "passed" as const,
+				},
+			],
+		};
+		const envelope = buildExecuteErrorEnvelopeFromResolved(
+			resolved,
+			new CentrsError({
+				code: "routeros/request-failed",
+				summary: "RouterOS reported an error",
+			}),
+			undefined,
+			{ validation: passed, offlineVerdict: "pass" },
+		);
+		expect(envelope.meta.validation).toEqual(passed);
+	});
+
+	test("an offline abstention is not flattened to `passed` by a device rejection", async () => {
+		// `warn` means the analyzer declined to judge part of the input. An error
+		// envelope that reports a bare `passed` tells the consumer it read bytes it
+		// explicitly did not.
+		const resolved = await resolveFor("/ip/address/prnt");
+		const envelope = buildExecuteErrorEnvelopeFromResolved(
+			resolved,
+			new CentrsError({
+				code: "validation/unknown-attribute",
+				summary: "Unknown RouterOS attribute",
+			}),
+			undefined,
+			{ offlineVerdict: "warn" },
+		);
+		const stages = envelope.meta.validation?.stages ?? [];
+		expect(stages[0]).toEqual({
+			stage: "offline",
+			source: OFFLINE_GATE_SOURCE,
+			result: "passed",
+			reason: "analyzer abstained on part of the input",
+		});
+		expect(stages[1]?.result).toBe("failed");
+	});
+
+	test("a stage-1 rejection reports the device stage as skipped, not failed", async () => {
+		const resolved = await resolveFor(":put [");
+		let gateError: unknown;
+		try {
+			assertOfflineSyntax(resolved.command, { surface: "execute" });
+		} catch (error) {
+			gateError = error;
+		}
+		const envelope = buildExecuteErrorEnvelopeFromResolved(
+			resolved,
+			gateError,
+			undefined,
+			{},
+		);
+		expect(envelope.meta.validation?.stages).toEqual([
+			{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "failed" },
+			{
+				stage: "device",
+				source: ":put [:parse] + /console/inspect",
+				result: "skipped",
+				reason: "offline analysis rejected the command; no connection opened",
+			},
+		]);
+	});
+
+	test("script-shaped input keeps `semantic: not-applicable` on a gate rejection", async () => {
+		// There is no `/console/inspect` half for a script, so `semantic: false`
+		// would claim a semantic gate ran and said no — a different statement from
+		// "there was none". The pre-#354 builder returned `not-applicable` here.
+		const resolved = await resolveFor(":put [");
+		expect(resolved.canonical.mode).not.toBe("structured");
+		const envelope = buildExecuteErrorEnvelopeFromResolved(
+			resolved,
+			new CentrsError({ code: "validation/syntax", summary: "nope" }),
+			undefined,
+			{},
+		);
+		expect(envelope.meta.validation?.semantic).toBe("not-applicable");
+	});
+
+	test("`--validate=false` lists both stages as skipped", async () => {
+		// The constitution's rule is that a gated surface always reports each
+		// stage, so a consumer reading `stages` never special-cases the disabled
+		// shape. `enabled: false` already carries the why, so no `reason`.
+		const resolved = await resolveFor("/ip/address/print", { validate: false });
+		const envelope = buildExecuteErrorEnvelopeFromResolved(
+			resolved,
+			new CentrsError({ code: "transport/unreachable", summary: "nope" }),
+			undefined,
+			{},
+		);
+		expect(envelope.meta.validation?.enabled).toBe(false);
+		expect(envelope.meta.validation?.stages).toEqual([
+			{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "skipped" },
+			{ stage: "device", source: "device preflight", result: "skipped" },
+		]);
+	});
+
+	test("a non-validation error omits stages rather than inventing a verdict", async () => {
+		// No trace and a transport drop: this builder cannot know which stage, if
+		// any, ran. Saying nothing beats asserting `device: failed`.
+		const resolved = await resolveFor("/ip/address/print");
+		const envelope = buildExecuteErrorEnvelopeFromResolved(
+			resolved,
+			new CentrsError({ code: "transport/unreachable", summary: "nope" }),
+			undefined,
+			{},
+		);
+		expect(envelope.meta.validation?.stages).toBeUndefined();
 	});
 });

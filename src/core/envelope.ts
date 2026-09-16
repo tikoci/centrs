@@ -132,6 +132,29 @@ export interface EnvelopeValidationStage {
 	reason?: string;
 }
 
+/**
+ * Mutable sink that lets an error path report the validation that ACTUALLY ran.
+ *
+ * `runResolvedExecute` / `runResolvedApi` finish the gate and then do the real
+ * work, and the error envelope is built by a *different* function after the
+ * throw unwinds past them. Without this, a `routeros/*` fault on the run — which
+ * happens with both gate stages already green — got a reconstructed
+ * `result: "failed"` that erased the real outcome. The runner writes
+ * {@link ValidationTrace.validation} the moment the gate returns; the error
+ * builder prefers it over anything it could guess (GH#354, PR #356 review).
+ */
+export interface ValidationTrace {
+	/** The completed gate result, set once validation finishes. */
+	validation?: EnvelopeValidationMeta;
+	/**
+	 * The stage-1 verdict, recorded as soon as stage 1 returns — before stage 2
+	 * can throw. `warn` is an abstention, and an error envelope that reported it
+	 * as `passed` would be telling a consumer the analyzer read bytes it declined
+	 * to judge.
+	 */
+	offlineVerdict?: "pass" | "warn";
+}
+
 export interface EnvelopeValidationMeta {
 	enabled: boolean;
 	/** Validator identity, e.g. `/console/inspect` or `:put [:parse]`. */

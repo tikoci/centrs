@@ -73,7 +73,7 @@ arbitrary script expressions. The `$a` variable must survive the validation
 wrapper: if that outer string expands it before `:parse`, this example fails even
 though RouterOS accepts the original command.
 
-### 5. Syntax reject from `:put [:parse ...]`
+### 5. Syntax reject before the write round-trip
 
 Malformed CLI is rejected by the syntax gate before semantic validation or the
 write round-trip.
@@ -82,9 +82,16 @@ write round-trip.
 centrs execute $R '/ip/address/add address="unterminated interface=ether1' --via rest-api --username $U --password $P --yes
 ```
 
-Envelope: `ok: false`, `error.code=validation/syntax`, `error.cause` preserves
-the RouterOS parse error string from `:put [:parse ...]`, `meta.via=rest-api`,
-and no address is added.
+Envelope: `ok: false`, `error.code=validation/syntax`, `meta.via=rest-api`, and
+no address is added.
+
+**Which stage rejects it changed in GH#354.** This input is now caught by the
+*offline* stage, so `error.context.validationStage="offline"`,
+`error.cause="explain/canonicalizer/unterminated-string"`,
+`error.context.span={"start":24,"end":54}`, and the device is never contacted —
+see V1–V3 below. It reached `:put [:parse ...]` before that. The code, the
+`meta.via`, and the no-mutation guarantee are unchanged, which is why the
+assertion in `test/integration/execute.test.ts` still reads `validation/syntax`.
 
 ### 6. Semantic reject that `:parse` accepts
 
@@ -202,14 +209,16 @@ centrs execute $A "/ip/address/remove numbers=$ID" --via native-api --port $API_
 Envelope: `ok: true`, `meta.via=native-api`. A subsequent retrieve of
 `/ip/address` does not contain `$ID`.
 
-### 15. Native syntax reject from `:parse`
+### 15. Native syntax reject
 
 ```bash
 centrs execute $A '/ip/address/add address="unterminated interface=ether1' --via native-api --port $API_PORT --username $U --password $P --yes
 ```
 
-Envelope: `ok: false`, `error.code=validation/syntax`, `error.cause` preserves
-the RouterOS parse error string, `meta.via=native-api`, and no address is added.
+Envelope: `ok: false`, `error.code=validation/syntax`, `meta.via=native-api`, and
+no address is added. The native twin of example 5, and it moved the same way:
+the offline stage rejects this input now, so the verdict no longer depends on
+the transport at all.
 
 ### 16. Native semantic reject after clean parse
 
@@ -415,7 +424,9 @@ centrs execute $R ':put [' --via rest-api --username $U --password $P --json --v
 Envelope: `ok: false`, `error.code=routeros/request-failed` with RouterOS's own
 `syntax error (line 1 column 7)` in the summary — the **device** rejecting it, not
 centrs — plus `meta.validation.enabled=false`, `meta.validation.result="skipped"`,
-and no `meta.validation.stages`.
+and `meta.validation.stages` listing **both** stages as `skipped`. A gated
+surface always reports every stage, so a consumer reading `stages` never has to
+special-case the disabled shape.
 
 ## Target selection (fan-out)
 

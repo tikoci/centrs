@@ -26,6 +26,7 @@ import type {
 	CommonSettingsMeta,
 	FanoutData,
 	FanoutSummary,
+	ValidationTrace,
 } from "./core/envelope.ts";
 import {
 	buildFanoutEnvelope,
@@ -233,6 +234,11 @@ export async function executeFanout(
 	await assertFanoutWriteConfirmed(request, global.summary, expansion);
 
 	const execute = internals.execute ?? runResolvedExecute;
+	// Per-target validation trace. `execute` and `onExecuteError` are separate
+	// callbacks that share only the resolved request, so the request object is
+	// the key: without it a per-target error envelope would reconstruct
+	// `meta.validation` instead of reporting the gate that actually ran (GH#354).
+	const traces = new WeakMap<ResolvedExecuteRequest, ValidationTrace>();
 	const sleep = internals.sleep ?? defaultFanoutSleep;
 
 	const targets = await runFanout<
@@ -282,11 +288,19 @@ export async function executeFanout(
 				warnings: member.kind === "cdb" ? [...member.resolution.warnings] : [],
 				summary: "Failed to resolve a fanout target.",
 			}),
-		execute: async (resolved, member) =>
-			relabelAdhocMember(await execute(resolved), member),
+		execute: async (resolved, member) => {
+			const trace: ValidationTrace = {};
+			traces.set(resolved, trace);
+			return relabelAdhocMember(await execute(resolved, trace), member);
+		},
 		onExecuteError: (resolved, member, error) =>
 			relabelAdhocMember(
-				buildExecuteErrorEnvelopeFromResolved(resolved, error),
+				buildExecuteErrorEnvelopeFromResolved(
+					resolved,
+					error,
+					undefined,
+					traces.get(resolved),
+				),
 				member,
 			),
 		sleep,

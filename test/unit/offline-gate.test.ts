@@ -131,3 +131,39 @@ describe("isOfflineGateRejection", () => {
 		expect(isOfflineGateRejection(undefined)).toBe(false);
 	});
 });
+
+describe("the quote-balance supplement", () => {
+	// `'` is not a RouterOS string delimiter — it is not a legal token at all, and
+	// the analyzer passes every form of it (#355). This check is what keeps stage 1
+	// from being blind to the character class. It used to live in `execute.ts` as a
+	// private `hasUnbalancedQuotes` guard *inside the device gate*, which made an
+	// error envelope report a `:parse` that never ran.
+	test("an unbalanced apostrophe is an OFFLINE rejection, not a device one", () => {
+		const error = reject("/system/identity/set name=don't");
+		expect(error.code).toBe("validation/syntax");
+		expect(error.context?.["validationStage"]).toBe("offline");
+		expect(error.context?.["validationSource"]).toContain("quote balance");
+		expect(error.causeData).toBe("unterminated string literal");
+		expect(isOfflineGateRejection(error)).toBe(true);
+	});
+
+	test("an apostrophe inside a real string is left alone", () => {
+		// CHR accepts `comment="it's here"`; only the bare apostrophe is rejected.
+		expect(
+			assertOfflineSyntax(
+				'/ip/address/add address=1.1.1.1/32 comment="it\'s here"',
+				surface,
+			).verdict,
+		).toBe("pass");
+	});
+
+	test("the analyzer speaks first, so a precise span beats the coarse message", () => {
+		// This input is BOTH an unterminated `"` and unbalanced by quote count. The
+		// analyzer's diagnostic carries a byte span, so it must be the one reported.
+		const error = reject(
+			'/ip/address/add address="unterminated interface=ether1',
+		);
+		expect(error.causeData).toBe("explain/canonicalizer/unterminated-string");
+		expect(error.context?.["span"]).toEqual({ start: 24, end: 54 });
+	});
+});

@@ -123,7 +123,10 @@ gate is `/console/inspect` — **not** `:put [:parse]`:
   rejection.
 - Structured path requests are **not** offline-gated. The input is a path plus a
   body, not a CLI string, and an offline *path* gate collides with GH#211's
-  unlisted-path decision. `meta.validation.stages[]` is absent there.
+  unlisted-path decision. On the success path `meta.validation.stages[]` is
+  absent there; on a `validation/*` rejection it is present and reports the
+  offline stage `skipped` with that reason, so the breakdown never implies an
+  analysis that did not run.
 
 `--validate=false` skips **both** stages of the preflight — one flag, one meaning
 (constitution: validation); RouterOS still re-validates writes server-side.

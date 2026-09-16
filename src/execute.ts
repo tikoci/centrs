@@ -7,6 +7,7 @@ import type {
 	EnvelopeValidationMeta,
 	EnvelopeValidationStage,
 	Tip,
+	ValidationTrace,
 	Warning,
 } from "./core/envelope.ts";
 import { buildTip } from "./core/envelope.ts";
@@ -181,13 +182,23 @@ export async function executeEnvelope(
 	env: Record<string, string | undefined> = Bun.env,
 ): Promise<ExecuteEnvelope> {
 	let resolved: ResolvedExecuteRequest | undefined;
+	// The gate finishes inside `runResolvedExecute`, but the error envelope is
+	// built out here after the throw has unwound past it. Without the trace, a
+	// RouterOS fault on the *run* — both stages already green — reported a
+	// reconstructed `result: "failed"` that erased the real outcome.
+	const trace: ValidationTrace = {};
 	try {
 		resolved = await resolveExecuteRequest(request, env);
 		await assertWriteConfirmed(request, resolved);
-		return await runResolvedExecute(resolved);
+		return await runResolvedExecute(resolved, trace);
 	} catch (error) {
 		return resolved
-			? buildExecuteErrorEnvelopeFromResolved(resolved, error)
+			? buildExecuteErrorEnvelopeFromResolved(
+					resolved,
+					error,
+					trace.validation,
+					trace,
+				)
 			: buildExecuteErrorEnvelope(request, error, env);
 	}
 }
@@ -205,6 +216,7 @@ export async function validateExecuteEnvelope(
 	env: Record<string, string | undefined> = Bun.env,
 ): Promise<ExecuteEnvelope> {
 	let resolved: ResolvedExecuteRequest | undefined;
+	const trace: ValidationTrace = {};
 	try {
 		resolved = await resolveExecuteRequest({ ...request, validate: true }, env);
 		const backend = createProtocolAdapter({
@@ -221,7 +233,7 @@ export async function validateExecuteEnvelope(
 			insecure: resolved.insecure.value,
 		});
 		try {
-			const validation = await validateExecuteCommand(resolved, backend);
+			const validation = await validateExecuteCommand(resolved, backend, trace);
 			return {
 				ok: true,
 				data: null,
@@ -234,13 +246,14 @@ export async function validateExecuteEnvelope(
 		}
 	} catch (error) {
 		return resolved
-			? buildExecuteErrorEnvelopeFromResolved(resolved, error)
+			? buildExecuteErrorEnvelopeFromResolved(resolved, error, undefined, trace)
 			: buildExecuteErrorEnvelope(request, error, env);
 	}
 }
 
 export async function runResolvedExecute(
 	resolved: ResolvedExecuteRequest,
+	trace: ValidationTrace = {},
 ): Promise<ExecuteSuccessEnvelope> {
 	const backend = createProtocolAdapter({
 		protocol: resolved.via.value,
@@ -262,16 +275,13 @@ export async function runResolvedExecute(
 
 	try {
 		if (resolved.validate.value) {
-			validation = await validateExecuteCommand(resolved, backend);
+			validation = await validateExecuteCommand(resolved, backend, trace);
 		} else {
-			validation = {
-				enabled: false,
-				source: "disabled",
-				result: "skipped",
-				syntax: false,
-				semantic: false,
-			};
+			validation = disabledValidationMeta();
 		}
+		// Recorded BEFORE the run, so a RouterOS fault or transport drop below
+		// reports the gate that actually passed rather than a guess.
+		trace.validation = validation;
 
 		const result = await runCommand(resolved, backend);
 		const routerOsFailure = routerOsFailureFromResult(
@@ -569,6 +579,7 @@ export function buildExecuteErrorEnvelopeFromResolved(
 	resolved: ResolvedExecuteRequest,
 	error: unknown,
 	validation?: EnvelopeValidationMeta,
+	trace?: ValidationTrace,
 ): ExecuteErrorEnvelope {
 	const centrsError =
 		error instanceof CentrsError
@@ -587,7 +598,9 @@ export function buildExecuteErrorEnvelopeFromResolved(
 		tips: resolvedExecuteTips(resolved),
 		meta: metaFromResolved(
 			resolved,
-			validation ?? failedValidationMeta(resolved, error),
+			validation ??
+				trace?.validation ??
+				failedValidationMeta(resolved, error, trace),
 		),
 	};
 }
@@ -604,27 +617,24 @@ export function buildExecuteErrorEnvelopeFromResolved(
 function failedValidationMeta(
 	resolved: ResolvedExecuteRequest,
 	error: unknown,
+	trace?: ValidationTrace,
 ): EnvelopeValidationMeta {
 	if (!resolved.validate.value) {
-		return {
-			enabled: false,
-			source: "disabled",
-			result: "skipped",
-			syntax: false,
-			semantic: false,
-		};
+		return disabledValidationMeta();
 	}
-	const deviceSource =
-		resolved.via.value === "mac-telnet" || resolved.via.value === "ssh"
-			? `:put [:parse ...] over ${resolved.via.value}`
-			: ":put [:parse] + /console/inspect";
+	const deviceSource = deviceStageSource(resolved);
+	// Script-shaped input has no `/console/inspect` half to fail, on either
+	// branch below. Reporting `semantic: false` for it would say a semantic gate
+	// ran and said no, which is a different claim from "there was none".
+	const semantic: boolean | "not-applicable" =
+		resolved.canonical.mode === "structured" ? false : "not-applicable";
 	if (isOfflineGateRejection(error)) {
 		return {
 			enabled: true,
 			source: OFFLINE_GATE_SOURCE,
 			result: "failed",
 			syntax: false,
-			semantic: false,
+			semantic,
 			stages: [
 				{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "failed" },
 				{
@@ -636,11 +646,13 @@ function failedValidationMeta(
 			],
 		};
 	}
-	// Only a `validation/*` error tells us the DEVICE stage is what rejected it.
-	// This builder also catches everything downstream — a RouterOS fault on the
-	// run, a transport drop — and those passed both stages. The flat fields keep
-	// their long-standing (coarse) meaning; `stages` is omitted rather than
-	// asserting a stage verdict this function cannot know.
+	// Only a `validation/*` error tells us the DEVICE stage rejected it — and
+	// only then do we know stage 1 passed, because stage 1 runs first and would
+	// have thrown its own (offline-tagged) error otherwise. This builder also
+	// catches everything downstream — a RouterOS fault on the run, a transport
+	// drop — which passed both stages and is served by `trace.validation`. When
+	// neither applies, `stages` is omitted rather than asserting a verdict this
+	// function cannot know.
 	const deviceRejected =
 		error instanceof CentrsError && error.code.startsWith("validation/");
 	return {
@@ -648,16 +660,11 @@ function failedValidationMeta(
 		source: deviceSource,
 		result: "failed",
 		syntax: true,
-		semantic:
-			resolved.canonical.mode === "structured" ? false : "not-applicable",
+		semantic,
 		...(deviceRejected
 			? {
 					stages: [
-						{
-							stage: "offline" as const,
-							source: OFFLINE_GATE_SOURCE,
-							result: "passed" as const,
-						},
+						offlineStagePassed(trace?.offlineVerdict),
 						{
 							stage: "device" as const,
 							source: deviceSource,
@@ -666,6 +673,55 @@ function failedValidationMeta(
 					],
 				}
 			: {}),
+	};
+}
+
+/** The device-stage validator identity for a resolved request's transport. */
+function deviceStageSource(resolved: ResolvedExecuteRequest): string {
+	return resolved.via.value === "mac-telnet" || resolved.via.value === "ssh"
+		? `:put [:parse ...] over ${resolved.via.value}`
+		: ":put [:parse] + /console/inspect";
+}
+
+/**
+ * The offline stage entry for a gate stage 1 cleared.
+ *
+ * `verdict` comes from the {@link ValidationTrace}, not from a re-run: a `warn`
+ * is an ABSTENTION, and an error envelope that flattened it to a bare `passed`
+ * would tell a consumer the analyzer judged bytes it explicitly declined to
+ * judge. An absent verdict means the caller did not thread a trace, so say
+ * nothing extra rather than invent the reason.
+ */
+function offlineStagePassed(
+	verdict: ValidationTrace["offlineVerdict"],
+): EnvelopeValidationStage {
+	return {
+		stage: "offline",
+		source: OFFLINE_GATE_SOURCE,
+		result: "passed",
+		...(verdict === "warn"
+			? { reason: "analyzer abstained on part of the input" }
+			: {}),
+	};
+}
+
+/**
+ * `validate=false`. Both stages are listed as `skipped` rather than omitted:
+ * the constitution's rule is that a gated surface always reports each stage, so
+ * a consumer reading `stages` never has to special-case the disabled shape.
+ * `reason` is left off — `enabled: false` already says why.
+ */
+function disabledValidationMeta(): EnvelopeValidationMeta {
+	return {
+		enabled: false,
+		source: "disabled",
+		result: "skipped",
+		syntax: false,
+		semantic: false,
+		stages: [
+			{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "skipped" },
+			{ stage: "device", source: "device preflight", result: "skipped" },
+		],
 	};
 }
 
@@ -712,11 +768,15 @@ export function validateExecuteRequestShape(request: ExecuteRequest): void {
 async function validateExecuteCommand(
 	resolved: ResolvedExecuteRequest,
 	backend: ProtocolAdapter,
+	trace: ValidationTrace = {},
 ): Promise<EnvelopeValidationMeta> {
 	const offline = assertOfflineSyntax(resolved.command, {
 		surface: "execute",
 		via: resolved.via.value,
 	});
+	// Recorded before stage 2 can throw, so a device rejection still reports
+	// whether stage 1 read the whole input or abstained on part of it.
+	trace.offlineVerdict = offline.verdict;
 
 	if (resolved.via.value === "mac-telnet" || resolved.via.value === "ssh") {
 		return validateConsoleParseCommand(resolved, backend, offline);
@@ -784,21 +844,6 @@ async function validateConsoleParseCommand(
 	backend: ProtocolAdapter,
 	offline: OfflineGateResult,
 ): Promise<EnvelopeValidationMeta> {
-	if (hasUnbalancedQuotes(resolved.command)) {
-		throw new CentrsError({
-			code: "validation/syntax",
-			summary:
-				"RouterOS rejected the command syntax during local quote preflight.",
-			remediation:
-				"Close the RouterOS string quote, then retry. The command was not executed.",
-			context: {
-				command: resolved.command,
-				validationSource: "local quote preflight before :put [:parse ...]",
-				via: resolved.via.value,
-			},
-			causeData: "unterminated string literal",
-		});
-	}
 	const result = await backend.execute({
 		path: "",
 		command: "",
@@ -847,21 +892,6 @@ async function runSyntaxGate(
 	resolved: ResolvedExecuteRequest,
 	backend: ProtocolAdapter,
 ): Promise<void> {
-	if (hasUnbalancedQuotes(resolved.command)) {
-		throw new CentrsError({
-			code: "validation/syntax",
-			summary:
-				"RouterOS rejected the command syntax during local quote preflight.",
-			remediation:
-				"Close the RouterOS string quote, then retry. The command was not executed.",
-			context: {
-				command: resolved.command,
-				validationSource: "local quote preflight before :put [:parse ...]",
-				via: resolved.via.value,
-			},
-			causeData: "unterminated string literal",
-		});
-	}
 	const script = `:put [:parse ${routerOsStringLiteral(resolved.command)}]`;
 	try {
 		// GH#230: `:parse` never throws (CHR 7.23.3). The diagnostic rides the
@@ -1378,31 +1408,6 @@ function renderExecuteErrorText(
 		lines.push("", JSON.stringify(envelope.error.context, null, 2));
 	}
 	return lines.join("\n");
-}
-
-function hasUnbalancedQuotes(input: string): boolean {
-	let quote: '"' | "'" | undefined;
-	let escaped = false;
-	for (const char of input) {
-		if (escaped) {
-			escaped = false;
-			continue;
-		}
-		if (char === "\\") {
-			escaped = true;
-			continue;
-		}
-		if (quote) {
-			if (char === quote) {
-				quote = undefined;
-			}
-			continue;
-		}
-		if (char === '"' || char === "'") {
-			quote = char;
-		}
-	}
-	return quote !== undefined;
 }
 
 function syntaxCause(error: unknown): unknown {

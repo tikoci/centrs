@@ -21,7 +21,9 @@ import type {
 	CommonSettingsMeta,
 	SettingSource as CoreSettingSource,
 	EnvelopeValidationMeta,
+	EnvelopeValidationStage,
 	Tip,
+	ValidationTrace,
 	Warning,
 } from "./core/envelope.ts";
 import { buildTip } from "./core/envelope.ts";
@@ -270,19 +272,25 @@ export async function apiEnvelope(
 	env: Record<string, string | undefined> = Bun.env,
 ): Promise<ApiEnvelope> {
 	let resolved: ResolvedApiRequest | undefined;
+	// The gate finishes inside `runResolvedApi`, but the error envelope is built
+	// out here after the throw has unwound past it. Without the trace, a
+	// `transport/*` or `routeros/*` fault on the request — both stages already
+	// settled — reported `/console/inspect` as the validator that failed.
+	const trace: ValidationTrace = {};
 	try {
 		resolved = await resolveApiRequest(request, env);
 		await assertApiWriteConfirmed(request, resolved);
-		return await runResolvedApi(resolved);
+		return await runResolvedApi(resolved, trace);
 	} catch (error) {
 		return resolved
-			? buildApiErrorEnvelopeFromResolved(resolved, error)
+			? buildApiErrorEnvelopeFromResolved(resolved, error, trace)
 			: buildApiErrorEnvelope(request, error, env);
 	}
 }
 
 export async function runResolvedApi(
 	resolved: ResolvedApiRequest,
+	trace: ValidationTrace = {},
 ): Promise<ApiSuccessEnvelope> {
 	assertListenCapability(resolved);
 	const backend = createProtocolAdapter({
@@ -302,18 +310,15 @@ export async function runResolvedApi(
 	let tips: Tip[] = [];
 	try {
 		if (resolved.validate.value) {
-			const result = await validateApiRequest(resolved, backend);
+			const result = await validateApiRequest(resolved, backend, trace);
 			validation = result.validation;
 			tips = result.tips;
 		} else {
-			validation = {
-				enabled: false,
-				source: "disabled",
-				result: "skipped",
-				syntax: false,
-				semantic: false,
-			};
+			validation = disabledApiValidationMeta(resolved);
 		}
+		// Recorded BEFORE the request, so a transport drop or RouterOS fault below
+		// reports the gate that actually settled rather than a guess.
+		trace.validation = validation;
 
 		const result = await backend.apiRequest(buildProtocolApiRequest(resolved));
 		return {
@@ -950,6 +955,9 @@ export function buildProtocolApiRequest(
 	return request;
 }
 
+/** The api device-stage validator: structured input is inspected, never `:parse`d. */
+const API_DEVICE_STAGE_SOURCE = "/console/inspect request=child";
+
 interface ApiValidationResult {
 	validation: EnvelopeValidationMeta;
 	tips: Tip[];
@@ -965,6 +973,7 @@ interface ApiValidationResult {
 async function validateApiRequest(
 	resolved: ResolvedApiRequest,
 	backend: ProtocolAdapter,
+	trace: ValidationTrace = {},
 ): Promise<ApiValidationResult> {
 	if (resolved.scriptMode) {
 		// `/execute` carries a CLI string, so `/console/inspect` has nothing to
@@ -979,6 +988,7 @@ async function validateApiRequest(
 					via: resolved.via.value,
 				})
 			: undefined;
+		trace.offlineVerdict = offline?.verdict;
 		const offlineReason =
 			offline === undefined
 				? "no `script` field to analyze"
@@ -1391,6 +1401,7 @@ export function buildApiErrorEnvelope(
 export function buildApiErrorEnvelopeFromResolved(
 	resolved: ResolvedApiRequest,
 	error: unknown,
+	trace?: ValidationTrace,
 ): ApiErrorEnvelope {
 	const centrsError = asApiError(error);
 	return {
@@ -1400,7 +1411,8 @@ export function buildApiErrorEnvelopeFromResolved(
 		tips: [],
 		meta: metaFromResolved(
 			resolved,
-			failedApiValidationMeta(resolved, centrsError),
+			trace?.validation ??
+				failedApiValidationMeta(resolved, centrsError, trace),
 		),
 	};
 }
@@ -1413,15 +1425,10 @@ export function buildApiErrorEnvelopeFromResolved(
 function failedApiValidationMeta(
 	resolved: ResolvedApiRequest,
 	error: CentrsError,
+	trace?: ValidationTrace,
 ): EnvelopeValidationMeta {
 	if (!resolved.validate.value) {
-		return {
-			enabled: false,
-			source: "disabled",
-			result: "skipped",
-			syntax: false,
-			semantic: false,
-		};
+		return disabledApiValidationMeta(resolved);
 	}
 	if (isOfflineGateRejection(error)) {
 		return {
@@ -1434,7 +1441,7 @@ function failedApiValidationMeta(
 				{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "failed" },
 				{
 					stage: "device",
-					source: "/console/inspect request=child",
+					source: API_DEVICE_STAGE_SOURCE,
 					result: "skipped",
 					reason: "offline analysis rejected the script; no connection opened",
 				},
@@ -1442,8 +1449,9 @@ function failedApiValidationMeta(
 		};
 	}
 	// `stages` is only asserted when a `validation/*` error identifies the device
-	// stage as the rejecter. This builder also catches everything downstream — a
-	// RouterOS fault on the run, a transport drop — which passed both stages.
+	// stage as the rejecter. Everything downstream — a RouterOS fault on the
+	// request, a transport drop — passed the gate and is served by
+	// `trace.validation` before this function is ever reached.
 	const deviceRejected = error.code.startsWith("validation/");
 	return {
 		enabled: true,
@@ -1452,29 +1460,66 @@ function failedApiValidationMeta(
 		syntax: false,
 		semantic: resolved.scriptMode ? "not-applicable" : false,
 		...(deviceRejected
-			? {
-					stages: [
-						{
-							stage: "offline" as const,
-							source: OFFLINE_GATE_SOURCE,
-							result: resolved.scriptMode
-								? ("passed" as const)
-								: ("skipped" as const),
-							...(resolved.scriptMode
-								? {}
-								: {
-										reason:
-											"structured path request; not a CLI string (GH#354)",
-									}),
-						},
-						{
-							stage: "device" as const,
-							source: "/console/inspect request=child",
-							result: "failed" as const,
-						},
-					],
-				}
+			? { stages: [offlineApiStage(resolved, trace), deviceStageFailed()] }
 			: {}),
+	};
+}
+
+/**
+ * The offline-stage entry for an api gate that reached the device stage.
+ *
+ * Script mode is the only api shape stage 1 analyzes; a structured path request
+ * is a path plus a body, not a CLI string, so its offline stage is `skipped`
+ * with the reason spelled out rather than silently reported as passed.
+ */
+function offlineApiStage(
+	resolved: ResolvedApiRequest,
+	trace?: ValidationTrace,
+): EnvelopeValidationStage {
+	if (!resolved.scriptMode) {
+		return {
+			stage: "offline",
+			source: OFFLINE_GATE_SOURCE,
+			result: "skipped",
+			reason: "structured path request, not a CLI string (GH#354)",
+		};
+	}
+	return {
+		stage: "offline",
+		source: OFFLINE_GATE_SOURCE,
+		result: "passed",
+		...(trace?.offlineVerdict === "warn"
+			? { reason: "analyzer abstained on part of the input" }
+			: {}),
+	};
+}
+
+function deviceStageFailed(): EnvelopeValidationStage {
+	return {
+		stage: "device",
+		source: API_DEVICE_STAGE_SOURCE,
+		result: "failed",
+	};
+}
+
+/**
+ * `--validate=false` (including a bare `--raw`). Both stages are listed as
+ * `skipped` rather than omitted, so a consumer reading `stages` never has to
+ * special-case the disabled shape; `enabled: false` already carries the why.
+ */
+function disabledApiValidationMeta(
+	resolved: ResolvedApiRequest,
+): EnvelopeValidationMeta {
+	return {
+		enabled: false,
+		source: "disabled",
+		result: "skipped",
+		syntax: false,
+		semantic: resolved.scriptMode ? "not-applicable" : false,
+		stages: [
+			{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "skipped" },
+			{ stage: "device", source: API_DEVICE_STAGE_SOURCE, result: "skipped" },
+		],
 	};
 }
 

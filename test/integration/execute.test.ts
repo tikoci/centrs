@@ -364,7 +364,17 @@ describeFast("execute against CHR", () => {
 				"routeros/request-failed",
 			);
 			expect(bypassed.meta.validation?.enabled).toBe(false);
-			expect(bypassed.meta.validation?.stages).toBeUndefined();
+			// A gated surface reports every stage, disabled included — so a reader
+			// never special-cases the `validate=false` shape.
+			expect(
+				(bypassed.meta.validation?.stages ?? []).map((stage) => [
+					stage.stage,
+					stage.result,
+				]),
+			).toEqual([
+				["offline", "skipped"],
+				["device", "skipped"],
+			]);
 
 			await recordIntegrationEvidence({
 				suite: "execute against CHR",

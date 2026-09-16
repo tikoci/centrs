@@ -104,7 +104,7 @@ benchmarked RouterOS agent support. Load-bearing findings that shape this design
 | Tool | Core mapping | Reads/Writes | Target source |
 | ---- | ------------ | ------------ | ------------- |
 | `centrs_explain` | `canonicalizeExecuteCommand` | offline, none | none (string only) |
-| `centrs_validate` | execute validation only (offline analysis, then `:parse` + `/console/inspect`), **no run** | read-only | CDB |
+| `centrs_validate` | execute validation only, **no run**: offline analysis, then the device stage — `:put [:parse ...]` alone over ssh/mac-telnet, `:parse` + `/console/inspect` for structured REST/native | read-only | CDB |
 | `centrs_retrieve` | `retrieve` / `retrieveGroup` | read-only | CDB |
 | `centrs_execute` | `execute` | read or write | CDB |
 | `centrs_devices` | `devices` (`list`/`show`/`groups`/`add`/`edit`/`set`/`remove`) | CDB read/write | CDB file |
