@@ -44,7 +44,11 @@ documenting cross-cutting shifts that affect contributors and consumers.
   invisible to the corpus false-reject join, which scores one direction only.
   Over the pinned corpus the rule fires on 40 scripts and every one is
   device-rejected: the false-reject count is unchanged at 1 and the caught count
-  goes 62 → 93, with none of the four censuses moving.
+  goes 62 → 93. Symbol resolution stops at the apostrophe too, the way it
+  already stopped at a malformed escape, so `:put 'abc'; :put $after` no longer
+  publishes an occurrence for `$after` — that returns 306 bytes to
+  `unclassified` and is the only census movement; value, operator and
+  bracket-equals are unchanged.
 - **The quote-count preflight that modelled `'` as a delimiter is gone.**
   `execute` carried a private `hasUnbalancedQuotes` check, moved into the
   offline gate by #354 and kept there only because it was the one thing catching

@@ -9,14 +9,15 @@ and `error.context.validationStage` says which one spoke:
 
 - **`"offline"`** — centrs rejected the input before any connection was opened,
   and `meta.validation.stages[]` shows the device stage `skipped`: the router was
-  never asked. Two checks make up this stage, and `error.context.validationSource`
-  says which spoke:
-  - the **corpus-gated analyzer**, the usual case. `error.context.span` carries
-    the offending byte range (end-exclusive) and `error.context.diagnostics[]`
-    the analyzer's own `explain/<analyzer>/<slug>` codes.
-  - the **quote-balance supplement** (`… + quote balance`), for an unterminated
-    `"` or `'` the analyzer passes. It reports no span — it is a coarser check
-    kept because the analyzer is blind to the apostrophe (GH#355).
+  never asked. The **corpus-gated analyzer** is the whole of this stage, and
+  `error.context.validationSource` names it. `error.context.span` carries the
+  offending byte range (end-exclusive) and `error.context.diagnostics[]` the
+  analyzer's own `explain/<analyzer>/<slug>` codes.
+
+  A quote-balance supplement used to sit beside it for the unterminated `"` or
+  `'` the analyzer passed, reporting no span. It is gone (GH#355): the analyzer
+  rejects a bare `'` itself now, with the byte span, and the supplement's own
+  model of `'` as a delimiter was false-rejecting input RouterOS accepts.
 - **absent** — RouterOS itself rejected it, through `:put [:parse "…"]`. When the
   device reported a `(line N column M)`, it is on `error.position`, which is
   RouterOS's authoritative 1-based **byte** column and is never synthesized by

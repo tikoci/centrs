@@ -525,7 +525,8 @@ Standard envelope (constitution: result envelope); `data` sketch:
   severity channels. **Malformed input carries a defect *region*** (Q14): each
   diagnostic points at the byte span of its defect, and the detectable classes
   are {unbalanced delimiter, unterminated string, invalid escape, invalid sigil,
-  invalid unquoted hash, BOM, non-ASCII, over-depth nesting}. **Two classes named
+  invalid unquoted hash, invalid apostrophe (#355), BOM, non-ASCII,
+  over-depth nesting}. **Two classes named
   in the phase-0 draft
   of this list are deliberately deferred** (maintainer decision, #192), because
   each would require offline to assert something it cannot prove:
@@ -596,19 +597,24 @@ and its phase is named below.
     all: a `[…]`/`(…)`/`$x`/`{…}` value, an escape this phase does not decode, a
     left-hand side that is not a RouterOS name, a token split by a continuation.
     Never partially read, because a dropped argument silently changes what a
-    rendered `curl` DOES. Two refusals are not lexical at all, but
-    places where centrs's two readers disagree about an **unquoted** value: a
-    `'`, which RouterOS treats as an ordinary character and the locked execute
-    gate treats as a quote (`comment=it's` is `it's` here and `its` to the
-    gate); and a `\f`/`\v`, which the gate splits tokens on (JavaScript `\s`)
-    and every explain module does not (ASCII whitespace). The device-correct
-    reading is the analysis's in both, but the gate cannot be corrected — so
-    phase 1 publishes neither rather than putting two confident values in one
-    result. Inside a `"…"` run the two agree and nothing is refused. The
-    advisory value-anchor view is intentionally wider only for exact array
+    rendered `curl` DOES. One refusal is not lexical at all, but a place where
+    centrs's two readers disagree about an **unquoted** value: a `\f`/`\v`,
+    which the retired execute gate split tokens on (JavaScript `\s`) and every
+    explain module does not (ASCII whitespace). The device-correct reading is
+    the analysis's, but that gate could not be corrected — so phase 1 publishes
+    neither rather than putting two confident values in one result. Inside a
+    `"…"` run the two agree and nothing is refused.
+
+    The advisory value-anchor view is intentionally wider only for exact array
     literals: a non-empty `{…}` value or a parenthesized run with a depth-zero
     comma is locatable and hints `array`, while the strict REST view continues
     to refuse the whole list.
+
+    An unquoted `'` used to be a second such disagreement, described here as a
+    character RouterOS treats as ordinary and the gate treats as a quote. That
+    reading was wrong on both halves and #355 settled it: `'` is not a RouterOS
+    token at all, so `comment=it's` is REJECTED by the device rather than
+    carrying either value, and the quote-counting gate that disagreed is gone.
   - **A token is read but carries no `value`** — the list still reads. The token
     is delimited and classified; only its literal value is unknowable, as for
     the positional in `:log info "result: $[…]"`. **`value` absent means there
@@ -1382,11 +1388,20 @@ fact rather than a probe artefact. Rows 2–4 carry BALANCED apostrophes and are
 rejected anyway: this is a lexical rule, not a quote-balance one, and the remedy
 is always `"`, never a matching `'`.
 
-Only the FIRST apostrophe is recorded, the same way the hard `#` is: the device
-reports one column and it is the first one (row 2 reports column 30, not the
-trailing apostrophe), because classification stops there. Apostrophes inside a
-`"`-string or a comment never reach the rule at all — both runs are consumed
-whole by the scan before it — so no special case is needed for either.
+Only the FIRST apostrophe is recorded, **document-wide**, the same way the hard
+`#` is: the device reports one column and it is the first one (row 2 reports
+column 30, not the trailing apostrophe), because classification stops there. A
+nested scope body is a separate scan (`segmentScopeBody`), so per-scan
+suppression is not enough on its own and the collapse to the earliest occurrence
+happens where the diagnostics are composed — which keeps each segmenter call
+pure. Apostrophes inside a `"`-string or a comment never reach the rule at all —
+both runs are consumed whole by the scan before it — so no special case is
+needed for either.
+
+Symbol resolution stops at the apostrophe too, exactly as it stops at a
+malformed escape: the device classes nothing after a hard reject, so
+`:put 'abc'; :put $after` must not publish an occurrence for `$after`.
+Occurrences BEFORE the defect stand, which is the lab's X1 rule.
 
 **This was a false ACCEPT, which the corpus join cannot see.** The false-reject
 measurement scores one direction only, so the analyzer passing all four forms
@@ -1394,7 +1409,14 @@ with zero diagnostics never appeared in it. Over the pinned corpus the rule
 fires on 40 of the 7.24.2 scripts and **every one of them is a script the device
 rejects** — none of the 617 it accepts. It moves the false-reject count not at
 all (still 1, the extra `}` of corpus 228) while taking the caught count from 62
-to 93. None of the four censuses move.
+to 93.
+
+The token census moves, and only in the direction the fail-closed symbol stop
+predicts: 68 fewer `variable-*` tokens and their 306 bytes returning to
+`unclassified` (classified 1,023,413 → 1,023,107). Those are variable references
+sitting after a bare apostrophe, which the device never reaches and centrs
+therefore stops naming. The value, operator and bracket-equals censuses and
+`explain:arg-reach` are all unchanged.
 
 **It also retires a wrong rule.** `execute` carried a private
 `hasUnbalancedQuotes` preflight that modelled `'` as a delimiter, moved into the
@@ -1678,8 +1700,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 1,023,413 are classified (71.73%), the remaining
-  403,318 are `unclassified`. The census emits 241,669 tokens (avg 254.9 per
+  1,426,731 analyzed bytes, 1,023,107 are classified (71.71%), the remaining
+  403,624 are `unclassified`. The census emits 241,539 tokens (avg 254.8 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is the
   vocabulary #264 B5 settled. Each B2 fill should move the classified
@@ -2030,11 +2052,12 @@ the 16,526 bytes `arg-sep` claims, one per attribute. Token count rises 214,503
 → 231,026 because one run became two. **This is a retag.**
 
 (Those totals are the corpus as it stood for THIS measurement. The classified
-total is 1,023,413 today: #347/#348 later classified 8 further bytes. The
-identity being claimed here is between the two sides of the split, not with any
-later total — restating it against today's figure would credit this retag with a
-movement a different change made. The generated block above carries the current
-numbers.)
+total is 1,023,107 today: #347/#348 later classified 8 further bytes, and #355's
+fail-closed symbol stop then unclaimed 306 of them — variable bytes sitting
+after a bare apostrophe, which the device never reaches. The identity being
+claimed here is between the two sides of the split, not with any later total —
+restating it against today's figure would credit this retag with a movement a
+different change made. The generated block above carries the current numbers.)
 
 One count is not a clean split: `arg`'s own run count falls 16,526 → 16,523.
 Three attributes lost their name run entirely, because an earlier `variable-*`
@@ -2119,7 +2142,7 @@ bytes came from a fill that already held it — `string` gives up 17,672 and
 last decimal**, 1,023,405 of 1,426,731 (71.73076073906013%), so in byte terms
 this is a retag even though it took a new walk to make — again, the identity is
 between this change's own before and after, and the corpus total has since moved
-to 1,023,413 / 241,669 tokens under #347/#348. Only the token count
+to 1,023,107 / 241,539 tokens under #347/#348 and #355. Only the token count
 moves, 231,026 → 241,663: the 7,408 new `escaped` tokens plus the 3,229
 fragments they leave behind when they split a run they sit inside (`string`
 +2,643, `value` +586). That second number is well under one per escape because

@@ -915,6 +915,33 @@ describe("`'` is not a RouterOS token (#355)", () => {
 		expect(result.diagnostics).toEqual([]);
 	});
 
+	test("a nested scope does not report a second apostrophe", () => {
+		// A block body is a SEPARATE scan (`segmentScopeBody`), so the per-scan
+		// suppression alone let the root and the body each report one. The device
+		// reports one error and stops, so the contract is document-wide.
+		const result = explainCommand(":put 'a'; :if (true) do={ :put 'b' }");
+		const apostrophes = result.diagnostics.filter((d) =>
+			d.code.endsWith("/invalid-apostrophe"),
+		);
+		expect(apostrophes).toHaveLength(1);
+		expect(apostrophes[0]?.span).toEqual({ start: 5, end: 6 });
+	});
+
+	test("symbol resolution stops at the apostrophe, as it does at a bad escape", () => {
+		// The device classes nothing after a hard reject, so publishing a symbol
+		// occurrence past it would claim a fact about bytes the console never
+		// reached. `:put 1 # a` and `:put \\q` already stop; this one now matches.
+		expect(
+			explainCommand(":put 'abc'; :put $after").symbols.occurrences,
+		).toEqual([]);
+		// Occurrences BEFORE the defect still stand (the lab's X1 rule).
+		expect(
+			explainCommand(":put $before; :put 'abc'").symbols.occurrences.map(
+				(o) => o.name,
+			),
+		).toEqual(["before"]);
+	});
+
 	test("the byte is diagnosed, and earns no token class of its own", () => {
 		// A deliberate reading of B5's rule, not an oversight: a class is split
 		// only where a consumer holding the whole envelope could not recover the
