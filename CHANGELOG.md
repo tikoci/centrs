@@ -31,6 +31,35 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Fixed
 
+- **`'` is not a RouterOS token, and offline analysis now says so (#355).** `'`
+  is not a string delimiter and not a legal bare byte — only `"` opens a string.
+  `:parse` rejects `name=don't`, `name=don't'`, `name='abc'` and `:put 'abc'`
+  byte-identically on CHR 7.21.5, 7.23.5, 7.24.2 and 7.25beta3, and offline
+  `explain` passed all four with ZERO diagnostics, dropping the byte into
+  `unclassified`. It now raises `explain/canonicalizer/invalid-apostrophe` on
+  the apostrophe's own byte — which is the device's own reported column in every
+  case — while an apostrophe inside a `"`-string or a comment stays legal. Rows
+  2-4 above carry BALANCED apostrophes and are rejected anyway, so this is a
+  lexical rule and not a quote-balance one. Being a false ACCEPT, it was
+  invisible to the corpus false-reject join, which scores one direction only.
+  Over the pinned corpus the rule fires on 40 scripts and every one is
+  device-rejected: the false-reject count is unchanged at 1 and the caught count
+  goes 62 → 93. Symbol resolution stops at the apostrophe too, the way it
+  already stopped at a malformed escape, so `:put 'abc'; :put $after` no longer
+  publishes an occurrence for `$after` — that returns 306 bytes to
+  `unclassified` and is the only census movement; value, operator and
+  bracket-equals are unchanged.
+- **The quote-count preflight that modelled `'` as a delimiter is gone.**
+  `execute` carried a private `hasUnbalancedQuotes` check, moved into the
+  offline gate by #354 and kept there only because it was the one thing catching
+  the apostrophe case. It had no comment awareness, so an English contraction in
+  a `#` comment opened a quote it never closed — over the pinned corpus it
+  false-rejected **51** of the 617 scripts CHR 7.24.2 accepts, a figure the
+  published measurement never saw because that measurement ran `explainCommand`
+  rather than the whole gate. Removing it costs 21 catches, all on scripts the
+  device rejects anyway and where the device stage still applies, and takes the
+  gate's false rejects from 52 to 1.
+
 - **CI: the three console reads that RouterOS 7.23.6/7.24.3/7.25beta4 broke.**
   Those builds print a settings menu that has exactly one property — of the
   menus centrs reads, only `/system/identity` — one character per line, so

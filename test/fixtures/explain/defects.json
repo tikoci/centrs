@@ -65,6 +65,56 @@
 			"why": "the segmenter's own defects always come from the TOP-LEVEL scan, which works in analyzed bytes throughout, so a non-ASCII statement never widens them. Only the walker-raised classes (over-depth) can reach the Loc.base=-1 fallback."
 		},
 		{
+			"name": "a-bare-apostrophe-is-not-a-token",
+			"input": "/system/identity/set name=don't",
+			"defects": [
+				{ "code": "invalid-apostrophe", "start": 29, "end": 30, "detail": "'" }
+			],
+			"why": "#355 — `'` is not a RouterOS string delimiter and not a legal bare byte. The region is the apostrophe itself, which is the byte the device's own column names.",
+			"verified": "CHR 7.21.5/7.23.5/7.24.2/7.25beta3: `expected end of command (line 1 column 30)`, byte-identical on all four. Column 30 is 1-based, so offset 29 — the apostrophe."
+		},
+		{
+			"name": "only-the-first-apostrophe-is-reported",
+			"input": "/system/identity/set name=don't'",
+			"defects": [
+				{ "code": "invalid-apostrophe", "start": 29, "end": 30, "detail": "'" }
+			],
+			"why": "#355 — classification stops at the first one, as with the hard `#`, so a second occurrence is not an independent finding.",
+			"verified": "CHR 7.21.5/7.23.5/7.24.2/7.25beta3: `expected end of command (line 1 column 30)` — the device reports the FIRST apostrophe here too, not the trailing one."
+		},
+		{
+			"name": "balanced-apostrophes-are-rejected-too",
+			"input": "/system/identity/set name='abc'",
+			"defects": [
+				{ "code": "invalid-apostrophe", "start": 26, "end": 27, "detail": "'" }
+			],
+			"why": "#355 — the control that makes this a LEXICAL rule rather than a quote-balance one. A balance rule would accept this pair; the device does not.",
+			"verified": "CHR 7.21.5/7.23.5/7.24.2/7.25beta3: `syntax error (line 1 column 27)`, byte-identical on all four."
+		},
+		{
+			"name": "balanced-apostrophes-in-a-directive-are-rejected-too",
+			"input": ":put 'abc'",
+			"defects": [
+				{ "code": "invalid-apostrophe", "start": 5, "end": 6, "detail": "'" }
+			],
+			"why": "#355 — the same balanced pair in a `:` directive, so the rule is not about argument pairing either.",
+			"verified": "CHR 7.21.5/7.23.5/7.24.2/7.25beta3: `syntax error (line 1 column 6)`, byte-identical on all four."
+		},
+		{
+			"name": "an-apostrophe-inside-a-string-is-legal",
+			"input": "/ip/address/add address=1.1.1.1/32 comment=\"it's here\"",
+			"defects": [],
+			"why": "#355 ACCEPTING control — only `\"` opens a string, and inside one the apostrophe is ordinary content. The string run is consumed whole before the lexical branch sees it.",
+			"verified": "CHR 7.21.5/7.23.5/7.24.2/7.25beta3: parses to `(evl /ip/address/addaddress=1.1.1.1;32;comment=it's here)` on all four."
+		},
+		{
+			"name": "an-apostrophe-inside-a-comment-is-legal",
+			"input": "# don't do this\n/ip/address/print",
+			"defects": [],
+			"why": "#355 ACCEPTING control — the comment run is consumed whole too. This is the case that broke the retired quote-count preflight, which read the contraction as an unclosed quote.",
+			"verified": "CHR 7.21.5/7.23.5/7.24.2/7.25beta3: parses to `(evl /ip/address/print)` on all four."
+		},
+		{
 			"name": "clean-input-has-no-defects",
 			"input": "/ip route add dst-address=10.9.0.0/16 gateway=10.9.0.1",
 			"defects": [],

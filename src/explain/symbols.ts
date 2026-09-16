@@ -878,6 +878,23 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 			break;
 		}
 
+		// --- `'` is not a RouterOS token (#355) ---------------------------------
+		//
+		// Same fail-closed stop as the malformed escape above, for the same reason:
+		// the device rejects at this byte and classes nothing after it, so carrying
+		// confident symbol classes across it would publish facts about bytes the
+		// console never reached. `:put 'abc'; :put $after` must not name `$after`.
+		//
+		// This walk reaches here only in CODE — a `"` string is consumed by the
+		// quote phase above and a comment by the `#` branch below — so an
+		// apostrophe inside either never trips it, matching `segment.ts`.
+		// Occurrences BEFORE the defect stand (the lab's X1 rule).
+		if (c === "'") {
+			defects.push(defectAt("invalid-apostrophe", i, "'"));
+			defect = true;
+			break;
+		}
+
 		// --- comments: `#` in statement-leading position (Q1 rule H4) ------------
 		//
 		// Done inline rather than through `segment.ts`'s shared `maskComments`:

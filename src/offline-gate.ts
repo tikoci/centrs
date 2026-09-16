@@ -102,7 +102,6 @@ export function assertOfflineSyntax(
 		.map(findingOf);
 
 	if (analysis.verdict !== "fail") {
-		assertBalancedQuotes(command, options);
 		return { verdict: analysis.verdict === "warn" ? "warn" : "pass", warnings };
 	}
 
@@ -130,75 +129,6 @@ export function assertOfflineSyntax(
 			diagnostics: findings,
 		},
 		causeData: first?.code ?? "offline analysis rejected the input",
-	});
-}
-
-/**
- * The quote-balance supplement to the analyzer, and the reason stage 1 is not
- * `explainCommand` alone.
- *
- * `\'` is not a RouterOS string delimiter — it is not a legal token at all.
- * `:put \'abc\'` and `name=don\'t` are both rejected, balanced or not,
- * byte-identically on CHR 7.21.5 / 7.23.5 / 7.24.2 / 7.25beta3. The analyzer
- * passes all of them with zero diagnostics (GH#355), so dropping this check
- * would make stage 1 blind to a whole character class.
- *
- * This ran as a private `hasUnbalancedQuotes` preflight inside `execute`'s
- * device gate until GH#354. It belongs here instead: it opens no connection, so
- * filing it under the device stage made an error envelope report a `:parse` that
- * never happened.
- *
- * The rule below is the one that shipped, not the correct one — it models `\'`
- * as a delimiter and so only catches the UNBALANCED case. GH#355 owns replacing
- * it with "an apostrophe outside a `"`-string is a syntax error", which needs a
- * corpus census re-run because it can only add rejections. Until then, keeping
- * the weaker rule is strictly better than keeping none.
- *
- * Runs only AFTER the analyzer has passed, so a defect the analyzer can describe
- * precisely reports its byte span rather than this coarser message.
- */
-function assertBalancedQuotes(
-	command: string,
-	options: { surface: string; via?: string },
-): void {
-	let quote: '"' | "'" | undefined;
-	let escaped = false;
-	for (const char of command) {
-		if (escaped) {
-			escaped = false;
-			continue;
-		}
-		if (char === "\\") {
-			escaped = true;
-			continue;
-		}
-		if (quote) {
-			if (char === quote) {
-				quote = undefined;
-			}
-			continue;
-		}
-		if (char === '"' || char === "'") {
-			quote = char;
-		}
-	}
-	if (quote === undefined) {
-		return;
-	}
-	throw new CentrsError({
-		code: "validation/syntax",
-		summary: `RouterOS syntax rejected by offline analysis: unterminated ${quote === '"' ? "string" : "`'`"} literal.`,
-		remediation:
-			"Close the RouterOS string quote, then retry. The command was not executed. " +
-			"`--validate=false` bypasses both validation stages.",
-		context: {
-			command,
-			validationStage: "offline" satisfies ValidationStageName,
-			validationSource: `${OFFLINE_GATE_SOURCE} + quote balance`,
-			surface: options.surface,
-			...(options.via ? { via: options.via } : {}),
-		},
-		causeData: "unterminated string literal",
 	});
 }
 

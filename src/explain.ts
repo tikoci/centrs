@@ -938,6 +938,14 @@ const DEFECT_DIAGNOSTICS: Record<
 		message: () =>
 			"unquoted `#` is a syntax error here — quote it where a value is accepted, or move it to statement-leading position to start a comment",
 	},
+	// #355. Not a quote-balance rule: `name='abc'` and `:put 'abc'` are rejected
+	// too. `'` simply is not a RouterOS token, so the remedy is the double quote,
+	// never a matching apostrophe.
+	"invalid-apostrophe": {
+		severity: "error",
+		message: () =>
+			'`\'` is not a RouterOS token — only `"` opens a string; use `"` here, or put the apostrophe inside a `"`-string',
+	},
 	// centrs's own resource bound, not a RouterOS rule. The input may be entirely
 	// legal; what is reported is that the analyzer stopped descending, so the
 	// honest severity is a warning about incomplete analysis.
@@ -957,6 +965,38 @@ const DEFECT_DIAGNOSTICS: Record<
 		message: () => "non-ASCII bytes, normalized one-for-one for analysis",
 	},
 };
+
+/**
+ * Keep only the EARLIEST `invalid-apostrophe`, document-wide (#355).
+ *
+ * The rule suppresses repeats within one scan, but a nested scope body is a
+ * SEPARATE scan — `segmentScopeBody` is called per block and its defects are
+ * rebased in — so `:put 'a'; :if (true) do={ :put 'b' }` produced one from each.
+ * The device reports one error and stops, so a second occurrence is not an
+ * independent finding no matter which scope it sits in, and the contract is
+ * stated document-wide.
+ *
+ * Collapsing HERE rather than threading a flag through the walkers is the point:
+ * `segmentStatements` and `segmentScopeBody` stay pure per call, which is what
+ * lets a body be segmented on its own. The other classes are deliberately
+ * untouched — two `unclosed` delimiters ARE two findings.
+ */
+function collapseToFirstApostrophe(
+	defects: readonly AttributedDefect[],
+): AttributedDefect[] {
+	let seen = false;
+	const out: AttributedDefect[] = [];
+	for (const entry of [...defects].sort(
+		(a, b) => a.defect.start - b.defect.start,
+	)) {
+		if (entry.defect.code === "invalid-apostrophe") {
+			if (seen) continue;
+			seen = true;
+		}
+		out.push(entry);
+	}
+	return out;
+}
 
 /** A defect plus the analysis pass that raised it. */
 interface AttributedDefect {
@@ -1281,14 +1321,16 @@ export function explainCommand(
 	// `symbols.ts` raises the DIFFERENT `bad-escape` code. Until the escape walk
 	// had an evidence entry of its own there was nothing truer to cite; now
 	// there is, and the token and the diagnostic cite the same one.
-	const defects = attributeDefects([
-		[EV.segment, segmented.defects],
-		[EV.statements, verbs.defects],
-		[EV.subcommands, brackets.defects],
-		[EV.write, write.defects],
-		[EV.symbols, symbols.defects],
-		[EV.escapes, stringEscapes.defects],
-	]);
+	const defects = collapseToFirstApostrophe(
+		attributeDefects([
+			[EV.segment, segmented.defects],
+			[EV.statements, verbs.defects],
+			[EV.subcommands, brackets.defects],
+			[EV.write, write.defects],
+			[EV.symbols, symbols.defects],
+			[EV.escapes, stringEscapes.defects],
+		]),
+	);
 
 	// From the SPLITS, not from the segmentation. The resolver flattens `do={…}`
 	// bodies in after their parent, so its list is longer than the top-level

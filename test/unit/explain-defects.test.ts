@@ -540,6 +540,7 @@ describe("the abstention gate rides the defect channel (#202)", () => {
 		["unbalanced-close", ":put 1}"],
 		["over-depth", `${"[".repeat(300)}find${"]".repeat(300)}`],
 		["invalid-hash", ":put 1 # nope"],
+		["invalid-apostrophe", ":put 'abc'"],
 	];
 
 	for (const [code, input] of structural) {
@@ -574,6 +575,7 @@ describe("the abstention gate rides the defect channel (#202)", () => {
 			"bad-string-escape",
 			"bad-sigil",
 			"invalid-hash",
+			"invalid-apostrophe",
 			"unterminated-string",
 			"unclosed",
 			"unbalanced-close",

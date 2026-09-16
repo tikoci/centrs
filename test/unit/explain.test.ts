@@ -878,6 +878,88 @@ test("public explain cost stays bounded as nesting depth grows (#322)", () => {
 }, 120_000);
 
 /**
+ * `'` is not a RouterOS token (#355).
+ *
+ * The four rows are the device's own, captured by writing each to a FILE and
+ * running `:put [:parse [/file/get <f> contents]]` — the corpus's own parseIL
+ * method — so no shell, JSON or RouterOS quoting layer ever sees the
+ * apostrophe. `:parse` returns `code` and does NOT throw on bad input, so the
+ * rendered reply is the verdict; `:onerror` catches nothing here.
+ *
+ * Every `start` is the device's reported column minus one, and the two
+ * ACCEPTING controls are what make the rejection a device fact rather than a
+ * probe artefact. The full evidence, with its per-build replies, is pinned in
+ * `test/fixtures/explain/defects.json`.
+ */
+describe("`'` is not a RouterOS token (#355)", () => {
+	test.each([
+		["/system/identity/set name=don't", 29],
+		["/system/identity/set name=don't'", 29],
+		["/system/identity/set name='abc'", 26],
+		[":put 'abc'", 5],
+	])("%j fails offline with the span on the apostrophe", (input, start) => {
+		const result = explainCommand(input as string);
+		expect(result.verdict).toBe("fail");
+		const errors = result.diagnostics.filter((d) => d.severity === "error");
+		expect(errors).toHaveLength(1);
+		expect(errors[0]?.code).toBe("explain/canonicalizer/invalid-apostrophe");
+		expect(errors[0]?.span).toEqual({ start, end: (start as number) + 1 });
+	});
+
+	test.each([
+		['/ip/address/add address=1.1.1.1/32 comment="it\'s here"'],
+		["# don't do this\n/ip/address/print"],
+	])("%j still passes — the device accepts it", (input) => {
+		const result = explainCommand(input as string);
+		expect(result.verdict).toBe("pass");
+		expect(result.diagnostics).toEqual([]);
+	});
+
+	test("a nested scope does not report a second apostrophe", () => {
+		// A block body is a SEPARATE scan (`segmentScopeBody`), so the per-scan
+		// suppression alone let the root and the body each report one. The device
+		// reports one error and stops, so the contract is document-wide.
+		const result = explainCommand(":put 'a'; :if (true) do={ :put 'b' }");
+		const apostrophes = result.diagnostics.filter((d) =>
+			d.code.endsWith("/invalid-apostrophe"),
+		);
+		expect(apostrophes).toHaveLength(1);
+		expect(apostrophes[0]?.span).toEqual({ start: 5, end: 6 });
+	});
+
+	test("symbol resolution stops at the apostrophe, as it does at a bad escape", () => {
+		// The device classes nothing after a hard reject, so publishing a symbol
+		// occurrence past it would claim a fact about bytes the console never
+		// reached. `:put 1 # a` and `:put \\q` already stop; this one now matches.
+		expect(
+			explainCommand(":put 'abc'; :put $after").symbols.occurrences,
+		).toEqual([]);
+		// Occurrences BEFORE the defect still stand (the lab's X1 rule).
+		expect(
+			explainCommand(":put $before; :put 'abc'").symbols.occurrences.map(
+				(o) => o.name,
+			),
+		).toEqual(["before"]);
+	});
+
+	test("the byte is diagnosed, and earns no token class of its own", () => {
+		// A deliberate reading of B5's rule, not an oversight: a class is split
+		// only where a consumer holding the whole envelope could not recover the
+		// distinction by joining on byte offsets, and `diagnostics[]` already
+		// carries this exact span. `bad-escape` is the precedent — its byte is
+		// diagnosed too and stays in the residual `unclassified` run.
+		const result = explainCommand(":put 'abc'", { tokens: true });
+		const diagnostic = result.diagnostics.find((d) =>
+			d.code.endsWith("/invalid-apostrophe"),
+		);
+		expect(diagnostic?.span).toEqual({ start: 5, end: 6 });
+
+		const covering = result.tokens?.find((t) => t.start <= 5 && t.end > 5);
+		expect(covering?.class).toBe("unclassified");
+	});
+});
+
+/**
  * The surface itself, beyond the numbered examples: the conditional-arity
  * grammar and the phase boundary it guards. No other centrs command has an
  * optional target where arity changes meaning, so these are the cases a shared
