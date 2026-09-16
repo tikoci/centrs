@@ -21,7 +21,7 @@ it upstream rather than working around it.
   CLI/API generally work: core paths, common commands). Stable channel only,
   x86 Linux runner.
 - **On pre-release** — same workflow as push, **also** on macOS and Windows
-  runners.
+  runners. (A pre-release is a `-`-suffixed version, e.g. `0.1.7-next.0`.)
 - **On release** — more sophisticated tests with richer quickchr options (extra
   packages, e.g. `container`); exercise all four RouterOS release channels.
 - CI must be runnable **separately from the release process**, so agents can fix
@@ -34,12 +34,27 @@ it upstream rather than working around it.
 
 ## Release versioning
 
-Even/odd **minor** signals channel; **both publish to NPM**:
+Standard npm semantics: the **SemVer pre-release identifier** selects the
+dist-tag. **Both publish to NPM.**
 
-- Odd minor = **pre-release** (e.g. `0.1.x`).
-- Even minor = **release** (e.g. `0.2.x`).
+- A version carrying a pre-release suffix (`0.1.7-next.0`) = **pre-release** →
+  npm tag `next`. It never moves `latest`, so it reaches only people who ask for
+  it by tag or exact version.
+- A plain version (`0.1.6`) = **release** → npm tag `latest`, and `release.yaml`
+  then moves `next` forward to the same version, so `@next` never resolves older
+  than `@latest` between cuts.
 
-Keep `CHANGELOG.md` current with the bump.
+The even/odd **minor** rule this replaces is gone: `0.1.x` was "pre-release"
+only by that convention, which meant a plain `npm install @tikoci/centrs`
+resolved to whatever odd-minor build last touched `latest` — in practice
+`0.1.0`, months stale — while every subsequent cut landed on `next` alone.
+Pre-release status now lives in the version string itself, where npm, `npm
+outdated`, and range resolvers can all see it.
+
+Cutting one: bump `package.json`, move `## Unreleased` in `CHANGELOG.md` to the
+new version heading, commit, then push the matching `v<version>` tag — the tag
+is what triggers the publish, and `release.yaml` fails the run if the tag and
+`package.json` disagree. Keep `CHANGELOG.md` current with the bump.
 
 ## Realized in
 
@@ -75,8 +90,9 @@ scheme as the reference):
   accumulator in `scripts/qa-history.ts`.
 - **Security/quality** → `codeql.yaml` (PR + push + weekly + dispatch) + the
   AI-findings probe.
-- **Release/publish** → `release.yaml`: `v*` tag or dispatch(dry-run); even/odd
-  minor → npm `next`/`latest`; release-tier sweep via `qa.yaml` `workflow_call`
+- **Release/publish** → `release.yaml`: `v*` tag or dispatch(dry-run);
+  pre-release suffix → npm `next`, plain version → `latest` + `next` moved
+  forward; release-tier sweep via `qa.yaml` `workflow_call`
   (all channels); `--provenance`; needs `NPM_TOKEN`.
 - **Extended platforms** → `verify-extended.yaml` (dispatch): macOS-x86 (HVF) +
   Windows-x86 (TCG, informational). A `packages` input installs extra RouterOS

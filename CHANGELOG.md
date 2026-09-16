@@ -8,7 +8,23 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+## 0.1.6 — 2026-09-15
+
 ### Changed
+
+- **Release channels now use standard npm pre-release versions, not the even/odd
+  minor rule.** `0.1.x` counted as "pre-release" only by an internal convention
+  npm could not see, so every cut since 0.1.0 published to `next` and `latest`
+  was left pointing at 0.1.0 — a plain `npm install @tikoci/centrs` handed you a
+  June build while six releases sat on `next`. The dist-tag is now selected by
+  the SemVer pre-release identifier: a `-`-suffixed version (`0.1.7-next.0`)
+  publishes to `next` and never moves `latest`; a plain version (`0.1.6`)
+  publishes to `latest` and carries `next` forward with it, so `@next` cannot
+  resolve older than `@latest` between cuts. This release is the first plain
+  version under the new rule, so `latest` and `next` both land on 0.1.6 — which
+  is also the fix for the stale `latest`. The pre-1.0 caveats are unchanged:
+  this is still an early preview, and `docs/MATRIX.md` remains the source of
+  truth for what works.
 
 - **Validation now runs offline first, then on the device.** centrs had two
   validators that did not know about each other: the device preflight
@@ -82,6 +98,10 @@ documenting cross-cutting shifts that affect contributors and consumers.
   channel leg mid-suite with every assertion green (#352).
 
 ## 0.1.5 — 2026-09-15
+
+*Tagged but never published: the release-tier CHR sweep failed on the
+7.23.6/7.24.3 console-wrap and image-cache defects that #352 then fixed, so npm
+has no 0.1.5. Everything below shipped in 0.1.6.*
 
 ### Added
 

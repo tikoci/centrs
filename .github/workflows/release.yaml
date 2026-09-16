@@ -6,9 +6,12 @@ run-name: Release • ${{ github.event_name }} • ${{ github.ref_name }}
 # dispatch). Pipeline: checks ‖ unit → release-tier CHR sweep (all channels via
 # qa.yaml workflow_call) → publish.
 #
-# Even/odd MINOR selects the npm dist-tag and signals pre-release vs release:
-#   odd  minor (0.1.x, 0.3.x) → npm tag "next"   (pre-release)
-#   even minor (0.2.x, 0.4.x) → npm tag "latest"  (release)
+# The SemVer PRE-RELEASE identifier selects the npm dist-tag — standard npm
+# semantics, no even/odd minor rule:
+#   0.1.7-next.0 (any `-` suffix) → npm tag "next"   (pre-release)
+#   0.1.6        (no suffix)      → npm tag "latest" (release), and "next" is
+#                                   moved forward to it so `@next` never resolves
+#                                   older than `@latest`.
 # Keep CHANGELOG.md current with the bump (move "## Unreleased" to the version).
 #
 # Requires NPM_TOKEN (npm automation token with publish access to @tikoci/centrs)
@@ -117,20 +120,29 @@ jobs:
         run: |
           set -eo pipefail
           VERSION=$(node -pe "require('./package.json').version")
-          MINOR=$(echo "$VERSION" | cut -d. -f2)
-          if [ $((MINOR % 2)) -ne 0 ]; then
+          PKG_NAME=$(node -pe "require('./package.json').name")
+          # SemVer: anything after the first `-` is a pre-release identifier, so
+          # stripping it changes the string only for a pre-release version.
+          if [ "${VERSION%%-*}" != "$VERSION" ]; then
             NPM_TAG="next"
-            echo "::notice::Pre-release $VERSION (odd minor $MINOR) → npm tag 'next'"
+            ALSO_NEXT="false"
+            echo "::notice::Pre-release $VERSION → npm tag 'next'"
           else
             NPM_TAG="latest"
-            echo "::notice::Release $VERSION (even minor $MINOR) → npm tag 'latest'"
+            ALSO_NEXT="true"
+            echo "::notice::Release $VERSION → npm tag 'latest' (and 'next' moved to it)"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "package=$PKG_NAME" >> "$GITHUB_OUTPUT"
           echo "npm-tag=$NPM_TAG" >> "$GITHUB_OUTPUT"
+          echo "also-next=$ALSO_NEXT" >> "$GITHUB_OUTPUT"
           {
             echo "## Release"
             echo "- Version: \`$VERSION\`"
             echo "- npm tag: \`$NPM_TAG\`"
+            if [ "$ALSO_NEXT" = "true" ]; then
+              echo "- Also moves: \`next\` → \`$VERSION\`"
+            fi
             echo "- Dry run: \`$DRY_RUN\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Validate tag matches package.json version
@@ -162,13 +174,23 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TAG: ${{ steps.version.outputs.npm-tag }}
+          ALSO_NEXT: ${{ steps.version.outputs.also-next }}
           VERSION: ${{ steps.version.outputs.version }}
+          PKG_NAME: ${{ steps.version.outputs.package }}
           DRY_RUN: ${{ inputs.dry-run || 'false' }}
         run: |
           set -eo pipefail
           if [ "$DRY_RUN" = "true" ]; then
             echo "Dry run — not publishing $VERSION (would use npm tag '$NPM_TAG')"
+            if [ "$ALSO_NEXT" = "true" ]; then
+              echo "Dry run — would then move 'next' to $PKG_NAME@$VERSION"
+            fi
             bunx npm pack --dry-run
           else
             bunx npm publish --access public --provenance --tag "$NPM_TAG"
+            # A plain release publishes to 'latest'; carry 'next' forward with it so
+            # `npm i pkg@next` never resolves older than `@latest` between cuts.
+            if [ "$ALSO_NEXT" = "true" ]; then
+              bunx npm dist-tag add "$PKG_NAME@$VERSION" next
+            fi
           fi
