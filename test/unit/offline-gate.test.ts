@@ -132,19 +132,45 @@ describe("isOfflineGateRejection", () => {
 	});
 });
 
-describe("the quote-balance supplement", () => {
-	// `'` is not a RouterOS string delimiter — it is not a legal token at all, and
-	// the analyzer passes every form of it (#355). This check is what keeps stage 1
-	// from being blind to the character class. It used to live in `execute.ts` as a
-	// private `hasUnbalancedQuotes` guard *inside the device gate*, which made an
-	// error envelope report a `:parse` that never ran.
-	test("an unbalanced apostrophe is an OFFLINE rejection, not a device one", () => {
-		const error = reject("/system/identity/set name=don't");
+describe("`'` is not a RouterOS token (#355)", () => {
+	// `\'` is not a string delimiter and not a legal bare byte. `:put [:parse]`
+	// rejects every form below byte-identically on CHR 7.21.5 / 7.23.5 / 7.24.2 /
+	// 7.25beta3 — the BALANCED forms included, which is why this is a lexical rule
+	// and not a quote-balance one. Each `start` below is the device's own reported
+	// column minus one (it reports 1-based): 30, 30, 27, 6.
+	//
+	// This replaced a private `hasUnbalancedQuotes` preflight that modelled `\'` as
+	// a delimiter. That rule had no comment awareness, so `# don\'t` opened a quote
+	// it never closed: over the pinned corpus it false-rejected 51 of the 617
+	// scripts CHR 7.24.2 ACCEPTS. The analyzer rule false-rejects none of them.
+	test.each([
+		["/system/identity/set name=don't", 29],
+		["/system/identity/set name=don't'", 29],
+		["/system/identity/set name='abc'", 26],
+		[":put 'abc'", 5],
+	])("%j is an OFFLINE rejection at byte %i", (command, start) => {
+		const error = reject(command as string);
 		expect(error.code).toBe("validation/syntax");
 		expect(error.context?.["validationStage"]).toBe("offline");
-		expect(error.context?.["validationSource"]).toContain("quote balance");
-		expect(error.causeData).toBe("unterminated string literal");
+		expect(error.context?.["validationSource"]).toBe(OFFLINE_GATE_SOURCE);
+		expect(error.causeData).toBe("explain/canonicalizer/invalid-apostrophe");
+		expect(error.context?.["span"]).toEqual({
+			start,
+			end: (start as number) + 1,
+		});
 		expect(isOfflineGateRejection(error)).toBe(true);
+	});
+
+	test("only the FIRST apostrophe is reported, as the device does", () => {
+		// `name=don't'` carries two, and CHR reports column 30 — the first one.
+		// Classification stops there, so a second is not an independent finding.
+		const error = reject("/system/identity/set name=don't'");
+		const diagnostics = error.context?.["diagnostics"] as ReadonlyArray<{
+			code: string;
+		}>;
+		expect(
+			diagnostics.filter((d) => d.code.endsWith("invalid-apostrophe")),
+		).toHaveLength(1);
 	});
 
 	test("an apostrophe inside a real string is left alone", () => {
@@ -157,9 +183,18 @@ describe("the quote-balance supplement", () => {
 		).toBe("pass");
 	});
 
-	test("the analyzer speaks first, so a precise span beats the coarse message", () => {
-		// This input is BOTH an unterminated `"` and unbalanced by quote count. The
-		// analyzer's diagnostic carries a byte span, so it must be the one reported.
+	test("an apostrophe inside a comment is left alone", () => {
+		// The comment run is consumed whole before the lexical branch sees it, so
+		// the English contraction that broke the old quote-count rule is a no-op.
+		expect(
+			assertOfflineSyntax("# don't do this\n/ip/address/print", surface)
+				.verdict,
+		).toBe("pass");
+	});
+
+	test("the analyzer speaks first, so a precise span beats a coarse message", () => {
+		// BOTH an unterminated `"` and unbalanced by quote count. The analyzer's
+		// diagnostic carries a byte span, so it must be the one reported.
 		const error = reject(
 			'/ip/address/add address="unterminated interface=ether1',
 		);

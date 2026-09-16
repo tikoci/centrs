@@ -938,6 +938,14 @@ const DEFECT_DIAGNOSTICS: Record<
 		message: () =>
 			"unquoted `#` is a syntax error here — quote it where a value is accepted, or move it to statement-leading position to start a comment",
 	},
+	// #355. Not a quote-balance rule: `name='abc'` and `:put 'abc'` are rejected
+	// too. `'` simply is not a RouterOS token, so the remedy is the double quote,
+	// never a matching apostrophe.
+	"invalid-apostrophe": {
+		severity: "error",
+		message: () =>
+			'`\'` is not a RouterOS token — only `"` opens a string; use `"` here, or put the apostrophe inside a `"`-string',
+	},
 	// centrs's own resource bound, not a RouterOS rule. The input may be entirely
 	// legal; what is reported is that the analyzer stopped descending, so the
 	// honest severity is a warning about incomplete analysis.

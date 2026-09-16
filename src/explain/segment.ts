@@ -737,6 +737,7 @@ function scanAscii(
 	const defects: Defect[] = [];
 	const overDepth: number[] = [];
 	let hardHashSeen = false;
+	let hardApostropheSeen = false;
 	// H2 — every open bracket, for balance. Each frame carries WHERE it opened so
 	// an `unclosed` defect can point at the opener rather than at the end of
 	// input.
@@ -967,6 +968,31 @@ function scanAscii(
 		) {
 			defects.push(defectAt("invalid-hash", i, "#"));
 			hardHashSeen = true;
+			f.structurallyInvalid = true;
+			ensureStmt(f, i);
+			f.atLead = false;
+			i++;
+			continue;
+		}
+
+		// #355 — `'` is NOT a RouterOS token: not a string delimiter, and not a
+		// legal bare byte. `:put [:parse]` rejects `name=don't`, `name=don't'`,
+		// `name='abc'` and `:put 'abc'` byte-identically on 7.21.5 / 7.23.5 /
+		// 7.24.2 / 7.25beta3, so this is a lexical rule and not a quote-balance
+		// one — the BALANCED forms are rejected too, and only `"` opens a string.
+		//
+		// Only the FIRST apostrophe is recorded, for the same reason as the hard
+		// hash above and grounded the same way: the device reports one column and
+		// it is always the first apostrophe (`name=don't'` reports column 30, the
+		// one at `don|'t`, not the trailing one), because classification stops
+		// there. A second occurrence is not an independent finding.
+		//
+		// Apostrophes inside a `"`-string or a comment never reach this branch:
+		// both runs are consumed whole above (H3 and H4/H5), which is why
+		// `comment="it's here"` stays legal with no special case here.
+		if (c === "'" && !hardApostropheSeen) {
+			defects.push(defectAt("invalid-apostrophe", i, "'"));
+			hardApostropheSeen = true;
 			f.structurallyInvalid = true;
 			ensureStmt(f, i);
 			f.atLead = false;

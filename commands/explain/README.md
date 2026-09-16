@@ -1029,7 +1029,8 @@ navigated, so the context stays as unknown as it already was.
     (string-internal unknown/lowercase-hex/truncated — CHR `highlight` `error`
       `:parse` `expected message value`, grounded stable+testing #247),
     `bad-sigil`,
-    `invalid-hash`, `missing-statement-separator` (#311, below). Eight classes
+    `invalid-hash`, `invalid-apostrophe` (#355, below),
+    `missing-statement-separator` (#311, below). Nine classes
     the device itself rejects.
   - `warning` — `over-depth`, because it is centrs's own resource bound and says
     nothing about whether the input is legal; and an `ambiguous`/`unknown`
@@ -1360,6 +1361,49 @@ no schema, so a catalog MISS abstains rather than being decided either way.
 That is the catalog's own "a hit is decisive, a miss says nothing" contract, and
 turning such a miss into an acceptance would be the mirror-image defect of the
 one being fixed here.
+
+### `'` is not a RouterOS token (#355)
+
+`'` (U+0027) is not a string delimiter and not a legal bare byte. Only `"` opens
+a string. `:parse` rejects every spelling of a bare apostrophe byte-identically
+on CHR 7.21.5, 7.23.5, 7.24.2 and 7.25beta3:
+
+| input | device `:parse` | offline span |
+| --- | --- | --- |
+| `/system/identity/set name=don't` | `expected end of command (line 1 column 30)` | 29 |
+| `/system/identity/set name=don't'` | `expected end of command (line 1 column 30)` | 29 |
+| `/system/identity/set name='abc'` | `syntax error (line 1 column 27)` | 26 |
+| `:put 'abc'` | `syntax error (line 1 column 6)` | 5 |
+
+The device's column is 1-based, so each offline span is the device's own byte.
+The accepting controls — `comment="it's here"` and a `# don't` comment line —
+parse cleanly on all four builds, which is what makes the rejection a device
+fact rather than a probe artefact. Rows 2–4 carry BALANCED apostrophes and are
+rejected anyway: this is a lexical rule, not a quote-balance one, and the remedy
+is always `"`, never a matching `'`.
+
+Only the FIRST apostrophe is recorded, the same way the hard `#` is: the device
+reports one column and it is the first one (row 2 reports column 30, not the
+trailing apostrophe), because classification stops there. Apostrophes inside a
+`"`-string or a comment never reach the rule at all — both runs are consumed
+whole by the scan before it — so no special case is needed for either.
+
+**This was a false ACCEPT, which the corpus join cannot see.** The false-reject
+measurement scores one direction only, so the analyzer passing all four forms
+with zero diagnostics never appeared in it. Over the pinned corpus the rule
+fires on 40 of the 7.24.2 scripts and **every one of them is a script the device
+rejects** — none of the 617 it accepts. It moves the false-reject count not at
+all (still 1, the extra `}` of corpus 228) while taking the caught count from 62
+to 93. None of the four censuses move.
+
+**It also retires a wrong rule.** `execute` carried a private
+`hasUnbalancedQuotes` preflight that modelled `'` as a delimiter, moved into the
+offline gate by #354. It had no comment awareness, so `# don't` opened a quote
+it never closed: over the same corpus it false-rejected **51** of the 617
+device-accepted scripts. Deleting it costs 21 catches — all of them scripts the
+device rejects anyway, where the device stage is still the backstop — and takes
+the gate's false rejects from 52 to 1. A false reject blocks input RouterOS
+accepts, which is the figure that matters.
 
 ### String escape validation (#247, #252)
 

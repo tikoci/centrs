@@ -101,6 +101,7 @@ export type DefectCode =
 	| "bad-string-escape"
 	| "bad-sigil"
 	| "invalid-hash"
+	| "invalid-apostrophe"
 	| "unterminated-string"
 	| "unclosed"
 	| "unbalanced-close"
