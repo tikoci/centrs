@@ -8,6 +8,27 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Changed
+
+- **Validation now runs offline first, then on the device.** centrs had two
+  validators that did not know about each other: the device preflight
+  (`:put [:parse …]` + `/console/inspect request=child`) that `execute` / `api` /
+  `validate` share, and offline `explain`, which was byte-accurate and
+  corpus-gated but took no part in validation at all. `execute` (all four
+  transports) and `api`'s `/execute` script mode now run the analyzer as
+  **stage 1**, before any connection: a syntax fault comes back with the
+  offending byte span in `error.context.span` and the protocol adapter is never
+  dialed, where `:put [` previously cost a full round trip to be told no. The
+  `api /execute` carve-out is the larger change — that surface ran **no**
+  preflight at all, so its script went to the device ungated.
+  `meta.validation.stages[]` reports what each stage concluded and names a
+  skipped stage's reason, so a reader can tell "the device accepted it" from
+  "the device was never asked". Stage 1 is necessary and never sufficient: it
+  has no per-menu schema, so it cannot see an unknown attribute, and the device
+  stage is unchanged. An offline `warn` is an abstention and passes through;
+  only a `fail` rejects. `--validate=false` disables both stages — one flag, one
+  meaning (#354, and the ordering agreed on #236).
+
 ### Fixed
 
 - **CI: the three console reads that RouterOS 7.23.6/7.24.3/7.25beta4 broke.**

@@ -150,12 +150,24 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 
 ## Current priority
 
-**Live `explain` (#236)** is the selected track. The offline baseline is
-`verified`: #264 closed the measured token vocabulary and #322 closed the final
-bounded-execution gap, including the public depth-axis guard. Start with
-[the #90 task index](https://github.com/tikoci/centrs/issues/90), then follow
-[`commands/explain/README.md`](../commands/explain/README.md) and the live
-examples in [`commands/explain/examples.md`](../commands/explain/examples.md).
+**Tightening validation as a whole** is the selected track, in the three-step
+order agreed on [#236](https://github.com/tikoci/centrs/issues/236):
+
+1. **Done** — fix the offline false rejects so the analyzer can be trusted as a
+   gate (#347/#348, shipped in #349; the measured corpus false-reject count went
+   4 → 1).
+2. **Done** — front the `execute` / `api` device preflight with the offline
+   analyzer (#354). The gate is now two-stage; the contract is in
+   [`docs/CONSTITUTION.md` → Validation is the product](CONSTITUTION.md#validation-is-the-product).
+3. **Next** — **live `explain` (#236)**, as stage two of a gate that now exists.
+   Start with [the #90 task index](https://github.com/tikoci/centrs/issues/90),
+   then follow [`commands/explain/README.md`](../commands/explain/README.md) and
+   the live examples in
+   [`commands/explain/examples.md`](../commands/explain/examples.md).
+
+The offline baseline stays `verified`: #264 closed the measured token vocabulary
+and #322 closed the final bounded-execution gap, including the public depth-axis
+guard.
 
 The live pass is the device-backed cross-check on the offline result, not a
 replacement for it. It adds read-only `/console/inspect` and `:parse` evidence,
@@ -165,7 +177,11 @@ applicable examples pass on CHR via `bun run test:integration`.
 
 Open offline follow-ups remain explicit but do not reopen the verified baseline.
 Issue #211 retains the fail-closed unlisted-path decision; #272 owns
-non-authoritative `.scratch/` citation cleanup. #336 and #342 are complete: the
+non-authoritative `.scratch/` citation cleanup. #350 (the broad optional `=`,
+schema-dependent and so belonging to step 3), #351 (an unresolvable menu that
+abstains at 2-deep nesting but hard-fails at 3-deep) and #355 (`'` is not a
+RouterOS token — a false ACCEPT the corpus join cannot see) are bounded analyzer
+defects that step 2 now surfaces through the `execute`/`api` gate. #336 and #342 are complete: the
 corpus is repinned to three *complete* builds (long-term 7.23.5, stable 7.24.2,
 development 7.25beta3), and the operator sweep and highlight slice are re-swept
 onto those same builds — plus 7.21.5 retained as an age anchor — so the operator

@@ -73,7 +73,7 @@ arbitrary script expressions. The `$a` variable must survive the validation
 wrapper: if that outer string expands it before `:parse`, this example fails even
 though RouterOS accepts the original command.
 
-### 5. Syntax reject from `:put [:parse ...]`
+### 5. Syntax reject before the write round-trip
 
 Malformed CLI is rejected by the syntax gate before semantic validation or the
 write round-trip.
@@ -82,9 +82,16 @@ write round-trip.
 centrs execute $R '/ip/address/add address="unterminated interface=ether1' --via rest-api --username $U --password $P --yes
 ```
 
-Envelope: `ok: false`, `error.code=validation/syntax`, `error.cause` preserves
-the RouterOS parse error string from `:put [:parse ...]`, `meta.via=rest-api`,
-and no address is added.
+Envelope: `ok: false`, `error.code=validation/syntax`, `meta.via=rest-api`, and
+no address is added.
+
+**Which stage rejects it changed in GH#354.** This input is now caught by the
+*offline* stage, so `error.context.validationStage="offline"`,
+`error.cause="explain/canonicalizer/unterminated-string"`,
+`error.context.span={"start":24,"end":54}`, and the device is never contacted —
+see V1–V3 below. It reached `:put [:parse ...]` before that. The code, the
+`meta.via`, and the no-mutation guarantee are unchanged, which is why the
+assertion in `test/integration/execute.test.ts` still reads `validation/syntax`.
 
 ### 6. Semantic reject that `:parse` accepts
 
@@ -202,14 +209,16 @@ centrs execute $A "/ip/address/remove numbers=$ID" --via native-api --port $API_
 Envelope: `ok: true`, `meta.via=native-api`. A subsequent retrieve of
 `/ip/address` does not contain `$ID`.
 
-### 15. Native syntax reject from `:parse`
+### 15. Native syntax reject
 
 ```bash
 centrs execute $A '/ip/address/add address="unterminated interface=ether1' --via native-api --port $API_PORT --username $U --password $P --yes
 ```
 
-Envelope: `ok: false`, `error.code=validation/syntax`, `error.cause` preserves
-the RouterOS parse error string, `meta.via=native-api`, and no address is added.
+Envelope: `ok: false`, `error.code=validation/syntax`, `meta.via=native-api`, and
+no address is added. The native twin of example 5, and it moved the same way:
+the offline stage rejects this input now, so the verdict no longer depends on
+the transport at all.
 
 ### 16. Native semantic reject after clean parse
 
@@ -363,6 +372,61 @@ centrs execute 127.0.0.1 '/ip/address/add address=198.51.100.51/32 interface=eth
 
 Envelope: `ok: false`, `error.code=validation/unknown-attribute`, `meta.via=ssh`,
 and no address is added — the console `:parse` gate catches `bogus` pre-mutation.
+
+## Offline gate (stage 1)
+
+Validation runs offline before it runs on the device
+([`docs/CONSTITUTION.md` → Validation is the product](../../docs/CONSTITUTION.md#validation-is-the-product),
+GH#354). These two prove the stage exists and that a stage-1 rejection reaches no
+router. Run by `test/integration/execute.test.ts`.
+
+### V1. Offline reject, with the device stage never asked
+
+`:put [` is an unclosed bracket. The old local quote preflight counted quotes
+only, so this used to cost a full round trip to be told no; the analyzer rejects
+it with a byte span before anything is dialed.
+
+```bash
+centrs execute $R ':put [' --via rest-api --username $U --password $P --json
+```
+
+Envelope: `ok: false`, `error.code=validation/syntax`,
+`error.context.validationStage="offline"`,
+`error.context.span={"start":5,"end":6}`,
+`error.context.diagnostics[0].code="explain/canonicalizer/unclosed"`,
+`error.position` absent (the offline byte offset is never dressed up as a
+RouterOS-reported one), `meta.validation.source` is the offline analyzer, and
+`meta.validation.stages` is `offline: failed` followed by `device: skipped`.
+
+### V2. The same rejection with no reachable router at all
+
+The proof that stage 1 opens no connection: point the same command at a port
+nothing is listening on. A gate that dialed first would report a
+`transport/*` error or hang until the timeout.
+
+```bash
+centrs execute 127.0.0.1:1 ':put [' --via rest-api --username $U --password $P --json
+```
+
+Envelope: identical to V1 — `ok: false`, `error.code=validation/syntax`,
+`error.context.validationStage="offline"` — and **not** a `transport/*` code.
+
+### V3. `--validate=false` disables the offline stage too
+
+One flag, one meaning. The escape hatch has to reach stage 1, or a caller hitting
+an analyzer defect would have no way past it. RouterOS then rejects the command
+itself on the run.
+
+```bash
+centrs execute $R ':put [' --via rest-api --username $U --password $P --json --validate=false
+```
+
+Envelope: `ok: false`, `error.code=routeros/request-failed` with RouterOS's own
+`syntax error (line 1 column 7)` in the summary — the **device** rejecting it, not
+centrs — plus `meta.validation.enabled=false`, `meta.validation.result="skipped"`,
+and `meta.validation.stages` listing **both** stages as `skipped`. A gated
+surface always reports every stage, so a consumer reading `stages` never has to
+special-case the disabled shape.
 
 ## Target selection (fan-out)
 

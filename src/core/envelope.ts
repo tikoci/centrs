@@ -111,6 +111,50 @@ export interface EnvelopeTargetMeta {
 	sources?: Record<string, SettingSource>;
 }
 
+/**
+ * One stage of the two-stage validation gate (GH#354).
+ *
+ * `offline` is the corpus-gated analyzer (`src/offline-gate.ts`): it opens no
+ * connection, so a `failed` offline stage means the device was never contacted.
+ * `device` is the RouterOS-side preflight — `:put [:parse …]` and/or
+ * `/console/inspect request=child`, depending on the command and transport.
+ *
+ * Stages appear in the order they run, and a stage that did not run is still
+ * listed with `result: "skipped"`. That is the point of the array: a reader must
+ * be able to tell "the device accepted it" from "the device was never asked".
+ */
+export interface EnvelopeValidationStage {
+	stage: "offline" | "device";
+	/** Validator identity, e.g. `offline explain (canonicalizer)` or `:put [:parse]`. */
+	source: string;
+	result: "passed" | "failed" | "skipped";
+	/** Why a stage was skipped, when the reason is not simply `validate=false`. */
+	reason?: string;
+}
+
+/**
+ * Mutable sink that lets an error path report the validation that ACTUALLY ran.
+ *
+ * `runResolvedExecute` / `runResolvedApi` finish the gate and then do the real
+ * work, and the error envelope is built by a *different* function after the
+ * throw unwinds past them. Without this, a `routeros/*` fault on the run — which
+ * happens with both gate stages already green — got a reconstructed
+ * `result: "failed"` that erased the real outcome. The runner writes
+ * {@link ValidationTrace.validation} the moment the gate returns; the error
+ * builder prefers it over anything it could guess (GH#354, PR #356 review).
+ */
+export interface ValidationTrace {
+	/** The completed gate result, set once validation finishes. */
+	validation?: EnvelopeValidationMeta;
+	/**
+	 * The stage-1 verdict, recorded as soon as stage 1 returns — before stage 2
+	 * can throw. `warn` is an abstention, and an error envelope that reported it
+	 * as `passed` would be telling a consumer the analyzer read bytes it declined
+	 * to judge.
+	 */
+	offlineVerdict?: "pass" | "warn";
+}
+
 export interface EnvelopeValidationMeta {
 	enabled: boolean;
 	/** Validator identity, e.g. `/console/inspect` or `:put [:parse]`. */
@@ -121,6 +165,15 @@ export interface EnvelopeValidationMeta {
 	/** Semantic `/console/inspect` gate status, or not-applicable for script mode. */
 	semantic?: boolean | "not-applicable";
 	availableAttributes?: readonly string[];
+	/**
+	 * Per-stage detail for the gate described in
+	 * `docs/CONSTITUTION.md` → "Validation is the product".
+	 *
+	 * The flat `source` / `syntax` / `semantic` fields above stay the summary
+	 * view and keep their meaning; this is the breakdown behind them. Absent on
+	 * surfaces that have no RouterOS-command gate at all (`btest`).
+	 */
+	stages?: readonly EnvelopeValidationStage[];
 }
 
 export interface EnvelopeTimingMeta {

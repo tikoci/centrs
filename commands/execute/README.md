@@ -16,7 +16,14 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
 - Mirror RouterOS `execute` semantics. Input is a CLI string; output is
   console-shaped text (or structured records for path+verb writes) wrapped in
   the standard envelope. This includes write-shaped add/set/remove.
-- Validation is two-stage (see constitution: validation; grounded on CHR 7.23.3,
+- Validation runs **offline first, then on the device** (see constitution:
+  validation; GH#354). Stage 1 is the corpus-gated analyzer over the exact
+  command string, with no connection: a syntax fault is rejected with a byte
+  span in `error.context.span` and the adapter is never dialed, and
+  `meta.validation.stages[]` then shows the device stage `skipped`. Stage 1
+  cannot see an unknown attribute — it has no per-menu schema — so stage 2 is
+  not optional.
+- Stage 2 is itself two gates (grounded on CHR 7.23.3,
   GH#230): a single `:put [:parse "<cmd>"]` covers both the syntax and the
   unknown-attribute (name-level) gate on **every** transport — `:parse` never
   throws; its return value's printed form (`(evl …)` / `(evl bad parameter …)` /

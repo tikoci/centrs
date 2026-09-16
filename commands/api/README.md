@@ -99,8 +99,8 @@ vs `--query` distinction.
 
 ## Validation
 
-Default on. Because the input is a structured path (not a CLI string), the gate is
-`/console/inspect` — **not** `:put [:parse]`:
+Default on. Because the input is a structured path (not a CLI string), the device
+gate is `/console/inspect` — **not** `:put [:parse]`:
 
 - Path existence + per-verb attribute validity via `request=child`
   (`validation/unknown-path`, `validation/unknown-attribute`).
@@ -113,11 +113,25 @@ Default on. Because the input is a structured path (not a CLI string), the gate 
   `AGENTS.md` (GH#343).
 - **Carve-out:** a script-shaped `POST /rest/execute` is a CLI string, not a path,
   so the inspect gate is `not-applicable` (`meta.validation.semantic`); RouterOS
-  re-validates on the run.
+  re-validates on the run. Until GH#354 that carve-out meant the script was sent
+  with *no* preflight at all. It is now gated by the offline stage (constitution:
+  validation) — the same analyzer `explain` publishes, run over the `script`
+  field with no connection, so a syntax fault is a byte span in
+  `error.context.span` instead of a round trip. `meta.validation.stages[]` shows
+  the offline stage `passed` and the device stage `skipped` with its reason. A
+  missing or blank `script` is still `input/invalid-command`, not a syntax
+  rejection.
+- Structured path requests are **not** offline-gated. The input is a path plus a
+  body, not a CLI string, and an offline *path* gate collides with GH#211's
+  unlisted-path decision. On the success path `meta.validation.stages[]` is
+  absent there; on a `validation/*` rejection it is present and reports the
+  offline stage `skipped` with that reason, so the breakdown never implies an
+  analysis that did not run.
 
-`--validate=false` skips the preflight; RouterOS still re-validates writes
-server-side. Disabling validation to make a call pass is forbidden (constitution:
-validation is the product).
+`--validate=false` skips **both** stages of the preflight — one flag, one meaning
+(constitution: validation); RouterOS still re-validates writes server-side.
+Disabling validation to make a call pass is forbidden (constitution: validation
+is the product).
 
 `--raw` **defaults** `--validate` to false — it does not override it (GH#154).
 The resolution order is the explicit `--validate` flag, then `--raw`, then

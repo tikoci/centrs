@@ -518,3 +518,74 @@ describe("`--raw` is a precedence layer for --validate, not an override (#154)",
 		expect(env.validate.source.kind).toBe("env");
 	});
 });
+
+describe("api validation metadata survives the error boundary (#354, PR #356 review)", () => {
+	const base = {
+		endpoint: "/ip/address",
+		host: "192.0.2.1",
+		username: "u",
+		password: "p",
+	} as const;
+
+	test("a post-validation transport fault does not claim /console/inspect failed", async () => {
+		// The gate settled before `backend.apiRequest` ran. Rebuilding the meta
+		// here reported `/console/inspect` as the failing validator and dropped
+		// `stages`, which is exactly the accepted-vs-skipped distinction the
+		// validation contract requires readers to be able to make.
+		const resolved = await resolveApiRequest({ ...base }, {});
+		const settled = {
+			enabled: true,
+			source: "/console/inspect request=child",
+			result: "passed" as const,
+			syntax: false,
+			semantic: true,
+		};
+		const envelope = buildApiErrorEnvelopeFromResolved(
+			resolved,
+			new CentrsError({
+				code: "transport/unreachable",
+				summary: "connection refused",
+			}),
+			{ validation: settled },
+		);
+		expect(envelope.meta.validation).toEqual(settled);
+	});
+
+	test("a structured request's offline stage is skipped, with the reason named", async () => {
+		// `api` only offline-gates script mode; a path plus a body is not a CLI
+		// string. Saying `passed` here would claim an analysis that never ran.
+		const resolved = await resolveApiRequest({ ...base }, {});
+		const envelope = buildApiErrorEnvelopeFromResolved(
+			resolved,
+			new CentrsError({
+				code: "validation/unknown-attribute",
+				summary: "Unknown RouterOS attribute",
+			}),
+		);
+		const stages = envelope.meta.validation?.stages ?? [];
+		expect(stages[0]).toMatchObject({
+			stage: "offline",
+			result: "skipped",
+		});
+		expect(stages[0]?.reason).toContain("structured path request");
+		expect(stages[1]?.result).toBe("failed");
+	});
+
+	test("--raw (validation disabled) lists both stages as skipped", async () => {
+		const resolved = await resolveApiRequest({ ...base, raw: true }, {});
+		const envelope = buildApiErrorEnvelopeFromResolved(
+			resolved,
+			new CentrsError({ code: "transport/unreachable", summary: "nope" }),
+		);
+		expect(envelope.meta.validation?.enabled).toBe(false);
+		expect(
+			(envelope.meta.validation?.stages ?? []).map((stage) => [
+				stage.stage,
+				stage.result,
+			]),
+		).toEqual([
+			["offline", "skipped"],
+			["device", "skipped"],
+		]);
+	});
+});

@@ -30,10 +30,24 @@ interface ExecuteSuccessEnvelope {
 
 interface ExecuteFailureEnvelope {
 	ok: false;
-	error: { code?: string; cause?: unknown; context?: Record<string, unknown> };
+	error: {
+		code?: string;
+		cause?: unknown;
+		context?: Record<string, unknown>;
+		position?: { line: number; column: number };
+	};
 	meta: {
 		via: string | null;
-		validation?: { enabled?: boolean; source?: string };
+		validation?: {
+			enabled?: boolean;
+			source?: string;
+			stages?: readonly {
+				stage: string;
+				source: string;
+				result: string;
+				reason?: string;
+			}[];
+		};
 	};
 }
 
@@ -290,6 +304,78 @@ describeFast("execute against CHR", () => {
 			);
 			expect(validateFalse.meta.validation?.enabled).toBe(false);
 
+			// V1 — the offline stage rejects before the device is asked (GH#354).
+			// `:put [` is an unclosed bracket: the old local quote preflight counted
+			// quotes only, so this used to cost a round trip to be told no.
+			const offlineReject = expectExecuteFailure(
+				await executeEnvelope({ ...base, command: ":put [" }),
+				"rest-api",
+				"validation/syntax",
+			);
+			expect(offlineReject.error.context?.["validationStage"]).toBe("offline");
+			expect(offlineReject.error.context?.["span"]).toEqual({
+				start: 5,
+				end: 6,
+			});
+			const offlineDiagnostics = offlineReject.error.context?.[
+				"diagnostics"
+			] as ReadonlyArray<{ code: string }>;
+			expect(offlineDiagnostics[0]?.code).toBe(
+				"explain/canonicalizer/unclosed",
+			);
+			// The offline byte offset must never be dressed up as RouterOS's own
+			// `(line N column M)`; `position` stays the device's word alone.
+			expect(
+				(offlineReject.error as { position?: unknown }).position,
+			).toBeUndefined();
+			expect(offlineReject.meta.validation?.stages).toEqual([
+				{
+					stage: "offline",
+					source: "offline explain (canonicalizer)",
+					result: "failed",
+				},
+				{
+					stage: "device",
+					source: ":put [:parse] + /console/inspect",
+					result: "skipped",
+					reason: "offline analysis rejected the command; no connection opened",
+				},
+			]);
+
+			// V2 — the same rejection with nothing listening. This is the assertion
+			// that proves stage 1 opens no connection: a gate that dialed first
+			// would report a `transport/*` code or hang until the timeout.
+			const unreachable = expectExecuteFailure(
+				await executeEnvelope({
+					...base,
+					targetInput: "127.0.0.1:1",
+					command: ":put [",
+				}),
+				"rest-api",
+				"validation/syntax",
+			);
+			expect(unreachable.error.context?.["validationStage"]).toBe("offline");
+
+			// V3 — `--validate=false` disables BOTH stages, so the same command
+			// reaches RouterOS and RouterOS is the one that rejects it.
+			const bypassed = expectExecuteFailure(
+				await executeEnvelope({ ...base, command: ":put [", validate: false }),
+				"rest-api",
+				"routeros/request-failed",
+			);
+			expect(bypassed.meta.validation?.enabled).toBe(false);
+			// A gated surface reports every stage, disabled included — so a reader
+			// never special-cases the `validate=false` shape.
+			expect(
+				(bypassed.meta.validation?.stages ?? []).map((stage) => [
+					stage.stage,
+					stage.result,
+				]),
+			).toEqual([
+				["offline", "skipped"],
+				["device", "skipped"],
+			]);
+
 			await recordIntegrationEvidence({
 				suite: "execute against CHR",
 				command: "execute",
@@ -298,7 +384,7 @@ describeFast("execute against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(11),
+				exampleIds: [...exampleIds(11), "V1", "V2", "V3"],
 			});
 		} finally {
 			await chr.destroy();

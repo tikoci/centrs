@@ -155,7 +155,23 @@ centrs api $R execute -X POST -f script=':put [/system/identity/get name]' --use
 ```
 
 Envelope: `ok: true`, `data` is string-shaped and contains the CHR identity;
-`meta.validation.semantic=not-applicable` (script, not a path).
+`meta.validation.semantic=not-applicable` (script, not a path) and
+`meta.validation.stages` is `offline: passed` then `device: skipped`.
+
+### 16b. The `/execute` script is gated offline (GH#354)
+
+Until GH#354 the script-mode carve-out meant this surface ran **no** preflight at
+all. The offline analyzer is the whole stage-1 gate here, and it opens no
+connection — the unreachable port proves it.
+
+```bash
+centrs api 127.0.0.1:1 execute -X POST -f script=':put [' --username $U --password $P --yes
+```
+
+Envelope: `ok: false`, `error.code=validation/syntax`,
+`error.context.validationStage="offline"`, `error.context.surface="api /execute"`,
+`error.context.span={"start":5,"end":6}`, and **not** a `transport/*` code.
+`meta.validation.stages` is `offline: failed` then `device: skipped`.
 
 ### 17. `--via rest-api --listen` is rejected
 

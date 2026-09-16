@@ -104,7 +104,7 @@ benchmarked RouterOS agent support. Load-bearing findings that shape this design
 | Tool | Core mapping | Reads/Writes | Target source |
 | ---- | ------------ | ------------ | ------------- |
 | `centrs_explain` | `canonicalizeExecuteCommand` | offline, none | none (string only) |
-| `centrs_validate` | execute validation only (`:parse` + `/console/inspect`), **no run** | read-only | CDB |
+| `centrs_validate` | execute validation only, **no run**: offline analysis, then the device stage — `:put [:parse ...]` alone over ssh/mac-telnet, `:parse` + `/console/inspect` for structured REST/native | read-only | CDB |
 | `centrs_retrieve` | `retrieve` / `retrieveGroup` | read-only | CDB |
 | `centrs_execute` | `execute` | read or write | CDB |
 | `centrs_devices` | `devices` (`list`/`show`/`groups`/`add`/`edit`/`set`/`remove`) | CDB read/write | CDB file |
@@ -118,7 +118,10 @@ benchmarked RouterOS agent support. Load-bearing findings that shape this design
 - `centrs_validate` is the headline distilled from the bench: a dry-run that runs
   the real parser plus schema inspection against a registered target and returns
   the validation envelope **without executing**. Use it to reject schema-invalid
-  commands before any write.
+  commands before any write. It shares `execute`'s two-stage gate (constitution:
+  validation is the product, GH#354), so a syntax fault comes back from the
+  offline stage with a byte span and without contacting the target at all, and
+  `meta.validation.stages[]` says which stage spoke.
 - `centrs_retrieve` mirrors `retrieve`, including attribute projection,
   `listAttributes`, and `group` fanout.
 - `centrs_execute` mirrors `execute`. Read-shaped commands run subject only to
