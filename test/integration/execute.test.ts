@@ -347,6 +347,15 @@ describeFast("execute against CHR", () => {
 				}),
 				"rest-api",
 			);
+			await executeEnvelope({
+				...base,
+				command: ':log warning "no such item"',
+			});
+			const structuredRecords = expectExecuteSuccess(
+				await executeEnvelope({ ...base, command: "/log/print" }),
+				"rest-api",
+			);
+			expect(JSON.stringify(structuredRecords.data)).toContain("no such item");
 
 			const validateFalse = expectExecuteFailure(
 				await executeEnvelope({

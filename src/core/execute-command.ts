@@ -211,7 +211,10 @@ function scriptContainsWriteShapedCommand(input: string): boolean {
 			!isKnownExecuteVerb(lastPathPart) &&
 			(spacedVerb === undefined || !isKnownExecuteVerb(spacedVerb))
 		) {
-			continue;
+			// A slash-rooted statement that cannot be proven to end in a known read
+			// verb may be menu navigation for a following relative command. Fail
+			// closed for the whole script rather than trying to infer that context.
+			return true;
 		}
 		const verb = (
 			spacedVerb !== undefined && isKnownExecuteVerb(spacedVerb)

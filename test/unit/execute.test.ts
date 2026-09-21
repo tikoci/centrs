@@ -70,6 +70,7 @@ describe("execute confirmation gate", () => {
 		"/import file-name=router.rsc",
 		':execute script="/ip/address/remove *1"',
 		"/ip firewall filter\nremove [find comment=centrs]",
+		"/ip firewall filter\nnew-mutator [find comment=centrs]",
 	]) {
 		test(`rejects unconfirmed write shape: ${command}`, async () => {
 			const envelope = await executeEnvelope(

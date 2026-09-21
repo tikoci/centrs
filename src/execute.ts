@@ -1307,27 +1307,14 @@ function routerOsFailureFromResult(
 	result: ProtocolExecuteResult,
 	via: RouterOsProtocol,
 ): CentrsError | undefined {
-	const candidates = [
-		result.ret,
-		...result.records.flatMap((record) => [
-			record["detail"],
-			record["message"],
-			record["failure"],
-			record["error"],
-			record["ret"],
-		]),
-	].filter((value): value is string => typeof value === "string");
-	for (const candidate of candidates) {
-		const failure = mapRouterOsResultError(candidate, {
-			transport:
-				via === "rest-api" || via === "mac-telnet" || via === "ssh"
-					? via
-					: "native-api",
-			context: { via },
-		});
-		if (failure) return failure;
-	}
-	return undefined;
+	if (typeof result.ret !== "string") return undefined;
+	return mapRouterOsResultError(result.ret, {
+		transport:
+			via === "rest-api" || via === "mac-telnet" || via === "ssh"
+				? via
+				: "native-api",
+		context: { via },
+	});
 }
 
 function applyMaxResultsBudget(

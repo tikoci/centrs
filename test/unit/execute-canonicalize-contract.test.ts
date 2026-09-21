@@ -104,6 +104,11 @@ const cases: GateCase[] = [
 		mode: "script",
 		write: true,
 	},
+	{
+		input: "/ip firewall filter\nnew-mutator [find comment=x]",
+		mode: "script",
+		write: true,
+	},
 	{ input: ':put "hello"', mode: "script", write: false },
 	{ input: ':put "/ip/address/remove"', mode: "script", write: false },
 	{ input: ":put [/system/identity/get name]", mode: "script", write: false },
