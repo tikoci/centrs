@@ -571,6 +571,35 @@ describe("api validation metadata survives the error boundary (#354, PR #356 rev
 		expect(stages[1]?.result).toBe("failed");
 	});
 
+	test("an api /execute parse rejection names the live device stage", async () => {
+		const resolved = await resolveApiRequest(
+			{
+				...base,
+				endpoint: "/execute",
+				method: "POST",
+				fields: { script: "/ip/address/add no-such-arg=x" },
+			},
+			{},
+		);
+		const envelope = buildApiErrorEnvelopeFromResolved(
+			resolved,
+			new CentrsError({
+				code: "validation/unknown-attribute",
+				summary: "bad parameter no-such-arg",
+			}),
+			{ offlineVerdict: "pass" },
+		);
+		expect(envelope.meta.validation).toMatchObject({
+			source: ":put [:parse]",
+			result: "failed",
+			semantic: "not-applicable",
+			stages: [
+				{ stage: "offline", result: "passed" },
+				{ stage: "device", source: ":put [:parse]", result: "failed" },
+			],
+		});
+	});
+
 	test("--raw (validation disabled) lists both stages as skipped", async () => {
 		const resolved = await resolveApiRequest({ ...base, raw: true }, {});
 		const envelope = buildApiErrorEnvelopeFromResolved(

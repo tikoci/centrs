@@ -352,7 +352,7 @@ export const executeInputShape = {
 		.boolean()
 		.optional()
 		.describe(
-			"Required true for write-shaped commands (add/set/remove). Reads ignore it.",
+			"Required true for write-shaped commands, including selector/positional and non-CRUD mutations. Reads ignore it.",
 		),
 	via: z.string().optional().describe("Override transport."),
 	timeout: z

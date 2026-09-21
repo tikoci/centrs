@@ -15,7 +15,7 @@
  *   - A `--default` / `__default__` member is guarded from being dialed as the
  *     literal hostname `"__default__"` — it fails that one target deterministically
  *     with `target/unresolved`.
- *   - A **write-shaped** command (add/set/remove) is confirmed ONCE up front
+ *   - A **write-shaped** command is confirmed ONCE up front
  *     (`--yes`), never per target; without `--yes` the error names the blast radius
  *     (how many routers). Write-ness is target-independent (`canonicalizeExecuteCommand`).
  */

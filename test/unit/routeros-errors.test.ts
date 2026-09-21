@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	mapRouterOsError,
+	mapRouterOsResultError,
 	parseRouterOsPosition,
 	routerOsErrorRules,
 } from "../../src/core/routeros-errors.ts";
@@ -52,6 +53,16 @@ describe("mapRouterOsError grounded vocabulary", () => {
 		const error = mapRouterOsError("invalid value of disabled");
 		expect(error.code).toBe("routeros/invalid-value");
 		expect(ctx(error).argument).toBe("disabled");
+	});
+
+	test("maps 'input does not match' runtime rejection to invalid-value", () => {
+		const error = mapRouterOsError(
+			"input does not match any value of certificate",
+		);
+		expect(error.code).toBe("routeros/invalid-value");
+		expect(ctx(error).detail).toBe(
+			"input does not match any value of certificate",
+		);
 	});
 
 	test("maps 'Session closed' to routeros/session-closed with 60-second fix", () => {
@@ -159,6 +170,39 @@ describe("mapRouterOsError grounded vocabulary", () => {
 			expect(rule.test).toBeInstanceOf(RegExp);
 			expect(typeof rule.build).toBe("function");
 		}
+	});
+});
+
+describe("mapRouterOsResultError", () => {
+	test("recognizes grounded /execute runtime rejection shapes", () => {
+		expect(
+			mapRouterOsResultError("input does not match any value of certificate", {
+				transport: "rest-api",
+			})?.code,
+		).toBe("routeros/invalid-value");
+		expect(
+			mapRouterOsResultError("no such item", {
+				transport: "native-api",
+			})?.code,
+		).toBe("routeros/unknown-path");
+		expect(
+			mapRouterOsResultError("syntax error (line 1 column 7)", {
+				transport: "rest-api",
+			})?.code,
+		).toBe("routeros/request-failed");
+	});
+
+	test("does not classify arbitrary output containing error-like prose", () => {
+		expect(
+			mapRouterOsResultError("status: no such item appears in the help text"),
+		).toBeUndefined();
+		expect(
+			mapRouterOsResultError(
+				"the phrase input does not match is ordinary script output",
+			),
+		).toBeUndefined();
+		expect(mapRouterOsResultError("1")).toBeUndefined();
+		expect(mapRouterOsResultError("")).toBeUndefined();
 	});
 });
 

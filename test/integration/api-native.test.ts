@@ -7,6 +7,7 @@ import {
 	recordIntegrationEvidence,
 	splitQuickChrAuth,
 	startIntegrationChr,
+	VALIDATION_REJECT_CODES,
 	withBootReadyRetry,
 } from "./chr.ts";
 
@@ -17,13 +18,30 @@ interface SuccessEnvelope {
 	data: unknown;
 	meta: {
 		via: string;
-		validation?: { semantic?: boolean | string; enabled?: boolean };
+		validation?: {
+			semantic?: boolean | string;
+			enabled?: boolean;
+			stages?: readonly {
+				stage: string;
+				source: string;
+				result: string;
+			}[];
+		};
 	};
 }
 
 interface FailureEnvelope {
 	ok: false;
 	error: { code?: string };
+	meta: {
+		validation?: {
+			stages?: readonly {
+				stage: string;
+				source: string;
+				result: string;
+			}[];
+		};
+	};
 }
 
 function expectApiSuccess(
@@ -178,6 +196,27 @@ describeFast("api against CHR (native-api)", () => {
 			);
 			expect(JSON.stringify(script.data)).toContain(identity);
 			expect(script.meta.validation?.semantic).toBe("not-applicable");
+			expect(script.meta.validation?.stages?.[1]).toMatchObject({
+				stage: "device",
+				source: ":put [:parse]",
+				result: "passed",
+			});
+
+			const liveScriptReject = await apiEnvelope({
+				...base,
+				endpoint: "execute",
+				method: "POST",
+				fields: { script: "/ip/address/add no-such-arg=x" },
+				yes: true,
+			});
+			expect(liveScriptReject.ok).toBe(false);
+			if (!liveScriptReject.ok) {
+				expect(VALIDATION_REJECT_CODES).toContain(liveScriptReject.error.code);
+				expect(liveScriptReject.meta.validation?.stages).toMatchObject([
+					{ stage: "offline", result: "passed" },
+					{ stage: "device", source: ":put [:parse]", result: "failed" },
+				]);
+			}
 
 			await recordIntegrationEvidence({
 				suite: "api against CHR (native-api)",
@@ -187,7 +226,7 @@ describeFast("api against CHR (native-api)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(8),
+				exampleIds: [...exampleIds(8), "N8b"],
 			});
 		} finally {
 			await chr.destroy();

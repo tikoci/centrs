@@ -65,7 +65,7 @@ describe("commands/explain/examples.md — offline", () => {
 			"/ip/route add dst-address=10.9.0.0/16 gateway=192.0.2.1",
 		]);
 		expect(data.canonical.mode).toBe("script");
-		expect(data.canonical.writeShaped).toBe(false);
+		expect(data.canonical.writeShaped).toBe(true);
 		expect(data.structure.statements[0]?.command).toEqual({
 			path: "/ip/route",
 			verb: "add",
@@ -92,12 +92,12 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(code).toBe(0);
 	});
 
-	test("3. Sub-command paths are re-constituted; the gate verdict is untouched", async () => {
+	test("3. Sub-command paths are re-constituted; transport stays script-mode", async () => {
 		const { data } = await explainJson([
 			"/ip/address remove [find comment=defconf]",
 		]);
 		expect(data.canonical.mode).toBe("script");
-		expect(data.canonical.writeShaped).toBe(false);
+		expect(data.canonical.writeShaped).toBe(true);
 		const inner = data.structure.subcommands[0];
 		expect(inner?.command).toEqual({ path: "/ip/address", verb: "find" });
 		expect(inner?.span).toEqual({ start: 19, end: 41 });
@@ -252,8 +252,8 @@ describe("commands/explain/examples.md — offline", () => {
 		expect(write.data.structure.containsWrite).toBe(true);
 		expect(read.data.structure.containsWrite).toBe(false);
 		expect(opaque.data.structure.containsWrite).toBe("unknown");
-		// The tristate never alters the execute gate's verdict.
-		expect(opaque.data.canonical.writeShaped).toBe(false);
+		// The execute safety gate independently recognizes this destructive verb.
+		expect(opaque.data.canonical.writeShaped).toBe(true);
 	});
 
 	test("21. A defect cannot fabricate a following command", async () => {

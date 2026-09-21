@@ -8,11 +8,11 @@ import {
  * Legacy-contract fixture table for the `execute` script-vs-structured gate.
  *
  * centrs OWNS this gate; it is the load-bearing discriminator that decides
- * whether a command is sent as a structured (path + verb + attributes) call —
- * which is validated, write-shape-detected, and confirmation-gated — or passed
- * through verbatim as a raw RouterOS script. Widening what counts as
- * `structured` is a product regression (it can change validation, the write
- * confirmation prompt, and what is actually executed).
+ * whether a command is sent as a structured (path + verb + attributes) call or
+ * passed through verbatim as a raw RouterOS script. Widening what counts as
+ * `structured` is a product regression because it can change validation and
+ * what is actually executed. Write detection is deliberately independent of
+ * that transport choice: script-mode writes must still be confirmation-gated.
  *
  * This table pins the exact current behavior so any future refactor — notably a
  * possible convergence on the shared `rosetta`/`lsp-routeros-ts` canonicalizer
@@ -46,24 +46,66 @@ const cases: GateCase[] = [
 	{
 		input: "/ip/address/add address=1.2.3.4/32; /ip/address/print",
 		mode: "script",
-		write: false,
+		write: true,
 	},
 	{
 		input: "/ip/address { print; add address=1.2.3.4/32 interface=ether1 }",
 		mode: "script",
-		write: false,
+		write: true,
 	},
 	{
 		input: "/ip/address/set [find interface=ether1] disabled=yes",
 		mode: "script",
-		write: false,
+		write: true,
 	},
 	{
 		input: "/ip/address/set numbers=[find interface=ether1] disabled=yes",
 		mode: "script",
-		write: false,
+		write: true,
+	},
+	{
+		input: "/ip/address/remove *1",
+		mode: "script",
+		write: true,
+	},
+	{
+		input: "/ip/address/disable numbers=*1",
+		mode: "structured",
+		write: true,
+	},
+	{
+		input: "/ip/address/enable [find comment=x]",
+		mode: "script",
+		write: true,
+	},
+	{
+		input: "/ip/address/move numbers=*1 destination=0",
+		mode: "structured",
+		write: true,
+	},
+	{
+		input: "/ip/address/unset numbers=*1 value-name=comment",
+		mode: "structured",
+		write: true,
+	},
+	{
+		input: "/system/reset-configuration no-defaults=yes",
+		mode: "structured",
+		write: true,
+	},
+	{ input: "/import file-name=router.rsc", mode: "script", write: true },
+	{
+		input: ':execute script="/ip/address/remove *1"',
+		mode: "script",
+		write: true,
+	},
+	{
+		input: "/ip firewall filter\nremove [find comment=x]",
+		mode: "script",
+		write: true,
 	},
 	{ input: ':put "hello"', mode: "script", write: false },
+	{ input: ':put "/ip/address/remove"', mode: "script", write: false },
 	{ input: ":put [/system/identity/get name]", mode: "script", write: false },
 
 	// --- must stay structured ---
@@ -127,14 +169,14 @@ describe("execute gate legacy contract", () => {
 		});
 	}
 
-	test("a subshell selector is never write-shaped structured", () => {
+	test("a subshell selector stays script-mode but remains write-shaped", () => {
 		// Regression guard for the dangerous parse: this previously became a
 		// structured write with attributes `{ numbers: "[find", interface: ... }`.
 		const command = canonicalizeExecuteCommand(
 			"/ip/address/set numbers=[find default=yes] disabled=yes",
 		);
 		expect(command.mode).toBe("script");
-		expect(isWriteShaped(command)).toBe(false);
+		expect(isWriteShaped(command)).toBe(true);
 		expect(command.attributes).toEqual({});
 	});
 });

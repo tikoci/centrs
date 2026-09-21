@@ -125,7 +125,8 @@ benchmarked RouterOS agent support. Load-bearing findings that shape this design
 - `centrs_retrieve` mirrors `retrieve`, including attribute projection,
   `listAttributes`, and `group` fanout.
 - `centrs_execute` mirrors `execute`. Read-shaped commands run subject only to
-  CDB membership; write-shaped add/set/remove are gated by the CDB policy below.
+  CDB membership; every write-shaped command is gated by the CDB policy below,
+  including selector/positional script forms and non-CRUD mutation verbs.
   Its MCP `destructiveHint` is **conservative — always `true`**, even though the
   tool also serves read-shaped commands: a single execute tool cannot vary the
   static annotation by argument, so it advertises the worst case and lets the

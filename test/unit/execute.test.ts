@@ -62,6 +62,32 @@ describe("execute confirmation gate", () => {
 			});
 		}
 	});
+
+	for (const command of [
+		"/ip/address/remove [find comment=centrs]",
+		"/ip/address/remove *1",
+		"/ip/address/disable numbers=*1",
+		"/import file-name=router.rsc",
+		':execute script="/ip/address/remove *1"',
+		"/ip firewall filter\nremove [find comment=centrs]",
+	]) {
+		test(`rejects unconfirmed write shape: ${command}`, async () => {
+			const envelope = await executeEnvelope(
+				{
+					targetInput: "127.0.0.1",
+					command,
+					via: "rest-api",
+					stdinIsTty: false,
+				},
+				{},
+			);
+			expect(envelope.ok).toBe(false);
+			if (!envelope.ok) {
+				expect(envelope.error.code).toBe("usage/confirmation-required");
+			}
+			expect(envelope.meta.operation?.request.write).toBe(true);
+		});
+	}
 });
 
 describe("execute preflight does not mask transport failures", () => {

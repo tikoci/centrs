@@ -88,6 +88,12 @@ export interface RouterOsErrorRule {
 	description: string;
 	/** Pattern matched against the trimmed RouterOS string. */
 	test: RegExp;
+	/**
+	 * Anchored form safe for classifying a successful transport's returned text.
+	 * Unlike an HTTP error body / native trap, `/execute as-string` also carries
+	 * ordinary stdout, so substring matches would turn user output into failures.
+	 */
+	resultTest?: RegExp;
 	/** Builds the normalized error fields from the regex match and raw string. */
 	build: (match: RegExpMatchArray, raw: string) => RouterOsErrorRuleResult;
 }
@@ -106,6 +112,8 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		description:
 			"RouterOS did not recognize the command path or menu item ('no such ...').",
 		test: /no such command prefix|no such item|no such entry/i,
+		resultTest:
+			/^(?:failure:\s*)?(?:no such command prefix|no such item|no such entry)\b.*$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS does not recognize the path: ${raw.trim()}`,
 			remediation:
@@ -119,6 +127,7 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		// (mac-telnet) says "bad parameter <name> (line N column M)" for the same
 		// fault. Grounded on CHR 7.23.1.
 		test: /(?:unknown|bad) parameter\s+(\S+)/i,
+		resultTest: /^(?:failure:\s*)?(?:unknown|bad) parameter\s+\S+.*$/i,
 		build: (match) => {
 			const parameter = cleanToken(match[1] ?? "");
 			return {
@@ -135,6 +144,7 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 			"RouterOS console rejected the command word ('bad command name …').",
 		// Console form (mac-telnet) of an unrecognized command/path word.
 		test: /bad command name/i,
+		resultTest: /^(?:failure:\s*)?(?:\(<%%\s*)?bad command name\b.*$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS does not recognize the command: ${raw.trim()}`,
 			remediation:
@@ -145,6 +155,7 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		code: "routeros/invalid-value",
 		description: "RouterOS rejected the value supplied for an argument.",
 		test: /invalid value (?:for argument|of)\s+(\S+)/i,
+		resultTest: /^(?:failure:\s*)?invalid value (?:for argument|of)\s+\S+.*$/i,
 		build: (match) => {
 			const argument = cleanToken(match[1] ?? "");
 			return {
@@ -156,10 +167,23 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		},
 	},
 	{
+		code: "routeros/invalid-value",
+		description:
+			"RouterOS rejected a value because it does not match the accepted domain.",
+		test: /input does not match/i,
+		resultTest: /^(?:failure:\s*)?input does not match\b.*$/i,
+		build: (_match, raw) => ({
+			summary: `RouterOS rejected the supplied value: ${raw.trim()}`,
+			remediation:
+				"Check the accepted values for this command on the target RouterOS version, then retry with a matching value.",
+		}),
+	},
+	{
 		code: "routeros/session-closed",
 		description:
 			"RouterOS closed the REST session before the request completed (60-second cap).",
 		test: /session closed/i,
+		resultTest: /^(?:failure:\s*)?session closed\b.*$/i,
 		build: () => ({
 			summary: "RouterOS closed the session before the request completed.",
 			remediation:
@@ -171,6 +195,7 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		description:
 			"Generic RouterOS command failure carrying a `failure: <msg>` string.",
 		test: /^\s*failure:\s*(.+?)\s*$/i,
+		resultTest: /^\s*failure:\s*.+?\s*$/i,
 		build: (match) => {
 			const failure = (match[1] ?? "").trim();
 			return {
@@ -183,9 +208,25 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 	},
 	{
 		code: "routeros/command-failed",
+		description: "Generic RouterOS command failure carrying an error prefix.",
+		test: /^\s*error:\s*(.+?)\s*$/i,
+		resultTest: /^\s*error:\s*.+?\s*$/i,
+		build: (match) => {
+			const failure = (match[1] ?? "").trim();
+			return {
+				summary: `RouterOS command failed: ${failure}`,
+				remediation:
+					"Inspect the RouterOS error message, then adjust the script or request shape accordingly.",
+				context: { failure },
+			};
+		},
+	},
+	{
+		code: "routeros/command-failed",
 		description:
 			"RouterOS /execute as-string returned a script :error value with source location.",
 		test: /^\s*(.+?)\s*\(:error; line \d+\)\s*$/i,
+		resultTest: /^\s*.+?\s*\(:error; line \d+\)\s*$/i,
 		build: (match) => {
 			const failure = (match[1] ?? "").trim();
 			return {
@@ -203,6 +244,7 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		code: "routeros/unknown-path",
 		description: "RouterOS reported a path-shaped 'not found'.",
 		test: /not found/i,
+		resultTest: /^\s*\/\S+\s+not found\s*$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS does not recognize the path: ${raw.trim()}`,
 			remediation:
@@ -210,6 +252,30 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		}),
 	},
 ];
+
+/**
+ * Grounded result shapes that intentionally use the transport-specific
+ * catch-all mapping. They are errors, but do not carry enough information for a
+ * more specific normalized code.
+ */
+const ROUTEROS_RESULT_CATCH_ALL =
+	/^(?:syntax error|expected (?:end of command|command name|input value))\b[^\n]*$/i;
+
+/**
+ * Map text returned by a successful transport only when it matches a grounded,
+ * stdout-safe result shape. Returns `undefined` for ordinary script output.
+ */
+export function mapRouterOsResultError(
+	raw: string,
+	opts: MapRouterOsErrorOptions = {},
+): CentrsError | undefined {
+	const trimmed = raw.trim();
+	if (trimmed.length === 0) return undefined;
+	const matched =
+		ROUTEROS_RESULT_CATCH_ALL.test(trimmed) ||
+		routerOsErrorRules.some((rule) => rule.resultTest?.test(trimmed));
+	return matched ? mapRouterOsError(raw, opts) : undefined;
+}
 
 /**
  * Maps a raw RouterOS error string to a normalized {@link CentrsError}.

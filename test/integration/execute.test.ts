@@ -41,6 +41,7 @@ interface ExecuteFailureEnvelope {
 		validation?: {
 			enabled?: boolean;
 			source?: string;
+			result?: string;
 			stages?: readonly {
 				stage: string;
 				source: string;
@@ -291,6 +292,62 @@ describeFast("execute against CHR", () => {
 				yes: true,
 			});
 
+			// W1/W2 — transport mode never decides safety. Selector/positional
+			// commands stay script-mode, while disable is a non-CRUD verb; all are
+			// confirmation-gated before any device call (GH#366).
+			const gated = expectExecuteSuccess(
+				await executeEnvelope({
+					...base,
+					command:
+						'/ip/address/add address=198.51.100.15/32 interface=ether1 comment="centrs-write-gate"',
+					yes: true,
+				}),
+				"rest-api",
+			);
+			const gatedId = idFromData(gated.data);
+			for (const command of [
+				"/ip/address/remove [find comment=centrs-write-gate]",
+				`/ip/address/remove ${gatedId}`,
+				`/ip/address/disable numbers=${gatedId}`,
+			]) {
+				expectExecuteFailure(
+					await executeEnvelope({ ...base, command, stdinIsTty: false }),
+					"rest-api",
+					"usage/confirmation-required",
+				);
+				expect(await readAddressById({ ...base, id: gatedId })).toBeDefined();
+			}
+			await executeEnvelope({
+				...base,
+				command: `/ip/address/remove numbers=${gatedId}`,
+				yes: true,
+			});
+
+			// R1/R2 — RouterOS can carry a post-validation runtime rejection in
+			// HTTP-200 `ret`. The gate remains passed; the overall envelope fails.
+			const invalidCertificate = expectExecuteFailure(
+				await executeEnvelope({
+					...base,
+					command: "/ip/service/set www-ssl certificate=nope",
+					yes: true,
+				}),
+				"rest-api",
+				"routeros/invalid-value",
+			);
+			expect(invalidCertificate.meta.validation?.result).toBe("passed");
+			expect(
+				invalidCertificate.meta.validation?.stages?.map(
+					(stage) => stage.result,
+				),
+			).toEqual(["passed", "passed"]);
+			expectExecuteSuccess(
+				await executeEnvelope({
+					...base,
+					command: ':put "status: no such item appears in ordinary output"',
+				}),
+				"rest-api",
+			);
+
 			const validateFalse = expectExecuteFailure(
 				await executeEnvelope({
 					...base,
@@ -384,7 +441,16 @@ describeFast("execute against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [...exampleIds(11), "V1", "V2", "V3"],
+				exampleIds: [
+					...exampleIds(11),
+					"V1",
+					"V2",
+					"V3",
+					"W1",
+					"W2",
+					"R1",
+					"R2",
+				],
 			});
 		} finally {
 			await chr.destroy();
@@ -509,6 +575,22 @@ describeFast("execute against CHR", () => {
 			expect(JSON.stringify(script.data)).toContain(liveIdentity);
 			expect(script.meta.validation?.syntax).toBe(true);
 
+			const invalidCertificate = expectExecuteFailure(
+				await executeEnvelope({
+					...base,
+					command: "/ip/service/set www-ssl certificate=nope",
+					yes: true,
+				}),
+				"native-api",
+				"routeros/invalid-value",
+			);
+			expect(invalidCertificate.meta.validation?.result).toBe("passed");
+			expect(
+				invalidCertificate.meta.validation?.stages?.map(
+					(stage) => stage.result,
+				),
+			).toEqual(["passed", "passed"]);
+
 			await recordIntegrationEvidence({
 				suite: "execute against CHR",
 				command: "execute",
@@ -517,7 +599,7 @@ describeFast("execute against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(19).slice(11),
+				exampleIds: [...exampleIds(19).slice(11), "R1"],
 			});
 		} finally {
 			await chr.destroy();

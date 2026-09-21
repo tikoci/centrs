@@ -7,6 +7,7 @@ import {
 	recordIntegrationEvidence,
 	splitQuickChrAuth,
 	startIntegrationChr,
+	VALIDATION_REJECT_CODES,
 } from "./chr.ts";
 
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
@@ -317,16 +318,34 @@ describeFast("api against CHR (rest-api)", () => {
 			);
 			expect(JSON.stringify(script.data)).toContain(identity);
 			expect(script.meta.validation?.semantic).toBe("not-applicable");
-			// The device stage has nothing to inspect for a CLI string, so the
-			// offline analyzer is the whole gate on this surface (GH#354).
+			// A CLI string uses live `:parse`, not structured `/console/inspect`.
 			expect(script.meta.validation?.stages?.[0]).toMatchObject({
 				stage: "offline",
 				result: "passed",
 			});
 			expect(script.meta.validation?.stages?.[1]).toMatchObject({
 				stage: "device",
-				result: "skipped",
+				source: ":put [:parse]",
+				result: "passed",
 			});
+
+			// 16c. Offline pass is not runtime proof: the CLI string continues to
+			// live `:parse`, which rejects a device-invalid attribute before run.
+			const liveScriptReject = await apiEnvelope({
+				...base,
+				endpoint: "execute",
+				method: "POST",
+				fields: { script: "/ip/address/add no-such-arg=x" },
+				yes: true,
+			});
+			expect(liveScriptReject.ok).toBe(false);
+			if (!liveScriptReject.ok) {
+				expect(VALIDATION_REJECT_CODES).toContain(liveScriptReject.error.code);
+				expect(liveScriptReject.meta.validation?.stages).toMatchObject([
+					{ stage: "offline", result: "passed" },
+					{ stage: "device", source: ":put [:parse]", result: "failed" },
+				]);
+			}
 
 			// 16b. The /execute script is gated offline, and the gate opens no
 			// connection — an unreachable port still yields the syntax rejection
@@ -470,7 +489,7 @@ describeFast("api against CHR (rest-api)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [...exampleIds(21), "16b"],
+				exampleIds: [...exampleIds(21), "16b", "16c"],
 			});
 		} finally {
 			await chr.destroy();

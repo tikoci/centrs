@@ -1,7 +1,7 @@
 # execute
 
 Run a RouterOS CLI command and return its (semi-structured) output. `execute`
-is the single read/write surface for RouterOS add/set/remove and other
+is the single read/write surface for RouterOS configuration and operational
 CLI-shaped commands — there is no separate `update` command.
 
 Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
@@ -15,7 +15,8 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
 
 - Mirror RouterOS `execute` semantics. Input is a CLI string; output is
   console-shaped text (or structured records for path+verb writes) wrapped in
-  the standard envelope. This includes write-shaped add/set/remove.
+  the standard envelope. This includes selector-, positional-id-, and
+  non-CRUD-shaped writes.
 - Validation runs **offline first, then on the device** (see constitution:
   validation; GH#354). Stage 1 is the corpus-gated analyzer over the exact
   command string, with no connection: a syntax fault is rejected with a byte
@@ -36,9 +37,14 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   The outer RouterOS string literal escapes backslash, quote, and dollar so
   validation parses the caller's exact command rather than expanding variables
   in the wrapper.
-- centrs owns the **script-vs-structured gate** (`canonicalizeExecuteCommand` +
-  `isWriteShaped` in `src/execute.ts`): it decides which validation runs and
-  whether the write-confirm prompt fires. The shared `rosetta`/`lsp-routeros-ts`
+- centrs owns the **script-vs-structured gate** (`canonicalizeExecuteCommand` in
+  `src/execute.ts`): it decides which validation and transport path runs.
+  `isWriteShaped` is deliberately independent: script fallback for `[find]`, a
+  positional id, or other non-`key=value` input never bypasses confirmation.
+  Known read verbs are allowlisted; an unknown menu verb fails closed as a
+  write-shaped operation. Root mutators such as `/import` and indirect
+  execution through `:execute` are write-shaped too. The shared
+  `rosetta`/`lsp-routeros-ts`
   canonicalizer is for canonicalization only — never the structured predicate
   (widening `structured` is a product regression). Pinned by
   `test/unit/execute-canonicalize-contract.test.ts`; the parser-vendoring
@@ -68,12 +74,11 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   else passes its `detail`/body plus the HTTP status through
   `mapRouterOsError({ transport: "rest-api", httpStatus })`. There is no longer
   a hand-rolled `routeros/*` table on the REST side.
-- **Run-time fault mapping — later (JG-28).** `mapRouterOsError`'s table covers
-  the faults seen so far; a known gap is errors that *pass* `:parse`/validation
-  but fail at **run time** (a syntactically valid command the router rejects when
-  executed). `tikoci/vscode-tikbook` has an error-string mapping for these worth
-  porting into `src/core/routeros-errors.ts`. Background research, not yet
-  scheduled — captured here so it isn't lost (no GitHub issue by design).
+- **Run-time fault mapping.** A successful transport can still carry a RouterOS
+  rejection in `/execute`'s `ret`. Result detection lives beside the grounded
+  mappings in `src/core/routeros-errors.ts`, uses anchored result shapes so
+  ordinary output containing error-like prose remains output, and preserves a
+  passed validation history while failing the overall envelope.
 - Output is *string*-shaped for script-mode; richer parsing is a future
   concern. The envelope must still distinguish RouterOS errors from successful
   runs (a 200 with a RouterOS error string is still an error — see
@@ -216,8 +221,8 @@ many tokens):
   it fans out; mixing it with positionals or CDB selectors is
   `usage/conflicting-flags` (constitution: resolution providers).
 
-Because `execute` is the primary **write** path, a write-shaped fan-out
-(add/set/remove) is gated by **`--yes`**, confirmed **once** up front; without it
+Because `execute` is the primary **write** path, a write-shaped fan-out is gated
+by **`--yes`**, confirmed **once** up front; without it
 the error names the blast radius (how many routers). Write-ness is determined from
 the command alone (`canonicalizeExecuteCommand` + `isWriteShaped`), so the gate
 fires before any target is dialed. Per-target validation still runs because

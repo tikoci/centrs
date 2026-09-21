@@ -156,7 +156,8 @@ centrs api $R execute -X POST -f script=':put [/system/identity/get name]' --use
 
 Envelope: `ok: true`, `data` is string-shaped and contains the CHR identity;
 `meta.validation.semantic=not-applicable` (script, not a path) and
-`meta.validation.stages` is `offline: passed` then `device: skipped`.
+`meta.validation.stages` is `offline: passed` then live `device: passed` from
+`:put [:parse ...]`.
 
 ### 16b. The `/execute` script is gated offline (GH#354)
 
@@ -172,6 +173,18 @@ Envelope: `ok: false`, `error.code=validation/syntax`,
 `error.context.validationStage="offline"`, `error.context.surface="api /execute"`,
 `error.context.span={"start":5,"end":6}`, and **not** a `transport/*` code.
 `meta.validation.stages` is `offline: failed` then `device: skipped`.
+
+### 16c. Offline pass continues to live `:parse`
+
+```bash
+centrs api $R execute -X POST -f script='/ip/address/add no-such-arg=x' --username $U --password $P --yes
+```
+
+Envelope: `ok: false` with a device validation code
+(`validation/unknown-attribute`, or `validation/syntax` on older RouterOS), and
+`meta.validation.stages` is `offline: passed` then `device: failed`. Offline
+acceptance remains `runtimeAcceptance: not-proven`; it never suppresses the live
+stage.
 
 ### 17. `--via rest-api --listen` is rejected
 
@@ -308,7 +321,18 @@ stdout is the bare rest-style array (string values); exit code 0.
 centrs api $A execute -X POST -f script=':put [/system/identity/get name]' --via native-api --port $API_PORT --username $U --password $P --yes
 ```
 
-Envelope: `ok: true`, `data` contains the CHR identity.
+Envelope: `ok: true`, `data` contains the CHR identity and validation reports
+offline plus live `:parse` stages passed.
+
+### N8b. Native `/execute` also rejects at live `:parse`
+
+```bash
+centrs api $A execute -X POST -f script='/ip/address/add no-such-arg=x' --via native-api --port $API_PORT --username $U --password $P --yes
+```
+
+Envelope: `ok: false`; the accepted version-specific validation code is
+`validation/unknown-attribute` or `validation/syntax`, with stages
+`offline: passed`, `device: failed`.
 
 ## listen / `--stream` (native-api only)
 
