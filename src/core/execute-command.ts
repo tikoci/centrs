@@ -183,7 +183,7 @@ function scriptContainsWriteShapedCommand(input: string): boolean {
 		// statement; quoted words were masked before tokenization.
 		if (
 			tokens.some((token) =>
-				KNOWN_WRITE_EXECUTE_VERBS.has(token.replace(/^[{[(]+|[}\])]+$/g, "")),
+				KNOWN_WRITE_EXECUTE_VERBS.has(trimGroupingPunctuation(token)),
 			)
 		) {
 			return true;
@@ -225,6 +225,14 @@ function scriptContainsWriteShapedCommand(input: string): boolean {
 		}
 	}
 	return false;
+}
+
+function trimGroupingPunctuation(value: string): string {
+	let start = 0;
+	let end = value.length;
+	while (start < end && "{[(".includes(value[start] ?? "")) start += 1;
+	while (end > start && "}])".includes(value[end - 1] ?? "")) end -= 1;
+	return value.slice(start, end);
 }
 
 /** Split only at real statement boundaries; quoted output is not executable. */
