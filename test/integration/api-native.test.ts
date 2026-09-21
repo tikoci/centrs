@@ -218,6 +218,23 @@ describeFast("api against CHR (native-api)", () => {
 				]);
 			}
 
+			// N8c. Both adapters surface the `as-string` console text as `data`, so
+			// a runtime rejection must fail the envelope here too, with the
+			// validation stages still reporting the pass they actually made.
+			const runtimeReject = expectApiFailure(
+				await apiEnvelope({
+					...base,
+					endpoint: "execute",
+					method: "POST",
+					fields: { script: "/ip/service/set www-ssl certificate=nope" },
+					yes: true,
+				}),
+				"routeros/invalid-value",
+			);
+			expect(
+				runtimeReject.meta.validation?.stages?.map((stage) => stage.result),
+			).toEqual(["passed", "passed"]);
+
 			await recordIntegrationEvidence({
 				suite: "api against CHR (native-api)",
 				command: "api",
@@ -226,7 +243,7 @@ describeFast("api against CHR (native-api)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [...exampleIds(8), "N8b"],
+				exampleIds: [...exampleIds(8), "N8b", "N8c"],
 			});
 		} finally {
 			await chr.destroy();

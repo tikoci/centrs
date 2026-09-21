@@ -347,6 +347,37 @@ describeFast("api against CHR (rest-api)", () => {
 				]);
 			}
 
+			// 16d. Validation passing is not the run succeeding: `as-string` carries
+			// a runtime rejection back as an HTTP-200 `ret`, so `/execute` output is
+			// normalized through the same result table `execute` uses.
+			const runtimeReject = expectApiFailure(
+				await apiEnvelope({
+					...base,
+					endpoint: "execute",
+					method: "POST",
+					fields: { script: "/ip/service/set www-ssl certificate=nope" },
+					yes: true,
+				}),
+				"routeros/invalid-value",
+			);
+			expect(
+				runtimeReject.meta.validation?.stages?.map((stage) => stage.result),
+			).toEqual(["passed", "passed"]);
+			// The matchers are anchored, so ordinary output mentioning a fault
+			// string is still a success.
+			expectApiSuccess(
+				await apiEnvelope({
+					...base,
+					endpoint: "execute",
+					method: "POST",
+					fields: {
+						script: ':put "status: no such item appears in ordinary output"',
+					},
+					yes: true,
+				}),
+				"rest-api",
+			);
+
 			// 16b. The /execute script is gated offline, and the gate opens no
 			// connection — an unreachable port still yields the syntax rejection
 			// rather than a `transport/*` code. Before GH#354 this surface ran no
@@ -489,7 +520,7 @@ describeFast("api against CHR (rest-api)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [...exampleIds(21), "16b", "16c"],
+				exampleIds: [...exampleIds(21), "16b", "16c", "16d"],
 			});
 		} finally {
 			await chr.destroy();

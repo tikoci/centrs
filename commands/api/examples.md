@@ -186,6 +186,19 @@ Envelope: `ok: false` with a device validation code
 acceptance remains `runtimeAcceptance: not-proven`; it never suppresses the live
 stage.
 
+### 16d. A runtime rejection in `/execute` output is not `ok: true`
+
+```bash
+centrs api $R execute -X POST -f script='/ip/service/set www-ssl certificate=nope' --username $U --password $P --yes
+```
+
+Envelope: `ok: false`, `error.code=routeros/invalid-value`. `as-string` makes
+the console's own text the reply body, so RouterOS carries this rejection in an
+HTTP-200 `ret`; the validation gate stays `passed` because it did pass — the
+command was rejected at run, not at validation. Ordinary output that merely
+mentions a fault string (`:put "status: no such item appears in help"`) stays
+`ok: true`.
+
 ### 17. `--via rest-api --listen` is rejected
 
 ```bash
@@ -333,6 +346,16 @@ centrs api $A execute -X POST -f script='/ip/address/add no-such-arg=x' --via na
 Envelope: `ok: false`; the accepted version-specific validation code is
 `validation/unknown-attribute` or `validation/syntax`, with stages
 `offline: passed`, `device: failed`.
+
+### N8c. Native `/execute` runtime rejection fails the envelope
+
+```bash
+centrs api $A execute -X POST -f script='/ip/service/set www-ssl certificate=nope' --via native-api --port $API_PORT --username $U --password $P --yes
+```
+
+Envelope: `ok: false`, `error.code=routeros/invalid-value`, with the validation
+stages still `passed` — the same normalization as REST, since both adapters
+surface the `as-string` console text as `data`.
 
 ## listen / `--stream` (native-api only)
 

@@ -34,6 +34,7 @@ import {
 	isCommandNode,
 	pathTokens,
 } from "./core/inspect.ts";
+import { mapRouterOsResultError } from "./core/routeros-errors.ts";
 import { toYaml } from "./core/yaml.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
 import {
@@ -50,6 +51,7 @@ import {
 	createProtocolAdapter,
 	type ProtocolAdapter,
 	type ProtocolApiRequest,
+	type ProtocolApiResult,
 	plannedProtocols,
 	type RouterOsProtocol,
 } from "./protocols/index.ts";
@@ -330,6 +332,10 @@ export async function runResolvedApi(
 		trace.validation = validation;
 
 		const result = await backend.apiRequest(protocolRequest);
+		const routerOsFailure = apiRouterOsFailureFromResult(resolved, result);
+		if (routerOsFailure) {
+			throw routerOsFailure;
+		}
 		return {
 			ok: true,
 			data: result.data,
@@ -340,6 +346,35 @@ export async function runResolvedApi(
 	} finally {
 		await backend.close();
 	}
+}
+
+/**
+ * A `/execute` run that RouterOS *transported* successfully but *rejected* at
+ * runtime.
+ *
+ * `as-string` makes the console's own text the reply body, so a rejected
+ * script comes back as an ordinary 200/`!done` carrying `no such item`. Both
+ * adapters surface that text as `data`, so without this the caller-addressed
+ * `/execute` would report a failure as `ok: true` — exactly the shape
+ * `execute` normalizes in `routerOsFailureFromResult`. Structured path
+ * requests are untouched: their faults already arrive as HTTP >=400 or a
+ * `!trap`, and their `data` is a record, not console text.
+ */
+function apiRouterOsFailureFromResult(
+	resolved: ResolvedApiRequest,
+	result: ProtocolApiResult,
+): CentrsError | undefined {
+	if (!resolved.scriptMode || typeof result.data !== "string") {
+		return undefined;
+	}
+	const via = resolved.via.value;
+	return mapRouterOsResultError(result.data, {
+		transport:
+			via === "rest-api" || via === "mac-telnet" || via === "ssh"
+				? via
+				: "native-api",
+		context: { via },
+	});
 }
 
 /**

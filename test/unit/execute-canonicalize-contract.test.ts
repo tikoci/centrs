@@ -94,6 +94,18 @@ const cases: GateCase[] = [
 		write: true,
 	},
 	{ input: "/import file-name=router.rsc", mode: "script", write: true },
+	// `file=` redirects command output into a device file, so a read verb still
+	// writes: `/ip/address/export file=address` creates `address.rsc` and
+	// `/file/print file=test` creates `test.txt` (RouterOS manual, "Configuration
+	// Export" / "Scripting Tips and Tricks"). Root `/export` has a one-segment
+	// path, so it lands here in script mode.
+	{ input: "/export", mode: "script", write: false },
+	{ input: "/export file=backup", mode: "script", write: true },
+	{
+		input: "/ip/address/print; /export file=backup",
+		mode: "script",
+		write: true,
+	},
 	{
 		input: ':execute script="/ip/address/remove *1"',
 		mode: "script",
@@ -159,6 +171,36 @@ const cases: GateCase[] = [
 		write: true,
 		path: "/ip/address",
 		verb: "remove",
+	},
+	{
+		input: "/ip/address/export",
+		mode: "structured",
+		write: false,
+		path: "/ip/address",
+		verb: "export",
+	},
+	{
+		input: "/ip/address/export file=address",
+		mode: "structured",
+		write: true,
+		path: "/ip/address",
+		verb: "export",
+	},
+	{
+		input: "/file/print file=test",
+		mode: "structured",
+		write: true,
+		path: "/file",
+		verb: "print",
+	},
+	{
+		// A `?`-prefixed word is a query filter, never an attribute, so the gate
+		// must not read it as the `file=` output redirect.
+		input: "/file/print ?file=test",
+		mode: "structured",
+		write: false,
+		path: "/file",
+		verb: "print",
 	},
 ];
 

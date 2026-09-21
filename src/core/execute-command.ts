@@ -99,9 +99,30 @@ export function canonicalizeExecuteCommand(
 
 export function isWriteShaped(command: CanonicalExecuteCommand): boolean {
 	if (command.mode === "structured") {
+		if (FILE_OUTPUT_ATTRIBUTE in command.attributes) {
+			return true;
+		}
 		return !READ_ONLY_EXECUTE_VERBS.has(command.verb.toLowerCase());
 	}
 	return scriptContainsWriteShapedCommand(command.input);
+}
+
+/**
+ * The attribute that turns an otherwise read-only verb into a device write.
+ *
+ * RouterOS routes command output to a file on the device when `file=` is
+ * supplied, so a read verb creates a file: `/ip/address/export file=address`
+ * writes `address.rsc`, and `/file/print file=test` writes `test.txt` (both
+ * from the RouterOS manual — "Configuration Export" and "Scripting Tips and
+ * Tricks", where that idiom is the documented way to create a file and needs
+ * the script `write` policy). The verb allowlist cannot see that, so the
+ * attribute is checked independently of it.
+ */
+const FILE_OUTPUT_ATTRIBUTE = "file";
+
+/** True for a `file=<name>` token — the write-shaping output redirect. */
+function isFileOutputToken(token: string): boolean {
+	return token.startsWith(`${FILE_OUTPUT_ATTRIBUTE}=`);
 }
 
 /**
@@ -185,6 +206,14 @@ function isKnownExecuteVerb(value: string): boolean {
 function scriptContainsWriteShapedCommand(input: string): boolean {
 	for (const statement of splitUnquotedStatements(input)) {
 		const tokens = tokenizeRouterOsCli(statement);
+		// `file=` redirects output to a device file, so it is a write even under a
+		// read verb. Checked before the verb rules for the same reason the
+		// structured branch checks it independently of the allowlist.
+		if (
+			tokens.some((token) => isFileOutputToken(trimGroupingPunctuation(token)))
+		) {
+			return true;
+		}
 		// A script may navigate to a menu on one line and use a relative verb on
 		// the next. Recognize grounded mutators even when no slash appears in that
 		// statement; quoted words were masked before tokenization.

@@ -43,7 +43,11 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   positional id, or other non-`key=value` input never bypasses confirmation.
   Known read verbs are allowlisted; an unknown menu verb fails closed as a
   write-shaped operation. Root mutators such as `/import` and indirect
-  execution through `:execute` are write-shaped too. The shared
+  execution through `:execute` are write-shaped too, and so is any command
+  carrying `file=`: RouterOS redirects command output into a device file, so
+  `/ip/address/export file=address` creates `address.rsc` and
+  `/file/print file=test` creates `test.txt` even though `export` and `print`
+  are read verbs. The shared
   `rosetta`/`lsp-routeros-ts`
   canonicalizer is for canonicalization only — never the structured predicate
   (widening `structured` is a product regression). Pinned by
