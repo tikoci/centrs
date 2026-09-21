@@ -112,15 +112,18 @@ gate is `/console/inspect` — **not** `:put [:parse]`:
   does) answers normally on the same build. See the 7.12.2 finding in
   `AGENTS.md` (GH#343).
 - **Carve-out:** a script-shaped `POST /rest/execute` is a CLI string, not a path,
-  so the inspect gate is `not-applicable` (`meta.validation.semantic`); RouterOS
-  re-validates on the run. Until GH#354 that carve-out meant the script was sent
-  with *no* preflight at all. It is now gated by the offline stage (constitution:
-  validation) — the same analyzer `explain` publishes, run over the `script`
-  field with no connection, so a syntax fault is a byte span in
-  `error.context.span` instead of a round trip. `meta.validation.stages[]` shows
-  the offline stage `passed` and the device stage `skipped` with its reason. A
-  missing or blank `script` is still `input/invalid-command`, not a syntax
-  rejection.
+  so structured inspect is `not-applicable` (`meta.validation.semantic`). It
+  follows the CLI-string pipeline instead: offline analysis, then live
+  `:put [:parse ...]`, then run. An offline rejection is still a byte span with
+  no connection; an offline pass or abstention continues to the device stage.
+  `meta.validation.stages[]` reports both decisions. A missing or blank `script`
+  is still `input/invalid-command`, not a syntax rejection. Validation passing
+  is not the run succeeding: `as-string` makes the console's own text the reply
+  body, so a runtime rejection arrives as an HTTP-200 `ret`. `/execute` output
+  is normalized through the same grounded result table `execute` uses, so
+  `no such item` fails the envelope with a `routeros/*` code while the stages
+  stay `passed`. Ordinary output that merely contains a fault string is
+  unaffected — the result matchers are anchored, not substring.
 - Structured path requests are **not** offline-gated. The input is a path plus a
   body, not a CLI string, and an offline *path* gate collides with GH#211's
   unlisted-path decision. On the success path `meta.validation.stages[]` is

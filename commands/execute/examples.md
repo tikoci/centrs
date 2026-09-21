@@ -428,6 +428,54 @@ and `meta.validation.stages` listing **both** stages as `skipped`. A gated
 surface always reports every stage, so a consumer reading `stages` never has to
 special-case the disabled shape.
 
+## Write authorization and returned runtime faults
+
+These regressions are transport-independent and run in
+`test/integration/execute.test.ts` (with MCP's selector form also covered by
+`test/integration/mcp.test.ts`).
+
+### W1. Script-mode selector and positional writes still require confirmation
+
+```bash
+centrs execute $R '/ip/address/remove [find comment=centrs-write-gate]' --via rest-api --username $U --password $P </dev/null
+```
+
+The same contract holds for `/ip/address/remove *1`. Both stay script-mode so
+RouterOS receives the raw selector/id syntax, but the independent safety gate
+returns `usage/confirmation-required` before validation or mutation.
+
+### W2. Non-CRUD mutation verbs still require confirmation
+
+```bash
+centrs execute $R '/ip/address/disable numbers=*1' --via rest-api --username $U --password $P </dev/null
+```
+
+Envelope: `ok: false`, `error.code=usage/confirmation-required`; the address
+remains enabled. Unknown RouterOS menu verbs also fail closed as write-shaped.
+Root mutators such as `/import` and indirect execution through `:execute` use
+the same gate.
+
+### R1. A post-validation `/execute` rejection fails the overall envelope
+
+```bash
+centrs execute $R '/ip/service/set www-ssl certificate=nope' --via rest-api --username $U --password $P --yes --json
+```
+
+Envelope: `ok: false`, `error.code=routeros/invalid-value`, exit `1`, while
+`meta.validation.result="passed"` and both stages remain `passed`: the rejection
+happened at run time, after the scoped checks completed. The same result is
+asserted over native API.
+
+### R2. Error-like prose remains ordinary script output
+
+```bash
+centrs execute $R ':put "status: no such item appears in ordinary output"' --via rest-api --username $U --password $P --json
+```
+
+Envelope: `ok: true`. Returned-text classification uses anchored grounded
+shapes; it does not fail arbitrary output merely because it contains an error
+phrase.
+
 ## Target selection (fan-out)
 
 These exercise the shared target-selection grammar

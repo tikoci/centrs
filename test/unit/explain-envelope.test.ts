@@ -279,13 +279,13 @@ describe("the execute gate is reproduced, never widened", () => {
 		});
 	}
 
-	test("the CLI verb spelling is script to the gate and a command to the analysis", () => {
+	test("the CLI verb spelling stays script-mode but is safety-gated as a write", () => {
 		// Not a bug, and the single most confusing thing about the two surfaces:
 		// the gate wants the verb IN the path, so `/ip/route add …` is `script`
 		// while the analysis reads exactly what the human wrote.
 		const data = explainCommand("/ip/route add dst-address=10.9.0.0/16");
 		expect(data.canonical.mode).toBe("script");
-		expect(data.canonical.writeShaped).toBe(false);
+		expect(data.canonical.writeShaped).toBe(true);
 		expect(data.structure.statements[0]?.command).toEqual({
 			path: "/ip/route",
 			verb: "add",
@@ -293,7 +293,7 @@ describe("the execute gate is reproduced, never widened", () => {
 			// analysis still reads the arguments the human wrote (#202c).
 			args: { "dst-address": "10.9.0.0/16" },
 		});
-		// …and the write signal that the gate cannot give is still reported.
+		// The richer analysis independently reaches the same safety conclusion.
 		expect(data.structure.containsWrite).toBe(true);
 	});
 });
@@ -442,12 +442,12 @@ describe("the resolution vocabulary", () => {
 
 describe("subcommands speak the same vocabulary as statements", () => {
 	test("the inner command of a selector is resolved against the enclosing menu", () => {
-		// examples.md example 3. The GATE stays `script` (a `[…]` selector cannot
-		// be a structured attribute map) while the analysis reads the inner
-		// command, and the outer `remove` is what makes `containsWrite` true.
+		// examples.md example 3. The transport gate stays `script` (a `[…]`
+		// selector cannot be a structured attribute map), while the independent
+		// safety predicate still recognizes the outer `remove` as a write.
 		const data = explainCommand("/ip/address remove [find comment=defconf]");
 		expect(data.canonical.mode).toBe("script");
-		expect(data.canonical.writeShaped).toBe(false);
+		expect(data.canonical.writeShaped).toBe(true);
 		expect(data.structure.containsWrite).toBe(true);
 		const [sub] = data.structure.subcommands;
 		expect(sub?.resolution).toBe("resolved");
@@ -510,10 +510,10 @@ describe("the write tristate is three-valued in the envelope", () => {
 		).toBe("unknown");
 	});
 
-	test("it does not move the gate's writeShaped verdict", () => {
+	test("the safety gate recognizes a known destructive command", () => {
 		const data = explainCommand("/disk format-drive disk1");
 		expect(data.structure.containsWrite).toBe("unknown");
-		expect(data.canonical.writeShaped).toBe(false);
+		expect(data.canonical.writeShaped).toBe(true);
 	});
 });
 

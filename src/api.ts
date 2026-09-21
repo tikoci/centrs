@@ -3,9 +3,10 @@
  *
  * The structured middle of the verb trichotomy (see `commands/api/README.md`):
  * one command per operation (no code blocks), structured input **and** output,
- * validated through `/console/inspect`, runnable over REST or the native API. The
+ * validated through `/console/inspect` (or live `:parse` for `/execute` scripts),
+ * runnable over REST or the native API. The
  * orchestrator is transport-agnostic — it normalizes the endpoint, resolves the
- * method→verb map, runs the inspect gate and the write-confirmation gate, then
+ * method→verb map, runs the validation and write-confirmation gates, then
  * hands a normalized {@link ProtocolApiRequest} to the adapter. REST vs native
  * mechanics (id-in-URL vs `=.id=`, `.query` vs `?`-words) live in the adapter.
  *
@@ -33,9 +34,13 @@ import {
 	isCommandNode,
 	pathTokens,
 } from "./core/inspect.ts";
+import { mapRouterOsResultError } from "./core/routeros-errors.ts";
 import { toYaml } from "./core/yaml.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
-import { promptForWriteConfirmation } from "./execute.ts";
+import {
+	promptForWriteConfirmation,
+	validateRouterOsScript,
+} from "./execute.ts";
 import {
 	assertOfflineSyntax,
 	isOfflineGateRejection,
@@ -46,6 +51,7 @@ import {
 	createProtocolAdapter,
 	type ProtocolAdapter,
 	type ProtocolApiRequest,
+	type ProtocolApiResult,
 	plannedProtocols,
 	type RouterOsProtocol,
 } from "./protocols/index.ts";
@@ -293,6 +299,11 @@ export async function runResolvedApi(
 	trace: ValidationTrace = {},
 ): Promise<ApiSuccessEnvelope> {
 	assertListenCapability(resolved);
+	// Validate the complete request shape before constructing a backend or
+	// running either validation stage. In particular, `/execute` must reject
+	// extra body fields deterministically instead of letting live `:parse`
+	// surface an unrelated transport or authentication failure first.
+	const protocolRequest = buildProtocolApiRequest(resolved);
 	const backend = createProtocolAdapter({
 		protocol: resolved.via.value,
 		host: resolved.target.host,
@@ -320,7 +331,11 @@ export async function runResolvedApi(
 		// reports the gate that actually settled rather than a guess.
 		trace.validation = validation;
 
-		const result = await backend.apiRequest(buildProtocolApiRequest(resolved));
+		const result = await backend.apiRequest(protocolRequest);
+		const routerOsFailure = apiRouterOsFailureFromResult(resolved, result);
+		if (routerOsFailure) {
+			throw routerOsFailure;
+		}
 		return {
 			ok: true,
 			data: result.data,
@@ -331,6 +346,35 @@ export async function runResolvedApi(
 	} finally {
 		await backend.close();
 	}
+}
+
+/**
+ * A `/execute` run that RouterOS *transported* successfully but *rejected* at
+ * runtime.
+ *
+ * `as-string` makes the console's own text the reply body, so a rejected
+ * script comes back as an ordinary 200/`!done` carrying `no such item`. Both
+ * adapters surface that text as `data`, so without this the caller-addressed
+ * `/execute` would report a failure as `ok: true` — exactly the shape
+ * `execute` normalizes in `routerOsFailureFromResult`. Structured path
+ * requests are untouched: their faults already arrive as HTTP >=400 or a
+ * `!trap`, and their `data` is a record, not console text.
+ */
+function apiRouterOsFailureFromResult(
+	resolved: ResolvedApiRequest,
+	result: ProtocolApiResult,
+): CentrsError | undefined {
+	if (!resolved.scriptMode || typeof result.data !== "string") {
+		return undefined;
+	}
+	const via = resolved.via.value;
+	return mapRouterOsResultError(result.data, {
+		transport:
+			via === "rest-api" || via === "mac-telnet" || via === "ssh"
+				? via
+				: "native-api",
+		context: { via },
+	});
 }
 
 /**
@@ -955,8 +999,9 @@ export function buildProtocolApiRequest(
 	return request;
 }
 
-/** The api device-stage validator: structured input is inspected, never `:parse`d. */
+/** The api device-stage validator for structured path input. */
 const API_DEVICE_STAGE_SOURCE = "/console/inspect request=child";
+const API_SCRIPT_DEVICE_STAGE_SOURCE = ":put [:parse]";
 
 interface ApiValidationResult {
 	validation: EnvelopeValidationMeta;
@@ -976,11 +1021,9 @@ async function validateApiRequest(
 	trace: ValidationTrace = {},
 ): Promise<ApiValidationResult> {
 	if (resolved.scriptMode) {
-		// `/execute` carries a CLI string, so `/console/inspect` has nothing to
-		// inspect — which until GH#354 meant the script was sent with NO gate at
-		// all (`syntax: false`, `semantic: "not-applicable"`, `result: "passed"`).
-		// The offline analyzer is the whole gate here: a syntax fault is now a
-		// byte span and no round trip, where before it reached the device.
+		// `/execute` carries a CLI string, so use the same offline -> live `:parse`
+		// pipeline as `execute`. `/console/inspect` remains inapplicable because
+		// there is no structured menu path/body to inspect.
 		const script = scriptOf(resolved);
 		const offline = script
 			? assertOfflineSyntax(script, {
@@ -989,6 +1032,9 @@ async function validateApiRequest(
 				})
 			: undefined;
 		trace.offlineVerdict = offline?.verdict;
+		if (script !== undefined) {
+			await validateRouterOsScript(script, backend, resolved.via.value);
+		}
 		const offlineReason =
 			offline === undefined
 				? "no `script` field to analyze"
@@ -998,9 +1044,12 @@ async function validateApiRequest(
 		return {
 			validation: {
 				enabled: true,
-				source: offline === undefined ? "not-applicable" : OFFLINE_GATE_SOURCE,
+				source:
+					offline === undefined
+						? "not-applicable"
+						: API_SCRIPT_DEVICE_STAGE_SOURCE,
 				result: "passed",
-				syntax: offline !== undefined,
+				syntax: script !== undefined,
 				semantic: "not-applicable",
 				stages: [
 					{
@@ -1011,10 +1060,11 @@ async function validateApiRequest(
 					},
 					{
 						stage: "device",
-						source: "/console/inspect request=child",
-						result: "skipped",
-						reason:
-							"`/execute` is a CLI string, not a menu path; RouterOS re-validates it on the run",
+						source: API_SCRIPT_DEVICE_STAGE_SOURCE,
+						result: script === undefined ? "skipped" : "passed",
+						...(script === undefined
+							? { reason: "no `script` field to parse" }
+							: {}),
 					},
 				],
 			},
@@ -1441,7 +1491,7 @@ function failedApiValidationMeta(
 				{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "failed" },
 				{
 					stage: "device",
-					source: API_DEVICE_STAGE_SOURCE,
+					source: apiDeviceStageSource(resolved),
 					result: "skipped",
 					reason: "offline analysis rejected the script; no connection opened",
 				},
@@ -1455,12 +1505,17 @@ function failedApiValidationMeta(
 	const deviceRejected = error.code.startsWith("validation/");
 	return {
 		enabled: true,
-		source: "/console/inspect",
+		source: apiDeviceStageSource(resolved),
 		result: "failed",
 		syntax: false,
 		semantic: resolved.scriptMode ? "not-applicable" : false,
 		...(deviceRejected
-			? { stages: [offlineApiStage(resolved, trace), deviceStageFailed()] }
+			? {
+					stages: [
+						offlineApiStage(resolved, trace),
+						deviceStageFailed(resolved),
+					],
+				}
 			: {}),
 	};
 }
@@ -1494,10 +1549,18 @@ function offlineApiStage(
 	};
 }
 
-function deviceStageFailed(): EnvelopeValidationStage {
+function apiDeviceStageSource(resolved: ResolvedApiRequest): string {
+	return resolved.scriptMode
+		? API_SCRIPT_DEVICE_STAGE_SOURCE
+		: API_DEVICE_STAGE_SOURCE;
+}
+
+function deviceStageFailed(
+	resolved: ResolvedApiRequest,
+): EnvelopeValidationStage {
 	return {
 		stage: "device",
-		source: API_DEVICE_STAGE_SOURCE,
+		source: apiDeviceStageSource(resolved),
 		result: "failed",
 	};
 }
@@ -1518,7 +1581,11 @@ function disabledApiValidationMeta(
 		semantic: resolved.scriptMode ? "not-applicable" : false,
 		stages: [
 			{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "skipped" },
-			{ stage: "device", source: API_DEVICE_STAGE_SOURCE, result: "skipped" },
+			{
+				stage: "device",
+				source: apiDeviceStageSource(resolved),
+				result: "skipped",
+			},
 		],
 	};
 }

@@ -535,8 +535,10 @@ as bibliography entries in `GLOSSARY.txt` — e.g. `netmiko`,
 ### Canonicalizer ownership
 
 centrs owns the **script-vs-structured execution gate** — the load-bearing
-discriminator for which validation runs and whether the write-confirmation prompt
-fires; widening what counts as `structured` is a product regression. The shared,
+discriminator for validation and transport shape; widening what counts as
+`structured` is a product regression. Write confirmation is a separate,
+fail-closed safety predicate over the original CLI string: falling back to raw
+script transport must never turn a write into a read. The shared,
 pure command canonicalizer that `rosetta` / `lsp-routeros-ts` publish is for
 canonicalization only, never the structured-mode predicate. The gate contract,
 its pinning test, and the parser-vendoring preconditions are documented in
@@ -546,5 +548,6 @@ its pinning test, and the parser-vendoring preconditions are documented in
 Richer schema-free analysis must distinguish **ambiguous** (multiple plausible
 readings) from **unknown** (no safe reading) and abstain in both cases rather than
 inventing a command, path, symbol class, or transport mapping. These explain-only
-verdicts never widen or reinterpret the execution gate's `mode` or `writeShaped`
-decision.
+verdicts never widen or reinterpret the execution gate's `mode`. The execution
+safety predicate remains deliberately conservative and independent of richer
+explain-only inference.

@@ -1,12 +1,13 @@
 # `routeros/invalid-value`
 
-RouterOS rejected the value supplied for an argument. The offending argument
-name is captured in `context.argument`.
+RouterOS rejected a supplied value. When RouterOS names the offending argument,
+it is captured in `context.argument`.
 
 ## Typical RouterOS strings
 
 - `invalid value for argument <name>`
 - `invalid value of <name>`
+- `input does not match ...`
 
 ## Fix
 

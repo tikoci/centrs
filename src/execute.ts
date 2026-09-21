@@ -17,7 +17,7 @@ import {
 	isWriteShaped,
 } from "./core/execute-command.ts";
 import { inspectArgumentNames, pathTokens } from "./core/inspect.ts";
-import { mapRouterOsError } from "./core/routeros-errors.ts";
+import { mapRouterOsResultError } from "./core/routeros-errors.ts";
 import { routerOsStringLiteral } from "./core/routeros-string.ts";
 import { toYaml } from "./core/yaml.ts";
 import { CentrsError, serializeCentrsError } from "./errors.ts";
@@ -892,7 +892,16 @@ async function runSyntaxGate(
 	resolved: ResolvedExecuteRequest,
 	backend: ProtocolAdapter,
 ): Promise<void> {
-	const script = `:put [:parse ${routerOsStringLiteral(resolved.command)}]`;
+	await validateRouterOsScript(resolved.command, backend, resolved.via.value);
+}
+
+/** Shared live `:parse` stage for every surface that carries a CLI string. */
+export async function validateRouterOsScript(
+	command: string,
+	backend: ProtocolAdapter,
+	via: RouterOsProtocol,
+): Promise<void> {
+	const script = `:put [:parse ${routerOsStringLiteral(command)}]`;
 	try {
 		// GH#230: `:parse` never throws (CHR 7.23.3). The diagnostic rides the
 		// success value's text — over REST/native the `ret` field (HTTP 200 /
@@ -901,7 +910,7 @@ async function runSyntaxGate(
 		// Read the return and classify it: one `:parse` covers syntax and the
 		// unknown-attribute (name-level) gate.
 		const result = await backend.execute({ path: "", command: "", script });
-		classifyParseResult(result.ret ?? "", resolved.command, resolved.via.value);
+		classifyParseResult(result.ret ?? "", command, via);
 	} catch (error) {
 		// The preflight is a syntax gate, but `backend.execute` also surfaces
 		// connection and authentication failures (login happens lazily here).
@@ -925,9 +934,9 @@ async function runSyntaxGate(
 			remediation:
 				"Fix the RouterOS CLI syntax, especially quotes and bracketed expressions, then retry.",
 			context: {
-				command: resolved.command,
+				command,
 				validationSource: ":put [:parse ...]",
-				via: resolved.via.value,
+				via,
 			},
 			...(position ? { position } : {}),
 			cause: error,
@@ -1298,52 +1307,14 @@ function routerOsFailureFromResult(
 	result: ProtocolExecuteResult,
 	via: RouterOsProtocol,
 ): CentrsError | undefined {
-	const candidates = [
-		result.ret,
-		...result.records.flatMap((record) => [
-			record["detail"],
-			record["message"],
-			record["failure"],
-			record["error"],
-			record["ret"],
-		]),
-	].filter((value): value is string => typeof value === "string");
-	const failure = candidates.find((candidate) =>
-		isRouterOsFailureString(candidate),
-	);
-	return failure
-		? mapRouterOsError(failure, {
-				transport:
-					via === "rest-api" || via === "mac-telnet" || via === "ssh"
-						? via
-						: "native-api",
-				context: { via },
-			})
-		: undefined;
-}
-
-function isRouterOsFailureString(value: string): boolean {
-	const trimmed = value.trim();
-	// REST/native fault strings (unchanged).
-	if (
-		/^(failure:|error:)|unknown parameter|invalid value|session closed|\(:error; line \d+\)/i.test(
-			trimmed,
-		)
-	) {
-		return true;
-	}
-	// Console (mac-telnet) error forms. `ret` here is ordinary stdout (every
-	// mac-telnet command and REST `/execute`), so anchor to the grounded RouterOS
-	// error *shapes* — the `(line N column M)` source location for parse rejections
-	// — rather than bare phrases, so `:put "syntax error"` is not misread as a
-	// failure.
-	return (
-		/(?:^|\n)\s*(?:bad parameter \S+|syntax error)\b[^\n]*\(line \d+ column \d+\)/i.test(
-			trimmed,
-		) ||
-		/(?:^|\n)\s*bad command name\b/i.test(trimmed) ||
-		/(?:^|\n)\s*expected end of command\b/i.test(trimmed)
-	);
+	if (typeof result.ret !== "string") return undefined;
+	return mapRouterOsResultError(result.ret, {
+		transport:
+			via === "rest-api" || via === "mac-telnet" || via === "ssh"
+				? via
+				: "native-api",
+		context: { via },
+	});
 }
 
 function applyMaxResultsBudget(
