@@ -350,6 +350,7 @@ describeFast("execute against CHR", () => {
 			await executeEnvelope({
 				...base,
 				command: ':log warning "no such item"',
+				yes: true,
 			});
 			const structuredRecords = expectExecuteSuccess(
 				await executeEnvelope({ ...base, command: "/log/print" }),

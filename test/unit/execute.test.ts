@@ -71,6 +71,7 @@ describe("execute confirmation gate", () => {
 		':execute script="/ip/address/remove *1"',
 		"/ip firewall filter\nremove [find comment=centrs]",
 		"/ip firewall filter\nnew-mutator [find comment=centrs]",
+		"ip address new-mutator",
 	]) {
 		test(`rejects unconfirmed write shape: ${command}`, async () => {
 			const envelope = await executeEnvelope(

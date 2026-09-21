@@ -167,6 +167,13 @@ const WRITE_SHAPED_SCRIPT_DIRECTIVES: ReadonlySet<string> = new Set([
 	":execute",
 ]);
 
+/** Script directives that are safe to run without device-write confirmation. */
+const READ_ONLY_SCRIPT_DIRECTIVES: ReadonlySet<string> = new Set([
+	":error",
+	":local",
+	":put",
+]);
+
 function isKnownExecuteVerb(value: string): boolean {
 	const normalized = value.toLowerCase();
 	return (
@@ -196,7 +203,26 @@ function scriptContainsWriteShapedCommand(input: string): boolean {
 			return true;
 		}
 		const pathIndex = tokens.findIndex((token) => /^[{[(]*\//.test(token));
-		if (pathIndex < 0) continue;
+		if (pathIndex < 0) {
+			const normalizedTokens = tokens
+				.map(trimGroupingPunctuation)
+				.filter((token) => token.length > 0);
+			if (normalizedTokens.length === 0) continue;
+			if (READ_ONLY_SCRIPT_DIRECTIVES.has(normalizedTokens[0] ?? "")) {
+				continue;
+			}
+			if (
+				normalizedTokens.some((token) =>
+					READ_ONLY_EXECUTE_VERBS.has(token.toLowerCase()),
+				)
+			) {
+				continue;
+			}
+			// A space-separated path or relative command with an unknown head cannot
+			// be proven read-only. Fail closed so new RouterOS mutators do not bypass
+			// confirmation merely because centrs has not learned their verb yet.
+			return true;
+		}
 
 		const pathToken = (tokens[pathIndex] ?? "").replace(/^[{[(]+/, "");
 		const pathParts = pathToken.split("/").filter(Boolean);

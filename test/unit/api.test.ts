@@ -275,6 +275,28 @@ describe("apiEnvelope usage errors (no I/O)", () => {
 		}
 	});
 
+	test("/execute rejects extra fields before live validation", async () => {
+		const envelope = await apiEnvelope(
+			{
+				endpoint: "execute",
+				targetInput: "127.0.0.1",
+				port: 1,
+				via: "native-api",
+				username: "x",
+				password: "y",
+				method: "POST",
+				fields: { script: ":put 1", extra: "x" },
+				yes: true,
+			},
+			{},
+		);
+		expect(envelope.ok).toBe(false);
+		if (!envelope.ok) {
+			expect(envelope.error.code).toBe("usage/conflicting-flags");
+			expect(envelope.error.context).toMatchObject({ extraFields: ["extra"] });
+		}
+	});
+
 	test("an empty endpoint is input/invalid-command", async () => {
 		const envelope = await apiEnvelope(
 			{ endpoint: "", targetInput: "192.0.2.1" },

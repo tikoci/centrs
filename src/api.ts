@@ -297,6 +297,11 @@ export async function runResolvedApi(
 	trace: ValidationTrace = {},
 ): Promise<ApiSuccessEnvelope> {
 	assertListenCapability(resolved);
+	// Validate the complete request shape before constructing a backend or
+	// running either validation stage. In particular, `/execute` must reject
+	// extra body fields deterministically instead of letting live `:parse`
+	// surface an unrelated transport or authentication failure first.
+	const protocolRequest = buildProtocolApiRequest(resolved);
 	const backend = createProtocolAdapter({
 		protocol: resolved.via.value,
 		host: resolved.target.host,
@@ -324,7 +329,7 @@ export async function runResolvedApi(
 		// reports the gate that actually settled rather than a guess.
 		trace.validation = validation;
 
-		const result = await backend.apiRequest(buildProtocolApiRequest(resolved));
+		const result = await backend.apiRequest(protocolRequest);
 		return {
 			ok: true,
 			data: result.data,
