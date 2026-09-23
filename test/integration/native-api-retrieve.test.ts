@@ -202,6 +202,20 @@ describeFast("native API retrieve against CHR", () => {
 			expect(attrs).toContain("version");
 			expect(attrs).toContain("uptime");
 
+			// 12. A singleton outside the old hardcoded pair (#377).
+			const romon = await ok([
+				"retrieve",
+				"127.0.0.1",
+				"/tool/romon",
+				"--attributes",
+				"enabled,id",
+				...baseArgs,
+			]);
+			expect(Object.keys(romon.data as object).sort()).toEqual([
+				"enabled",
+				"id",
+			]);
+
 			// 9. Unknown path → validation/unknown-path.
 			await fail(
 				["retrieve", "127.0.0.1", "/not/a/real/path", ...baseArgs],
@@ -249,7 +263,7 @@ describeFast("native API retrieve against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(11),
+				exampleIds: exampleIds(12),
 			});
 		} finally {
 			capture.restore();

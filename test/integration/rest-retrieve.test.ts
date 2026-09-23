@@ -229,7 +229,7 @@ describeFast("REST retrieve against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(19),
+				exampleIds: exampleIds(20),
 			});
 
 			const identityEnvelope = await expectRetrieveSuccess(consoleCapture, [
@@ -300,6 +300,20 @@ describeFast("REST retrieve against CHR", () => {
 				"/system/resource",
 				"--all-attributes",
 				...baseArgs,
+			]);
+
+			// 20. A singleton outside the old hardcoded pair (#377).
+			const romonEnvelope = await expectRetrieveSuccess(consoleCapture, [
+				"retrieve",
+				chr.restUrl,
+				"/tool/romon",
+				"--attributes",
+				"enabled,id",
+				...baseArgs,
+			]);
+			expect(Object.keys(romonEnvelope.data as object).sort()).toEqual([
+				"enabled",
+				"id",
 			]);
 
 			await expectRetrieveFailure(

@@ -84,6 +84,18 @@ Rejected before any network call, with `usage/conflicting-flags`.
 centrs retrieve $R /system/resource --attribute uptime --all-attributes --username $U --password $P --json
 ```
 
+### 20. Comma-list --attributes on any singleton
+
+Singletons are recognized from `/console/inspect` — their `get` takes no
+`number` argument — so every singleton validates against its `get value-name`
+properties, not against `print`'s flags (#377).
+
+```bash
+centrs retrieve $R /tool/romon --attributes enabled,id --username $U --password $P --json
+```
+
+Envelope: `data` is an object containing only `enabled` and `id`.
+
 ## --list-attributes
 
 ### 9. List attributes for a path
@@ -335,6 +347,14 @@ centrs retrieve $A /system/resource --attribute bogus-attr --via native-api --po
 ```bash
 centrs retrieve $A /system/resource --via native-api --port $API_PORT --username wrong --password wrong
 ```
+
+### N12. Singleton `--attributes` projection (#377)
+
+```bash
+centrs retrieve $A /tool/romon --attributes enabled,id --via native-api --port $API_PORT --username $U --password $P
+```
+
+`data` is an object containing only `enabled` and `id`.
 
 ## quickchr targets (#134)
 
