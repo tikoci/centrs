@@ -998,7 +998,7 @@ describe("devices init", () => {
 		}
 	});
 
-	test("the CDB stays 0600 after a mutation rewrites it", async () => {
+	test("the CDB and its backup stay 0600 after a mutation rewrites it", async () => {
 		const { dir, cleanup } = await tempDir();
 		try {
 			const cdbFile = join(dir, "winbox.cdb");
@@ -1010,6 +1010,11 @@ describe("devices init", () => {
 			});
 			expect((await reload(cdbFile)).entries).toHaveLength(1);
 			expect((await stat(cdbFile)).mode & 0o777).toBe(0o600);
+			const backups = (await readdir(dir)).filter((f) => f.includes(".bak."));
+			expect(backups).toHaveLength(1);
+			for (const backup of backups) {
+				expect((await stat(join(dir, backup))).mode & 0o777).toBe(0o600);
+			}
 		} finally {
 			await cleanup();
 		}
