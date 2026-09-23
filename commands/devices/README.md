@@ -362,7 +362,9 @@ field-editing verb, and invoking it today returns `usage/not-implemented`. There
 is no `update`.
 
 - `list` (alias `print`) shows resolved targets, their record type, group, and
-  a one-line provenance summary. No network IO. `--where attr=value`
+  a one-line provenance summary. Each row carries the `identity=`/`mac=`/`ip=`
+  lookup keys it resolves by (when set), so one call maps names to records. No
+  network IO. `--where attr=value`
   (repeatable, AND-combined) filters by CDB-stored facts/comment-kv plus core
   record fields (`target`/`group`/`identity`/`mac`) — e.g. `--where
   lat=37.7749`. `--near lat,lon,radius` and `--bbox south,west,north,east`

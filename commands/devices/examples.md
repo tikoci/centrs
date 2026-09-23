@@ -29,7 +29,8 @@ centrs devices list --cdb-file $CDB
 ```
 
 Envelope: `ok: true`, `data` is an array of `{ target, recordType, group?,
-user, sources }`. No `meta.timing.request`.
+user, identity?, mac?, ip?, sources }` — the lookup keys appear only when the
+record's comment sets them. No `meta.timing.request`.
 
 ### 2. List a single group
 
