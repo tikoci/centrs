@@ -758,7 +758,9 @@ function entryToListItem(
 	}
 	for (const key of commentKvLookupKeys) {
 		const value = parsed.lookups[key];
-		if (value !== undefined) {
+		// Same non-blank rule as `entryRouterKeys`: never advertise a key that
+		// does not resolve.
+		if (value !== undefined && value.trim().length > 0) {
 			item[key] = value;
 			sources[key] = {
 				kind: "comment-kv",

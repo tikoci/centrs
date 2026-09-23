@@ -774,6 +774,22 @@ describe("listDevices lookup-key projection (#378)", () => {
 		}
 	});
 
+	test("omits a whitespace-only lookup key, which cannot resolve", async () => {
+		const { path, cleanup } = await tempCdb([
+			adminRecord('identity=" " mac=AA:BB:CC:DD:EE:33'),
+		]);
+		try {
+			const cdb = await reload(path);
+			const [row] = listDevices({ cdb }).data;
+			expect(row?.identity).toBeUndefined();
+			expect(row?.sources?.["identity"]).toBeUndefined();
+			expect(row?.mac).toBe("AA:BB:CC:DD:EE:33");
+			expect(() => showDevice({ cdb, target: " " })).toThrow();
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("text list shows the identity column", async () => {
 		const { path, cleanup } = await tempCdb(lookupKeyRecords());
 		try {
