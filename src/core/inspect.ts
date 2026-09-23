@@ -55,12 +55,20 @@ export interface InspectChildItem {
 }
 
 /** A row from `request=completion`: a candidate token for a path/argument. */
+/**
+ * One `request=completion` row. These are the only fields RouterOS sends, on
+ * every build recorded from 7.9.2 to 7.25beta3 (lsp-routeros-ts
+ * `test-data/inspect-shapes.v*.json`). `text` is the candidate's help string,
+ * never its name.
+ */
 export interface InspectCompletionItem {
 	type?: string;
-	name?: string;
 	completion?: string;
-	value?: string;
+	show?: string;
+	style?: string;
 	text?: string;
+	offset?: string;
+	preference?: string;
 }
 
 /**
@@ -99,31 +107,20 @@ export function isCommandNode(child: InspectChildItem, name: string): boolean {
 }
 
 /**
- * Flatten completion rows into attribute names. Reads every name-like field a
- * RouterOS build might populate (`completion`/`name`/`value`/`text`), strips
- * everything from the first `=` onward (the `name=value` completion form), and
- * drops blanks. Returns the names in row order **without** de-duplication or
- * sorting — callers that need a stable set wrap with `[...new Set(names)].sort()`
- * (both current callers do).
+ * The candidate names from completion rows: `completion` of each
+ * `show: "true"` row, as lsp-routeros-ts reads them. `show: "false"` rows are
+ * syntax completions (`[`, `(`, `$`, `"`, `*`, `<value>`), not properties
+ * (CHR 7.23.7, on both `print,proplist` and `get,value-name`; #380). Returns
+ * the names in row order **without** de-duplication or sorting; callers that
+ * need a stable set wrap with `[...new Set(names)].sort()`.
  */
 export function extractCompletionNames(
 	rows: readonly InspectCompletionItem[],
 ): string[] {
 	return rows
-		.flatMap((row) => [row.completion, row.name, row.value, row.text])
-		.filter((value): value is string => typeof value === "string")
-		.map((value) => nameBeforeEquals(value).trim())
-		.filter((value) => value.length > 0);
-}
-
-/**
- * The token before the first `=` in a RouterOS completion row. Plain string
- * slicing (no regex) — `value.replace(/=.*$/, "")` triggers a CodeQL
- * polynomial-ReDoS flag on this exported function's caller-supplied input.
- */
-function nameBeforeEquals(value: string): string {
-	const eq = value.indexOf("=");
-	return eq === -1 ? value : value.slice(0, eq);
+		.filter((row) => row.show === "true")
+		.map((row) => row.completion?.trim() ?? "")
+		.filter((name) => name.length > 0);
 }
 
 /** `request=child` for a token path. */

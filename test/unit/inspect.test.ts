@@ -81,26 +81,34 @@ describe("isCommandNode", () => {
 });
 
 describe("extractCompletionNames", () => {
-	test("reads every name-like field, strips =value, trims, drops blanks", () => {
+	// Row shapes as CHR 7.23.7 returns them for `ip,dns,get,value-name` (#380).
+	test("keeps `completion` of show=true rows only; `text` is help, not a name", () => {
 		const rows: InspectCompletionItem[] = [
-			{ completion: "address=1.2.3.4" },
-			{ name: " interface " },
-			{ value: "comment" },
-			{ text: "" },
-			{},
+			{
+				completion: "[",
+				show: "false",
+				style: "syntax-meta",
+				text: "start of command substitution",
+			},
+			{ completion: "*", show: "false", style: "none", text: "id prefix" },
+			{
+				completion: "cache-size",
+				show: "true",
+				style: "none",
+				text: "DNS cache size in kB",
+			},
+			{ completion: "servers", show: "true", style: "none", text: "" },
+			{ completion: " ", show: "true" },
+			{ text: "orphan help" },
 		];
-		expect(extractCompletionNames(rows)).toEqual([
-			"address",
-			"interface",
-			"comment",
-		]);
+		expect(extractCompletionNames(rows)).toEqual(["cache-size", "servers"]);
 	});
 
 	test("preserves row order WITHOUT de-duplication (callers sort/uniq)", () => {
 		const rows: InspectCompletionItem[] = [
-			{ name: "b" },
-			{ name: "a" },
-			{ name: "b" },
+			{ completion: "b", show: "true" },
+			{ completion: "a", show: "true" },
+			{ completion: "b", show: "true" },
 		];
 		expect(extractCompletionNames(rows)).toEqual(["b", "a", "b"]);
 	});

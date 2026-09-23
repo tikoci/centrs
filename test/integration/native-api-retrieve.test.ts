@@ -201,6 +201,9 @@ describeFast("native API retrieve against CHR", () => {
 			expect(Array.isArray(attrs)).toBe(true);
 			expect(attrs).toContain("version");
 			expect(attrs).toContain("uptime");
+			for (const noise of ["$", "*", "<value>", "id prefix"]) {
+				expect(attrs).not.toContain(noise);
+			}
 
 			// 12. A singleton outside the old hardcoded pair (#377).
 			const romon = await ok([

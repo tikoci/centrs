@@ -77,8 +77,8 @@ describe("retrieve core", () => {
 			() =>
 				new Response(
 					JSON.stringify([
-						{ type: "completion", completion: "disabled" },
-						{ type: "completion", completion: "name" },
+						{ type: "completion", show: "true", completion: "disabled" },
+						{ type: "completion", show: "true", completion: "name" },
 					]),
 				),
 		]);
@@ -118,8 +118,8 @@ describe("retrieve core", () => {
 			() =>
 				new Response(
 					JSON.stringify([
-						{ type: "completion", completion: "address" },
-						{ type: "completion", completion: "interface" },
+						{ type: "completion", show: "true", completion: "address" },
+						{ type: "completion", show: "true", completion: "interface" },
 					]),
 				),
 			(_, init) => {
@@ -173,8 +173,8 @@ describe("retrieve core", () => {
 				expect(body.path).toBe("system,resource,get,value-name");
 				return new Response(
 					JSON.stringify([
-						{ type: "completion", completion: "uptime" },
-						{ type: "completion", completion: "version" },
+						{ type: "completion", show: "true", completion: "uptime" },
+						{ type: "completion", show: "true", completion: "version" },
 					]),
 				);
 			},
@@ -228,10 +228,10 @@ describe("retrieve core", () => {
 				expect(body.path).toBe("tool,romon,get,value-name");
 				return new Response(
 					JSON.stringify([
-						{ type: "completion", completion: "current-id" },
-						{ type: "completion", completion: "enabled" },
-						{ type: "completion", completion: "id" },
-						{ type: "completion", completion: "secrets" },
+						{ type: "completion", show: "true", completion: "current-id" },
+						{ type: "completion", show: "true", completion: "enabled" },
+						{ type: "completion", show: "true", completion: "id" },
+						{ type: "completion", show: "true", completion: "secrets" },
 					]),
 				);
 			},
@@ -294,7 +294,9 @@ describe("retrieve core", () => {
 				const body = JSON.parse(String(init?.body)) as { path?: string };
 				expect(body.path).toBe("ip,address,print,proplist");
 				return new Response(
-					JSON.stringify([{ type: "completion", completion: "address" }]),
+					JSON.stringify([
+						{ type: "completion", show: "true", completion: "address" },
+					]),
 				);
 			},
 			() => new Response(JSON.stringify([{ address: "192.0.2.1/24" }])),
@@ -467,8 +469,8 @@ describe("retrieve core", () => {
 			() =>
 				new Response(
 					JSON.stringify([
-						{ type: "completion", completion: "uptime" },
-						{ type: "completion", completion: "version" },
+						{ type: "completion", show: "true", completion: "uptime" },
+						{ type: "completion", show: "true", completion: "version" },
 					]),
 				),
 		]);

@@ -332,6 +332,10 @@ describeFast("REST retrieve against CHR", () => {
 			expect(new Set(attributes).size).toBe(attributes.length);
 			expect(attributes).toContain("uptime");
 			expect(attributes).toContain("version");
+			// Only `show: "true"` completion names — no syntax rows or help text (#380).
+			for (const noise of ["$", "*", "<value>", "id prefix"]) {
+				expect(attributes).not.toContain(noise);
+			}
 
 			const unknownPathEnvelope = await expectRetrieveFailure(
 				consoleCapture,
