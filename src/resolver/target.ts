@@ -428,20 +428,40 @@ export function resolveAuth(
 }
 
 export function parseHostCandidate(value: string): URL {
-	if (/^https?:\/\//i.test(value)) {
-		const url = new URL(value);
-		if (url.pathname !== "/" && url.pathname !== "") {
-			throw new CentrsError({
-				code: "input/invalid-target",
-				summary: `Target URL must not include a path. Received: ${value}`,
-				remediation:
-					"Pass only the RouterOS host or base URL, then provide the RouterOS menu path as the second positional argument.",
-			});
-		}
-		return url;
+	const hasScheme = /^https?:\/\//i.test(value);
+	let url: URL;
+	try {
+		url = new URL(hasScheme ? value : `http://${value}`);
+	} catch (cause) {
+		throw invalidTargetError(value, cause);
 	}
+	if (hasScheme && url.pathname !== "/" && url.pathname !== "") {
+		throw new CentrsError({
+			code: "input/invalid-target",
+			summary: `Target URL must not include a path. Received: ${value}`,
+			remediation:
+				"Pass only the RouterOS host or base URL, then provide the RouterOS menu path as the second positional argument.",
+		});
+	}
+	return url;
+}
 
-	return new URL(`http://${value}`);
+/**
+ * A `<router>` that is not a CDB handle and does not parse as a host (#381).
+ * `quickchr:NAME` is the likely guess for a quickchr VM, so it names the flag.
+ */
+function invalidTargetError(value: string, cause: unknown): CentrsError {
+	const quickchrGuess = /^quickchr:(.+)$/i.exec(value)?.[1];
+	return new CentrsError({
+		code: "input/invalid-target",
+		summary: `Target is not a known device or a valid host: ${value}`,
+		remediation:
+			quickchrGuess !== undefined
+				? `Select a quickchr VM with the flag: \`--quickchr ${quickchrGuess}\` (there is no \`quickchr:\` target prefix).`
+				: "Pass a CDB target or identity (see `centrs devices list`), an IP or hostname with optional `:port`, or an `http(s)://host[:port]` base URL.",
+		context: { target: value },
+		cause,
+	});
 }
 
 function readPort(parsedUrl: URL, scheme: "http" | "https"): number {

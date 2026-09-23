@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { CentrsError } from "../../src/errors.ts";
 import {
 	buildWinBoxCdbEntryRecord,
 	encodeOpenWinBoxCdb,
@@ -10,6 +11,7 @@ import {
 import {
 	type CdbResolution,
 	coerceCommentKv,
+	parseHostCandidate,
 	type ResolverWarning,
 	resolveAuth,
 	resolveBooleanSetting,
@@ -379,6 +381,44 @@ describe("resolver target provenance", () => {
 
 		expect(target.port).toBe(8443);
 		expect(target.sources["port"]?.kind).toBe("explicit");
+	});
+});
+
+// #381: an unparseable `<router>` crashed as internal/unhandled (TypeError:
+// Invalid URL) instead of a classified input error.
+describe("resolver unparseable target", () => {
+	function invalidTarget(value: string): CentrsError {
+		try {
+			parseHostCandidate(value);
+		} catch (error) {
+			return error as CentrsError;
+		}
+		throw new Error(`${value} parsed`);
+	}
+
+	test("quickchr:NAME is input/invalid-target naming --quickchr", () => {
+		const error = invalidTarget("quickchr:7.23.7-x86-1");
+		expect(error).toBeInstanceOf(CentrsError);
+		expect(error.code).toBe("input/invalid-target");
+		expect(error.remediation).toContain("`--quickchr 7.23.7-x86-1`");
+		expect(error.context).toEqual({ target: "quickchr:7.23.7-x86-1" });
+	});
+
+	test.each(["a b", "bad:host:name", "http://a b"])(
+		"%p is input/invalid-target with the generic remediation",
+		(value) => {
+			const error = invalidTarget(value);
+			expect(error.code).toBe("input/invalid-target");
+			expect(error.remediation).toContain("centrs devices list");
+		},
+	);
+
+	test.each([
+		["192.0.2.1", "192.0.2.1"],
+		["router.example:8080", "router.example"],
+		["https://192.0.2.1:8443", "192.0.2.1"],
+	])("%p still parses", (value, hostname) => {
+		expect(parseHostCandidate(value).hostname).toBe(hostname);
 	});
 });
 
