@@ -79,6 +79,10 @@ export interface DevicesListItem {
 	user: string;
 	cdbRecordIndex: number;
 	source?: string;
+	/** `identity=` / `mac=` / `ip=` comment lookup keys — the names `<router>` resolves by (issue #378). */
+	identity?: string;
+	mac?: string;
+	ip?: string;
 	sources?: Record<string, SettingSource>;
 	/** GPS location, parsed from the `lat`/`lon`/`altitude`/`altitude-type` comment facts (issue #146). */
 	location?: DeviceLocation;
@@ -751,6 +755,18 @@ function entryToListItem(
 			kind: "comment-kv",
 			key: `record:${cdbRecordIndex}:source`,
 		};
+	}
+	for (const key of commentKvLookupKeys) {
+		const value = parsed.lookups[key];
+		// Same non-blank rule as `entryRouterKeys`: never advertise a key that
+		// does not resolve.
+		if (value !== undefined && value.trim().length > 0) {
+			item[key] = value;
+			sources[key] = {
+				kind: "comment-kv",
+				key: `record:${cdbRecordIndex}:${key}`,
+			};
+		}
 	}
 	const location = deviceLocation(parseRawCommentFacts(entry.comment));
 	if (location !== undefined) {
@@ -1828,12 +1844,15 @@ function renderListText(
 		lines.push("(no entries)");
 		return;
 	}
-	lines.push(["INDEX", "TARGET", "TYPE", "USER", "GROUP"].join("\t"));
+	lines.push(
+		["INDEX", "TARGET", "IDENTITY", "TYPE", "USER", "GROUP"].join("\t"),
+	);
 	for (const item of items) {
 		lines.push(
 			[
 				String(item.cdbRecordIndex),
 				item.target,
+				item.identity || "-",
 				item.recordTypeName,
 				item.user || "-",
 				item.group || "-",

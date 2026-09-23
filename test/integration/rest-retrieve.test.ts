@@ -217,20 +217,6 @@ describeFast("REST retrieve against CHR", () => {
 			const boardName = resourceData?.["board-name"];
 			expect(resourceData).toHaveProperty("version");
 			expect(resourceData).toHaveProperty("uptime");
-			await recordIntegrationEvidence({
-				suite: "REST retrieve against CHR",
-				command: "retrieve",
-				protocol: "rest-api",
-				routerosVersion:
-					typeof routerOsVersion === "string"
-						? routerOsVersion
-						: chr.state.version,
-				boardName: typeof boardName === "string" ? boardName : undefined,
-				quickChrName: chr.name,
-				requestedChannel: started.requestedChannel,
-				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(19),
-			});
 
 			const identityEnvelope = await expectRetrieveSuccess(consoleCapture, [
 				"retrieve",
@@ -300,6 +286,20 @@ describeFast("REST retrieve against CHR", () => {
 				"/system/resource",
 				"--all-attributes",
 				...baseArgs,
+			]);
+
+			// 20. A singleton outside the old hardcoded pair (#377).
+			const romonEnvelope = await expectRetrieveSuccess(consoleCapture, [
+				"retrieve",
+				chr.restUrl,
+				"/tool/romon",
+				"--attributes",
+				"enabled,id",
+				...baseArgs,
+			]);
+			expect(Object.keys(romonEnvelope.data as object).sort()).toEqual([
+				"enabled",
+				"id",
 			]);
 
 			await expectRetrieveFailure(
@@ -470,6 +470,22 @@ describeFast("REST retrieve against CHR", () => {
 				],
 				"validation/not-implemented",
 			);
+
+			// Recorded last: evidence claims every example above passed.
+			await recordIntegrationEvidence({
+				suite: "REST retrieve against CHR",
+				command: "retrieve",
+				protocol: "rest-api",
+				routerosVersion:
+					typeof routerOsVersion === "string"
+						? routerOsVersion
+						: chr.state.version,
+				boardName: typeof boardName === "string" ? boardName : undefined,
+				quickChrName: chr.name,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+				exampleIds: exampleIds(20),
+			});
 		} finally {
 			consoleCapture.restore();
 			await chr.destroy();

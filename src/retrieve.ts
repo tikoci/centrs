@@ -8,6 +8,7 @@ import type {
 } from "./core/envelope.ts";
 import {
 	extractCompletionNames,
+	inspectArgumentNames,
 	inspectChildren,
 	inspectChildrenOrEmpty,
 	inspectCompletions,
@@ -124,6 +125,7 @@ export type RetrieveErrorEnvelope = CentrsErrorEnvelope<RetrieveOperationMeta>;
 
 interface RetrieveInspection {
 	command: "get" | "print";
+	singleton: boolean;
 }
 
 export interface ResolvedRetrieveRequest {
@@ -240,7 +242,7 @@ export async function runResolvedRetrieve(
 			}
 		}
 
-		const data = await executeRetrieve(resolved, backend);
+		const data = await executeRetrieve(resolved, backend, inspection);
 		const envelope = buildSuccessEnvelope(
 			resolved,
 			{
@@ -999,9 +1001,18 @@ async function inspectRetrievePath(
 		});
 	}
 
-	const singleton = isKnownSingletonPath(resolved.path);
+	// A singleton's `get` takes only `value-name`; a list menu's also takes
+	// `number` (CHR 7.23.7: /tool/romon, /ip/dns, /system/identity vs
+	// /ip/address). A hardcoded path list missed every other singleton and
+	// validated its properties against `print`'s flags (issue #377).
+	const singleton =
+		supportsGet &&
+		!(await inspectArgumentNames(backend, [...tokens, "get"])).includes(
+			"number",
+		);
 	return {
-		command: singleton && supportsGet ? "get" : "print",
+		command: singleton ? "get" : "print",
+		singleton,
 	};
 }
 
@@ -1040,8 +1051,9 @@ async function inspectAttributes(
 async function executeRetrieve(
 	resolved: ResolvedRetrieveRequest,
 	backend: ProtocolAdapter,
+	inspection: RetrieveInspection | undefined,
 ): Promise<unknown> {
-	if (isKnownSingletonPath(resolved.path)) {
+	if (inspection?.singleton ?? isKnownSingletonPath(resolved.path)) {
 		const data = await backend.getSingleton(resolved.path);
 		if (resolved.attributes.length > 0) {
 			return projectSingletonAttributes(data, resolved.attributes);
@@ -1055,6 +1067,7 @@ async function executeRetrieve(
 	});
 }
 
+/** Fallback for `--validate=false`, which skips the inspect that detects singletons. */
 function isKnownSingletonPath(path: string): boolean {
 	return ["/system/resource", "/system/identity"].includes(
 		path.replace(/\/$/, ""),

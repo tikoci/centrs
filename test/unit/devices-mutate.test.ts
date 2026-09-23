@@ -17,6 +17,7 @@ import {
 	listDevices,
 	loadCdb,
 	removeDevice,
+	renderDevicesEnvelope,
 	setDevice,
 	showDevice,
 } from "../../src/devices.ts";
@@ -733,6 +734,76 @@ describe("showDevice lookup-key resolution", () => {
 			const cdb = await reload(path);
 			const result = showDevice({ cdb, target: "aa:bb:cc:dd:ee:22" });
 			expect(result.data.entry.user).toBe("l2");
+		} finally {
+			await cleanup();
+		}
+	});
+});
+
+describe("listDevices lookup-key projection (#378)", () => {
+	test("rows carry identity=/mac=/ip= with comment-kv provenance", async () => {
+		const { path, cleanup } = await tempCdb([
+			...lookupKeyRecords(),
+			adminRecord(),
+		]);
+		try {
+			const cdb = await reload(path);
+			const [a, b, plain] = listDevices({ cdb }).data;
+			expect(a).toMatchObject({
+				target: "192.0.2.50",
+				identity: "edge1",
+				mac: "AA:BB:CC:DD:EE:11",
+			});
+			expect(a?.ip).toBeUndefined();
+			expect(a?.sources?.["identity"]).toEqual({
+				kind: "comment-kv",
+				key: "record:0:identity",
+			});
+			expect(b).toMatchObject({
+				target: "AA:BB:CC:DD:EE:22",
+				identity: "edge2",
+				ip: "192.0.2.51",
+			});
+			expect(b?.mac).toBeUndefined();
+			for (const key of ["identity", "mac", "ip"] as const) {
+				expect(plain?.[key]).toBeUndefined();
+				expect(plain?.sources?.[key]).toBeUndefined();
+			}
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("omits a whitespace-only lookup key, which cannot resolve", async () => {
+		const { path, cleanup } = await tempCdb([
+			adminRecord('identity=" " mac=AA:BB:CC:DD:EE:33'),
+		]);
+		try {
+			const cdb = await reload(path);
+			const [row] = listDevices({ cdb }).data;
+			expect(row?.identity).toBeUndefined();
+			expect(row?.sources?.["identity"]).toBeUndefined();
+			expect(row?.mac).toBe("AA:BB:CC:DD:EE:33");
+			expect(() => showDevice({ cdb, target: " " })).toThrow();
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("text list shows the identity column", async () => {
+		const { path, cleanup } = await tempCdb(lookupKeyRecords());
+		try {
+			const cdb = await reload(path);
+			const [header, first] = renderDevicesEnvelope(
+				listDevices({ cdb }),
+				"text",
+			).split("\n");
+			expect(header).toBe("INDEX\tTARGET\tIDENTITY\tTYPE\tUSER\tGROUP");
+			expect(first?.split("\t").slice(0, 3)).toEqual([
+				"0",
+				"192.0.2.50",
+				"edge1",
+			]);
 		} finally {
 			await cleanup();
 		}

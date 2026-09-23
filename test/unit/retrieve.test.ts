@@ -162,6 +162,12 @@ describe("retrieve core", () => {
 						{ type: "child", name: "get", "node-type": "cmd" },
 					]),
 				),
+			() =>
+				new Response(
+					JSON.stringify([
+						{ type: "child", name: "value-name", "node-type": "arg" },
+					]),
+				),
 			(_url, init) => {
 				const body = JSON.parse(String(init?.body)) as { path?: string };
 				expect(body.path).toBe("system,resource,get,value-name");
@@ -189,6 +195,124 @@ describe("retrieve core", () => {
 			expect(envelope.data).toBe("5m");
 			expect(fetchMock.calls.at(-1)?.url).toBe(
 				"http://router1:80/rest/system/resource",
+			);
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	// Issue #377: a singleton outside the old hardcoded two-path list was
+	// validated against `print`'s flags. Inspect shapes from CHR 7.23.7.
+	test("detects a singleton from `get` having no `number` argument", async () => {
+		const fetchMock = mockFetchSequence([
+			() =>
+				new Response(
+					JSON.stringify([
+						{ type: "child", name: "get", "node-type": "cmd" },
+						{ type: "child", name: "print", "node-type": "cmd" },
+						{ type: "child", name: "set", "node-type": "cmd" },
+					]),
+				),
+			(_url, init) => {
+				const body = JSON.parse(String(init?.body)) as { path?: string };
+				expect(body.path).toBe("tool,romon,get");
+				return new Response(
+					JSON.stringify([
+						{ type: "child", name: "as-string", "node-type": "arg" },
+						{ type: "child", name: "value-name", "node-type": "arg" },
+					]),
+				);
+			},
+			(_url, init) => {
+				const body = JSON.parse(String(init?.body)) as { path?: string };
+				expect(body.path).toBe("tool,romon,get,value-name");
+				return new Response(
+					JSON.stringify([
+						{ type: "completion", completion: "current-id" },
+						{ type: "completion", completion: "enabled" },
+						{ type: "completion", completion: "id" },
+						{ type: "completion", completion: "secrets" },
+					]),
+				);
+			},
+			() =>
+				new Response(
+					JSON.stringify({
+						enabled: "false",
+						id: "00:00:00:00:00:00",
+						secrets: "",
+					}),
+				),
+		]);
+
+		try {
+			const envelope = await retrieve({
+				targetInput: "router1",
+				path: "/tool/romon",
+				via: "rest-api",
+				attribute: ["enabled", "id"],
+				username: "admin",
+				password: "",
+			});
+
+			expect(envelope.data).toEqual({
+				enabled: "false",
+				id: "00:00:00:00:00:00",
+			});
+			expect(envelope.meta.validation?.availableAttributes).toEqual([
+				"current-id",
+				"enabled",
+				"id",
+				"secrets",
+			]);
+			expect(fetchMock.calls.at(-1)?.url).toBe(
+				"http://router1:80/rest/tool/romon",
+			);
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("keeps a list menu whose `get` takes `number` on print/proplist", async () => {
+		const fetchMock = mockFetchSequence([
+			() =>
+				new Response(
+					JSON.stringify([
+						{ type: "child", name: "find", "node-type": "cmd" },
+						{ type: "child", name: "get", "node-type": "cmd" },
+						{ type: "child", name: "print", "node-type": "cmd" },
+					]),
+				),
+			() =>
+				new Response(
+					JSON.stringify([
+						{ type: "child", name: "number", "node-type": "arg" },
+						{ type: "child", name: "value-name", "node-type": "arg" },
+					]),
+				),
+			(_url, init) => {
+				const body = JSON.parse(String(init?.body)) as { path?: string };
+				expect(body.path).toBe("ip,address,print,proplist");
+				return new Response(
+					JSON.stringify([{ type: "completion", completion: "address" }]),
+				);
+			},
+			() => new Response(JSON.stringify([{ address: "192.0.2.1/24" }])),
+		]);
+
+		try {
+			const envelope = await retrieve({
+				targetInput: "router1",
+				path: "/ip/address",
+				via: "rest-api",
+				attribute: "address",
+				username: "admin",
+				password: "",
+			});
+
+			expect(envelope.data).toEqual([{ address: "192.0.2.1/24" }]);
+			expect(fetchMock.calls.at(-1)?.url).toBe(
+				"http://router1:80/rest/ip/address/print",
 			);
 		} finally {
 			fetchMock.restore();
@@ -424,6 +548,12 @@ describe("retrieve CLI", () => {
 					JSON.stringify([
 						{ type: "child", name: "print", "node-type": "cmd" },
 						{ type: "child", name: "get", "node-type": "cmd" },
+					]),
+				),
+			() =>
+				new Response(
+					JSON.stringify([
+						{ type: "child", name: "value-name", "node-type": "arg" },
 					]),
 				),
 			() => new Response(JSON.stringify({ version: "7.22.1", uptime: "5m" })),
