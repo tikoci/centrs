@@ -108,9 +108,12 @@ export function isCommandNode(child: InspectChildItem, name: string): boolean {
 
 /**
  * The candidate names from completion rows: `completion` of each
- * `show: "true"` row, as lsp-routeros-ts reads them. `show: "false"` rows are
+ * `show: "true"` row that is not `syntax-meta`. `show: "false"` rows are
  * syntax completions (`[`, `(`, `$`, `"`, `*`, `<value>`), not properties
- * (CHR 7.23.7, on both `print,proplist` and `get,value-name`; #380). Returns
+ * (CHR 7.23.7, on both `print,proplist` and `get,value-name`; #380). At an
+ * argument boundary RouterOS also offers a shown `=` ("argument value
+ * separator", `style: "syntax-meta"`) on every recorded build, 7.9.2 →
+ * 7.25beta3; no build offers a `name=value` completion. Returns
  * the names in row order **without** de-duplication or sorting; callers that
  * need a stable set wrap with `[...new Set(names)].sort()`.
  */
@@ -118,7 +121,7 @@ export function extractCompletionNames(
 	rows: readonly InspectCompletionItem[],
 ): string[] {
 	return rows
-		.filter((row) => row.show === "true")
+		.filter((row) => row.show === "true" && row.style !== "syntax-meta")
 		.map((row) => row.completion?.trim() ?? "")
 		.filter((name) => name.length > 0);
 }

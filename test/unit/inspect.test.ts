@@ -99,6 +99,13 @@ describe("extractCompletionNames", () => {
 			},
 			{ completion: "servers", show: "true", style: "none", text: "" },
 			{ completion: " ", show: "true" },
+			// lsp-routeros-ts inspect-shapes `completion-valid-arg`, 7.9.2 → 7.25beta3.
+			{
+				completion: "=",
+				show: "true",
+				style: "syntax-meta",
+				text: "argument value separator",
+			},
 			{ text: "orphan help" },
 		];
 		expect(extractCompletionNames(rows)).toEqual(["cache-size", "servers"]);

@@ -1,4 +1,5 @@
-import { mkdir, open } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { link, mkdir, open, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type {
@@ -228,19 +229,28 @@ function isAlreadyExistsError(cause: unknown): boolean {
 
 /**
  * Create an empty open CDB at `path` without clobbering an existing file.
- * Uses an exclusive-create open (`wx`) so a concurrent writer's CDB is never
- * overwritten; the caller treats EEXIST as "another process created it".
- * Mode `0o600` keeps the CDB (device credentials) unreadable by other local
- * users instead of falling back to the process umask default.
+ * The bytes are written to a private temp file first and then hard-linked
+ * into place: `link` fails with EEXIST instead of replacing, and `path` never
+ * exists half-written, so a concurrent creator that loses the race reads a
+ * complete CDB (#382 review). The caller treats EEXIST as "another process
+ * created it". Mode `0o600` keeps the CDB (device credentials) unreadable by
+ * other local users instead of falling back to the process umask default.
  */
 async function createEmptyCdbNoClobber(path: string): Promise<void> {
 	await mkdir(dirname(path), { recursive: true });
-	const handle = await open(path, "wx", 0o600);
+	const tempPath = `${path}.init.${randomUUID()}`;
+	const handle = await open(tempPath, "wx", 0o600);
 	try {
+		await handle.chmod(0o600);
 		await handle.write(encodeOpenWinBoxCdb([]));
 		await handle.sync();
 	} finally {
 		await handle.close();
+	}
+	try {
+		await link(tempPath, path);
+	} finally {
+		await unlink(tempPath);
 	}
 }
 

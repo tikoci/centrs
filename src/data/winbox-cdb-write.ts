@@ -159,8 +159,13 @@ export async function writeWinBoxCdb(
 		dir,
 		`${basename(target)}${TEMP_INFIX}${process.pid}.${Date.now().toString(36)}`,
 	);
-	const handle = await open(tempPath, "w");
+	// The temp file replaces the CDB, so it carries the CDB's mode (a new CDB
+	// gets 0600): the file holds device credentials, and a plain open would
+	// widen it to the umask default, e.g. 0644 (#382 review).
+	const mode = targetExists ? (await stat(target)).mode & 0o777 : 0o600;
+	const handle = await open(tempPath, "w", mode);
 	try {
+		await handle.chmod(mode);
 		await handle.write(bytes);
 		await handle.sync();
 	} finally {

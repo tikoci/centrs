@@ -1006,6 +1006,38 @@ describe("devices init", () => {
 		}
 	});
 
+	test("the CDB stays 0600 after a mutation rewrites it", async () => {
+		const { dir, cleanup } = await tempDir();
+		try {
+			const cdbFile = join(dir, "winbox.cdb");
+			await initCdb({ cdbFile, env: {} });
+			await addDevice({
+				cdb: await reload(cdbFile),
+				target: "192.0.2.1",
+				user: "robot-reader",
+			});
+			expect((await reload(cdbFile)).entries).toHaveLength(1);
+			expect((await stat(cdbFile)).mode & 0o777).toBe(0o600);
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("concurrent inits: one creates, the rest read a complete CDB", async () => {
+		const { dir, cleanup } = await tempDir();
+		try {
+			const cdbFile = join(dir, "winbox.cdb");
+			const results = await Promise.all(
+				Array.from({ length: 8 }, () => initCdb({ cdbFile, env: {} })),
+			);
+			expect(results.filter((r) => r.data.created)).toHaveLength(1);
+			expect(results.every((r) => r.ok)).toBe(true);
+			expect(await readdir(dir)).toEqual(["winbox.cdb"]);
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("never clobbers: an existing CDB is reported, not rewritten", async () => {
 		const { path, cleanup } = await tempCdb([adminRecord()]);
 		try {
