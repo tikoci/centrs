@@ -973,6 +973,11 @@ describe("devices tips", () => {
 	});
 });
 
+// Windows has no POSIX mode bits: `chmod` only toggles write permission and
+// `stat` reports 0o666/0o444 (Node `fs.chmod` docs), so mode assertions and a
+// read-only-directory fixture only mean something elsewhere.
+const posixModes = process.platform !== "win32";
+
 // #376: an explicit, non-clobbering way to start a repo-local CDB.
 describe("devices init", () => {
 	async function tempDir(): Promise<{
@@ -991,7 +996,9 @@ describe("devices init", () => {
 			expect(result.ok).toBe(true);
 			expect(result.data).toEqual({ cdbFile, created: true, recordCount: 0 });
 			expect(result.meta.operation?.command).toBe("init");
-			expect((await stat(cdbFile)).mode & 0o777).toBe(0o600);
+			if (posixModes) {
+				expect((await stat(cdbFile)).mode & 0o777).toBe(0o600);
+			}
 			expect((await loadCdb({ cdbFile, env: {} })).entries).toEqual([]);
 		} finally {
 			await cleanup();
@@ -1009,11 +1016,13 @@ describe("devices init", () => {
 				user: "robot-reader",
 			});
 			expect((await reload(cdbFile)).entries).toHaveLength(1);
-			expect((await stat(cdbFile)).mode & 0o777).toBe(0o600);
 			const backups = (await readdir(dir)).filter((f) => f.includes(".bak."));
 			expect(backups).toHaveLength(1);
-			for (const backup of backups) {
-				expect((await stat(join(dir, backup))).mode & 0o777).toBe(0o600);
+			if (posixModes) {
+				expect((await stat(cdbFile)).mode & 0o777).toBe(0o600);
+				for (const backup of backups) {
+					expect((await stat(join(dir, backup))).mode & 0o777).toBe(0o600);
+				}
 			}
 		} finally {
 			await cleanup();
@@ -1079,19 +1088,22 @@ describe("devices init", () => {
 		}
 	});
 
-	test("an existing CDB in a read-only directory is still file-exists", async () => {
-		const { path, cleanup } = await tempCdb([adminRecord()]);
-		const dir = dirname(path);
-		try {
-			await chmod(dir, 0o500);
-			const result = await initCdb({ cdbFile: path, env: {} });
-			expect(result.data).toMatchObject({ created: false, recordCount: 1 });
-			expect(result.warnings.map((w) => w.code)).toContain("cdb/file-exists");
-		} finally {
-			await chmod(dir, 0o700);
-			await cleanup();
-		}
-	});
+	test.skipIf(!posixModes)(
+		"an existing CDB in a read-only directory is still file-exists",
+		async () => {
+			const { path, cleanup } = await tempCdb([adminRecord()]);
+			const dir = dirname(path);
+			try {
+				await chmod(dir, 0o500);
+				const result = await initCdb({ cdbFile: path, env: {} });
+				expect(result.data).toMatchObject({ created: false, recordCount: 1 });
+				expect(result.warnings.map((w) => w.code)).toContain("cdb/file-exists");
+			} finally {
+				await chmod(dir, 0o700);
+				await cleanup();
+			}
+		},
+	);
 
 	test("a missing explicit CDB still errors, and names `devices init`", async () => {
 		const { dir, cleanup } = await tempDir();

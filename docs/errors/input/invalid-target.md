@@ -27,5 +27,5 @@ Pass one of the accepted target forms:
 | Base URL without a path | `https://192.0.2.1:8443` |
 | quickchr VM | `--quickchr NAME` (a flag, not a prefix) |
 
-With an explicit `--cdb-file`, a string that matches no record stops earlier
-with `cdb/not-found-target`.
+With an explicit `--cdb-file` and no `__default__` fallback record, a string
+that matches no record stops earlier with `cdb/not-found-target`.

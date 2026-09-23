@@ -171,16 +171,17 @@ export async function writeWinBoxCdb(
 		dir,
 		`${basename(target)}${TEMP_INFIX}${process.pid}.${Date.now().toString(36)}`,
 	);
-	const handle = await open(tempPath, "w", mode);
+	// Any failure before the rename removes the temp file: it holds the
+	// serialized CDB, credentials included.
 	try {
-		await handle.chmod(mode);
-		await handle.write(bytes);
-		await handle.sync();
-	} finally {
-		await handle.close();
-	}
-
-	try {
+		const handle = await open(tempPath, "w", mode);
+		try {
+			await handle.chmod(mode);
+			await handle.write(bytes);
+			await handle.sync();
+		} finally {
+			await handle.close();
+		}
 		await rename(tempPath, target);
 	} catch (error) {
 		await unlink(tempPath).catch(() => undefined);
