@@ -22,6 +22,7 @@ import {
 	describeCentrs,
 	devicesOutputFormats,
 	editInteractiveOnlyError,
+	initCdb,
 	listDevices,
 	listGroups,
 	loadCdb,
@@ -46,7 +47,8 @@ import {
 
 export const devicesCommand: CliCommandMetadata = {
 	name: "devices",
-	usage: "centrs devices <list|show|groups|add|edit|set|remove> [args] [flags]",
+	usage:
+		"centrs devices <init|list|show|groups|add|edit|set|remove> [args] [flags]",
 	summary:
 		"Inspect and mutate the CDB-backed device registry. `devices` is the only command that writes the CDB.",
 	options: [
@@ -197,6 +199,7 @@ export const devicesCommand: CliCommandMetadata = {
 };
 
 type DevicesSubcommand =
+	| "init"
 	| "list"
 	| "show"
 	| "groups"
@@ -378,6 +381,7 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	}
 
 	const subcommands: readonly DevicesSubcommand[] = [
+		"init",
 		"list",
 		"show",
 		"groups",
@@ -389,14 +393,14 @@ function parseDevicesCliArgs(args: readonly string[]): DevicesCliArgs {
 	const [rawSub, ...rest] = positional;
 	if (rawSub === undefined) {
 		throw new Error(
-			"`centrs devices` requires a subcommand: list, show, groups, add, edit, set, or remove.",
+			"`centrs devices` requires a subcommand: init, list, show, groups, add, edit, set, or remove.",
 		);
 	}
 	// Resolve aliases (print/get/rm/delete) to the canonical verb before validating.
 	const sub = SUBCOMMAND_ALIASES[rawSub] ?? (rawSub as DevicesSubcommand);
 	if (!subcommands.includes(sub)) {
 		throw new Error(
-			`Unknown devices subcommand: ${rawSub}. Use list, show, groups, add, edit, set, or remove (aliases: print, get, rm, delete).`,
+			`Unknown devices subcommand: ${rawSub}. Use init, list, show, groups, add, edit, set, or remove (aliases: print, get, rm, delete).`,
 		);
 	}
 	parsed.subcommand = sub;
@@ -606,6 +610,15 @@ export async function runDevicesCli(args: readonly string[]): Promise<number> {
 		}
 
 		envSnapshot = Bun.env;
+		if (parsed.subcommand === "init") {
+			const envelope = await initCdb({
+				cdbFile: parsed.cdbFile,
+				cdbPassword: parsed.cdbPassword,
+				env: envSnapshot,
+			});
+			console.log(renderDevicesEnvelope(envelope, parsed.format ?? "text"));
+			return 0;
+		}
 		const cdb = await loadCdb({
 			cdbFile: parsed.cdbFile,
 			cdbPassword: parsed.cdbPassword,

@@ -332,6 +332,7 @@ runs produce stable diffs.
 ## Subcommands
 
 ```text
+centrs devices init                     # create an empty CDB at the resolved path
 centrs devices list [--group G] [--where attr=value]
                     [--near lat,lon,radius] [--bbox south,west,north,east]
                     [--format json|yaml|text]
@@ -361,6 +362,12 @@ clack-style prompt used by `@tikoci/quickchr`); it is **not** a separate
 field-editing verb, and invoking it today returns `usage/not-implemented`. There
 is no `update`.
 
+- `init` creates an empty open CDB at the resolved path (`--cdb-file`,
+  `CENTRS_CDB_FILE`, or the default), with parent directories and mode `0600`.
+  It never overwrites: on an existing, readable CDB it succeeds with a
+  `cdb/file-exists` warning and writes nothing. An explicit path is created only
+  by `init`; every other subcommand reports `cdb/not-found` for it (typo
+  protection), and that error names `init`.
 - `list` (alias `print`) shows resolved targets, their record type, group, and
   a one-line provenance summary. Each row carries the `identity=`/`mac=`/`ip=`
   lookup keys it resolves by (when set), so one call maps names to records. No

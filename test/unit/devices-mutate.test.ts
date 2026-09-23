@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import {
+	chmod,
+	mkdir,
+	mkdtemp,
+	readdir,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -13,6 +21,7 @@ import {
 } from "../../src/data/winbox-cdb.ts";
 import {
 	addDevice,
+	initCdb,
 	type LoadedCdb,
 	listDevices,
 	loadCdb,
@@ -966,6 +975,90 @@ describe("devices tips", () => {
 		try {
 			const cdb = await reload(path);
 			expect(showDevice({ cdb, target: "192.0.2.5" }).tips).toEqual([]);
+		} finally {
+			await cleanup();
+		}
+	});
+});
+
+// #376: an explicit, non-clobbering way to start a repo-local CDB.
+describe("devices init", () => {
+	async function tempDir(): Promise<{
+		dir: string;
+		cleanup: () => Promise<void>;
+	}> {
+		const dir = await mkdtemp(join(tmpdir(), "centrs-init-"));
+		return { dir, cleanup: () => rm(dir, { recursive: true, force: true }) };
+	}
+
+	test("creates an empty 0600 CDB, making parent directories", async () => {
+		const { dir, cleanup } = await tempDir();
+		try {
+			const cdbFile = join(dir, "workspace", "nested", "winbox.cdb");
+			const result = await initCdb({ cdbFile, env: {} });
+			expect(result.ok).toBe(true);
+			expect(result.data).toEqual({ cdbFile, created: true, recordCount: 0 });
+			expect(result.meta.operation?.command).toBe("init");
+			expect((await stat(cdbFile)).mode & 0o777).toBe(0o600);
+			expect((await loadCdb({ cdbFile, env: {} })).entries).toEqual([]);
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("never clobbers: an existing CDB is reported, not rewritten", async () => {
+		const { path, cleanup } = await tempCdb([adminRecord()]);
+		try {
+			const before = await Bun.file(path).bytes();
+			const result = await initCdb({ cdbFile: path, env: {} });
+			expect(result.ok).toBe(true);
+			expect(result.data.created).toBe(false);
+			expect(result.data.recordCount).toBe(1);
+			expect(result.warnings.map((w) => w.code)).toContain("cdb/file-exists");
+			expect(await Bun.file(path).bytes()).toEqual(before);
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("an existing non-CDB file fails to load and is left alone", async () => {
+		const { dir, cleanup } = await tempDir();
+		try {
+			const cdbFile = join(dir, "notes.cdb");
+			await writeFile(cdbFile, "not a cdb");
+			const error = await catchError(() => initCdb({ cdbFile, env: {} }));
+			expect(error.code).toBe("cdb/parse-failed");
+			expect(await Bun.file(cdbFile).text()).toBe("not a cdb");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("a read-only location is cdb/create-failed", async () => {
+		const { dir, cleanup } = await tempDir();
+		const locked = join(dir, "locked");
+		try {
+			await mkdir(locked, { mode: 0o500 });
+			const error = await catchError(() =>
+				initCdb({ cdbFile: join(locked, "sub", "winbox.cdb"), env: {} }),
+			);
+			expect(error.code).toBe("cdb/create-failed");
+		} finally {
+			await chmod(locked, 0o700);
+			await cleanup();
+		}
+	});
+
+	test("a missing explicit CDB still errors, and names `devices init`", async () => {
+		const { dir, cleanup } = await tempDir();
+		try {
+			const cdbFile = join(dir, "missing.cdb");
+			const error = await catchError(() => loadCdb({ cdbFile, env: {} }));
+			expect(error.code).toBe("cdb/not-found");
+			expect(error.remediation).toContain(
+				`centrs devices init --cdb-file ${cdbFile}`,
+			);
+			expect(await Bun.file(cdbFile).exists()).toBe(false);
 		} finally {
 			await cleanup();
 		}

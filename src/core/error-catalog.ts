@@ -41,6 +41,10 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "A CDB entry with that target already exists.",
 	},
 	{
+		code: "cdb/create-failed",
+		summary: "A new CDB file could not be created at the resolved location.",
+	},
+	{
 		code: "cdb/created",
 		summary: "A new CDB file was created at the resolved location.",
 	},
@@ -56,6 +60,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "cdb/empty-selection",
 		summary: "The target selection matched no CDB records.",
+	},
+	{
+		code: "cdb/file-exists",
+		summary:
+			"`devices init` found a CDB already at the resolved location and wrote nothing.",
 	},
 	{
 		code: "cdb/invalid-option",

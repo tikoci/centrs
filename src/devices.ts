@@ -106,6 +106,7 @@ export interface DevicesGroupSummary {
 }
 
 export type DevicesCommand =
+	| "init"
 	| "list"
 	| "show"
 	| "groups"
@@ -243,6 +244,63 @@ async function createEmptyCdbNoClobber(path: string): Promise<void> {
 	}
 }
 
+export interface DevicesInitData {
+	cdbFile: string;
+	/** False when a readable CDB was already there; nothing was written. */
+	created: boolean;
+	recordCount: number;
+}
+
+/**
+ * `devices init` (#376): create an empty open CDB at the resolved path, the
+ * explicit counterpart of the default path's first-run auto-create. Never
+ * clobbers: like `git init`, re-running on an existing, readable CDB succeeds
+ * with a `cdb/file-exists` warning and writes nothing, so a workspace bootstrap
+ * script can run it unconditionally. An existing file that does not load
+ * (not a CDB, or encrypted without a password) fails with the load error.
+ */
+export async function initCdb(
+	options: LoadCdbOptions,
+): Promise<CentrsSuccessEnvelope<DevicesInitData, DevicesOperationMeta>> {
+	const settings = resolveDevicesSettings(options);
+	const cdbFile = settings.cdbFile.value;
+	try {
+		await createEmptyCdbNoClobber(cdbFile);
+	} catch (cause) {
+		if (!isAlreadyExistsError(cause)) {
+			throw new CentrsError({
+				code: "cdb/create-failed",
+				summary: `Could not create a CDB at ${cdbFile}.`,
+				remediation:
+					"Check that the directory is writable, or pass --cdb-file PATH to a writable location.",
+				context: { cdbFile },
+				cause,
+			});
+		}
+		const existing = await loadCdb(options);
+		return {
+			ok: true,
+			data: { cdbFile, created: false, recordCount: existing.entries.length },
+			warnings: [
+				...existing.warnings,
+				{
+					code: "cdb/file-exists",
+					message: `A CDB already exists at ${cdbFile} (${existing.entries.length} record(s)); nothing was written.`,
+				},
+			],
+			tips: [],
+			meta: devicesMeta("init", settings),
+		};
+	}
+	return {
+		ok: true,
+		data: { cdbFile, created: true, recordCount: 0 },
+		warnings: [],
+		tips: [],
+		meta: devicesMeta("init", settings),
+	};
+}
+
 export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 	const settings = resolveDevicesSettings(options);
 	const warnings: DevicesWarning[] = [];
@@ -279,8 +337,7 @@ export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 			throw new CentrsError({
 				code: "cdb/not-found",
 				summary: `CDB file not found: ${settings.cdbFile.value}`,
-				remediation:
-					"Pass --cdb-file PATH, set CENTRS_CDB_FILE, or place a CDB at ~/.config/tikoci/winbox.cdb.",
+				remediation: `To start a new CDB there, run \`centrs devices init --cdb-file ${settings.cdbFile.value}\`. Otherwise check the path; an explicit --cdb-file or CENTRS_CDB_FILE is never created implicitly.`,
 				context: { cdbFile: settings.cdbFile.value },
 			});
 		}
@@ -1769,6 +1826,15 @@ function renderText(envelope: DevicesEnvelope<unknown>): string {
 	}
 
 	switch (envelope.meta.operation?.command) {
+		case "init": {
+			const data = envelope.data as DevicesInitData;
+			lines.push(
+				data.created
+					? `created ${data.cdbFile}`
+					: `exists ${data.cdbFile} (${data.recordCount} record(s))`,
+			);
+			break;
+		}
 		case "list":
 			renderListText(lines, envelope.data as readonly DevicesListItem[]);
 			break;
