@@ -47,7 +47,8 @@ valid success.
 centrs devices list --cdb-file /tmp/does-not-exist.cdb
 ```
 
-Errors with `cdb/not-found`. `details_url` populated.
+Errors with `cdb/not-found`. `details_url` populated. The remediation names
+`centrs devices init --cdb-file <path>` (example 54).
 
 ## show
 
@@ -635,3 +636,32 @@ Both succeed: the `add` stores the freeform comment verbatim, and the later
 `set timeout=5000` does **not** raise `input/incomplete-gps` even though the
 record's GPS pair is incomplete. Touching `lat`/`lon` (e.g. `set lat=…`) would
 re-enable the pairing check.
+
+## init
+
+`init` is the explicit way to start a CDB at a path you choose (#376). Reads
+and mutations never create an explicit `--cdb-file`/`CENTRS_CDB_FILE`; only the
+default path is created implicitly on first run.
+
+### 54. Start a repo-local CDB
+
+```bash
+centrs devices init --cdb-file ./lab/winbox.cdb --json
+centrs devices add 192.0.2.1 --user robot-reader --cdb-file ./lab/winbox.cdb --json
+```
+
+Creates missing parent directories and an empty open CDB with mode `0600`.
+`data` is `{ cdbFile, created: true, recordCount: 0 }`. The `add` then succeeds.
+
+### 55. `init` never clobbers
+
+```bash
+centrs devices init --cdb-file ./lab/winbox.cdb --json
+```
+
+On an existing, readable CDB: `ok: true`, `data.created: false`,
+`data.recordCount` is the current count, and a `cdb/file-exists` warning says
+nothing was written. As with `git init`, re-running is safe. An existing file that
+does not load fails with that load error (`cdb/parse-failed`,
+`cdb/password-required`) and is left untouched. A location that cannot be
+written fails with `cdb/create-failed`.

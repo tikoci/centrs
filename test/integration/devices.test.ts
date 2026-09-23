@@ -1976,3 +1976,50 @@ describe("centrs devices (read-only)", () => {
 		expect(envelope.error.code).toBe("input/incomplete-gps");
 	});
 });
+
+describe("centrs devices init (#376)", () => {
+	test("examples 54-55 init a repo-local CDB, add to it, re-run init", async () => {
+		const cdbPath = join(tempDir, `init-${randomUUID()}`, "lab", "winbox.cdb");
+
+		const init = await runWithCapture([
+			"devices",
+			"init",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(init.exitCode).toBe(0);
+		expect(JSON.parse(init.stdout).data).toEqual({
+			cdbFile: cdbPath,
+			created: true,
+			recordCount: 0,
+		});
+
+		const add = await runWithCapture([
+			"devices",
+			"add",
+			"192.0.2.1",
+			"--user",
+			"robot-reader",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(add.exitCode).toBe(0);
+
+		const again = await runWithCapture([
+			"devices",
+			"init",
+			"--cdb-file",
+			cdbPath,
+			"--json",
+		]);
+		expect(again.exitCode).toBe(0);
+		const envelope = JSON.parse(again.stdout) as {
+			data: { created: boolean; recordCount: number };
+			warnings: Array<{ code: string }>;
+		};
+		expect(envelope.data).toMatchObject({ created: false, recordCount: 1 });
+		expect(envelope.warnings.map((w) => w.code)).toContain("cdb/file-exists");
+	});
+});

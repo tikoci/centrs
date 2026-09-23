@@ -20,6 +20,7 @@
  */
 
 import {
+	chmod,
 	copyFile,
 	mkdir,
 	open,
@@ -137,10 +138,21 @@ export async function writeWinBoxCdb(
 	let backupPath: string | undefined;
 	const prunedBackups: string[] = [];
 	const targetExists = await pathExists(target);
+	// The backup and the replacement both carry the CDB's mode (a new CDB gets
+	// 0600): the file holds device credentials, and neither a plain open nor
+	// `copyFile` is guaranteed to keep it narrower than the umask default,
+	// e.g. 0644 (#382 review).
+	const mode = targetExists ? (await stat(target)).mode & 0o777 : 0o600;
 	if (targetExists && !options.skipBackup) {
 		const stamp = backupStamp(options.now ?? new Date());
 		backupPath = join(dir, `${backupPrefix(target)}${stamp}`);
 		await copyFile(target, backupPath);
+		try {
+			await chmod(backupPath, mode);
+		} catch (error) {
+			await unlink(backupPath).catch(() => undefined);
+			throw error;
+		}
 
 		if (retention >= 0) {
 			const backups = await listWinBoxCdbBackups(target);
@@ -159,15 +171,17 @@ export async function writeWinBoxCdb(
 		dir,
 		`${basename(target)}${TEMP_INFIX}${process.pid}.${Date.now().toString(36)}`,
 	);
-	const handle = await open(tempPath, "w");
+	// Any failure before the rename removes the temp file: it holds the
+	// serialized CDB, credentials included.
 	try {
-		await handle.write(bytes);
-		await handle.sync();
-	} finally {
-		await handle.close();
-	}
-
-	try {
+		const handle = await open(tempPath, "w", mode);
+		try {
+			await handle.chmod(mode);
+			await handle.write(bytes);
+			await handle.sync();
+		} finally {
+			await handle.close();
+		}
 		await rename(tempPath, target);
 	} catch (error) {
 		await unlink(tempPath).catch(() => undefined);

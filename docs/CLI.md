@@ -234,7 +234,7 @@ Usage: centrs explain '<input>' [flags]
 Inspect and mutate the CDB-backed device registry. `devices` is the only command that writes the CDB.
 
 ```text
-Usage: centrs devices <list|show|groups|add|edit|set|remove> [args] [flags]
+Usage: centrs devices <init|list|show|groups|add|edit|set|remove> [args] [flags]
 ```
 
 | Flag | Value | Description |

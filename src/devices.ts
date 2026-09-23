@@ -1,4 +1,5 @@
-import { mkdir, open } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { link, mkdir, open, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type {
@@ -106,6 +107,7 @@ export interface DevicesGroupSummary {
 }
 
 export type DevicesCommand =
+	| "init"
 	| "list"
 	| "show"
 	| "groups"
@@ -227,20 +229,104 @@ function isAlreadyExistsError(cause: unknown): boolean {
 
 /**
  * Create an empty open CDB at `path` without clobbering an existing file.
- * Uses an exclusive-create open (`wx`) so a concurrent writer's CDB is never
- * overwritten; the caller treats EEXIST as "another process created it".
- * Mode `0o600` keeps the CDB (device credentials) unreadable by other local
- * users instead of falling back to the process umask default.
+ * The bytes are written to a private temp file first and then hard-linked
+ * into place: `link` fails with EEXIST instead of replacing, and `path` never
+ * exists half-written, so a concurrent creator that loses the race reads a
+ * complete CDB (#382 review). Returns false when `link` found a CDB already
+ * there (another process created it). Only `link`'s EEXIST means that: a
+ * recursive `mkdir` also reports EEXIST when a path component is a regular
+ * file. Mode `0o600` keeps the CDB (device credentials) unreadable by other
+ * local users instead of falling back to the process umask default.
  */
-async function createEmptyCdbNoClobber(path: string): Promise<void> {
+async function createEmptyCdbNoClobber(path: string): Promise<boolean> {
 	await mkdir(dirname(path), { recursive: true });
-	const handle = await open(path, "wx", 0o600);
+	const tempPath = `${path}.init.${randomUUID()}`;
+	const handle = await open(tempPath, "wx", 0o600);
 	try {
-		await handle.write(encodeOpenWinBoxCdb([]));
-		await handle.sync();
+		try {
+			await handle.chmod(0o600);
+			await handle.write(encodeOpenWinBoxCdb([]));
+			await handle.sync();
+		} finally {
+			await handle.close();
+		}
+		await link(tempPath, path);
+		return true;
+	} catch (error) {
+		if (isAlreadyExistsError(error)) {
+			return false;
+		}
+		throw error;
 	} finally {
-		await handle.close();
+		await unlink(tempPath);
 	}
+}
+
+export interface DevicesInitData {
+	cdbFile: string;
+	/** False when a readable CDB was already there; nothing was written. */
+	created: boolean;
+	recordCount: number;
+}
+
+/**
+ * `devices init` (#376): create an empty open CDB at the resolved path, the
+ * explicit counterpart of the default path's first-run auto-create. Never
+ * clobbers: like `git init`, re-running on an existing, readable CDB succeeds
+ * with a `cdb/file-exists` warning and writes nothing, so a workspace bootstrap
+ * script can run it unconditionally. An existing file that does not load
+ * (not a CDB, or encrypted without a password) fails with the load error.
+ */
+export async function initCdb(
+	options: LoadCdbOptions,
+): Promise<CentrsSuccessEnvelope<DevicesInitData, DevicesOperationMeta>> {
+	const settings = resolveDevicesSettings(options);
+	const cdbFile = settings.cdbFile.value;
+	const existingResult = async () => {
+		const existing = await loadCdb(options);
+		return {
+			ok: true as const,
+			data: { cdbFile, created: false, recordCount: existing.entries.length },
+			warnings: [
+				...existing.warnings,
+				{
+					code: "cdb/file-exists",
+					message: `A CDB already exists at ${cdbFile} (${existing.entries.length} record(s)); nothing was written.`,
+				},
+			],
+			tips: [],
+			meta: devicesMeta("init", settings),
+		};
+	};
+	// Check first: an existing CDB in a read-only directory is still an
+	// idempotent success, although no temp file could be created beside it.
+	// A `false` from the create covers a creator that wins the race after this.
+	if (await Bun.file(cdbFile).exists()) {
+		return existingResult();
+	}
+	let created: boolean;
+	try {
+		created = await createEmptyCdbNoClobber(cdbFile);
+	} catch (cause) {
+		throw new CentrsError({
+			code: "cdb/create-failed",
+			summary: `Could not create a CDB at ${cdbFile}.`,
+			remediation:
+				"Check that the directory is writable, or pass --cdb-file PATH to a writable location.",
+			context: { cdbFile },
+			cause,
+		});
+	}
+	if (!created) {
+		return existingResult();
+	}
+	return {
+		ok: true,
+		data: { cdbFile, created: true, recordCount: 0 },
+		warnings: [],
+		tips: [],
+		meta: devicesMeta("init", settings),
+	};
 }
 
 export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
@@ -254,33 +340,33 @@ export async function loadCdb(options: LoadCdbOptions): Promise<LoadedCdb> {
 		// `devices`/identity commands work out of the box. An explicit missing
 		// path stays an error (typo protection).
 		if (settings.cdbFile.source.kind === "default") {
+			// `false` means another process won the race and created the CDB
+			// after our existence check; that file is authoritative, so fall
+			// through and read it instead of erroring.
+			let created: boolean;
 			try {
-				await createEmptyCdbNoClobber(settings.cdbFile.value);
+				created = await createEmptyCdbNoClobber(settings.cdbFile.value);
+			} catch (cause) {
+				throw new CentrsError({
+					code: "cdb/not-found",
+					summary: `CDB file not found and could not be created: ${settings.cdbFile.value}`,
+					remediation:
+						"Check directory permissions for ~/.config/tikoci, or pass --cdb-file PATH to a writable location.",
+					context: { cdbFile: settings.cdbFile.value },
+					cause,
+				});
+			}
+			if (created) {
 				warnings.push({
 					code: "cdb/created",
 					message: `No CDB found at the default path; created an empty CDB at ${settings.cdbFile.value}.`,
 				});
-			} catch (cause) {
-				// EEXIST means another process won the race and created the CDB
-				// between our existence check and the exclusive open — that file
-				// is authoritative; fall through and read it instead of erroring.
-				if (!isAlreadyExistsError(cause)) {
-					throw new CentrsError({
-						code: "cdb/not-found",
-						summary: `CDB file not found and could not be created: ${settings.cdbFile.value}`,
-						remediation:
-							"Check directory permissions for ~/.config/tikoci, or pass --cdb-file PATH to a writable location.",
-						context: { cdbFile: settings.cdbFile.value },
-						cause,
-					});
-				}
 			}
 		} else {
 			throw new CentrsError({
 				code: "cdb/not-found",
 				summary: `CDB file not found: ${settings.cdbFile.value}`,
-				remediation:
-					"Pass --cdb-file PATH, set CENTRS_CDB_FILE, or place a CDB at ~/.config/tikoci/winbox.cdb.",
+				remediation: `To start a new CDB there, run \`centrs devices init --cdb-file ${settings.cdbFile.value}\`. Otherwise check the path; an explicit --cdb-file or CENTRS_CDB_FILE is never created implicitly.`,
 				context: { cdbFile: settings.cdbFile.value },
 			});
 		}
@@ -1769,6 +1855,15 @@ function renderText(envelope: DevicesEnvelope<unknown>): string {
 	}
 
 	switch (envelope.meta.operation?.command) {
+		case "init": {
+			const data = envelope.data as DevicesInitData;
+			lines.push(
+				data.created
+					? `created ${data.cdbFile}`
+					: `exists ${data.cdbFile} (${data.recordCount} record(s))`,
+			);
+			break;
+		}
 		case "list":
 			renderListText(lines, envelope.data as readonly DevicesListItem[]);
 			break;
