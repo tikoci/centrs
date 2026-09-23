@@ -1,15 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-	chmod,
-	mkdir,
-	mkdtemp,
-	readdir,
-	rm,
-	stat,
-	writeFile,
-} from "node:fs/promises";
+import { chmod, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
 	buildWinBoxCdbEntryRecord,
 	encodeOpenWinBoxCdb,
@@ -1066,17 +1058,32 @@ describe("devices init", () => {
 		}
 	});
 
-	test("a read-only location is cdb/create-failed", async () => {
+	// A file as a path component fails with ENOTDIR even for a privileged
+	// runner, which a 0500 directory would not stop.
+	test("a path through a regular file is cdb/create-failed, leaving no temp file", async () => {
 		const { dir, cleanup } = await tempDir();
-		const locked = join(dir, "locked");
 		try {
-			await mkdir(locked, { mode: 0o500 });
+			await writeFile(join(dir, "not-a-dir"), "");
 			const error = await catchError(() =>
-				initCdb({ cdbFile: join(locked, "sub", "winbox.cdb"), env: {} }),
+				initCdb({ cdbFile: join(dir, "not-a-dir", "winbox.cdb"), env: {} }),
 			);
 			expect(error.code).toBe("cdb/create-failed");
+			expect(await readdir(dir)).toEqual(["not-a-dir"]);
 		} finally {
-			await chmod(locked, 0o700);
+			await cleanup();
+		}
+	});
+
+	test("an existing CDB in a read-only directory is still file-exists", async () => {
+		const { path, cleanup } = await tempCdb([adminRecord()]);
+		const dir = dirname(path);
+		try {
+			await chmod(dir, 0o500);
+			const result = await initCdb({ cdbFile: path, env: {} });
+			expect(result.data).toMatchObject({ created: false, recordCount: 1 });
+			expect(result.warnings.map((w) => w.code)).toContain("cdb/file-exists");
+		} finally {
+			await chmod(dir, 0o700);
 			await cleanup();
 		}
 	});
