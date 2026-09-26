@@ -7,15 +7,21 @@ import {
 	encodeSentence,
 	SentenceReader,
 } from "../../src/protocols/native-api.ts";
+import { runCliProcess } from "./cli-process.ts";
 
 /**
  * `api --stream` against a loopback native-API peer, run as a real CLI process
  * (#385). The contract under test is that the PROCESS exits within a bound
  * when the stream stops, whether or not the router acknowledges `/cancel`.
  * Emitting a summary frame is not enough; the session must close too.
+ *
+ * Network-free (loopback peer, dummy credentials), so like `cli-smoke` it is not
+ * CHR-gated and runs in the fast `bun test` gate. Boundedness is the kill guard:
+ * a child still running at `killAfterMs` is SIGKILLed and never prints the
+ * summary line every case asserts on. No wall-clock assertion, since CI
+ * runners and a CPU-throttled laptop differ several-fold in startup time.
  */
 
-const CLI = new URL("../../src/cli.ts", import.meta.url).pathname;
 // A throwaway HOME keeps the developer's default CDB and centrs.env out of it.
 const HOME = mkdtempSync(join(tmpdir(), "centrs-stream-cancel-"));
 afterAll(() => rmSync(HOME, { recursive: true, force: true }));
@@ -89,13 +95,11 @@ function startPeer(acknowledgeCancel: boolean): Peer {
 async function runStream(
 	peer: Peer,
 	extra: string[],
-	onFirstFrame?: (proc: ReturnType<typeof Bun.spawn>) => void,
-): Promise<{ exitCode: number; elapsedMs: number; lines: unknown[] }> {
-	const started = Date.now();
-	const proc = Bun.spawn(
-		[
-			"bun",
-			CLI,
+	onFirstFrame?: (child: Bun.Subprocess) => void,
+): Promise<{ exitCode: number; lines: unknown[] }> {
+	let frames = 0;
+	const result = await runCliProcess({
+		args: [
 			"api",
 			"127.0.0.1",
 			"/ip/address",
@@ -113,37 +117,19 @@ async function runStream(
 			"--json",
 			...extra,
 		],
-		{
-			stdin: "ignore",
-			stdout: "pipe",
-			stderr: "pipe",
-			env: {
-				PATH: Bun.env["PATH"],
-				HOME,
-				XDG_CONFIG_HOME: join(HOME, ".config"),
-			},
+		env: { HOME, XDG_CONFIG_HOME: join(HOME, ".config") },
+		killAfterMs: 8000,
+		onStdoutLine: (line, child) => {
+			if (line.trim().length === 0) return;
+			frames += 1;
+			if (frames === 1) onFirstFrame?.(child);
 		},
-	);
-	const guard = setTimeout(() => proc.kill("SIGKILL"), 5000);
-	let buffered = "";
-	const lines: unknown[] = [];
-	const decoder = new TextDecoder();
-	for await (const chunk of proc.stdout) {
-		buffered += decoder.decode(chunk);
-		let newline = buffered.indexOf("\n");
-		while (newline >= 0) {
-			const line = buffered.slice(0, newline).trim();
-			buffered = buffered.slice(newline + 1);
-			if (line.length > 0) {
-				lines.push(JSON.parse(line));
-				if (lines.length === 1) onFirstFrame?.(proc);
-			}
-			newline = buffered.indexOf("\n");
-		}
-	}
-	const exitCode = await proc.exited;
-	clearTimeout(guard);
-	return { exitCode, elapsedMs: Date.now() - started, lines };
+	});
+	const lines = result.stdoutText
+		.split("\n")
+		.filter((line) => line.trim().length > 0)
+		.map((line) => JSON.parse(line) as unknown);
+	return { exitCode: result.exitCode, lines };
 }
 
 type Summary = {
@@ -159,7 +145,6 @@ describe("api --stream stops within a bound (#385)", () => {
 		peer = startPeer(false);
 		const run = await runStream(peer, ["--duration", "200ms"]);
 		expect(run.exitCode).toBe(0);
-		expect(run.elapsedMs).toBeLessThan(4000);
 		expect(peer.cancels).toBe(1);
 		const summary = run.lines.at(-1) as Summary;
 		expect(summary.data.stopReason).toBe("duration-elapsed");
@@ -167,18 +152,17 @@ describe("api --stream stops within a bound (#385)", () => {
 		expect(summary.warnings.map((w) => w.code)).toContain(
 			"transport/cancel-unacknowledged",
 		);
-	}, 10_000);
+	}, 15_000);
 
 	test("SIGINT against a peer that ignores /cancel exits", async () => {
 		peer = startPeer(false);
 		const run = await runStream(peer, [], (proc) => proc.kill("SIGINT"));
-		expect(run.elapsedMs).toBeLessThan(4000);
 		const summary = run.lines.at(-1) as Summary;
 		expect(summary.data.stopReason).toBe("interrupted");
 		expect(summary.warnings.map((w) => w.code)).toContain(
 			"transport/cancel-unacknowledged",
 		);
-	}, 10_000);
+	}, 15_000);
 
 	test("a cooperative peer's cancel is acknowledged: no warning", async () => {
 		peer = startPeer(true);
@@ -189,14 +173,13 @@ describe("api --stream stops within a bound (#385)", () => {
 		expect(summary.warnings.map((w) => w.code)).not.toContain(
 			"transport/cancel-unacknowledged",
 		);
-	}, 10_000);
+	}, 15_000);
 
 	test("--count against a peer that ignores /cancel exits", async () => {
 		peer = startPeer(false);
 		const run = await runStream(peer, ["--count", "1"]);
 		expect(run.exitCode).toBe(0);
-		expect(run.elapsedMs).toBeLessThan(4000);
 		const summary = run.lines.at(-1) as Summary;
 		expect(summary.data.stopReason).toBe("count-reached");
-	}, 10_000);
+	}, 15_000);
 });

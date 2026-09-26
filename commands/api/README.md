@@ -190,8 +190,9 @@ RouterOS produces multi-frame output two ways, and `api` treats them differently
   envelope (`data.stopReason` ∈ `count-reached`/`duration-elapsed`/`interrupted`/
   `transport-error`, plus `frames` and `durationMs`). `--duration`/`--count`
   bound it; Ctrl-C stops and still emits the summary. The `--duration` window
-  starts once validation is done and the listen is on the wire, so it excludes
-  connect, login and validation. Stopping sends RouterOS `/cancel`, and centrs
+  starts once validation is done, so it excludes validation (and the connect and
+  login validation needs). With `--no-validate`, connect and login happen inside
+  the window. Stopping sends RouterOS `/cancel`, and centrs
   waits up to `--timeout` for the router to acknowledge it. A router that never
   does gets its session closed locally, and the summary carries a
   `transport/cancel-unacknowledged` warning (#385). `--via rest-api --stream` →

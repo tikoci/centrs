@@ -719,6 +719,10 @@ export class NativeApiSession {
 			if (options.cancelGraceMs === undefined) return;
 			graceTimer = setTimeout(() => {
 				if (ended) return;
+				// Stop routing this tag and drop anything queued: a peer that ignores
+				// `/cancel` but keeps sending frames must not keep the loop draining.
+				this.subscriptions.delete(tag);
+				queue.length = 0;
 				ended = true;
 				options.onCancelUnacknowledged?.();
 				signalWake();
