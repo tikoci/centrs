@@ -157,6 +157,8 @@ describe("api --stream stops within a bound (#385)", () => {
 	test("SIGINT against a peer that ignores /cancel exits", async () => {
 		peer = startPeer(false);
 		const run = await runStream(peer, [], (proc) => proc.kill("SIGINT"));
+		expect(run.exitCode).toBe(0);
+		expect(peer.cancels).toBe(1);
 		const summary = run.lines.at(-1) as Summary;
 		expect(summary.data.stopReason).toBe("interrupted");
 		expect(summary.warnings.map((w) => w.code)).toContain(
