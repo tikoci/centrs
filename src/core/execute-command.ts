@@ -256,29 +256,22 @@ function scriptContainsWriteShapedCommand(input: string): boolean {
 		const pathToken = (tokens[pathIndex] ?? "").replace(/^[{[(]+/, "");
 		const pathParts = pathToken.split("/").filter(Boolean);
 		const lastPathPart = pathParts.at(-1) ?? "";
-		const following = tokens[pathIndex + 1];
-		const spacedVerb =
-			following !== undefined && /^[A-Za-z][A-Za-z0-9-]*$/.test(following)
-				? following
-				: undefined;
-		if (
-			pathParts.length < 2 &&
-			!isKnownExecuteVerb(lastPathPart) &&
-			(spacedVerb === undefined || !isKnownExecuteVerb(spacedVerb))
-		) {
+		// The space-separated spelling puts menu segments and the verb in the bare
+		// words after the path token (`/ip firewall filter print`), so the verb is
+		// the first known one among the path's last segment and that run.
+		const spacedWords: string[] = [];
+		for (const token of tokens.slice(pathIndex + 1)) {
+			if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(token)) break;
+			spacedWords.push(token);
+		}
+		const verb = [lastPathPart, ...spacedWords].find(isKnownExecuteVerb);
+		if (verb === undefined) {
 			// A slash-rooted statement that cannot be proven to end in a known read
-			// verb may be menu navigation for a following relative command. Fail
-			// closed for the whole script rather than trying to infer that context.
+			// verb may be menu navigation for a following relative command, or an
+			// unlearned mutator. Fail closed for the whole script.
 			return true;
 		}
-		const verb = (
-			spacedVerb !== undefined && isKnownExecuteVerb(spacedVerb)
-				? spacedVerb
-				: isKnownExecuteVerb(lastPathPart)
-					? lastPathPart
-					: (spacedVerb ?? lastPathPart)
-		).toLowerCase();
-		if (verb.length > 0 && !READ_ONLY_EXECUTE_VERBS.has(verb)) {
+		if (!READ_ONLY_EXECUTE_VERBS.has(verb.toLowerCase())) {
 			return true;
 		}
 	}
