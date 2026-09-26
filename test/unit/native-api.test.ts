@@ -558,6 +558,58 @@ describe("native-api listen() streaming", () => {
 		expect(transport.sent.some((words) => words[0] === "/cancel")).toBe(true);
 	});
 
+	test("a peer that ignores /cancel ends the listen after cancelGraceMs (#385)", async () => {
+		const transport = new FakeTransport();
+		const controller = new AbortController();
+		let unacknowledged = 0;
+		const gen = transport.apiSession.listen(
+			{ command: "/ip/address/listen" },
+			{
+				signal: controller.signal,
+				cancelGraceMs: 50,
+				onCancelUnacknowledged: () => {
+					unacknowledged += 1;
+				},
+			},
+		);
+		const first = gen.next();
+		await Bun.sleep(0);
+		controller.abort();
+		// No trap, no `!done`: without the grace bound this await never settles.
+		const end = await first;
+		expect(end.done).toBe(true);
+		expect(unacknowledged).toBe(1);
+		const cancels = transport.sent.filter((words) => words[0] === "/cancel");
+		expect(cancels).toHaveLength(1);
+	});
+
+	test("an acknowledged cancel inside the grace window is not reported as unacknowledged", async () => {
+		const transport = new FakeTransport();
+		const controller = new AbortController();
+		let unacknowledged = 0;
+		const gen = transport.apiSession.listen(
+			{ command: "/ip/address/listen" },
+			{
+				signal: controller.signal,
+				cancelGraceMs: 200,
+				onCancelUnacknowledged: () => {
+					unacknowledged += 1;
+				},
+			},
+		);
+		const first = gen.next();
+		const tag = transport.lastTag();
+		controller.abort();
+		await Bun.sleep(20);
+		transport.reply(
+			["!trap", "=category=2", "=message=interrupted", `.tag=${tag}`],
+			["!done", `.tag=${tag}`],
+		);
+		expect((await first).done).toBe(true);
+		await Bun.sleep(250);
+		expect(unacknowledged).toBe(0);
+	});
+
 	test("onListening fires once the listen sentence is on the wire", async () => {
 		const transport = new FakeTransport();
 		let listening = false;
