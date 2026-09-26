@@ -428,6 +428,31 @@ and `meta.validation.stages` listing **both** stages as `skipped`. A gated
 surface always reports every stage, so a consumer reading `stages` never has to
 special-case the disabled shape.
 
+### V4. A device-only `missing …` rejection is still a rejection
+
+The offline stage passes `/ip/address/find where=`: an empty `where` is not a
+structural fault it can see. RouterOS's `:parse` returns
+`missing value for where (line 1 column 24)` (CHR 7.24.4), a bare diagnostic
+like `syntax error`, so the device stage must reject it (GH#375). Before that
+fix the classifier only knew `syntax error`, `bad command name` and
+`expected …`, so it reported this reply as a pass and the command ran.
+
+```bash
+centrs execute $R '/ip/address/find where=' --via rest-api --username $U --password $P --json
+```
+
+Envelope: `ok: false`, `error.code=validation/syntax`, `error.context.detail`
+is RouterOS's own `missing value for where (line 1 column 24)`,
+`error.position={"line":1,"column":24}`, and `meta.validation.stages` is
+`offline: passed` followed by `device: failed`.
+
+CHR 7.24.4 controls, via `:put [:parse "…"]`: `find where` without `=` parses
+(IL). `print where=` is rejected differently (`expected end of command`, at
+`where`). An unclosed bare `{` block or menu block (`/ip address {` then
+newlines) returns `missing closing brace (line 3 column 1)`, while an unclosed
+`do={` returns `expected closing brace`. Offline analysis usually catches the
+unclosed-brace cases first.
+
 ## Write authorization and returned runtime faults
 
 These regressions are transport-independent and run in
