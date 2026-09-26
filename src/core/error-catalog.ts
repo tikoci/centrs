@@ -440,6 +440,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"Auto-selection moved the operation to a different method (informational auto-hop).",
 	},
 	{
+		code: "transport/cancel-unacknowledged",
+		summary:
+			"RouterOS did not acknowledge a stream's /cancel within the timeout; centrs ended the stream and closed the session locally.",
+	},
+	{
 		code: "transport/capability-unsupported",
 		summary: "The chosen transport cannot perform this kind of operation.",
 	},

@@ -635,10 +635,21 @@ export class NativeApiSession {
 	 *   trap/`!done` are not awaited) and the generator returns.
 	 * A non-`interrupted` trap (e.g. a bad path) or `!fatal`/transport closure
 	 * throws. CHR-grounded (7.23.1): see `commands/api/AGENTS.md`.
+	 *
+	 * After an abort, `cancelGraceMs` bounds the wait for that acknowledgement: a
+	 * peer that never answers `/cancel` would otherwise hold the generator open
+	 * forever (#385). On expiry the generator ends without the router's
+	 * `!done` and `onCancelUnacknowledged` fires, so the caller can close the
+	 * session and report that the stop was local, not acknowledged.
 	 */
 	async *listen(
 		command: NativeApiCommand,
-		options: { signal?: AbortSignal; onListening?: () => void } = {},
+		options: {
+			signal?: AbortSignal;
+			onListening?: () => void;
+			cancelGraceMs?: number;
+			onCancelUnacknowledged?: () => void;
+		} = {},
 	): AsyncGenerator<ApiReply, void, void> {
 		if (this.closed) {
 			throw (
@@ -702,10 +713,24 @@ export class NativeApiSession {
 		// can act on a real barrier rather than a blind timer.
 		options.onListening?.();
 
-		const onAbort = (): void => this.cancel(tag);
+		let graceTimer: ReturnType<typeof setTimeout> | undefined;
+		const onAbort = (): void => {
+			this.cancel(tag);
+			if (options.cancelGraceMs === undefined) return;
+			graceTimer = setTimeout(() => {
+				if (ended) return;
+				// Stop routing this tag and drop anything queued: a peer that ignores
+				// `/cancel` but keeps sending frames must not keep the loop draining.
+				this.subscriptions.delete(tag);
+				queue.length = 0;
+				ended = true;
+				options.onCancelUnacknowledged?.();
+				signalWake();
+			}, options.cancelGraceMs);
+		};
 		if (options.signal) {
 			if (options.signal.aborted) {
-				this.cancel(tag);
+				onAbort();
 			} else {
 				options.signal.addEventListener("abort", onAbort, { once: true });
 			}
@@ -738,6 +763,7 @@ export class NativeApiSession {
 				throw this.trapToError(command.command, trap);
 			}
 		} finally {
+			clearTimeout(graceTimer);
 			options.signal?.removeEventListener("abort", onAbort);
 			this.subscriptions.delete(tag);
 			// Consumer broke out early (e.g. --count reached): tell the router to stop.

@@ -152,6 +152,14 @@ export interface ProtocolListenOptions {
 	 * after the follow is established, instead of a blind timer.
 	 */
 	onListening?: () => void;
+	/**
+	 * How long to wait for RouterOS to acknowledge `/cancel` after `signal`
+	 * aborts before ending the listen locally. Native API defaults to the
+	 * adapter's `timeoutMs`, the same bound as any other reply wait.
+	 */
+	cancelGraceMs?: number;
+	/** Fired when that wait expires without the router's acknowledgement. */
+	onCancelUnacknowledged?: () => void;
 }
 
 /**
@@ -733,7 +741,10 @@ class NativeApiAdapter implements ProtocolAdapter {
 			command.proplist = request.proplist;
 		}
 		const session = await this.connect();
-		for await (const reply of session.listen(command, options)) {
+		for await (const reply of session.listen(command, {
+			...options,
+			cancelGraceMs: options.cancelGraceMs ?? this.config.timeoutMs,
+		})) {
 			// Each `!re` becomes a rest-style record (string values; `.dead` preserved).
 			yield { ...reply.attributes };
 		}
