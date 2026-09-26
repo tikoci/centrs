@@ -648,8 +648,8 @@ const BARE_SYNTAX =
  * RouterOS emits them (see the grammar note above): wrapped as
  * `(evl bad parameter <name> (line N column M) /path)` /
  * `(<%% bad command name <name> (line N column M) a;b;c)`, or bare and
- * line-initial as `expected … (line N column M)` / `syntax error (line N column
- * M)`. A single `:parse` covers both the syntax and the unknown-attribute
+ * line-initial as `expected … (line N column M)` / `missing … (line N column
+ * M)` / `syntax error (line N column M)`. A single `:parse` covers both the syntax and the unknown-attribute
  * (name-level) gate on every transport — REST and native API expose the same text
  * in the `ret` value (HTTP 200 / `as-string`), the console transports print it.
  *
