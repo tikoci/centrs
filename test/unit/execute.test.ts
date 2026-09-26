@@ -9,11 +9,13 @@ import {
 	type ResolvedExecuteRequest,
 	resolvedExecuteTips,
 	resolveExecuteRequest,
+	validateRouterOsScript,
 } from "../../src/execute.ts";
 import {
 	assertOfflineSyntax,
 	OFFLINE_GATE_SOURCE,
 } from "../../src/offline-gate.ts";
+import type { ProtocolAdapter } from "../../src/protocols/adapter.ts";
 
 describe("execute canonicalization", () => {
 	test("extracts path, verb, attributes, and quoted values", () => {
@@ -416,5 +418,54 @@ describe("validation metadata survives the error boundary (#354, PR #356 review)
 			{},
 		);
 		expect(envelope.meta.validation?.stages).toBeUndefined();
+	});
+});
+
+describe("device `:parse` stage rejects recorded `missing …` responses (GH#375)", () => {
+	/** A backend whose `:put [:parse …]` returns one recorded device reply. */
+	function parseReplying(ret: string): ProtocolAdapter {
+		return {
+			execute: async () => ({ records: [], ret }),
+		} as unknown as ProtocolAdapter;
+	}
+
+	// Corpus row 507 (7.24.2): its failing line is `/certificate builtin find
+	// where=`, which offline analysis passes, so the device stage is the gate.
+	test("`missing value for where` is a device syntax rejection, not a pass", async () => {
+		const rejection = validateRouterOsScript(
+			"/certificate builtin find where=",
+			parseReplying("missing value for where (line 1 column 33)"),
+			"rest-api",
+		);
+		await expect(rejection).rejects.toMatchObject({
+			code: "validation/syntax",
+			position: { line: 1, column: 33 },
+		});
+	});
+
+	// CHR 7.24.4: `{` + newline + `:put 1` + newline, unclosed.
+	test("`missing closing brace` is a device syntax rejection", async () => {
+		await expect(
+			validateRouterOsScript(
+				"{\n:put 1\n",
+				parseReplying("missing closing brace (line 3 column 1)"),
+				"native-api",
+			),
+		).rejects.toMatchObject({
+			code: "validation/syntax",
+			position: { line: 3, column: 1 },
+		});
+	});
+
+	test("an accepted return that echoes diagnostic-looking text still passes", async () => {
+		await expect(
+			validateRouterOsScript(
+				':put "missing closing brace (line 1 column 1)"',
+				parseReplying(
+					"(evl /putmessage=missing closing brace (line 1 column 1))",
+				),
+				"rest-api",
+			),
+		).resolves.toBeUndefined();
 	});
 });

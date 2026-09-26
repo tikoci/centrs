@@ -627,14 +627,16 @@ export function parseScriptFor(cli: string): string {
  *      with RouterOS's position suffix. All 425 corpus rows of this shape are
  *      the entire return; none appear embedded. Requiring both line-start and
  *      the `(line N column M)` suffix is what separates a real verdict from
- *      echoed body text.
+ *      echoed body text. The pinned 7.23.5/7.24.2/7.25beta3 captures add no
+ *      new heads beyond `syntax error`, `expected …` and `missing …`
+ *      (`missing closing brace`, `missing value for where`; GH#375).
  */
 const WRAPPED_BAD_PARAMETER = /\(evl\s+bad parameter\s+(\S+)/i;
 const WRAPPED_BAD_COMMAND = /\(<%%\s*bad command name\b/i;
 const BARE_BAD_PARAMETER =
 	/^[ \t]*bad parameter\s+(\S+)[^\n]*\(line \d+ column \d+\)/im;
 const BARE_SYNTAX =
-	/^[ \t]*(?:syntax error|bad command name|expected [a-z]+(?: [a-z]+)*)[^\n]*\(line \d+ column \d+\)/im;
+	/^[ \t]*(?:syntax error|bad command name|(?:expected|missing) [a-z]+(?: [a-z]+)*)[^\n]*\(line \d+ column \d+\)/im;
 
 /**
  * Classify the printed value of `:put [:parse "<cli>"]`. Grounded on CHR 7.23.3
@@ -646,8 +648,8 @@ const BARE_SYNTAX =
  * RouterOS emits them (see the grammar note above): wrapped as
  * `(evl bad parameter <name> (line N column M) /path)` /
  * `(<%% bad command name <name> (line N column M) a;b;c)`, or bare and
- * line-initial as `expected … (line N column M)` / `syntax error (line N column
- * M)`. A single `:parse` covers both the syntax and the unknown-attribute
+ * line-initial as `expected … (line N column M)` / `missing … (line N column
+ * M)` / `syntax error (line N column M)`. A single `:parse` covers both the syntax and the unknown-attribute
  * (name-level) gate on every transport — REST and native API expose the same text
  * in the `ret` value (HTTP 200 / `as-string`), the console transports print it.
  *
