@@ -127,6 +127,34 @@ const cases: GateCase[] = [
 	{ input: ':put "hello"', mode: "script", write: false },
 	{ input: ':put "/ip/address/remove"', mode: "script", write: false },
 	{ input: ":put [/system/identity/get name]", mode: "script", write: false },
+	// The space-separated menu spelling: the verb is the first known word in the
+	// bare run after the path token, not necessarily the word right after it.
+	{ input: "/system identity print", mode: "script", write: false },
+	{ input: "/system resource print", mode: "script", write: false },
+	{ input: "/ip address print detail", mode: "script", write: false },
+	{
+		input: "/ip firewall filter print where chain=input",
+		mode: "script",
+		write: false,
+	},
+	{ input: "/ip/firewall filter print", mode: "script", write: false },
+	{ input: ":put [/system identity get name]", mode: "script", write: false },
+	{ input: "/interface 6to4 print", mode: "script", write: false },
+	{ input: "/ip firewall/filter print", mode: "script", write: false },
+	{ input: ":put [/ip address find]", mode: "script", write: false },
+	{ input: ":put [:len [/ip address find]]", mode: "script", write: false },
+	{ input: "{/ip address print}", mode: "script", write: false },
+	// A read verb inside a nested command is not this statement's verb.
+	{ input: "/ip address new-mutator [find]", mode: "script", write: true },
+	{ input: "/interface 6to4 new-mutator", mode: "script", write: true },
+	{ input: "/ip firewall filter", mode: "script", write: true },
+	{ input: "/ip address new-mutator", mode: "script", write: true },
+	{ input: "/ip/firewall filter new-mutator", mode: "script", write: true },
+	{
+		input: "/ip firewall filter set [find comment=x] disabled=yes",
+		mode: "script",
+		write: true,
+	},
 
 	// --- must stay structured ---
 	{

@@ -256,29 +256,32 @@ function scriptContainsWriteShapedCommand(input: string): boolean {
 		const pathToken = (tokens[pathIndex] ?? "").replace(/^[{[(]+/, "");
 		const pathParts = pathToken.split("/").filter(Boolean);
 		const lastPathPart = pathParts.at(-1) ?? "";
-		const following = tokens[pathIndex + 1];
-		const spacedVerb =
-			following !== undefined && /^[A-Za-z][A-Za-z0-9-]*$/.test(following)
-				? following
-				: undefined;
-		if (
-			pathParts.length < 2 &&
-			!isKnownExecuteVerb(lastPathPart) &&
-			(spacedVerb === undefined || !isKnownExecuteVerb(spacedVerb))
-		) {
+		// The space-separated spelling puts menu segments and the verb in the bare
+		// words after the path token (`/ip firewall filter print`, `/interface
+		// 6to4 print`, `/ip firewall/filter print`), so the verb is the first known
+		// one among the path's last segment and that run. An opening bracket starts
+		// a nested command (`new-mutator [find]`) whose words are not this
+		// statement's verb, so the run stops there; a closing one ends it after
+		// the word it trails (`:put [/ip address find]`).
+		const spacedWords: string[] = [];
+		for (const token of tokens.slice(pathIndex + 1)) {
+			if (/^[{[(]/.test(token)) break;
+			const word = trimGroupingPunctuation(token);
+			if (
+				!/^[A-Za-z0-9][A-Za-z0-9-]*(?:\/[A-Za-z0-9][A-Za-z0-9-]*)*$/.test(word)
+			)
+				break;
+			spacedWords.push(...word.split("/"));
+			if (word !== token) break;
+		}
+		const verb = [lastPathPart, ...spacedWords].find(isKnownExecuteVerb);
+		if (verb === undefined) {
 			// A slash-rooted statement that cannot be proven to end in a known read
-			// verb may be menu navigation for a following relative command. Fail
-			// closed for the whole script rather than trying to infer that context.
+			// verb may be menu navigation for a following relative command, or an
+			// unlearned mutator. Fail closed for the whole script.
 			return true;
 		}
-		const verb = (
-			spacedVerb !== undefined && isKnownExecuteVerb(spacedVerb)
-				? spacedVerb
-				: isKnownExecuteVerb(lastPathPart)
-					? lastPathPart
-					: (spacedVerb ?? lastPathPart)
-		).toLowerCase();
-		if (verb.length > 0 && !READ_ONLY_EXECUTE_VERBS.has(verb)) {
+		if (!READ_ONLY_EXECUTE_VERBS.has(verb.toLowerCase())) {
 			return true;
 		}
 	}
