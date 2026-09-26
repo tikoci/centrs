@@ -257,12 +257,22 @@ function scriptContainsWriteShapedCommand(input: string): boolean {
 		const pathParts = pathToken.split("/").filter(Boolean);
 		const lastPathPart = pathParts.at(-1) ?? "";
 		// The space-separated spelling puts menu segments and the verb in the bare
-		// words after the path token (`/ip firewall filter print`), so the verb is
-		// the first known one among the path's last segment and that run.
+		// words after the path token (`/ip firewall filter print`, `/interface
+		// 6to4 print`, `/ip firewall/filter print`), so the verb is the first known
+		// one among the path's last segment and that run. An opening bracket starts
+		// a nested command (`new-mutator [find]`) whose words are not this
+		// statement's verb, so the run stops there; a closing one ends it after
+		// the word it trails (`:put [/ip address find]`).
 		const spacedWords: string[] = [];
 		for (const token of tokens.slice(pathIndex + 1)) {
-			if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(token)) break;
-			spacedWords.push(token);
+			if (/^[{[(]/.test(token)) break;
+			const word = trimGroupingPunctuation(token);
+			if (
+				!/^[A-Za-z0-9][A-Za-z0-9-]*(?:\/[A-Za-z0-9][A-Za-z0-9-]*)*$/.test(word)
+			)
+				break;
+			spacedWords.push(...word.split("/"));
+			if (word !== token) break;
 		}
 		const verb = [lastPathPart, ...spacedWords].find(isKnownExecuteVerb);
 		if (verb === undefined) {
