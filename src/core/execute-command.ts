@@ -13,6 +13,8 @@
  * re-couples `explain`'s browser entry to the transport graph.
  */
 
+import { isKnownMenuPath } from "../explain/is-known-menu.ts";
+
 export interface CanonicalExecuteCommand {
 	mode: "structured" | "script";
 	input: string;
@@ -188,20 +190,33 @@ const WRITE_SHAPED_SCRIPT_DIRECTIVES: ReadonlySet<string> = new Set([
 	":execute",
 ]);
 
-/** Script directives that are safe to run without device-write confirmation. */
+/**
+ * Script directives that are safe to run without device-write confirmation:
+ * output, control flow and pure value functions, all members of `explain`'s
+ * grounded root-cmd vocabulary (`ROOT_CMDS` in `src/explain/write.ts`). A
+ * directive's `do={…}` or `[…]` body is its own command head and is checked on
+ * its own. Deliberately absent: `:execute` and `:parse` (run built code),
+ * `:global` and `:set` (outlive the script), and `:import`, `:password`,
+ * `:undo`, `:redo` (configuration changes).
+ */
 const READ_ONLY_SCRIPT_DIRECTIVES: ReadonlySet<string> = new Set([
+	":break",
+	":continue",
+	":do",
 	":error",
+	":for",
+	":foreach",
+	":if",
+	":len",
 	":local",
+	":onerror",
+	":pick",
 	":put",
+	":return",
+	":tostr",
+	":typeof",
+	":while",
 ]);
-
-function isKnownExecuteVerb(value: string): boolean {
-	const normalized = value.toLowerCase();
-	return (
-		READ_ONLY_EXECUTE_VERBS.has(normalized) ||
-		KNOWN_WRITE_EXECUTE_VERBS.has(normalized)
-	);
-}
 
 function scriptContainsWriteShapedCommand(input: string): boolean {
 	for (const statement of splitUnquotedStatements(input)) {
@@ -231,58 +246,91 @@ function scriptContainsWriteShapedCommand(input: string): boolean {
 		) {
 			return true;
 		}
-		const pathIndex = tokens.findIndex((token) => /^[{[(]*\//.test(token));
-		if (pathIndex < 0) {
-			const normalizedTokens = tokens
-				.map(trimGroupingPunctuation)
-				.filter((token) => token.length > 0);
-			if (normalizedTokens.length === 0) continue;
-			if (READ_ONLY_SCRIPT_DIRECTIVES.has(normalizedTokens[0] ?? "")) {
-				continue;
-			}
-			if (
-				normalizedTokens.some((token) =>
-					READ_ONLY_EXECUTE_VERBS.has(token.toLowerCase()),
-				)
-			) {
-				continue;
-			}
-			// A space-separated path or relative command with an unknown head cannot
-			// be proven read-only. Fail closed so new RouterOS mutators do not bypass
-			// confirmation merely because centrs has not learned their verb yet.
-			return true;
-		}
-
-		const pathToken = (tokens[pathIndex] ?? "").replace(/^[{[(]+/, "");
-		const pathParts = pathToken.split("/").filter(Boolean);
-		const lastPathPart = pathParts.at(-1) ?? "";
-		const following = tokens[pathIndex + 1];
-		const spacedVerb =
-			following !== undefined && /^[A-Za-z][A-Za-z0-9-]*$/.test(following)
-				? following
-				: undefined;
-		if (
-			pathParts.length < 2 &&
-			!isKnownExecuteVerb(lastPathPart) &&
-			(spacedVerb === undefined || !isKnownExecuteVerb(spacedVerb))
-		) {
-			// A slash-rooted statement that cannot be proven to end in a known read
-			// verb may be menu navigation for a following relative command. Fail
-			// closed for the whole script rather than trying to infer that context.
-			return true;
-		}
-		const verb = (
-			spacedVerb !== undefined && isKnownExecuteVerb(spacedVerb)
-				? spacedVerb
-				: isKnownExecuteVerb(lastPathPart)
-					? lastPathPart
-					: (spacedVerb ?? lastPathPart)
-		).toLowerCase();
-		if (verb.length > 0 && !READ_ONLY_EXECUTE_VERBS.has(verb)) {
+		// Every command the statement runs must be proven read-only, not just the
+		// first: `:foreach i in=[/ip address find] do={/user expire-password $i}`
+		// reads with `find` and writes with an unlearned mutator.
+		if (!commandHeads(statement).every(isReadOnlyCommand)) {
 			return true;
 		}
 	}
 	return false;
+}
+
+/**
+ * The commands a statement runs: one at its start and one after every `[` or
+ * `{`, wherever that opener sits — an argument value (`in=[/ip address find]`,
+ * `do={/user expire-password $i}`), a sigil (`$[…]`), a concatenation
+ * (`"x".[…]`) or a token of its own (`do={ /user … }`). Parentheses group
+ * expressions, not commands, so they do not start one. Each head reads only up
+ * to the next opener, which begins its own head.
+ */
+function commandHeads(statement: string): string[][] {
+	const heads: string[][] = [];
+	const starts = [0];
+	for (let index = 0; index < statement.length; index += 1) {
+		const char = statement[index];
+		if (char === "[" || char === "{") starts.push(index + 1);
+	}
+	for (const start of starts) {
+		const nextOpener = statement.slice(start).search(/[[{(]/);
+		const segment =
+			nextOpener < 0
+				? statement.slice(start)
+				: statement.slice(start, start + nextOpener);
+		const tokens = tokenizeRouterOsCli(segment);
+		const head = tokens[0];
+		if (head === undefined) continue;
+		const words = commandWords(head, tokens.slice(1));
+		// A lone closer (`}` ending a multi-line block) runs nothing.
+		if (words.length > 0) heads.push(words);
+	}
+	return heads;
+}
+
+/**
+ * The path segments and verb of one command, from its head token and the bare
+ * words after it. The space-separated spelling puts menu segments and the verb
+ * in those words (`/ip firewall filter print`, `/interface 6to4 print`, `/ip
+ * firewall/filter print`). A word opening a bracket starts a nested command
+ * (`new-mutator [find]`) and a word trailing a closer ends this one (`:put [/ip
+ * address find]`), so the run stops at either.
+ */
+function commandWords(head: string, following: readonly string[]): string[] {
+	const words: string[] = [];
+	const headWord = trimGroupingPunctuation(head);
+	if (headWord.startsWith(":")) return [headWord];
+	words.push(...headWord.split("/").filter(Boolean));
+	if (headWord !== head) return words;
+	for (const token of following) {
+		if (/^[{[(]/.test(token)) break;
+		const word = trimGroupingPunctuation(token);
+		if (!/^[A-Za-z0-9][A-Za-z0-9-]*(?:\/[A-Za-z0-9][A-Za-z0-9-]*)*$/.test(word))
+			break;
+		words.push(...word.split("/"));
+		if (word !== token) break;
+	}
+	return words;
+}
+
+/**
+ * A command is read-only when it is a read-only script directive, or when the
+ * first word past the longest known menu prefix is a read verb. Walking the
+ * menu table rather than taking the first known verb keeps an unlearned
+ * command from borrowing a later argument: `/user expire-password print` names
+ * `expire-password` (a published command, absent from every allowlist) with
+ * the username `print`. The menu table is a floor, so an unknown menu fails
+ * closed here, as does a run of menus with no verb (navigation for a later
+ * relative command).
+ */
+function isReadOnlyCommand(words: readonly string[]): boolean {
+	const head = words[0] ?? "";
+	if (head.startsWith(":")) return READ_ONLY_SCRIPT_DIRECTIVES.has(head);
+	let depth = 0;
+	while (depth < words.length && isKnownMenuPath(words.slice(0, depth + 1))) {
+		depth += 1;
+	}
+	const verb = words[depth];
+	return verb !== undefined && READ_ONLY_EXECUTE_VERBS.has(verb.toLowerCase());
 }
 
 function trimGroupingPunctuation(value: string): string {
@@ -293,32 +341,62 @@ function trimGroupingPunctuation(value: string): string {
 	return value.slice(start, end);
 }
 
-/** Split only at real statement boundaries; quoted output is not executable. */
+/**
+ * Split at real statement boundaries and blank quoted text, which does not
+ * execute — except a `$[…]` or `$(…)` substitution inside a double-quoted
+ * string, which is code: `:put "$[/system identity set name=x]"` runs the set.
+ * Its body is kept (with its opener, so it becomes a command head) and may nest
+ * strings of its own. The frame grammar is `explain`'s (`stepFrame` in
+ * `src/explain/quoted-string.ts`).
+ */
 function splitUnquotedStatements(input: string): string[] {
 	const statements: string[] = [];
 	let current = "";
-	let quote: '"' | "'" | undefined;
+	// `"` / `'` are string frames; `]` / `)` are the closer a code frame inside
+	// a string is waiting for. An empty stack is top-level code.
+	const frames: string[] = [];
 	let escaped = false;
-	for (const char of input) {
+	for (let index = 0; index < input.length; index += 1) {
+		const char = input[index] ?? "";
+		const top = frames.at(-1);
+		const inString = top === '"' || top === "'";
 		if (escaped) {
-			current += quote ? " " : char;
+			current += inString ? " " : char;
 			escaped = false;
 			continue;
 		}
 		if (char === "\\") {
 			escaped = true;
-			current += quote ? " " : char;
+			current += inString ? " " : char;
 			continue;
 		}
-		if (quote) {
-			if (char === quote) quote = undefined;
+		if (inString) {
+			if (char === top) {
+				frames.pop();
+			} else if (
+				top === '"' &&
+				char === "$" &&
+				(input[index + 1] === "[" || input[index + 1] === "(")
+			) {
+				const opener = input[index + 1] ?? "";
+				frames.push(opener === "[" ? "]" : ")");
+				current += ` ${opener}`;
+				index += 1;
+				continue;
+			}
 			current += " ";
 			continue;
 		}
 		if (char === '"' || char === "'") {
-			quote = char;
+			frames.push(char);
 			current += " ";
 			continue;
+		}
+		if (top !== undefined) {
+			// Inside a string's code frame: track nesting to find its closer.
+			if (char === top) frames.pop();
+			else if (char === "[") frames.push("]");
+			else if (char === "(") frames.push(")");
 		}
 		if (char === ";" || char === "\n" || char === "\r") {
 			statements.push(current);

@@ -127,6 +127,128 @@ const cases: GateCase[] = [
 	{ input: ':put "hello"', mode: "script", write: false },
 	{ input: ':put "/ip/address/remove"', mode: "script", write: false },
 	{ input: ":put [/system/identity/get name]", mode: "script", write: false },
+	// The verb is the first word past the known menu prefix, so an unlearned
+	// command cannot borrow a later argument: `/user/expire-password` is a real
+	// command and `print` here is its username.
+	{ input: "/user expire-password print", mode: "script", write: true },
+	{ input: "user expire-password print", mode: "script", write: true },
+	{ input: ":put [user expire-password admin]", mode: "script", write: true },
+	// Every command in a statement is checked, not only the first path.
+	{
+		input: ":foreach i in=[/ip address find] do={/user expire-password $i}",
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ":foreach i in=[/ip/address/find] do={/user/expire-password $i}",
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ':foreach i in=$ids do={:execute "/ip/address/print"}',
+		mode: "script",
+		write: true,
+	},
+	{ input: ":if (true) do={:global x 1}", mode: "script", write: true },
+	{
+		input: ":foreach i in=[/ip address find] do={:put $i}",
+		mode: "script",
+		write: false,
+	},
+	{
+		input: ':if ([/system identity get name] = "x") do={:put 1}',
+		mode: "script",
+		write: false,
+	},
+	{ input: "{\n/ip address print\n}", mode: "script", write: false },
+	// A `$[…]`/`$(…)` inside a double-quoted string is code and is classified;
+	// the rest of the string, and an escaped `\$`, is literal text. CHR 7.23.7:
+	// `:put "v=$[/system identity get name]"` prints `v=CHR`, and
+	// `:put "\$[…]"` prints the brackets verbatim.
+	{
+		input: ':put "$[/system identity set name=x]"',
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ':put "$[/user expire-password admin]"',
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ':put "a $("b".[/user expire-password admin]) c"',
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ':put "name: $[/system identity get name]"',
+		mode: "script",
+		write: false,
+	},
+	{
+		input: ':put "done; $[/ip address print count-only]"',
+		mode: "script",
+		write: false,
+	},
+	{
+		input: ':put "[/user expire-password admin]"',
+		mode: "script",
+		write: false,
+	},
+	{
+		input: ':put "\\$[/user expire-password admin]"',
+		mode: "script",
+		write: false,
+	},
+	// Every `[`/`{` starts a command wherever it sits: after a sigil, inside a
+	// concatenation, or as a token of its own. A bare `$[…]` outside a string is
+	// a device `syntax error` (CHR 7.23.7), so it never runs; gating it is
+	// merely conservative.
+	{ input: ":put $[/system/identity/set name=x]", mode: "script", write: true },
+	{ input: ":put $[/user/expire-password admin]", mode: "script", write: true },
+	{
+		input: ':put ("x".[/user expire-password admin])',
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ":if (true) do={ /user expire-password print }",
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ":if (true) do={ /ip address print }",
+		mode: "script",
+		write: false,
+	},
+	// The space-separated menu spelling: the verb is the first known word in the
+	// bare run after the path token, not necessarily the word right after it.
+	{ input: "/system identity print", mode: "script", write: false },
+	{ input: "/system resource print", mode: "script", write: false },
+	{ input: "/ip address print detail", mode: "script", write: false },
+	{
+		input: "/ip firewall filter print where chain=input",
+		mode: "script",
+		write: false,
+	},
+	{ input: "/ip/firewall filter print", mode: "script", write: false },
+	{ input: ":put [/system identity get name]", mode: "script", write: false },
+	{ input: "/interface 6to4 print", mode: "script", write: false },
+	{ input: "/ip firewall/filter print", mode: "script", write: false },
+	{ input: ":put [/ip address find]", mode: "script", write: false },
+	{ input: ":put [:len [/ip address find]]", mode: "script", write: false },
+	{ input: "{/ip address print}", mode: "script", write: false },
+	// A read verb inside a nested command is not this statement's verb.
+	{ input: "/ip address new-mutator [find]", mode: "script", write: true },
+	{ input: "/interface 6to4 new-mutator", mode: "script", write: true },
+	{ input: "/ip firewall filter", mode: "script", write: true },
+	{ input: "/ip address new-mutator", mode: "script", write: true },
+	{ input: "/ip/firewall filter new-mutator", mode: "script", write: true },
+	{
+		input: "/ip firewall filter set [find comment=x] disabled=yes",
+		mode: "script",
+		write: true,
+	},
 
 	// --- must stay structured ---
 	{

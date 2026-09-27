@@ -480,6 +480,22 @@ remains enabled. Unknown RouterOS menu verbs also fail closed as write-shaped.
 Root mutators such as `/import` and indirect execution through `:execute` use
 the same gate.
 
+### W3. Space-separated menu reads run without confirmation
+
+```bash
+centrs execute $R '/system identity print' --via rest-api --username $U --password $P </dev/null
+```
+
+Envelope: `ok: true`. The space-separated spelling puts menu segments and the
+verb in bare words, so the gate walks the known menu prefix and reads the first
+word past it as the verb. `/ip address print where …` and
+`:put [/system identity get name]` are reads the same way. The walk is also what
+keeps an unlearned command gated: `/user expire-password print` names
+`expire-password`, a published command outside both verb allowlists, whose
+argument happens to be `print`, so it returns `usage/confirmation-required`.
+Every command head in a statement is checked, including `[…]` and `do={…}`
+bodies.
+
 ### R1. A post-validation `/execute` rejection fails the overall envelope
 
 ```bash
