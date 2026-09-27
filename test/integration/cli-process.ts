@@ -36,6 +36,13 @@ export interface CliProcessOptions {
 	cwd?: string;
 	/** Extra env layered on top of the parent's `process.env`. */
 	env?: Record<string, string>;
+	/**
+	 * Called for each complete stdout line as it arrives, with the child, so a
+	 * test can act mid-run (e.g. SIGINT after the first NDJSON frame).
+	 */
+	onStdoutLine?: (line: string, child: Bun.Subprocess) => void;
+	/** SIGKILL the child after this long: a guard for tests of bounded exit. */
+	killAfterMs?: number;
 }
 
 export interface CliProcessResult {
@@ -73,11 +80,19 @@ export async function runCliProcess(
 		env: { ...process.env, ...options.env },
 	});
 
+	const guard =
+		options.killAfterMs === undefined
+			? undefined
+			: setTimeout(() => proc.kill("SIGKILL"), options.killAfterMs);
+	const onLine = options.onStdoutLine;
 	const [stdout, stderr, exitCode] = await Promise.all([
-		new Response(proc.stdout).arrayBuffer(),
+		onLine === undefined
+			? new Response(proc.stdout).arrayBuffer()
+			: readLines(proc.stdout, (line) => onLine(line, proc)),
 		new Response(proc.stderr).arrayBuffer(),
 		proc.exited,
 	]);
+	clearTimeout(guard);
 
 	const stdoutBuf = Buffer.from(stdout);
 	const stderrBuf = Buffer.from(stderr);
@@ -88,4 +103,25 @@ export async function runCliProcess(
 		stdoutText: stdoutBuf.toString("utf8"),
 		stderrText: stderrBuf.toString("utf8"),
 	};
+}
+
+/** Collect a stream's bytes while reporting each complete UTF-8 line. */
+async function readLines(
+	stream: ReadableStream<Uint8Array>,
+	onLine: (line: string) => void,
+): Promise<ArrayBuffer> {
+	const chunks: Uint8Array[] = [];
+	const decoder = new TextDecoder();
+	let pending = "";
+	for await (const chunk of stream) {
+		chunks.push(chunk);
+		pending += decoder.decode(chunk, { stream: true });
+		let newline = pending.indexOf("\n");
+		while (newline >= 0) {
+			onLine(pending.slice(0, newline));
+			pending = pending.slice(newline + 1);
+			newline = pending.indexOf("\n");
+		}
+	}
+	return new Blob(chunks).arrayBuffer();
 }

@@ -558,6 +558,144 @@ describe("native-api listen() streaming", () => {
 		expect(transport.sent.some((words) => words[0] === "/cancel")).toBe(true);
 	});
 
+	test("a peer that ignores /cancel ends the listen after cancelGraceMs (#385)", async () => {
+		const transport = new FakeTransport();
+		const controller = new AbortController();
+		let unacknowledged = 0;
+		const gen = transport.apiSession.listen(
+			{ command: "/ip/address/listen" },
+			{
+				signal: controller.signal,
+				cancelGraceMs: 50,
+				onCancelUnacknowledged: () => {
+					unacknowledged += 1;
+				},
+			},
+		);
+		const first = gen.next();
+		await Bun.sleep(0);
+		controller.abort();
+		// No trap, no `!done`: without the grace bound this await never settles.
+		const end = await first;
+		expect(end.done).toBe(true);
+		expect(unacknowledged).toBe(1);
+		const cancels = transport.sent.filter((words) => words[0] === "/cancel");
+		expect(cancels).toHaveLength(1);
+	});
+
+	test("a peer that ignores /cancel but keeps sending frames still ends after cancelGraceMs", async () => {
+		const transport = new FakeTransport();
+		const controller = new AbortController();
+		const gen = transport.apiSession.listen(
+			{ command: "/ip/address/listen" },
+			{ signal: controller.signal, cancelGraceMs: 50 },
+		);
+		const first = gen.next();
+		const tag = transport.lastTag();
+		// The peer outpaces a consumer that does I/O per frame (the CLI writes
+		// each one), so the queue is never empty when the loop checks it.
+		const chatter = setInterval(() => {
+			for (let i = 0; i < 5; i += 1) {
+				transport.reply(["!re", "=state=chatty", `.tag=${tag}`]);
+			}
+		}, 1);
+		try {
+			await first;
+			controller.abort();
+			const started = Date.now();
+			for (;;) {
+				const step = await gen.next();
+				if (step.done) break;
+				if (Date.now() - started > 1000) throw new Error("listen never ended");
+				await Bun.sleep(2);
+			}
+		} finally {
+			clearInterval(chatter);
+		}
+	});
+
+	test("an acknowledged cancel inside the grace window is not reported as unacknowledged", async () => {
+		const transport = new FakeTransport();
+		const controller = new AbortController();
+		let unacknowledged = 0;
+		const gen = transport.apiSession.listen(
+			{ command: "/ip/address/listen" },
+			{
+				signal: controller.signal,
+				cancelGraceMs: 200,
+				onCancelUnacknowledged: () => {
+					unacknowledged += 1;
+				},
+			},
+		);
+		const first = gen.next();
+		const tag = transport.lastTag();
+		controller.abort();
+		await Bun.sleep(20);
+		transport.reply(
+			["!trap", "=category=2", "=message=interrupted", `.tag=${tag}`],
+			["!done", `.tag=${tag}`],
+		);
+		expect((await first).done).toBe(true);
+		await Bun.sleep(250);
+		expect(unacknowledged).toBe(0);
+	});
+
+	test("a cancel answered by the interrupted trap but never `!done` still ends after cancelGraceMs", async () => {
+		const transport = new FakeTransport();
+		const controller = new AbortController();
+		let unacknowledged = 0;
+		const gen = transport.apiSession.listen(
+			{ command: "/ip/address/listen" },
+			{
+				signal: controller.signal,
+				cancelGraceMs: 50,
+				onCancelUnacknowledged: () => {
+					unacknowledged += 1;
+				},
+			},
+		);
+		const first = gen.next();
+		const tag = transport.lastTag();
+		controller.abort();
+		// A partial acknowledgement: the trap arrives, the terminating `!done`
+		// does not, so the subscription never settles on its own.
+		transport.reply([
+			"!trap",
+			"=category=2",
+			"=message=interrupted",
+			`.tag=${tag}`,
+		]);
+		const end = await first;
+		expect(end.done).toBe(true);
+		expect(unacknowledged).toBe(1);
+	});
+
+	test("a transport close after the cancel fails the listen and is not reported as an unacknowledged cancel", async () => {
+		const transport = new FakeTransport();
+		const controller = new AbortController();
+		let unacknowledged = 0;
+		const gen = transport.apiSession.listen(
+			{ command: "/ip/address/listen" },
+			{
+				signal: controller.signal,
+				cancelGraceMs: 50,
+				onCancelUnacknowledged: () => {
+					unacknowledged += 1;
+				},
+			},
+		);
+		const first = gen.next();
+		controller.abort();
+		transport.apiSession.handleClose();
+		await expect(first).rejects.toMatchObject({
+			code: "transport/connection-closed",
+		});
+		// The close is the terminal outcome; the timer must not fire afterwards.
+		await Bun.sleep(100);
+		expect(unacknowledged).toBe(0);
+	});
+
 	test("onListening fires once the listen sentence is on the wire", async () => {
 		const transport = new FakeTransport();
 		let listening = false;

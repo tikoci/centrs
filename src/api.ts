@@ -443,14 +443,18 @@ async function* streamResolvedApi(
 	const startedAt = Date.now();
 	let frames = 0;
 	let stopReason: ApiStreamStopReason | undefined;
+	let cancelUnacknowledged = false;
 	let durationTimer: ReturnType<typeof setTimeout> | undefined;
+	// The first stop cause wins: the cancel grace window keeps the loop alive
+	// after a stop, so a later timer or frame must not relabel it.
 	const onExternalAbort = (): void => {
 		stopReason ??= "interrupted";
+		clearTimeout(durationTimer);
 		controller.abort();
 	};
 	if (resolved.durationMs !== undefined) {
 		durationTimer = setTimeout(() => {
-			stopReason = "duration-elapsed";
+			stopReason ??= "duration-elapsed";
 			controller.abort();
 		}, resolved.durationMs);
 	}
@@ -467,11 +471,14 @@ async function* streamResolvedApi(
 		for await (const record of backend.listen(protocolRequest, {
 			signal: controller.signal,
 			onListening,
+			onCancelUnacknowledged: () => {
+				cancelUnacknowledged = true;
+			},
 		})) {
 			frames += 1;
 			yield streamFrameEnvelope(resolved, validation, record, frames);
 			if (resolved.count !== undefined && frames >= resolved.count) {
-				stopReason = "count-reached";
+				stopReason ??= "count-reached";
 				break;
 			}
 		}
@@ -481,6 +488,15 @@ async function* streamResolvedApi(
 			stopReason ?? "interrupted",
 			frames,
 			Date.now() - startedAt,
+			cancelUnacknowledged
+				? [
+						{
+							code: "transport/cancel-unacknowledged",
+							message: `RouterOS did not acknowledge /cancel within ${resolved.timeoutMs.value}ms; centrs closed the session locally.`,
+							context: { timeoutMs: resolved.timeoutMs.value },
+						},
+					]
+				: [],
 		);
 	} catch (error) {
 		// A mid-stream failure is itself a frame, tagged `stream.kind="frame"` so
@@ -540,6 +556,7 @@ function streamSummaryEnvelope(
 	stopReason: ApiStreamStopReason,
 	frames: number,
 	durationMs: number,
+	streamWarnings: readonly Warning[] = [],
 ): ApiSuccessEnvelope {
 	const summary: ApiStreamSummary = { stopReason, frames, durationMs };
 	const meta = metaFromResolved(resolved, validation, summary);
@@ -548,7 +565,7 @@ function streamSummaryEnvelope(
 	return {
 		ok: true,
 		data: summary,
-		warnings: [...resolved.warnings],
+		warnings: [...resolved.warnings, ...streamWarnings],
 		tips: [],
 		meta,
 	};
