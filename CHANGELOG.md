@@ -8,6 +8,113 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Added
+
+- **`centrs devices init` creates an empty CDB, `git init`-style (#376).**
+  Bootstrapping a device book previously meant conjuring the file some other
+  way. `centrs devices init [--cdb-file PATH]` (or `CENTRS_CDB_FILE`, or the
+  default path) creates the parent directories and an exclusive `0600` file.
+  **It never clobbers**, so a bootstrap script may run it unconditionally: an
+  existing readable CDB succeeds with a `cdb/file-exists` warning and nothing
+  is written. An existing file that fails to load (`cdb/parse-failed`,
+  `cdb/password-required`) reports that error and is left untouched, and a
+  location that cannot be written fails with the new `cdb/create-failed`. CLI
+  and library (`initCdb`) only; not exposed on the MCP devices tool.
+
+- **`devices list` reports the lookup keys it matches on (#378).** Rows now
+  carry `identity` / `mac` / `ip` when the comment sets them, with
+  `comment-kv` provenance in `sources`, and the text table gains an `IDENTITY`
+  column. `comment` itself stays `show`-only.
+
+### Fixed
+
+- **Write-shaped commands now require confirmation, on every transport
+  (#365, #366).** Write authorization was entangled with script-vs-structured
+  transport selection, so several shapes reached a device without passing the
+  `--yes` gate: selectors, positional ids, non-CRUD verbs, root mutators,
+  indirect execution and relative menu writes. Authorization is now decided
+  independently of how the command is carried. Read spellings are unaffected —
+  the verb is the first known verb among the path's last segment and the bare
+  words following the path token, so `/system identity print` and
+  `:put [/system identity get name]` stay reads, while a statement with no
+  recognizable verb still fails closed. Caller-addressed API `/execute` script
+  strings additionally run offline analysis, then live `:parse`, then execute;
+  structured API requests remain on `/console/inspect`. This advances the
+  synchronous half of #154 without closing it — caller-controlled `file=`,
+  `as-string` and async job-id semantics remain open there.
+
+- **RouterOS rejections returned inside a successful transport envelope are no
+  longer read as success.** `/execute` can answer 200 while the device's own
+  text says it refused. Those are now classified as runtime failures, with the
+  passed validation-stage history preserved so the envelope still shows what
+  each stage concluded.
+
+- **Device-stage validation missed RouterOS's bare `missing …` diagnostics
+  (#375).** `classifyParseResult` matched `syntax error`, `bad command name`
+  and `expected …` from `:put [:parse …]`, but not `missing closing brace` or
+  `missing value for where` — so the device stage reported those rejections as
+  a pass and the command ran. `/ip/address/find where=` passes offline, which
+  made the device classifier its only gate. Replaying every bare diagnostic in
+  the pinned corpus across 7.20.8 → 7.25beta3 finds exactly seven heads, and
+  the two `missing …` forms were the only misses; both are now recognized, with
+  the device's own position in `error.context.detail`. Echoed script text is
+  still not a verdict.
+
+- **A stream's `/cancel` acknowledgement is now bounded (#385).** `api
+  --stream` stopped by `--duration` or Ctrl-C sent `/cancel` and then waited
+  with no bound, so a connected router that never answered held the CLI open
+  forever — `backend.close()` in the outer `finally` was unreachable while that
+  wait was pending. The wait is now bounded by the request `--timeout`, the
+  same bound as every other reply wait; past it the listen ends locally and the
+  session closes. The summary keeps its real `stopReason` and adds a
+  `transport/cancel-unacknowledged` **warning**, so the outcome never claims an
+  acknowledgement that did not arrive. A cooperating router is unchanged.
+
+- **`retrieve --attributes` rejected real singleton properties (#377).**
+  `isKnownSingletonPath` knew only `/system/resource` and `/system/identity`,
+  so every other singleton (`/tool/romon`, `/system/routerboard`, `/ip/dns`, …)
+  was inspected as a list menu. `print,proplist` comes back empty on a
+  singleton, so validation fell back to `print`'s own flags (`as-value`,
+  `file`, `interval`, …) and offered those as the attribute list. The singleton
+  bit now comes from the device: a singleton's `get` takes only `value-name`,
+  while a list menu's `get` also takes `number`. The hardcoded pair survives
+  only as the `--validate=false` fallback, which skips inspect. Costs one extra
+  `request=child` for a menu that has `get`.
+
+- **Completion candidates mixed help text and syntax rows into property names
+  (#380).** `extractCompletionNames` read `completion`/`name`/`value`/`text`
+  from every row, so the help string ("DNS cache size in kB") and the
+  `show: "false"` syntax rows (`[`, `(`, `$`, `"`, `*`, `<value>`) were offered
+  as attributes — which is why `--attributes '$'` passed validation. Rows carry
+  only `completion`/`offset`/`preference`/`show`/`style`/`text`/`type` on every
+  build recorded 7.9.2 → 7.25beta3, so `name`/`value` never matched anything.
+  On CHR 7.23.7, `show: "true"` is exactly the property set. The exported
+  `InspectCompletionItem` drops the never-present `name`/`value` and adds
+  `show`/`style`/`offset`/`preference`.
+
+- **An unparseable `<router>` crashed instead of reporting (#381).**
+  `parseHostCandidate` passed the target straight to `new URL` — the only
+  `new URL` on user input in `src/` — so with the default CDB, `quickchr:NAME`,
+  `a b` or `bad:host:name` failed every command with a `TypeError: Invalid URL`
+  surfaced as `internal/unhandled`. It now raises `input/invalid-target` and
+  names the valid target forms; a `quickchr:NAME` guess is told to use
+  `--quickchr NAME`. With an explicit CDB the same input already stopped at a
+  classified `cdb/not-found-target`, so that path is unchanged.
+
+### Changed
+
+- **The pinned restraml inspect trees advance to the live channel builds.** The
+  pins named "current stable" and "next beta" while pointing a patch behind
+  both: stable 7.24.2 → 7.24.4 and development 7.25beta3 → 7.25beta5. History
+  anchors 7.10.2 and 7.16 are untouched and both current versions stay
+  architecture-paired. The refresh is structurally a no-op — the inspect union
+  holds at 617 menus and the catalog at 1,120 paths, with no path added or
+  removed and no kind change. What moved is current-only publication: the CLI
+  Reference grew 1,053 → 1,055 pages (1,060 → 1,062 entries) and now documents
+  `/interface/ethernet/pon` and `/ip/ssh/known-hosts`, so both move `inspect` →
+  `both` (961 `both`, 65 `inspect`, 94 `published`). Zero
+  navigation-vs-command contradictions, unchanged.
+
 ## 0.1.6 — 2026-09-15
 
 ### Changed
