@@ -96,6 +96,7 @@ async function runStream(
 	peer: Peer,
 	extra: string[],
 	onFirstFrame?: (child: Bun.Subprocess) => void,
+	timeout = "300ms",
 ): Promise<{ exitCode: number; lines: unknown[] }> {
 	let frames = 0;
 	const result = await runCliProcess({
@@ -113,7 +114,7 @@ async function runStream(
 			"--password",
 			"dummy",
 			"--timeout",
-			"300ms",
+			timeout,
 			"--json",
 			...extra,
 		],
@@ -159,6 +160,24 @@ describe("api --stream stops within a bound (#385)", () => {
 		const run = await runStream(peer, [], (proc) => proc.kill("SIGINT"));
 		expect(run.exitCode).toBe(0);
 		expect(peer.cancels).toBe(1);
+		const summary = run.lines.at(-1) as Summary;
+		expect(summary.data.stopReason).toBe("interrupted");
+		expect(summary.warnings.map((w) => w.code)).toContain(
+			"transport/cancel-unacknowledged",
+		);
+	}, 15_000);
+
+	test("SIGINT keeps its stop reason when --duration expires during the cancel wait", async () => {
+		peer = startPeer(false);
+		// SIGINT lands on the first frame; the duration then expires inside the
+		// 4s cancel grace window and must not relabel the stop.
+		const run = await runStream(
+			peer,
+			["--duration", "1500ms"],
+			(proc) => proc.kill("SIGINT"),
+			"4s",
+		);
+		expect(run.exitCode).toBe(0);
 		const summary = run.lines.at(-1) as Summary;
 		expect(summary.data.stopReason).toBe("interrupted");
 		expect(summary.warnings.map((w) => w.code)).toContain(

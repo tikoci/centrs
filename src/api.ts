@@ -445,13 +445,16 @@ async function* streamResolvedApi(
 	let stopReason: ApiStreamStopReason | undefined;
 	let cancelUnacknowledged = false;
 	let durationTimer: ReturnType<typeof setTimeout> | undefined;
+	// The first stop cause wins: the cancel grace window keeps the loop alive
+	// after a stop, so a later timer or frame must not relabel it.
 	const onExternalAbort = (): void => {
 		stopReason ??= "interrupted";
+		clearTimeout(durationTimer);
 		controller.abort();
 	};
 	if (resolved.durationMs !== undefined) {
 		durationTimer = setTimeout(() => {
-			stopReason = "duration-elapsed";
+			stopReason ??= "duration-elapsed";
 			controller.abort();
 		}, resolved.durationMs);
 	}
@@ -475,7 +478,7 @@ async function* streamResolvedApi(
 			frames += 1;
 			yield streamFrameEnvelope(resolved, validation, record, frames);
 			if (resolved.count !== undefined && frames >= resolved.count) {
-				stopReason = "count-reached";
+				stopReason ??= "count-reached";
 				break;
 			}
 		}
