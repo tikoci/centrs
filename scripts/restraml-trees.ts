@@ -9,7 +9,7 @@
  *
  * ## Source selection (pinned, deliberately)
  *
- * Six extra-packages trees, two architectures, spanning 7.10.2 → 7.25beta3.
+ * Six extra-packages trees, two architectures, spanning 7.10.2 → 7.25beta5.
  * The pin is the point: `--check` must be reproducible, so adopting a newer
  * RouterOS tree is a deliberate edit to {@link RESTRAML_SOURCES}, reviewed like
  * any other change. It is *not* version tracking — the emitted tables are
@@ -37,8 +37,8 @@ export interface RestramlSource {
 /**
  * The pinned trees. Two x86 points early in 7.x retain menus that existed then
  * and were later renamed away. Both architectures of the current stable
- * (7.24.2) establish the released breadth; both architectures of the next beta
- * (7.25beta3) retain the established stable-plus-prerelease early-warning
+ * (7.24.4) establish the released breadth; both architectures of the next beta
+ * (7.25beta5) retain the established stable-plus-prerelease early-warning
  * coverage. Keeping each current version architecture-paired makes an added
  * path attributable to RouterOS version rather than to an architecture swap.
  *
@@ -50,24 +50,24 @@ export const RESTRAML_SOURCES: readonly RestramlSource[] = [
 	{ version: "7.10.2", arch: "x86", file: "7.10.2/extra/inspect.json" },
 	{ version: "7.16", arch: "x86", file: "7.16/extra/inspect.json" },
 	{
-		version: "7.24.2",
+		version: "7.24.4",
 		arch: "x86",
-		file: "7.24.2/extra/deep-inspect.x86.json",
+		file: "7.24.4/extra/deep-inspect.x86.json",
 	},
 	{
-		version: "7.24.2",
+		version: "7.24.4",
 		arch: "arm64",
-		file: "7.24.2/extra/deep-inspect.arm64.json",
+		file: "7.24.4/extra/deep-inspect.arm64.json",
 	},
 	{
-		version: "7.25beta3",
+		version: "7.25beta5",
 		arch: "x86",
-		file: "7.25beta3/extra/deep-inspect.x86.json",
+		file: "7.25beta5/extra/deep-inspect.x86.json",
 	},
 	{
-		version: "7.25beta3",
+		version: "7.25beta5",
 		arch: "arm64",
-		file: "7.25beta3/extra/deep-inspect.arm64.json",
+		file: "7.25beta5/extra/deep-inspect.arm64.json",
 	},
 ];
 

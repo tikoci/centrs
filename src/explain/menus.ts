@@ -12,10 +12,10 @@
  * | ---- | ---- | -------- | ----- | ---------- |
  * | `7.10.2/extra/inspect.json` | x86 | 7.10.2 | 29,086 | 458 |
  * | `7.16/extra/inspect.json` | x86 | 7.16 | 34,876 | 522 |
- * | `7.24.2/extra/deep-inspect.x86.json` | x86 | 7.24.2 | 41,345 | 554 |
- * | `7.24.2/extra/deep-inspect.arm64.json` | arm64 | 7.24.2 | 42,691 | 575 |
- * | `7.25beta3/extra/deep-inspect.x86.json` | x86 | 7.25beta3 | 41,798 | 557 |
- * | `7.25beta3/extra/deep-inspect.arm64.json` | arm64 | 7.25beta3 | 43,148 | 578 |
+ * | `7.24.4/extra/deep-inspect.x86.json` | x86 | 7.24.4 | 41,345 | 554 |
+ * | `7.24.4/extra/deep-inspect.arm64.json` | arm64 | 7.24.4 | 42,691 | 575 |
+ * | `7.25beta5/extra/deep-inspect.x86.json` | x86 | 7.25beta5 | 41,794 | 557 |
+ * | `7.25beta5/extra/deep-inspect.arm64.json` | arm64 | 7.25beta5 | 43,150 | 578 |
  *
  * Zero node-type conflicts across those trees — no `dir`↔`cmd` flip across
  * 4 versions or across architectures — which is what makes the union

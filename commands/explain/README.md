@@ -172,7 +172,7 @@ today's path/verb/args split and script-vs-structured gate:
   The *container* half of that pair is since decidable. `src/explain/menus.ts`
   (#207) bakes only the menu-vs-command node type — not a schema — and it is
   version-less because the pinned trees show no `dir`↔`cmd` flip across
-  7.10.2 → 7.25beta3 or across architectures. So `/ip/route` now resolves as
+  7.10.2 → 7.25beta5 or across architectures. So `/ip/route` now resolves as
   `navigation` (#210). The floor is unmoved: the table is deliberately
   incomplete, absence from it decides nothing, and every rule above it still
   refuses rather than guesses.
@@ -220,6 +220,17 @@ today's path/verb/args split and script-vs-structured gate:
   publication changes are accepted: none introduces a kind contradiction. The
   coherent generated catalog has 1,120 paths: 959 `both`, 67 `inspect`, and 94
   `published`; it still reports zero navigation-vs-command contradictions.
+
+  **Source refresh (accepted 2026-09-27).** The two current pins advance to the
+  channels then live — stable 7.24.2 → 7.24.4 and development 7.25beta3 →
+  7.25beta5 — both still architecture-paired, both history anchors untouched.
+  The refresh is a structural no-op: the inspect union holds at 617 menus and
+  the catalog at 1,120 paths, with no path added or removed and no kind change.
+  What moved is current-only publication: the CLI Reference grows from 1,053
+  pages / 1,060 entries to 1,055 / 1,062, which documents
+  `/interface/ethernet/pon` and `/ip/ssh/known-hosts` for the first time and so
+  moves both from `inspect` to `both` — 961 `both`, 65 `inspect`, 94
+  `published`. Zero navigation-vs-command contradictions, unchanged.
 
 There are real unknowns in how far offline parsing can go (expression
 grammar, scope fidelity vs `:parse`, `[]`-nesting corner cases). Grounding

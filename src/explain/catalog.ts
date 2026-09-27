@@ -9,7 +9,7 @@
  * Union of two first-order sources (#228):
  *
  * 1. MikroTik's published CLI Reference (`https://manual.mikrotik.com/docs/cli-reference/`),
- *    1,053 pages, 1,060 entries — first-order about the definition
+ *    1,055 pages, 1,062 entries — first-order about the definition
  *    structs and their build-time gates. Since #285 every page is a leaf whose
  *    slug is the CLI path, so no spelling has to be rewritten to be looked up.
  * 2. 6 pinned restraml `/console/inspect` trees
@@ -19,14 +19,14 @@
  * | ---- | ---- | -------- | ----- |
  * | `7.10.2/extra/inspect.json` | x86 | 7.10.2 | 29,086 |
  * | `7.16/extra/inspect.json` | x86 | 7.16 | 34,876 |
- * | `7.24.2/extra/deep-inspect.x86.json` | x86 | 7.24.2 | 41,345 |
- * | `7.24.2/extra/deep-inspect.arm64.json` | arm64 | 7.24.2 | 42,691 |
- * | `7.25beta3/extra/deep-inspect.x86.json` | x86 | 7.25beta3 | 41,798 |
- * | `7.25beta3/extra/deep-inspect.arm64.json` | arm64 | 7.25beta3 | 43,148 |
+ * | `7.24.4/extra/deep-inspect.x86.json` | x86 | 7.24.4 | 41,345 |
+ * | `7.24.4/extra/deep-inspect.arm64.json` | arm64 | 7.24.4 | 42,691 |
+ * | `7.25beta5/extra/deep-inspect.x86.json` | x86 | 7.25beta5 | 41,794 |
+ * | `7.25beta5/extra/deep-inspect.arm64.json` | arm64 | 7.25beta5 | 43,150 |
  *
  * | Kind | Total | `both` | `inspect` | `published` |
  * | ---- | ----- | ------ | --------- | ----------- |
- * | `menu` | 554 | 443 | 67 | 44 |
+ * | `menu` | 554 | 445 | 65 | 44 |
  * | `command` | 450 | 409 | 0 | 41 |
  * | `settings` | 116 | 107 | 0 | 9 |
  *
@@ -285,7 +285,7 @@ const ROWS = `
 /interface/ethernet/poe/monitor|command|published|||(poe or poe-in)
 /interface/ethernet/poe/power-cycle|command|published|||(poe or poe-in)
 /interface/ethernet/poe/settings|settings|published|||(poe or poe-in) and poesettings
-/interface/ethernet/pon|menu|inspect
+/interface/ethernet/pon|menu|both
 /interface/ethernet/reset-counters|command|both
 /interface/ethernet/reset-mac-address|command|both
 /interface/ethernet/switch|menu|both
@@ -744,7 +744,7 @@ const ROWS = `
 /ip/ssh|settings|both
 /ip/ssh/export-host-key|command|both
 /ip/ssh/import-host-key|command|both
-/ip/ssh/known-hosts|menu|inspect
+/ip/ssh/known-hosts|menu|both
 /ip/ssh/regenerate-host-key|command|both
 /ip/tftp|menu|both
 /ip/tftp/settings|settings|both
