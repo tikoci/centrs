@@ -641,6 +641,61 @@ describe("native-api listen() streaming", () => {
 		expect(unacknowledged).toBe(0);
 	});
 
+	test("a cancel answered by the interrupted trap but never `!done` still ends after cancelGraceMs", async () => {
+		const transport = new FakeTransport();
+		const controller = new AbortController();
+		let unacknowledged = 0;
+		const gen = transport.apiSession.listen(
+			{ command: "/ip/address/listen" },
+			{
+				signal: controller.signal,
+				cancelGraceMs: 50,
+				onCancelUnacknowledged: () => {
+					unacknowledged += 1;
+				},
+			},
+		);
+		const first = gen.next();
+		const tag = transport.lastTag();
+		controller.abort();
+		// A partial acknowledgement: the trap arrives, the terminating `!done`
+		// does not, so the subscription never settles on its own.
+		transport.reply([
+			"!trap",
+			"=category=2",
+			"=message=interrupted",
+			`.tag=${tag}`,
+		]);
+		const end = await first;
+		expect(end.done).toBe(true);
+		expect(unacknowledged).toBe(1);
+	});
+
+	test("a transport close after the cancel fails the listen and is not reported as an unacknowledged cancel", async () => {
+		const transport = new FakeTransport();
+		const controller = new AbortController();
+		let unacknowledged = 0;
+		const gen = transport.apiSession.listen(
+			{ command: "/ip/address/listen" },
+			{
+				signal: controller.signal,
+				cancelGraceMs: 50,
+				onCancelUnacknowledged: () => {
+					unacknowledged += 1;
+				},
+			},
+		);
+		const first = gen.next();
+		controller.abort();
+		transport.apiSession.handleClose();
+		await expect(first).rejects.toMatchObject({
+			code: "transport/connection-closed",
+		});
+		// The close is the terminal outcome; the timer must not fire afterwards.
+		await Bun.sleep(100);
+		expect(unacknowledged).toBe(0);
+	});
+
 	test("onListening fires once the listen sentence is on the wire", async () => {
 		const transport = new FakeTransport();
 		let listening = false;

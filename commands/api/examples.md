@@ -403,6 +403,27 @@ centrs api $A ip/address --stream --duration 2s --via native-api --port $API_POR
 With no change during the window, the stream ends after ~2 s with a summary
 envelope whose `data.stopReason=duration-elapsed`. Exit code 0.
 
+### L5. A router that ignores `/cancel` cannot hold the process open
+
+```bash
+centrs api $A ip/address --stream --duration 200ms --timeout 1s --via native-api --port $API_PORT --username $U --password $P
+```
+
+A stream stopped by `--duration` or Ctrl-C sends `/cancel` and waits up to
+`--timeout` for the router's acknowledgement (the interrupted `!trap` and
+`!done`). If none arrives, centrs closes the session itself. The summary still
+reports its stop reason (`duration-elapsed` or `interrupted`), exit code is 0,
+and `warnings` carries `transport/cancel-unacknowledged`. A router that answers
+inside the window gets no warning. `--count` sends `/cancel` without waiting,
+so it exits at once and never warns (#385).
+
+RouterOS on CHR always acknowledges `/cancel`, so this example runs against a
+loopback native-API peer that ignores it, as a real CLI process:
+`test/integration/api-stream-cancel.test.ts` covers `--duration`, SIGINT,
+`--count` and the cooperative control. The session-level cases (silent peer,
+chatty peer, trap without `!done`, close after cancel) are in
+`test/unit/native-api.test.ts`.
+
 ## fanout (multi-target, F…)
 
 These run against a CDB fixture with two records sharing group `$G`: record 0 is

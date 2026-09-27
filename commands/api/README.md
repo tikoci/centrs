@@ -192,10 +192,12 @@ RouterOS produces multi-frame output two ways, and `api` treats them differently
   bound it; Ctrl-C stops and still emits the summary. The `--duration` window
   starts once validation is done, so it excludes validation (and the connect and
   login validation needs). With `--no-validate`, connect and login happen inside
-  the window. Stopping sends RouterOS `/cancel`, and centrs
-  waits up to `--timeout` for the router to acknowledge it. A router that never
-  does gets its session closed locally, and the summary carries a
-  `transport/cancel-unacknowledged` warning (#385). `--via rest-api --stream` →
+  the window. Stopping on `--duration` or Ctrl-C sends RouterOS `/cancel`, and
+  centrs waits up to `--timeout` for the router to acknowledge it. A router that
+  never does gets its session closed locally, and the summary carries a
+  `transport/cancel-unacknowledged` warning (#385). Reaching `--count` sends
+  `/cancel` best-effort and closes the session without waiting, so it never
+  carries that warning (examples L5). `--via rest-api --stream` →
   `transport/capability-unsupported`. The exit code reflects whether the stream
   *started* cleanly, not whether every frame was `ok`.
 
