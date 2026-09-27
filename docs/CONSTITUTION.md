@@ -84,8 +84,10 @@ validator, with CHR evidence.
   `expected`. Rejection forms are `(evl bad parameter <name> (line N column M)
   /path)`, `(<%% bad command name <name> (line N column M) …)`, and the
   line-anchored `expected … (line N column M)` (spellings: `expected end of
-  command`, `expected command name`, `expected input value`) / `syntax error
-  (line N column M)`. That text rides the **HTTP-200 `ret` value** (REST,
+  command`, `expected command name`, `expected input value`), `missing … (line
+  N column M)` (`missing closing brace`, `missing value for where`; GH#375) and
+  `syntax error (line N column M)`. Every bare form is anchored at a line start
+  with the position suffix, because an accepted return can echo those words. That text rides the **HTTP-200 `ret` value** (REST,
   `as-string`), the native `as-string` `ret`, and the console's printed output
   alike — so a single `:put [:parse ...]` covers both the syntax and the
   **unknown-attribute** gate on every transport. centrs sends `as-string` and now

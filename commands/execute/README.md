@@ -28,8 +28,10 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   GH#230): a single `:put [:parse "<cmd>"]` covers both the syntax and the
   unknown-attribute (name-level) gate on **every** transport — `:parse` never
   throws; its return value's printed form (`(evl …)` / `(evl bad parameter …)` /
-  `(<%% bad command name …)`) is read from the REST/native `ret` *and* the
-  console output. That check is necessary, not sufficient: value-type errors pass
+  `(<%% bad command name …)`, or a bare line-anchored `syntax error` /
+  `expected …` / `missing … (line N column M)`, examples V4) is read from the
+  REST/native `ret` *and* the console output. An accepted return can echo
+  those words, so only the anchored forms reject. That check is necessary, not sufficient: value-type errors pass
   it, and the `/console/inspect request=child` / server re-validation semantic
   checks are separate. Command-level `request=completion` is deliberately not
   used: it hangs REST and closes native API on RouterOS 7.12.2 (GH#343), while

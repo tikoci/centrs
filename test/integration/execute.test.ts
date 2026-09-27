@@ -443,6 +443,28 @@ describeFast("execute against CHR", () => {
 				["device", "skipped"],
 			]);
 
+			// V4 — a `missing …` diagnostic the offline stage passes, so the device
+			// stage is the gate (GH#375). Before the fix the classifier returned
+			// on this reply and the command ran.
+			const missingWhere = expectExecuteFailure(
+				await executeEnvelope({ ...base, command: "/ip/address/find where=" }),
+				"rest-api",
+				"validation/syntax",
+			);
+			expect(missingWhere.error.context?.["detail"]).toBe(
+				"missing value for where (line 1 column 24)",
+			);
+			expect(missingWhere.error.position).toEqual({ line: 1, column: 24 });
+			expect(
+				(missingWhere.meta.validation?.stages ?? []).map((stage) => [
+					stage.stage,
+					stage.result,
+				]),
+			).toEqual([
+				["offline", "passed"],
+				["device", "failed"],
+			]);
+
 			await recordIntegrationEvidence({
 				suite: "execute against CHR",
 				command: "execute",
@@ -456,6 +478,7 @@ describeFast("execute against CHR", () => {
 					"V1",
 					"V2",
 					"V3",
+					"V4",
 					"W1",
 					"W2",
 					"R1",
