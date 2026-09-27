@@ -161,6 +161,66 @@ const cases: GateCase[] = [
 		write: false,
 	},
 	{ input: "{\n/ip address print\n}", mode: "script", write: false },
+	// A `$[…]`/`$(…)` inside a double-quoted string is code and is classified;
+	// the rest of the string, and an escaped `\$`, is literal text. CHR 7.23.7:
+	// `:put "v=$[/system identity get name]"` prints `v=CHR`, and
+	// `:put "\$[…]"` prints the brackets verbatim.
+	{
+		input: ':put "$[/system identity set name=x]"',
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ':put "$[/user expire-password admin]"',
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ':put "a $("b".[/user expire-password admin]) c"',
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ':put "name: $[/system identity get name]"',
+		mode: "script",
+		write: false,
+	},
+	{
+		input: ':put "done; $[/ip address print count-only]"',
+		mode: "script",
+		write: false,
+	},
+	{
+		input: ':put "[/user expire-password admin]"',
+		mode: "script",
+		write: false,
+	},
+	{
+		input: ':put "\\$[/user expire-password admin]"',
+		mode: "script",
+		write: false,
+	},
+	// Every `[`/`{` starts a command wherever it sits: after a sigil, inside a
+	// concatenation, or as a token of its own. A bare `$[…]` outside a string is
+	// a device `syntax error` (CHR 7.23.7), so it never runs; gating it is
+	// merely conservative.
+	{ input: ":put $[/system/identity/set name=x]", mode: "script", write: true },
+	{ input: ":put $[/user/expire-password admin]", mode: "script", write: true },
+	{
+		input: ':put ("x".[/user expire-password admin])',
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ":if (true) do={ /user expire-password print }",
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ":if (true) do={ /ip address print }",
+		mode: "script",
+		write: false,
+	},
 	// The space-separated menu spelling: the verb is the first known word in the
 	// bare run after the path token, not necessarily the word right after it.
 	{ input: "/system identity print", mode: "script", write: false },

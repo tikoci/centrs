@@ -249,7 +249,7 @@ function scriptContainsWriteShapedCommand(input: string): boolean {
 		// Every command the statement runs must be proven read-only, not just the
 		// first: `:foreach i in=[/ip address find] do={/user expire-password $i}`
 		// reads with `find` and writes with an unlearned mutator.
-		if (!commandHeads(tokens).every(isReadOnlyCommand)) {
+		if (!commandHeads(statement).every(isReadOnlyCommand)) {
 			return true;
 		}
 	}
@@ -257,25 +257,30 @@ function scriptContainsWriteShapedCommand(input: string): boolean {
 }
 
 /**
- * The words that start a command: the statement's first token, and the token
- * that opens a `[…]` substitution or `{…}` block, including as an argument
- * value (`in=[/ip address find]`, `do={/user expire-password $i}`). Parentheses
- * group expressions, not commands, so they do not start one. Each head is the
- * run of bare words from that point (see `commandWords`).
+ * The commands a statement runs: one at its start and one after every `[` or
+ * `{`, wherever that opener sits — an argument value (`in=[/ip address find]`,
+ * `do={/user expire-password $i}`), a sigil (`$[…]`), a concatenation
+ * (`"x".[…]`) or a token of its own (`do={ /user … }`). Parentheses group
+ * expressions, not commands, so they do not start one. Each head reads only up
+ * to the next opener, which begins its own head.
  */
-function commandHeads(tokens: readonly string[]): string[][] {
+function commandHeads(statement: string): string[][] {
 	const heads: string[][] = [];
-	for (let index = 0; index < tokens.length; index += 1) {
-		const token = (tokens[index] ?? "").replace(/^[A-Za-z0-9-]+=/, "");
-		const opener = /^[{[(]*/.exec(token)?.[0] ?? "";
-		if (index > 0 && !/[{[]/.test(opener)) continue;
-		const rest = token.slice(opener.length);
-		if (rest.length === 0) {
-			// A bare `{` or `[` — the command starts at the next token.
-			if (index + 1 < tokens.length) continue;
-			break;
-		}
-		const words = commandWords(rest, tokens.slice(index + 1));
+	const starts = [0];
+	for (let index = 0; index < statement.length; index += 1) {
+		const char = statement[index];
+		if (char === "[" || char === "{") starts.push(index + 1);
+	}
+	for (const start of starts) {
+		const nextOpener = statement.slice(start).search(/[[{(]/);
+		const segment =
+			nextOpener < 0
+				? statement.slice(start)
+				: statement.slice(start, start + nextOpener);
+		const tokens = tokenizeRouterOsCli(segment);
+		const head = tokens[0];
+		if (head === undefined) continue;
+		const words = commandWords(head, tokens.slice(1));
 		// A lone closer (`}` ending a multi-line block) runs nothing.
 		if (words.length > 0) heads.push(words);
 	}
@@ -336,32 +341,62 @@ function trimGroupingPunctuation(value: string): string {
 	return value.slice(start, end);
 }
 
-/** Split only at real statement boundaries; quoted output is not executable. */
+/**
+ * Split at real statement boundaries and blank quoted text, which does not
+ * execute — except a `$[…]` or `$(…)` substitution inside a double-quoted
+ * string, which is code: `:put "$[/system identity set name=x]"` runs the set.
+ * Its body is kept (with its opener, so it becomes a command head) and may nest
+ * strings of its own. The frame grammar is `explain`'s (`stepFrame` in
+ * `src/explain/quoted-string.ts`).
+ */
 function splitUnquotedStatements(input: string): string[] {
 	const statements: string[] = [];
 	let current = "";
-	let quote: '"' | "'" | undefined;
+	// `"` / `'` are string frames; `]` / `)` are the closer a code frame inside
+	// a string is waiting for. An empty stack is top-level code.
+	const frames: string[] = [];
 	let escaped = false;
-	for (const char of input) {
+	for (let index = 0; index < input.length; index += 1) {
+		const char = input[index] ?? "";
+		const top = frames.at(-1);
+		const inString = top === '"' || top === "'";
 		if (escaped) {
-			current += quote ? " " : char;
+			current += inString ? " " : char;
 			escaped = false;
 			continue;
 		}
 		if (char === "\\") {
 			escaped = true;
-			current += quote ? " " : char;
+			current += inString ? " " : char;
 			continue;
 		}
-		if (quote) {
-			if (char === quote) quote = undefined;
+		if (inString) {
+			if (char === top) {
+				frames.pop();
+			} else if (
+				top === '"' &&
+				char === "$" &&
+				(input[index + 1] === "[" || input[index + 1] === "(")
+			) {
+				const opener = input[index + 1] ?? "";
+				frames.push(opener === "[" ? "]" : ")");
+				current += ` ${opener}`;
+				index += 1;
+				continue;
+			}
 			current += " ";
 			continue;
 		}
 		if (char === '"' || char === "'") {
-			quote = char;
+			frames.push(char);
 			current += " ";
 			continue;
+		}
+		if (top !== undefined) {
+			// Inside a string's code frame: track nesting to find its closer.
+			if (char === top) frames.pop();
+			else if (char === "[") frames.push("]");
+			else if (char === "(") frames.push(")");
 		}
 		if (char === ";" || char === "\n" || char === "\r") {
 			statements.push(current);
