@@ -42,7 +42,10 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   `isWriteShaped` is deliberately independent: script fallback for `[find]`, a
   positional id, or other non-`key=value` input never bypasses confirmation.
   Known read verbs are allowlisted; an unknown menu verb fails closed as a
-  write-shaped operation. Root mutators such as `/import` and indirect
+  write-shaped operation. In script mode every command head in a statement
+  (the statement start and each `[…]` or `{…}` body) must be a read: its verb
+  is the first word past the known menu prefix, so `/ip address print` is a
+  read and `/user expire-password print` is not (examples W3). Root mutators such as `/import` and indirect
   execution through `:execute` are write-shaped too, and so is any command
   carrying `file=`: RouterOS redirects command output into a device file, so
   `/ip/address/export file=address` creates `address.rsc` and

@@ -323,6 +323,28 @@ describeFast("execute against CHR", () => {
 				yes: true,
 			});
 
+			// W3 — space-separated menu reads run without `--yes`; an unlearned
+			// command ahead of a read-verb argument is still gated (GH#367 regression).
+			for (const command of [
+				"/system identity print",
+				"/ip address print where comment=centrs-write-gate",
+				":put [/system identity get name]",
+			]) {
+				expectExecuteSuccess(
+					await executeEnvelope({ ...base, command, stdinIsTty: false }),
+					"rest-api",
+				);
+			}
+			expectExecuteFailure(
+				await executeEnvelope({
+					...base,
+					command: "/user expire-password print",
+					stdinIsTty: false,
+				}),
+				"rest-api",
+				"usage/confirmation-required",
+			);
+
 			// R1/R2 — RouterOS can carry a post-validation runtime rejection in
 			// HTTP-200 `ret`. The gate remains passed; the overall envelope fails.
 			const invalidCertificate = expectExecuteFailure(
@@ -458,6 +480,7 @@ describeFast("execute against CHR", () => {
 					"V3",
 					"W1",
 					"W2",
+					"W3",
 					"R1",
 					"R2",
 				],

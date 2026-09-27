@@ -127,6 +127,40 @@ const cases: GateCase[] = [
 	{ input: ':put "hello"', mode: "script", write: false },
 	{ input: ':put "/ip/address/remove"', mode: "script", write: false },
 	{ input: ":put [/system/identity/get name]", mode: "script", write: false },
+	// The verb is the first word past the known menu prefix, so an unlearned
+	// command cannot borrow a later argument: `/user/expire-password` is a real
+	// command and `print` here is its username.
+	{ input: "/user expire-password print", mode: "script", write: true },
+	{ input: "user expire-password print", mode: "script", write: true },
+	{ input: ":put [user expire-password admin]", mode: "script", write: true },
+	// Every command in a statement is checked, not only the first path.
+	{
+		input: ":foreach i in=[/ip address find] do={/user expire-password $i}",
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ":foreach i in=[/ip/address/find] do={/user/expire-password $i}",
+		mode: "script",
+		write: true,
+	},
+	{
+		input: ':foreach i in=$ids do={:execute "/ip/address/print"}',
+		mode: "script",
+		write: true,
+	},
+	{ input: ":if (true) do={:global x 1}", mode: "script", write: true },
+	{
+		input: ":foreach i in=[/ip address find] do={:put $i}",
+		mode: "script",
+		write: false,
+	},
+	{
+		input: ':if ([/system identity get name] = "x") do={:put 1}',
+		mode: "script",
+		write: false,
+	},
+	{ input: "{\n/ip address print\n}", mode: "script", write: false },
 	// The space-separated menu spelling: the verb is the first known word in the
 	// bare run after the path token, not necessarily the word right after it.
 	{ input: "/system identity print", mode: "script", write: false },
