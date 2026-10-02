@@ -37,7 +37,12 @@ import {
 	loadCdb,
 	resolveDevicesSettings,
 } from "./devices.ts";
-import { asCentrsError, CentrsError, serializeCentrsError } from "./errors.ts";
+import {
+	asCentrsError,
+	CentrsError,
+	formatCentrsErrorText,
+	serializeCentrsError,
+} from "./errors.ts";
 import { parseCommentKv, renderCommentKvToken } from "./resolver/comment-kv.ts";
 import { normalizeMac } from "./resolver/mac.ts";
 
@@ -771,13 +776,7 @@ export function renderDiscoverEnvelope(
 function renderDiscoverText(envelope: DiscoverEnvelope): string {
 	const lines: string[] = [];
 	if (!envelope.ok) {
-		lines.push(`[${envelope.error.code}] ${envelope.error.summary}`);
-		if (envelope.error.remediation) {
-			lines.push(`Fix: ${envelope.error.remediation}`);
-		}
-		if (envelope.error.detailsUrl) {
-			lines.push(`Details: ${envelope.error.detailsUrl}`);
-		}
+		lines.push(formatCentrsErrorText(envelope.error));
 		appendDiscoverWarnings(lines, envelope.warnings);
 		return lines.join("\n");
 	}

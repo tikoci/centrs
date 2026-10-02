@@ -5,6 +5,14 @@
  */
 export const ERROR_DETAILS_BASE_URL = "https://tikoci.github.io/centrs/errors/";
 
+/**
+ * Remediation for a device-stage `:parse` rejection. It does not claim the
+ * syntax is wrong: RouterOS rejects an absent menu (unknown path, package not
+ * installed) in the same words, and #361 tracks telling those apart.
+ */
+export const SYNTAX_REJECTED_REMEDIATION =
+	"RouterOS refused to parse this command; its own words are in `Device said`. Check the syntax with `centrs explain '<command>'`. A menu that does not exist on this device (an unknown path, or a package that is not installed) is rejected the same way.";
+
 export type CentrsErrorCode =
 	| `auth/${string}`
 	| `cdb/${string}`
@@ -120,6 +128,15 @@ export function asCentrsError(
 	});
 }
 
+/**
+ * The one text renderer for an error, shared by every command (GH#362).
+ *
+ * Order: header, where (`At:`), the device's own words (`Device said:`), `Fix:`,
+ * `Details:`. Where and the device's words print without `--verbose`: they are
+ * what lets a caller recover from a remediation that names the wrong cause.
+ * `--verbose` adds the full `context` object. A command that has more to say
+ * (warnings, tips) appends to this output; it never re-derives the header.
+ */
 export function formatCentrsErrorText(
 	error: CentrsError | SerializedCentrsError,
 	options: { verbose?: boolean } = {},
@@ -132,6 +149,14 @@ export function formatCentrsErrorText(
 		lines.push(
 			`At: line ${serialized.position.line}, column ${serialized.position.column} (RouterOS byte offset)`,
 		);
+	} else {
+		const offline = offlineSpanText(serialized.context);
+		if (offline) lines.push(offline);
+	}
+
+	const deviceSaid = deviceSaidText(serialized);
+	if (deviceSaid) {
+		lines.push(`Device said: ${deviceSaid}`);
 	}
 
 	if (serialized.remediation) {
@@ -148,6 +173,50 @@ export function formatCentrsErrorText(
 	}
 
 	return lines.join("\n");
+}
+
+const DEVICE_SAID_MAX = 240;
+
+/**
+ * RouterOS's own verdict, from `context.detail`: the raw `:parse` return or the
+ * trap / REST message, as `mapRouterOsError` and `classifyParseResult` store it.
+ * Collapsed to one line and capped. Omitted when the summary already quotes it,
+ * so a trap message is not printed twice. `--json` keeps it unabridged.
+ */
+function deviceSaidText(error: SerializedCentrsError): string | undefined {
+	const detail = error.context?.["detail"];
+	if (typeof detail !== "string") return undefined;
+	const oneLine = detail.replace(/\s+/g, " ").trim();
+	if (oneLine.length === 0 || error.summary.includes(oneLine)) return undefined;
+	return oneLine.length > DEVICE_SAID_MAX
+		? `${oneLine.slice(0, DEVICE_SAID_MAX)}…`
+		: oneLine;
+}
+
+/**
+ * The offline gate's rejected byte range (`context.span`, 0-based, end-exclusive,
+ * into `context.command`). Labelled as offline analysis so it is never mistaken
+ * for a RouterOS-reported position (see `src/offline-gate.ts`).
+ */
+function offlineSpanText(
+	context: Record<string, unknown> | undefined,
+): string | undefined {
+	const span = context?.["span"];
+	if (
+		!span ||
+		typeof span !== "object" ||
+		typeof (span as { start?: unknown }).start !== "number" ||
+		typeof (span as { end?: unknown }).end !== "number"
+	) {
+		return undefined;
+	}
+	const { start, end } = span as { start: number; end: number };
+	const command = context?.["command"];
+	const excerpt =
+		typeof command === "string" && end > start
+			? `: ${JSON.stringify(Buffer.from(command).subarray(start, end).toString())}`
+			: "";
+	return `At: bytes ${start}-${end} (offline analysis)${excerpt}`;
 }
 
 export function serializeUnknownError(error: unknown): unknown {
