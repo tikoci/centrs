@@ -6,6 +6,10 @@ The product evolves as a stream of changes; there are no alpha gates.
 Per-feature status is tracked in `docs/MATRIX.md`. Use this file for
 documenting cross-cutting shifts that affect contributors and consumers.
 
+## Unreleased
+
+Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
+
 ## 0.1.7 — 2026-09-27
 
 ### Added
