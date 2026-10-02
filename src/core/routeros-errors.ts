@@ -326,7 +326,7 @@ export function mapRouterOsError(
 			? `RouterOS reported an error: ${trimmed}`
 			: "RouterOS reported an unspecified error.",
 		remediation:
-			"Inspect the original RouterOS message; the command word, path, or an attribute is likely invalid.",
+			"RouterOS refused the request, and its message is the reason. If the message names part of the input (a path, parameter or value), fix that; otherwise the router may be busy or the operation unavailable right now.",
 		context: { ...baseContext, ...opts.context },
 		...(position ? { position } : {}),
 		causeData: raw,

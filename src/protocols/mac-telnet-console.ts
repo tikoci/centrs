@@ -44,7 +44,7 @@
 
 import { parseRouterOsPosition } from "../core/routeros-errors.ts";
 import { routerOsStringLiteral } from "../core/routeros-string.ts";
-import { CentrsError } from "../errors.ts";
+import { CentrsError, SYNTAX_REJECTED_REMEDIATION } from "../errors.ts";
 import {
 	type MacAddress,
 	type MacTelnetDatagramSink,
@@ -684,8 +684,7 @@ export function classifyParseResult(
 		throw new CentrsError({
 			code: "validation/syntax",
 			summary: "RouterOS rejected the command syntax while parsing it.",
-			remediation:
-				"Fix the RouterOS CLI syntax (quotes, brackets, attribute form), then retry.",
+			remediation: SYNTAX_REJECTED_REMEDIATION,
 			context: {
 				command: cli,
 				validationSource: `:put [:parse ...] over ${via}`,

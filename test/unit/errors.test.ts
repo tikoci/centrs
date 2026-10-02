@@ -102,6 +102,106 @@ describe("formatCentrsErrorText", () => {
 		expect(formatCentrsErrorText(error)).not.toContain("offset");
 		expect(formatCentrsErrorText(error, { verbose: true })).toContain("offset");
 	});
+
+	// GH#362: position and the device's own words print without --verbose.
+	test("prints position and the device's words in order, without verbose", () => {
+		const text = formatCentrsErrorText(
+			new CentrsError({
+				code: "validation/syntax",
+				summary: "RouterOS rejected the command syntax while parsing it.",
+				remediation: "Fix the syntax.",
+				position: { line: 1, column: 2 },
+				context: { detail: "bad command name zerotier\r\n(line 1 column 2)" },
+			}),
+		);
+		expect(text.split("\n")).toEqual([
+			"[validation/syntax] RouterOS rejected the command syntax while parsing it.",
+			"At: line 1, column 2 (RouterOS byte offset)",
+			"Device said: bad command name zerotier (line 1 column 2)",
+			"Fix: Fix the syntax.",
+			"Details: https://tikoci.github.io/centrs/errors/validation/syntax",
+		]);
+	});
+
+	test("omits the device's words when the summary already quotes them", () => {
+		const text = formatCentrsErrorText(
+			new CentrsError({
+				code: "routeros/api-trap",
+				summary: "RouterOS reported an error: no such item",
+				context: { detail: "no such item" },
+			}),
+		);
+		expect(text).not.toContain("Device said:");
+	});
+
+	test("compares a multi-line summary to the detail on one line", () => {
+		const text = formatCentrsErrorText(
+			new CentrsError({
+				code: "routeros/api-trap",
+				summary: "RouterOS reported an error: failure:\n  no such item",
+				context: { detail: "failure:\n  no such item" },
+			}),
+		);
+		expect(text).not.toContain("Device said:");
+	});
+
+	test("replaces terminal control characters in router-supplied text", () => {
+		const text = formatCentrsErrorText(
+			new CentrsError({
+				code: "routeros/api-trap",
+				summary: "bad \u001b[31m red\r",
+				remediation: "fix \u009b2J",
+				context: { detail: "said \u001b]0;title\u0007" },
+			}),
+		);
+		for (const control of ["\u001b", "\u0007", "\u009b", "\r"])
+			expect(text).not.toContain(control);
+		expect(text).toContain("[routeros/api-trap] bad  [31m red ");
+	});
+
+	test("ignores a non-string detail and caps a long one", () => {
+		expect(
+			formatCentrsErrorText(
+				new CentrsError({
+					code: "routeros/api-trap",
+					summary: "x",
+					context: { detail: ["a"] },
+				}),
+			),
+		).not.toContain("Device said:");
+		const long = formatCentrsErrorText(
+			new CentrsError({
+				code: "routeros/api-trap",
+				summary: "x",
+				context: { detail: "y".repeat(500) },
+			}),
+		);
+		expect(long).toContain(`Device said: ${"y".repeat(240)}…`);
+	});
+
+	test("prints the offline gate's byte span with the bytes it covers", () => {
+		const text = formatCentrsErrorText(
+			new CentrsError({
+				code: "validation/syntax",
+				summary: "RouterOS syntax rejected by offline analysis: x",
+				context: { command: ':put "é" stats', span: { start: 10, end: 15 } },
+			}),
+		);
+		expect(text).toContain('At: bytes [10, 15) (offline analysis): "stats"');
+	});
+
+	test("a RouterOS position wins over an offline span", () => {
+		const text = formatCentrsErrorText(
+			new CentrsError({
+				code: "validation/syntax",
+				summary: "x",
+				position: { line: 1, column: 3 },
+				context: { command: "abc", span: { start: 0, end: 1 } },
+			}),
+		);
+		expect(text).toContain("At: line 1, column 3");
+		expect(text).not.toContain("offline analysis");
+	});
 });
 
 describe("extractErrorCode", () => {

@@ -108,7 +108,11 @@ import {
 	isWriteShaped,
 } from "./core/execute-command.ts";
 import { toYaml } from "./core/yaml.ts";
-import { CentrsError, serializeCentrsError } from "./errors.ts";
+import {
+	CentrsError,
+	formatCentrsErrorText,
+	serializeCentrsError,
+} from "./errors.ts";
 import { argSpans } from "./explain/arg-tokens.ts";
 import {
 	type ArgumentKind,
@@ -2495,11 +2499,7 @@ function renderExplainText(
 ): string {
 	const lines: string[] = [];
 	if (!envelope.ok) {
-		lines.push(`[${envelope.error.code}] ${envelope.error.summary}`);
-		if (envelope.error.remediation)
-			lines.push(`Fix: ${envelope.error.remediation}`);
-		if (envelope.error.detailsUrl)
-			lines.push(`Details: ${envelope.error.detailsUrl}`);
+		lines.push(formatCentrsErrorText(envelope.error));
 		lines.push(...tipLines(envelope.tips));
 		return lines.join("\n");
 	}

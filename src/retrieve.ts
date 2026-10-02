@@ -17,7 +17,11 @@ import {
 	pathTokens,
 } from "./core/inspect.ts";
 import { toYaml } from "./core/yaml.ts";
-import { CentrsError, serializeCentrsError } from "./errors.ts";
+import {
+	CentrsError,
+	formatCentrsErrorText,
+	serializeCentrsError,
+} from "./errors.ts";
 import {
 	createProtocolAdapter,
 	type ProtocolAdapter,
@@ -350,7 +354,7 @@ export function renderRetrieveEnvelope(
 		case "text":
 			return envelope.ok
 				? renderRetrieveSuccessText(envelope, options)
-				: renderRetrieveErrorText(envelope, options);
+				: formatCentrsErrorText(envelope.error, options);
 		default:
 			return exhaustiveOutputFormat(format);
 	}
@@ -411,25 +415,6 @@ function renderRetrieveSuccessText(
 				lines.push(`    fix: ${item.fix}`);
 			}
 		}
-	}
-
-	return lines.join("\n");
-}
-
-function renderRetrieveErrorText(
-	envelope: RetrieveErrorEnvelope,
-	options: { verbose?: boolean },
-): string {
-	const { error } = envelope;
-	const lines = [`[${error.code}] ${error.summary}`];
-
-	if (error.remediation) {
-		lines.push(`Fix: ${error.remediation}`);
-	}
-
-	if (options.verbose && error.context) {
-		lines.push("");
-		lines.push(JSON.stringify(error.context, null, 2));
 	}
 
 	return lines.join("\n");

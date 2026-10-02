@@ -16,7 +16,12 @@
 
 import { createServer } from "node:net";
 import type { CentrsEnvelope, EnvelopeMeta } from "./core/envelope.ts";
-import { asCentrsError, CentrsError, serializeCentrsError } from "./errors.ts";
+import {
+	asCentrsError,
+	CentrsError,
+	formatCentrsErrorText,
+	serializeCentrsError,
+} from "./errors.ts";
 import {
 	BTEST_PORT,
 	BTEST_UDP_PORT_START,
@@ -902,30 +907,18 @@ export function btestServerSummaryLine(d: BtestServerData): string {
 }
 
 function renderClientText(envelope: BtestClientEnvelope): string {
-	if (!envelope.ok) return formatErrorText(envelope.error);
+	if (!envelope.ok) return formatCentrsErrorText(envelope.error);
 	const lines = envelope.data.reports.map(formatBtestReportText);
 	lines.push(btestClientSummaryLine(envelope.data));
 	return lines.join("\n");
 }
 
 function renderServerText(envelope: BtestServerEnvelope): string {
-	if (!envelope.ok) return formatErrorText(envelope.error);
+	if (!envelope.ok) return formatCentrsErrorText(envelope.error);
 	const lines = [btestServerSummaryLine(envelope.data)];
 	for (const s of envelope.data.sessions) lines.push(formatBtestSessionText(s));
 	for (const w of envelope.warnings)
 		lines.push(`warning: [${w.code}] ${w.message}`);
-	return lines.join("\n");
-}
-
-function formatErrorText(error: {
-	code: string;
-	summary: string;
-	remediation?: string;
-	detailsUrl?: string;
-}): string {
-	const lines = [`[${error.code}] ${error.summary}`];
-	if (error.remediation) lines.push(`Fix: ${error.remediation}`);
-	if (error.detailsUrl) lines.push(`Details: ${error.detailsUrl}`);
 	return lines.join("\n");
 }
 

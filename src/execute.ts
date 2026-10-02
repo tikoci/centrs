@@ -20,7 +20,12 @@ import { inspectArgumentNames, pathTokens } from "./core/inspect.ts";
 import { mapRouterOsResultError } from "./core/routeros-errors.ts";
 import { routerOsStringLiteral } from "./core/routeros-string.ts";
 import { toYaml } from "./core/yaml.ts";
-import { CentrsError, serializeCentrsError } from "./errors.ts";
+import {
+	CentrsError,
+	formatCentrsErrorText,
+	SYNTAX_REJECTED_REMEDIATION,
+	serializeCentrsError,
+} from "./errors.ts";
 import {
 	assertOfflineSyntax,
 	isOfflineGateRejection,
@@ -738,7 +743,7 @@ export function renderExecuteEnvelope(
 		case "text":
 			return envelope.ok
 				? renderExecuteSuccessText(envelope, options)
-				: renderExecuteErrorText(envelope, options);
+				: formatCentrsErrorText(envelope.error, options);
 		default:
 			return exhaustiveOutputFormat(format);
 	}
@@ -931,12 +936,16 @@ export async function validateRouterOsScript(
 			code: "validation/syntax",
 			summary:
 				"RouterOS rejected the command syntax during `:parse` preflight.",
-			remediation:
-				"Fix the RouterOS CLI syntax, especially quotes and bracketed expressions, then retry.",
+			remediation: SYNTAX_REJECTED_REMEDIATION,
 			context: {
 				command,
 				validationSource: ":put [:parse ...]",
 				via,
+				// Keep RouterOS's own words from the mapped fault (GH#362).
+				...(error instanceof CentrsError &&
+				typeof error.context?.["detail"] === "string"
+					? { detail: error.context["detail"] }
+					: {}),
 			},
 			...(position ? { position } : {}),
 			cause: error,
@@ -1363,20 +1372,6 @@ function renderExecuteSuccessText(
 		lines.push(envelope.data);
 	} else {
 		lines.push(JSON.stringify(envelope.data, null, 2));
-	}
-	return lines.join("\n");
-}
-
-function renderExecuteErrorText(
-	envelope: ExecuteErrorEnvelope,
-	options: { verbose?: boolean },
-): string {
-	const lines = [`[${envelope.error.code}] ${envelope.error.summary}`];
-	if (envelope.error.remediation) {
-		lines.push(`Fix: ${envelope.error.remediation}`);
-	}
-	if (options.verbose && envelope.error.context) {
-		lines.push("", JSON.stringify(envelope.error.context, null, 2));
 	}
 	return lines.join("\n");
 }

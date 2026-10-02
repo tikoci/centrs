@@ -39,7 +39,11 @@ import {
 	summarizeFanout,
 } from "./core/fanout.ts";
 import { toYaml } from "./core/yaml.ts";
-import { CentrsError, serializeCentrsError } from "./errors.ts";
+import {
+	CentrsError,
+	formatCentrsErrorText,
+	serializeCentrsError,
+} from "./errors.ts";
 import { promptForWriteConfirmation } from "./execute.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
@@ -501,11 +505,7 @@ export function renderTransferFanoutEnvelope(
 		return toYaml(envelope);
 	}
 	if (!envelope.ok) {
-		const lines = [`[${envelope.error.code}] ${envelope.error.summary}`];
-		if (envelope.error.remediation) {
-			lines.push(`Fix: ${envelope.error.remediation}`);
-		}
-		return lines.join("\n");
+		return formatCentrsErrorText(envelope.error, options);
 	}
 	const operation = envelope.meta.operation;
 	const { total, ok, failed } = envelope.data.summary;

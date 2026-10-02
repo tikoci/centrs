@@ -10,6 +10,26 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 
+### Fixed
+
+- **Every command now renders errors the same way, and keeps the router's own
+  words (#362).** `execute`, `retrieve`, `api`, `transfer`, `settings`, the
+  fan-outs and five others each had their own text renderer; most dropped the
+  `Details:` link and RouterOS's position, and the device's own verdict was
+  shown only with `--verbose`. All of them now use `formatCentrsErrorText`,
+  which prints, in order: `[code] summary`, `At:` (RouterOS's line/column, or
+  the offline gate's byte span with the bytes it covers), `Device said:`
+  (RouterOS's message, one line, omitted when the summary already quotes it),
+  `Fix:` and `Details:`. A test pins all fourteen renderers to the same text.
+  Two remediation messages stopped claiming a cause they can't know: a device-stage
+  `:parse` rejection no longer says "fix the quotes" (an absent menu or missing
+  package is rejected in the same words; #361 separates them) and points to
+  `centrs explain`, and the `routeros/api-trap` catch-all no longer says the
+  command is likely invalid. The `:parse` preflight wrapper in `execute` also
+  stopped dropping RouterOS's message from `context.detail`. `--json` output is
+  unchanged apart from those remediation strings and the restored
+  `context.detail`.
+
 ## 0.1.7 — 2026-09-27
 
 ### Added
