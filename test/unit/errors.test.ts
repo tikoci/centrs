@@ -134,6 +134,31 @@ describe("formatCentrsErrorText", () => {
 		expect(text).not.toContain("Device said:");
 	});
 
+	test("compares a multi-line summary to the detail on one line", () => {
+		const text = formatCentrsErrorText(
+			new CentrsError({
+				code: "routeros/api-trap",
+				summary: "RouterOS reported an error: failure:\n  no such item",
+				context: { detail: "failure:\n  no such item" },
+			}),
+		);
+		expect(text).not.toContain("Device said:");
+	});
+
+	test("replaces terminal control characters in router-supplied text", () => {
+		const text = formatCentrsErrorText(
+			new CentrsError({
+				code: "routeros/api-trap",
+				summary: "bad \u001b[31m red\r",
+				remediation: "fix \u009b2J",
+				context: { detail: "said \u001b]0;title\u0007" },
+			}),
+		);
+		for (const control of ["\u001b", "\u0007", "\u009b", "\r"])
+			expect(text).not.toContain(control);
+		expect(text).toContain("[routeros/api-trap] bad  [31m red ");
+	});
+
 	test("ignores a non-string detail and caps a long one", () => {
 		expect(
 			formatCentrsErrorText(
@@ -162,7 +187,7 @@ describe("formatCentrsErrorText", () => {
 				context: { command: ':put "é" stats', span: { start: 10, end: 15 } },
 			}),
 		);
-		expect(text).toContain('At: bytes 10-15 (offline analysis): "stats"');
+		expect(text).toContain('At: bytes [10, 15) (offline analysis): "stats"');
 	});
 
 	test("a RouterOS position wins over an offline span", () => {

@@ -142,7 +142,7 @@ export function formatCentrsErrorText(
 	options: { verbose?: boolean } = {},
 ): string {
 	const serialized = serializeCentrsError(error);
-	const lines = [`[${serialized.code}] ${serialized.summary}`];
+	const lines = [`[${serialized.code}] ${terminalSafe(serialized.summary)}`];
 
 	if (serialized.position) {
 		// RouterOS's authoritative byte column (1-based); see RouterOsErrorPosition.
@@ -156,11 +156,11 @@ export function formatCentrsErrorText(
 
 	const deviceSaid = deviceSaidText(serialized);
 	if (deviceSaid) {
-		lines.push(`Device said: ${deviceSaid}`);
+		lines.push(`Device said: ${terminalSafe(deviceSaid)}`);
 	}
 
 	if (serialized.remediation) {
-		lines.push(`Fix: ${serialized.remediation}`);
+		lines.push(`Fix: ${terminalSafe(serialized.remediation)}`);
 	}
 
 	if (serialized.detailsUrl) {
@@ -178,6 +178,22 @@ export function formatCentrsErrorText(
 const DEVICE_SAID_MAX = 240;
 
 /**
+ * Control characters other than tab and newline, C1 included. Summaries and
+ * `detail` carry router-supplied text; an ESC or CR in it would drive the
+ * terminal. `--json` keeps the raw value.
+ */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching them is the point.
+const TERMINAL_CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
+
+function terminalSafe(text: string): string {
+	return text.replace(TERMINAL_CONTROL, " ");
+}
+
+function oneLine(text: string): string {
+	return text.replace(/\s+/g, " ").trim();
+}
+
+/**
  * RouterOS's own verdict, from `context.detail`: the raw `:parse` return or the
  * trap / REST message, as `mapRouterOsError` and `classifyParseResult` store it.
  * Collapsed to one line and capped. Omitted when the summary already quotes it,
@@ -186,11 +202,12 @@ const DEVICE_SAID_MAX = 240;
 function deviceSaidText(error: SerializedCentrsError): string | undefined {
 	const detail = error.context?.["detail"];
 	if (typeof detail !== "string") return undefined;
-	const oneLine = detail.replace(/\s+/g, " ").trim();
-	if (oneLine.length === 0 || error.summary.includes(oneLine)) return undefined;
-	return oneLine.length > DEVICE_SAID_MAX
-		? `${oneLine.slice(0, DEVICE_SAID_MAX)}…`
-		: oneLine;
+	const said = oneLine(detail);
+	if (said.length === 0 || oneLine(error.summary).includes(said))
+		return undefined;
+	return said.length > DEVICE_SAID_MAX
+		? `${said.slice(0, DEVICE_SAID_MAX)}…`
+		: said;
 }
 
 /**
@@ -214,9 +231,10 @@ function offlineSpanText(
 	const command = context?.["command"];
 	const excerpt =
 		typeof command === "string" && end > start
-			? `: ${JSON.stringify(Buffer.from(command).subarray(start, end).toString())}`
+			? `: ${JSON.stringify(new TextDecoder().decode(new TextEncoder().encode(command).subarray(start, end)))}`
 			: "";
-	return `At: bytes ${start}-${end} (offline analysis)${excerpt}`;
+	// Half-open, exactly as `context.span` carries it.
+	return `At: bytes [${start}, ${end}) (offline analysis)${excerpt}`;
 }
 
 export function serializeUnknownError(error: unknown): unknown {
