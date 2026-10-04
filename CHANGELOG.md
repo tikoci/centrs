@@ -12,6 +12,23 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 
 ### Fixed
 
+- **A menu the device does not have is no longer reported as a syntax error
+  (#361).** RouterOS's `:parse` answers `/zerotier/print` on a router without
+  the package with `syntax error (line 1 column 10)`, and `/zerotier print`
+  with `bad command name zerotier`. Both point at the segment it could not
+  resolve. centrs now locates that segment and looks the path up in its path
+  catalog (every RouterOS 7.10–7.25 build, all extra packages):
+  `validation/package-missing` when MikroTik publishes the menu behind a
+  package (`error.context.packages`, with `/system/package/print` as the fix),
+  `validation/menu-unavailable` when the gate is hardware, build or version
+  (`/interface/w60g` needs `60ghz`; `error.context.gates`), and
+  `validation/unknown-path` when no published build has it. A real syntax
+  fault, and any rejection centrs cannot locate exactly (a menu-scope block, a
+  menu named on an earlier line), stays `validation/syntax`. Applies to every
+  transport, since all of them classify the same `:parse` return. **Breaking
+  for code that branches on `validation/syntax`** for these rejections: match
+  `validation/package-missing`, `validation/menu-unavailable` and
+  `validation/unknown-path` as well.
 - **Every command now renders errors the same way, and keeps the router's own
   words (#362).** `execute`, `retrieve`, `api`, `transfer`, `settings`, the
   fan-outs and five others each had their own text renderer; most dropped the

@@ -453,6 +453,51 @@ newlines) returns `missing closing brace (line 3 column 1)`, while an unclosed
 `do={` returns `expected closing brace`. Offline analysis usually catches the
 unclosed-brace cases first.
 
+### V5. A menu from a package that is not installed is not a syntax error
+
+RouterOS's `:parse` reports a menu the device does not have as a syntax fault —
+`syntax error (line 1 column 10)` for `/zerotier/print`, pointing at the `/`
+after the absent segment, and `bad command name container (line 1 column 2)` for
+the space spelling `/container print` (CHR 7.23.7). centrs locates the segment,
+looks the path up in its path catalog, and names the package (GH#361).
+
+```bash
+centrs execute $R '/zerotier/print' --via rest-api --username $U --password $P --json
+centrs execute $R '/container print' --via rest-api --username $U --password $P --json
+```
+
+Envelope: `ok: false`, `error.code=validation/package-missing`,
+`error.context.path` is `/zerotier` (then `/container`),
+`error.context.packages` names the published package, the remediation points at
+`/system/package/print` and never at the syntax, and `error.position` and
+`error.context.detail` keep RouterOS's own column and words.
+
+### V6. A menu no RouterOS build has is an unknown path
+
+```bash
+centrs execute $R '/ip/nosuchmenu/print' --via rest-api --username $U --password $P --json
+```
+
+Envelope: `ok: false`, `error.code=validation/unknown-path`,
+`error.context.path=/ip/nosuchmenu`, `error.context.segment=nosuchmenu`. The
+path catalog covers every 7.10–7.25 build with all extra packages, so a path it
+lacks is not a missing package.
+
+### V7. A published menu gated on more than a package
+
+```bash
+centrs execute $R '/interface/w60g/print' --via rest-api --username $U --password $P --json
+```
+
+Envelope: `ok: false`, `error.code=validation/menu-unavailable`,
+`error.context.path=/interface/w60g`, and `error.context.gates` carries both
+published gates — package `wireless-rep` and hardware capability `60ghz` —
+because a 60 GHz menu can be absent with the package installed. Nested and later
+statements locate the same way (`:put [/interface/w60g/get [find] disabled]`
+points at column 22). A menu-scope block (`/ip { nosuchmenu print }`) or a menu
+named on an earlier line abstains and stays `validation/syntax`: the offline
+analyzer does not resolve that parent, and centrs does not guess it.
+
 ## Write authorization and returned runtime faults
 
 These regressions are transport-independent and run in

@@ -757,3 +757,12 @@ dgram # Node's `node:dgram` UDP socket module — reached by `mac-telnet`, and o
 elsy # the misspelled `else` in `:if (1=1) do={…} elsy {…}` — rejected as `expected end of command` on CHR 7.21.5/7.23.5/7.24.2/7.25beta3, which is what proves the bare-brace `else {` acceptance is a real device fact and not a probe artifact (#347)
 prnt # a misspelt `print` verb — `/ip/address/prnt` is the offline analyzer's ABSTENTION fixture (`verdict: warn`, not `fail`), which is what proves the two-stage validation gate passes an abstention through to the device rather than refusing it (#354)
 zzznotamenu # a menu name no RouterOS build has — `/ip { zzznotamenu { print } }` is a `syntax error` on device, so menu-scope resolution is schema-dependent and a catalog MISS must abstain rather than accept (#348)
+
+# #361 absent-menu controls. Deliberate NON-words: each names a path no RouterOS
+# build has, or quotes a published gate verbatim, so the spelling is load-bearing.
+nosuch # a top-level menu no RouterOS build has — `/nosuch` is `bad command name nosuch` on CHR 7.23.7, the `validation/unknown-path` control (#361)
+nosuchmenu # a submenu no RouterOS build has — `/ip/nosuchmenu/print` is `syntax error (line 1 column 15)` on CHR 7.23.7, pointing at the `/` after it (#361)
+nosuchverb # a command no RouterOS build has under a real menu — `/ip/address/nosuchverb` is `bad command name nosuchverb` on CHR 7.23.7 (#361)
+qqq # the second segment of the parse-oracle row `/zzz qqq print`, captured on CHR 7.23.3 (GH#230)
+userman # MikroTik's published package name `userman-5` for `/user-manager`; the installable package is `user-manager` (#361)
+nochr # a CLI-Reference syscap that excludes CHR — `/system/license/output` is published `nochr` (#361)

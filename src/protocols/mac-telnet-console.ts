@@ -42,6 +42,7 @@
  *     (name-level) gate — no `/console/inspect` table parsing needed.
  */
 
+import { absentMenuError } from "../absent-menu.ts";
 import { parseRouterOsPosition } from "../core/routeros-errors.ts";
 import { routerOsStringLiteral } from "../core/routeros-string.ts";
 import { CentrsError, SYNTAX_REJECTED_REMEDIATION } from "../errors.ts";
@@ -681,6 +682,9 @@ export function classifyParseResult(
 		});
 	}
 	if (WRAPPED_BAD_COMMAND.test(output) || BARE_SYNTAX.test(output)) {
+		// An absent menu reads as a syntax error; name it instead (GH#361).
+		const absent = absentMenuError(cli, output, position, via);
+		if (absent) throw absent;
 		throw new CentrsError({
 			code: "validation/syntax",
 			summary: "RouterOS rejected the command syntax while parsing it.",

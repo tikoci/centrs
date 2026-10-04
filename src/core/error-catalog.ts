@@ -563,8 +563,18 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "The requested validation feature is not implemented yet.",
 	},
 	{
+		code: "validation/menu-unavailable",
+		summary:
+			"RouterOS 7 publishes this menu, but this device does not have it — usually hardware, build or version.",
+	},
+	{
 		code: "validation/option",
 		summary: "An unknown option value was supplied.",
+	},
+	{
+		code: "validation/package-missing",
+		summary:
+			"This device has no such menu; MikroTik publishes it in a package that is likely not installed.",
 	},
 	{
 		code: "validation/syntax",
@@ -578,7 +588,8 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "validation/unknown-path",
-		summary: "The RouterOS path does not expose the requested command.",
+		summary:
+			"The RouterOS path does not exist, or does not expose the requested command.",
 	},
 ];
 

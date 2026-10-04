@@ -487,6 +487,31 @@ describeFast("execute against CHR", () => {
 				["device", "failed"],
 			]);
 
+			// V5–V7 — a menu the device lacks reads as `syntax error` from `:parse`;
+			// centrs names it instead (GH#361). The CHR has no extra packages.
+			const absent = [
+				["/zerotier/print", "validation/package-missing", "/zerotier"],
+				["/container print", "validation/package-missing", "/container"],
+				["/ip/nosuchmenu/print", "validation/unknown-path", "/ip/nosuchmenu"],
+				[
+					"/interface/w60g/print",
+					"validation/menu-unavailable",
+					"/interface/w60g",
+				],
+			] as const;
+			for (const [command, code, path] of absent) {
+				const rejected = expectExecuteFailure(
+					await executeEnvelope({ ...base, command }),
+					"rest-api",
+					code,
+				);
+				expect(rejected.error.context?.["path"]).toBe(path);
+				expect(String(rejected.error.context?.["detail"] ?? "")).toContain(
+					"(line 1 column",
+				);
+				expect(rejected.error.position).toBeDefined();
+			}
+
 			await recordIntegrationEvidence({
 				suite: "execute against CHR",
 				command: "execute",
@@ -501,6 +526,9 @@ describeFast("execute against CHR", () => {
 					"V2",
 					"V3",
 					"V4",
+					"V5",
+					"V6",
+					"V7",
 					"W1",
 					"W2",
 					"W3",
