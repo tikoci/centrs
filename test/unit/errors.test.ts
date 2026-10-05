@@ -159,6 +159,18 @@ describe("formatCentrsErrorText", () => {
 		expect(text).toContain("[routeros/api-trap] bad  [31m red ");
 	});
 
+	test("replaces C1 controls in the offline span excerpt", () => {
+		const text = formatCentrsErrorText(
+			new CentrsError({
+				code: "validation/syntax",
+				summary: "x",
+				context: { command: "a\u009b2Jb", span: { start: 0, end: 5 } },
+			}),
+		);
+		expect(text).toContain("At: bytes [0, 5) (offline analysis)");
+		expect(text).not.toContain("\u009b");
+	});
+
 	test("ignores a non-string detail and caps a long one", () => {
 		expect(
 			formatCentrsErrorText(

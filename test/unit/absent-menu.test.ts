@@ -109,6 +109,13 @@ const CASES: readonly [
 		"validation/unknown-path",
 		"/nosuch",
 	],
+	// `ip` is a unique prefix of `/ip/ipsec`, so RouterOS rejects `print`.
+	[
+		"/ip ip print",
+		"(<%% bad command name print (line 1 column 8) print)",
+		"validation/unknown-path",
+		"/ip/ipsec/print",
+	],
 	// Abstentions: a real syntax fault, and parents the analyzer does not resolve.
 	[
 		'/ip/address/print where "',
@@ -128,6 +135,12 @@ const CASES: readonly [
 	[
 		["/ip", "nosuchmenu print"].join("\n"),
 		"/ip/;(<%% bad command name nosuchmenu (line 2 column 1) nosuchmenu;print)",
+		"validation/syntax",
+	],
+	// The rejected segment repeats; which occurrence column 12 means is not mapped.
+	[
+		"/interface interface print",
+		"(<%% bad command name interface (line 1 column 12) interface;print)",
 		"validation/syntax",
 	],
 ];
@@ -173,5 +186,15 @@ describe("absent menus are not syntax errors (GH#361)", () => {
 			{ path: "/interface/w60g", package: "wireless-rep", syscap: "60ghz" },
 		]);
 		expect(error.remediation).toContain("`60ghz`");
+	});
+
+	test("a published command is not called a menu", () => {
+		const error = rejection(
+			"/system license output",
+			"(<%% bad command name output (line 1 column 17) output)",
+		);
+		expect(error.code).toBe("validation/menu-unavailable");
+		expect(error.summary).toContain("`/system/license/output` command");
+		expect(error.summary).not.toContain(" menu");
 	});
 });

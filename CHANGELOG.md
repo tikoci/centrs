@@ -22,9 +22,11 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   package (`error.context.packages`, with `/system/package/print` as the fix),
   `validation/menu-unavailable` when the gate is hardware, build or version
   (`/interface/w60g` needs `60ghz`; `error.context.gates`), and
-  `validation/unknown-path` when no published build has it. A real syntax
-  fault, and any rejection centrs cannot locate exactly (a menu-scope block, a
-  menu named on an earlier line), stays `validation/syntax`. Applies to every
+  `validation/unknown-path` when no published build has it. The path can end
+  in a command (`/system/license/output` is `nochr`), and the summary says so.
+  A real syntax fault, and any rejection centrs cannot locate exactly (a
+  menu-scope block, a menu named on an earlier line, a segment written twice),
+  stays `validation/syntax`. Applies to every
   transport, since all of them classify the same `:parse` return. **Breaking
   for code that branches on `validation/syntax`** for these rejections: match
   `validation/package-missing`, `validation/menu-unavailable` and

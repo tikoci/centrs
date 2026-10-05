@@ -169,7 +169,7 @@ export function formatCentrsErrorText(
 
 	if (options.verbose && serialized.context) {
 		lines.push("");
-		lines.push(JSON.stringify(serialized.context, null, 2));
+		lines.push(terminalSafe(JSON.stringify(serialized.context, null, 2)));
 	}
 
 	return lines.join("\n");
@@ -180,7 +180,8 @@ const DEVICE_SAID_MAX = 240;
 /**
  * Control characters other than tab and newline, C1 included. Summaries and
  * `detail` carry router-supplied text; an ESC or CR in it would drive the
- * terminal. `--json` keeps the raw value.
+ * terminal. `JSON.stringify` escapes C0 but not C1, so serialized excerpts need
+ * this too. `--json` keeps the raw value.
  */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching them is the point.
 const TERMINAL_CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
@@ -231,7 +232,7 @@ function offlineSpanText(
 	const command = context?.["command"];
 	const excerpt =
 		typeof command === "string" && end > start
-			? `: ${JSON.stringify(new TextDecoder().decode(new TextEncoder().encode(command).subarray(start, end)))}`
+			? `: ${terminalSafe(JSON.stringify(new TextDecoder().decode(new TextEncoder().encode(command).subarray(start, end))))}`
 			: "";
 	// Half-open, exactly as `context.span` carries it.
 	return `At: bytes [${start}, ${end}) (offline analysis)${excerpt}`;

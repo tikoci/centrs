@@ -18,6 +18,9 @@
  * tables are built from all-extra-packages builds, so a path they carry exists in
  * SOME RouterOS 7 build, and its published gates explain why this one lacks it:
  *
+ * The path can end in a command (`/system/license/output`, gated `nochr`), not
+ * only a menu; the summary uses the catalog's kind.
+ *
  * - a package gate alone           -> `validation/package-missing`
  * - any other gate, or none        -> `validation/menu-unavailable`
  * - not in either table            -> `validation/unknown-path`
@@ -81,6 +84,7 @@ export function absentMenuError(
 		});
 	}
 
+	const noun = PATH_CATALOG.get(path)?.kind === "command" ? "command" : "menu";
 	const gates = gatesOf(segments);
 	const packages = unique(gates.flatMap((gate) => gate.package ?? []));
 	const others = gates.filter(
@@ -90,7 +94,7 @@ export function absentMenuError(
 		const named = packages.map((name) => `\`${name}\``).join(", ");
 		return new CentrsError({
 			code: "validation/package-missing",
-			summary: `This device has no \`${path}\` menu; MikroTik publishes it in package ${named}, which is likely not installed.`,
+			summary: `This device has no \`${path}\` ${noun}; MikroTik publishes it in package ${named}, which is likely not installed.`,
 			remediation: `The command is not the problem. Check the installed packages with \`/system/package/print\`; install ${named} (MikroTik's published name; the installable package can be named differently) and reboot, or run this only on devices that have it.`,
 			context: { ...context, packages, gates },
 			position,
@@ -98,7 +102,7 @@ export function absentMenuError(
 	}
 	return new CentrsError({
 		code: "validation/menu-unavailable",
-		summary: `This device has no \`${path}\` menu, although RouterOS 7 publishes one.`,
+		summary: `This device has no \`${path}\` ${noun}, although RouterOS 7 publishes one.`,
 		remediation: `The command is not the problem. ${gateAdvice(gates)}`,
 		context: { ...context, gates },
 		position,
@@ -175,7 +179,8 @@ function slashRun(
 /**
  * `/ip nosuchmenu print` — the parent comes from the offline analyzer's reading
  * of the statement that holds the segment. Menu-scope blocks and anything else
- * the analyzer did not resolve abstain.
+ * the analyzer did not resolve abstain, and so does a segment that appears more
+ * than once (`/ip ip print`): which occurrence RouterOS rejected is not mapped.
  */
 function spaceSpelling(
 	cli: string,
@@ -199,7 +204,8 @@ function spaceSpelling(
 		...("verb" in command ? [command.verb] : []),
 	].map((word) => word.toLowerCase());
 	const index = words.indexOf(segment.toLowerCase());
-	if (index < 0) return undefined;
+	if (index < 0 || words.lastIndexOf(segment.toLowerCase()) !== index)
+		return undefined;
 	return { segments: words.slice(0, index + 1), segment };
 }
 
