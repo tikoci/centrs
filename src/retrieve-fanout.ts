@@ -47,7 +47,11 @@ import {
 	summarizeFanout,
 } from "./core/fanout.ts";
 import { toYaml } from "./core/yaml.ts";
-import { CentrsError, serializeCentrsError } from "./errors.ts";
+import {
+	CentrsError,
+	formatCentrsErrorText,
+	serializeCentrsError,
+} from "./errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
 	expandSelection,
@@ -468,11 +472,7 @@ function renderFanoutText(
 	options: { verbose?: boolean },
 ): string {
 	if (!envelope.ok) {
-		const lines = [`[${envelope.error.code}] ${envelope.error.summary}`];
-		if (envelope.error.remediation) {
-			lines.push(`Fix: ${envelope.error.remediation}`);
-		}
-		return lines.join("\n");
+		return formatCentrsErrorText(envelope.error, options);
 	}
 
 	const operation = envelope.meta.operation;

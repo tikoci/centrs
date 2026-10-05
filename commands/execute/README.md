@@ -142,8 +142,11 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   refused by current RouterOS), so an empty login is rejected at connect time.
   It is a tip, not an error — the call is still attempted.
 - Default output is human-readable `text`; pass `--json`/`--format json`
-  (or set `CENTRS_FORMAT=json`) for the structured envelope. Errors always
-  render as `[code] summary` + `Fix:` lines in text mode.
+  (or set `CENTRS_FORMAT=json`) for the structured envelope. In text mode every
+  command renders errors the same way (`formatCentrsErrorText`): `[code] summary`,
+  then `At:` (RouterOS position or offline byte span), `Device said:` (RouterOS's
+  own words), `Fix:` and `Details:` when present. `--verbose` adds the full
+  `context`.
 - CDB comment-kv metadata may provide per-target `via`, `port`, and `ssh-key`
   overrides; CLI/API arguments still win.
 - RoMON and WinBox Terminal are lower priority than mac-telnet until their

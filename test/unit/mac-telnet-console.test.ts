@@ -216,7 +216,7 @@ describe("classifyParseResult surfaces error.position (JG-16; GH#230)", () => {
 		}
 	});
 
-	test("GH#230: (<%% bad command name …) inside the return is syntax", () => {
+	test("GH#230: (<%% bad command name …) inside the return is a rejection", () => {
 		try {
 			classifyParseResult(
 				"(<%% bad command name poe (line 1 column 21) poe;monitor)",
@@ -224,7 +224,9 @@ describe("classifyParseResult surfaces error.position (JG-16; GH#230)", () => {
 			);
 			throw new Error("expected classifyParseResult to throw");
 		} catch (error) {
-			expect((error as CentrsError).code).toBe("validation/syntax");
+			// GH#361: a published menu behind a hardware gate (PoE) is named as
+			// such, not reported as a syntax fault.
+			expect((error as CentrsError).code).toBe("validation/menu-unavailable");
 			expect((error as CentrsError).position).toEqual({ line: 1, column: 21 });
 		}
 	});
@@ -404,7 +406,18 @@ describe("parse-oracle.json (GH#230 frozen fixtures, CHR 7.23.3)", () => {
 		}
 	});
 
-	test("each bad-command-name raw classifies to syntax with a position", () => {
+	// GH#361: a bad command name RouterOS reports for a menu the device lacks is
+	// named by the path catalog — hardware gates (`poe`, `lcd`, `partitions`,
+	// `nochr` on `/system/license/output`) and a path no build has (`/zzz`).
+	const BAD_COMMAND_CODES: Record<string, CentrsError["code"]> = {
+		"/interface ethernet poe monitor": "validation/menu-unavailable",
+		"/system license output": "validation/menu-unavailable",
+		"/partitions print": "validation/menu-unavailable",
+		"/lcd show": "validation/menu-unavailable",
+		"/zzz qqq print": "validation/unknown-path",
+	};
+
+	test("each bad-command-name raw is rejected with a position", () => {
 		for (const row of oracle.badCommandName) {
 			expect(row.raw).toContain(row.expectedContains);
 			try {
@@ -413,7 +426,9 @@ describe("parse-oracle.json (GH#230 frozen fixtures, CHR 7.23.3)", () => {
 					`expected classifyParseResult to throw: ${row.caption}`,
 				);
 			} catch (e) {
-				expect((e as CentrsError).code).toBe("validation/syntax");
+				expect((e as CentrsError).code).toBe(
+					BAD_COMMAND_CODES[row.input] ?? "validation/syntax",
+				);
 				if (row.mustHavePosition) {
 					expect((e as CentrsError).position).toBeDefined();
 				}

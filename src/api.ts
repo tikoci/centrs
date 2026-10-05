@@ -36,7 +36,12 @@ import {
 } from "./core/inspect.ts";
 import { mapRouterOsResultError } from "./core/routeros-errors.ts";
 import { toYaml } from "./core/yaml.ts";
-import { CentrsError, serializeCentrsError } from "./errors.ts";
+import {
+	CentrsError,
+	formatCentrsErrorLine,
+	formatCentrsErrorText,
+	serializeCentrsError,
+} from "./errors.ts";
 import {
 	promptForWriteConfirmation,
 	validateRouterOsScript,
@@ -1640,7 +1645,7 @@ export function renderApiEnvelope(
 		case "text":
 			return envelope.ok
 				? renderApiSuccessText(envelope, options)
-				: renderApiErrorText(envelope, options);
+				: formatCentrsErrorText(envelope.error, options);
 		default:
 			return exhaustiveFormat(format);
 	}
@@ -1670,10 +1675,7 @@ export function renderApiStreamLine(
 		}
 		// A streamed error must stay one line too — never the verbose blank-line +
 		// pretty-printed context block that `renderApiErrorText` emits.
-		const error = envelope.error;
-		return error.remediation
-			? `[${error.code}] ${error.summary} — Fix: ${error.remediation}`
-			: `[${error.code}] ${error.summary}`;
+		return formatCentrsErrorLine(envelope.error);
 	}
 	// json and yaml both stream as NDJSON: one compact envelope object per line.
 	// (yaml falls back to JSON — a multi-line YAML doc can't be one stream line.)
@@ -1722,20 +1724,6 @@ function renderApiSuccessText(
 			? envelope.data
 			: JSON.stringify(envelope.data, null, 2),
 	);
-	return lines.join("\n");
-}
-
-function renderApiErrorText(
-	envelope: ApiErrorEnvelope,
-	options: { verbose?: boolean },
-): string {
-	const lines = [`[${envelope.error.code}] ${envelope.error.summary}`];
-	if (envelope.error.remediation) {
-		lines.push(`Fix: ${envelope.error.remediation}`);
-	}
-	if (options.verbose && envelope.error.context) {
-		lines.push("", JSON.stringify(envelope.error.context, null, 2));
-	}
 	return lines.join("\n");
 }
 

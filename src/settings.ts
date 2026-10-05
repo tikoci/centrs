@@ -26,7 +26,11 @@ import type {
 import { buildTip } from "./core/envelope.ts";
 import { toYaml } from "./core/yaml.ts";
 import { loadCdb, resolveDevicesSettings } from "./devices.ts";
-import { CentrsError, serializeCentrsError } from "./errors.ts";
+import {
+	CentrsError,
+	formatCentrsErrorText,
+	serializeCentrsError,
+} from "./errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
 	DEFAULT_RECORD_TARGET,
@@ -981,7 +985,7 @@ export function renderSettingsEnvelope(
 	}
 	return envelope.ok
 		? renderSettingsSuccessText(envelope)
-		: renderSettingsErrorText(envelope);
+		: formatCentrsErrorText(envelope.error);
 }
 
 function formatValue(value: SettingsValue | null): string {
@@ -1066,14 +1070,5 @@ function renderSettingsSuccessText(
 		}
 	}
 
-	return lines.join("\n");
-}
-
-function renderSettingsErrorText(envelope: SettingsErrorEnvelope): string {
-	const error = envelope.error;
-	const lines = [`[${error.code}] ${error.summary}`];
-	if (error.remediation) {
-		lines.push(`Fix: ${error.remediation}`);
-	}
 	return lines.join("\n");
 }

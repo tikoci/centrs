@@ -33,7 +33,11 @@ import {
 	writeWinBoxCdb,
 } from "./data/winbox-cdb-write.ts";
 import { parseDeviceRecord } from "./devices-schema.ts";
-import { CentrsError, serializeCentrsError } from "./errors.ts";
+import {
+	CentrsError,
+	formatCentrsErrorText,
+	serializeCentrsError,
+} from "./errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
 	applyCommentKv,
@@ -1841,14 +1845,7 @@ function renderYamlInline(value: unknown, indent: string): string {
 function renderText(envelope: DevicesEnvelope<unknown>): string {
 	const lines: string[] = [];
 	if (!envelope.ok) {
-		const error = envelope.error;
-		lines.push(`[${error.code}] ${error.summary}`);
-		if (error.remediation) {
-			lines.push(`Fix: ${error.remediation}`);
-		}
-		if (error.detailsUrl) {
-			lines.push(`Details: ${error.detailsUrl}`);
-		}
+		lines.push(formatCentrsErrorText(envelope.error));
 		appendWarnings(lines, envelope.warnings);
 		appendTips(lines, envelope.tips);
 		return lines.join("\n");

@@ -30,7 +30,11 @@ import type {
 	Warning,
 } from "./core/envelope.ts";
 import { toYaml } from "./core/yaml.ts";
-import { CentrsError, serializeCentrsError } from "./errors.ts";
+import {
+	CentrsError,
+	formatCentrsErrorText,
+	serializeCentrsError,
+} from "./errors.ts";
 import {
 	createProtocolAdapter,
 	type ProtocolAdapter,
@@ -1405,7 +1409,7 @@ export function renderTransferEnvelope(
 		case "text":
 			return envelope.ok
 				? renderSuccessText(envelope, options)
-				: renderErrorText(envelope);
+				: formatCentrsErrorText(envelope.error, options);
 		default:
 			return exhaustiveFormat(format);
 	}
@@ -1454,15 +1458,6 @@ function renderSuccessText(
 		}
 	}
 
-	return lines.join("\n");
-}
-
-function renderErrorText(envelope: TransferErrorEnvelope): string {
-	const { error } = envelope;
-	const lines = [`[${error.code}] ${error.summary}`];
-	if (error.remediation) {
-		lines.push(`Fix: ${error.remediation}`);
-	}
 	return lines.join("\n");
 }
 
