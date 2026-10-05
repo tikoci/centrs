@@ -565,7 +565,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "validation/menu-unavailable",
 		summary:
-			"RouterOS 7 publishes this menu, but this device does not have it — usually hardware, build or version.",
+			"RouterOS 7 publishes this menu or command, but this device does not have it — usually hardware, build or version.",
 	},
 	{
 		code: "validation/option",
@@ -574,7 +574,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "validation/package-missing",
 		summary:
-			"This device has no such menu; MikroTik publishes it in a package that is likely not installed.",
+			"This device has no such menu or command; MikroTik publishes it in a package that is likely not installed.",
 	},
 	{
 		code: "validation/syntax",

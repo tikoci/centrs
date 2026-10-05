@@ -3,6 +3,7 @@ import {
 	asCentrsError,
 	CentrsError,
 	extractErrorCode,
+	formatCentrsErrorLine,
 	formatCentrsErrorText,
 	serializeCentrsError,
 } from "../../src/errors.ts";
@@ -157,6 +158,19 @@ describe("formatCentrsErrorText", () => {
 		for (const control of ["\u001b", "\u0007", "\u009b", "\r"])
 			expect(text).not.toContain(control);
 		expect(text).toContain("[routeros/api-trap] bad  [31m red ");
+	});
+
+	test("the one-line form collapses router text and keeps the filter", () => {
+		const line = formatCentrsErrorLine(
+			new CentrsError({
+				code: "routeros/api-trap",
+				summary: "RouterOS reported an error: failure:\n  no such\u009b2J item",
+				remediation: "Check the item.",
+			}),
+		);
+		expect(line).toBe(
+			"[routeros/api-trap] RouterOS reported an error: failure: no such 2J item — Fix: Check the item. — Details: https://tikoci.github.io/centrs/errors/routeros/api-trap",
+		);
 	});
 
 	test("replaces C1 controls in the offline span excerpt", () => {

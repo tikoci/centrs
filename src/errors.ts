@@ -142,6 +142,26 @@ export function formatCentrsErrorText(
 	options: { verbose?: boolean } = {},
 ): string {
 	const serialized = serializeCentrsError(error);
+	const lines = errorFields(serialized);
+	if (options.verbose && serialized.context) {
+		lines.push("");
+		lines.push(terminalSafe(JSON.stringify(serialized.context, null, 2)));
+	}
+	return lines.join("\n");
+}
+
+/**
+ * The same fields as `formatCentrsErrorText`, on one line joined by ` — `, for
+ * output that must stay line-per-record (`api --stream --format text`).
+ * `--verbose` adds nothing here: a context block cannot be one line.
+ */
+export function formatCentrsErrorLine(
+	error: CentrsError | SerializedCentrsError,
+): string {
+	return errorFields(serializeCentrsError(error)).map(oneLine).join(" — ");
+}
+
+function errorFields(serialized: SerializedCentrsError): string[] {
 	const lines = [`[${serialized.code}] ${terminalSafe(serialized.summary)}`];
 
 	if (serialized.position) {
@@ -167,12 +187,7 @@ export function formatCentrsErrorText(
 		lines.push(`Details: ${serialized.detailsUrl}`);
 	}
 
-	if (options.verbose && serialized.context) {
-		lines.push("");
-		lines.push(terminalSafe(JSON.stringify(serialized.context, null, 2)));
-	}
-
-	return lines.join("\n");
+	return lines;
 }
 
 const DEVICE_SAID_MAX = 240;

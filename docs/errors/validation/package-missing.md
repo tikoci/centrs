@@ -1,7 +1,7 @@
 # `validation/package-missing`
 
-This device has no such menu; MikroTik publishes it in a package that is likely
-not installed.
+This device has no such menu or command; MikroTik publishes it in a package
+that is likely not installed.
 
 RouterOS's `:parse` reports a menu it does not have as `syntax error` (slash
 spelling, `/zerotier/print`) or `bad command name` (space spelling,
@@ -12,7 +12,8 @@ else, reports this code instead of `validation/syntax`.
 
 `error.context` carries:
 
-- `path` — the absent menu, from the root (`/zerotier`). An abbreviated segment
+- `path` — the absent menu or command, from the root (`/zerotier`). The summary
+  says which, from the path catalog's kind. An abbreviated segment
   is expanded when the catalog has one unique completion.
 - `segment` — the segment as written.
 - `packages` — the published package names. These are MikroTik's build names

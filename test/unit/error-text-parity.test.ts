@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { renderApiEnvelope } from "../../src/api.ts";
+import { renderApiEnvelope, renderApiStreamLine } from "../../src/api.ts";
 import { renderApiFanoutEnvelope } from "../../src/api-fanout.ts";
 import {
 	renderBtestClientEnvelope,
@@ -9,6 +9,7 @@ import { renderDevicesEnvelope } from "../../src/devices.ts";
 import { renderDiscoverEnvelope } from "../../src/discover.ts";
 import {
 	CentrsError,
+	formatCentrsErrorLine,
 	formatCentrsErrorText,
 	serializeCentrsError,
 } from "../../src/errors.ts";
@@ -73,4 +74,17 @@ describe("error text parity (GH#362)", () => {
 			expect(render().startsWith(expected)).toBe(true);
 		});
 	}
+
+	test("api --stream renders the same fields on one line", () => {
+		const line = renderApiStreamLine(envelope, "text");
+		expect(line).toBe(formatCentrsErrorLine(error));
+		expect(line).not.toContain("\n");
+		for (const field of [
+			"At: line 1, column 2",
+			"Device said:",
+			"Fix:",
+			"Details:",
+		])
+			expect(line).toContain(field);
+	});
 });

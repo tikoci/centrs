@@ -40,6 +40,8 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   the offline gate's byte span with the bytes it covers), `Device said:`
   (RouterOS's message, one line, omitted when the summary already quotes it),
   `Fix:` and `Details:`. A test pins all fourteen renderers to the same text.
+  `api --stream --format text` prints the same fields on one line, joined by
+  ` — ` (`formatCentrsErrorLine`).
   Two remediation messages stopped claiming a cause they can't know: a device-stage
   `:parse` rejection no longer says "fix the quotes" (an absent menu or missing
   package is rejected in the same words; #361 separates them) and points to

@@ -38,6 +38,7 @@ import { mapRouterOsResultError } from "./core/routeros-errors.ts";
 import { toYaml } from "./core/yaml.ts";
 import {
 	CentrsError,
+	formatCentrsErrorLine,
 	formatCentrsErrorText,
 	serializeCentrsError,
 } from "./errors.ts";
@@ -1674,10 +1675,7 @@ export function renderApiStreamLine(
 		}
 		// A streamed error must stay one line too — never the verbose blank-line +
 		// pretty-printed context block that `renderApiErrorText` emits.
-		const error = envelope.error;
-		return error.remediation
-			? `[${error.code}] ${error.summary} — Fix: ${error.remediation}`
-			: `[${error.code}] ${error.summary}`;
+		return formatCentrsErrorLine(envelope.error);
 	}
 	// json and yaml both stream as NDJSON: one compact envelope object per line.
 	// (yaml falls back to JSON — a multi-line YAML doc can't be one stream line.)
