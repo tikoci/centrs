@@ -83,14 +83,35 @@ async function run(
 						reply("!fatal", "=message=fixture fatal");
 						continue;
 					}
+					if (mode === "late-trap") {
+						// This case requires an already received failure. Separate writes
+						// allow Linux TCP to deliver the first row before the trap exists.
+						socket.write(
+							Buffer.concat([
+								encodeSentence([
+									"!re",
+									"=seq=0",
+									"=.section=7",
+									...(tag ? [tag] : []),
+								]),
+								encodeSentence([
+									"!trap",
+									"=category=0",
+									"=message=no such command",
+									...(tag ? [tag] : []),
+								]),
+								encodeSentence(["!done", ...(tag ? [tag] : [])]),
+							]),
+						);
+						continue;
+					}
 					if (mode === "burst") {
 						reply("!re", "=seq=0");
 						reply("!re", "=seq=1");
 					}
 					if (mode === "delete") reply("!re", "=.id=*1", "=.dead=true");
-					if (mode === "done" || mode === "late-trap")
-						reply("!re", "=seq=0", "=.section=7");
-					if (mode === "trap" || mode === "late-trap")
+					if (mode === "done") reply("!re", "=seq=0", "=.section=7");
+					if (mode === "trap")
 						reply("!trap", "=category=0", "=message=no such command");
 					if (mode === "interrupted")
 						reply("!trap", "=category=2", "=message=interrupted");
