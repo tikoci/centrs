@@ -166,6 +166,18 @@ describe("api --stream command lifecycle (#399)", () => {
 		});
 		expect(result.lines[1].data.done).toBeUndefined();
 	});
+	test("count stop does not discard an already received RouterOS failure", async () => {
+		const result = await run("late-trap", ["--count", "1"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.lines.at(-1)).toMatchObject({
+			ok: false,
+			meta: {
+				operation: {
+					stream: { kind: "summary", frames: 1, stopReason: "routeros-error" },
+				},
+			},
+		});
+	});
 	test("GET projection retains deletion fields and addressed-row query", async () => {
 		const result = await run(
 			"delete",

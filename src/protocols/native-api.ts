@@ -676,6 +676,12 @@ export class NativeApiSession {
 		let ended = false;
 		let failure: CentrsError | undefined;
 		let trap: ApiReply | undefined;
+		const assertNoFailure = (): void => {
+			if (failure) throw failure;
+			if (trap && !(isInterruptedTrap(trap) && options.signal?.aborted)) {
+				throw this.trapToError(command.command, trap);
+			}
+		};
 		const signalWake = (): void => {
 			const resume = wake;
 			wake = undefined;
@@ -764,12 +770,6 @@ export class NativeApiSession {
 					});
 				}
 			}
-			if (failure) {
-				throw failure;
-			}
-			if (trap && !(isInterruptedTrap(trap) && options.signal?.aborted)) {
-				throw this.trapToError(command.command, trap);
-			}
 		} finally {
 			clearTimeout(graceTimer);
 			options.signal?.removeEventListener("abort", onAbort);
@@ -778,6 +778,9 @@ export class NativeApiSession {
 			if (!ended && !this.closed) {
 				this.cancel(tag);
 			}
+			// Consumer return (including --count) must not hide a trap/close
+			// already received alongside the last row in the same TCP chunk.
+			assertNoFailure();
 		}
 	}
 
