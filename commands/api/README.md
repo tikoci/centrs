@@ -46,7 +46,8 @@ centrs api <router> <endpoint> [flags]
 - `<endpoint>` — a REST-style path, leniently normalized. All of
   `ip/address`, `/ip/address`, `rest/ip/address`, `/rest/ip/address`,
   `"ip address"`, `'ip address'` canonicalize to `/ip/address`. A trailing id
-  segment (`ip/address/*1`) addresses one row. A trailing `/listen` segment
+  segment (`ip/address/*1`) addresses one row for GET/PATCH/DELETE; PUT and
+  POST reject it with `input/invalid-path`. A trailing `/listen` segment
   infers `--stream` + `--via native-api`.
 
 The HTTP method (`-X`, default `GET`) is honored **literally** against RouterOS's

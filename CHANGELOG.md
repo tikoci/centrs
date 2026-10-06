@@ -14,7 +14,8 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 
 - Native API one-shot and incremental commands share their sentence builder;
   structured POST queries/projections reach both transports. Mutation and script
-  requests reject unused query/projection flags. Stream outcomes are read from
+  requests reject unused query/projection flags, and PUT/POST reject a
+  trailing row id instead of dropping it. Stream outcomes are read from
   `meta.operation.stream`; failed summaries retain cancellation warnings, and
   received terminal attributes survive a local stop.
 

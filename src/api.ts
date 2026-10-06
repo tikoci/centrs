@@ -647,6 +647,17 @@ export async function resolveApiRequest(
 			context: { method, path: normalized.path },
 		});
 	}
+	// PUT/POST map no row id onto the wire: native would drop it silently and
+	// REST would fold it into `.query`, so the transports would disagree.
+	if ((verb === "add" || verb === "run") && normalized.id !== undefined) {
+		throw new CentrsError({
+			code: "input/invalid-path",
+			summary: `A ${method} request does not address a row by id (${normalized.id}).`,
+			remediation:
+				"Drop the trailing id; use PATCH/DELETE for one row, or pass `.id` as a command field such as `-f .id=*1`.",
+			context: { method, path: normalized.path, id: normalized.id },
+		});
+	}
 	const raw = request.raw ?? false;
 	const body = buildApiBody(request);
 	const query = buildApiQuery(request);

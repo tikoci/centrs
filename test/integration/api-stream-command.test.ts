@@ -302,6 +302,21 @@ describe("api --stream command lifecycle (#399)", () => {
 				}
 			});
 		}
+	for (const stream of [false, true])
+		for (const method of ["PUT", "POST"]) {
+			test(`${method} with a row id fails before dispatch (stream=${stream})`, async () => {
+				const result = await run(
+					"done",
+					["-X", method],
+					"ip/address/*1",
+					true,
+					stream,
+				);
+				expect(result.exitCode).toBe(1);
+				expect(result.sent).toHaveLength(0);
+				expect(result.lines[0].error.code).toBe("input/invalid-path");
+			});
+		}
 	test("failed summary retains the unacknowledged cancellation warning", async () => {
 		const result = await run("trap-unacknowledged", ["--duration", "100ms"]);
 		expect(result.exitCode).toBe(1);
