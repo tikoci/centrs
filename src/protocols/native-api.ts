@@ -349,10 +349,9 @@ interface PendingCommand {
 }
 
 /**
- * A long-lived `/listen` subscription. Unlike {@link PendingCommand} it never
+ * An incremental command subscription. Unlike {@link PendingCommand} it never
  * buffers to a single resolve — each `!re` is pushed to the consumer as it
- * arrives, and the stream ends on `!done` (after a `/cancel`'s `interrupted`
- * trap) or fails on `!fatal`/transport closure.
+ * arrives, and ends on natural `!done`, acknowledged cancellation, or failure.
  */
 interface StreamingSubscription {
 	command: string;
@@ -361,7 +360,7 @@ interface StreamingSubscription {
 	/** An `!trap` arrived (an `interrupted` trap is the normal `/cancel` path). */
 	trap: (reply: ApiReply) => void;
 	/** `!done` arrived — the listen closed. */
-	settle: () => void;
+	settle: (reply: ApiReply) => void;
 	/** `!fatal` or transport closure — the stream cannot continue. */
 	fail: (error: CentrsError) => void;
 }
@@ -458,6 +457,9 @@ export class NativeApiSession {
 				context: { attributes: reply.attributes },
 			});
 			this.failAll(this.closeError);
+			// Fatal ends the session locally too: a peer that sends !fatal but
+			// leaves TCP open must not keep the CLI alive after its error summary.
+			this.sink.close();
 			return;
 		}
 
@@ -506,7 +508,7 @@ export class NativeApiSession {
 					return;
 				case "!done":
 					this.subscriptions.delete(tag);
-					subscription.settle();
+					subscription.settle(reply);
 					return;
 				default:
 					return;
@@ -624,17 +626,17 @@ export class NativeApiSession {
 	}
 
 	/**
-	 * Open a `/listen` subscription and yield each `!re` change frame as it
-	 * arrives (the open-ended follow path; the listen command never sends `!done`
-	 * on its own). The generator ends cleanly when the listen is cancelled:
+	 * Stream a native command and yield each `!re` as it arrives. Finite commands
+	 * end on `!done`; `/listen` needs cancellation. The generator ends cleanly:
 	 * - via `options.signal` aborting — the subscription stays registered, so the
 	 *   resulting `interrupted` trap + `!done` are drained and the loop ends
 	 *   without throwing;
 	 * - via the consumer breaking out of the `for await` — `finally` sends
 	 *   `/cancel` best-effort (the subscription is already torn down, so the
 	 *   trap/`!done` are not awaited) and the generator returns.
-	 * A non-`interrupted` trap (e.g. a bad path) or `!fatal`/transport closure
-	 * throws. CHR-grounded (7.23.1): see `commands/api/AGENTS.md`.
+	 * A trap throws unless it acknowledges our cancellation; unsolicited
+	 * interruption, `!fatal`, and transport closure are failures. CHR grounding
+	 * lives in `commands/api/AGENTS.md` and the command examples.
 	 *
 	 * After an abort, `cancelGraceMs` bounds the wait for that acknowledgement: a
 	 * peer that never answers `/cancel` would otherwise hold the generator open
@@ -649,6 +651,8 @@ export class NativeApiSession {
 			onListening?: () => void;
 			cancelGraceMs?: number;
 			onCancelUnacknowledged?: () => void;
+			/** Terminal attributes, distinct from the streamed `!re` rows. */
+			onDone?: (attributes: Record<string, string>) => void;
 		} = {},
 	): AsyncGenerator<ApiReply, void, void> {
 		if (this.closed) {
@@ -684,7 +688,8 @@ export class NativeApiSession {
 			trap: (reply) => {
 				trap = reply;
 			},
-			settle: () => {
+			settle: (reply) => {
+				options.onDone?.(reply.attributes);
 				ended = true;
 				signalWake();
 			},
@@ -759,7 +764,7 @@ export class NativeApiSession {
 			if (failure) {
 				throw failure;
 			}
-			if (trap && !isInterruptedTrap(trap)) {
+			if (trap && !(isInterruptedTrap(trap) && options.signal?.aborted)) {
 				throw this.trapToError(command.command, trap);
 			}
 		} finally {

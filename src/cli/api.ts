@@ -104,12 +104,13 @@ export const apiCommand: CliCommandMetadata = {
 		{
 			flag: "--stream / --listen",
 			description:
-				"Follow changes as an NDJSON envelope stream (native-api only; the `/listen` endpoint infers it). Ends with a summary envelope.",
+				"Stream native API replies as NDJSON: GET follows a menu; POST runs a command. Ends with a summary envelope. The `/listen` endpoint infers it.",
 		},
 		{
 			flag: "--count",
 			valueName: "<n>",
-			description: "Stop a `--stream` after N change frames.",
+			description:
+				"Stop a `--stream` after N reply frames (not the device count= argument).",
 		},
 		{
 			flag: "--duration",
@@ -583,11 +584,9 @@ function endpointInfersListen(endpoint: string): boolean {
 }
 
 /**
- * Consume the open-ended `--stream` follow: print one line per change frame
- * (NDJSON under `json`, human rows under `text`), then the terminating summary.
- * Ctrl-C (SIGINT) cancels the listen and still emits the summary. The exit code
- * reflects whether the stream *started* cleanly — a failure before the first
- * frame is `1`; a mid-stream error frame leaves a started stream at `0`.
+ * Emit all structured stream outcomes on stdout. Any failure sets exit 1,
+ * including a terminal error after successful rows. Raw mode retains its
+ * stderr error contract; Ctrl-C requests bounded cancellation.
  */
 async function runApiListenCli(
 	parsed: ApiCliArgs,
@@ -598,7 +597,6 @@ async function runApiListenCli(
 	const onSigint = (): void => controller.abort();
 	process.on("SIGINT", onSigint);
 	let exitCode = 0;
-	let first = true;
 	try {
 		for await (const envelope of apiListen(
 			parsed,
@@ -609,15 +607,12 @@ async function runApiListenCli(
 				raw: parsed.raw,
 				verbose: parsed.verbose,
 			});
-			if (envelope.ok) {
+			if (envelope.ok || !parsed.raw) {
 				console.log(line);
 			} else {
 				console.error(line);
-				if (first) {
-					exitCode = 1;
-				}
 			}
-			first = false;
+			if (!envelope.ok) exitCode = 1;
 		}
 	} finally {
 		process.off("SIGINT", onSigint);

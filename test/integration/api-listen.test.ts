@@ -75,7 +75,7 @@ async function streamWithTrigger(
 }
 
 describeFast("api --stream against CHR (native-api)", () => {
-	test("runs listen examples L1-L4", async () => {
+	test("runs native stream examples L1-L4 and L6-L13", async () => {
 		const started = await startIntegrationChr();
 		const chr = started.chr;
 		try {
@@ -209,6 +209,161 @@ describeFast("api --stream against CHR (native-api)", () => {
 				"duration-elapsed",
 			);
 
+			async function collect(request: Parameters<typeof apiListen>[0]) {
+				const result: ApiEnvelope[] = [];
+				for await (const envelope of apiListen(request)) result.push(envelope);
+				return result;
+			}
+
+			// L6. Device count= ends ping naturally, without centrs --count.
+			const ping = await collect({
+				...nativeBase,
+				endpoint: "tool/ping",
+				method: "POST",
+				fields: { address: "10.0.2.2", count: "3" },
+				yes: true,
+				duration: "10s",
+			});
+			expect(ping.every((e) => e.ok)).toBe(true);
+			expect(ping.filter((e) => streamKind(e) === "frame")).toHaveLength(3);
+			expect(summaryData(ping.at(-1)).stopReason).toBe("completed");
+
+			// L7. A bounded monitor retains its device tick grouping.
+			const monitor = await collect({
+				...nativeBase,
+				endpoint: "interface/monitor-traffic",
+				method: "POST",
+				fields: { interface: "ether1", duration: "2s" },
+				yes: true,
+				duration: "10s",
+			});
+			expect(monitor.every((e) => e.ok)).toBe(true);
+			const ticks = monitor.filter((e) => streamKind(e) === "frame");
+			expect(ticks.length).toBeGreaterThan(0);
+			expect(
+				ticks.every((e) => typeof recordOf(e)[".section"] === "string"),
+			).toBe(true);
+			expect(summaryData(monitor.at(-1)).stopReason).toBe("completed");
+
+			// L8. POST print streams attributes instead of becoming a listen.
+			const interval = await collect({
+				...nativeBase,
+				endpoint: "system/resource/print",
+				method: "POST",
+				fields: { interval: "1" },
+				count: 2,
+				duration: "10s",
+			});
+			expect(interval.every((e) => e.ok)).toBe(true);
+			expect(interval.filter((e) => streamKind(e) === "frame")).toHaveLength(2);
+			expect(summaryData(interval.at(-1)).stopReason).toBe("count-reached");
+
+			// L9. Projection cannot turn a delete into an empty/update-looking row.
+			const projectedSeed = await apiEnvelope({
+				...restBase,
+				endpoint: "ip/address",
+				method: "PUT",
+				fields: { address: "198.51.100.33/32", interface: "ether1" },
+				yes: true,
+			});
+			expect(projectedSeed.ok).toBe(true);
+			const projectedId = idOf(recordOf(projectedSeed));
+			const projected = await streamWithTrigger(
+				{
+					...nativeBase,
+					endpoint: "ip/address",
+					proplist: ["address"],
+					duration: "3s",
+				},
+				async () => {
+					const deleted = await apiEnvelope({
+						...restBase,
+						endpoint: `ip/address/${projectedId}`,
+						method: "DELETE",
+						yes: true,
+					});
+					expect(deleted.ok).toBe(true);
+				},
+			);
+			expect(projected.every((e) => e.ok)).toBe(true);
+			expect(
+				projected.some(
+					(e) =>
+						recordOf(e)[".id"] === projectedId &&
+						recordOf(e)[".dead"] === "true",
+				),
+			).toBe(true);
+
+			// L10. Filtering a change subscription fails closed until membership
+			// initialization is designed (#396/#397); server queries drop deletes.
+			const filtered = await collect({
+				...nativeBase,
+				endpoint: "ip/address",
+				query: ["interface=ether1"],
+			});
+			expect(filtered).toHaveLength(1);
+			expect(filtered[0]).toMatchObject({
+				ok: false,
+				error: { code: "usage/conflicting-flags" },
+			});
+
+			// L11. Command arguments are validated before starting the stream.
+			const badArgument = await collect({
+				...nativeBase,
+				endpoint: "tool/ping",
+				method: "POST",
+				fields: { "no-such-arg": "x" },
+				yes: true,
+				duration: "1s",
+			});
+			expect(badArgument[0]).toMatchObject({
+				ok: false,
+				error: { code: "validation/unknown-attribute" },
+			});
+
+			// L12. Streaming a mutator never bypasses confirmation.
+			const unconfirmed = await collect({
+				...nativeBase,
+				endpoint: "system/license/renew",
+				method: "POST",
+			});
+			expect(unconfirmed[0]).toMatchObject({
+				ok: false,
+				error: { code: "usage/confirmation-required" },
+			});
+
+			// L13. Streamed mutations retain verb mapping and !done ret; read back
+			// the address to prove add ran rather than another listen opening.
+			const created = await collect({
+				...nativeBase,
+				endpoint: "ip/address",
+				method: "PUT",
+				fields: { address: "198.51.100.34/32", interface: "ether1" },
+				yes: true,
+				duration: "5s",
+			});
+			expect(created.every((e) => e.ok)).toBe(true);
+			expect(created).toHaveLength(1);
+			expect(summaryData(created[0]).stopReason).toBe("completed");
+			const createdId = String(
+				(recordOf(created[0])["done"] as Record<string, string>)["ret"],
+			);
+			expect(createdId).toMatch(/^\*[0-9A-F]+$/i);
+			const readBack = await apiEnvelope({
+				...nativeBase,
+				endpoint: `ip/address/${createdId}`,
+			});
+			expect(readBack.ok).toBe(true);
+			expect(recordOf(readBack)["address"]).toBe("198.51.100.34/32");
+			const removed = await collect({
+				...nativeBase,
+				endpoint: `ip/address/${createdId}`,
+				method: "DELETE",
+				yes: true,
+			});
+			expect(removed.every((e) => e.ok)).toBe(true);
+			expect(summaryData(removed.at(-1)).stopReason).toBe("completed");
+
 			await recordIntegrationEvidence({
 				suite: "api --stream against CHR (native-api)",
 				command: "api",
@@ -217,7 +372,7 @@ describeFast("api --stream against CHR (native-api)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(4),
+				exampleIds: [...exampleIds(4), ...[6, 7, 8, 9, 10, 11, 12, 13]],
 			});
 		} finally {
 			await chr.destroy();

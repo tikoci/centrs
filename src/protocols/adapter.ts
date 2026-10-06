@@ -142,7 +142,7 @@ export interface ProtocolApiResult {
 	data: unknown;
 }
 
-/** Options for an open-ended `listen` follow. */
+/** Options for incremental native command replies. */
 export interface ProtocolListenOptions {
 	/** Abort the listen (sends `/cancel`); the generator then ends cleanly. */
 	signal?: AbortSignal;
@@ -160,6 +160,8 @@ export interface ProtocolListenOptions {
 	cancelGraceMs?: number;
 	/** Fired when that wait expires without the router's acknowledgement. */
 	onCancelUnacknowledged?: () => void;
+	/** Attributes carried by the command's terminal `!done`, not a row frame. */
+	onDone?: (attributes: Record<string, string>) => void;
 }
 
 /**
@@ -183,9 +185,9 @@ export interface ProtocolAdapter {
 	/** Run a normalized structured `api` request (the gh-api passthrough surface). */
 	apiRequest(request: ProtocolApiRequest): Promise<ProtocolApiResult>;
 	/**
-	 * Open-ended `/listen` follow (native-api only). Yields one rest-style change
-	 * record per `!re` frame (deletions carry `.dead`), until cancelled via
-	 * `options.signal` or the consumer stopping. REST and console transports
+	 * Incremental native replies. GET/print subscribes to changes; other verbs
+	 * keep their command mapping. Yields one record per `!re`, until natural
+	 * completion, cancellation, or failure. REST and console transports
 	 * reject with `transport/capability-unsupported`.
 	 */
 	listen(
@@ -725,20 +727,36 @@ class NativeApiAdapter implements ProtocolAdapter {
 		options: ProtocolListenOptions,
 	): AsyncGenerator<Record<string, unknown>> {
 		const base = request.path.replace(/\/$/, "");
-		const command: NativeApiCommand = { command: `${base}/listen` };
-		// A listen can filter which changes it follows with the same `?`-words /
-		// `=.proplist=` as print (REST `.query` word == native `?`-word minus `?`).
+		const follow = request.verb === "print";
+		const command: NativeApiCommand = {
+			command: follow
+				? `${base}/listen`
+				: request.verb === "run"
+					? base
+					: `${base}/${request.verb}`,
+			attributes:
+				request.script !== undefined
+					? { script: request.script, "as-string": "" }
+					: { ...request.attributes },
+		};
+		if (request.id && (request.verb === "set" || request.verb === "remove")) {
+			command.attributes = { ...command.attributes, ".id": request.id };
+		}
 		const queries = (request.query ?? []).map((word) => `?${word}`);
 		// An addressed row (`ip/address/*1 --stream`) follows just that row, the
 		// same `?.id=` mapping one-shot native reads use.
-		if (request.id) {
+		if (request.id && follow) {
 			queries.push(`?.id=${request.id}`);
 		}
 		if (queries.length > 0) {
 			command.queries = queries;
 		}
 		if (request.proplist && request.proplist.length > 0) {
-			command.proplist = request.proplist;
+			command.proplist = [
+				...new Set(
+					follow ? [...request.proplist, ".id", ".dead"] : request.proplist,
+				),
+			];
 		}
 		const session = await this.connect();
 		for await (const reply of session.listen(command, {

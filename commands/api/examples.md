@@ -359,9 +359,9 @@ surface the `as-string` console text as `data`.
 
 ## listen / `--stream` (native-api only)
 
-Open-ended follow. `--stream` is the primary flag; `--listen` is an accepted
+Incremental native replies and change subscriptions. `--stream` is the primary flag; `--listen` is an accepted
 alias and a trailing `/listen` endpoint segment infers it. Output is NDJSON: one
-envelope per change frame, then a terminating summary envelope.
+envelope per reply row, then a terminating summary envelope.
 
 ### L1. `--stream` streams a change as an NDJSON frame, then a summary
 
@@ -372,8 +372,7 @@ centrs api $A ip/address --stream --count 1 --via native-api --port $API_PORT --
 While listening, the harness adds an address over REST. stdout is NDJSON: at least
 one envelope frame for the new row (`meta.operation.stream.kind=frame`), then a
 final summary envelope (`meta.operation.stream.kind=summary`,
-`data.stopReason=count-reached`, `data.frames>=1`). Exit code 0 (stream started
-cleanly).
+`data.stopReason=count-reached`, `data.frames>=1`). Exit code 0 (successful local count stop).
 
 ### L2. A deletion frame carries `.dead`
 
@@ -423,6 +422,82 @@ loopback native-API peer that ignores it, as a real CLI process:
 `--count` and the cooperative control. The session-level cases (silent peer,
 chatty peer, trap without `!done`, close after cancel) are in
 `test/unit/native-api.test.ts`.
+
+### L6. Finite ping completes naturally
+
+```bash
+centrs api $A tool/ping -X POST -f address=10.0.2.2 -f count=3 --stream --yes --via native-api --port $API_PORT --username $U --password $P
+```
+
+Three reply frames, then a successful summary with `data.stopReason=completed`.
+The device's `count=3` completes the command; no centrs `--count` is needed.
+
+### L7. Monitor replies preserve `.section`
+
+```bash
+centrs api $A interface/monitor-traffic -X POST -f interface=ether1 -f duration=2s --stream --yes --via native-api --port $API_PORT --username $U --password $P
+```
+
+One or more rows carrying device `.section` values, then `completed`.
+
+### L8. Explicit print interval streams instead of listening
+
+```bash
+centrs api $A system/resource/print -X POST -f interval=1 --stream --count 2 --via native-api --port $API_PORT --username $U --password $P
+```
+
+Two reply frames and a `count-reached` summary. POST print stays read-only.
+
+### L9. Projection preserves deletion identity and flag
+
+```bash
+centrs api $A ip/address --stream --proplist address --duration 3s --via native-api --port $API_PORT --username $U --password $P
+```
+
+The harness deletes a seeded address. Its frame retains `.id,.dead=true` even
+though the requested field list contained only `address`.
+
+### L10. Filtered change subscriptions fail closed
+
+```bash
+centrs api $A ip/address --stream --query interface=ether1 --via native-api --port $API_PORT --username $U --password $P
+```
+
+`usage/conflicting-flags`, pointing to unfiltered tracking or a one-shot query.
+Correct membership filtering is deferred to #396/#397; deletes are never
+silently hidden by a server query. `--raw-query` is rejected the same way.
+
+### L11. Command attributes are validated
+
+```bash
+centrs api $A tool/ping -X POST -f no-such-arg=x --stream --yes --via native-api --port $API_PORT --username $U --password $P
+```
+
+`validation/unknown-attribute`; no ping stream starts.
+
+### L12. Streaming keeps the mutator confirmation gate
+
+```bash
+centrs api $A system/license/renew -X POST --stream --via native-api --port $API_PORT --username $U --password $P
+```
+
+Non-interactively, `usage/confirmation-required`; no renew operation is sent.
+
+### L13. Mutation streams retain method mapping and terminal `ret`
+
+```bash
+centrs api $A ip/address -X PUT -f address=198.51.100.34/32 -f interface=ether1 --stream --yes --via native-api --port $API_PORT --username $U --password $P
+```
+
+A successful zero-row summary with `data.done.ret` naming the created address.
+The harness retrieves that ID to check its address, then streams DELETE on that
+ID and requires natural completion. Neither mutation becomes a listen.
+
+Loopback regressions in `test/integration/api-stream-command.test.ts` also
+exercise natural/empty completion, terminal `ret`, first/midstream trap,
+unsolicited interruption, fatal/close, and nonzero process exit with the failure
+summary on stdout. Device-dependent examples L6–L13 run in
+`test/integration/api-listen.test.ts` with validation enabled.
 
 ## fanout (multi-target, F…)
 
