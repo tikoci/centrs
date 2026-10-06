@@ -211,7 +211,7 @@ export interface ApiStreamSummary {
 	stopReason: ApiStreamStopReason;
 	frames: number;
 	durationMs: number;
-	/** Attributes from a natural terminal `!done` (for example `ret`). */
+	/** Attributes from a received terminal `!done` (for example `ret`). */
 	done?: Record<string, string>;
 }
 
@@ -418,7 +418,7 @@ export async function* apiListen(
 				summary: "Incremental `--stream` replies require native-api.",
 				remediation:
 					"Use `--via native-api`, or drop `--stream` for a bounded one-shot response.",
-				context: { via: resolved.via.value, capability: "listen" },
+				context: { via: resolved.via.value, capability: "stream" },
 			});
 		}
 	} catch (error) {
@@ -454,6 +454,16 @@ async function* streamResolvedApi(
 	let stopReason: ApiStreamStopReason | undefined;
 	let cancelUnacknowledged = false;
 	let done: Record<string, string> | undefined;
+	const cancellationWarnings = (): Warning[] =>
+		cancelUnacknowledged
+			? [
+					{
+						code: "transport/cancel-unacknowledged",
+						message: `RouterOS did not acknowledge /cancel within ${resolved.timeoutMs.value}ms; centrs closed the session locally.`,
+						context: { timeoutMs: resolved.timeoutMs.value },
+					},
+				]
+			: [];
 	let durationTimer: ReturnType<typeof setTimeout> | undefined;
 	// The first stop cause wins: the cancel grace window keeps the loop alive
 	// after a stop, so a later timer or frame must not relabel it.
@@ -507,20 +517,13 @@ async function* streamResolvedApi(
 			stopReason ?? "completed",
 			frames,
 			Date.now() - startedAt,
-			cancelUnacknowledged
-				? [
-						{
-							code: "transport/cancel-unacknowledged",
-							message: `RouterOS did not acknowledge /cancel within ${resolved.timeoutMs.value}ms; centrs closed the session locally.`,
-							context: { timeoutMs: resolved.timeoutMs.value },
-						},
-					]
-				: [],
-			stopReason === undefined ? done : undefined,
+			cancellationWarnings(),
+			done,
 		);
 	} catch (error) {
 		const envelope = buildApiErrorEnvelopeFromResolved(resolved, error);
 		envelope.meta.validation = validation;
+		envelope.warnings = [...envelope.warnings, ...cancellationWarnings()];
 		if (envelope.meta.operation) {
 			envelope.meta.operation.stream = {
 				kind: "summary",
@@ -648,6 +651,18 @@ export async function resolveApiRequest(
 	const body = buildApiBody(request);
 	const query = buildApiQuery(request);
 	const proplist = buildApiProplist(request);
+	if (
+		((verb !== "print" && verb !== "run") || scriptMode) &&
+		(query.length > 0 || proplist.length > 0)
+	) {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary:
+				"Query and projection flags require a GET or a structured POST command.",
+			remediation:
+				"Remove --query/--raw-query/--proplist from mutation and script requests; address PATCH/DELETE by row id.",
+		});
+	}
 	if (listen && normalized.listen && method !== "GET") {
 		throw new CentrsError({
 			code: "usage/conflicting-flags",
@@ -1039,10 +1054,7 @@ export function buildProtocolApiRequest(
 			request.attributes = resolved.body;
 		}
 	}
-	if (
-		resolved.verb === "print" ||
-		(resolved.listen && resolved.verb === "run")
-	) {
+	if (resolved.verb === "print" || resolved.verb === "run") {
 		if (resolved.query.length > 0) {
 			request.query = resolved.query;
 		}
@@ -1322,15 +1334,16 @@ function assertListenCapability(resolved: ResolvedApiRequest): void {
 			summary: "Incremental `--stream` replies require native-api.",
 			remediation:
 				"Use `--via native-api`, or drop `--stream` for a bounded one-shot response.",
-			context: { via: resolved.via.value, capability: "listen" },
+			context: { via: resolved.via.value, capability: "stream" },
 		});
 	}
 	throw new CentrsError({
 		code: "input/invalid-command",
-		summary: "`--stream` is an open-ended follow, not a one-shot `api` call.",
+		summary:
+			"`--stream` yields incremental replies instead of a one-shot `api` result.",
 		remediation:
-			"Consume the stream via `apiListen()` (library) or `centrs api … --stream` (CLI); both yield an NDJSON envelope per change frame plus a final summary.",
-		context: { via: resolved.via.value, capability: "listen" },
+			"Consume the stream via `apiListen()` (library) or `centrs api … --stream` (CLI); both yield an NDJSON envelope per reply frame plus a final summary.",
+		context: { via: resolved.via.value, capability: "stream" },
 	});
 }
 

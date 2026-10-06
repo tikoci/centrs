@@ -24,10 +24,8 @@ function summaryData(envelope: ApiEnvelope | undefined): {
 	stopReason?: string;
 	frames?: number;
 } {
-	if (!envelope?.ok) {
-		return {};
-	}
-	return envelope.data as { stopReason?: string; frames?: number };
+	const stream = envelope?.meta.operation?.stream;
+	return stream?.kind === "summary" ? stream : {};
 }
 
 /** The rest-style record on a success (frame) envelope; `{}` for an error envelope. */
@@ -75,7 +73,7 @@ async function streamWithTrigger(
 }
 
 describeFast("api --stream against CHR (native-api)", () => {
-	test("runs native stream examples L1-L4 and L6-L14", async () => {
+	test("runs native stream examples L1-L4 and L6-L16", async () => {
 		const started = await startIntegrationChr();
 		const chr = started.chr;
 		try {
@@ -294,6 +292,42 @@ describeFast("api --stream against CHR (native-api)", () => {
 				),
 			).toBe(true);
 
+			// L15. Addressed listens retain delete notices with and without projection.
+			for (const proplist of [undefined, ["address"]]) {
+				const seed = await apiEnvelope({
+					...restBase,
+					endpoint: "ip/address",
+					method: "PUT",
+					fields: { address: "198.51.100.35/32", interface: "ether1" },
+					yes: true,
+				});
+				expect(seed.ok).toBe(true);
+				const id = idOf(recordOf(seed));
+				const addressed = await streamWithTrigger(
+					{
+						...nativeBase,
+						endpoint: `ip/address/${id}`,
+						proplist,
+						duration: "3s",
+					},
+					async () => {
+						const removed = await apiEnvelope({
+							...restBase,
+							endpoint: `ip/address/${id}`,
+							method: "DELETE",
+							yes: true,
+						});
+						expect(removed.ok).toBe(true);
+					},
+				);
+				expect(addressed.every((e) => e.ok)).toBe(true);
+				expect(
+					addressed.some(
+						(e) => recordOf(e)[".id"] === id && recordOf(e)[".dead"] === "true",
+					),
+				).toBe(true);
+			}
+
 			// L10. Filtering a change subscription fails closed until membership
 			// initialization is designed (#396/#397); server queries drop deletes.
 			const filtered = await collect({
@@ -355,6 +389,31 @@ describeFast("api --stream against CHR (native-api)", () => {
 			});
 			expect(readBack.ok).toBe(true);
 			expect(recordOf(readBack)["address"]).toBe("198.51.100.34/32");
+			// L16. Explicit POST print keeps query/projection in either delivery mode.
+			for (const base of [nativeBase, restBase]) {
+				const selected = await apiEnvelope({
+					...base,
+					endpoint: "ip/address/print",
+					method: "POST",
+					query: ["address=198.51.100.34/32"],
+					proplist: ["address"],
+				});
+				expect(selected.ok).toBe(true);
+				if (selected.ok)
+					expect(selected.data).toEqual([{ address: "198.51.100.34/32" }]);
+			}
+			const selectedStream = await collect({
+				...nativeBase,
+				endpoint: "ip/address/print",
+				method: "POST",
+				query: ["address=198.51.100.34/32"],
+				proplist: ["address"],
+			});
+			expect(selectedStream.every((e) => e.ok)).toBe(true);
+			expect(
+				selectedStream.filter((e) => streamKind(e) === "frame").map(recordOf),
+			).toEqual([{ address: "198.51.100.34/32" }]);
+
 			const removed = await collect({
 				...nativeBase,
 				endpoint: `ip/address/${createdId}`,
@@ -408,7 +467,10 @@ describeFast("api --stream against CHR (native-api)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [...exampleIds(4), ...[6, 7, 8, 9, 10, 11, 12, 13, 14]],
+				exampleIds: [
+					...exampleIds(4),
+					...[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+				],
 			});
 		} finally {
 			await chr.destroy();

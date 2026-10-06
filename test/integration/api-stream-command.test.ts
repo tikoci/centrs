@@ -23,6 +23,8 @@ type Mode =
 	| "interrupted"
 	| "delayed-interrupted"
 	| "script-error"
+	| "trap-unacknowledged"
+	| "delayed-done"
 	| "burst"
 	| "delete";
 
@@ -31,6 +33,7 @@ async function run(
 	extra: string[] = [],
 	endpoint = "tool/ping",
 	confirmed = true,
+	stream = true,
 ) {
 	const sent: string[][] = [];
 	const readers = new WeakMap<object, SentenceReader>();
@@ -70,6 +73,14 @@ async function run(
 						reply("!done");
 						continue;
 					}
+					if (mode === "trap-unacknowledged") {
+						reply("!trap", "=category=0", "=message=no such command");
+						continue;
+					}
+					if (mode === "delayed-done") {
+						setTimeout(() => reply("!done", "=ret=*A"), 250);
+						continue;
+					}
 					if (mode === "delayed-interrupted") {
 						reply("!trap", "=category=2", "=message=interrupted");
 						setTimeout(() => reply("!done"), 250);
@@ -106,8 +117,18 @@ async function run(
 						continue;
 					}
 					if (mode === "burst") {
-						reply("!re", "=seq=0");
-						reply("!re", "=seq=1");
+						socket.write(
+							Buffer.concat([
+								encodeSentence(["!re", "=seq=0", ...(tag ? [tag] : [])]),
+								encodeSentence(["!re", "=seq=1", ...(tag ? [tag] : [])]),
+								encodeSentence([
+									"!done",
+									"=ret=fixture-result",
+									...(tag ? [tag] : []),
+								]),
+							]),
+						);
+						continue;
 					}
 					if (mode === "delete") reply("!re", "=.id=*1", "=.dead=true");
 					if (mode === "done") reply("!re", "=seq=0", "=.section=7");
@@ -134,7 +155,7 @@ async function run(
 				endpoint,
 				"-X",
 				"POST",
-				"--stream",
+				...(stream ? ["--stream"] : []),
 				...(confirmed ? ["--yes"] : []),
 				"--via",
 				"native-api",
@@ -155,11 +176,13 @@ async function run(
 		return {
 			...result,
 			sent,
-			lines: result.stdoutText
-				.trim()
-				.split("\n")
-				.filter(Boolean)
-				.map((line) => JSON.parse(line)),
+			lines: !stream
+				? [JSON.parse(result.stdoutText || result.stderrText)]
+				: result.stdoutText
+						.trim()
+						.split("\n")
+						.filter(Boolean)
+						.map((line) => JSON.parse(line)),
 		};
 	} finally {
 		peer.stop(true);
@@ -201,7 +224,7 @@ describe("api --stream command lifecycle (#399)", () => {
 			stopReason: "count-reached",
 			frames: 1,
 		});
-		expect(result.lines[1].data.done).toBeUndefined();
+		expect(result.lines[1].data.done).toEqual({ ret: "fixture-result" });
 	});
 	test("count stop does not discard an already received RouterOS failure", async () => {
 		const result = await run("late-trap", ["--count", "1"]);
@@ -233,6 +256,72 @@ describe("api --stream command lifecycle (#399)", () => {
 		expect(result.lines.at(-1)).toMatchObject({
 			ok: false,
 			meta: { operation: { stream: { stopReason: "routeros-error" } } },
+		});
+	});
+	test("one-shot and streamed POST print keep identical command options", async () => {
+		for (const stream of [false, true]) {
+			const result = await run(
+				"done",
+				[
+					"-f",
+					"interval=1",
+					"--query",
+					"interface=ether1",
+					"--proplist",
+					"address",
+				],
+				"ip/address/print",
+				true,
+				stream,
+			);
+			expect(result.exitCode).toBe(0);
+			const words = result.sent.find((w) => w[0] === "/ip/address/print");
+			expect(words).toContain("=interval=1");
+			expect(words).toContain("?interface=ether1");
+			expect(words).toContain("=.proplist=address");
+		}
+	});
+	for (const stream of [false, true])
+		for (const method of ["PUT", "PATCH", "DELETE"]) {
+			test(`${method} query/projection flags fail before dispatch (stream=${stream})`, async () => {
+				for (const flags of [
+					["--query", "address=192.0.2.1"],
+					["--raw-query", "address"],
+					["--proplist", "address"],
+				]) {
+					const result = await run(
+						"done",
+						["-X", method, ...flags],
+						method === "PUT" ? "ip/address" : "ip/address/*1",
+						true,
+						stream,
+					);
+					expect(result.exitCode).toBe(1);
+					expect(result.sent).toHaveLength(0);
+					expect(result.lines[0].error.code).toBe("usage/conflicting-flags");
+				}
+			});
+		}
+	test("failed summary retains the unacknowledged cancellation warning", async () => {
+		const result = await run("trap-unacknowledged", ["--duration", "100ms"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.lines.at(-1)).toMatchObject({
+			ok: false,
+			warnings: [{ code: "transport/cancel-unacknowledged" }],
+			meta: { operation: { stream: { stopReason: "routeros-error" } } },
+		});
+	});
+	test("a local duration stop preserves terminal mutation attributes received later", async () => {
+		const result = await run(
+			"delayed-done",
+			["-X", "PUT", "--duration", "100ms"],
+			"ip/address",
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.lines.at(-1)).toMatchObject({
+			ok: true,
+			data: { done: { ret: "*A" } },
+			meta: { operation: { stream: { stopReason: "duration-elapsed" } } },
 		});
 	});
 	test("GET projection retains deletion fields and addressed-row query", async () => {

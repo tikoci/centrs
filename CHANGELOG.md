@@ -12,6 +12,12 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 
 ### Fixed
 
+- Native API one-shot and incremental commands share their sentence builder;
+  structured POST queries/projections reach both transports. Mutation and script
+  requests reject unused query/projection flags. Stream outcomes are read from
+  `meta.operation.stream`; failed summaries retain cancellation warnings, and
+  received terminal attributes survive a local stop.
+
 - **Native `api --stream` runs commands instead of always appending `/listen`
   (#399).** POST ping/monitor/print commands forward their attributes and emit
   replies incrementally; terminal attributes are retained. GET-menu subscriptions

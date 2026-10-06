@@ -35,7 +35,7 @@ inspect-client TS patterns — `tikoci/lsp-routeros-ts`
   GH#399 adds incremental native command replies with `--stream`, including
   bounded commands and open-ended ping/monitor/print interval. Method semantics,
   terminal outcomes and subscription limitations live in the README;
-  examples L6–L14 ground the extended path.
+  examples L6–L16 ground the extended path.
 - **`/listen` semantics.** Emits `!re` on change; a deleted/disappeared item's
   `!re` carries the dead flag (docs say `=.dead=yes`; **CHR 7.23.1 sends
   `.dead=true`** — see CONFIRMED below); it never self-terminates. Cancel with
@@ -216,3 +216,9 @@ infers both. Native-api only (REST's 60s cap → `transport/capability-unsupport
   GH#399 supersedes the original terminal/exit behavior: natural completion is
   distinct from cancellation; a failure summary has `ok:false`, and any failure
   exits nonzero. The current contract lives in the README.
+
+- **CONFIRMED — addressed-listen deletes (L15), CHR 7.23.7:** `test/integration/api-listen.test.ts`
+  covers `/ip/address/listen ?.id=<id>` both without projection and with
+  `.proplist=address,.id,.dead`. Removing the seeded address must produce
+  `{ ".id": <id>, ".dead": "true" }`. The ID query matches a deletion frame
+  because it carries `.id`; a predicate on another column may hide that frame.

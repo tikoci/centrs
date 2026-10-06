@@ -188,18 +188,24 @@ command is finite or open-ended. `--via rest-api --stream` fails with
   `api $R /tool/ping -X POST -f address=10.0.2.2 -f count=3 --stream --yes`.
   POST `/system/resource/print -f interval=1 --stream --count 2` samples twice;
   it does not become a listen. PUT/PATCH/DELETE retain their add/set/remove
-  mapping and confirmation gates. `/execute` retains synchronous `as-string`
+  mapping and confirmation gates. Query/projection flags on these mutations or
+  `/execute` scripts fail with `usage/conflicting-flags` instead of being ignored. `/execute` retains synchronous `as-string`
   script semantics. Streaming never makes a command read-only.
 - Each `!re` emits one envelope with `meta.operation.stream.kind=frame`.
   Device `.section` grouping is preserved verbatim. A terminal `!done` is not
-  a row: its attributes, when present, appear in successful summary `data.done`.
+  a row: its attributes, when received, appear in successful summary `data.done`,
+  including a terminal result received during local cancellation. The stop
+  reason still reports the first local bound.
+- Read outcomes from **`meta.operation.stream`** on both success and failure;
+  successful `data.stopReason` is a compatibility copy.
 - Exactly one terminal summary follows a started stream. Its marker is
   `meta.operation.stream.kind=summary`, with `frames`, `durationMs`, and
   `stopReason`: `completed`, `count-reached`, `duration-elapsed`, `interrupted`,
   `routeros-error`, or `transport-error`. A RouterOS/transport failure has
   `ok:false` and a structured `error`; summary counts/reason are in metadata
   (error envelopes have no `data`). Previously emitted rows remain partial
-  results. Preflight failures emit one error envelope without starting a stream.
+  results. A failed summary retains any `transport/cancel-unacknowledged`
+  warning as well. Preflight failures emit one error envelope without starting a stream.
 - Structured JSON/YAML streams put **all** envelopes, including errors, on
   stdout as NDJSON and exit nonzero for any failure, even after successful rows.
   Text mode uses the same outcome/exit rules. `--raw` retains bare payloads and

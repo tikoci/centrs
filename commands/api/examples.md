@@ -372,7 +372,8 @@ centrs api $A ip/address --stream --count 1 --via native-api --port $API_PORT --
 While listening, the harness adds an address over REST. stdout is NDJSON: at least
 one envelope frame for the new row (`meta.operation.stream.kind=frame`), then a
 final summary envelope (`meta.operation.stream.kind=summary`,
-`data.stopReason=count-reached`, `data.frames>=1`). Exit code 0 (successful local count stop).
+`meta.operation.stream.stopReason=count-reached`,
+`meta.operation.stream.frames>=1`). Exit code 0 (successful local count stop).
 
 ### L2. A deletion frame carries `.dead`
 
@@ -400,7 +401,7 @@ centrs api $A ip/address --stream --duration 2s --via native-api --port $API_POR
 ```
 
 With no change during the window, the stream ends after ~2 s with a summary
-envelope whose `data.stopReason=duration-elapsed`. Exit code 0.
+envelope whose `meta.operation.stream.stopReason=duration-elapsed`. Exit code 0.
 
 ### L5. A router that ignores `/cancel` cannot hold the process open
 
@@ -429,7 +430,7 @@ chatty peer, trap without `!done`, close after cancel) are in
 centrs api $A tool/ping -X POST -f address=10.0.2.2 -f count=3 --stream --yes --via native-api --port $API_PORT --username $U --password $P
 ```
 
-Three reply frames, then a successful summary with `data.stopReason=completed`.
+Three reply frames, then a successful summary with `meta.operation.stream.stopReason=completed`.
 The device's `count=3` completes the command; no centrs `--count` is needed.
 
 ### L7. Monitor replies preserve `.section`
@@ -493,10 +494,45 @@ A successful zero-row summary with `data.done.ret` naming the created address.
 The harness retrieves that ID to check its address, then streams DELETE on that
 ID and requires natural completion. Neither mutation becomes a listen.
 
+### L14. Streamed `/execute` runtime errors fail the terminal summary
+
+```bash
+centrs api $A execute -X POST --stream --via native-api --yes --json -f 'script=/ip/service/set www-ssl certificate=nope' --port $API_PORT --username $U --password $P
+```
+
+With validation enabled and no `nope` certificate, syntax validation passes but
+RouterOS rejects the value at runtime. The sole terminal envelope is `ok: false`,
+`routeros/invalid-value`, and `meta.operation.stream.stopReason=routeros-error`; the CLI exits nonzero.
+Ordinary stdout such as `:put "status: no such item appears in ordinary output"`
+still completes successfully with its text in `data.done.ret`.
+
+### L15. An addressed GET stream reports deletion with or without projection
+
+```bash
+centrs api $A "ip/address/$ID" --stream --duration 3s --via native-api --port $API_PORT --username $U --password $P
+centrs api $A "ip/address/$ID" --stream --duration 3s --proplist address --via native-api --port $API_PORT --username $U --password $P
+```
+
+For each variant the harness seeds an address, starts the addressed subscription,
+and deletes it after the listening barrier. The stream emits `.id=$ID` with
+`.dead=true`. This pins the `?.id=` exception on CHR rather than only checking
+client request words.
+
+### L16. POST print preserves query/projection in either delivery mode
+
+```bash
+centrs api $A ip/address/print -X POST --query address=198.51.100.34/32 --proplist address --via native-api --port $API_PORT --username $U --password $P
+centrs api $A ip/address/print -X POST --query address=198.51.100.34/32 --proplist address --stream --via native-api --port $API_PORT --username $U --password $P
+```
+
+The harness seeds the L13 address. Both modes return only that address and only
+the requested `address` field; the streamed form then completes naturally. The
+one-shot REST equivalent is also checked, using the same query/projection.
+
 Loopback regressions in `test/integration/api-stream-command.test.ts` also
 exercise natural/empty completion, terminal `ret`, first/midstream trap,
 unsolicited interruption, fatal/close, and nonzero process exit with the failure
-summary on stdout. Device-dependent examples L6–L14 run in
+summary on stdout. Device-dependent examples L6–L16 run in
 `test/integration/api-listen.test.ts` with validation enabled.
 
 ## fanout (multi-target, F…)
@@ -614,15 +650,3 @@ centrs api --quickchr $NAME system/resource --json
 
 Envelope: `ok: true`, `data` is the resource object,
 `meta.target.source.kind=provider`.
-
-### L14. Streamed `/execute` runtime errors fail the terminal summary
-
-```sh
-bun run centrs api ROUTER execute -X POST --stream --via native-api --yes --json -f 'script=/ip/service/set www-ssl certificate=nope'
-```
-
-With validation enabled and no `nope` certificate, syntax validation passes but
-RouterOS rejects the value at runtime. The sole terminal envelope is `ok: false`,
-`routeros/invalid-value`, and `stopReason: routeros-error`; the CLI exits nonzero.
-Ordinary stdout such as `:put "status: no such item appears in ordinary output"`
-still completes successfully with its text in `data.done.ret`.
