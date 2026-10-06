@@ -461,6 +461,17 @@ describe("isNativeAuthFailure (grounded auth classification)", () => {
 });
 
 describe("native-api listen() streaming", () => {
+	test("a pre-aborted stream never dispatches its command", async () => {
+		const transport = new FakeTransport();
+		const controller = new AbortController();
+		controller.abort();
+		const generator = transport.apiSession.listen(
+			{ command: "/ip/address/add", attributes: { address: "192.0.2.1/32" } },
+			{ signal: controller.signal },
+		);
+		expect((await generator.next()).done).toBe(true);
+		expect(transport.sent).toHaveLength(0);
+	});
 	test("sends the listen sentence and yields !re change frames", async () => {
 		const transport = new FakeTransport();
 		const gen = transport.apiSession.listen({
@@ -498,15 +509,20 @@ describe("native-api listen() streaming", () => {
 
 	test("ends cleanly on cancel (interrupted trap then !done, no throw)", async () => {
 		const transport = new FakeTransport();
-		const gen = transport.apiSession.listen({
-			command: "/ip/address/listen",
-		});
+		const controller = new AbortController();
+		const gen = transport.apiSession.listen(
+			{
+				command: "/ip/address/listen",
+			},
+			{ signal: controller.signal },
+		);
 		const first = gen.next();
 		const tag = transport.lastTag();
 		transport.reply(["!re", "=address=198.51.100.1/32", `.tag=${tag}`]);
 		await first;
 
 		const next = gen.next();
+		controller.abort();
 		transport.reply(
 			["!trap", "=category=2", "=message=interrupted", `.tag=${tag}`],
 			["!done", `.tag=${tag}`],

@@ -12,6 +12,23 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 
 ### Fixed
 
+- Native API one-shot and incremental commands share their sentence builder;
+  structured POST queries/projections reach both transports. Mutation and script
+  requests reject unused query/projection flags, and PUT/POST reject a
+  trailing row id instead of dropping it. Stream outcomes are read from
+  `meta.operation.stream`; failed summaries retain cancellation warnings, and
+  received terminal attributes survive a local stop.
+
+- **Native `api --stream` runs commands instead of always appending `/listen`
+  (#399).** POST ping/monitor/print commands forward their attributes and emit
+  replies incrementally; terminal attributes are retained. GET-menu subscriptions
+  keep `.id,.dead` in projections and reject filters that would hide deletes
+  pending #396/#397. Natural completion is `completed`; RouterOS/transport
+  failures produce one `ok:false` summary and a nonzero exit, even after rows.
+  **Breaking stream contract:** structured error envelopes now appear on stdout;
+  failed summary counts/reason live in metadata, with no `data` key. Raw errors
+  retain stderr behavior. Fatal sessions close locally even if the peer does not.
+
 - **A menu the device does not have is no longer reported as a syntax error
   (#361).** RouterOS's `:parse` answers `/zerotier/print` on a router without
   the package with `syntax error (line 1 column 10)`, and `/zerotier print`

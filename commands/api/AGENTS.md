@@ -29,18 +29,13 @@ inspect-client TS patterns — `tikoci/lsp-routeros-ts`
 - **HTTP method map (REST):** `GET`→print, `PUT`→add (**create**), `PATCH`→set,
   `DELETE`→remove, `POST`→universal (run any console command). PUT — not POST — is
   RouterOS's create.
-- **Multi-frame results: bounded → array; open-ended → native `/listen` only.**
-  *Nuance (do not over-read the REST docs).* RouterOS REST **does** run
-  `duration=` / `monitor` commands — it regularizes the native `!re` frames into a
-  JSON **array of `.section` records** and returns the whole array in one response,
-  bounded by the **60 s** REST cap (a command asked to run longer terminates early
-  with an error). Native has **no** such cap. So a `duration=`/`monitor` command is
-  an **ordinary bounded `api` call** that returns a `.section` array on both
-  transports (native's `talk()` accumulates the `!re` until `!done`) — **not**
-  NDJSON. The only thing that needs the NDJSON streaming path is **open-ended
-  follow** (native `/listen`, which never sends `!done`); REST genuinely cannot do
-  open-ended follow. ⇒ `--listen` (open-ended) is native-only; `duration=` commands
-  are normal one-shot calls. (CONFIRMED below.)
+- **Multi-frame results: one-shot → array; incremental replies → native API.**
+  REST regularizes bounded native `!re` replies into a JSON array and retains
+  its 60 s cap. A one-shot native call also accumulates rows until `!done`.
+  GH#399 adds incremental native command replies with `--stream`, including
+  bounded commands and open-ended ping/monitor/print interval. Method semantics,
+  terminal outcomes and subscription limitations live in the README;
+  examples L6–L16 ground the extended path.
 - **`/listen` semantics.** Emits `!re` on change; a deleted/disappeared item's
   `!re` carries the dead flag (docs say `=.dead=yes`; **CHR 7.23.1 sends
   `.dead=true`** — see CONFIRMED below); it never self-terminates. Cancel with
@@ -216,9 +211,14 @@ infers both. Native-api only (REST's 60s cap → `transport/capability-unsupport
 - **CONFIRMED — deletion frames carry `.dead=true`.** Removing a pre-seeded
   address over REST while listening emits a minimal `{ ".id", ".dead":"true" }`
   `!re` (re-confirms `.dead=true`, not the docs' `=.dead=yes`).
-- **Stream shape:** each `!re` → one NDJSON envelope frame
-  (`meta.operation.stream.kind="frame"`, string values, `.dead` preserved); the
-  stream ends with a summary envelope (`stream.kind="summary"`,
-  `data.stopReason` ∈ `count-reached`/`duration-elapsed`/`interrupted`/
-  `transport-error`, plus `frames`/`durationMs`). The CLI exit code keys on
-  whether the stream *started* cleanly, not on per-frame `ok`.
+- **Stream shape:** each `!re` → one envelope frame
+  (`meta.operation.stream.kind="frame"`, string values, `.dead` preserved).
+  GH#399 supersedes the original terminal/exit behavior: natural completion is
+  distinct from cancellation; a failure summary has `ok:false`, and any failure
+  exits nonzero. The current contract lives in the README.
+
+- **CONFIRMED — addressed-listen deletes (L15), CHR 7.23.7:** `test/integration/api-listen.test.ts`
+  covers `/ip/address/listen ?.id=<id>` both without projection and with
+  `.proplist=address,.id,.dead`. Removing the seeded address must produce
+  `{ ".id": <id>, ".dead": "true" }`. The ID query matches a deletion frame
+  because it carries `.id`; a predicate on another column may hide that frame.

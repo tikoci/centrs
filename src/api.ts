@@ -11,8 +11,8 @@
  * mechanics (id-in-URL vs `=.id=`, `.query` vs `?`-words) live in the adapter.
  *
  * Grounded RouterOS facts this depends on live in `commands/api/AGENTS.md`
- * (CHR 7.23.1). The `--listen` streaming path and multi-target fan-out are later
- * phases; this file is the single-target rest-api + native-api surface.
+ * (CHR 7.23.1 and command-stream examples). Streaming and fan-out reuse this
+ * structured validation, confirmation, and result-envelope surface.
  */
 
 import type {
@@ -118,11 +118,11 @@ export interface ApiRequest {
 	 * error contract (#154).
 	 */
 	raw?: boolean;
-	/** `--listen`: native-api-only open-ended follow (later phase; rejected here). */
+	/** `--stream` / `--listen`: emit native replies incrementally. */
 	listen?: boolean;
-	/** `--duration`: bound a `--listen` stream (later phase). */
+	/** `--duration`: bound a native reply stream. */
 	duration?: string;
-	/** `--count`: bound a `--listen` stream to N frames (later phase). */
+	/** `--count`: bound a native reply stream to N rows. */
 	count?: number;
 	via?: string;
 	host?: string;
@@ -187,8 +187,10 @@ export interface ApiRequestSummary {
 	proplist?: readonly string[];
 }
 
-/** Why a `--stream` follow ended. */
+/** Why an incremental native command stream ended. */
 export type ApiStreamStopReason =
+	| "completed"
+	| "routeros-error"
 	| "count-reached"
 	| "duration-elapsed"
 	| "interrupted"
@@ -209,6 +211,8 @@ export interface ApiStreamSummary {
 	stopReason: ApiStreamStopReason;
 	frames: number;
 	durationMs: number;
+	/** Attributes from a received terminal `!done` (for example `ret`). */
+	done?: Record<string, string>;
 }
 
 export interface ApiOperationMeta {
@@ -411,10 +415,10 @@ export async function* apiListen(
 		if (resolved.via.value !== "native-api") {
 			throw new CentrsError({
 				code: "transport/capability-unsupported",
-				summary: "REST cannot follow an open-ended `--stream` (60s cap).",
+				summary: "Incremental `--stream` replies require native-api.",
 				remediation:
-					"Open-ended follow is native-api only: use `--via native-api`, or drop `--stream` for a bounded one-shot.",
-				context: { via: resolved.via.value, capability: "listen" },
+					"Use `--via native-api`, or drop `--stream` for a bounded one-shot response.",
+				context: { via: resolved.via.value, capability: "stream" },
 			});
 		}
 	} catch (error) {
@@ -449,10 +453,22 @@ async function* streamResolvedApi(
 	let frames = 0;
 	let stopReason: ApiStreamStopReason | undefined;
 	let cancelUnacknowledged = false;
+	let done: Record<string, string> | undefined;
+	const cancellationWarnings = (): Warning[] =>
+		cancelUnacknowledged
+			? [
+					{
+						code: "transport/cancel-unacknowledged",
+						message: `RouterOS did not acknowledge /cancel within ${resolved.timeoutMs.value}ms; centrs closed the session locally.`,
+						context: { timeoutMs: resolved.timeoutMs.value },
+					},
+				]
+			: [];
 	let durationTimer: ReturnType<typeof setTimeout> | undefined;
 	// The first stop cause wins: the cancel grace window keeps the loop alive
 	// after a stop, so a later timer or frame must not relabel it.
 	const onExternalAbort = (): void => {
+		if (done !== undefined) return;
 		stopReason ??= "interrupted";
 		clearTimeout(durationTimer);
 		controller.abort();
@@ -479,6 +495,10 @@ async function* streamResolvedApi(
 			onCancelUnacknowledged: () => {
 				cancelUnacknowledged = true;
 			},
+			onDone: (attributes) => {
+				done = attributes;
+				clearTimeout(durationTimer);
+			},
 		})) {
 			frames += 1;
 			yield streamFrameEnvelope(resolved, validation, record, frames);
@@ -487,36 +507,35 @@ async function* streamResolvedApi(
 				break;
 			}
 		}
+		const routerOsFailure = apiRouterOsFailureFromResult(resolved, {
+			data: done?.["ret"],
+		});
+		if (routerOsFailure) throw routerOsFailure;
 		yield streamSummaryEnvelope(
 			resolved,
 			validation,
-			stopReason ?? "interrupted",
+			stopReason ?? "completed",
 			frames,
 			Date.now() - startedAt,
-			cancelUnacknowledged
-				? [
-						{
-							code: "transport/cancel-unacknowledged",
-							message: `RouterOS did not acknowledge /cancel within ${resolved.timeoutMs.value}ms; centrs closed the session locally.`,
-							context: { timeoutMs: resolved.timeoutMs.value },
-						},
-					]
-				: [],
+			cancellationWarnings(),
+			done,
 		);
 	} catch (error) {
-		// A mid-stream failure is itself a frame, tagged `stream.kind="frame"` so
-		// consumers that key off `meta.operation.stream` still see it in the stream
-		// (not as a stray non-stream envelope); the summary then closes with
-		// `transport-error` (the CLI's exit code keys on whether it *started*
-		// cleanly).
-		yield streamErrorFrameEnvelope(resolved, error, frames + 1);
-		yield streamSummaryEnvelope(
-			resolved,
-			validation,
-			"transport-error",
-			frames,
-			Date.now() - startedAt,
-		);
+		const envelope = buildApiErrorEnvelopeFromResolved(resolved, error);
+		envelope.meta.validation = validation;
+		envelope.warnings = [...envelope.warnings, ...cancellationWarnings()];
+		if (envelope.meta.operation) {
+			envelope.meta.operation.stream = {
+				kind: "summary",
+				stopReason: envelope.error.code.startsWith("routeros/")
+					? "routeros-error"
+					: "transport-error",
+				frames,
+				durationMs: Date.now() - startedAt,
+			};
+			envelope.meta.operation.objectCount = frames;
+		}
+		yield envelope;
 	} finally {
 		if (durationTimer !== undefined) {
 			clearTimeout(durationTimer);
@@ -537,24 +556,6 @@ function streamFrameEnvelope(
 	return { ok: true, data: record, warnings: [], tips: [], meta };
 }
 
-/**
- * A mid-stream failure rendered as a stream frame: the error envelope carries
- * `meta.operation.stream.kind="frame"` (index after the last good frame) so
- * stream consumers can place it on the timeline rather than mistaking it for a
- * non-stream envelope.
- */
-function streamErrorFrameEnvelope(
-	resolved: ResolvedApiRequest,
-	error: unknown,
-	index: number,
-): ApiErrorEnvelope {
-	const envelope = buildApiErrorEnvelopeFromResolved(resolved, error);
-	if (envelope.meta.operation) {
-		envelope.meta.operation.stream = { kind: "frame", index };
-	}
-	return envelope;
-}
-
 function streamSummaryEnvelope(
 	resolved: ResolvedApiRequest,
 	validation: EnvelopeValidationMeta,
@@ -562,8 +563,14 @@ function streamSummaryEnvelope(
 	frames: number,
 	durationMs: number,
 	streamWarnings: readonly Warning[] = [],
+	done?: Record<string, string>,
 ): ApiSuccessEnvelope {
-	const summary: ApiStreamSummary = { stopReason, frames, durationMs };
+	const summary: ApiStreamSummary = {
+		stopReason,
+		frames,
+		durationMs,
+		...(done && Object.keys(done).length > 0 ? { done } : {}),
+	};
 	const meta = metaFromResolved(resolved, validation, summary);
 	meta.operation.objectCount = frames;
 	meta.operation.stream = { kind: "summary", stopReason, frames, durationMs };
@@ -640,10 +647,58 @@ export async function resolveApiRequest(
 			context: { method, path: normalized.path },
 		});
 	}
+	// PUT/POST map no row id onto the wire: native would drop it silently and
+	// REST would fold it into `.query`, so the transports would disagree.
+	if ((verb === "add" || verb === "run") && normalized.id !== undefined) {
+		throw new CentrsError({
+			code: "input/invalid-path",
+			summary: `A ${method} request does not address a row by id (${normalized.id}).`,
+			remediation:
+				"Drop the trailing id; use PATCH/DELETE for one row, or pass `.id` as a command field such as `-f .id=*1`.",
+			context: { method, path: normalized.path, id: normalized.id },
+		});
+	}
 	const raw = request.raw ?? false;
 	const body = buildApiBody(request);
 	const query = buildApiQuery(request);
 	const proplist = buildApiProplist(request);
+	if (
+		((verb !== "print" && verb !== "run") || scriptMode) &&
+		(query.length > 0 || proplist.length > 0)
+	) {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary:
+				"Query and projection flags require a GET or a structured POST command.",
+			remediation:
+				"Remove --query/--raw-query/--proplist from mutation and script requests; address PATCH/DELETE by row id.",
+		});
+	}
+	if (listen && normalized.listen && method !== "GET") {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary: "An explicit /listen endpoint requires GET.",
+			remediation:
+				"Drop -X to follow that menu, or target a command with -X POST --stream.",
+		});
+	}
+	if (listen && verb === "print" && Object.keys(body).length > 0) {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary: "A GET change subscription does not accept command fields.",
+			remediation:
+				"Use -X POST with the full command path to stream command attributes, such as /system/resource/print -f interval=1.",
+		});
+	}
+	if (listen && verb === "print" && query.length > 0) {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary:
+				"Filtered change subscriptions can miss deletes and are not supported.",
+			remediation:
+				"Follow the unfiltered menu and track .id/.dead on the client; use a one-shot query for filtered reads. Stateful filtered follow is tracked in #396/#397.",
+		});
+	}
 
 	// A quickchr target is a named-live-provider: host/port/auth come from the
 	// live descriptor, bypassing CDB, `__default__`, and MAC resolution.
@@ -1010,7 +1065,7 @@ export function buildProtocolApiRequest(
 			request.attributes = resolved.body;
 		}
 	}
-	if (resolved.verb === "print") {
+	if (resolved.verb === "print" || resolved.verb === "run") {
 		if (resolved.query.length > 0) {
 			request.query = resolved.query;
 		}
@@ -1287,18 +1342,19 @@ function assertListenCapability(resolved: ResolvedApiRequest): void {
 	if (resolved.via.value === "rest-api") {
 		throw new CentrsError({
 			code: "transport/capability-unsupported",
-			summary: "REST cannot follow an open-ended `--stream` (60s cap).",
+			summary: "Incremental `--stream` replies require native-api.",
 			remediation:
-				"Open-ended follow is native-api only: use `--via native-api`, or drop `--stream` for a bounded one-shot.",
-			context: { via: resolved.via.value, capability: "listen" },
+				"Use `--via native-api`, or drop `--stream` for a bounded one-shot response.",
+			context: { via: resolved.via.value, capability: "stream" },
 		});
 	}
 	throw new CentrsError({
 		code: "input/invalid-command",
-		summary: "`--stream` is an open-ended follow, not a one-shot `api` call.",
+		summary:
+			"`--stream` yields incremental replies instead of a one-shot `api` result.",
 		remediation:
-			"Consume the stream via `apiListen()` (library) or `centrs api … --stream` (CLI); both yield an NDJSON envelope per change frame plus a final summary.",
-		context: { via: resolved.via.value, capability: "listen" },
+			"Consume the stream via `apiListen()` (library) or `centrs api … --stream` (CLI); both yield an NDJSON envelope per reply frame plus a final summary.",
+		context: { via: resolved.via.value, capability: "stream" },
 	});
 }
 

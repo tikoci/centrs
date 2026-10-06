@@ -7,7 +7,7 @@ single REST or native-API operation, and returns the result in the standard
 envelope.
 
 Status: `CHR-passed` over `rest-api` and `native-api`, including multi-target
-fan-out and open-ended `--stream` follow (native-api only), per
+fan-out and incremental `--stream` replies (native-api only), per
 `docs/MATRIX.md`. This file describes intent and flags; the matrix holds the
 cell states. Load-bearing rules — envelope, errors, settings precedence,
 identity, validation, protocol selection — live in
@@ -46,7 +46,8 @@ centrs api <router> <endpoint> [flags]
 - `<endpoint>` — a REST-style path, leniently normalized. All of
   `ip/address`, `/ip/address`, `rest/ip/address`, `/rest/ip/address`,
   `"ip address"`, `'ip address'` canonicalize to `/ip/address`. A trailing id
-  segment (`ip/address/*1`) addresses one row. A trailing `/listen` segment
+  segment (`ip/address/*1`) addresses one row for GET/PATCH/DELETE; PUT and
+  POST reject it with `input/invalid-path`. A trailing `/listen` segment
   infers `--stream` + `--via native-api`.
 
 The HTTP method (`-X`, default `GET`) is honored **literally** against RouterOS's
@@ -171,35 +172,61 @@ the RouterOS error payload to stderr with a nonzero exit; a centrs-side failure
 with no RouterOS response prints a compact `{code,message}` to stderr. Exit code is
 `0` iff `ok`.
 
-## Multi-frame results: bounded vs open-ended
+## Multi-frame results and incremental replies
 
-RouterOS produces multi-frame output two ways, and `api` treats them differently:
+Without `--stream`, bounded commands return their accumulated rows as an ordinary
+array. REST retains its **60 s** cap; native API collects replies until `!done`.
 
-- **Bounded `duration=` / `monitor` commands are ordinary `api` calls.** Both
-  transports return the accumulated frames as a normal **array** (REST regularizes
-  the native `!re` frames into `.section`-keyed records; native's reader collects
-  them until the command completes). No flag needed — e.g.
-  `centrs api $R interface/monitor-traffic -f interface=ether1 -f duration=5s`
-  returns a `.section` array. REST bounds these at the **60 s** cap (a longer
-  `duration=` terminates early with an error); native has no cap. This is **not**
-  NDJSON.
-- **Open-ended follow is `--stream` (alias `--listen`), native-api only.** Only
-  the native API `/listen` command follows indefinitely (REST cannot — the 60 s
-  cap). Each `!re` becomes one rest-style envelope frame (one NDJSON line; a
-  deletion's `.dead=true` flag is preserved); the stream ends with a summary
-  envelope (`data.stopReason` ∈ `count-reached`/`duration-elapsed`/`interrupted`/
-  `transport-error`, plus `frames` and `durationMs`). `--duration`/`--count`
-  bound it; Ctrl-C stops and still emits the summary. The `--duration` window
-  starts once validation is done, so it excludes validation (and the connect and
-  login validation needs). With `--no-validate`, connect and login happen inside
-  the window. Stopping on `--duration` or Ctrl-C sends RouterOS `/cancel`, and
-  centrs waits up to `--timeout` for the router to acknowledge it. A router that
-  never does gets its session closed locally, and the summary carries a
-  `transport/cancel-unacknowledged` warning (#385). Reaching `--count` sends
-  `/cancel` best-effort and closes the session without waiting, so it never
-  carries that warning (examples L5). `--via rest-api --stream` →
-  `transport/capability-unsupported`. The exit code reflects whether the stream
-  *started* cleanly, not whether every frame was `ok`.
+`--stream` (alias `--listen`) emits native replies incrementally, whether the
+command is finite or open-ended. `--via rest-api --stream` fails with
+`transport/capability-unsupported`; centrs never substitutes polling.
+
+- **GET menu + `--stream`** keeps the existing change-subscription behavior:
+  `/ip/address` sends `/ip/address/listen`. An explicit `/listen` endpoint infers
+  streaming and requires GET. GET subscriptions reject body fields rather than
+  silently dropping them.
+- **POST command + `--stream`** runs the literal command with its attributes:
+  `api $R /tool/ping -X POST -f address=10.0.2.2 -f count=3 --stream --yes`.
+  POST `/system/resource/print -f interval=1 --stream --count 2` samples twice;
+  it does not become a listen. PUT/PATCH/DELETE retain their add/set/remove
+  mapping and confirmation gates. Query/projection flags on these mutations or
+  `/execute` scripts fail with `usage/conflicting-flags` instead of being ignored. `/execute` retains synchronous `as-string`
+  script semantics. Streaming never makes a command read-only.
+- Each `!re` emits one envelope with `meta.operation.stream.kind=frame`.
+  Device `.section` grouping is preserved verbatim. A terminal `!done` is not
+  a row: its attributes, when received, appear in successful summary `data.done`,
+  including a terminal result received during local cancellation. The stop
+  reason still reports the first local bound.
+- Read outcomes from **`meta.operation.stream`** on both success and failure;
+  successful `data.stopReason` is a compatibility copy.
+- Exactly one terminal summary follows a started stream. Its marker is
+  `meta.operation.stream.kind=summary`, with `frames`, `durationMs`, and
+  `stopReason`: `completed`, `count-reached`, `duration-elapsed`, `interrupted`,
+  `routeros-error`, or `transport-error`. A RouterOS/transport failure has
+  `ok:false` and a structured `error`; summary counts/reason are in metadata
+  (error envelopes have no `data`). Previously emitted rows remain partial
+  results. A failed summary retains any `transport/cancel-unacknowledged`
+  warning as well. Preflight failures emit one error envelope without starting a stream.
+- Structured JSON/YAML streams put **all** envelopes, including errors, on
+  stdout as NDJSON and exit nonzero for any failure, even after successful rows.
+  Text mode uses the same outcome/exit rules. `--raw` retains bare payloads and
+  stderr errors; it does not provide the structured stream contract.
+
+A change subscription always retains `.id,.dead` when the caller requests a
+proplist. **Filtered change subscriptions are rejected**: server query words can
+hide deletes, and correct client filtering requires initial membership and
+transition semantics (#396/#397). Follow unfiltered rows and track membership
+on the client, or use a one-shot query. An addressed GET subscription keeps its
+ID query because deletion notices carry that same ID. These change-only
+protections do not alter projections/queries on explicit POST commands.
+
+`-f count=3` and `-f duration=2s` are **device arguments**; `--count` and
+`--duration` are **centrs bounds**. The duration window starts after validation,
+excluding its connection/login. With validation disabled, connect/login happen
+inside the window. Duration expiry or Ctrl-C sends `/cancel` and waits up to
+`--timeout` for acknowledgement; otherwise centrs closes locally and reports
+`transport/cancel-unacknowledged`. Count stop sends `/cancel` best-effort and
+closes without waiting (#385, example L5). A local bound is not a device `!done`.
 
 ## MCP (deferred — forward guidance)
 

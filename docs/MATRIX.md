@@ -60,6 +60,8 @@ and implementation sequencing in the linked issues.
   structured operation surface is `api`.
 - `api --stream` absorbs the former `stream`/`tail` surface; native-api stream
   details are in `commands/api/README.md` and `src/protocols/native-api.ts`.
+  #399 extends it to incremental command replies and truthful terminal outcomes;
+  filtered change subscriptions fail closed pending #396/#397.
 - `discover / mndp` is grounded by `commands/discover/README.md`,
   `src/data/mndp.ts`, `src/data/mndp-cache.ts`, and
   `test/integration/discover.test.ts`.

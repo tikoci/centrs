@@ -142,7 +142,7 @@ export interface ProtocolApiResult {
 	data: unknown;
 }
 
-/** Options for an open-ended `listen` follow. */
+/** Options for incremental native command replies. */
 export interface ProtocolListenOptions {
 	/** Abort the listen (sends `/cancel`); the generator then ends cleanly. */
 	signal?: AbortSignal;
@@ -160,6 +160,8 @@ export interface ProtocolListenOptions {
 	cancelGraceMs?: number;
 	/** Fired when that wait expires without the router's acknowledgement. */
 	onCancelUnacknowledged?: () => void;
+	/** Attributes carried by the command's terminal `!done`, not a row frame. */
+	onDone?: (attributes: Record<string, string>) => void;
 }
 
 /**
@@ -183,9 +185,9 @@ export interface ProtocolAdapter {
 	/** Run a normalized structured `api` request (the gh-api passthrough surface). */
 	apiRequest(request: ProtocolApiRequest): Promise<ProtocolApiResult>;
 	/**
-	 * Open-ended `/listen` follow (native-api only). Yields one rest-style change
-	 * record per `!re` frame (deletions carry `.dead`), until cancelled via
-	 * `options.signal` or the consumer stopping. REST and console transports
+	 * Incremental native replies. GET/print subscribes to changes; other verbs
+	 * keep their command mapping. Yields one record per `!re`, until natural
+	 * completion, cancellation, or failure. REST and console transports
 	 * reject with `transport/capability-unsupported`.
 	 */
 	listen(
@@ -333,7 +335,10 @@ class RestAdapter implements ProtocolAdapter {
 					return { data: result.ret ?? result.records };
 				}
 				return {
-					data: await this.requestRest("POST", base, request.attributes ?? {}),
+					data: await this.requestRest("POST", base, {
+						...request.attributes,
+						...restQueryBody(request),
+					}),
 				};
 			}
 			default:
@@ -349,7 +354,7 @@ class RestAdapter implements ProtocolAdapter {
 			summary: "REST cannot follow an open-ended `--stream` (60s cap).",
 			remediation:
 				"Open-ended follow is native-api only: use `--via native-api`, or drop `--stream` for a bounded one-shot.",
-			context: { protocol: this.protocol, capability: "listen" },
+			context: { protocol: this.protocol, capability: "stream" },
 		});
 	}
 
@@ -569,6 +574,32 @@ class RestAdapter implements ProtocolAdapter {
 	}
 }
 
+/** One native sentence shape for one-shot and incremental API requests. */
+function nativeCommandFor(request: ProtocolApiRequest): NativeApiCommand {
+	const base = request.path.replace(/\/$/, "");
+	const command: NativeApiCommand = {
+		command:
+			request.script !== undefined
+				? "/execute"
+				: request.verb === "run"
+					? base
+					: `${base}/${request.verb}`,
+		attributes:
+			request.script !== undefined
+				? { script: request.script, "as-string": "" }
+				: { ...request.attributes },
+	};
+	if (request.verb === "set" || request.verb === "remove") {
+		command.attributes = { ...command.attributes, ".id": request.id ?? "" };
+	}
+	const queries = (request.query ?? []).map((word) => `?${word}`);
+	if (request.id && request.verb === "print")
+		queries.push(`?.id=${request.id}`);
+	if (queries.length > 0) command.queries = queries;
+	if (request.proplist?.length) command.proplist = request.proplist;
+	return command;
+}
+
 class NativeApiAdapter implements ProtocolAdapter {
 	readonly protocol: RouterOsProtocol;
 	readonly capabilities: ProtocolAdapterCapabilities = {
@@ -652,69 +683,21 @@ class NativeApiAdapter implements ProtocolAdapter {
 	}
 
 	async apiRequest(request: ProtocolApiRequest): Promise<ProtocolApiResult> {
-		const base = request.path.replace(/\/$/, "");
+		const records = repliesToRecords(
+			await this.talk(nativeCommandFor(request)),
+		);
 		switch (request.verb) {
-			case "print": {
-				const command: NativeApiCommand = { command: `${base}/print` };
-				const queries: string[] = [];
-				// REST `.query` words map 1:1 to native `?`-prefixed words (CHR-grounded).
-				for (const word of request.query ?? []) {
-					queries.push(`?${word}`);
-				}
-				// No native get-one-by-id shorthand: address a single row with `?.id=`.
-				if (request.id) {
-					queries.push(`?.id=${request.id}`);
-				}
-				if (queries.length > 0) {
-					command.queries = queries;
-				}
-				if (request.proplist && request.proplist.length > 0) {
-					command.proplist = request.proplist;
-				}
-				const records = repliesToRecords(await this.talk(command));
+			case "print":
 				return { data: request.id ? (records[0] ?? null) : records };
-			}
-			case "add": {
-				const records = repliesToRecords(
-					await this.talk({
-						command: `${base}/add`,
-						attributes: request.attributes ?? {},
-					}),
-				);
+			case "add":
+			case "set":
+			case "remove":
 				return { data: restStyleMutationData(records) };
-			}
-			case "set": {
-				const records = repliesToRecords(
-					await this.talk({
-						command: `${base}/set`,
-						attributes: {
-							...(request.attributes ?? {}),
-							".id": request.id ?? "",
-						},
-					}),
-				);
-				return { data: restStyleMutationData(records) };
-			}
-			case "remove": {
-				const records = repliesToRecords(
-					await this.talk({
-						command: `${base}/remove`,
-						attributes: { ".id": request.id ?? "" },
-					}),
-				);
-				return { data: restStyleMutationData(records) };
-			}
-			case "run": {
-				if (request.script !== undefined) {
-					const records = await this.executeScript(request.script);
-					return { data: restStyleRunData(records) };
-				}
-				const command: NativeApiCommand = { command: base };
-				if (request.attributes && Object.keys(request.attributes).length > 0) {
-					command.attributes = request.attributes;
-				}
-				return { data: repliesToRecords(await this.talk(command)) };
-			}
+			case "run":
+				return {
+					data:
+						request.script !== undefined ? restStyleRunData(records) : records,
+				};
 			default:
 				return exhaustiveApiVerb(request.verb);
 		}
@@ -724,28 +707,19 @@ class NativeApiAdapter implements ProtocolAdapter {
 		request: ProtocolApiRequest,
 		options: ProtocolListenOptions,
 	): AsyncGenerator<Record<string, unknown>> {
-		const base = request.path.replace(/\/$/, "");
-		const command: NativeApiCommand = { command: `${base}/listen` };
-		// A listen can filter which changes it follows with the same `?`-words /
-		// `=.proplist=` as print (REST `.query` word == native `?`-word minus `?`).
-		const queries = (request.query ?? []).map((word) => `?${word}`);
-		// An addressed row (`ip/address/*1 --stream`) follows just that row, the
-		// same `?.id=` mapping one-shot native reads use.
-		if (request.id) {
-			queries.push(`?.id=${request.id}`);
-		}
-		if (queries.length > 0) {
-			command.queries = queries;
-		}
-		if (request.proplist && request.proplist.length > 0) {
-			command.proplist = request.proplist;
+		if (options.signal?.aborted) return;
+		const command = nativeCommandFor(request);
+		if (request.verb === "print") {
+			command.command = `${request.path.replace(/\/$/, "")}/listen`;
+			if (request.proplist?.length) {
+				command.proplist = [...new Set([...request.proplist, ".id", ".dead"])];
+			}
 		}
 		const session = await this.connect();
 		for await (const reply of session.listen(command, {
 			...options,
 			cancelGraceMs: options.cancelGraceMs ?? this.config.timeoutMs,
 		})) {
-			// Each `!re` becomes a rest-style record (string values; `.dead` preserved).
 			yield { ...reply.attributes };
 		}
 	}

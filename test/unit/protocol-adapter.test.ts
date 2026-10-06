@@ -299,3 +299,47 @@ describe("RestAdapter execute seam", () => {
 		}
 	});
 });
+
+describe("REST structured POST query/projection", () => {
+	test("forwards command attributes together with query and projection", async () => {
+		const mock = mockFetchSequence([
+			(_url, init) => {
+				expect(JSON.parse(String(init?.body))).toEqual({
+					interval: "1",
+					".query": ["interface=ether1"],
+					".proplist": ["address"],
+				});
+				return jsonResponse([]);
+			},
+		]);
+		try {
+			await createProtocolAdapter(restConfig()).apiRequest({
+				verb: "run",
+				path: "/ip/address/print",
+				attributes: { interval: "1" },
+				query: ["interface=ether1"],
+				proplist: ["address"],
+			});
+		} finally {
+			mock.restore();
+		}
+	});
+});
+
+describe("native pre-aborted incremental request", () => {
+	test("returns before dialing the adapter endpoint", async () => {
+		const adapter = createProtocolAdapter(
+			restConfig({ protocol: "native-api", host: "127.0.0.1", port: 1 }),
+		);
+		const controller = new AbortController();
+		controller.abort();
+		const rows = [];
+		for await (const row of adapter.listen(
+			{ verb: "add", path: "/ip/address" },
+			{ signal: controller.signal },
+		))
+			rows.push(row);
+		expect(rows).toEqual([]);
+		await adapter.close();
+	});
+});
