@@ -655,6 +655,9 @@ export class NativeApiSession {
 			onDone?: (attributes: Record<string, string>) => void;
 		} = {},
 	): AsyncGenerator<ApiReply, void, void> {
+		// A cancelled caller must not dispatch a command, especially now that
+		// this path streams writes as well as read-only change subscriptions.
+		if (options.signal?.aborted) return;
 		if (this.closed) {
 			throw (
 				this.closeError ??
