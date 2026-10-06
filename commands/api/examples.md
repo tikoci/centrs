@@ -496,7 +496,7 @@ ID and requires natural completion. Neither mutation becomes a listen.
 Loopback regressions in `test/integration/api-stream-command.test.ts` also
 exercise natural/empty completion, terminal `ret`, first/midstream trap,
 unsolicited interruption, fatal/close, and nonzero process exit with the failure
-summary on stdout. Device-dependent examples L6–L13 run in
+summary on stdout. Device-dependent examples L6–L14 run in
 `test/integration/api-listen.test.ts` with validation enabled.
 
 ## fanout (multi-target, F…)
@@ -614,3 +614,15 @@ centrs api --quickchr $NAME system/resource --json
 
 Envelope: `ok: true`, `data` is the resource object,
 `meta.target.source.kind=provider`.
+
+### L14. Streamed `/execute` runtime errors fail the terminal summary
+
+```sh
+bun run centrs api ROUTER execute -X POST --stream --via native-api --yes --json -f 'script=/ip/service/set www-ssl certificate=nope'
+```
+
+With validation enabled and no `nope` certificate, syntax validation passes but
+RouterOS rejects the value at runtime. The sole terminal envelope is `ok: false`,
+`routeros/invalid-value`, and `stopReason: routeros-error`; the CLI exits nonzero.
+Ordinary stdout such as `:put "status: no such item appears in ordinary output"`
+still completes successfully with its text in `data.done.ret`.

@@ -497,6 +497,10 @@ async function* streamResolvedApi(
 				break;
 			}
 		}
+		const routerOsFailure = apiRouterOsFailureFromResult(resolved, {
+			data: done?.["ret"],
+		});
+		if (routerOsFailure) throw routerOsFailure;
 		yield streamSummaryEnvelope(
 			resolved,
 			validation,

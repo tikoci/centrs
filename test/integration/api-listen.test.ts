@@ -75,7 +75,7 @@ async function streamWithTrigger(
 }
 
 describeFast("api --stream against CHR (native-api)", () => {
-	test("runs native stream examples L1-L4 and L6-L13", async () => {
+	test("runs native stream examples L1-L4 and L6-L14", async () => {
 		const started = await startIntegrationChr();
 		const chr = started.chr;
 		try {
@@ -364,6 +364,42 @@ describeFast("api --stream against CHR (native-api)", () => {
 			expect(removed.every((e) => e.ok)).toBe(true);
 			expect(summaryData(removed.at(-1)).stopReason).toBe("completed");
 
+			// L14. /execute runtime rejection in !done.ret follows the one-shot
+			// error contract; ordinary stdout containing fault words stays successful.
+			const scriptRejected = await collect({
+				...nativeBase,
+				endpoint: "execute",
+				method: "POST",
+				fields: { script: "/ip/service/set www-ssl certificate=nope" },
+				yes: true,
+			});
+			expect(scriptRejected).toHaveLength(1);
+			expect(scriptRejected[0]).toMatchObject({
+				ok: false,
+				error: { code: "routeros/invalid-value" },
+				meta: {
+					operation: {
+						stream: { kind: "summary", stopReason: "routeros-error" },
+					},
+				},
+			});
+			expect(
+				scriptRejected[0]?.meta.validation?.stages?.map(
+					(stage) => stage.result,
+				),
+			).toEqual(["passed", "passed"]);
+			const scriptOutput = await collect({
+				...nativeBase,
+				endpoint: "execute",
+				method: "POST",
+				fields: {
+					script: ':put "status: no such item appears in ordinary output"',
+				},
+				yes: true,
+			});
+			expect(scriptOutput.every((e) => e.ok)).toBe(true);
+			expect(summaryData(scriptOutput.at(-1)).stopReason).toBe("completed");
+
 			await recordIntegrationEvidence({
 				suite: "api --stream against CHR (native-api)",
 				command: "api",
@@ -372,7 +408,7 @@ describeFast("api --stream against CHR (native-api)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [...exampleIds(4), ...[6, 7, 8, 9, 10, 11, 12, 13]],
+				exampleIds: [...exampleIds(4), ...[6, 7, 8, 9, 10, 11, 12, 13, 14]],
 			});
 		} finally {
 			await chr.destroy();

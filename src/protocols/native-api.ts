@@ -676,9 +676,10 @@ export class NativeApiSession {
 		let ended = false;
 		let failure: CentrsError | undefined;
 		let trap: ApiReply | undefined;
+		let trapAcknowledgesCancel = false;
 		const assertNoFailure = (): void => {
 			if (failure) throw failure;
-			if (trap && !(isInterruptedTrap(trap) && options.signal?.aborted)) {
+			if (trap && !trapAcknowledgesCancel) {
 				throw this.trapToError(command.command, trap);
 			}
 		};
@@ -696,6 +697,8 @@ export class NativeApiSession {
 			},
 			trap: (reply) => {
 				trap = reply;
+				trapAcknowledgesCancel =
+					isInterruptedTrap(reply) && !!options.signal?.aborted;
 			},
 			settle: (reply) => {
 				options.onDone?.(reply.attributes);

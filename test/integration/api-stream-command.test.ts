@@ -21,6 +21,8 @@ type Mode =
 	| "close"
 	| "fatal"
 	| "interrupted"
+	| "delayed-interrupted"
+	| "script-error"
 	| "burst"
 	| "delete";
 
@@ -64,6 +66,15 @@ async function run(
 						reply("!done");
 						continue;
 					}
+					if (words[0] === "/cancel") {
+						reply("!done");
+						continue;
+					}
+					if (mode === "delayed-interrupted") {
+						reply("!trap", "=category=2", "=message=interrupted");
+						setTimeout(() => reply("!done"), 250);
+						continue;
+					}
 					if (mode === "close") {
 						socket.end();
 						continue;
@@ -84,7 +95,12 @@ async function run(
 					if (mode === "interrupted")
 						reply("!trap", "=category=2", "=message=interrupted");
 					if (mode === "empty") reply("!empty");
-					reply("!done", "=ret=fixture-result");
+					reply(
+						"!done",
+						mode === "script-error"
+							? "=ret=no such item"
+							: "=ret=fixture-result",
+					);
 				}
 			},
 		},
@@ -176,6 +192,26 @@ describe("api --stream command lifecycle (#399)", () => {
 					stream: { kind: "summary", frames: 1, stopReason: "routeros-error" },
 				},
 			},
+		});
+	});
+	test("script runtime rejection in terminal ret fails the stream", async () => {
+		const result = await run(
+			"script-error",
+			["-f", "script=/ip/address/get *FFFFFF address"],
+			"execute",
+		);
+		expect(result.exitCode).toBe(1);
+		expect(result.lines.at(-1)).toMatchObject({
+			ok: false,
+			error: { code: "routeros/unknown-path" },
+		});
+	});
+	test("a later duration abort cannot hide an unsolicited interruption", async () => {
+		const result = await run("delayed-interrupted", ["--duration", "100ms"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.lines.at(-1)).toMatchObject({
+			ok: false,
+			meta: { operation: { stream: { stopReason: "routeros-error" } } },
 		});
 	});
 	test("GET projection retains deletion fields and addressed-row query", async () => {
