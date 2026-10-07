@@ -18,9 +18,15 @@
  *   error (examples P1–P4).
  */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type {
 	CentrsEnvelope,
 	CentrsErrorEnvelope,
@@ -397,6 +403,9 @@ async function runDownload(
 	warnings: Warning[],
 ): Promise<VerbResult> {
 	const remote = requireRemote(resolved);
+	// A destination that cannot be written fails before any device read, so a
+	// typo in the local path costs no transfer and never reads as a centrs bug.
+	checkLocalSink(resolved);
 	const row = await backend.findFile(remote);
 	if (!row) {
 		throw new CentrsError({
@@ -1253,7 +1262,45 @@ function writeLocalSink(
 	// so a newly created destination file gets owner-only permissions
 	// instead of the process umask default. Mode only applies on creation —
 	// an existing destination keeps its current permissions.
-	writeFileSync(local, bytes, { mode: 0o600 });
+	try {
+		writeFileSync(local, bytes, { mode: 0o600 });
+	} catch (error) {
+		throw localSinkError(local, "cannot be written", error);
+	}
+}
+
+/**
+ * The local half of download's validate-before-write: the parent directory
+ * must exist (centrs does not create it) and the destination must not be a
+ * directory. stdout (`-`) needs no check.
+ */
+function checkLocalSink(resolved: ResolvedTransferRequest): void {
+	const local = resolved.local ?? basename(resolved.remote ?? "");
+	if (local === "-") {
+		return;
+	}
+	const parent = dirname(local);
+	if (!statSync(parent, { throwIfNoEntry: false })?.isDirectory()) {
+		throw localSinkError(local, `has no parent directory ${parent}`);
+	}
+	if (statSync(local, { throwIfNoEntry: false })?.isDirectory()) {
+		throw localSinkError(local, "is a directory");
+	}
+}
+
+function localSinkError(
+	local: string,
+	reason: string,
+	cause?: unknown,
+): CentrsError {
+	return new CentrsError({
+		code: "input/local-destination",
+		summary: `Local destination ${local} ${reason}.`,
+		remediation:
+			"Create the parent directory first (centrs does not create it), or pass a writable file path, or `-` for stdout.",
+		context: { local },
+		cause,
+	});
 }
 
 function localLabel(resolved: ResolvedTransferRequest): string {

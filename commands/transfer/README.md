@@ -261,7 +261,9 @@ success, per-target results live in `data.targets`.
 ## Validation
 
 `transfer` validates what it can locally first — conflicting flags
-(`usage/conflicting-flags`), a missing local source on `upload`, a `--via rest`
+(`usage/conflicting-flags`), a missing local source on `upload`, a `download`
+destination whose parent directory is missing or that is itself a directory
+(`input/local-destination`; centrs does not create directories), a `--via rest`
 upload that exceeds 60 KB (`transport/unsupported-operation`). The
 **refuse-overwrite** guard is a real precondition probe, not a local check:
 unless `--force`, centrs `stat`s the destination (SFTP `stat`, or `/file/print`
