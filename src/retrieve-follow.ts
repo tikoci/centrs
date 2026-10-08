@@ -83,6 +83,11 @@ class FollowQueue {
 		return this.events.length - this.head;
 	}
 
+	/** The first fatal error recorded, including one that arrived after the loop left. */
+	get fatalError(): { error: unknown } | undefined {
+		return this.fatal;
+	}
+
 	push(event: FollowEvent): void {
 		this.events.push(event);
 		this.signal();
@@ -255,11 +260,15 @@ async function* runFollow(
 	// that arrived before the snapshot's `!done` (A1 replays them after it).
 	const queue = new FollowQueue();
 	const pending: ProtocolTappedReply[] = [];
+	// Cleared once the loop leaves: replies that land during teardown are not
+	// read, so they must not count toward the overflow bound. Errors still do.
+	let draining = true;
 	const push = (event: FollowEvent): void => {
 		if (event.type === "error") {
 			queue.fail(event.error);
 			return;
 		}
+		if (!draining) return;
 		if (
 			(event.type === "listen" || event.type === "snapshot-row") &&
 			queue.length + pending.length >= bufferLimit
@@ -514,7 +523,12 @@ async function* runFollow(
 					throw event.error;
 			}
 		}
+		draining = false;
 		const warnings = await endListen();
+		// A command that failed while teardown waited (a sweep or snapshot trap
+		// after `--count`/`--duration`) fails the follow, not a clean summary.
+		const late = queue.fatalError;
+		if (late) throw late.error;
 		yield summaryEnvelope(
 			resolved,
 			validation,
@@ -524,6 +538,7 @@ async function* runFollow(
 			warnings,
 		);
 	} catch (error) {
+		draining = false;
 		const warnings = await endListen();
 		const envelope = buildRetrieveErrorEnvelopeFromResolved(resolved, error);
 		envelope.meta.validation = validation;

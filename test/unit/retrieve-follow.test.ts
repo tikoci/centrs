@@ -8,6 +8,9 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Socket, TCPSocketListener } from "bun";
 import {
 	encodeSentence,
@@ -39,6 +42,11 @@ interface FakeRouterOptions {
 	onSnapshot?: (router: FakeFollowRouter) => void;
 	/** Runs when a sweep arrives; returns the ids the sweep reports. */
 	onSweep?: (router: FakeFollowRouter) => string[];
+	/**
+	 * Answer every sweep with a non-interrupted `!trap` this many ms late,
+	 * after announcing a new row (`*9`) to open listens.
+	 */
+	sweepTrapAfterMs?: number;
 }
 
 /**
@@ -143,6 +151,15 @@ class FakeFollowRouter {
 				return;
 			case "/ip/address/print": {
 				let rows = [...this.rows.values()];
+				const trapAfter = this.options.sweepTrapAfterMs;
+				if (attrs[".proplist"] === ".id" && trapAfter !== undefined) {
+					this.set("*9", { address: "192.0.2.9/24" });
+					setTimeout(() => {
+						this.send(["!trap", "=message=sweep failed", `.tag=${tag}`]);
+						done();
+					}, trapAfter);
+					return;
+				}
 				if (attrs[".proplist"] === ".id") {
 					const ids = this.options.onSweep?.(this) ?? [...this.rows.keys()];
 					rows = ids.map((id) => ({ ".id": id }));
@@ -407,6 +424,24 @@ describe("retrieveFollow sweep", () => {
 		);
 	});
 
+	test("a sweep that traps after --count stopped the loop fails the follow", async () => {
+		// The `*9` change reaches --count 1 while the sweep is still out; its
+		// trap lands during teardown and must not become a clean summary.
+		const router = fakeRouter({ sweepTrapAfterMs: 50 });
+		const out = await follow(
+			request(router, { count: 1, duration: "5s", sweep: "50ms" }),
+		);
+		const shapes = out.map(shape);
+		expect(shapes).toContain("live upsert *9 listen");
+		const last = out.at(-1);
+		expect(last?.ok).toBe(false);
+		expect(streamOf(last as RetrieveEnvelope)).toMatchObject({
+			kind: "summary",
+			stopReason: "routeros-error",
+			changes: 1,
+		});
+	});
+
 	test("--sweep 0 sends no sweep and leads with the follow-sweep-off notice", async () => {
 		const router = fakeRouter();
 		const out = await follow(request(router, { duration: "300ms", sweep: 0 }));
@@ -554,6 +589,46 @@ describe("retrieve --follow CLI", () => {
 		]);
 		expect(result.code).toBe(1);
 		expect(result.err).toContain("usage/fanout-not-supported");
+	});
+
+	test("honors CENTRS_FORMAT from centrs.env, known only after resolution", async () => {
+		const router = fakeRouter();
+		const xdg = await mkdtemp(join(tmpdir(), "centrs-follow-xdg-"));
+		await Bun.write(join(xdg, "tikoci", "centrs.env"), "CENTRS_FORMAT=json\n");
+		const saved = {
+			XDG_CONFIG_HOME: Bun.env["XDG_CONFIG_HOME"],
+			CENTRS_SKIP_ENV_FILE: Bun.env["CENTRS_SKIP_ENV_FILE"],
+			CENTRS_FORMAT: Bun.env["CENTRS_FORMAT"],
+		};
+		Bun.env["XDG_CONFIG_HOME"] = xdg;
+		delete Bun.env["CENTRS_SKIP_ENV_FILE"];
+		delete Bun.env["CENTRS_FORMAT"];
+		try {
+			const result = await runCliCaptured([
+				"retrieve",
+				"127.0.0.1",
+				"/ip/address",
+				"--port",
+				String(router.port),
+				"--username",
+				"admin",
+				"--password",
+				"",
+				"--follow",
+				"--duration",
+				"200ms",
+			]);
+			expect(result.code).toBe(0);
+			const lines = result.out.split("\n");
+			expect(lines.length).toBeGreaterThan(2);
+			for (const line of lines) expect(JSON.parse(line).ok).toBe(true);
+		} finally {
+			for (const [key, value] of Object.entries(saved)) {
+				if (value === undefined) delete Bun.env[key];
+				else Bun.env[key] = value;
+			}
+			await rm(xdg, { recursive: true, force: true });
+		}
 	});
 
 	test("text lines: frames, synced and summary each stay on one line", async () => {

@@ -299,7 +299,9 @@ async function runRetrieveFollowCli(
 		for await (const envelope of retrieveFollow(request, Bun.env, {
 			signal: controller.signal,
 		})) {
-			console.log(renderRetrieveFollowLine(envelope, format));
+			// A config-file `CENTRS_FORMAT` is known only after resolution.
+			const resolvedFormat = envelope.meta.operation?.request.format ?? format;
+			console.log(renderRetrieveFollowLine(envelope, resolvedFormat));
 			if (!envelope.ok) exitCode = 1;
 		}
 	} finally {
