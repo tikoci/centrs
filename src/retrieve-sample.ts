@@ -87,18 +87,13 @@ export async function* retrieveSample(
 	const sample = resolved.sample ?? { intervalMs: 0 };
 	let samples = 0;
 	let stopReason: RetrieveSampleStopReason | undefined;
-	// Every stop source settles one promise; a read or a wait races it.
-	let wakeStop: () => void = () => {};
-	const stopped = new Promise<void>((resolve) => {
-		wakeStop = resolve;
-	});
-	// Abandons the read in flight: REST aborts its request; a native read ends
-	// when the session closes below.
+	// Every stop source aborts this signal. It abandons the read in flight
+	// (REST aborts its request; a native read ends when the session closes
+	// below) and ends the wait between reads.
 	const abandon = new AbortController();
 	const stop = (reason: RetrieveSampleStopReason): void => {
 		stopReason ??= reason;
 		abandon.abort();
-		wakeStop();
 	};
 	const onAbort = (): void => stop("interrupted");
 	options.signal?.addEventListener("abort", onAbort);
@@ -129,7 +124,7 @@ export async function* retrieveSample(
 				).then((data) => ({ data }));
 				// A read abandoned by a stop may still fail later; nobody awaits it.
 				read.catch(() => {});
-				const result = await Promise.race([read, stopped]);
+				const result = await unlessAborted(read, abandon.signal);
 				// A read still in flight at the stop is not a complete sample.
 				if (result === undefined) break;
 				samples += 1;
@@ -148,12 +143,12 @@ export async function* retrieveSample(
 				const waitMs = sentAt + sample.intervalMs - Date.now();
 				if (waitMs > 0) {
 					let timer: ReturnType<typeof setTimeout> | undefined;
-					await Promise.race([
+					await unlessAborted(
 						new Promise<void>((resolve) => {
 							timer = setTimeout(resolve, waitMs);
 						}),
-						stopped,
-					]);
+						abandon.signal,
+					);
 					clearTimeout(timer);
 				}
 			}
@@ -185,6 +180,33 @@ export async function* retrieveSample(
 		options.signal?.removeEventListener("abort", onAbort);
 		await backend.close();
 	}
+}
+
+/**
+ * `work`'s value, or `undefined` as soon as `signal` aborts. The abort
+ * listener is removed when `work` settles: racing every sample against one
+ * long-lived promise would keep a reaction per sample for the whole run
+ * (#411 review: about 5,300 retained after 3,000 samples).
+ */
+function unlessAborted<T>(
+	work: Promise<T>,
+	signal: AbortSignal,
+): Promise<T | undefined> {
+	if (signal.aborted) return Promise.resolve(undefined);
+	return new Promise<T | undefined>((resolve, reject) => {
+		const onAbort = (): void => resolve(undefined);
+		signal.addEventListener("abort", onAbort, { once: true });
+		work.then(
+			(value) => {
+				signal.removeEventListener("abort", onAbort);
+				resolve(value);
+			},
+			(error: unknown) => {
+				signal.removeEventListener("abort", onAbort);
+				reject(error);
+			},
+		);
+	});
 }
 
 function summaryEnvelope(

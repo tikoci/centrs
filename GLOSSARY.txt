@@ -347,6 +347,7 @@ WHATWG
 followable
 # BFD: Bidirectional Forwarding Detection (`/routing/bfd`); its sessions accept `listen` but never send changes (#396 round 2).
 BFD
+jsc # Bun's `bun:jsc` module (JavaScriptCore heap stats), used by the `--sample` memory regression test
 # WIP: work in progress (used for the upstream MikroTik Docusaurus docs site).
 WIP
 # adhoc: future inline host+credential targets; Phase 1 MCP uses CDB-only targets.

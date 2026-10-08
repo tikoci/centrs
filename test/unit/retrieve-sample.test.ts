@@ -285,6 +285,31 @@ describe("retrieveSample cadence", () => {
 	});
 });
 
+describe("retrieveSample memory", () => {
+	test("a long run keeps a bounded number of pending promises", async () => {
+		const { heapStats } = await import("bun:jsc");
+		const router = fakeRouter();
+		const pending = (): number => {
+			Bun.gc(true);
+			const counts = heapStats().objectTypeCounts;
+			return (counts["Promise"] ?? 0) + (counts["SlimPromiseReaction"] ?? 0);
+		};
+		const at = new Map<number, number>();
+		for await (const envelope of retrieveSample(
+			request(router, { sample: "1ms", count: 1500 }),
+			ENV,
+		)) {
+			const stream = streamOf(envelope);
+			if (stream?.kind === "sample" && [300, 1500].includes(stream.index)) {
+				at.set(stream.index, pending());
+			}
+		}
+		// Racing each sample against one long-lived stop promise retained about
+		// two objects per sample (#411 review): ~2,400 more here.
+		expect((at.get(1500) ?? 0) - (at.get(300) ?? 0)).toBeLessThan(300);
+	}, 30_000);
+});
+
 describe("retrieveSample bounds", () => {
 	test("--duration ends the run; a read still in flight is not a sample", async () => {
 		const router = fakeRouter();
