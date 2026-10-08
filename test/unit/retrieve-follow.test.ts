@@ -47,6 +47,8 @@ interface FakeRouterOptions {
 	 * after announcing a new row (`*9`) to open listens.
 	 */
 	sweepTrapAfterMs?: number;
+	/** Runs on every `/console/inspect` (live validation). */
+	onInspect?: () => void;
 }
 
 /**
@@ -141,6 +143,7 @@ class FakeFollowRouter {
 				done();
 				return;
 			case "/console/inspect":
+				this.options.onInspect?.();
 				for (const row of this.inspect(attrs["request"], attrs["path"])) {
 					this.send(["!re", ...attributeWords(row), `.tag=${tag}`]);
 				}
@@ -502,6 +505,77 @@ describe("retrieveFollow projection and bounds", () => {
 		});
 		expect(out.at(-1)?.ok).toBe(true);
 		expect(shape(out.at(-1) as RetrieveEnvelope)).toBe("summary:interrupted");
+	});
+	test("an abort mid-replay ends at once: no rest of the batch, no synced", async () => {
+		const router = fakeRouter({
+			onSnapshot: (r) => {
+				for (let n = 1; n <= 5; n += 1) {
+					r.emit({ ".id": "*2", address: "192.0.2.2/24", comment: `v${n}` });
+				}
+			},
+		});
+		const controller = new AbortController();
+		const out: RetrieveEnvelope[] = [];
+		for await (const envelope of retrieveFollow(
+			request(router, { duration: "5s", sweep: 0 }),
+			ENV,
+			{ signal: controller.signal },
+		)) {
+			out.push(envelope);
+			if (shape(envelope) === "snapshot upsert *2 listen") controller.abort();
+		}
+		expect(out.map(shape)).toEqual([
+			"notice",
+			"snapshot upsert *1 print",
+			"snapshot upsert *2 print",
+			"snapshot upsert *2 listen",
+			"summary:interrupted",
+		]);
+	});
+
+	test("an abort mid-sweep ends at once: no rest of the removals", async () => {
+		const router = fakeRouter();
+		for (let n = 3; n <= 6; n += 1) {
+			router.set(`*${n}`, { address: `192.0.2.${n}/24` }, false);
+		}
+		const controller = new AbortController();
+		const out: RetrieveEnvelope[] = [];
+		for await (const envelope of retrieveFollow(
+			request(router, { duration: "5s", sweep: "50ms" }),
+			ENV,
+			{ signal: controller.signal },
+		)) {
+			out.push(envelope);
+			// A view menu: all six rows go away with no `.dead`.
+			if (streamOf(envelope)?.kind === "synced") router.rows.clear();
+			if (shape(envelope).endsWith(" sweep")) controller.abort();
+		}
+		const shapes = out.map(shape);
+		expect(shapes.filter((s) => s.endsWith(" sweep"))).toHaveLength(1);
+		expect(shapes.at(-1)).toBe("summary:interrupted");
+	});
+
+	test("a signal aborted before the call sends nothing to the router", async () => {
+		const router = fakeRouter();
+		const controller = new AbortController();
+		controller.abort();
+		const out = await follow(request(router, { duration: "5s", sweep: 0 }), {
+			signal: controller.signal,
+		});
+		expect(out.map(shape)).toEqual(["summary:interrupted"]);
+		expect(out[0]?.ok).toBe(true);
+		expect(router.commands()).toEqual([]);
+	});
+
+	test("an abort during validation never sends the listen", async () => {
+		const controller = new AbortController();
+		const router = fakeRouter({ onInspect: () => controller.abort() });
+		const out = await follow(request(router, { duration: "5s", sweep: 0 }), {
+			signal: controller.signal,
+		});
+		expect(out.map(shape)).toEqual(["summary:interrupted"]);
+		expect(router.commands()).not.toContain("/ip/address/listen");
+		expect(router.commands()).not.toContain("/ip/address/print");
 	});
 });
 

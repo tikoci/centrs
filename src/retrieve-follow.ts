@@ -88,6 +88,16 @@ class FollowQueue {
 		return this.fatal;
 	}
 
+	/**
+	 * The stop or fatal error waiting to jump the queue, if any. A loop that
+	 * yields a batch of frames between `next()` calls checks this per frame.
+	 */
+	halted(): FollowEvent | undefined {
+		if (this.fatal) return { type: "error", error: this.fatal.error };
+		if (this.stopRequested) return { type: "stop" };
+		return undefined;
+	}
+
 	push(event: FollowEvent): void {
 		this.events.push(event);
 		this.signal();
@@ -105,8 +115,8 @@ class FollowQueue {
 
 	async next(): Promise<FollowEvent> {
 		for (;;) {
-			if (this.fatal) return { type: "error", error: this.fatal.error };
-			if (this.stopRequested) return { type: "stop" };
+			const halted = this.halted();
+			if (halted) return halted;
 			if (this.head < this.events.length) {
 				const event = this.events[this.head] as FollowEvent;
 				this.head += 1;
@@ -151,6 +161,17 @@ export async function* retrieveFollow(
 		yield buildRetrieveErrorEnvelope(followRequest, error);
 		return;
 	}
+	const startedAt = Date.now();
+	// A caller that cancelled before the follow began gets its summary
+	// without any device work.
+	if (options.signal?.aborted) {
+		yield interruptedSummary(
+			resolved,
+			{ enabled: resolved.validate.value, result: "skipped" },
+			startedAt,
+		);
+		return;
+	}
 	if (resolved.via.value !== "native-api") {
 		yield buildRetrieveErrorEnvelopeFromResolved(
 			resolved,
@@ -183,7 +204,12 @@ export async function* retrieveFollow(
 		yield buildRetrieveErrorEnvelopeFromResolved(resolved, error);
 		return;
 	}
-	yield* runFollow(resolved, backend, validation, options);
+	if (options.signal?.aborted) {
+		await backend.close();
+		yield interruptedSummary(resolved, validation, startedAt);
+		return;
+	}
+	yield* runFollow(resolved, backend, validation, options, startedAt);
 }
 
 /**
@@ -240,10 +266,10 @@ async function* runFollow(
 	backend: ProtocolAdapter,
 	validation: EnvelopeValidationMeta,
 	options: RetrieveFollowOptions,
+	startedAt: number,
 ): AsyncGenerator<RetrieveEnvelope, void, void> {
 	const follow = resolved.follow ?? { sweepMs: 0 };
 	const bufferLimit = options.bufferLimit ?? FOLLOW_BUFFER_LIMIT;
-	const startedAt = Date.now();
 	const counts: RetrieveFollowCounts = {
 		frames: 0,
 		snapshot: 0,
@@ -298,8 +324,11 @@ async function* runFollow(
 			? setTimeout(() => stop("duration-elapsed"), follow.durationMs)
 			: undefined;
 	const onExternalAbort = (): void => stop("interrupted");
-	if (options.signal?.aborted) onExternalAbort();
-	else options.signal?.addEventListener("abort", onExternalAbort);
+	if (options.signal?.aborted) {
+		// Aborting the internal signal too keeps `run` from dispatching anything.
+		onExternalAbort();
+		controller.abort();
+	} else options.signal?.addEventListener("abort", onExternalAbort);
 
 	const internalProplist =
 		resolved.attributes.length > 0
@@ -443,6 +472,15 @@ async function* runFollow(
 		held.add(id);
 		return frame(phase, "upsert", id, "listen", reply.attributes);
 	};
+	/**
+	 * Between frames of one batch (the A1 replay, a sweep's removals): a stop
+	 * ends the loop and a fatal error is thrown, without waiting for the batch.
+	 */
+	const haltRequested = (): boolean => {
+		const halted = queue.halted();
+		if (halted?.type === "error") throw halted.error;
+		return halted !== undefined;
+	};
 	const countReached = (): boolean =>
 		follow.count !== undefined && counts.changes >= follow.count;
 
@@ -484,9 +522,11 @@ async function* runFollow(
 				}
 				case "snapshot-done": {
 					for (const reply of pending.splice(0, pending.length)) {
+						if (haltRequested()) break loop;
 						const envelope = applyListen(reply, "snapshot");
 						if (envelope) yield envelope;
 					}
+					if (haltRequested()) break loop;
 					counts.synced = true;
 					yield streamEnvelope(resolved, validation, null, {
 						kind: "synced",
@@ -504,6 +544,7 @@ async function* runFollow(
 					touchedSinceSweep = undefined;
 					for (const id of [...held]) {
 						if (event.ids.has(id) || touched.has(id)) continue;
+						if (haltRequested()) break loop;
 						held.delete(id);
 						yield frame("live", "removed", id, "sweep", null);
 						if (countReached()) {
@@ -511,6 +552,7 @@ async function* runFollow(
 							break loop;
 						}
 					}
+					if (haltRequested()) break loop;
 					scheduleSweep();
 					break;
 				}
@@ -647,6 +689,29 @@ function summaryEnvelope(
 	}
 	envelope.warnings = [...resolved.warnings, ...warnings];
 	return envelope;
+}
+
+/** The summary of a follow cancelled before its listen went out. */
+function interruptedSummary(
+	resolved: ResolvedRetrieveRequest,
+	validation: EnvelopeValidationMeta,
+	startedAt: number,
+): RetrieveSuccessEnvelope {
+	return summaryEnvelope(
+		resolved,
+		validation,
+		{
+			stopReason: "interrupted",
+			frames: 0,
+			snapshot: 0,
+			changes: 0,
+			sweeps: 0,
+			synced: false,
+		},
+		Date.now() - startedAt,
+		[],
+		[],
+	);
 }
 
 /** Advice known before the first frame: what this follow will not report. */
