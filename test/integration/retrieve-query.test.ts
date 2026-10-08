@@ -45,6 +45,9 @@ const AGREE: Record<string, string[]> = {
 		"!comment",
 		'comment=""',
 		"comment=x>y",
+		// Escapes decode as the CLI decodes them: `\_` is a space, `\3E` is `>`.
+		'comment="a\\_b"',
+		'comment="x\\3Ey"',
 		"disabled",
 		"!disabled",
 		"disabled=no",

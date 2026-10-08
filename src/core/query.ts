@@ -73,16 +73,25 @@ type Token =
 
 const NAME = /^\.?[A-Za-z][A-Za-z0-9.-]*/;
 const BARE_VALUE_STOP = new Set([" ", "\t", "\r", "\n", "(", ")", '"']);
+/**
+ * RouterOS string escapes, the device's set (`src/explain/quoted-string.ts`
+ * has the sweep). Hex is two UPPERCASE digits: `\ff` is `\f` then `f`.
+ */
 const ESCAPES: Record<string, string> = {
 	'"': '"',
 	"\\": "\\",
 	$: "$",
 	"?": "?",
 	_: " ",
+	a: "\x07",
+	b: "\b",
+	f: "\f",
 	n: "\n",
 	r: "\r",
 	t: "\t",
+	v: "\v",
 };
+const HEX_ESCAPE = /^[0-9A-F]{2}$/;
 
 /** Parse one or more `--query` expressions offline. */
 export function parseQueries(expressions: readonly string[]): ParsedQuery {
@@ -279,6 +288,16 @@ function tokenize(expression: string): Token[] {
 	while (index < expression.length) {
 		const char = expression[index] as string;
 		if (/\s/.test(char)) {
+			// RouterOS: `comment= x` is "expected comment value". `in` is a word,
+			// so a space follows it.
+			const last = tokens.at(-1);
+			if (wantValue && !(last?.kind === "op" && last.text === "in")) {
+				throw invalidQuery(
+					expression,
+					"A value must follow its operator without a space; quote a value that starts with one.",
+					index,
+				);
+			}
 			index++;
 			continue;
 		}
@@ -375,8 +394,20 @@ function readQuoted(
 		if (next in ESCAPES) {
 			text += ESCAPES[next];
 			index += 2;
-		} else if (/^[0-9A-Fa-f]{2}$/.test(hex)) {
-			text += String.fromCharCode(Number.parseInt(hex, 16));
+		} else if (/[ \t\r\n]/.test(next)) {
+			// A backslash before whitespace joins the lines: both are dropped.
+			index += expression.startsWith("\r\n", index + 1) ? 3 : 2;
+		} else if (HEX_ESCAPE.test(hex)) {
+			const byte = Number.parseInt(hex, 16);
+			if (byte > 0x7f) {
+				// RouterOS stores the raw byte; centrs sends values as UTF-8.
+				throw invalidQuery(
+					expression,
+					`\`\\${hex}\` is a byte above 7F, which a query value cannot carry; write the character itself.`,
+					index,
+				);
+			}
+			text += String.fromCharCode(byte);
 			index += 3;
 		} else {
 			throw invalidQuery(

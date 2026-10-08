@@ -70,7 +70,7 @@ Two layers, both grounded above:
   without `a` as smaller than any value; API `<`/`>` skip it); a bare name → `a=yes` for a boolean, otherwise
   the has-property word `a`, decided by asking the device (completion after
   `where a=` offers exactly `yes`/`no` for a boolean). The table, refusals and
-  CHR differential (`find where` vs `.query`, 50 expressions, 7.23.7 + 7.24.5)
+  CHR differential (`find where` vs `.query`, 52 expressions, 7.23.7 + 7.24.5)
   are in `commands/retrieve/README.md` → Query. Until #397 the structured form
   was a per-word splitter where a bare name meant has-property, `<` skipped
   rows without the property, and an operator anywhere in the string split it

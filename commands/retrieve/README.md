@@ -174,8 +174,12 @@ As in `print where`, a row without the property counts as smaller than any
 value: `timeout<1d` includes static address-list entries (no `timeout`), and
 `timeout>1h` does not. API `<`/`>` skip such rows on their own, hence the `-a`
 ("has no `a`") word. `and` (`&&`) binds tighter than `or` (`||`), as in RouterOS. Values run to the
-next space or parenthesis; quote one with spaces (`comment="uplink a"`), using
-RouterOS escapes (`\"`, `\\`, `\$`, `\41`).
+next space or parenthesis, and start right after the operator (RouterOS
+rejects `comment= x`). Quote a value with spaces (`comment="uplink a"`), using
+RouterOS escapes: `\"`, `\\`, `\$`, `\?`, `\_`, `\a` `\b` `\f` `\n` `\r` `\t`
+`\v`, and two uppercase hex digits (`\41`; `\ff` is `\f` then `f`). A hex
+byte above `\7F` is refused: centrs sends values as UTF-8, so it could not match
+the raw byte RouterOS stores.
 
 **A bare name.** `where disabled` means `disabled=yes`, but `where comment`
 means "comment is set" (RouterOS stores an empty comment as absent). Only the
@@ -190,7 +194,7 @@ on a misspelled property with no rows and no error, so a typo fails
 `validation/unknown-attribute` instead.
 
 **Same rows as `print where`, with these differences.** On CHR 7.23.7 and
-7.24.5, 50 expressions over three menus return exactly the rows
+7.24.5, 52 expressions over three menus return exactly the rows
 `find where` selects (examples QY1, QY2). The exceptions come from the CLI
 typing an unquoted literal, which the query does not do:
 

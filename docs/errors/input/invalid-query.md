@@ -10,13 +10,17 @@ A `--query` expression does not parse as a `print where` condition.
 runs it on the router as an API query. The error's `context.offset` points at
 the problem in `context.query`.
 
-centrs also refuses three spellings that RouterOS reads differently from how
-they look:
+centrs also refuses spellings that RouterOS reads differently from how they
+look, or does not accept:
 
 - `!name=value` is `(!name)=value` to RouterOS, which matches by accident.
   Write `!(name=value)` or `name!=value`.
 - `not` is not a RouterOS operator. Use `!`.
 - Conditions separated only by a space. Join them with `and` or `or`.
+- A space after the operator (`comment= x`), which RouterOS rejects too.
+- A string escape RouterOS does not have, such as lowercase hex `\0a` (hex is
+  two uppercase digits; `\ff` is `\f` then `f`), or a hex byte above `\7F`,
+  which a UTF-8 query value cannot carry.
 
 A bare name (`disabled`, `comment`) means what it means after `where`: `yes`
 for a boolean and "is set" for anything else. Only the router knows which a

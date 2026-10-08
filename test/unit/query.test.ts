@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Server } from "bun";
-import { buildApiQuery, resolveApiRequest } from "../../src/api.ts";
+import { api, buildApiQuery, resolveApiRequest } from "../../src/api.ts";
 import { inspectWhereBooleans } from "../../src/core/inspect.ts";
 import { compileQueryWords, parseQueries } from "../../src/core/query.ts";
 import { CentrsError } from "../../src/errors.ts";
@@ -99,6 +99,14 @@ describe("compileQueryWords", () => {
 		expect(words('comment="say \\"hi\\" \\$5 \\41"')).toEqual([
 			'comment=say "hi" $5 A',
 		]);
+		// The device's escape set: named \a \b \f \v, uppercase-only hex, and a
+		// backslash before whitespace joins lines (CHR 7.24.5).
+		expect(words('comment="\\a\\b\\f\\v\\07"')).toEqual([
+			"comment=\x07\b\f\v\x07",
+		]);
+		expect(words('comment="\\ff"')).toEqual(["comment=\ff"]);
+		expect(words('comment="x\\ "')).toEqual(["comment=x"]);
+		expect(words('comment="x\\\r\ny"')).toEqual(["comment=xy"]);
 		expect(words("(name=ether1)")).toEqual(["name=ether1"]);
 		expect(words("dst-address=0.0.0.0/0")).toEqual(["dst-address=0.0.0.0/0"]);
 		expect(words(".id=*1")).toEqual([".id=*1"]);
@@ -147,6 +155,10 @@ describe("refusals", () => {
 			['a="open', 2],
 			["a=1 and", 7],
 			['a="\\q"', 3],
+			['a="\\0a"', 3],
+			['a="\\FF"', 3],
+			["a= 1", 2],
+			["a= and b=1", 2],
 			["=1", 0],
 		] as const) {
 			const error = refusal(expression);
@@ -204,6 +216,40 @@ describe("api --query", () => {
 				rawQuery: ["-comment"],
 			}),
 		).toEqual(["running", "type=ether", "#&", "-comment"]);
+	});
+
+	test("a bare name is probed in the menu, not the parent of a menu POST", async () => {
+		const router = new FakeRouter();
+		routers.push(router);
+		for (const endpoint of [
+			"/ip/firewall/address-list",
+			"/ip/firewall/address-list/print",
+		]) {
+			await api(
+				{
+					endpoint,
+					method: "POST",
+					yes: true,
+					targetInput: router.url,
+					username: "u",
+					password: "p",
+					query: ["disabled"],
+				},
+				ENV,
+			);
+		}
+		const probes = router.posts
+			.map((post) => post.body["input"])
+			.filter((input) => input !== undefined);
+		expect(probes).toEqual([
+			"/ip/firewall/address-list/print where disabled=",
+			"/ip/firewall/address-list/print where disabled=",
+		]);
+		expect(
+			router.posts
+				.filter((post) => post.path.startsWith("/ip/firewall/address-list"))
+				.map((post) => post.body[".query"]),
+		).toEqual([["disabled=yes"], ["disabled=yes"]]);
 	});
 
 	test("a bare name without validation is refused", async () => {
@@ -281,6 +327,8 @@ function inspect(body: Record<string, unknown>): unknown[] {
 		}));
 	}
 	switch (body["path"]) {
+		case "ip,firewall":
+			return [{ name: "address-list", "node-type": "dir", type: "child" }];
 		case "ip,firewall,address-list":
 			return [cmd("print"), cmd("get")];
 		case "ip,firewall,address-list,get":
@@ -331,6 +379,14 @@ describe("retrieve --query", () => {
 			"/ip/firewall/address-list/print where comment=",
 			"/ip/firewall/address-list/print where disabled=",
 		]);
+		// One attribute inspect serves both --query and --attributes checks.
+		expect(
+			router.posts.filter(
+				(post) =>
+					post.body["request"] === "completion" &&
+					post.body["input"] === undefined,
+			),
+		).toHaveLength(1);
 		const read = router.posts.find(
 			(post) => post.path === "/ip/firewall/address-list/print",
 		);
@@ -372,6 +428,17 @@ describe("retrieve --query", () => {
 				ENV,
 			),
 		).rejects.toMatchObject({ code: "usage/conflicting-flags" });
+		expect(
+			router.posts.some((post) => post.body["request"] === "completion"),
+		).toBe(false);
+	});
+
+	test("an empty --query is refused, not read as no filter", async () => {
+		for (const query of ["", "  "]) {
+			await expect(
+				retrieve({ targetInput: "127.0.0.1", path: "/ip/address", query }, ENV),
+			).rejects.toMatchObject({ code: "input/invalid-query" });
+		}
 	});
 
 	test("--validate=false sends spelled-out words and refuses bare names", async () => {

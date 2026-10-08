@@ -380,7 +380,7 @@ export async function runResolvedApi(
 			const result = await validateApiRequest(resolved, backend, trace);
 			validation = result.validation;
 			tips = result.tips;
-			resolved = await withQueryBooleans(resolved, backend);
+			resolved = await withQueryBooleans(resolved, backend, result.queryMenu);
 		} else {
 			validation = disabledApiValidationMeta(resolved);
 		}
@@ -494,11 +494,12 @@ async function* streamResolvedApi(
 	let resolved = request;
 	let validation: EnvelopeValidationMeta;
 	try {
-		validation = resolved.validate.value
-			? (await validateApiRequest(resolved, backend)).validation
-			: disabledValidationMeta();
 		if (resolved.validate.value) {
-			resolved = await withQueryBooleans(resolved, backend);
+			const result = await validateApiRequest(resolved, backend);
+			validation = result.validation;
+			resolved = await withQueryBooleans(resolved, backend, result.queryMenu);
+		} else {
+			validation = disabledValidationMeta();
 		}
 	} catch (error) {
 		await backend.close();
@@ -1166,14 +1167,10 @@ export function buildApiQuery(request: ApiRequest): string[] {
 export async function withQueryBooleans(
 	resolved: ResolvedApiRequest,
 	backend: ProtocolAdapter,
+	menu: string,
 ): Promise<ResolvedApiRequest> {
 	const parsed = resolved.structuredQuery;
 	if (!parsed || parsed.bareNames.length === 0) return resolved;
-	// GET reads the menu itself; a POST names `<menu>/<command>`.
-	const menu =
-		resolved.verb === "print"
-			? resolved.path
-			: resolved.path.replace(/\/[^/]+\/?$/, "");
 	const booleans = await inspectWhereBooleans(backend, menu, parsed.bareNames);
 	return {
 		...resolved,
@@ -1256,6 +1253,8 @@ const API_SCRIPT_DEVICE_STAGE_SOURCE = ":put [:parse]";
 interface ApiValidationResult {
 	validation: EnvelopeValidationMeta;
 	tips: Tip[];
+	/** The menu a `--query` bare name is probed in: the path's parent only when inspect confirmed its last segment is a command. */
+	queryMenu: string;
 }
 
 /**
@@ -1319,6 +1318,7 @@ async function validateApiRequest(
 				],
 			},
 			tips: [],
+			queryMenu: resolved.path,
 		};
 	}
 
@@ -1391,6 +1391,7 @@ async function validateApiRequest(
 				semantic: true,
 			},
 			tips,
+			queryMenu: isCommand ? `/${parent.join("/")}` : resolved.path,
 		};
 	}
 
@@ -1435,6 +1436,7 @@ async function validateApiRequest(
 				availableAttributes: available,
 			},
 			tips,
+			queryMenu: resolved.path,
 		};
 	}
 
@@ -1447,6 +1449,7 @@ async function validateApiRequest(
 			semantic: true,
 		},
 		tips,
+		queryMenu: resolved.path,
 	};
 }
 

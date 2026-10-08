@@ -398,13 +398,22 @@ export async function validateRetrieveRead(
 		};
 	}
 	const inspection = await inspectRetrievePath(resolved, backend);
+	if (resolved.query && inspection.singleton) {
+		throw singletonQueryError(resolved, resolved.query);
+	}
 	const availableAttributes =
 		resolved.attributes.length > 0 || resolved.query !== undefined
 			? await assertKnownAttributes(resolved, inspection, backend)
 			: undefined;
-	const query = resolved.query
-		? await compileValidatedQuery(resolved, resolved.query, inspection, backend)
-		: undefined;
+	const query =
+		resolved.query && availableAttributes
+			? await compileValidatedQuery(
+					resolved,
+					resolved.query,
+					availableAttributes,
+					backend,
+				)
+			: undefined;
 	return {
 		inspection,
 		query,
@@ -1337,9 +1346,9 @@ export async function assertKnownAttributes(
 }
 
 function queryExpressions(request: RetrieveRequest): string[] {
-	return [request.filter, request.query]
-		.flatMap((value) => (value === undefined ? [] : [value].flat()))
-		.filter((expression) => expression.trim().length > 0);
+	return [request.filter, request.query].flatMap((value) =>
+		value === undefined ? [] : [value].flat(),
+	);
 }
 
 /** Parse `--query`/`--filter` offline; a bad expression fails before any network work. */
@@ -1352,23 +1361,17 @@ function resolveRetrieveQuery(
 }
 
 /**
- * Validate the predicate's property names against the menu (the device fails
- * an unknown one silently: no rows, no trap) and ask it which bare names are
- * booleans, then compile. A singleton has no rows to filter.
+ * Validate the predicate's property names against the menu's attributes (the
+ * device fails an unknown one silently: no rows, no trap) and ask it which bare
+ * names are booleans, then compile.
  */
 async function compileValidatedQuery(
 	resolved: ResolvedRetrieveRequest,
 	query: ResolvedRetrieveQuery,
-	inspection: RetrieveInspection,
+	availableAttributes: readonly string[],
 	backend: ProtocolAdapter,
 ): Promise<string[]> {
-	if (inspection.singleton) {
-		throw singletonQueryError(resolved, query);
-	}
-	const known = new Set([
-		...(await inspectAttributes(resolved, inspection, backend)),
-		".id",
-	]);
+	const known = new Set([...availableAttributes, ".id"]);
 	const unknown = query.parsed.names.filter((name) => !known.has(name));
 	if (unknown.length > 0) {
 		throw new CentrsError({
