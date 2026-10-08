@@ -359,6 +359,24 @@ describe("transfer download (rest)", () => {
 		}
 	});
 
+	// #406: decided as `curl -o` / `scp` — the local file is replaced, no --force.
+	test("replaces an existing local file without --force", async () => {
+		const out = tmpFile("existing.txt", "precious local");
+		const fetchMock = mockFetchSequence([
+			() =>
+				json([{ ".id": "*9", name: "src.txt", type: ".txt file", size: "12" }]),
+			() => json({ ret: "hello-centrs" }),
+		]);
+		try {
+			await runTransfer(
+				baseRequest({ verb: "download", remote: "src.txt", local: out }),
+			);
+			expect(readFileSync(out, "utf8")).toBe("hello-centrs");
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
 	test("a missing remote file is a routeros error", async () => {
 		const fetchMock = mockFetchSequence([() => json([])]);
 		try {

@@ -167,9 +167,16 @@ Implemented flags are generated from the CLI metadata into
 [`docs/CLI.md` → transfer](../../docs/CLI.md#transfer); this file does not
 duplicate that table. Behavior notes the generated reference cannot carry:
 
-- `--force`/`--overwrite` applies to the destination side (the local file for
-  `download`, the remote file for `upload`); the default refuses an existing
-  target with `usage/target-exists` (see *Validation*).
+- `--force`/`--overwrite` skips the existing-**device**-destination check of
+  `upload`, `mkdir` and `copy`, which by default refuse an existing target
+  with `usage/target-exists` (see *Validation*). `upload` then overwrites the
+  file; `mkdir` and `copy` still run as RouterOS's own `/file` commands.
+  `download` replaces an existing **local** file without `--force`, as
+  `curl -o` and `scp` do (#406). The local file is written only after the
+  whole remote read completes and, under the default `--verify size`, matches
+  the device's size, so a failed read or a size mismatch leaves an existing
+  file untouched. The write itself is not atomic: a local write that fails
+  part-way can leave the file truncated.
 - `--verify` details and the sftp size caveat are in *Integrity*.
 - `--timeout`: `rest`/`native` are per-request ≤ 60000 ms (a chunked read is
   many short requests, each capped); `sftp` accepts longer for a single large
@@ -274,9 +281,11 @@ success, per-target results live in `data.targets`.
 destination whose parent directory is missing or that is itself a directory
 (`input/local-destination`; centrs does not create directories), a `--via rest`
 upload that exceeds 60 KB (`transport/unsupported-operation`). The
-**refuse-overwrite** guard is a real precondition probe, not a local check:
-unless `--force`, centrs `stat`s the destination (SFTP `stat`, or `/file/print`
-for the REST family) and fails with `usage/target-exists` if it is already there.
+**refuse-overwrite** guard protects device files and is a real precondition
+probe, not a local check: unless `--force`, centrs `stat`s the device
+destination (SFTP `stat`, or `/file/print` for the REST family) and fails with
+`usage/target-exists` if it is already there. A `download` overwrites its local
+destination (see *Flags*).
 This is the "validate before write" gate applied to files — see constitution:
 validation is the product.
 
