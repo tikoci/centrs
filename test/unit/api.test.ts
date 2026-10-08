@@ -352,6 +352,7 @@ describe("renderApiEnvelope --raw", () => {
 					verb: "print" as const,
 					write: false,
 					listen: false,
+					stream: false,
 					yes: false,
 					validate: false,
 					raw: true,

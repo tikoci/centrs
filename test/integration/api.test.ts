@@ -404,12 +404,12 @@ describeFast("api against CHR (rest-api)", () => {
 				result: "skipped",
 			});
 
-			// 17. --via rest-api --listen is rejected.
+			// 17. --via rest-api --stream is rejected.
 			expectApiFailure(
 				await apiEnvelope({
 					...base,
 					endpoint: "ip/address",
-					listen: true,
+					stream: true,
 				}),
 				"transport/capability-unsupported",
 			);

@@ -530,6 +530,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "The --concurrency value must be an integer >= 1.",
 	},
 	{
+		code: "usage/removed-flag",
+		summary:
+			"A flag or request field was removed; the error names its replacement.",
+	},
+	{
 		code: "usage/stdin-ignored",
 		summary:
 			"stdin was redirected but the input came from the positional argument, so anything piped in was not analyzed.",

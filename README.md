@@ -60,7 +60,7 @@ product; without them this would just be a worse `curl`.
 | ---------- | ------- |
 | `retrieve` | Read RouterOS state over REST/native API and SNMP OID/MIB values. |
 | `execute`  | Run RouterOS CLI-shaped read/write commands (add/set/remove) over native API/REST/L2 surfaces. |
-| `api`      | Structured RouterOS API passthrough (gh-api style): one command per operation, structured in/out, can write, over REST or native API. Open-ended follow is `api … --stream` (native API; NDJSON). |
+| `api`      | Structured RouterOS API passthrough (gh-api style): one command per operation, structured in/out, can write, over REST or native API. Follow changes with `api … <menu>/listen`; `--stream` streams any command's replies (native API; NDJSON). |
 | `terminal` | Open an interactive console, primarily SSH or MAC-Telnet. |
 | `check`    | Probe reachability and management protocol availability. **Designed, not implemented** — see `docs/MATRIX.md`. |
 | `explain`  | Analyze a RouterOS command before running it: canonical form, syntax diagnostics, and what is valid at a path. Offline analysis runs today; the live-device probes are designed. |

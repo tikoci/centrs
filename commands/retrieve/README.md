@@ -63,7 +63,7 @@ Spec-tier flags with no implementation yet — today they fail as unknown flags:
 
 | Flag                                | Designed behavior                                                                          |
 | ----------------------------------- | ----------------------------------------------------------------------------------------- |
-| `--once`                            | Bounded single read of a monitor-style menu (RouterOS `once`): returns **one** envelope and never follows. Open-ended follow is `api … --stream`. See constitution: protocol selection. |
+| `--once`                            | Bounded single read of a monitor-style menu (RouterOS `once`): returns **one** envelope and never follows. Open-ended follow is `api … <menu>/listen` (or `--stream` for a command). See constitution: protocol selection. |
 | `--max-bytes <n>`                   | Byte budget for the rendered payload. If the response would exceed it, centrs truncates to fit, keeps `ok: true`, and adds a warning + `meta.truncated`. Not an error. (Will replace the implemented `--max-results`, which fails instead of truncating.) |
 | `--max-rows <n>`                    | Maximum row count for list reads. Excess rows are clipped; `ok: true` with a warning + `meta.truncated`.                                    |
 | `--yaml`                            | Shortcut for `--format yaml`.                                                             |

@@ -72,18 +72,72 @@ describe("parseApiCliArgs", () => {
 			"ip/address",
 			"--raw",
 			"--yes",
-			"--listen",
+			"--stream",
 			"--insecure",
 		]);
 		expect(parsed.raw).toBe(true);
 		expect(parsed.yes).toBe(true);
-		expect(parsed.listen).toBe(true);
+		expect(parsed.stream).toBe(true);
 		expect(parsed.insecure).toBe(true);
 	});
 
-	test("--stream is the primary follow flag; --listen is an alias", () => {
-		expect(parseApiCliArgs(["r", "ip/address", "--stream"]).listen).toBe(true);
-		expect(parseApiCliArgs(["r", "ip/address", "--listen"]).listen).toBe(true);
+	// #402: `--listen` meant "stream" AND rewrote a GET into a change feed.
+	describe("--listen is removed and names the exact replacement", () => {
+		const remediation = (args: string[]): string => {
+			try {
+				parseApiCliArgs(args);
+			} catch (error) {
+				expect((error as { code?: string }).code).toBe("usage/removed-flag");
+				return (error as { remediation: string }).remediation;
+			}
+			throw new Error("--listen was accepted");
+		};
+
+		test("a GET becomes the menu's /listen endpoint", () => {
+			expect(
+				remediation(["r1", "ip/address", "--listen", "--count", "1"]),
+			).toContain("Run: centrs api r1 ip/address/listen --count 1.");
+		});
+
+		test("another method keeps its command and streams", () => {
+			expect(
+				remediation([
+					"r1",
+					"tool/ping",
+					"-X",
+					"POST",
+					"-f",
+					"address=10.0.2.2",
+					"--listen",
+				]),
+			).toContain(
+				"Run: centrs api r1 tool/ping -X POST -f address=10.0.2.2 --stream.",
+			);
+		});
+
+		test("an existing /listen endpoint just drops the flag", () => {
+			expect(remediation(["r1", "ip/address/listen", "--listen"])).toContain(
+				"Run: centrs api r1 ip/address/listen.",
+			);
+		});
+
+		test("passwords are not echoed back", () => {
+			const text = remediation([
+				"r1",
+				"ip/address",
+				"--password",
+				"hunter2",
+				"--listen",
+			]);
+			expect(text).not.toContain("hunter2");
+			expect(text).toContain("--password <password>");
+		});
+
+		test("arguments with spaces stay one shell word", () => {
+			expect(remediation(["r1", "ip address", "--listen"])).toContain(
+				"Run: centrs api r1 'ip address/listen'.",
+			);
+		});
 	});
 
 	test("--validate=false and --no-validate both disable validation", () => {

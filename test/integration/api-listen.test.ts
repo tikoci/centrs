@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type ApiEnvelope, apiEnvelope, apiListen } from "../../src/api.ts";
+import { type ApiEnvelope, apiEnvelope, apiStream } from "../../src/api.ts";
 import {
 	exampleIds,
 	isChrIntegrationEnabled,
@@ -23,14 +23,27 @@ function streamKind(envelope: ApiEnvelope): "frame" | "summary" | undefined {
 function summaryData(envelope: ApiEnvelope | undefined): {
 	stopReason?: string;
 	frames?: number;
+	rows?: number;
+	empty?: number;
 } {
 	const stream = envelope?.meta.operation?.stream;
 	return stream?.kind === "summary" ? stream : {};
 }
 
-/** The rest-style record on a success (frame) envelope; `{}` for an error envelope. */
+/** The rest-style record on a success (frame) envelope; `{}` for an error envelope or an `!empty` frame. */
 function recordOf(envelope: ApiEnvelope | undefined): Record<string, unknown> {
-	return (envelope?.ok ? envelope.data : {}) as Record<string, unknown>;
+	return (
+		envelope?.ok && envelope.data !== null ? envelope.data : {}
+	) as Record<string, unknown>;
+}
+
+function replyOf(envelope: ApiEnvelope): string | undefined {
+	const stream = envelope.meta.operation?.stream;
+	return stream?.kind === "frame" ? stream.reply : undefined;
+}
+
+function tipCodes(envelope: ApiEnvelope | undefined): string[] {
+	return (envelope?.tips ?? []).map((tip) => tip.code);
 }
 
 function idOf(data: unknown): string {
@@ -47,7 +60,7 @@ function idOf(data: unknown): string {
  * (`--count` / `--duration`).
  */
 async function streamWithTrigger(
-	listenRequest: Parameters<typeof apiListen>[0],
+	listenRequest: Parameters<typeof apiStream>[0],
 	trigger: () => Promise<void>,
 ): Promise<ApiEnvelope[]> {
 	const envelopes: ApiEnvelope[] = [];
@@ -56,7 +69,7 @@ async function streamWithTrigger(
 		signalReady = resolve;
 	});
 	const consumed = (async () => {
-		for await (const envelope of apiListen(
+		for await (const envelope of apiStream(
 			listenRequest,
 			Bun.env,
 			undefined,
@@ -106,8 +119,7 @@ describeFast("api --stream against CHR (native-api)", () => {
 			const l1 = await streamWithTrigger(
 				{
 					...nativeBase,
-					endpoint: "ip/address",
-					listen: true,
+					endpoint: "ip/address/listen",
 					count: 1,
 					duration: "10s",
 				},
@@ -146,7 +158,7 @@ describeFast("api --stream against CHR (native-api)", () => {
 			});
 			const seedId = idOf(recordOf(seed));
 			const l2 = await streamWithTrigger(
-				{ ...nativeBase, endpoint: "ip/address", listen: true, duration: "3s" },
+				{ ...nativeBase, endpoint: "ip/address/listen", duration: "3s" },
 				async () => {
 					await apiEnvelope({
 						...restBase,
@@ -192,26 +204,75 @@ describeFast("api --stream against CHR (native-api)", () => {
 			);
 
 			// L4. A bounded `--duration` with no change ends with `duration-elapsed`.
+			// RouterOS answers the /cancel of a listen that sent nothing with
+			// interrupted, `!empty`, `!done`: that `!empty` is a frame marked
+			// `afterStop`, never evidence of an empty table (#402).
 			const l4: ApiEnvelope[] = [];
-			for await (const envelope of apiListen({
+			for await (const envelope of apiStream({
 				...nativeBase,
-				endpoint: "ip/address",
-				listen: true,
+				endpoint: "ip/address/listen",
 				duration: "2s",
 			})) {
 				l4.push(envelope);
 			}
 			const l4Summary = l4.find((e) => streamKind(e) === "summary");
 			expect(l4Summary).toBeDefined();
-			expect(summaryData(l4Summary as ApiEnvelope).stopReason).toBe(
-				"duration-elapsed",
-			);
+			expect(summaryData(l4Summary as ApiEnvelope)).toMatchObject({
+				stopReason: "duration-elapsed",
+				rows: 0,
+				empty: 1,
+			});
+			expect(l4[0]?.meta.operation?.stream).toEqual({
+				kind: "frame",
+				index: 1,
+				reply: "empty",
+				afterStop: true,
+			});
 
-			async function collect(request: Parameters<typeof apiListen>[0]) {
+			async function collect(request: Parameters<typeof apiStream>[0]) {
 				const result: ApiEnvelope[] = [];
-				for await (const envelope of apiListen(request)) result.push(envelope);
+				for await (const envelope of apiStream(request)) result.push(envelope);
 				return result;
 			}
+
+			// L17. A GET stream is one literal print: it completes on its own, one
+			// frame per row, and the tip names the listen it no longer becomes.
+			const printed = await apiEnvelope({
+				...nativeBase,
+				endpoint: "ip/address",
+			});
+			expect(printed.ok).toBe(true);
+			const rowCount = (printed.ok ? (printed.data as unknown[]) : []).length;
+			const getStream = await collect({
+				...nativeBase,
+				endpoint: "ip/address",
+				duration: "10s",
+			});
+			expect(getStream.every((e) => e.ok)).toBe(true);
+			expect(summaryData(getStream.at(-1))).toMatchObject({
+				stopReason: "completed",
+				rows: rowCount,
+			});
+			expect(tipCodes(getStream.at(-1))).toEqual(["tip/stream-print"]);
+
+			// L18. Each zero-row `print interval=` tick is an `!empty` frame; they
+			// do not use up `--count`, which counts rows.
+			const emptyTicks = await collect({
+				...nativeBase,
+				endpoint: "ip/firewall/raw/print",
+				method: "POST",
+				fields: { interval: "1" },
+				count: 1,
+				duration: "2500ms",
+			});
+			expect(emptyTicks.every((e) => e.ok)).toBe(true);
+			const emptyFrames = emptyTicks.filter((e) => replyOf(e) === "empty");
+			expect(emptyFrames.length).toBeGreaterThanOrEqual(2);
+			expect(emptyFrames.every((e) => e.ok && e.data === null)).toBe(true);
+			expect(summaryData(emptyTicks.at(-1))).toMatchObject({
+				stopReason: "duration-elapsed",
+				rows: 0,
+			});
 
 			// L6. Device count= ends ping naturally, without centrs --count.
 			const ping = await collect({
@@ -256,90 +317,100 @@ describeFast("api --stream against CHR (native-api)", () => {
 			expect(interval.filter((e) => streamKind(e) === "frame")).toHaveLength(2);
 			expect(summaryData(interval.at(-1)).stopReason).toBe("count-reached");
 
-			// L9. Projection cannot turn a delete into an empty/update-looking row.
-			const projectedSeed = await apiEnvelope({
-				...restBase,
-				endpoint: "ip/address",
-				method: "PUT",
-				fields: { address: "198.51.100.33/32", interface: "ether1" },
-				yes: true,
-			});
-			expect(projectedSeed.ok).toBe(true);
-			const projectedId = idOf(recordOf(projectedSeed));
-			const projected = await streamWithTrigger(
-				{
-					...nativeBase,
-					endpoint: "ip/address",
-					proplist: ["address"],
-					duration: "3s",
+			/** Seed an address, follow `request`, delete the seed once listening. */
+			async function followDelete(
+				request: Omit<Parameters<typeof apiStream>[0], "endpoint"> & {
+					endpoint: (id: string) => string;
 				},
-				async () => {
-					const deleted = await apiEnvelope({
-						...restBase,
-						endpoint: `ip/address/${projectedId}`,
-						method: "DELETE",
-						yes: true,
-					});
-					expect(deleted.ok).toBe(true);
-				},
-			);
-			expect(projected.every((e) => e.ok)).toBe(true);
-			expect(
-				projected.some(
-					(e) =>
-						recordOf(e)[".id"] === projectedId &&
-						recordOf(e)[".dead"] === "true",
-				),
-			).toBe(true);
-
-			// L15. Addressed listens retain delete notices with and without projection.
-			for (const proplist of [undefined, ["address"]]) {
+			): Promise<{ id: string; envelopes: ApiEnvelope[] }> {
 				const seed = await apiEnvelope({
 					...restBase,
 					endpoint: "ip/address",
 					method: "PUT",
-					fields: { address: "198.51.100.35/32", interface: "ether1" },
+					fields: { address: "198.51.100.33/32", interface: "ether1" },
 					yes: true,
 				});
 				expect(seed.ok).toBe(true);
 				const id = idOf(recordOf(seed));
-				const addressed = await streamWithTrigger(
-					{
-						...nativeBase,
-						endpoint: `ip/address/${id}`,
-						proplist,
-						duration: "3s",
-					},
+				const envelopes = await streamWithTrigger(
+					{ ...request, endpoint: request.endpoint(id), duration: "3s" },
 					async () => {
-						const removed = await apiEnvelope({
+						const deleted = await apiEnvelope({
 							...restBase,
 							endpoint: `ip/address/${id}`,
 							method: "DELETE",
 							yes: true,
 						});
-						expect(removed.ok).toBe(true);
+						expect(deleted.ok).toBe(true);
 					},
 				);
-				expect(addressed.every((e) => e.ok)).toBe(true);
-				expect(
-					addressed.some(
-						(e) => recordOf(e)[".id"] === id && recordOf(e)[".dead"] === "true",
-					),
-				).toBe(true);
+				expect(envelopes.every((e) => e.ok)).toBe(true);
+				return { id, envelopes };
 			}
+			const deadFor = (envelopes: ApiEnvelope[], id: string) =>
+				envelopes.some(
+					(e) => recordOf(e)[".id"] === id && recordOf(e)[".dead"] === "true",
+				);
 
-			// L10. Filtering a change subscription fails closed until membership
-			// initialization is designed (#396/#397); server queries drop deletes.
-			const filtered = await collect({
+			// L9. `api` sends .proplist as typed (#402). Without `.id,.dead` a delete
+			// is not reported as one, so the tip says so; naming them shows it.
+			const projected = await followDelete({
 				...nativeBase,
-				endpoint: "ip/address",
+				endpoint: () => "ip/address/listen",
+				proplist: ["address"],
+			});
+			expect(deadFor(projected.envelopes, projected.id)).toBe(false);
+			expect(tipCodes(projected.envelopes.at(-1))).toEqual([
+				"tip/follow-proplist",
+			]);
+			const withDead = await followDelete({
+				...nativeBase,
+				endpoint: () => "ip/address/listen",
+				proplist: ["address", ".id", ".dead"],
+			});
+			expect(deadFor(withDead.envelopes, withDead.id)).toBe(true);
+			expect(tipCodes(withDead.envelopes.at(-1))).toEqual([]);
+
+			// L15. An addressed listen (`?.id=`) reports its delete. Under a
+			// projection without `.id,.dead`, RouterOS strips both, so the delete
+			// is an `!re` with no attributes; the tip says so.
+			const addressed = await followDelete({
+				...nativeBase,
+				endpoint: (id) => `ip/address/${id}/listen`,
+			});
+			expect(deadFor(addressed.envelopes, addressed.id)).toBe(true);
+			expect(tipCodes(addressed.envelopes.at(-1))).toEqual([]);
+			const addressedProjected = await followDelete({
+				...nativeBase,
+				endpoint: (id) => `ip/address/${id}/listen`,
+				proplist: ["address"],
+			});
+			expect(
+				addressedProjected.envelopes
+					.filter((e) => streamKind(e) === "frame")
+					.map(recordOf),
+			).toEqual([{}]);
+			expect(tipCodes(addressedProjected.envelopes.at(-1))).toEqual([
+				"tip/follow-proplist",
+			]);
+
+			// L10. A filtered listen is sent as typed, and RouterOS drops the
+			// delete of a row that matched the filter; the tip says so.
+			const filtered = await followDelete({
+				...nativeBase,
+				endpoint: () => "ip/address/listen",
 				query: ["interface=ether1"],
 			});
-			expect(filtered).toHaveLength(1);
-			expect(filtered[0]).toMatchObject({
-				ok: false,
-				error: { code: "usage/conflicting-flags" },
-			});
+			// Nothing at all for the delete: the only frame is the `!empty` that
+			// answers the cancel.
+			expect(
+				filtered.envelopes
+					.filter((e) => streamKind(e) === "frame")
+					.map((e) => e.meta.operation?.stream),
+			).toEqual([{ kind: "frame", index: 1, reply: "empty", afterStop: true }]);
+			expect(tipCodes(filtered.envelopes.at(-1))).toEqual([
+				"tip/filtered-follow",
+			]);
 
 			// L11. Command arguments are validated before starting the stream.
 			const badArgument = await collect({
@@ -469,7 +540,7 @@ describeFast("api --stream against CHR (native-api)", () => {
 				requestedVersion: started.requestedVersion,
 				exampleIds: [
 					...exampleIds(4),
-					...[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+					...[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
 				],
 			});
 		} finally {

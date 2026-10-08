@@ -15,13 +15,14 @@
  *     with `target/unresolved`.
  *   - A mutating fan-out is confirmed ONCE up front (`--yes`), never per target;
  *     without `--yes` the error names the blast radius (how many routers).
- *   - `--listen`/`--stream` and `--raw` are rejected in fan-out mode by the CLI
+ *   - `--stream` and `--raw` are rejected in fan-out mode by the CLI
  *     before reaching here (single-session / envelope-stripping).
  */
 
 import {
 	type ApiEnvelope,
 	type ApiOperationMeta,
+	type ApiOutputFormat,
 	type ApiRequest,
 	type ApiRequestSummary,
 	type ApiSuccessEnvelope,
@@ -432,16 +433,20 @@ export function buildApiFanoutErrorEnvelope(
 }
 
 /**
- * Render an api fan-out envelope. `json`/`yaml` serialize the whole envelope;
- * `text` renders a summary line plus one line per target in record-index order.
+ * Render an api fan-out envelope. `json`/`yaml` serialize the whole envelope,
+ * `ndjson` as one compact line; `text` renders a summary line plus one line
+ * per target in record-index order.
  */
 export function renderApiFanoutEnvelope(
 	envelope: ApiFanoutEnvelope | ApiFanoutErrorEnvelope,
-	format: "json" | "yaml" | "text",
+	format: ApiOutputFormat,
 	options: { verbose?: boolean } = {},
 ): string {
 	if (format === "json") {
 		return JSON.stringify(envelope, null, 2);
+	}
+	if (format === "ndjson") {
+		return JSON.stringify(envelope);
 	}
 	if (format === "yaml") {
 		return toYaml(envelope);

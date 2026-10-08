@@ -134,6 +134,19 @@ export interface ProtocolApiRequest {
 	proplist?: readonly string[];
 	/** Raw console line for the `/execute` script form (`run`); when set, `path`/`attributes` are ignored. */
 	script?: string;
+	/** `print` only: send the menu's `listen` command instead (the literal `<menu>/listen` endpoint). */
+	listen?: boolean;
+}
+
+/**
+ * One reply of an incremental native command, as RouterOS sent it: an `!re`
+ * row, or an `!empty` (zero rows: an empty finite read, a zero-row
+ * `print interval=` tick, or a listen cancelled before it sent anything).
+ */
+export interface ProtocolStreamReply {
+	type: "re" | "empty";
+	/** The row's attributes; always `{}` for `!empty`. */
+	attributes: Record<string, string>;
 }
 
 /** Result of an `apiRequest` round-trip: the response body shaped for the envelope. */
@@ -185,15 +198,16 @@ export interface ProtocolAdapter {
 	/** Run a normalized structured `api` request (the gh-api passthrough surface). */
 	apiRequest(request: ProtocolApiRequest): Promise<ProtocolApiResult>;
 	/**
-	 * Incremental native replies. GET/print subscribes to changes; other verbs
-	 * keep their command mapping. Yields one record per `!re`, until natural
-	 * completion, cancellation, or failure. REST and console transports
-	 * reject with `transport/capability-unsupported`.
+	 * Incremental native replies to the literal command (the same mapping as
+	 * `apiRequest`; never rewritten into a `listen`). Yields each `!re` and
+	 * `!empty` as it arrives, until natural completion, cancellation, or
+	 * failure. REST and console transports reject with
+	 * `transport/capability-unsupported`.
 	 */
-	listen(
+	stream(
 		request: ProtocolApiRequest,
 		options: ProtocolListenOptions,
-	): AsyncIterable<Record<string, unknown>>;
+	): AsyncIterable<ProtocolStreamReply>;
 	/** Release any underlying connection. Safe to call when never connected. */
 	close(): Promise<void>;
 }
@@ -346,9 +360,9 @@ class RestAdapter implements ProtocolAdapter {
 		}
 	}
 
-	// REST cannot hold an open-ended follow (the 60s cap); listen is native-only.
+	// REST cannot hold an open-ended follow (the 60s cap); streaming is native-only.
 	// biome-ignore lint/correctness/useYield: a throw-only async generator yields nothing.
-	async *listen(): AsyncGenerator<Record<string, unknown>> {
+	async *stream(): AsyncGenerator<ProtocolStreamReply> {
 		throw new CentrsError({
 			code: "transport/capability-unsupported",
 			summary: "REST cannot follow an open-ended `--stream` (60s cap).",
@@ -583,7 +597,9 @@ function nativeCommandFor(request: ProtocolApiRequest): NativeApiCommand {
 				? "/execute"
 				: request.verb === "run"
 					? base
-					: `${base}/${request.verb}`,
+					: request.verb === "print" && request.listen
+						? `${base}/listen`
+						: `${base}/${request.verb}`,
 		attributes:
 			request.script !== undefined
 				? { script: request.script, "as-string": "" }
@@ -703,24 +719,20 @@ class NativeApiAdapter implements ProtocolAdapter {
 		}
 	}
 
-	async *listen(
+	async *stream(
 		request: ProtocolApiRequest,
 		options: ProtocolListenOptions,
-	): AsyncGenerator<Record<string, unknown>> {
+	): AsyncGenerator<ProtocolStreamReply> {
 		if (options.signal?.aborted) return;
-		const command = nativeCommandFor(request);
-		if (request.verb === "print") {
-			command.command = `${request.path.replace(/\/$/, "")}/listen`;
-			if (request.proplist?.length) {
-				command.proplist = [...new Set([...request.proplist, ".id", ".dead"])];
-			}
-		}
 		const session = await this.connect();
-		for await (const reply of session.listen(command, {
+		for await (const reply of session.listen(nativeCommandFor(request), {
 			...options,
 			cancelGraceMs: options.cancelGraceMs ?? this.config.timeoutMs,
 		})) {
-			yield { ...reply.attributes };
+			yield {
+				type: reply.type === "!empty" ? "empty" : "re",
+				attributes: { ...reply.attributes },
+			};
 		}
 	}
 
@@ -871,8 +883,8 @@ class MacTelnetAdapter implements ProtocolAdapter {
 	}
 
 	// biome-ignore lint/correctness/useYield: a reject-only async generator yields nothing.
-	async *listen(): AsyncGenerator<Record<string, unknown>> {
-		throw this.unsupported("open-ended listen streaming");
+	async *stream(): AsyncGenerator<ProtocolStreamReply> {
+		throw this.unsupported("incremental native replies");
 	}
 
 	async close(): Promise<void> {
@@ -1022,8 +1034,8 @@ class SshExecAdapter implements ProtocolAdapter {
 	}
 
 	// biome-ignore lint/correctness/useYield: a reject-only async generator yields nothing.
-	async *listen(): AsyncGenerator<Record<string, unknown>> {
-		throw this.unsupported("open-ended listen streaming");
+	async *stream(): AsyncGenerator<ProtocolStreamReply> {
+		throw this.unsupported("incremental native replies");
 	}
 
 	close(): Promise<void> {

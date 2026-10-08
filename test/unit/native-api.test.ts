@@ -472,6 +472,30 @@ describe("native-api listen() streaming", () => {
 		expect((await generator.next()).done).toBe(true);
 		expect(transport.sent).toHaveLength(0);
 	});
+	// #402: a zero-row `print interval=` tick is an `!empty`; dropping it hid
+	// that the tick happened at all. A one-shot `talk` still returns no rows.
+	test("yields !empty to a stream but not as a talk record", async () => {
+		const transport = new FakeTransport();
+		const gen = transport.apiSession.listen({
+			command: "/ip/firewall/raw/print",
+			attributes: { interval: "1" },
+		});
+		const first = gen.next();
+		const tag = transport.lastTag();
+		transport.reply(["!empty", `.tag=${tag}`]);
+		expect(((await first).value as ApiReply).type).toBe("!empty");
+
+		const talk = transport.apiSession.talk({
+			command: "/ip/firewall/raw/print",
+		});
+		const talkTag = transport.lastTag();
+		transport.reply(
+			["!empty", `.tag=${talkTag}`],
+			["!done", `.tag=${talkTag}`],
+		);
+		expect(await talk).toEqual([]);
+		await gen.return(undefined);
+	});
 	test("sends the listen sentence and yields !re change frames", async () => {
 		const transport = new FakeTransport();
 		const gen = transport.apiSession.listen({

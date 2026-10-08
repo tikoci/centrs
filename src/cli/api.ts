@@ -2,10 +2,11 @@ import {
 	type ApiOutputFormat,
 	type ApiRequest,
 	apiEnvelope,
-	apiListen,
 	apiOutputFormats,
+	apiStream,
 	buildApiErrorEnvelope,
 	normalizeApiEndpoint,
+	removedListenError,
 	renderApiEnvelope,
 	renderApiStreamLine,
 } from "../api.ts";
@@ -102,15 +103,15 @@ export const apiCommand: CliCommandMetadata = {
 				"Confirm a mutating (non-read) request in non-interactive runs.",
 		},
 		{
-			flag: "--stream / --listen",
+			flag: "--stream",
 			description:
-				"Stream native API replies as NDJSON: GET follows a menu; POST runs a command. Ends with a summary envelope. The `/listen` endpoint infers it.",
+				"Stream the command's native replies (`!re` rows and `!empty`) as NDJSON, then a summary envelope. Never changes the command: a GET streams one print. To follow changes, request `<menu>/listen`, which implies it.",
 		},
 		{
 			flag: "--count",
 			valueName: "<n>",
 			description:
-				"Stop a `--stream` after N reply frames (not the device count= argument).",
+				"Stop a `--stream` after N `!re` rows; `!empty` replies do not count (not the device count= argument).",
 		},
 		{
 			flag: "--duration",
@@ -206,7 +207,9 @@ interface ApiCliArgs extends ApiRequest {
 export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 	const parsed: ApiCliArgs = { endpoint: "" };
 	const positional: string[] = [];
+	const positionalIndexes: number[] = [];
 	const selectionFlags = emptySelectionFlags();
+	let listenFlag = false;
 
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
@@ -235,8 +238,10 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 				parsed.raw = true;
 				break;
 			case "--stream":
+				parsed.stream = true;
+				break;
 			case "--listen":
-				parsed.listen = true;
+				listenFlag = true;
 				break;
 			case "--validate":
 				parsed.validate = true;
@@ -346,9 +351,17 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 					throw unknownFlagError("api", arg, apiCommand.options);
 				}
 				positional.push(arg);
+				positionalIndexes.push(index);
 				break;
 			}
 		}
+	}
+	if (listenFlag) {
+		throw removedListenError(
+			positional.at(-1) ?? "",
+			"cli",
+			listenReplacement(args, positionalIndexes.at(-1), parsed.method),
+		);
 	}
 
 	// api/retrieve positional boundary: the FINAL positional is the endpoint; every
@@ -359,6 +372,46 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 	parsed.targetInput = parsed.targetPositionals[0];
 	parsed.stdinIsTty = process.stdin.isTTY;
 	return parsed;
+}
+
+/**
+ * The exact command `--listen` meant (#402): a GET becomes the menu's
+ * `/listen` endpoint, anything else keeps its command and streams. Secrets in
+ * the original arguments are not echoed back.
+ */
+function listenReplacement(
+	args: readonly string[],
+	endpointIndex: number | undefined,
+	method: string | undefined,
+): string {
+	const get = (method ?? "GET").toUpperCase() === "GET";
+	const words: string[] = [];
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index] as string;
+		if (arg === "--listen") {
+			if (!get) words.push("--stream");
+			continue;
+		}
+		if (index === endpointIndex && get && !normalizeApiEndpoint(arg).listen) {
+			words.push(shellWord(`${arg.replace(/\/+$/, "")}/listen`));
+			continue;
+		}
+		words.push(shellWord(arg));
+		if (
+			(arg === "--password" || arg === "--cdb-password") &&
+			index + 1 < args.length
+		) {
+			words.push("<password>");
+			index += 1;
+		}
+	}
+	return `centrs api ${words.join(" ")}`;
+}
+
+function shellWord(word: string): string {
+	return /^[\w@%+=:,./*-]+$/.test(word)
+		? word
+		: `'${word.replaceAll("'", "'\\''")}'`;
 }
 
 export async function runApiCli(args: readonly string[]): Promise<number> {
@@ -405,7 +458,7 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 
 		// Fan-out mode (selector flag present, or >1 positional target) has its own
 		// envelope shape, guards, and granular exit code. It runs first and rejects
-		// `--stream`/`--listen` + fan-out itself (single-session is exclusive).
+		// `--stream` + fan-out itself (single-session is exclusive).
 		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 			return await runApiFanoutCli(
 				parsed,
@@ -420,14 +473,14 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 			parsed.quickchr = selectionFlags.quickchr[0];
 		}
 
-		// Open-ended follow (`--stream`/`--listen`, or a `/listen` endpoint) consumes
+		// A stream (`--stream`, or a `/listen` endpoint) consumes
 		// the NDJSON envelope stream instead of a single one-shot envelope.
 		const streaming =
-			parsed.listen === true ||
+			parsed.stream === true ||
 			(parsed.endpoint.length > 0 &&
 				normalizeApiEndpoint(parsed.endpoint).listen);
 		if (streaming) {
-			return await runApiListenCli(parsed, args);
+			return await runApiStreamCli(parsed, args);
 		}
 
 		if (!parsed.targetInput && parsed.quickchr === undefined) {
@@ -527,14 +580,14 @@ async function runApiFanoutCli(
 				context: { flags: ["--raw", "fanout"] },
 			});
 		}
-		// `--listen`/`--stream` is single-session.
+		// `--stream` is single-session.
 		const listenRequested =
-			(parsed.listen ?? false) || endpointInfersListen(parsed.endpoint);
+			(parsed.stream ?? false) || endpointInfersListen(parsed.endpoint);
 		if (listenRequested) {
 			throw new CentrsError({
 				code: "usage/fanout-not-supported",
 				summary:
-					"`api --stream`/`--listen` is single-session and cannot fan out across multiple targets.",
+					"`api --stream` is single-session and cannot fan out across multiple targets.",
 				remediation:
 					"Follow a stream against a single router (no `--group`/`--where`/`--all`/`--default`/multiple positionals).",
 				context: { capability: "listen" },
@@ -574,7 +627,7 @@ async function runApiFanoutCli(
 	}
 }
 
-/** Whether an endpoint's trailing segment infers `--listen` (without throwing). */
+/** Whether an endpoint's trailing `listen` segment implies `--stream` (without throwing). */
 function endpointInfersListen(endpoint: string): boolean {
 	try {
 		return normalizeApiEndpoint(endpoint).listen;
@@ -588,7 +641,7 @@ function endpointInfersListen(endpoint: string): boolean {
  * including a terminal error after successful rows. Raw mode retains its
  * stderr error contract; Ctrl-C requests bounded cancellation.
  */
-async function runApiListenCli(
+async function runApiStreamCli(
 	parsed: ApiCliArgs,
 	args: readonly string[],
 ): Promise<number> {
@@ -598,7 +651,7 @@ async function runApiListenCli(
 	process.on("SIGINT", onSigint);
 	let exitCode = 0;
 	try {
-		for await (const envelope of apiListen(
+		for await (const envelope of apiStream(
 			parsed,
 			Bun.env,
 			controller.signal,
