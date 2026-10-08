@@ -187,6 +187,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "The target string is invalid for the requested operation.",
 	},
 	{
+		code: "input/local-destination",
+		summary:
+			"A local download destination cannot be written (missing parent directory, a directory, or no permission).",
+	},
+	{
 		code: "input/local-file-not-found",
 		summary: "A local file required for the transfer could not be read.",
 	},

@@ -405,6 +405,36 @@ describe("transfer download (rest)", () => {
 			fetchMock.restore();
 		}
 	});
+
+	// #403: a destination centrs cannot write was `internal/unhandled` (ENOENT) after
+	// the whole remote read. It is now a typed error before any device call.
+	// A file used as a parent directory makes `statSync` throw ENOTDIR, which
+	// `throwIfNoEntry` does not cover (nor EACCES / ELOOP).
+	const notADir = tmpFile("not-a-dir", "x");
+	for (const [label, local] of [
+		["a missing parent directory", join(TMP, "no-such-dir", "a.tsv")],
+		["an existing directory", TMP],
+		["a parent path through a file", join(notADir, "sub", "a.tsv")],
+	] as const) {
+		test(`${label} fails before any device call`, async () => {
+			const fetchMock = mockFetchSequence([]);
+			try {
+				let error: CentrsError | undefined;
+				try {
+					await runTransfer(
+						baseRequest({ verb: "download", remote: "a.tsv", local }),
+					);
+				} catch (caught) {
+					error = caught as CentrsError;
+				}
+				expect(error?.code).toBe("input/local-destination");
+				expect(error?.context).toMatchObject({ local });
+				expect(fetchMock.calls).toHaveLength(0);
+			} finally {
+				fetchMock.restore();
+			}
+		});
+	}
 });
 
 // ── CLI: stdin/stdout positional `-` (examples 9/10, deferred from CHR) ───────
