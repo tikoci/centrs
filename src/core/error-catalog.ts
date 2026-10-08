@@ -503,6 +503,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "A network request to the device failed.",
 	},
 	{
+		code: "transport/stream-overflow",
+		summary:
+			"More stream replies were waiting unread than the buffer allows, so centrs ended the stream rather than drop any.",
+	},
+	{
 		code: "transport/timeout",
 		summary: "The transport request timed out.",
 	},
@@ -572,6 +577,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 
 	// validation/*
+	{
+		code: "validation/not-followable",
+		summary:
+			"The RouterOS menu cannot be followed: it is a single record, or its print has no follow-only.",
+	},
 	{
 		code: "validation/not-implemented",
 		summary: "The requested validation feature is not implemented yet.",

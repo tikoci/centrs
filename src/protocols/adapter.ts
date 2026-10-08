@@ -186,6 +186,19 @@ export interface ProtocolListenOptions {
 	onCancelUnacknowledged?: () => void;
 	/** Attributes carried by the command's terminal `!done`, not a row frame. */
 	onDone?: (attributes: Record<string, string>) => void;
+	/**
+	 * Every reply (`re`, `empty`, `trap`, `done`), called synchronously in wire
+	 * order as it arrives, before the generator yields it. Concurrent streams
+	 * on one connection can be ordered against each other only this way; the
+	 * generators' own interleaving depends on microtask scheduling.
+	 */
+	onReply?: (reply: ProtocolTappedReply) => void;
+}
+
+/** A reply seen by {@link ProtocolListenOptions.onReply}. */
+export interface ProtocolTappedReply {
+	type: "re" | "empty" | "trap" | "done";
+	attributes: Record<string, string>;
 }
 
 /**
@@ -760,9 +773,17 @@ class NativeApiAdapter implements ProtocolAdapter {
 	): AsyncGenerator<ProtocolStreamReply> {
 		if (options.signal?.aborted) return;
 		const session = await this.connect();
+		const { onReply } = options;
 		for await (const reply of session.listen(nativeCommandFor(request), {
 			...options,
 			cancelGraceMs: options.cancelGraceMs ?? this.config.timeoutMs,
+			onReply: onReply
+				? (reply) =>
+						onReply({
+							type: reply.type.slice(1) as ProtocolTappedReply["type"],
+							attributes: { ...reply.attributes },
+						})
+				: undefined,
 		})) {
 			yield {
 				type: reply.type === "!empty" ? "empty" : "re",

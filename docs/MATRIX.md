@@ -63,8 +63,12 @@ and implementation sequencing in the linked issues.
   #399 extends it to incremental command replies and truthful terminal outcomes.
   #402 makes it literal: following is the `<menu>/listen` endpoint, every wire
   reply (`!empty` included) is a line, and what RouterOS will not report
-  (filtered or projected change feeds) is a tip, not a rewrite. Stateful
-  filtered follow belongs to `retrieve --follow` (#396/#397).
+  (filtered or projected change feeds) is a tip, not a rewrite.
+- `retrieve --follow` (#396) is the stateful follow over native-api: A1
+  bootstrap, `synced`, live frames, and an `.id` sweep for removals RouterOS
+  does not send. Unfiltered and single-target; `CHR-passed` by
+  `test/integration/retrieve-follow.test.ts` (FL1–FL9, 7.23.7 and 7.24.5).
+  Filtered follow waits on #397.
 - `discover / mndp` is grounded by `commands/discover/README.md`,
   `src/data/mndp.ts`, `src/data/mndp-cache.ts`, and
   `test/integration/discover.test.ts`.
@@ -158,9 +162,10 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 **First: the native-api / NDJSON line** (maintainer decision on
 [#396](https://github.com/tikoci/centrs/issues/396), 2026-10-07): agents in the
 field poll with `sleep` where a native follow would answer. In order:
-(1) #402, literal `api --stream` with `!empty` frames and `--format ndjson`;
-(2) `retrieve --follow` (#396); (3) `retrieve --sample`; (4) #397, then #364
-on `--follow`; (5) #398 and #401. Each slice's contract lives in its command
+(1) done: #402, literal `api --stream` with `!empty` frames and
+`--format ndjson`; (2) done: `retrieve --follow` (#396, unfiltered);
+(3) next: `retrieve --sample`; (4) #397, then #364 on `--follow`;
+(5) #398 and #401. Each slice's contract lives in its command
 README. Live `explain` (below) resumes after this line.
 
 **Tightening validation as a whole** is the next track, in the three-step

@@ -1,0 +1,681 @@
+/**
+ * `retrieve --follow`: keep a menu's rows current over native-api `listen`.
+ * The contract (line kinds, A1 bootstrap, `.id` sweep, bounds) is
+ * `commands/retrieve/README.md` → Follow; the CHR evidence is #396.
+ *
+ * One native connection carries three tagged commands: the `listen` (started
+ * first), the snapshot `print`, and the periodic `.id` sweep. Their replies
+ * land in one arrival-ordered queue, so the A1 replay and the sweep's
+ * "changed since it was sent" exclusion are both decided by queue position.
+ */
+
+import {
+	buildTip,
+	type EnvelopeValidationMeta,
+	type Tip,
+	type Warning,
+} from "./core/envelope.ts";
+import { inspectArgumentNames, pathTokens } from "./core/inspect.ts";
+import { CentrsError, formatCentrsErrorLine } from "./errors.ts";
+import {
+	createProtocolAdapter,
+	type ProtocolAdapter,
+	type ProtocolApiRequest,
+	type ProtocolListenOptions,
+	type ProtocolTappedReply,
+} from "./protocols/adapter.ts";
+import {
+	assertKnownAttributes,
+	buildRetrieveErrorEnvelope,
+	buildRetrieveErrorEnvelopeFromResolved,
+	inspectRetrievePath,
+	metaFromResolved,
+	type ResolvedRetrieveRequest,
+	type RetrieveEnvelope,
+	type RetrieveFollowCounts,
+	type RetrieveFollowStopReason,
+	type RetrieveFollowSummary,
+	type RetrieveOutputFormat,
+	type RetrieveRequest,
+	type RetrieveStreamMeta,
+	type RetrieveSuccessEnvelope,
+	resolveRetrieveRequest,
+	retrieveRequestSummary,
+} from "./retrieve.ts";
+
+/** Changes allowed to wait unread before the follow ends (`transport/stream-overflow`). */
+export const FOLLOW_BUFFER_LIMIT = 50_000;
+
+export interface RetrieveFollowOptions {
+	/** Ctrl-C: ends the follow with `stopReason: "interrupted"`. */
+	signal?: AbortSignal;
+	/** Fired once the `listen` is on the wire, before the snapshot `print`. */
+	onListening?: () => void;
+	/** Override {@link FOLLOW_BUFFER_LIMIT} (tests). */
+	bufferLimit?: number;
+}
+
+type FollowEvent =
+	| { type: "listen"; reply: ProtocolTappedReply }
+	| { type: "listen-end" }
+	| { type: "snapshot-row"; row: Record<string, string> }
+	| { type: "snapshot-done" }
+	| { type: "sweep-start" }
+	| { type: "sweep"; ids: Set<string> }
+	| { type: "stop" }
+	| { type: "error"; error: unknown };
+
+/**
+ * The wire-ordered event queue: every source feeds it from a synchronous
+ * reply tap (`ProtocolListenOptions.onReply`), so its order is the order the
+ * replies arrived on the connection. A stop request and a fatal error jump the
+ * queue: Ctrl-C, an elapsed `--duration` or an overflow must not wait behind
+ * a backlog. Head-indexed, because `shift()` is O(n) per event.
+ */
+class FollowQueue {
+	private events: FollowEvent[] = [];
+	private head = 0;
+	private wake: (() => void) | undefined;
+	private stopRequested = false;
+	private fatal: { error: unknown } | undefined;
+
+	get length(): number {
+		return this.events.length - this.head;
+	}
+
+	push(event: FollowEvent): void {
+		this.events.push(event);
+		this.signal();
+	}
+
+	requestStop(): void {
+		this.stopRequested = true;
+		this.signal();
+	}
+
+	fail(error: unknown): void {
+		this.fatal ??= { error };
+		this.signal();
+	}
+
+	async next(): Promise<FollowEvent> {
+		for (;;) {
+			if (this.fatal) return { type: "error", error: this.fatal.error };
+			if (this.stopRequested) return { type: "stop" };
+			if (this.head < this.events.length) {
+				const event = this.events[this.head] as FollowEvent;
+				this.head += 1;
+				if (this.head > 1024 && this.head * 2 > this.events.length) {
+					this.events.splice(0, this.head);
+					this.head = 0;
+				}
+				return event;
+			}
+			await new Promise<void>((resolve) => {
+				this.wake = resolve;
+			});
+		}
+	}
+
+	private signal(): void {
+		const resume = this.wake;
+		this.wake = undefined;
+		resume?.();
+	}
+}
+
+type FrameMeta = Extract<RetrieveStreamMeta, { kind: "frame" }>;
+
+/**
+ * Follow one menu: yields an optional `notice`, the snapshot frames, `synced`,
+ * live frames, then exactly one summary (successful, or an error envelope
+ * carrying the partial counts). Errors before the follow starts (resolution,
+ * validation, a non-followable menu, a non-native transport) yield one error
+ * envelope without a summary.
+ */
+export async function* retrieveFollow(
+	request: RetrieveRequest,
+	env: Record<string, string | undefined> = Bun.env,
+	options: RetrieveFollowOptions = {},
+): AsyncGenerator<RetrieveEnvelope, void, void> {
+	const followRequest: RetrieveRequest = { ...request, follow: true };
+	let resolved: ResolvedRetrieveRequest;
+	try {
+		resolved = await resolveRetrieveRequest(followRequest, env);
+	} catch (error) {
+		yield buildRetrieveErrorEnvelope(followRequest, error);
+		return;
+	}
+	if (resolved.via.value !== "native-api") {
+		yield buildRetrieveErrorEnvelopeFromResolved(
+			resolved,
+			new CentrsError({
+				code: "transport/capability-unsupported",
+				summary: `\`retrieve --follow\` needs native-api; ${resolved.via.value} cannot follow a menu.`,
+				remediation:
+					"Use `--via native-api` (or leave `via` unset), and make sure the router's `api` service is enabled. There is no polling fallback.",
+				context: { via: resolved.via.value, capability: "follow" },
+			}),
+		);
+		return;
+	}
+	const backend = createProtocolAdapter({
+		protocol: resolved.via.value,
+		host: resolved.target.host,
+		port: resolved.target.port,
+		tls: resolved.target.tls,
+		baseUrl: resolved.target.baseUrl,
+		username: resolved.auth.username,
+		password: resolved.auth.password,
+		timeoutMs: resolved.timeoutMs.value,
+		insecure: resolved.insecure?.value,
+	});
+	let validation: EnvelopeValidationMeta;
+	try {
+		validation = await validateFollow(resolved, backend);
+	} catch (error) {
+		await backend.close();
+		yield buildRetrieveErrorEnvelopeFromResolved(resolved, error);
+		return;
+	}
+	yield* runFollow(resolved, backend, validation, options);
+}
+
+/**
+ * The follow-only check: a list menu whose `print` takes `follow-only`
+ * (#396 round 1: 0 mismatches over 403 menus on 7.23.7 and 7.24.5). Requested
+ * attributes are checked as for a one-shot read. `--no-validate` skips both,
+ * and RouterOS then rejects a non-followable `listen` itself.
+ */
+async function validateFollow(
+	resolved: ResolvedRetrieveRequest,
+	backend: ProtocolAdapter,
+): Promise<EnvelopeValidationMeta> {
+	if (!resolved.validate.value) {
+		return { enabled: false, source: "disabled" };
+	}
+	const inspection = await inspectRetrievePath(resolved, backend);
+	const followable =
+		!inspection.singleton &&
+		(
+			await inspectArgumentNames(backend, [
+				...pathTokens(resolved.path),
+				"print",
+			])
+		).includes("follow-only");
+	if (!followable) {
+		throw new CentrsError({
+			code: "validation/not-followable",
+			summary: inspection.singleton
+				? `${resolved.path} is a single record, which RouterOS cannot follow.`
+				: `${resolved.path}/print has no \`follow-only\`, so RouterOS cannot follow this menu.`,
+			remediation: `Read it once with \`centrs retrieve <router> ${resolved.path}\`, or sample it on a timer with \`centrs api <router> ${resolved.path}/print -X POST -f interval=5s --stream\`.`,
+			context: {
+				path: resolved.path,
+				singleton: inspection.singleton,
+				validationSource: "/console/inspect request=child",
+			},
+		});
+	}
+	const availableAttributes =
+		resolved.attributes.length > 0
+			? await assertKnownAttributes(resolved, inspection, backend)
+			: undefined;
+	return {
+		enabled: true,
+		source: availableAttributes
+			? "live /console/inspect request=child+completion"
+			: "live /console/inspect request=child",
+		availableAttributes,
+	};
+}
+
+async function* runFollow(
+	resolved: ResolvedRetrieveRequest,
+	backend: ProtocolAdapter,
+	validation: EnvelopeValidationMeta,
+	options: RetrieveFollowOptions,
+): AsyncGenerator<RetrieveEnvelope, void, void> {
+	const follow = resolved.follow ?? { sweepMs: 0 };
+	const bufferLimit = options.bufferLimit ?? FOLLOW_BUFFER_LIMIT;
+	const startedAt = Date.now();
+	const counts: RetrieveFollowCounts = {
+		frames: 0,
+		snapshot: 0,
+		changes: 0,
+		sweeps: 0,
+		synced: false,
+	};
+	const tips = followTips(resolved);
+	const controller = new AbortController();
+	let stopReason: RetrieveFollowStopReason | undefined;
+	let cancelUnacknowledged = false;
+
+	// One wire-ordered queue for every source; `pending` holds listen replies
+	// that arrived before the snapshot's `!done` (A1 replays them after it).
+	const queue = new FollowQueue();
+	const pending: ProtocolTappedReply[] = [];
+	const push = (event: FollowEvent): void => {
+		if (event.type === "error") {
+			queue.fail(event.error);
+			return;
+		}
+		if (
+			(event.type === "listen" || event.type === "snapshot-row") &&
+			queue.length + pending.length >= bufferLimit
+		) {
+			queue.fail(overflowError(bufferLimit));
+			return;
+		}
+		queue.push(event);
+	};
+	const stop = (reason: RetrieveFollowStopReason): void => {
+		stopReason ??= reason;
+		queue.requestStop();
+	};
+	/**
+	 * Cancel the listen and wait for RouterOS's acknowledgement (bounded by
+	 * the adapter's cancel grace), so the outcome is known before the summary.
+	 */
+	const endListen = async (): Promise<Warning[]> => {
+		clearTimeout(durationTimer);
+		clearTimeout(sweepTimer);
+		controller.abort();
+		await Promise.all(running);
+		return cancelUnacknowledged ? [cancelUnacknowledgedWarning(resolved)] : [];
+	};
+	const durationTimer =
+		follow.durationMs !== undefined
+			? setTimeout(() => stop("duration-elapsed"), follow.durationMs)
+			: undefined;
+	const onExternalAbort = (): void => stop("interrupted");
+	if (options.signal?.aborted) onExternalAbort();
+	else options.signal?.addEventListener("abort", onExternalAbort);
+
+	const internalProplist =
+		resolved.attributes.length > 0
+			? [...new Set([".id", ".dead", ...resolved.attributes])]
+			: undefined;
+	const detail = resolved.allAttributes ? { detail: "" } : undefined;
+	/**
+	 * Run one native command, feeding the queue from its synchronous reply
+	 * tap. The generator is only drained here; a failure becomes an `error`.
+	 */
+	const running = new Set<Promise<void>>();
+	const run = (
+		request: ProtocolApiRequest,
+		onReply: (reply: ProtocolTappedReply) => void,
+		extra: Partial<ProtocolListenOptions> = {},
+	): void => {
+		const drained = (async () => {
+			try {
+				for await (const _reply of backend.stream(request, {
+					...extra,
+					signal: controller.signal,
+					onReply,
+				})) {
+					// Replies reach the queue through `onReply`, in wire order.
+				}
+				if (request.listen) push({ type: "listen-end" });
+			} catch (error) {
+				push({ type: "error", error });
+			}
+		})();
+		running.add(drained);
+		void drained.then(() => running.delete(drained));
+	};
+	/** `onReply` for a finite read: rows, then `done` unless it trapped. */
+	const finite = (
+		onRow: (row: Record<string, string>) => void,
+		onDone: () => void,
+	): ((reply: ProtocolTappedReply) => void) => {
+		let trapped = false;
+		return (reply) => {
+			if (reply.type === "re") onRow(reply.attributes);
+			else if (reply.type === "trap") trapped = true;
+			else if (reply.type === "done" && !trapped) onDone();
+		};
+	};
+
+	// The snapshot `print` goes out only once the `listen` is on the wire, on
+	// the same connection, so every change after it is in the listen feed.
+	run(
+		{
+			verb: "print",
+			path: resolved.path,
+			listen: true,
+			proplist: internalProplist,
+			attributes: detail,
+		},
+		(reply) => {
+			if (reply.type === "re" || reply.type === "empty") {
+				push({ type: "listen", reply });
+			}
+		},
+		{
+			onListening: () => {
+				options.onListening?.();
+				run(
+					{
+						verb: "print",
+						path: resolved.path,
+						proplist: internalProplist,
+						attributes: detail,
+					},
+					finite(
+						(row) => push({ type: "snapshot-row", row }),
+						() => push({ type: "snapshot-done" }),
+					),
+				);
+			},
+			onCancelUnacknowledged: () => {
+				cancelUnacknowledged = true;
+			},
+		},
+	);
+
+	// Held ids: what the consumer's state contains if it applied every line.
+	const held = new Set<string>();
+	// Ids touched by a listen reply since the in-flight sweep was sent; a sweep
+	// never removes those (its snapshot may predate them).
+	let touchedSinceSweep: Set<string> | undefined;
+	let sweepTimer: ReturnType<typeof setTimeout> | undefined;
+	const scheduleSweep = (): void => {
+		if (follow.sweepMs <= 0 || controller.signal.aborted) return;
+		sweepTimer = setTimeout(() => {
+			if (controller.signal.aborted) return;
+			push({ type: "sweep-start" });
+			const ids = new Set<string>();
+			run(
+				{ verb: "print", path: resolved.path, proplist: [".id"] },
+				finite(
+					(row) => ids.add(row[".id"] ?? ""),
+					() => push({ type: "sweep", ids }),
+				),
+			);
+		}, follow.sweepMs);
+	};
+
+	const frame = (
+		phase: FrameMeta["phase"],
+		change: FrameMeta["change"],
+		id: string,
+		source: FrameMeta["source"],
+		row: Record<string, string> | null,
+	): RetrieveSuccessEnvelope => {
+		counts.frames += 1;
+		if (phase === "snapshot") counts.snapshot += 1;
+		else counts.changes += 1;
+		const data = row === null ? null : projectRow(row, resolved.attributes);
+		return streamEnvelope(resolved, validation, data, {
+			kind: "frame",
+			index: counts.frames,
+			phase,
+			change,
+			id,
+			source,
+		});
+	};
+	/** A listen reply as a frame, or `undefined` when it changes nothing held. */
+	const applyListen = (
+		reply: ProtocolTappedReply,
+		phase: FrameMeta["phase"],
+	): RetrieveSuccessEnvelope | undefined => {
+		// `!empty` on a listen is the cancel acknowledgement, never a table state.
+		if (reply.type === "empty") return undefined;
+		const id = reply.attributes[".id"];
+		if (id === undefined) return undefined;
+		touchedSinceSweep?.add(id);
+		if (reply.attributes[".dead"] === "true") {
+			// A `.dead` for an id never reported is a coalesced add+delete.
+			if (!held.delete(id)) return undefined;
+			return frame(phase, "removed", id, "listen", null);
+		}
+		held.add(id);
+		return frame(phase, "upsert", id, "listen", reply.attributes);
+	};
+	const countReached = (): boolean =>
+		follow.count !== undefined && counts.changes >= follow.count;
+
+	try {
+		if (tips.length > 0) {
+			yield streamEnvelope(
+				resolved,
+				validation,
+				null,
+				{ kind: "notice" },
+				tips,
+			);
+		}
+		loop: for (;;) {
+			const event = await queue.next();
+			switch (event.type) {
+				case "listen": {
+					if (!counts.synced) {
+						pending.push(event.reply);
+						break;
+					}
+					const envelope = applyListen(event.reply, "live");
+					if (envelope) {
+						yield envelope;
+						if (countReached()) {
+							stopReason ??= "count-reached";
+							break loop;
+						}
+					}
+					break;
+				}
+				case "snapshot-row": {
+					const id = event.row[".id"];
+					if (id !== undefined) {
+						held.add(id);
+						yield frame("snapshot", "upsert", id, "print", event.row);
+					}
+					break;
+				}
+				case "snapshot-done": {
+					for (const reply of pending.splice(0, pending.length)) {
+						const envelope = applyListen(reply, "snapshot");
+						if (envelope) yield envelope;
+					}
+					counts.synced = true;
+					yield streamEnvelope(resolved, validation, null, {
+						kind: "synced",
+						rows: held.size,
+					});
+					scheduleSweep();
+					break;
+				}
+				case "sweep-start":
+					touchedSinceSweep = new Set();
+					break;
+				case "sweep": {
+					counts.sweeps += 1;
+					const touched = touchedSinceSweep ?? new Set<string>();
+					touchedSinceSweep = undefined;
+					for (const id of [...held]) {
+						if (event.ids.has(id) || touched.has(id)) continue;
+						held.delete(id);
+						yield frame("live", "removed", id, "sweep", null);
+						if (countReached()) {
+							stopReason ??= "count-reached";
+							break loop;
+						}
+					}
+					scheduleSweep();
+					break;
+				}
+				case "listen-end":
+					stopReason ??= "completed";
+					break loop;
+				case "stop":
+					break loop;
+				case "error":
+					throw event.error;
+			}
+		}
+		const warnings = await endListen();
+		yield summaryEnvelope(
+			resolved,
+			validation,
+			{ stopReason: stopReason ?? "completed", ...counts },
+			Date.now() - startedAt,
+			tips,
+			warnings,
+		);
+	} catch (error) {
+		const warnings = await endListen();
+		const envelope = buildRetrieveErrorEnvelopeFromResolved(resolved, error);
+		envelope.meta.validation = validation;
+		envelope.warnings = [...envelope.warnings, ...warnings];
+		envelope.tips = [...envelope.tips, ...tips];
+		if (envelope.meta.operation) {
+			envelope.meta.operation.objectCount = counts.frames;
+			envelope.meta.operation.stream = {
+				kind: "summary",
+				stopReason: envelope.error.code.startsWith("routeros/")
+					? "routeros-error"
+					: "transport-error",
+				...counts,
+				durationMs: Date.now() - startedAt,
+			};
+		}
+		yield envelope;
+	} finally {
+		options.signal?.removeEventListener("abort", onExternalAbort);
+		// A consumer that stopped reading early lands here directly.
+		await endListen();
+		await backend.close();
+	}
+}
+
+/**
+ * One `--follow` envelope as one line: compact NDJSON for every structured
+ * format (a multi-line YAML document cannot be a stream line), and a short
+ * row for `text`. Router text is JSON-escaped so it cannot carry terminal
+ * control bytes.
+ */
+export function renderRetrieveFollowLine(
+	envelope: RetrieveEnvelope,
+	format: RetrieveOutputFormat,
+): string {
+	if (format !== "text") return JSON.stringify(envelope);
+	if (!envelope.ok) return formatCentrsErrorLine(envelope.error);
+	const stream = envelope.meta.operation?.stream;
+	switch (stream?.kind) {
+		case "notice":
+			return envelope.tips
+				.map((tip) => `tip: ${tip.message}${tip.fix ? ` ${tip.fix}` : ""}`)
+				.join("\n");
+		case "frame": {
+			const head = `${stream.index}\t${stream.phase}\t${stream.change}\t${escaped(stream.id)}`;
+			return stream.change === "removed"
+				? `${head}\t(${stream.source})`
+				: `${head}\t${JSON.stringify(envelope.data)}`;
+		}
+		case "synced":
+			return `— synced: ${stream.rows} row(s)`;
+		case "summary":
+			return `— ${stream.stopReason}: ${stream.snapshot} snapshot, ${stream.changes} change(s), ${stream.sweeps} sweep(s) in ${stream.durationMs}ms`;
+		default:
+			return JSON.stringify(envelope.data);
+	}
+}
+
+function escaped(text: string): string {
+	return JSON.stringify(text).slice(1, -1);
+}
+
+function streamEnvelope(
+	resolved: ResolvedRetrieveRequest,
+	validation: EnvelopeValidationMeta,
+	data: unknown,
+	stream: RetrieveStreamMeta,
+	tips: Tip[] = [],
+): RetrieveSuccessEnvelope {
+	return {
+		ok: true,
+		data,
+		warnings: [],
+		tips,
+		meta: metaFromResolved(resolved, validation, {
+			kind: "data",
+			objectCount: data === null ? 0 : 1,
+			request: retrieveRequestSummary(resolved),
+			auth: {
+				username: resolved.auth.username,
+				passwordProvided: resolved.auth.passwordProvided,
+			},
+			stream,
+		}),
+	};
+}
+
+function summaryEnvelope(
+	resolved: ResolvedRetrieveRequest,
+	validation: EnvelopeValidationMeta,
+	counts: Omit<RetrieveFollowSummary, "durationMs">,
+	durationMs: number,
+	tips: Tip[],
+	warnings: readonly Warning[],
+): RetrieveSuccessEnvelope {
+	const summary: RetrieveFollowSummary = { ...counts, durationMs };
+	const envelope = streamEnvelope(
+		resolved,
+		validation,
+		summary,
+		{ kind: "summary", ...summary },
+		tips,
+	);
+	if (envelope.meta.operation) {
+		envelope.meta.operation.objectCount = counts.frames;
+	}
+	envelope.warnings = [...resolved.warnings, ...warnings];
+	return envelope;
+}
+
+/** Advice known before the first frame: what this follow will not report. */
+function followTips(resolved: ResolvedRetrieveRequest): Tip[] {
+	if ((resolved.follow?.sweepMs ?? 0) > 0) return [];
+	return [
+		buildTip(
+			"tip/follow-sweep-off",
+			"`--sweep 0` turned off the `.id` sweep, so removals RouterOS does not send (view menus such as `/interface/<type>`, `/ip/route`, `/ipv6/route`) will not be reported.",
+			"Leave `--sweep` at its default (10s), or follow the base menu (`/interface`, `/routing/route`), which reports its removals.",
+		),
+	];
+}
+
+/** `data` limited to the requested attributes; `.id`/`.dead` only when named. */
+function projectRow(
+	row: Record<string, string>,
+	attributes: readonly string[],
+): Record<string, string> {
+	if (attributes.length === 0) return row;
+	const projected: Record<string, string> = {};
+	for (const attribute of attributes) {
+		const value = row[attribute];
+		if (value !== undefined) projected[attribute] = value;
+	}
+	return projected;
+}
+
+function overflowError(limit: number): CentrsError {
+	return new CentrsError({
+		code: "transport/stream-overflow",
+		summary: `More than ${limit} changes were waiting unread, so centrs ended the follow instead of dropping any.`,
+		remediation:
+			"The state you hold is stale: follow again to take a new snapshot, and read lines as they arrive (or narrow the menu).",
+		context: { bufferLimit: limit },
+	});
+}
+
+function cancelUnacknowledgedWarning(
+	resolved: ResolvedRetrieveRequest,
+): Warning {
+	return {
+		code: "transport/cancel-unacknowledged",
+		message: `RouterOS did not acknowledge /cancel within ${resolved.timeoutMs.value}ms; centrs closed the session locally.`,
+		context: { timeoutMs: resolved.timeoutMs.value },
+	};
+}

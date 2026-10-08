@@ -1,8 +1,8 @@
 # retrieve
 
 Status: `CHR-passed` over `rest-api` and `native-api`, including multi-target
-fan-out (see **Target selection**). `snmp` is `not-started`. Matches
-`docs/MATRIX.md`.
+fan-out (see **Target selection**) and `--follow` over `native-api` (see
+**Follow**). `snmp` is `not-started`. Matches `docs/MATRIX.md`.
 
 Read RouterOS state. RouterOS menu reads model `<path>/<verb>` where the verb
 is `print`-style (`print`, `get`, and async POST-shaped reads as they're
@@ -63,7 +63,7 @@ Spec-tier flags with no implementation yet — today they fail as unknown flags:
 
 | Flag                                | Designed behavior                                                                          |
 | ----------------------------------- | ----------------------------------------------------------------------------------------- |
-| `--once`                            | Bounded single read of a monitor-style menu (RouterOS `once`): returns **one** envelope and never follows. Open-ended follow is `api … <menu>/listen` (or `--stream` for a command). See constitution: protocol selection. |
+| `--once`                            | Bounded single read of a monitor-style menu (RouterOS `once`): returns **one** envelope and never follows. Open-ended follow is `--follow` (below), or `api … <menu>/listen` for the literal wire. See constitution: protocol selection. |
 | `--max-bytes <n>`                   | Byte budget for the rendered payload. If the response would exceed it, centrs truncates to fit, keeps `ok: true`, and adds a warning + `meta.truncated`. Not an error. (Will replace the implemented `--max-results`, which fails instead of truncating.) |
 | `--max-rows <n>`                    | Maximum row count for list reads. Excess rows are clipped; `ok: true` with a warning + `meta.truncated`.                                    |
 | `--yaml`                            | Shortcut for `--format yaml`.                                                             |
@@ -139,6 +139,99 @@ handling.
 warning entry — it is not an error. (Earlier text said a byte overflow returns an
 *error* with the needed size; superseded — truncation is an `ok: true` footnote so
 partial data stays usable.)
+
+## Follow (`--follow`)
+
+`retrieve <router> <menu> --follow` keeps a menu's rows current: first the
+rows that exist now, then a line for every change, as NDJSON. It is the
+friendly wrapper over native-API `listen`; `api <router> <menu>/listen` is the
+literal wire (`commands/api/README.md`). Decisions and CHR evidence: #396.
+
+**What starts it.** `--follow` on a list menu whose `print` takes
+`follow-only` in `/console/inspect` (checked live). A menu without it, a
+singleton included, fails `validation/not-followable` before anything is
+followed. Native-api only: an unset `via` infers native-api, and a `via` of
+`rest-api` from any source (flag, env, CDB, settings) fails
+`transport/capability-unsupported`; there is no polling fallback. Single
+target only: a fan-out selector fails `usage/fanout-not-supported`. The first
+slice is unfiltered: `--query`/`--filter` are still `validation/not-implemented`
+(#397).
+
+**What each line means.** Every line is one envelope; read
+`meta.operation.stream`:
+
+| `kind` | When | `data` | Fields |
+| ------ | ---- | ------ | ------ |
+| `frame` | One row change | the row (`upsert`), `null` (`removed`) | `index`, `phase` (`snapshot`/`live`), `change` (`upsert`/`removed`), `id`, `source` (`print`/`listen`/`sweep`) |
+| `synced` | Once, after the snapshot | `null` | `rows`: rows held at that point |
+| `notice` | First, only when there is advice | `null` | — (`tips` carries it) |
+| `summary` | Last, exactly once | the counts | `stopReason`, `frames`, `snapshot`, `changes`, `sweeps`, `synced`, `durationMs` |
+
+- **Bootstrap (A1).** centrs starts the `listen`, then the `print`, on one
+  connection. It emits the `print` rows, then every `listen` change received
+  since the `listen` started, all as `phase: "snapshot"`, then `synced`.
+  Applying the lines in order gives the menu's state at `synced`. That order
+  had 0 errors over about 14.7k writes on 7.23.7 and 7.24.5; merging by arrival
+  order resurrects deleted rows (#396 round 3). `synced` means the bootstrap
+  was processed. It is not an atomic snapshot, a full event history, or
+  routing convergence.
+- **`upsert`** carries the latest full row; replace what you hold for `id`.
+  **`removed`** carries `data: null`; drop `id`. The row identity is always
+  `meta.operation.stream.id`, even when `--attributes` leaves `.id` out of
+  `data`.
+- **Changes are coalesced state, not an event log.** RouterOS sends a change
+  about 200 ms after a write and folds writes in between. A row created and
+  deleted inside that window may never appear, and a flap may arrive as one
+  line or none. A `.dead` for an `id` centrs never reported is dropped, so a
+  removal the sweep saw first is reported once, as `source: "sweep"`.
+- **Removals RouterOS does not send.** View menus (`/interface/<type>`,
+  `/ip/route`, `/ipv6/route`) never send `.dead`. An `.id`-only sweep
+  (`print .proplist=.id`) runs every `--sweep` (default `10s`) on every followed
+  menu and reports an `id` that is gone as `removed` with `source: "sweep"`.
+  An `id` that changed since that sweep was sent is never removed by it. A
+  failed sweep ends the follow with an error; it never infers a removal. A
+  sweep only checks membership: it does not repair a missed field update or
+  report rows `listen` never announced. `--sweep 0` turns it off, with a
+  notice tip saying view-menu removals will not be reported.
+- **What `listen` never reports.** Hot counters (`rx-byte`, firewall
+  `bytes`/`packets`) and some protocol state (BFD sessions accept `listen` but
+  stay silent). The follow is correct but quiet there; a periodic sample
+  (`retrieve --sample`, planned) is the answer for those.
+- **Projection.** `--attribute(s)` projects `data`; centrs still asks RouterOS
+  for `.id,.dead` and removes them from `data` unless you named them.
+  `--all-attributes` sends `detail` to both `listen` and `print`.
+  `--list-attributes` and `--max-results` conflict with `--follow`
+  (`usage/conflicting-flags`).
+
+**What ends it.** `--count N` stops after N `live` frames; snapshot frames and
+`synced` never count, so `--count 1` is "the next observed change" (coalesced,
+so not a guaranteed transition). `--duration <d>` is a wall-clock bound that
+includes the bootstrap. Ctrl-C (`SIGINT`) stops it. Each ends with a
+successful summary whose `stopReason` is `count-reached`, `duration-elapsed`,
+or `interrupted`. A RouterOS error, a lost connection, a failed sweep or a full
+buffer ends it with a failed summary (`ok: false`, `stopReason`
+`routeros-error` or `transport-error`), whose counts are partial. Buffers are
+bounded: if more than 50,000 changes are waiting (a consumer that stopped
+reading, or a burst during a long snapshot), the follow ends with
+`transport/stream-overflow`. The state you hold is stale; follow again to get a
+new snapshot. `--count`, `--duration` and `--sweep` without `--follow` fail
+`usage/conflicting-flags`.
+
+**Format.** Under `--follow`, `json`, `yaml` and `ndjson` all print one compact
+envelope per line (as `api --stream` does); `text` prints one short row per
+line. Every envelope, errors included, goes to stdout, and the exit code is
+nonzero for any failure, even after rows. Without `--follow`,
+`--format ndjson` prints the ordinary envelope as one compact line; it never
+starts a follow.
+
+Recipes (bounded, so an agent can run them unattended):
+
+```bash
+# Watch: hold /ip/address for 30s, then stop.
+centrs retrieve $R /ip/address --follow --duration 30s
+# Wait for the next change, at most 60s.
+centrs retrieve $R /ip/address --follow --count 1 --duration 60s
+```
 
 ## Target selection
 

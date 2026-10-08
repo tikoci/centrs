@@ -32,7 +32,7 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 
 | Flag | Value | Description |
 | ---- | ----- | ----------- |
-| `--via` | `<protocol>` | Pin the protocol selector. Defaults to `rest-api` for retrieve. |
+| `--via` | `<protocol>` | Pin the protocol selector. Defaults to `rest-api` for retrieve, and to `native-api` under `--follow`. |
 | `--group` | `<name>` | Fan out across every CDB record in the group (repeatable; de-duped by record index). |
 | `--where` | `<attr>`=`<value>` | Device-class selector over CDB facts + core fields (repeatable, AND-combined). |
 | `--near` | `<lat>`,`<lon>`,`<radius>` | Geo selector: devices whose GPS is within radius (m/km/mi/ft; bare number = km). Lat-first. |
@@ -51,7 +51,11 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 | `--all-attributes` |  | Request the RouterOS detail/all-attributes shape. |
 | `--list-attributes / --list` |  | List inspect-derived attributes without running the data call. |
 | `--query / --filter` | `<expr>` | RouterOS-side row filter (maps to `.query`). Not implemented yet — returns `validation/not-implemented`. |
-| `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope. |
+| `--follow` |  | Keep the menu's rows current over native-api `listen`: snapshot frames, a `synced` line, then a line per change, then a summary (NDJSON for json/yaml/ndjson). Single target, list menus whose print takes follow-only. |
+| `--sweep` | `<duration>` | `--follow` only: how often an `.id` sweep finds removals RouterOS does not send (view menus such as `/interface/<type>`). Default `10s`; `0` turns it off. |
+| `--count` | `<n>` | `--follow` only: stop after N live changes. Snapshot frames and `synced` do not count. |
+| `--duration` | `<duration>` | `--follow` only: stop after this wall-clock window, bootstrap included (e.g. `30s`). |
+| `--format` | &lt;text\|json\|yaml\|ndjson&gt; | Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope. `ndjson` prints each envelope as one compact line. |
 | `--json` |  | Shortcut for `--format json`. |
 | `--max-results` | `<bytes>` | Fail instead of printing output larger than the given byte budget. |
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |

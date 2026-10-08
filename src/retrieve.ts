@@ -54,7 +54,12 @@ import {
 	toCoreSource,
 } from "./resolver/index.ts";
 
-export const retrieveOutputFormats = ["text", "json", "yaml"] as const;
+export const retrieveOutputFormats = [
+	"text",
+	"json",
+	"yaml",
+	"ndjson",
+] as const;
 export type RetrieveOutputFormat = (typeof retrieveOutputFormats)[number];
 
 export interface RetrieveRequest {
@@ -90,6 +95,14 @@ export interface RetrieveRequest {
 	group?: string;
 	/** Bounded worker-pool size for group fanout (defaults are transport-aware). */
 	concurrency?: number;
+	/** Keep the menu's rows current over native-api `listen` (`retrieveFollow`). */
+	follow?: boolean;
+	/** `--follow` only: `.id` sweep period (`10s` default; `0` turns it off). */
+	sweep?: string | number;
+	/** `--follow` only: stop after this many `live` frames. */
+	count?: number;
+	/** `--follow` only: wall-clock bound, bootstrap included (e.g. `30s`). */
+	duration?: string | number;
 }
 
 export interface RetrieveWarning {
@@ -108,7 +121,64 @@ export interface RetrieveRequestSummary {
 	timeoutMs: number;
 	format: RetrieveOutputFormat;
 	maxResultsBytes?: number;
+	/** Present when the request is a `--follow`. */
+	follow?: RetrieveFollowSettings;
 }
+
+/** The resolved bounds of a `--follow`. */
+export interface RetrieveFollowSettings {
+	/** `.id` sweep period; `0` = off. */
+	sweepMs: number;
+	count?: number;
+	durationMs?: number;
+}
+
+/** Why a `--follow` ended. */
+export type RetrieveFollowStopReason =
+	| "completed"
+	| "routeros-error"
+	| "count-reached"
+	| "duration-elapsed"
+	| "interrupted"
+	| "transport-error";
+
+/** Counts carried by a `--follow` summary (also its `data`). */
+export interface RetrieveFollowCounts {
+	/** Every frame line, snapshot and live. */
+	frames: number;
+	/** Frames before `synced`. */
+	snapshot: number;
+	/** `live` frames after `synced`; `--count` counts these. */
+	changes: number;
+	/** Completed `.id` sweeps. */
+	sweeps: number;
+	/** Whether the bootstrap finished before the follow ended. */
+	synced: boolean;
+}
+
+export interface RetrieveFollowSummary extends RetrieveFollowCounts {
+	stopReason: RetrieveFollowStopReason;
+	durationMs: number;
+}
+
+/**
+ * Per-line marker on `--follow` output (`commands/retrieve/README.md` →
+ * Follow). A `frame` is one row change: `upsert` carries the latest full row,
+ * `removed` carries `data: null`; `id` is the row identity even when the
+ * projection leaves `.id` out of `data`.
+ */
+export type RetrieveStreamMeta =
+	| { kind: "notice" }
+	| {
+			kind: "frame";
+			index: number;
+			phase: "snapshot" | "live";
+			change: "upsert" | "removed";
+			id: string;
+			source: "print" | "listen" | "sweep";
+	  }
+	| { kind: "synced"; rows: number }
+	| ({ kind: "summary" } & RetrieveFollowSummary);
 
 export interface RetrieveOperationMeta {
 	kind: "attributes" | "data";
@@ -118,6 +188,8 @@ export interface RetrieveOperationMeta {
 		username?: string;
 		passwordProvided: boolean;
 	};
+	/** Present only on `--follow` output. */
+	stream?: RetrieveStreamMeta;
 }
 
 export type RetrieveEnvelope = CentrsEnvelope<unknown, RetrieveOperationMeta>;
@@ -127,7 +199,7 @@ export type RetrieveSuccessEnvelope = CentrsSuccessEnvelope<
 >;
 export type RetrieveErrorEnvelope = CentrsErrorEnvelope<RetrieveOperationMeta>;
 
-interface RetrieveInspection {
+export interface RetrieveInspection {
 	command: "get" | "print";
 	singleton: boolean;
 }
@@ -153,6 +225,7 @@ export interface ResolvedRetrieveRequest {
 	allAttributes: boolean;
 	listAttributes: boolean;
 	verbose: boolean;
+	follow?: RetrieveFollowSettings;
 	warnings: readonly RetrieveWarning[];
 }
 
@@ -160,6 +233,16 @@ export async function retrieve(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined> = Bun.env,
 ): Promise<RetrieveSuccessEnvelope> {
+	if (request.follow) {
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary:
+				"`follow` yields a stream of envelopes instead of one `retrieve` result.",
+			remediation:
+				"Consume it with `retrieveFollow()` (library) or `centrs retrieve … --follow` (CLI): snapshot frames, `synced`, live frames, then a summary.",
+			context: { capability: "follow" },
+		});
+	}
 	const resolved = await resolveRetrieveRequest(request, env);
 	return runResolvedRetrieve(resolved);
 }
@@ -194,18 +277,12 @@ export async function runResolvedRetrieve(
 			inspection = await inspectRetrievePath(resolved, backend);
 		}
 
-		if (
-			resolved.listAttributes ||
-			(resolved.validate.value && resolved.attributes.length > 0)
-		) {
+		if (resolved.listAttributes) {
 			availableAttributes = await inspectAttributes(
 				resolved,
 				inspection ?? (await inspectRetrievePath(resolved, backend)),
 				backend,
 			);
-		}
-
-		if (resolved.listAttributes) {
 			const envelope = buildSuccessEnvelope(
 				resolved,
 				{
@@ -222,28 +299,12 @@ export async function runResolvedRetrieve(
 			return applyMaxResultsBudget(envelope);
 		}
 
-		if (
-			resolved.validate.value &&
-			availableAttributes &&
-			resolved.attributes.length > 0
-		) {
-			const missing = resolved.attributes.filter(
-				(attribute) => !availableAttributes?.includes(attribute),
+		if (resolved.validate.value && resolved.attributes.length > 0) {
+			availableAttributes = await assertKnownAttributes(
+				resolved,
+				inspection ?? (await inspectRetrievePath(resolved, backend)),
+				backend,
 			);
-			if (missing.length > 0) {
-				throw new CentrsError({
-					code: "validation/unknown-attribute",
-					summary: `Unknown RouterOS attribute ${missing.join(", ")} for ${resolved.path}.`,
-					remediation:
-						"Check the attribute name, or use `--list-attributes` to inspect the available properties first.",
-					context: {
-						path: resolved.path,
-						parameter: missing[0],
-						requestedAttributes: resolved.attributes,
-						availableAttributes,
-					},
-				});
-			}
 		}
 
 		const data = await executeRetrieve(resolved, backend, inspection);
@@ -351,6 +412,8 @@ export function renderRetrieveEnvelope(
 			return JSON.stringify(envelope, null, 2);
 		case "yaml":
 			return toYaml(envelope);
+		case "ndjson":
+			return JSON.stringify(envelope);
 		case "text":
 			return envelope.ok
 				? renderRetrieveSuccessText(envelope, options)
@@ -420,7 +483,7 @@ function renderRetrieveSuccessText(
 	return lines.join("\n");
 }
 
-function retrieveRequestSummary(
+export function retrieveRequestSummary(
 	resolved: ResolvedRetrieveRequest,
 ): RetrieveRequestSummary {
 	return {
@@ -433,6 +496,7 @@ function retrieveRequestSummary(
 		timeoutMs: resolved.timeoutMs.value,
 		format: resolved.format.value,
 		maxResultsBytes: resolved.maxResultsBytes?.value,
+		...(resolved.follow ? { follow: resolved.follow } : {}),
 	};
 }
 
@@ -440,7 +504,7 @@ function retrieveRequestSummary(
  * Common `target` / `via` / `settings` meta for a resolved target. Shared by
  * success and per-target error envelopes so both carry identical provenance.
  */
-function metaFromResolved(
+export function metaFromResolved(
 	resolved: ResolvedRetrieveRequest,
 	validation: EnvelopeValidationMeta,
 	operation?: RetrieveOperationMeta,
@@ -590,6 +654,8 @@ export function validateRetrieveRequestShape(
 		});
 	}
 
+	assertFollowShape(request);
+
 	const attributeSelections = normalizeAttributeSelection(request);
 	if (request.allAttributes && attributeSelections.length > 0) {
 		throw new CentrsError({
@@ -616,6 +682,77 @@ export function validateRetrieveRequestShape(
 
 	return attributeSelections;
 }
+
+/**
+ * `--follow` flag pairings, checked before any network work: its bounds need
+ * it, and a byte budget or an attribute listing has no meaning on a follow.
+ */
+function assertFollowShape(request: RetrieveRequest): void {
+	if (!request.follow) {
+		const orphan = (
+			[
+				["--sweep", request.sweep],
+				["--count", request.count],
+				["--duration", request.duration],
+			] as const
+		).find(([, value]) => value !== undefined);
+		if (orphan) {
+			throw new CentrsError({
+				code: "usage/conflicting-flags",
+				summary: `\`${orphan[0]}\` only applies to \`--follow\`.`,
+				remediation: `Add \`--follow\` to follow the menu, or drop \`${orphan[0]}\` for a one-shot read.`,
+				context: { flag: orphan[0] },
+			});
+		}
+		return;
+	}
+	const conflict = request.listAttributes
+		? "--list-attributes"
+		: request.maxResultsBytes !== undefined
+			? "--max-results"
+			: undefined;
+	if (conflict) {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary: `\`--follow\` cannot be combined with \`${conflict}\`.`,
+			remediation: `Run \`${conflict}\` as a one-shot read, then follow with \`--follow\` alone.`,
+			context: { flag: conflict },
+		});
+	}
+	if (
+		request.count !== undefined &&
+		(!Number.isInteger(request.count) || request.count < 1)
+	) {
+		throw new CentrsError({
+			code: "settings/invalid-integer",
+			summary: `\`--count\` must be a positive integer. Received: ${request.count}`,
+			remediation:
+				"Pass how many live changes to wait for, e.g. `--count 1` for the next change.",
+			context: { flag: "--count", count: request.count },
+		});
+	}
+}
+
+function resolveFollowSettings(
+	request: RetrieveRequest,
+): RetrieveFollowSettings | undefined {
+	if (!request.follow) return undefined;
+	const durationMs =
+		request.duration === undefined
+			? undefined
+			: parseDuration(String(request.duration));
+	return {
+		sweepMs:
+			request.sweep === undefined
+				? FOLLOW_SWEEP_DEFAULT_MS
+				: parseDuration(String(request.sweep)),
+		...(request.count !== undefined ? { count: request.count } : {}),
+		...(durationMs !== undefined ? { durationMs } : {}),
+	};
+}
+
+/** `--sweep` default (#396 slice decisions, 2026-10-08). */
+export const FOLLOW_SWEEP_DEFAULT_MS = 10_000;
 
 /**
  * Build a {@link ResolvedRetrieveRequest} from the static request plus an
@@ -710,6 +847,7 @@ export function buildResolvedRetrieve(
 		allAttributes: request.allAttributes ?? false,
 		listAttributes: request.listAttributes ?? false,
 		verbose: request.verbose ?? false,
+		follow: resolveFollowSettings(request),
 		warnings: connection
 			? [...connection.warnings]
 			: (cdbResolution?.warnings ?? []),
@@ -870,11 +1008,13 @@ function resolveProtocol(
 	cdb?: CdbResolution,
 	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<RouterOsProtocol> {
+	// A follow infers native-api when `via` is unset (REST cannot follow); a
+	// `via` from any source still wins, and `retrieveFollow` rejects non-native.
 	const via = resolveStringSetting(
 		request.via,
 		env,
 		"CENTRS_VIA",
-		"rest-api",
+		request.follow ? "native-api" : "rest-api",
 		"via",
 		undefined,
 		cdb?.overrides.via,
@@ -959,7 +1099,7 @@ function resolveFormat(
  * trap. Attribute/completion discovery does NOT use the swallowing probe — traps
  * there surface as-is.
  */
-async function inspectRetrievePath(
+export async function inspectRetrievePath(
 	resolved: ResolvedRetrieveRequest,
 	backend: ProtocolAdapter,
 ): Promise<RetrieveInspection> {
@@ -999,6 +1139,40 @@ async function inspectRetrievePath(
 		command: singleton ? "get" : "print",
 		singleton,
 	};
+}
+
+/**
+ * Inspect the menu's attribute names and reject requested ones it lacks with
+ * `validation/unknown-attribute`. Shared by one-shot retrieve and `--follow`.
+ */
+export async function assertKnownAttributes(
+	resolved: ResolvedRetrieveRequest,
+	inspection: RetrieveInspection,
+	backend: ProtocolAdapter,
+): Promise<string[]> {
+	const availableAttributes = await inspectAttributes(
+		resolved,
+		inspection,
+		backend,
+	);
+	const missing = resolved.attributes.filter(
+		(attribute) => !availableAttributes.includes(attribute),
+	);
+	if (missing.length > 0) {
+		throw new CentrsError({
+			code: "validation/unknown-attribute",
+			summary: `Unknown RouterOS attribute ${missing.join(", ")} for ${resolved.path}.`,
+			remediation:
+				"Check the attribute name, or use `--list-attributes` to inspect the available properties first.",
+			context: {
+				path: resolved.path,
+				parameter: missing[0],
+				requestedAttributes: resolved.attributes,
+				availableAttributes,
+			},
+		});
+	}
+	return availableAttributes;
 }
 
 async function inspectAttributes(

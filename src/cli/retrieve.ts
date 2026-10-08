@@ -18,8 +18,10 @@ import {
 	type RetrieveRequest,
 	renderRetrieveEnvelope,
 	renderRetrieveFanoutEnvelope,
+	renderRetrieveFollowLine,
 	retrieve,
 	retrieveFanout,
+	retrieveFollow,
 	retrieveOutputFormats,
 } from "../index.ts";
 import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
@@ -58,7 +60,7 @@ export const retrieveCommand: CliCommandMetadata = {
 			flag: "--via",
 			valueName: "<protocol>",
 			description:
-				"Pin the protocol selector. Defaults to `rest-api` for retrieve.",
+				"Pin the protocol selector. Defaults to `rest-api` for retrieve, and to `native-api` under `--follow`.",
 		},
 		...selectionCommandOptions,
 		{
@@ -114,10 +116,33 @@ export const retrieveCommand: CliCommandMetadata = {
 				"RouterOS-side row filter (maps to `.query`). Not implemented yet — returns `validation/not-implemented`.",
 		},
 		{
+			flag: "--follow",
+			description:
+				"Keep the menu's rows current over native-api `listen`: snapshot frames, a `synced` line, then a line per change, then a summary (NDJSON for json/yaml/ndjson). Single target, list menus whose print takes follow-only.",
+		},
+		{
+			flag: "--sweep",
+			valueName: "<duration>",
+			description:
+				"`--follow` only: how often an `.id` sweep finds removals RouterOS does not send (view menus such as `/interface/<type>`). Default `10s`; `0` turns it off.",
+		},
+		{
+			flag: "--count",
+			valueName: "<n>",
+			description:
+				"`--follow` only: stop after N live changes. Snapshot frames and `synced` do not count.",
+		},
+		{
+			flag: "--duration",
+			valueName: "<duration>",
+			description:
+				"`--follow` only: stop after this wall-clock window, bootstrap included (e.g. `30s`).",
+		},
+		{
 			flag: "--format",
 			valueName: `<${retrieveOutputFormats.join("|")}>`,
 			description:
-				"Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope.",
+				"Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope. `ndjson` prints each envelope as one compact line.",
 		},
 		{
 			flag: "--json",
@@ -177,6 +202,18 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 		// single-target envelope.
 		const selectionFlags = request.selectionFlags ?? emptySelectionFlags();
 		const targetPositionals = request.targetPositionals ?? [];
+		if (request.follow) {
+			if (isFanoutMode(selectionFlags, targetPositionals.length)) {
+				throw new CentrsError({
+					code: "usage/fanout-not-supported",
+					summary:
+						"`retrieve --follow` follows one router and cannot fan out across multiple targets.",
+					remediation:
+						"Follow a single router (no `--group`/`--where`/`--all`/`--default`/multiple positionals); run one follow per router to watch several.",
+				});
+			}
+			return await runRetrieveFollowCli(request, args);
+		}
 		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 			return await runRetrieveFanoutCli(
 				request,
@@ -209,7 +246,7 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 					env: Bun.env,
 				})
 			: [];
-		if (format === "json" || format === "yaml") {
+		if (format !== "text") {
 			// When parsing failed before a request existed, build the error envelope
 			// from an empty request rather than reconstructing positionals from raw
 			// args — a credential value (e.g. the token after `--password` /
@@ -242,6 +279,33 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 		}
 		return 1;
 	}
+}
+
+/**
+ * Every `--follow` envelope goes to stdout, one per line, errors included; any
+ * failure sets exit 1, even after successful frames. Ctrl-C asks for a
+ * bounded stop that still ends with a summary.
+ */
+async function runRetrieveFollowCli(
+	request: RetrieveCliArgs,
+	args: readonly string[],
+): Promise<number> {
+	const format = inferRequestedFormat(args, request);
+	const controller = new AbortController();
+	const onSigint = (): void => controller.abort();
+	process.on("SIGINT", onSigint);
+	let exitCode = 0;
+	try {
+		for await (const envelope of retrieveFollow(request, Bun.env, {
+			signal: controller.signal,
+		})) {
+			console.log(renderRetrieveFollowLine(envelope, format));
+			if (!envelope.ok) exitCode = 1;
+		}
+	} finally {
+		process.off("SIGINT", onSigint);
+	}
+	return exitCode;
 }
 
 async function runRetrieveFanoutCli(
@@ -377,6 +441,18 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 			case "--verbose":
 				request.verbose = true;
 				break;
+			case "--follow":
+				request.follow = true;
+				break;
+			case "--sweep":
+				request.sweep = expectValue(args, ++index, arg);
+				break;
+			case "--count":
+				request.count = parseCountFlag(expectValue(args, ++index, arg));
+				break;
+			case "--duration":
+				request.duration = expectValue(args, ++index, arg);
+				break;
 			default: {
 				const consumed = consumeSelectionFlag(args, index, selectionFlags);
 				if (consumed !== null) {
@@ -456,6 +532,20 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 	return request;
 }
 
+function parseCountFlag(value: string): number {
+	// The whole token: `parseInt` would accept `10abc` as 10.
+	if (!/^\d+$/.test(value.trim())) {
+		throw new CentrsError({
+			code: "settings/invalid-integer",
+			summary: `\`--count\` must be a positive integer. Received: ${value}`,
+			remediation:
+				"Pass how many live changes to wait for, e.g. `--count 1` for the next change.",
+			context: { flag: "--count" },
+		});
+	}
+	return Number.parseInt(value, 10);
+}
+
 function inferRequestedFormat(
 	args: readonly string[],
 	request?: RetrieveRequest,
@@ -471,8 +561,8 @@ function inferRequestedFormat(
 		return args[formatIndex + 1] as RetrieveOutputFormat;
 	}
 	const envFormat = process.env["CENTRS_FORMAT"];
-	if (envFormat === "json" || envFormat === "yaml" || envFormat === "text") {
-		return envFormat;
+	if (retrieveOutputFormats.includes(envFormat as RetrieveOutputFormat)) {
+		return envFormat as RetrieveOutputFormat;
 	}
 	return "text";
 }

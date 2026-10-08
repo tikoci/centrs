@@ -343,6 +343,10 @@ modelcontextprotocol
 nextid
 # WHATWG: the web standards body whose Encoding spec makes TextDecoder("latin1") windows-1252, not a byte decoder (#404).
 WHATWG
+# followable: a RouterOS menu `retrieve --follow` can follow — a list menu whose `print` takes `follow-only` in `/console/inspect` (`validation/not-followable` otherwise; #396).
+followable
+# BFD: Bidirectional Forwarding Detection (`/routing/bfd`); its sessions accept `listen` but never send changes (#396 round 2).
+BFD
 # WIP: work in progress (used for the upstream MikroTik Docusaurus docs site).
 WIP
 # adhoc: future inline host+credential targets; Phase 1 MCP uses CDB-only targets.

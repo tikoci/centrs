@@ -29,7 +29,8 @@ dependencies within the selected capability; they do not replace its status.
 Commands are centrs **verbs** (`retrieve`, `execute`, `api`, `devices`,
 `discover`, `check`, `explain`, `terminal`, `settings`), never one tool per
 RouterOS command. Open-ended follow
-is folded into `api --stream` (no separate `stream` verb). Sub-verbs and their
+is a flag, not a verb: `retrieve --follow` keeps state, `api --stream` is the
+literal wire (no separate `stream` verb). Sub-verbs and their
 aliases are canonical across CLI / API / MCP:
 
 | Canonical | Aliases          | Meaning                                  |

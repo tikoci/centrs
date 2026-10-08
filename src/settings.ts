@@ -42,7 +42,6 @@ import {
 	readSettingsFileRaw,
 	resolveOptionalIntegerSetting,
 } from "./resolver/index.ts";
-import { retrieveOutputFormats } from "./retrieve.ts";
 
 // ── Envelope shape ───────────────────────────────────────────────────────────
 
@@ -160,6 +159,12 @@ const TRANSFER_VIA_VALUES = [
 ] as const;
 
 /**
+ * The formats every command renders. `ndjson` is per-command (`api`,
+ * `retrieve`), so a shared `format` setting must not select it.
+ */
+const sharedOutputFormats = ["text", "json", "yaml"] as const;
+
+/**
  * The 13 `CENTRS_*` keys `settings` fully manages (validated get/set/print/
  * reset). `commands/settings/README.md` ("Not yet wired — exclude from v1")
  * deliberately excludes `CENTRS_CONCURRENCY`/`CENTRS_DISCOVER_TIMEOUT`/
@@ -173,14 +178,14 @@ export const settingsManagedKeys: readonly SettingsKeyDef[] = [
 		parse: (raw) => {
 			const value = raw.trim();
 			if (
-				!retrieveOutputFormats.includes(
-					value as (typeof retrieveOutputFormats)[number],
+				!sharedOutputFormats.includes(
+					value as (typeof sharedOutputFormats)[number],
 				)
 			) {
 				throw new CentrsError({
 					code: "settings/invalid-format",
 					summary: `Unsupported output format: ${value}`,
-					remediation: `Choose one of ${retrieveOutputFormats.join(", ")}.`,
+					remediation: `Choose one of ${sharedOutputFormats.join(", ")}.`,
 				});
 			}
 			return { value, write: value };
