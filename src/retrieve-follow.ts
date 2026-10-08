@@ -16,7 +16,7 @@ import {
 	type Warning,
 } from "./core/envelope.ts";
 import { inspectArgumentNames, pathTokens } from "./core/inspect.ts";
-import { CentrsError, formatCentrsErrorLine } from "./errors.ts";
+import { CentrsError } from "./errors.ts";
 import {
 	createProtocolAdapter,
 	type ProtocolAdapter,
@@ -29,19 +29,17 @@ import {
 	buildRetrieveErrorEnvelope,
 	buildRetrieveErrorEnvelopeFromResolved,
 	inspectRetrievePath,
-	metaFromResolved,
 	type ResolvedRetrieveRequest,
 	type RetrieveEnvelope,
 	type RetrieveFollowCounts,
 	type RetrieveFollowStopReason,
 	type RetrieveFollowSummary,
-	type RetrieveOutputFormat,
 	type RetrieveRequest,
 	type RetrieveStreamMeta,
 	type RetrieveSuccessEnvelope,
 	resolveRetrieveRequest,
-	retrieveRequestSummary,
 } from "./retrieve.ts";
+import { failedStreamEnvelope, streamEnvelope } from "./retrieve-stream.ts";
 
 /** Changes allowed to wait unread before the follow ends (`transport/stream-overflow`). */
 export const FOLLOW_BUFFER_LIMIT = 50_000;
@@ -240,7 +238,7 @@ async function validateFollow(
 			summary: inspection.singleton
 				? `${resolved.path} is a single record, which RouterOS cannot follow.`
 				: `${resolved.path}/print has no \`follow-only\`, so RouterOS cannot follow this menu.`,
-			remediation: `Read it once with \`centrs retrieve <router> ${resolved.path}\`, or sample it on a timer with \`centrs api <router> ${resolved.path}/print -X POST -f interval=5s --stream\`.`,
+			remediation: `Read it once with \`centrs retrieve <router> ${resolved.path}\`, or read it on a timer with \`centrs retrieve <router> ${resolved.path} --sample 5s\`.`,
 			context: {
 				path: resolved.path,
 				singleton: inspection.singleton,
@@ -582,21 +580,20 @@ async function* runFollow(
 	} catch (error) {
 		draining = false;
 		const warnings = await endListen();
-		const envelope = buildRetrieveErrorEnvelopeFromResolved(resolved, error);
-		envelope.meta.validation = validation;
-		envelope.warnings = [...envelope.warnings, ...warnings];
-		envelope.tips = [...envelope.tips, ...tips];
-		if (envelope.meta.operation) {
-			envelope.meta.operation.objectCount = counts.frames;
-			envelope.meta.operation.stream = {
+		const envelope = failedStreamEnvelope(
+			resolved,
+			validation,
+			error,
+			(stopReason) => ({
 				kind: "summary",
-				stopReason: envelope.error.code.startsWith("routeros/")
-					? "routeros-error"
-					: "transport-error",
+				stopReason,
 				...counts,
 				durationMs: Date.now() - startedAt,
-			};
-		}
+			}),
+			counts.frames,
+		);
+		envelope.warnings = [...envelope.warnings, ...warnings];
+		envelope.tips = [...envelope.tips, ...tips];
 		yield envelope;
 	} finally {
 		options.signal?.removeEventListener("abort", onExternalAbort);
@@ -604,68 +601,6 @@ async function* runFollow(
 		await endListen();
 		await backend.close();
 	}
-}
-
-/**
- * One `--follow` envelope as one line: compact NDJSON for every structured
- * format (a multi-line YAML document cannot be a stream line), and a short
- * row for `text`. Router text is JSON-escaped so it cannot carry terminal
- * control bytes.
- */
-export function renderRetrieveFollowLine(
-	envelope: RetrieveEnvelope,
-	format: RetrieveOutputFormat,
-): string {
-	if (format !== "text") return JSON.stringify(envelope);
-	if (!envelope.ok) return formatCentrsErrorLine(envelope.error);
-	const stream = envelope.meta.operation?.stream;
-	switch (stream?.kind) {
-		case "notice":
-			return envelope.tips
-				.map((tip) => `tip: ${tip.message}${tip.fix ? ` ${tip.fix}` : ""}`)
-				.join("\n");
-		case "frame": {
-			const head = `${stream.index}\t${stream.phase}\t${stream.change}\t${escaped(stream.id)}`;
-			return stream.change === "removed"
-				? `${head}\t(${stream.source})`
-				: `${head}\t${JSON.stringify(envelope.data)}`;
-		}
-		case "synced":
-			return `— synced: ${stream.rows} row(s)`;
-		case "summary":
-			return `— ${stream.stopReason}: ${stream.snapshot} snapshot, ${stream.changes} change(s), ${stream.sweeps} sweep(s) in ${stream.durationMs}ms`;
-		default:
-			return JSON.stringify(envelope.data);
-	}
-}
-
-function escaped(text: string): string {
-	return JSON.stringify(text).slice(1, -1);
-}
-
-function streamEnvelope(
-	resolved: ResolvedRetrieveRequest,
-	validation: EnvelopeValidationMeta,
-	data: unknown,
-	stream: RetrieveStreamMeta,
-	tips: Tip[] = [],
-): RetrieveSuccessEnvelope {
-	return {
-		ok: true,
-		data,
-		warnings: [],
-		tips,
-		meta: metaFromResolved(resolved, validation, {
-			kind: "data",
-			objectCount: data === null ? 0 : 1,
-			request: retrieveRequestSummary(resolved),
-			auth: {
-				username: resolved.auth.username,
-				passwordProvided: resolved.auth.passwordProvided,
-			},
-			stream,
-		}),
-	};
 }
 
 function summaryEnvelope(

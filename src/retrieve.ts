@@ -99,9 +99,11 @@ export interface RetrieveRequest {
 	follow?: boolean;
 	/** `--follow` only: `.id` sweep period (`10s` default; `0` turns it off). */
 	sweep?: string | number;
-	/** `--follow` only: stop after this many `live` frames. */
+	/** Read the menu again every interval (`retrieveSample`), e.g. `5s`. */
+	sample?: string | number;
+	/** `--follow`: stop after this many `live` frames; `--sample`: after this many samples. */
 	count?: number;
-	/** `--follow` only: wall-clock bound, bootstrap included (e.g. `30s`). */
+	/** `--follow`/`--sample`: wall-clock bound, validation included (e.g. `30s`). */
 	duration?: string | number;
 }
 
@@ -123,6 +125,16 @@ export interface RetrieveRequestSummary {
 	maxResultsBytes?: number;
 	/** Present when the request is a `--follow`. */
 	follow?: RetrieveFollowSettings;
+	/** Present when the request is a `--sample`. */
+	sample?: RetrieveSampleSettings;
+}
+
+/** The resolved cadence and bounds of a `--sample`. */
+export interface RetrieveSampleSettings {
+	/** Time between the starts of two reads; a slow read delays the next one. */
+	intervalMs: number;
+	count?: number;
+	durationMs?: number;
 }
 
 /** The resolved bounds of a `--follow`. */
@@ -161,11 +173,28 @@ export interface RetrieveFollowSummary extends RetrieveFollowCounts {
 	durationMs: number;
 }
 
+/** Why a `--sample` ended: it never completes on its own. */
+export type RetrieveSampleStopReason = Exclude<
+	RetrieveFollowStopReason,
+	"completed"
+>;
+
+/** A `--sample` summary (also its `data`). */
+export interface RetrieveSampleSummary {
+	stopReason: RetrieveSampleStopReason;
+	/** Sample lines emitted; a read still in flight at the stop is not one. */
+	samples: number;
+	durationMs: number;
+}
+
 /**
- * Per-line marker on `--follow` output (`commands/retrieve/README.md` →
- * Follow). A `frame` is one row change: `upsert` carries the latest full row,
- * `removed` carries `data: null`; `id` is the row identity even when the
- * projection leaves `.id` out of `data`.
+ * Per-line marker on `--follow` and `--sample` output
+ * (`commands/retrieve/README.md` → Follow, Sample). A `frame` is one row
+ * change: `upsert` carries the latest full row, `removed` carries
+ * `data: null`; `id` is the row identity even when the projection leaves `.id`
+ * out of `data`. A `sample` is one complete read; `at` is when it was sent
+ * (host clock) and `readMs` how long it took. The two summaries are told apart
+ * by their counts (`frames` vs `samples`).
  */
 export type RetrieveStreamMeta =
 	| { kind: "notice" }
@@ -178,7 +207,9 @@ export type RetrieveStreamMeta =
 			source: "print" | "listen" | "sweep";
 	  }
 	| { kind: "synced"; rows: number }
-	| ({ kind: "summary" } & RetrieveFollowSummary);
+	| { kind: "sample"; index: number; at: string; readMs: number }
+	| ({ kind: "summary" } & RetrieveFollowSummary)
+	| ({ kind: "summary" } & RetrieveSampleSummary);
 
 export interface RetrieveOperationMeta {
 	kind: "attributes" | "data";
@@ -188,7 +219,7 @@ export interface RetrieveOperationMeta {
 		username?: string;
 		passwordProvided: boolean;
 	};
-	/** Present only on `--follow` output. */
+	/** Present only on `--follow` and `--sample` output. */
 	stream?: RetrieveStreamMeta;
 }
 
@@ -226,6 +257,7 @@ export interface ResolvedRetrieveRequest {
 	listAttributes: boolean;
 	verbose: boolean;
 	follow?: RetrieveFollowSettings;
+	sample?: RetrieveSampleSettings;
 	warnings: readonly RetrieveWarning[];
 }
 
@@ -243,6 +275,16 @@ export async function retrieve(
 			context: { capability: "follow" },
 		});
 	}
+	if (request.sample !== undefined) {
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary:
+				"`sample` yields a stream of envelopes instead of one `retrieve` result.",
+			remediation:
+				"Consume it with `retrieveSample()` (library) or `centrs retrieve … --sample <interval>` (CLI): one line per complete read, then a summary.",
+			context: { capability: "sample" },
+		});
+	}
 	const resolved = await resolveRetrieveRequest(request, env);
 	return runResolvedRetrieve(resolved);
 }
@@ -258,8 +300,6 @@ export async function runResolvedRetrieve(
 	resolved: ResolvedRetrieveRequest,
 ): Promise<RetrieveSuccessEnvelope> {
 	const warnings: RetrieveWarning[] = [...resolved.warnings];
-	let availableAttributes: string[] | undefined;
-	let inspection: RetrieveInspection | undefined;
 	const backend = createProtocolAdapter({
 		protocol: resolved.via.value,
 		host: resolved.target.host,
@@ -273,40 +313,32 @@ export async function runResolvedRetrieve(
 	});
 
 	try {
-		if (resolved.listAttributes || resolved.validate.value) {
-			inspection = await inspectRetrievePath(resolved, backend);
-		}
-
 		if (resolved.listAttributes) {
-			availableAttributes = await inspectAttributes(
+			const availableAttributes = await inspectAttributes(
 				resolved,
-				inspection ?? (await inspectRetrievePath(resolved, backend)),
+				await inspectRetrievePath(resolved, backend),
 				backend,
 			);
 			const envelope = buildSuccessEnvelope(
 				resolved,
 				{
 					kind: "attributes",
-					data: availableAttributes ?? [],
+					data: availableAttributes,
 				},
 				{
 					enabled: true,
 					source: "live /console/inspect request=child+completion",
-					availableAttributes: availableAttributes ?? [],
+					availableAttributes,
 				},
 				warnings,
 			);
 			return applyMaxResultsBudget(envelope);
 		}
 
-		if (resolved.validate.value && resolved.attributes.length > 0) {
-			availableAttributes = await assertKnownAttributes(
-				resolved,
-				inspection ?? (await inspectRetrievePath(resolved, backend)),
-				backend,
-			);
-		}
-
+		const { inspection, validation } = await validateRetrieveRead(
+			resolved,
+			backend,
+		);
 		const data = await executeRetrieve(resolved, backend, inspection);
 		const envelope = buildSuccessEnvelope(
 			resolved,
@@ -314,21 +346,48 @@ export async function runResolvedRetrieve(
 				kind: "data",
 				data,
 			},
-			{
-				enabled: resolved.validate.value,
-				source: resolved.validate.value
-					? availableAttributes
-						? "live /console/inspect request=child+completion"
-						: "live /console/inspect request=child"
-					: "disabled",
-				availableAttributes,
-			},
+			validation,
 			warnings,
 		);
 		return applyMaxResultsBudget(envelope);
 	} finally {
 		await backend.close();
 	}
+}
+
+/**
+ * The inspect half of a data read: the path's shape (singleton or list) and
+ * the requested attributes, checked once. `--validate=false` skips both.
+ * Shared by one-shot retrieve and `--sample`, which reads many times after it.
+ */
+export async function validateRetrieveRead(
+	resolved: ResolvedRetrieveRequest,
+	backend: ProtocolAdapter,
+): Promise<{
+	inspection: RetrieveInspection | undefined;
+	validation: EnvelopeValidationMeta;
+}> {
+	if (!resolved.validate.value) {
+		return {
+			inspection: undefined,
+			validation: { enabled: false, source: "disabled" },
+		};
+	}
+	const inspection = await inspectRetrievePath(resolved, backend);
+	const availableAttributes =
+		resolved.attributes.length > 0
+			? await assertKnownAttributes(resolved, inspection, backend)
+			: undefined;
+	return {
+		inspection,
+		validation: {
+			enabled: true,
+			source: availableAttributes
+				? "live /console/inspect request=child+completion"
+				: "live /console/inspect request=child",
+			availableAttributes,
+		},
+	};
 }
 
 export function buildRetrieveErrorEnvelope(
@@ -497,6 +556,7 @@ export function retrieveRequestSummary(
 		format: resolved.format.value,
 		maxResultsBytes: resolved.maxResultsBytes?.value,
 		...(resolved.follow ? { follow: resolved.follow } : {}),
+		...(resolved.sample ? { sample: resolved.sample } : {}),
 	};
 }
 
@@ -654,7 +714,7 @@ export function validateRetrieveRequestShape(
 		});
 	}
 
-	assertFollowShape(request);
+	assertStreamShape(request);
 
 	const attributeSelections = normalizeAttributeSelection(request);
 	if (request.allAttributes && attributeSelections.length > 0) {
@@ -684,28 +744,43 @@ export function validateRetrieveRequestShape(
 }
 
 /**
- * `--follow` flag pairings, checked before any network work: its bounds need
- * it, and a byte budget or an attribute listing has no meaning on a follow.
+ * `--follow`/`--sample` flag pairings, checked before any network work: the
+ * two are exclusive, their bounds need one of them, and a byte budget or an
+ * attribute listing has no meaning on a stream.
  */
-function assertFollowShape(request: RetrieveRequest): void {
+function assertStreamShape(request: RetrieveRequest): void {
+	const sample = request.sample !== undefined;
+	if (request.follow && sample) {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary: "`--follow` cannot be combined with `--sample`.",
+			remediation:
+				"Use `--follow` for object changes RouterOS announces, or `--sample <interval>` to read the menu on a timer (counters, state `listen` never reports).",
+			context: { flag: "--sample" },
+		});
+	}
 	if (!request.follow) {
 		const orphan = (
 			[
 				["--sweep", request.sweep],
-				["--count", request.count],
-				["--duration", request.duration],
+				["--count", sample ? undefined : request.count],
+				["--duration", sample ? undefined : request.duration],
 			] as const
 		).find(([, value]) => value !== undefined);
 		if (orphan) {
+			const followOnly = orphan[0] === "--sweep";
 			throw new CentrsError({
 				code: "usage/conflicting-flags",
-				summary: `\`${orphan[0]}\` only applies to \`--follow\`.`,
-				remediation: `Add \`--follow\` to follow the menu, or drop \`${orphan[0]}\` for a one-shot read.`,
+				summary: `\`${orphan[0]}\` only applies to ${followOnly ? "`--follow`" : "`--follow` or `--sample`"}.`,
+				remediation: followOnly
+					? "Add `--follow` to follow the menu, or drop `--sweep`."
+					: `Add \`--follow\` or \`--sample <interval>\`, or drop \`${orphan[0]}\` for a one-shot read.`,
 				context: { flag: orphan[0] },
 			});
 		}
-		return;
+		if (!sample) return;
 	}
+	const mode = request.follow ? "--follow" : "--sample";
 	const conflict = request.listAttributes
 		? "--list-attributes"
 		: request.maxResultsBytes !== undefined
@@ -714,8 +789,8 @@ function assertFollowShape(request: RetrieveRequest): void {
 	if (conflict) {
 		throw new CentrsError({
 			code: "usage/conflicting-flags",
-			summary: `\`--follow\` cannot be combined with \`${conflict}\`.`,
-			remediation: `Run \`${conflict}\` as a one-shot read, then follow with \`--follow\` alone.`,
+			summary: `\`${mode}\` cannot be combined with \`${conflict}\`.`,
+			remediation: `Run \`${conflict}\` as a one-shot read, then use \`${mode}\` without it.`,
 			context: { flag: conflict },
 		});
 	}
@@ -726,8 +801,9 @@ function assertFollowShape(request: RetrieveRequest): void {
 		throw new CentrsError({
 			code: "settings/invalid-integer",
 			summary: `\`--count\` must be a positive integer. Received: ${request.count}`,
-			remediation:
-				"Pass how many live changes to wait for, e.g. `--count 1` for the next change.",
+			remediation: request.follow
+				? "Pass how many live changes to wait for, e.g. `--count 1` for the next change."
+				: "Pass how many samples to take, e.g. `--count 3`.",
 			context: { flag: "--count", count: request.count },
 		});
 	}
@@ -745,7 +821,7 @@ function resolveFollowSettings(
 		sweepMs:
 			request.sweep === undefined
 				? FOLLOW_SWEEP_DEFAULT_MS
-				: parseDuration(String(request.sweep)),
+				: parseStreamInterval("--sweep", request.sweep),
 		...(request.count !== undefined ? { count: request.count } : {}),
 		...(durationMs !== undefined ? { durationMs } : {}),
 	};
@@ -753,6 +829,51 @@ function resolveFollowSettings(
 
 /** `--sweep` default (#396 slice decisions, 2026-10-08). */
 export const FOLLOW_SWEEP_DEFAULT_MS = 10_000;
+
+function resolveSampleSettings(
+	request: RetrieveRequest,
+): RetrieveSampleSettings | undefined {
+	if (request.sample === undefined) return undefined;
+	const durationMs =
+		request.duration === undefined
+			? undefined
+			: parseDuration(String(request.duration));
+	return {
+		intervalMs: parseStreamInterval("--sample", request.sample),
+		...(request.count !== undefined ? { count: request.count } : {}),
+		...(durationMs !== undefined ? { durationMs } : {}),
+	};
+}
+
+/**
+ * A `--sample` or `--sweep` period needs a unit: RouterOS reads a bare
+ * `interval=5` as seconds while centrs durations read a bare number as
+ * milliseconds, so `--sample 5` is refused rather than guessed. `--sweep 0`
+ * (off) is the one bare number allowed; `--sample` must be above zero.
+ */
+function parseStreamInterval(
+	flag: "--sample" | "--sweep",
+	value: string | number,
+): number {
+	const text = String(value).trim();
+	const off = flag === "--sweep" && text === "0";
+	const intervalMs = off ? 0 : /^\d+$/.test(text) ? -1 : parseDuration(text);
+	if (intervalMs < 0 || (flag === "--sample" && intervalMs === 0)) {
+		throw new CentrsError({
+			code: "settings/invalid-timeout",
+			summary:
+				flag === "--sample"
+					? `\`--sample\` needs a positive interval with a unit. Received: ${text}`
+					: `\`--sweep\` needs a unit (or \`0\` to turn it off). Received: ${text}`,
+			remediation:
+				flag === "--sample"
+					? "Pass the time between reads with its unit, e.g. `--sample 5s` or `--sample 500ms`."
+					: "Pass the sweep period with its unit, e.g. `--sweep 10s` or `--sweep 500ms`, or `--sweep 0` to turn it off.",
+			context: { flag, value: text },
+		});
+	}
+	return intervalMs;
+}
 
 /**
  * Build a {@link ResolvedRetrieveRequest} from the static request plus an
@@ -848,6 +969,7 @@ export function buildResolvedRetrieve(
 		listAttributes: request.listAttributes ?? false,
 		verbose: request.verbose ?? false,
 		follow: resolveFollowSettings(request),
+		sample: resolveSampleSettings(request),
 		warnings: connection
 			? [...connection.warnings]
 			: (cdbResolution?.warnings ?? []),
@@ -1207,7 +1329,8 @@ async function inspectAttributes(
 		.sort();
 }
 
-async function executeRetrieve(
+/** The data half of a read: one `get` (singleton) or `print` (list), projected. */
+export async function executeRetrieve(
 	resolved: ResolvedRetrieveRequest,
 	backend: ProtocolAdapter,
 	inspection: RetrieveInspection | undefined,

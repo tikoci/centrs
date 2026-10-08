@@ -10,6 +10,23 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 
+### Added
+
+- **`retrieve --follow` keeps a menu's rows current over native API (#396).**
+  Snapshot rows, one `synced` line, then a line per change, as NDJSON; an
+  `.id` sweep (`--sweep`, default 10s) reports removals RouterOS never sends
+  on view menus. Single target, unfiltered (#397 adds filters). `--sweep`
+  needs a unit (`10s`); only `0` (off) may be bare.
+- **`retrieve --sample <interval>` re-reads a menu on a timer.** One line per
+  complete read (`data` is the whole read), then a summary; `--count` and
+  `--duration` bound it. Works over REST and native API, on list menus and
+  singletons, and sees counters `--follow` cannot. The interval needs a unit
+  (`5s`): a bare number is refused because RouterOS and centrs read it
+  differently.
+- `--format ndjson` for `retrieve`. Library: `retrieveFollow()`,
+  `retrieveSample()`, and `renderRetrieveStreamLine()` for both (it replaces
+  the unreleased `renderRetrieveFollowLine()`).
+
 ### Fixed
 
 - Native API one-shot and incremental commands share their sentence builder;

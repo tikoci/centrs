@@ -58,7 +58,7 @@ product; without them this would just be a worse `curl`.
 
 | Command    | Purpose |
 | ---------- | ------- |
-| `retrieve` | Read RouterOS state over REST/native API and SNMP OID/MIB values. `--follow` keeps a menu's rows current over native API (snapshot, then a line per change; NDJSON). |
+| `retrieve` | Read RouterOS state over REST/native API and SNMP OID/MIB values. `--follow` keeps a menu's rows current over native API (snapshot, then a line per change; NDJSON); `--sample <interval>` re-reads it on a timer for counters. |
 | `execute`  | Run RouterOS CLI-shaped read/write commands (add/set/remove) over native API/REST/L2 surfaces. |
 | `api`      | Structured RouterOS API passthrough (gh-api style): one command per operation, structured in/out, can write, over REST or native API. Follow changes with `api … <menu>/listen`; `--stream` streams any command's replies (native API; NDJSON). |
 | `terminal` | Open an interactive console, primarily SSH or MAC-Telnet. |

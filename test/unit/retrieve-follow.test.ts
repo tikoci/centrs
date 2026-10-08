@@ -22,10 +22,8 @@ import {
 	retrieve,
 } from "../../src/retrieve.ts";
 import { retrieveFanout } from "../../src/retrieve-fanout.ts";
-import {
-	renderRetrieveFollowLine,
-	retrieveFollow,
-} from "../../src/retrieve-follow.ts";
+import { retrieveFollow } from "../../src/retrieve-follow.ts";
+import { renderRetrieveStreamLine } from "../../src/retrieve-stream.ts";
 import { runCliCaptured } from "./cli-capture.ts";
 
 const ENV = {
@@ -613,6 +611,9 @@ describe("retrieveFollow refusals", () => {
 			[{ listAttributes: true }, "usage/conflicting-flags"],
 			[{ maxResultsBytes: 100 }, "usage/conflicting-flags"],
 			[{ count: 0 }, "settings/invalid-integer"],
+			// A bare number is refused (RouterOS reads seconds, centrs ms); 0 is off.
+			[{ sweep: "10" }, "settings/invalid-timeout"],
+			[{ sweep: 10 }, "settings/invalid-timeout"],
 		];
 		for (const [extra, code] of cases) {
 			const { follow: _ignored, ...rest } = extra;
@@ -710,7 +711,7 @@ describe("retrieve --follow CLI", () => {
 		const out = await follow(request(router, { duration: "200ms", sweep: 0 }), {
 			afterSynced: () => router.remove("*1"),
 		});
-		const lines = out.map((e) => renderRetrieveFollowLine(e, "text"));
+		const lines = out.map((e) => renderRetrieveStreamLine(e, "text"));
 		expect(lines.every((line) => !line.includes("\n"))).toBe(true);
 		expect(lines).toContain("— synced: 2 row(s)");
 		expect(
@@ -719,7 +720,7 @@ describe("retrieve --follow CLI", () => {
 		expect(lines.at(-1)).toMatch(
 			/^— duration-elapsed: 2 snapshot, 1 change\(s\), 0 sweep\(s\) in \d+ms$/,
 		);
-		const ndjson = out.map((e) => renderRetrieveFollowLine(e, "yaml"));
+		const ndjson = out.map((e) => renderRetrieveStreamLine(e, "yaml"));
 		expect(ndjson.every((line) => JSON.parse(line).ok === true)).toBe(true);
 	});
 });

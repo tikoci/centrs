@@ -593,6 +593,9 @@ export {
 	type RetrieveOutputFormat,
 	type RetrieveRequest,
 	type RetrieveRequestSummary,
+	type RetrieveSampleSettings,
+	type RetrieveSampleStopReason,
+	type RetrieveSampleSummary,
 	type RetrieveStreamMeta,
 	type RetrieveSuccessEnvelope,
 	type RetrieveWarning,
@@ -620,9 +623,13 @@ export {
 export {
 	FOLLOW_BUFFER_LIMIT,
 	type RetrieveFollowOptions,
-	renderRetrieveFollowLine,
 	retrieveFollow,
 } from "./retrieve-follow.ts";
+export {
+	type RetrieveSampleOptions,
+	retrieveSample,
+} from "./retrieve-sample.ts";
+export { renderRetrieveStreamLine } from "./retrieve-stream.ts";
 export {
 	buildSettingsErrorEnvelope,
 	renderSettingsEnvelope,
