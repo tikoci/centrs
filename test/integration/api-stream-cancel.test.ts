@@ -103,8 +103,7 @@ async function runStream(
 		args: [
 			"api",
 			"127.0.0.1",
-			"/ip/address",
-			"--stream",
+			"/ip/address/listen",
 			"--via",
 			"native-api",
 			"--port",

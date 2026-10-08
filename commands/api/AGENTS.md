@@ -198,8 +198,9 @@ green on CHR 7.23.1.
 ## CONFIRMED ON CHR (Phase 4 `--stream` follow — CHR 7.23.1, 2026-06-30)
 
 Validated by `test/integration/api-listen.test.ts` (L1–L4) on CHR 7.23.1.
-`--stream` is the primary flag; `--listen` is an alias; a `/listen` endpoint
-infers both. Native-api only (REST's 60s cap → `transport/capability-unsupported`).
+Since #402 the `/listen` endpoint is the only way to listen (it implies
+`--stream`); `--listen` is removed. Native-api only (REST's 60s cap →
+`transport/capability-unsupported`).
 
 - **CONFIRMED — `NativeApiSession.listen()` + `/cancel` end-to-end.** Opening
   `/ip/address/listen` (own `.tag`) and adding an address over REST yields an
@@ -207,7 +208,8 @@ infers both. Native-api only (REST's 60s cap → `transport/capability-unsupport
   .tag=<n>` and the listen closes via the `interrupted` trap (category 2) then
   `!done` — the generator ends **without** throwing (the interrupted trap is the
   normal cancel, not an error). A non-interrupted trap or transport closure does
-  throw. Re-confirms the Phase-0 spike through the real `apiListen()` path.
+  throw. Re-confirms the Phase-0 spike through the real `apiListen()` path (now
+  `apiStream()`).
 - **CONFIRMED — deletion frames carry `.dead=true`.** Removing a pre-seeded
   address over REST while listening emits a minimal `{ ".id", ".dead":"true" }`
   `!re` (re-confirms `.dead=true`, not the docs' `=.dead=yes`).
@@ -222,3 +224,23 @@ infers both. Native-api only (REST's 60s cap → `transport/capability-unsupport
   `.proplist=address,.id,.dead`. Removing the seeded address must produce
   `{ ".id": <id>, ".dead": "true" }`. The ID query matches a deletion frame
   because it carries `.id`; a predicate on another column may hide that frame.
+
+## CONFIRMED ON CHR (#402 literal `--stream` — 7.23.7 + 7.24.5, 2026-10-07)
+
+`api` stopped adding `.id,.dead` to a listen's `.proplist` and stopped
+rejecting filtered listens, so these are now the device's own answers, pinned
+by `test/integration/api-listen.test.ts` (L4, L9, L10, L15, L18):
+
+- **`.proplist=address` strips `.id` and `.dead` from delete frames, even
+  under `?.id=`.** An addressed listen's delete arrives as an `!re` with no
+  attributes (`{}`); an unaddressed one has no `.dead` frame for the row.
+  The `?.id=` exception only holds when the projection names `.id,.dead`
+  (or there is none). This corrects the 2026-10-06 note that it held "with
+  and without `.proplist`": that run had centrs's forced `.id,.dead`.
+- **A filtered listen (`?interface=ether1`) sends nothing for the delete of
+  a matching row.** The only reply in the window is the `!empty` that answers
+  the cancel.
+- **Cancelling a listen that sent nothing** → `!trap` interrupted, `!empty`,
+  `!done`. centrs emits that `!empty` as a frame with `afterStop: true`.
+- **`print interval=1` on an empty table** (`/ip/firewall/raw`) → one
+  `!empty` per tick.

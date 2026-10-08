@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { apiStream } from "../../src/api.ts";
 import {
 	encodeSentence,
 	SentenceReader,
@@ -26,7 +27,9 @@ type Mode =
 	| "trap-unacknowledged"
 	| "delayed-done"
 	| "burst"
-	| "delete";
+	| "delete"
+	| "ticks"
+	| "cancel-empty";
 
 async function run(
 	mode: Mode,
@@ -34,6 +37,7 @@ async function run(
 	endpoint = "tool/ping",
 	confirmed = true,
 	stream = true,
+	onStdoutLine?: (line: string) => void,
 ) {
 	const sent: string[][] = [];
 	const readers = new WeakMap<object, SentenceReader>();
@@ -70,7 +74,27 @@ async function run(
 						continue;
 					}
 					if (words[0] === "/cancel") {
+						if (mode === "cancel-empty") {
+							// RouterOS's answer to cancelling a listen that sent nothing
+							// (CHR 7.23.7 + 7.24.5): interrupted, then !empty, then !done.
+							const target = words.find((w) => w.startsWith("=tag="));
+							const original = `.tag=${target?.slice("=tag=".length)}`;
+							for (const sentence of [
+								["!trap", "=category=2", "=message=interrupted"],
+								["!empty"],
+								["!done"],
+							])
+								socket.write(encodeSentence([...sentence, original]));
+						}
 						reply("!done");
+						continue;
+					}
+					if (mode === "cancel-empty") continue;
+					if (mode === "ticks") {
+						// Two zero-row `print interval=` ticks, then one with a row.
+						reply("!empty");
+						reply("!empty");
+						reply("!re", "=seq=0", "=.section=2");
 						continue;
 					}
 					if (mode === "trap-unacknowledged") {
@@ -172,6 +196,7 @@ async function run(
 			],
 			env: { HOME: taskHome, XDG_CONFIG_HOME: join(taskHome, ".config") },
 			killAfterMs: 5000,
+			...(onStdoutLine ? { onStdoutLine } : {}),
 		});
 		return {
 			...result,
@@ -339,27 +364,187 @@ describe("api --stream command lifecycle (#399)", () => {
 			meta: { operation: { stream: { stopReason: "duration-elapsed" } } },
 		});
 	});
-	test("GET projection retains deletion fields and addressed-row query", async () => {
+	// #402: `api` sends the command as typed; what RouterOS will not report
+	// becomes a tip instead of a rewrite.
+	test("a GET stream is one literal print, with a tip naming /listen", async () => {
+		const result = await run(
+			"done",
+			["-X", "GET", "--query", "interface=ether1", "--proplist", "address"],
+			"ip/address",
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.sent.some((words) => words[0]?.endsWith("/listen"))).toBe(
+			false,
+		);
+		const words = result.sent.find((w) => w[0] === "/ip/address/print");
+		expect(words).toContain("?interface=ether1");
+		expect(words).toContain("=.proplist=address");
+		expect(result.lines.at(-1).tips).toEqual([
+			expect.objectContaining({ code: "tip/stream-print" }),
+		]);
+	});
+	test("an addressed GET stream's tip keeps the row in the /listen it names", async () => {
+		const result = await run("done", ["-X", "GET"], "ip/address/*1");
+		expect(result.exitCode).toBe(0);
+		expect(result.lines.at(-1).tips[0].fix).toContain(
+			"centrs api <router> /ip/address/*1/listen",
+		);
+	});
+	test("a /listen endpoint sends listen as typed, with tips for what it hides", async () => {
 		const result = await run(
 			"delete",
-			["-X", "GET", "--proplist", "address,.id,address"],
-			"ip/address/*1",
+			["-X", "GET", "--proplist", "address", "--query", "disabled=no"],
+			"ip/address/listen",
 		);
 		expect(result.exitCode).toBe(0);
-		const words = result.sent.find(
-			(words) => words[0] === "/ip/address/listen",
-		);
-		expect(words).toContain("=.proplist=address,.id,.dead");
-		expect(words).toContain("?.id=*1");
-		expect(result.lines[0].data).toEqual({ ".id": "*1", ".dead": "true" });
+		const words = result.sent.find((w) => w[0] === "/ip/address/listen");
+		expect(words).toContain("=.proplist=address");
+		expect(words).toContain("?disabled=no");
+		expect(
+			result.lines.at(-1).tips.map((tip: { code: string }) => tip.code),
+		).toEqual(["tip/filtered-follow", "tip/follow-proplist"]);
+		expect(result.lines.at(-1).meta.operation.request).toMatchObject({
+			listen: true,
+			stream: true,
+		});
 	});
-	test("empty completion is successful and does not invent a row", async () => {
+	test("an addressed listen is sent as ?.id=, projection as typed", async () => {
+		const result = await run(
+			"delete",
+			["-X", "GET", "--proplist", "address"],
+			"ip/address/*1/listen",
+		);
+		expect(result.exitCode).toBe(0);
+		const words = result.sent.find((w) => w[0] === "/ip/address/listen");
+		expect(words).toContain("?.id=*1");
+		expect(words).toContain("=.proplist=address");
+		expect(result.lines.at(-1).tips).toEqual([
+			expect.objectContaining({ code: "tip/follow-proplist" }),
+		]);
+	});
+	// #409 review: request-shape advice is known before any reply, so it is a
+	// leading `notice` line, kept on the terminal summary whatever the outcome.
+	test("a notice with the tips is the first line, before any reply", async () => {
+		const result = await run(
+			"delete",
+			["-X", "GET", "--query", "interface=ether1"],
+			"ip/address/listen",
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.lines[0]).toMatchObject({
+			ok: true,
+			data: null,
+			tips: [{ code: "tip/filtered-follow" }],
+			meta: { operation: { stream: { kind: "notice" } } },
+		});
+		expect(result.lines[1].meta.operation.stream.kind).toBe("frame");
+		expect(result.lines.at(-1).data).toMatchObject({ frames: 1, rows: 1 });
+	});
+	test("a silent watch prints its notice while it is still running", async () => {
+		let noticeAt: number | undefined;
+		const result = await run(
+			"cancel-empty",
+			["-X", "GET", "--query", "interface=ether1", "--duration", "1500ms"],
+			"ip/address/listen",
+			true,
+			true,
+			(line) => {
+				if (noticeAt === undefined && line.includes('"notice"'))
+					noticeAt = Date.now();
+			},
+		);
+		const exitedAt = Date.now();
+		expect(result.exitCode).toBe(0);
+		expect(noticeAt).toBeDefined();
+		// Printed before the duration bound, not with the summary at the end.
+		expect(exitedAt - (noticeAt ?? exitedAt)).toBeGreaterThan(1000);
+	});
+	test("a failed watch keeps its tips on the failure summary", async () => {
+		const result = await run(
+			"trap",
+			["-X", "GET", "--proplist", "address"],
+			"ip/address/listen",
+		);
+		expect(result.exitCode).toBe(1);
+		expect(result.lines[0].meta.operation.stream.kind).toBe("notice");
+		expect(result.lines.at(-1)).toMatchObject({
+			ok: false,
+			tips: [{ code: "tip/follow-proplist" }],
+			meta: { operation: { stream: { kind: "summary" } } },
+		});
+	});
+	test("--raw omits the notice: bare payloads only", async () => {
+		const result = await run(
+			"delete",
+			["-X", "GET", "--query", "interface=ether1", "--raw"],
+			"ip/address/listen",
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.lines[0]).toEqual({ ".id": "*1", ".dead": "true" });
+	});
+	test("!empty is its own frame and does not invent a row", async () => {
 		const result = await run("empty");
 		expect(result.exitCode).toBe(0);
-		expect(result.lines).toHaveLength(1);
-		expect(result.lines[0].data).toMatchObject({
+		expect(result.lines).toHaveLength(2);
+		expect(result.lines[0]).toMatchObject({
+			ok: true,
+			data: null,
+			meta: { operation: { stream: { kind: "frame", reply: "empty" } } },
+		});
+		expect(result.lines[1].data).toMatchObject({
 			stopReason: "completed",
-			frames: 0,
+			frames: 1,
+			rows: 0,
+			empty: 1,
+		});
+		expect(result.lines[1].meta.operation.objectCount).toBe(0);
+	});
+	test("--count counts rows, so empty ticks cannot use it up", async () => {
+		const result = await run("ticks", ["--count", "1"], "ip/address/print");
+		expect(result.exitCode).toBe(0);
+		expect(
+			result.lines.map((line) => line.meta.operation.stream.reply ?? "summary"),
+		).toEqual(["empty", "empty", "re", "summary"]);
+		expect(result.lines.at(-1).data).toMatchObject({
+			stopReason: "count-reached",
+			frames: 3,
+			rows: 1,
+			empty: 2,
+		});
+	});
+	test("a cancelled listen's !empty is marked as arriving after the stop", async () => {
+		const result = await run(
+			"cancel-empty",
+			["-X", "GET", "--duration", "100ms"],
+			"ip/address/listen",
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.lines).toHaveLength(2);
+		expect(result.lines[0].meta.operation.stream).toEqual({
+			kind: "frame",
+			index: 1,
+			reply: "empty",
+			afterStop: true,
+		});
+		expect(result.lines[1].data).toMatchObject({
+			stopReason: "duration-elapsed",
+			rows: 0,
+			empty: 1,
+		});
+	});
+	test("--format ndjson prints a one-shot envelope as one line", async () => {
+		const result = await run(
+			"done",
+			["--format", "ndjson"],
+			"tool/ping",
+			true,
+			false,
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdoutText.trim().split("\n")).toHaveLength(1);
+		expect(result.lines[0]).toMatchObject({
+			ok: true,
+			meta: { operation: { request: { format: "ndjson", stream: false } } },
 		});
 	});
 	for (const mode of [
@@ -408,13 +593,13 @@ describe("api --stream command lifecycle (#399)", () => {
 		expect(command).toContain("=.proplist=address");
 		expect(command).toContain("?interface=ether1");
 	});
-	test("GET fields and filtered follows fail before connecting", async () => {
-		for (const flags of [
-			["--query", "interface=ether1"],
-			["--raw-query", "interface=ether1"],
-			["-f", "interval=1"],
-		]) {
-			const result = await run("done", ["-X", "GET", ...flags], "ip/address");
+	test("GET fields fail before connecting", async () => {
+		for (const endpoint of ["ip/address", "ip/address/listen"]) {
+			const result = await run(
+				"done",
+				["-X", "GET", "-f", "interval=1"],
+				endpoint,
+			);
 			expect(result.exitCode).toBe(1);
 			expect(result.sent).toHaveLength(0);
 			expect(result.lines[0].error.code).toBe("usage/conflicting-flags");
@@ -433,4 +618,70 @@ describe("api --stream command lifecycle (#399)", () => {
 		expect(result.lines).toHaveLength(1);
 		expect(result.lines[0]).toEqual({ seq: "0", ".section": "7" });
 	});
+});
+
+// A notice is emitted after validation has opened the native session.
+test("returning after a library stream notice closes the validated session", async () => {
+	const readers = new WeakMap<object, SentenceReader>();
+	let signalClosed: () => void = () => {};
+	const closed = new Promise<void>((resolve) => {
+		signalClosed = resolve;
+	});
+	const sent: string[] = [];
+	const peer = Bun.listen({
+		hostname: "127.0.0.1",
+		port: 0,
+		socket: {
+			data(socket, chunk) {
+				const reader = readers.get(socket) ?? new SentenceReader();
+				readers.set(socket, reader);
+				for (const words of reader.push(new Uint8Array(chunk))) {
+					sent.push(words[0] ?? "");
+					const tag = words.find((word) => word.startsWith(".tag=")) ?? "";
+					if (words[0] === "/console/inspect") {
+						for (const name of ["ip", "address", "print"])
+							socket.write(
+								encodeSentence(["!re", `=name=${name}`, "=type=cmd", tag]),
+							);
+					}
+					socket.write(encodeSentence(["!done", tag]));
+				}
+			},
+			close() {
+				signalClosed();
+			},
+		},
+	});
+	const stream = apiStream(
+		{
+			targetInput: "127.0.0.1",
+			endpoint: "ip/address",
+			port: peer.port,
+			username: "fixture",
+			password: "dummy",
+			timeout: "1s",
+		},
+		{ HOME: taskHome, XDG_CONFIG_HOME: join(taskHome, ".config") },
+	);
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		const first = await stream.next();
+		expect(first.value?.meta.operation?.stream?.kind).toBe("notice");
+		await stream.return();
+		await Promise.race([
+			closed,
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(
+					() => reject(new Error("Native session stayed open after return")),
+					1000,
+				);
+			}),
+		]);
+		expect(sent).toContain("/console/inspect");
+		expect(sent).not.toContain("/ip/address/print");
+	} finally {
+		clearTimeout(timer);
+		await stream.return();
+		peer.stop(true);
+	}
 });

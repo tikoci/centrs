@@ -14,10 +14,12 @@ identity, validation, protocol selection — live in
 [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md); the `(constitution: …)`
 notes below point there rather than restating them.
 
-`api` absorbs the former `stream` command: open-ended follow is `api <router>
-<endpoint> --stream` (or the `/listen` endpoint form). `--listen` is an accepted
-alias of `--stream`. Streaming is single-session — it cannot combine with
-multi-target fan-out (see below).
+`api` absorbs the former `stream` command. `api` sends the command as typed:
+following changes is the menu's own `listen` (`api <router> ip/address/listen`),
+and `--stream` delivers any command's replies incrementally. `--listen` was
+removed in #402 (`usage/removed-flag`, naming the exact replacement): it also
+turned a GET into a listen. Streaming is single-session — it cannot combine
+with multi-target fan-out (see below).
 
 ## Where `api` sits — the verb trichotomy
 
@@ -47,8 +49,9 @@ centrs api <router> <endpoint> [flags]
   `ip/address`, `/ip/address`, `rest/ip/address`, `/rest/ip/address`,
   `"ip address"`, `'ip address'` canonicalize to `/ip/address`. A trailing id
   segment (`ip/address/*1`) addresses one row for GET/PATCH/DELETE; PUT and
-  POST reject it with `input/invalid-path`. A trailing `/listen` segment
-  infers `--stream` + `--via native-api`.
+  POST reject it with `input/invalid-path`. A trailing `/listen` segment is
+  the menu's `listen` command, which implies `--stream` + `--via native-api`
+  and requires GET (`ip/address/*1/listen` follows one row).
 
 The HTTP method (`-X`, default `GET`) is honored **literally** against RouterOS's
 REST mapping — `GET`→print/get, **`PUT`→add**, `PATCH`→set, `DELETE`→remove,
@@ -70,8 +73,10 @@ the generated reference cannot carry:
   `--raw-query type=ether --raw-query type=vlan --raw-query '#|'` (OR).
 - `--via rest-api --stream` errors `transport/capability-unsupported`
   (REST's 60 s cap cannot follow).
-- Under `--stream`, `--format json`/`yaml` emit one compact envelope per
-  line (NDJSON); `text` emits a concise row per frame.
+- `--format ndjson` prints every envelope as one compact line, one-shot or
+  streamed; it never starts a stream by itself. Under `--stream`,
+  `json`/`yaml` also emit NDJSON (unchanged for existing callers); `text`
+  emits a concise row per frame.
 - The target/auth flags (`--host`, `--port`, `--username`, `--password`,
   `--insecure`, `--timeout`, `--cdb-file`, `--cdb-password`, `--resolve`)
   use the same single-target resolver as `retrieve`/`execute`; `--quickchr`
@@ -94,7 +99,7 @@ vs `--query` distinction.
 - **Writes fan out under `--yes`**, confirmed once up front (not per target).
   Without `--yes`, the error names the blast radius (how many routers) and that
   `--yes` is required.
-- **`--listen`/`--stream` is single-session** → `usage/fanout-not-supported` in
+- **`--stream` (or a `/listen` endpoint) is single-session** → `usage/fanout-not-supported` in
   fan-out mode. **`--raw` strips the envelope** → `usage/conflicting-flags` in
   fan-out mode (per-target envelopes can't be bare).
 
@@ -177,49 +182,75 @@ with no RouterOS response prints a compact `{code,message}` to stderr. Exit code
 Without `--stream`, bounded commands return their accumulated rows as an ordinary
 array. REST retains its **60 s** cap; native API collects replies until `!done`.
 
-`--stream` (alias `--listen`) emits native replies incrementally, whether the
-command is finite or open-ended. `--via rest-api --stream` fails with
-`transport/capability-unsupported`; centrs never substitutes polling.
+`--stream` emits the literal command's native replies incrementally, whether
+the command is finite or open-ended (#402: one wire reply, one line).
+`--via rest-api --stream` fails with `transport/capability-unsupported`;
+centrs never substitutes polling.
 
-- **GET menu + `--stream`** keeps the existing change-subscription behavior:
-  `/ip/address` sends `/ip/address/listen`. An explicit `/listen` endpoint infers
-  streaming and requires GET. GET subscriptions reject body fields rather than
+- **Following changes is a command you ask for**: the `<menu>/listen`
+  endpoint (GET; implies `--stream` and native-api), or POST `<menu>/print`
+  with `-f follow-only=` / `-f follow=` to pass print arguments.
+  `ip/address/*1/listen` follows one row (`?.id=*1`).
+- **GET menu + `--stream`** streams one literal print and completes; it does
+  not follow. Its summary carries `tip/stream-print` naming the `/listen`
+  form (see the notice below). A streamed GET (or a `/listen`) rejects `-f` fields rather than
   silently dropping them.
 - **POST command + `--stream`** runs the literal command with its attributes:
   `api $R /tool/ping -X POST -f address=10.0.2.2 -f count=3 --stream --yes`.
-  POST `/system/resource/print -f interval=1 --stream --count 2` samples twice;
-  it does not become a listen. PUT/PATCH/DELETE retain their add/set/remove
-  mapping and confirmation gates. Query/projection flags on these mutations or
-  `/execute` scripts fail with `usage/conflicting-flags` instead of being ignored. `/execute` retains synchronous `as-string`
-  script semantics. Streaming never makes a command read-only.
-- Each `!re` emits one envelope with `meta.operation.stream.kind=frame`.
-  Device `.section` grouping is preserved verbatim. A terminal `!done` is not
-  a row: its attributes, when received, appear in successful summary `data.done`,
+  POST `/system/resource/print -f interval=1 --stream --count 2` samples twice.
+  PUT/PATCH/DELETE retain their add/set/remove mapping and confirmation gates.
+  Query/projection flags on these mutations or `/execute` scripts fail with
+  `usage/conflicting-flags` instead of being ignored. `/execute` retains
+  synchronous `as-string` script semantics. Streaming never makes a command
+  read-only.
+- Each wire reply emits one envelope with `meta.operation.stream.kind=frame`
+  and `reply`: **`re`** (a row; `data` is the row, device `.section`,
+  `.dead`, `.nextid` and `.about` verbatim) or **`empty`** (RouterOS `!empty`:
+  zero rows; `data` is `null`). RouterOS sends `!empty` for an empty finite
+  read, for **each zero-row tick** of `print interval=`, and for a listen
+  cancelled before it sent anything. A frame received after centrs stopped the
+  stream locally carries `afterStop: true` — that cancellation `!empty` is not
+  evidence of an empty table. A terminal `!done` is not a frame: its
+  attributes, when received, appear in successful summary `data.done`,
   including a terminal result received during local cancellation. The stop
   reason still reports the first local bound.
 - Read outcomes from **`meta.operation.stream`** on both success and failure;
   successful `data.stopReason` is a compatibility copy.
 - Exactly one terminal summary follows a started stream. Its marker is
-  `meta.operation.stream.kind=summary`, with `frames`, `durationMs`, and
-  `stopReason`: `completed`, `count-reached`, `duration-elapsed`, `interrupted`,
-  `routeros-error`, or `transport-error`. A RouterOS/transport failure has
-  `ok:false` and a structured `error`; summary counts/reason are in metadata
-  (error envelopes have no `data`). Previously emitted rows remain partial
-  results. A failed summary retains any `transport/cancel-unacknowledged`
-  warning as well. Preflight failures emit one error envelope without starting a stream.
-- Structured JSON/YAML streams put **all** envelopes, including errors, on
-  stdout as NDJSON and exit nonzero for any failure, even after successful rows.
-  Text mode uses the same outcome/exit rules. `--raw` retains bare payloads and
+  `meta.operation.stream.kind=summary`, with `frames` (every reply line),
+  `rows` (`!re`), `empty` (`!empty`), `durationMs`, and `stopReason`:
+  `completed`, `count-reached`, `duration-elapsed`, `interrupted`,
+  `routeros-error`, or `transport-error`. `meta.operation.objectCount` is
+  `rows`. A RouterOS/transport failure (`!trap`, `!fatal`, a dropped
+  connection) has `ok:false` and a structured `error`; summary counts/reason
+  are in metadata (error envelopes have no `data`). Previously emitted rows
+  remain partial results. A failed summary retains any
+  `transport/cancel-unacknowledged` warning as well. Preflight failures emit
+  one error envelope without starting a stream.
+- Structured streams put **all** envelopes, including errors, on stdout as
+  NDJSON and exit nonzero for any failure, even after successful rows. Text
+  mode uses the same outcome/exit rules. `--raw` retains bare payloads and
   stderr errors; it does not provide the structured stream contract.
 
-A change subscription always retains `.id,.dead` when the caller requests a
-proplist. **Filtered change subscriptions are rejected**: server query words can
-hide deletes, and correct client filtering requires initial membership and
-transition semantics (#396/#397). Follow unfiltered rows and track membership
-on the client, or use a one-shot query. An addressed GET subscription keeps its
-ID query because deletion notices carry that same ID. These change-only
-protections do not alter projections/queries on explicit POST commands.
+`api` never edits a change feed to make it safer; it says what RouterOS will
+not report as tips (CHR 7.23.7 + 7.24.5). Because that advice depends only on
+the request, it arrives **first**: a leading envelope with
+`meta.operation.stream.kind=notice`, `data: null` and the `tips`, before any
+reply — so a filtered watch that never gets a reply still shows it. A notice is
+not a reply and is not counted in `frames`/`rows`; a stream with no advice has
+no notice. The same tips are repeated on the terminal summary, successful or
+failed. `--raw` omits the notice.
 
+- `tip/filtered-follow` — a `listen` (or `follow`) with a query reports
+  neither rows leaving the filter nor deletes. Follow unfiltered and filter
+  on the client, or follow one row (`<menu>/*id/listen`). Stateful filtered
+  follow belongs to `retrieve --follow` (#396/#397).
+- `tip/follow-proplist` — a `--proplist` without `.id,.dead` makes RouterOS
+  strip both from a delete frame, even under `?.id=`: the delete arrives as an
+  `!re` with no attributes. Add `.id,.dead` to see deletes.
+
+`--count N` stops after N **`!re` rows**; `!empty` replies never count, so an
+empty tick cannot use up the count before the data arrives.
 `-f count=3` and `-f duration=2s` are **device arguments**; `--count` and
 `--duration` are **centrs bounds**. The duration window starts after validation,
 excluding its connection/login. With validation disabled, connect/login happen

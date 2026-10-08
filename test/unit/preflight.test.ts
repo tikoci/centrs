@@ -242,7 +242,7 @@ function stubAdapter(overrides: Partial<ProtocolAdapter>): ProtocolAdapter {
 		execute: reject,
 		apiRequest: reject,
 		// biome-ignore lint/correctness/useYield: a reject-only async generator yields nothing.
-		listen: async function* () {
+		stream: async function* () {
 			throw new Error("not stubbed");
 		},
 		close: () => Promise.resolve(),

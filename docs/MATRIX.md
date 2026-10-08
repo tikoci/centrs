@@ -60,8 +60,11 @@ and implementation sequencing in the linked issues.
   structured operation surface is `api`.
 - `api --stream` absorbs the former `stream`/`tail` surface; native-api stream
   details are in `commands/api/README.md` and `src/protocols/native-api.ts`.
-  #399 extends it to incremental command replies and truthful terminal outcomes;
-  filtered change subscriptions fail closed pending #396/#397.
+  #399 extends it to incremental command replies and truthful terminal outcomes.
+  #402 makes it literal: following is the `<menu>/listen` endpoint, every wire
+  reply (`!empty` included) is a line, and what RouterOS will not report
+  (filtered or projected change feeds) is a tip, not a rewrite. Stateful
+  filtered follow belongs to `retrieve --follow` (#396/#397).
 - `discover / mndp` is grounded by `commands/discover/README.md`,
   `src/data/mndp.ts`, `src/data/mndp-cache.ts`, and
   `test/integration/discover.test.ts`.
@@ -152,7 +155,15 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 
 ## Current priority
 
-**Tightening validation as a whole** is the selected track, in the three-step
+**First: the native-api / NDJSON line** (maintainer decision on
+[#396](https://github.com/tikoci/centrs/issues/396), 2026-10-07): agents in the
+field poll with `sleep` where a native follow would answer. In order:
+(1) #402, literal `api --stream` with `!empty` frames and `--format ndjson`;
+(2) `retrieve --follow` (#396); (3) `retrieve --sample`; (4) #397, then #364
+on `--follow`; (5) #398 and #401. Each slice's contract lives in its command
+README. Live `explain` (below) resumes after this line.
+
+**Tightening validation as a whole** is the next track, in the three-step
 order agreed on [#236](https://github.com/tikoci/centrs/issues/236):
 
 1. **Done** — fix the offline false rejects so the analyzer can be trusted as a

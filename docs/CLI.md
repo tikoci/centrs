@@ -116,8 +116,8 @@ Usage: centrs api <router> <endpoint> [flags]
 | `--attribute / --proplist` | `<a,b>` | Property projection → `.proplist`. |
 | `--raw` |  | Strip the envelope; emit bare RouterOS JSON. Defaults `--validate` to false (an explicit `--validate=true` still runs the gate); does not imply `--yes`. |
 | `--yes` |  | Confirm a mutating (non-read) request in non-interactive runs. |
-| `--stream / --listen` |  | Stream native API replies as NDJSON: GET follows a menu; POST runs a command. Ends with a summary envelope. The `/listen` endpoint infers it. |
-| `--count` | `<n>` | Stop a `--stream` after N reply frames (not the device count= argument). |
+| `--stream` |  | Stream the command's native replies (`!re` rows and `!empty`) as NDJSON, then a summary envelope. Never changes the command: a GET streams one print. To follow changes, request `<menu>/listen`, which implies it. |
+| `--count` | `<n>` | Stop a `--stream` after N `!re` rows; `!empty` replies do not count (not the device count= argument). |
 | `--duration` | `<dur>` | Stop a `--stream` after this wall-clock window (e.g. `5s`). |
 | `--via` | &lt;rest-api\|native-api&gt; | Pin the transport; no silent downgrade. Default rest-api. |
 | `--group` | `<name>` | Fan out across every CDB record in the group (repeatable; de-duped by record index). |
@@ -138,7 +138,7 @@ Usage: centrs api <router> <endpoint> [flags]
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
 | `--validate / --no-validate` |  | Run `/console/inspect` validation before the request (default true; `--validate=false` also accepted). |
-| `--format` | &lt;json\|yaml\|text&gt; | Output format. Defaults to json for api; `CENTRS_FORMAT` overrides. |
+| `--format` | &lt;json\|ndjson\|yaml\|text&gt; | Output format. Defaults to json for api; `CENTRS_FORMAT` overrides. |
 | `--json` |  | Shortcut for `--format json`. |
 | `--verbose` |  | Include additional context in text output. |
 

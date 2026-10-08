@@ -326,8 +326,8 @@ runs produce stable diffs.
 - A multi-target **write** is gated by `--yes`, confirmed once up front (not per
   target); without it the error/tip names the blast radius (how many routers).
   `--force` stays scoped to destructive `devices` CDB mutations.
-- Commands that are not safe to fan out (`terminal`, and `api --stream` /
-  `--listen`) reject a multi-target selection with `usage/fanout-not-supported`.
+- Commands that are not safe to fan out (`terminal`, and `api --stream` or a
+  `/listen` endpoint) reject a multi-target selection with `usage/fanout-not-supported`.
 
 ## Subcommands
 

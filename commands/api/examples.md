@@ -199,10 +199,10 @@ command was rejected at run, not at validation. Ordinary output that merely
 mentions a fault string (`:put "status: no such item appears in help"`) stays
 `ok: true`.
 
-### 17. `--via rest-api --listen` is rejected
+### 17. `--via rest-api --stream` is rejected
 
 ```bash
-centrs api $R ip/address --listen --via rest-api --username $U --password $P
+centrs api $R ip/address --stream --via rest-api --username $U --password $P
 ```
 
 Envelope: `ok: false`, `error.code=transport/capability-unsupported` (REST cannot
@@ -233,7 +233,7 @@ centrs api $R interface/monitor-traffic -X POST -f interface=ether1 -f duration=
 ```
 
 Envelope: `ok: true`, `data` is an **array** of `.section`-keyed records (one per
-~second), `meta.via=rest-api`. This is an ordinary bounded call — no `--listen`,
+~second), `meta.via=rest-api`. This is an ordinary bounded call — no `--stream`,
 no NDJSON. `monitor-traffic` is a command (not `print`/`get`), so it is a
 `POST` and write-classed (needs `--yes`); centrs never relaxes that to read-only.
 (REST bounds it at the 60 s cap; native has no cap.)
@@ -359,26 +359,29 @@ surface the `as-string` console text as `data`.
 
 ## listen / `--stream` (native-api only)
 
-Incremental native replies and change subscriptions. `--stream` is the primary flag; `--listen` is an accepted
-alias and a trailing `/listen` endpoint segment infers it. Output is NDJSON: one
-envelope per reply row, then a terminating summary envelope.
+`api` sends the command as typed (#402). Following changes is the menu's
+`listen`, requested as a `<menu>/listen` endpoint, which implies `--stream` and
+native-api. `--stream` delivers any command's replies incrementally: one NDJSON
+envelope per wire reply (`!re` row or `!empty`), then a terminating summary.
+`--listen` is removed (`usage/removed-flag`, unit- and smoke-tested with its
+exact replacement).
 
-### L1. `--stream` streams a change as an NDJSON frame, then a summary
+### L1. A `/listen` stream emits a change as an NDJSON frame, then a summary
 
 ```bash
-centrs api $A ip/address --stream --count 1 --via native-api --port $API_PORT --username $U --password $P
+centrs api $A ip/address/listen --count 1 --via native-api --port $API_PORT --username $U --password $P
 ```
 
 While listening, the harness adds an address over REST. stdout is NDJSON: at least
-one envelope frame for the new row (`meta.operation.stream.kind=frame`), then a
-final summary envelope (`meta.operation.stream.kind=summary`,
+one envelope frame for the new row (`meta.operation.stream.kind=frame`,
+`reply=re`), then a final summary envelope (`meta.operation.stream.kind=summary`,
 `meta.operation.stream.stopReason=count-reached`,
-`meta.operation.stream.frames>=1`). Exit code 0 (successful local count stop).
+`meta.operation.stream.rows>=1`). Exit code 0 (successful local count stop).
 
 ### L2. A deletion frame carries `.dead`
 
 ```bash
-centrs api $A ip/address --stream --duration 3s --via native-api --port $API_PORT --username $U --password $P
+centrs api $A ip/address/listen --duration 3s --via native-api --port $API_PORT --username $U --password $P
 ```
 
 The harness removes a pre-seeded address; an emitted frame's record carries
@@ -397,11 +400,14 @@ No `--stream` / `--via` given; the `/listen` endpoint infers `--stream` and
 ### L4. Bounded `--duration` reports its stop reason
 
 ```bash
-centrs api $A ip/address --stream --duration 2s --via native-api --port $API_PORT --username $U --password $P
+centrs api $A ip/address/listen --duration 2s --via native-api --port $API_PORT --username $U --password $P
 ```
 
 With no change during the window, the stream ends after ~2 s with a summary
-envelope whose `meta.operation.stream.stopReason=duration-elapsed`. Exit code 0.
+envelope whose `meta.operation.stream.stopReason=duration-elapsed`, `rows=0`,
+`empty=1`. Exit code 0. RouterOS answers the cancel of a listen that sent
+nothing with interrupted, `!empty`, `!done`: that `!empty` is the one frame,
+with `reply=empty`, `data=null` and `afterStop: true`.
 
 ### L5. A router that ignores `/cancel` cannot hold the process open
 
@@ -449,24 +455,30 @@ centrs api $A system/resource/print -X POST -f interval=1 --stream --count 2 --v
 
 Two reply frames and a `count-reached` summary. POST print stays read-only.
 
-### L9. Projection preserves deletion identity and flag
+### L9. Projection is sent as typed; the tip says what it hides
 
 ```bash
-centrs api $A ip/address --stream --proplist address --duration 3s --via native-api --port $API_PORT --username $U --password $P
+centrs api $A ip/address/listen --proplist address --duration 3s --via native-api --port $API_PORT --username $U --password $P
+centrs api $A ip/address/listen --proplist address,.id,.dead --duration 3s --via native-api --port $API_PORT --username $U --password $P
 ```
 
-The harness deletes a seeded address. Its frame retains `.id,.dead=true` even
-though the requested field list contained only `address`.
+The harness deletes a seeded address during each. With `address` alone no
+frame carries `.dead` for it, and the leading notice and the summary carry
+`tip/follow-proplist`.
+With `address,.id,.dead` the delete frame is `{ ".id", ".dead": "true" }` and
+there is no tip.
 
-### L10. Filtered change subscriptions fail closed
+### L10. A filtered listen is sent as typed, with a tip
 
 ```bash
-centrs api $A ip/address --stream --query interface=ether1 --via native-api --port $API_PORT --username $U --password $P
+centrs api $A ip/address/listen --query interface=ether1 --duration 3s --via native-api --port $API_PORT --username $U --password $P
 ```
 
-`usage/conflicting-flags`, pointing to unfiltered tracking or a one-shot query.
-Correct membership filtering is deferred to #396/#397; deletes are never
-silently hidden by a server query. `--raw-query` is rejected the same way.
+The harness deletes a seeded `ether1` address while listening. RouterOS sends
+nothing for it: the only frame is the cancellation `!empty` (`afterStop`).
+The first line is a `notice` with `tip/filtered-follow`; the summary is `ok`
+and repeats it. `--raw-query` is sent
+the same way.
 
 ### L11. Command attributes are validated
 
@@ -506,17 +518,18 @@ RouterOS rejects the value at runtime. The sole terminal envelope is `ok: false`
 Ordinary stdout such as `:put "status: no such item appears in ordinary output"`
 still completes successfully with its text in `data.done.ret`.
 
-### L15. An addressed GET stream reports deletion with or without projection
+### L15. An addressed listen reports its deletion; a projection hides it
 
 ```bash
-centrs api $A "ip/address/$ID" --stream --duration 3s --via native-api --port $API_PORT --username $U --password $P
-centrs api $A "ip/address/$ID" --stream --duration 3s --proplist address --via native-api --port $API_PORT --username $U --password $P
+centrs api $A "ip/address/$ID/listen" --duration 3s --via native-api --port $API_PORT --username $U --password $P
+centrs api $A "ip/address/$ID/listen" --duration 3s --proplist address --via native-api --port $API_PORT --username $U --password $P
 ```
 
-For each variant the harness seeds an address, starts the addressed subscription,
-and deletes it after the listening barrier. The stream emits `.id=$ID` with
-`.dead=true`. This pins the `?.id=` exception on CHR rather than only checking
-client request words.
+For each variant the harness seeds an address, starts the addressed listen
+(`?.id=$ID`), and deletes it after the listening barrier. Without projection
+the stream emits `.id=$ID` with `.dead=true` and no tip. With `--proplist
+address` RouterOS strips both, so the delete is one `!re` with no attributes
+(`data={}`) and the summary carries `tip/follow-proplist`.
 
 ### L16. POST print preserves query/projection in either delivery mode
 
@@ -529,11 +542,32 @@ The harness seeds the L13 address. Both modes return only that address and only
 the requested `address` field; the streamed form then completes naturally. The
 one-shot REST equivalent is also checked, using the same query/projection.
 
+### L17. A GET stream is one literal print
+
+```bash
+centrs api $A ip/address --stream --via native-api --port $API_PORT --username $U --password $P
+```
+
+The print completes on its own (`stopReason=completed`) with one `re` frame
+per row (`rows` equals a one-shot GET's row count); a leading notice and the
+summary carry `tip/stream-print` naming `ip/address/listen`. It never becomes a listen.
+
+### L18. Zero-row ticks are `!empty` frames and do not use up `--count`
+
+```bash
+centrs api $A ip/firewall/raw/print -X POST -f interval=1 --stream --count 1 --duration 2500ms --via native-api --port $API_PORT --username $U --password $P
+```
+
+On the CHR's empty raw table, each tick is a frame with `reply=empty` and
+`data=null`; at least two arrive. They do not count toward `--count 1`, so the
+stream ends on `duration-elapsed` with `rows=0`.
+
 Loopback regressions in `test/integration/api-stream-command.test.ts` also
-exercise natural/empty completion, terminal `ret`, first/midstream trap,
-unsolicited interruption, fatal/close, and nonzero process exit with the failure
-summary on stdout. Device-dependent examples L6–L16 run in
-`test/integration/api-listen.test.ts` with validation enabled.
+exercise natural/empty completion, `!empty` frames, row-only `--count`,
+`afterStop`, the stream tips, `--format ndjson`, terminal `ret`,
+first/midstream trap, unsolicited interruption, fatal/close, and nonzero
+process exit with the failure summary on stdout. Device-dependent examples
+L6–L18 run in `test/integration/api-listen.test.ts` with validation enabled.
 
 ## fanout (multi-target, F…)
 
@@ -543,7 +577,7 @@ the live CHR (comment `board=chr`), record 1 is an unreachable host (comment
 (`data = { summary, targets[] }`; outer `ok` = orchestration success; per-target
 failures are inner `ok:false`), with the granular exit code (0 all-ok / 2 partial /
 1 all-failed or orchestration error). See `test/integration/api-fanout.test.ts`.
-The `--raw`/`--listen` + fan-out guards are network-free and validated in
+The `--raw`/`--stream` + fan-out guards are network-free and validated in
 `test/integration/cli-smoke.test.ts`.
 
 ### F1. `--group` fans a GET out; a dead target is an inner failure

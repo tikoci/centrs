@@ -57,6 +57,7 @@ import {
 	type ProtocolAdapter,
 	type ProtocolApiRequest,
 	type ProtocolApiResult,
+	type ProtocolStreamReply,
 	plannedProtocols,
 	type RouterOsProtocol,
 } from "./protocols/index.ts";
@@ -81,7 +82,7 @@ import {
 	toCoreSource,
 } from "./resolver/index.ts";
 
-export const apiOutputFormats = ["json", "yaml", "text"] as const;
+export const apiOutputFormats = ["json", "ndjson", "yaml", "text"] as const;
 export type ApiOutputFormat = (typeof apiOutputFormats)[number];
 
 /** HTTP methods `api` honors literally against RouterOS's REST verb map. */
@@ -118,8 +119,12 @@ export interface ApiRequest {
 	 * error contract (#154).
 	 */
 	raw?: boolean;
-	/** `--stream` / `--listen`: emit native replies incrementally. */
-	listen?: boolean;
+	/**
+	 * `--stream`: deliver the literal command's native replies incrementally.
+	 * It never changes the command: a GET streams one print. To follow changes,
+	 * request the menu's `listen` (`ip/address/listen`), which implies it.
+	 */
+	stream?: boolean;
 	/** `--duration`: bound a native reply stream. */
 	duration?: string;
 	/** `--count`: bound a native reply stream to N rows. */
@@ -165,7 +170,7 @@ export interface NormalizedApiEndpoint {
 	path: string;
 	/** Trailing `*id` segment, when the endpoint addressed one row. */
 	id?: string;
-	/** True when the endpoint's terminal segment was `listen` (infers `--listen`). */
+	/** True when the endpoint's terminal segment was `listen`: the menu's `listen` command, which implies `--stream`. */
 	listen: boolean;
 }
 
@@ -178,7 +183,10 @@ export interface ApiRequestSummary {
 	/** `null` when the method was invalid and no verb could be mapped (error path). */
 	verb: ApiVerb | null;
 	write: boolean;
+	/** The request is the menu's `listen` command (a `/listen` endpoint). */
 	listen: boolean;
+	/** Replies are delivered incrementally (`--stream`, or implied by `listen`). */
+	stream: boolean;
 	yes: boolean;
 	validate: boolean;
 	raw: boolean;
@@ -196,13 +204,32 @@ export type ApiStreamStopReason =
 	| "interrupted"
 	| "transport-error";
 
-/** Per-line marker on `--stream` NDJSON output: a change frame, or the terminating summary. */
+/**
+ * Per-line marker on `--stream` NDJSON output: a leading `notice`, one wire
+ * reply, or the terminating summary. A `notice` (`data: null`, not counted)
+ * comes first only when the request has advice in `tips` — what RouterOS will
+ * not report for it — so even a watch that never gets a reply sees it. A frame's `reply` is `re` (a row; `data` is the row) or
+ * `empty` (RouterOS `!empty`: zero rows; `data` is `null`). `afterStop` marks a
+ * reply that arrived after centrs stopped the stream locally, such as the
+ * `!empty` a cancelled listen sends; it is not evidence of an empty table.
+ */
 export type ApiStreamMeta =
-	| { kind: "frame"; index: number }
+	| { kind: "notice" }
+	| {
+			kind: "frame";
+			index: number;
+			reply: "re" | "empty";
+			afterStop?: true;
+	  }
 	| {
 			kind: "summary";
 			stopReason: ApiStreamStopReason;
+			/** Every reply line: `rows + empty`. */
 			frames: number;
+			/** `!re` rows. `--count` counts these. */
+			rows: number;
+			/** `!empty` replies. */
+			empty: number;
 			durationMs: number;
 	  };
 
@@ -210,6 +237,8 @@ export type ApiStreamMeta =
 export interface ApiStreamSummary {
 	stopReason: ApiStreamStopReason;
 	frames: number;
+	rows: number;
+	empty: number;
 	durationMs: number;
 	/** Attributes from a received terminal `!done` (for example `ret`). */
 	done?: Record<string, string>;
@@ -242,14 +271,17 @@ export interface ResolvedApiRequest {
 	verb: ApiVerb;
 	/** A `/execute` script-run (CLI string, not a path) — inspect gate is not-applicable. */
 	scriptMode: boolean;
+	/** The menu's `listen` command was requested (a `/listen` endpoint). */
 	listen: boolean;
+	/** Deliver replies incrementally (`--stream`, or implied by `listen`). */
+	stream: boolean;
 	/** Resolved JSON body (from `-f` / `-d` / `--input`). */
 	body: Record<string, string>;
 	/** REST `.query` words (no `?` prefix), structured then raw, in order. */
 	query: readonly string[];
 	proplist: readonly string[];
 	raw: boolean;
-	/** `--count`: stop a `--stream` after N frames. */
+	/** `--count`: stop a `--stream` after N `!re` rows (`!empty` does not count). */
 	count?: number;
 	/** `--duration` parsed to ms: stop a `--stream` after this wall-clock window. */
 	durationMs?: number;
@@ -307,7 +339,7 @@ export async function runResolvedApi(
 	resolved: ResolvedApiRequest,
 	trace: ValidationTrace = {},
 ): Promise<ApiSuccessEnvelope> {
-	assertListenCapability(resolved);
+	assertStreamCapability(resolved);
 	// Validate the complete request shape before constructing a backend or
 	// running either validation stage. In particular, `/execute` must reject
 	// extra body fields deterministically instead of letting live `:parse`
@@ -387,27 +419,29 @@ function apiRouterOsFailureFromResult(
 }
 
 /**
- * The open-ended `--stream` follow path: an async generator yielding one
- * {@link ApiEnvelope} per `/listen` change frame, then a terminating summary
- * envelope (`data` = {@link ApiStreamSummary}). Open-ended follow is native-api
- * only — a `rest-api` (or otherwise unresolved) transport yields a single error
- * envelope. `--count`/`--duration` and `externalSignal` (Ctrl-C) bound it.
- * Errors before the first frame (resolution, validation, confirmation,
- * capability) yield one error envelope and stop — the CLI keys its exit code on
- * that first envelope. `onListening` fires once the follow is established on the
- * wire (a real barrier for callers that must act only after that point).
+ * The `--stream` path: an async generator yielding one {@link ApiEnvelope} per
+ * native reply (`!re` row or `!empty`) to the literal command, then a
+ * terminating summary envelope (`data` = {@link ApiStreamSummary}). It never
+ * rewrites the command; a `<menu>/listen` endpoint is how to follow changes.
+ * Streaming is native-api only — a `rest-api` (or otherwise unresolved)
+ * transport yields a single error envelope. `--count`/`--duration` and
+ * `externalSignal` (Ctrl-C) bound it. Errors before the first frame
+ * (resolution, validation, confirmation, capability) yield one error envelope
+ * and stop — the CLI keys its exit code on that first envelope. `onListening`
+ * fires once the command is on the wire (a real barrier for callers that must
+ * act only after that point).
  */
-export async function* apiListen(
+export async function* apiStream(
 	request: ApiRequest,
 	env: Record<string, string | undefined> = Bun.env,
 	externalSignal?: AbortSignal,
 	onListening?: () => void,
 ): AsyncGenerator<ApiEnvelope, void, void> {
-	// `apiListen` is inherently the streaming surface, so force `listen` on the
-	// request: otherwise a caller that omits it (and the `/listen` endpoint form)
-	// would resolve `via` to the rest-api default and be rejected. An explicit
-	// `--via rest-api` still surfaces capability-unsupported below.
-	const streamRequest: ApiRequest = { ...request, listen: true };
+	// `apiStream` is inherently the streaming surface, so force `stream` on the
+	// request: otherwise a caller that omits it would resolve `via` to the
+	// rest-api default and be rejected. An explicit `--via rest-api` still
+	// surfaces capability-unsupported below.
+	const streamRequest: ApiRequest = { ...request, stream: true };
 	let resolved: ResolvedApiRequest | undefined;
 	try {
 		resolved = await resolveApiRequest(streamRequest, env);
@@ -448,9 +482,12 @@ async function* streamResolvedApi(
 		return;
 	}
 
+	// Request-shape advice is known before the first reply: deliver it first,
+	// and keep it on whichever terminal summary follows (#409 review).
+	const tips = streamTips(resolved);
 	const controller = new AbortController();
 	const startedAt = Date.now();
-	let frames = 0;
+	const counts = { frames: 0, rows: 0, empty: 0 };
 	let stopReason: ApiStreamStopReason | undefined;
 	let cancelUnacknowledged = false;
 	let done: Record<string, string> | undefined;
@@ -488,8 +525,13 @@ async function* streamResolvedApi(
 	}
 
 	try {
+		// A consumer may return immediately after this notice; keep it inside
+		// the session cleanup scope, just like every wire reply.
+		if (tips.length > 0) {
+			yield streamNoticeEnvelope(resolved, validation, tips);
+		}
 		const protocolRequest = buildProtocolApiRequest(resolved);
-		for await (const record of backend.listen(protocolRequest, {
+		for await (const reply of backend.stream(protocolRequest, {
 			signal: controller.signal,
 			onListening,
 			onCancelUnacknowledged: () => {
@@ -500,9 +542,17 @@ async function* streamResolvedApi(
 				clearTimeout(durationTimer);
 			},
 		})) {
-			frames += 1;
-			yield streamFrameEnvelope(resolved, validation, record, frames);
-			if (resolved.count !== undefined && frames >= resolved.count) {
+			counts.frames += 1;
+			if (reply.type === "empty") counts.empty += 1;
+			else counts.rows += 1;
+			yield streamFrameEnvelope(resolved, validation, reply, counts.frames);
+			// `--count` counts rows only: an empty tick must never use up the
+			// count before the data it is waiting for arrives.
+			if (
+				reply.type === "re" &&
+				resolved.count !== undefined &&
+				counts.rows >= resolved.count
+			) {
 				stopReason ??= "count-reached";
 				break;
 			}
@@ -515,8 +565,9 @@ async function* streamResolvedApi(
 			resolved,
 			validation,
 			stopReason ?? "completed",
-			frames,
+			counts,
 			Date.now() - startedAt,
+			tips,
 			cancellationWarnings(),
 			done,
 		);
@@ -524,16 +575,17 @@ async function* streamResolvedApi(
 		const envelope = buildApiErrorEnvelopeFromResolved(resolved, error);
 		envelope.meta.validation = validation;
 		envelope.warnings = [...envelope.warnings, ...cancellationWarnings()];
+		envelope.tips = [...envelope.tips, ...tips];
 		if (envelope.meta.operation) {
 			envelope.meta.operation.stream = {
 				kind: "summary",
 				stopReason: envelope.error.code.startsWith("routeros/")
 					? "routeros-error"
 					: "transport-error",
-				frames,
+				...counts,
 				durationMs: Date.now() - startedAt,
 			};
-			envelope.meta.operation.objectCount = frames;
+			envelope.meta.operation.objectCount = counts.rows;
 		}
 		yield envelope;
 	} finally {
@@ -548,39 +600,112 @@ async function* streamResolvedApi(
 function streamFrameEnvelope(
 	resolved: ResolvedApiRequest,
 	validation: EnvelopeValidationMeta,
-	record: Record<string, unknown>,
+	reply: ProtocolStreamReply,
 	index: number,
 ): ApiSuccessEnvelope {
-	const meta = metaFromResolved(resolved, validation, record);
-	meta.operation.stream = { kind: "frame", index };
-	return { ok: true, data: record, warnings: [], tips: [], meta };
+	const data = reply.type === "empty" ? null : reply.attributes;
+	const meta = metaFromResolved(resolved, validation, data);
+	meta.operation.stream = {
+		kind: "frame",
+		index,
+		reply: reply.type,
+		...(reply.afterStop ? { afterStop: true as const } : {}),
+	};
+	return { ok: true, data, warnings: [], tips: [], meta };
+}
+
+function streamNoticeEnvelope(
+	resolved: ResolvedApiRequest,
+	validation: EnvelopeValidationMeta,
+	tips: Tip[],
+): ApiSuccessEnvelope {
+	const meta = metaFromResolved(resolved, validation, null);
+	meta.operation.stream = { kind: "notice" };
+	return { ok: true, data: null, warnings: [], tips, meta };
 }
 
 function streamSummaryEnvelope(
 	resolved: ResolvedApiRequest,
 	validation: EnvelopeValidationMeta,
 	stopReason: ApiStreamStopReason,
-	frames: number,
+	counts: { frames: number; rows: number; empty: number },
 	durationMs: number,
+	tips: Tip[],
 	streamWarnings: readonly Warning[] = [],
 	done?: Record<string, string>,
 ): ApiSuccessEnvelope {
 	const summary: ApiStreamSummary = {
 		stopReason,
-		frames,
+		...counts,
 		durationMs,
 		...(done && Object.keys(done).length > 0 ? { done } : {}),
 	};
 	const meta = metaFromResolved(resolved, validation, summary);
-	meta.operation.objectCount = frames;
-	meta.operation.stream = { kind: "summary", stopReason, frames, durationMs };
+	meta.operation.objectCount = counts.rows;
+	meta.operation.stream = {
+		kind: "summary",
+		stopReason,
+		...counts,
+		durationMs,
+	};
 	return {
 		ok: true,
 		data: summary,
 		warnings: [...resolved.warnings, ...streamWarnings],
-		tips: [],
+		tips,
 		meta,
 	};
+}
+
+/**
+ * `api` sends the command as typed, so what RouterOS will not report is said
+ * as a tip, not fixed by rewriting the request (#396 decisions). Grounded on
+ * CHR 7.23.7 + 7.24.5: a GET stream is one finite print; a filtered change feed
+ * drops rows leaving the filter and every delete except under an `?.id=`
+ * query; a `.proplist` without `.id,.dead` strips both from a delete frame,
+ * even under `?.id=` (it arrives as an `!re` with no attributes).
+ */
+function streamTips(resolved: ResolvedApiRequest): Tip[] {
+	const tips: Tip[] = [];
+	const menu = resolved.id ? `${resolved.path}/${resolved.id}` : resolved.path;
+	if (resolved.verb === "print" && !resolved.listen) {
+		tips.push(
+			buildTip(
+				"tip/stream-print",
+				`GET ${menu} --stream streamed one print; it does not follow changes.`,
+				`To follow changes, request the menu's listen: \`centrs api <router> ${menu}/listen\` (or POST \`${resolved.path}/print -f follow-only=${resolved.id ? ` --query .id=${resolved.id}` : ""}\`).`,
+			),
+		);
+	}
+	const follows =
+		resolved.listen ||
+		"follow-only" in resolved.body ||
+		"follow" in resolved.body;
+	if (!follows) return tips;
+	const filtered = resolved.query.some((word) => !word.startsWith(".id="));
+	if (filtered) {
+		tips.push(
+			buildTip(
+				"tip/filtered-follow",
+				"RouterOS ran this change feed with a query, so it reports neither rows that leave the filter nor deletes.",
+				"Follow the unfiltered menu and filter on the client, or address one row (`<menu>/*id/listen`), whose delete is reported.",
+			),
+		);
+	}
+	const projection = resolved.proplist;
+	if (
+		projection.length > 0 &&
+		!(projection.includes(".id") && projection.includes(".dead"))
+	) {
+		tips.push(
+			buildTip(
+				"tip/follow-proplist",
+				"This --proplist omits `.id` or `.dead`, which RouterOS then strips from delete frames: a delete can arrive as a row with no attributes.",
+				"Add `.id,.dead` to --proplist to see deletes.",
+			),
+		);
+	}
+	return tips;
 }
 
 function adapterForResolved(resolved: ResolvedApiRequest): ProtocolAdapter {
@@ -628,7 +753,9 @@ export async function resolveApiRequest(
 	const normalized = normalizeApiEndpoint(request.endpoint);
 	const method = parseApiMethod(request.method);
 	const verb = mapMethodToVerb(method);
-	const listen = (request.listen ?? false) || normalized.listen;
+	const listen = normalized.listen;
+	// A listen never completes, so it is only ever streamed.
+	const stream = (request.stream ?? false) || listen;
 	// `/execute` (root, single token) run via POST is the script surface — a CLI
 	// string, not a menu path. A GET, a nested path, or any other menu that merely
 	// ends in `execute` stays a normal path request validated through inspect.
@@ -674,29 +801,22 @@ export async function resolveApiRequest(
 				"Remove --query/--raw-query/--proplist from mutation and script requests; address PATCH/DELETE by row id.",
 		});
 	}
-	if (listen && normalized.listen && method !== "GET") {
+	if (listen && method !== "GET") {
 		throw new CentrsError({
 			code: "usage/conflicting-flags",
 			summary: "An explicit /listen endpoint requires GET.",
 			remediation:
-				"Drop -X to follow that menu, or target a command with -X POST --stream.",
+				"Drop -X to follow that menu, or POST the menu's print with `-f follow-only=` to pass print arguments.",
 		});
 	}
-	if (listen && verb === "print" && Object.keys(body).length > 0) {
+	// A GET maps to print, which takes no body here; refuse the fields rather
+	// than drop them from a stream.
+	if (stream && verb === "print" && Object.keys(body).length > 0) {
 		throw new CentrsError({
 			code: "usage/conflicting-flags",
-			summary: "A GET change subscription does not accept command fields.",
+			summary: "A streamed GET does not accept command fields.",
 			remediation:
 				"Use -X POST with the full command path to stream command attributes, such as /system/resource/print -f interval=1.",
-		});
-	}
-	if (listen && verb === "print" && query.length > 0) {
-		throw new CentrsError({
-			code: "usage/conflicting-flags",
-			summary:
-				"Filtered change subscriptions can miss deletes and are not supported.",
-			remediation:
-				"Follow the unfiltered menu and track .id/.dead on the client; use a one-shot query for filtered reads. Stateful filtered follow is tracked in #396/#397.",
 		});
 	}
 
@@ -721,7 +841,7 @@ export async function resolveApiRequest(
 				env,
 				config,
 			)));
-	const via = resolveApiProtocol(request, env, listen, cdbResolution, config);
+	const via = resolveApiProtocol(request, env, stream, cdbResolution, config);
 	const format = resolveApiFormat(request, env, config);
 	// `--raw` is a PRECEDENCE LAYER, not an override (#154). It ranks below an
 	// explicit `--validate` and above every ambient source, so:
@@ -837,6 +957,7 @@ export async function resolveApiRequest(
 		verb,
 		scriptMode,
 		listen,
+		stream,
 		body,
 		query,
 		proplist,
@@ -1033,6 +1154,9 @@ export function buildProtocolApiRequest(
 	};
 	if (resolved.id) {
 		request.id = resolved.id;
+	}
+	if (resolved.listen) {
+		request.listen = true;
 	}
 	if (resolved.scriptMode) {
 		const { script, ...extra } = resolved.body;
@@ -1335,8 +1459,8 @@ async function assertApiWriteConfirmed(
 	});
 }
 
-function assertListenCapability(resolved: ResolvedApiRequest): void {
-	if (!resolved.listen) {
+function assertStreamCapability(resolved: ResolvedApiRequest): void {
+	if (!resolved.stream) {
 		return;
 	}
 	if (resolved.via.value === "rest-api") {
@@ -1353,7 +1477,7 @@ function assertListenCapability(resolved: ResolvedApiRequest): void {
 		summary:
 			"`--stream` yields incremental replies instead of a one-shot `api` result.",
 		remediation:
-			"Consume the stream via `apiListen()` (library) or `centrs api … --stream` (CLI); both yield an NDJSON envelope per reply frame plus a final summary.",
+			"Consume the stream via `apiStream()` (library) or `centrs api … --stream` (CLI); both yield an NDJSON envelope per reply frame plus a final summary.",
 		context: { via: resolved.via.value, capability: "stream" },
 	});
 }
@@ -1361,13 +1485,13 @@ function assertListenCapability(resolved: ResolvedApiRequest): void {
 function resolveApiProtocol(
 	request: ApiRequest,
 	env: Record<string, string | undefined>,
-	listen: boolean,
+	stream: boolean,
 	cdb?: CdbResolution,
 	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<RouterOsProtocol> {
-	// A `/listen` endpoint (or `--listen`) infers native-api when `--via` is unset;
-	// REST stays the default for one-shot calls.
-	const defaultVia: RouterOsProtocol = listen ? "native-api" : "rest-api";
+	// A stream (`--stream` or a `/listen` endpoint) infers native-api when
+	// `--via` is unset; REST stays the default for one-shot calls.
+	const defaultVia: RouterOsProtocol = stream ? "native-api" : "rest-api";
 	const via = resolveStringSetting(
 		request.via,
 		env,
@@ -1511,7 +1635,9 @@ export function buildApiErrorEnvelope(
 					write: parsedMethod
 						? isApiMutating(parsedMethod, reportedPath)
 						: false,
-					listen: request.listen ?? false,
+					listen: safeNormalizeListen(request.endpoint),
+					stream:
+						(request.stream ?? false) || safeNormalizeListen(request.endpoint),
 					yes: request.yes ?? false,
 					validate: summarizedValidate(request),
 					raw: request.raw ?? false,
@@ -1696,6 +1822,10 @@ export function renderApiEnvelope(
 	switch (format) {
 		case "json":
 			return JSON.stringify(envelope, null, 2);
+		// One envelope, one compact line: the same line shape as a stream, so a
+		// one-shot read and a `--stream` are both read line by line.
+		case "ndjson":
+			return JSON.stringify(envelope);
 		case "yaml":
 			return toYaml(envelope);
 		case "text":
@@ -1733,15 +1863,25 @@ export function renderApiStreamLine(
 		// pretty-printed context block that `renderApiErrorText` emits.
 		return formatCentrsErrorLine(envelope.error);
 	}
-	// json and yaml both stream as NDJSON: one compact envelope object per line.
-	// (yaml falls back to JSON — a multi-line YAML doc can't be one stream line.)
+	// ndjson, json and yaml all stream as NDJSON: one compact envelope object
+	// per line. (json keeps this for compatibility; yaml falls back to JSON — a
+	// multi-line YAML doc can't be one stream line.)
 	return JSON.stringify(envelope);
 }
 
 function renderApiStreamFrameText(envelope: ApiSuccessEnvelope): string {
 	const stream = envelope.meta.operation?.stream;
 	if (stream?.kind === "summary") {
-		return `— ${stream.stopReason}: ${stream.frames} frame(s) in ${stream.durationMs}ms`;
+		const empty = stream.empty > 0 ? `, ${stream.empty} empty` : "";
+		return `— ${stream.stopReason}: ${stream.rows} row(s)${empty} in ${stream.durationMs}ms`;
+	}
+	if (stream?.kind === "notice") {
+		return envelope.tips
+			.map((tip) => `tip: ${tip.message}${tip.fix ? ` ${tip.fix}` : ""}`)
+			.join("\n");
+	}
+	if (stream?.kind === "frame" && stream.reply === "empty") {
+		return `${stream.index}\t!empty`;
 	}
 	const index = stream?.kind === "frame" ? stream.index : 0;
 	return `${index}\t${JSON.stringify(envelope.data)}`;
@@ -1784,6 +1924,11 @@ function renderApiSuccessText(
 }
 
 export function validateApiRequestShape(request: ApiRequest): void {
+	// `listen` used to mean "stream" AND rewrote a GET into a change feed (#402).
+	// Refuse it rather than let an untyped caller silently get a finite print.
+	if ("listen" in request) {
+		throw removedListenError(request.endpoint, "library");
+	}
 	if (!request.endpoint || request.endpoint.trim().length === 0) {
 		throw new CentrsError({
 			code: "input/invalid-command",
@@ -1801,6 +1946,31 @@ export function validateApiRequestShape(request: ApiRequest): void {
 				"Pass a path with at least one menu segment, such as `ip/address`.",
 		});
 	}
+}
+
+/**
+ * `--listen` / `ApiRequest.listen` were removed in #402: they meant "stream"
+ * and also turned a GET into a change feed, which a literal `api` must not do.
+ * The error names the exact replacement instead of guessing which was meant.
+ */
+export function removedListenError(
+	endpoint: string,
+	surface: "cli" | "library",
+	replacement?: string,
+): CentrsError {
+	const menu = safeNormalizeMenu(endpoint);
+	return new CentrsError({
+		code: "usage/removed-flag",
+		summary:
+			surface === "cli"
+				? "`--listen` was removed: `api` no longer rewrites a request into a listen."
+				: "`ApiRequest.listen` was removed: `api` no longer rewrites a request into a listen.",
+		remediation:
+			surface === "cli"
+				? `Run: ${replacement ?? `centrs api <router> ${menu}/listen`}${replacement?.includes("<") ? " (fill each <placeholder> in from your command)" : ""}. A \`/listen\` endpoint follows changes; \`--stream\` streams any other command as typed.`
+				: `To follow changes, use \`apiStream()\` with endpoint \`${menu}/listen\`; to stream another command as typed, set \`stream: true\`.`,
+		context: { flag: surface === "cli" ? "--listen" : "listen", endpoint },
+	});
 }
 
 export function parseApiMethod(method: string | undefined): ApiMethod {
@@ -1830,7 +2000,7 @@ export function apiRequestSummaryFromRequest(
 ): ApiRequestSummary {
 	const normalized = normalizeApiEndpoint(request.endpoint);
 	const parsed = tryParseApiMethod(request.method);
-	const listen = (request.listen ?? false) || normalized.listen;
+	const listen = normalized.listen;
 	return {
 		endpoint: request.endpoint,
 		path: normalized.path,
@@ -1839,6 +2009,7 @@ export function apiRequestSummaryFromRequest(
 		verb: parsed ? mapMethodToVerb(parsed) : null,
 		write: parsed ? isApiMutating(parsed, normalized.path) : false,
 		listen,
+		stream: (request.stream ?? false) || listen,
 		yes: request.yes ?? false,
 		validate: summarizedValidate(request),
 		raw: request.raw ?? false,
@@ -1857,6 +2028,24 @@ function tryParseApiMethod(method: string | undefined): ApiMethod | undefined {
 	return (apiMethods as readonly string[]).includes(upper)
 		? (upper as ApiMethod)
 		: undefined;
+}
+
+/** The endpoint's path plus any row id (`/ip/address/*1`), without a `/listen`. */
+function safeNormalizeMenu(endpoint: string): string {
+	try {
+		const { path, id } = normalizeApiEndpoint(endpoint);
+		return id ? `${path}/${id}` : path;
+	} catch {
+		return endpoint;
+	}
+}
+
+function safeNormalizeListen(endpoint: string): boolean {
+	try {
+		return normalizeApiEndpoint(endpoint).listen;
+	} catch {
+		return false;
+	}
 }
 
 function safeNormalizePath(endpoint: string): string {
@@ -1954,6 +2143,7 @@ function apiRequestSummary(resolved: ResolvedApiRequest): ApiRequestSummary {
 		verb: resolved.verb,
 		write: isApiMutating(resolved.method, resolved.path),
 		listen: resolved.listen,
+		stream: resolved.stream,
 		yes: resolved.yes,
 		validate: resolved.validate.value,
 		raw: resolved.raw,

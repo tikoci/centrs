@@ -282,6 +282,11 @@ export interface ApiReply {
 	tag?: string;
 	/** Raw words exactly as received, including the leading reply word. */
 	words: readonly string[];
+	/**
+	 * Set by `listen()` on a reply that ARRIVED after its signal aborted (the
+	 * replies a `/cancel` drains), however long it then waited in the queue.
+	 */
+	afterStop?: true;
 }
 
 /** Parse a raw sentence (array of words) into a structured reply. */
@@ -426,7 +431,7 @@ interface PendingCommand {
  */
 interface StreamingSubscription {
 	command: string;
-	/** An `!re` change frame arrived. */
+	/** An `!re` row or an `!empty` reply arrived. */
 	push: (reply: ApiReply) => void;
 	/** An `!trap` arrived (an `interrupted` trap is the normal `/cancel` path). */
 	trap: (reply: ApiReply) => void;
@@ -580,13 +585,14 @@ export class NativeApiSession {
 		const subscription = this.subscriptions.get(tag);
 		if (subscription !== undefined) {
 			switch (reply.type) {
+				// `!empty` is a reply in its own right (a zero-row tick, an empty
+				// finite read), so a stream consumer sees it like a row (#402).
 				case "!re":
+				case "!empty":
 					subscription.push(reply);
 					return;
 				case "!trap":
 					subscription.trap(reply);
-					return;
-				case "!empty":
 					return;
 				case "!done":
 					this.subscriptions.delete(tag);
@@ -709,7 +715,7 @@ export class NativeApiSession {
 	}
 
 	/**
-	 * Stream a native command and yield each `!re` as it arrives. Finite commands
+	 * Stream a native command and yield each `!re` and `!empty` as it arrives. Finite commands
 	 * end on `!done`; `/listen` needs cancellation. The generator ends cleanly:
 	 * - via `options.signal` aborting — the subscription stays registered, so the
 	 *   resulting `interrupted` trap + `!done` are drained and the loop ends
@@ -775,7 +781,9 @@ export class NativeApiSession {
 		this.subscriptions.set(tag, {
 			command: command.command,
 			push: (reply) => {
-				queue.push(reply);
+				queue.push(
+					options.signal?.aborted ? { ...reply, afterStop: true } : reply,
+				);
 				signalWake();
 			},
 			trap: (reply) => {

@@ -422,7 +422,7 @@ describe("native pre-aborted incremental request", () => {
 		const controller = new AbortController();
 		controller.abort();
 		const rows = [];
-		for await (const row of adapter.listen(
+		for await (const row of adapter.stream(
 			{ verb: "add", path: "/ip/address" },
 			{ signal: controller.signal },
 		))

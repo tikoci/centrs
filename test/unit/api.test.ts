@@ -247,6 +247,25 @@ describe("buildProtocolApiRequest", () => {
 });
 
 describe("apiEnvelope usage errors (no I/O)", () => {
+	// #402 review: the migration must keep an addressed request's row scope.
+	test("a removed `listen` field names the addressed /listen replacement", async () => {
+		const envelope = await apiEnvelope(
+			{
+				endpoint: "ip/address/*1",
+				targetInput: "192.0.2.1",
+				listen: true,
+			} as Parameters<typeof apiEnvelope>[0],
+			{},
+		);
+		expect(envelope.ok).toBe(false);
+		if (!envelope.ok) {
+			expect(envelope.error.code).toBe("usage/removed-flag");
+			expect(envelope.error.remediation).toContain(
+				"endpoint `/ip/address/*1/listen`",
+			);
+		}
+	});
+
 	test("an unsupported -X method is usage/invalid-method", async () => {
 		const envelope = await apiEnvelope(
 			{ endpoint: "ip/address", targetInput: "192.0.2.1", method: "HEAD" },
@@ -352,6 +371,7 @@ describe("renderApiEnvelope --raw", () => {
 					verb: "print" as const,
 					write: false,
 					listen: false,
+					stream: false,
 					yes: false,
 					validate: false,
 					raw: true,

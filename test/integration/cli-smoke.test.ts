@@ -19,7 +19,7 @@ import { runCliProcess } from "./cli-process.ts";
 
 interface Envelope {
 	ok: boolean;
-	error?: { code?: string; detailsUrl?: string };
+	error?: { code?: string; detailsUrl?: string; remediation?: string };
 }
 
 function parseEnvelope(text: string): Envelope {
@@ -265,15 +265,42 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		expect(envelope.error?.code).toBe("usage/conflicting-flags");
 	});
 
-	test("api fan-out + --listen is usage/fanout-not-supported (no network)", async () => {
+	test("api fan-out + --stream is usage/fanout-not-supported (no network)", async () => {
 		// The single-session guard fires before any CDB/transport I/O — hermetic.
+		for (const endpoint of ["ip/address", "ip/address/listen"]) {
+			const res = await runCliProcess({
+				args: ["api", "--group", "prod", endpoint, "--stream", "--json"],
+			});
+			expect(res.exitCode).toBe(1);
+			const envelope = parseEnvelope(res.stderrText);
+			expect(envelope.ok).toBe(false);
+			expect(envelope.error?.code).toBe("usage/fanout-not-supported");
+		}
+	});
+
+	test("a parse-time error under --format ndjson is one JSON line (#402)", async () => {
 		const res = await runCliProcess({
-			args: ["api", "--group", "prod", "ip/address", "--listen", "--json"],
+			args: ["api", "r1", "ip/address", "--listen", "--format", "ndjson"],
+		});
+		expect(res.exitCode).toBe(1);
+		const lines = res.stderrText.trim().split("\n");
+		expect(lines).toHaveLength(1);
+		expect(parseEnvelope(lines[0] ?? "").error?.code).toBe(
+			"usage/removed-flag",
+		);
+	});
+
+	test("api --listen is usage/removed-flag naming the replacement (#402)", async () => {
+		const res = await runCliProcess({
+			args: ["api", "r1", "ip/address", "--listen", "--json"],
 		});
 		expect(res.exitCode).toBe(1);
 		const envelope = parseEnvelope(res.stderrText);
 		expect(envelope.ok).toBe(false);
-		expect(envelope.error?.code).toBe("usage/fanout-not-supported");
+		expect(envelope.error?.code).toBe("usage/removed-flag");
+		expect(envelope.error?.remediation).toContain(
+			"Run: centrs api r1 ip/address/listen --json.",
+		);
 	});
 
 	test("api fan-out + --raw is usage/conflicting-flags (no network)", async () => {
