@@ -107,6 +107,13 @@ describe("compileQueryWords", () => {
 		expect(words('comment="\\ff"')).toEqual(["comment=\ff"]);
 		expect(words('comment="x\\ "')).toEqual(["comment=x"]);
 		expect(words('comment="x\\\r\ny"')).toEqual(["comment=xy"]);
+		// ...and the whole whitespace run after it, not one character.
+		expect(words('comment="x\\  y"')).toEqual(["comment=xy"]);
+		expect(words('comment="x\\\n  y"')).toEqual(["comment=xy"]);
+		expect(words('comment="x\\\r\n\t y"')).toEqual(["comment=xy"]);
+		// Ordinary spaces and `\_` stay.
+		expect(words('comment="x  y\\_"')).toEqual(["comment=x  y "]);
+		expect(words('comment="x=yes"')).toEqual(["comment=x=yes"]);
 		expect(words("(name=ether1)")).toEqual(["name=ether1"]);
 		expect(words("dst-address=0.0.0.0/0")).toEqual(["dst-address=0.0.0.0/0"]);
 		expect(words(".id=*1")).toEqual([".id=*1"]);
@@ -145,6 +152,17 @@ describe("refusals", () => {
 		expect(bang.summary).toContain("!(list");
 		expect(refusal("not disabled").summary).toContain("use `!`");
 		expect(refusal("a=1 b=2").summary).toContain("`and` or `or`");
+		// RouterOS reads `comment=x=yes` as `(comment=x)=yes`; `x!=y` matches nothing.
+		for (const [expression, offset, fix] of [
+			["comment=x=yes", 9, 'comment="x=yes"'],
+			["comment!=x<=y", 11, 'comment!="x<=y"'],
+			["disabled=yes=no", 12, 'disabled="yes=no"'],
+		] as const) {
+			const chained = refusal(expression);
+			expect(chained.code).toBe("input/invalid-query");
+			expect(chained.context).toMatchObject({ offset });
+			expect(chained.summary).toContain(fix);
+		}
 	});
 
 	test("malformed expressions name the offset", () => {

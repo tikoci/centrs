@@ -550,7 +550,7 @@ centrs retrieve $R /ip/firewall/address-list --query 'comment and !disabled' --u
 centrs retrieve $A /interface/vlan --via native-api --query 'vlan-id>10 and vlan-id<100 or disabled' --port $API_PORT --username $U --password $P --json
 ```
 
-For each of 52 expressions across three menus (equality, `!=`, numeric
+For each of 58 expressions across three menus (equality, `!=`, numeric
 ordering, ordering on a property some rows lack, quoted values and their escapes, bare booleans, bare "is set" names, `and`/`or`
 precedence, parentheses, `!(…)`), the `.id`s returned over both transports
 equal the ids `:put [<menu> find where <expression>]` prints on the same

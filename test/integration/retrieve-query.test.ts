@@ -48,6 +48,16 @@ const AGREE: Record<string, string[]> = {
 		// Escapes decode as the CLI decodes them: `\_` is a space, `\3E` is `>`.
 		'comment="a\\_b"',
 		'comment="x\\3Ey"',
+		// A quoted `=` is literal (unquoted, `comment=x=yes` is refused: RouterOS
+		// reads it as `(comment=x)=yes`). Rows `x` and `x=yes` tell a wrong
+		// match from an empty one.
+		'comment="x=yes"',
+		"comment=x",
+		// A continuation drops the backslash and the whole whitespace run.
+		'comment="x\\  y"',
+		'comment="x\\\n  y"',
+		'comment="x\\\r\n\ty"',
+		'comment="x  y"',
 		"disabled",
 		"!disabled",
 		"disabled=no",
@@ -168,6 +178,15 @@ describeFast("retrieve --query against CHR", () => {
 				["198.51.100.7", { timeout: "1d" }],
 			] as const) {
 				await add(AL, { list: "qa-397", address, ...extra });
+			}
+			// Their own list, so the qa-397 examples below keep their rows.
+			for (const [address, comment] of [
+				["203.0.113.1", "x"],
+				["203.0.113.2", "x=yes"],
+				["203.0.113.3", "xy"],
+				["203.0.113.4", "x  y"],
+			] as const) {
+				await add(AL, { list: "qb-397", address, comment });
 			}
 			await add("/interface/bridge", { name: "br-397" });
 			for (const [id, extra] of [

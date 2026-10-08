@@ -17,6 +17,9 @@ look, or does not accept:
   Write `!(name=value)` or `name!=value`.
 - `not` is not a RouterOS operator. Use `!`.
 - Conditions separated only by a space. Join them with `and` or `or`.
+- An unquoted `=` inside a value. RouterOS reads `comment=x=yes` as
+  `(comment=x)=yes`, and `comment=x!=y` matches nothing. Quote it:
+  `comment="x=yes"`.
 - A space after the operator (`comment= x`), which RouterOS rejects too.
 - A string escape RouterOS does not have, such as lowercase hex `\0a` (hex is
   two uppercase digits; `\ff` is `\f` then `f`), or a hex byte above `\7F`,

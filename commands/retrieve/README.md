@@ -175,9 +175,11 @@ value: `timeout<1d` includes static address-list entries (no `timeout`), and
 `timeout>1h` does not. API `<`/`>` skip such rows on their own, hence the `-a`
 ("has no `a`") word. `and` (`&&`) binds tighter than `or` (`||`), as in RouterOS. Values run to the
 next space or parenthesis, and start right after the operator (RouterOS
-rejects `comment= x`). Quote a value with spaces (`comment="uplink a"`), using
-RouterOS escapes: `\"`, `\\`, `\$`, `\?`, `\_`, `\a` `\b` `\f` `\n` `\r` `\t`
-`\v`, and two uppercase hex digits (`\41`; `\ff` is `\f` then `f`). A hex
+rejects `comment= x`). Quote a value with spaces or an `=` (`comment="uplink a"`,
+`comment="x=yes"`), using RouterOS escapes: `\"`, `\\`, `\$`, `\?`, `\_`, `\a`
+`\b` `\f` `\n` `\r` `\t` `\v`, and two uppercase hex digits (`\41`; `\ff` is `\f`
+then `f`). A backslash before whitespace drops it and the whole whitespace run
+after it, so `"x\<newline>  y"` is `xy`. A hex
 byte above `\7F` is refused: centrs sends values as UTF-8, so it could not match
 the raw byte RouterOS stores.
 
@@ -194,7 +196,7 @@ on a misspelled property with no rows and no error, so a typo fails
 `validation/unknown-attribute` instead.
 
 **Same rows as `print where`, with these differences.** On CHR 7.23.7 and
-7.24.5, 52 expressions over three menus return exactly the rows
+7.24.5, 58 expressions over three menus return exactly the rows
 `find where` selects (examples QY1, QY2). The exceptions come from the CLI
 typing an unquoted literal, which the query does not do:
 
@@ -209,11 +211,13 @@ typing an unquoted literal, which the query does not do:
 
 **Refused, never approximated.** `~` (regex) and `in` (prefix membership) have
 no query word, and a `$variable`, `[command]` or `{array}` value needs the
-script evaluator: these fail `input/unsupported-query` with a tip. Three
+script evaluator: these fail `input/unsupported-query` with a tip. Four
 spellings RouterOS reads differently from how they look fail
 `input/invalid-query`: `!a=v` (RouterOS reads `(!a)=v`; write `!(a=v)` or
-`a!=v`), `not` (not a RouterOS operator; use `!`), and conditions separated
-only by a space (join them with `and` or `or`).
+`a!=v`), `not` (not a RouterOS operator; use `!`), conditions separated
+only by a space (join them with `and` or `or`), and an unquoted `=` inside a
+value (RouterOS reads `comment=x=yes` as `(comment=x)=yes`, and `comment=x!=y`
+matches nothing; quote it: `comment="x=yes"`).
 
 ## Follow (`--follow`)
 

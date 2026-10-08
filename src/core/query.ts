@@ -322,6 +322,16 @@ function tokenize(expression: string): Token[] {
 				break;
 			}
 			rejectScriptValue(expression, text, at);
+			// RouterOS chains it: `comment=x=yes` is `(comment=x)=yes`, and
+			// `comment=x!=y` (or `<=`, `>=`) matches nothing.
+			const chained = text.indexOf("=");
+			if (chained >= 0) {
+				throw invalidQuery(
+					expression,
+					`RouterOS reads a second \`=\` as another comparison; quote the value: ${expression.slice(tokens.at(-2)?.at ?? 0, at)}"${text}".`,
+					at + chained,
+				);
+			}
 			tokens.push({ kind: "value", text, at });
 			index = end;
 			continue;
@@ -395,8 +405,10 @@ function readQuoted(
 			text += ESCAPES[next];
 			index += 2;
 		} else if (/[ \t\r\n]/.test(next)) {
-			// A backslash before whitespace joins the lines: both are dropped.
-			index += expression.startsWith("\r\n", index + 1) ? 3 : 2;
+			// A backslash before whitespace joins the lines: it and the whole
+			// whitespace run after it are dropped (`"x\<LF>  y"` is `xy`).
+			index++;
+			while (/[ \t\r\n]/.test(expression[index] ?? "")) index++;
 		} else if (HEX_ESCAPE.test(hex)) {
 			const byte = Number.parseInt(hex, 16);
 			if (byte > 0x7f) {
