@@ -178,7 +178,7 @@ export const apiCommand: CliCommandMetadata = {
 		},
 		{
 			flag: "--format",
-			valueName: "<json|yaml|text>",
+			valueName: "<json|ndjson|yaml|text>",
 			description:
 				"Output format. Defaults to json for api; `CENTRS_FORMAT` overrides.",
 		},
@@ -377,8 +377,10 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 /**
  * The exact command `--listen` meant (#402): a GET becomes the menu's
  * `/listen` endpoint, anything else keeps its command and streams. Secrets in
- * the original arguments are not echoed back: auth flags, a `-d` body (any
- * JSON field may be one), and `-f` values whose key names a secret.
+ * the original arguments are not echoed back. Any value can carry one (a
+ * `-f script=` body holds whole commands), so every request value is a
+ * placeholder: `-f`/query values keep their key and operator, a `-d` body and
+ * passwords are replaced whole. Flag names, the method and the endpoint stay.
  */
 function listenReplacement(
 	args: readonly string[],
@@ -399,27 +401,43 @@ function listenReplacement(
 		}
 		words.push(shellWord(arg));
 		const value = args[index + 1];
-		if (value === undefined) continue;
-		if (arg === "--password" || arg === "--cdb-password") {
-			words.push("<password>");
-			index += 1;
-		} else if (arg === "-d" || arg === "--data") {
-			words.push("<json>");
-			index += 1;
-		} else if (
-			(arg === "-f" || arg === "--field") &&
-			SECRET_FIELD.test(value.split("=", 1)[0] ?? "")
-		) {
-			// A placeholder, like `<password>` and `<router>`: left unquoted.
-			words.push(`${shellWord(value.split("=", 1)[0] ?? "")}=<secret>`);
+		const placeholder =
+			value === undefined ? undefined : redactedValue(arg, value);
+		if (placeholder !== undefined) {
+			words.push(placeholder);
 			index += 1;
 		}
 	}
 	return `centrs api ${words.join(" ")}`;
 }
 
-/** Field names whose values are credentials (RouterOS: password, secret, psk, private-key, …). */
-const SECRET_FIELD = /pass|secret|psk|key|token|auth/i;
+/**
+ * The placeholder that stands in for a request value, or `undefined` for a
+ * flag whose value is echoed (method, transport, bounds, names). Placeholders
+ * are left unquoted, like `<router>`.
+ */
+function redactedValue(flag: string, value: string): string | undefined {
+	switch (flag) {
+		case "--password":
+		case "--cdb-password":
+			return "<password>";
+		case "-d":
+		case "--data":
+			return "<json>";
+		case "-f":
+		case "--field":
+		case "--query":
+		case "--filter":
+		case "--raw-query": {
+			const match = /^([^=<>!]*)(!=|=|<|>)/.exec(value);
+			return match
+				? `${shellWord(`${match[1]}${match[2]}`)}<value>`
+				: shellWord(value);
+		}
+		default:
+			return undefined;
+	}
+}
 
 function shellWord(word: string): string {
 	return /^[\w@%+=:,./*-]+$/.test(word)
@@ -669,6 +687,9 @@ async function runApiStreamCli(
 			Bun.env,
 			controller.signal,
 		)) {
+			// `--raw` is bare payloads only; a notice has none.
+			if (parsed.raw && envelope.meta.operation?.stream?.kind === "notice")
+				continue;
 			const line = renderApiStreamLine(envelope, format, {
 				raw: parsed.raw,
 				verbose: parsed.verbose,

@@ -36,6 +36,7 @@ async function run(
 	endpoint = "tool/ping",
 	confirmed = true,
 	stream = true,
+	onStdoutLine?: (line: string) => void,
 ) {
 	const sent: string[][] = [];
 	const readers = new WeakMap<object, SentenceReader>();
@@ -194,6 +195,7 @@ async function run(
 			],
 			env: { HOME: taskHome, XDG_CONFIG_HOME: join(taskHome, ".config") },
 			killAfterMs: 5000,
+			...(onStdoutLine ? { onStdoutLine } : {}),
 		});
 		return {
 			...result,
@@ -418,6 +420,70 @@ describe("api --stream command lifecycle (#399)", () => {
 		expect(result.lines.at(-1).tips).toEqual([
 			expect.objectContaining({ code: "tip/follow-proplist" }),
 		]);
+	});
+	// #409 review: request-shape advice is known before any reply, so it is a
+	// leading `notice` line, kept on the terminal summary whatever the outcome.
+	test("a notice with the tips is the first line, before any reply", async () => {
+		const result = await run(
+			"delete",
+			["-X", "GET", "--query", "interface=ether1"],
+			"ip/address/listen",
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.lines[0]).toMatchObject({
+			ok: true,
+			data: null,
+			tips: [{ code: "tip/filtered-follow" }],
+			meta: { operation: { stream: { kind: "notice" } } },
+		});
+		expect(result.lines[1].meta.operation.stream.kind).toBe("frame");
+		expect(result.lines.at(-1).data).toMatchObject({ frames: 1, rows: 1 });
+	});
+	test("a silent watch prints its notice while it is still running", async () => {
+		const startedAt = Date.now();
+		let noticeAt: number | undefined;
+		const result = await run(
+			"cancel-empty",
+			["-X", "GET", "--query", "interface=ether1", "--duration", "1500ms"],
+			"ip/address/listen",
+			true,
+			true,
+			(line) => {
+				if (noticeAt === undefined && line.includes('"notice"'))
+					noticeAt = Date.now();
+			},
+		);
+		const exitedAt = Date.now();
+		expect(result.exitCode).toBe(0);
+		expect(noticeAt).toBeDefined();
+		// Printed before the duration bound, not with the summary at the end.
+		expect(exitedAt - (noticeAt ?? exitedAt)).toBeGreaterThan(1000);
+		expect((noticeAt ?? exitedAt) - startedAt).toBeLessThan(
+			exitedAt - startedAt,
+		);
+	});
+	test("a failed watch keeps its tips on the failure summary", async () => {
+		const result = await run(
+			"trap",
+			["-X", "GET", "--proplist", "address"],
+			"ip/address/listen",
+		);
+		expect(result.exitCode).toBe(1);
+		expect(result.lines[0].meta.operation.stream.kind).toBe("notice");
+		expect(result.lines.at(-1)).toMatchObject({
+			ok: false,
+			tips: [{ code: "tip/follow-proplist" }],
+			meta: { operation: { stream: { kind: "summary" } } },
+		});
+	});
+	test("--raw omits the notice: bare payloads only", async () => {
+		const result = await run(
+			"delete",
+			["-X", "GET", "--query", "interface=ether1", "--raw"],
+			"ip/address/listen",
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.lines[0]).toEqual({ ".id": "*1", ".dead": "true" });
 	});
 	test("!empty is its own frame and does not invent a row", async () => {
 		const result = await run("empty");

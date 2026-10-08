@@ -138,7 +138,7 @@ Usage: centrs api <router> <endpoint> [flags]
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
 | `--validate / --no-validate` |  | Run `/console/inspect` validation before the request (default true; `--validate=false` also accepted). |
-| `--format` | &lt;json\|yaml\|text&gt; | Output format. Defaults to json for api; `CENTRS_FORMAT` overrides. |
+| `--format` | &lt;json\|ndjson\|yaml\|text&gt; | Output format. Defaults to json for api; `CENTRS_FORMAT` overrides. |
 | `--json` |  | Shortcut for `--format json`. |
 | `--verbose` |  | Include additional context in text output. |
 

@@ -411,6 +411,11 @@ describeFast("api --stream against CHR (native-api)", () => {
 			expect(tipCodes(filtered.envelopes.at(-1))).toEqual([
 				"tip/filtered-follow",
 			]);
+			// The advice is the first line, before RouterOS has said anything.
+			expect(filtered.envelopes[0]?.meta.operation?.stream).toEqual({
+				kind: "notice",
+			});
+			expect(tipCodes(filtered.envelopes[0])).toEqual(["tip/filtered-follow"]);
 
 			// L11. Command arguments are validated before starting the stream.
 			const badArgument = await collect({

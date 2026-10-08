@@ -463,7 +463,8 @@ centrs api $A ip/address/listen --proplist address,.id,.dead --duration 3s --via
 ```
 
 The harness deletes a seeded address during each. With `address` alone no
-frame carries `.dead` for it, and the summary carries `tip/follow-proplist`.
+frame carries `.dead` for it, and the leading notice and the summary carry
+`tip/follow-proplist`.
 With `address,.id,.dead` the delete frame is `{ ".id", ".dead": "true" }` and
 there is no tip.
 
@@ -475,7 +476,8 @@ centrs api $A ip/address/listen --query interface=ether1 --duration 3s --via nat
 
 The harness deletes a seeded `ether1` address while listening. RouterOS sends
 nothing for it: the only frame is the cancellation `!empty` (`afterStop`).
-The summary is `ok` and carries `tip/filtered-follow`. `--raw-query` is sent
+The first line is a `notice` with `tip/filtered-follow`; the summary is `ok`
+and repeats it. `--raw-query` is sent
 the same way.
 
 ### L11. Command attributes are validated
@@ -547,8 +549,8 @@ centrs api $A ip/address --stream --via native-api --port $API_PORT --username $
 ```
 
 The print completes on its own (`stopReason=completed`) with one `re` frame
-per row (`rows` equals a one-shot GET's row count), and the summary carries
-`tip/stream-print` naming `ip/address/listen`. It never becomes a listen.
+per row (`rows` equals a one-shot GET's row count); a leading notice and the
+summary carry `tip/stream-print` naming `ip/address/listen`. It never becomes a listen.
 
 ### L18. Zero-row ticks are `!empty` frames and do not use up `--count`
 

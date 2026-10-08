@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseApiCliArgs } from "../../src/cli/api.ts";
+import { type CentrsError, serializeCentrsError } from "../../src/errors.ts";
 
 describe("parseApiCliArgs", () => {
 	test("first two positionals are <router> and <endpoint>", () => {
@@ -111,7 +112,7 @@ describe("parseApiCliArgs", () => {
 					"--listen",
 				]),
 			).toContain(
-				"Run: centrs api r1 tool/ping -X POST -f address=10.0.2.2 --stream.",
+				"Run: centrs api r1 tool/ping -X POST -f address=<value> --stream (fill each <placeholder> in from your command).",
 			);
 		});
 
@@ -133,31 +134,51 @@ describe("parseApiCliArgs", () => {
 			expect(text).toContain("--password <password>");
 		});
 
-		test("request-body secrets are not echoed back", () => {
-			const text = remediation([
-				"r1",
-				"ppp/secret",
-				"-X",
-				"PUT",
-				"-f",
-				"password=hunter2",
-				"-f",
-				"name=u1",
-				"--listen",
-			]);
-			expect(text).not.toContain("hunter2");
-			expect(text).toContain("-f password=<secret> -f name=u1 --stream");
-			const body = remediation([
-				"r1",
-				"ppp/secret",
-				"-X",
-				"PUT",
-				"-d",
-				'{"name":"u1","password":"hunter2"}',
-				"--listen",
-			]);
-			expect(body).not.toContain("hunter2");
-			expect(body).toContain("-d <json> --stream");
+		// #409 review: any request value can carry a secret (a `script=` body
+		// holds whole commands), so none is echoed — not just secret-named keys.
+		test("no request value is echoed back", () => {
+			const cases: string[][] = [
+				["-f", "script=/user/add name=demo password=SYNTHETIC_SECRET"],
+				["-f", "password=SYNTHETIC_SECRET"],
+				["-d", '{"name":"u1","password":"SYNTHETIC_SECRET"}'],
+				["--query", "password=SYNTHETIC_SECRET"],
+				["--raw-query", "comment!=SYNTHETIC_SECRET"],
+			];
+			for (const flags of cases) {
+				let error: unknown;
+				try {
+					parseApiCliArgs([
+						"r1",
+						"execute",
+						"-X",
+						"POST",
+						...flags,
+						"--listen",
+					]);
+				} catch (caught) {
+					error = caught;
+				}
+				expect((error as { code?: string }).code).toBe("usage/removed-flag");
+				const rendered = JSON.stringify(
+					serializeCentrsError(error as CentrsError),
+				);
+				expect(rendered).not.toContain("SYNTHETIC_SECRET");
+			}
+			expect(
+				remediation([
+					"r1",
+					"execute",
+					"-X",
+					"POST",
+					"-f",
+					"script=:put SYNTHETIC_SECRET",
+					"--query",
+					"name!=x",
+					"--listen",
+				]),
+			).toContain(
+				"Run: centrs api r1 execute -X POST -f script=<value> --query 'name!='<value> --stream",
+			);
 		});
 
 		test("arguments with spaces stay one shell word", () => {

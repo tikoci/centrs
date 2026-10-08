@@ -193,7 +193,7 @@ centrs never substitutes polling.
   `ip/address/*1/listen` follows one row (`?.id=*1`).
 - **GET menu + `--stream`** streams one literal print and completes; it does
   not follow. Its summary carries `tip/stream-print` naming the `/listen`
-  form. A streamed GET (or a `/listen`) rejects `-f` fields rather than
+  form (see the notice below). A streamed GET (or a `/listen`) rejects `-f` fields rather than
   silently dropping them.
 - **POST command + `--stream`** runs the literal command with its attributes:
   `api $R /tool/ping -X POST -f address=10.0.2.2 -f count=3 --stream --yes`.
@@ -233,7 +233,13 @@ centrs never substitutes polling.
   stderr errors; it does not provide the structured stream contract.
 
 `api` never edits a change feed to make it safer; it says what RouterOS will
-not report as a tip on the summary (CHR 7.23.7 + 7.24.5):
+not report as tips (CHR 7.23.7 + 7.24.5). Because that advice depends only on
+the request, it arrives **first**: a leading envelope with
+`meta.operation.stream.kind=notice`, `data: null` and the `tips`, before any
+reply — so a filtered watch that never gets a reply still shows it. A notice is
+not a reply and is not counted in `frames`/`rows`; a stream with no advice has
+no notice. The same tips are repeated on the terminal summary, successful or
+failed. `--raw` omits the notice.
 
 - `tip/filtered-follow` — a `listen` (or `follow`) with a query reports
   neither rows leaving the filter nor deletes. Follow unfiltered and filter

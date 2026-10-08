@@ -205,13 +205,16 @@ export type ApiStreamStopReason =
 	| "transport-error";
 
 /**
- * Per-line marker on `--stream` NDJSON output: one wire reply, or the
- * terminating summary. A frame's `reply` is `re` (a row; `data` is the row) or
+ * Per-line marker on `--stream` NDJSON output: a leading `notice`, one wire
+ * reply, or the terminating summary. A `notice` (`data: null`, not counted)
+ * comes first only when the request has advice in `tips` — what RouterOS will
+ * not report for it — so even a watch that never gets a reply sees it. A frame's `reply` is `re` (a row; `data` is the row) or
  * `empty` (RouterOS `!empty`: zero rows; `data` is `null`). `afterStop` marks a
  * reply that arrived after centrs stopped the stream locally, such as the
  * `!empty` a cancelled listen sends; it is not evidence of an empty table.
  */
 export type ApiStreamMeta =
+	| { kind: "notice" }
 	| {
 			kind: "frame";
 			index: number;
@@ -479,6 +482,13 @@ async function* streamResolvedApi(
 		return;
 	}
 
+	// Request-shape advice is known before the first reply: deliver it first,
+	// and keep it on whichever terminal summary follows (#409 review).
+	const tips = streamTips(resolved);
+	if (tips.length > 0) {
+		yield streamNoticeEnvelope(resolved, validation, tips);
+	}
+
 	const controller = new AbortController();
 	const startedAt = Date.now();
 	const counts = { frames: 0, rows: 0, empty: 0 };
@@ -556,6 +566,7 @@ async function* streamResolvedApi(
 			stopReason ?? "completed",
 			counts,
 			Date.now() - startedAt,
+			tips,
 			cancellationWarnings(),
 			done,
 		);
@@ -563,6 +574,7 @@ async function* streamResolvedApi(
 		const envelope = buildApiErrorEnvelopeFromResolved(resolved, error);
 		envelope.meta.validation = validation;
 		envelope.warnings = [...envelope.warnings, ...cancellationWarnings()];
+		envelope.tips = [...envelope.tips, ...tips];
 		if (envelope.meta.operation) {
 			envelope.meta.operation.stream = {
 				kind: "summary",
@@ -601,12 +613,23 @@ function streamFrameEnvelope(
 	return { ok: true, data, warnings: [], tips: [], meta };
 }
 
+function streamNoticeEnvelope(
+	resolved: ResolvedApiRequest,
+	validation: EnvelopeValidationMeta,
+	tips: Tip[],
+): ApiSuccessEnvelope {
+	const meta = metaFromResolved(resolved, validation, null);
+	meta.operation.stream = { kind: "notice" };
+	return { ok: true, data: null, warnings: [], tips, meta };
+}
+
 function streamSummaryEnvelope(
 	resolved: ResolvedApiRequest,
 	validation: EnvelopeValidationMeta,
 	stopReason: ApiStreamStopReason,
 	counts: { frames: number; rows: number; empty: number },
 	durationMs: number,
+	tips: Tip[],
 	streamWarnings: readonly Warning[] = [],
 	done?: Record<string, string>,
 ): ApiSuccessEnvelope {
@@ -628,7 +651,7 @@ function streamSummaryEnvelope(
 		ok: true,
 		data: summary,
 		warnings: [...resolved.warnings, ...streamWarnings],
-		tips: streamTips(resolved),
+		tips,
 		meta,
 	};
 }
@@ -1851,6 +1874,11 @@ function renderApiStreamFrameText(envelope: ApiSuccessEnvelope): string {
 		const empty = stream.empty > 0 ? `, ${stream.empty} empty` : "";
 		return `— ${stream.stopReason}: ${stream.rows} row(s)${empty} in ${stream.durationMs}ms`;
 	}
+	if (stream?.kind === "notice") {
+		return envelope.tips
+			.map((tip) => `tip: ${tip.message}${tip.fix ? ` ${tip.fix}` : ""}`)
+			.join("\n");
+	}
 	if (stream?.kind === "frame" && stream.reply === "empty") {
 		return `${stream.index}\t!empty`;
 	}
@@ -1938,7 +1966,7 @@ export function removedListenError(
 				: "`ApiRequest.listen` was removed: `api` no longer rewrites a request into a listen.",
 		remediation:
 			surface === "cli"
-				? `Run: ${replacement ?? `centrs api <router> ${menu}/listen`}. A \`/listen\` endpoint follows changes; \`--stream\` streams any other command as typed.`
+				? `Run: ${replacement ?? `centrs api <router> ${menu}/listen`}${replacement?.includes("<") ? " (fill each <placeholder> in from your command)" : ""}. A \`/listen\` endpoint follows changes; \`--stream\` streams any other command as typed.`
 				: `To follow changes, use \`apiStream()\` with endpoint \`${menu}/listen\`; to stream another command as typed, set \`stream: true\`.`,
 		context: { flag: surface === "cli" ? "--listen" : "listen", endpoint },
 	});
