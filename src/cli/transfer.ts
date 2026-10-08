@@ -86,7 +86,7 @@ export const transferCommand: CliCommandMetadata = {
 		{
 			flag: "--force / --overwrite",
 			description:
-				"Replace an existing device file on `upload`/`mkdir`/`copy`. Default refuses it. `download` always replaces the local file.",
+				"Skip the existing-destination check on the device for `upload`/`mkdir`/`copy` (`upload` then overwrites). Default refuses an existing target. `download` always replaces the local file.",
 		},
 		...selectionCommandOptions,
 		{

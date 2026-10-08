@@ -158,12 +158,16 @@ Implemented flags are generated from the CLI metadata into
 [`docs/CLI.md` → transfer](../../docs/CLI.md#transfer); this file does not
 duplicate that table. Behavior notes the generated reference cannot carry:
 
-- `--force`/`--overwrite` applies to the **device** destination of `upload`,
-  `mkdir` and `copy`; the default refuses an existing target with
-  `usage/target-exists` (see *Validation*). `download` replaces an existing
-  **local** file without `--force`, as `curl -o` and `scp` do (#406). The file
-  is written only after the read is verified, so a failed download leaves it
-  untouched.
+- `--force`/`--overwrite` skips the existing-**device**-destination check of
+  `upload`, `mkdir` and `copy`, which by default refuse an existing target
+  with `usage/target-exists` (see *Validation*). `upload` then overwrites the
+  file; `mkdir` and `copy` still run as RouterOS's own `/file` commands.
+  `download` replaces an existing **local** file without `--force`, as
+  `curl -o` and `scp` do (#406). The local file is written only after the
+  whole remote read completes and, under the default `--verify size`, matches
+  the device's size, so a failed read or a size mismatch leaves an existing
+  file untouched. The write itself is not atomic: a local write that fails
+  part-way can leave the file truncated.
 - `--verify` details and the sftp size caveat are in *Integrity*.
 - `--timeout`: `rest`/`native` are per-request ≤ 60000 ms (a chunked read is
   many short requests, each capped); `sftp` accepts longer for a single large

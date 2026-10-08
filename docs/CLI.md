@@ -155,7 +155,7 @@ Usage: centrs transfer <router> upload <local> [remote] | download <remote> [loc
 | `--via` | `<method>` | Pin the method: rest, native, or sftp (large transfers); scp/fetch/ftp are not built yet. Auto picks the cheapest by size/direction. |
 | `--ssh-key` | `<path>` | sftp only: explicit private-key path. Falls back to CENTRS_SSH_KEY / the ssh-agent. |
 | `--insecure` |  | Accept a self-signed TLS cert (https/api-ssl) or a new SSH host key. Default verifies. |
-| `--force / --overwrite` |  | Replace an existing device file on `upload`/`mkdir`/`copy`. Default refuses it. `download` always replaces the local file. |
+| `--force / --overwrite` |  | Skip the existing-destination check on the device for `upload`/`mkdir`/`copy` (`upload` then overwrites). Default refuses an existing target. `download` always replaces the local file. |
 | `--group` | `<name>` | Fan out across every CDB record in the group (repeatable; de-duped by record index). |
 | `--where` | `<attr>`=`<value>` | Device-class selector over CDB facts + core fields (repeatable, AND-combined). |
 | `--near` | `<lat>`,`<lon>`,`<radius>` | Geo selector: devices whose GPS is within radius (m/km/mi/ft; bare number = km). Lat-first. |
