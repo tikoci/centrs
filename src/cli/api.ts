@@ -429,10 +429,12 @@ function redactedValue(flag: string, value: string): string | undefined {
 		case "--query":
 		case "--filter":
 		case "--raw-query": {
-			const match = /^([^=<>!]*)(!=|=|<|>)/.exec(value);
-			return match
-				? `${shellWord(`${match[1]}${match[2]}`)}<value>`
-				: shellWord(value);
+			// Keep `key` plus its operator (`=`, `!=`, `<`, `>`); a bare word
+			// such as `#|` or `name` carries no value and is echoed.
+			let at = 0;
+			while (at < value.length && !"=<>".includes(value.charAt(at))) at += 1;
+			if (at === value.length) return shellWord(value);
+			return `${shellWord(value.slice(0, at + 1))}<value>`;
 		}
 		default:
 			return undefined;
