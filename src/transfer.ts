@@ -548,7 +548,10 @@ function isRestFamily(method: TransferMethod): boolean {
 	return method === "rest" || method === "native";
 }
 
-/** REST / native-api `/file` command seam. The one place those wire shapes live. */
+/**
+ * REST / native-api `/file` command seam. The one place those wire shapes live.
+ * Contents move in the adapters' `binary` mode, as byte strings (#404).
+ */
 class AdapterFileBackend implements FileBackend {
 	constructor(private readonly adapter: ProtocolAdapter) {}
 
@@ -579,7 +582,6 @@ class AdapterFileBackend implements FileBackend {
 		bytes: Buffer,
 		existing: FileRow | undefined,
 	): Promise<void> {
-		const text = bytes.toString("utf8");
 		let id = existing?.id;
 		if (!id) {
 			const added = await this.adapter.execute({
@@ -601,7 +603,8 @@ class AdapterFileBackend implements FileBackend {
 		await this.adapter.execute({
 			path: "/file",
 			command: "set",
-			attributes: { ".id": id, contents: text },
+			attributes: { ".id": id, contents: bytes.toString("latin1") },
+			binary: true,
 		});
 	}
 
@@ -612,8 +615,9 @@ class AdapterFileBackend implements FileBackend {
 				path: "/file",
 				command: "get",
 				attributes: { ".id": row.id, "value-name": "contents" },
+				binary: true,
 			});
-			return Buffer.from(extractContents(result), "utf8");
+			return Buffer.from(extractContents(result), "latin1");
 		}
 		const parts: Buffer[] = [];
 		let offset = 0;
@@ -624,12 +628,13 @@ class AdapterFileBackend implements FileBackend {
 				path: "/file",
 				command: "read",
 				attributes: {
-					file: row.name,
+					file: Buffer.from(row.name, "utf8").toString("latin1"),
 					offset: String(offset),
 					"chunk-size": String(FILE_READ_CHUNK_BYTES),
 				},
+				binary: true,
 			});
-			const chunk = Buffer.from(extractReadData(result), "utf8");
+			const chunk = Buffer.from(extractReadData(result), "latin1");
 			if (chunk.byteLength === 0) {
 				break;
 			}

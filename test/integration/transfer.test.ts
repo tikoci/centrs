@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -77,6 +78,28 @@ async function generateKeyPair(keyPath: string): Promise<void> {
 			{ cause: { tool: "ssh-keygen", exitCode, stderr, keyPath } },
 		);
 	}
+}
+
+/**
+ * #404 fixture: every byte value first, then deterministic noise, with a UTF-8
+ * `€` (e2 82 ac) straddling each 32 KiB `/file/read` chunk boundary. A
+ * same-length substitution passes a size check, so callers compare sha256.
+ */
+function binaryFixture(size: number): Buffer {
+	const bytes = Buffer.alloc(size);
+	let seed = 0x404;
+	for (let index = 0; index < size; index += 1) {
+		seed = (seed * 1_103_515_245 + 12_345) >>> 0;
+		bytes[index] = index < 256 ? index : seed >>> 24;
+	}
+	for (let boundary = 32_768; boundary + 2 <= size; boundary += 32_768) {
+		bytes.set([0xe2, 0x82, 0xac], boundary - 1);
+	}
+	return bytes;
+}
+
+function sha256(bytes: Buffer): string {
+	return createHash("sha256").update(bytes).digest("hex");
 }
 
 function captureConsole() {
@@ -347,7 +370,8 @@ describeFast("transfer against CHR", () => {
 
 			// 18. --via rest upload over 60 KB → rejected up front
 			const big = join(tmp, "big.bin");
-			await writeFile(big, Buffer.alloc(70_000, 7));
+			const bigBytes = binaryFixture(70_000);
+			await writeFile(big, bigBytes);
 			await fail(
 				[
 					"transfer",
@@ -419,6 +443,23 @@ describeFast("transfer against CHR", () => {
 				"transport/unsupported-operation",
 			);
 
+			// B1-B2. binary contents round-trip byte-exact on both wires (#404): the
+			// largest size the write cap allows, every byte value, compared by sha256.
+			const binBytes = binaryFixture(60_000);
+			const bin = join(tmp, "bin.bin");
+			await writeFile(bin, binBytes);
+			for (const [label, via] of [
+				["rest", rest],
+				["nv", native],
+			] as const) {
+				const remote = `centrs-bin-${label}.bin`;
+				const binUp = await ok(["transfer", ...via, "upload", bin, remote]);
+				expect(binUp.data).toMatchObject({ bytes: 60_000, verified: "size" });
+				const binOut = join(tmp, `bin-${label}.bin`);
+				await ok(["transfer", ...via, "download", remote, binOut]);
+				expect(sha256(await readFile(binOut))).toBe(sha256(binBytes));
+			}
+
 			// ── sftp (ssh): key-auth round-trip, the >60 KB gap, list/mkdir/remove ──
 			// RouterOS refuses password login once a user has an SSH key, and centrs's
 			// sftp client runs BatchMode=yes (no password prompts), so the faithful
@@ -472,7 +513,7 @@ describeFast("transfer against CHR", () => {
 			const bigOut = join(tmp, "sftp-big.bin");
 			await ok(["transfer", ...sftp, "upload", big, "centrs-big.bin"]);
 			await ok(["transfer", ...sftp, "download", "centrs-big.bin", bigOut]);
-			expect((await readFile(bigOut)).byteLength).toBe(70_000);
+			expect(sha256(await readFile(bigOut))).toBe(sha256(bigBytes));
 
 			// 17. the same sftp-seeded >60 KB file reads back over REST via chunked
 			// /file/read (no fetch-seed hack needed now that sftp can place it).
@@ -485,7 +526,12 @@ describeFast("transfer against CHR", () => {
 				restBigOut,
 			]);
 			expect(restBig.meta.via).toBe("rest-api");
-			expect((await readFile(restBigOut)).byteLength).toBe(70_000);
+			expect(sha256(await readFile(restBigOut))).toBe(sha256(bigBytes));
+
+			// B3. the same chunked read over native-api (#404)
+			const nvBigOut = join(tmp, "nv-big.bin");
+			await ok(["transfer", ...native, "download", "centrs-big.bin", nvBigOut]);
+			expect(sha256(await readFile(nvBigOut))).toBe(sha256(bigBytes));
 
 			// S4. list over sftp surfaces the uploaded file
 			const sList = await ok(["transfer", ...sftp, "list"]);
@@ -517,6 +563,8 @@ describeFast("transfer against CHR", () => {
 				"centrs-stdin.txt",
 				"centrs-no-verify.txt",
 				"centrs-nv.txt",
+				"centrs-bin-rest.bin",
+				"centrs-bin-nv.bin",
 				"centrs-sftp.txt",
 				"centrs_it.pub",
 				"centrs-sftp-dir",
@@ -534,7 +582,7 @@ describeFast("transfer against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(27),
+				exampleIds: [...exampleIds(27), "B1", "B2", "B3"],
 			});
 		} finally {
 			capture.restore();

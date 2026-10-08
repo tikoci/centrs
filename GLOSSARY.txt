@@ -339,6 +339,8 @@ creds
 Streamable
 # modelcontextprotocol: npm scope of the MCP SDK (@modelcontextprotocol/sdk).
 modelcontextprotocol
+# WHATWG: the web standards body whose Encoding spec makes TextDecoder("latin1") windows-1252, not a byte decoder (#404).
+WHATWG
 # WIP: work in progress (used for the upstream MikroTik Docusaurus docs site).
 WIP
 # adhoc: future inline host+credential targets; Phase 1 MCP uses CDB-only targets.

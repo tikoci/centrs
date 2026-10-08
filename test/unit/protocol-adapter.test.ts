@@ -300,6 +300,94 @@ describe("RestAdapter execute seam", () => {
 	});
 });
 
+// #404, CHR-grounded on 7.23.7 + 7.24.5: RouterOS carries `/file` contents as
+// raw bytes in the JSON string (0x80–0xff unescaped, <0x20 as `\u00XX`) and
+// stores the UTF-8 encoding of every JSON code point it receives.
+describe("RestAdapter binary execute (#404)", () => {
+	const bytes = Buffer.from([0xff, 0x80, 0x00, 0x41]);
+	const byteString = bytes.toString("latin1");
+	/** The device's reply: raw high bytes inside a JSON string, so not UTF-8. */
+	const rawReply = () =>
+		new Response(
+			Buffer.concat([
+				Buffer.from('{"ret":"'),
+				Buffer.from([0xff, 0x80]),
+				Buffer.from('\\u0000A"}'),
+			]),
+			{ headers: { "Content-Type": "application/json" } },
+		);
+
+	test("sends contents as raw body bytes, not UTF-8", async () => {
+		const mock = mockFetchSequence([() => jsonResponse({})]);
+		try {
+			const adapter = createProtocolAdapter(restConfig());
+			await adapter.execute({
+				path: "/file",
+				command: "set",
+				attributes: { ".id": "*1", contents: byteString },
+				binary: true,
+			});
+			const body = Buffer.from(mock.calls[0]?.init?.body as Uint8Array);
+			expect(
+				body.equals(
+					Buffer.from('{".id":"*1","contents":"\xff\x80\\u0000A"}', "latin1"),
+				),
+			).toBe(true);
+		} finally {
+			mock.restore();
+		}
+	});
+
+	test("reads a reply's raw bytes back exactly", async () => {
+		const mock = mockFetchSequence([rawReply]);
+		try {
+			const adapter = createProtocolAdapter(restConfig());
+			const result = await adapter.execute({
+				path: "/file",
+				command: "get",
+				attributes: { ".id": "*1", "value-name": "contents" },
+				binary: true,
+			});
+			expect(Buffer.from(result.ret ?? "", "latin1").equals(bytes)).toBe(true);
+		} finally {
+			mock.restore();
+		}
+	});
+
+	test("control: the text path replaces the same reply's high bytes", async () => {
+		const mock = mockFetchSequence([rawReply]);
+		try {
+			const adapter = createProtocolAdapter(restConfig());
+			const result = await adapter.execute({
+				path: "/file",
+				command: "get",
+				attributes: { ".id": "*1", "value-name": "contents" },
+			});
+			expect(result.ret).toBe("\ufffd\ufffd\u0000A");
+		} finally {
+			mock.restore();
+		}
+	});
+
+	test("refuses a character that is not a byte instead of truncating it", async () => {
+		const mock = mockFetchSequence([]);
+		try {
+			const adapter = createProtocolAdapter(restConfig());
+			await expect(
+				adapter.execute({
+					path: "/file",
+					command: "set",
+					attributes: { ".id": "*1", contents: "\u20ac" },
+					binary: true,
+				}),
+			).rejects.toMatchObject({ code: "internal/byte-string" });
+			expect(mock.calls).toHaveLength(0);
+		} finally {
+			mock.restore();
+		}
+	});
+});
+
 describe("REST structured POST query/projection", () => {
 	test("forwards command attributes together with query and projection", async () => {
 		const mock = mockFetchSequence([
