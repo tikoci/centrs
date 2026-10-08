@@ -371,3 +371,102 @@ centrs retrieve --quickchr $NAME /system/resource --json
 Envelope: `ok: true`, `meta.via=rest-api` (normal default; quickchr does not
 change protocol selection), `meta.target.source.kind=provider`,
 `meta.target.identity=$NAME`, no `recordIndex` (the CDB was never consulted).
+
+## Follow (`--follow`, #396)
+
+Contract: [README → Follow](README.md#follow---follow). `$A`/`$API_PORT` as in
+the native-api section; `--via` is left unset because `--follow` infers
+native-api. Covered by `test/integration/retrieve-follow.test.ts`; the engine
+orderings a CHR cannot produce on demand (A1 replay, the sweep's
+changed-since-sent exclusion, overflow) are pinned in
+`test/unit/retrieve-follow.test.ts`.
+
+### FL1. Bootstrap: snapshot frames, one `synced`, a summary
+
+```bash
+centrs retrieve $A /ip/address --follow --duration 3s --port $API_PORT --username $U --password $P --json
+```
+
+Every line parses as an envelope. Frames before `synced` have
+`phase: "snapshot"` and `source: "print"`; exactly one `synced`; the last line
+is the summary with `stopReason: "duration-elapsed"`, `synced: true`,
+`changes: 0`. Every frame carries `meta.operation.stream.id`.
+
+### FL2. A live change, and `--count` that ignores the snapshot
+
+```bash
+centrs retrieve $A /ip/address --follow --count 1 --duration 15s --port $API_PORT --username $U --password $P --json
+```
+
+After `synced`, add an address. The follow ends with `stopReason:
+"count-reached"` after exactly one `live` `upsert` frame from `listen`, however
+many snapshot frames came first.
+
+### FL3. A removal RouterOS sends
+
+```bash
+centrs retrieve $A /ip/address --follow --sweep 0 --count 1 --duration 15s --port $API_PORT --username $U --password $P --json
+```
+
+After `synced`, remove an address that existed before the follow. One `live`
+`removed` frame, `source: "listen"`, `data: null`. `--sweep 0` keeps the sweep
+out of the race, and its `tip/follow-sweep-off` notice is the first line.
+
+### FL4. A removal RouterOS does not send (view menu → sweep)
+
+```bash
+centrs retrieve $A /interface/bridge --follow --sweep 1s --duration 15s --port $API_PORT --username $U --password $P --json
+```
+
+Create a bridge after `synced`, then remove it. Its `upsert` comes from
+`listen`; its removal comes from the sweep (`source: "sweep"`), because
+`/interface/<type>` never sends `.dead`.
+
+### FL5. `--attributes` projects `data`, identity stays in meta
+
+```bash
+centrs retrieve $A /ip/address --follow --attributes address --duration 3s --port $API_PORT --username $U --password $P --json
+```
+
+Every snapshot frame's `data` has only `address`; `meta.operation.stream.id`
+still names the row.
+
+### FL6. A menu RouterOS cannot follow
+
+```bash
+centrs retrieve $A /system/resource --follow --port $API_PORT --username $U --password $P --json
+```
+
+One envelope: `ok: false`, `validation/not-followable`, exit 1. No summary.
+
+### FL7. A pinned REST transport
+
+```bash
+centrs retrieve $R /ip/address --via rest-api --follow --username $U --password $P --json
+```
+
+One envelope: `ok: false`, `transport/capability-unsupported`. No polling
+fallback.
+
+### FL8. NDJSON is readable before the process exits; Ctrl-C ends it cleanly
+
+```bash
+centrs retrieve $A /ip/address --follow --format ndjson --port $API_PORT --username $U --password $P
+```
+
+Run as a subprocess. The first frame line parses while the process is still
+running; after `SIGINT` the last line is a successful summary with
+`stopReason: "interrupted"`, and the exit code is 0.
+
+### FL9. A1 and the sweep under churn (regression harness)
+
+```bash
+centrs retrieve $A /ip/firewall/address-list --follow --sweep 200ms --duration 8s --port $API_PORT --username $U --password $P --json
+```
+
+A second connection updates, adds and removes address-list rows while the
+follow bootstraps and runs. Applying every line in order must equal a fresh
+`print` taken after the churn settles: no stale value, no resurrected row, no
+row removed by a sweep while it still exists. #396 round 3 measured 0 errors
+over about 14.7k writes with this bootstrap; arrival-order merging failed the
+same harness.

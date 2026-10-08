@@ -194,6 +194,15 @@ export async function retrieveFanout(
 	internals: RetrieveFanoutInternals = {},
 	options: RetrieveFanoutOptions = {},
 ): Promise<RetrieveFanoutEnvelope> {
+	if (request.follow) {
+		throw new CentrsError({
+			code: "usage/fanout-not-supported",
+			summary:
+				"`retrieve --follow` follows one router and cannot fan out across multiple targets.",
+			remediation: "Call `retrieveFollow()` once per router to watch several.",
+			context: { capability: "follow" },
+		});
+	}
 	const attributeSelections = validateRetrieveRequestShape(request);
 	const config = await loadEnvFileDefaults(env);
 	const global = resolveRetrieveGlobalContext(
@@ -462,6 +471,8 @@ export function renderRetrieveFanoutEnvelope(
 			return JSON.stringify(envelope, null, 2);
 		case "yaml":
 			return toYaml(envelope);
+		case "ndjson":
+			return JSON.stringify(envelope);
 		default:
 			return renderFanoutText(envelope, options);
 	}

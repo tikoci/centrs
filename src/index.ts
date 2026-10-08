@@ -580,14 +580,20 @@ export {
 	buildResolvedRetrieve,
 	buildRetrieveErrorEnvelope,
 	buildRetrieveErrorEnvelopeFromResolved,
+	FOLLOW_SWEEP_DEFAULT_MS,
 	type ResolvedRetrieveRequest,
 	type RetrieveEnvelope,
 	type RetrieveErrorEnvelope,
+	type RetrieveFollowCounts,
+	type RetrieveFollowSettings,
+	type RetrieveFollowStopReason,
+	type RetrieveFollowSummary,
 	type RetrieveGlobalContext,
 	type RetrieveOperationMeta,
 	type RetrieveOutputFormat,
 	type RetrieveRequest,
 	type RetrieveRequestSummary,
+	type RetrieveStreamMeta,
 	type RetrieveSuccessEnvelope,
 	type RetrieveWarning,
 	renderRetrieveEnvelope,
@@ -611,6 +617,12 @@ export {
 	retrieveFanout,
 	retrieveGroup,
 } from "./retrieve-fanout.ts";
+export {
+	FOLLOW_BUFFER_LIMIT,
+	type RetrieveFollowOptions,
+	renderRetrieveFollowLine,
+	retrieveFollow,
+} from "./retrieve-follow.ts";
 export {
 	buildSettingsErrorEnvelope,
 	renderSettingsEnvelope,

@@ -742,6 +742,12 @@ export class NativeApiSession {
 			onCancelUnacknowledged?: () => void;
 			/** Terminal attributes, distinct from the streamed `!re` rows. */
 			onDone?: (attributes: Record<string, string>) => void;
+			/**
+			 * Every reply for this tag (`!re`, `!empty`, `!trap`, `!done`), called
+			 * synchronously as it is routed, before the generator yields it. Taps
+			 * on several concurrent commands see one connection's wire order.
+			 */
+			onReply?: (reply: ApiReply) => void;
 		} = {},
 	): AsyncGenerator<ApiReply, void, void> {
 		// A cancelled caller must not dispatch a command, especially now that
@@ -781,17 +787,20 @@ export class NativeApiSession {
 		this.subscriptions.set(tag, {
 			command: command.command,
 			push: (reply) => {
+				options.onReply?.(reply);
 				queue.push(
 					options.signal?.aborted ? { ...reply, afterStop: true } : reply,
 				);
 				signalWake();
 			},
 			trap: (reply) => {
+				options.onReply?.(reply);
 				trap = reply;
 				trapAcknowledgesCancel =
 					isInterruptedTrap(reply) && !!options.signal?.aborted;
 			},
 			settle: (reply) => {
+				options.onReply?.(reply);
 				options.onDone?.(reply.attributes);
 				ended = true;
 				signalWake();
