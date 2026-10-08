@@ -79,13 +79,13 @@ export const apiCommand: CliCommandMetadata = {
 			flag: "--query / --filter",
 			valueName: "<expr>",
 			description:
-				"RouterOS-side row filter, AND-combined, repeatable: name=value, name!=value, name>value, name<value, name.",
+				"Row filter written as after `print where` (`disabled`, `mtu>=1500 and !dynamic`), sent as query words; repeatable, AND-ed. No `~` or `in`.",
 		},
 		{
 			flag: "--raw-query",
 			valueName: "<word>",
 			description:
-				"Verbatim RouterOS query word (repeatable) for OR / absence / stack expressions.",
+				"Verbatim RouterOS query word (repeatable), e.g. has-property `name`, absence `-name`, or stack ops `#|` `#&` `#!`.",
 		},
 		{
 			flag: "--attribute / --proplist",

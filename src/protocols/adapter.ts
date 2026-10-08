@@ -71,6 +71,8 @@ export interface ProtocolAdapterConfig {
 export interface RetrieveListOptions extends RetrieveReadOptions {
 	proplist?: readonly string[];
 	detail?: boolean;
+	/** Row filter in REST `.query` form (no leading `?`); native prefixes each with `?`. */
+	query?: readonly string[];
 }
 
 /** Options every retrieve read takes. */
@@ -221,7 +223,12 @@ export interface ProtocolAdapter {
 	/** Capability flags describing what this adapter supports. */
 	readonly capabilities: ProtocolAdapterCapabilities;
 	/** `/console/inspect` probe (`request=child` or `request=completion`). */
-	inspect(request: "child" | "completion", path: string): Promise<unknown[]>;
+	/** `/console/inspect`; `input` is the CLI-text form (`request=completion input=…`). */
+	inspect(
+		request: "child" | "completion",
+		path: string,
+		input?: string,
+	): Promise<unknown[]>;
 	/** Read a single record (singleton menu) as an object. */
 	getSingleton(path: string, options?: RetrieveReadOptions): Promise<unknown>;
 	/** Read a menu as an array of records, optionally projected/detailed. */
@@ -285,8 +292,12 @@ class RestAdapter implements ProtocolAdapter {
 	async inspect(
 		request: "child" | "completion",
 		path: string,
+		input?: string,
 	): Promise<unknown[]> {
-		return this.restPost<unknown[]>("/console/inspect", { request, path });
+		return this.restPost<unknown[]>(
+			"/console/inspect",
+			input === undefined ? { request, path } : { request, input },
+		);
 	}
 
 	async getSingleton(
@@ -297,14 +308,23 @@ class RestAdapter implements ProtocolAdapter {
 	}
 
 	async list(path: string, options: RetrieveListOptions): Promise<unknown[]> {
-		const hasProjection =
-			(options.proplist?.length ?? 0) > 0 || options.detail === true;
-		if (!hasProjection) {
+		const hasBody =
+			(options.proplist?.length ?? 0) > 0 ||
+			(options.query?.length ?? 0) > 0 ||
+			options.detail === true;
+		if (!hasBody) {
 			return (await this.restGet(path, options.signal)) as unknown[];
 		}
-		const body: { ".proplist"?: readonly string[]; detail?: string } = {};
+		const body: {
+			".proplist"?: readonly string[];
+			".query"?: readonly string[];
+			detail?: string;
+		} = {};
 		if (options.proplist && options.proplist.length > 0) {
 			body[".proplist"] = options.proplist;
+		}
+		if (options.query && options.query.length > 0) {
+			body[".query"] = options.query;
 		}
 		if (options.detail) {
 			body.detail = "true";
@@ -698,10 +718,11 @@ class NativeApiAdapter implements ProtocolAdapter {
 	async inspect(
 		request: "child" | "completion",
 		path: string,
+		input?: string,
 	): Promise<unknown[]> {
 		const replies = await this.talk({
 			command: "/console/inspect",
-			attributes: { request, path },
+			attributes: input === undefined ? { request, path } : { request, input },
 		});
 		return repliesToRecords(replies);
 	}
@@ -723,6 +744,9 @@ class NativeApiAdapter implements ProtocolAdapter {
 		}
 		if (options.detail) {
 			command.attributes = { detail: "" };
+		}
+		if (options.query && options.query.length > 0) {
+			command.queries = options.query.map((word) => `?${word}`);
 		}
 		const replies = await this.talk(command);
 		return repliesToRecords(replies);

@@ -106,7 +106,7 @@ export async function* retrieveSample(
 			yield buildRetrieveErrorEnvelopeFromResolved(resolved, error);
 			return;
 		}
-		const { inspection, validation } = prepared;
+		const { validation, ...plan } = prepared;
 		if (sample.durationMs !== undefined) {
 			durationTimer = setTimeout(
 				() => stop("duration-elapsed"),
@@ -119,7 +119,7 @@ export async function* retrieveSample(
 				const read = executeRetrieve(
 					resolved,
 					backend,
-					inspection,
+					plan,
 					abandon.signal,
 				).then((data) => ({ data }));
 				// A read abandoned by a stop may still fail later; nobody awaits it.

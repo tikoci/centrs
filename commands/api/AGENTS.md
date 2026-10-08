@@ -63,15 +63,18 @@ inspect-client TS patterns — `tikoci/lsp-routeros-ts`
 
 Two layers, both grounded above:
 
-- **`--query` / `--filter`** — structured convenience, **AND-combined** (RouterOS
-  default), repeatable. Each maps to one query word:
-  - `name=value` → `name=value` (eq)
-  - `name!=value` → two words `name=value`, `#!` (eq then NOT-top)
-  - `name>value` / `name<value` → `>name=value` / `<name=value`
-  - `name` (no `=`) → `name` (has-property)
-  Multiple `--query` emit their words in order; RouterOS's implicit AND applies (no
-  `#&` injected). `--query` cannot express OR or arbitrary stacks — that is
-  `--raw-query`.
+- **`--query` / `--filter`** — the `print where` grammar, shared with
+  `retrieve --query` (`src/core/query.ts`, #397), repeatable and AND-ed.
+  `and`/`or`/`!`/parentheses compile to `#&`/`#|`/`#!`; `a!=v` → `a=v` `#!`;
+  `a<v` → `<a=v` `-a` `#|` and `a<=v` → `>a=v` `#!` (`where` counts a row
+  without `a` as smaller than any value; API `<`/`>` skip it); a bare name → `a=yes` for a boolean, otherwise
+  the has-property word `a`, decided by asking the device (completion after
+  `where a=` offers exactly `yes`/`no` for a boolean). The table, refusals and
+  CHR differential (`find where` vs `.query`, 50 expressions, 7.23.7 + 7.24.5)
+  are in `commands/retrieve/README.md` → Query. Until #397 the structured form
+  was a per-word splitter where a bare name meant has-property, `<` skipped
+  rows without the property, and an operator anywhere in the string split it
+  (`comment=a>b` → `>comment=a=b`).
 - **`--raw-query <word>`** — power-user escape hatch, repeatable. Each value is a
   **verbatim RouterOS query word** (absence `-name`, OR `#|`, AND `#&`, NOT `#!`,
   or any `>`/`<`/`=` form). Emitted as-is: a `.query` element over REST, a

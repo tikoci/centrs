@@ -245,11 +245,13 @@ outputs round-trip to the same JS value.
 centrs retrieve $R /system/resource --format yaml --username $U --password $P
 ```
 
-## Out-of-scope (must surface as not-implemented)
+## Row filters
 
-### 18. --query
+### 18. --query with a regex
 
-Returns `validation/not-implemented` immediately.
+A regex has no RouterOS API query word, so it fails
+`input/unsupported-query` before anything is read. The full `--query`
+contract is in the **Query** section below.
 
 ```bash
 centrs retrieve $R /ip/address --query 'address~"192"' --username $U --password $P --json
@@ -257,10 +259,10 @@ centrs retrieve $R /ip/address --query 'address~"192"' --username $U --password 
 
 ### 19. --filter
 
-Same handling as `--query`.
+`--filter` is `--query`: the router filters, and every returned row matches.
 
 ```bash
-centrs retrieve $R /ip/address --filter 'disabled=no' --username $U --password $P --json
+centrs retrieve $R /interface --filter 'type=ether' --username $U --password $P --json
 ```
 
 ## native-api (`--via native-api`)
@@ -533,3 +535,75 @@ centrs retrieve $A /system/resource --via native-api --sample 1s --format ndjson
 Run as a subprocess. The first `sample` line parses while the process is still
 running; after `SIGINT` the last line is a successful summary with
 `stopReason: "interrupted"`, and the exit code is 0.
+
+## Query (`--query`, #397)
+
+Contract: [README → Query](README.md#query---query). `$R` and `$A`/`$API_PORT`
+as above. Covered by `test/integration/retrieve-query.test.ts`, which seeds
+address-list, VLAN and firewall-filter rows; the grammar and compiled words are
+pinned in `test/unit/query.test.ts`.
+
+### QY1. The same rows as RouterOS's `find where`
+
+```bash
+centrs retrieve $R /ip/firewall/address-list --query 'comment and !disabled' --username $U --password $P --json
+centrs retrieve $A /interface/vlan --via native-api --query 'vlan-id>10 and vlan-id<100 or disabled' --port $API_PORT --username $U --password $P --json
+```
+
+For each of 50 expressions across three menus (equality, `!=`, numeric
+ordering, ordering on a property some rows lack, quoted values, bare booleans, bare "is set" names, `and`/`or`
+precedence, parentheses, `!(…)`), the `.id`s returned over both transports
+equal the ids `:put [<menu> find where <expression>]` prints on the same
+router.
+
+### QY2. Where the query and the CLI differ, as documented
+
+```bash
+centrs retrieve $R /ip/firewall/filter --query 'dst-port=80' --username $U --password $P --json
+centrs retrieve $R /ip/firewall/address-list --query 'list=qa-397 and address>192.0.2.9' --username $U --password $P --json
+```
+
+The first returns the rule whose `dst-port` is `"80"`, although
+`find where dst-port=80` selects nothing (the CLI reads `80` as a number). The
+second compares `address` as text, so `192.0.2.10` is not above `192.0.2.9`.
+
+### QY3. `--filter` and repeated `--query` are AND-ed
+
+```bash
+centrs retrieve $R /ip/firewall/address-list --filter list=qa-397 --query comment --query '!disabled' --attributes address --username $U --password $P --json
+```
+
+`data` is exactly `[{ "address": "192.0.2.9" }]`.
+
+### QY4. A regex fails before anything is sent
+
+```bash
+centrs retrieve $R /interface --query 'name~"^ether"' --username $U --password $P --json
+```
+
+`ok: false`, `input/unsupported-query`, exit 1.
+
+### QY5. A misspelled property fails validation
+
+```bash
+centrs retrieve $A /ip/firewall/address-list --via native-api --query 'lists=qa-397' --port $API_PORT --username $U --password $P --json
+```
+
+`validation/unknown-attribute`. Without the check RouterOS would answer with
+no rows and no error.
+
+### QY6. A singleton has no rows to filter
+
+```bash
+centrs retrieve $R /system/identity --query 'name=MikroTik' --username $U --password $P --json
+```
+
+`usage/conflicting-flags`.
+
+### QY7. `--sample` reads the filtered rows each time
+
+```bash
+centrs retrieve $R /ip/firewall/address-list --query 'list=qa-397 and disabled' --sample 500ms --count 2 --username $U --password $P --json
+```
+
+Both samples hold only the disabled `qa-397` row.

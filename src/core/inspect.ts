@@ -30,16 +30,21 @@ import { CentrsError } from "../errors.ts";
  * protocol layer (no import cycle).
  */
 export interface InspectBackend {
-	inspect(request: "child" | "completion", path: string): Promise<unknown[]>;
+	inspect(
+		request: "child" | "completion",
+		path: string,
+		input?: string,
+	): Promise<unknown[]>;
 }
 
 /**
  * The `/console/inspect` request modes (lsp's `InspectRequest`). Only `child`
  * and `completion` are wired today (the two the {@link InspectBackend} seam
- * exposes); `highlight` (token-level error detection) and `syntax` (parse tree),
- * plus the `input`/`.query`/`.proplist` request fields, are the documented
- * Phase-2 extension point for value-level validation — widen the adapter seam
- * when adding them.
+ * exposes), plus `input` for completion over CLI text
+ * ({@link inspectWhereBooleans}); `highlight` (token-level error detection),
+ * `syntax` (parse tree) and the `.query`/`.proplist` request fields are the
+ * documented extension point for value-level validation — widen the adapter
+ * seam when adding them.
  */
 export type InspectRequestKind =
 	| "child"
@@ -199,4 +204,37 @@ export async function inspectChildrenOrEmpty(
 		}
 		throw error;
 	}
+}
+
+/**
+ * Which of `names` are booleans in `<menu>/print where`, asked of the device:
+ * completion after `where <name>=` offers exactly `no` and `yes` as `arg` rows
+ * for a boolean (`disabled`, `dynamic`, `running`), and `none`-styled values
+ * or `<value>` otherwise (enums such as `protocol` or `arp`, strings, numbers;
+ * CHR 7.24.5, #397). A `--query` bare name needs this: RouterOS reads
+ * `where disabled` as `disabled=yes` but `where comment` as "comment is set",
+ * and only the device knows which a property is. One request per name.
+ */
+export async function inspectWhereBooleans(
+	backend: InspectBackend,
+	menuPath: string,
+	names: readonly string[],
+): Promise<Set<string>> {
+	const booleans = new Set<string>();
+	const menu = menuPath.replace(/\/$/, "");
+	for (const name of names) {
+		const rows = (await backend.inspect(
+			"completion",
+			"",
+			`${menu}/print where ${name}=`,
+		)) as InspectCompletionItem[];
+		const values = rows
+			.filter((row) => row.style !== "syntax-meta")
+			.map((row) => `${row.style}:${row.completion}`)
+			.sort();
+		if (values.join(" ") === "arg:no arg:yes") {
+			booleans.add(name);
+		}
+	}
+	return booleans;
 }

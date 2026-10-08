@@ -151,9 +151,13 @@ describe("buildApiQuery", () => {
 		expect(
 			buildApiQuery({ endpoint: "x", query: ["actual-mtu>1000"] }),
 		).toEqual([">actual-mtu=1000"]);
+		// `where` counts a row without the property as smaller (#397).
 		expect(buildApiQuery({ endpoint: "x", query: ["mtu<2000"] })).toEqual([
 			"<mtu=2000",
+			"-mtu",
+			"#|",
 		]);
+		// A summary has not asked the device, so a bare name reads "is set".
 		expect(buildApiQuery({ endpoint: "x", query: ["running"] })).toEqual([
 			"running",
 		]);

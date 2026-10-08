@@ -174,6 +174,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"A file path contains a character the transport cannot quote (e.g. a quote or newline).",
 	},
 	{
+		code: "input/invalid-query",
+		summary:
+			"A --query expression does not parse as a `print where` condition.",
+	},
+	{
 		code: "input/invalid-radius",
 		summary:
 			"The --near radius is not a number with an optional m/km/mi/ft suffix.",
@@ -202,6 +207,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "input/max-results-exceeded",
 		summary: "Output exceeded the requested byte budget.",
+	},
+	{
+		code: "input/unsupported-query",
+		summary:
+			"A --query uses something the RouterOS API query cannot run (`~`, `in`, a `$variable` or `[command]`).",
 	},
 
 	// internal/*

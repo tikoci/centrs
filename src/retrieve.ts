@@ -12,10 +12,16 @@ import {
 	inspectChildren,
 	inspectChildrenOrEmpty,
 	inspectCompletions,
+	inspectWhereBooleans,
 	isArgumentNode,
 	isCommandNode,
 	pathTokens,
 } from "./core/inspect.ts";
+import {
+	compileQueryWords,
+	type ParsedQuery,
+	parseQueries,
+} from "./core/query.ts";
 import { toYaml } from "./core/yaml.ts";
 import {
 	CentrsError,
@@ -84,8 +90,10 @@ export interface RetrieveRequest {
 	attributes?: string | readonly string[];
 	allAttributes?: boolean;
 	listAttributes?: boolean;
-	filter?: string;
-	query?: string;
+	/** Alias of `query`; both lists are AND-ed together. */
+	filter?: string | readonly string[];
+	/** Row filters written as after `print where` (`disabled`, `mtu>=1500 and !dynamic`); several are AND-ed. */
+	query?: string | readonly string[];
 	maxResultsBytes?: number;
 	cdbFile?: string;
 	cdbPassword?: string;
@@ -123,6 +131,8 @@ export interface RetrieveRequestSummary {
 	timeoutMs: number;
 	format: RetrieveOutputFormat;
 	maxResultsBytes?: number;
+	/** The `--query` expressions, as given. */
+	query?: readonly string[];
 	/** Present when the request is a `--follow`. */
 	follow?: RetrieveFollowSettings;
 	/** Present when the request is a `--sample`. */
@@ -256,9 +266,25 @@ export interface ResolvedRetrieveRequest {
 	allAttributes: boolean;
 	listAttributes: boolean;
 	verbose: boolean;
+	/** `--query`, parsed offline; compiled to words once the device says which bare names are booleans. */
+	query?: ResolvedRetrieveQuery;
 	follow?: RetrieveFollowSettings;
 	sample?: RetrieveSampleSettings;
 	warnings: readonly RetrieveWarning[];
+}
+
+export interface ResolvedRetrieveQuery {
+	expressions: readonly string[];
+	parsed: ParsedQuery;
+}
+
+/**
+ * What a data read needs after validation: the path's shape (undefined under
+ * `--validate=false`) and the compiled `--query` words.
+ */
+export interface RetrieveReadPlan {
+	inspection: RetrieveInspection | undefined;
+	query?: readonly string[];
 }
 
 export async function retrieve(
@@ -335,11 +361,11 @@ export async function runResolvedRetrieve(
 			return applyMaxResultsBudget(envelope);
 		}
 
-		const { inspection, validation } = await validateRetrieveRead(
+		const { validation, ...plan } = await validateRetrieveRead(
 			resolved,
 			backend,
 		);
-		const data = await executeRetrieve(resolved, backend, inspection);
+		const data = await executeRetrieve(resolved, backend, plan);
 		const envelope = buildSuccessEnvelope(
 			resolved,
 			{
@@ -363,23 +389,25 @@ export async function runResolvedRetrieve(
 export async function validateRetrieveRead(
 	resolved: ResolvedRetrieveRequest,
 	backend: ProtocolAdapter,
-): Promise<{
-	inspection: RetrieveInspection | undefined;
-	validation: EnvelopeValidationMeta;
-}> {
+): Promise<RetrieveReadPlan & { validation: EnvelopeValidationMeta }> {
 	if (!resolved.validate.value) {
 		return {
 			inspection: undefined,
+			query: compileQueryWithoutValidation(resolved),
 			validation: { enabled: false, source: "disabled" },
 		};
 	}
 	const inspection = await inspectRetrievePath(resolved, backend);
 	const availableAttributes =
-		resolved.attributes.length > 0
+		resolved.attributes.length > 0 || resolved.query !== undefined
 			? await assertKnownAttributes(resolved, inspection, backend)
 			: undefined;
+	const query = resolved.query
+		? await compileValidatedQuery(resolved, resolved.query, inspection, backend)
+		: undefined;
 	return {
 		inspection,
+		query,
 		validation: {
 			enabled: true,
 			source: availableAttributes
@@ -555,6 +583,7 @@ export function retrieveRequestSummary(
 		timeoutMs: resolved.timeoutMs.value,
 		format: resolved.format.value,
 		maxResultsBytes: resolved.maxResultsBytes?.value,
+		...(resolved.query ? { query: resolved.query.expressions } : {}),
 		...(resolved.follow ? { follow: resolved.follow } : {}),
 		...(resolved.sample ? { sample: resolved.sample } : {}),
 	};
@@ -700,17 +729,23 @@ export function validateRetrieveRequestShape(
 		});
 	}
 
-	if (request.filter !== undefined || request.query !== undefined) {
+	const query = resolveRetrieveQuery(request);
+	if (query && request.follow) {
 		throw new CentrsError({
 			code: "validation/not-implemented",
-			summary:
-				"`--filter` and `--query` are not implemented yet for `retrieve`.",
+			summary: "`--query` is not implemented yet for `retrieve --follow`.",
 			remediation:
-				"Remove the flag for now, or narrow the request with `--attribute` and `--max-results` instead.",
-			context: {
-				filter: request.filter,
-				query: request.query,
-			},
+				"Follow the whole menu and filter the lines yourself, or read the filtered rows on a timer with `--sample <interval>` (#397).",
+			context: { query: query.expressions },
+		});
+	}
+	if (query && request.listAttributes) {
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary: "`--list-attributes` cannot be combined with `--query`.",
+			remediation:
+				"Run `--list-attributes` by itself to see the property names, then filter with `--query`.",
+			context: { flag: "--query" },
 		});
 	}
 
@@ -968,6 +1003,7 @@ export function buildResolvedRetrieve(
 		allAttributes: request.allAttributes ?? false,
 		listAttributes: request.listAttributes ?? false,
 		verbose: request.verbose ?? false,
+		query: resolveRetrieveQuery(request),
 		follow: resolveFollowSettings(request),
 		sample: resolveSampleSettings(request),
 		warnings: connection
@@ -1033,6 +1069,9 @@ export function resolveRetrieveGlobalContext(
 			timeoutMs: timeoutMs.value,
 			format: format.value,
 			maxResultsBytes: maxResultsBytes?.value,
+			...(queryExpressions(request).length > 0
+				? { query: queryExpressions(request) }
+				: {}),
 		},
 		settings: {
 			via: toCoreSource(via.source),
@@ -1297,6 +1336,102 @@ export async function assertKnownAttributes(
 	return availableAttributes;
 }
 
+function queryExpressions(request: RetrieveRequest): string[] {
+	return [request.filter, request.query]
+		.flatMap((value) => (value === undefined ? [] : [value].flat()))
+		.filter((expression) => expression.trim().length > 0);
+}
+
+/** Parse `--query`/`--filter` offline; a bad expression fails before any network work. */
+function resolveRetrieveQuery(
+	request: RetrieveRequest,
+): ResolvedRetrieveQuery | undefined {
+	const expressions = queryExpressions(request);
+	if (expressions.length === 0) return undefined;
+	return { expressions, parsed: parseQueries(expressions) };
+}
+
+/**
+ * Validate the predicate's property names against the menu (the device fails
+ * an unknown one silently: no rows, no trap) and ask it which bare names are
+ * booleans, then compile. A singleton has no rows to filter.
+ */
+async function compileValidatedQuery(
+	resolved: ResolvedRetrieveRequest,
+	query: ResolvedRetrieveQuery,
+	inspection: RetrieveInspection,
+	backend: ProtocolAdapter,
+): Promise<string[]> {
+	if (inspection.singleton) {
+		throw singletonQueryError(resolved, query);
+	}
+	const known = new Set([
+		...(await inspectAttributes(resolved, inspection, backend)),
+		".id",
+	]);
+	const unknown = query.parsed.names.filter((name) => !known.has(name));
+	if (unknown.length > 0) {
+		throw new CentrsError({
+			code: "validation/unknown-attribute",
+			summary: `Unknown RouterOS attribute ${unknown.join(", ")} in --query for ${resolved.path}.`,
+			remediation:
+				"RouterOS answers a query on a misspelled property with no rows, not an error. Check the name with `--list-attributes`.",
+			context: {
+				path: resolved.path,
+				parameter: unknown[0],
+				flag: "--query",
+				query: query.expressions,
+				availableAttributes: [...known].sort(),
+			},
+		});
+	}
+	const booleans = await inspectWhereBooleans(
+		backend,
+		resolved.path,
+		query.parsed.bareNames,
+	);
+	return compileQueryWords(query.parsed, booleans);
+}
+
+/**
+ * `--validate=false` skips inspect, so nothing can say whether a bare name is a
+ * boolean (`disabled=yes`) or "is set"; refuse rather than guess.
+ */
+function compileQueryWithoutValidation(
+	resolved: ResolvedRetrieveRequest,
+): string[] | undefined {
+	const query = resolved.query;
+	if (!query) return undefined;
+	if (isKnownSingletonPath(resolved.path)) {
+		throw singletonQueryError(resolved, query);
+	}
+	if (query.parsed.bareNames.length > 0) {
+		throw new CentrsError({
+			code: "input/invalid-query",
+			summary: `A bare name in --query (${query.parsed.bareNames.join(", ")}) needs validation to learn whether it is a boolean.`,
+			remediation:
+				"Drop `--validate=false`, or write a boolean out as `disabled=yes`.",
+			context: {
+				query: query.expressions,
+				bareNames: query.parsed.bareNames,
+			},
+		});
+	}
+	return compileQueryWords(query.parsed, new Set());
+}
+
+function singletonQueryError(
+	resolved: ResolvedRetrieveRequest,
+	query: ResolvedRetrieveQuery,
+): CentrsError {
+	return new CentrsError({
+		code: "usage/conflicting-flags",
+		summary: `${resolved.path} is a single record, so --query has no rows to filter.`,
+		remediation: `Read it with \`centrs retrieve <router> ${resolved.path}\`, using \`--attribute <name>\` for one value.`,
+		context: { path: resolved.path, flag: "--query", query: query.expressions },
+	});
+}
+
 async function inspectAttributes(
 	resolved: ResolvedRetrieveRequest,
 	inspection: RetrieveInspection,
@@ -1333,10 +1468,10 @@ async function inspectAttributes(
 export async function executeRetrieve(
 	resolved: ResolvedRetrieveRequest,
 	backend: ProtocolAdapter,
-	inspection: RetrieveInspection | undefined,
+	plan: RetrieveReadPlan,
 	signal?: AbortSignal,
 ): Promise<unknown> {
-	if (inspection?.singleton ?? isKnownSingletonPath(resolved.path)) {
+	if (plan.inspection?.singleton ?? isKnownSingletonPath(resolved.path)) {
 		const data = await backend.getSingleton(resolved.path, { signal });
 		if (resolved.attributes.length > 0) {
 			return projectSingletonAttributes(data, resolved.attributes);
@@ -1347,6 +1482,7 @@ export async function executeRetrieve(
 	return backend.list(resolved.path, {
 		proplist: resolved.attributes.length > 0 ? resolved.attributes : undefined,
 		detail: resolved.allAttributes,
+		query: plan.query,
 		signal,
 	});
 }

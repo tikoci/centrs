@@ -114,7 +114,7 @@ export const retrieveCommand: CliCommandMetadata = {
 			flag: "--query / --filter",
 			valueName: "<expr>",
 			description:
-				"RouterOS-side row filter (maps to `.query`). Not implemented yet — returns `validation/not-implemented`.",
+				"Row filter written as after `print where` (`disabled`, `mtu>=1500 and !dynamic`), run on the router as an API query; repeatable, AND-ed. No `~` or `in`.",
 		},
 		{
 			flag: "--follow",
@@ -421,10 +421,11 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 				request.listAttributes = true;
 				break;
 			case "--filter":
-				request.filter = expectValue(args, ++index, arg);
-				break;
 			case "--query":
-				request.query = expectValue(args, ++index, arg);
+				request.query = [
+					...[request.query ?? []].flat(),
+					expectValue(args, ++index, arg),
+				];
 				break;
 			case "--max-results":
 				request.maxResultsBytes = Number.parseInt(
