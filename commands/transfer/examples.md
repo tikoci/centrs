@@ -15,7 +15,10 @@ Conventions (provided by the harness):
 - `$A` is `<host>` and `$API_PORT` is the native-API port (`chr.ports.api`) for
   `--via native-api`.
 - `$SRC` is a small local text file (~2 KB) the harness creates; `$TMP` is a
-  scratch directory for downloads. `$BIG` is a local file **larger than 60 KB**.
+  scratch directory for downloads. `$BIG` is a local file **larger than 60 KB**:
+  every byte value, then deterministic noise, with a UTF-8 `€` straddling each
+  32 KiB `/file/read` chunk boundary. `$BIN` is the same shape at exactly 60 KB,
+  the largest the `/file/set` write cap allows.
 - Device-side paths are **bare** (a CHR has no `flash` disk, so everything
   persists for the session); the harness removes `centrs-*` test files between
   runs. The CHR free license caps throughput at 1 Mb/s, so fixtures stay small —
@@ -202,8 +205,8 @@ centrs transfer $R download centrs-big.bin $TMP/big.bin --username $U --password
 ```
 
 Envelope: `ok: true`, `meta.via="rest-api"`, `data.bytes` equals the seeded size
-(>60 KB). `$TMP/big.bin` is byte-identical to the seed — proving the chunked read
-reassembles correctly across `/file/read` calls.
+(>60 KB). `$TMP/big.bin` has the seed's sha256 — proving the chunked read
+reassembles correctly across `/file/read` calls and keeps every byte value.
 
 ## Error / transport contract
 
@@ -284,6 +287,37 @@ centrs transfer $A upload $BIG centrs-too-big.txt --via native-api --port $API_P
 
 Envelope: `ok: false`, `error.code="transport/unsupported-operation"`.
 
+## Binary contents (#404)
+
+A size check cannot see a same-length substitution, so these compare sha256.
+
+### B1. Binary round-trip over REST
+
+```bash
+centrs transfer $R upload $BIN centrs-bin-rest.bin --username $U --password $P --json
+centrs transfer $R download centrs-bin-rest.bin $TMP/bin-rest.bin --username $U --password $P --json
+```
+
+Upload envelope: `data.bytes=60000`, `data.verified="size"`. `$TMP/bin-rest.bin`
+has the sha256 of `$BIN`.
+
+### B2. Binary round-trip over native-api
+
+```bash
+centrs transfer $A upload $BIN centrs-bin-nv.bin --via native-api --port $API_PORT --username $U --password $P --json
+centrs transfer $A download centrs-bin-nv.bin $TMP/bin-nv.bin --via native-api --port $API_PORT --username $U --password $P --json
+```
+
+Same as B1.
+
+### B3. Chunked binary read over native-api
+
+```bash
+centrs transfer $A download centrs-big.bin $TMP/nv-big.bin --via native-api --port $API_PORT --username $U --password $P --json
+```
+
+Runs after S3 seeds `centrs-big.bin`. `$TMP/nv-big.bin` has the sha256 of `$BIG`.
+
 ## ssh (`--via sftp`)
 
 The first SSH consumer: a key-authenticated SFTP round-trip over the host OpenSSH
@@ -315,8 +349,9 @@ centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $U --ssh-key $K
 centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $U --ssh-key $KEY --insecure upload $BIG centrs-big.bin --json
 ```
 
-Envelope: `ok: true`. This is also the seed for example 17 (the same file then
-reads back over REST via chunked `/file/read`).
+Envelope: `ok: true`. An sftp download of it has the sha256 of `$BIG`. This is
+also the seed for examples 17 and B3 (the same file then reads back over REST and
+native-api via chunked `/file/read`).
 
 ### S4. list over sftp
 

@@ -118,6 +118,15 @@ past 60 KB) rather than quietly switching to sftp. `scp`, `fetch`, and `ftp` are
 explicit-only; `ftp` additionally requires `ALLOW_UNSAFE_PROTOCOLS=ftp` because
 it is cleartext.
 
+**File contents are bytes on `rest`/`native`.** RouterOS carries `/file`
+contents as raw bytes on both wires — REST puts bytes 0x80–0xff unescaped in the
+JSON string, so the body is not UTF-8 — and stores the UTF-8 encoding of every
+JSON code point it receives (CHR 7.23.7 + 7.24.5, #404). So the `/file`
+`get`/`read`/`set` calls run in the adapters' `binary` mode: each byte is one
+string code unit (Node `Buffer` latin1 — not WHATWG `TextDecoder("latin1")`,
+which is windows-1252), and a file name in those calls is sent as its UTF-8
+bytes. Every other command stays UTF-8 text.
+
 > Future methods documented so callers know the capability exists, behind an
 > explicit `--via`: `/system/smb` (not enabled by default) and `rose-storage`
 > (`rsync`/`nfs`/`nvme-over-tcp`/`iscsi`, needs `rose-storage.npk`).

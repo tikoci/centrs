@@ -3,8 +3,10 @@ import { createHash } from "node:crypto";
 import {
 	type ApiReply,
 	attributeWord,
+	byteStringBytes,
 	challengeResponse,
 	decodeLength,
+	decodeWord,
 	encodeLength,
 	encodeSentence,
 	encodeWord,
@@ -169,6 +171,98 @@ describe("native-api attribute value round-trip (JG-15)", () => {
 		const [sentence] = reader.push(encodeSentence(["!re", "=name"]));
 		if (!sentence) throw new Error("codec decoded no sentence");
 		expect(readAttribute(parseReply(sentence), "name")).toBe("");
+	});
+});
+
+// #404, CHR-grounded on 7.23.7 + 7.24.5: native `/file/get` and `/file/read`
+// words carry the file's raw bytes, and a raw byte `=contents=` word is stored
+// exactly. A UTF-8 decode of those words was the loss.
+describe("native-api binary words (#404)", () => {
+	const bytes = Uint8Array.of(0xff, 0x80, 0x00, 0x41);
+	const byteString = Buffer.from(bytes).toString("latin1");
+
+	test("a binary word is sent as its bytes", () => {
+		expect(hex(encodeWord(byteString, true))).toBe("04 ff 80 00 41");
+		// Control: the text path sends the UTF-8 encoding of each code unit.
+		expect(hex(encodeWord(byteString))).toBe("06 c3 bf c2 80 00 41");
+	});
+
+	test("a binary word is read back as its bytes", () => {
+		const word = decodeWord(bytes, true);
+		expect(hex(Buffer.from(word, "latin1"))).toBe("ff 80 00 41");
+		// Control: the text path replaces each invalid byte with U+FFFD.
+		expect(decodeWord(bytes)).toBe("\ufffd\ufffd\u0000A");
+	});
+
+	test("WHATWG latin1 is windows-1252, so it is not a byte decoder", () => {
+		// Bun's types list only "utf-8"/"utf-16le" labels; the runtime takes any WHATWG label.
+		const label = "latin1" as ConstructorParameters<typeof TextDecoder>[0];
+		expect(new TextDecoder(label).decode(Uint8Array.of(0x80))).toBe("\u20ac");
+		expect(decodeWord(Uint8Array.of(0x80), true)).toBe("\u0080");
+	});
+
+	test("a character above U+00FF is refused, not truncated", () => {
+		expect(() => byteStringBytes("\u20ac")).toThrow(
+			expect.objectContaining({ code: "internal/byte-string" }),
+		);
+		expect(() =>
+			encodeSentence(["/file/set", "=contents=\u20ac"], true),
+		).toThrow();
+	});
+
+	test("a session decodes only the binary command's replies as bytes", async () => {
+		const sent: Uint8Array[] = [];
+		const session = new NativeApiSession({
+			sink: { write: (chunk) => void sent.push(chunk), close: () => {} },
+			endpoint: "fake:8728",
+		});
+		const file = session.talk({
+			command: "/file/read",
+			attributes: { file: Buffer.from("café", "utf8").toString("latin1") },
+			binary: true,
+		});
+		const identity = session.talk({ command: "/system/identity/print" });
+
+		// The binary request names the file by its UTF-8 bytes.
+		expect(hex(sent[0] as Uint8Array)).toContain(
+			hex(Buffer.from("=file=café", "utf8")),
+		);
+		const reply = (words: Uint8Array[]) => {
+			const out = Buffer.concat([...words, Uint8Array.of(0)]);
+			session.handleData(out);
+		};
+		reply([
+			encodeWord("!re"),
+			encodeWord(`=data=${byteString}`, true),
+			encodeWord(".tag=t1"),
+		]);
+		reply([encodeWord("!re"), encodeWord("=name=café"), encodeWord(".tag=t2")]);
+		reply([encodeWord("!done"), encodeWord(".tag=t1")]);
+		reply([encodeWord("!done"), encodeWord(".tag=t2")]);
+
+		const [data] = await file;
+		expect(
+			hex(Buffer.from(readAttribute(data as ApiReply, "data") ?? "", "latin1")),
+		).toBe("ff 80 00 41");
+		const [name] = await identity;
+		expect(readAttribute(name as ApiReply, "name")).toBe("café");
+	});
+
+	test("a binary command's trap message stays UTF-8 text", async () => {
+		const session = new NativeApiSession({
+			sink: { write: () => {}, close: () => {} },
+			endpoint: "fake:8728",
+		});
+		const file = session.talk({ command: "/file/read", binary: true });
+		for (const words of [
+			["!trap", "=message=no such file café", ".tag=t1"],
+			["!done", ".tag=t1"],
+		]) {
+			session.handleData(encodeSentence(words));
+		}
+		await expect(file).rejects.toMatchObject({
+			context: { message: "no such file café" },
+		});
 	});
 });
 
