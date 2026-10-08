@@ -359,6 +359,24 @@ describe("transfer download (rest)", () => {
 		}
 	});
 
+	// #406: decided as `curl -o` / `scp` — the local file is replaced, no --force.
+	test("replaces an existing local file without --force", async () => {
+		const out = tmpFile("existing.txt", "precious local");
+		const fetchMock = mockFetchSequence([
+			() =>
+				json([{ ".id": "*9", name: "src.txt", type: ".txt file", size: "12" }]),
+			() => json({ ret: "hello-centrs" }),
+		]);
+		try {
+			await runTransfer(
+				baseRequest({ verb: "download", remote: "src.txt", local: out }),
+			);
+			expect(readFileSync(out, "utf8")).toBe("hello-centrs");
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
 	test("a missing remote file is a routeros error", async () => {
 		const fetchMock = mockFetchSequence([() => json([])]);
 		try {
@@ -435,6 +453,99 @@ describe("transfer download (rest)", () => {
 			}
 		});
 	}
+});
+
+// #404: file contents are bytes. RouterOS sends and stores them raw on both
+// wires (CHR 7.23.7 + 7.24.5); the UTF-8 round-trip turned 2,842 bytes into
+// 3,422 on download and 5,078 on upload.
+describe("transfer binary contents over rest (#404)", () => {
+	const bytes = Buffer.from([0xff, 0x80, 0x00, 0x41]);
+	const fileRow = (name: string, size: number) =>
+		json([{ ".id": "*9", name, type: "file", size: String(size) }]);
+
+	test("upload sends the file's bytes", async () => {
+		const local = tmpFile("bin-up.bin", bytes);
+		const fetchMock = mockFetchSequence([
+			() => json([]),
+			() => json({ ret: "*9" }),
+			() => json({}),
+			() => fileRow("bin.bin", 4),
+		]);
+		try {
+			await runTransfer(
+				baseRequest({ verb: "upload", local, remote: "bin.bin" }),
+			);
+			const body = Buffer.from(fetchMock.calls[2]?.init?.body as Uint8Array);
+			expect(body.includes(Buffer.from([0xff, 0x80]))).toBe(true);
+			expect(body.includes(Buffer.from([0xc3]))).toBe(false);
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("download writes the device's bytes", async () => {
+		const out = join(TMP, "bin-down.bin");
+		const fetchMock = mockFetchSequence([
+			() => fileRow("bin.bin", 4),
+			() =>
+				new Response(
+					Buffer.concat([
+						Buffer.from('{"ret":"'),
+						Buffer.from([0xff, 0x80]),
+						Buffer.from('\\u0000A"}'),
+					]),
+				),
+		]);
+		try {
+			await runTransfer(
+				baseRequest({ verb: "download", remote: "bin.bin", local: out }),
+			);
+			expect(readFileSync(out).equals(bytes)).toBe(true);
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("a chunked read names a non-ASCII file by its UTF-8 bytes", async () => {
+		const out = join(TMP, "bin-big.bin");
+		const name = "café.bin";
+		const big = Buffer.alloc(60_001, 0x80);
+		const fetchMock = mockFetchSequence([
+			() => fileRow(name, big.byteLength),
+			() =>
+				new Response(
+					Buffer.concat([
+						Buffer.from('[{"data":"'),
+						big.subarray(0, 32_768),
+						Buffer.from('"}]'),
+					]),
+				),
+			() =>
+				new Response(
+					Buffer.concat([
+						Buffer.from('[{"data":"'),
+						big.subarray(32_768),
+						Buffer.from('"}]'),
+					]),
+				),
+		]);
+		try {
+			await runTransfer(
+				baseRequest({ verb: "download", remote: name, local: out }),
+			);
+			expect(readFileSync(out).equals(big)).toBe(true);
+			const body = Buffer.from(fetchMock.calls[1]?.init?.body as Uint8Array);
+			expect(body.includes(Buffer.from(`"file":"${name}"`, "utf8"))).toBe(true);
+			const second = JSON.parse(
+				Buffer.from(fetchMock.calls[2]?.init?.body as Uint8Array).toString(
+					"latin1",
+				),
+			);
+			expect(second.offset).toBe("32768");
+		} finally {
+			fetchMock.restore();
+		}
+	});
 });
 
 // ── CLI: stdin/stdout positional `-` (examples 9/10, deferred from CHR) ───────

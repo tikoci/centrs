@@ -118,6 +118,15 @@ past 60 KB) rather than quietly switching to sftp. `scp`, `fetch`, and `ftp` are
 explicit-only; `ftp` additionally requires `ALLOW_UNSAFE_PROTOCOLS=ftp` because
 it is cleartext.
 
+**File contents are bytes on `rest`/`native`.** RouterOS carries `/file`
+contents as raw bytes on both wires — REST puts bytes 0x80–0xff unescaped in the
+JSON string, so the body is not UTF-8 — and stores the UTF-8 encoding of every
+JSON code point it receives (CHR 7.23.7 + 7.24.5, #404). So the `/file`
+`get`/`read`/`set` calls run in the adapters' `binary` mode: each byte is one
+string code unit (Node `Buffer` latin1 — not WHATWG `TextDecoder("latin1")`,
+which is windows-1252), and a file name in those calls is sent as its UTF-8
+bytes. Every other command stays UTF-8 text.
+
 > Future methods documented so callers know the capability exists, behind an
 > explicit `--via`: `/system/smb` (not enabled by default) and `rose-storage`
 > (`rsync`/`nfs`/`nvme-over-tcp`/`iscsi`, needs `rose-storage.npk`).
@@ -158,9 +167,16 @@ Implemented flags are generated from the CLI metadata into
 [`docs/CLI.md` → transfer](../../docs/CLI.md#transfer); this file does not
 duplicate that table. Behavior notes the generated reference cannot carry:
 
-- `--force`/`--overwrite` applies to the destination side (the local file for
-  `download`, the remote file for `upload`); the default refuses an existing
-  target with `usage/target-exists` (see *Validation*).
+- `--force`/`--overwrite` skips the existing-**device**-destination check of
+  `upload`, `mkdir` and `copy`, which by default refuse an existing target
+  with `usage/target-exists` (see *Validation*). `upload` then overwrites the
+  file; `mkdir` and `copy` still run as RouterOS's own `/file` commands.
+  `download` replaces an existing **local** file without `--force`, as
+  `curl -o` and `scp` do (#406). The local file is written only after the
+  whole remote read completes and, under the default `--verify size`, matches
+  the device's size, so a failed read or a size mismatch leaves an existing
+  file untouched. The write itself is not atomic: a local write that fails
+  part-way can leave the file truncated.
 - `--verify` details and the sftp size caveat are in *Integrity*.
 - `--timeout`: `rest`/`native` are per-request ≤ 60000 ms (a chunked read is
   many short requests, each capped); `sftp` accepts longer for a single large
@@ -265,9 +281,11 @@ success, per-target results live in `data.targets`.
 destination whose parent directory is missing or that is itself a directory
 (`input/local-destination`; centrs does not create directories), a `--via rest`
 upload that exceeds 60 KB (`transport/unsupported-operation`). The
-**refuse-overwrite** guard is a real precondition probe, not a local check:
-unless `--force`, centrs `stat`s the destination (SFTP `stat`, or `/file/print`
-for the REST family) and fails with `usage/target-exists` if it is already there.
+**refuse-overwrite** guard protects device files and is a real precondition
+probe, not a local check: unless `--force`, centrs `stat`s the device
+destination (SFTP `stat`, or `/file/print` for the REST family) and fails with
+`usage/target-exists` if it is already there. A `download` overwrites its local
+destination (see *Flags*).
 This is the "validate before write" gate applied to files — see constitution:
 validation is the product.
 

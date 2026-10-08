@@ -206,6 +206,10 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 
 	// internal/*
 	{
+		code: "internal/byte-string",
+		summary: "A binary RouterOS word held a character that is not a byte.",
+	},
+	{
 		code: "internal/devices-failed",
 		summary: "The devices command failed with an unexpected internal error.",
 	},

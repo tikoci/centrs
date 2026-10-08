@@ -485,10 +485,6 @@ async function* streamResolvedApi(
 	// Request-shape advice is known before the first reply: deliver it first,
 	// and keep it on whichever terminal summary follows (#409 review).
 	const tips = streamTips(resolved);
-	if (tips.length > 0) {
-		yield streamNoticeEnvelope(resolved, validation, tips);
-	}
-
 	const controller = new AbortController();
 	const startedAt = Date.now();
 	const counts = { frames: 0, rows: 0, empty: 0 };
@@ -529,6 +525,11 @@ async function* streamResolvedApi(
 	}
 
 	try {
+		// A consumer may return immediately after this notice; keep it inside
+		// the session cleanup scope, just like every wire reply.
+		if (tips.length > 0) {
+			yield streamNoticeEnvelope(resolved, validation, tips);
+		}
 		const protocolRequest = buildProtocolApiRequest(resolved);
 		for await (const reply of backend.stream(protocolRequest, {
 			signal: controller.signal,

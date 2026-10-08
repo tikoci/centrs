@@ -144,9 +144,32 @@ export function decodeLength(
 	return { value: value >>> 0, size };
 }
 
-/** Encode a single word: length prefix followed by its UTF-8 bytes. */
-export function encodeWord(word: string): Uint8Array {
-	const payload = utf8Encoder.encode(word);
+/**
+ * The bytes of a *byte string*: a string whose code units are each one byte
+ * (0–255), the shape `binary` commands carry file contents in. A code unit
+ * above 0xff has no byte, and `Buffer`'s latin1 encoder would silently keep
+ * only its low byte, so it is refused instead.
+ */
+export function byteStringBytes(value: string): Buffer {
+	for (let index = 0; index < value.length; index += 1) {
+		if (value.charCodeAt(index) > 0xff) {
+			throw new CentrsError({
+				code: "internal/byte-string",
+				summary: `A binary RouterOS word holds a character above U+00FF at offset ${index}.`,
+				remediation:
+					'This is a centrs bug; a binary command must carry each byte as one code unit (Buffer#toString("latin1")).',
+			});
+		}
+	}
+	return Buffer.from(value, "latin1");
+}
+
+/**
+ * Encode a single word: length prefix followed by its UTF-8 bytes, or, for a
+ * `binary` word, its byte-string bytes (see {@link byteStringBytes}).
+ */
+export function encodeWord(word: string, binary = false): Uint8Array {
+	const payload = binary ? byteStringBytes(word) : utf8Encoder.encode(word);
 	const prefix = encodeLength(payload.length);
 	const out = new Uint8Array(prefix.length + payload.length);
 	out.set(prefix, 0);
@@ -155,8 +178,11 @@ export function encodeWord(word: string): Uint8Array {
 }
 
 /** Encode a sentence: each word framed, terminated by a zero-length word. */
-export function encodeSentence(words: readonly string[]): Uint8Array {
-	const parts = words.map(encodeWord);
+export function encodeSentence(
+	words: readonly string[],
+	binary = false,
+): Uint8Array {
+	const parts = words.map((word) => encodeWord(word, binary));
 	const total = parts.reduce((sum, part) => sum + part.length, 0) + 1;
 	const out = new Uint8Array(total);
 	let cursor = 0;
@@ -169,16 +195,41 @@ export function encodeSentence(words: readonly string[]): Uint8Array {
 }
 
 /**
+ * Decode one received word. RouterOS sends words as raw bytes: UTF-8 for the
+ * text centrs reads, but `/file` contents are arbitrary bytes, which a UTF-8
+ * decode replaces with U+FFFD (#404). A `binary` word decodes as a byte string
+ * through `Buffer`'s latin1, never WHATWG `TextDecoder("latin1")`, which is
+ * windows-1252 and maps 0x80 to U+20AC.
+ */
+export function decodeWord(word: Uint8Array, binary = false): string {
+	return binary
+		? Buffer.from(word.buffer, word.byteOffset, word.byteLength).toString(
+				"latin1",
+			)
+		: utf8Decoder.decode(word);
+}
+
+/**
  * Incremental sentence reader. Accumulates TCP chunks and yields whole
- * sentences (arrays of decoded words) as they complete. Partial words and
- * partial length prefixes are buffered until the rest of the bytes arrive.
+ * sentences as they complete. Partial words and partial length prefixes are
+ * buffered until the rest of the bytes arrive.
  */
 export class SentenceReader {
 	private buffer: Uint8Array = new Uint8Array(0);
-	private current: string[] = [];
+	private current: Uint8Array[] = [];
 
-	/** Push a chunk and return any sentences completed by it. */
+	/** Push a chunk and return any sentences completed by it, UTF-8 decoded. */
 	push(chunk: Uint8Array): string[][] {
+		return this.pushRaw(chunk).map((words) =>
+			words.map((word) => decodeWord(word)),
+		);
+	}
+
+	/**
+	 * Push a chunk and return any completed sentences as raw word bytes, so the
+	 * caller picks each sentence's decoding (see {@link decodeWord}).
+	 */
+	pushRaw(chunk: Uint8Array): Uint8Array[][] {
 		if (chunk.length > 0) {
 			const next = new Uint8Array(this.buffer.length + chunk.length);
 			next.set(this.buffer, 0);
@@ -186,7 +237,7 @@ export class SentenceReader {
 			this.buffer = next;
 		}
 
-		const sentences: string[][] = [];
+		const sentences: Uint8Array[][] = [];
 		let offset = 0;
 		for (;;) {
 			const header = decodeLength(this.buffer, offset);
@@ -204,9 +255,8 @@ export class SentenceReader {
 				this.current = [];
 				continue;
 			}
-			this.current.push(
-				utf8Decoder.decode(this.buffer.subarray(wordStart, wordEnd)),
-			);
+			// Copy: the buffer is re-sliced and replaced as chunks arrive.
+			this.current.push(this.buffer.slice(wordStart, wordEnd));
 		}
 
 		if (offset > 0) {
@@ -266,6 +316,19 @@ export function parseReply(words: readonly string[]): ApiReply {
 		}
 	}
 	return { type, attributes, tag, words };
+}
+
+const TAG_PREFIX = utf8Encoder.encode(".tag=");
+
+/** The `.tag=` value of a raw sentence; ASCII, so readable before decoding. */
+function sentenceTag(words: readonly Uint8Array[]): string | undefined {
+	for (let index = 1; index < words.length; index += 1) {
+		const word = words[index] as Uint8Array;
+		if (TAG_PREFIX.every((byte, at) => word[at] === byte)) {
+			return decodeWord(word.subarray(TAG_PREFIX.length));
+		}
+	}
+	return undefined;
 }
 
 /** Read an attribute by name (variable key avoids index-signature pitfalls). */
@@ -343,10 +406,18 @@ export interface NativeApiCommand {
 	queries?: readonly string[];
 	/** `.proplist` restriction (comma-joined when an array). */
 	proplist?: readonly string[] | string;
+	/**
+	 * Every word, sent and received, is a byte string (see
+	 * {@link byteStringBytes}), not UTF-8 text. Only `transfer`'s `/file`
+	 * contents need it (#404); a non-ASCII value such as a file name must be
+	 * passed as its UTF-8 byte string.
+	 */
+	binary?: boolean;
 }
 
 interface PendingCommand {
 	command: string;
+	binary: boolean;
 	records: ApiReply[];
 	trap?: ApiReply;
 	resolve: (replies: ApiReply[]) => void;
@@ -408,9 +479,9 @@ export class NativeApiSession {
 
 	/** Feed inbound transport bytes into the parser. */
 	handleData(chunk: Uint8Array): void {
-		let sentences: string[][];
+		let sentences: Uint8Array[][];
 		try {
-			sentences = this.reader.push(chunk);
+			sentences = this.reader.pushRaw(chunk);
 		} catch (error) {
 			this.failAll(
 				error instanceof CentrsError
@@ -429,8 +500,19 @@ export class NativeApiSession {
 			if (words.length === 0) {
 				continue;
 			}
-			this.dispatch(parseReply(words));
+			const binary = this.isBinaryReply(words);
+			this.dispatch(parseReply(words.map((word) => decodeWord(word, binary))));
 		}
+	}
+
+	/** A binary command's data replies; its `!trap` message stays UTF-8 text. */
+	private isBinaryReply(words: readonly Uint8Array[]): boolean {
+		const tag = sentenceTag(words);
+		return (
+			tag !== undefined &&
+			this.pending.get(tag)?.binary === true &&
+			decodeWord(words[0] as Uint8Array) !== "!trap"
+		);
 	}
 
 	/** Notify the session the transport closed (optionally with an error). */
@@ -609,12 +691,13 @@ export class NativeApiSession {
 		return new Promise<ApiReply[]>((resolve, reject) => {
 			this.pending.set(tag, {
 				command: command.command,
+				binary: command.binary === true,
 				records: [],
 				resolve,
 				reject,
 			});
 			try {
-				this.sink.write(encodeSentence(words));
+				this.sink.write(encodeSentence(words, command.binary));
 			} catch (error) {
 				this.pending.delete(tag);
 				reject(

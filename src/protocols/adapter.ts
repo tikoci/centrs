@@ -28,6 +28,7 @@ import {
 import { MacTelnetConsole } from "./mac-telnet-console.ts";
 import {
 	type ApiReply,
+	byteStringBytes,
 	connectNativeApi,
 	type NativeApiCommand,
 	type NativeApiSession,
@@ -96,6 +97,14 @@ export interface ProtocolExecuteRequest {
 	queries?: readonly string[];
 	/** Raw CLI line for the `/rest/execute` script fallback. */
 	script?: string;
+	/**
+	 * Attribute values and reply strings are byte strings, one code unit per
+	 * byte (0–255), instead of UTF-8 text. RouterOS carries `/file` contents
+	 * as raw bytes on both wires, so this is how `transfer` moves arbitrary
+	 * bytes (#404); a non-ASCII value such as a file name must be passed as its
+	 * UTF-8 byte string. Honored by REST and native-api; not with `script`.
+	 */
+	binary?: boolean;
 }
 
 /** Result of an `execute` round-trip. */
@@ -289,6 +298,21 @@ class RestAdapter implements ProtocolAdapter {
 			return normalizeRestExecute(data);
 		}
 		const target = `${request.path.replace(/\/$/, "")}/${request.command}`;
+		if (request.binary) {
+			// RouterOS stores the UTF-8 encoding of each JSON code point, so a
+			// `\u0080` escape lands as `c2 80`; only raw bytes in the body are
+			// exact. Replies carry 0x80–0xff unescaped too (CHR, #404).
+			const response = await this.fetchRest(
+				target,
+				{
+					method: "POST",
+					body: byteStringBytes(JSON.stringify(request.attributes ?? {})),
+					headers: { "Content-Type": "application/json" },
+				},
+				true,
+			);
+			return normalizeRestExecute(response.data);
+		}
 		const data = await this.restPost<unknown>(target, request.attributes ?? {});
 		return normalizeRestExecute(data);
 	}
@@ -415,6 +439,7 @@ class RestAdapter implements ProtocolAdapter {
 	private async fetchRest(
 		path: string,
 		init: RequestInit,
+		binary = false,
 	): Promise<RestResponse> {
 		const url = joinRestUrl(this.config.baseUrl, path);
 		const headers = new Headers(init.headers);
@@ -445,7 +470,12 @@ class RestAdapter implements ProtocolAdapter {
 
 		try {
 			const response = await fetch(url, fetchInit);
-			const text = await response.text();
+			// A binary reply decodes as a byte string through Buffer's latin1;
+			// WHATWG latin1 is windows-1252 and loses 0x80–0x9f. Errors stay UTF-8
+			// text for the message.
+			const text = Buffer.from(await response.arrayBuffer()).toString(
+				binary && response.ok ? "latin1" : "utf8",
+			);
 			const data = parseResponseBody(text);
 			if (!response.ok) {
 				throw this.mapHttpFailure(response.status, text, data, path);
@@ -678,6 +708,9 @@ class NativeApiAdapter implements ProtocolAdapter {
 		}
 		if (request.queries && request.queries.length > 0) {
 			command.queries = request.queries;
+		}
+		if (request.binary) {
+			command.binary = true;
 		}
 		const replies = await this.talk(command);
 		return { records: repliesToRecords(replies) };

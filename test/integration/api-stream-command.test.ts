@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { apiStream } from "../../src/api.ts";
 import {
 	encodeSentence,
 	SentenceReader,
@@ -440,7 +441,6 @@ describe("api --stream command lifecycle (#399)", () => {
 		expect(result.lines.at(-1).data).toMatchObject({ frames: 1, rows: 1 });
 	});
 	test("a silent watch prints its notice while it is still running", async () => {
-		const startedAt = Date.now();
 		let noticeAt: number | undefined;
 		const result = await run(
 			"cancel-empty",
@@ -458,9 +458,6 @@ describe("api --stream command lifecycle (#399)", () => {
 		expect(noticeAt).toBeDefined();
 		// Printed before the duration bound, not with the summary at the end.
 		expect(exitedAt - (noticeAt ?? exitedAt)).toBeGreaterThan(1000);
-		expect((noticeAt ?? exitedAt) - startedAt).toBeLessThan(
-			exitedAt - startedAt,
-		);
 	});
 	test("a failed watch keeps its tips on the failure summary", async () => {
 		const result = await run(
@@ -621,4 +618,70 @@ describe("api --stream command lifecycle (#399)", () => {
 		expect(result.lines).toHaveLength(1);
 		expect(result.lines[0]).toEqual({ seq: "0", ".section": "7" });
 	});
+});
+
+// A notice is emitted after validation has opened the native session.
+test("returning after a library stream notice closes the validated session", async () => {
+	const readers = new WeakMap<object, SentenceReader>();
+	let signalClosed: () => void = () => {};
+	const closed = new Promise<void>((resolve) => {
+		signalClosed = resolve;
+	});
+	const sent: string[] = [];
+	const peer = Bun.listen({
+		hostname: "127.0.0.1",
+		port: 0,
+		socket: {
+			data(socket, chunk) {
+				const reader = readers.get(socket) ?? new SentenceReader();
+				readers.set(socket, reader);
+				for (const words of reader.push(new Uint8Array(chunk))) {
+					sent.push(words[0] ?? "");
+					const tag = words.find((word) => word.startsWith(".tag=")) ?? "";
+					if (words[0] === "/console/inspect") {
+						for (const name of ["ip", "address", "print"])
+							socket.write(
+								encodeSentence(["!re", `=name=${name}`, "=type=cmd", tag]),
+							);
+					}
+					socket.write(encodeSentence(["!done", tag]));
+				}
+			},
+			close() {
+				signalClosed();
+			},
+		},
+	});
+	const stream = apiStream(
+		{
+			targetInput: "127.0.0.1",
+			endpoint: "ip/address",
+			port: peer.port,
+			username: "fixture",
+			password: "dummy",
+			timeout: "1s",
+		},
+		{ HOME: taskHome, XDG_CONFIG_HOME: join(taskHome, ".config") },
+	);
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		const first = await stream.next();
+		expect(first.value?.meta.operation?.stream?.kind).toBe("notice");
+		await stream.return();
+		await Promise.race([
+			closed,
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(
+					() => reject(new Error("Native session stayed open after return")),
+					1000,
+				);
+			}),
+		]);
+		expect(sent).toContain("/console/inspect");
+		expect(sent).not.toContain("/ip/address/print");
+	} finally {
+		clearTimeout(timer);
+		await stream.return();
+		peer.stop(true);
+	}
 });
