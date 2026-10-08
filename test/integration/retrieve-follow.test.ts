@@ -43,7 +43,7 @@ function frames(out: readonly RetrieveEnvelope[]) {
 
 function summaryOf(out: readonly RetrieveEnvelope[]) {
 	const stream = streamOf(out.at(-1));
-	return stream?.kind === "summary" ? stream : undefined;
+	return stream?.kind === "summary" && "frames" in stream ? stream : undefined;
 }
 
 /**

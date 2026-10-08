@@ -18,6 +18,12 @@ Like the other typed-value codes here, this isn't `settings`-exclusive:
 flag, so the same failure shape shows up anywhere a duration string is
 resolved, not just through `settings set`.
 
+`retrieve --sample <interval>` and `retrieve --follow --sweep <period>` are
+stricter: the value needs a unit (`5s`, `500ms`, `1m`). `--sample` must be
+above zero; `--sweep 0` is allowed and turns the sweep off. A bare `--sample 5` fails here
+because RouterOS reads `interval=5` as five seconds while centrs reads a bare
+number as milliseconds; pass the unit you mean.
+
 One write detail worth knowing: `settings set timeout` writes the
 **canonical parsed milliseconds**, not the raw suffixed string you typed —
 `centrs settings set timeout 5s` writes `CENTRS_TIMEOUT=5000` to

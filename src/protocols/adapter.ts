@@ -68,9 +68,18 @@ export interface ProtocolAdapterConfig {
 }
 
 /** Projection/detail options for a menu `list`. */
-export interface RetrieveListOptions {
+export interface RetrieveListOptions extends RetrieveReadOptions {
 	proplist?: readonly string[];
 	detail?: boolean;
+}
+
+/** Options every retrieve read takes. */
+export interface RetrieveReadOptions {
+	/**
+	 * Abandon the read: REST aborts the HTTP request at once. Native reads
+	 * share the session, so they end when the adapter is closed.
+	 */
+	signal?: AbortSignal;
 }
 
 /** What an adapter can do. Lets callers pick a transport per capability. */
@@ -214,7 +223,7 @@ export interface ProtocolAdapter {
 	/** `/console/inspect` probe (`request=child` or `request=completion`). */
 	inspect(request: "child" | "completion", path: string): Promise<unknown[]>;
 	/** Read a single record (singleton menu) as an object. */
-	getSingleton(path: string): Promise<unknown>;
+	getSingleton(path: string, options?: RetrieveReadOptions): Promise<unknown>;
 	/** Read a menu as an array of records, optionally projected/detailed. */
 	list(path: string, options: RetrieveListOptions): Promise<unknown[]>;
 	/** Run a CLI-shaped command (WP-1c write surface). */
@@ -280,15 +289,18 @@ class RestAdapter implements ProtocolAdapter {
 		return this.restPost<unknown[]>("/console/inspect", { request, path });
 	}
 
-	async getSingleton(path: string): Promise<unknown> {
-		return this.restGet(path);
+	async getSingleton(
+		path: string,
+		options: RetrieveReadOptions = {},
+	): Promise<unknown> {
+		return this.restGet(path, options.signal);
 	}
 
 	async list(path: string, options: RetrieveListOptions): Promise<unknown[]> {
 		const hasProjection =
 			(options.proplist?.length ?? 0) > 0 || options.detail === true;
 		if (!hasProjection) {
-			return (await this.restGet(path)) as unknown[];
+			return (await this.restGet(path, options.signal)) as unknown[];
 		}
 		const body: { ".proplist"?: readonly string[]; detail?: string } = {};
 		if (options.proplist && options.proplist.length > 0) {
@@ -297,7 +309,11 @@ class RestAdapter implements ProtocolAdapter {
 		if (options.detail) {
 			body.detail = "true";
 		}
-		return this.restPost<unknown[]>(`${path.replace(/\/$/, "")}/print`, body);
+		return this.restPost<unknown[]>(
+			`${path.replace(/\/$/, "")}/print`,
+			body,
+			options.signal,
+		);
 	}
 
 	async execute(
@@ -432,19 +448,21 @@ class RestAdapter implements ProtocolAdapter {
 		return response.data;
 	}
 
-	private async restGet(path: string): Promise<unknown> {
-		const response = await this.fetchRest(path, { method: "GET" });
+	private async restGet(path: string, signal?: AbortSignal): Promise<unknown> {
+		const response = await this.fetchRest(path, { method: "GET", signal });
 		return response.data;
 	}
 
 	private async restPost<T = unknown>(
 		path: string,
 		body: Record<string, unknown>,
+		signal?: AbortSignal,
 	): Promise<T> {
 		const response = await this.fetchRest(path, {
 			method: "POST",
 			body: JSON.stringify(body),
 			headers: { "Content-Type": "application/json" },
+			signal,
 		});
 		return response.data as T;
 	}
@@ -477,7 +495,10 @@ class RestAdapter implements ProtocolAdapter {
 		} = {
 			...init,
 			headers,
-			signal: controller.signal,
+			// A caller's signal abandons the request; the timeout still applies.
+			signal: init.signal
+				? AbortSignal.any([controller.signal, init.signal])
+				: controller.signal,
 			tls: { rejectUnauthorized: this.config.insecure !== true },
 		};
 

@@ -292,9 +292,9 @@ A multi-target **RouterOS write** (e.g. `execute` / `api` add/set/remove across 
 selection) is gated by **`--yes`**, confirmed **once** up front; when it is missing
 the error names the blast radius (how many routers). The separate **`--force`**
 gate is scoped to destructive **`devices` CDB mutations** (e.g. `devices remove`
-across a group), not RouterOS writes. `terminal`, `api --stream` and
-`retrieve --follow` are single-session, not fan-out surfaces, and reject N>1 with
-`usage/fanout-not-supported`; `api --raw` is rejected in fan-out mode with
+across a group), not RouterOS writes. `terminal`, `api --stream`,
+`retrieve --follow` and `retrieve --sample` are single-session, not fan-out
+surfaces, and reject N>1 with `usage/fanout-not-supported`; `api --raw` is rejected in fan-out mode with
 `usage/conflicting-flags` (it strips the per-target envelope).
 
 `--where` filters *which devices* by CDB-stored facts; keep it distinct from
@@ -372,7 +372,7 @@ Per-operation preferences, downgrade order in parens:
 
 | Operation | Preferred | Downgrade order |
 | --------- | --------- | --------------- |
-| retrieve  | rest-api, native-api; snmp for OID/MIB reads (future); `--follow` native-api only | rest-api, native-api (`--follow`: no downgrade) |
+| retrieve  | rest-api, native-api (`--sample` too); snmp for OID/MIB reads (future); `--follow` native-api only | rest-api, native-api (`--follow`: no downgrade) |
 | api       | rest-api, native-api; `--stream` and `/listen` native-api only | rest-api, native-api (no silent downgrade) |
 | execute   | native-api → rest-api → mac-telnet | native-api, rest-api, mac-telnet, ssh, romon, winbox-terminal |
 | terminal  | ssh | mac-telnet (L2 only when ssh fails or MAC given) |

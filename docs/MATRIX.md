@@ -69,6 +69,11 @@ and implementation sequencing in the linked issues.
   does not send. Unfiltered and single-target; `CHR-passed` by
   `test/integration/retrieve-follow.test.ts` (FL1–FL9, 7.23.7 and 7.24.5).
   Filtered follow waits on #397.
+- `retrieve --sample <interval>` repeats the one-shot read on a timer, one
+  line per complete read, over rest-api or native-api: the answer for counters
+  and state `listen` never reports. RouterOS's `print interval=` was measured
+  and not used (no end-of-tick marker). Single-target; `CHR-passed` by
+  `test/integration/retrieve-sample.test.ts` (SA1–SA6, 7.23.7 and 7.24.5).
 - `discover / mndp` is grounded by `commands/discover/README.md`,
   `src/data/mndp.ts`, `src/data/mndp-cache.ts`, and
   `test/integration/discover.test.ts`.
@@ -164,7 +169,7 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 field poll with `sleep` where a native follow would answer. In order:
 (1) done: #402, literal `api --stream` with `!empty` frames and
 `--format ndjson`; (2) done: `retrieve --follow` (#396, unfiltered);
-(3) next: `retrieve --sample`; (4) #397, then #364 on `--follow`;
+(3) done: `retrieve --sample`; (4) next: #397, then #364 on `--follow`;
 (5) #398 and #401. Each slice's contract lives in its command
 README. Live `explain` (below) resumes after this line.
 

@@ -470,3 +470,66 @@ follow bootstraps and runs. Applying every line in order must equal a fresh
 row removed by a sweep while it still exists. #396 round 3 measured 0 errors
 over about 14.7k writes with this bootstrap; arrival-order merging failed the
 same harness.
+
+## Sample (`--sample`)
+
+Contract: [README → Sample](README.md#sample---sample). `$R` and `$A`/`$API_PORT`
+as above. Covered by `test/integration/retrieve-sample.test.ts`; cadence, the
+in-flight read at a stop, and the flag rules are pinned in
+`test/unit/retrieve-sample.test.ts`.
+
+### SA1. Three samples, one interval apart, on either transport
+
+```bash
+centrs retrieve $R /ip/address --sample 1s --count 3 --username $U --password $P --json
+centrs retrieve $A /ip/address --via native-api --sample 1s --count 3 --port $API_PORT --username $U --password $P --json
+```
+
+Each run prints three `sample` lines (`index` 1–3, `data` a row array) and a
+summary with `stopReason: "count-reached"`, `samples: 3`. Consecutive `at`
+values are at least one second apart. `meta.via` is the transport used.
+
+### SA2. Counters `listen` never reports
+
+```bash
+centrs retrieve $A /interface --via native-api --attributes name,rx-byte --sample 1s --count 3 --port $API_PORT --username $U --password $P --json
+```
+
+Every row has only `name` and `rx-byte`. `ether1`'s `rx-byte` in the third
+sample is higher than in the first, since the test's own API traffic arrives
+on `ether1`.
+
+### SA3. A singleton with one `--attribute`
+
+```bash
+centrs retrieve $R /system/resource --attribute uptime --sample 1s --count 2 --username $U --password $P --json
+```
+
+Each sample's `data` is the bare `uptime` string, and the two differ.
+
+### SA4. A removal is absence in the next sample
+
+```bash
+centrs retrieve $A /ip/firewall/address-list --via native-api --sample 500ms --count 2 --port $API_PORT --username $U --password $P --json
+```
+
+Add an address-list row before the run and remove it after the first sample.
+The first sample's rows include its `.id`; the second sample's do not.
+
+### SA5. `--follow` and `--sample` are exclusive
+
+```bash
+centrs retrieve $R /ip/address --sample 1s --follow --username $U --password $P --json
+```
+
+One envelope: `ok: false`, `usage/conflicting-flags`, exit 1. No summary.
+
+### SA6. NDJSON is readable before the process exits; Ctrl-C ends it cleanly
+
+```bash
+centrs retrieve $A /system/resource --via native-api --sample 1s --format ndjson --port $API_PORT --username $U --password $P
+```
+
+Run as a subprocess. The first `sample` line parses while the process is still
+running; after `SIGINT` the last line is a successful summary with
+`stopReason: "interrupted"`, and the exit code is 0.

@@ -1,8 +1,9 @@
 # retrieve
 
 Status: `CHR-passed` over `rest-api` and `native-api`, including multi-target
-fan-out (see **Target selection**) and `--follow` over `native-api` (see
-**Follow**). `snmp` is `not-started`. Matches `docs/MATRIX.md`.
+fan-out (see **Target selection**), `--follow` over `native-api` (see
+**Follow**) and `--sample` over both (see **Sample**). `snmp` is
+`not-started`. Matches `docs/MATRIX.md`.
 
 Read RouterOS state. RouterOS menu reads model `<path>/<verb>` where the verb
 is `print`-style (`print`, `get`, and async POST-shaped reads as they're
@@ -191,12 +192,14 @@ slice is unfiltered: `--query`/`--filter` are still `validation/not-implemented`
   An `id` that changed since that sweep was sent is never removed by it. A
   failed sweep ends the follow with an error; it never infers a removal. A
   sweep only checks membership: it does not repair a missed field update or
-  report rows `listen` never announced. `--sweep 0` turns it off, with a
-  notice tip saying view-menu removals will not be reported.
+  report rows `listen` never announced. `--sweep` needs a unit (`10s`,
+  `500ms`); a bare number fails `settings/invalid-timeout`, as for `--sample`.
+  `--sweep 0` turns it off, with a notice tip saying view-menu removals will
+  not be reported.
 - **What `listen` never reports.** Hot counters (`rx-byte`, firewall
   `bytes`/`packets`) and some protocol state (BFD sessions accept `listen` but
-  stay silent). The follow is correct but quiet there; a periodic sample
-  (`retrieve --sample`, planned) is the answer for those.
+  stay silent). The follow is correct but quiet there; `--sample` (below)
+  is the answer for those.
 - **Projection.** `--attribute(s)` projects `data`; centrs still asks RouterOS
   for `.id,.dead` and removes them from `data` unless you named them.
   `--all-attributes` sends `detail` to both `listen` and `print`.
@@ -210,12 +213,14 @@ includes the bootstrap. Ctrl-C (`SIGINT`) stops it. Each ends with a
 successful summary whose `stopReason` is `count-reached`, `duration-elapsed`,
 or `interrupted`. A RouterOS error, a lost connection, a failed sweep or a full
 buffer ends it with a failed summary (`ok: false`, `stopReason`
-`routeros-error` or `transport-error`), whose counts are partial. Buffers are
+`routeros-error` or `transport-error`), whose counts are partial.
+`routeros-error` means RouterOS answered with an error; `transport-error`
+covers every other failure, and `error.code` names the cause. Buffers are
 bounded: if more than 50,000 changes are waiting (a consumer that stopped
 reading, or a burst during a long snapshot), the follow ends with
 `transport/stream-overflow`. The state you hold is stale; follow again to get a
-new snapshot. `--count`, `--duration` and `--sweep` without `--follow` fail
-`usage/conflicting-flags`.
+new snapshot. `--sweep` without `--follow`, and `--count` or `--duration`
+without `--follow` or `--sample`, fail `usage/conflicting-flags`.
 
 **Format.** Under `--follow`, `json`, `yaml` and `ndjson` all print one compact
 envelope per line (as `api --stream` does); `text` prints one short row per
@@ -231,6 +236,73 @@ Recipes (bounded, so an agent can run them unattended):
 centrs retrieve $R /ip/address --follow --duration 30s
 # Wait for the next change, at most 60s.
 centrs retrieve $R /ip/address --follow --count 1 --duration 60s
+```
+
+## Sample (`--sample`)
+
+`retrieve <router> <menu> --sample <interval>` reads the menu again every
+interval: one line per complete read, as NDJSON. It sees what `--follow`
+cannot (hot counters such as `rx-byte`, and state `listen` never announces),
+at the cost of missing whatever changes and changes back between two reads.
+
+**What starts it.** `--sample` with an interval that has a unit (`5s`,
+`500ms`, `1m`). A bare number fails `settings/invalid-timeout`: RouterOS reads
+`interval=5` as seconds and centrs reads `5` as milliseconds, so centrs does
+not guess. Any readable menu works, list or singleton. Each sample is the
+ordinary one-shot read (`print` or `get`) with the same validation (once, before
+the first read), projection and transport as `retrieve` without `--sample`:
+`rest-api` by default, `native-api` when pinned. Single target only; a fan-out
+selector fails `usage/fanout-not-supported`. `--follow` with `--sample` fails
+`usage/conflicting-flags`.
+
+Why reads and not RouterOS's own `print interval=`: on CHR 7.24.5 that feed has
+no end-of-tick marker, so a tick is only known complete when the next tick (or
+`!empty`) arrives, one whole interval later. A tick heavier than its interval
+also stalls the connection. A one-shot read ends with its own `!done` or HTTP
+response, so every sample is known complete when it arrives. The raw tick feed
+stays available as `api <router> <menu>/print -X POST -f interval=1s --stream`
+(`commands/api/README.md`).
+
+**What each line means.** Every line is one envelope; read
+`meta.operation.stream`:
+
+| `kind` | When | `data` | Fields |
+| ------ | ---- | ------ | ------ |
+| `sample` | One complete read | the whole read: a row array (list), the record (singleton), or the bare value (one `--attribute` on a singleton) | `index` (1-based), `at` (when the read was sent, host clock, ISO 8601), `readMs` |
+| `summary` | Last, exactly once | the counts | `stopReason`, `samples`, `durationMs` |
+
+- **A sample is the whole state at that read.** A row missing from a sample
+  was gone when it was read; there is no separate removal line. A list read
+  with no rows is `data: []`, still a complete sample.
+- **Cadence.** Reads start one interval apart, measured start to start. A
+  read slower than the interval delays the next read rather than overlapping
+  it, and missed slots are not made up in a burst. `at` gives the real spacing,
+  which is what a counter rate needs.
+- **Not an event log.** A change shorter than the interval can fall between
+  two reads. Use `--follow` for object changes RouterOS announces.
+
+**What ends it.** `--count N` stops after N samples. `--duration <d>` is a
+wall-clock bound counted from the end of validation. Ctrl-C (`SIGINT`) stops
+it. Each ends with a successful summary whose `stopReason` is `count-reached`,
+`duration-elapsed` or `interrupted`. A read still in flight when the run stops
+is not reported, because it is not complete. A failed read (a RouterOS error,
+a lost connection, a timeout) ends the run with a failed summary (`ok: false`,
+`stopReason` `routeros-error` or `transport-error`, as for `--follow`)
+carrying the partial `samples` count; there is no retry. `--list-attributes`, `--max-results` and
+`--sweep` conflict with `--sample` (`usage/conflicting-flags`).
+
+**Format.** As for `--follow`: `json`, `yaml` and `ndjson` print one compact
+envelope per line, and `text` prints `index`, `at` and the data on one line.
+Every envelope, errors included, goes to stdout; the exit code is nonzero for
+any failure, even after samples.
+
+Recipes (bounded, so an agent can run them unattended):
+
+```bash
+# Interface counters every 5s, three samples.
+centrs retrieve $R /interface --attributes name,rx-byte,tx-byte --sample 5s --count 3
+# CPU load once a second for a minute.
+centrs retrieve $R /system/resource --attribute cpu-load --sample 1s --duration 1m
 ```
 
 ## Target selection

@@ -18,11 +18,12 @@ import {
 	type RetrieveRequest,
 	renderRetrieveEnvelope,
 	renderRetrieveFanoutEnvelope,
-	renderRetrieveFollowLine,
+	renderRetrieveStreamLine,
 	retrieve,
 	retrieveFanout,
 	retrieveFollow,
 	retrieveOutputFormats,
+	retrieveSample,
 } from "../index.ts";
 import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
@@ -60,7 +61,7 @@ export const retrieveCommand: CliCommandMetadata = {
 			flag: "--via",
 			valueName: "<protocol>",
 			description:
-				"Pin the protocol selector. Defaults to `rest-api` for retrieve, and to `native-api` under `--follow`.",
+				"Pin the protocol selector. Defaults to `rest-api` for retrieve (`--sample` included), and to `native-api` under `--follow`.",
 		},
 		...selectionCommandOptions,
 		{
@@ -121,22 +122,28 @@ export const retrieveCommand: CliCommandMetadata = {
 				"Keep the menu's rows current over native-api `listen`: snapshot frames, a `synced` line, then a line per change, then a summary (NDJSON for json/yaml/ndjson). Single target, list menus whose print takes follow-only.",
 		},
 		{
+			flag: "--sample",
+			valueName: "<interval>",
+			description:
+				"Read the menu again every interval (with a unit, e.g. `5s`): one line per complete read, then a summary (NDJSON for json/yaml/ndjson). Sees what `--follow` cannot, such as counters. Single target; rest-api or native-api.",
+		},
+		{
 			flag: "--sweep",
 			valueName: "<duration>",
 			description:
-				"`--follow` only: how often an `.id` sweep finds removals RouterOS does not send (view menus such as `/interface/<type>`). Default `10s`; `0` turns it off.",
+				"`--follow` only: how often an `.id` sweep finds removals RouterOS does not send (view menus such as `/interface/<type>`). Needs a unit; default `10s`; `0` turns it off.",
 		},
 		{
 			flag: "--count",
 			valueName: "<n>",
 			description:
-				"`--follow` only: stop after N live changes. Snapshot frames and `synced` do not count.",
+				"`--follow`: stop after N live changes (snapshot frames and `synced` do not count). `--sample`: stop after N samples.",
 		},
 		{
 			flag: "--duration",
 			valueName: "<duration>",
 			description:
-				"`--follow` only: stop after this wall-clock window, bootstrap included (e.g. `30s`).",
+				"`--follow`/`--sample`: stop after this wall-clock window (e.g. `30s`), counted from the end of validation.",
 		},
 		{
 			flag: "--format",
@@ -202,17 +209,16 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 		// single-target envelope.
 		const selectionFlags = request.selectionFlags ?? emptySelectionFlags();
 		const targetPositionals = request.targetPositionals ?? [];
-		if (request.follow) {
+		if (request.follow || request.sample !== undefined) {
+			const mode = request.follow ? "--follow" : "--sample";
 			if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 				throw new CentrsError({
 					code: "usage/fanout-not-supported",
-					summary:
-						"`retrieve --follow` follows one router and cannot fan out across multiple targets.",
-					remediation:
-						"Follow a single router (no `--group`/`--where`/`--all`/`--default`/multiple positionals); run one follow per router to watch several.",
+					summary: `\`retrieve ${mode}\` watches one router and cannot fan out across multiple targets.`,
+					remediation: `Watch a single router (no \`--group\`/\`--where\`/\`--all\`/\`--default\`/multiple positionals); run one \`${mode}\` per router to watch several.`,
 				});
 			}
-			return await runRetrieveFollowCli(request, args);
+			return await runRetrieveStreamCli(request, args);
 		}
 		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 			return await runRetrieveFanoutCli(
@@ -282,11 +288,11 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 }
 
 /**
- * Every `--follow` envelope goes to stdout, one per line, errors included; any
- * failure sets exit 1, even after successful frames. Ctrl-C asks for a
- * bounded stop that still ends with a summary.
+ * Every `--follow`/`--sample` envelope goes to stdout, one per line, errors
+ * included; any failure sets exit 1, even after successful lines. Ctrl-C asks
+ * for a bounded stop that still ends with a summary.
  */
-async function runRetrieveFollowCli(
+async function runRetrieveStreamCli(
 	request: RetrieveCliArgs,
 	args: readonly string[],
 ): Promise<number> {
@@ -296,12 +302,13 @@ async function runRetrieveFollowCli(
 	process.on("SIGINT", onSigint);
 	let exitCode = 0;
 	try {
-		for await (const envelope of retrieveFollow(request, Bun.env, {
+		const stream = request.follow ? retrieveFollow : retrieveSample;
+		for await (const envelope of stream(request, Bun.env, {
 			signal: controller.signal,
 		})) {
 			// A config-file `CENTRS_FORMAT` is known only after resolution.
 			const resolvedFormat = envelope.meta.operation?.request.format ?? format;
-			console.log(renderRetrieveFollowLine(envelope, resolvedFormat));
+			console.log(renderRetrieveStreamLine(envelope, resolvedFormat));
 			if (!envelope.ok) exitCode = 1;
 		}
 	} finally {
@@ -446,6 +453,9 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 			case "--follow":
 				request.follow = true;
 				break;
+			case "--sample":
+				request.sample = expectValue(args, ++index, arg);
+				break;
 			case "--sweep":
 				request.sweep = expectValue(args, ++index, arg);
 				break;
@@ -541,7 +551,7 @@ function parseCountFlag(value: string): number {
 			code: "settings/invalid-integer",
 			summary: `\`--count\` must be a positive integer. Received: ${value}`,
 			remediation:
-				"Pass how many live changes to wait for, e.g. `--count 1` for the next change.",
+				"Pass how many live changes (`--follow`) or samples (`--sample`) to wait for, e.g. `--count 1`.",
 			context: { flag: "--count" },
 		});
 	}

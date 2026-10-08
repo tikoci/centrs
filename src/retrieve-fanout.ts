@@ -194,13 +194,15 @@ export async function retrieveFanout(
 	internals: RetrieveFanoutInternals = {},
 	options: RetrieveFanoutOptions = {},
 ): Promise<RetrieveFanoutEnvelope> {
-	if (request.follow) {
+	if (request.follow || request.sample !== undefined) {
+		const [flag, fn, capability] = request.follow
+			? ["--follow", "retrieveFollow", "follow"]
+			: ["--sample", "retrieveSample", "sample"];
 		throw new CentrsError({
 			code: "usage/fanout-not-supported",
-			summary:
-				"`retrieve --follow` follows one router and cannot fan out across multiple targets.",
-			remediation: "Call `retrieveFollow()` once per router to watch several.",
-			context: { capability: "follow" },
+			summary: `\`retrieve ${flag}\` watches one router and cannot fan out across multiple targets.`,
+			remediation: `Call \`${fn}()\` once per router to watch several.`,
+			context: { capability },
 		});
 	}
 	const attributeSelections = validateRetrieveRequestShape(request);
