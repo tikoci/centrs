@@ -47,8 +47,9 @@ export function streamEnvelope(
 
 /**
  * The failed summary that ends a stream after it started: the error, plus the
- * partial counts as a `summary` marker whose `stopReason` says which side
- * failed.
+ * partial counts as a `summary` marker. `stopReason` is `routeros-error` when
+ * RouterOS answered with an error and `transport-error` for anything else
+ * (the same split as `api --stream`); `error.code` names the cause.
  */
 export function failedStreamEnvelope(
 	resolved: ResolvedRetrieveRequest,

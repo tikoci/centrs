@@ -41,6 +41,8 @@ class FakeRestRouter {
 	/** Answer the Nth data read (1-based) with a RouterOS error. */
 	failRead: number | undefined;
 	readonly reads: Array<{ start: number; end: number }> = [];
+	/** Data reads whose client went away before the answer. */
+	aborted = 0;
 	private inFlight = 0;
 	maxInFlight = 0;
 	private readonly server: Server<undefined>;
@@ -72,6 +74,7 @@ class FakeRestRouter {
 		this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
 		try {
 			if (this.readDelayMs > 0) await Bun.sleep(this.readDelayMs);
+			if (req.signal.aborted) this.aborted += 1;
 			if (this.failRead === this.reads.length + 1) {
 				return Response.json(
 					{ error: 400, message: "Bad Request", detail: "no such item" },
@@ -293,6 +296,15 @@ describe("retrieveSample bounds", () => {
 			samples: 0,
 		});
 		expect(summaryOf(out)?.durationMs).toBeLessThan(400);
+	});
+
+	test("a stop aborts the REST read in flight instead of leaving it running", async () => {
+		const router = fakeRouter();
+		router.readDelayMs = 300;
+		await sample(request(router, { duration: "50ms" }));
+		await Bun.sleep(400);
+		expect(router.reads).toHaveLength(1);
+		expect(router.aborted).toBe(1);
 	});
 
 	test("an abort signal ends with a successful interrupted summary", async () => {

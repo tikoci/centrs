@@ -92,8 +92,12 @@ export async function* retrieveSample(
 	const stopped = new Promise<void>((resolve) => {
 		wakeStop = resolve;
 	});
+	// Abandons the read in flight: REST aborts its request; a native read ends
+	// when the session closes below.
+	const abandon = new AbortController();
 	const stop = (reason: RetrieveSampleStopReason): void => {
 		stopReason ??= reason;
+		abandon.abort();
 		wakeStop();
 	};
 	const onAbort = (): void => stop("interrupted");
@@ -117,9 +121,12 @@ export async function* retrieveSample(
 		try {
 			while (stopReason === undefined) {
 				const sentAt = Date.now();
-				const read = executeRetrieve(resolved, backend, inspection).then(
-					(data) => ({ data }),
-				);
+				const read = executeRetrieve(
+					resolved,
+					backend,
+					inspection,
+					abandon.signal,
+				).then((data) => ({ data }));
 				// A read abandoned by a stop may still fail later; nobody awaits it.
 				read.catch(() => {});
 				const result = await Promise.race([read, stopped]);
@@ -172,6 +179,8 @@ export async function* retrieveSample(
 			startedAt,
 		);
 	} finally {
+		// A consumer that stopped reading early lands here directly.
+		abandon.abort();
 		clearTimeout(durationTimer);
 		options.signal?.removeEventListener("abort", onAbort);
 		await backend.close();

@@ -103,7 +103,7 @@ export interface RetrieveRequest {
 	sample?: string | number;
 	/** `--follow`: stop after this many `live` frames; `--sample`: after this many samples. */
 	count?: number;
-	/** `--follow`/`--sample`: wall-clock bound, validation included (e.g. `30s`). */
+	/** `--follow`/`--sample`: wall-clock bound counted from the end of validation (e.g. `30s`). */
 	duration?: string | number;
 }
 
@@ -1334,9 +1334,10 @@ export async function executeRetrieve(
 	resolved: ResolvedRetrieveRequest,
 	backend: ProtocolAdapter,
 	inspection: RetrieveInspection | undefined,
+	signal?: AbortSignal,
 ): Promise<unknown> {
 	if (inspection?.singleton ?? isKnownSingletonPath(resolved.path)) {
-		const data = await backend.getSingleton(resolved.path);
+		const data = await backend.getSingleton(resolved.path, { signal });
 		if (resolved.attributes.length > 0) {
 			return projectSingletonAttributes(data, resolved.attributes);
 		}
@@ -1346,6 +1347,7 @@ export async function executeRetrieve(
 	return backend.list(resolved.path, {
 		proplist: resolved.attributes.length > 0 ? resolved.attributes : undefined,
 		detail: resolved.allAttributes,
+		signal,
 	});
 }
 

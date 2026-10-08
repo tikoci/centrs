@@ -213,7 +213,9 @@ includes the bootstrap. Ctrl-C (`SIGINT`) stops it. Each ends with a
 successful summary whose `stopReason` is `count-reached`, `duration-elapsed`,
 or `interrupted`. A RouterOS error, a lost connection, a failed sweep or a full
 buffer ends it with a failed summary (`ok: false`, `stopReason`
-`routeros-error` or `transport-error`), whose counts are partial. Buffers are
+`routeros-error` or `transport-error`), whose counts are partial.
+`routeros-error` means RouterOS answered with an error; `transport-error`
+covers every other failure, and `error.code` names the cause. Buffers are
 bounded: if more than 50,000 changes are waiting (a consumer that stopped
 reading, or a burst during a long snapshot), the follow ends with
 `transport/stream-overflow`. The state you hold is stale; follow again to get a
@@ -285,8 +287,8 @@ it. Each ends with a successful summary whose `stopReason` is `count-reached`,
 `duration-elapsed` or `interrupted`. A read still in flight when the run stops
 is not reported, because it is not complete. A failed read (a RouterOS error,
 a lost connection, a timeout) ends the run with a failed summary (`ok: false`,
-`stopReason` `routeros-error` or `transport-error`) carrying the partial
-`samples` count; there is no retry. `--list-attributes`, `--max-results` and
+`stopReason` `routeros-error` or `transport-error`, as for `--follow`)
+carrying the partial `samples` count; there is no retry. `--list-attributes`, `--max-results` and
 `--sweep` conflict with `--sample` (`usage/conflicting-flags`).
 
 **Format.** As for `--follow`: `json`, `yaml` and `ndjson` print one compact
