@@ -22,6 +22,7 @@ import {
 	mkdtempSync,
 	readFileSync,
 	rmSync,
+	type Stats,
 	statSync,
 	writeFileSync,
 } from "node:fs";
@@ -1280,11 +1281,24 @@ function checkLocalSink(resolved: ResolvedTransferRequest): void {
 		return;
 	}
 	const parent = dirname(local);
-	if (!statSync(parent, { throwIfNoEntry: false })?.isDirectory()) {
+	if (!statLocal(local, parent)?.isDirectory()) {
 		throw localSinkError(local, `has no parent directory ${parent}`);
 	}
-	if (statSync(local, { throwIfNoEntry: false })?.isDirectory()) {
+	if (statLocal(local, local)?.isDirectory()) {
 		throw localSinkError(local, "is a directory");
+	}
+}
+
+/**
+ * `statSync` for the sink preflight. Only a missing entry reads as absent;
+ * `throwIfNoEntry` does not cover EACCES, ENOTDIR or ELOOP, and those are
+ * still the caller's path, not a centrs fault.
+ */
+function statLocal(local: string, path: string): Stats | undefined {
+	try {
+		return statSync(path, { throwIfNoEntry: false });
+	} catch (error) {
+		throw localSinkError(local, `cannot be checked (${path})`, error);
 	}
 }
 
