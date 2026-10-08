@@ -474,6 +474,35 @@ describe("native-api listen() streaming", () => {
 	});
 	// #402: a zero-row `print interval=` tick is an `!empty`; dropping it hid
 	// that the tick happened at all. A one-shot `talk` still returns no rows.
+	// #402 review: `afterStop` is decided when a reply ARRIVES, so a row that
+	// was queued before the stop is not relabelled when consumed after it.
+	test("marks afterStop at arrival, not at consumption", async () => {
+		const transport = new FakeTransport();
+		const controller = new AbortController();
+		const gen = transport.apiSession.listen(
+			{ command: "/ip/address/listen" },
+			{ signal: controller.signal },
+		);
+		const first = gen.next();
+		const tag = transport.lastTag();
+		transport.reply(["!re", "=.id=*1", `.tag=${tag}`]);
+		expect(((await first).value as ApiReply).afterStop).toBeUndefined();
+		transport.reply(["!re", "=.id=*2", `.tag=${tag}`]); // queued, unread
+		controller.abort();
+		transport.reply(
+			["!trap", "=category=2", "=message=interrupted", `.tag=${tag}`],
+			["!empty", `.tag=${tag}`],
+			["!done", `.tag=${tag}`],
+		);
+		const queued = (await gen.next()).value as ApiReply;
+		expect(readAttribute(queued, ".id")).toBe("*2");
+		expect(queued.afterStop).toBeUndefined();
+		const drained = (await gen.next()).value as ApiReply;
+		expect(drained.type).toBe("!empty");
+		expect(drained.afterStop).toBe(true);
+		expect((await gen.next()).done).toBe(true);
+	});
+
 	test("yields !empty to a stream but not as a talk record", async () => {
 		const transport = new FakeTransport();
 		const gen = transport.apiSession.listen({

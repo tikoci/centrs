@@ -377,7 +377,8 @@ export function parseApiCliArgs(args: readonly string[]): ApiCliArgs {
 /**
  * The exact command `--listen` meant (#402): a GET becomes the menu's
  * `/listen` endpoint, anything else keeps its command and streams. Secrets in
- * the original arguments are not echoed back.
+ * the original arguments are not echoed back: auth flags, a `-d` body (any
+ * JSON field may be one), and `-f` values whose key names a secret.
  */
 function listenReplacement(
 	args: readonly string[],
@@ -397,16 +398,28 @@ function listenReplacement(
 			continue;
 		}
 		words.push(shellWord(arg));
-		if (
-			(arg === "--password" || arg === "--cdb-password") &&
-			index + 1 < args.length
-		) {
+		const value = args[index + 1];
+		if (value === undefined) continue;
+		if (arg === "--password" || arg === "--cdb-password") {
 			words.push("<password>");
+			index += 1;
+		} else if (arg === "-d" || arg === "--data") {
+			words.push("<json>");
+			index += 1;
+		} else if (
+			(arg === "-f" || arg === "--field") &&
+			SECRET_FIELD.test(value.split("=", 1)[0] ?? "")
+		) {
+			// A placeholder, like `<password>` and `<router>`: left unquoted.
+			words.push(`${shellWord(value.split("=", 1)[0] ?? "")}=<secret>`);
 			index += 1;
 		}
 	}
 	return `centrs api ${words.join(" ")}`;
 }
+
+/** Field names whose values are credentials (RouterOS: password, secret, psk, private-key, …). */
+const SECRET_FIELD = /pass|secret|psk|key|token|auth/i;
 
 function shellWord(word: string): string {
 	return /^[\w@%+=:,./*-]+$/.test(word)
@@ -531,7 +544,7 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 					verbose: parsed.verbose ?? false,
 				}),
 			);
-		} else if (format === "json" || format === "yaml") {
+		} else if (format !== "text") {
 			const envelope = withTips(
 				buildApiErrorEnvelope(parsed ?? { endpoint: "" }, error),
 				tips,

@@ -380,6 +380,13 @@ describe("api --stream command lifecycle (#399)", () => {
 			expect.objectContaining({ code: "tip/stream-print" }),
 		]);
 	});
+	test("an addressed GET stream's tip keeps the row in the /listen it names", async () => {
+		const result = await run("done", ["-X", "GET"], "ip/address/*1");
+		expect(result.exitCode).toBe(0);
+		expect(result.lines.at(-1).tips[0].fix).toContain(
+			"centrs api <router> /ip/address/*1/listen",
+		);
+	});
 	test("a /listen endpoint sends listen as typed, with tips for what it hides", async () => {
 		const result = await run(
 			"delete",

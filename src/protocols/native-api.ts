@@ -232,6 +232,11 @@ export interface ApiReply {
 	tag?: string;
 	/** Raw words exactly as received, including the leading reply word. */
 	words: readonly string[];
+	/**
+	 * Set by `listen()` on a reply that ARRIVED after its signal aborted (the
+	 * replies a `/cancel` drains), however long it then waited in the queue.
+	 */
+	afterStop?: true;
 }
 
 /** Parse a raw sentence (array of words) into a structured reply. */
@@ -693,7 +698,9 @@ export class NativeApiSession {
 		this.subscriptions.set(tag, {
 			command: command.command,
 			push: (reply) => {
-				queue.push(reply);
+				queue.push(
+					options.signal?.aborted ? { ...reply, afterStop: true } : reply,
+				);
 				signalWake();
 			},
 			trap: (reply) => {

@@ -147,6 +147,8 @@ export interface ProtocolStreamReply {
 	type: "re" | "empty";
 	/** The row's attributes; always `{}` for `!empty`. */
 	attributes: Record<string, string>;
+	/** The reply arrived after `options.signal` aborted (see `ApiReply.afterStop`). */
+	afterStop?: true;
 }
 
 /** Result of an `apiRequest` round-trip: the response body shaped for the envelope. */
@@ -732,6 +734,7 @@ class NativeApiAdapter implements ProtocolAdapter {
 			yield {
 				type: reply.type === "!empty" ? "empty" : "re",
 				attributes: { ...reply.attributes },
+				...(reply.afterStop ? { afterStop: true as const } : {}),
 			};
 		}
 	}

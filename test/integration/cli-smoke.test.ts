@@ -278,6 +278,18 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		}
 	});
 
+	test("a parse-time error under --format ndjson is one JSON line (#402)", async () => {
+		const res = await runCliProcess({
+			args: ["api", "r1", "ip/address", "--listen", "--format", "ndjson"],
+		});
+		expect(res.exitCode).toBe(1);
+		const lines = res.stderrText.trim().split("\n");
+		expect(lines).toHaveLength(1);
+		expect(parseEnvelope(lines[0] ?? "").error?.code).toBe(
+			"usage/removed-flag",
+		);
+	});
+
 	test("api --listen is usage/removed-flag naming the replacement (#402)", async () => {
 		const res = await runCliProcess({
 			args: ["api", "r1", "ip/address", "--listen", "--json"],

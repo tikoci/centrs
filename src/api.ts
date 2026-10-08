@@ -534,13 +534,7 @@ async function* streamResolvedApi(
 			counts.frames += 1;
 			if (reply.type === "empty") counts.empty += 1;
 			else counts.rows += 1;
-			yield streamFrameEnvelope(
-				resolved,
-				validation,
-				reply,
-				counts.frames,
-				controller.signal.aborted,
-			);
+			yield streamFrameEnvelope(resolved, validation, reply, counts.frames);
 			// `--count` counts rows only: an empty tick must never use up the
 			// count before the data it is waiting for arrives.
 			if (
@@ -595,7 +589,6 @@ function streamFrameEnvelope(
 	validation: EnvelopeValidationMeta,
 	reply: ProtocolStreamReply,
 	index: number,
-	afterStop: boolean,
 ): ApiSuccessEnvelope {
 	const data = reply.type === "empty" ? null : reply.attributes;
 	const meta = metaFromResolved(resolved, validation, data);
@@ -603,7 +596,7 @@ function streamFrameEnvelope(
 		kind: "frame",
 		index,
 		reply: reply.type,
-		...(afterStop ? { afterStop: true as const } : {}),
+		...(reply.afterStop ? { afterStop: true as const } : {}),
 	};
 	return { ok: true, data, warnings: [], tips: [], meta };
 }
@@ -656,7 +649,7 @@ function streamTips(resolved: ResolvedApiRequest): Tip[] {
 			buildTip(
 				"tip/stream-print",
 				`GET ${menu} --stream streamed one print; it does not follow changes.`,
-				`To follow changes, request the menu's listen: \`centrs api <router> ${resolved.path}/listen\` (or POST \`${resolved.path}/print -f follow-only=\`).`,
+				`To follow changes, request the menu's listen: \`centrs api <router> ${menu}/listen\` (or POST \`${resolved.path}/print -f follow-only=${resolved.id ? ` --query .id=${resolved.id}` : ""}\`).`,
 			),
 		);
 	}
@@ -1936,7 +1929,7 @@ export function removedListenError(
 	surface: "cli" | "library",
 	replacement?: string,
 ): CentrsError {
-	const menu = safeNormalizePath(endpoint);
+	const menu = safeNormalizeMenu(endpoint);
 	return new CentrsError({
 		code: "usage/removed-flag",
 		summary:
@@ -2006,6 +1999,16 @@ function tryParseApiMethod(method: string | undefined): ApiMethod | undefined {
 	return (apiMethods as readonly string[]).includes(upper)
 		? (upper as ApiMethod)
 		: undefined;
+}
+
+/** The endpoint's path plus any row id (`/ip/address/*1`), without a `/listen`. */
+function safeNormalizeMenu(endpoint: string): string {
+	try {
+		const { path, id } = normalizeApiEndpoint(endpoint);
+		return id ? `${path}/${id}` : path;
+	} catch {
+		return endpoint;
+	}
 }
 
 function safeNormalizeListen(endpoint: string): boolean {

@@ -133,6 +133,33 @@ describe("parseApiCliArgs", () => {
 			expect(text).toContain("--password <password>");
 		});
 
+		test("request-body secrets are not echoed back", () => {
+			const text = remediation([
+				"r1",
+				"ppp/secret",
+				"-X",
+				"PUT",
+				"-f",
+				"password=hunter2",
+				"-f",
+				"name=u1",
+				"--listen",
+			]);
+			expect(text).not.toContain("hunter2");
+			expect(text).toContain("-f password=<secret> -f name=u1 --stream");
+			const body = remediation([
+				"r1",
+				"ppp/secret",
+				"-X",
+				"PUT",
+				"-d",
+				'{"name":"u1","password":"hunter2"}',
+				"--listen",
+			]);
+			expect(body).not.toContain("hunter2");
+			expect(body).toContain("-d <json> --stream");
+		});
+
 		test("arguments with spaces stay one shell word", () => {
 			expect(remediation(["r1", "ip address", "--listen"])).toContain(
 				"Run: centrs api r1 'ip address/listen'.",
