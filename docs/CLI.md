@@ -45,14 +45,17 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases `--user`, `-u`). Falls back to `CENTRS_USERNAME`. |
 | `--password` | `<secret>` | RouterOS password. Falls back to `CENTRS_PASSWORD`. |
-| `--timeout` | &lt;ms\|5s&gt; | Operation timeout. REST currently rejects values above 60s. |
+| `--timeout` | &lt;ms\|5s&gt; | Per-request timeout, separate from --wait's overall deadline. REST currently rejects values above 60s. |
 | `--attribute` | `<name>` | Project one attribute. May be repeated. |
 | `--attributes` | `<a,b>` | Project a comma-separated attribute list. |
 | `--all-attributes` |  | Request the RouterOS detail/all-attributes shape. |
 | `--list-attributes / --list` |  | List inspect-derived attributes without running the data call. |
 | `--query / --filter` | `<expr>` | Row filter written as after `print where` (`disabled`, `mtu>=1500 and !dynamic`), run on the router as an API query; repeatable, AND-ed. No `~` or `in`. |
 | `--follow` |  | Keep the menu's rows current over native-api `listen`: snapshot frames, a `synced` line, then a line per change, then a summary (NDJSON for json/yaml/ndjson). Single target, list menus whose print takes follow-only. |
-| `--sample` | `<interval>` | Read the menu again every interval (with a unit, e.g. `5s`): one line per complete read, then a summary (NDJSON for json/yaml/ndjson). Sees what `--follow` cannot, such as counters. Single target; rest-api or native-api. |
+| `--sample` | `<interval>` | Read the menu again every interval (with a unit, e.g. `5s`): one line per complete read, then a summary. With --wait, sets polling cadence and returns one final envelope. Sees counters and state listen never reports. Single target; rest-api or native-api. |
+| `--wait` | `<deadline>` | Wait for a successful read or a condition until this overall deadline, with a unit (e.g. `2m`). Retries refused, closed, reset and timed-out connections and a down or unreachable host; other errors fail at once. One final envelope; single target. |
+| `--until` | `<expr>` | With --wait: succeed when any selected row matches this --query grammar predicate; repeatable, AND-ed. Returns the matching rows. Already true succeeds on the initial read. |
+| `--until-empty` |  | With --wait: succeed on a completed read with zero rows selected by --query. Silence and failed reads never satisfy it. |
 | `--sweep` | `<duration>` | `--follow` only: how often a membership sweep finds removals RouterOS does not send, including silent exits from --query. Needs a unit; default `10s`; `0` turns it off. |
 | `--count` | `<n>` | `--follow`: stop after N live changes (snapshot frames and `synced` do not count). `--sample`: stop after N samples. |
 | `--duration` | `<duration>` | `--follow`/`--sample`: stop after this wall-clock window (e.g. `30s`), counted from the end of validation. |

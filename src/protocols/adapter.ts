@@ -53,6 +53,8 @@ export interface ProtocolAdapterConfig {
 	password: string;
 	/** Per-command timeout in milliseconds. */
 	timeoutMs: number;
+	/** Abandon every operation, including validation and native connection/login. */
+	signal?: AbortSignal;
 	/** Target device MAC, for L2 transports (mac-telnet). */
 	mac?: string;
 	/** Client (in-packet source) MAC for mac-telnet; a synthetic one is used when omitted. */
@@ -516,9 +518,13 @@ class RestAdapter implements ProtocolAdapter {
 			...init,
 			headers,
 			// A caller's signal abandons the request; the timeout still applies.
-			signal: init.signal
-				? AbortSignal.any([controller.signal, init.signal])
-				: controller.signal,
+			signal: AbortSignal.any([
+				controller.signal,
+				...[init.signal, this.config.signal].filter(
+					(signal): signal is AbortSignal =>
+						signal !== undefined && signal !== null,
+				),
+			]),
 			tls: { rejectUnauthorized: this.config.insecure !== true },
 		};
 
@@ -710,9 +716,13 @@ class NativeApiAdapter implements ProtocolAdapter {
 		inspect: true,
 	};
 	private session?: NativeApiSession;
+	private readonly onAbort = (): void => {
+		this.session?.close();
+	};
 
 	constructor(private readonly config: ProtocolAdapterConfig) {
 		this.protocol = config.protocol;
+		config.signal?.addEventListener("abort", this.onAbort, { once: true });
 	}
 
 	async inspect(
@@ -839,11 +849,13 @@ class NativeApiAdapter implements ProtocolAdapter {
 	}
 
 	async close(): Promise<void> {
+		this.config.signal?.removeEventListener("abort", this.onAbort);
 		this.session?.close();
 		this.session = undefined;
 	}
 
 	private async connect(): Promise<NativeApiSession> {
+		this.config.signal?.throwIfAborted();
 		if (this.session) {
 			return this.session;
 		}
@@ -857,7 +869,12 @@ class NativeApiAdapter implements ProtocolAdapter {
 			// RouterOS's self-signed cert. (Previously native-api always accepted.)
 			rejectUnauthorized: this.config.insecure !== true,
 			timeoutMs: this.config.timeoutMs,
+			signal: this.config.signal,
 		});
+		if (this.config.signal?.aborted) {
+			session.close();
+			this.config.signal.throwIfAborted();
+		}
 		this.session = session;
 		return session;
 	}

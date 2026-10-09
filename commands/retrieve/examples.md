@@ -666,3 +666,80 @@ of a fresh filtered print after churn settles. Deterministic delayed-reply,
 delete, cancellation and sustained-write bootstrap orderings are anchored in
 `retrieve-follow.test.ts`; newer versions cannot starve `synced`, sweeps or
 live `--count`.
+
+## Readiness and conditions
+
+Covered by `test/integration/retrieve-wait.test.ts` (WT1–WT7) on disposable
+CHR, with validation enabled over REST and native-api. `$R` and
+`$A`/`$API_PORT` are the targets as above.
+
+### WT1. Readiness and already-true any-match
+
+```bash
+centrs retrieve $R /system/resource --wait 5s --username $U --password $P --json
+centrs retrieve $A /interface --via native-api --port $API_PORT --query name=ether1 --until '!disabled and mtu>=1500' --attributes name --wait 5s --username $U --password $P --json
+```
+
+Each succeeds with one attempt and one observation. The second returns only
+`[{ "name": "ether1" }]`, with `stopReason: "condition-met"`.
+
+### WT2. Wait for a row to match
+
+```bash
+centrs retrieve $R /ip/firewall/address-list --query list=wait-364 --until comment=ready --attributes address --wait 10s --sample 100ms --username $U --password $P --json
+```
+
+The harness adds a matching row after the wait starts. The waiter returns its
+projected address, with more than one completed observation. The same test
+runs over native-api.
+
+### WT3. Drop to zero and already empty
+
+```bash
+centrs retrieve $R /ip/firewall/address-list --query list=wait-364 --until-empty --wait 10s --sample 100ms --username $U --password $P --json
+```
+
+The harness removes the selected row after the wait starts; `data: []`,
+`stopReason: "condition-met"`. Repeating the wait on the now-empty selection
+succeeds on its first completed observation.
+
+### WT4. Condition expiry and fail-fast faults
+
+```bash
+centrs retrieve $R /interface --until name=missing --wait 500ms --sample 100ms --username $U --password $P --json
+centrs retrieve $R /interface --until unknown-property=yes --wait 5s --username $U --password $P --json
+```
+
+The first fails `wait/deadline-exceeded`, `stopReason: "deadline-elapsed"`.
+The second fails `validation/unknown-attribute` in one attempt. Incorrect
+credentials also fail in one attempt; singleton `--until-empty` is refused.
+
+### WT5. Real reboot readiness
+
+```bash
+centrs retrieve $R /system/resource --wait 60s --timeout 2s --sample 500ms --username $U --password $P --json
+```
+
+The harness reboots the CHR and starts this call while its services are down.
+The waiter succeeds with multiple attempts and exactly one completed data
+observation, without an external retry loop.
+
+### WT6. OSPF reaches Full
+
+```bash
+centrs retrieve $A /routing/ospf/neighbor --via native-api --port $API_PORT --until state=Full --wait 40s --sample 200ms --username $U --password $P --json
+```
+
+Two disposable CHRs share a point-to-point Ethernet link. After configuring
+OSPF, the waiter returns a neighbor whose state is `Full`. A REST wait on
+the established adjacency succeeds on its initial observation.
+
+### WT7. CLI failure is one final envelope
+
+```bash
+centrs retrieve $R /interface --until name=missing --wait 500ms --username $U --password $P --json
+```
+
+One envelope goes to stdout, with `stopReason: "deadline-elapsed"`; exit 1.
+No intermediate sample frames are printed. Unit anchors cover slow validation,
+unfinished reads, cancellation and narrow retry classification.

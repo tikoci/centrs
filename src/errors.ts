@@ -14,6 +14,7 @@ export const SYNTAX_REJECTED_REMEDIATION =
 	"RouterOS refused to parse this command; its own words are in `Device said`. Check the syntax with `centrs explain '<command>'`. A menu that does not exist on this device (an unknown path, or a package that is not installed) is rejected the same way.";
 
 export type CentrsErrorCode =
+	| `wait/${string}`
 	| `auth/${string}`
 	| `cdb/${string}`
 	| `discover/${string}`

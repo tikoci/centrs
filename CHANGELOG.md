@@ -12,6 +12,13 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 
 ### Added
 
+- **`retrieve --wait` establishes readiness or a condition by a deadline (#364).**
+  One final envelope over REST or native API, with elapsed time, attempts and
+  completed observations. `--until` uses the shared query grammar and succeeds
+  on any matching selected row; `--until-empty` requires a completed zero-row
+  read. Already-true conditions succeed immediately. Only transient transport
+  errors retry; authentication and validation fail immediately. `--timeout`
+  bounds each request, and optional `--sample` sets observation cadence.
 - **`retrieve --follow` keeps a menu's rows current over native API (#396).**
   Snapshot rows, one `synced` line, then a line per change, as NDJSON; an
   `.id` sweep (`--sweep`, default 10s) reports removals RouterOS never sends

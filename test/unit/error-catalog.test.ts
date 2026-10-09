@@ -30,6 +30,7 @@ const KNOWN_FAMILIES = new Set([
 	"transport",
 	"usage",
 	"validation",
+	"wait",
 ]);
 
 /**
