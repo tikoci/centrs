@@ -17,7 +17,7 @@ Nothing was followed. The error's `context.singleton` says which case it was.
 
 - Read the menu once: `centrs retrieve <router> <menu>`.
 - To see a value change over time, sample it:
-  `centrs api <router> <menu>/print -X POST -f interval=5s --stream`
-  (one reply per tick, until `--count`, `--duration` or Ctrl-C).
+  `centrs retrieve <router> <menu> --sample 5s` (one line per complete read,
+  until `--count`, `--duration` or Ctrl-C).
 - If you expected the menu to be followable, check the path with
   `centrs retrieve <router> <menu> --list-attributes`.

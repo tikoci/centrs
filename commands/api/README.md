@@ -68,9 +68,16 @@ the generated reference cannot carry:
 
 - `-f` values pass through verbatim (no type-guessing); `-d`/`--input`
   collide with `-f` → `usage/conflicting-flags`.
-- `--query`/`--filter` map to REST `.query` words / native `?` words.
+- `--query`/`--filter` take the same `print where` grammar as
+  `retrieve --query` ([retrieve README → Query](../retrieve/README.md#query---query))
+  and compile to REST `.query` words / native `?` words. A bare name is
+  `name=yes` for a boolean and "has a value" otherwise, which the router is
+  asked during validation; with `--validate=false` (or `--raw`) a bare name
+  fails `input/invalid-query`. Unlike `retrieve`, `api` does not check the
+  property names.
 - `--raw-query` is emitted as-is; the caller owns the stack — e.g.
-  `--raw-query type=ether --raw-query type=vlan --raw-query '#|'` (OR).
+  `--raw-query type=ether --raw-query type=vlan --raw-query '#|'` (OR), or the
+  has-property `--raw-query comment` / absence `--raw-query -comment` words.
 - `--via rest-api --stream` errors `transport/capability-unsupported`
   (REST's 60 s cap cannot follow).
 - `--format ndjson` prints every envelope as one compact line, one-shot or

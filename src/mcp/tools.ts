@@ -264,11 +264,13 @@ export const retrieveInputShape = {
 		.boolean()
 		.optional()
 		.describe("Return every attribute instead of the default projection."),
-	filter: z.string().optional().describe("RouterOS-style filter expression."),
+	filter: z.string().optional().describe("Alias of `query`."),
 	query: z
-		.string()
+		.union([z.string(), z.array(z.string())])
 		.optional()
-		.describe("Raw query word(s) appended to the read."),
+		.describe(
+			"Row filter written as after `print where`, e.g. `type=ether and !disabled`; run on the router, several are AND-ed. No `~` (regex) or `in`.",
+		),
 	via: z.string().optional().describe("Override transport."),
 	timeout: z
 		.union([z.string(), z.number()])

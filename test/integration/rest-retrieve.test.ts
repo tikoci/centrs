@@ -450,6 +450,7 @@ describeFast("REST retrieve against CHR", () => {
 				(jsonEnvelope.data as VersionedData).version,
 			);
 
+			// 18. A regex has no API query word: refused before the read.
 			await expectRetrieveFailure(
 				consoleCapture,
 				[
@@ -460,20 +461,21 @@ describeFast("REST retrieve against CHR", () => {
 					'address~"192"',
 					...baseArgs,
 				],
-				"validation/not-implemented",
+				"input/unsupported-query",
 			);
-			await expectRetrieveFailure(
-				consoleCapture,
-				[
-					"retrieve",
-					chr.restUrl,
-					"/ip/address",
-					"--filter",
-					"disabled=no",
-					...baseArgs,
-				],
-				"validation/not-implemented",
-			);
+			// 19. --filter is --query: the router filters, retrieve returns rows.
+			const filtered = await expectRetrieveSuccess(consoleCapture, [
+				"retrieve",
+				chr.restUrl,
+				"/interface",
+				"--filter",
+				"type=ether",
+				...baseArgs,
+			]);
+			expect(Array.isArray(filtered.data)).toBe(true);
+			const filteredRows = filtered.data as Array<Record<string, unknown>>;
+			expect(filteredRows.length).toBeGreaterThan(0);
+			expect(filteredRows.every((row) => row["type"] === "ether")).toBe(true);
 
 			// Recorded last: evidence claims every example above passed.
 			await recordIntegrationEvidence({

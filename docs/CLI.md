@@ -50,7 +50,7 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 | `--attributes` | `<a,b>` | Project a comma-separated attribute list. |
 | `--all-attributes` |  | Request the RouterOS detail/all-attributes shape. |
 | `--list-attributes / --list` |  | List inspect-derived attributes without running the data call. |
-| `--query / --filter` | `<expr>` | RouterOS-side row filter (maps to `.query`). Not implemented yet — returns `validation/not-implemented`. |
+| `--query / --filter` | `<expr>` | Row filter written as after `print where` (`disabled`, `mtu>=1500 and !dynamic`), run on the router as an API query; repeatable, AND-ed. No `~` or `in`. |
 | `--follow` |  | Keep the menu's rows current over native-api `listen`: snapshot frames, a `synced` line, then a line per change, then a summary (NDJSON for json/yaml/ndjson). Single target, list menus whose print takes follow-only. |
 | `--sample` | `<interval>` | Read the menu again every interval (with a unit, e.g. `5s`): one line per complete read, then a summary (NDJSON for json/yaml/ndjson). Sees what `--follow` cannot, such as counters. Single target; rest-api or native-api. |
 | `--sweep` | `<duration>` | `--follow` only: how often an `.id` sweep finds removals RouterOS does not send (view menus such as `/interface/<type>`). Needs a unit; default `10s`; `0` turns it off. |
@@ -116,8 +116,8 @@ Usage: centrs api <router> <endpoint> [flags]
 | `-f / --field` | `<key=value>` | Body field, repeatable; assembled into the JSON body (verbatim string values). |
 | `-d / --data` | `<json>` | Raw JSON request body. Conflicts with `-f` / `--input`. |
 | `--input` | &lt;file\|-&gt; | Read the raw JSON body from a file or stdin (`-`). |
-| `--query / --filter` | `<expr>` | RouterOS-side row filter, AND-combined, repeatable: name=value, name!=value, name>value, name<value, name. |
-| `--raw-query` | `<word>` | Verbatim RouterOS query word (repeatable) for OR / absence / stack expressions. |
+| `--query / --filter` | `<expr>` | Row filter written as after `print where` (`disabled`, `mtu>=1500 and !dynamic`), sent as query words; repeatable, AND-ed. No `~` or `in`. |
+| `--raw-query` | `<word>` | Verbatim RouterOS query word (repeatable), e.g. has-property `name`, absence `-name`, or stack ops `#\|` `#&` `#!`. |
 | `--attribute / --proplist` | `<a,b>` | Property projection → `.proplist`. |
 | `--raw` |  | Strip the envelope; emit bare RouterOS JSON. Defaults `--validate` to false (an explicit `--validate=true` still runs the gate); does not imply `--yes`. |
 | `--yes` |  | Confirm a mutating (non-read) request in non-interactive runs. |

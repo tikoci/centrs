@@ -74,6 +74,11 @@ and implementation sequencing in the linked issues.
   and state `listen` never reports. RouterOS's `print interval=` was measured
   and not used (no end-of-tick marker). Single-target; `CHR-passed` by
   `test/integration/retrieve-sample.test.ts` (SA1–SA6, 7.23.7 and 7.24.5).
+- `retrieve --query` (#397) filters rows on the router with the `print where`
+  grammar, compiled to the API query; `api --query` shares it. One-shot,
+  `--sample` and fan-out; `CHR-passed` by
+  `test/integration/retrieve-query.test.ts` (QY1–QY7, QA1–QA2, 7.23.7 and
+  7.24.5), whose QY1 checks the rows against RouterOS's own `find where`.
 - `discover / mndp` is grounded by `commands/discover/README.md`,
   `src/data/mndp.ts`, `src/data/mndp-cache.ts`, and
   `test/integration/discover.test.ts`.
@@ -169,7 +174,8 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 field poll with `sleep` where a native follow would answer. In order:
 (1) done: #402, literal `api --stream` with `!empty` frames and
 `--format ndjson`; (2) done: `retrieve --follow` (#396, unfiltered);
-(3) done: `retrieve --sample`; (4) next: #397, then #364 on `--follow`;
+(3) done: `retrieve --sample`; (4) #397: one-shot `retrieve --query` done,
+filtered `--follow` next; then #364 (`--until`, same grammar);
 (5) #398 and #401. Each slice's contract lives in its command
 README. Live `explain` (below) resumes after this line.
 

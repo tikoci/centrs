@@ -5,7 +5,8 @@ Each numbered example is an executable spec asserted by CHR integration tests
 `test/integration/api.test.ts` (rest-api examples),
 `test/integration/api-native.test.ts` (native-api examples, N…),
 `test/integration/api-listen.test.ts` (streaming examples, L…), and
-`test/integration/api-fanout.test.ts` (fan-out examples, F…). If a line here is not
+`test/integration/api-fanout.test.ts` (fan-out examples, F…), and
+`test/integration/retrieve-query.test.ts` (query grammar examples, QA…). If a line here is not
 exercised by a test, the test file is wrong; if a line passes only with
 `--validate=false`, the implementation is wrong (see
 [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md)).
@@ -669,6 +670,28 @@ The reserved record is a credential fallback, not a connectable router, so its o
 target fails deterministically: inner `ok:false` with
 `error.code=target/unresolved` (never a `transport/dns` attempt on `"__default__"`).
 `data.summary = { total: 1, ok: 0, failed: 1 }`. Exit code 1 (every target failed).
+
+## `--query` grammar (#397)
+
+`--query` takes the `print where` grammar shared with `retrieve --query`. The
+test seeds `qa-397` address-list rows, one of them disabled with comment `x>y`.
+
+### QA1. A bare boolean is `=yes`, on either transport
+
+```bash
+centrs api $R ip/firewall/address-list --query 'list=qa-397 and disabled' --proplist address --username $U --password $P
+centrs api $A ip/firewall/address-list --via native-api --query 'list=qa-397 and disabled' --proplist address --port $API_PORT --username $U --password $P
+```
+
+Both return only the disabled row's address.
+
+### QA2. A value containing an operator stays one value
+
+```bash
+centrs api $R ip/firewall/address-list --query 'comment=x>y' --proplist address --username $U --password $P
+```
+
+Returns the row whose comment is `x>y`; the query word sent is `comment=x>y`.
 
 ## quickchr targets (#134)
 

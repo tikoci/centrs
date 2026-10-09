@@ -31,9 +31,15 @@ import { buildTip } from "./core/envelope.ts";
 import {
 	inspectArgumentNames,
 	inspectChildrenOrEmpty,
+	inspectWhereBooleans,
 	isCommandNode,
 	pathTokens,
 } from "./core/inspect.ts";
+import {
+	compileQueryWords,
+	type ParsedQuery,
+	parseQueries,
+} from "./core/query.ts";
 import { mapRouterOsResultError } from "./core/routeros-errors.ts";
 import { toYaml } from "./core/yaml.ts";
 import {
@@ -107,7 +113,7 @@ export interface ApiRequest {
 	data?: string;
 	/** `--input` raw JSON body (file/stdin content already read). Mutually exclusive with `fields` / `data`. */
 	inputBody?: string;
-	/** `--query` / `--filter` expressions (`name=value`, `name!=value`, `name>value`, `name`). */
+	/** `--query` / `--filter` expressions, written as after `print where` (`src/core/query.ts`); several are AND-ed. */
 	query?: readonly string[];
 	/** `--raw-query` verbatim RouterOS query words (no leading `?`). */
 	rawQuery?: readonly string[];
@@ -277,8 +283,16 @@ export interface ResolvedApiRequest {
 	stream: boolean;
 	/** Resolved JSON body (from `-f` / `-d` / `--input`). */
 	body: Record<string, string>;
-	/** REST `.query` words (no `?` prefix), structured then raw, in order. */
+	/**
+	 * REST `.query` words (no `?` prefix), structured then raw, in order. A bare
+	 * `--query` name reads "is set" here until validation asks the device which
+	 * bare names are booleans ({@link withQueryBooleans}).
+	 */
 	query: readonly string[];
+	/** The parsed `--query` expressions, when any were given. */
+	structuredQuery?: ParsedQuery;
+	/** `--raw-query` words, verbatim. */
+	rawQuery: readonly string[];
 	proplist: readonly string[];
 	raw: boolean;
 	/** `--count`: stop a `--stream` after N `!re` rows (`!empty` does not count). */
@@ -336,9 +350,10 @@ export async function apiEnvelope(
 }
 
 export async function runResolvedApi(
-	resolved: ResolvedApiRequest,
+	request: ResolvedApiRequest,
 	trace: ValidationTrace = {},
 ): Promise<ApiSuccessEnvelope> {
+	let resolved = request;
 	assertStreamCapability(resolved);
 	// Validate the complete request shape before constructing a backend or
 	// running either validation stage. In particular, `/execute` must reject
@@ -365,6 +380,7 @@ export async function runResolvedApi(
 			const result = await validateApiRequest(resolved, backend, trace);
 			validation = result.validation;
 			tips = result.tips;
+			resolved = await withQueryBooleans(resolved, backend, result.queryMenu);
 		} else {
 			validation = disabledApiValidationMeta(resolved);
 		}
@@ -372,7 +388,11 @@ export async function runResolvedApi(
 		// reports the gate that actually settled rather than a guess.
 		trace.validation = validation;
 
-		const result = await backend.apiRequest(protocolRequest);
+		const result = await backend.apiRequest(
+			resolved === request
+				? protocolRequest
+				: buildProtocolApiRequest(resolved),
+		);
 		const routerOsFailure = apiRouterOsFailureFromResult(resolved, result);
 		if (routerOsFailure) {
 			throw routerOsFailure;
@@ -465,17 +485,22 @@ export async function* apiStream(
 }
 
 async function* streamResolvedApi(
-	resolved: ResolvedApiRequest,
+	request: ResolvedApiRequest,
 	externalSignal?: AbortSignal,
 	onListening?: () => void,
 ): AsyncGenerator<ApiEnvelope, void, void> {
-	const backend = adapterForResolved(resolved);
+	const backend = adapterForResolved(request);
 
+	let resolved = request;
 	let validation: EnvelopeValidationMeta;
 	try {
-		validation = resolved.validate.value
-			? (await validateApiRequest(resolved, backend)).validation
-			: disabledValidationMeta();
+		if (resolved.validate.value) {
+			const result = await validateApiRequest(resolved, backend);
+			validation = result.validation;
+			resolved = await withQueryBooleans(resolved, backend, result.queryMenu);
+		} else {
+			validation = disabledValidationMeta();
+		}
 	} catch (error) {
 		await backend.close();
 		yield buildApiErrorEnvelopeFromResolved(resolved, error);
@@ -787,7 +812,15 @@ export async function resolveApiRequest(
 	}
 	const raw = request.raw ?? false;
 	const body = buildApiBody(request);
-	const query = buildApiQuery(request);
+	const structuredQuery =
+		(request.query?.length ?? 0) > 0
+			? parseQueries(request.query ?? [])
+			: undefined;
+	const rawQuery = [...(request.rawQuery ?? [])];
+	const query = [
+		...(structuredQuery ? compileQueryWords(structuredQuery, new Set()) : []),
+		...rawQuery,
+	];
 	const proplist = buildApiProplist(request);
 	if (
 		((verb !== "print" && verb !== "run") || scriptMode) &&
@@ -877,6 +910,19 @@ export async function resolveApiRequest(
 					cdbResolution?.overrides.validate,
 					config,
 				);
+	if (!validate.value && (structuredQuery?.bareNames.length ?? 0) > 0) {
+		throw new CentrsError({
+			code: "input/invalid-query",
+			summary: `A bare name in --query (${structuredQuery?.bareNames.join(", ")}) needs validation to learn whether it is a boolean.`,
+			remediation:
+				'Drop `--validate=false`/`--raw`, or spell the word out: `--query disabled=yes` for a boolean, `--raw-query comment` for "is set".',
+			context: {
+				query: request.query,
+				bareNames: structuredQuery?.bareNames,
+				validate: validate.source,
+			},
+		});
+	}
 	const timeoutMs = resolveApiTimeout(
 		request.timeout,
 		env,
@@ -960,6 +1006,8 @@ export async function resolveApiRequest(
 		stream,
 		body,
 		query,
+		structuredQuery,
+		rawQuery,
 		proplist,
 		raw,
 		count: request.count,
@@ -1098,38 +1146,36 @@ function parseJsonBody(raw: string, flag: string): Record<string, string> {
 }
 
 /**
- * Build REST `.query` words (no `?` prefix). Structured `--query` words first, in
- * order, then verbatim `--raw-query` words. Mapping is CHR-grounded
- * (`commands/api/AGENTS.md`): `name=value` (eq), `name!=value` → `name=value`,
- * `#!` (eq then NOT-top), `name>value`/`name<value` → `>name=value`/`<name=value`,
- * bare `name` (has-property).
+ * REST `.query` words (no `?` prefix) for a request summary: structured
+ * `--query` words first (`src/core/query.ts`, bare names as "is set"), then
+ * verbatim `--raw-query` words. Throws `input/invalid-query` on a bad
+ * expression.
  */
 export function buildApiQuery(request: ApiRequest): string[] {
-	const words: string[] = [];
-	for (const expression of request.query ?? []) {
-		words.push(...queryExpressionToWords(expression));
-	}
-	for (const raw of request.rawQuery ?? []) {
-		words.push(raw);
-	}
-	return words;
+	const structured =
+		(request.query?.length ?? 0) > 0
+			? compileQueryWords(parseQueries(request.query ?? []), new Set())
+			: [];
+	return [...structured, ...(request.rawQuery ?? [])];
 }
 
-function queryExpressionToWords(expression: string): string[] {
-	const ne = expression.indexOf("!=");
-	if (ne >= 0) {
-		return [`${expression.slice(0, ne)}=${expression.slice(ne + 2)}`, "#!"];
-	}
-	const gt = expression.indexOf(">");
-	if (gt >= 0) {
-		return [`>${expression.slice(0, gt)}=${expression.slice(gt + 1)}`];
-	}
-	const lt = expression.indexOf("<");
-	if (lt >= 0) {
-		return [`<${expression.slice(0, lt)}=${expression.slice(lt + 1)}`];
-	}
-	// `name=value` (eq) or bare `name` (has-property) pass through verbatim.
-	return [expression];
+/**
+ * The resolved request with its `--query` bare names compiled by type: the
+ * device says which are booleans (`disabled` → `disabled=yes`); the rest mean
+ * "is set". Unchanged when there are no bare names.
+ */
+export async function withQueryBooleans(
+	resolved: ResolvedApiRequest,
+	backend: ProtocolAdapter,
+	menu: string,
+): Promise<ResolvedApiRequest> {
+	const parsed = resolved.structuredQuery;
+	if (!parsed || parsed.bareNames.length === 0) return resolved;
+	const booleans = await inspectWhereBooleans(backend, menu, parsed.bareNames);
+	return {
+		...resolved,
+		query: [...compileQueryWords(parsed, booleans), ...resolved.rawQuery],
+	};
 }
 
 function buildApiProplist(request: ApiRequest): string[] {
@@ -1207,6 +1253,8 @@ const API_SCRIPT_DEVICE_STAGE_SOURCE = ":put [:parse]";
 interface ApiValidationResult {
 	validation: EnvelopeValidationMeta;
 	tips: Tip[];
+	/** The menu a `--query` bare name is probed in: the path's parent only when inspect confirmed its last segment is a command. */
+	queryMenu: string;
 }
 
 /**
@@ -1270,6 +1318,7 @@ async function validateApiRequest(
 				],
 			},
 			tips: [],
+			queryMenu: resolved.path,
 		};
 	}
 
@@ -1342,6 +1391,7 @@ async function validateApiRequest(
 				semantic: true,
 			},
 			tips,
+			queryMenu: isCommand ? `/${parent.join("/")}` : resolved.path,
 		};
 	}
 
@@ -1386,6 +1436,7 @@ async function validateApiRequest(
 				availableAttributes: available,
 			},
 			tips,
+			queryMenu: resolved.path,
 		};
 	}
 
@@ -1398,6 +1449,7 @@ async function validateApiRequest(
 			semantic: true,
 		},
 		tips,
+		queryMenu: resolved.path,
 	};
 }
 
@@ -2014,9 +2066,18 @@ export function apiRequestSummaryFromRequest(
 		validate: summarizedValidate(request),
 		raw: request.raw ?? false,
 		format: resolveErrorFormat(request, env),
-		query: buildApiQuery(request),
+		query: summaryQuery(request),
 		proplist: buildApiProplist(request),
 	};
+}
+
+/** {@link buildApiQuery} for an error summary, which must not throw on the expression it reports. */
+function summaryQuery(request: ApiRequest): string[] | undefined {
+	try {
+		return buildApiQuery(request);
+	} catch {
+		return undefined;
+	}
 }
 
 /** Parse a method without throwing: a valid {@link ApiMethod}, or `undefined` when invalid. */

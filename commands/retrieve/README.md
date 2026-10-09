@@ -1,9 +1,9 @@
 # retrieve
 
 Status: `CHR-passed` over `rest-api` and `native-api`, including multi-target
-fan-out (see **Target selection**), `--follow` over `native-api` (see
-**Follow**) and `--sample` over both (see **Sample**). `snmp` is
-`not-started`. Matches `docs/MATRIX.md`.
+fan-out (see **Target selection**), `--query` row filters (see **Query**),
+`--follow` over `native-api` (see **Follow**) and `--sample` over both (see
+**Sample**). `snmp` is `not-started`. Matches `docs/MATRIX.md`.
 
 Read RouterOS state. RouterOS menu reads model `<path>/<verb>` where the verb
 is `print`-style (`print`, `get`, and async POST-shaped reads as they're
@@ -141,6 +141,84 @@ warning entry — it is not an error. (Earlier text said a byte overflow returns
 *error* with the needed size; superseded — truncation is an `ok: true` footnote so
 partial data stays usable.)
 
+## Query (`--query`)
+
+`retrieve <router> <menu> --query '<expr>'` returns only the rows that match,
+filtered on the router. `<expr>` is what you would write after `print where`:
+
+```bash
+centrs retrieve $R /interface --query 'type=ether and !disabled'
+centrs retrieve $R /ip/route --query '(dst-address="0.0.0.0/0" or distance>=10) and active'
+```
+
+`--filter` is the same flag. Repeat either, and the expressions are AND-ed. A
+list read with `--query` is always an array, `[]` when nothing matches. The
+result works with `--attribute(s)`, `--sample` and fan-out; `--follow` does not
+take it yet (#397). A singleton (`/system/identity`) has no rows to filter and
+fails `usage/conflicting-flags`.
+
+**What it compiles to.** centrs parses the expression before connecting and
+sends it as the API query (native `?` words, REST `.query`; one language,
+`commands/api/AGENTS.md`). The router evaluates it, so comparisons use
+RouterOS's own per-property typing:
+
+| You write | RouterOS query words |
+| --------- | -------------------- |
+| `a=v`, `a!=v` | `a=v`; `a=v` `#!` |
+| `a<v`, `a>v` | `<a=v` `-a` `#\|`; `>a=v` |
+| `a<=v`, `a>=v` | `>a=v` `#!`; `<a=v` `-a` `#\|` `#!` |
+| bare `a` | `a=yes` if `a` is a boolean, otherwise `a` (has a value) |
+| `!x`, `x and y`, `x or y` | x `#!`; x y `#&`; x y `#\|` |
+
+As in `print where`, a row without the property counts as smaller than any
+value: `timeout<1d` includes static address-list entries (no `timeout`), and
+`timeout>1h` does not. API `<`/`>` skip such rows on their own, hence the `-a`
+("has no `a`") word. `and` (`&&`) binds tighter than `or` (`||`), as in RouterOS. Values run to the
+next space or parenthesis, and start right after the operator (RouterOS
+rejects `comment= x`). Quote a value with spaces or an `=` (`comment="uplink a"`,
+`comment="x=yes"`), using RouterOS escapes: `\"`, `\\`, `\$`, `\?`, `\_`, `\a`
+`\b` `\f` `\n` `\r` `\t` `\v`, and two uppercase hex digits (`\41`; `\ff` is `\f`
+then `f`). A backslash before whitespace drops it and the whole whitespace run
+after it, so `"x\<newline>  y"` is `xy`. A hex
+byte above `\7F` is refused: centrs sends values as UTF-8, so it could not match
+the raw byte RouterOS stores.
+
+**A bare name.** `where disabled` means `disabled=yes`, but `where comment`
+means "comment is set" (RouterOS stores an empty comment as absent). Only the
+router knows which kind a property is, so centrs asks it: `/console/inspect`
+completion after `where <name>=` offers exactly `yes`/`no` for a boolean. With
+`--validate=false` there is no one to ask, and a bare name fails
+`input/invalid-query`; write `disabled=yes`.
+
+**Validation.** Every property in the expression is checked against the
+menu's attributes (as for `--attributes`, plus `.id`). RouterOS answers a query
+on a misspelled property with no rows and no error, so a typo fails
+`validation/unknown-attribute` instead.
+
+**Same rows as `print where`, with these differences.** On CHR 7.23.7 and
+7.24.5, 58 expressions over three menus return exactly the rows
+`find where` selects (examples QY1, QY2). The exceptions come from the CLI
+typing an unquoted literal, which the query does not do:
+
+- `where dst-port=80` reads `80` as a number and matches nothing, and
+  `where protocol=tcp` likewise; the query matches the `"80"` and `"tcp"` that
+  `retrieve` shows. Quoted (`dst-port="80"`), the CLI agrees.
+- Ordering (`<`, `>`, `<=`, `>=`) on a property RouterOS returns as text
+  (address-list `address`, `dst-port`) is text order: `192.0.2.10` sorts
+  before `192.0.2.9`. Numbers (`mtu`, `vlan-id`, `distance`) compare as
+  numbers.
+- The query accepts `disabled=true` as `yes`; the CLI rejects it.
+
+**Refused, never approximated.** `~` (regex) and `in` (prefix membership) have
+no query word, and a `$variable`, `[command]` or `{array}` value needs the
+script evaluator: these fail `input/unsupported-query` with a tip. Four
+spellings RouterOS reads differently from how they look fail
+`input/invalid-query`: `!a=v` (RouterOS reads `(!a)=v`; write `!(a=v)` or
+`a!=v`), `not` (not a RouterOS operator; use `!`), conditions separated
+only by a space (join them with `and` or `or`), and an unquoted `=` inside a
+value (RouterOS reads `comment=x=yes` as `(comment=x)=yes`, and `comment=x!=y`
+matches nothing; quote it: `comment="x=yes"`).
+
 ## Follow (`--follow`)
 
 `retrieve <router> <menu> --follow` keeps a menu's rows current: first the
@@ -154,9 +232,9 @@ singleton included, fails `validation/not-followable` before anything is
 followed. Native-api only: an unset `via` infers native-api, and a `via` of
 `rest-api` from any source (flag, env, CDB, settings) fails
 `transport/capability-unsupported`; there is no polling fallback. Single
-target only: a fan-out selector fails `usage/fanout-not-supported`. The first
-slice is unfiltered: `--query`/`--filter` are still `validation/not-implemented`
-(#397).
+target only: a fan-out selector fails `usage/fanout-not-supported`. Follow is
+unfiltered for now: `--query` with `--follow` fails `validation/not-implemented`
+until filtered follow lands (#397).
 
 **What each line means.** Every line is one envelope; read
 `meta.operation.stream`:

@@ -23,11 +23,26 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   singletons, and sees counters `--follow` cannot. The interval needs a unit
   (`5s`): a bare number is refused because RouterOS and centrs read it
   differently.
+- **`retrieve --query` filters rows on the router (#397).** Write what you
+  would after `print where` (`type=ether and !disabled`, `mtu>=1500`,
+  `(a=1 or b=2)`); centrs compiles it to the API query, so the router filters.
+  `--filter` is the same flag; repeats are AND-ed. Property names are
+  validated, and bare names are asked of the router (`disabled` → `=yes`,
+  `comment` → "is set"). `~`, `in` and script values fail
+  `input/unsupported-query`. Works with `--sample` and fan-out, not yet with
+  `--follow`. Checked on CHR against RouterOS's own `find where`.
 - `--format ndjson` for `retrieve`. Library: `retrieveFollow()`,
   `retrieveSample()`, and `renderRetrieveStreamLine()` for both (it replaces
   the unreleased `renderRetrieveFollowLine()`).
 
 ### Fixed
+
+- **`api --query` uses the `print where` grammar too (#397).** A bare name is
+  now `=yes` for a boolean (was "has the property"; that is
+  `--raw-query name`), `<`/`<=` include rows without the property as `where`
+  does, and a value containing an operator stays one value (`comment=a>b` was
+  sent as `>comment=a=b`). With `--validate=false` or `--raw`, a bare name
+  fails `input/invalid-query`.
 
 - Native API one-shot and incremental commands share their sentence builder;
   structured POST queries/projections reach both transports. Mutation and script
