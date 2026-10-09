@@ -214,7 +214,7 @@ export type RetrieveStreamMeta =
 			phase: "snapshot" | "live";
 			change: "upsert" | "removed";
 			id: string;
-			source: "print" | "listen" | "sweep";
+			source: "print" | "listen" | "sweep" | "membership";
 	  }
 	| { kind: "synced"; rows: number }
 	| { kind: "sample"; index: number; at: string; readMs: number }
@@ -739,15 +739,6 @@ export function validateRetrieveRequestShape(
 	}
 
 	const query = resolveRetrieveQuery(request);
-	if (query && request.follow) {
-		throw new CentrsError({
-			code: "validation/not-implemented",
-			summary: "`--query` is not implemented yet for `retrieve --follow`.",
-			remediation:
-				"Follow the whole menu and filter the lines yourself, or read the filtered rows on a timer with `--sample <interval>` (#397).",
-			context: { query: query.expressions },
-		});
-	}
 	if (query && request.listAttributes) {
 		throw new CentrsError({
 			code: "usage/conflicting-flags",

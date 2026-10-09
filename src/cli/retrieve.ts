@@ -131,7 +131,7 @@ export const retrieveCommand: CliCommandMetadata = {
 			flag: "--sweep",
 			valueName: "<duration>",
 			description:
-				"`--follow` only: how often an `.id` sweep finds removals RouterOS does not send (view menus such as `/interface/<type>`). Needs a unit; default `10s`; `0` turns it off.",
+				"`--follow` only: how often a membership sweep finds removals RouterOS does not send, including silent exits from --query. Needs a unit; default `10s`; `0` turns it off.",
 		},
 		{
 			flag: "--count",

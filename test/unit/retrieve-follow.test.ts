@@ -47,6 +47,8 @@ interface FakeRouterOptions {
 	sweepTrapAfterMs?: number;
 	/** Runs on every `/console/inspect` (live validation). */
 	onInspect?: () => void;
+	/** A newer wire change before an older membership result is returned. */
+	onMembership?: (router: FakeFollowRouter) => void;
 }
 
 /**
@@ -152,6 +154,10 @@ class FakeFollowRouter {
 				return;
 			case "/ip/address/print": {
 				let rows = [...this.rows.values()];
+				const query = words
+					.filter((word) => word.startsWith("?"))
+					.map((word) => word.slice(1));
+				const membership = query.some((word) => word.startsWith(".id="));
 				const trapAfter = this.options.sweepTrapAfterMs;
 				if (attrs[".proplist"] === ".id" && trapAfter !== undefined) {
 					this.set("*9", { address: "192.0.2.9/24" });
@@ -163,10 +169,13 @@ class FakeFollowRouter {
 				}
 				if (attrs[".proplist"] === ".id") {
 					const ids = this.options.onSweep?.(this) ?? [...this.rows.keys()];
-					rows = ids.map((id) => ({ ".id": id }));
+					rows = ids.map((id) => this.rows.get(id) ?? { ".id": id });
+				} else if (membership) {
+					this.options.onMembership?.(this);
 				} else {
 					this.options.onSnapshot?.(this);
 				}
+				rows = rows.filter((row) => matches(row, query));
 				for (const row of rows) {
 					this.send([
 						"!re",
@@ -227,6 +236,25 @@ function project(row: Row, proplist: string[] | undefined): Row {
 	return Object.fromEntries(
 		Object.entries(row).filter(([key]) => proplist.includes(key)),
 	);
+}
+
+/** Test oracle for equality and stack combinations only; CHR proves typing. */
+function matches(row: Row, words: string[]): boolean {
+	const stack: boolean[] = [];
+	for (const word of words) {
+		if (word === "#!") stack.push(!stack.pop());
+		else if (word === "#&" || word === "#|") {
+			const right = stack.pop();
+			const left = stack.pop();
+			stack.push(
+				word === "#&" ? Boolean(left && right) : Boolean(left || right),
+			);
+		} else {
+			const cut = word.indexOf("=");
+			stack.push(row[word.slice(0, cut)] === word.slice(cut + 1));
+		}
+	}
+	return stack.every(Boolean);
 }
 
 const routers: FakeFollowRouter[] = [];
@@ -574,6 +602,207 @@ describe("retrieveFollow projection and bounds", () => {
 		expect(out.map(shape)).toEqual(["summary:interrupted"]);
 		expect(router.commands()).not.toContain("/ip/address/listen");
 		expect(router.commands()).not.toContain("/ip/address/print");
+	});
+});
+
+describe("retrieveFollow filtered membership", () => {
+	test("filters bootstrap and follows both membership directions with projected-away fields", async () => {
+		const router = fakeRouter();
+		const out = await follow(
+			request(router, {
+				query: "comment=a or comment=new",
+				attributes: "address",
+				sweep: 0,
+				duration: "300ms",
+			}),
+			{
+				afterSynced: () => {
+					router.set("*1", { address: "192.0.2.1/24", comment: "out" });
+					router.set("*2", { address: "192.0.2.2/24", comment: "new" });
+				},
+			},
+		);
+		expect(out.map(shape)).toEqual([
+			"notice",
+			"snapshot upsert *1 print",
+			"synced:1",
+			"live removed *1 membership",
+			"live upsert *2 membership",
+			"summary:duration-elapsed",
+		]);
+		expect(dataOf(out[4])).toEqual({ address: "192.0.2.2/24" });
+		const listen = router.sentences.find((words) =>
+			words[0]?.endsWith("/listen"),
+		);
+		expect(listen?.some((word) => word.startsWith("?"))).toBe(false);
+	});
+
+	test("a delayed membership result cannot restore a row after a newer delete", async () => {
+		let changed = false;
+		const router = fakeRouter({
+			onMembership: (r) => {
+				if (!changed) {
+					changed = true;
+					r.remove("*2");
+				}
+			},
+		});
+		const out = await follow(
+			request(router, { query: "comment=a", sweep: 0, duration: "300ms" }),
+			{
+				afterSynced: () =>
+					router.set("*2", { address: "192.0.2.2/24", comment: "a" }),
+			},
+		);
+		expect(out.map(shape)).not.toContain("live upsert *2 membership");
+		expect(out.map(shape)).not.toContain("live removed *2 listen");
+		expect(dataOf(out.at(-1))).toMatchObject({ synced: true, changes: 0 });
+	});
+
+	test("reconciles changes during bootstrap before synced", async () => {
+		const router = fakeRouter({
+			onSnapshot: (r) => {
+				r.set("*1", { address: "192.0.2.1/24", comment: "out" });
+				r.set("*2", { address: "192.0.2.2/24", comment: "a" });
+			},
+		});
+		const out = await follow(
+			request(router, { query: "comment=a", sweep: 0, duration: "300ms" }),
+		);
+		expect(out.map(shape)).toEqual([
+			"notice",
+			"snapshot upsert *1 print",
+			"snapshot removed *1 membership",
+			"snapshot upsert *2 membership",
+			"synced:1",
+			"summary:duration-elapsed",
+		]);
+	});
+
+	test("sustained newer changes cannot starve filtered bootstrap, sweeps or count", async () => {
+		let batches = 0;
+		const router = fakeRouter({
+			onSnapshot: (r) => r.set("*1", { address: "192.0.2.1/24", comment: "a" }),
+			onMembership: (r) => {
+				batches++;
+				r.set("*1", { address: "192.0.2.1/24", comment: "a" });
+			},
+		});
+		const out = await follow(
+			request(router, {
+				query: "comment=a or comment=old",
+				sweep: "20ms",
+				count: 1,
+				duration: "300ms",
+			}),
+			{
+				afterSynced: () => {
+					// Even while *1 keeps invalidating its membership replies, a
+					// different held row's removal must satisfy the live count.
+					setTimeout(() => router.remove("*2"), 80);
+				},
+			},
+		);
+		expect(batches).toBeGreaterThan(1);
+		expect(out.map(shape)).toContain("synced:2");
+		expect(out.map(shape)).toContain("live removed *2 listen");
+		expect(out.map(shape).at(-1)).toBe("summary:count-reached");
+		expect(dataOf(out.at(-1))).toMatchObject({ synced: true });
+		expect((dataOf(out.at(-1)) as { sweeps: number }).sweeps).toBeGreaterThan(
+			0,
+		);
+	});
+
+	test("minimal deletion uses held membership; a silent predicate exit is swept", async () => {
+		const router = fakeRouter();
+		const out = await follow(
+			request(router, { query: "comment=a", sweep: "40ms", duration: "300ms" }),
+			{
+				afterSynced: () =>
+					router.set("*1", { address: "192.0.2.1/24", comment: "out" }, false),
+			},
+		);
+		expect(out.map(shape)).toContain("live removed *1 membership");
+		const dead = await follow(
+			request(router, {
+				query: "comment=old",
+				sweep: 0,
+				count: 1,
+				duration: "300ms",
+			}),
+			{
+				afterSynced: () => {
+					router.remove("*1");
+					router.remove("*2");
+				},
+			},
+		);
+		expect(dead.map(shape)).toContain("live removed *2 listen");
+		expect(dead.map(shape)).not.toContain("live removed *1 listen");
+	});
+
+	test("unknown predicate property fails validation before listen", async () => {
+		const router = fakeRouter();
+		const out = await follow(request(router, { query: "unknown-property=a" }));
+		expect(out[0]?.ok ? undefined : out[0]?.error.code).toBe(
+			"validation/unknown-attribute",
+		);
+		expect(router.commands()).not.toContain("/ip/address/listen");
+	});
+
+	test("cancellation mid-membership batch emits no remaining frames or synced", async () => {
+		const router = fakeRouter({
+			onSnapshot: (r) => {
+				r.set("*1", { address: "192.0.2.1/24", comment: "in" });
+				r.set("*2", { address: "192.0.2.2/24", comment: "in" });
+			},
+		});
+		const controller = new AbortController();
+		const out: RetrieveEnvelope[] = [];
+		for await (const envelope of retrieveFollow(
+			request(router, { query: "comment=in", sweep: 0, duration: "2s" }),
+			ENV,
+			{ signal: controller.signal },
+		)) {
+			out.push(envelope);
+			if (shape(envelope).endsWith(" membership")) controller.abort();
+		}
+		expect(out.map(shape)).toEqual([
+			"notice",
+			"snapshot upsert *1 membership",
+			"summary:interrupted",
+		]);
+	});
+
+	test("a paused membership batch keeps its unread results in the overflow bound", async () => {
+		const router = fakeRouter({
+			onSnapshot: (r) => {
+				r.set("*1", { address: "192.0.2.1/24", comment: "in" });
+				r.set("*2", { address: "192.0.2.2/24", comment: "in" });
+			},
+		});
+		const out: RetrieveEnvelope[] = [];
+		let paused = false;
+		for await (const envelope of retrieveFollow(
+			request(router, { query: "comment=in", sweep: 0, duration: "300ms" }),
+			ENV,
+			{ bufferLimit: 2 },
+		)) {
+			out.push(envelope);
+			if (!paused && shape(envelope).endsWith(" membership")) {
+				paused = true;
+				router.set("*1", { comment: "in" });
+				router.set("*2", { comment: "in" });
+				await Bun.sleep(40);
+				expect(router.commands()).toContain("/cancel");
+			}
+		}
+		expect(paused).toBe(true);
+		expect(out.filter((e) => shape(e).endsWith(" membership"))).toHaveLength(1);
+		const last = out.at(-1);
+		expect(last?.ok ? undefined : last?.error.code).toBe(
+			"transport/stream-overflow",
+		);
 	});
 });
 

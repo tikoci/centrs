@@ -15,7 +15,9 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 - **`retrieve --follow` keeps a menu's rows current over native API (#396).**
   Snapshot rows, one `synced` line, then a line per change, as NDJSON; an
   `.id` sweep (`--sweep`, default 10s) reports removals RouterOS never sends
-  on view menus. Single target, unfiltered (#397 adds filters). `--sweep`
+  on view menus. Single target; `--query` / `--filter` (#397) use device
+  membership reads and filtered sweeps, with membership removals distinguished
+  from wire deletions. `--sweep`
   needs a unit (`10s`); only `0` (off) may be bare.
 - **`retrieve --sample <interval>` re-reads a menu on a timer.** One line per
   complete read (`data` is the whole read), then a summary; `--count` and
@@ -29,8 +31,8 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   `--filter` is the same flag; repeats are AND-ed. Property names are
   validated, and bare names are asked of the router (`disabled` → `=yes`,
   `comment` → "is set"). `~`, `in` and script values fail
-  `input/unsupported-query`. Works with `--sample` and fan-out, not yet with
-  `--follow`. Checked on CHR against RouterOS's own `find where`.
+  `input/unsupported-query`. Works with `--sample`, fan-out and `--follow`.
+  Checked on CHR against RouterOS's own `find where`.
 - `--format ndjson` for `retrieve`. Library: `retrieveFollow()`,
   `retrieveSample()`, and `renderRetrieveStreamLine()` for both (it replaces
   the unreleased `renderRetrieveFollowLine()`).

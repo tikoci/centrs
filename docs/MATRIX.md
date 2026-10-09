@@ -66,9 +66,12 @@ and implementation sequencing in the linked issues.
   (filtered or projected change feeds) is a tip, not a rewrite.
 - `retrieve --follow` (#396) is the stateful follow over native-api: A1
   bootstrap, `synced`, live frames, and an `.id` sweep for removals RouterOS
-  does not send. Unfiltered and single-target; `CHR-passed` by
+  does not send. Single-target; `CHR-passed` by
   `test/integration/retrieve-follow.test.ts` (FL1–FL9, 7.23.7 and 7.24.5).
-  Filtered follow waits on #397.
+  Filtered follow (#397) uses device-evaluated changed-id membership, guarded
+  against stale replies; `test/integration/retrieve-filtered-follow.test.ts`
+  covers FQ1–FQ5 on 7.23.8 and 7.24.5, including projected predicates, both membership directions,
+  minimal deletes, silent predicate exits and bootstrap/live churn.
 - `retrieve --sample <interval>` repeats the one-shot read on a timer, one
   line per complete read, over rest-api or native-api: the answer for counters
   and state `listen` never reports. RouterOS's `print interval=` was measured
@@ -175,7 +178,7 @@ field poll with `sleep` where a native follow would answer. In order:
 (1) done: #402, literal `api --stream` with `!empty` frames and
 `--format ndjson`; (2) done: `retrieve --follow` (#396, unfiltered);
 (3) done: `retrieve --sample`; (4) #397: one-shot `retrieve --query` done,
-filtered `--follow` next; then #364 (`--until`, same grammar);
+filtered `--follow` done; next #364 (`--until`, same grammar);
 (5) #398 and #401. Each slice's contract lives in its command
 README. Live `explain` (below) resumes after this line.
 

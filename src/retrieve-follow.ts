@@ -3,10 +3,10 @@
  * The contract (line kinds, A1 bootstrap, `.id` sweep, bounds) is
  * `commands/retrieve/README.md` → Follow; the CHR evidence is #396.
  *
- * One native connection carries three tagged commands: the `listen` (started
- * first), the snapshot `print`, and the periodic `.id` sweep. Their replies
- * land in one arrival-ordered queue, so the A1 replay and the sweep's
- * "changed since it was sent" exclusion are both decided by queue position.
+ * One native connection carries the `listen` (started first), snapshot,
+ * membership reads and periodic sweep. Replies land in one arrival-ordered
+ * queue. Filtered membership adds per-id wire versions so delayed replies
+ * cannot overwrite newer changes; membership reads and sweeps are serialized.
  */
 
 import {
@@ -25,10 +25,8 @@ import {
 	type ProtocolTappedReply,
 } from "./protocols/adapter.ts";
 import {
-	assertKnownAttributes,
 	buildRetrieveErrorEnvelope,
 	buildRetrieveErrorEnvelopeFromResolved,
-	inspectRetrievePath,
 	type ResolvedRetrieveRequest,
 	type RetrieveEnvelope,
 	type RetrieveFollowCounts,
@@ -38,6 +36,7 @@ import {
 	type RetrieveStreamMeta,
 	type RetrieveSuccessEnvelope,
 	resolveRetrieveRequest,
+	validateRetrieveRead,
 } from "./retrieve.ts";
 import { failedStreamEnvelope, streamEnvelope } from "./retrieve-stream.ts";
 
@@ -54,12 +53,17 @@ export interface RetrieveFollowOptions {
 }
 
 type FollowEvent =
-	| { type: "listen"; reply: ProtocolTappedReply }
+	| { type: "listen"; reply: ProtocolTappedReply; version?: number }
 	| { type: "listen-end" }
 	| { type: "snapshot-row"; row: Record<string, string> }
-	| { type: "snapshot-done" }
+	| { type: "snapshot-done"; bootstrap?: Map<string, number> }
 	| { type: "sweep-start" }
 	| { type: "sweep"; ids: Set<string> }
+	| {
+			type: "membership";
+			versions: Map<string, number>;
+			rows: Map<string, Record<string, string>>;
+	  }
 	| { type: "stop" }
 	| { type: "error"; error: unknown };
 
@@ -194,9 +198,9 @@ export async function* retrieveFollow(
 		timeoutMs: resolved.timeoutMs.value,
 		insecure: resolved.insecure?.value,
 	});
-	let validation: EnvelopeValidationMeta;
+	let prepared: Awaited<ReturnType<typeof validateFollow>>;
 	try {
-		validation = await validateFollow(resolved, backend);
+		prepared = await validateFollow(resolved, backend);
 	} catch (error) {
 		await backend.close();
 		yield buildRetrieveErrorEnvelopeFromResolved(resolved, error);
@@ -204,10 +208,17 @@ export async function* retrieveFollow(
 	}
 	if (options.signal?.aborted) {
 		await backend.close();
-		yield interruptedSummary(resolved, validation, startedAt);
+		yield interruptedSummary(resolved, prepared.validation, startedAt);
 		return;
 	}
-	yield* runFollow(resolved, backend, validation, options, startedAt);
+	yield* runFollow(
+		resolved,
+		backend,
+		prepared.validation,
+		options,
+		startedAt,
+		prepared.query,
+	);
 }
 
 /**
@@ -219,11 +230,13 @@ export async function* retrieveFollow(
 async function validateFollow(
 	resolved: ResolvedRetrieveRequest,
 	backend: ProtocolAdapter,
-): Promise<EnvelopeValidationMeta> {
+): Promise<Awaited<ReturnType<typeof validateRetrieveRead>>> {
+	const prepared = await validateRetrieveRead(resolved, backend);
 	if (!resolved.validate.value) {
-		return { enabled: false, source: "disabled" };
+		return prepared;
 	}
-	const inspection = await inspectRetrievePath(resolved, backend);
+	const inspection = prepared.inspection;
+	if (!inspection) throw new Error("validated follow has no inspection");
 	const followable =
 		!inspection.singleton &&
 		(
@@ -246,17 +259,7 @@ async function validateFollow(
 			},
 		});
 	}
-	const availableAttributes =
-		resolved.attributes.length > 0
-			? await assertKnownAttributes(resolved, inspection, backend)
-			: undefined;
-	return {
-		enabled: true,
-		source: availableAttributes
-			? "live /console/inspect request=child+completion"
-			: "live /console/inspect request=child",
-		availableAttributes,
-	};
+	return prepared;
 }
 
 async function* runFollow(
@@ -265,6 +268,7 @@ async function* runFollow(
 	validation: EnvelopeValidationMeta,
 	options: RetrieveFollowOptions,
 	startedAt: number,
+	query?: readonly string[],
 ): AsyncGenerator<RetrieveEnvelope, void, void> {
 	const follow = resolved.follow ?? { sweepMs: 0 };
 	const bufferLimit = options.bufferLimit ?? FOLLOW_BUFFER_LIMIT;
@@ -283,21 +287,39 @@ async function* runFollow(
 	// One wire-ordered queue for every source; `pending` holds listen replies
 	// that arrived before the snapshot's `!done` (A1 replays them after it).
 	const queue = new FollowQueue();
-	const pending: ProtocolTappedReply[] = [];
+	const pending: Extract<FollowEvent, { type: "listen" }>[] = [];
+	// Versions are advanced in the synchronous wire tap, not when a consumer
+	// eventually drains the queue. A delayed membership reply cannot restore a
+	// row after a newer change/deletion. Entries leave with their final result.
+	const latest = new Map<string, number>();
+	const dirty = new Map<string, number>();
+	// Fixed at the snapshot's wire !done: newer changes stay live work and
+	// cannot continually extend bootstrap or postpone its first sweep.
+	const bootstrapPending = new Map<string, number>();
+	let version = 0;
+	let membershipRunning = false;
+	let membershipSize = 0;
+	let sweepRunning = false;
+	let sweepDue = false;
+	let snapshotComplete = false;
 	// Cleared once the loop leaves: replies that land during teardown are not
 	// read, so they must not count toward the overflow bound. Errors still do.
 	let draining = true;
 	const push = (event: FollowEvent): void => {
 		if (event.type === "error") {
 			queue.fail(event.error);
+			draining = false;
+			controller.abort();
 			return;
 		}
 		if (!draining) return;
 		if (
 			(event.type === "listen" || event.type === "snapshot-row") &&
-			queue.length + pending.length >= bufferLimit
+			queue.length + pending.length + dirty.size + membershipSize >= bufferLimit
 		) {
 			queue.fail(overflowError(bufferLimit));
+			draining = false;
+			controller.abort();
 			return;
 		}
 		queue.push(event);
@@ -305,6 +327,7 @@ async function* runFollow(
 	const stop = (reason: RetrieveFollowStopReason): void => {
 		stopReason ??= reason;
 		queue.requestStop();
+		controller.abort();
 	};
 	/**
 	 * Cancel the listen and wait for RouterOS's acknowledgement (bounded by
@@ -385,7 +408,11 @@ async function* runFollow(
 		},
 		(reply) => {
 			if (reply.type === "re" || reply.type === "empty") {
-				push({ type: "listen", reply });
+				const id = reply.attributes[".id"];
+				const current = query && id !== undefined ? ++version : undefined;
+				if (draining && current !== undefined && id !== undefined)
+					latest.set(id, current);
+				push({ type: "listen", reply, version: current });
 			}
 		},
 		{
@@ -397,10 +424,15 @@ async function* runFollow(
 						path: resolved.path,
 						proplist: internalProplist,
 						attributes: detail,
+						query,
 					},
 					finite(
 						(row) => push({ type: "snapshot-row", row }),
-						() => push({ type: "snapshot-done" }),
+						() =>
+							push({
+								type: "snapshot-done",
+								bootstrap: query ? new Map(latest) : undefined,
+							}),
 					),
 				);
 			},
@@ -416,20 +448,79 @@ async function* runFollow(
 	// never removes those (its snapshot may predate them).
 	let touchedSinceSweep: Set<string> | undefined;
 	let sweepTimer: ReturnType<typeof setTimeout> | undefined;
+	const startSweep = (): void => {
+		if (
+			!sweepDue ||
+			membershipRunning ||
+			sweepRunning ||
+			controller.signal.aborted
+		)
+			return;
+		sweepDue = false;
+		sweepRunning = true;
+		push({ type: "sweep-start" });
+		const ids = new Set<string>();
+		run(
+			{ verb: "print", path: resolved.path, proplist: [".id"], query },
+			finite(
+				(row) => ids.add(row[".id"] ?? ""),
+				() => push({ type: "sweep", ids }),
+			),
+		);
+	};
 	const scheduleSweep = (): void => {
 		if (follow.sweepMs <= 0 || controller.signal.aborted) return;
 		sweepTimer = setTimeout(() => {
 			if (controller.signal.aborted) return;
-			push({ type: "sweep-start" });
-			const ids = new Set<string>();
-			run(
-				{ verb: "print", path: resolved.path, proplist: [".id"] },
-				finite(
-					(row) => ids.add(row[".id"] ?? ""),
-					() => push({ type: "sweep", ids }),
-				),
-			);
+			sweepDue = true;
+			startSweep();
 		}, follow.sweepMs);
+	};
+	/** One bounded batch at a time. The unfiltered listen only identifies ids;
+	 * the router returns current matching rows with the caller's projection. */
+	const scheduleMembership = (): void => {
+		if (
+			!query ||
+			membershipRunning ||
+			sweepRunning ||
+			sweepDue ||
+			dirty.size === 0 ||
+			controller.signal.aborted
+		)
+			return;
+		const versions = new Map<string, number>();
+		for (const id of bootstrapPending.keys()) {
+			const current = dirty.get(id);
+			if (current !== undefined) versions.set(id, current);
+			if (versions.size === 256) break;
+		}
+		for (const [id, current] of dirty) {
+			if (versions.size === 256) break;
+			versions.set(id, current);
+		}
+		for (const id of versions.keys()) dirty.delete(id);
+		const ids = [...versions.keys()];
+		const selection = ids.flatMap((id, index) =>
+			index === 0 ? [`.id=${id}`] : [`.id=${id}`, "#|"],
+		);
+		const rows = new Map<string, Record<string, string>>();
+		membershipRunning = true;
+		membershipSize = versions.size;
+		run(
+			{
+				verb: "print",
+				path: resolved.path,
+				proplist: internalProplist,
+				attributes: detail,
+				query: [...selection, ...query, "#&"],
+			},
+			finite(
+				(row) => {
+					if (row[".id"] !== undefined) rows.set(row[".id"], row);
+				},
+				() => push({ type: "membership", versions, rows }),
+			),
+		);
 	};
 
 	const frame = (
@@ -454,14 +545,26 @@ async function* runFollow(
 	};
 	/** A listen reply as a frame, or `undefined` when it changes nothing held. */
 	const applyListen = (
-		reply: ProtocolTappedReply,
+		event: Extract<FollowEvent, { type: "listen" }>,
 		phase: FrameMeta["phase"],
 	): RetrieveSuccessEnvelope | undefined => {
+		const { reply } = event;
 		// `!empty` on a listen is the cancel acknowledgement, never a table state.
 		if (reply.type === "empty") return undefined;
 		const id = reply.attributes[".id"];
 		if (id === undefined) return undefined;
 		touchedSinceSweep?.add(id);
+		if (query) {
+			if (event.version === undefined || event.version !== latest.get(id))
+				return undefined;
+			if (reply.attributes[".dead"] !== "true") {
+				dirty.set(id, event.version);
+				return undefined;
+			}
+			dirty.delete(id);
+			latest.delete(id);
+			bootstrapPending.delete(id);
+		}
 		if (reply.attributes[".dead"] === "true") {
 			// A `.dead` for an id never reported is a coalesced add+delete.
 			if (!held.delete(id)) return undefined;
@@ -496,14 +599,17 @@ async function* runFollow(
 			const event = await queue.next();
 			switch (event.type) {
 				case "listen": {
-					if (!counts.synced) {
-						pending.push(event.reply);
+					if (!snapshotComplete) {
+						pending.push(event);
 						break;
 					}
-					const envelope = applyListen(event.reply, "live");
+					const envelope = applyListen(
+						event,
+						counts.synced ? "live" : "snapshot",
+					);
 					if (envelope) {
 						yield envelope;
-						if (countReached()) {
+						if (counts.synced && countReached()) {
 							stopReason ??= "count-reached";
 							break loop;
 						}
@@ -519,12 +625,16 @@ async function* runFollow(
 					break;
 				}
 				case "snapshot-done": {
+					snapshotComplete = true;
+					for (const [id, current] of event.bootstrap ?? [])
+						bootstrapPending.set(id, current);
 					for (const reply of pending.splice(0, pending.length)) {
 						if (haltRequested()) break loop;
 						const envelope = applyListen(reply, "snapshot");
 						if (envelope) yield envelope;
 					}
 					if (haltRequested()) break loop;
+					if (query) break;
 					counts.synced = true;
 					yield streamEnvelope(resolved, validation, null, {
 						kind: "synced",
@@ -533,18 +643,58 @@ async function* runFollow(
 					scheduleSweep();
 					break;
 				}
+				case "membership": {
+					membershipRunning = false;
+					for (const [id, expected] of event.versions) {
+						if (haltRequested()) break loop;
+						membershipSize--;
+						const initial = bootstrapPending.get(id);
+						if (initial !== undefined && expected >= initial)
+							bootstrapPending.delete(id);
+						// A newer wire version invalidates this result, but it is
+						// live work after the fixed bootstrap cutoff, not a reason
+						// to extend initialization. Its dirty entry is retained.
+						if (latest.get(id) !== expected) continue;
+						latest.delete(id);
+						const row = event.rows.get(id);
+						const phase = counts.synced ? "live" : "snapshot";
+						if (row) {
+							held.add(id);
+							yield frame(phase, "upsert", id, "membership", row);
+						} else if (held.delete(id)) {
+							yield frame(phase, "removed", id, "membership", null);
+						}
+						if (counts.synced && countReached()) {
+							stopReason ??= "count-reached";
+							break loop;
+						}
+					}
+					break;
+				}
 				case "sweep-start":
 					touchedSinceSweep = new Set();
 					break;
 				case "sweep": {
+					sweepRunning = false;
 					counts.sweeps += 1;
 					const touched = touchedSinceSweep ?? new Set<string>();
 					touchedSinceSweep = undefined;
 					for (const id of [...held]) {
-						if (event.ids.has(id) || touched.has(id)) continue;
+						if (
+							event.ids.has(id) ||
+							touched.has(id) ||
+							(query && latest.has(id))
+						)
+							continue;
 						if (haltRequested()) break loop;
 						held.delete(id);
-						yield frame("live", "removed", id, "sweep", null);
+						yield frame(
+							"live",
+							"removed",
+							id,
+							query ? "membership" : "sweep",
+							null,
+						);
 						if (countReached()) {
 							stopReason ??= "count-reached";
 							break loop;
@@ -561,6 +711,19 @@ async function* runFollow(
 					break loop;
 				case "error":
 					throw event.error;
+			}
+			if (query) {
+				if (haltRequested()) break;
+				if (snapshotComplete && !counts.synced && bootstrapPending.size === 0) {
+					counts.synced = true;
+					yield streamEnvelope(resolved, validation, null, {
+						kind: "synced",
+						rows: held.size,
+					});
+					scheduleSweep();
+				}
+				startSweep();
+				scheduleMembership();
 			}
 		}
 		draining = false;
@@ -655,7 +818,10 @@ function followTips(resolved: ResolvedRetrieveRequest): Tip[] {
 	return [
 		buildTip(
 			"tip/follow-sweep-off",
-			"`--sweep 0` turned off the `.id` sweep, so removals RouterOS does not send (view menus such as `/interface/<type>`, `/ip/route`, `/ipv6/route`) will not be reported.",
+			"`--sweep 0` turned off the membership sweep, so removals RouterOS does not send (view menus such as `/interface/<type>`, `/ip/route`, `/ipv6/route`) will not be reported." +
+				(resolved.query
+					? " Silent exits from the predicate will also remain held until a listen notification arrives."
+					: ""),
 			"Leave `--sweep` at its default (10s), or follow the base menu (`/interface`, `/routing/route`), which reports its removals.",
 		),
 	];

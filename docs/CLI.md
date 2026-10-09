@@ -53,7 +53,7 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 | `--query / --filter` | `<expr>` | Row filter written as after `print where` (`disabled`, `mtu>=1500 and !dynamic`), run on the router as an API query; repeatable, AND-ed. No `~` or `in`. |
 | `--follow` |  | Keep the menu's rows current over native-api `listen`: snapshot frames, a `synced` line, then a line per change, then a summary (NDJSON for json/yaml/ndjson). Single target, list menus whose print takes follow-only. |
 | `--sample` | `<interval>` | Read the menu again every interval (with a unit, e.g. `5s`): one line per complete read, then a summary (NDJSON for json/yaml/ndjson). Sees what `--follow` cannot, such as counters. Single target; rest-api or native-api. |
-| `--sweep` | `<duration>` | `--follow` only: how often an `.id` sweep finds removals RouterOS does not send (view menus such as `/interface/<type>`). Needs a unit; default `10s`; `0` turns it off. |
+| `--sweep` | `<duration>` | `--follow` only: how often a membership sweep finds removals RouterOS does not send, including silent exits from --query. Needs a unit; default `10s`; `0` turns it off. |
 | `--count` | `<n>` | `--follow`: stop after N live changes (snapshot frames and `synced` do not count). `--sample`: stop after N samples. |
 | `--duration` | `<duration>` | `--follow`/`--sample`: stop after this wall-clock window (e.g. `30s`), counted from the end of validation. |
 | `--format` | &lt;text\|json\|yaml\|ndjson&gt; | Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope. `ndjson` prints each envelope as one compact line. |
