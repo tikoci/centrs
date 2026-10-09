@@ -46,6 +46,10 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 
 ### Fixed
 
+- Fan-out FAIL rows and btest client/server CSV error comments replace terminal
+  controls with spaces (#395, #415). Compact error text stays on one line,
+  including target labels and verbose remediation; JSON/YAML keep the raw values.
+
 - **`api --query` uses the `print where` grammar too (#397).** A bare name is
   now `=yes` for a boolean (was "has the property"; that is
   `--raw-query name`), `<`/`<=` include rows without the property as `where`

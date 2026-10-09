@@ -206,6 +206,11 @@ function terminalSafe(text: string): string {
 	return text.replace(TERMINAL_CONTROL, " ");
 }
 
+/** Compact records also replace tab/newline so external text cannot add rows. */
+export function terminalSafeLine(text: string): string {
+	return terminalSafe(text).replace(/[\t\n]/g, " ");
+}
+
 function oneLine(text: string): string {
 	return text.replace(/\s+/g, " ").trim();
 }

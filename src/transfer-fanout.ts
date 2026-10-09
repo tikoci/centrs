@@ -43,6 +43,7 @@ import {
 	CentrsError,
 	formatCentrsErrorText,
 	serializeCentrsError,
+	terminalSafeLine,
 } from "./errors.ts";
 import { promptForWriteConfirmation } from "./execute.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
@@ -530,10 +531,14 @@ export function renderTransferFanoutEnvelope(
 			lines.push(`  [${index}] ok    ${label}${detail}`);
 		} else {
 			lines.push(
-				`  [${index}] FAIL  ${label} [${target.error.code}] ${target.error.summary}`,
+				terminalSafeLine(
+					`  [${index}] FAIL  ${label} [${target.error.code}] ${target.error.summary}`,
+				),
 			);
 			if (options.verbose && target.error.remediation) {
-				lines.push(`        Fix: ${target.error.remediation}`);
+				lines.push(
+					terminalSafeLine(`        Fix: ${target.error.remediation}`),
+				);
 			}
 		}
 	}
