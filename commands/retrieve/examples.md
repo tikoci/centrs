@@ -607,3 +607,60 @@ centrs retrieve $R /ip/firewall/address-list --query 'list=qa-397 and disabled' 
 ```
 
 Both samples hold only the disabled `qa-397` row.
+
+## Filtered follow
+
+Covered by `test/integration/retrieve-filtered-follow.test.ts` (FQ1–FQ5).
+The harness seeds address-list rows and changes them while following, with
+validation enabled. `$A`/`$API_PORT` are the native-API target as above.
+
+### FQ1. Projection and both membership directions
+
+```bash
+centrs retrieve $A /ip/firewall/address-list --via native-api --port $API_PORT --username $U --password $P --follow --query 'list=fq1' --query 'comment=a and !disabled' --attributes address --count 2 --duration 10s --json
+```
+
+Initially only the matching row appears. Changing its comment out of the
+predicate emits a `removed` frame with `source: "membership"`; changing an
+excluded row into it emits an `upsert` with the same source. `data` contains
+only `address`, while identity remains in meta.
+
+### FQ2. Minimal deletion frames
+
+```bash
+centrs retrieve $A /ip/firewall/address-list --via native-api --port $API_PORT --username $U --password $P --follow --query 'list=fq1 and comment=a' --sweep 0 --count 1 --duration 10s --json
+```
+
+Deleting an excluded row emits nothing; deleting the held row emits one
+`removed` with `source: "listen"`. Predicate fields are absent from `.dead`.
+
+### FQ3. Silent predicate exit
+
+```bash
+centrs retrieve $A /ip/firewall/address-list --via native-api --port $API_PORT --username $U --password $P --follow --query 'list=fq3 and timeout>8s' --sweep 200ms --count 1 --duration 6s --json
+```
+
+The harness adds a row with a 10-second timeout. A sweep removes it from the
+selected set as its remaining timeout crosses 8 seconds, with
+`source: "membership"`; the row still exists in an unfiltered read.
+
+### FQ4. CLI alias and predicate validation
+
+```bash
+centrs retrieve $A /ip/firewall/address-list --port $API_PORT --username $U --password $P --follow --filter list=fq3 --attributes address --duration 500ms --json
+centrs retrieve $A /ip/firewall/address-list --port $API_PORT --username $U --password $P --follow --query lits=fq3 --json
+```
+
+The first emits projected snapshot rows and `synced`. The typo in the second
+fails `validation/unknown-attribute` before listen starts.
+
+### FQ5. Filtered bootstrap and live churn
+
+```bash
+centrs retrieve $A /ip/firewall/address-list --port $API_PORT --username $U --password $P --follow --query 'list=fq5 and comment=in' --attributes address --sweep 200ms --duration 6s --json
+```
+
+The harness changes membership during bootstrap and live operation, then
+deletes rows. Applying all frames yields exactly the ids and projected rows
+of a fresh filtered print after churn settles. Deterministic delayed-reply,
+delete and cancellation orderings are anchored in `retrieve-follow.test.ts`.

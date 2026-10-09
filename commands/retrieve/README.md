@@ -153,8 +153,8 @@ centrs retrieve $R /ip/route --query '(dst-address="0.0.0.0/0" or distance>=10) 
 
 `--filter` is the same flag. Repeat either, and the expressions are AND-ed. A
 list read with `--query` is always an array, `[]` when nothing matches. The
-result works with `--attribute(s)`, `--sample` and fan-out; `--follow` does not
-take it yet (#397). A singleton (`/system/identity`) has no rows to filter and
+result works with `--attribute(s)`, `--sample`, `--follow` and fan-out.
+A singleton (`/system/identity`) has no rows to filter and
 fails `usage/conflicting-flags`.
 
 **What it compiles to.** centrs parses the expression before connecting and
@@ -233,15 +233,14 @@ followed. Native-api only: an unset `via` infers native-api, and a `via` of
 `rest-api` from any source (flag, env, CDB, settings) fails
 `transport/capability-unsupported`; there is no polling fallback. Single
 target only: a fan-out selector fails `usage/fanout-not-supported`. Follow is
-unfiltered for now: `--query` with `--follow` fails `validation/not-implemented`
-until filtered follow lands (#397).
+filtered with the same `--query`/`--filter` grammar as a one-shot read (#397).
 
 **What each line means.** Every line is one envelope; read
 `meta.operation.stream`:
 
 | `kind` | When | `data` | Fields |
 | ------ | ---- | ------ | ------ |
-| `frame` | One row change | the row (`upsert`), `null` (`removed`) | `index`, `phase` (`snapshot`/`live`), `change` (`upsert`/`removed`), `id`, `source` (`print`/`listen`/`sweep`) |
+| `frame` | One row change | the row (`upsert`), `null` (`removed`) | `index`, `phase` (`snapshot`/`live`), `change` (`upsert`/`removed`), `id`, `source` (`print`/`listen`/`sweep`/`membership`) |
 | `synced` | Once, after the snapshot | `null` | `rows`: rows held at that point |
 | `notice` | First, only when there is advice | `null` | — (`tips` carries it) |
 | `summary` | Last, exactly once | the counts | `stopReason`, `frames`, `snapshot`, `changes`, `sweeps`, `synced`, `durationMs` |
@@ -278,6 +277,22 @@ until filtered follow lands (#397).
   `bytes`/`packets`) and some protocol state (BFD sessions accept `listen` but
   stay silent). The follow is correct but quiet there; `--sample` (below)
   is the answer for those.
+- **Filtered membership.** The snapshot and sweep carry the predicate; the
+  listen stays unfiltered, retaining `.id,.dead`. For changed ids centrs reads
+  the current matching rows from RouterOS, in batches of at most 256 ids with
+  one membership read in flight. No client type coercion is involved, and
+  predicate fields need not appear in the caller's projection. These frames
+  have `source: "membership"`: a matching row is upserted, and a held row that
+  no longer matches (or no longer exists) is removed. This removal is a change
+  in the selected set, not a claim that RouterOS sent `.dead`. A real `.dead`
+  still has `source: "listen"` and only removes a held id. Delayed membership
+  results are discarded for ids with newer wire changes; sweeps and membership
+  reads are serialized. During bootstrap, buffered changes are reconciled
+  before `synced`; this may coalesce more changes than unfiltered A1 replay.
+  The filtered sweep also detects silent exits from a predicate (e.g. a
+  decreasing address-list `timeout`). It does not discover silent entries or
+  repair silent field updates: use `--sample` for such state. With `--sweep 0`,
+  silent exits remain held until a listen notification arrives.
 - **Projection.** `--attribute(s)` projects `data`; centrs still asks RouterOS
   for `.id,.dead` and removes them from `data` unless you named them.
   `--all-attributes` sends `detail` to both `listen` and `print`.

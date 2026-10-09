@@ -477,7 +477,7 @@ describe("retrieve --query", () => {
 		).rejects.toMatchObject({ code: "input/invalid-query" });
 	});
 
-	test("a bad expression fails offline; --follow and --list-attributes refuse --query", async () => {
+	test("a bad expression fails offline; --list-attributes refuses --query", async () => {
 		await expect(
 			retrieve(
 				{ targetInput: "127.0.0.1", path: "/ip/address", query: "a=1)" },
