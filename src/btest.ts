@@ -21,6 +21,7 @@ import {
 	CentrsError,
 	formatCentrsErrorText,
 	serializeCentrsError,
+	terminalSafeLine,
 } from "./errors.ts";
 import {
 	BTEST_PORT,
@@ -873,7 +874,11 @@ function renderClientCsv(envelope: BtestClientEnvelope): string {
 	if (envelope.ok)
 		for (const r of envelope.data.reports) lines.push(btestClientCsvRow(r));
 	else
-		lines.push(`# error: [${envelope.error.code}] ${envelope.error.summary}`);
+		lines.push(
+			terminalSafeLine(
+				`# error: [${envelope.error.code}] ${envelope.error.summary}`,
+			),
+		);
 	return lines.join("\n");
 }
 
@@ -882,7 +887,11 @@ function renderServerCsv(envelope: BtestServerEnvelope): string {
 	if (envelope.ok)
 		for (const s of envelope.data.sessions) lines.push(btestServerCsvRow(s));
 	else
-		lines.push(`# error: [${envelope.error.code}] ${envelope.error.summary}`);
+		lines.push(
+			terminalSafeLine(
+				`# error: [${envelope.error.code}] ${envelope.error.summary}`,
+			),
+		);
 	return lines.join("\n");
 }
 

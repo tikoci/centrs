@@ -5,12 +5,14 @@ import {
 	renderBtestClientEnvelope,
 	renderBtestServerEnvelope,
 } from "../../src/btest.ts";
+import type { EnvelopeTargetMeta } from "../../src/core/envelope.ts";
 import { renderDevicesEnvelope } from "../../src/devices.ts";
 import { renderDiscoverEnvelope } from "../../src/discover.ts";
 import {
 	CentrsError,
 	formatCentrsErrorLine,
 	formatCentrsErrorText,
+	type SerializedCentrsError,
 	serializeCentrsError,
 } from "../../src/errors.ts";
 import { renderExecuteEnvelope } from "../../src/execute.ts";
@@ -87,4 +89,128 @@ describe("error text parity (GH#362)", () => {
 		])
 			expect(line).toContain(field);
 	});
+});
+
+function compactFanoutEnvelope(
+	error: SerializedCentrsError,
+	target: EnvelopeTargetMeta,
+) {
+	return {
+		ok: true as const,
+		data: {
+			summary: { total: 1, ok: 0, failed: 1 },
+			targets: [
+				{
+					ok: false as const,
+					error,
+					warnings: [],
+					tips: [],
+					meta: {
+						target: { recordIndex: 3, ...target },
+						via: null,
+						settings: {},
+					},
+				},
+			],
+		},
+		warnings: [],
+		tips: [],
+		meta: { target: {}, via: null, settings: {} },
+	};
+}
+
+const compactFanoutRenderers = {
+	execute: renderExecuteFanoutEnvelope,
+	retrieve: renderRetrieveFanoutEnvelope,
+	api: renderApiFanoutEnvelope,
+	transfer: renderTransferFanoutEnvelope,
+};
+
+// Include every C0/C1 control, including LF/tab that full error text permits.
+const controls = [
+	...Array.from({ length: 32 }, (_, index) => String.fromCharCode(index)),
+	...Array.from({ length: 33 }, (_, index) => String.fromCharCode(127 + index)),
+].join("");
+
+describe("compact error lines (GH#395, GH#415)", () => {
+	const plainError = serializeCentrsError(
+		new CentrsError({
+			code: "routeros/api-trap",
+			summary: "Device refused the request.",
+			remediation: "Try again.",
+		}),
+	);
+	const hostileError = serializeCentrsError(
+		new CentrsError({
+			code: "routeros/api-trap",
+			summary: `Device said:${controls}forged FAIL row`,
+			remediation: `Try:${controls}forged Fix row`,
+		}),
+	);
+
+	for (const [command, render] of Object.entries(compactFanoutRenderers)) {
+		test(`${command} keeps the compact FAIL and verbose Fix layout`, () => {
+			const envelope = compactFanoutEnvelope(plainError, { identity: "r1" });
+			const normal = render(envelope, "text").split("\n");
+			expect(normal).toHaveLength(2);
+			expect(normal[1]).toBe(
+				"  [3] FAIL  r1 [routeros/api-trap] Device refused the request.",
+			);
+			expect(render(envelope, "text", { verbose: true }).split("\n")).toEqual([
+				...normal,
+				"        Fix: Try again.",
+			]);
+		});
+
+		for (const label of ["identity", "host", "input"] as const) {
+			test(`${command} filters controls in ${label}, summary and verbose remediation`, () => {
+				const envelope = compactFanoutEnvelope(hostileError, {
+					[label]: `r1${controls}forged label`,
+				});
+				for (const verbose of [false, true]) {
+					const lines = render(envelope, "text", { verbose }).split("\n");
+					expect(lines).toHaveLength(verbose ? 3 : 2);
+					for (const line of lines) {
+						for (const control of controls) expect(line).not.toContain(control);
+					}
+					expect(lines[1]).toContain(
+						"forged label [routeros/api-trap] Device said:",
+					);
+					expect(lines[1]).toEndWith("forged FAIL row");
+					if (verbose) expect(lines[2]).toEndWith("forged Fix row");
+				}
+				const json = JSON.parse(render(envelope, "json"));
+				expect(json.data.targets[0].error).toEqual(hostileError);
+				expect(json.data.targets[0].meta.target[label]).toBe(
+					envelope.data.targets[0]?.meta.target[label],
+				);
+			});
+		}
+	}
+
+	for (const [role, render] of Object.entries({
+		client: renderBtestClientEnvelope,
+		server: renderBtestServerEnvelope,
+	})) {
+		test(`btest ${role} keeps one filtered CSV error comment after its header`, () => {
+			const envelope = {
+				ok: false as const,
+				error: hostileError,
+				warnings: [],
+				tips: [],
+				meta: { target: {}, via: null, settings: {} },
+			};
+			const lines = render(envelope, "csv").split("\n");
+			expect(lines).toHaveLength(2);
+			expect(lines[0]).toBe(
+				role === "client"
+					? "seq,direction,protocol,tx_bps,rx_bps,lost_packets,tx_bytes,rx_bytes"
+					: "duration_ms,event,client,protocol,direction,user,tx_bps,rx_bps,lost_packets",
+			);
+			expect(lines[1]).toStartWith("# error: [routeros/api-trap] Device said:");
+			expect(lines[1]).toEndWith("forged FAIL row");
+			for (const control of controls) expect(lines[1]).not.toContain(control);
+			expect(JSON.parse(render(envelope, "json")).error).toEqual(hostileError);
+		});
+	}
 });
