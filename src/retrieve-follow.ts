@@ -56,7 +56,7 @@ type FollowEvent =
 	| { type: "listen"; reply: ProtocolTappedReply; version?: number }
 	| { type: "listen-end" }
 	| { type: "snapshot-row"; row: Record<string, string> }
-	| { type: "snapshot-done" }
+	| { type: "snapshot-done"; bootstrap?: Map<string, number> }
 	| { type: "sweep-start" }
 	| { type: "sweep"; ids: Set<string> }
 	| {
@@ -293,6 +293,9 @@ async function* runFollow(
 	// row after a newer change/deletion. Entries leave with their final result.
 	const latest = new Map<string, number>();
 	const dirty = new Map<string, number>();
+	// Fixed at the snapshot's wire !done: newer changes stay live work and
+	// cannot continually extend bootstrap or postpone its first sweep.
+	const bootstrapPending = new Map<string, number>();
 	let version = 0;
 	let membershipRunning = false;
 	let membershipSize = 0;
@@ -421,7 +424,11 @@ async function* runFollow(
 					},
 					finite(
 						(row) => push({ type: "snapshot-row", row }),
-						() => push({ type: "snapshot-done" }),
+						() =>
+							push({
+								type: "snapshot-done",
+								bootstrap: query ? new Map(latest) : undefined,
+							}),
 					),
 				);
 			},
@@ -477,7 +484,16 @@ async function* runFollow(
 			controller.signal.aborted
 		)
 			return;
-		const versions = new Map([...dirty].slice(0, 256));
+		const versions = new Map<string, number>();
+		for (const id of bootstrapPending.keys()) {
+			const current = dirty.get(id);
+			if (current !== undefined) versions.set(id, current);
+			if (versions.size === 256) break;
+		}
+		for (const [id, current] of dirty) {
+			if (versions.size === 256) break;
+			versions.set(id, current);
+		}
 		for (const id of versions.keys()) dirty.delete(id);
 		const ids = [...versions.keys()];
 		const selection = ids.flatMap((id, index) =>
@@ -543,6 +559,7 @@ async function* runFollow(
 			}
 			dirty.delete(id);
 			latest.delete(id);
+			bootstrapPending.delete(id);
 		}
 		if (reply.attributes[".dead"] === "true") {
 			// A `.dead` for an id never reported is a coalesced add+delete.
@@ -605,6 +622,8 @@ async function* runFollow(
 				}
 				case "snapshot-done": {
 					snapshotComplete = true;
+					for (const [id, current] of event.bootstrap ?? [])
+						bootstrapPending.set(id, current);
 					for (const reply of pending.splice(0, pending.length)) {
 						if (haltRequested()) break loop;
 						const envelope = applyListen(reply, "snapshot");
@@ -622,9 +641,15 @@ async function* runFollow(
 				}
 				case "membership": {
 					membershipRunning = false;
-					membershipSize = 0;
 					for (const [id, expected] of event.versions) {
 						if (haltRequested()) break loop;
+						membershipSize--;
+						const initial = bootstrapPending.get(id);
+						if (initial !== undefined && expected >= initial)
+							bootstrapPending.delete(id);
+						// A newer wire version invalidates this result, but it is
+						// live work after the fixed bootstrap cutoff, not a reason
+						// to extend initialization. Its dirty entry is retained.
 						if (latest.get(id) !== expected) continue;
 						latest.delete(id);
 						const row = event.rows.get(id);
@@ -685,15 +710,7 @@ async function* runFollow(
 			}
 			if (query) {
 				if (haltRequested()) break;
-				startSweep();
-				scheduleMembership();
-				if (
-					snapshotComplete &&
-					!counts.synced &&
-					!membershipRunning &&
-					dirty.size === 0 &&
-					queue.length === 0
-				) {
+				if (snapshotComplete && !counts.synced && bootstrapPending.size === 0) {
 					counts.synced = true;
 					yield streamEnvelope(resolved, validation, null, {
 						kind: "synced",
@@ -701,6 +718,8 @@ async function* runFollow(
 					});
 					scheduleSweep();
 				}
+				startSweep();
+				scheduleMembership();
 			}
 		}
 		draining = false;

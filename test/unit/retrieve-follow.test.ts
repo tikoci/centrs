@@ -169,7 +169,7 @@ class FakeFollowRouter {
 				}
 				if (attrs[".proplist"] === ".id") {
 					const ids = this.options.onSweep?.(this) ?? [...this.rows.keys()];
-					rows = ids.map((id) => ({ ".id": id }));
+					rows = ids.map((id) => this.rows.get(id) ?? { ".id": id });
 				} else if (membership) {
 					this.options.onMembership?.(this);
 				} else {
@@ -679,6 +679,40 @@ describe("retrieveFollow filtered membership", () => {
 		]);
 	});
 
+	test("sustained newer changes cannot starve filtered bootstrap, sweeps or count", async () => {
+		let batches = 0;
+		const router = fakeRouter({
+			onSnapshot: (r) => r.set("*1", { address: "192.0.2.1/24", comment: "a" }),
+			onMembership: (r) => {
+				batches++;
+				r.set("*1", { address: "192.0.2.1/24", comment: "a" });
+			},
+		});
+		const out = await follow(
+			request(router, {
+				query: "comment=a or comment=old",
+				sweep: "20ms",
+				count: 1,
+				duration: "300ms",
+			}),
+			{
+				afterSynced: () => {
+					// Even while *1 keeps invalidating its membership replies, a
+					// different held row's removal must satisfy the live count.
+					setTimeout(() => router.remove("*2"), 80);
+				},
+			},
+		);
+		expect(batches).toBeGreaterThan(1);
+		expect(out.map(shape)).toContain("synced:2");
+		expect(out.map(shape)).toContain("live removed *2 listen");
+		expect(out.map(shape).at(-1)).toBe("summary:count-reached");
+		expect(dataOf(out.at(-1))).toMatchObject({ synced: true });
+		expect((dataOf(out.at(-1)) as { sweeps: number }).sweeps).toBeGreaterThan(
+			0,
+		);
+	});
+
 	test("minimal deletion uses held membership; a silent predicate exit is swept", async () => {
 		const router = fakeRouter();
 		const out = await follow(
@@ -738,6 +772,36 @@ describe("retrieveFollow filtered membership", () => {
 			"snapshot upsert *1 membership",
 			"summary:interrupted",
 		]);
+	});
+
+	test("a paused membership batch keeps its unread results in the overflow bound", async () => {
+		const router = fakeRouter({
+			onSnapshot: (r) => {
+				r.set("*1", { address: "192.0.2.1/24", comment: "in" });
+				r.set("*2", { address: "192.0.2.2/24", comment: "in" });
+			},
+		});
+		const out: RetrieveEnvelope[] = [];
+		let paused = false;
+		for await (const envelope of retrieveFollow(
+			request(router, { query: "comment=in", sweep: 0, duration: "300ms" }),
+			ENV,
+			{ bufferLimit: 2 },
+		)) {
+			out.push(envelope);
+			if (!paused && shape(envelope).endsWith(" membership")) {
+				paused = true;
+				router.set("*1", { comment: "in" });
+				router.set("*2", { comment: "in" });
+				await Bun.sleep(40);
+			}
+		}
+		expect(paused).toBe(true);
+		expect(out.filter((e) => shape(e).endsWith(" membership"))).toHaveLength(1);
+		const last = out.at(-1);
+		expect(last?.ok ? undefined : last?.error.code).toBe(
+			"transport/stream-overflow",
+		);
 	});
 });
 

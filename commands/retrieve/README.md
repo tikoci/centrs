@@ -287,8 +287,12 @@ filtered with the same `--query`/`--filter` grammar as a one-shot read (#397).
   in the selected set, not a claim that RouterOS sent `.dead`. A real `.dead`
   still has `source: "listen"` and only removes a held id. Delayed membership
   results are discarded for ids with newer wire changes; sweeps and membership
-  reads are serialized. During bootstrap, buffered changes are reconciled
-  before `synced`; this may coalesce more changes than unfiltered A1 replay.
+  reads are serialized. Bootstrap fixes its changed-id/version cutoff at the
+  snapshot's wire completion and reconciles those ids before `synced`. A
+  reply superseded by a newer change is discarded; that newer version stays
+  queued for live reconciliation. Continuous writes cannot extend bootstrap
+  indefinitely or postpone the first sweep and live `--count`. This may
+  coalesce more changes than unfiltered A1 replay.
   The filtered sweep also detects silent exits from a predicate (e.g. a
   decreasing address-list `timeout`). It does not discover silent entries or
   repair silent field updates: use `--sample` for such state. With `--sweep 0`,

@@ -663,4 +663,6 @@ centrs retrieve $A /ip/firewall/address-list --port $API_PORT --username $U --pa
 The harness changes membership during bootstrap and live operation, then
 deletes rows. Applying all frames yields exactly the ids and projected rows
 of a fresh filtered print after churn settles. Deterministic delayed-reply,
-delete and cancellation orderings are anchored in `retrieve-follow.test.ts`.
+delete, cancellation and sustained-write bootstrap orderings are anchored in
+`retrieve-follow.test.ts`; newer versions cannot starve `synced`, sweeps or
+live `--count`.
