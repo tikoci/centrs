@@ -576,6 +576,7 @@ export {
 	type TargetSelection,
 	toCoreSource,
 } from "./resolver/index.ts";
+export type { RetrieveWaitMeta, RetrieveWaitSettings } from "./retrieve.ts";
 export {
 	buildResolvedRetrieve,
 	buildRetrieveErrorEnvelope,
@@ -630,6 +631,7 @@ export {
 	retrieveSample,
 } from "./retrieve-sample.ts";
 export { renderRetrieveStreamLine } from "./retrieve-stream.ts";
+export { type RetrieveWaitOptions, retrieveWait } from "./retrieve-wait.ts";
 export {
 	buildSettingsErrorEnvelope,
 	renderSettingsEnvelope,

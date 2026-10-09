@@ -59,10 +59,12 @@ Codes are slash-namespaced `family/slug`. The families and where they originate:
 - `transport/*` — connection, TLS, DNS, and timeout plumbing.
 - `usage/*` — how a command was invoked (arity, conflicting flags, confirmation).
 - `validation/*` — the canonicalize → validate gate (`:parse` + `/console/inspect`).
+- `wait/*` — readiness/condition deadlines and cancellation (`retrieveWait`).
 
 The hand-enriched pages (richer trigger strings and remediation) currently are
 the `routeros/*` set produced by `src/core/routeros-errors.ts` and the
-`target/*` MAC-resolution pages; the rest are generated stubs to be enriched as
+`target/*` MAC-resolution pages and `wait/*` deadline/cancellation pages;
+the rest are generated stubs to be enriched as
 each code is grounded.
 
 ## RouterOS-fault mapping (`routeros/*`)

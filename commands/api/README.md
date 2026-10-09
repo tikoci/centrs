@@ -266,6 +266,19 @@ inside the window. Duration expiry or Ctrl-C sends `/cancel` and waits up to
 `transport/cancel-unacknowledged`. Count stop sends `/cancel` best-effort and
 closes without waiting (#385, example L5). A local bound is not a device `!done`.
 
+For the next wire change on a connected router:
+
+```bash
+centrs api $A /ip/address/listen --port $API_PORT --stream --count 1 --duration 60s
+```
+
+This counts replies rather than asserting readiness or a predicate. Use
+`retrieve --wait` / `--until` / `--until-empty` instead when the router may
+still be booting, when the condition may already be true, when you are on REST,
+or when the state you need is one that `listen` never reports (counters,
+`running`, timeouts)
+([retrieve → Wait](../retrieve/README.md#wait---wait---until---until-empty)).
+
 ## MCP (deferred — forward guidance)
 
 `api` is **not** exposed over the MCP frontend yet: the MCP server is the

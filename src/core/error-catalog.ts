@@ -625,6 +625,16 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary:
 			"The RouterOS path does not exist, or does not expose the requested command.",
 	},
+	{
+		code: "wait/deadline-exceeded",
+		summary:
+			"The wait deadline passed before readiness or its condition was established.",
+	},
+	{
+		code: "wait/interrupted",
+		summary:
+			"The wait was cancelled before readiness or its condition was established.",
+	},
 ];
 
 /** Set of all catalog codes, for fast membership checks in tests/resources. */

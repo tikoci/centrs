@@ -82,6 +82,11 @@ and implementation sequencing in the linked issues.
   `--sample` and fan-out; `CHR-passed` by
   `test/integration/retrieve-query.test.ts` (QY1–QY7, QA1–QA2, 7.23.7 and
   7.24.5), whose QY1 checks the rows against RouterOS's own `find where`.
+- `retrieve --wait` / `--until` / `--until-empty` (#364) return one bounded
+  readiness/condition result over REST or native-api, with elapsed time,
+  attempts and completed observations. `test/integration/retrieve-wait.test.ts`
+  covers WT1–WT7 on 7.23.8 and 7.24.5, including real reboot readiness and a
+  two-CHR OSPF adjacency.
 - `discover / mndp` is grounded by `commands/discover/README.md`,
   `src/data/mndp.ts`, `src/data/mndp-cache.ts`, and
   `test/integration/discover.test.ts`.
@@ -178,7 +183,7 @@ field poll with `sleep` where a native follow would answer. In order:
 (1) done: #402, literal `api --stream` with `!empty` frames and
 `--format ndjson`; (2) done: `retrieve --follow` (#396, unfiltered);
 (3) done: `retrieve --sample`; (4) #397: one-shot `retrieve --query` done,
-filtered `--follow` done; next #364 (`--until`, same grammar);
+filtered `--follow` done; #364 (`--wait`/`--until`, same grammar) done;
 (5) #398 and #401. Each slice's contract lives in its command
 README. Live `explain` (below) resumes after this line.
 

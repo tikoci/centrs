@@ -9,7 +9,7 @@
  * 2. A **session** (`NativeApiSession`) driven over an injectable byte stream
  *    (`NativeApiByteSink`), so scripted server bytes can drive it in tests and
  *    a real socket drives it in integration.
- * 3. A thin **TCP/TLS adapter** (`connectNativeApi`) built on `Bun.connect`.
+ * 3. A thin **TCP/TLS adapter** (`connectNativeApi`) built on Bun's built-in `node:net` / `node:tls` sockets.
  *
  * Wire format grounded against the MikroTik wiki API page and the canonical
  * `go-routeros` and `librouteros` implementations. Default ports: 8728 (plain),
@@ -20,6 +20,8 @@
  */
 
 import { createHash } from "node:crypto";
+import { createConnection, isIP } from "node:net";
+import { connect as connectTls } from "node:tls";
 import { mapRouterOsError } from "../core/routeros-errors.ts";
 import { CentrsError } from "../errors.ts";
 
@@ -966,6 +968,8 @@ export interface ConnectNativeApiOptions {
 	rejectUnauthorized?: boolean;
 	/** Connection timeout in milliseconds. */
 	timeoutMs?: number;
+	/** Cancel TCP/TLS connection and login before dispatching any command. */
+	signal?: AbortSignal;
 }
 
 interface ConnectedNativeApi {
@@ -983,56 +987,81 @@ export async function connectNativeApi(
 		options.port ?? (options.tls ? NATIVE_API_TLS_PORT : NATIVE_API_PORT);
 	const endpoint = `${options.host}:${port}`;
 	const timeoutMs = options.timeoutMs ?? 15_000;
+	options.signal?.throwIfAborted();
 
-	let session: NativeApiSession | undefined;
-	const connectPromise = Bun.connect({
-		hostname: options.host,
-		port,
-		...(options.tls
-			? {
-					tls: {
-						rejectUnauthorized: options.rejectUnauthorized ?? false,
-					},
-				}
-			: {}),
-		socket: {
-			data(_socket, data) {
-				session?.handleData(new Uint8Array(data));
-			},
-			close() {
-				session?.handleClose();
-			},
-			error(_socket, error) {
-				session?.handleClose(error);
-			},
-		},
-	}).catch((error: unknown) => {
-		throw mapConnectError(error, endpoint);
-	});
-
-	const socket = await withTimeout(connectPromise, timeoutMs, endpoint);
-	session = new NativeApiSession({
+	// Own the socket before TCP/TLS completes: aborting only the connect promise
+	// leaves a pending connection alive and can prevent the CLI from exiting.
+	const socket = options.tls
+		? connectTls({
+				host: options.host,
+				port,
+				rejectUnauthorized: options.rejectUnauthorized ?? false,
+				...(isIP(options.host) ? {} : { servername: options.host }),
+			})
+		: createConnection({ host: options.host, port });
+	socket.setNoDelay(true);
+	const session = new NativeApiSession({
 		endpoint,
 		sink: {
 			write(bytes) {
 				socket.write(bytes);
 			},
 			close() {
-				socket.end();
+				socket.destroy();
 			},
 		},
 	});
+	socket.on("data", (data: Buffer) => session.handleData(data));
+	socket.on("close", () => session.handleClose());
+	socket.on("error", (error) => session.handleClose(error));
 
+	const readyEvent = options.tls ? "secureConnect" : "connect";
+	const connectPromise = new Promise<void>((resolve, reject) => {
+		const cleanup = () => {
+			socket.removeListener(readyEvent, onConnect);
+			socket.removeListener("error", onError);
+			socket.removeListener("close", onClose);
+		};
+		const onConnect = () => {
+			cleanup();
+			resolve();
+		};
+		const onError = (error: Error) => {
+			cleanup();
+			reject(mapConnectError(error, endpoint));
+		};
+		const onClose = () => {
+			cleanup();
+			reject(
+				new CentrsError({
+					code: "transport/connection-closed",
+					summary: `The RouterOS API connection to ${endpoint} closed before it was ready.`,
+					remediation:
+						"Confirm the API service and network path are available.",
+				}),
+			);
+		};
+		socket.once(readyEvent, onConnect);
+		socket.once("error", onError);
+		socket.once("close", onClose);
+	});
+	const onAbort = (): void => session.close();
+	options.signal?.addEventListener("abort", onAbort, { once: true });
 	try {
+		options.signal?.throwIfAborted();
+		await withTimeout(connectPromise, timeoutMs, endpoint, options.signal);
 		await withTimeout(
 			session.login(options.username, options.password),
 			timeoutMs,
 			endpoint,
+			options.signal,
 		);
 	} catch (error) {
-		// Never leave a half-open socket when login times out or is rejected.
+		// Destroy even a pending connection when its deadline or login fails.
 		session.close();
 		throw error;
+	} finally {
+		options.signal?.removeEventListener("abort", onAbort);
 	}
 	return { session };
 }
@@ -1041,9 +1070,17 @@ async function withTimeout<T>(
 	promise: Promise<T>,
 	timeoutMs: number,
 	endpoint: string,
+	signal?: AbortSignal,
 ): Promise<T> {
 	let handle: ReturnType<typeof setTimeout> | undefined;
+	let onAbort: (() => void) | undefined;
 	const timeout = new Promise<never>((_resolve, reject) => {
+		onAbort = () =>
+			reject(
+				signal?.reason ?? new DOMException("Operation cancelled", "AbortError"),
+			);
+		if (signal?.aborted) onAbort();
+		else signal?.addEventListener("abort", onAbort, { once: true });
 		handle = setTimeout(() => {
 			reject(
 				new CentrsError({
@@ -1058,6 +1095,7 @@ async function withTimeout<T>(
 	try {
 		return await Promise.race([promise, timeout]);
 	} finally {
+		if (onAbort) signal?.removeEventListener("abort", onAbort);
 		if (handle !== undefined) {
 			clearTimeout(handle);
 		}

@@ -194,6 +194,13 @@ export async function retrieveFanout(
 	internals: RetrieveFanoutInternals = {},
 	options: RetrieveFanoutOptions = {},
 ): Promise<RetrieveFanoutEnvelope> {
+	if (request.wait !== undefined)
+		throw new CentrsError({
+			code: "usage/fanout-not-supported",
+			summary: "`retrieve --wait` waits on one router and cannot fan out.",
+			remediation:
+				"Call `retrieveWait()` once per router with its own deadline.",
+		});
 	if (request.follow || request.sample !== undefined) {
 		const [flag, fn, capability] = request.follow
 			? ["--follow", "retrieveFollow", "follow"]

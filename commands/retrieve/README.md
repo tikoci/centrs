@@ -3,7 +3,8 @@
 Status: `CHR-passed` over `rest-api` and `native-api`, including multi-target
 fan-out (see **Target selection**), `--query` row filters (see **Query**),
 `--follow` over `native-api` (see **Follow**) and `--sample` over both (see
-**Sample**). `snmp` is `not-started`. Matches `docs/MATRIX.md`.
+**Sample**) and bounded readiness/conditions (see **Wait**). `snmp` is
+`not-started`. Matches `docs/MATRIX.md`.
 
 Read RouterOS state. RouterOS menu reads model `<path>/<verb>` where the verb
 is `print`-style (`print`, `get`, and async POST-shaped reads as they're
@@ -401,6 +402,59 @@ centrs retrieve $R /interface --attributes name,rx-byte,tx-byte --sample 5s --co
 # CPU load once a second for a minute.
 centrs retrieve $R /system/resource --attribute cpu-load --sample 1s --duration 1m
 ```
+
+## Wait (`--wait`, `--until`, `--until-empty`)
+
+`retrieve <router> <menu> --wait <deadline>` waits for a successful read.
+It retries refused, closed, reset and timed-out connections, and a host that is
+down or unreachable, so it can start while a router or CHR is rebooting or its
+services are coming up. Authentication,
+TLS, DNS, RouterOS and validation errors fail immediately. Identity/CDB/quickchr
+resolution errors also fail immediately; `--quickchr` must name a running VM.
+The caller's pinned protocol is preserved.
+
+```bash
+centrs retrieve --quickchr sun /system/resource --wait 5m --json
+centrs retrieve $R /routing/ospf/neighbor --wait 2m --until state=Full --json
+centrs retrieve $R /routing/ospf/neighbor --wait 2m --until-empty --json
+```
+
+- **Deadline and cadence.** `--wait` is the overall deadline, including
+  validation and retries, and needs a unit (`30s`, `5m`): a bare number is
+  refused, as for `--sample`. `--timeout` bounds each request. Reads begin one
+  second apart by default; `--sample 500ms` selects another cadence, measured
+  start to start without overlapping reads. With `--wait`, `--sample` yields
+  one final result rather than a stream. Slow reads delay the next one and
+  unfinished reads at the deadline are abandoned.
+- **Any matching row.** `--until '<expr>'` uses the same grammar, property
+  validation and device typing as `--query`. Repeat it to AND conditions.
+  `--query` selects the rows to consider; `--until` terminates the wait when
+  any of those rows match. The final `data` contains those matching rows,
+  projected as requested; predicate properties need not appear in `data`.
+  Already true succeeds on the initial read. Zero rows never satisfy it.
+  Predicates apply to list menus; singleton readiness uses `--wait` alone.
+- **Zero rows.** `--until-empty` succeeds only on a completed read with zero
+  rows selected by `--query`. Silence, transport failure, unfinished reads and
+  cancellation do not prove emptiness. It needs a list menu and conflicts
+  with `--until`.
+- **One result.** After request resolution, every terminal envelope carries `meta.operation.wait` with
+  `stopReason`, `elapsedMs`, `attempts` and `observations`. Attempts include
+  failed validation/connection attempts; observations count completed data
+  reads. `ready` and `condition-met` are successful. On deadline expiry,
+  `deadline-elapsed` is failed: it preserves the last transient transport error,
+  or reports `wait/deadline-exceeded` when the last completed observation did
+  not satisfy the condition. Ctrl-C or an aborted library signal fails with
+  `wait/interrupted`, `stopReason: "interrupted"`. Other errors have
+  `stopReason: "failed"`. CLI exit is 0 on success and 1 on any failure;
+  the one final envelope, including failures, is written to stdout.
+
+Single target only. `--until` and `--until-empty` require `--wait`.
+`--follow`, `--count`, `--duration` and `--list-attributes` conflict with it.
+This waiter uses completed reads over REST or native-api, including counters
+and protocol state that listen never reports. For open-ended change feeds use
+`--follow`; `--duration` finishing a watch does not establish a wait condition.
+The library entry is `retrieveWait(request, env?, { signal? })`, returning a
+success or failure envelope; `retrieve()` remains the one-shot entry.
 
 ## Target selection
 

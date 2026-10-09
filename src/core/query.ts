@@ -94,8 +94,18 @@ const ESCAPES: Record<string, string> = {
 const HEX_ESCAPE = /^[0-9A-F]{2}$/;
 
 /** Parse one or more `--query` expressions offline. */
-export function parseQueries(expressions: readonly string[]): ParsedQuery {
-	const nodes = expressions.map(parseQuery);
+export function parseQueries(
+	expressions: readonly string[],
+	flag: "--query" | "--until" = "--query",
+): ParsedQuery {
+	let nodes: QueryNode[];
+	try {
+		nodes = expressions.map(parseQuery);
+	} catch (error) {
+		if (flag === "--until" && error instanceof CentrsError)
+			throw queryErrorForFlag(error, flag);
+		throw error;
+	}
 	const names = new Set<string>();
 	const bareNames = new Set<string>();
 	const visit = (node: QueryNode): void => {
@@ -117,6 +127,22 @@ export function parseQueries(expressions: readonly string[]): ParsedQuery {
 	};
 	nodes.forEach(visit);
 	return { nodes, names: [...names], bareNames: [...bareNames] };
+}
+
+/** Keep shared grammar diagnostics attached to the caller's predicate flag. */
+export function queryErrorForFlag(
+	error: CentrsError,
+	flag: "--until",
+): CentrsError {
+	return new CentrsError({
+		code: error.code,
+		summary: error.summary.replace("--query", flag),
+		remediation: error.remediation?.replace("--query", flag),
+		context: { ...error.context, flag },
+		position: error.position,
+		cause: error.cause,
+		causeData: error.causeData,
+	});
 }
 
 /**

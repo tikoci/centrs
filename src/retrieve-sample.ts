@@ -43,6 +43,19 @@ export async function* retrieveSample(
 	env: Record<string, string | undefined> = Bun.env,
 	options: RetrieveSampleOptions = {},
 ): AsyncGenerator<RetrieveEnvelope, void, void> {
+	if (request.wait !== undefined) {
+		yield buildRetrieveErrorEnvelope(
+			request,
+			new CentrsError({
+				code: "input/invalid-command",
+				summary:
+					"`--sample` with a `--wait` deadline is a bounded waiter, not a sample stream.",
+				remediation:
+					"Consume the final result with `retrieveWait()` or `centrs retrieve … --wait <deadline> --sample <interval>`.",
+			}),
+		);
+		return;
+	}
 	if (request.sample === undefined) {
 		yield buildRetrieveErrorEnvelope(
 			request,

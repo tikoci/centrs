@@ -113,6 +113,12 @@ export interface RetrieveRequest {
 	count?: number;
 	/** `--follow`/`--sample`: wall-clock bound counted from the end of validation (e.g. `30s`). */
 	duration?: string | number;
+	/** Overall readiness/condition deadline; consumed by `retrieveWait()`. */
+	wait?: string | number;
+	/** Same grammar as `--query`: succeed when any selected row matches. */
+	until?: string | readonly string[];
+	/** Succeed on a completed read with zero selected rows. */
+	untilEmpty?: boolean;
 }
 
 export interface RetrieveWarning {
@@ -137,6 +143,26 @@ export interface RetrieveRequestSummary {
 	follow?: RetrieveFollowSettings;
 	/** Present when the request is a `--sample`. */
 	sample?: RetrieveSampleSettings;
+	wait?: RetrieveWaitSettings;
+}
+
+export interface RetrieveWaitSettings {
+	deadlineMs: number;
+	intervalMs: number;
+	until: readonly string[];
+	untilEmpty: boolean;
+}
+
+export interface RetrieveWaitMeta {
+	stopReason:
+		| "ready"
+		| "condition-met"
+		| "deadline-elapsed"
+		| "interrupted"
+		| "failed";
+	elapsedMs: number;
+	attempts: number;
+	observations: number;
 }
 
 /** The resolved cadence and bounds of a `--sample`. */
@@ -231,6 +257,8 @@ export interface RetrieveOperationMeta {
 	};
 	/** Present only on `--follow` and `--sample` output. */
 	stream?: RetrieveStreamMeta;
+	/** The bounded waiter outcome; a watch duration never satisfies a condition. */
+	wait?: RetrieveWaitMeta;
 }
 
 export type RetrieveEnvelope = CentrsEnvelope<unknown, RetrieveOperationMeta>;
@@ -270,6 +298,7 @@ export interface ResolvedRetrieveRequest {
 	query?: ResolvedRetrieveQuery;
 	follow?: RetrieveFollowSettings;
 	sample?: RetrieveSampleSettings;
+	wait?: RetrieveWaitSettings;
 	warnings: readonly RetrieveWarning[];
 }
 
@@ -291,6 +320,15 @@ export async function retrieve(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined> = Bun.env,
 ): Promise<RetrieveSuccessEnvelope> {
+	if (request.wait !== undefined) {
+		throw new CentrsError({
+			code: "input/invalid-command",
+			summary:
+				"Use `retrieveWait()` for a bounded readiness or condition wait.",
+			remediation:
+				"Call `retrieveWait(request)` (library) or `centrs retrieve … --wait 30s` (CLI); inspect its success or failure envelope.",
+		});
+	}
 	if (request.follow) {
 		throw new CentrsError({
 			code: "input/invalid-command",
@@ -511,9 +549,14 @@ export function renderRetrieveEnvelope(
 		case "ndjson":
 			return JSON.stringify(envelope);
 		case "text":
-			return envelope.ok
-				? renderRetrieveSuccessText(envelope, options)
-				: formatCentrsErrorText(envelope.error, options);
+			return (
+				(envelope.ok
+					? renderRetrieveSuccessText(envelope, options)
+					: formatCentrsErrorText(envelope.error, options)) +
+				(envelope.meta.operation?.wait
+					? `\nwait: ${envelope.meta.operation.wait.stopReason}; ${envelope.meta.operation.wait.elapsedMs}ms; ${envelope.meta.operation.wait.attempts} attempt(s), ${envelope.meta.operation.wait.observations} observation(s)`
+					: "")
+			);
 		default:
 			return exhaustiveOutputFormat(format);
 	}
@@ -595,6 +638,7 @@ export function retrieveRequestSummary(
 		...(resolved.query ? { query: resolved.query.expressions } : {}),
 		...(resolved.follow ? { follow: resolved.follow } : {}),
 		...(resolved.sample ? { sample: resolved.sample } : {}),
+		...(resolved.wait ? { wait: resolved.wait } : {}),
 	};
 }
 
@@ -660,7 +704,7 @@ export function metaFromResolved(
 	};
 }
 
-function buildSuccessEnvelope(
+export function buildSuccessEnvelope(
 	resolved: ResolvedRetrieveRequest,
 	result: { kind: "attributes" | "data"; data: unknown },
 	validation: EnvelopeValidationMeta,
@@ -685,7 +729,7 @@ function buildSuccessEnvelope(
 	};
 }
 
-function applyMaxResultsBudget(
+export function applyMaxResultsBudget(
 	envelope: RetrieveSuccessEnvelope,
 ): RetrieveSuccessEnvelope {
 	const operation = envelope.meta.operation;
@@ -739,6 +783,7 @@ export function validateRetrieveRequestShape(
 	}
 
 	const query = resolveRetrieveQuery(request);
+	resolveWaitSettings(request);
 	if (query && request.listAttributes) {
 		throw new CentrsError({
 			code: "usage/conflicting-flags",
@@ -784,7 +829,7 @@ export function validateRetrieveRequestShape(
  * attribute listing has no meaning on a stream.
  */
 function assertStreamShape(request: RetrieveRequest): void {
-	const sample = request.sample !== undefined;
+	const sample = request.sample !== undefined && request.wait === undefined;
 	if (request.follow && sample) {
 		throw new CentrsError({
 			code: "usage/conflicting-flags",
@@ -844,6 +889,62 @@ function assertStreamShape(request: RetrieveRequest): void {
 	}
 }
 
+function resolveWaitSettings(
+	request: RetrieveRequest,
+): RetrieveWaitSettings | undefined {
+	const until = request.until === undefined ? [] : [request.until].flat();
+	if (until.length > 0) parseQueries(until, "--until");
+	if (request.wait === undefined) {
+		if (until.length > 0 || request.untilEmpty)
+			throw new CentrsError({
+				code: "usage/conflicting-flags",
+				summary: "`--until` and `--until-empty` need a `--wait` deadline.",
+				remediation:
+					"Add an overall bound, e.g. `--wait 2m`, so the condition cannot wait forever.",
+			});
+		return undefined;
+	}
+	const conflict = request.follow
+		? "--follow"
+		: request.count !== undefined
+			? "--count"
+			: request.duration !== undefined
+				? "--duration"
+				: request.listAttributes
+					? "--list-attributes"
+					: until.length > 0 && request.untilEmpty
+						? "--until-empty"
+						: undefined;
+	if (conflict)
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary: `\`--wait\` cannot be combined with \`${conflict}\`.`,
+			remediation:
+				"Use `--wait` for a readiness/condition deadline, `--sample` for its polling cadence, and either `--until` or `--until-empty` for a condition.",
+		});
+	// A unit is required for the same reason as `--sample`: a bare `30` would
+	// be a 30 ms deadline, which expires before validation completes.
+	const text = String(request.wait).trim();
+	const deadlineMs = /^\d+$/.test(text) ? -1 : parseDuration(text);
+	if (deadlineMs <= 0)
+		throw new CentrsError({
+			code: "settings/invalid-timeout",
+			summary: `\`--wait\` needs a positive deadline with a unit. Received: ${text}`,
+			remediation:
+				"Pass an overall duration such as `--wait 30s` or `--wait 5m`.",
+			context: { flag: "--wait", value: text },
+		});
+	return {
+		deadlineMs,
+		intervalMs:
+			request.sample === undefined
+				? 1_000
+				: parseStreamInterval("--sample", request.sample),
+		until,
+		untilEmpty: request.untilEmpty ?? false,
+	};
+}
+
 function resolveFollowSettings(
 	request: RetrieveRequest,
 ): RetrieveFollowSettings | undefined {
@@ -868,7 +969,8 @@ export const FOLLOW_SWEEP_DEFAULT_MS = 10_000;
 function resolveSampleSettings(
 	request: RetrieveRequest,
 ): RetrieveSampleSettings | undefined {
-	if (request.sample === undefined) return undefined;
+	if (request.sample === undefined || request.wait !== undefined)
+		return undefined;
 	const durationMs =
 		request.duration === undefined
 			? undefined
@@ -1006,6 +1108,7 @@ export function buildResolvedRetrieve(
 		query: resolveRetrieveQuery(request),
 		follow: resolveFollowSettings(request),
 		sample: resolveSampleSettings(request),
+		wait: resolveWaitSettings(request),
 		warnings: connection
 			? [...connection.warnings]
 			: (cdbResolution?.warnings ?? []),
@@ -1482,7 +1585,7 @@ export async function executeRetrieve(
 }
 
 /** Fallback for `--validate=false`, which skips the inspect that detects singletons. */
-function isKnownSingletonPath(path: string): boolean {
+export function isKnownSingletonPath(path: string): boolean {
 	return ["/system/resource", "/system/identity"].includes(
 		path.replace(/\/$/, ""),
 	);

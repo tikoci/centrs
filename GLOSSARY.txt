@@ -148,6 +148,8 @@ nullglob # bash shopt that makes an unmatched glob expand to zero words instead 
 npk # MikroTik package format
 nvme-over-tcp # supported by RouterOS **with** rose-storage.npk extra-package
 OID
+# %OSPF: Open Shortest Path First; RouterOS dynamic routing adjacency protocol.
+OSPF
 PII # Personally Identifiable Information
 PON # passive optical network; RouterOS /interface/ethernet/pon menu
 POV
@@ -309,6 +311,7 @@ ENOTSUP
 EAFNOSUPPORT
 ECONNREFUSED
 ECONNRESET
+EHOSTDOWN
 REUSEPORT
 REUSEADDR
 # L2 bridge frame-parsing terms (test/integration/mndp-l2-bridge.ts):

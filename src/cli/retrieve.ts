@@ -24,6 +24,7 @@ import {
 	retrieveFollow,
 	retrieveOutputFormats,
 	retrieveSample,
+	retrieveWait,
 } from "../index.ts";
 import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
@@ -89,7 +90,7 @@ export const retrieveCommand: CliCommandMetadata = {
 			flag: "--timeout",
 			valueName: "<ms|5s>",
 			description:
-				"Operation timeout. REST currently rejects values above 60s.",
+				"Per-request timeout, separate from --wait's overall deadline. REST currently rejects values above 60s.",
 		},
 		{
 			flag: "--attribute",
@@ -125,7 +126,24 @@ export const retrieveCommand: CliCommandMetadata = {
 			flag: "--sample",
 			valueName: "<interval>",
 			description:
-				"Read the menu again every interval (with a unit, e.g. `5s`): one line per complete read, then a summary (NDJSON for json/yaml/ndjson). Sees what `--follow` cannot, such as counters. Single target; rest-api or native-api.",
+				"Read the menu again every interval (with a unit, e.g. `5s`): one line per complete read, then a summary. With --wait, sets polling cadence and returns one final envelope. Sees counters and state listen never reports. Single target; rest-api or native-api.",
+		},
+		{
+			flag: "--wait",
+			valueName: "<deadline>",
+			description:
+				"Wait for a successful read or a condition until this overall deadline, with a unit (e.g. `2m`). Retries refused, closed, reset and timed-out connections and a down or unreachable host; other errors fail at once. One final envelope; single target.",
+		},
+		{
+			flag: "--until",
+			valueName: "<expr>",
+			description:
+				"With --wait: succeed when any selected row matches this --query grammar predicate; repeatable, AND-ed. Returns the matching rows. Already true succeeds on the initial read.",
+		},
+		{
+			flag: "--until-empty",
+			description:
+				"With --wait: succeed on a completed read with zero rows selected by --query. Silence and failed reads never satisfy it.",
 		},
 		{
 			flag: "--sweep",
@@ -209,8 +227,17 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 		// single-target envelope.
 		const selectionFlags = request.selectionFlags ?? emptySelectionFlags();
 		const targetPositionals = request.targetPositionals ?? [];
-		if (request.follow || request.sample !== undefined) {
-			const mode = request.follow ? "--follow" : "--sample";
+		if (
+			request.wait !== undefined ||
+			request.follow ||
+			request.sample !== undefined
+		) {
+			const mode =
+				request.wait !== undefined
+					? "--wait"
+					: request.follow
+						? "--follow"
+						: "--sample";
 			if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 				throw new CentrsError({
 					code: "usage/fanout-not-supported",
@@ -218,7 +245,9 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 					remediation: `Watch a single router (no \`--group\`/\`--where\`/\`--all\`/\`--default\`/multiple positionals); run one \`${mode}\` per router to watch several.`,
 				});
 			}
-			return await runRetrieveStreamCli(request, args);
+			return request.wait !== undefined
+				? await runRetrieveWaitCli(request, args)
+				: await runRetrieveStreamCli(request, args);
 		}
 		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 			return await runRetrieveFanoutCli(
@@ -315,6 +344,31 @@ async function runRetrieveStreamCli(
 		process.off("SIGINT", onSigint);
 	}
 	return exitCode;
+}
+
+async function runRetrieveWaitCli(
+	request: RetrieveCliArgs,
+	args: readonly string[],
+): Promise<number> {
+	const controller = new AbortController();
+	const onSigint = (): void => controller.abort();
+	process.on("SIGINT", onSigint);
+	try {
+		const envelope = await retrieveWait(request, Bun.env, {
+			signal: controller.signal,
+		});
+		console.log(
+			renderRetrieveEnvelope(
+				envelope,
+				envelope.meta.operation?.request.format ??
+					inferRequestedFormat(args, request),
+				{ verbose: request.verbose },
+			),
+		);
+		return envelope.ok ? 0 : 1;
+	} finally {
+		process.off("SIGINT", onSigint);
+	}
 }
 
 async function runRetrieveFanoutCli(
@@ -465,6 +519,18 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 				break;
 			case "--duration":
 				request.duration = expectValue(args, ++index, arg);
+				break;
+			case "--wait":
+				request.wait = expectValue(args, ++index, arg);
+				break;
+			case "--until":
+				request.until = [
+					...[request.until ?? []].flat(),
+					expectValue(args, ++index, arg),
+				];
+				break;
+			case "--until-empty":
+				request.untilEmpty = true;
 				break;
 			default: {
 				const consumed = consumeSelectionFlag(args, index, selectionFlags);
