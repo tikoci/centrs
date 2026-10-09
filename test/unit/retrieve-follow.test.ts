@@ -794,6 +794,7 @@ describe("retrieveFollow filtered membership", () => {
 				router.set("*1", { comment: "in" });
 				router.set("*2", { comment: "in" });
 				await Bun.sleep(40);
+				expect(router.commands()).toContain("/cancel");
 			}
 		}
 		expect(paused).toBe(true);

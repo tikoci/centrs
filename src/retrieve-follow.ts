@@ -308,6 +308,8 @@ async function* runFollow(
 	const push = (event: FollowEvent): void => {
 		if (event.type === "error") {
 			queue.fail(event.error);
+			draining = false;
+			controller.abort();
 			return;
 		}
 		if (!draining) return;
@@ -316,6 +318,8 @@ async function* runFollow(
 			queue.length + pending.length + dirty.size + membershipSize >= bufferLimit
 		) {
 			queue.fail(overflowError(bufferLimit));
+			draining = false;
+			controller.abort();
 			return;
 		}
 		queue.push(event);
