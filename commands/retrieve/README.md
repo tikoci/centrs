@@ -203,7 +203,10 @@ typing an unquoted literal, which the query does not do:
 
 - `where dst-port=80` reads `80` as a number and matches nothing, and
   `where protocol=tcp` likewise; the query matches the `"80"` and `"tcp"` that
-  `retrieve` shows. Quoted (`dst-port="80"`), the CLI agrees.
+  `retrieve` shows. Quoted (`dst-port="80"`), the CLI agrees. This difference
+  is version-dependent: on CHR 7.25beta3, 7.25beta5, 7.25rc1 and 7.26beta1,
+  both unquoted CLI expressions also match. QY2 keeps exact expectations for
+  both behaviors; API query results stay the same over both transports.
 - Ordering (`<`, `>`, `<=`, `>=`) on a property RouterOS returns as text
   (address-list `address`, `dst-port`) is text order: `192.0.2.10` sorts
   before `192.0.2.9`. Numbers (`mtu`, `vlan-id`, `distance`) compare as

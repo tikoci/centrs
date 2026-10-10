@@ -564,8 +564,11 @@ centrs retrieve $R /ip/firewall/address-list --query 'list=qa-397 and address>19
 ```
 
 The first returns the rule whose `dst-port` is `"80"`, although
-`find where dst-port=80` selects nothing (the CLI reads `80` as a number). The
-second compares `address` as text, so `192.0.2.10` is not above `192.0.2.9`.
+`find where dst-port=80` selects nothing on CHR 7.23.7/7.24.5 (the CLI reads
+`80` as a number). On CHR 7.25beta3, 7.25beta5, 7.25rc1 and 7.26beta1 the CLI
+also selects that rule. The test covers the same split for `protocol=tcp`
+and checks API query results over both transports. The second compares
+`address` as text, so `192.0.2.10` is not above `192.0.2.9`.
 
 ### QY3. `--filter` and repeated `--query` are AND-ed
 

@@ -41,8 +41,9 @@
  * space-separated conditions must be joined with `and`/`or`.
  *
  * The device decides comparisons with the API's per-property typing, which is
- * not always the CLI's: `where dst-port=80` reads `80` as a number and matches
- * nothing, while the query matches the `"80"` that `retrieve` shows; ordering
+ * not always the CLI's: on CHR 7.23.7/7.24.5, `where dst-port=80` matches
+ * nothing, while the query matches the `"80"` that `retrieve` shows. On CHR
+ * 7.25beta3/7.25rc1/7.26beta1 the CLI agrees with the query; ordering
  * on a text property (`dst-port`, address-list `address`) is text order.
  */
 
