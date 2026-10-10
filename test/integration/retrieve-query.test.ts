@@ -8,9 +8,11 @@ import {
 } from "../../src/retrieve.ts";
 import { retrieveSample } from "../../src/retrieve-sample.ts";
 import {
+	FIREWALL_WHERE_UNQUOTED_LITERALS_SINCE,
 	isChrIntegrationEnabled,
 	readEnv,
 	recordIntegrationEvidence,
+	routerOsAtLeast,
 	splitQuickChrAuth,
 	startIntegrationChr,
 	withBootReadyRetry,
@@ -251,11 +253,28 @@ describeFast("retrieve --query against CHR", () => {
 
 			// QY2. Documented differences: the query compares the value retrieve
 			// shows, not the CLI's typed literal, and orders text as text.
-			const port80 = await read(rest, FILTER, "dst-port=80");
-			expect((port80.data as Row[]).map((row) => row["dst-port"])).toEqual([
-				"80",
-			]);
-			expect(await findWhere(FILTER, "dst-port=80")).toBe("");
+			const whereMatchesUnquoted = routerOsAtLeast(
+				chr.state.version,
+				FIREWALL_WHERE_UNQUOTED_LITERALS_SINCE,
+			);
+			for (const base of [rest, native]) {
+				const port80 = await read(base, FILTER, "dst-port=80");
+				expect(port80.ok).toBe(true);
+				expect((port80.data as Row[]).map((row) => row["dst-port"])).toEqual([
+					"80",
+				]);
+				expect(await findWhere(FILTER, "dst-port=80")).toBe(
+					whereMatchesUnquoted ? ids(port80.data) : "",
+				);
+				const tcp = await read(base, FILTER, "protocol=tcp");
+				expect(tcp.ok).toBe(true);
+				expect(
+					(tcp.data as Row[]).map((row) => row["dst-port"]).sort(),
+				).toEqual(["443", "80"]);
+				expect(await findWhere(FILTER, "protocol=tcp")).toBe(
+					whereMatchesUnquoted ? ids(tcp.data) : "",
+				);
+			}
 			const above = await read(rest, AL, "list=qa-397 and address>192.0.2.9");
 			// "192.0.2.10" < "192.0.2.9" as text, so only 198.51.100.7 is above.
 			expect((above.data as Row[]).map((row) => row["address"])).toEqual([

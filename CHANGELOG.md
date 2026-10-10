@@ -46,6 +46,10 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 
 ### Fixed
 
+- Query QA declares the RouterOS version split for unquoted firewall `where`
+  literals. Testing/development builds select rows that 7.24.5 does not;
+  both API transports retain exact result checks on either side of the split.
+
 - Fan-out FAIL rows and btest client/server CSV error comments replace terminal
   controls with spaces (#395, #415). Compact error text stays on one line,
   including target labels and verbose remediation; JSON/YAML keep the raw values.

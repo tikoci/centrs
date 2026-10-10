@@ -178,6 +178,20 @@ export const TOBOOL_STRING_COERCED_SINCE = "7.22";
 export const PROPLIST_HIGHLIGHT_SPLIT_SINCE = "7.23beta1";
 
 /**
+ * Firewall `find where` started matching unquoted `dst-port=80` and
+ * `protocol=tcp`, where older CLI typing selected no rows. API query words
+ * match the printed values on both sides.
+ *
+ * Measured: no CLI matches on 7.23.8/7.24.5; matches on 7.25beta3, 7.25beta5,
+ * 7.25rc1 and 7.26beta1. The change is bracketed to (7.24.5, 7.25beta3];
+ * 7.25beta1..beta2 were not booted: their public CHR downloads returned 404
+ * when probed on 2026-10-09. This threshold names the first observed build
+ * with the new behavior, not a measured first-affected build. Re-derive with
+ * retrieve-query.test.ts (QY2).
+ */
+export const FIREWALL_WHERE_UNQUOTED_LITERALS_SINCE = "7.25beta3";
+
+/**
  * How a `:parse` REJECTION reads, as an accepted set rather than one wording
  * (#296) — the `VALIDATION_REJECT_CODES` pattern applied to raw device text.
  *
