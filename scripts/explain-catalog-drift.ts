@@ -261,6 +261,33 @@ export function buildDriftReport(
 	return lines.join("\n");
 }
 
+/**
+ * The summary for a generation that ABORTED before a drift report could be
+ * built — a discovery or parse refusal, not a catalog difference.
+ *
+ * It carries {@link DRIFT_REPORT_SENTINEL}, so the QA fallback step does not
+ * replace it with its generic "no structured report" line. Until this existed,
+ * a manual reshape (#417) left the job red for days with nothing in the summary
+ * but that line.
+ */
+export function buildAbortReport(message: string): string {
+	return [
+		DRIFT_REPORT_SENTINEL,
+		"### `src/explain/catalog.ts` could not be checked",
+		"",
+		"Generation aborted before a drift report could be built. This is a REPORT,",
+		'not a gate, but it is not the usual "catalog differs" outcome: a source',
+		"refused to parse, so MikroTik's published shape likely moved. Read the",
+		"refusal below, compare it with `scripts/explain-catalog-data.ts`, and do not",
+		"loosen a guard to make it pass.",
+		"",
+		"~~~text",
+		message,
+		"~~~",
+		"",
+	].join("\n");
+}
+
 /** Append without truncating earlier steps; summary publication is best-effort. */
 export function appendDriftReportToSummary(
 	report: string,

@@ -29,7 +29,8 @@ import {
 	ALIASES,
 	build,
 	type CatalogRow,
-	categoryLeafSlugs,
+	categoryDirSlugs,
+	categoryPageSlugs,
 	countRowMarkers,
 	countTypeMarkers,
 	discoverSlugs,
@@ -379,6 +380,86 @@ describe("explain/catalog — parsing published pages", () => {
 	});
 
 	/**
+	 * The preamble served since 2026-10-06 has no `import` line, so a parser that
+	 * starts the body after the last import starts at line 0 and reads the `# app`
+	 * title as an entry (#417). That entry has no Type, so it was a loud failure
+	 * on all 1,099 pages — and a title equal to a real top-level command
+	 * (`# app` over `## app`) is exactly the case where, were a Type to follow,
+	 * it would be a silent duplicate.
+	 */
+	test("reads the import-free preamble: the title is not an entry", async () => {
+		const markdown = await readFixture("app.md");
+		const entries = parsePage("app", markdown);
+		expect(
+			entries.map((e) => [e.path, e.kind, e.package, e.syscap, e.line]),
+		).toEqual([["/app", "Directory", "container", "app", 7]]);
+		expect(countTypeMarkers(markdown)).toBe(1);
+	});
+
+	/**
+	 * The frozen MDX pages and today's import-free ones must read the same: strip
+	 * the `import` lines from a real MDX page and the entries do not change.
+	 */
+	test("dropping the import lines does not change what a page reads as", async () => {
+		const mdx = await readFixture("partitions.md");
+		const importFree = mdx
+			.split("\n")
+			.filter((line) => !/^import\s*\{/.test(line))
+			.join("\n");
+		const read = (markdown: string) =>
+			parsePage("partitions", markdown).map(
+				(e) => `${e.path} ${e.kind} ${e.conditions} ${e.syscap} ${e.rows}`,
+			);
+		expect(read(importFree)).toEqual(read(mdx));
+	});
+
+	/** Windows checkouts convert fixtures to CRLF (#282); the new shape too. */
+	test("reads the import-free preamble under CRLF", async () => {
+		const markdown = (await readFixture("app.md")).replace(/\n/g, "\r\n");
+		expect(parsePage("app", markdown).map((e) => e.kind)).toEqual([
+			"Directory",
+		]);
+	});
+
+	/**
+	 * A page that really stopped carrying its Type marker still fails loud: the
+	 * preamble rule must not make "skip leading lines" into "skip anything".
+	 */
+	test("a new-shape page with no Type marker still refuses", () => {
+		expect(() =>
+			parsePage("app", "# app\n\n> blurb\n\n-----------\n\n## app\n"),
+		).toThrow(/has no Type marker/);
+	});
+
+	/**
+	 * The current-shape `system/health` page: one page, the same path published
+	 * twice under different gates — the pair #285 found in the old leaf, so the
+	 * fold, not the parser, decides what survives.
+	 */
+	test("reads the current-shape page that publishes a path twice", async () => {
+		const entries = parsePage(
+			"system/health",
+			await readFixture("system__health.md"),
+		);
+		expect(
+			entries.map((e) => `${e.path} ${e.kind} ${e.conditions} ${e.syscap}`),
+		).toEqual([
+			"/system/health Settings Directory i386 null",
+			"/system/health Directory !i386 health",
+		]);
+		expect(buildWith(entries, { "/system/health": "dir" })).toEqual([
+			{
+				conditions: undefined,
+				kind: "menu",
+				package: undefined,
+				path: "/system/health",
+				provenance: "both",
+				syscap: undefined,
+			},
+		]);
+	});
+
+	/**
 	 * A `<dir>/<basename>` leaf, the shape sitemap-only discovery dropped (#285),
 	 * publishing ONE path as two entries under different hardware gates. Read
 	 * end-to-end, because each half was decided from this page: the parser keeps
@@ -601,6 +682,8 @@ describe("explain/catalog — parsing published pages", () => {
 describe("explain/catalog — discovery", () => {
 	const loc = (path: string): string =>
 		`<url><loc>https://manual.mikrotik.com${path}</loc></url>`;
+	const link = (title: string, path: string): string =>
+		`- [${title}](https://manual.mikrotik.com${path})`;
 	const sitemap = [
 		loc("/docs/cli-reference/"),
 		loc("/docs/cli-reference/app/"),
@@ -608,25 +691,38 @@ describe("explain/catalog — discovery", () => {
 		loc("/docs/cli-reference/beep"),
 		loc("/docs/other/thing"),
 	].join("\n");
-	const llms = [
-		"- [App](https://manual.mikrotik.com/docs/cli-reference/app/app.md)",
-		"- [Cleanup](https://manual.mikrotik.com/docs/cli-reference/app/cleanup.md)",
-		"- [Beep](https://manual.mikrotik.com/docs/cli-reference/beep.md)",
-		"- [Index](https://manual.mikrotik.com/docs/cli-reference/index.md)",
-		"- [Other](https://manual.mikrotik.com/docs/other/thing.md)",
-	].join("\n");
+	const rest = [
+		link("Cleanup", "/docs/cli-reference/app/cleanup.md"),
+		link("Beep", "/docs/cli-reference/beep.md"),
+		link("Index", "/docs/cli-reference/index.md"),
+		link("Other", "/docs/other/thing.md"),
+	];
+	/** The shape served since 2026-10-06: a menu's own entry is `<dir>.md`. */
+	const llms = [link("App", "/docs/cli-reference/app.md"), ...rest].join("\n");
+	/** The shape served until then, and still tolerated: `<dir>/<basename>.md`. */
+	const llmsOld = [link("App", "/docs/cli-reference/app/app.md"), ...rest].join(
+		"\n",
+	);
+	/** Neither spelling: the menu's own entry is not published anywhere. */
+	const llmsNeither = rest.join("\n");
 
 	test("the sitemap lists only the directly-addressable pages", () => {
 		expect(sitemapSlugs(sitemap)).toEqual(["app/cleanup", "beep"]);
 	});
 
-	test("a category URL names the leaf that carries the menu's own entry", () => {
-		expect(categoryLeafSlugs(sitemap)).toEqual(["app/app"]);
+	test("a category URL names the dir, and both spellings of its own page", () => {
+		expect(categoryDirSlugs(sitemap)).toEqual(["app"]);
+		expect(categoryPageSlugs("app")).toEqual(["app", "app/app"]);
+		expect(categoryPageSlugs("caps-man/interface")).toEqual([
+			"caps-man/interface",
+			"caps-man/interface/interface",
+		]);
 	});
 
 	/** `index` is the argument-type glossary prose, not a CLI path. */
 	test("llms.txt lists every page except the section landing page", () => {
-		expect(llmsSlugs(llms)).toEqual(["app/app", "app/cleanup", "beep"]);
+		expect(llmsSlugs(llms)).toEqual(["app", "app/cleanup", "beep"]);
+		expect(llmsSlugs(llmsOld)).toEqual(["app/app", "app/cleanup", "beep"]);
 	});
 
 	/**
@@ -641,15 +737,20 @@ describe("explain/catalog — discovery", () => {
 			llmsSlugs(
 				[
 					"- [Root-relative](/docs/cli-reference/beep.md)",
-					"- [Document-relative](./docs/cli-reference/app/app.md)",
+					"- [Document-relative](./docs/cli-reference/app.md)",
 					"- [Elsewhere](/docs/other/thing.md)",
 				].join("\n"),
 			),
-		).toEqual(["app/app", "beep"]);
+		).toEqual(["app", "beep"]);
 	});
 
-	test("the inventory is the union, and the category leaf survives it", () => {
+	test("the inventory is the union, and the category page survives it", () => {
 		expect(discoverSlugs(sitemap, llms)).toEqual([
+			"app",
+			"app/cleanup",
+			"beep",
+		]);
+		expect(discoverSlugs(sitemap, llmsOld)).toEqual([
 			"app/app",
 			"app/cleanup",
 			"beep",
@@ -657,14 +758,45 @@ describe("explain/catalog — discovery", () => {
 	});
 
 	/**
-	 * The #285 defect itself, refused. A category dir whose leaf no inventory
-	 * carries means that menu's entry is being dropped — invisibly, since the
-	 * generated table would simply be shorter.
+	 * The #285 defect itself, refused — in BOTH shapes, because a guard that only
+	 * knows one spelling either rejects the other (#417) or, worse, is loosened
+	 * until it accepts a missing entry. A category dir whose own page no
+	 * inventory carries means that menu's entry is being dropped, invisibly,
+	 * since the generated table would simply be shorter.
 	 */
-	test("aborts when a category dir contributes no leaf", () => {
+	test.each([
+		["new", llms],
+		["old", llmsOld],
+	])("aborts when a category dir contributes no page (%s shape)", (_, text) => {
 		expect(() =>
-			discoverSlugs(sitemap, llms.split("\n").slice(1).join("\n")),
-		).toThrow(/contribute no <dir>\/<basename> leaf/);
+			discoverSlugs(sitemap, text.split("\n").slice(1).join("\n")),
+		).toThrow(/1 of 1 sitemap category dir\(s\) contribute neither/);
+		expect(() =>
+			discoverSlugs(sitemap, text.split("\n").slice(1).join("\n")),
+		).toThrow(/\n {2}app$/);
+	});
+
+	test("the abort names both spellings and counts the inventory", () => {
+		expect(() => discoverSlugs(sitemap, llmsNeither)).toThrow(
+			/<dir> nor a\n<dir>\/<basename> page.*\(sitemap ∪ llms\.txt, 2 pages\)/s,
+		);
+	});
+
+	/**
+	 * One menu at two URLs is not a dropped entry — the union carries both — but
+	 * its entries would collide, so it is a visible line rather than a silent pass.
+	 */
+	test("reports a category published at both spellings", () => {
+		const reported: string[] = [];
+		const slugs = discoverSlugs(
+			sitemap,
+			`${llms}\n${link("App again", "/docs/cli-reference/app/app.md")}`,
+			(message) => reported.push(message),
+		);
+		expect(slugs).toEqual(["app", "app/app", "app/cleanup", "beep"]);
+		expect(reported.join("\n")).toMatch(
+			/BOTH <dir> and <dir>\/<basename>.*app/s,
+		);
 	});
 
 	/**
@@ -684,28 +816,34 @@ describe("explain/catalog — discovery", () => {
 
 	/**
 	 * And the inverse, which is NOT symmetric. `llms.txt` legitimately carries
-	 * every category leaf the sitemap lacks — 256 of them — so reporting all
+	 * every category page the sitemap lacks — 253 of them — so reporting all
 	 * llms-only pages would bury the signal in the shape. The residue is what
-	 * matters: a page in neither the sitemap nor the category leaves has appeared
+	 * matters: a page in neither the sitemap nor the category pages has appeared
 	 * from nowhere and the sitemap no longer accounts for it.
 	 */
 	test("reports an llms.txt page the sitemap cannot account for", () => {
 		const reported: string[] = [];
 		const slugs = discoverSlugs(
 			sitemap,
-			`${llms}\n- [Nowhere](https://manual.mikrotik.com/docs/cli-reference/nowhere.md)`,
+			`${llms}\n${link("Nowhere", "/docs/cli-reference/nowhere.md")}`,
 			(message) => reported.push(message),
 		);
 		expect(slugs).toContain("nowhere");
 		expect(reported.join("\n")).toMatch(/neither in the sitemap.*nowhere/s);
 	});
 
-	/** ...and the category leaves themselves are never reported as that. */
-	test("stays silent when llms.txt differs only by its category leaves", () => {
-		const reported: string[] = [];
-		discoverSlugs(sitemap, llms, (message) => reported.push(message));
-		expect(reported).toEqual([]);
-	});
+	/** ...and the category pages themselves are never reported as that. */
+	test.each([
+		["new", llms],
+		["old", llmsOld],
+	])(
+		"stays silent when llms.txt differs only by its category pages (%s shape)",
+		(_, text) => {
+			const reported: string[] = [];
+			discoverSlugs(sitemap, text, (message) => reported.push(message));
+			expect(reported).toEqual([]);
+		},
+	);
 });
 
 // ---------------------------------------------------------------------------

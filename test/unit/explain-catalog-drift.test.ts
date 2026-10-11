@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { CatalogRow } from "../../scripts/explain-catalog-data.ts";
 import {
 	appendDriftReportToSummary,
+	buildAbortReport,
 	buildDriftReport,
 	DRIFT_REPORT_SENTINEL,
 	parseCommittedCatalog,
@@ -128,6 +129,22 @@ describe("explain catalog drift report", () => {
 			"Fresh catalog has 1 paths; committed file could not be parsed (binary diff).",
 		);
 		expect(report).toContain("git diff src/explain/catalog.ts");
+	});
+
+	/**
+	 * An abort happens before any catalog exists to diff, so it has its own
+	 * report. It must carry the sentinel or the QA fallback step overwrites it
+	 * with the generic line (#417: twelve red runs and nothing to read).
+	 */
+	test("an abort report carries the sentinel and the refusal verbatim", () => {
+		const report = buildAbortReport(
+			"3 category dir(s) contribute no page:\n  app",
+		);
+		expect(report.startsWith(`${DRIFT_REPORT_SENTINEL}\n`)).toBe(true);
+		expect(report).toContain("could not be checked");
+		expect(report).toContain("3 category dir(s) contribute no page:\n  app");
+		// A refusal that quotes a code fence cannot close the report's own block.
+		expect(buildAbortReport("```\nx")).toContain("~~~text\n```\nx\n~~~");
 	});
 
 	test("the QA fallback guards against duplicate reports with the sentinel", async () => {
