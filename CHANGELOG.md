@@ -10,6 +10,13 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 
+### Maintenance
+
+- Refresh vulnerable dependencies within existing ranges and use Bun's
+  Dependabot ecosystem for `bun.lock` (#390). Preserve the dependency group
+  and the `has-flag` major-version ignore. Remaining dependency advisories
+  and updater verification are tracked in #390.
+
 ### Added
 
 - **`retrieve --wait` establishes readiness or a condition by a deadline (#364).**
