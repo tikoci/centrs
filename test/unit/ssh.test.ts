@@ -35,10 +35,17 @@ describe("sshCommonOptions", () => {
 	test("secure default: key, batch mode, connect timeout, accept-new", () => {
 		const opts = sshCommonOptions({ ...base, sshKey: "/k/id" }).join(" ");
 		expect(opts).toContain("-i /k/id");
+		expect(opts).toContain("-o IdentitiesOnly=yes");
 		expect(opts).toContain("BatchMode=yes");
 		expect(opts).toContain("ConnectTimeout=8");
 		expect(opts).toContain("StrictHostKeyChecking=accept-new");
 		expect(opts).not.toContain("UserKnownHostsFile=/dev/null");
+	});
+
+	test("no selected key leaves agent/config identity selection unrestricted", () => {
+		const opts = sshCommonOptions(base);
+		expect(opts).not.toContain("-i");
+		expect(opts.join(" ")).not.toContain("IdentitiesOnly");
 	});
 
 	test("insecure disables host-key checking with an ephemeral hosts file", () => {

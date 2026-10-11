@@ -73,6 +73,12 @@ CLI/API. When no key is set, terminal delegates identity selection to system
 `ssh` config and the SSH agent; `--ssh-key` is an explicit override and must not
 silently merge with a conflicting CDB/env key.
 
+A selected key from any settings source adds `IdentitiesOnly=yes` alongside
+`-i`, preventing unrelated agent identities from authenticating instead. The
+agent can still sign for the selected key. OpenSSH continues to honor explicit
+`IdentityFile` entries in its config; this does not isolate the user's SSH
+configuration. The same selection applies to execute and SFTP.
+
 Unlike the batch sftp/execute clients, the **interactive** `terminal / ssh` argv
 omits `BatchMode=yes` (`interactive: true` in `sshCommonOptions`), so the host
 `ssh` can prompt on the inherited TTY for an encrypted key's passphrase or a
@@ -86,8 +92,9 @@ longer open for the file path: **host-key verification** rides the unified
 a changed key → `transport/host-key-mismatch`; `--insecure` →
 `StrictHostKeyChecking=no` — see `docs/CONSTITUTION.md`, Transport trust);
 **agent vs explicit-key** interplay and **algorithm negotiation** are delegated to
-the host OpenSSH (`-i <ssh-key>` when set, else the agent / `~/.ssh/config`). The
-MAC-on-file-but-SSH-pinned case is settled (see *MAC target over SSH* above):
+the host OpenSSH (`-i <ssh-key> -o IdentitiesOnly=yes` when set, else the agent /
+`~/.ssh/config`). The MAC-on-file-but-SSH-pinned case is settled (see *MAC target
+over SSH* above):
 centrs resolves a MAC for `--via ssh` CDB-first, then tips `--via mac-telnet` —
 it does **not** silently fall back to L2 (constitution: a pinned `--via` is never
 swapped). The no-pseudo-tty console reader is likewise resolved — a CHR spike

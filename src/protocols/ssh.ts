@@ -54,7 +54,8 @@ export function sshCommonOptions(config: SshConnectionConfig): string[] {
 	const connectSeconds = Math.max(1, Math.ceil(config.timeoutMs / 1000));
 	const options: string[] = [];
 	if (config.sshKey) {
-		options.push("-i", config.sshKey);
+		// Exclude unrelated agent keys; explicit IdentityFile config still applies.
+		options.push("-i", config.sshKey, "-o", "IdentitiesOnly=yes");
 	}
 	// Batch clients (sftp/execute) keep BatchMode so a missing/encrypted credential
 	// errors out rather than blocking on a prompt; the interactive terminal relay

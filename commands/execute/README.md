@@ -192,6 +192,10 @@ with the first SSH consumer, `transfer`/sftp; `execute / ssh` (this command) and
 `terminal / ssh` followed as separate transports over the same host-`ssh`
 plumbing (`src/protocols/ssh.ts`) — all three SSH cells are `CHR-passed`.
 
+A selected key adds `IdentitiesOnly=yes`, preventing fallback to unrelated
+agent keys. Explicit OpenSSH `IdentityFile` configuration still applies; see
+[`terminal` → SSH key selection](../terminal/README.md#ssh-key-selection).
+
 Over SSH — like mac-telnet — `execute` is a **console transport**: it runs a
 CLI line and returns text (`SshExecClient`, one `ssh user@host "<command>"` per
 command; validation reuses the same `:put [:parse …]` gate), so structured

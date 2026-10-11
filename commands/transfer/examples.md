@@ -371,6 +371,13 @@ centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $U --ssh-key $K
 Both `ok: true`. On-device `copy` has no SFTP primitive — `--via sftp copy` returns
 `transport/unsupported-operation` (it stays on rest/native).
 
+### S6. A rejected selected key fails despite a trusted agent identity
+
+The shared [SSH identity example S5](../execute/examples.md#s5-an-explicit-rejected-key-cannot-fall-back-to-an-unrelated-agent-key)
+runs a real SFTP list with an untrusted `--ssh-key` and a trusted key in a
+private agent. It fails with `auth/failed`; selecting the trusted key or leaving
+the key unset succeeds. Covered by `test/integration/ssh-identity.test.ts`.
+
 ## Target selection (fan-out)
 
 These exercise the shared target-selection grammar
