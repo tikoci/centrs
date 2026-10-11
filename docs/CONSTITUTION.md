@@ -432,9 +432,10 @@ ecosystem norm* rather than one literal value:
 
 SSH identity selection: the `sshKey` setting (`--ssh-key`/`CENTRS_SSH_KEY`/CDB
 `ssh-key=`) carries a private-key **path only** — never key material; when unset,
-the host SSH agent / `~/.ssh/config` is used. RouterOS refuses password login once
-an SSH key is set for a user (`password-authentication=yes-if-no-key`, the
-default), so key auth is the normal sftp path.
+the host SSH agent / `~/.ssh/config` is used. Batch SSH clients (sftp, `execute
+--via ssh`) run `BatchMode=yes` and never send a password, so key auth is the
+only batch path. Separately, RouterOS refuses SSH password login once a user has
+a key (`/ip/ssh password-authentication=yes-if-no-key`, the default).
 
 ## Done definition
 

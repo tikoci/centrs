@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { sep } from "node:path";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, sep } from "node:path";
 import { isFanoutMode } from "../../src/cli/selection.ts";
 import { parseTransferCliArgs } from "../../src/cli/transfer.ts";
 import { fanoutExitCode } from "../../src/core/fanout.ts";
@@ -216,6 +218,63 @@ describe("transferFanout", () => {
 		const failed = envelope.data.targets.find((t) => !t.ok);
 		expect(failed?.meta.target.recordIndex).toBe(1);
 		expect(failed?.meta.target.identity).toBe("10.0.0.2");
+	});
+
+	test("a per-target failure after resolution keeps the resolved meta (#391)", async () => {
+		// The default execute path (no `internals.execute`): each member resolves
+		// inside `transfer()`, then a >60 KB `--via rest` upload fails before any
+		// network call — after resolution, so the inner envelope must carry it.
+		const dir = mkdtempSync(join(tmpdir(), "centrs-fanout-391-"));
+		const local = join(dir, "big.bin");
+		writeFileSync(local, Buffer.alloc(70_000, 1));
+		try {
+			const envelope = await transferFanout(
+				{
+					verb: "upload",
+					local,
+					remote: "big.bin",
+					via: "rest",
+					yes: true,
+					password: "hidden-fanout-pw",
+				},
+				selection(),
+				{},
+				{
+					expand: async () =>
+						expansionOf([
+							cdbMember("10.0.0.1", 0, "edge-1"),
+							{ kind: "literal", input: "192.0.2.9" },
+						]),
+					sleep: async () => {},
+				},
+			);
+			expect(envelope.data.summary).toEqual({ total: 2, ok: 0, failed: 2 });
+			const [cdb, literal] = envelope.data.targets;
+			for (const target of [cdb, literal]) {
+				expect(target?.ok).toBe(false);
+				if (!target || target.ok) continue;
+				expect(target.error.code).toBe("transport/unsupported-operation");
+				expect(target.meta.via).toBe("rest-api");
+				expect(target.meta.settings.password).toEqual({
+					kind: "cli",
+					key: "password",
+				});
+				expect(target.meta.operation?.auth.passwordProvided).toBe(true);
+			}
+			expect(cdb?.meta.target).toMatchObject({
+				host: "10.0.0.1",
+				identity: "edge-1",
+				recordIndex: 0,
+			});
+			expect(literal?.meta.target).toMatchObject({
+				input: "192.0.2.9",
+				host: "192.0.2.9",
+			});
+			expect(literal?.meta.target.recordIndex).toBeUndefined();
+			expect(JSON.stringify(envelope)).not.toContain("hidden-fanout-pw");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 
 	test("an empty selection is ok:true, 0/0/0, exit 0", async () => {

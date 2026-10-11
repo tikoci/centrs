@@ -324,8 +324,9 @@ The first SSH consumer: a key-authenticated SFTP round-trip over the host OpenSS
 `sftp` subsystem. The harness generates an ed25519 keypair, imports the public
 half to the CHR user (`/user ssh-keys import`), and drives `--via sftp --ssh-key`
 against the CHR's forwarded SSH port; `--insecure` accepts the ephemeral host key
-(default is `accept-new` trust-on-first-use). RouterOS refuses password login once
-a key is set, and centrs's sftp runs `BatchMode=yes`, so key auth is the path.
+(default is `accept-new` trust-on-first-use). centrs's sftp runs `BatchMode=yes`
+and never sends a password, so key auth is the only path (S7); RouterOS's own
+password policy is a separate fact (S8).
 
 ### S1. sftp upload (host → device)
 
@@ -377,6 +378,36 @@ The shared [SSH identity example S5](../execute/examples.md#s5-an-explicit-rejec
 runs a real SFTP list with an untrusted `--ssh-key` and a trusted key in a
 private agent. It fails with `auth/failed`; selecting the trusted key or leaving
 the key unset succeeds. Covered by `test/integration/ssh-identity.test.ts`.
+
+### S7. A resolved password does not authenticate batch sftp
+
+`$PW_USER` has a password, no SSH key, and the default
+`password-authentication=yes-if-no-key`; a plain OpenSSH password login as that
+user succeeds. The host OpenSSH runs with an empty config and no agent.
+
+```bash
+centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $PW_USER --password $PW_PASS --insecure list --json
+```
+
+Exit 1. Envelope: `ok: false`, `error.code="auth/failed"`,
+`error.context.sshKeySelected=false`, and the resolved meta — `meta.via="ssh"`,
+`meta.target.host`/`port`, `meta.settings.password={kind:"cli",key:"password"}`,
+`meta.operation.auth={username:$PW_USER,passwordProvided:true}`. `tips` is
+`tip/sftp-password-not-used` then `tip/transfer-password-transport`; text output
+lists the same tips. The password appears nowhere in either output.
+
+### S8. RouterOS password policy, and the key path that works
+
+After `/user ssh-keys import` installs `$KEY.pub` for `$PW_USER`, the plain
+OpenSSH password login is refused (`Permission denied`), and:
+
+```bash
+centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $PW_USER --ssh-key $KEY --insecure list --json
+```
+
+Envelope: `ok: true`. With `/ip ssh set password-authentication=yes`, the
+password login succeeds again with the key still installed. S7–S8 are covered
+by `test/integration/ssh-auth-policy.test.ts`.
 
 ## Target selection (fan-out)
 

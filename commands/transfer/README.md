@@ -296,6 +296,17 @@ gate as in `retrieve` / `execute`; RouterOS's own menu errors (missing remote
 file, permission denied) map to `routeros/*`, and SFTP/SCP/fetch errors map to
 `transport/*` and `auth/*`.
 
+A failure **after** target resolution keeps what resolution found: the error
+envelope carries the resolved `meta.target` (host, port, identity, sources),
+`meta.via`, the setting sources in `meta.settings`, and `meta.operation`
+(including `auth.username` / `auth.passwordProvided` — provenance, never the
+secret). This holds for single-target runs and for each fan-out member. A
+failure before resolution (bad shape, unknown target) keeps only
+`meta.target.input`. An sftp `auth/failed` with a resolved password adds
+`tip/sftp-password-not-used`, plus `tip/transfer-password-transport` unless the
+upload is known to exceed the rest/native write cap — advice only, never a
+fallback across a pinned `--via` (examples S7–S8).
+
 **Error codes reuse existing namespaces — `transfer` adds no namespace of its
 own.** Everything specific to transfer fits `usage/*` (`usage/target-exists`),
 `transport/*` (`transport/unsupported-operation` for the REST 60 KB write cap,
@@ -364,7 +375,11 @@ done rule. The first coded pass targets `rest`/`native` (no SSH dependency);
   / [User](https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User) pages:
   **by default** a user cannot password-auth over SSH once an SSH key is set for it
   (`/ip/ssh password-authentication=yes-if-no-key`, the default — settable to
-  `yes` to allow both), so key auth is the normal path; and `strong-crypto=yes`
+  `yes` to allow both; CHR-grounded on 7.23.8 and 7.24.5 by
+  `test/integration/ssh-auth-policy.test.ts`). centrs's batch sftp runs
+  `BatchMode=yes` and never sends a password at all — it authenticates with the
+  selected key or the host OpenSSH configuration/agent — so key auth is the
+  only sftp path regardless of that policy; and `strong-crypto=yes`
   disables ssh-rsa/SHA1, so the client must offer ed25519 / rsa-sha2-256 (the host
   OpenSSH negotiates this natively). The SSH file path is the SFTP **subsystem**
   (a real file protocol), not exec-driven scp; on-device `copy`

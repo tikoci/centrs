@@ -26,7 +26,11 @@
  */
 
 import { CentrsError } from "../errors.ts";
-import { sshCommonOptions, sshUserHost } from "./ssh.ts";
+import {
+	batchSshAuthRemediation,
+	sshCommonOptions,
+	sshUserHost,
+} from "./ssh.ts";
 
 /** A directory entry as parsed from an `sftp` `ls -l` long-name line. */
 export interface SftpFileEntry {
@@ -210,12 +214,15 @@ export class SftpClient {
 			lower.includes("no such identity") ||
 			lower.includes("too many authentication failures")
 		) {
+			const sshKeySelected = Boolean(this.config.sshKey);
 			return new CentrsError({
 				code: "auth/failed",
 				summary: `SSH authentication to ${host} failed.`,
-				remediation:
-					"Provide a key the device trusts via `--ssh-key` / the ssh-agent, and confirm the RouterOS user has `ftp`/`ssh` policy. RouterOS refuses password login once an SSH key is set for the user.",
-				context,
+				remediation: batchSshAuthRemediation(
+					sshKeySelected,
+					"the `ftp` and `ssh`",
+				),
+				context: { ...context, sshKeySelected },
 				causeData: stderr,
 			});
 		}

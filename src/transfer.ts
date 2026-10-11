@@ -34,8 +34,10 @@ import type {
 	CentrsSuccessEnvelope,
 	SettingSource as CoreSettingSource,
 	EnvelopeValidationMeta,
+	Tip,
 	Warning,
 } from "./core/envelope.ts";
+import { buildTip } from "./core/envelope.ts";
 import { toYaml } from "./core/yaml.ts";
 import {
 	CentrsError,
@@ -205,7 +207,7 @@ export type TransferSuccessEnvelope = CentrsSuccessEnvelope<
 >;
 export type TransferErrorEnvelope = CentrsErrorEnvelope<TransferOperationMeta>;
 
-interface ResolvedTransferRequest {
+export interface ResolvedTransferRequest {
 	verb: TransferVerb;
 	method: TransferMethod;
 	protocol: RouterOsProtocol;
@@ -230,17 +232,55 @@ interface ResolvedTransferRequest {
 
 // ── Public entry ────────────────────────────────────────────────────────────
 
+export interface TransferOptions {
+	cdbResolution?: CdbResolution;
+	/**
+	 * Called once resolution succeeds, before any connection. A caller that
+	 * catches the later throw uses it to keep the resolved target, method and
+	 * setting sources in its error envelope.
+	 */
+	onResolved?: (resolved: ResolvedTransferRequest) => void;
+}
+
 export async function transfer(
 	request: TransferRequest,
 	env: Record<string, string | undefined> = Bun.env,
-	options: { cdbResolution?: CdbResolution } = {},
+	options: TransferOptions = {},
 ): Promise<TransferSuccessEnvelope> {
 	const resolved = await resolveTransferRequest(request, env, options);
+	options.onResolved?.(resolved);
 	const backend = createFileBackend(resolved);
 	try {
 		return await runResolvedTransfer(resolved, backend);
 	} finally {
 		await backend.close();
+	}
+}
+
+/**
+ * {@link transfer} as an envelope that never throws. A failure after resolution
+ * carries the resolved target, method and setting sources
+ * ({@link buildTransferErrorEnvelopeFromResolved}); a failure before it keeps
+ * only the caller's input ({@link buildTransferErrorEnvelope}).
+ */
+export async function transferEnvelope(
+	request: TransferRequest,
+	env: Record<string, string | undefined> = Bun.env,
+	options: TransferOptions = {},
+): Promise<TransferEnvelope> {
+	let resolved: ResolvedTransferRequest | undefined;
+	try {
+		return await transfer(request, env, {
+			...options,
+			onResolved: (value) => {
+				resolved = value;
+				options.onResolved?.(value);
+			},
+		});
+	} catch (error) {
+		return resolved
+			? buildTransferErrorEnvelopeFromResolved(resolved, error)
+			: buildTransferErrorEnvelope(request, error);
 	}
 }
 
@@ -1432,20 +1472,115 @@ function metaFromResolved(
 	};
 }
 
+function asTransferError(error: unknown): CentrsError {
+	return error instanceof CentrsError
+		? error
+		: new CentrsError({
+				code: "internal/unhandled",
+				summary: "transfer failed with an unexpected internal error.",
+				remediation:
+					"Re-run with `--format json` to capture the structured error details.",
+				cause: error,
+			});
+}
+
+/**
+ * The error envelope for a failure after resolution: the same target, method,
+ * setting sources and operation meta a success would carry, so the caller can
+ * see which host, user and credential sources were tried. Secrets never enter
+ * it — auth meta is `username` + `passwordProvided` only.
+ */
+export function buildTransferErrorEnvelopeFromResolved(
+	resolved: ResolvedTransferRequest,
+	error: unknown,
+): TransferErrorEnvelope {
+	const centrsError = asTransferError(error);
+	return {
+		ok: false,
+		error: serializeCentrsError(centrsError),
+		warnings: [...resolved.warnings],
+		tips: transferErrorTips(resolved, centrsError),
+		// Which probe ran before the failure is unknown here, so no `result`.
+		meta: metaFromResolved(
+			resolved,
+			baseData(resolved, {
+				op: resolved.verb,
+				remote: resolved.remote,
+				local: resolved.local,
+			}),
+			{
+				enabled: resolved.validate.value,
+				source: resolved.validate.value
+					? "device /file existence probe"
+					: "disabled",
+			},
+		),
+	};
+}
+
+/**
+ * Batch sftp never sends a password. When one was resolved anyway, say so —
+ * "the API accepted this password" is otherwise read as "SFTP tried it" (#391).
+ * The REST/native alternative is advice only (never a fallback) and is left out
+ * when the upload is known to exceed their write cap.
+ */
+function transferErrorTips(
+	resolved: ResolvedTransferRequest,
+	error: CentrsError,
+): Tip[] {
+	if (
+		resolved.method !== "sftp" ||
+		error.code !== "auth/failed" ||
+		!resolved.auth.passwordProvided
+	) {
+		return [];
+	}
+	const source = resolved.auth.passwordSource
+		? ` (from ${describeSource(toCoreSource(resolved.auth.passwordSource))})`
+		: "";
+	const tips = [
+		buildTip(
+			"tip/sftp-password-not-used",
+			`A password was resolved${source}, but batch SFTP does not send it; it tries SSH keys only.`,
+			"Install the user's public key on the device and select it with --ssh-key, or use a password transport for this transfer.",
+		),
+	];
+	if (!uploadExceedsWriteCap(resolved)) {
+		tips.push(
+			buildTip(
+				"tip/transfer-password-transport",
+				"`--via rest` and `--via native-api` log in with the resolved username and password.",
+				`Re-run with --via rest; uploads over rest/native-api are capped at ${REST_FILE_WRITE_CAP_BYTES} bytes.`,
+			),
+		);
+	}
+	return tips;
+}
+
+function describeSource(source: CoreSettingSource): string {
+	return source.key ? `${source.kind} ${source.key}` : source.kind;
+}
+
+function uploadExceedsWriteCap(resolved: ResolvedTransferRequest): boolean {
+	if (
+		resolved.verb !== "upload" ||
+		resolved.local === undefined ||
+		resolved.local === "-"
+	) {
+		return false;
+	}
+	try {
+		return statSync(resolved.local).size > REST_FILE_WRITE_CAP_BYTES;
+	} catch {
+		return false;
+	}
+}
+
 export function buildTransferErrorEnvelope(
 	request: TransferRequest,
 	error: unknown,
 ): TransferErrorEnvelope {
-	const centrsError =
-		error instanceof CentrsError
-			? error
-			: new CentrsError({
-					code: "internal/unhandled",
-					summary: "transfer failed with an unexpected internal error.",
-					remediation:
-						"Re-run with `--format json` to capture the structured error details.",
-					cause: error,
-				});
+	const centrsError = asTransferError(error);
 
 	return {
 		ok: false,

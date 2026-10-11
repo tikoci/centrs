@@ -80,6 +80,23 @@ export function sshCommonOptions(config: SshConnectionConfig): string[] {
 	return options;
 }
 
+/**
+ * Remediation for an `auth/failed` from a batch (`BatchMode=yes`) client —
+ * `execute --via ssh` and sftp `transfer`. A batch client never sends a
+ * password, so it names the key source it used and leaves RouterOS's password
+ * policy as a separate fact rather than a guessed cause (#391; CHR controls in
+ * `test/integration/ssh-auth-policy.test.ts`).
+ */
+export function batchSshAuthRemediation(
+	sshKeySelected: boolean,
+	policies: string,
+): string {
+	const keys = sshKeySelected
+		? "only the selected SSH key"
+		: "keys from the host OpenSSH configuration or agent";
+	return `Batch SSH never sends a password; it authenticates with ${keys}. Install the matching public key for the user on the device (\`/user/ssh-keys import\`; \`/user/ssh-keys print\` lists the user's keys) and confirm the user has ${policies} policy. Password login is separate: \`/ip/ssh password-authentication\` (default \`yes-if-no-key\`) refuses it for a user who has a key.`;
+}
+
 /** `[user@]host` for the ssh/sftp command line. */
 export function sshUserHost(config: SshConnectionConfig): string {
 	return `${config.username ? `${config.username}@` : ""}${config.host}`;
@@ -95,7 +112,7 @@ export function sshUserHost(config: SshConnectionConfig): string {
 export function mapSshConnectError(
 	stderr: string,
 	exitCode: number,
-	ctx: { host: string; port: number; op: string },
+	ctx: { host: string; port: number; op: string; sshKeySelected?: boolean },
 ): CentrsError {
 	const { host, port, op } = ctx;
 	const trimmed = stderr.trim();
@@ -118,12 +135,12 @@ export function mapSshConnectError(
 		lower.includes("no such identity") ||
 		lower.includes("too many authentication failures")
 	) {
+		const sshKeySelected = ctx.sshKeySelected ?? false;
 		return new CentrsError({
 			code: "auth/failed",
 			summary: `SSH authentication to ${host} failed.`,
-			remediation:
-				"Provide a key the device trusts via `--ssh-key` / the ssh-agent, and confirm the RouterOS user has `ssh` policy. RouterOS refuses password login once an SSH key is set for the user.",
-			context,
+			remediation: batchSshAuthRemediation(sshKeySelected, "the `ssh`"),
+			context: { ...context, sshKeySelected },
 			causeData: trimmed,
 		});
 	}
@@ -245,6 +262,7 @@ export class SshExecClient {
 				host: this.config.host,
 				port: this.config.port,
 				op: "execute",
+				sshKeySelected: Boolean(this.config.sshKey),
 			});
 		}
 		return cleanConsoleOutput(result.stdout);

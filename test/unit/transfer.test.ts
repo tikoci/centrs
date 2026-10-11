@@ -10,14 +10,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runTransferCli } from "../../src/cli/transfer.ts";
 import {
-	type CentrsError,
+	buildTransferErrorEnvelopeFromResolved,
+	CentrsError,
 	normalizeRemotePath,
+	resolveTransferRequest,
 	selectTransferMethod,
 	type TransferRequest,
 	type TransferSuccessEnvelope,
 	transfer,
+	transferEnvelope,
 	validateTransferRequestShape,
 } from "../../src/index.ts";
+import { SftpClient } from "../../src/protocols/sftp.ts";
 
 // ── fetch mock (drives the REST adapter end-to-end, no CHR) ──────────────────
 
@@ -332,6 +336,211 @@ describe("transfer upload (rest)", () => {
 		} finally {
 			fetchMock.restore();
 		}
+	});
+});
+
+// ── error envelopes (#391) ───────────────────────────────────────────────────
+
+describe("transfer error envelopes keep what resolution found (#391)", () => {
+	const SECRET = "hidden-transfer-pw";
+
+	test("a failure after resolution carries target, via, sources and auth provenance", async () => {
+		const local = tmpFile("big-391.bin", Buffer.alloc(70_000, 1));
+		const fetchMock = mockFetchSequence([]);
+		try {
+			const envelope = await transferEnvelope(
+				baseRequest({
+					verb: "upload",
+					via: "rest",
+					local,
+					remote: "big.bin",
+					password: SECRET,
+				}),
+				{},
+			);
+			expect(envelope.ok).toBe(false);
+			if (envelope.ok) return;
+			expect(envelope.error.code).toBe("transport/unsupported-operation");
+			expect(envelope.meta.target).toMatchObject({
+				input: "router1",
+				host: "127.0.0.1",
+				port: 9999,
+			});
+			expect(envelope.meta.via).toBe("rest-api");
+			expect(envelope.meta.settings).toMatchObject({
+				host: { kind: "cli" },
+				port: { kind: "cli" },
+				username: { kind: "cli" },
+				password: { kind: "cli" },
+			});
+			expect(envelope.meta.operation).toMatchObject({
+				op: "upload",
+				method: "rest",
+				auth: { username: "admin", passwordProvided: true },
+			});
+			expect(envelope.meta.validation).toEqual({
+				enabled: true,
+				source: "device /file existence probe",
+			});
+			expect(JSON.stringify(envelope)).not.toContain(SECRET);
+			expect(fetchMock.calls).toHaveLength(0);
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("a failure before resolution keeps the minimal input-only envelope", async () => {
+		const envelope = await transferEnvelope(
+			{ verb: "upload", targetInput: "router1", password: SECRET },
+			{},
+		);
+		expect(envelope.ok).toBe(false);
+		if (envelope.ok) return;
+		expect(envelope.error.code).toBe("usage/conflicting-flags");
+		expect(envelope.meta).toEqual({
+			target: { input: "router1" },
+			via: null,
+			settings: {},
+		});
+	});
+
+	test("the CLI renders the resolved envelope on a post-resolution failure", async () => {
+		const local = tmpFile("big-391-cli.bin", Buffer.alloc(70_000, 1));
+		const errLines: string[] = [];
+		const origErr = console.error;
+		console.error = (...a: unknown[]) => {
+			errLines.push(a.map(String).join(" "));
+		};
+		try {
+			const code = await runTransferCli([
+				"router",
+				"upload",
+				local,
+				"big.bin",
+				"--via",
+				"rest",
+				"--host",
+				"127.0.0.1",
+				"--port",
+				"9999",
+				"--username",
+				"admin",
+				"--password",
+				SECRET,
+				"--json",
+			]);
+			expect(code).toBe(1);
+			const text = errLines.join("\n");
+			expect(text).not.toContain(SECRET);
+			const envelope = JSON.parse(text);
+			expect(envelope.error.code).toBe("transport/unsupported-operation");
+			expect(envelope.meta.via).toBe("rest-api");
+			expect(envelope.meta.target.host).toBe("127.0.0.1");
+			expect(envelope.meta.settings.password).toEqual({
+				kind: "cli",
+				key: "password",
+			});
+		} finally {
+			console.error = origErr;
+		}
+	});
+});
+
+describe("sftp auth failure tips (#391)", () => {
+	async function sftpAuthError(sshKey?: string): Promise<CentrsError> {
+		const client = new SftpClient({
+			host: "127.0.0.1",
+			port: 22,
+			username: "admin",
+			sshKey,
+			timeoutMs: 1000,
+			runner: async () => ({
+				exitCode: 255,
+				stdout: "",
+				stderr: "admin@127.0.0.1: Permission denied (publickey,password).",
+			}),
+		});
+		return client.stat("x").then(
+			() => {
+				throw new Error("expected auth/failed");
+			},
+			(error: CentrsError) => error,
+		);
+	}
+
+	test("a resolved password is named as not sent, with a password transport tip", async () => {
+		const resolved = await resolveTransferRequest(
+			baseRequest({ via: "sftp", password: undefined }),
+			{ CENTRS_PASSWORD: "from-env" },
+		);
+		const envelope = buildTransferErrorEnvelopeFromResolved(
+			resolved,
+			await sftpAuthError(),
+		);
+		expect(envelope.error.code).toBe("auth/failed");
+		expect(envelope.meta.via).toBe("ssh");
+		expect(envelope.meta.operation?.auth).toEqual({
+			username: "admin",
+			passwordProvided: true,
+		});
+		expect(envelope.tips.map((tip) => tip.code)).toEqual([
+			"tip/sftp-password-not-used",
+			"tip/transfer-password-transport",
+		]);
+		expect(envelope.tips[0]?.message).toContain("env CENTRS_PASSWORD");
+		expect(JSON.stringify(envelope)).not.toContain("from-env");
+	});
+
+	test("the password-transport tip is left out for an upload over the write cap", async () => {
+		const local = tmpFile("big-391-tip.bin", Buffer.alloc(70_000, 1));
+		const resolved = await resolveTransferRequest(
+			baseRequest({ verb: "upload", via: "sftp", local, password: "pw" }),
+			{},
+		);
+		const envelope = buildTransferErrorEnvelopeFromResolved(
+			resolved,
+			await sftpAuthError(),
+		);
+		expect(envelope.tips.map((tip) => tip.code)).toEqual([
+			"tip/sftp-password-not-used",
+		]);
+	});
+
+	test("no password, or a non-auth failure, adds no tips", async () => {
+		const noPassword = await resolveTransferRequest(
+			baseRequest({ via: "sftp", password: undefined }),
+			{},
+		);
+		expect(
+			buildTransferErrorEnvelopeFromResolved(noPassword, await sftpAuthError())
+				.tips,
+		).toEqual([]);
+		const withPassword = await resolveTransferRequest(
+			baseRequest({ via: "sftp", password: "pw" }),
+			{},
+		);
+		const timeout = new CentrsError({
+			code: "transport/timeout",
+			summary: "timed out",
+			remediation: "retry",
+		});
+		expect(
+			buildTransferErrorEnvelopeFromResolved(withPassword, timeout).tips,
+		).toEqual([]);
+	});
+
+	test("the remediation names the key source and the password policy as separate facts", async () => {
+		const agent = await sftpAuthError();
+		expect(agent.remediation).toContain("never sends a password");
+		expect(agent.remediation).toContain("host OpenSSH configuration or agent");
+		expect(agent.remediation).toContain("/user/ssh-keys print");
+		expect(agent.remediation).toContain(
+			"`/ip/ssh password-authentication` (default `yes-if-no-key`)",
+		);
+		expect(agent.context).toMatchObject({ sshKeySelected: false });
+		const selected = await sftpAuthError("/tmp/id_ed25519");
+		expect(selected.remediation).toContain("only the selected SSH key");
+		expect(selected.context).toMatchObject({ sshKeySelected: true });
 	});
 });
 

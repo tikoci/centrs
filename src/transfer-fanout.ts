@@ -58,7 +58,9 @@ import {
 } from "./resolver/index.ts";
 import {
 	buildTransferErrorEnvelope,
+	buildTransferErrorEnvelopeFromResolved,
 	isTransferWriteVerb,
+	type ResolvedTransferRequest,
 	type TransferEnvelope,
 	type TransferOperationMeta,
 	type TransferOutputFormat,
@@ -322,14 +324,20 @@ export async function transferFanout(
 				)
 			: undefined;
 
+	// Resolution happens inside `transfer()`, so a failure after it would lose the
+	// resolved target/method/sources unless the member's resolution is kept.
+	const resolvedByMember = new Map<SelectionMember, ResolvedTransferRequest>();
 	const execute =
 		internals.execute ??
-		((req: TransferRequest, member: SelectionMember) =>
-			transfer(req, env, {
+		((req: TransferRequest, member: SelectionMember) => {
+			resolvedByMember.delete(member);
+			return transfer(req, env, {
 				// cdb members carry their pre-resolved record (CDB loaded once);
 				// literals fall through to single-target resolution.
 				cdbResolution: member.kind === "cdb" ? member.resolution : undefined,
-			}));
+				onResolved: (resolved) => resolvedByMember.set(member, resolved),
+			});
+		});
 	const sleep = internals.sleep ?? defaultFanoutSleep;
 
 	const targets = await runFanout<
@@ -378,11 +386,15 @@ export async function transferFanout(
 			}),
 		execute: async (resolved, member) =>
 			relabelAdhocMember(await execute(resolved.request, member), member),
-		onExecuteError: (resolved, member, error) =>
-			applyMemberMeta(
-				buildTransferErrorEnvelope(resolved.request, error),
+		onExecuteError: (planned, member, error) => {
+			const resolved = resolvedByMember.get(member);
+			return applyMemberMeta(
+				resolved
+					? buildTransferErrorEnvelopeFromResolved(resolved, error)
+					: buildTransferErrorEnvelope(planned.request, error),
 				member,
-			),
+			);
+		},
 		sleep,
 	});
 

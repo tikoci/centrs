@@ -18,7 +18,7 @@ import {
 	type TransferOutputFormat,
 	type TransferRequest,
 	type TransferVerb,
-	transfer,
+	transferEnvelope,
 	transferFanout,
 	transferOutputFormats,
 	transferVerbs,
@@ -200,11 +200,18 @@ export async function runTransferCli(
 		}
 		request = parsed.request;
 
-		const envelope = await transfer(request);
+		const envelope = await transferEnvelope(request);
 		const format = resolvedFormat(request);
 		const rendered = renderTransferEnvelope(envelope, format, {
 			verbose: request.verbose,
 		});
+		if (!envelope.ok) {
+			console.error(
+				// codeql[js/clear-text-logging] The envelope carries auth provenance only (`username`, `passwordProvided`, setting sources), never the password; see buildTransferErrorEnvelopeFromResolved.
+				format === "text" ? rendered + formatTipsText(envelope.tips) : rendered,
+			);
+			return 1;
+		}
 		// A download to stdout (`local === "-"`) has already streamed the file bytes
 		// to stdout inside `transfer()`; keep the structured envelope on stderr so it
 		// cannot interleave with — and corrupt — the piped payload.
