@@ -781,4 +781,4 @@ nochr # a CLI-Reference syscap that excludes CHR — `/system/license/output` is
 
 # #417 CLI Reference refresh (7.26beta1).
 cmr # MikroTik's optional `cmr` controller package and the `/cmr` menu tree it adds (7.26beta1); the catalog carries `package="cmr"` as its published gate, e.g. `/cmr/device/reboot` (#417)
-apptraffic # the `/tool/apptraffic` settings menu and `/cmr/device/apptraffic` command, new in 7.26beta1; published with `!mmips, !powerpc, !smips` conditions (#417)
+apptraffic # two paths new in 7.26beta1 with different published gates: the `/tool/apptraffic` settings menu (conditions `!mmips, !powerpc, !smips`) and the `/cmr/device/apptraffic` command (package `cmr`, no conditions) (#417)

@@ -193,15 +193,14 @@ async function main(): Promise<void> {
 	}
 }
 
-// A refusal (discovery, parse, kind contradiction) happens before any drift
-// report exists. Put it in the Actions summary too, so the job is not red with
+// An abort (fetch failure, discovery or parse refusal, kind contradiction)
+// happens before any drift report exists. Put it in the Actions summary too, so the job is not red with
 // nothing to read (#417), then crash exactly as before.
 try {
 	await main();
 } catch (error) {
-	const message = error instanceof Error ? error.message : String(error);
 	appendDriftReportToSummary(
-		buildAbortReport(message),
+		buildAbortReport(error),
 		process.env["GITHUB_STEP_SUMMARY"],
 	);
 	throw error;

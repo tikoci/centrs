@@ -138,13 +138,37 @@ describe("explain catalog drift report", () => {
 	 */
 	test("an abort report carries the sentinel and the refusal verbatim", () => {
 		const report = buildAbortReport(
-			"3 category dir(s) contribute no page:\n  app",
+			new Error("3 category dir(s) contribute no page:\n  app"),
 		);
 		expect(report.startsWith(`${DRIFT_REPORT_SENTINEL}\n`)).toBe(true);
 		expect(report).toContain("could not be checked");
 		expect(report).toContain("3 category dir(s) contribute no page:\n  app");
 		// A refusal that quotes a code fence cannot close the report's own block.
-		expect(buildAbortReport("```\nx")).toContain("~~~text\n```\nx\n~~~");
+		expect(buildAbortReport(new Error("```\nx"))).toContain(
+			"~~~text\n```\nx\n~~~",
+		);
+	});
+
+	/**
+	 * A network failure reaches the same report, and must not be diagnosed as a
+	 * format change: re-running is the right response to one and loosening
+	 * nothing is the right response to the other. `fetchTextWithRetry` keeps the
+	 * HTTP status only in `cause`, so the chain is what tells them apart.
+	 */
+	test("an abort report is cause-neutral and keeps the cause chain", () => {
+		const report = buildAbortReport(
+			new Error("failed to fetch https://manual.mikrotik.com/llms.txt", {
+				cause: new Error("HTTP 503 Service Unavailable"),
+			}),
+		);
+		expect(report).toContain(
+			"failed to fetch https://manual.mikrotik.com/llms.txt\ncaused by: HTTP 503 Service Unavailable",
+		);
+		expect(report).toContain("Re-run");
+		expect(report).not.toContain("refused to parse");
+		expect(buildAbortReport("not an Error")).toContain(
+			"~~~text\nnot an Error\n~~~",
+		);
 	});
 
 	test("the QA fallback guards against duplicate reports with the sentinel", async () => {
