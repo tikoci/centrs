@@ -91,10 +91,10 @@ on the argv.
 
 Harness inputs (from `test/integration/terminal-ssh.test.ts`): `$SSH_PORT` is
 `chr.sshPort` (passed via `--port`), and `$KEY` is the ephemeral private key the
-test mints with `ssh-keygen -f <tmp>/id` and passes via `--ssh-key`. **TS1–TS2 are
-the original CHR-tested set** (green via `bun run test:integration`, CHR 7.23.1) —
-the matrix's `CHR-passed` claim rests on them. TS4 adds the shared SSH identity
-regression in `test/integration/ssh-identity.test.ts`. **TS3 is the interactive hand-verified
+test mints with `ssh-keygen -f <tmp>/id` and passes via `--ssh-key`. **TS1, TS2 and
+TS4 are the CHR-tested set** — the matrix's `CHR-passed` claim rests on all three.
+TS1–TS2 run in `test/integration/terminal-ssh.test.ts`; TS4 runs in the shared
+`test/integration/ssh-identity.test.ts`. **TS3 is the interactive hand-verified
 analog of T4** (a piped subprocess stdin cannot be a TTY), not in CI.
 
 ### TS1. Run a command over an SSH terminal (batch relay)

@@ -9,7 +9,7 @@ with `usage/fanout-not-supported` — open a console to one router at a time; us
 (Target selection grammar).
 
 Status: `terminal / mac-telnet` **and** `terminal / ssh` are both **`CHR-passed`**
-(see `docs/MATRIX.md` and `examples.md` T1–T3 / TS1–TS2). The two transports take
+(see `docs/MATRIX.md` and `examples.md` T1–T3 / TS1–TS2, TS4). The two transports take
 different paths: **mac-telnet** is the in-process raw passthrough over
 `MacTelnetConsole.attachInteractive`; **ssh** execs the host `ssh` with inherited
 stdio (RouterOS grants no PTY, but `ssh user@host` opens the console and the OS

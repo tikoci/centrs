@@ -388,8 +388,7 @@ printf ':put ("centrs-identity:" . [/system/identity/get name])\n/quit\n' | cent
 Execute and transfer fail with `auth/failed`; the terminal relay preserves
 OpenSSH's nonzero exit and `Permission denied` diagnostic. The test disables
 interactive prompts on its terminal relay. Controls using `$KEY`, or omitting
-`--ssh-key` to use the private agent, succeed for all three commands. Selecting
-`$KEY.pub` also works: the agent can still sign for a selected identity.
+`--ssh-key` to use the private agent, succeed for all three commands.
 
 ## Offline gate (stage 1)
 

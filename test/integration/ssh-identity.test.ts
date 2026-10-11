@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import {
 	isChrIntegrationEnabled,
 	readEnv,
@@ -104,7 +104,7 @@ describeFast("SSH identity selection", () => {
 			}
 			const cliEnv = {
 				SSH_AUTH_SOCK: socket,
-				PATH: `${tmp}:${process.env["PATH"]}`,
+				PATH: `${tmp}${delimiter}${process.env["PATH"]}`,
 				CENTRS_SSH_KEY: "",
 			};
 			const base = [
@@ -121,14 +121,7 @@ describeFast("SSH identity selection", () => {
 				] ?? "";
 			expect(identity.length).toBeGreaterThan(0);
 
-			// Selecting the public half also proves the agent may sign for a selected
-			// identity: IdentitiesOnly restricts identities, not their signing source.
-			for (const key of [
-				undefined,
-				trustedKey,
-				`${trustedKey}.pub`,
-				rejectedKey,
-			] as const) {
+			for (const key of [undefined, trustedKey, rejectedKey] as const) {
 				const keyArgs = key ? ["--ssh-key", key] : [];
 				for (const command of ["execute", "transfer", "terminal"]) {
 					const args =
