@@ -373,6 +373,23 @@ centrs execute 127.0.0.1 '/ip/address/add address=198.51.100.51/32 interface=eth
 Envelope: `ok: false`, `error.code=validation/unknown-attribute`, `meta.via=ssh`,
 and no address is added — the console `:parse` gate catches `bogus` pre-mutation.
 
+### S5. An explicit rejected key cannot fall back to an unrelated agent key
+
+`test/integration/ssh-identity.test.ts` imports `$KEY` on a disposable CHR and
+loads it into a private SSH agent. `$WRONG_KEY` is a second, untrusted key.
+The test uses an empty OpenSSH config so no other `IdentityFile` is selected.
+
+```bash
+centrs execute 127.0.0.1 ':put [/system/identity/get name]' --via ssh --port $SSH_PORT --username $U --ssh-key $WRONG_KEY --insecure --json
+centrs transfer 127.0.0.1 list --via sftp --port $SSH_PORT --username $U --ssh-key $WRONG_KEY --insecure --json
+printf ':put ("centrs-identity:" . [/system/identity/get name])\n/quit\n' | centrs terminal 127.0.0.1 --via ssh --port $SSH_PORT --username $U --ssh-key $WRONG_KEY --insecure
+```
+
+Execute and transfer fail with `auth/failed`; the terminal relay preserves
+OpenSSH's nonzero exit and `Permission denied` diagnostic. The test disables
+interactive prompts on its terminal relay. Controls using `$KEY`, or omitting
+`--ssh-key` to use the private agent, succeed for all three commands.
+
 ## Offline gate (stage 1)
 
 Validation runs offline before it runs on the device

@@ -46,6 +46,10 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 
 ### Fixed
 
+- SSH execute, SFTP and terminal add `IdentitiesOnly=yes` when a private key is
+  selected, preventing fallback to unrelated SSH agent identities (#177).
+  Explicit OpenSSH `IdentityFile` configuration continues to apply.
+
 - Query QA declares the RouterOS version split for unquoted firewall `where`
   literals. Testing/development builds select rows that 7.24.5 does not;
   both API transports retain exact result checks on either side of the split.

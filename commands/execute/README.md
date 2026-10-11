@@ -6,7 +6,7 @@ CLI-shaped commands — there is no separate `update` command.
 
 Status: `rest-api`, `native-api`, `mac-telnet`, and `ssh` are `CHR-passed` (see
 `docs/MATRIX.md` and `commands/execute/examples.md`, examples 1–11 over REST,
-12–19 over the native API, 20–22 over mac-telnet, and S1–S4 over ssh, green via
+12–19 over the native API, 20–22 over mac-telnet, and S1–S5 over ssh, green via
 `bun run test:integration`), including multi-target fan-out (see **Target
 selection**, examples F1–F5). `romon` and `winbox-terminal` remain
 `not-started`. SNMP is retrieve-only and rejects `execute`.
@@ -191,6 +191,10 @@ explicit per-invocation override. The `ssh-key` setting (and `--insecure`) lande
 with the first SSH consumer, `transfer`/sftp; `execute / ssh` (this command) and
 `terminal / ssh` followed as separate transports over the same host-`ssh`
 plumbing (`src/protocols/ssh.ts`) — all three SSH cells are `CHR-passed`.
+
+A selected key adds `IdentitiesOnly=yes`, preventing fallback to unrelated
+agent keys. Explicit OpenSSH `IdentityFile` configuration still applies; see
+[`terminal` → SSH key selection](../terminal/README.md#ssh-key-selection).
 
 Over SSH — like mac-telnet — `execute` is a **console transport**: it runs a
 CLI line and returns text (`SshExecClient`, one `ssh user@host "<command>"` per

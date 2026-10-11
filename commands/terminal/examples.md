@@ -91,9 +91,10 @@ on the argv.
 
 Harness inputs (from `test/integration/terminal-ssh.test.ts`): `$SSH_PORT` is
 `chr.sshPort` (passed via `--port`), and `$KEY` is the ephemeral private key the
-test mints with `ssh-keygen -f <tmp>/id` and passes via `--ssh-key`. **TS1–TS2 are
-the CHR-tested set** (green via `bun run test:integration`, CHR 7.23.1) — the
-matrix's `CHR-passed` claim rests on them. **TS3 is the interactive hand-verified
+test mints with `ssh-keygen -f <tmp>/id` and passes via `--ssh-key`. **TS1, TS2 and
+TS4 are the CHR-tested set** — the matrix's `CHR-passed` claim rests on all three.
+TS1–TS2 run in `test/integration/terminal-ssh.test.ts`; TS4 runs in the shared
+`test/integration/ssh-identity.test.ts`. **TS3 is the interactive hand-verified
 analog of T4** (a piped subprocess stdin cannot be a TTY), not in CI.
 
 ### TS1. Run a command over an SSH terminal (batch relay)
@@ -129,6 +130,14 @@ A host target with no `--via` selects `ssh`. The inherited terminal hands the
 RouterOS console to the user; `/quit` (or `Ctrl-D`) ends the session. RouterOS's
 no-PTY limitation applies (e.g. multi-line brace blocks are not supported over
 SSH — see the SSH page); single-line commands work.
+
+### TS4. A rejected selected key cannot authenticate through another agent identity
+
+The shared [SSH identity example S5](../execute/examples.md#s5-an-explicit-rejected-key-cannot-fall-back-to-an-unrelated-agent-key)
+checks the real terminal relay against CHR with a private agent and prompts
+disabled. The rejected key preserves OpenSSH's nonzero exit and
+`Permission denied`; selecting the trusted key or leaving the key unset
+returns the device identity. Covered by `test/integration/ssh-identity.test.ts`.
 
 ## MAC target over `--via ssh` resolution (behavior note — not a numbered CHR example)
 

@@ -63,6 +63,7 @@ describe("SftpClient argv", () => {
 		expect(argv).toContain("-b -");
 		expect(argv).toContain("-P 2222");
 		expect(argv).toContain("-i /k/id_ed25519");
+		expect(argv).toContain("-o IdentitiesOnly=yes");
 		expect(argv).toContain("BatchMode=yes");
 		expect(argv).toContain("StrictHostKeyChecking=accept-new");
 		expect(argv).not.toContain("UserKnownHostsFile=/dev/null");

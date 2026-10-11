@@ -125,6 +125,7 @@ describe("buildSshTerminalArgv", () => {
 		expect(argv).toContain("2222");
 		expect(argv).toContain("-i");
 		expect(argv).toContain("/k/id");
+		expect(argv.join(" ")).toContain("-o IdentitiesOnly=yes");
 		expect(argv.join(" ")).toContain("StrictHostKeyChecking=accept-new");
 		// Last token is the host (no trailing command — interactive console); no -t.
 		expect(argv.at(-1)).toBe("admin@192.0.2.10");
@@ -144,6 +145,7 @@ describe("buildSshTerminalArgv", () => {
 	test("no key: still `user@host` last, agent/ssh-config used", () => {
 		const argv = buildSshTerminalArgv(resolvedSsh());
 		expect(argv).not.toContain("-i");
+		expect(argv.join(" ")).not.toContain("IdentitiesOnly");
 		expect(argv.at(-1)).toBe("admin@192.0.2.10");
 	});
 });

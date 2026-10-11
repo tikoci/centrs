@@ -183,7 +183,9 @@ duplicate that table. Behavior notes the generated reference cannot carry:
   transfer.
 - `--ssh-key` is the same `sshKey` setting as `terminal`/`execute`
   (`CENTRS_SSH_KEY`, CDB `ssh-key=`); when unset, the ssh-agent /
-  `~/.ssh/config` is used. See `commands/terminal/README.md`.
+  `~/.ssh/config` is used. A selected key adds `IdentitiesOnly=yes` to exclude
+  unrelated agent keys; explicit OpenSSH `IdentityFile` entries still apply.
+  See `commands/terminal/README.md`.
 - `--insecure` adds a `transport/insecure-trust` warning (constitution:
   transport trust).
 - `--quickchr` resolves host/port/auth from the live `@tikoci/quickchr`
