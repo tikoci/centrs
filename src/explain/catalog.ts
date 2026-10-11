@@ -9,10 +9,10 @@
  * Union of two first-order sources (#228):
  *
  * 1. MikroTik's published CLI Reference (`https://manual.mikrotik.com/docs/cli-reference/`),
- *    1,055 pages, 1,062 entries — first-order about the definition
+ *    1,099 pages, 1,106 entries — first-order about the definition
  *    structs and their build-time gates. Since #285 every page is a leaf whose
  *    slug is the CLI path, so no spelling has to be rewritten to be looked up.
- * 2. 6 pinned restraml `/console/inspect` trees
+ * 2. 8 pinned restraml `/console/inspect` trees
  *    (`https://tikoci.github.io/restraml/`) — first-order about the CLI surface:
  *
  * | Tree | Arch | RouterOS | Nodes |
@@ -23,12 +23,14 @@
  * | `7.24.4/extra/deep-inspect.arm64.json` | arm64 | 7.24.4 | 42,691 |
  * | `7.25beta5/extra/deep-inspect.x86.json` | x86 | 7.25beta5 | 41,794 |
  * | `7.25beta5/extra/deep-inspect.arm64.json` | arm64 | 7.25beta5 | 43,150 |
+ * | `7.26beta1/extra/deep-inspect.x86.json` | x86 | 7.26beta1 | 43,294 |
+ * | `7.26beta1/extra/deep-inspect.arm64.json` | arm64 | 7.26beta1 | 44,650 |
  *
  * | Kind | Total | `both` | `inspect` | `published` |
  * | ---- | ----- | ------ | --------- | ----------- |
- * | `menu` | 554 | 445 | 65 | 44 |
- * | `command` | 450 | 409 | 0 | 41 |
- * | `settings` | 116 | 107 | 0 | 9 |
+ * | `menu` | 568 | 457 | 67 | 44 |
+ * | `command` | 477 | 436 | 0 | 41 |
+ * | `settings` | 121 | 112 | 0 | 9 |
  *
  * Zero navigation-vs-command contradictions between the two sources. Generation
  * aborts if that ever stops holding, rather than picking a winner. Where a path
@@ -89,7 +91,7 @@ export interface CatalogEntry {
  * `path|kind|provenance|package|conditions|syscap` — with trailing empty
  * columns trimmed. Lower-cased, slash-led and sorted by path.
  *
- * Text rather than ~1,120 object literals so that one path is one line in a
+ * Text rather than ~1,166 object literals so that one path is one line in a
  * review diff, and so the formatter has nothing to re-wrap.
  */
 const ROWS = `
@@ -154,6 +156,38 @@ const ROWS = `
 /certificate/settings|settings|both
 /certificate/sign|command|both
 /certificate/sign-certificate-request|command|both
+/cmr|settings|both|cmr
+/cmr/alert|menu|both|cmr
+/cmr/alert/show-devices|command|both|cmr
+/cmr/alert/test|command|both|cmr
+/cmr/client|settings|both||!smips, !powerpc
+/cmr/client/forget|command|both||!smips, !powerpc
+/cmr/client/pair|command|both||!smips, !powerpc
+/cmr/client/push-button|command|both
+/cmr/device|menu|both|cmr
+/cmr/device/apptraffic|command|both|cmr
+/cmr/device/dashboard|command|both|cmr
+/cmr/device/pair|command|both|cmr
+/cmr/device/reboot|command|both|cmr
+/cmr/device/run-script|command|both|cmr
+/cmr/device/upgrade|command|both|cmr
+/cmr/device/wifi-logs|command|both|cmr
+/cmr/layout|menu|both|cmr
+/cmr/layout/add-devices|command|both|cmr
+/cmr/layout/link|menu|both|cmr
+/cmr/layout/node|menu|both|cmr
+/cmr/layout/rebuild-links|command|both|cmr
+/cmr/push-button|command|both
+/cmr/upgrade|menu|both|cmr
+/cmr/upgrade/job|menu|both|cmr
+/cmr/upgrade/job/run-next|command|both|cmr
+/cmr/upgrade/job/show-devices|command|both|cmr
+/cmr/upgrade/show-devices|command|both|cmr
+/cmr/upgrade/trigger|command|both|cmr
+/cmr/upgrade/version-check|command|both|cmr
+/cmr/vlan|menu|both|cmr
+/cmr/wifi|menu|both|cmr
+/cmr/wifi/radio|menu|both|cmr
 /console|menu|inspect
 /console/inspect|command|both
 /console/settings|settings|both
@@ -286,6 +320,7 @@ const ROWS = `
 /interface/ethernet/poe/power-cycle|command|published|||(poe or poe-in)
 /interface/ethernet/poe/settings|settings|published|||(poe or poe-in) and poesettings
 /interface/ethernet/pon|menu|both
+/interface/ethernet/pon/monitor|command|both
 /interface/ethernet/reset-counters|command|both
 /interface/ethernet/reset-mac-address|command|both
 /interface/ethernet/switch|menu|both
@@ -327,7 +362,8 @@ const ROWS = `
 /interface/ethernet/switch/reserved-fdb|menu|published|||musicswitch
 /interface/ethernet/switch/reset-counters|command|both
 /interface/ethernet/switch/rule|menu|both|||rbswitch
-/interface/ethernet/switch/rule/reset-counters|command|both|||rbswitch
+/interface/ethernet/switch/rule/reset-counters|command|both|||rbswitch and crs_prestera
+/interface/ethernet/switch/rule/reset-counters-all|command|published|||rbswitch and crs_prestera
 /interface/ethernet/switch/shaper|menu|published|||musicswitch
 /interface/ethernet/switch/stats|settings|published||!smips|musicswitch
 /interface/ethernet/switch/trunk|menu|published|||musicswitch
@@ -442,6 +478,11 @@ const ROWS = `
 /interface/wifi/capsman/remote-cap/upgrade|command|both
 /interface/wifi/channel|menu|both
 /interface/wifi/configuration|menu|both
+/interface/wifi/dashboard|menu|inspect
+/interface/wifi/dashboard/settings|settings|both
+/interface/wifi/dashboard/show|command|both
+/interface/wifi/dashboard/show-clients|command|both
+/interface/wifi/dashboard/show-logs|command|both
 /interface/wifi/datapath|menu|both
 /interface/wifi/devel|command|both
 /interface/wifi/flat-snoop|command|both
@@ -525,6 +566,7 @@ const ROWS = `
 /interface/wireless/sniffer/sniff|command|both|wireless-rep
 /interface/wireless/snooper|settings|both|wireless-rep
 /interface/wireless/snooper/flat-snoop|command|both|wireless-rep
+/interface/wireless/snooper/snoop|command|both|wireless-rep
 /interface/wireless/spectral-scan|command|both|wireless-rep
 /interface/wireless/wds|menu|both|wireless-rep
 /interface/wireless/wds/monitor|command|both|wireless-rep
@@ -984,6 +1026,9 @@ const ROWS = `
 /system/clock/manual|settings|both
 /system/console|menu|both
 /system/console/screen|settings|both||i386
+/system/dashboard|menu|inspect
+/system/dashboard/settings|settings|both
+/system/dashboard/show|command|both
 /system/default-configuration|settings|both
 /system/default-configuration/caps-mode-script|settings|both
 /system/default-configuration/custom-script|settings|both
@@ -1062,10 +1107,9 @@ const ROWS = `
 /system/routerboard/mode-button|settings|both||!i386
 /system/routerboard/reset-button|settings|both||!i386
 /system/routerboard/settings|settings|both||!i386
-/system/routerboard/settings/keep-frequency|command|published||!i386, mipsel
 /system/routerboard/upgrade|command|both||!i386
-/system/routerboard/usb|settings|both||!i386, !i386, !mipsel, !powerpc
-/system/routerboard/usb/power-reset|command|both||!i386, !i386, !mipsel, !powerpc
+/system/routerboard/usb|settings|both||!i386, !i386, !powerpc
+/system/routerboard/usb/power-reset|command|both||!i386, !i386, !powerpc
 /system/routerboard/wps-button|settings|both||!i386
 /system/rtrace|settings|both
 /system/rtrace/start|command|both
@@ -1101,6 +1145,10 @@ const ROWS = `
 /task/terminate|command|both
 /terminal|menu|inspect
 /tool|menu|inspect
+/tool/apptraffic|settings|both||!mmips, !powerpc, !smips
+/tool/apptraffic/stats|menu|both||!mmips, !powerpc, !smips
+/tool/apptraffic/stats/categories|menu|both||!mmips, !powerpc, !smips
+/tool/apptraffic/stats/clear|command|both||!mmips, !powerpc, !smips
 /tool/bandwidth-server|settings|both
 /tool/bandwidth-server/session|menu|both
 /tool/bandwidth-test|command|both
