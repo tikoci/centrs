@@ -1546,11 +1546,17 @@ function transferErrorTips(
 		),
 	];
 	if (!uploadExceedsWriteCap(resolved)) {
+		// An explicit port here is the SSH port; carried over, rest would dial it.
+		const portSource = toCoreSource(resolved.target.portSource);
+		const port =
+			portSource.kind === "default"
+				? ""
+				: ` Port ${resolved.target.port} (from ${describeSource(portSource)}) is the SSH port; point --port at the REST service or leave it unset.`;
 		tips.push(
 			buildTip(
 				"tip/transfer-password-transport",
 				"`--via rest` and `--via native-api` log in with the resolved username and password.",
-				`Re-run with --via rest; uploads over rest/native-api are capped at ${REST_FILE_WRITE_CAP_BYTES} bytes.`,
+				`Re-run with --via rest; uploads over rest/native-api are capped at ${REST_FILE_WRITE_CAP_BYTES} bytes.${port}`,
 			),
 		);
 	}

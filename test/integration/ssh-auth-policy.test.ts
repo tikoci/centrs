@@ -25,6 +25,14 @@ import { runCliProcess } from "./cli-process.ts";
  * - P2 after `/user/ssh-keys import`: password login is refused.
  * - K1 centrs `--via sftp --ssh-key` with the installed key: succeeds.
  * - P3 `password-authentication=yes`: password login succeeds again, key present.
+ *
+ * Then group policy, each user holding the same installed key:
+ *
+ * - G1 no `write` (`ssh,ftp,read`): login works, upload and mkdir are refused
+ *   after it — `routeros/command-failed`, not `auth/failed`, and no password tips.
+ * - G2 no `ftp` (`ssh,read,write`): RouterOS closes the SFTP session with SSH
+ *   disconnect reason 7 — `routeros/session-closed`.
+ * - G3 no `ssh` (`ftp,read,write`): refused at login — `auth/failed`.
  */
 
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
@@ -240,6 +248,83 @@ describeFast("SSH password policy vs batch SFTP (#391)", () => {
 			const p3 = await passwordLogin();
 			expect(p3.ok, `P3 ${p3.detail}`).toBe(true);
 
+			// G1–G3. Group policy decides which failure a key-authenticated user gets.
+			const policyCase = async (
+				name: string,
+				policy: string,
+				args: readonly string[],
+			): Promise<{ code: string; tips: readonly unknown[] }> => {
+				await chr.exec(`/user group add name=${name} policy=${policy}`);
+				await chr.exec(
+					`/user add name=${name} group=${name} password="${PASSWORD}"`,
+				);
+				const pub = await runCliProcess({
+					args: [
+						"transfer",
+						chr.restUrl,
+						"--username",
+						admin.username,
+						"--password",
+						admin.password,
+						"upload",
+						`${key}.pub`,
+						`${name}.pub`,
+						"--json",
+					],
+				});
+				expect(pub.exitCode, pub.stderrText).toBe(0);
+				await chr.exec(
+					`/user ssh-keys import public-key-file=${name}.pub user=${name}`,
+				);
+				const run = await runCliProcess({
+					args: [
+						"transfer",
+						"127.0.0.1",
+						"--via",
+						"sftp",
+						"--port",
+						String(chr.sshPort),
+						"--username",
+						name,
+						"--password",
+						PASSWORD,
+						"--ssh-key",
+						key,
+						"--insecure",
+						...args,
+						"--json",
+					],
+					env: cliEnv,
+					killAfterMs: 30_000,
+				});
+				const label = `${name} ${args[0]}: ${run.stderrText}`;
+				expect(run.exitCode, label).toBe(1);
+				const failed = JSON.parse(run.stderrText);
+				return { code: failed.error.code, tips: failed.tips };
+			};
+			const local = join(tmp, "g1.txt");
+			await writeFile(local, "centrs #391\n");
+			for (const args of [
+				["upload", local, "centrs-391-g1.txt"],
+				["mkdir", "centrs-391-g1"],
+			]) {
+				const g1 = await policyCase(
+					`centrs391w${args[0]}`,
+					"ssh,ftp,read",
+					args,
+				);
+				expect(g1.code, `G1 ${args[0]}`).toBe("routeros/command-failed");
+				expect(g1.tips).toEqual([]);
+			}
+			const g2 = await policyCase("centrs391-no-ftp", "ssh,read,write", [
+				"list",
+			]);
+			expect(g2.code).toBe("routeros/session-closed");
+			const g3 = await policyCase("centrs391-no-ssh", "ftp,read,write", [
+				"list",
+			]);
+			expect(g3.code).toBe("auth/failed");
+
 			const resource = (await chr.rest("/system/resource")) as Record<
 				string,
 				string
@@ -253,7 +338,7 @@ describeFast("SSH password policy vs batch SFTP (#391)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: ["S7", "S8"],
+				exampleIds: ["S7", "S8", "S9"],
 			});
 		} finally {
 			try {

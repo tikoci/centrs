@@ -552,6 +552,14 @@ export function renderTransferFanoutEnvelope(
 					terminalSafeLine(`        Fix: ${target.error.remediation}`),
 				);
 			}
+			for (const tip of target.tips) {
+				lines.push(
+					terminalSafeLine(`        tip [${tip.code}]: ${tip.message}`),
+				);
+				if (options.verbose && tip.fix) {
+					lines.push(terminalSafeLine(`          fix: ${tip.fix}`));
+				}
+			}
 		}
 	}
 	for (const warning of envelope.warnings) {

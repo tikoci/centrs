@@ -305,7 +305,10 @@ failure before resolution (bad shape, unknown target) keeps only
 `meta.target.input`. An sftp `auth/failed` with a resolved password adds
 `tip/sftp-password-not-used`, plus `tip/transfer-password-transport` unless the
 upload is known to exceed the rest/native write cap — advice only, never a
-fallback across a pinned `--via` (examples S7–S8).
+fallback across a pinned `--via` (examples S7–S9). Only OpenSSH's pre-login
+refusal is `auth/failed`: a user whose group lacks `write` logs in and gets
+`routeros/command-failed` for upload/mkdir/remove, and one lacking `ftp` gets
+`routeros/session-closed` (SSH disconnect reason 7) — example S9.
 
 **Error codes reuse existing namespaces — `transfer` adds no namespace of its
 own.** Everything specific to transfer fits `usage/*` (`usage/target-exists`),

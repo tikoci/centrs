@@ -198,6 +198,36 @@ describe("SftpClient error mapping", () => {
 		);
 		expect(await codeFor("some other failure")).toBe("transport/network");
 	});
+
+	// Stderr captured from CHR 7.24.5 (#391 review): only OpenSSH's pre-login
+	// refusal is auth; a bare "Permission denied" comes after login.
+	test("a policy refusal after login is not an auth failure", async () => {
+		expect(
+			await codeFor(
+				"u@127.0.0.1: Permission denied (publickey).\r\nConnection closed",
+			),
+		).toBe("auth/failed");
+		for (const stderr of [
+			'dest open "/x-ro.txt": Permission denied',
+			'remote mkdir "/d-ro": Permission denied',
+			"remote delete /x.txt: Permission denied",
+		]) {
+			const { client } = clientWith(fail(stderr));
+			const error = (await client
+				.put("/tmp/x", "x-ro.txt")
+				.catch((e) => e)) as CentrsError;
+			expect(error.code, stderr).toBe("routeros/command-failed");
+			expect(error.remediation).toContain("`write`");
+		}
+		const { client } = clientWith(
+			fail(
+				"Received disconnect from 127.0.0.1 port 9222:7: \r\nDisconnected from 127.0.0.1 port 9222\r\nConnection closed",
+			),
+		);
+		const closed = (await client.readdir("").catch((e) => e)) as CentrsError;
+		expect(closed.code).toBe("routeros/session-closed");
+		expect(closed.remediation).toContain("`ftp`");
+	});
 });
 
 // ── spawn failure (no injected runner → real host spawn) ─────────────────────

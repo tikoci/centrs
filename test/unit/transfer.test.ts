@@ -488,6 +488,10 @@ describe("sftp auth failure tips (#391)", () => {
 			"tip/transfer-password-transport",
 		]);
 		expect(envelope.tips[0]?.message).toContain("env CENTRS_PASSWORD");
+		// The explicit --port is the SSH port; the rest re-run must not reuse it.
+		expect(envelope.tips[1]?.fix).toContain(
+			"Port 9999 (from cli port) is the SSH port",
+		);
 		expect(JSON.stringify(envelope)).not.toContain("from-env");
 	});
 
@@ -504,6 +508,28 @@ describe("sftp auth failure tips (#391)", () => {
 		expect(envelope.tips.map((tip) => tip.code)).toEqual([
 			"tip/sftp-password-not-used",
 		]);
+	});
+
+	test("a post-login permission refusal adds no password tips", async () => {
+		const resolved = await resolveTransferRequest(
+			baseRequest({ via: "sftp", password: "pw" }),
+			{},
+		);
+		const client = new SftpClient({
+			host: "127.0.0.1",
+			port: 22,
+			username: "admin",
+			timeoutMs: 1000,
+			runner: async () => ({
+				exitCode: 1,
+				stdout: "",
+				stderr: 'dest open "/x.txt": Permission denied',
+			}),
+		});
+		const error = await client.put("/tmp/x", "x.txt").catch((e) => e);
+		const envelope = buildTransferErrorEnvelopeFromResolved(resolved, error);
+		expect(envelope.error.code).toBe("routeros/command-failed");
+		expect(envelope.tips).toEqual([]);
 	});
 
 	test("no password, or a non-auth failure, adds no tips", async () => {
@@ -532,6 +558,8 @@ describe("sftp auth failure tips (#391)", () => {
 	test("the remediation names the key source and the password policy as separate facts", async () => {
 		const agent = await sftpAuthError();
 		expect(agent.remediation).toContain("never sends a password");
+		expect(agent.remediation).toContain("`ssh` policy");
+		expect(agent.remediation).not.toContain("`ftp`");
 		expect(agent.remediation).toContain("host OpenSSH configuration or agent");
 		expect(agent.remediation).toContain("/user/ssh-keys print");
 		expect(agent.remediation).toContain(
@@ -539,7 +567,9 @@ describe("sftp auth failure tips (#391)", () => {
 		);
 		expect(agent.context).toMatchObject({ sshKeySelected: false });
 		const selected = await sftpAuthError("/tmp/id_ed25519");
-		expect(selected.remediation).toContain("only the selected SSH key");
+		expect(selected.remediation).toContain(
+			"the selected SSH key (plus any `IdentityFile`",
+		);
 		expect(selected.context).toMatchObject({ sshKeySelected: true });
 	});
 });

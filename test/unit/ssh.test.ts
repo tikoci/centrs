@@ -122,7 +122,10 @@ describe("SshExecClient", () => {
 		// RouterOS's password policy a separate fact, not the guessed cause.
 		expect(error.context).toMatchObject({ sshKeySelected: true });
 		expect(error.remediation).toContain("never sends a password");
-		expect(error.remediation).toContain("only the selected SSH key");
+		expect(error.remediation).toContain(
+			"the selected SSH key (plus any `IdentityFile`",
+		);
+		expect(error.remediation).toContain("`ssh` policy");
 		expect(error.remediation).toContain("`/ip/ssh password-authentication`");
 	});
 

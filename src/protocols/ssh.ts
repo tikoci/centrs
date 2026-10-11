@@ -81,20 +81,33 @@ export function sshCommonOptions(config: SshConnectionConfig): string[] {
 }
 
 /**
+ * OpenSSH's own pre-login refusals. A bare `Permission denied` is not one: sftp
+ * prints it after login when RouterOS refuses an operation (`dest open "/x":
+ * Permission denied` — CHR 7.24.5, a user without `write` policy), and that is
+ * a policy refusal, not an authentication failure (#391).
+ */
+export function isSshAuthFailure(lowerStderr: string): boolean {
+	return (
+		/permission denied \(/.test(lowerStderr) ||
+		lowerStderr.includes("authentication failed") ||
+		lowerStderr.includes("no such identity") ||
+		lowerStderr.includes("too many authentication failures")
+	);
+}
+
+/**
  * Remediation for an `auth/failed` from a batch (`BatchMode=yes`) client —
  * `execute --via ssh` and sftp `transfer`. A batch client never sends a
  * password, so it names the key source it used and leaves RouterOS's password
- * policy as a separate fact rather than a guessed cause (#391; CHR controls in
- * `test/integration/ssh-auth-policy.test.ts`).
+ * policy as a separate fact rather than a guessed cause. A user without `ssh`
+ * policy is refused at login (`Permission denied (publickey)`); CHR controls in
+ * `test/integration/ssh-auth-policy.test.ts` (#391).
  */
-export function batchSshAuthRemediation(
-	sshKeySelected: boolean,
-	policies: string,
-): string {
+export function batchSshAuthRemediation(sshKeySelected: boolean): string {
 	const keys = sshKeySelected
-		? "only the selected SSH key"
+		? "the selected SSH key (plus any `IdentityFile` in the host OpenSSH configuration)"
 		: "keys from the host OpenSSH configuration or agent";
-	return `Batch SSH never sends a password; it authenticates with ${keys}. Install the matching public key for the user on the device (\`/user/ssh-keys import\`; \`/user/ssh-keys print\` lists the user's keys) and confirm the user has ${policies} policy. Password login is separate: \`/ip/ssh password-authentication\` (default \`yes-if-no-key\`) refuses it for a user who has a key.`;
+	return `Batch SSH never sends a password; it authenticates with ${keys}. Install the matching public key for the user on the device (\`/user/ssh-keys import\`; \`/user/ssh-keys print\` lists the user's keys) and confirm the user's group has the \`ssh\` policy. Password login is separate: on RouterOS 7.21+, \`/ip/ssh password-authentication\` (default \`yes-if-no-key\`) refuses it for a user who has a key.`;
 }
 
 /** `[user@]host` for the ssh/sftp command line. */
@@ -129,17 +142,12 @@ export function mapSshConnectError(
 			causeData: trimmed,
 		});
 	}
-	if (
-		lower.includes("permission denied") ||
-		lower.includes("authentication failed") ||
-		lower.includes("no such identity") ||
-		lower.includes("too many authentication failures")
-	) {
+	if (isSshAuthFailure(lower)) {
 		const sshKeySelected = ctx.sshKeySelected ?? false;
 		return new CentrsError({
 			code: "auth/failed",
 			summary: `SSH authentication to ${host} failed.`,
-			remediation: batchSshAuthRemediation(sshKeySelected, "the `ssh`"),
+			remediation: batchSshAuthRemediation(sshKeySelected),
 			context: { ...context, sshKeySelected },
 			causeData: trimmed,
 		});

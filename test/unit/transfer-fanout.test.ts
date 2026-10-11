@@ -16,6 +16,7 @@ import type {
 	TransferSuccessEnvelope,
 } from "../../src/transfer.ts";
 import {
+	renderTransferFanoutEnvelope,
 	type TransferFanoutInternals,
 	transferFanout,
 } from "../../src/transfer-fanout.ts";
@@ -218,6 +219,49 @@ describe("transferFanout", () => {
 		const failed = envelope.data.targets.find((t) => !t.ok);
 		expect(failed?.meta.target.recordIndex).toBe(1);
 		expect(failed?.meta.target.identity).toBe("10.0.0.2");
+	});
+
+	test("text output lists each failed target's tips (#391)", () => {
+		const envelope = {
+			ok: true as const,
+			data: {
+				summary: { total: 1, ok: 0, failed: 1 },
+				targets: [
+					{
+						ok: false as const,
+						error: {
+							code: "auth/failed",
+							summary: "SSH authentication to 10.0.0.1 failed.",
+						},
+						warnings: [],
+						tips: [
+							{
+								code: "tip/sftp-password-not-used",
+								message:
+									"A password was resolved, but batch SFTP does not send it.",
+								fix: "Install the user's public key.",
+							},
+						],
+						meta: {
+							target: { identity: "edge-1", recordIndex: 0 },
+							via: "ssh" as const,
+							settings: {},
+						},
+					},
+				],
+			},
+			warnings: [],
+			tips: [],
+			meta: { target: {}, via: null, settings: {} },
+		} as unknown as Parameters<typeof renderTransferFanoutEnvelope>[0];
+		expect(renderTransferFanoutEnvelope(envelope, "text").split("\n")).toEqual([
+			"transfer ? : 0/1 ok, 1 failed (concurrency ?)",
+			"  [0] FAIL  edge-1 [auth/failed] SSH authentication to 10.0.0.1 failed.",
+			"        tip [tip/sftp-password-not-used]: A password was resolved, but batch SFTP does not send it.",
+		]);
+		expect(
+			renderTransferFanoutEnvelope(envelope, "text", { verbose: true }),
+		).toContain("          fix: Install the user's public key.");
 	});
 
 	test("a per-target failure after resolution keeps the resolved meta (#391)", async () => {

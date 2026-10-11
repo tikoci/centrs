@@ -406,8 +406,25 @@ centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $PW_USER --ssh-
 ```
 
 Envelope: `ok: true`. With `/ip ssh set password-authentication=yes`, the
-password login succeeds again with the key still installed. S7–S8 are covered
-by `test/integration/ssh-auth-policy.test.ts`.
+password login succeeds again with the key still installed.
+
+### S9. Group policy refusals are not auth failures
+
+Each user holds the installed `$KEY`, and a password is passed too:
+
+```bash
+centrs transfer 127.0.0.1 --via sftp --port $SSH_PORT --username $USER_NO_WRITE --password $PW_PASS --ssh-key $KEY --insecure upload $SRC centrs-391.txt --json
+```
+
+| User's group policy | Verb | `error.code` |
+| ------------------- | ---- | ------------ |
+| `ssh,ftp,read` (no `write`) | `upload`, `mkdir` | `routeros/command-failed`, `tips: []` |
+| `ssh,read,write` (no `ftp`) | `list` | `routeros/session-closed` (SSH disconnect reason 7) |
+| `ftp,read,write` (no `ssh`) | `list` | `auth/failed` |
+
+Only OpenSSH's pre-login `Permission denied (publickey…)` is `auth/failed`; a
+bare `Permission denied` after login is a policy refusal, so no password tips
+are attached. S7–S9 are covered by `test/integration/ssh-auth-policy.test.ts`.
 
 ## Target selection (fan-out)
 
