@@ -9,7 +9,7 @@
  *
  * ## Source selection (pinned, deliberately)
  *
- * Six extra-packages trees, two architectures, spanning 7.10.2 → 7.25beta5.
+ * Eight extra-packages trees, two architectures, spanning 7.10.2 → 7.26beta1.
  * The pin is the point: `--check` must be reproducible, so adopting a newer
  * RouterOS tree is a deliberate edit to {@link RESTRAML_SOURCES}, reviewed like
  * any other change. It is *not* version tracking — the emitted tables are
@@ -37,10 +37,18 @@ export interface RestramlSource {
 /**
  * The pinned trees. Two x86 points early in 7.x retain menus that existed then
  * and were later renamed away. Both architectures of the current stable
- * (7.24.4) establish the released breadth; both architectures of the next beta
- * (7.25beta5) retain the established stable-plus-prerelease early-warning
- * coverage. Keeping each current version architecture-paired makes an added
- * path attributable to RouterOS version rather than to an architecture swap.
+ * (7.24.4) establish the released breadth; both architectures of two
+ * prereleases (7.25beta5, 7.26beta1) retain the stable-plus-prerelease
+ * early-warning coverage. Keeping each current version architecture-paired makes
+ * an added path attributable to RouterOS version rather than to an architecture
+ * swap.
+ *
+ * 7.26beta1 is pinned because the published CLI Reference documents the
+ * development channel: without a tree of that version, every path new in it
+ * (`/cmr`, `/system/dashboard`, `/interface/wifi/dashboard`, …) would be
+ * published-only with no gate to explain it, which the catalog reads as an
+ * unexplained absence rather than as a newer version (#417). 7.25beta5 stays as
+ * the earlier prerelease point; dropping it is a separate, reviewable choice.
  *
  * `extra/` is the extra-packages build throughout — a bare CHR under-covers.
  * Before 7.20.8 restraml published no arch-split deep-inspect, so the early
@@ -68,6 +76,16 @@ export const RESTRAML_SOURCES: readonly RestramlSource[] = [
 		version: "7.25beta5",
 		arch: "arm64",
 		file: "7.25beta5/extra/deep-inspect.arm64.json",
+	},
+	{
+		version: "7.26beta1",
+		arch: "x86",
+		file: "7.26beta1/extra/deep-inspect.x86.json",
+	},
+	{
+		version: "7.26beta1",
+		arch: "arm64",
+		file: "7.26beta1/extra/deep-inspect.arm64.json",
 	},
 ];
 

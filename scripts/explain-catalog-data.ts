@@ -76,6 +76,8 @@
  * directly and has no build or runtime dependency on tikoci/rosetta. The
  * Markdown parser is adapted from tikoci/rosetta `src/extract-cliref.ts` at
  * commit 34f1d32a9823d6dabcacc070d3884b45956d3f43 (MIT, copyright tikoci, 2026).
+ * The 2026-10-06 layout change (category page at `<dir>.md`, import-free
+ * preamble) follows the same change in tikoci/rosetta@71d8d92.
  *
  * Published documentation is not device truth. Only a live router can establish
  * its version, platform, installed packages, hardware capabilities, undocumented
@@ -213,20 +215,29 @@ export function sitemapSlugs(sitemapXml: string): string[] {
 
 /**
  * Every BRANCHING menu the sitemap serves as a trailing-slash category URL, as
- * the slug of the page that carries its own entry: `app/` -> `app/app`.
+ * the directory slug (`app/` -> `app`). The page that carries the menu's own
+ * entry is {@link categoryPageSlugs}.
  *
  * The section root itself (`/docs/cli-reference/`) is not a menu and is skipped.
  */
-export function categoryLeafSlugs(sitemapXml: string): string[] {
+export function categoryDirSlugs(sitemapXml: string): string[] {
 	const slugs = new Set<string>();
 	for (const match of sitemapXml.matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/g)) {
 		const path = cliRefPath(decodeXml(match[1] ?? ""), SITEMAP_URL);
 		if (path === null || !path.endsWith("/")) continue;
 		const dir = path.slice(CLI_PREFIX.length).replace(/\/$/, "");
 		if (dir === "" || !CLI_SLUG.test(dir)) continue;
-		slugs.add(`${dir}/${dir.split("/").pop()}`);
+		slugs.add(dir);
 	}
 	return [...slugs].sort();
+}
+
+/**
+ * The two spellings of the page that carries a category's own entry, newest
+ * first: `app` (served since 2026-10-06) and `app/app` (served until then).
+ */
+export function categoryPageSlugs(dir: string): [string, string] {
+	return [dir, `${dir}/${dir.split("/").pop()}`];
 }
 
 /** Every CLI-Reference page `llms.txt` lists. */
@@ -245,34 +256,39 @@ export function llmsSlugs(llmsTxt: string): string[] {
  *
  * The sitemap alone is NOT the inventory, and its shortfall is silent. A menu
  * that BRANCHES is served as a trailing-slash category URL with no `.md` of its
- * own — but the menu's own `Directory` entry is published, at
- * `<dir>/<basename(dir)>.md` (`app/` -> `app/app.md`), and listed only in
- * `llms.txt`. Sitemap-only discovery therefore dropped 256 of 1,070 pages, and
- * the field-heavy quarter of them: `app/app` carries 35 argument rows,
- * `caps-man/interface/interface` 79 (tikoci/rosetta#137, centrs #285).
+ * own — but the menu's own `Directory` entry is published as a page, listed
+ * only in `llms.txt`. Sitemap-only discovery therefore dropped 256 of 1,070
+ * pages, and the field-heavy quarter of them: `app/app` carries 35 argument
+ * rows, `caps-man/interface/interface` 79 (tikoci/rosetta#137, centrs #285).
  *
- * `<dir>.md`, `<dir>/index.md` and `<dir>/.md` all 404, which is what made this
- * read as a navigation stub for months. A 404 on a probe is evidence about the
- * probe, not about the page.
+ * That page has been published under two spellings (see
+ * {@link categoryPageSlugs}): `<dir>/<basename(dir)>.md` (`app/app.md`) until
+ * 2026-10-06, and `<dir>.md` (`app.md`) since. The old spelling now 404s.
+ * `<dir>/index.md` and `<dir>/.md` have never served it, which is what made
+ * this read as a navigation stub for months. A 404 on a probe is evidence about
+ * the probe, not about the page.
  *
  * The two inventories reconcile exactly, and this asserts it rather than
  * trusting either one:
  *
- *   sitemap pages 814 ∪ derived <dir>/<basename> 256  = 1,070 = llms.txt pages
+ *   sitemap pages 846 ∪ category dirs 253 = 1,099 = llms.txt pages (2026-10-11)
+ *   sitemap pages 814 ∪ category dirs 256 = 1,070 = llms.txt pages (until then)
  *
- * The category-leaf reconciliation is the ABORT, because a category dir whose
- * leaf no inventory carries is a menu entry being dropped — the #285 defect
- * itself, and invisible in the output. A page only one inventory lists is
- * reported instead of refused: the union already carries it, so nothing is
- * dropped, and `--check` fails on the new row anyway.
+ * The category reconciliation is the ABORT, because a category dir with NEITHER
+ * spelling in the inventory is a menu entry being dropped — the #285 defect
+ * itself, and invisible in the output. A dir with BOTH is reported instead: the
+ * union carries both, so nothing is dropped, but one menu published at two URLs
+ * is a path-collision risk worth a visible line. A page only one inventory
+ * lists is reported rather than refused for the same reason: the union already
+ * carries it, and `--check` fails on the new row anyway.
  *
  * BOTH one-sided directions are reported, but they are not symmetric, and the
  * asymmetry is the shape itself. Every sitemap page is also in `llms.txt`, so a
- * sitemap-only page is bare drift. `llms.txt` has 256 pages the sitemap lacks —
- * that is not drift, it IS the category leaves, so reporting them all would be
- * noise that buries the signal. What is reported is the residue: an `llms.txt`
- * page that is neither in the sitemap nor a category leaf, i.e. one that
- * appears from nowhere.
+ * sitemap-only page is bare drift. `llms.txt` has one page per category the
+ * sitemap lacks — that is not drift, it IS the category pages, so reporting
+ * them all would be noise that buries the signal. What is reported is the
+ * residue: an `llms.txt` page that is neither in the sitemap nor a category
+ * page, i.e. one that appears from nowhere.
  */
 export function discoverSlugs(
 	sitemapXml: string,
@@ -281,16 +297,30 @@ export function discoverSlugs(
 ): string[] {
 	const sitemap = new Set(sitemapSlugs(sitemapXml));
 	const llms = new Set(llmsSlugs(llmsTxt));
-	const leaves = new Set(categoryLeafSlugs(sitemapXml));
+	const dirs = categoryDirSlugs(sitemapXml);
 	const inventory = new Set([...sitemap, ...llms]);
+	const categoryPages = new Set(dirs.flatMap(categoryPageSlugs));
 
-	const orphans = [...leaves].filter((slug) => !inventory.has(slug));
+	const orphans = dirs.filter(
+		(dir) => !categoryPageSlugs(dir).some((slug) => inventory.has(slug)),
+	);
 	if (orphans.length > 0)
 		throw new Error(
-			`${orphans.length} sitemap category dir(s) contribute no <dir>/<basename> leaf to the\n` +
-				"discovered inventory (sitemap ∪ llms.txt), so those menus' own entries would be\n" +
-				"dropped silently — the #285 defect. Re-verify the inventory by hand:\n  " +
-				orphans.join("\n  "),
+			`${orphans.length} of ${dirs.length} sitemap category dir(s) contribute neither a <dir> nor a\n` +
+				`<dir>/<basename> page to the discovered inventory (sitemap ∪ llms.txt, ` +
+				`${inventory.size} pages), so\nthose menus' own entries would be dropped ` +
+				"silently — the #285 defect. Re-verify the inventory by hand:\n  " +
+				orphans.slice(0, 20).join("\n  ") +
+				(orphans.length > 20 ? `\n  … (+${orphans.length - 20} more)` : ""),
+		);
+
+	const doubled = dirs.filter((dir) =>
+		categoryPageSlugs(dir).every((slug) => inventory.has(slug)),
+	);
+	if (doubled.length > 0)
+		report(
+			`${doubled.length} category dir(s) are published at BOTH <dir> and <dir>/<basename>, so one ` +
+				`menu has two pages and its entries would collide: ${doubled.join(", ")}`,
 		);
 
 	const sitemapOnly = [...sitemap].filter((slug) => !llms.has(slug));
@@ -301,21 +331,28 @@ export function discoverSlugs(
 		);
 
 	const unaccounted = [...llms].filter(
-		(slug) => !sitemap.has(slug) && !leaves.has(slug),
+		(slug) => !sitemap.has(slug) && !categoryPages.has(slug),
 	);
 	if (unaccounted.length > 0)
 		report(
 			`${unaccounted.length} page(s) are in llms.txt but are neither in the sitemap nor a ` +
-				`category leaf, so the sitemap no longer accounts for them: ${unaccounted.join(", ")}`,
+				`category page, so the sitemap no longer accounts for them: ${unaccounted.join(", ")}`,
 		);
 
 	return [...inventory].sort();
 }
 
 /**
- * Drop the Docusaurus preamble: the H1 title and the `import {…}` lines. The
- * page body starts after the last import, which is what makes every remaining
- * heading an entry heading.
+ * Drop the page preamble so every remaining heading is an entry heading.
+ *
+ * Two preamble shapes have been served. Until 2026-10-06 it was MDX: the H1
+ * title, a `> -----------` blurb and `import {…}` lines. Since then it is
+ * rendered Markdown: the H1 title, a real `> RouterOS directory reference for
+ * /…` blurb, a `---` rule and NO imports. The H1 is the page's last path
+ * segment (`# app`, `# filter`), never an entry. Skipping a leading `# ` title
+ * and then every blank, `>` blurb, `import` and rule line covers both, and does
+ * not depend on any one of them being present (rosetta@71d8d92 made the same
+ * change for the same reshape).
  *
  * Splits on `\r?\n` and rejoins with `\n`, so the body every caller re-splits is
  * already normalized (#282). A Windows checkout converts these fixtures to CRLF,
@@ -327,14 +364,10 @@ export function discoverSlugs(
  */
 function pageBody(markdown: string): { body: string; startLine: number } {
 	const lines = markdown.split(/\r?\n/);
-	let lastImport = -1;
-	for (let index = 0; index < lines.length; index++)
-		if (/^import\s*\{/.test(lines[index] ?? "")) lastImport = index;
-	let start = lastImport + 1;
+	let start = (lines[0] ?? "").startsWith("# ") ? 1 : 0;
 	while (
 		start < lines.length &&
-		((lines[start] ?? "").trim() === "" ||
-			/^-{3,}$/.test((lines[start] ?? "").trim()))
+		/^(?:\s*|>.*|import\s*\{.*|-{3,}\s*)$/.test(lines[start] ?? "")
 	)
 		start++;
 	return { body: lines.slice(start).join("\n"), startLine: start + 1 };

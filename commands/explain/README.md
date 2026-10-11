@@ -199,10 +199,11 @@ today's path/verb/args split and script-vs-structured gate:
   Discovery is the union of MikroTik's two published inventories, not the
   sitemap alone. A *branching* menu is served as a trailing-slash category URL
   with no `.md` of its own, while that menu's own entry is published at
-  `<dir>/<basename>.md` and listed only in `llms.txt` — so sitemap-only
-  discovery dropped 256 of 1,070 pages, silently and field-heavily. Generation
-  asserts that every category dir still contributes its leaf, so the next
-  inventory reshape fails loudly instead of shrinking the table (#285,
+  `<dir>/<basename>.md` (since 2026-10-06, `<dir>.md`) and listed only in
+  `llms.txt` — so sitemap-only discovery dropped 256 of 1,070 pages, silently
+  and field-heavily. Generation asserts that every category dir still
+  contributes its own page under one of those two spellings, so the next
+  inventory reshape fails loudly instead of shrinking the table (#285, #417,
   tikoci/rosetta#137).
 
   **Source refresh (#335, accepted 2026-09-13).** The inspect pins retain the
@@ -231,6 +232,31 @@ today's path/verb/args split and script-vs-structured gate:
   `/interface/ethernet/pon` and `/ip/ssh/known-hosts` for the first time and so
   moves both from `inspect` to `both` — 961 `both`, 65 `inspect`, 94
   `published`. Zero navigation-vs-command contradictions, unchanged.
+
+  **Source refresh (accepted 2026-10-11, #417).** MikroTik changed the CLI
+  Reference layout on 2026-10-06: a branching menu's own entry moved from
+  `<dir>/<basename>.md` to `<dir>.md`, and pages dropped their MDX `import`
+  preamble, so the `# title` line is no longer fenced off by an import. Both
+  guards refused, correctly, and the catalog check could not report anything
+  for days. The parser now accepts either layout (a category dir needs one of
+  the two page spellings, and both at once is reported); losing the page
+  entirely still aborts. The inventories reconcile exactly: 846 sitemap pages
+  plus 253 category pages equal the 1,099 pages `llms.txt` lists. The inspect
+  pins add 7.26beta1 (x86 and arm64) because the manual documents the
+  development channel, and a path new in it with no matching tree is
+  published-only with no gate to explain it. Reviewed against the committed
+  catalog: 47 paths added, 1 removed, 3 gate strings changed, and no kind
+  change, no provenance loss and no navigation-vs-command contradiction. The
+  additions are the 32 `/cmr` paths, `/interface/wifi/dashboard`,
+  `/system/dashboard`, `/tool/apptraffic`, `/interface/ethernet/pon/monitor`,
+  `/interface/wireless/snooper/snoop` and
+  `/interface/ethernet/switch/rule/reset-counters-all`; the removal is the
+  published-only `/system/routerboard/settings/keep-frequency`, which its page
+  no longer lists. The CLI Reference moves from 1,055 pages / 1,062 entries to
+  1,099 / 1,106; the inspect union from 617 to 636 menus; the catalog from
+  1,120 to 1,166 paths: 1,005 `both`, 67 `inspect`, 94 `published`.
+  `/interface/wifi/dashboard` and `/system/dashboard` are `inspect` only: the
+  trees carry them, the manual publishes no menu entry for them.
 
 There are real unknowns in how far offline parsing can go (expression
 grammar, scope fidelity vs `:parse`, `[]`-nesting corner cases). Grounding

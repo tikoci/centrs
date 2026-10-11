@@ -5,7 +5,7 @@
  * the drift gate. The generator (`scripts/gen-explain-menus.ts`) carries the
  * full rationale, the source pin, and why absence here is safe.
  *
- * Union of the `dir` and `path` nodes in 6 pinned restraml typed trees
+ * Union of the `dir` and `path` nodes in 8 pinned restraml typed trees
  * (`https://tikoci.github.io/restraml/`), all extra-packages builds:
  *
  * | Tree | Arch | RouterOS | Nodes | Containers |
@@ -16,9 +16,11 @@
  * | `7.24.4/extra/deep-inspect.arm64.json` | arm64 | 7.24.4 | 42,691 | 575 |
  * | `7.25beta5/extra/deep-inspect.x86.json` | x86 | 7.25beta5 | 41,794 | 557 |
  * | `7.25beta5/extra/deep-inspect.arm64.json` | arm64 | 7.25beta5 | 43,150 | 578 |
+ * | `7.26beta1/extra/deep-inspect.x86.json` | x86 | 7.26beta1 | 43,294 | 576 |
+ * | `7.26beta1/extra/deep-inspect.arm64.json` | arm64 | 7.26beta1 | 44,650 | 597 |
  *
  * Zero node-type conflicts across those trees — no `dir`↔`cmd` flip across
- * 4 versions or across architectures — which is what makes the union
+ * 5 versions or across architectures — which is what makes the union
  * version-less rather than version-keyed. Generation aborts if that ever stops
  * holding.
  *
@@ -57,6 +59,18 @@ export const MENU_PATHS: ReadonlySet<string> = new Set([
 	"/certificate/scep-server/ra",
 	"/certificate/scep-server/requests",
 	"/certificate/settings",
+	"/cmr",
+	"/cmr/alert",
+	"/cmr/client",
+	"/cmr/device",
+	"/cmr/layout",
+	"/cmr/layout/link",
+	"/cmr/layout/node",
+	"/cmr/upgrade",
+	"/cmr/upgrade/job",
+	"/cmr/vlan",
+	"/cmr/wifi",
+	"/cmr/wifi/radio",
 	"/console",
 	"/console/settings",
 	"/container",
@@ -183,6 +197,8 @@ export const MENU_PATHS: ReadonlySet<string> = new Set([
 	"/interface/wifi/capsman/remote-cap",
 	"/interface/wifi/channel",
 	"/interface/wifi/configuration",
+	"/interface/wifi/dashboard",
+	"/interface/wifi/dashboard/settings",
 	"/interface/wifi/datapath",
 	"/interface/wifi/interworking",
 	"/interface/wifi/network",
@@ -526,6 +542,8 @@ export const MENU_PATHS: ReadonlySet<string> = new Set([
 	"/system/clock/manual",
 	"/system/console",
 	"/system/console/screen",
+	"/system/dashboard",
+	"/system/dashboard/settings",
 	"/system/default-configuration",
 	"/system/default-configuration/caps-mode-script",
 	"/system/default-configuration/custom-script",
@@ -583,6 +601,9 @@ export const MENU_PATHS: ReadonlySet<string> = new Set([
 	"/task",
 	"/terminal",
 	"/tool",
+	"/tool/apptraffic",
+	"/tool/apptraffic/stats",
+	"/tool/apptraffic/stats/categories",
 	"/tool/bandwidth-server",
 	"/tool/bandwidth-server/session",
 	"/tool/calea",

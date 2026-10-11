@@ -17,7 +17,7 @@
  *   bun run explain:catalog --cache=DIR    # reuse/populate a local page cache
  *
  * `--check` needs network (CLI Reference plus the pinned trees), so it hangs off
- * the QA workflow rather than the offline `lint:ci` gate. A full run is ~1,070
+ * the QA workflow rather than the offline `lint:ci` gate. A full run is ~1,100
  * small page fetches plus 15 MB of trees, about a minute.
  */
 
@@ -37,6 +37,7 @@ import {
 } from "./explain-catalog-data.ts";
 import {
 	appendDriftReportToSummary,
+	buildAbortReport,
 	buildDriftReport,
 	parseCommittedCatalog,
 } from "./explain-catalog-drift.ts";
@@ -111,81 +112,96 @@ async function mapConcurrent<T, U>(
 // Main
 // ---------------------------------------------------------------------------
 
-// Both inventories, because neither alone is the page set: the sitemap serves a
-// branching menu as a category URL with no `.md`, and only `llms.txt` lists the
-// leaf that carries that menu's own entry (#285).
-const [sitemapXml, llmsTxt] = await Promise.all([
-	fetchTextWithRetry(SITEMAP_URL),
-	fetchTextWithRetry(LLMS_TXT_URL),
-]);
-const slugs = discoverSlugs(sitemapXml, llmsTxt);
-console.log(`cli-reference: ${slugs.length} pages`);
+async function main(): Promise<void> {
+	// Both inventories, because neither alone is the page set: the sitemap serves a
+	// branching menu as a category URL with no `.md`, and only `llms.txt` lists the
+	// leaf that carries that menu's own entry (#285).
+	const [sitemapXml, llmsTxt] = await Promise.all([
+		fetchTextWithRetry(SITEMAP_URL),
+		fetchTextWithRetry(LLMS_TXT_URL),
+	]);
+	const slugs = discoverSlugs(sitemapXml, llmsTxt);
+	console.log(`cli-reference: ${slugs.length} pages`);
 
-let fetched = 0;
-const parsed = await mapConcurrent(slugs, CONCURRENCY, async (slug) => {
-	const markdown = await fetchPage(slug);
-	const entries = parsePage(slug, markdown);
-	const markers = countTypeMarkers(markdown);
-	if (markers !== entries.length)
-		throw new Error(
-			`${slug}: ${markers} Type markers but ${entries.length} parsed entries — the source format moved`,
-		);
-	// Rows are never emitted, so only this reconciliation can notice that the
-	// parser stopped reading them — and an unread row disarms the R2 alias guard
-	// without changing the generated file.
-	const rowMarkers = countRowMarkers(markdown);
-	const parsedRows = entries.reduce((sum, entry) => sum + entry.rows, 0);
-	if (rowMarkers !== parsedRows)
-		throw new Error(
-			`${slug}: ${rowMarkers} ArgTableRow markers but ${parsedRows} parsed rows — the source format moved`,
-		);
-	fetched++;
-	if (fetched % 50 === 0 || fetched === slugs.length)
-		console.log(`cli-reference: parsed ${fetched}/${slugs.length}`);
-	return entries;
-});
-const publishedEntries = parsed.flat();
-console.log(`cli-reference: ${publishedEntries.length} entries`);
+	let fetched = 0;
+	const parsed = await mapConcurrent(slugs, CONCURRENCY, async (slug) => {
+		const markdown = await fetchPage(slug);
+		const entries = parsePage(slug, markdown);
+		const markers = countTypeMarkers(markdown);
+		if (markers !== entries.length)
+			throw new Error(
+				`${slug}: ${markers} Type markers but ${entries.length} parsed entries — the source format moved`,
+			);
+		// Rows are never emitted, so only this reconciliation can notice that the
+		// parser stopped reading them — and an unread row disarms the R2 alias guard
+		// without changing the generated file.
+		const rowMarkers = countRowMarkers(markdown);
+		const parsedRows = entries.reduce((sum, entry) => sum + entry.rows, 0);
+		if (rowMarkers !== parsedRows)
+			throw new Error(
+				`${slug}: ${rowMarkers} ArgTableRow markers but ${parsedRows} parsed rows — the source format moved`,
+			);
+		fetched++;
+		if (fetched % 50 === 0 || fetched === slugs.length)
+			console.log(`cli-reference: parsed ${fetched}/${slugs.length}`);
+		return entries;
+	});
+	const publishedEntries = parsed.flat();
+	console.log(`cli-reference: ${publishedEntries.length} entries`);
 
-const extracts = await fetchPinnedTrees();
-// Aborts on a cross-tree `dir`↔`cmd` flip, exactly as the menu generator does.
-// Last-write-wins here would let a published kind be validated against whichever
-// tree happened to sort last.
-const treeTypes = mergeTreeTypes(extracts);
-const treeContainers = new Set<string>();
-for (const extract of extracts)
-	for (const path of extract.containers) treeContainers.add(path);
+	const extracts = await fetchPinnedTrees();
+	// Aborts on a cross-tree `dir`↔`cmd` flip, exactly as the menu generator does.
+	// Last-write-wins here would let a published kind be validated against whichever
+	// tree happened to sort last.
+	const treeTypes = mergeTreeTypes(extracts);
+	const treeContainers = new Set<string>();
+	for (const extract of extracts)
+		for (const path of extract.containers) treeContainers.add(path);
 
-const rows = build(publishedEntries, treeTypes, treeContainers);
-const content = render(rows, {
-	pages: slugs.length,
-	publishedEntries: publishedEntries.length,
-	trees: extracts.map((extract) => ({
-		arch: extract.arch,
-		file: extract.file,
-		nodes: extract.nodes,
-		version: extract.version,
-	})),
-});
-console.log(
-	`catalog: ${rows.length} paths (${rows.filter((r) => r.provenance === "both").length} both, ` +
-		`${rows.filter((r) => r.provenance === "inspect").length} inspect, ` +
-		`${rows.filter((r) => r.provenance === "published").length} published)`,
-);
+	const rows = build(publishedEntries, treeTypes, treeContainers);
+	const content = render(rows, {
+		pages: slugs.length,
+		publishedEntries: publishedEntries.length,
+		trees: extracts.map((extract) => ({
+			arch: extract.arch,
+			file: extract.file,
+			nodes: extract.nodes,
+			version: extract.version,
+		})),
+	});
+	console.log(
+		`catalog: ${rows.length} paths (${rows.filter((r) => r.provenance === "both").length} both, ` +
+			`${rows.filter((r) => r.provenance === "inspect").length} inspect, ` +
+			`${rows.filter((r) => r.provenance === "published").length} published)`,
+	);
 
-if (process.argv.includes("--check")) {
-	const existing = await Bun.file(OUTPUT_PATH)
-		.text()
-		.catch(() => "");
-	if (existing !== content) {
-		const committed = parseCommittedCatalog(existing);
-		const report = buildDriftReport(committed, rows);
-		console.error(report);
-		appendDriftReportToSummary(report, process.env["GITHUB_STEP_SUMMARY"]);
-		process.exit(1);
+	if (process.argv.includes("--check")) {
+		const existing = await Bun.file(OUTPUT_PATH)
+			.text()
+			.catch(() => "");
+		if (existing !== content) {
+			const committed = parseCommittedCatalog(existing);
+			const report = buildDriftReport(committed, rows);
+			console.error(report);
+			appendDriftReportToSummary(report, process.env["GITHUB_STEP_SUMMARY"]);
+			process.exit(1);
+		}
+		console.log("src/explain/catalog.ts matches its two sources.");
+	} else {
+		await Bun.write(OUTPUT_PATH, content);
+		console.log(`wrote ${OUTPUT_PATH}`);
 	}
-	console.log("src/explain/catalog.ts matches its two sources.");
-} else {
-	await Bun.write(OUTPUT_PATH, content);
-	console.log(`wrote ${OUTPUT_PATH}`);
+}
+
+// An abort (fetch failure, discovery or parse refusal, kind contradiction)
+// happens before any drift report exists. Put it in the Actions summary too, so the job is not red with
+// nothing to read (#417), then crash exactly as before.
+try {
+	await main();
+} catch (error) {
+	appendDriftReportToSummary(
+		buildAbortReport(error),
+		process.env["GITHUB_STEP_SUMMARY"],
+	);
+	throw error;
 }

@@ -261,6 +261,52 @@ export function buildDriftReport(
 	return lines.join("\n");
 }
 
+/**
+ * The summary for a generation that ABORTED before a drift report could be
+ * built: a fetch failure, a discovery or parse refusal, or anything else
+ * `main()` threw. It is not a catalog difference.
+ *
+ * The text is cause-neutral on purpose. A transient HTTP failure and a manual
+ * reshape both land here, and they need opposite next steps (re-run vs. read the
+ * source), so the report hands over the full error, `cause` chain included,
+ * rather than guessing which one it is. `fetchTextWithRetry` puts the HTTP
+ * status only in `cause`, so the top-level message alone cannot tell them apart.
+ *
+ * It carries {@link DRIFT_REPORT_SENTINEL}, so the QA fallback step does not
+ * replace it with its generic "no structured report" line. Until this existed,
+ * a manual reshape (#417) left the job red for days with nothing in the summary
+ * but that line.
+ */
+export function buildAbortReport(error: unknown): string {
+	const chain: string[] = [];
+	for (
+		let current: unknown = error;
+		current !== undefined && chain.length < 5;
+		current = current instanceof Error ? current.cause : undefined
+	)
+		chain.push(current instanceof Error ? current.message : String(current));
+	return [
+		DRIFT_REPORT_SENTINEL,
+		"### `src/explain/catalog.ts` could not be checked",
+		"",
+		"Generation aborted before a drift report could be built. This is a REPORT,",
+		'not a gate, and not the usual "catalog differs" outcome. Read the error',
+		"below before acting on it:",
+		"",
+		"- `failed to fetch …` or an HTTP status: a source was unreachable. Re-run",
+		"  the job; nothing about the catalog was learned.",
+		"- A refusal naming a page, entry, marker or category dir: MikroTik's",
+		"  published shape likely moved. Compare it with",
+		"  `scripts/explain-catalog-data.ts`, and do not loosen a guard to make it",
+		"  pass.",
+		"",
+		"~~~text",
+		chain.join("\ncaused by: "),
+		"~~~",
+		"",
+	].join("\n");
+}
+
 /** Append without truncating earlier steps; summary publication is best-effort. */
 export function appendDriftReportToSummary(
 	report: string,
