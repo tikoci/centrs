@@ -10,7 +10,7 @@ import type {
 	ValidationTrace,
 	Warning,
 } from "./core/envelope.ts";
-import { buildTip } from "./core/envelope.ts";
+import { buildTip, notReachedReason } from "./core/envelope.ts";
 import {
 	type CanonicalExecuteCommand,
 	canonicalizeExecuteCommand,
@@ -653,31 +653,53 @@ function failedValidationMeta(
 	}
 	// Only a `validation/*` error tells us the DEVICE stage rejected it — and
 	// only then do we know stage 1 passed, because stage 1 runs first and would
-	// have thrown its own (offline-tagged) error otherwise. This builder also
-	// catches everything downstream — a RouterOS fault on the run, a transport
-	// drop — which passed both stages and is served by `trace.validation`. When
-	// neither applies, `stages` is omitted rather than asserting a verdict this
-	// function cannot know.
-	const deviceRejected =
-		error instanceof CentrsError && error.code.startsWith("validation/");
+	// have thrown its own (offline-tagged) error otherwise. Everything downstream
+	// of a passed gate — a RouterOS fault on the run, a transport drop — is
+	// served by `trace.validation` before this function is reached.
+	if (error instanceof CentrsError && error.code.startsWith("validation/")) {
+		return {
+			enabled: true,
+			source: deviceSource,
+			result: "failed",
+			syntax: true,
+			semantic,
+			stages: [
+				offlineStagePassed(trace?.offlineVerdict),
+				{ stage: "device", source: deviceSource, result: "failed" },
+			],
+		};
+	}
+	// Anything else stopped the gate before it produced a verdict: a transport or
+	// auth failure, a device error that is not a parse answer, or a refusal
+	// before the gate ran (write confirmation). No `result`, no `syntax` /
+	// `semantic` — no stage said either (GH#435). Without a trace this builder
+	// cannot know whether stage 1 ran, so it leaves that stage out.
+	const reason = notReachedReason(
+		error instanceof CentrsError ? error.code : "internal/unhandled",
+	);
+	const device: EnvelopeValidationStage = {
+		stage: "device",
+		source: deviceSource,
+		result: "skipped",
+		reason,
+	};
+	if (!trace) {
+		return { enabled: true, source: deviceSource, stages: [device] };
+	}
 	return {
 		enabled: true,
 		source: deviceSource,
-		result: "failed",
-		syntax: true,
-		semantic,
-		...(deviceRejected
-			? {
-					stages: [
-						offlineStagePassed(trace?.offlineVerdict),
-						{
-							stage: "device" as const,
-							source: deviceSource,
-							result: "failed" as const,
-						},
-					],
-				}
-			: {}),
+		stages: [
+			trace.offlineVerdict
+				? offlineStagePassed(trace.offlineVerdict)
+				: {
+						stage: "offline",
+						source: OFFLINE_GATE_SOURCE,
+						result: "skipped",
+						reason,
+					},
+			device,
+		],
 	};
 }
 

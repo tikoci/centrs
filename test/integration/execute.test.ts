@@ -514,6 +514,31 @@ describeFast("execute against CHR", () => {
 				expect(rejected.error.position).toBeDefined();
 			}
 
+			// V8 (GH#435) — wrong credentials: the device answers 401 before the
+			// `:parse` stage can, so the gate reports no verdict. Offline passed;
+			// the device stage was not reached.
+			const badAuth = expectExecuteFailure(
+				await executeEnvelope({
+					...base,
+					username: "centrs-wrong",
+					password: "centrs-wrong",
+					command: "/system/identity/print",
+				}),
+				"rest-api",
+				"transport/auth-failed",
+			);
+			expect(badAuth.meta.validation?.result).toBeUndefined();
+			expect(
+				(badAuth.meta.validation?.stages ?? []).map((stage) => [
+					stage.stage,
+					stage.result,
+					stage.reason,
+				]),
+			).toEqual([
+				["offline", "passed", undefined],
+				["device", "skipped", "not reached: transport/auth-failed"],
+			]);
+
 			// P1 (#426): the REST URL alone selects rest-api on its own port.
 			const urlOnly = expectExecuteSuccess(
 				await executeEnvelope({
@@ -548,6 +573,7 @@ describeFast("execute against CHR", () => {
 					"V5",
 					"V6",
 					"V7",
+					"V8",
 					"W1",
 					"W2",
 					"W3",

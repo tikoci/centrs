@@ -27,7 +27,7 @@ import type {
 	ValidationTrace,
 	Warning,
 } from "./core/envelope.ts";
-import { buildTip } from "./core/envelope.ts";
+import { buildTip, notReachedReason } from "./core/envelope.ts";
 import {
 	inspectArgumentNames,
 	inspectChildrenOrEmpty,
@@ -493,9 +493,10 @@ async function* streamResolvedApi(
 
 	let resolved = request;
 	let validation: EnvelopeValidationMeta;
+	const trace: ValidationTrace = {};
 	try {
 		if (resolved.validate.value) {
-			const result = await validateApiRequest(resolved, backend);
+			const result = await validateApiRequest(resolved, backend, trace);
 			validation = result.validation;
 			resolved = await withQueryBooleans(resolved, backend, result.queryMenu);
 		} else {
@@ -503,7 +504,7 @@ async function* streamResolvedApi(
 		}
 	} catch (error) {
 		await backend.close();
-		yield buildApiErrorEnvelopeFromResolved(resolved, error);
+		yield buildApiErrorEnvelopeFromResolved(resolved, error, trace);
 		return;
 	}
 
@@ -1754,25 +1755,50 @@ function failedApiValidationMeta(
 			],
 		};
 	}
-	// `stages` is only asserted when a `validation/*` error identifies the device
-	// stage as the rejecter. Everything downstream — a RouterOS fault on the
-	// request, a transport drop — passed the gate and is served by
-	// `trace.validation` before this function is ever reached.
-	const deviceRejected = error.code.startsWith("validation/");
+	// Only a `validation/*` error identifies the device stage as the rejecter.
+	// Everything downstream of a passed gate — a RouterOS fault on the request,
+	// a transport drop — is served by `trace.validation` before this function is
+	// ever reached.
+	if (error.code.startsWith("validation/")) {
+		return {
+			enabled: true,
+			source: apiDeviceStageSource(resolved),
+			result: "failed",
+			syntax: false,
+			semantic: resolved.scriptMode ? "not-applicable" : false,
+			stages: [offlineApiStage(resolved, trace), deviceStageFailed(resolved)],
+		};
+	}
+	// Anything else stopped the gate before it produced a verdict: a transport or
+	// auth failure, a device error that is not a gate answer, or a refusal before
+	// the gate ran (write confirmation, a non-native `--stream`). No `result`, no
+	// `syntax` / `semantic` — no stage said either (GH#435). Without a trace a
+	// script request cannot say whether stage 1 ran, so that stage is left out.
+	const reason = notReachedReason(error.code);
+	const source = apiDeviceStageSource(resolved);
+	const device: EnvelopeValidationStage = {
+		stage: "device",
+		source,
+		result: "skipped",
+		reason,
+	};
+	if (resolved.scriptMode && !trace) {
+		return { enabled: true, source, stages: [device] };
+	}
 	return {
 		enabled: true,
-		source: apiDeviceStageSource(resolved),
-		result: "failed",
-		syntax: false,
-		semantic: resolved.scriptMode ? "not-applicable" : false,
-		...(deviceRejected
-			? {
-					stages: [
-						offlineApiStage(resolved, trace),
-						deviceStageFailed(resolved),
-					],
-				}
-			: {}),
+		source,
+		stages: [
+			resolved.scriptMode && trace?.offlineVerdict === undefined
+				? {
+						stage: "offline",
+						source: OFFLINE_GATE_SOURCE,
+						result: "skipped",
+						reason,
+					}
+				: offlineApiStage(resolved, trace),
+			device,
+		],
 	};
 }
 

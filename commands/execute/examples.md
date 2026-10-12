@@ -515,6 +515,17 @@ points at column 22). A menu-scope block (`/ip { nosuchmenu print }`) or a menu
 named on an earlier line abstains and stays `validation/syntax`: the offline
 analyzer does not resolve that parent, and centrs does not guess it.
 
+### V8. Wrong credentials: the device stage is not reached (GH#435)
+
+```bash
+centrs execute $R '/system/identity/print' --via rest-api --username centrs-wrong --password centrs-wrong --json
+```
+
+Envelope: `ok: false`, `error.code=transport/auth-failed`. `meta.validation`
+has no `result`, `syntax` or `semantic`. Its stages are `offline: passed`, then
+`device: skipped` with `reason: "not reached: transport/auth-failed"`. RouterOS
+answered 401 before `:parse` could give a verdict.
+
 ## Write authorization and returned runtime faults
 
 These regressions are transport-independent and run in

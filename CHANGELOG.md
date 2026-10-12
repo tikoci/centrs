@@ -97,6 +97,20 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   The MCP `centrs_retrieve` tool had the same gap and is fixed too. New
   library export: `retrieveEnvelope()`, which never throws.
 
+- Error envelopes no longer report validation `failed` when the validator
+  never answered or had passed (#435). A transport or auth failure (and, for
+  `retrieve`, a `routeros/*` error) that stops the gate now omits
+  `meta.validation.result` and the `syntax`/`semantic` summaries. Each stage
+  the gate did not reach reports `skipped` with
+  `reason: "not reached: <error.code>"`. `retrieve` now records the gate's
+  result, so a read that fails after inspect passed reports `passed`. Success
+  envelopes now carry `result: "passed"` too. `--validate=false` reports
+  `{enabled: false, source: "disabled"}` instead of `result: "failed"`. Only a
+  gate refusal reports `failed`. Applies to `execute`, `api` (including
+  `--stream`) and every `retrieve` mode. `ValidationTrace` is now a public
+  type, and `retrieve()` accepts `{ trace }`. The shape is interim until the
+  live-explain review (#236).
+
 - SSH execute, SFTP and terminal add `IdentitiesOnly=yes` when a private key is
   selected, preventing fallback to unrelated SSH agent identities (#177).
   Explicit OpenSSH `IdentityFile` configuration continues to apply.

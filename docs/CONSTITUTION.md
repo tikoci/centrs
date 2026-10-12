@@ -63,6 +63,16 @@ an ABSTENTION and passes through to the device stage; only a `fail` rejects.
 that was skipped and why. A reader must always be able to tell "the device
 accepted it" from "the device was never asked".
 
+`meta.validation.result` is a verdict, so it is present only when the gate
+produced one. `failed` means the gate refused the request. A failure after the
+gate passed keeps `passed`. When something stopped the gate before it gave a
+verdict (a `transport/*` or `auth/*` failure, a device error that is not a
+gate answer, or a refusal before the gate ran), `result` and the
+`syntax`/`semantic` summaries are absent. Each stage the gate did not reach is
+then `skipped` with `reason: "not reached: <error.code>"` (GH#435). This is an
+interim shape: the validation meta across commands is reviewed again with live
+`explain` (#236).
+
 `--validate=false` disables **both** stages — one flag, one meaning. A bypass
 that covered only the device stage would leave a caller stranded behind a
 stage-1 defect with no escape at all, and the analyzer is demonstrably wrong in

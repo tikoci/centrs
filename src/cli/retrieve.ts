@@ -27,6 +27,7 @@ import {
 	retrieveOutputFormats,
 	retrieveSample,
 	retrieveWait,
+	type ValidationTrace,
 } from "../index.ts";
 import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
@@ -218,6 +219,7 @@ type RetrieveCliArgs = RetrieveRequest & {
 export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 	let request: RetrieveCliArgs | undefined;
 	let resolved: ResolvedRetrieveRequest | undefined;
+	const trace: ValidationTrace = {};
 
 	try {
 		request = parseRetrieveCliArgs(args);
@@ -263,6 +265,7 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 		}
 
 		const envelope = await retrieve(request, Bun.env, {
+			trace,
 			onResolved: (value) => {
 				resolved = value;
 			},
@@ -298,7 +301,7 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 			// setting sources (#433).
 			const envelope = withTips(
 				resolved
-					? buildRetrieveErrorEnvelopeFromResolved(resolved, error)
+					? buildRetrieveErrorEnvelopeFromResolved(resolved, error, trace)
 					: buildRetrieveErrorEnvelope(request ?? { path: "" }, error),
 				tips,
 			);

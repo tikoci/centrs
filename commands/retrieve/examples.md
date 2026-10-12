@@ -139,6 +139,9 @@ centrs retrieve $R /system/resource --attribute bogus --username $U --password $
 centrs retrieve $R /system/resource --username wrong --password wrong --json
 ```
 
+`meta.validation` has no `result`. Its one stage is `device: skipped` with
+`reason: "not reached: transport/auth-failed"` (GH#435).
+
 ### 13. Unreachable host
 
 `transport/connection-refused` (not the more general `transport/network`).
@@ -191,7 +194,18 @@ Exit 1, `transport/connection-refused`. `meta.via="rest-api"`, and
 `source.kind="cdb"`. `meta.settings.port={kind:"cli",key:"port"}` and
 `meta.settings.username`/`password` have `kind:"cdb"`.
 `meta.operation.auth.passwordProvided=true`. The password itself appears
-nowhere.
+nowhere. `meta.validation` has no `result`; its device stage is `skipped` with
+`reason: "not reached: transport/connection-refused"` (GH#435).
+
+### 16c. The gate passed, then a later step failed (GH#435)
+
+```bash
+centrs retrieve $R /system/resource --max-results 10 --username $U --password $P --json
+```
+
+Exit 1, `input/max-results-exceeded`. The read was validated and ran, and the
+answer was larger than the byte budget. `meta.validation.result="passed"`,
+because the gate did pass.
 
 ### H1. `--host` stands in for `<target>` (#428)
 

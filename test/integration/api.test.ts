@@ -13,6 +13,7 @@ import {
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
 
 interface ValidationStages {
+	result?: string;
 	stages?: readonly {
 		stage: string;
 		source: string;
@@ -404,6 +405,25 @@ describeFast("api against CHR (rest-api)", () => {
 				result: "skipped",
 			});
 
+			// 16e (GH#435). Wrong credentials: the device answers 401 before
+			// `/console/inspect` can, so the gate reports no verdict.
+			const badAuth = expectApiFailure(
+				await apiEnvelope({
+					...base,
+					username: "centrs-wrong",
+					password: "centrs-wrong",
+					endpoint: "system/identity",
+				}),
+				"transport/auth-failed",
+			);
+			expect(badAuth.meta.validation?.result).toBeUndefined();
+			expect(badAuth.meta.validation?.stages?.[1]).toEqual({
+				stage: "device",
+				source: "/console/inspect request=child",
+				result: "skipped",
+				reason: "not reached: transport/auth-failed",
+			});
+
 			// 17. --via rest-api --stream is rejected.
 			expectApiFailure(
 				await apiEnvelope({
@@ -520,7 +540,7 @@ describeFast("api against CHR (rest-api)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [...exampleIds(21), "16b", "16c", "16d"],
+				exampleIds: [...exampleIds(21), "16b", "16c", "16d", "16e"],
 			});
 		} finally {
 			await chr.destroy();
