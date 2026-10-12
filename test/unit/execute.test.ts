@@ -3,7 +3,7 @@ import {
 	type EnvelopeValidationStage,
 	notReachedReason,
 } from "../../src/core/envelope.ts";
-import { CentrsError } from "../../src/errors.ts";
+import { CentrsError, type CentrsErrorCode } from "../../src/errors.ts";
 import {
 	buildExecuteErrorEnvelopeFromResolved,
 	canonicalizeExecuteCommand,
@@ -528,6 +528,63 @@ describe("validation metadata survives the error boundary (#354, PR #356 review)
 			expect(envelope.meta.validation?.result).toBeUndefined();
 			expect(envelope.meta.validation?.syntax).toBeUndefined();
 			expect(envelope.meta.validation?.semantic).toBeUndefined();
+		}
+	});
+
+	test("flat summaries name only the check that gave a verdict (GH#435)", async () => {
+		const flat = async (
+			command: string,
+			error: CentrsError,
+		): Promise<Record<string, unknown>> => {
+			const { syntax, semantic } =
+				buildExecuteErrorEnvelopeFromResolved(
+					await resolveFor(command),
+					error,
+					undefined,
+					{ offlineVerdict: "pass" },
+				).meta.validation ?? {};
+			return { syntax, semantic };
+		};
+		const device = (code: CentrsErrorCode) =>
+			new CentrsError({ code, summary: "no" });
+		const offline = new CentrsError({
+			code: "validation/syntax",
+			summary: "no",
+			context: { validationStage: "offline" },
+		});
+		const structured = "/ip/address/print";
+		const script = ":put 1";
+
+		// A name-level rejection: the syntax was fine.
+		expect(
+			await flat(structured, device("validation/unknown-attribute")),
+		).toEqual({ syntax: true, semantic: false });
+		// `:parse` refused the command; the name-level check was never asked.
+		for (const code of [
+			"validation/syntax",
+			"validation/unknown-path",
+			"validation/package-missing",
+			"validation/menu-unavailable",
+		] as const) {
+			expect(await flat(structured, device(code))).toEqual({
+				syntax: false,
+				semantic: undefined,
+			});
+		}
+		expect(await flat(structured, offline)).toEqual({
+			syntax: false,
+			semantic: undefined,
+		});
+		// Script input has no semantic half; `bad parameter` is `:parse` refusing.
+		for (const error of [
+			device("validation/unknown-attribute"),
+			device("validation/syntax"),
+			offline,
+		]) {
+			expect(await flat(script, error)).toEqual({
+				syntax: false,
+				semantic: "not-applicable",
+			});
 		}
 	});
 

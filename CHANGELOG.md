@@ -106,8 +106,12 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   result, so a read that fails after inspect passed reports `passed`. Success
   envelopes now carry `result: "passed"` too. `--validate=false` reports
   `{enabled: false, source: "disabled"}` instead of `result: "failed"`. Only a
-  gate refusal reports `failed`. Applies to `execute`, `api` (including
-  `--stream`) and every `retrieve` mode. `ValidationTrace` is now a public
+  gate refusal reports `failed`. On an `execute` rejection, `syntax: true` now
+  means only a name-level refusal; a `:parse` refusal (syntax, unknown path,
+  missing package, unavailable menu) is `syntax: false` with no `semantic`.
+  Before, every device rejection said `syntax: true`. A failure in `api`'s
+  `--query` boolean probe after the gate passed now reports `passed`. Applies
+  to `execute`, `api` (including `--stream`) and every `retrieve` mode. `ValidationTrace` is now a public
   type, and `retrieve()` accepts `{ trace }`. The shape is interim until the
   live-explain review (#236).
 

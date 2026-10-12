@@ -86,8 +86,9 @@ alternatives in the error envelope.
 `passed` once inspect accepts the read, even if the read fails afterward. It is
 `failed` when the gate refuses: `validation/*`, or `--query` on a singleton.
 It is absent when a `transport/*`, `auth/*`, `routeros/*` or `internal/*` error
-stopped inspect from answering; the device stage then says `not reached` (examples 12,
-16b, 16c). With `--validate=false` it is `{enabled: false, source: "disabled"}`.
+stopped inspect from answering; the device stage then says `not reached`
+(examples 12 and 16b; 16c is the `passed` case). With `--validate=false` it
+is `{enabled: false, source: "disabled"}`.
 
 If `--all-attributes` is combined with `--attribute(s)`, fail with
 `usage/conflicting-flags` *before* hitting the network.

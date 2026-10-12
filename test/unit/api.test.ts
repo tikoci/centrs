@@ -322,6 +322,38 @@ describe("api meta.validation on a gate that never answered (GH#435)", () => {
 		);
 	});
 
+	test("a pre-stream refusal of a script: both stages not reached", async () => {
+		const envelopes = [];
+		for await (const envelope of apiStream(
+			{
+				...auth,
+				endpoint: "execute",
+				method: "POST",
+				fields: { script: ":put 1" },
+				yes: true,
+				via: "rest-api",
+				targetInput: "127.0.0.1:1",
+			},
+			{},
+		)) {
+			envelopes.push(envelope);
+		}
+		const [envelope] = envelopes;
+		expect(envelope?.ok).toBe(false);
+		if (!envelope || envelope.ok) return;
+		expect(envelope.error.code).toBe("transport/capability-unsupported");
+		const reason = notReachedReason("transport/capability-unsupported");
+		expect(envelope.meta.validation?.stages).toEqual([
+			{
+				stage: "offline",
+				source: OFFLINE_GATE_SOURCE,
+				result: "skipped",
+				reason,
+			},
+			{ stage: "device", source: ":put [:parse]", result: "skipped", reason },
+		]);
+	});
+
 	test("--stream threads the trace: offline passed, device not reached", async () => {
 		const envelopes = [];
 		for await (const envelope of apiStream(

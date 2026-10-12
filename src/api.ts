@@ -376,17 +376,18 @@ export async function runResolvedApi(
 	let validation: EnvelopeValidationMeta;
 	let tips: Tip[] = [];
 	try {
+		// Recorded the moment the gate settles, so a failure in the boolean probe
+		// or the request below reports the gate that passed rather than a guess.
 		if (resolved.validate.value) {
 			const result = await validateApiRequest(resolved, backend, trace);
 			validation = result.validation;
+			trace.validation = validation;
 			tips = result.tips;
 			resolved = await withQueryBooleans(resolved, backend, result.queryMenu);
 		} else {
 			validation = disabledApiValidationMeta(resolved);
+			trace.validation = validation;
 		}
-		// Recorded BEFORE the request, so a transport drop or RouterOS fault below
-		// reports the gate that actually settled rather than a guess.
-		trace.validation = validation;
 
 		const result = await backend.apiRequest(
 			resolved === request
@@ -476,8 +477,9 @@ export async function* apiStream(
 			});
 		}
 	} catch (error) {
+		// Every failure here comes before stage 1, so an empty trace says so.
 		yield resolved
-			? buildApiErrorEnvelopeFromResolved(resolved, error)
+			? buildApiErrorEnvelopeFromResolved(resolved, error, {})
 			: buildApiErrorEnvelope(streamRequest, error, env);
 		return;
 	}
@@ -498,6 +500,8 @@ async function* streamResolvedApi(
 		if (resolved.validate.value) {
 			const result = await validateApiRequest(resolved, backend, trace);
 			validation = result.validation;
+			// The boolean probe below runs after the gate passed (GH#435).
+			trace.validation = validation;
 			resolved = await withQueryBooleans(resolved, backend, result.queryMenu);
 		} else {
 			validation = disabledValidationMeta();

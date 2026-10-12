@@ -44,6 +44,8 @@ interface ExecuteFailureEnvelope {
 			enabled?: boolean;
 			source?: string;
 			result?: string;
+			syntax?: boolean;
+			semantic?: boolean | string;
 			stages?: readonly {
 				stage: string;
 				source: string;
@@ -236,6 +238,16 @@ describeFast("execute against CHR", () => {
 			if (semantic.error.code === "validation/unknown-attribute") {
 				expect(semantic.error.context?.["parameter"]).toBe("no-such-arg");
 			}
+			// GH#435: a name-level rejection keeps `syntax: true`; the ≤ 7.21.x
+			// generic `:parse` rejection is a syntax refusal.
+			expect({
+				syntax: semantic.meta.validation?.syntax,
+				semantic: semantic.meta.validation?.semantic,
+			}).toEqual(
+				semantic.error.code === "validation/unknown-attribute"
+					? { syntax: true, semantic: false }
+					: { syntax: false, semantic: undefined },
+			);
 			await ensureNoAddressWithComment({ ...base, comment: "missing-confirm" });
 
 			expectExecuteFailure(
@@ -479,6 +491,10 @@ describeFast("execute against CHR", () => {
 				"missing value for where (line 1 column 24)",
 			);
 			expect(missingWhere.error.position).toEqual({ line: 1, column: 24 });
+			// GH#435: `:parse` refused it, so `syntax` is false and the name-level
+			// check was never asked.
+			expect(missingWhere.meta.validation?.syntax).toBe(false);
+			expect(missingWhere.meta.validation?.semantic).toBeUndefined();
 			expect(
 				(missingWhere.meta.validation?.stages ?? []).map((stage) => [
 					stage.stage,
@@ -512,6 +528,12 @@ describeFast("execute against CHR", () => {
 					"(line 1 column",
 				);
 				expect(rejected.error.position).toBeDefined();
+				// GH#435: `:parse` refused the command. A script-shaped line
+				// (`/container print`) has no semantic half at all.
+				expect(rejected.meta.validation?.syntax).toBe(false);
+				expect(rejected.meta.validation?.semantic).toBe(
+					command.includes(" ") ? "not-applicable" : undefined,
+				);
 			}
 
 			// V8 (GH#435) — wrong credentials: the device answers 401 before the

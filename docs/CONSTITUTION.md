@@ -69,7 +69,13 @@ gate passed keeps `passed`. When something stopped the gate before it gave a
 verdict (a `transport/*` or `auth/*` failure, a device error that is not a
 gate answer, or a refusal before the gate ran), `result` and the
 `syntax`/`semantic` summaries are absent. Each stage the gate did not reach is
-then `skipped` with `reason: "not reached: <error.code>"` (GH#435). This is an
+then `skipped` with `reason: "not reached: <error.code>"` (GH#435). On an
+`execute` rejection, `syntax: true` survives only for a name-level refusal (an
+unknown attribute in a structured command). Any other device or offline
+refusal is `syntax: false`, and `semantic` is then absent (`not-applicable` for
+script input), because the name-level check was never asked. `api`'s
+structured requests run no `:parse`, so their `syntax: false` means "not run",
+even on success. That overload is part of the review below. This is an
 interim shape: the validation meta across commands is reviewed again with live
 `explain` (#236).
 

@@ -7,7 +7,12 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Server } from "bun";
-import { api, buildApiQuery, resolveApiRequest } from "../../src/api.ts";
+import {
+	api,
+	apiEnvelope,
+	buildApiQuery,
+	resolveApiRequest,
+} from "../../src/api.ts";
 import { inspectWhereBooleans } from "../../src/core/inspect.ts";
 import { compileQueryWords, parseQueries } from "../../src/core/query.ts";
 import { CentrsError } from "../../src/errors.ts";
@@ -270,6 +275,26 @@ describe("api --query", () => {
 		).toEqual([["disabled=yes"], ["disabled=yes"]]);
 	});
 
+	test("a boolean probe that fails after the gate passed reports `passed` (GH#435)", async () => {
+		const router = new FakeRouter({ failProbe: true });
+		routers.push(router);
+		const envelope = await apiEnvelope(
+			{
+				endpoint: "/ip/firewall/address-list",
+				targetInput: router.url,
+				username: "u",
+				password: "p",
+				query: ["disabled"],
+			},
+			ENV,
+		);
+		expect(envelope.ok).toBe(false);
+		expect(envelope.meta.validation?.result).toBe("passed");
+		expect(router.posts.some((post) => post.body["input"] !== undefined)).toBe(
+			true,
+		);
+	});
+
 	test("a bare name without validation is refused", async () => {
 		const promise = resolveApiRequest(
 			{
@@ -297,7 +322,8 @@ type Row = Record<string, string>;
 class FakeRouter {
 	readonly posts: Array<{ path: string; body: Record<string, unknown> }> = [];
 	private readonly server: Server<undefined>;
-	constructor() {
+	/** `failProbe`: the `where` boolean probe answers HTTP 500. */
+	constructor(options: { failProbe?: boolean } = {}) {
 		this.server = Bun.serve({
 			hostname: "127.0.0.1",
 			port: 0,
@@ -308,6 +334,16 @@ class FakeRouter {
 						? ((await req.json()) as Record<string, unknown>)
 						: {};
 				this.posts.push({ path, body });
+				if (
+					options.failProbe &&
+					path === "/console/inspect" &&
+					body["input"] !== undefined
+				) {
+					return Response.json(
+						{ error: 500, message: "Internal Server Error" },
+						{ status: 500 },
+					);
+				}
 				if (path === "/console/inspect") return Response.json(inspect(body));
 				if (path === "/ip/firewall/address-list/print") {
 					return Response.json([{ ".id": "*1", list: "qa" } satisfies Row]);

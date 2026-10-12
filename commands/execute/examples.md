@@ -461,7 +461,9 @@ centrs execute $R '/ip/address/find where=' --via rest-api --username $U --passw
 Envelope: `ok: false`, `error.code=validation/syntax`, `error.context.detail`
 is RouterOS's own `missing value for where (line 1 column 24)`,
 `error.position={"line":1,"column":24}`, and `meta.validation.stages` is
-`offline: passed` followed by `device: failed`.
+`offline: passed` followed by `device: failed`. `meta.validation.syntax=false`,
+and `semantic` is absent: `:parse` refused the command, so the name-level check
+was never asked (GH#435).
 
 CHR 7.24.4 controls, via `:put [:parse "…"]`: `find where` without `=` parses
 (IL). `print where=` is rejected differently (`expected end of command`, at
@@ -487,7 +489,9 @@ Envelope: `ok: false`, `error.code=validation/package-missing`,
 `error.context.path` is `/zerotier` (then `/container`),
 `error.context.packages` names the published package, the remediation points at
 `/system/package/print` and never at the syntax, and `error.position` and
-`error.context.detail` keep RouterOS's own column and words.
+`error.context.detail` keep RouterOS's own column and words. V5–V7 all report
+`meta.validation.syntax=false`. `semantic` is absent, or `not-applicable` for
+the script-shaped `/container print` (GH#435).
 
 ### V6. A menu no RouterOS build has is an unknown path
 
