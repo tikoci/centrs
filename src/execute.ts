@@ -1103,6 +1103,11 @@ function defaultExecuteVia(
 	cdb?: CdbResolution,
 	config: Record<string, string | undefined> = {},
 ): RouterOsProtocol {
+	// A quickchr target's endpoint comes from its descriptor, so no host
+	// setting may steer its transport.
+	if (request.quickchr !== undefined) {
+		return "native-api";
+	}
 	const candidate = effectiveHostCandidate({
 		host: request.host,
 		targetInput: request.targetInput,

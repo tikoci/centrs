@@ -244,9 +244,7 @@ export function resolveTarget(
 		// SSH (sftp/scp/exec) addresses host:22 and carries its own crypto, so the
 		// URL scheme is irrelevant. An explicit `--port` / URL port wins over 22.
 		tls = false;
-		port =
-			portSetting?.value ??
-			(parsedUrl.port.length > 0 ? Number.parseInt(parsedUrl.port, 10) : 22);
+		port = portSetting?.value ?? typedPort(candidate, parsedUrl) ?? 22;
 		baseUrl = `ssh://${formatHostForUrl(parsedUrl.hostname)}:${port}`;
 	} else if (isNative) {
 		// Native API ignores the URL scheme for its wire protocol; it defaults to
@@ -259,9 +257,9 @@ export function resolveTarget(
 		// is left alone.
 		const explicitPort =
 			portSetting?.value ??
-			(parsedUrl.port.length > 0 && !hostFromCdbRecord(hostSetting, cdb)
-				? Number.parseInt(parsedUrl.port, 10)
-				: undefined);
+			(hostFromCdbRecord(hostSetting, cdb)
+				? undefined
+				: typedPort(candidate, parsedUrl));
 		if (explicitPort === NATIVE_API_PORT) {
 			tls = false;
 		} else if (explicitPort === NATIVE_API_TLS_PORT) {
@@ -304,6 +302,22 @@ export function resolveTarget(
 		portSource,
 		sources,
 	};
+}
+
+/**
+ * The port written in the host candidate, if any. WHATWG `URL` drops a
+ * scheme-default port (`http://h:80`, `https://h:443`, and a bare `h:80`, which
+ * parses as http), so an empty `URL.port` is re-read from the text. The URL has
+ * already parsed, so a trailing `:digits` can only be that port: an unbracketed
+ * IPv6 literal is rejected by `parseHostCandidate`.
+ */
+function typedPort(candidate: string, parsedUrl: URL): number | undefined {
+	if (parsedUrl.port.length > 0) {
+		return Number.parseInt(parsedUrl.port, 10);
+	}
+	const authority = candidate.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+	const match = /:(\d+)$/.exec(authority);
+	return match?.[1] !== undefined ? Number.parseInt(match[1], 10) : undefined;
 }
 
 /**

@@ -595,6 +595,46 @@ describe("resolver native-api honors a caller-typed port (#426)", () => {
 		expect(target.baseUrl).toBe("api-ssl://10.0.0.5:1234");
 	});
 
+	test("an explicit :80/:443, which URL parsing drops, is still the typed port", () => {
+		for (const [input, baseUrl] of [
+			["http://10.0.0.5:80", "api://10.0.0.5:80"],
+			["10.0.0.5:80", "api://10.0.0.5:80"],
+			["https://10.0.0.5:443", "api-ssl://10.0.0.5:443"],
+			["[2001:db8::5]:80", "api://[2001:db8::5]:80"],
+		] as const) {
+			const target = resolveTarget(
+				{ targetInput: input },
+				EMPTY_ENV,
+				"native-api",
+			);
+			expect(target.baseUrl).toBe(baseUrl);
+		}
+		const ssh = resolveTarget(
+			{ targetInput: "http://10.0.0.5:80" },
+			EMPTY_ENV,
+			"ssh",
+		);
+		expect(ssh.baseUrl).toBe("ssh://10.0.0.5:80");
+	});
+
+	test("an IPv6 literal without a port keeps the default", () => {
+		const target = resolveTarget(
+			{ targetInput: "[2001:db8::80]" },
+			EMPTY_ENV,
+			"native-api",
+		);
+		expect(target.baseUrl).toBe("api://[2001:db8::80]:8728");
+	});
+
+	test("the port settings ladder (CENTRS_PORT) wins over a typed port", () => {
+		const target = resolveTarget(
+			{ targetInput: "10.0.0.5:9" },
+			{ CENTRS_PORT: "8728" },
+			"native-api",
+		);
+		expect(target.baseUrl).toBe("api://10.0.0.5:8728");
+	});
+
 	test("--port wins over a typed port", () => {
 		const target = resolveTarget(
 			{ targetInput: "10.0.0.5:9", port: 8728 },

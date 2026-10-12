@@ -52,7 +52,8 @@ duplicate that table. Behavior notes the generated reference cannot carry:
 - `--format json` (shortcut `--json`): set `CENTRS_FORMAT=json` to make the
   structured envelope the default. `--format yaml` renders the same envelope.
 - `--port`: native-api defaults to 8728; `--port 8729` selects TLS `api-ssl`.
-  A port typed into the target (`host:port`) is honored too, below `--port`.
+  A port typed into the target (`host:port`) is honored too, below the port
+  settings ladder (`--port`, `CENTRS_PORT`, a CDB `port=` comment, config).
 - `--query`/`--filter` are RouterOS **row** filters and always return an
   array (see Synopsis); `--where` filters *which devices* fan out, not rows.
 - `--all-attributes` conflicts with `--attribute(s)` (see Validation).

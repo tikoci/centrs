@@ -118,6 +118,34 @@ describeFast("--quickchr targets against CHR (#134)", () => {
 			expect(eq1Env.meta.via).toBe("native-api");
 			expect(eq1Env.meta.target.source?.kind).toBe("provider");
 
+			// execute Q1 (#426): an ambient CENTRS_HOST URL must not steer a
+			// quickchr target's transport; the descriptor owns the endpoint.
+			const savedHost = process.env["CENTRS_HOST"];
+			process.env["CENTRS_HOST"] = "http://192.0.2.1:9";
+			let eq1Url: Awaited<ReturnType<typeof run>>;
+			try {
+				eq1Url = await run([
+					"execute",
+					"--quickchr",
+					name,
+					":put [/system/identity/get name]",
+					"--json",
+				]);
+			} finally {
+				if (savedHost === undefined) {
+					delete process.env["CENTRS_HOST"];
+				} else {
+					process.env["CENTRS_HOST"] = savedHost;
+				}
+			}
+			expect(eq1Url.exit).toBe(0);
+			const eq1UrlEnv = parse(eq1Url.out);
+			expect(eq1UrlEnv.meta.via).toBe("native-api");
+			expect(eq1UrlEnv.meta.settings?.["via"]).toEqual({
+				kind: "default",
+				key: "via",
+			});
+
 			// execute Q2: a --via the descriptor does not forward is a typed error,
 			// never a fallback.
 			const eq2 = await run([

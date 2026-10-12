@@ -58,8 +58,11 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   selects rest-api on that scheme and port instead of silently dialing native
   API on 8728; `meta.settings.via` reports `via:target-url`. A port typed into
   the target (`host:9`, `--host`, `CENTRS_HOST`) now reaches native-api on
-  every command, below `--port`, as it already did for ssh and REST. A matched
-  CDB record's own port is unchanged.
+  every command, below the port settings (`--port`, `CENTRS_PORT`, `port=`,
+  config), as it already did for ssh and REST. An explicit `:80`/`:443`, which
+  URL parsing normalizes away, is kept for native-api and ssh. A matched CDB
+  record's own port is unchanged. A `--quickchr` target keeps native-api
+  whatever `CENTRS_HOST` holds.
 
 - SSH execute, SFTP and terminal add `IdentitiesOnly=yes` when a private key is
   selected, preventing fallback to unrelated SSH agent identities (#177).
