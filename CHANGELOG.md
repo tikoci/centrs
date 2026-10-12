@@ -8,7 +8,10 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
-Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
+## 0.1.8-next.0 — 2026-10-12
+
+Pre-release (npm tag `next`; `latest` stays on 0.1.7). Install with
+`bunx @tikoci/centrs@next`.
 
 ### Maintenance
 
@@ -133,6 +136,49 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   controls with spaces (#395, #415). Compact error text stays on one line,
   including target labels and verbose remediation; JSON/YAML keep the raw values.
 
+- **`api --stream` is now a literal stream of the wire (#402).** Following a
+  menu is the `<menu>/listen` endpoint (GET; implies `--stream` and
+  native-api); a GET with `--stream` streams one literal print. RouterOS's
+  `!empty` is no longer dropped: every reply is a frame, `reply: "re"` (a row)
+  or `"empty"` (`data: null`), and one received after a local stop carries
+  `afterStop: true`. `--count` counts rows only. Property lists and queries go out
+  as typed; `tip/filtered-follow` and `tip/follow-proplist` say what RouterOS
+  will not report, and request-shape tips lead the stream as a `notice`
+  envelope. `--format ndjson` prints every envelope as one compact line,
+  one-shot or streamed. **Breaking:** `--listen` and `ApiRequest.listen` are
+  removed (`usage/removed-flag`, which prints the replacement command with
+  values redacted); `apiListen()` is renamed `apiStream()`, and
+  `ProtocolAdapter.listen()` is `stream()`.
+
+- **`transfer` moves `/file` contents as bytes on REST and native API
+  (#404).** centrs decoded and encoded file contents as UTF-8, so every
+  non-UTF-8 byte became U+FFFD (a 2,842-byte file downloaded as 3,422 bytes).
+  Library: `ProtocolExecuteRequest` and `NativeApiCommand` gain an opt-in
+  `binary` mode; a code unit above U+00FF is refused
+  (`internal/byte-string`). Every other command stays UTF-8.
+
+- `transfer download` checks the local destination before reading the device
+  (#403). A missing parent directory, a destination that is a directory, or a
+  write that still fails reports the new `input/local-destination` (the OS
+  error rides as `cause`) instead of `internal/unhandled` after a full read.
+  Download replaces an existing local file, like `curl -o` and `scp` (#406);
+  `--force` guards device destinations only, and the docs now say so.
+
+- A `transfer` failure after resolution keeps the resolved meta (#391):
+  `meta.target`, `meta.via`, `meta.settings` and `meta.operation.auth`, with
+  no secret values. Batch SSH (sftp `transfer`, `execute --via ssh`) never
+  sends a password, and the `auth/failed` remediation now says so and names
+  the key source; `error.context.sshKeySelected` is new. When a password was
+  resolved, `tip/sftp-password-not-used` and
+  `tip/transfer-password-transport` explain it and suggest `--via rest` or
+  `native-api`. New library export: `transferEnvelope()`, which never throws.
+
+- `explain` reads the CLI Reference layout `manual.mikrotik.com` has served
+  since 2026-10-06, and its path catalog now includes RouterOS 7.26beta1
+  (#417). 47 paths are added (`/cmr/*`, `/system/dashboard`,
+  `/interface/wifi/dashboard`, `/tool/apptraffic`, and others), so commands
+  such as `/cmr/device/reboot` resolve instead of warning.
+
 - **`api --query` uses the `print where` grammar too (#397).** A bare name is
   now `=yes` for a boolean (was "has the property"; that is
   `--raw-query name`), `<`/`<=` include rows without the property as `where`
@@ -145,13 +191,12 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   requests reject unused query/projection flags, and PUT/POST reject a
   trailing row id instead of dropping it. Stream outcomes are read from
   `meta.operation.stream`; failed summaries retain cancellation warnings, and
-  received terminal attributes survive a local stop.
+  received terminal attributes survive a local stop (#400).
 
 - **Native `api --stream` runs commands instead of always appending `/listen`
   (#399).** POST ping/monitor/print commands forward their attributes and emit
-  replies incrementally; terminal attributes are retained. GET-menu subscriptions
-  keep `.id,.dead` in projections and reject filters that would hide deletes
-  pending #396/#397. Natural completion is `completed`; RouterOS/transport
+  replies incrementally; terminal attributes are retained. (#402, above,
+  then made GET-menu streams literal.) Natural completion is `completed`; RouterOS/transport
   failures produce one `ok:false` summary and a nonzero exit, even after rows.
   **Breaking stream contract:** structured error envelopes now appear on stdout;
   failed summary counts/reason live in metadata, with no `data` key. Raw errors
