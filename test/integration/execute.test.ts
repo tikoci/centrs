@@ -788,7 +788,7 @@ describeFast("execute against CHR", () => {
 					args: ["transfer", "--host", chr.restUrl, "list", ...cliAuth],
 				},
 			];
-			for (const { args, via } of hostOnly) {
+			for (const { args, command, via } of hostOnly) {
 				const result = await runCliProcess({
 					args,
 					env: { CENTRS_SKIP_ENV_FILE: "1" },
@@ -800,6 +800,7 @@ describeFast("execute against CHR", () => {
 				}).toEqual({ args, stderr: "", exit: 0 });
 				const envelope = JSON.parse(result.stdoutText) as {
 					ok: boolean;
+					data: unknown;
 					meta: {
 						via: string;
 						target: { source?: unknown; recordIndex?: number };
@@ -812,6 +813,15 @@ describeFast("execute against CHR", () => {
 					key: "host",
 				});
 				expect(envelope.meta.target.recordIndex).toBeUndefined();
+				// The answer itself, as each command's H1 documents it.
+				if (command === "execute") {
+					expect(JSON.stringify(envelope.data)).toContain(liveIdentity);
+				} else if (command === "transfer") {
+					expect(Array.isArray(envelope.data)).toBe(true);
+					expect((envelope.data as unknown[]).length).toBeGreaterThan(0);
+				} else {
+					expect(envelope.data).toMatchObject({ name: liveIdentity });
+				}
 			}
 
 			const evidence = {
