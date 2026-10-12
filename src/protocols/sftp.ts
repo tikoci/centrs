@@ -26,6 +26,7 @@
  */
 
 import { CentrsError } from "../errors.ts";
+import { formatEndpoint } from "./endpoint.ts";
 import {
 	batchSshAuthRemediation,
 	isSshAuthFailure,
@@ -155,6 +156,11 @@ export class SftpClient {
 	argv(): string[] {
 		// `sftp` takes the port as `-P` (vs `ssh -p`); the `-i`/`-o` trust + batch
 		// options are shared with the ssh execute client via `sshCommonOptions`.
+		// Unlike `ssh`, `sftp` reads `host:path`, so an IPv6 host must be bracketed
+		// (`x@::1` is "Missing hostname"; `ssh x@[::1]` fails to resolve).
+		const { host: bare } = this.config;
+		const host =
+			bare.includes(":") && !bare.startsWith("[") ? `[${bare}]` : bare;
 		return [
 			this.config.binary ?? "sftp",
 			"-b",
@@ -162,7 +168,7 @@ export class SftpClient {
 			"-P",
 			String(this.config.port),
 			...sshCommonOptions(this.config),
-			sshUserHost(this.config),
+			sshUserHost({ ...this.config, host }),
 		];
 	}
 
@@ -222,7 +228,7 @@ export class SftpClient {
 		if (lower.includes("connection refused")) {
 			return new CentrsError({
 				code: "transport/connection-refused",
-				summary: `SSH connection to ${host}:${port} was refused.`,
+				summary: `SSH connection to ${formatEndpoint(host, port)} was refused.`,
 				remediation:
 					"Enable the RouterOS SSH service (`/ip service enable ssh`) and confirm the port / firewall.",
 				context,
@@ -236,7 +242,7 @@ export class SftpClient {
 		) {
 			return new CentrsError({
 				code: "transport/timeout",
-				summary: `SSH connection to ${host}:${port} timed out.`,
+				summary: `SSH connection to ${formatEndpoint(host, port)} timed out.`,
 				remediation:
 					"Raise `--timeout`, or confirm the host and port are reachable.",
 				context,
@@ -293,7 +299,7 @@ export class SftpClient {
 		}
 		return new CentrsError({
 			code: "transport/network",
-			summary: `SFTP ${op} failed against ${host}:${port} (exit ${result.exitCode}).`,
+			summary: `SFTP ${op} failed against ${formatEndpoint(host, port)} (exit ${result.exitCode}).`,
 			remediation:
 				"Re-run with `--format json` for the structured cause, and confirm SSH/SFTP access to the device.",
 			context,

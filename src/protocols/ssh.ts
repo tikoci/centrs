@@ -15,6 +15,7 @@
  */
 
 import { CentrsError } from "../errors.ts";
+import { formatEndpoint } from "./endpoint.ts";
 
 export interface SshConnectionConfig {
 	host: string;
@@ -155,7 +156,7 @@ export function mapSshConnectError(
 	if (lower.includes("connection refused")) {
 		return new CentrsError({
 			code: "transport/connection-refused",
-			summary: `SSH connection to ${host}:${port} was refused.`,
+			summary: `SSH connection to ${formatEndpoint(host, port)} was refused.`,
 			remediation:
 				"Enable the RouterOS SSH service (`/ip service enable ssh`) and confirm the port / firewall.",
 			context,
@@ -169,7 +170,7 @@ export function mapSshConnectError(
 	) {
 		return new CentrsError({
 			code: "transport/timeout",
-			summary: `SSH connection to ${host}:${port} timed out.`,
+			summary: `SSH connection to ${formatEndpoint(host, port)} timed out.`,
 			remediation:
 				"Raise `--timeout`, or confirm the host and port are reachable.",
 			context,
@@ -192,7 +193,7 @@ export function mapSshConnectError(
 	}
 	return new CentrsError({
 		code: "transport/network",
-		summary: `SSH ${op} failed against ${host}:${port} (exit ${exitCode}).`,
+		summary: `SSH ${op} failed against ${formatEndpoint(host, port)} (exit ${exitCode}).`,
 		remediation:
 			"Re-run with `--format json` for the structured cause, and confirm SSH access (`/ip service`) to the device.",
 		context,

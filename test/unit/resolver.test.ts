@@ -11,6 +11,7 @@ import {
 import {
 	type CdbResolution,
 	coerceCommentKv,
+	isLiteralHostTarget,
 	parseHostCandidate,
 	type ResolverWarning,
 	resolveAuth,
@@ -884,21 +885,196 @@ describe("resolver __default__ fallback", () => {
 		expect(auth.password).toBe("fallback-pw");
 	});
 
-	test("no __default__ keeps the explicit-CDB not-found-target contract", async () => {
+	test("no __default__ keeps the explicit-CDB not-found-target contract for a name", async () => {
 		const cdbPath = await writeCdbRecords([
 			{ target: "10.9.9.5", user: "owner", password: "owner-pw" },
 		]);
-		// With an explicit --cdb-file and no __default__, an unknown target stays a
+		// With an explicit --cdb-file and no __default__, an unknown name stays a
 		// hard error (typo protection) rather than synthesizing a resolution.
+		for (const name of [
+			"no-such-router",
+			"r1.lan",
+			"r1.lan:8728",
+			"10.9.9.300",
+		]) {
+			let caught: unknown;
+			try {
+				await resolveCdb({ targetInput: name, cdbFile: cdbPath }, EMPTY_ENV);
+			} catch (error) {
+				caught = error;
+			}
+			expect((caught as { code?: string })?.code).toBe("cdb/not-found-target");
+		}
+	});
+});
+
+describe("resolver: an address that misses a pinned CDB is a literal (#427)", () => {
+	let tmpDir: string;
+	let cdbPath: string;
+
+	beforeAll(async () => {
+		tmpDir = join(process.cwd(), "test", `.tmp-literal-${crypto.randomUUID()}`);
+		await mkdir(tmpDir, { recursive: true });
+		cdbPath = join(tmpDir, "pinned.cdb");
+		await writeFile(
+			cdbPath,
+			encodeOpenWinBoxCdb([
+				buildWinBoxCdbEntryRecord({
+					recordType: winBoxCdbRecordType.ipAdmin,
+					target: "10.9.9.5",
+					user: "owner",
+					password: "owner-pw",
+				}),
+			]),
+		);
+	});
+
+	afterAll(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	const ADDRESSES = [
+		"203.0.113.201",
+		"203.0.113.201:8729",
+		"2001:db8::1",
+		"[2001:db8::1]",
+		"[2001:db8::1]:8728",
+		"http://203.0.113.201:9",
+		"https://r1.example",
+		"aa:bb:cc:dd:ee:ff",
+	];
+
+	test.each(ADDRESSES)(
+		"%s misses → no resolution (literal host)",
+		async (address) => {
+			expect(isLiteralHostTarget(address)).toBe(true);
+			expect(
+				await resolveCdb({ targetInput: address, cdbFile: cdbPath }, EMPTY_ENV),
+			).toBeUndefined();
+		},
+	);
+
+	test.each([
+		"no-such-router",
+		"r1.lan",
+		"r1.lan:8728",
+		"10.9.9.300",
+		"1.2.3",
+		"[r1]:80",
+		"__default__",
+	])("%s is not address-shaped", (name) => {
+		expect(isLiteralHostTarget(name)).toBe(false);
+	});
+
+	test("a literal that matches a record still resolves to it", async () => {
+		const resolution = await resolveCdb(
+			{ targetInput: "10.9.9.5", cdbFile: cdbPath },
+			EMPTY_ENV,
+		);
+		expect(resolution?.recordIndex).toBe(0);
+		expect(resolution?.username).toBe("owner");
+	});
+
+	test("a missing pinned CDB file still errors for an address", async () => {
 		let caught: unknown;
 		try {
 			await resolveCdb(
-				{ targetInput: "203.0.113.201", cdbFile: cdbPath },
+				{ targetInput: "203.0.113.201", cdbFile: join(tmpDir, "absent.cdb") },
 				EMPTY_ENV,
 			);
 		} catch (error) {
 			caught = error;
 		}
-		expect((caught as { code?: string })?.code).toBe("cdb/not-found-target");
+		expect((caught as { code?: string })?.code).toBe("cdb/not-found");
+	});
+
+	test("CENTRS_CDB_FILE pins the CDB the same way", async () => {
+		const env = { CENTRS_CDB_FILE: cdbPath };
+		expect(
+			await resolveCdb({ targetInput: "203.0.113.201" }, env),
+		).toBeUndefined();
+		await expect(
+			resolveCdb({ targetInput: "no-such-router" }, env),
+		).rejects.toMatchObject({ code: "cdb/not-found-target" });
+	});
+
+	test("retrieve dials an address that misses the pinned CDB", async () => {
+		const originalFetch = globalThis.fetch;
+		const seen: string[] = [];
+		globalThis.fetch = (async (input: string | URL | Request) => {
+			seen.push(input instanceof Request ? input.url : String(input));
+			return new Response(JSON.stringify({ version: "7.22.1" }));
+		}) as typeof fetch;
+		try {
+			const envelope = await retrieve(
+				{
+					targetInput: "http://203.0.113.201:9",
+					path: "/system/resource",
+					via: "rest-api",
+					validate: false,
+					username: "u",
+					password: "p",
+					cdbFile: cdbPath,
+				},
+				EMPTY_ENV,
+			);
+			expect(envelope.ok).toBe(true);
+			expect(envelope.meta.target.recordIndex).toBeUndefined();
+			expect(seen.at(-1)).toBe("http://203.0.113.201:9/rest/system/resource");
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
+	test("an IPv6 target's host is the bare address; baseUrl keeps brackets", () => {
+		for (const via of ["native-api", "ssh", "rest-api"] as const) {
+			const target = resolveTarget(
+				{ targetInput: "[2001:db8::5]:9" },
+				EMPTY_ENV,
+				via,
+			);
+			expect(target.host).toBe("2001:db8::5");
+			expect(target.baseUrl).toContain("[2001:db8::5]:9");
+		}
+	});
+
+	test("a bare IPv6 target parses, and its last group is not a port", () => {
+		const defaults = { "native-api": 8728, ssh: 22, "rest-api": 80 } as const;
+		for (const via of ["native-api", "ssh", "rest-api"] as const) {
+			const target = resolveTarget(
+				{ targetInput: "2001:db8::1" },
+				EMPTY_ENV,
+				via,
+			);
+			expect(target.host).toBe("2001:db8::1");
+			expect(target.port).toBe(defaults[via]);
+		}
+	});
+
+	test("a bare IPv6 miss in the pinned CDB reaches the router end to end", async () => {
+		const originalFetch = globalThis.fetch;
+		const seen: string[] = [];
+		globalThis.fetch = (async (input: string | URL | Request) => {
+			seen.push(input instanceof Request ? input.url : String(input));
+			return new Response(JSON.stringify({ version: "7.22.1" }));
+		}) as typeof fetch;
+		try {
+			const envelope = await retrieve(
+				{
+					targetInput: "2001:db8::1",
+					path: "/system/resource",
+					via: "rest-api",
+					validate: false,
+					username: "u",
+					password: "p",
+					cdbFile: cdbPath,
+				},
+				EMPTY_ENV,
+			);
+			expect(envelope.ok).toBe(true);
+			expect(seen.at(-1)).toBe("http://[2001:db8::1]:80/rest/system/resource");
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
 	});
 });

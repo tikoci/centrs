@@ -16,6 +16,7 @@
 
 import { mapRouterOsError } from "../core/routeros-errors.ts";
 import { CentrsError } from "../errors.ts";
+import { formatEndpoint } from "./endpoint.ts";
 import type { RouterOsProtocol } from "./index.ts";
 import {
 	createUdpMacTelnetTransport,
@@ -562,7 +563,7 @@ class RestAdapter implements ProtocolAdapter {
 		if (status === 401 || status === 403) {
 			return new CentrsError({
 				code: "transport/auth-failed",
-				summary: `RouterOS rejected the REST credentials for ${host}:${port}.`,
+				summary: `RouterOS rejected the REST credentials for ${formatEndpoint(host, port)}.`,
 				remediation:
 					"Check `--username` / `--password` or the matching `CENTRS_*` environment variables, and confirm the user has RouterOS REST access.",
 				context: { via: protocol, host, port, path, status },
@@ -608,7 +609,7 @@ class RestAdapter implements ProtocolAdapter {
 		) {
 			return new CentrsError({
 				code: "transport/timeout",
-				summary: `Timed out waiting for ${protocol} to respond from ${host}:${port}.`,
+				summary: `Timed out waiting for ${protocol} to respond from ${formatEndpoint(host, port)}.`,
 				remediation:
 					"Increase `--timeout` within the REST ceiling, or confirm the host and port are reachable.",
 				context: { via: protocol, host, port, path, timeoutMs },
@@ -629,7 +630,7 @@ class RestAdapter implements ProtocolAdapter {
 		) {
 			return new CentrsError({
 				code: "transport/connection-refused",
-				summary: `Connection refused by ${host}:${port} over ${protocol}.`,
+				summary: `Connection refused by ${formatEndpoint(host, port)} over ${protocol}.`,
 				remediation:
 					"Check that the RouterOS REST service is enabled on that port and that any local forwarding or firewall rules are correct.",
 				context: { via: protocol, host, port, path },
@@ -661,7 +662,7 @@ class RestAdapter implements ProtocolAdapter {
 		if (messages.some((candidate) => candidate.includes("certificate"))) {
 			return new CentrsError({
 				code: "transport/tls-certificate",
-				summary: `TLS certificate validation failed for ${host}:${port}.`,
+				summary: `TLS certificate validation failed for ${formatEndpoint(host, port)}.`,
 				remediation:
 					"RouterOS ships a self-signed certificate by default. Install a trusted chain, or pass `--insecure` (`CENTRS_INSECURE=1`) to accept it; an HTTP URL also avoids TLS.",
 				context: { via: protocol, host, port, path },
@@ -671,7 +672,7 @@ class RestAdapter implements ProtocolAdapter {
 
 		return new CentrsError({
 			code: "transport/network",
-			summary: `Network request to ${host}:${port} failed over ${protocol}.`,
+			summary: `Network request to ${formatEndpoint(host, port)} failed over ${protocol}.`,
 			remediation:
 				"Check the host, port, and service availability, then re-run with `--format json` if you need the structured cause data.",
 			context: { via: protocol, host, port, path },

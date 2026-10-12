@@ -65,7 +65,15 @@ inert. (Earlier drafts said "the comment is not a lookup key" — superseded.)
 When `<router>` matches an entry (by `target` or a lookup key), credentials and
 other CDB-resident fields load from that entry. If nothing matches, the call
 still proceeds but `--username` / `--password` (or `CENTRS_USERNAME` /
-`CENTRS_PASSWORD`, or a `__default__` record) become mandatory.
+`CENTRS_PASSWORD`, or a `__default__` record) become mandatory. The one
+exception is a **pinned** CDB (`--cdb-file`, `CENTRS_CDB_FILE`,
+`CENTRS_CDB_PASSWORD`, or a `centrs.env` CDB path) with no `__default__`
+record: a DNS name or identity that matches nothing fails closed with
+`cdb/not-found-target`, because it can't be told apart from a mistyped record.
+An address that matches nothing still proceeds as a literal host: an IPv4 or
+IPv6 literal (optionally with a port, IPv6 as `[…]:port`), an `http(s)://` URL,
+or a MAC. On MCP every target must still be registered
+(`cdb/target-not-registered`).
 
 ### Ambiguity
 

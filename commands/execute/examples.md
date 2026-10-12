@@ -646,6 +646,17 @@ command). With no `--cdb-file`, both are ad-hoc literals, labeled by
 `meta.target.input` with no `recordIndex`: `data.summary = { total: 2, ok: 1,
 failed: 1 }`, exit `2`.
 
+### F7. An address that misses a pinned CDB is a literal; a name is not (#427)
+
+```bash
+centrs execute $A:$API_PORT no-such-router --cdb-file $CDB --username $U --password $P --json -- /system/resource/print
+```
+
+Neither positional matches a record. The address is dialed as a literal host
+(inner `ok: true`). The name fails closed with `cdb/not-found-target`, because
+it can't be told apart from a mistyped record name. `data.summary = { total: 2,
+ok: 1, failed: 1 }`, exit `2`.
+
 ## Protocol selection notes
 
 For an unresolved MAC target, execute auto-selection defaults to mac-telnet
@@ -679,6 +690,20 @@ centrs execute $A:$API_PORT ':put [/system/identity/get name]' --username $U --p
 
 Envelope: `ok: true`, `meta.via=native-api`, dialing `$API_PORT` (no
 `--port` flag), the same way ssh and REST already treat a typed port.
+
+### P3. A pinned CDB doesn't refuse an address it has no record for (#427)
+
+```bash
+centrs execute $A:$API_PORT ':put [/system/identity/get name]' --cdb-file $CDB --username $U --password $P --json
+centrs execute http://$A:$REST_PORT ':put [/system/identity/get name]' --cdb-file $CDB --username $U --password $P --json
+centrs execute no-such-router ':put [/system/identity/get name]' --cdb-file $CDB --username $U --password $P --json
+```
+
+`$CDB` has no record for any of the three. The first two are `ok: true` over
+native-api and rest-api: an IP, `[IPv6]`, `http(s)://` URL or MAC that misses a
+pinned CDB is a literal host, exactly as with no CDB. The third is `ok: false`,
+`error.code = cdb/not-found-target`: a name or identity that misses still fails
+closed.
 
 ## quickchr targets (#134)
 

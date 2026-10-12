@@ -14,6 +14,7 @@
  * a future `mac` field.
  */
 
+import { isIP } from "node:net";
 import { CentrsError } from "../errors.ts";
 import type { RouterOsProtocol } from "../protocols/index.ts";
 import { MAC_TELNET_PORT } from "../protocols/mac-telnet.ts";
@@ -290,7 +291,9 @@ export function resolveTarget(
 
 	return {
 		input: input.targetInput,
-		host: parsedUrl.hostname,
+		// WHATWG keeps an IPv6 hostname bracketed; sockets and ssh need the bare
+		// address (`baseUrl` re-brackets it).
+		host: parsedUrl.hostname.replace(/^\[(.*)\]$/, "$1"),
 		port,
 		scheme,
 		tls,
@@ -308,12 +311,15 @@ export function resolveTarget(
  * The port written in the host candidate, if any. WHATWG `URL` drops a
  * scheme-default port (`http://h:80`, `https://h:443`, and a bare `h:80`, which
  * parses as http), so an empty `URL.port` is re-read from the text. The URL has
- * already parsed, so a trailing `:digits` can only be that port: an unbracketed
- * IPv6 literal is rejected by `parseHostCandidate`.
+ * already parsed, so a trailing `:digits` can only be that port, except in a
+ * bare IPv6 literal (`2001:db8::1`), which carries no port.
  */
 function typedPort(candidate: string, parsedUrl: URL): number | undefined {
 	if (parsedUrl.port.length > 0) {
 		return Number.parseInt(parsedUrl.port, 10);
+	}
+	if (isIP(candidate) === 6) {
+		return undefined;
 	}
 	const authority = candidate.replace(/^https?:\/\//i, "").replace(/\/$/, "");
 	const match = /:(\d+)$/.exec(authority);
@@ -467,9 +473,11 @@ export function resolveAuth(
 
 export function parseHostCandidate(value: string): URL {
 	const hasScheme = /^https?:\/\//i.test(value);
+	// A bare IPv6 literal (`2001:db8::1`) has no port; URL needs it bracketed.
+	const authority = isIP(value) === 6 ? `[${value}]` : value;
 	let url: URL;
 	try {
-		url = new URL(hasScheme ? value : `http://${value}`);
+		url = new URL(hasScheme ? value : `http://${authority}`);
 	} catch (cause) {
 		throw invalidTargetError(value, cause);
 	}

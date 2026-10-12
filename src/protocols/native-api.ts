@@ -24,6 +24,7 @@ import { createConnection, isIP } from "node:net";
 import { connect as connectTls } from "node:tls";
 import { mapRouterOsError } from "../core/routeros-errors.ts";
 import { CentrsError } from "../errors.ts";
+import { formatEndpoint } from "./endpoint.ts";
 
 const utf8Encoder = new TextEncoder();
 const utf8Decoder = new TextDecoder();
@@ -985,7 +986,7 @@ export async function connectNativeApi(
 ): Promise<ConnectedNativeApi> {
 	const port =
 		options.port ?? (options.tls ? NATIVE_API_TLS_PORT : NATIVE_API_PORT);
-	const endpoint = `${options.host}:${port}`;
+	const endpoint = formatEndpoint(options.host, port);
 	const timeoutMs = options.timeoutMs ?? 15_000;
 	options.signal?.throwIfAborted();
 
