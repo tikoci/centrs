@@ -244,17 +244,22 @@ export function resolveTarget(
 		// SSH (sftp/scp/exec) addresses host:22 and carries its own crypto, so the
 		// URL scheme is irrelevant. An explicit `--port` / URL port wins over 22.
 		tls = false;
-		port =
-			portSetting?.value ??
-			(parsedUrl.port.length > 0 ? Number.parseInt(parsedUrl.port, 10) : 22);
+		port = portSetting?.value ?? typedPort(candidate, parsedUrl) ?? 22;
 		baseUrl = `ssh://${formatHostForUrl(parsedUrl.hostname)}:${port}`;
 	} else if (isNative) {
 		// Native API ignores the URL scheme for its wire protocol; it defaults to
 		// TCP 8728, or TLS (api-ssl) 8729 when the caller passed `https://` or an
 		// explicit 8729. An explicit well-known port wins over the scheme so
 		// `https://host --port 8728` stays plaintext instead of running a TLS
-		// handshake against the plaintext API port.
-		const explicitPort = portSetting?.value;
+		// handshake against the plaintext API port. A port the caller typed in
+		// the host (`host:9`, `http://host:9`) counts as explicit, as it does for
+		// ssh and REST (#426); a matched CDB record's port may be WinBox's, so it
+		// is left alone.
+		const explicitPort =
+			portSetting?.value ??
+			(hostFromCdbRecord(hostSetting, cdb)
+				? undefined
+				: typedPort(candidate, parsedUrl));
 		if (explicitPort === NATIVE_API_PORT) {
 			tls = false;
 		} else if (explicitPort === NATIVE_API_TLS_PORT) {
@@ -297,6 +302,39 @@ export function resolveTarget(
 		portSource,
 		sources,
 	};
+}
+
+/**
+ * The port written in the host candidate, if any. WHATWG `URL` drops a
+ * scheme-default port (`http://h:80`, `https://h:443`, and a bare `h:80`, which
+ * parses as http), so an empty `URL.port` is re-read from the text. The URL has
+ * already parsed, so a trailing `:digits` can only be that port: an unbracketed
+ * IPv6 literal is rejected by `parseHostCandidate`.
+ */
+function typedPort(candidate: string, parsedUrl: URL): number | undefined {
+	if (parsedUrl.port.length > 0) {
+		return Number.parseInt(parsedUrl.port, 10);
+	}
+	const authority = candidate.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+	const match = /:(\d+)$/.exec(authority);
+	return match?.[1] !== undefined ? Number.parseInt(match[1], 10) : undefined;
+}
+
+/**
+ * True when the host is a matched CDB record's `target` rather than something
+ * the caller typed (`--host`, `CENTRS_HOST`, config, or the positional itself).
+ * A `__default__`-only resolution carries the positional as its target, so its
+ * record index is the default record's.
+ */
+function hostFromCdbRecord(
+	hostSetting: ResolvedSetting<string>,
+	cdb: CdbResolution | undefined,
+): boolean {
+	return (
+		cdb !== undefined &&
+		hostSetting.source.kind === "target-input" &&
+		cdb.recordIndex !== cdb.defaults?.recordIndex
+	);
 }
 
 /**

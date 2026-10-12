@@ -552,6 +552,137 @@ describe("resolver native-api TLS/port disambiguation", () => {
 	});
 });
 
+describe("resolver native-api honors a caller-typed port (#426)", () => {
+	const record = (
+		target: string,
+		extra: Partial<CdbResolution> = {},
+	): CdbResolution => ({
+		target,
+		identity: target,
+		username: "admin",
+		password: "",
+		recordIndex: 3,
+		overrides: {},
+		warnings: [],
+		...extra,
+	});
+
+	test("a bare host:port positional dials that port", () => {
+		const target = resolveTarget(
+			{ targetInput: "10.0.0.5:9" },
+			EMPTY_ENV,
+			"native-api",
+		);
+		expect(target.baseUrl).toBe("api://10.0.0.5:9");
+	});
+
+	test("a typed 8729 selects api-ssl, as --port 8729 does", () => {
+		const target = resolveTarget(
+			{ targetInput: "10.0.0.5:8729" },
+			EMPTY_ENV,
+			"native-api",
+		);
+		expect(target.tls).toBe(true);
+		expect(target.baseUrl).toBe("api-ssl://10.0.0.5:8729");
+	});
+
+	test("an https URL port keeps TLS on the typed port", () => {
+		const target = resolveTarget(
+			{ targetInput: "https://10.0.0.5:1234" },
+			EMPTY_ENV,
+			"native-api",
+		);
+		expect(target.baseUrl).toBe("api-ssl://10.0.0.5:1234");
+	});
+
+	test("an explicit :80/:443, which URL parsing drops, is still the typed port", () => {
+		for (const [input, baseUrl] of [
+			["http://10.0.0.5:80", "api://10.0.0.5:80"],
+			["10.0.0.5:80", "api://10.0.0.5:80"],
+			["https://10.0.0.5:443", "api-ssl://10.0.0.5:443"],
+			["[2001:db8::5]:80", "api://[2001:db8::5]:80"],
+		] as const) {
+			const target = resolveTarget(
+				{ targetInput: input },
+				EMPTY_ENV,
+				"native-api",
+			);
+			expect(target.baseUrl).toBe(baseUrl);
+		}
+		const ssh = resolveTarget(
+			{ targetInput: "http://10.0.0.5:80" },
+			EMPTY_ENV,
+			"ssh",
+		);
+		expect(ssh.baseUrl).toBe("ssh://10.0.0.5:80");
+	});
+
+	test("an IPv6 literal without a port keeps the default", () => {
+		const target = resolveTarget(
+			{ targetInput: "[2001:db8::80]" },
+			EMPTY_ENV,
+			"native-api",
+		);
+		expect(target.baseUrl).toBe("api://[2001:db8::80]:8728");
+	});
+
+	test("the port settings ladder (CENTRS_PORT) wins over a typed port", () => {
+		const target = resolveTarget(
+			{ targetInput: "10.0.0.5:9" },
+			{ CENTRS_PORT: "8728" },
+			"native-api",
+		);
+		expect(target.baseUrl).toBe("api://10.0.0.5:8728");
+	});
+
+	test("--port wins over a typed port", () => {
+		const target = resolveTarget(
+			{ targetInput: "10.0.0.5:9", port: 8728 },
+			EMPTY_ENV,
+			"native-api",
+		);
+		expect(target.baseUrl).toBe("api://10.0.0.5:8728");
+	});
+
+	test("--host and CENTRS_HOST ports count as typed, even over a CDB record", () => {
+		const viaFlag = resolveTarget(
+			{ targetInput: "edge1", host: "10.0.0.9:9" },
+			EMPTY_ENV,
+			"native-api",
+			record("10.0.0.5:8291"),
+		);
+		expect(viaFlag.baseUrl).toBe("api://10.0.0.9:9");
+
+		const viaEnv = resolveTarget(
+			{ targetInput: "edge1" },
+			{ CENTRS_HOST: "10.0.0.9:9" },
+			"native-api",
+			record("10.0.0.5:8291"),
+		);
+		expect(viaEnv.baseUrl).toBe("api://10.0.0.9:9");
+	});
+
+	test("a matched CDB record's port is not applied to native-api", () => {
+		const target = resolveTarget(
+			{ targetInput: "edge1" },
+			EMPTY_ENV,
+			"native-api",
+			record("10.0.0.5:8291"),
+		);
+		expect(target.baseUrl).toBe("api://10.0.0.5:8728");
+	});
+
+	test("a __default__-only resolution carries the typed target, so its port is used", () => {
+		const target = resolveTarget(
+			{ targetInput: "10.0.0.5:9" },
+			EMPTY_ENV,
+			"native-api",
+			record("10.0.0.5:9", { recordIndex: 0, defaults: { recordIndex: 0 } }),
+		);
+		expect(target.baseUrl).toBe("api://10.0.0.5:9");
+	});
+});
+
 describe("resolver CDB end-to-end through retrieve", () => {
 	let tmpDir: string;
 

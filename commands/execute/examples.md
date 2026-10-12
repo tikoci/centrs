@@ -661,6 +661,25 @@ Envelope: `meta.via=mac-telnet` when `$MAC` is not resolved from CDB and no
 they must opt into MAC-to-IP resolution (`--resolve arp` + `--via …`) before
 protocol selection.
 
+### P1. An `http(s)://` target selects rest-api on its own port (#426)
+
+```bash
+centrs execute http://$A:$REST_PORT ':put [/system/identity/get name]' --username $U --password $P --json
+```
+
+Envelope: `ok: true`, `meta.via=rest-api`, `meta.settings.via =
+{ kind: "default", key: "via:target-url" }`. No `--via` is pinned, and the URL's
+scheme and port are what get dialed.
+
+### P2. A typed `host:port` keeps native-api on that port (#426)
+
+```bash
+centrs execute $A:$API_PORT ':put [/system/identity/get name]' --username $U --password $P --json
+```
+
+Envelope: `ok: true`, `meta.via=native-api`, dialing `$API_PORT` (no
+`--port` flag), the same way ssh and REST already treat a typed port.
+
 ## quickchr targets (#134)
 
 `$NAME` is the machine name of a running quickchr-managed CHR. Host/port/auth

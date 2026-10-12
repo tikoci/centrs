@@ -136,6 +136,17 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   mac-telnet. Callers that want IP-level execution may opt into ARP-based
   MAC → IP resolution with `--resolve arp` (plus `--via native-api`/`rest-api`)
   before protocol selection.
+- An explicit `http(s)://host[:port]` target (positional, `--host`, or
+  `CENTRS_HOST`) names the REST service: with no `via` pinned anywhere,
+  auto-selection picks `rest-api` and keeps the URL's scheme and port
+  (`meta.settings.via` source `default` / `via:target-url`). Otherwise
+  auto-selection picks native-api. On the IP transports (native-api, REST,
+  ssh), a port typed into the target (`host:port`, `http://host:port`,
+  including an explicit `:80`/`:443`) is honored. The port settings ladder
+  (`--port`, `CENTRS_PORT`, a CDB `port=` comment, config) wins over it, and
+  the transport default comes last. The port carried by a matched CDB
+  record's `target` is not applied to native-api. mac-telnet addresses the MAC,
+  so its `--host`/`--port` are only the UDP delivery endpoint.
 - When the resolved transport is mac-telnet and **no** username or password is
   resolved from any source, execute emits a `tip/mac-telnet-no-credentials`
   pointer: mac-telnet logs in with RouterOS credentials over **MTWEI** (MD5 is

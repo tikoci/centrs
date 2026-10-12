@@ -1031,10 +1031,8 @@ function resolveExecuteProtocol(
 	cdb?: CdbResolution,
 	config: Record<string, string | undefined> = {},
 ): ResolvedSetting<RouterOsProtocol> {
-	const defaultVia = isUnresolvedMacTarget(request, env, cdb, config)
-		? "mac-telnet"
-		: "native-api";
-	const via = resolveStringSetting(
+	const defaultVia = defaultExecuteVia(request, env, cdb, config);
+	const resolvedVia = resolveStringSetting(
 		request.via,
 		env,
 		"CENTRS_VIA",
@@ -1044,12 +1042,20 @@ function resolveExecuteProtocol(
 		cdb?.overrides.via,
 		config,
 	);
+	// A URL-derived default names its reason, since native-api is the documented one.
+	const via =
+		resolvedVia?.source.kind === "default" && resolvedVia.value === "rest-api"
+			? {
+					...resolvedVia,
+					source: { kind: "default" as const, key: "via:target-url" },
+				}
+			: resolvedVia;
 	if (!via) {
 		throw new CentrsError({
 			code: "internal/unhandled",
 			summary: "Failed to resolve the default execute protocol.",
 			remediation:
-				"Report this bug; execute should default to native-api or mac-telnet.",
+				"Report this bug; execute should default to native-api, rest-api, or mac-telnet.",
 		});
 	}
 	if (!plannedProtocols.includes(via.value as RouterOsProtocol)) {
@@ -1083,23 +1089,25 @@ function resolveExecuteProtocol(
 	return via as ResolvedSetting<RouterOsProtocol>;
 }
 
-function isUnresolvedMacTarget(
+/**
+ * Execute's default transport when no tier pins `via`, decided from the
+ * *effective* target (host > CENTRS_HOST > CDB target > positional), not the
+ * positional alone — an IP supplied via --host/CENTRS_HOST must default to
+ * native-api even when the positional was a MAC. An unresolved MAC defaults to
+ * mac-telnet, and an explicit `http(s)://` base URL names the REST service, so
+ * its scheme and port are honored rather than dropped for native-api (#426).
+ */
+function defaultExecuteVia(
 	request: ExecuteRequest,
 	env: Record<string, string | undefined>,
 	cdb?: CdbResolution,
 	config: Record<string, string | undefined> = {},
-): boolean {
-	if (
-		request.via !== undefined ||
-		env["CENTRS_VIA"] !== undefined ||
-		config["CENTRS_VIA"] !== undefined
-	) {
-		return false;
+): RouterOsProtocol {
+	// A quickchr target's endpoint comes from its descriptor, so no host
+	// setting may steer its transport.
+	if (request.quickchr !== undefined) {
+		return "native-api";
 	}
-	// Decide the default transport from the *effective* target (host >
-	// CENTRS_HOST > CDB target > positional), not the positional alone — an IP
-	// supplied via --host/CENTRS_HOST must default to native-api even when the
-	// positional was a MAC.
 	const candidate = effectiveHostCandidate({
 		host: request.host,
 		targetInput: request.targetInput,
@@ -1107,7 +1115,13 @@ function isUnresolvedMacTarget(
 		env,
 		config,
 	});
-	return candidate ? isMacAddress(candidate) : false;
+	if (candidate === undefined) {
+		return "native-api";
+	}
+	if (isMacAddress(candidate)) {
+		return "mac-telnet";
+	}
+	return /^https?:\/\//i.test(candidate) ? "rest-api" : "native-api";
 }
 
 function resolveFormat(
