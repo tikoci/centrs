@@ -219,6 +219,12 @@ single-target. On the top-level `upload`/`download` alias the verb is fixed, so
 its positionals are paths — positional fan-out targets are not expressible there;
 fan-out comes from a selector flag.
 
+In the verb form, the `--host` **flag** with no positional before the verb is the
+single target (`transfer --host 192.0.2.10 list`), with no CDB lookup.
+`CENTRS_HOST` never stands in for `<router>`. The `upload`/`download` aliases
+still read their first positional as the target, since their optional second
+path makes a count ambiguous.
+
 Two transfer-specific rules:
 
 - **`download` fan-out requires `--out-dir <dir>`.** N devices cannot share one

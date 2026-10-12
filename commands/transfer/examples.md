@@ -80,6 +80,15 @@ centrs transfer $R list --name 'centrs-*' --username $U --password $P --json
 
 Envelope: every row's `name` matches the glob; `centrs-up.txt` is present.
 
+### H1. `--host` stands in for `<router>` (#428)
+
+```bash
+centrs transfer --host $R list --username $U --password $P --json
+```
+
+`ok: true`, with `data` the device's file list. Nothing comes before the verb,
+so `--host` is the target and there is no CDB lookup.
+
 ## Validate before write
 
 ### 6. Refuse overwrite without `--force`

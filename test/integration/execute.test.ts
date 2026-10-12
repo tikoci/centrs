@@ -11,6 +11,7 @@ import {
 	startIntegrationChr,
 	VALIDATION_REJECT_CODES,
 } from "./chr.ts";
+import { runCliProcess } from "./cli-process.ts";
 
 const runFastIntegration = isChrIntegrationEnabled();
 const describeFast = runFastIntegration ? describe : describe.skip;
@@ -733,15 +734,107 @@ describeFast("execute against CHR", () => {
 				"cdb/not-found-target",
 			);
 
+			// H1 (#428): the `--host` flag stands in for `<router>` on the real
+			// CLI, for execute and the commands that share the rule.
+			const cliAuth = [
+				"--username",
+				auth.username,
+				"--password",
+				auth.password,
+				"--json",
+			];
+			const identityCommand = ":put [/system/identity/get name]";
+			const hostOnly: ReadonlyArray<{
+				command: string;
+				via: string;
+				args: string[];
+			}> = [
+				{
+					command: "execute",
+					via: "rest-api",
+					args: ["execute", "--host", chr.restUrl, identityCommand, ...cliAuth],
+				},
+				{
+					command: "execute",
+					via: "native-api",
+					args: [
+						"execute",
+						"--host",
+						`127.0.0.1:${chr.ports.api}`,
+						...cliAuth,
+						"--",
+						identityCommand,
+					],
+				},
+				{
+					command: "retrieve",
+					via: "rest-api",
+					args: [
+						"retrieve",
+						"--host",
+						chr.restUrl,
+						"/system/identity",
+						...cliAuth,
+					],
+				},
+				{
+					command: "api",
+					via: "rest-api",
+					args: ["api", "--host", chr.restUrl, "system/identity", ...cliAuth],
+				},
+				{
+					command: "transfer",
+					via: "rest-api",
+					args: ["transfer", "--host", chr.restUrl, "list", ...cliAuth],
+				},
+			];
+			for (const { args, via } of hostOnly) {
+				const result = await runCliProcess({
+					args,
+					env: { CENTRS_SKIP_ENV_FILE: "1" },
+				});
+				expect({
+					args,
+					stderr: result.stderrText,
+					exit: result.exitCode,
+				}).toEqual({ args, stderr: "", exit: 0 });
+				const envelope = JSON.parse(result.stdoutText) as {
+					ok: boolean;
+					meta: {
+						via: string;
+						target: { source?: unknown; recordIndex?: number };
+					};
+				};
+				expect(envelope.ok).toBe(true);
+				expect(envelope.meta.via).toBe(via);
+				expect(envelope.meta.target.source).toEqual({
+					kind: "cli",
+					key: "host",
+				});
+				expect(envelope.meta.target.recordIndex).toBeUndefined();
+			}
+
+			const evidence = {
+				quickChrName: chr.name,
+				routerosVersion: chr.state.version,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+			};
+			for (const command of ["retrieve", "api", "transfer"]) {
+				await recordIntegrationEvidence({
+					...evidence,
+					suite: "execute against CHR",
+					command,
+					protocol: "rest-api",
+					exampleIds: ["H1"],
+				});
+			}
 			await recordIntegrationEvidence({
+				...evidence,
 				suite: "execute against CHR",
 				command: "execute",
 				protocol: "native-api",
-				routerosVersion: chr.state.version,
-				quickChrName: chr.name,
-				requestedChannel: started.requestedChannel,
-				requestedVersion: started.requestedVersion,
-				exampleIds: [...exampleIds(19).slice(11), "R1", "P2", "P3"],
+				exampleIds: [...exampleIds(19).slice(11), "R1", "P2", "P3", "H1"],
 			});
 		} finally {
 			await chr.destroy();

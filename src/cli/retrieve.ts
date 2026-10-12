@@ -54,7 +54,7 @@ import {
 export const retrieveCommand: CliCommandMetadata = {
 	name: "retrieve",
 	usage:
-		"centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <target...> <routeros-path> [flags] | centrs retrieve --group <name> <routeros-path> [flags]",
+		"centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <target...> <routeros-path> [flags] | centrs retrieve --host <host|url> <routeros-path> [flags] | centrs retrieve --group <name> <routeros-path> [flags]",
 	summary:
 		"Read RouterOS values through the shared core using the selected protocol.",
 	options: [
@@ -68,7 +68,8 @@ export const retrieveCommand: CliCommandMetadata = {
 		{
 			flag: "--host",
 			valueName: "<host|url>",
-			description: "Override the resolved host or base URL for the target.",
+			description:
+				"Host or base URL to dial. With no <target> it is the target (no CDB lookup); with one it overrides the resolved host.",
 		},
 		{
 			flag: "--port",
@@ -583,18 +584,28 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 
 	// A single `--quickchr <name>` is single-target mode: the machine name is the
 	// target (resolved from the live descriptor inside the resolver); the lone
-	// positional is the routeros-path.
-	if (selectionFlags.quickchr.length === 1) {
-		if (positional.length === 0 || path.length === 0) {
+	// positional is the routeros-path. The `--host` flag stands in for a missing
+	// `<router>` the same way (#428), with no CDB lookup; `CENTRS_HOST` never
+	// counts.
+	const quickchr = selectionFlags.quickchr[0];
+	const hostOnly =
+		quickchr === undefined &&
+		targetPositionals.length === 0 &&
+		request.host !== undefined;
+	if (quickchr !== undefined || hostOnly) {
+		if (path.length === 0) {
+			const flag = hostOnly ? "--host" : "--quickchr";
+			const example = hostOnly ? "--host 192.0.2.10" : "--quickchr lab";
 			throw new CentrsError({
 				code: "input/invalid-command",
-				summary: "`centrs retrieve --quickchr` requires a <routeros-path>.",
-				remediation:
-					"Add the RouterOS menu path as the final positional, e.g. `centrs retrieve --quickchr lab /system/resource`.",
+				summary: `\`centrs retrieve ${flag}\` requires a <routeros-path>.`,
+				remediation: `Add the RouterOS menu path as the final positional, e.g. \`centrs retrieve ${example} /system/resource\`.`,
 				context: { command: "retrieve", missingPath: true },
 			});
 		}
-		request.quickchr = selectionFlags.quickchr[0];
+		if (quickchr !== undefined) {
+			request.quickchr = quickchr;
+		}
 		return request;
 	}
 
@@ -603,7 +614,7 @@ function parseRetrieveCliArgs(args: readonly string[]): RetrieveCliArgs {
 			command: "retrieve",
 			summary: "`centrs retrieve` requires a <target> and a <routeros-path>.",
 			remediation:
-				"Pass the router host/identity then the RouterOS path, e.g. `centrs retrieve 192.0.2.10 /system/resource`.",
+				"Pass the router host/identity then the RouterOS path, e.g. `centrs retrieve 192.0.2.10 /system/resource`, or name the host with `--host <host|url>`.",
 		});
 	}
 	// Single-target: exactly one target positional (more would be fan-out mode).

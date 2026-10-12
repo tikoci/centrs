@@ -43,7 +43,7 @@ import {
 export const executeCommand: CliCommandMetadata = {
 	name: "execute",
 	usage:
-		"centrs execute <target> <command> [flags] | centrs execute <target...> -- <command> [flags] | centrs execute --group <name> <command> [flags]",
+		"centrs execute <target> <command> [flags] | centrs execute <target...> -- <command> [flags] | centrs execute --host <host|url> [--] <command> [flags] | centrs execute --group <name> <command> [flags]",
 	summary:
 		"Run a RouterOS read or write command via native API, REST, or mac-telnet.",
 	options: [
@@ -57,7 +57,8 @@ export const executeCommand: CliCommandMetadata = {
 		{
 			flag: "--host",
 			valueName: "<host|url>",
-			description: "Override the resolved host or base URL for the target.",
+			description:
+				"Host or base URL to dial. With no <target> it is the target (no CDB lookup); with one it overrides the resolved host.",
 		},
 		{
 			flag: "--port",
@@ -270,6 +271,10 @@ export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 	//   - `--` present: targets are the positionals BEFORE it, command is AFTER it.
 	//   - selector flag (or `--quickchr`) present, no `--`: every positional is the
 	//     command (targets come from the flag).
+	//   - `--host` flag with a lone positional, no `--`: that positional is the
+	//     command and `--host` stands in for `<router>` (#428). Two or more keep
+	//     the legacy split, so `execute <mac> <cmd> --host <udp-endpoint>` (the
+	//     mac-telnet delivery override) still parses. `CENTRS_HOST` never counts.
 	//   - otherwise (no `--`, no selector): legacy single-target split — first
 	//     positional is the target, the rest is the command. Multiple positional
 	//     targets therefore REQUIRE `--`.
@@ -280,6 +285,9 @@ export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 	} else if (hasSelector) {
 		parsed.targetPositionals = [];
 		parsed.command = positional.join(" ");
+	} else if (parsed.host !== undefined && positional.length === 1) {
+		parsed.targetPositionals = [];
+		parsed.command = positional[0] ?? "";
 	} else {
 		parsed.targetPositionals =
 			positional[0] !== undefined ? [positional[0]] : [];
@@ -331,13 +339,18 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 		// No positional at all: lead with the missing-target guidance (CDB picker /
 		// discover) rather than the missing-command error — there is nothing to run
 		// without a device. A lone positional is treated as the target, so the
-		// "requires a command" path still fires for `execute <target>`.
-		if (!parsed.targetInput && parsed.quickchr === undefined) {
+		// "requires a command" path still fires for `execute <target>`. The
+		// `--host` flag is a target of its own, with no CDB lookup.
+		if (
+			!parsed.targetInput &&
+			parsed.quickchr === undefined &&
+			parsed.host === undefined
+		) {
 			throw missingTargetError({
 				command: "execute",
 				summary: "`centrs execute` requires a <target> and a RouterOS command.",
 				remediation:
-					'Pass the router host/identity then the command, e.g. `centrs execute 192.0.2.10 "/system/resource/print"`.',
+					'Pass the router host/identity then the command, e.g. `centrs execute 192.0.2.10 "/system/resource/print"`, or name the host with `--host <host|url>`.',
 			});
 		}
 

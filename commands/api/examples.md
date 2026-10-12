@@ -266,6 +266,15 @@ key. Contrast example 13, where bare `--raw` skips the preflight entirely. This
 pair is how you tell a RouterOS rejection from a centrs bug while staying on the
 bare-passthrough surface.
 
+### H1. `--host` stands in for `<router>` (#428)
+
+```bash
+centrs api --host $R system/identity --username $U --password $P --json
+```
+
+`ok: true`, with `data.name` the router's identity. The lone positional is the
+endpoint, and there is no CDB lookup.
+
 ## native-api (`--via native-api`)
 
 The same contract over the binary API. Validation still runs through

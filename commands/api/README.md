@@ -89,6 +89,10 @@ the generated reference cannot carry:
   use the same single-target resolver as `retrieve`/`execute`; `--quickchr`
   resolves host/port/auth from the live `@tikoci/quickchr` descriptor
   instead (constitution: resolution providers).
+- The `--host` **flag** stands in for a missing `<router>`:
+  `api --host http://192.0.2.10:8080 system/resource` targets that host with
+  no CDB lookup. `CENTRS_HOST` never does; `api <endpoint>` with it set is
+  still a missing `<router>`.
 
 ## Fan-out (multi-target)
 

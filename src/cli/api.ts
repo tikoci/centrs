@@ -49,7 +49,8 @@ import {
 
 export const apiCommand: CliCommandMetadata = {
 	name: "api",
-	usage: "centrs api <router> <endpoint> [flags]",
+	usage:
+		"centrs api <router> <endpoint> [flags] | centrs api --host <host|url> <endpoint> [flags]",
 	summary:
 		"Structured RouterOS API passthrough (gh-api style) over REST or native API.",
 	options: [
@@ -128,7 +129,8 @@ export const apiCommand: CliCommandMetadata = {
 		{
 			flag: "--host",
 			valueName: "<host|url>",
-			description: "Override the resolved host or base URL for the target.",
+			description:
+				"Host or base URL to dial. With no <router> it is the target (no CDB lookup); with one it overrides the resolved host.",
 		},
 		{
 			flag: "--port",
@@ -516,12 +518,18 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 			return await runApiStreamCli(parsed, args);
 		}
 
-		if (!parsed.targetInput && parsed.quickchr === undefined) {
+		// The `--host` flag stands in for a missing `<router>` (#428), with no CDB
+		// lookup; `CENTRS_HOST` never counts.
+		if (
+			!parsed.targetInput &&
+			parsed.quickchr === undefined &&
+			parsed.host === undefined
+		) {
 			throw missingTargetError({
 				command: "api",
 				summary: "`centrs api` requires a <router> and an <endpoint>.",
 				remediation:
-					"Pass the router host/identity then the endpoint, e.g. `centrs api 192.0.2.10 ip/address`.",
+					"Pass the router host/identity then the endpoint, e.g. `centrs api 192.0.2.10 ip/address`, or name the host with `--host <host|url>`.",
 			});
 		}
 

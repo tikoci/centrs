@@ -278,7 +278,10 @@ token cannot spoof them), AND-combined across repeats. A call is in **fan-out
 mode** when any selector flag is present **or** more than one positional target is
 given; a plain single-positional call stays single-target. The union is
 **de-duped by CDB record index** (ad-hoc literal targets by host) and run through
-the same per-target pipeline.
+the same per-target pipeline. With no `<router>` positional and no selector, the
+`--host` **flag** stands in for the target: a single target with no CDB lookup,
+so no record credential applies. The env var `CENTRS_HOST` never changes how
+positionals split. Each command README states where its `<router>` slot ends.
 
 Fan-out output is the locked **`FanoutData`** envelope: `data = { summary, targets[]
 }`, where the outer `ok` reports **orchestration** success and a per-target failure

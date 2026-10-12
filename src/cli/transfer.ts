@@ -62,7 +62,7 @@ const VERB_ALIASES: Record<string, TransferVerb> = {
 export const transferCommand: CliCommandMetadata = {
 	name: "transfer",
 	usage:
-		"centrs transfer <router> upload <local> [remote] | download <remote> [local] | list [path] | remove <remote> | mkdir <remote> | copy <src> <dst> [flags]",
+		"centrs transfer <router>|--host <host> upload <local> [remote] | download <remote> [local] | list [path] | remove <remote> | mkdir <remote> | copy <src> <dst> [flags]",
 	summary:
 		"Copy files to/from a RouterOS device and manage device files (rest/native/sftp).",
 	options: [
@@ -119,7 +119,8 @@ export const transferCommand: CliCommandMetadata = {
 		{
 			flag: "--host",
 			valueName: "<host|url>",
-			description: "Override the resolved host or base URL.",
+			description:
+				"Host or base URL to dial. With no <router> before the verb it is the target (no CDB lookup); with one it overrides the resolved host.",
 		},
 		{
 			flag: "--port",
@@ -510,7 +511,7 @@ function assemblePositionals(
 	} else {
 		const verbIndex = positional.findIndex(isTransferVerbToken);
 		if (verbIndex === -1) {
-			if (positional.length === 0 && !hasSelector) {
+			if (positional.length === 0 && !hasSelector && flags.host === undefined) {
 				throw missingTargetError({
 					command: "transfer",
 					summary:
@@ -544,7 +545,10 @@ function assemblePositionals(
 	}
 
 	// Single-target (not fan-out mode) needs exactly one resolved target: one
-	// positional, or one `--quickchr <name>` (the named-live-provider).
+	// positional, one `--quickchr <name>` (the named-live-provider), or the
+	// `--host` flag with no positional before the verb (#428; no CDB lookup,
+	// `CENTRS_HOST` never counts). The `upload`/`download` aliases always read their first
+	// positional as the target, since a path count can't tell them apart.
 	if (!isFanoutMode(selectionFlags, targetPositionals.length)) {
 		if (selectionFlags.quickchr.length === 1) {
 			request.quickchr = selectionFlags.quickchr[0];
@@ -552,11 +556,14 @@ function assemblePositionals(
 		}
 		const targetInput = targetPositionals[0];
 		if (!targetInput) {
+			if (flags.host !== undefined && !fixedVerb) {
+				return { request, targetPositionals };
+			}
 			throw missingTargetError({
 				command: "transfer",
 				summary: "`centrs transfer` requires a <router> target.",
 				remediation:
-					"Pass the router host/identity as the first argument; run `centrs transfer --help` for the command shape.",
+					"Pass the router host/identity as the first argument, or name the host with `--host <host>` (`transfer` verb form only); run `centrs transfer --help` for the command shape.",
 			});
 		}
 		request.targetInput = targetInput;

@@ -37,7 +37,8 @@ import { selectionFlagTokens } from "./selection.ts";
 
 export const terminalCommand: CliCommandMetadata = {
 	name: "terminal",
-	usage: "centrs terminal <router> [flags]",
+	usage:
+		"centrs terminal <router> [flags] | centrs terminal --host <host> [flags]",
 	summary: "Open an interactive RouterOS console (ssh or mac-telnet).",
 	options: [
 		{
@@ -50,7 +51,7 @@ export const terminalCommand: CliCommandMetadata = {
 			flag: "--host",
 			valueName: "<host>",
 			description:
-				"Override the target host (ssh) / UDP delivery host (mac-telnet, default L2 broadcast).",
+				"ssh: the host to dial (the target when no <router> is given; no CDB lookup). mac-telnet: the UDP delivery host (default L2 broadcast).",
 		},
 		{
 			flag: "--port",
@@ -299,16 +300,20 @@ export function parseTerminalCliArgs(args: readonly string[]): ParsedTerminal {
 	if (help) {
 		return { help: true, request: {} };
 	}
+	// The `--host` flag stands in for a missing `<router>` (#428), with no CDB
+	// lookup; `CENTRS_HOST` never counts.
 	const targetInput = positional[0];
-	if (!targetInput) {
+	if (!targetInput && flags.host === undefined) {
 		throw missingTargetError({
 			command: "terminal",
 			summary: "`centrs terminal` requires a <router> target.",
 			remediation:
-				"Pass the device MAC (or a CDB identity/ip) as the first argument; run `centrs terminal --help` for the shape.",
+				"Pass the device MAC (or a CDB identity/ip) as the first argument, or name an ssh host with `--host <host>`; run `centrs terminal --help` for the shape.",
 		});
 	}
-	flags.targetInput = targetInput;
+	if (targetInput) {
+		flags.targetInput = targetInput;
+	}
 	return { request: flags };
 }
 
