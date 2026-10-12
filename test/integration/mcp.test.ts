@@ -26,7 +26,11 @@ interface Envelope {
 	ok: boolean;
 	data?: unknown;
 	error?: { code?: string; cause?: unknown };
-	meta?: { via?: string; validation?: { source?: string } };
+	meta?: {
+		via?: string;
+		validation?: { source?: string };
+		target?: { baseUrl?: string; identity?: string; recordIndex?: number };
+	};
 }
 
 interface ExplainData {
@@ -69,7 +73,7 @@ describeFast("centrs MCP server against CHR", () => {
 				target: chr.restUrl,
 				user: auth.username,
 				password: auth.password,
-				comment: "mcp=rw via=rest-api",
+				comment: "identity=mcp-lab mcp=rw via=rest-api",
 				savedPassword: true,
 			});
 			cdb = await loadCdb({ cdbFile, env: {} });
@@ -114,6 +118,19 @@ describeFast("centrs MCP server against CHR", () => {
 				});
 				expect(stranger.ok).toBe(false);
 				expect(stranger.error?.code).toBe("cdb/target-not-registered");
+
+				// Example 2b: a record's identity= name passes the allowlist and
+				// dials that record (#444).
+				const byName = await callTool(client, "centrs_retrieve", {
+					target: "mcp-lab",
+					path: "/system/resource",
+				});
+				expect(byName.ok).toBe(true);
+				expect(byName.meta?.target).toMatchObject({
+					baseUrl: `${chr.restUrl}/rest`,
+					identity: "mcp-lab",
+					recordIndex: 0,
+				});
 
 				// Example 3: validate accepts the bare blackhole flag (dry-run only).
 				const validBare = await callTool(client, "centrs_validate", {

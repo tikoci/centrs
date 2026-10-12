@@ -193,7 +193,7 @@ export const validateInputShape = {
 	target: z
 		.string()
 		.describe(
-			"CDB-registered target (name / IP / URL / MAC). Must be on the allowlist.",
+			"CDB-registered target: its address (IP / URL / MAC) or its identity=, mac= or ip= comment key. Must be on the allowlist.",
 		),
 	command: z.string().describe("RouterOS CLI command to dry-run."),
 	via: z
@@ -248,7 +248,9 @@ export const retrieveInputShape = {
 	target: z
 		.string()
 		.optional()
-		.describe("CDB-registered single target. Use either target or group."),
+		.describe(
+			"CDB-registered single target: its address (IP / URL / MAC) or its identity=, mac= or ip= comment key. Use either target or group.",
+		),
 	group: z
 		.string()
 		.optional()
@@ -340,7 +342,7 @@ export const executeInputShape = {
 	target: z
 		.string()
 		.describe(
-			"CDB-registered target. Inline host+credentials are not accepted.",
+			"CDB-registered target: its address (IP / URL / MAC) or its identity=, mac= or ip= comment key. Inline host+credentials are not accepted.",
 		),
 	command: z.string().describe("RouterOS CLI command to run."),
 	confirm: z
