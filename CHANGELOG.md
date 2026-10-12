@@ -8,6 +8,27 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+## 0.1.8 — 2026-10-12
+
+Release (npm tag `latest`; `next` moves forward to 0.1.8). Everything in
+0.1.8-next.0 below, plus two fixes from field-testing it.
+
+### Fixed
+
+- `retrieve --wait` with no deadline value names `--wait` (#445). Written as a
+  bare switch, `--wait --until 'expr'` read `--until` as the deadline and
+  shifted the predicate into a second target, so the CLI reported
+  `usage/fanout-not-supported`. It now fails `settings/invalid-timeout`
+  ("Received the flag: --until"), and every deadline without a unit gets the
+  `--wait`-specific message. A real multi-target `--wait` still gets the
+  fanout refusal.
+- MCP accepts a registered device by its `identity=`, `mac=` or `ip=` comment
+  key, as the CLI does (#444). The allowlist gate now matches with the same
+  resolver the call dials with, so the `mcp=` write policy checked is the
+  policy of the record the call runs against. A name on more than one record
+  fails `identity/ambiguous` with the candidates in `context.matches` and an
+  MCP remediation, instead of resolving to the first.
+
 ## 0.1.8-next.0 — 2026-10-12
 
 Pre-release (npm tag `next`; `latest` stays on 0.1.7). Install with
