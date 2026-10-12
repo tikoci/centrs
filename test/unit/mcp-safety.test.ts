@@ -105,6 +105,19 @@ describe("MCP allowlist resolution", () => {
 					expect.objectContaining({ code: "identity/ambiguous" }),
 				);
 			}
+			// MCP has no `--match`; the remediation names an MCP action and the
+			// candidates stay in context.
+			try {
+				resolveRegisteredTarget(cdb, "twin");
+			} catch (error) {
+				const ambiguous = error as CentrsError;
+				expect(ambiguous.remediation).not.toContain("--match");
+				expect(ambiguous.remediation).toContain("context.matches[].target");
+				expect(ambiguous.context?.["matches"]).toEqual([
+					expect.objectContaining({ target: "10.0.0.7" }),
+					expect.objectContaining({ target: "10.0.0.8" }),
+				]);
+			}
 		} finally {
 			await cleanup();
 		}

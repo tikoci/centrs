@@ -81,6 +81,17 @@ export function resolveRegisteredTarget(
 				context: { target, cdbFile: cdb.settings.cdbFile.value },
 			});
 		}
+		// The CLI remediation names `--match`, which no MCP tool takes.
+		if (error instanceof CentrsError && error.code === "identity/ambiguous") {
+			throw new CentrsError({
+				code: error.code,
+				summary: error.summary,
+				remediation:
+					"Retry with one candidate's address from `context.matches[].target` as `target`. If the candidates share that address too, the CDB holds duplicate records for it: remove or edit the extra one with the `centrs_devices` tool (op `remove` or `set`).",
+				context: error.context,
+				cause: error,
+			});
+		}
 		throw error;
 	}
 	return {
