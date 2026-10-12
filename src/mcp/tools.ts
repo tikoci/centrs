@@ -36,7 +36,7 @@ import {
 import type { CommentKvUpdate } from "../resolver/comment-kv.ts";
 import { parseBbox, parseNear } from "../resolver/geo.ts";
 import { parseDuration } from "../resolver/settings.ts";
-import { buildRetrieveErrorEnvelope, retrieve } from "../retrieve.ts";
+import { retrieveEnvelope } from "../retrieve.ts";
 import {
 	buildRetrieveFanoutErrorEnvelope,
 	retrieveGroup,
@@ -326,18 +326,11 @@ export async function handleRetrieve(
 		cdbPassword: config.cdbPassword,
 	};
 
+	if (args.group === undefined) return await retrieveEnvelope(request);
 	try {
-		const envelope =
-			args.group !== undefined
-				? await retrieveGroup(request)
-				: await retrieve(request);
-		return envelope;
+		return await retrieveGroup(request);
 	} catch (error) {
-		const envelope =
-			args.group !== undefined
-				? buildRetrieveFanoutErrorEnvelope(request, error)
-				: buildRetrieveErrorEnvelope(request, error);
-		return envelope;
+		return buildRetrieveFanoutErrorEnvelope(request, error);
 	}
 }
 

@@ -144,6 +144,17 @@ warning entry — it is not an error. (Earlier text said a byte overflow returns
 *error* with the needed size; superseded — truncation is an `ok: true` footnote so
 partial data stays usable.)
 
+A failure **after** target resolution keeps what resolution found. The error
+envelope carries the resolved `meta.target` (host, port, base URL, record,
+sources), `meta.via`, the setting sources in `meta.settings`, and
+`meta.operation.auth` (`username`, `passwordProvided`; provenance only, never
+the secret). This holds for one-shot reads, `--follow`, `--sample`, `--wait`,
+each fan-out member and the MCP `centrs_retrieve` tool. A failure before
+resolution (bad shape, unknown target) keeps `meta.target.input` and a valid
+pinned `via`, with empty `meta.settings`. The
+library exposes this as `retrieveEnvelope()`, which never throws (examples 13,
+16b).
+
 ## Query (`--query`)
 
 `retrieve <router> <menu> --query '<expr>'` returns only the rows that match,

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { runCli } from "../../src/cli.ts";
-import { type CentrsError, retrieve } from "../../src/index.ts";
+import {
+	type CentrsError,
+	retrieve,
+	retrieveEnvelope,
+} from "../../src/index.ts";
 import {
 	resolveMacForRetrieve,
 	resolveRetrieveRequest,
@@ -504,6 +508,153 @@ describe("retrieve core", () => {
 			fetchMock.restore();
 		}
 	});
+});
+
+/** A loopback port that was just listening and now refuses connections. */
+function closedPort(): number {
+	const listener = Bun.listen({
+		hostname: "127.0.0.1",
+		port: 0,
+		socket: { data() {} },
+	});
+	const { port } = listener;
+	listener.stop(true);
+	return port;
+}
+
+describe("retrieve error envelopes keep what resolution found (#433)", () => {
+	const SECRET = "hidden-retrieve-pw";
+
+	test("a refused connection carries target, via, sources and auth provenance", async () => {
+		const port = closedPort();
+		const envelope = await retrieveEnvelope(
+			{
+				targetInput: `http://127.0.0.1:${port}`,
+				path: "/system/resource",
+				username: "admin",
+				password: SECRET,
+			},
+			{},
+		);
+		expect(envelope.ok).toBe(false);
+		if (envelope.ok) return;
+		expect(envelope.error.code).toBe("transport/connection-refused");
+		expect(envelope.meta.target).toMatchObject({
+			input: `http://127.0.0.1:${port}`,
+			host: "127.0.0.1",
+			port,
+			baseUrl: `http://127.0.0.1:${port}/rest`,
+			source: { kind: "cli", key: "host" },
+		});
+		expect(envelope.meta.via).toBe("rest-api");
+		expect(envelope.meta.settings).toMatchObject({
+			via: { kind: "default" },
+			host: { kind: "cli" },
+			port: { kind: "cli" },
+			username: { kind: "cli", key: "username" },
+			password: { kind: "cli", key: "password" },
+		});
+		expect(envelope.meta.operation).toMatchObject({
+			kind: "data",
+			auth: { username: "admin", passwordProvided: true },
+		});
+		expect(JSON.stringify(envelope)).not.toContain(SECRET);
+	});
+
+	test("a pinned native-api transport keeps its typed port", async () => {
+		const port = closedPort();
+		const envelope = await retrieveEnvelope(
+			{
+				targetInput: `127.0.0.1:${port}`,
+				path: "/system/resource",
+				via: "native-api",
+				username: "admin",
+				password: SECRET,
+			},
+			{},
+		);
+		expect(envelope.ok).toBe(false);
+		if (envelope.ok) return;
+		expect(envelope.error.code).toBe("transport/connection-refused");
+		expect(envelope.meta.via).toBe("native-api");
+		expect(envelope.meta.target).toMatchObject({ host: "127.0.0.1", port });
+		expect(envelope.meta.settings).toMatchObject({
+			via: { kind: "cli", key: "via" },
+		});
+		expect(JSON.stringify(envelope)).not.toContain(SECRET);
+	});
+
+	test("a failure before resolution keeps the minimal input-only envelope", async () => {
+		const envelope = await retrieveEnvelope(
+			{
+				targetInput: "router1",
+				path: "/system/resource",
+				wait: "1s",
+				password: SECRET,
+			},
+			{},
+		);
+		expect(envelope.ok).toBe(false);
+		if (envelope.ok) return;
+		expect(envelope.error.code).toBe("input/invalid-command");
+		expect(envelope.meta).toEqual({
+			target: { input: "router1" },
+			via: null,
+			settings: {},
+		});
+
+		const pinned = await retrieveEnvelope(
+			{
+				targetInput: "router1",
+				path: "/system/resource",
+				via: "native-api",
+				wait: "1s",
+			},
+			{},
+		);
+		expect(pinned.meta).toEqual({
+			target: { input: "router1" },
+			via: "native-api",
+			settings: {},
+		});
+	});
+
+	for (const form of ["positional", "--host"] as const) {
+		test(`the CLI renders the resolved envelope for a ${form} target`, async () => {
+			const port = closedPort();
+			const target = `http://127.0.0.1:${port}`;
+			const consoleCapture = captureConsole();
+			try {
+				const exitCode = await runCli([
+					"retrieve",
+					...(form === "--host" ? ["--host", target] : [target]),
+					"/system/resource",
+					"--username",
+					"admin",
+					"--password",
+					SECRET,
+					"--json",
+				]);
+				expect(exitCode).toBe(1);
+				const text = consoleCapture.errors.join("\n");
+				expect(text).not.toContain(SECRET);
+				const envelope = JSON.parse(text);
+				expect(envelope.error.code).toBe("transport/connection-refused");
+				expect(envelope.meta.via).toBe("rest-api");
+				expect(envelope.meta.target).toMatchObject({
+					host: "127.0.0.1",
+					port,
+					baseUrl: `${target}/rest`,
+				});
+				expect(envelope.meta.settings.password).toEqual({
+					kind: "cli",
+					key: "password",
+				});
+			} finally {
+				consoleCapture.restore();
+			}
+		});
+	}
 });
 
 describe("retrieve CLI", () => {

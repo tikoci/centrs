@@ -111,6 +111,44 @@ describe("handleRetrieve (offline allowlist gate)", () => {
 		}
 	});
 
+	test("a refused connection keeps the resolved endpoint and sources (#433)", async () => {
+		const listener = Bun.listen({
+			hostname: "127.0.0.1",
+			port: 0,
+			socket: { data() {} },
+		});
+		const target = `http://127.0.0.1:${listener.port}`;
+		listener.stop(true);
+		const { path, cleanup } = await makeMcpTestCdb([
+			{ target, password: "hidden-mcp-pw" },
+		]);
+		try {
+			const env = await handleRetrieve(
+				{ target, path: "/system/resource" },
+				config(path),
+			);
+			expect(env.ok).toBe(false);
+			if (env.ok) {
+				return;
+			}
+			expect(env.error.code).toBe("transport/connection-refused");
+			expect(env.meta.via).toBe("rest-api");
+			expect(env.meta.target).toMatchObject({
+				host: "127.0.0.1",
+				port: listener.port,
+				recordIndex: 0,
+				source: { kind: "cdb", key: "record:0" },
+			});
+			expect(env.meta.settings).toMatchObject({
+				username: { kind: "cdb" },
+				password: { kind: "cdb" },
+			});
+			expect(JSON.stringify(env)).not.toContain("hidden-mcp-pw");
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("rejects an empty group", async () => {
 		const { path, cleanup } = await makeMcpTestCdb([
 			{ target: "known", group: "edge" },

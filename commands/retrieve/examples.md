@@ -147,6 +147,10 @@ centrs retrieve $R /system/resource --username wrong --password wrong --json
 centrs retrieve 127.0.0.1:1 /system/resource --username $U --password $P --json
 ```
 
+The envelope still carries the resolved endpoint: `meta.via="rest-api"`,
+`meta.target.host`/`port`/`baseUrl`, and `meta.settings` with the source of
+each setting (#433).
+
 ### 14. REST timeout ceiling
 
 `--timeout 70000` against `--via rest-api` is rejected up front with
@@ -173,6 +177,21 @@ Call succeeds with a `cdb/password-not-needed` warning in `meta.warnings`.
 ```bash
 centrs retrieve $R /system/resource --cdb-file $CDB --cdb-password ignored --json
 ```
+
+### 16b. A refused transport still names what resolution found (#433)
+
+`$CLOSED` is a loopback port with nothing listening.
+
+```bash
+centrs retrieve $R /system/resource --cdb-file $CDB --port $CLOSED --json
+```
+
+Exit 1, `transport/connection-refused`. `meta.via="rest-api"`, and
+`meta.target` has the CDB record's host, `port=$CLOSED`, `recordIndex=0` and
+`source.kind="cdb"`. `meta.settings.port={kind:"cli",key:"port"}` and
+`meta.settings.username`/`password` have `kind:"cdb"`.
+`meta.operation.auth.passwordProvided=true`. The password itself appears
+nowhere.
 
 ### H1. `--host` stands in for `<target>` (#428)
 
