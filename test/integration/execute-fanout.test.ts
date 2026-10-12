@@ -292,6 +292,36 @@ describeFast("execute fan-out against CHR", () => {
 				f6.data.targets.every((t) => t.meta.target.recordIndex === undefined),
 			).toBe(true);
 
+			// F7 (#427): with a pinned CDB, an address positional that matches no
+			// record is a literal host, while a name that matches none fails closed.
+			const literal = `127.0.0.1:${chr.ports.api}`;
+			const f7Start = consoleCapture.logs.length;
+			const f7Exit = await runCli([
+				"execute",
+				literal,
+				"no-such-router",
+				"--cdb-file",
+				fixture.cdbPath,
+				"--username",
+				auth.username,
+				"--password",
+				auth.password,
+				"--json",
+				"--",
+				READ_COMMAND,
+			]);
+			const f7 = JSON.parse(
+				consoleCapture.logs.slice(f7Start)[0] ?? "",
+			) as FanoutTestEnvelope;
+			expect(f7Exit).toBe(2);
+			expect(f7.data.summary).toEqual({ total: 2, ok: 1, failed: 1 });
+			expect(f7.data.targets.map((t) => t.meta.target.input)).toEqual([
+				literal,
+				"no-such-router",
+			]);
+			expect(f7.data.targets[0]?.ok).toBe(true);
+			expect(f7.data.targets[1]?.error?.code).toBe("cdb/not-found-target");
+
 			const resourceVersion =
 				typeof chr.state.version === "string" ? chr.state.version : undefined;
 			await recordIntegrationEvidence({
@@ -302,7 +332,7 @@ describeFast("execute fan-out against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(6),
+				exampleIds: exampleIds(7),
 			});
 		} finally {
 			consoleCapture.restore();

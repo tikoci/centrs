@@ -151,6 +151,37 @@ describe("handleExecute (offline gates)", () => {
 		}
 	});
 
+	test("an unregistered address is still rejected (#427 is CLI/API only)", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([
+			{ target: "rw-box", comment: "mcp=rw" },
+		]);
+		try {
+			for (const target of [
+				"203.0.113.201",
+				"[2001:db8::1]:8728",
+				"http://203.0.113.201:9",
+				"aa:bb:cc:dd:ee:ff",
+			]) {
+				const execute = await handleExecute(
+					{ target, command: "/system/identity/print" },
+					config(path),
+				);
+				const read = await handleRetrieve(
+					{ target, path: "/system/resource" },
+					config(path),
+				);
+				for (const env of [execute, read]) {
+					expect(env.ok).toBe(false);
+					if (!env.ok) {
+						expect(env.error.code).toBe("cdb/target-not-registered");
+					}
+				}
+			}
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("denies a write to an mcp=ro device before any network call", async () => {
 		const { path, cleanup } = await makeMcpTestCdb([
 			{ target: "ro-box", comment: "mcp=ro" },

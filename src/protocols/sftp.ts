@@ -155,6 +155,11 @@ export class SftpClient {
 	argv(): string[] {
 		// `sftp` takes the port as `-P` (vs `ssh -p`); the `-i`/`-o` trust + batch
 		// options are shared with the ssh execute client via `sshCommonOptions`.
+		// Unlike `ssh`, `sftp` reads `host:path`, so an IPv6 host must be bracketed
+		// (`x@::1` is "Missing hostname"; `ssh x@[::1]` fails to resolve).
+		const { host: bare } = this.config;
+		const host =
+			bare.includes(":") && !bare.startsWith("[") ? `[${bare}]` : bare;
 		return [
 			this.config.binary ?? "sftp",
 			"-b",
@@ -162,7 +167,7 @@ export class SftpClient {
 			"-P",
 			String(this.config.port),
 			...sshCommonOptions(this.config),
-			sshUserHost(this.config),
+			sshUserHost({ ...this.config, host }),
 		];
 	}
 

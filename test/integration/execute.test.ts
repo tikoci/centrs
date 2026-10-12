@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { executeEnvelope } from "../../src/execute.ts";
 import { retrieve } from "../../src/retrieve.ts";
 import {
@@ -704,6 +705,34 @@ describeFast("execute against CHR", () => {
 				"native-api",
 			);
 
+			// P3 (#427): an address that misses a pinned CDB is still a literal
+			// host; a name that misses it still fails closed.
+			const pinned = {
+				cdbFile: join(import.meta.dir, "../fixtures/winbox-cdb/min.cdb"),
+				username: auth.username,
+				password: auth.password,
+				command: ":put [/system/identity/get name]",
+			};
+			expectExecuteSuccess(
+				await executeEnvelope({
+					...pinned,
+					targetInput: `127.0.0.1:${chr.ports.api}`,
+				}),
+				"native-api",
+			);
+			expectExecuteSuccess(
+				await executeEnvelope({ ...pinned, targetInput: chr.restUrl }),
+				"rest-api",
+			);
+			const nameMiss = await executeEnvelope({
+				...pinned,
+				targetInput: "no-such-router",
+			});
+			expect(nameMiss.ok).toBe(false);
+			expect((nameMiss as ExecuteFailureEnvelope).error.code).toBe(
+				"cdb/not-found-target",
+			);
+
 			await recordIntegrationEvidence({
 				suite: "execute against CHR",
 				command: "execute",
@@ -712,7 +741,7 @@ describeFast("execute against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [...exampleIds(19).slice(11), "R1", "P2"],
+				exampleIds: [...exampleIds(19).slice(11), "R1", "P2", "P3"],
 			});
 		} finally {
 			await chr.destroy();

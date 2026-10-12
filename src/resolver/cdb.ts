@@ -26,6 +26,7 @@
  * (WP-2c / WP-1b); the shape below leaves a clean seam for them.
  */
 
+import { isIP } from "node:net";
 import type { WinBoxCdbEntry } from "../data/winbox-cdb.ts";
 import {
 	type DevicesWarning,
@@ -37,7 +38,7 @@ import {
 import { CentrsError } from "../errors.ts";
 import { plannedProtocols, type RouterOsProtocol } from "../protocols/index.ts";
 import { parseCommentKv } from "./comment-kv.ts";
-import { normalizeMac } from "./mac.ts";
+import { isMacAddress, normalizeMac } from "./mac.ts";
 import {
 	parseBoolean,
 	parseDuration,
@@ -146,9 +147,11 @@ function warningFromDevices(warning: DevicesWarning): ResolverWarning {
  *
  * Returns `undefined` when no CDB is in play (no explicit CDB inputs and the
  * default file is absent, or the default CDB has no matching record) — the
- * caller then treats `<router>` as a literal host. When an explicit CDB is
- * provided, a missing file/record surfaces as the underlying CDB error so the
- * "name not found without credentials" contract stays intact upstream.
+ * caller then treats `<router>` as a literal host. An address-shaped
+ * `<router>` ({@link isLiteralHostTarget}) that misses an explicit CDB is also a
+ * literal host. Otherwise, with an explicit CDB, a missing file/record surfaces
+ * as the underlying CDB error so the "name not found without credentials"
+ * contract stays intact upstream.
  */
 export async function resolveCdb(
 	input: CdbResolveInput,
@@ -227,8 +230,9 @@ export async function resolveCdb(
 			// target has no record of its own. On the CLI/API this fills creds for
 			// an ad-hoc target; on MCP the allowlist gate upstream still rejects
 			// unregistered targets, so `__default__` never widens it. Without a
-			// `__default__`, preserve the prior contract: undefined for an implicit
-			// CDB (treat `<router>` as a literal host), rethrow for an explicit one.
+			// `__default__`: undefined (treat `<router>` as a literal host) for an
+			// implicit CDB or an address-shaped target; rethrow a name miss in an
+			// explicit CDB, since a name can't be told apart from a typo (#427).
 			if (defaults) {
 				return {
 					target: input.targetInput,
@@ -242,12 +246,29 @@ export async function resolveCdb(
 					defaults,
 				};
 			}
-			if (!explicitCdb) {
+			if (!explicitCdb || isLiteralHostTarget(input.targetInput)) {
 				return undefined;
 			}
 		}
 		throw error;
 	}
+}
+
+/**
+ * True when `<router>` is an address rather than a name: an IPv4 or IPv6 literal
+ * (with an optional `:port`, IPv6 as `[…]:port`), an `http(s)://` URL, or a MAC.
+ * A miss on one of these in an explicit CDB can't be a mistyped record name, so
+ * {@link resolveCdb} lets it through as a literal host. A DNS name or identity
+ * keeps failing closed with `cdb/not-found-target`.
+ */
+export function isLiteralHostTarget(value: string): boolean {
+	const trimmed = value.trim();
+	if (isMacAddress(trimmed) || /^https?:\/\//i.test(trimmed)) {
+		return true;
+	}
+	const bracketed = /^\[([^\]]+)\](?::\d+)?$/.exec(trimmed)?.[1];
+	const host = bracketed ?? trimmed.replace(/^([^:]+):\d+$/, "$1");
+	return isIP(host) !== 0;
 }
 
 /** A single CDB group member resolved for fanout. */

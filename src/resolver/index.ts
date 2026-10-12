@@ -29,6 +29,7 @@ export {
 	DEFAULT_RECORD_TARGET,
 	expandCdbGroup,
 	identityFromComment,
+	isLiteralHostTarget,
 	macFromComment,
 	type ResolverWarning,
 	resolutionFromEntry,

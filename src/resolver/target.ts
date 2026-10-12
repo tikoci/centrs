@@ -290,7 +290,9 @@ export function resolveTarget(
 
 	return {
 		input: input.targetInput,
-		host: parsedUrl.hostname,
+		// WHATWG keeps an IPv6 hostname bracketed; sockets and ssh need the bare
+		// address (`baseUrl` re-brackets it).
+		host: parsedUrl.hostname.replace(/^\[(.*)\]$/, "$1"),
 		port,
 		scheme,
 		tls,

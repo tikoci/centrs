@@ -84,6 +84,11 @@ describe("SftpClient argv", () => {
 		const { client } = clientWith(ok(), { username: undefined });
 		expect(client.argv().at(-1)).toBe("192.0.2.10");
 	});
+
+	test("an IPv6 host is bracketed, since sftp reads host:path (#427)", () => {
+		const { client } = clientWith(ok(), { host: "2001:db8::10" });
+		expect(client.argv().at(-1)).toBe("admin@[2001:db8::10]");
+	});
 });
 
 // ── ls -l parsing ────────────────────────────────────────────────────────────
