@@ -346,13 +346,44 @@ describe("retrieveWait", () => {
 		);
 		expect(r.reads()).toBe(0);
 		// A bare number would be a millisecond deadline; like --sample, refuse it.
-		for (const wait of ["30", 30, "0s"]) {
+		for (const wait of ["30", 30, "0s", "5h", "--until"]) {
 			const result = await retrieveWait({ ...r.request, wait }, ENV);
 			expect(result.ok ? undefined : result.error.code).toBe(
 				"settings/invalid-timeout",
 			);
 		}
 		expect(r.inspections()).toBe(0);
+	});
+
+	test("CLI: a value-less --wait names --wait, not fanout or the path (#445)", async () => {
+		const swallowed = await runCliCaptured([
+			"retrieve",
+			"192.0.2.1",
+			"/interface",
+			"--wait",
+			"--until",
+			"name=ether1 and running",
+			"--json",
+		]);
+		expect(swallowed.code).not.toBe(0);
+		const error = JSON.parse(swallowed.err).error;
+		expect(error.code).toBe("settings/invalid-timeout");
+		expect(error.summary).toContain("Received the flag: --until");
+		expect(error.context).toEqual({ flag: "--wait", value: "--until" });
+
+		// A real multi-target --wait still gets the fanout refusal.
+		const fanout = await runCliCaptured([
+			"retrieve",
+			"192.0.2.1",
+			"192.0.2.2",
+			"/interface",
+			"--wait",
+			"20s",
+			"--json",
+		]);
+		expect(JSON.parse(fanout.err).error.code).toBe(
+			"usage/fanout-not-supported",
+		);
 	});
 
 	test("CLI returns one final envelope and exit 1 for an unmet condition", async () => {

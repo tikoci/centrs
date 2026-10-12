@@ -874,6 +874,9 @@ export function applyMaxResultsBudget(
 export function validateRetrieveRequestShape(
 	request: RetrieveRequest,
 ): readonly string[] {
+	// Flag values before the path: a value-less flag shifts the positionals,
+	// so the path check would blame the wrong token (#445).
+	resolveWaitSettings(request);
 	if (!request.path.startsWith("/")) {
 		throw new CentrsError({
 			code: "input/invalid-routeros-path",
@@ -885,7 +888,6 @@ export function validateRetrieveRequestShape(
 	}
 
 	const query = resolveRetrieveQuery(request);
-	resolveWaitSettings(request);
 	if (query && request.listAttributes) {
 		throw new CentrsError({
 			code: "usage/conflicting-flags",
@@ -1027,13 +1029,16 @@ function resolveWaitSettings(
 	// A unit is required for the same reason as `--sample`: a bare `30` would
 	// be a 30 ms deadline, which expires before validation completes.
 	const text = String(request.wait).trim();
-	const deadlineMs = /^\d+$/.test(text) ? -1 : parseDuration(text);
+	const deadlineMs = /^\d+(ms|s|m)$/i.test(text) ? parseDuration(text) : -1;
 	if (deadlineMs <= 0)
 		throw new CentrsError({
 			code: "settings/invalid-timeout",
-			summary: `\`--wait\` needs a positive deadline with a unit. Received: ${text}`,
+			// `--wait --until …` reads `--until` as the deadline (#445).
+			summary: text.startsWith("-")
+				? `\`--wait\` needs a deadline value before the next flag. Received the flag: ${text}`
+				: `\`--wait\` needs a positive deadline with a unit. Received: ${text}`,
 			remediation:
-				"Pass an overall duration such as `--wait 30s` or `--wait 5m`.",
+				"Pass an overall duration such as `--wait 30s` or `--wait 5m`, e.g. `--wait 20s --until 'running'`.",
 			context: { flag: "--wait", value: text },
 		});
 	return {

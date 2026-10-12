@@ -28,6 +28,7 @@ import {
 	retrieveSample,
 	retrieveWait,
 	type ValidationTrace,
+	validateRetrieveRequestShape,
 } from "../index.ts";
 import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
@@ -244,6 +245,10 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 					: request.follow
 						? "--follow"
 						: "--sample";
+			// Flag values first: a value-less `--wait` swallows the next flag and
+			// shifts a positional into a second target, so the fanout refusal
+			// would name the wrong mistake (#445).
+			validateRetrieveRequestShape(request);
 			if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 				throw new CentrsError({
 					code: "usage/fanout-not-supported",
