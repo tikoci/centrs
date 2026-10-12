@@ -415,7 +415,7 @@ describe("explain/catalog — parsing published pages", () => {
 
 	/** Windows checkouts convert fixtures to CRLF (#282); the new shape too. */
 	test("reads the import-free preamble under CRLF", async () => {
-		const markdown = (await readFixture("app.md")).replace(/\n/g, "\r\n");
+		const markdown = (await readFixture("app.md")).replace(/\r?\n/g, "\r\n");
 		expect(parsePage("app", markdown).map((e) => e.kind)).toEqual([
 			"Directory",
 		]);
