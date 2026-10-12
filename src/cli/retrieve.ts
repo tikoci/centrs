@@ -11,9 +11,11 @@ import {
 } from "../errors.ts";
 import {
 	buildRetrieveErrorEnvelope,
+	buildRetrieveErrorEnvelopeFromResolved,
 	buildRetrieveFanoutErrorEnvelope,
 	describeCentrs,
 	fanoutExitCode,
+	type ResolvedRetrieveRequest,
 	type RetrieveOutputFormat,
 	type RetrieveRequest,
 	renderRetrieveEnvelope,
@@ -215,6 +217,7 @@ type RetrieveCliArgs = RetrieveRequest & {
 
 export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 	let request: RetrieveCliArgs | undefined;
+	let resolved: ResolvedRetrieveRequest | undefined;
 
 	try {
 		request = parseRetrieveCliArgs(args);
@@ -259,7 +262,11 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 			);
 		}
 
-		const envelope = await retrieve(request);
+		const envelope = await retrieve(request, Bun.env, {
+			onResolved: (value) => {
+				resolved = value;
+			},
+		});
 		const resolvedFormat =
 			(
 				envelope.meta.operation as {
@@ -287,8 +294,12 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 			// from an empty request rather than reconstructing positionals from raw
 			// args — a credential value (e.g. the token after `--password` /
 			// `--cdb-password`) would otherwise be echoed as `meta.target.input`.
+			// A failure after resolution keeps the resolved target, via and
+			// setting sources (#433).
 			const envelope = withTips(
-				buildRetrieveErrorEnvelope(request ?? { path: "" }, error),
+				resolved
+					? buildRetrieveErrorEnvelopeFromResolved(resolved, error)
+					: buildRetrieveErrorEnvelope(request ?? { path: "" }, error),
 				tips,
 			);
 			console.error(

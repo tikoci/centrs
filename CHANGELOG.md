@@ -89,6 +89,14 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   `execute <mac> <cmd> --via mac-telnet --host <udp-host>` is unchanged. The
   `upload`/`download` aliases still read their first positional as the target.
 
+- A one-shot `retrieve` that fails after resolution keeps the resolved meta
+  (#433). A refused connection, auth failure or validation error now reports
+  `meta.target` (host, port, base URL, record, sources), `meta.via`,
+  `meta.settings` and `meta.operation.auth`, as `execute`, `api` and `transfer`
+  already did. Before, it reported `meta.via: null` and only the typed input.
+  The MCP `centrs_retrieve` tool had the same gap and is fixed too. New
+  library export: `retrieveEnvelope()`, which never throws.
+
 - SSH execute, SFTP and terminal add `IdentitiesOnly=yes` when a private key is
   selected, preventing fallback to unrelated SSH agent identities (#177).
   Explicit OpenSSH `IdentityFile` configuration continues to apply.

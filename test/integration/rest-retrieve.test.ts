@@ -51,6 +51,10 @@ interface RetrieveFailureTestEnvelope {
 		details_url?: string;
 		remediation?: string;
 	};
+	meta: RetrieveSuccessTestEnvelope["meta"] & {
+		target: { host?: string; port?: number; recordIndex?: number };
+		settings: { port?: { kind?: string; key?: string } };
+	};
 }
 
 interface VersionedData {
@@ -410,6 +414,43 @@ describeFast("REST retrieve against CHR", () => {
 				unusedPasswordEnvelope.warnings.map((warning) => warning.code),
 			).toContain("cdb/password-not-needed");
 
+			// 16b. A refused transport still names what resolution found (#433):
+			// the CDB record's host and credentials, and the caller's --port.
+			const listener = Bun.listen({
+				hostname: "127.0.0.1",
+				port: 0,
+				socket: { data() {} },
+			});
+			const closedPort = listener.port;
+			listener.stop(true);
+			const refusedEnvelope = await expectRetrieveFailure(
+				consoleCapture,
+				[
+					"retrieve",
+					chr.restUrl,
+					"/system/resource",
+					"--cdb-file",
+					cdbPath,
+					"--port",
+					String(closedPort),
+				],
+				"transport/connection-refused",
+			);
+			expect(refusedEnvelope.meta.via).toBe("rest-api");
+			expect(refusedEnvelope.meta.target).toMatchObject({
+				host: new URL(chr.restUrl).hostname,
+				port: closedPort,
+				recordIndex: 0,
+				source: { kind: "cdb" },
+			});
+			expect(refusedEnvelope.meta.settings.port).toEqual({
+				kind: "cli",
+				key: "port",
+			});
+			expect(refusedEnvelope.meta.settings.username?.kind).toBe("cdb");
+			expect(refusedEnvelope.meta.settings.password?.kind).toBe("cdb");
+			expect(refusedEnvelope.meta.operation?.auth?.passwordProvided).toBe(true);
+
 			await expectRetrieveFailure(
 				consoleCapture,
 				[
@@ -515,11 +556,14 @@ describeFast("REST retrieve against CHR", () => {
 
 			expect(exitCode).toBe(1);
 			expect(consoleCapture.logs).toHaveLength(0);
-			const payload = JSON.parse(consoleCapture.errors[0] ?? "") as {
-				error: { code: string; remediation?: string };
-			};
+			const payload = JSON.parse(
+				consoleCapture.errors[0] ?? "",
+			) as RetrieveFailureTestEnvelope;
 			expect(payload.error.code).toBe("transport/connection-refused");
 			expect(payload.error.remediation).toContain("REST service");
+			expect(payload.meta.via).toBe("rest-api");
+			expect(payload.meta.target).toMatchObject({ host: "127.0.0.1", port: 1 });
+			expect(payload.meta.settings.password?.kind).toBe("cli");
 		} finally {
 			consoleCapture.restore();
 		}

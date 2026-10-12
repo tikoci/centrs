@@ -316,9 +316,19 @@ export interface RetrieveReadPlan {
 	query?: readonly string[];
 }
 
+export interface RetrieveOptions {
+	/**
+	 * Called once resolution succeeds, before any connection. A caller that
+	 * catches the later throw uses it to keep the resolved target, via and
+	 * setting sources in its error envelope.
+	 */
+	onResolved?: (resolved: ResolvedRetrieveRequest) => void;
+}
+
 export async function retrieve(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined> = Bun.env,
+	options: RetrieveOptions = {},
 ): Promise<RetrieveSuccessEnvelope> {
 	if (request.wait !== undefined) {
 		throw new CentrsError({
@@ -350,7 +360,35 @@ export async function retrieve(
 		});
 	}
 	const resolved = await resolveRetrieveRequest(request, env);
+	options.onResolved?.(resolved);
 	return runResolvedRetrieve(resolved);
+}
+
+/**
+ * {@link retrieve} as an envelope that never throws. A failure after resolution
+ * carries the resolved target, via and setting sources
+ * ({@link buildRetrieveErrorEnvelopeFromResolved}); a failure before it keeps
+ * only the caller's input ({@link buildRetrieveErrorEnvelope}).
+ */
+export async function retrieveEnvelope(
+	request: RetrieveRequest,
+	env: Record<string, string | undefined> = Bun.env,
+	options: RetrieveOptions = {},
+): Promise<RetrieveEnvelope> {
+	let resolved: ResolvedRetrieveRequest | undefined;
+	try {
+		return await retrieve(request, env, {
+			...options,
+			onResolved: (value) => {
+				resolved = value;
+				options.onResolved?.(value);
+			},
+		});
+	} catch (error) {
+		return resolved
+			? buildRetrieveErrorEnvelopeFromResolved(resolved, error)
+			: buildRetrieveErrorEnvelope(request, error);
+	}
 }
 
 /**
