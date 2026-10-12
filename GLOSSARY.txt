@@ -481,6 +481,12 @@ toarray
 # markdown dictionary knows it but the TypeScript one does not.
 iff
 
+# Dependency vocabulary (package.json overrides)
+# smol: smol-toml, a markdownlint-cli2/cspell transitive pinned past an advisory.
+# katex: a markdownlint-cli2 transitive with a residual dev-only advisory.
+smol
+katex
+
 # GitHub Pages build vocabulary (scripts/build-pages-site.ts, pages.yaml)
 # typedoc/pandoc: the API-reference generator and the markdown->HTML converter
 #   the Pages build chains together. gfm: GitHub-Flavored Markdown, pandoc's

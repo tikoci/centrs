@@ -16,6 +16,11 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   Dependabot ecosystem for `bun.lock` (#390). Preserve the dependency group
   and the `has-flag` major-version ignore. Remaining dependency advisories
   and updater verification are tracked in #390.
+- Pre-release dependency alignment (#390): runtime ranges now floor at the
+  tested versions (`@modelcontextprotocol/sdk ^1.32.1`, `zod ^4.6.7`),
+  `smol-toml` is overridden past its advisories, and `@types/bun` stays on
+  the 1.3.14 runtime pin. The two residual advisories (`braces`, `katex`) are
+  dev-tool-only and do not ship in the package.
 
 ### Added
 

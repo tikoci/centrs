@@ -19,6 +19,12 @@ updates:
       - dependency-name: has-flag
         update-types:
           - version-update:semver-major
+      # Types track the Bun runtime pinned in workflows, Dockerfile and
+      # packageManager; bump them together with that pin, not alone.
+      - dependency-name: "@types/bun"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-major
     groups:
       npm:
         patterns:
