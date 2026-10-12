@@ -245,11 +245,13 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 					: request.follow
 						? "--follow"
 						: "--sample";
-			// Flag values first: a value-less `--wait` swallows the next flag and
-			// shifts a positional into a second target, so the fanout refusal
-			// would name the wrong mistake (#445).
-			validateRetrieveRequestShape(request);
 			if (isFanoutMode(selectionFlags, targetPositionals.length)) {
+				// A value-less `--wait` swallows the next flag and shifts a
+				// positional into a second target, so report a flag-value error
+				// before the fanout refusal names the wrong mistake (#445). Only
+				// here: single-target streams report shape errors as their own
+				// stdout envelope.
+				validateRetrieveRequestShape(request);
 				throw new CentrsError({
 					code: "usage/fanout-not-supported",
 					summary: `\`retrieve ${mode}\` watches one router and cannot fan out across multiple targets.`,

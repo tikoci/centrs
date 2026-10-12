@@ -384,6 +384,23 @@ describe("retrieveWait", () => {
 		expect(JSON.parse(fanout.err).error.code).toBe(
 			"usage/fanout-not-supported",
 		);
+
+		// Single-target streams keep reporting shape errors as their own
+		// stdout envelope; the pre-check must not pull them onto stderr.
+		for (const flags of [
+			["--wait", "20"],
+			["--sample", "5s", "--max-results", "10"],
+		]) {
+			const single = await runCliCaptured([
+				"retrieve",
+				"192.0.2.1",
+				"/interface",
+				...flags,
+				"--json",
+			]);
+			expect(single.err).toBe("");
+			expect(JSON.parse(single.out).ok).toBe(false);
+		}
 	});
 
 	test("CLI returns one final envelope and exit 1 for an unmet condition", async () => {
