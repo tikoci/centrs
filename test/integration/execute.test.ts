@@ -512,6 +512,23 @@ describeFast("execute against CHR", () => {
 				expect(rejected.error.position).toBeDefined();
 			}
 
+			// P1 (#426): the REST URL alone selects rest-api on its own port.
+			const urlOnly = expectExecuteSuccess(
+				await executeEnvelope({
+					targetInput: chr.restUrl,
+					username: auth.username,
+					password: auth.password,
+					command: ":put [/system/identity/get name]",
+				}),
+				"rest-api",
+			);
+			expect(urlOnly.data).toBeTruthy();
+			expect(
+				(urlOnly.meta as { settings?: Record<string, unknown> }).settings?.[
+					"via"
+				],
+			).toEqual({ kind: "default", key: "via:target-url" });
+
 			await recordIntegrationEvidence({
 				suite: "execute against CHR",
 				command: "execute",
@@ -534,6 +551,7 @@ describeFast("execute against CHR", () => {
 					"W3",
 					"R1",
 					"R2",
+					"P1",
 				],
 			});
 		} finally {
@@ -675,6 +693,17 @@ describeFast("execute against CHR", () => {
 				),
 			).toEqual(["passed", "passed"]);
 
+			// P2 (#426): a typed host:port keeps native-api and dials that port.
+			expectExecuteSuccess(
+				await executeEnvelope({
+					targetInput: `127.0.0.1:${chr.ports.api}`,
+					username: auth.username,
+					password: auth.password,
+					command: ":put [/system/identity/get name]",
+				}),
+				"native-api",
+			);
+
 			await recordIntegrationEvidence({
 				suite: "execute against CHR",
 				command: "execute",
@@ -683,7 +712,7 @@ describeFast("execute against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [...exampleIds(19).slice(11), "R1"],
+				exampleIds: [...exampleIds(19).slice(11), "R1", "P2"],
 			});
 		} finally {
 			await chr.destroy();

@@ -220,6 +220,67 @@ describe("execute bare-MAC transport default honors host precedence", () => {
 	});
 });
 
+describe("execute honors an explicit URL target's scheme and port (#426)", () => {
+	const command = "/system/identity/print";
+
+	test("an http:// URL with no via pinned selects rest-api on its port", async () => {
+		const resolved = await resolveExecuteRequest(
+			{ targetInput: "http://127.0.0.1:9", command },
+			{},
+		);
+		expect(resolved.via.value).toBe("rest-api");
+		expect(resolved.via.source).toEqual({
+			kind: "default",
+			key: "via:target-url",
+		});
+		expect(resolved.target.baseUrl).toBe("http://127.0.0.1:9/rest");
+	});
+
+	test("an https:// --host selects rest-api over TLS", async () => {
+		const resolved = await resolveExecuteRequest(
+			{ host: "https://192.0.2.10", command },
+			{},
+		);
+		expect(resolved.via.value).toBe("rest-api");
+		expect(resolved.target.baseUrl).toBe("https://192.0.2.10:443/rest");
+	});
+
+	test("a URL in CENTRS_HOST selects rest-api", async () => {
+		const resolved = await resolveExecuteRequest(
+			{ targetInput: "192.0.2.99", command },
+			{ CENTRS_HOST: "http://192.0.2.10:8080" },
+		);
+		expect(resolved.via.value).toBe("rest-api");
+		expect(resolved.target.port).toBe(8080);
+	});
+
+	test("a bare host:port keeps native-api and dials the typed port", async () => {
+		const resolved = await resolveExecuteRequest(
+			{ targetInput: "127.0.0.1:9", command },
+			{},
+		);
+		expect(resolved.via.value).toBe("native-api");
+		expect(resolved.via.source).toEqual({ kind: "default", key: "via" });
+		expect(resolved.target.baseUrl).toBe("api://127.0.0.1:9");
+	});
+
+	test("a pinned via wins over the URL and keeps its typed port", async () => {
+		const pinned = await resolveExecuteRequest(
+			{ targetInput: "http://127.0.0.1:9", command, via: "native-api" },
+			{},
+		);
+		expect(pinned.via.value).toBe("native-api");
+		expect(pinned.target.baseUrl).toBe("api://127.0.0.1:9");
+
+		const fromEnv = await resolveExecuteRequest(
+			{ targetInput: "http://127.0.0.1:9", command },
+			{ CENTRS_VIA: "native-api" },
+		);
+		expect(fromEnv.via.value).toBe("native-api");
+		expect(fromEnv.target.baseUrl).toBe("api://127.0.0.1:9");
+	});
+});
+
 describe("resolvedExecuteTips — mac-telnet no-credentials tip (JG-24)", () => {
 	// `resolvedExecuteTips` reads only `via.value` and `auth`, so a minimal stub
 	// pins the fire/no-fire logic hermetically (no CDB/network). The two envelope

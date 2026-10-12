@@ -253,8 +253,15 @@ export function resolveTarget(
 		// TCP 8728, or TLS (api-ssl) 8729 when the caller passed `https://` or an
 		// explicit 8729. An explicit well-known port wins over the scheme so
 		// `https://host --port 8728` stays plaintext instead of running a TLS
-		// handshake against the plaintext API port.
-		const explicitPort = portSetting?.value;
+		// handshake against the plaintext API port. A port the caller typed in
+		// the host (`host:9`, `http://host:9`) counts as explicit, as it does for
+		// ssh and REST (#426); a matched CDB record's port may be WinBox's, so it
+		// is left alone.
+		const explicitPort =
+			portSetting?.value ??
+			(parsedUrl.port.length > 0 && !hostFromCdbRecord(hostSetting, cdb)
+				? Number.parseInt(parsedUrl.port, 10)
+				: undefined);
 		if (explicitPort === NATIVE_API_PORT) {
 			tls = false;
 		} else if (explicitPort === NATIVE_API_TLS_PORT) {
@@ -297,6 +304,23 @@ export function resolveTarget(
 		portSource,
 		sources,
 	};
+}
+
+/**
+ * True when the host is a matched CDB record's `target` rather than something
+ * the caller typed (`--host`, `CENTRS_HOST`, config, or the positional itself).
+ * A `__default__`-only resolution carries the positional as its target, so its
+ * record index is the default record's.
+ */
+function hostFromCdbRecord(
+	hostSetting: ResolvedSetting<string>,
+	cdb: CdbResolution | undefined,
+): boolean {
+	return (
+		cdb !== undefined &&
+		hostSetting.source.kind === "target-input" &&
+		cdb.recordIndex !== cdb.defaults?.recordIndex
+	);
 }
 
 /**

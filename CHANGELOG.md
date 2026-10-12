@@ -53,6 +53,14 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
 
 ### Fixed
 
+- `execute` honors an explicit target URL, and native-api honors a typed port
+  (#426, from #384). With no `via` pinned, an `http(s)://host[:port]` target
+  selects rest-api on that scheme and port instead of silently dialing native
+  API on 8728; `meta.settings.via` reports `via:target-url`. A port typed into
+  the target (`host:9`, `--host`, `CENTRS_HOST`) now reaches native-api on
+  every command, below `--port`, as it already did for ssh and REST. A matched
+  CDB record's own port is unchanged.
+
 - SSH execute, SFTP and terminal add `IdentitiesOnly=yes` when a private key is
   selected, preventing fallback to unrelated SSH agent identities (#177).
   Explicit OpenSSH `IdentityFile` configuration continues to apply.
