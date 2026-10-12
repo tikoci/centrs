@@ -150,7 +150,8 @@ sources), `meta.via`, the setting sources in `meta.settings`, and
 `meta.operation.auth` (`username`, `passwordProvided`; provenance only, never
 the secret). This holds for one-shot reads, `--follow`, `--sample`, `--wait`,
 each fan-out member and the MCP `centrs_retrieve` tool. A failure before
-resolution (bad shape, unknown target) keeps only `meta.target.input`. The
+resolution (bad shape, unknown target) keeps `meta.target.input` and a valid
+pinned `via`, with empty `meta.settings`. The
 library exposes this as `retrieveEnvelope()`, which never throws (examples 13,
 16b).
 

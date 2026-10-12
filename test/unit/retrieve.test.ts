@@ -602,6 +602,21 @@ describe("retrieve error envelopes keep what resolution found (#433)", () => {
 			via: null,
 			settings: {},
 		});
+
+		const pinned = await retrieveEnvelope(
+			{
+				targetInput: "router1",
+				path: "/system/resource",
+				via: "native-api",
+				wait: "1s",
+			},
+			{},
+		);
+		expect(pinned.meta).toEqual({
+			target: { input: "router1" },
+			via: "native-api",
+			settings: {},
+		});
 	});
 
 	for (const form of ["positional", "--host"] as const) {
