@@ -149,7 +149,10 @@ The authorization boundary is the WinBox CDB (constitution: identity and CDB),
 which is already centrs's device registry **and** native credential store. The
 MCP server applies it as a hard allowlist:
 
-- **Targets resolve through the CDB only** — by name, MAC, or `group`. Inline
+- **Targets resolve through the CDB only** — by record target, by the
+  `identity=`/`mac=`/`ip=` comment keys (the same matcher the CLI dials with, so
+  the write policy checked is the record's that runs), or by `group`. A name on
+  more than one record fails `identity/ambiguous` rather than picking one. Inline
   ad-hoc `host` + `username` + `password` are **rejected by default** with
   `cdb/target-not-registered`, whose `fix` points at `centrs_devices add`. An
   agent therefore cannot reach an arbitrary router with arbitrary credentials.

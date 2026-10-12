@@ -10,7 +10,12 @@
  * `mcp=rw`, else `cdb/write-not-permitted`.
  */
 
-import { type LoadedCdb, loadCdb } from "../devices.ts";
+import {
+	type DevicesShowItem,
+	type LoadedCdb,
+	loadCdb,
+	showDevice,
+} from "../devices.ts";
 import { CentrsError } from "../errors.ts";
 import type { McpWritePolicy } from "../mcp.ts";
 import { parseCommentKv } from "../resolver/comment-kv.ts";
@@ -52,30 +57,39 @@ export async function loadAllowlistCdb(
  * `cdb/target-not-registered` when no record matches — the friendly,
  * MCP-specific framing of "this device is not on the allowlist", pointing at
  * `centrs_devices add` rather than leaking the CLI's `cdb/not-found-target`.
+ *
+ * Matches with {@link showDevice}, the matcher the core resolver dials with
+ * (target, `identity=`, `mac=`, `ip=`), so the record whose write policy is
+ * checked here is the record the call then runs against (#444). A name that
+ * matches more than one record fails `identity/ambiguous` rather than taking
+ * the first.
  */
 export function resolveRegisteredTarget(
 	cdb: LoadedCdb,
 	target: string,
 ): RegisteredTarget {
-	for (let index = 0; index < cdb.entries.length; index += 1) {
-		const entry = cdb.entries[index];
-		if (entry && entry.target === target) {
-			return {
-				target,
-				user: entry.user,
-				group: entry.group,
-				recordIndex: index,
-				writePolicy: readWritePolicy(entry.comment),
-			};
+	let entry: DevicesShowItem;
+	try {
+		entry = showDevice({ cdb, target }).data.entry;
+	} catch (error) {
+		if (error instanceof CentrsError && error.code === "cdb/not-found-target") {
+			throw new CentrsError({
+				code: "cdb/target-not-registered",
+				summary: `Target "${target}" is not registered in the CDB allowlist.`,
+				remediation:
+					"Register the device first with the `centrs_devices` tool (op `add`) or `centrs devices add`, then retry. The MCP server only acts on CDB-registered targets, by target or by its `identity=`, `mac=` or `ip=` comment key.",
+				context: { target, cdbFile: cdb.settings.cdbFile.value },
+			});
 		}
+		throw error;
 	}
-	throw new CentrsError({
-		code: "cdb/target-not-registered",
-		summary: `Target "${target}" is not registered in the CDB allowlist.`,
-		remediation:
-			"Register the device first with the `centrs_devices` tool (op `add`) or `centrs devices add`, then retry. The MCP server only acts on CDB-registered targets.",
-		context: { target, cdbFile: cdb.settings.cdbFile.value },
-	});
+	return {
+		target: entry.target,
+		user: entry.user,
+		group: entry.group,
+		recordIndex: entry.cdbRecordIndex,
+		writePolicy: readWritePolicy(entry.comment),
+	};
 }
 
 /**

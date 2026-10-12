@@ -216,6 +216,27 @@ describe("handleExecute (offline gates)", () => {
 		}
 	});
 
+	test("denies a write by identity= name to an mcp=ro device (#444)", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([
+			{ target: "10.0.0.1", comment: "identity=r1 mcp=ro" },
+		]);
+		try {
+			const env = await handleExecute(
+				{
+					target: "r1",
+					command: "/system/identity/set name=x",
+					confirm: true,
+				},
+				config(path),
+			);
+			expect(env.ok ? undefined : env.error.code).toBe(
+				"cdb/write-not-permitted",
+			);
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("denies a write to an mcp=ro device before any network call", async () => {
 		const { path, cleanup } = await makeMcpTestCdb([
 			{ target: "ro-box", comment: "mcp=ro" },

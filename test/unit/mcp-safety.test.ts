@@ -58,6 +58,58 @@ describe("MCP allowlist resolution", () => {
 		}
 	});
 
+	test("matches the CLI's lookup keys and reads the matched record's policy (#444)", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([
+			{ target: "10.0.0.1", comment: "identity=r1 mcp=ro" },
+			{
+				target: "10.0.0.2",
+				comment: "identity=r2 mac=02:00:00:00:00:02 ip=192.0.2.2 mcp=rw",
+			},
+		]);
+		try {
+			const cdb = await loadAllowlistCdb(
+				resolveMcpConfig({ cdbFile: path, env: {} }),
+			);
+			expect(resolveRegisteredTarget(cdb, "r1")).toMatchObject({
+				target: "10.0.0.1",
+				recordIndex: 0,
+				writePolicy: "ro",
+			});
+			for (const key of ["r2", "02:00:00:00:00:02", "192.0.2.2", "10.0.0.2"]) {
+				expect(resolveRegisteredTarget(cdb, key)).toMatchObject({
+					target: "10.0.0.2",
+					recordIndex: 1,
+					writePolicy: "rw",
+				});
+			}
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("a name on two records is refused, never resolved to the first (#444)", async () => {
+		// Before #444 the gate took the first exact-target record (mcp=rw here)
+		// while the dialing resolver matches by every lookup key.
+		const { path, cleanup } = await makeMcpTestCdb([
+			{ target: "r1", comment: "mcp=rw" },
+			{ target: "10.0.0.9", comment: "identity=r1 mcp=ro" },
+			{ target: "10.0.0.7", comment: "identity=twin" },
+			{ target: "10.0.0.8", comment: "identity=twin" },
+		]);
+		try {
+			const cdb = await loadAllowlistCdb(
+				resolveMcpConfig({ cdbFile: path, env: {} }),
+			);
+			for (const name of ["r1", "twin"]) {
+				expect(() => resolveRegisteredTarget(cdb, name)).toThrow(
+					expect.objectContaining({ code: "identity/ambiguous" }),
+				);
+			}
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("resolveRegisteredGroup counts members and rejects empty groups", async () => {
 		const { path, cleanup } = await makeMcpTestCdb([
 			{ target: "a", group: "edge" },
