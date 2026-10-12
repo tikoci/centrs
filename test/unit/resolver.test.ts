@@ -1037,4 +1037,44 @@ describe("resolver: an address that misses a pinned CDB is a literal (#427)", ()
 			expect(target.baseUrl).toContain("[2001:db8::5]:9");
 		}
 	});
+
+	test("a bare IPv6 target parses, and its last group is not a port", () => {
+		const defaults = { "native-api": 8728, ssh: 22, "rest-api": 80 } as const;
+		for (const via of ["native-api", "ssh", "rest-api"] as const) {
+			const target = resolveTarget(
+				{ targetInput: "2001:db8::1" },
+				EMPTY_ENV,
+				via,
+			);
+			expect(target.host).toBe("2001:db8::1");
+			expect(target.port).toBe(defaults[via]);
+		}
+	});
+
+	test("a bare IPv6 miss in the pinned CDB reaches the router end to end", async () => {
+		const originalFetch = globalThis.fetch;
+		const seen: string[] = [];
+		globalThis.fetch = (async (input: string | URL | Request) => {
+			seen.push(input instanceof Request ? input.url : String(input));
+			return new Response(JSON.stringify({ version: "7.22.1" }));
+		}) as typeof fetch;
+		try {
+			const envelope = await retrieve(
+				{
+					targetInput: "2001:db8::1",
+					path: "/system/resource",
+					via: "rest-api",
+					validate: false,
+					username: "u",
+					password: "p",
+					cdbFile: cdbPath,
+				},
+				EMPTY_ENV,
+			);
+			expect(envelope.ok).toBe(true);
+			expect(seen.at(-1)).toBe("http://[2001:db8::1]:80/rest/system/resource");
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
 });

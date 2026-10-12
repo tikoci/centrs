@@ -80,6 +80,7 @@ import {
 	ecSrp5ServerPublicKey,
 	ecSrp5ServerShared,
 } from "./ec-srp5.ts";
+import { formatEndpoint } from "./endpoint.ts";
 
 /** Default status-exchange cadence (RouterOS uses ~1s). */
 export const BTEST_STATUS_INTERVAL_MS = 1000;
@@ -320,7 +321,7 @@ export function connectBtestControl(
 				reject(
 					new CentrsError({
 						code: "transport/connection-refused",
-						summary: `No btest server answered on ${host}:${port}.`,
+						summary: `No btest server answered on ${formatEndpoint(host, port)}.`,
 						remediation:
 							"Enable /tool/bandwidth-server on the device (or start `centrs btest server`) and check the host/--port.",
 						context: { host, port, cause: code },
@@ -332,7 +333,7 @@ export function connectBtestControl(
 			reject(
 				new CentrsError({
 					code: "transport/network",
-					summary: `Failed to open the btest control connection to ${host}:${port}.`,
+					summary: `Failed to open the btest control connection to ${formatEndpoint(host, port)}.`,
 					remediation: "Check the host, --port, and network reachability.",
 					context: { host, port, cause: code },
 					cause: error,

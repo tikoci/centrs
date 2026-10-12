@@ -150,4 +150,29 @@ describe("SshExecClient", () => {
 			code: "transport/connection-refused",
 		});
 	});
+
+	test("an IPv6 host dials bare but reads bracketed in the error (#427)", async () => {
+		const capture: { argv?: readonly string[] } = {};
+		const c = new SshExecClient({
+			host: "2001:db8::10",
+			port: 9,
+			username: "admin",
+			timeoutMs: 8000,
+			runner: async (argv) => {
+				capture.argv = argv;
+				return {
+					exitCode: 255,
+					stdout: "",
+					stderr:
+						"ssh: connect to host 2001:db8::10 port 9: Connection refused",
+				};
+			},
+		});
+		await expect(c.exec("/x")).rejects.toMatchObject({
+			code: "transport/connection-refused",
+			summary: "SSH connection to [2001:db8::10]:9 was refused.",
+		});
+		// `ssh user@[addr]` fails to resolve; ssh takes the bare address.
+		expect(capture.argv).toContain("admin@2001:db8::10");
+	});
 });

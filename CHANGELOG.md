@@ -71,9 +71,12 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   holds on every command and in fan-out, where each such member also failed. A
   DNS name or identity that matches nothing still fails closed with
   `cdb/not-found-target`, and MCP still accepts only registered targets. An
-  IPv6 literal (`[2001:db8::1]:8728`) now dials over native-api, ssh, terminal
-  and btest. The address used to reach them still bracketed and failed to
-  resolve. SFTP, which needs the brackets, keeps them.
+  IPv6 literal now dials over native-api, ssh, terminal and btest. Before, the
+  address was passed to them still in brackets (`[2001:db8::1]`) and failed to
+  resolve. SFTP, which needs the brackets, keeps them. A bare IPv6 target
+  (`2001:db8::1`, no port) is now accepted everywhere instead of
+  `input/invalid-target`. Error messages bracket an IPv6 endpoint
+  (`[2001:db8::1]:8728`).
 
 - SSH execute, SFTP and terminal add `IdentitiesOnly=yes` when a private key is
   selected, preventing fallback to unrelated SSH agent identities (#177).
