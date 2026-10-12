@@ -69,6 +69,7 @@ Addrs
 ajv
 amazonq
 amm
+~askpass # OpenSSH SSH_ASKPASS helper; the CHR password-login control in ssh-auth-policy.test.ts
 AT-SPI
 awk
 axuielement

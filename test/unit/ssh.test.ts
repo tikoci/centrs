@@ -114,9 +114,19 @@ describe("SshExecClient", () => {
 			stdout: "",
 			stderr: "admin@192.0.2.10: Permission denied (publickey).",
 		});
-		await expect(c.exec("/system/identity/print")).rejects.toMatchObject({
-			code: "auth/failed",
-		});
+		const error = (await c
+			.exec("/system/identity/print")
+			.catch((e) => e)) as CentrsError;
+		expect(error.code).toBe("auth/failed");
+		// Batch ssh never sends a password (#391): name the key source, and keep
+		// RouterOS's password policy a separate fact, not the guessed cause.
+		expect(error.context).toMatchObject({ sshKeySelected: true });
+		expect(error.remediation).toContain("never sends a password");
+		expect(error.remediation).toContain(
+			"the selected SSH key (plus any `IdentityFile`",
+		);
+		expect(error.remediation).toContain("`ssh` policy");
+		expect(error.remediation).toContain("`/ip/ssh password-authentication`");
 	});
 
 	test("a changed host key maps to transport/host-key-mismatch", async () => {

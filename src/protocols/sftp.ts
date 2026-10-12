@@ -26,7 +26,12 @@
  */
 
 import { CentrsError } from "../errors.ts";
-import { sshCommonOptions, sshUserHost } from "./ssh.ts";
+import {
+	batchSshAuthRemediation,
+	isSshAuthFailure,
+	sshCommonOptions,
+	sshUserHost,
+} from "./ssh.ts";
 
 /** A directory entry as parsed from an `sftp` `ls -l` long-name line. */
 export interface SftpFileEntry {
@@ -204,18 +209,13 @@ export class SftpClient {
 				causeData: stderr,
 			});
 		}
-		if (
-			lower.includes("permission denied") ||
-			lower.includes("authentication failed") ||
-			lower.includes("no such identity") ||
-			lower.includes("too many authentication failures")
-		) {
+		if (isSshAuthFailure(lower)) {
+			const sshKeySelected = Boolean(this.config.sshKey);
 			return new CentrsError({
 				code: "auth/failed",
 				summary: `SSH authentication to ${host} failed.`,
-				remediation:
-					"Provide a key the device trusts via `--ssh-key` / the ssh-agent, and confirm the RouterOS user has `ftp`/`ssh` policy. RouterOS refuses password login once an SSH key is set for the user.",
-				context,
+				remediation: batchSshAuthRemediation(sshKeySelected),
+				context: { ...context, sshKeySelected },
 				causeData: stderr,
 			});
 		}
@@ -253,6 +253,30 @@ export class SftpClient {
 				summary: `Could not resolve ${host} for SSH.`,
 				remediation:
 					"Check the host spelling / DNS, or pass a literal address with `--host`.",
+				context,
+				causeData: stderr,
+			});
+		}
+		// After login: RouterOS refused the operation for the user's policy
+		// (`dest open`, `remote mkdir`, `remote delete` — CHR 7.24.5, no `write`).
+		if (lower.includes("permission denied")) {
+			return new CentrsError({
+				code: "routeros/command-failed",
+				summary: `RouterOS refused SFTP ${op}${remote ? ` of ${remote}` : ""} on ${host}: permission denied.`,
+				remediation:
+					"The user logged in, but its group lacks the policy for this operation: upload, mkdir and remove need `write`. `/user print` shows the user's group and `/user group print` its policies.",
+				context,
+				causeData: stderr,
+			});
+		}
+		// SSH disconnect reason 7 (service not available): RouterOS refuses the
+		// SFTP subsystem to a user whose group lacks `ftp` (CHR 7.24.5).
+		if (/received disconnect from .* port \d+:7:/.test(lower)) {
+			return new CentrsError({
+				code: "routeros/session-closed",
+				summary: `${host} refused the SFTP session (SSH disconnect reason 7, service not available).`,
+				remediation:
+					"RouterOS does this when the user's group lacks the `ftp` policy SFTP needs. `/user print` shows the user's group and `/user group print` its policies.",
 				context,
 				causeData: stderr,
 			});
