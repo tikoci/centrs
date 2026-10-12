@@ -249,7 +249,7 @@ export const retrieveInputShape = {
 		.string()
 		.optional()
 		.describe(
-			"CDB-registered single target, by address or identity= name. Use either target or group.",
+			"CDB-registered single target: its address (IP / URL / MAC) or its identity=, mac= or ip= comment key. Use either target or group.",
 		),
 	group: z
 		.string()
@@ -342,7 +342,7 @@ export const executeInputShape = {
 	target: z
 		.string()
 		.describe(
-			"CDB-registered target, by address or identity= name. Inline host+credentials are not accepted.",
+			"CDB-registered target: its address (IP / URL / MAC) or its identity=, mac= or ip= comment key. Inline host+credentials are not accepted.",
 		),
 	command: z.string().describe("RouterOS CLI command to run."),
 	confirm: z

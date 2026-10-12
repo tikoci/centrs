@@ -37,9 +37,26 @@ Envelope: `ok: true`, `data.path = "/ip/route"`, `data.verb = "add"`,
 
 Envelope: `ok: false`, `error.code = "cdb/target-not-registered"`, and
 `error.fix`/`remediation` names `centrs_devices add`. No connection is attempted.
-RouterOS-facing MCP tools accept only a CDB `target` (name/MAC/URL) — there is
+RouterOS-facing MCP tools accept only a CDB-registered `target` — the record's
+address (IP/URL/MAC) or its `identity=`/`mac=`/`ip=` comment key — and there is
 no inline `host`/`username`/`password` executor parameter, so RouterOS actions
 use credentials already stored in the CDB.
+
+### 2b. A record's `identity=` name passes the allowlist
+
+The harness registers `$NAME` with the comment `identity=mcp-lab mcp=rw
+via=rest-api`.
+
+```json
+{ "name": "centrs_retrieve",
+  "arguments": { "target": "mcp-lab", "path": "/system/resource" } }
+```
+
+Envelope: `ok: true`, and `meta.target` names the record the call dialed:
+`identity = "mcp-lab"`, `recordIndex = 0`, and `baseUrl` is `$NAME`'s REST URL.
+The allowlist gate and the dialing resolver use the same matcher, so a name on
+more than one record fails `identity/ambiguous` instead of picking one (asserted
+offline in `test/unit/mcp-safety.test.ts`; the CHR test registers one record).
 
 ### 3. `centrs_validate` accepts the bare `blackhole` flag
 
