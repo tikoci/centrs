@@ -27,7 +27,7 @@ import type {
 	ValidationTrace,
 	Warning,
 } from "./core/envelope.ts";
-import { buildTip } from "./core/envelope.ts";
+import { buildTip, notReachedReason } from "./core/envelope.ts";
 import {
 	inspectArgumentNames,
 	inspectChildrenOrEmpty,
@@ -376,17 +376,18 @@ export async function runResolvedApi(
 	let validation: EnvelopeValidationMeta;
 	let tips: Tip[] = [];
 	try {
+		// Recorded the moment the gate settles, so a failure in the boolean probe
+		// or the request below reports the gate that passed rather than a guess.
 		if (resolved.validate.value) {
 			const result = await validateApiRequest(resolved, backend, trace);
 			validation = result.validation;
+			trace.validation = validation;
 			tips = result.tips;
 			resolved = await withQueryBooleans(resolved, backend, result.queryMenu);
 		} else {
 			validation = disabledApiValidationMeta(resolved);
+			trace.validation = validation;
 		}
-		// Recorded BEFORE the request, so a transport drop or RouterOS fault below
-		// reports the gate that actually settled rather than a guess.
-		trace.validation = validation;
 
 		const result = await backend.apiRequest(
 			resolved === request
@@ -476,8 +477,9 @@ export async function* apiStream(
 			});
 		}
 	} catch (error) {
+		// Every failure here comes before stage 1, so an empty trace says so.
 		yield resolved
-			? buildApiErrorEnvelopeFromResolved(resolved, error)
+			? buildApiErrorEnvelopeFromResolved(resolved, error, {})
 			: buildApiErrorEnvelope(streamRequest, error, env);
 		return;
 	}
@@ -493,17 +495,20 @@ async function* streamResolvedApi(
 
 	let resolved = request;
 	let validation: EnvelopeValidationMeta;
+	const trace: ValidationTrace = {};
 	try {
 		if (resolved.validate.value) {
-			const result = await validateApiRequest(resolved, backend);
+			const result = await validateApiRequest(resolved, backend, trace);
 			validation = result.validation;
+			// The boolean probe below runs after the gate passed (GH#435).
+			trace.validation = validation;
 			resolved = await withQueryBooleans(resolved, backend, result.queryMenu);
 		} else {
 			validation = disabledValidationMeta();
 		}
 	} catch (error) {
 		await backend.close();
-		yield buildApiErrorEnvelopeFromResolved(resolved, error);
+		yield buildApiErrorEnvelopeFromResolved(resolved, error, trace);
 		return;
 	}
 
@@ -1754,25 +1759,50 @@ function failedApiValidationMeta(
 			],
 		};
 	}
-	// `stages` is only asserted when a `validation/*` error identifies the device
-	// stage as the rejecter. Everything downstream — a RouterOS fault on the
-	// request, a transport drop — passed the gate and is served by
-	// `trace.validation` before this function is ever reached.
-	const deviceRejected = error.code.startsWith("validation/");
+	// Only a `validation/*` error identifies the device stage as the rejecter.
+	// Everything downstream of a passed gate — a RouterOS fault on the request,
+	// a transport drop — is served by `trace.validation` before this function is
+	// ever reached.
+	if (error.code.startsWith("validation/")) {
+		return {
+			enabled: true,
+			source: apiDeviceStageSource(resolved),
+			result: "failed",
+			syntax: false,
+			semantic: resolved.scriptMode ? "not-applicable" : false,
+			stages: [offlineApiStage(resolved, trace), deviceStageFailed(resolved)],
+		};
+	}
+	// Anything else stopped the gate before it produced a verdict: a transport or
+	// auth failure, a device error that is not a gate answer, or a refusal before
+	// the gate ran (write confirmation, a non-native `--stream`). No `result`, no
+	// `syntax` / `semantic` — no stage said either (GH#435). Without a trace a
+	// script request cannot say whether stage 1 ran, so that stage is left out.
+	const reason = notReachedReason(error.code);
+	const source = apiDeviceStageSource(resolved);
+	const device: EnvelopeValidationStage = {
+		stage: "device",
+		source,
+		result: "skipped",
+		reason,
+	};
+	if (resolved.scriptMode && !trace) {
+		return { enabled: true, source, stages: [device] };
+	}
 	return {
 		enabled: true,
-		source: apiDeviceStageSource(resolved),
-		result: "failed",
-		syntax: false,
-		semantic: resolved.scriptMode ? "not-applicable" : false,
-		...(deviceRejected
-			? {
-					stages: [
-						offlineApiStage(resolved, trace),
-						deviceStageFailed(resolved),
-					],
-				}
-			: {}),
+		source,
+		stages: [
+			resolved.scriptMode && trace?.offlineVerdict === undefined
+				? {
+						stage: "offline",
+						source: OFFLINE_GATE_SOURCE,
+						result: "skipped",
+						reason,
+					}
+				: offlineApiStage(resolved, trace),
+			device,
+		],
 	};
 }
 

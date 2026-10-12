@@ -200,6 +200,17 @@ command was rejected at run, not at validation. Ordinary output that merely
 mentions a fault string (`:put "status: no such item appears in help"`) stays
 `ok: true`.
 
+### 16e. Wrong credentials: the device stage is not reached (GH#435)
+
+```bash
+centrs api $R system/identity --username centrs-wrong --password centrs-wrong --json
+```
+
+Envelope: `ok: false`, `error.code=transport/auth-failed`. `meta.validation`
+has no `result`. Its device stage is `skipped` with
+`reason: "not reached: transport/auth-failed"`, because RouterOS answered 401
+before `/console/inspect` could give a verdict.
+
 ### 17. `--via rest-api --stream` is rejected
 
 ```bash

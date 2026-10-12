@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { notReachedReason } from "../../src/core/envelope.ts";
 import { CentrsError } from "../../src/errors.ts";
 import type {
 	CdbResolution,
@@ -322,6 +323,51 @@ describe("retrieve fanout orchestration", () => {
 		const target = envelope.data.targets[0];
 		expect(target?.meta.target.recordIndex).toBeUndefined();
 		expect(target?.meta.target.input).toBe("1.2.3.4");
+	});
+});
+
+describe("retrieve fanout member validation meta (GH#435)", () => {
+	test("a member that passed the gate and then failed reports `passed`", async () => {
+		const passed = {
+			enabled: true,
+			source: "live /console/inspect request=child",
+			result: "passed" as const,
+		};
+		const envelope = await retrieveGroup(
+			baseRequest,
+			{},
+			{
+				expand: async () => fakeExpansion(2),
+				sleep: noSleep,
+				execute: async (resolved, trace) => {
+					if (resolved.target.recordIndex === 0) {
+						trace.validation = passed;
+						throw new CentrsError({
+							code: "routeros/request-failed",
+							summary: "RouterOS reported an error",
+						});
+					}
+					throw new CentrsError({
+						code: "transport/connection-refused",
+						summary: "refused",
+					});
+				},
+			},
+		);
+		const [afterGate, interrupted] = envelope.data.targets;
+		expect(afterGate?.meta.validation).toEqual(passed);
+		expect(interrupted?.meta.validation).toEqual({
+			enabled: true,
+			source: "live /console/inspect",
+			stages: [
+				{
+					stage: "device",
+					source: "live /console/inspect",
+					result: "skipped",
+					reason: notReachedReason("transport/connection-refused"),
+				},
+			],
+		});
 	});
 });
 

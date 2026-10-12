@@ -36,6 +36,7 @@ import type {
 	CentrsSuccessEnvelope,
 	FanoutData,
 	FanoutSummary,
+	ValidationTrace,
 } from "./core/envelope.ts";
 import {
 	buildFanoutEnvelope,
@@ -109,9 +110,13 @@ export type RetrieveFanoutErrorEnvelope =
 
 /** Test/override seams; production callers pass nothing. */
 export interface RetrieveFanoutInternals {
-	/** Per-target executor (attempts; throws on failure). Defaults to the live tail. */
+	/**
+	 * Per-target executor (attempts; throws on failure). Defaults to the live
+	 * tail, which records the settled gate in `trace` before reading.
+	 */
 	execute?: (
 		resolved: ResolvedRetrieveRequest,
+		trace: ValidationTrace,
 	) => Promise<RetrieveSuccessEnvelope>;
 	/** Selection expansion. Defaults to the real CDB-backed expansion. */
 	expand?: (
@@ -260,6 +265,10 @@ export async function retrieveFanout(
 	}
 
 	const execute = internals.execute ?? runResolvedRetrieve;
+	// Per-target validation trace, keyed by the resolved request that both
+	// callbacks share, so a target that passed the gate and then failed reports
+	// the gate that ran (GH#435).
+	const traces = new WeakMap<ResolvedRetrieveRequest, ValidationTrace>();
 	const sleep = internals.sleep ?? defaultFanoutSleep;
 
 	const targets = await runFanout<
@@ -318,11 +327,18 @@ export async function retrieveFanout(
 				warnings: member.kind === "cdb" ? [...member.resolution.warnings] : [],
 				summary: "Failed to resolve a fanout target.",
 			}),
-		execute: async (resolved, member) =>
-			relabelAdhocMember(await execute(resolved), member),
+		execute: async (resolved, member) => {
+			const trace: ValidationTrace = {};
+			traces.set(resolved, trace);
+			return relabelAdhocMember(await execute(resolved, trace), member);
+		},
 		onExecuteError: (resolved, member, error) =>
 			relabelAdhocMember(
-				buildRetrieveErrorEnvelopeFromResolved(resolved, error),
+				buildRetrieveErrorEnvelopeFromResolved(
+					resolved,
+					error,
+					traces.get(resolved),
+				),
 				member,
 			),
 		sleep,

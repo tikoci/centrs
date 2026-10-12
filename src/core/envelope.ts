@@ -159,6 +159,11 @@ export interface EnvelopeValidationMeta {
 	enabled: boolean;
 	/** Validator identity, e.g. `/console/inspect` or `:put [:parse]`. */
 	source?: string;
+	/**
+	 * The gate's verdict. Absent when the gate never produced one: a transport,
+	 * auth or device error interrupted it, or a failure came before it ran.
+	 * `stages[]` then says which stage was not reached and why (GH#435).
+	 */
 	result?: "passed" | "failed" | "skipped";
 	/** Syntax gate status for commands that use RouterOS `:parse`. */
 	syntax?: boolean;
@@ -174,6 +179,15 @@ export interface EnvelopeValidationMeta {
 	 * surfaces that have no RouterOS-command gate at all (`btest`).
 	 */
 	stages?: readonly EnvelopeValidationStage[];
+}
+
+/**
+ * The `reason` a stage carries when the gate never reached it: the error that
+ * stopped the run before that stage produced a verdict (GH#435). One wording
+ * across commands, so a consumer can match on the `not reached:` prefix.
+ */
+export function notReachedReason(code: string): string {
+	return `not reached: ${code}`;
 }
 
 export interface EnvelopeTimingMeta {

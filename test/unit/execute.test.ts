@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { CentrsError } from "../../src/errors.ts";
+import {
+	type EnvelopeValidationStage,
+	notReachedReason,
+} from "../../src/core/envelope.ts";
+import { CentrsError, type CentrsErrorCode } from "../../src/errors.ts";
 import {
 	buildExecuteErrorEnvelopeFromResolved,
 	canonicalizeExecuteCommand,
@@ -16,6 +20,7 @@ import {
 	OFFLINE_GATE_SOURCE,
 } from "../../src/offline-gate.ts";
 import type { ProtocolAdapter } from "../../src/protocols/adapter.ts";
+import { closedPort } from "./closed-port.ts";
 
 describe("execute canonicalization", () => {
 	test("extracts path, verb, attributes, and quoted values", () => {
@@ -468,17 +473,147 @@ describe("validation metadata survives the error boundary (#354, PR #356 review)
 		]);
 	});
 
-	test("a non-validation error omits stages rather than inventing a verdict", async () => {
-		// No trace and a transport drop: this builder cannot know which stage, if
-		// any, ran. Saying nothing beats asserting `device: failed`.
+	test("a gate interrupted by a transport error reports not reached, never a verdict (GH#435)", async () => {
 		const resolved = await resolveFor("/ip/address/print");
-		const envelope = buildExecuteErrorEnvelopeFromResolved(
+		const refused = new CentrsError({
+			code: "transport/unreachable",
+			summary: "nope",
+		});
+		const reason = notReachedReason("transport/unreachable");
+		const device: EnvelopeValidationStage = {
+			stage: "device",
+			source: ":put [:parse] + /console/inspect",
+			result: "skipped",
+			reason,
+		};
+
+		// Stage 1 never returned: both stages not reached.
+		const before = buildExecuteErrorEnvelopeFromResolved(
 			resolved,
-			new CentrsError({ code: "transport/unreachable", summary: "nope" }),
+			refused,
 			undefined,
 			{},
 		);
-		expect(envelope.meta.validation?.stages).toBeUndefined();
+		expect(before.meta.validation).toEqual({
+			enabled: true,
+			source: ":put [:parse] + /console/inspect",
+			stages: [
+				{
+					stage: "offline",
+					source: OFFLINE_GATE_SOURCE,
+					result: "skipped",
+					reason,
+				},
+				device,
+			],
+		});
+
+		// Stage 1 passed, then the device stage was interrupted.
+		const during = buildExecuteErrorEnvelopeFromResolved(
+			resolved,
+			refused,
+			undefined,
+			{ offlineVerdict: "pass" },
+		);
+		expect(during.meta.validation?.stages).toEqual([
+			{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "passed" },
+			device,
+		]);
+
+		// No trace: whether stage 1 ran is unknown, so it is left out.
+		const untraced = buildExecuteErrorEnvelopeFromResolved(resolved, refused);
+		expect(untraced.meta.validation?.stages).toEqual([device]);
+
+		for (const envelope of [before, during, untraced]) {
+			expect(envelope.meta.validation?.result).toBeUndefined();
+			expect(envelope.meta.validation?.syntax).toBeUndefined();
+			expect(envelope.meta.validation?.semantic).toBeUndefined();
+		}
+	});
+
+	test("flat summaries name only the check that gave a verdict (GH#435)", async () => {
+		const flat = async (
+			command: string,
+			error: CentrsError,
+		): Promise<Record<string, unknown>> => {
+			const { syntax, semantic } =
+				buildExecuteErrorEnvelopeFromResolved(
+					await resolveFor(command),
+					error,
+					undefined,
+					{ offlineVerdict: "pass" },
+				).meta.validation ?? {};
+			return { syntax, semantic };
+		};
+		const device = (code: CentrsErrorCode) =>
+			new CentrsError({ code, summary: "no" });
+		const offline = new CentrsError({
+			code: "validation/syntax",
+			summary: "no",
+			context: { validationStage: "offline" },
+		});
+		const structured = "/ip/address/print";
+		const script = ":put 1";
+
+		// A name-level rejection: the syntax was fine.
+		expect(
+			await flat(structured, device("validation/unknown-attribute")),
+		).toEqual({ syntax: true, semantic: false });
+		// `:parse` refused the command; the name-level check was never asked.
+		for (const code of [
+			"validation/syntax",
+			"validation/unknown-path",
+			"validation/package-missing",
+			"validation/menu-unavailable",
+		] as const) {
+			expect(await flat(structured, device(code))).toEqual({
+				syntax: false,
+				semantic: undefined,
+			});
+		}
+		expect(await flat(structured, offline)).toEqual({
+			syntax: false,
+			semantic: undefined,
+		});
+		// Script input has no semantic half; `bad parameter` is `:parse` refusing.
+		for (const error of [
+			device("validation/unknown-attribute"),
+			device("validation/syntax"),
+			offline,
+		]) {
+			expect(await flat(script, error)).toEqual({
+				syntax: false,
+				semantic: "not-applicable",
+			});
+		}
+	});
+
+	test("a refused connection end to end: offline passed, device not reached (GH#435)", async () => {
+		const envelope = await executeEnvelope(
+			{
+				targetInput: `http://127.0.0.1:${closedPort()}`,
+				command: "/ip/address/print",
+				username: "admin",
+				password: "",
+			},
+			{},
+		);
+		expect(envelope.ok).toBe(false);
+		if (envelope.ok) return;
+		expect(envelope.error.code).toBe("transport/connection-refused");
+		expect(envelope.meta.validation).toEqual({
+			enabled: true,
+			source: ":put [:parse] + /console/inspect",
+			stages: [
+				{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "passed" },
+				{
+					stage: "device",
+					source: ":put [:parse] + /console/inspect",
+					result: "skipped",
+					reason: notReachedReason("transport/connection-refused"),
+				},
+			],
+		});
 	});
 });
 

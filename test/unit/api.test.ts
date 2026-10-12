@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	type ApiOutputFormat,
 	apiEnvelope,
+	apiStream,
 	buildApiBody,
 	buildApiErrorEnvelope,
 	buildApiErrorEnvelopeFromResolved,
@@ -14,7 +15,13 @@ import {
 	renderApiEnvelope,
 	resolveApiRequest,
 } from "../../src/api.ts";
+import {
+	type EnvelopeValidationStage,
+	notReachedReason,
+} from "../../src/core/envelope.ts";
 import { CentrsError } from "../../src/errors.ts";
+import { OFFLINE_GATE_SOURCE } from "../../src/offline-gate.ts";
+import { closedPort } from "./closed-port.ts";
 
 describe("normalizeApiEndpoint", () => {
 	test("lenient variants canonicalize to one slash path", () => {
@@ -247,6 +254,130 @@ describe("buildProtocolApiRequest", () => {
 				}),
 			),
 		).toThrow("only the `script`");
+	});
+});
+
+describe("api meta.validation on a gate that never answered (GH#435)", () => {
+	const auth = { username: "admin", password: "" };
+
+	test("a structured request: offline skipped by shape, device not reached", async () => {
+		const envelope = await apiEnvelope(
+			{
+				...auth,
+				endpoint: "ip/address",
+				targetInput: `http://127.0.0.1:${closedPort()}`,
+			},
+			{},
+		);
+		expect(envelope.ok).toBe(false);
+		if (envelope.ok) return;
+		expect(envelope.error.code).toBe("transport/connection-refused");
+		expect(envelope.meta.validation).toEqual({
+			enabled: true,
+			source: "/console/inspect request=child",
+			stages: [
+				{
+					stage: "offline",
+					source: OFFLINE_GATE_SOURCE,
+					result: "skipped",
+					reason: "structured path request, not a CLI string (GH#354)",
+				},
+				{
+					stage: "device",
+					source: "/console/inspect request=child",
+					result: "skipped",
+					reason: notReachedReason("transport/connection-refused"),
+				},
+			],
+		});
+	});
+
+	const scriptStages = (code: string): EnvelopeValidationStage[] => [
+		{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "passed" },
+		{
+			stage: "device",
+			source: ":put [:parse]",
+			result: "skipped",
+			reason: notReachedReason(code),
+		},
+	];
+
+	test("an /execute script: offline passed, device not reached", async () => {
+		const envelope = await apiEnvelope(
+			{
+				...auth,
+				endpoint: "execute",
+				method: "POST",
+				fields: { script: ":put 1" },
+				yes: true,
+				targetInput: `http://127.0.0.1:${closedPort()}`,
+			},
+			{},
+		);
+		expect(envelope.ok).toBe(false);
+		if (envelope.ok) return;
+		expect(envelope.meta.validation?.result).toBeUndefined();
+		expect(envelope.meta.validation?.stages).toEqual(
+			scriptStages("transport/connection-refused"),
+		);
+	});
+
+	test("a pre-stream refusal of a script: both stages not reached", async () => {
+		const envelopes = [];
+		for await (const envelope of apiStream(
+			{
+				...auth,
+				endpoint: "execute",
+				method: "POST",
+				fields: { script: ":put 1" },
+				yes: true,
+				via: "rest-api",
+				targetInput: "127.0.0.1:1",
+			},
+			{},
+		)) {
+			envelopes.push(envelope);
+		}
+		const [envelope] = envelopes;
+		expect(envelope?.ok).toBe(false);
+		if (!envelope || envelope.ok) return;
+		expect(envelope.error.code).toBe("transport/capability-unsupported");
+		const reason = notReachedReason("transport/capability-unsupported");
+		expect(envelope.meta.validation?.stages).toEqual([
+			{
+				stage: "offline",
+				source: OFFLINE_GATE_SOURCE,
+				result: "skipped",
+				reason,
+			},
+			{ stage: "device", source: ":put [:parse]", result: "skipped", reason },
+		]);
+	});
+
+	test("--stream threads the trace: offline passed, device not reached", async () => {
+		const envelopes = [];
+		for await (const envelope of apiStream(
+			{
+				...auth,
+				endpoint: "execute",
+				method: "POST",
+				fields: { script: ":put 1" },
+				yes: true,
+				via: "native-api",
+				targetInput: `127.0.0.1:${closedPort()}`,
+			},
+			{},
+		)) {
+			envelopes.push(envelope);
+		}
+		expect(envelopes).toHaveLength(1);
+		const [envelope] = envelopes;
+		expect(envelope?.ok).toBe(false);
+		if (!envelope || envelope.ok) return;
+		expect(envelope.meta.validation?.stages).toEqual(
+			scriptStages(envelope.error.code),
+		);
+		expect(envelope.error.code).toStartWith("transport/");
 	});
 });
 

@@ -32,7 +32,17 @@ interface RetrieveSuccessTestEnvelope {
 			username?: { kind?: string };
 			password?: { kind?: string };
 		};
-		validation?: { source?: string };
+		validation?: {
+			enabled?: boolean;
+			source?: string;
+			result?: string;
+			stages?: ReadonlyArray<{
+				stage: string;
+				source?: string;
+				result: string;
+				reason?: string;
+			}>;
+		};
 		operation?: {
 			auth?: { passwordProvided?: boolean };
 		};
@@ -380,6 +390,19 @@ describeFast("REST retrieve against CHR", () => {
 			expect(authFailureEnvelope.error.details_url).toContain(
 				"/transport/auth-failed",
 			);
+			// GH#435: the device answered 401 before inspect could give a verdict.
+			expect(authFailureEnvelope.meta.validation).toEqual({
+				enabled: true,
+				source: "live /console/inspect",
+				stages: [
+					{
+						stage: "device",
+						source: "live /console/inspect",
+						result: "skipped",
+						reason: "not reached: transport/auth-failed",
+					},
+				],
+			});
 
 			const cdbPath = await writeRetrieveCdb(
 				chr.restUrl,
@@ -450,6 +473,31 @@ describeFast("REST retrieve against CHR", () => {
 			expect(refusedEnvelope.meta.settings.username?.kind).toBe("cdb");
 			expect(refusedEnvelope.meta.settings.password?.kind).toBe("cdb");
 			expect(refusedEnvelope.meta.operation?.auth?.passwordProvided).toBe(true);
+			expect(refusedEnvelope.meta.validation?.result).toBeUndefined();
+			expect(refusedEnvelope.meta.validation?.stages?.[0]?.reason).toBe(
+				"not reached: transport/connection-refused",
+			);
+
+			// 16c. The gate passed and a later step failed (GH#435): a byte budget
+			// smaller than the answer fails after a validated read, and the
+			// envelope reports the gate that passed.
+			const overBudget = await expectRetrieveFailure(
+				consoleCapture,
+				[
+					"retrieve",
+					chr.restUrl,
+					"/system/resource",
+					"--max-results",
+					"10",
+					...baseArgs,
+				],
+				"input/max-results-exceeded",
+			);
+			expect(overBudget.meta.validation).toMatchObject({
+				enabled: true,
+				source: "live /console/inspect request=child",
+				result: "passed",
+			});
 
 			await expectRetrieveFailure(
 				consoleCapture,
@@ -531,7 +579,7 @@ describeFast("REST retrieve against CHR", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: exampleIds(20),
+				exampleIds: [...exampleIds(20), "16b", "16c"],
 			});
 		} finally {
 			consoleCapture.restore();

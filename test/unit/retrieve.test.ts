@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { runCli } from "../../src/cli.ts";
+import { notReachedReason } from "../../src/core/envelope.ts";
 import {
 	type CentrsError,
 	retrieve,
@@ -9,6 +10,7 @@ import {
 	resolveMacForRetrieve,
 	resolveRetrieveRequest,
 } from "../../src/retrieve.ts";
+import { closedPort } from "./closed-port.ts";
 
 type FetchHandler = (
 	url: string,
@@ -510,18 +512,6 @@ describe("retrieve core", () => {
 	});
 });
 
-/** A loopback port that was just listening and now refuses connections. */
-function closedPort(): number {
-	const listener = Bun.listen({
-		hostname: "127.0.0.1",
-		port: 0,
-		socket: { data() {} },
-	});
-	const { port } = listener;
-	listener.stop(true);
-	return port;
-}
-
 describe("retrieve error envelopes keep what resolution found (#433)", () => {
 	const SECRET = "hidden-retrieve-pw";
 
@@ -655,6 +645,162 @@ describe("retrieve error envelopes keep what resolution found (#433)", () => {
 			}
 		});
 	}
+});
+
+describe("retrieve meta.validation reports what the gate concluded (GH#435)", () => {
+	const inspectChildren = (names: readonly string[]) => () =>
+		new Response(
+			JSON.stringify(
+				names.map((name) => ({ type: "child", name, "node-type": "cmd" })),
+			),
+		);
+	const base = {
+		targetInput: "router1",
+		via: "rest-api",
+		username: "admin",
+		password: "",
+	} as const;
+
+	test("a refused connection reports the device stage as not reached, with no verdict", async () => {
+		const port = closedPort();
+		const envelope = await retrieveEnvelope(
+			{
+				...base,
+				targetInput: `http://127.0.0.1:${port}`,
+				path: "/system/resource",
+			},
+			{},
+		);
+		expect(envelope.ok).toBe(false);
+		expect(envelope.meta.validation).toEqual({
+			enabled: true,
+			source: "live /console/inspect",
+			stages: [
+				{
+					stage: "device",
+					source: "live /console/inspect",
+					result: "skipped",
+					reason: notReachedReason("transport/connection-refused"),
+				},
+			],
+		});
+	});
+
+	test("--no-validate never reports a failed gate", async () => {
+		const port = closedPort();
+		const envelope = await retrieveEnvelope(
+			{
+				...base,
+				targetInput: `http://127.0.0.1:${port}`,
+				path: "/system/resource",
+				validate: false,
+			},
+			{},
+		);
+		expect(envelope.ok).toBe(false);
+		expect(envelope.meta.validation).toEqual({
+			enabled: false,
+			source: "disabled",
+		});
+	});
+
+	test("a gate that passed and a read that then failed reports `passed`", async () => {
+		const fetchMock = mockFetchSequence([
+			inspectChildren(["print", "get"]),
+			inspectChildren(["value-name"]),
+			() =>
+				new Response(
+					JSON.stringify({
+						error: 400,
+						message: "Bad Request",
+						detail: "boom",
+					}),
+					{ status: 400 },
+				),
+		]);
+		try {
+			const envelope = await retrieveEnvelope(
+				{ ...base, path: "/system/resource" },
+				{},
+			);
+			expect(envelope.ok).toBe(false);
+			if (envelope.ok) return;
+			expect(envelope.error.code).toStartWith("routeros/");
+			expect(envelope.meta.validation).toEqual({
+				enabled: true,
+				source: "live /console/inspect request=child",
+				result: "passed",
+			});
+			expect(fetchMock.calls).toHaveLength(3);
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("an unknown path is the gate's refusal: `failed`", async () => {
+		const fetchMock = mockFetchSequence([inspectChildren([])]);
+		try {
+			const envelope = await retrieveEnvelope(
+				{ ...base, path: "/no/such/menu" },
+				{},
+			);
+			expect(envelope.ok).toBe(false);
+			if (envelope.ok) return;
+			expect(envelope.error.code).toBe("validation/unknown-path");
+			expect(envelope.meta.validation).toEqual({
+				enabled: true,
+				source: "live /console/inspect",
+				result: "failed",
+				stages: [
+					{
+						stage: "device",
+						source: "live /console/inspect",
+						result: "failed",
+					},
+				],
+			});
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("--query on a singleton is a refusal the inspect answer produced: `failed`", async () => {
+		const fetchMock = mockFetchSequence([
+			inspectChildren(["print", "get"]),
+			inspectChildren(["value-name"]),
+		]);
+		try {
+			const envelope = await retrieveEnvelope(
+				{ ...base, path: "/system/resource", query: ["uptime=5m"] },
+				{},
+			);
+			expect(envelope.ok).toBe(false);
+			if (envelope.ok) return;
+			expect(envelope.error.code).toBe("usage/conflicting-flags");
+			expect(envelope.meta.validation?.result).toBe("failed");
+			expect(fetchMock.calls.length).toBeGreaterThan(0);
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("a success reports `passed`", async () => {
+		const fetchMock = mockFetchSequence([
+			inspectChildren(["print", "get"]),
+			inspectChildren(["value-name"]),
+			() => new Response(JSON.stringify({ uptime: "5m" })),
+		]);
+		try {
+			const envelope = await retrieveEnvelope(
+				{ ...base, path: "/system/resource" },
+				{},
+			);
+			expect(envelope.ok).toBe(true);
+			expect(envelope.meta.validation?.result).toBe("passed");
+		} finally {
+			fetchMock.restore();
+		}
+	});
 });
 
 describe("retrieve CLI", () => {

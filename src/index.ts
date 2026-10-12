@@ -85,6 +85,7 @@ export {
 	normalizeWarnings,
 	type SettingSource,
 	type SettingSourceKind,
+	type ValidationTrace,
 	type Warning,
 } from "./core/envelope.ts";
 export {

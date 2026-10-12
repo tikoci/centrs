@@ -5,7 +5,9 @@ import type {
 	CommonSettingsMeta,
 	SettingSource as CoreSettingSource,
 	EnvelopeValidationMeta,
+	ValidationTrace,
 } from "./core/envelope.ts";
+import { notReachedReason } from "./core/envelope.ts";
 import {
 	extractCompletionNames,
 	inspectArgumentNames,
@@ -323,6 +325,11 @@ export interface RetrieveOptions {
 	 * setting sources in its error envelope.
 	 */
 	onResolved?: (resolved: ResolvedRetrieveRequest) => void;
+	/**
+	 * Receives the gate's result the moment validation settles, so an error
+	 * envelope built after a later throw reports the validation that ran.
+	 */
+	trace?: ValidationTrace;
 }
 
 export async function retrieve(
@@ -361,7 +368,7 @@ export async function retrieve(
 	}
 	const resolved = await resolveRetrieveRequest(request, env);
 	options.onResolved?.(resolved);
-	return runResolvedRetrieve(resolved);
+	return runResolvedRetrieve(resolved, options.trace);
 }
 
 /**
@@ -376,9 +383,11 @@ export async function retrieveEnvelope(
 	options: RetrieveOptions = {},
 ): Promise<RetrieveEnvelope> {
 	let resolved: ResolvedRetrieveRequest | undefined;
+	const trace = options.trace ?? {};
 	try {
 		return await retrieve(request, env, {
 			...options,
+			trace,
 			onResolved: (value) => {
 				resolved = value;
 				options.onResolved?.(value);
@@ -386,7 +395,7 @@ export async function retrieveEnvelope(
 		});
 	} catch (error) {
 		return resolved
-			? buildRetrieveErrorEnvelopeFromResolved(resolved, error)
+			? buildRetrieveErrorEnvelopeFromResolved(resolved, error, trace)
 			: buildRetrieveErrorEnvelope(request, error);
 	}
 }
@@ -400,6 +409,7 @@ export async function retrieveEnvelope(
  */
 export async function runResolvedRetrieve(
 	resolved: ResolvedRetrieveRequest,
+	trace: ValidationTrace = {},
 ): Promise<RetrieveSuccessEnvelope> {
 	const warnings: RetrieveWarning[] = [...resolved.warnings];
 	const backend = createProtocolAdapter({
@@ -421,17 +431,20 @@ export async function runResolvedRetrieve(
 				await inspectRetrievePath(resolved, backend),
 				backend,
 			);
+			const validation: EnvelopeValidationMeta = {
+				enabled: true,
+				source: "live /console/inspect request=child+completion",
+				result: "passed",
+				availableAttributes,
+			};
+			trace.validation = validation;
 			const envelope = buildSuccessEnvelope(
 				resolved,
 				{
 					kind: "attributes",
 					data: availableAttributes,
 				},
-				{
-					enabled: true,
-					source: "live /console/inspect request=child+completion",
-					availableAttributes,
-				},
+				validation,
 				warnings,
 			);
 			return applyMaxResultsBudget(envelope);
@@ -441,6 +454,9 @@ export async function runResolvedRetrieve(
 			resolved,
 			backend,
 		);
+		// Recorded BEFORE the read, so a RouterOS fault or transport drop below
+		// reports the gate that passed rather than a guess (GH#435).
+		trace.validation = validation;
 		const data = await executeRetrieve(resolved, backend, plan);
 		const envelope = buildSuccessEnvelope(
 			resolved,
@@ -498,6 +514,7 @@ export async function validateRetrieveRead(
 			source: availableAttributes
 				? "live /console/inspect request=child+completion"
 				: "live /console/inspect request=child",
+			result: "passed",
 			availableAttributes,
 		},
 	};
@@ -547,6 +564,7 @@ export function buildRetrieveErrorEnvelope(
 export function buildRetrieveErrorEnvelopeFromResolved(
 	resolved: ResolvedRetrieveRequest,
 	error: unknown,
+	trace?: ValidationTrace,
 ): RetrieveErrorEnvelope {
 	const centrsError =
 		error instanceof CentrsError
@@ -559,11 +577,10 @@ export function buildRetrieveErrorEnvelopeFromResolved(
 					cause: error,
 				});
 
-	const meta = metaFromResolved(resolved, {
-		enabled: resolved.validate.value,
-		source: resolved.validate.value ? "live /console/inspect" : "disabled",
-		result: "failed",
-	});
+	const meta = metaFromResolved(
+		resolved,
+		trace?.validation ?? unsettledValidationMeta(resolved, centrsError),
+	);
 
 	return {
 		ok: false,
@@ -571,6 +588,53 @@ export function buildRetrieveErrorEnvelopeFromResolved(
 		warnings: [...resolved.warnings],
 		tips: [],
 		meta,
+	};
+}
+
+const RETRIEVE_DEVICE_STAGE_SOURCE = "live /console/inspect";
+
+/**
+ * `meta.validation` for a failure with no settled gate result: the gate
+ * refused, or something stopped it before it answered (GH#435).
+ *
+ * Every retrieve gate refusal is a `CentrsError` the gate itself raised from
+ * an inspect answer: `validation/*`, and the singleton `--query` refusal
+ * (`usage/conflicting-flags`). A `transport/*` or `auth/*` failure means the
+ * device never answered; a `routeros/*` error is a device answer that is not
+ * a verdict; `internal/*` is a centrs defect. Those four report no `result`.
+ */
+function unsettledValidationMeta(
+	resolved: ResolvedRetrieveRequest,
+	error: CentrsError,
+): EnvelopeValidationMeta {
+	if (!resolved.validate.value) {
+		return { enabled: false, source: "disabled" };
+	}
+	if (/^(transport|auth|routeros|internal)\//.test(error.code)) {
+		return {
+			enabled: true,
+			source: RETRIEVE_DEVICE_STAGE_SOURCE,
+			stages: [
+				{
+					stage: "device",
+					source: RETRIEVE_DEVICE_STAGE_SOURCE,
+					result: "skipped",
+					reason: notReachedReason(error.code),
+				},
+			],
+		};
+	}
+	return {
+		enabled: true,
+		source: RETRIEVE_DEVICE_STAGE_SOURCE,
+		result: "failed",
+		stages: [
+			{
+				stage: "device",
+				source: RETRIEVE_DEVICE_STAGE_SOURCE,
+				result: "failed",
+			},
+		],
 	};
 }
 

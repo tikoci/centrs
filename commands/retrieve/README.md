@@ -81,6 +81,15 @@ Default validator: `/console/inspect request=syntax path=<comma-joined>,print`
 unknown attributes with `validation/*` codes that include the inspect-suggested
 alternatives in the error envelope.
 
+`meta.validation.result` follows
+[the constitution](../../docs/CONSTITUTION.md#validation-is-the-product). It is
+`passed` once inspect accepts the read, even if the read fails afterward. It is
+`failed` when the gate refuses: `validation/*`, or `--query` on a singleton.
+It is absent when a `transport/*`, `auth/*`, `routeros/*` or `internal/*` error
+stopped inspect from answering; the device stage then says `not reached`
+(examples 12 and 16b; 16c is the `passed` case). With `--validate=false` it
+is `{enabled: false, source: "disabled"}`.
+
 If `--all-attributes` is combined with `--attribute(s)`, fail with
 `usage/conflicting-flags` *before* hitting the network.
 

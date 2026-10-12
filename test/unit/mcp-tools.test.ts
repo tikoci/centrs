@@ -10,6 +10,7 @@ import {
 	handleRetrieve,
 	handleValidate,
 } from "../../src/mcp/tools.ts";
+import { closedPort } from "./closed-port.ts";
 import { makeMcpTestCdb } from "./mcp-cdb-fixture.ts";
 import { udpLoopbackSupported } from "./udp-loopback.ts";
 
@@ -112,13 +113,8 @@ describe("handleRetrieve (offline allowlist gate)", () => {
 	});
 
 	test("a refused connection keeps the resolved endpoint and sources (#433)", async () => {
-		const listener = Bun.listen({
-			hostname: "127.0.0.1",
-			port: 0,
-			socket: { data() {} },
-		});
-		const target = `http://127.0.0.1:${listener.port}`;
-		listener.stop(true);
+		const port = closedPort();
+		const target = `http://127.0.0.1:${port}`;
 		const { path, cleanup } = await makeMcpTestCdb([
 			{ target, password: "hidden-mcp-pw" },
 		]);
@@ -135,7 +131,7 @@ describe("handleRetrieve (offline allowlist gate)", () => {
 			expect(env.meta.via).toBe("rest-api");
 			expect(env.meta.target).toMatchObject({
 				host: "127.0.0.1",
-				port: listener.port,
+				port,
 				recordIndex: 0,
 				source: { kind: "cdb", key: "record:0" },
 			});
