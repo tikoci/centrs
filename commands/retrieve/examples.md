@@ -174,6 +174,15 @@ Call succeeds with a `cdb/password-not-needed` warning in `meta.warnings`.
 centrs retrieve $R /system/resource --cdb-file $CDB --cdb-password ignored --json
 ```
 
+### H1. `--host` stands in for `<target>` (#428)
+
+```bash
+centrs retrieve --host $R /system/identity --username $U --password $P --json
+```
+
+`ok: true`, with `data.name` the router's identity. The lone positional is the
+path, and there is no CDB lookup.
+
 ## Target selection (fan-out)
 
 These exercise the shared target-selection grammar

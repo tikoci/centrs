@@ -6,7 +6,10 @@ Open an interactive RouterOS console.
 flag (`--group` / `--where` / `--all` / `--default` / `--concurrency`) is rejected
 with `usage/fanout-not-supported` — open a console to one router at a time; use
 `execute` / `api` for multi-target commands. See `docs/CONSTITUTION.md`
-(Target selection grammar).
+(Target selection grammar). With no `<router>`, the `--host` **flag** is the
+target (`terminal --host 192.0.2.10` opens an ssh console; no CDB lookup).
+`CENTRS_HOST` never stands in for `<router>`. mac-telnet still needs a MAC
+`<router>`, since its `--host` is only the UDP delivery endpoint.
 
 Status: `terminal / mac-telnet` **and** `terminal / ssh` are both **`CHR-passed`**
 (see `docs/MATRIX.md` and `examples.md` T1–T3 / TS1–TS2, TS4). The two transports take

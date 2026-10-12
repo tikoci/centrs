@@ -78,6 +78,17 @@ Work toward 0.1.8 is tracked in the `0.1.8-next.0` milestone.
   `input/invalid-target`. Error messages bracket an IPv6 endpoint
   (`[2001:db8::1]:8728`).
 
+- The `--host` flag can stand in for `<router>` (#428, from #384).
+  `execute --host http://192.0.2.10:8080 '<cmd>'`, `execute --host <host> --
+  <cmd>`, `retrieve --host <host> <path>`, `api --host <host> <endpoint>`,
+  `transfer --host <host> <verb>` and `terminal --host <host>` (ssh) now reach
+  the router instead of failing `input/invalid-command` for a missing target.
+  With no `<router>` there is no CDB lookup, so auth comes from flags, env or
+  config. `CENTRS_HOST` doesn't change how positionals are read. Two or more
+  `execute` positionals without `--` still split as `<target> <command>`, so
+  `execute <mac> <cmd> --via mac-telnet --host <udp-host>` is unchanged. The
+  `upload`/`download` aliases still read their first positional as the target.
+
 - SSH execute, SFTP and terminal add `IdentitiesOnly=yes` when a private key is
   selected, preventing fallback to unrelated SSH agent identities (#177).
   Explicit OpenSSH `IdentityFile` configuration continues to apply.

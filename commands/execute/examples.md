@@ -705,6 +705,20 @@ pinned CDB is a literal host, exactly as with no CDB. The third is `ok: false`,
 `error.code = cdb/not-found-target`: a name or identity that misses still fails
 closed.
 
+## `--host` as the target (#428)
+
+### H1. `--host` stands in for `<target>`; a lone positional is the command
+
+```bash
+centrs execute --host http://$A:$REST_PORT ':put [/system/identity/get name]' --username $U --password $P --json
+centrs execute --host $A:$API_PORT --username $U --password $P --json -- ':put [/system/identity/get name]'
+```
+
+Both are `ok: true`, the first over rest-api (the URL names REST) and the second
+over native-api on `$API_PORT`. `meta.target.source = { kind: "cli", key:
+"host" }`, with no `recordIndex`: there is no `<target>`, so there is no CDB
+lookup. `retrieve`, `api` and `transfer` have the same rule (their H1).
+
 ## quickchr targets (#134)
 
 `$NAME` is the machine name of a running quickchr-managed CHR. Host/port/auth

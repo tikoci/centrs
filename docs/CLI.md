@@ -27,7 +27,7 @@ implemented flags live in each command's `commands/<name>/README.md`.
 Read RouterOS values through the shared core using the selected protocol.
 
 ```text
-Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <target...> <routeros-path> [flags] | centrs retrieve --group <name> <routeros-path> [flags]
+Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <target...> <routeros-path> [flags] | centrs retrieve --host <host|url> <routeros-path> [flags] | centrs retrieve --group <name> <routeros-path> [flags]
 ```
 
 | Flag | Value | Description |
@@ -41,7 +41,7 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 | `--default` |  | Select the reserved `__default__` record. |
 | `--quickchr` | `<name>` | Target a running quickchr-managed CHR VM by name (repeatable; fans out when repeated). Exclusive of positional targets and CDB selectors; conflicts with direct connection overrides (--host/--port/--username/--password, and --ssh-key where the command has it). |
 | `--concurrency` | `<n>` | Max in-flight targets during fan-out (transport-aware default: rest-api 8, native-api 4). |
-| `--host` | &lt;host\|url&gt; | Override the resolved host or base URL for the target. |
+| `--host` | &lt;host\|url&gt; | Host or base URL to dial. With no `<target>` it is the target (no CDB lookup); with one it overrides the resolved host. |
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases `--user`, `-u`). Falls back to `CENTRS_USERNAME`. |
 | `--password` | `<secret>` | RouterOS password. Falls back to `CENTRS_PASSWORD`. |
@@ -73,7 +73,7 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 Run a RouterOS read or write command via native API, REST, or mac-telnet.
 
 ```text
-Usage: centrs execute <target> <command> [flags] | centrs execute <target...> -- <command> [flags] | centrs execute --group <name> <command> [flags]
+Usage: centrs execute <target> <command> [flags] | centrs execute <target...> -- <command> [flags] | centrs execute --host <host|url> [--] <command> [flags] | centrs execute --group <name> <command> [flags]
 ```
 
 | Flag | Value | Description |
@@ -87,7 +87,7 @@ Usage: centrs execute <target> <command> [flags] | centrs execute <target...> --
 | `--default` |  | Select the reserved `__default__` record. |
 | `--quickchr` | `<name>` | Target a running quickchr-managed CHR VM by name (repeatable; fans out when repeated). Exclusive of positional targets and CDB selectors; conflicts with direct connection overrides (--host/--port/--username/--password, and --ssh-key where the command has it). |
 | `--concurrency` | `<n>` | Max in-flight targets during fan-out (transport-aware default: rest-api 8, native-api 4). |
-| `--host` | &lt;host\|url&gt; | Override the resolved host or base URL for the target. |
+| `--host` | &lt;host\|url&gt; | Host or base URL to dial. With no `<target>` it is the target (no CDB lookup); with one it overrides the resolved host. |
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases `--user`, `-u`). Falls back to `CENTRS_USERNAME`. |
 | `--password` | `<secret>` | RouterOS password. Falls back to `CENTRS_PASSWORD`. |
@@ -110,7 +110,7 @@ Usage: centrs execute <target> <command> [flags] | centrs execute <target...> --
 Structured RouterOS API passthrough (gh-api style) over REST or native API.
 
 ```text
-Usage: centrs api <router> <endpoint> [flags]
+Usage: centrs api <router> <endpoint> [flags] | centrs api --host <host|url> <endpoint> [flags]
 ```
 
 | Flag | Value | Description |
@@ -136,7 +136,7 @@ Usage: centrs api <router> <endpoint> [flags]
 | `--default` |  | Select the reserved `__default__` record. |
 | `--quickchr` | `<name>` | Target a running quickchr-managed CHR VM by name (repeatable; fans out when repeated). Exclusive of positional targets and CDB selectors; conflicts with direct connection overrides (--host/--port/--username/--password, and --ssh-key where the command has it). |
 | `--concurrency` | `<n>` | Max in-flight targets during fan-out (transport-aware default: rest-api 8, native-api 4). |
-| `--host` | &lt;host\|url&gt; | Override the resolved host or base URL for the target. |
+| `--host` | &lt;host\|url&gt; | Host or base URL to dial. With no `<router>` it is the target (no CDB lookup); with one it overrides the resolved host. |
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username. Falls back to `CENTRS_USERNAME`. |
 | `--password` | `<secret>` | RouterOS password. Falls back to `CENTRS_PASSWORD`. |
@@ -155,7 +155,7 @@ Usage: centrs api <router> <endpoint> [flags]
 Copy files to/from a RouterOS device and manage device files (rest/native/sftp).
 
 ```text
-Usage: centrs transfer <router> upload <local> [remote] | download <remote> [local] | list [path] | remove <remote> | mkdir <remote> | copy <src> <dst> [flags]
+Usage: centrs transfer <router>|--host <host> upload <local> [remote] | download <remote> [local] | list [path] | remove <remote> | mkdir <remote> | copy <src> <dst> [flags]
 ```
 
 | Flag | Value | Description |
@@ -177,7 +177,7 @@ Usage: centrs transfer <router> upload <local> [remote] | download <remote> [loc
 | `--verify / --no-verify` | &lt;size\|checksum\|off&gt; | Post-transfer integrity check. Default size; `--no-verify` skips. |
 | `--type` | &lt;file\|directory\|disk\|package&gt; | list filter: RouterOS /file row type. |
 | `--name` | `<glob>` | list filter: file-name glob. |
-| `--host` | &lt;host\|url&gt; | Override the resolved host or base URL. |
+| `--host` | &lt;host\|url&gt; | Host or base URL to dial. With no `<router>` before the verb it is the target (no CDB lookup); with one it overrides the resolved host. |
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases --user, -u). Falls back to CENTRS_USERNAME. |
 | `--password` | `<secret>` | RouterOS password. Falls back to CENTRS_PASSWORD. |
@@ -195,13 +195,13 @@ Usage: centrs transfer <router> upload <local> [remote] | download <remote> [loc
 Open an interactive RouterOS console (ssh or mac-telnet).
 
 ```text
-Usage: centrs terminal <router> [flags]
+Usage: centrs terminal <router> [flags] | centrs terminal --host <host> [flags]
 ```
 
 | Flag | Value | Description |
 | ---- | ----- | ----------- |
 | `--via` | `<method>` | Transport: `ssh` (host target, default) or `mac-telnet` (MAC target, default for a MAC). rest/native have no terminal capability. |
-| `--host` | `<host>` | Override the target host (ssh) / UDP delivery host (mac-telnet, default L2 broadcast). |
+| `--host` | `<host>` | ssh: the host to dial (the target when no `<router>` is given; no CDB lookup). mac-telnet: the UDP delivery host (default L2 broadcast). |
 | `--port` | `<port>` | Override the port: ssh default 22, mac-telnet default 20561. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases --user, -u). Falls back to CENTRS_USERNAME. |
 | `--password` | `<secret>` | RouterOS password. Falls back to CENTRS_PASSWORD. |

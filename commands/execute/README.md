@@ -247,6 +247,16 @@ many tokens):
   the command; no `--` needed). One `--quickchr` stays single-target; repeating
   it fans out; mixing it with positionals or CDB selectors is
   `usage/conflicting-flags` (constitution: resolution providers).
+- `execute --host http://192.0.2.10:8080 '/system/resource/print'` (or
+  `execute --host <host|url> -- <command>`) — the `--host` **flag** stands in
+  for a missing `<target>`: a lone positional is the command, and nothing
+  before `--` is fine. There is no `<target>`, so there is no CDB lookup and no
+  record credential can be picked up; auth comes from flags, env or config.
+  Two or more positionals without `--` keep the legacy split, so
+  `execute <mac> <command> --via mac-telnet --host <udp-host>` (the mac-telnet
+  delivery override) is unchanged. `CENTRS_HOST` never changes positional
+  parsing: `execute '<command>'` with it set still reads the lone positional as
+  the target.
 
 Because `execute` is the primary **write** path, a write-shaped fan-out is gated
 by **`--yes`**, confirmed **once** up front; without it

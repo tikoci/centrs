@@ -130,6 +130,29 @@ describeFast("terminal over ssh (host ssh relay)", () => {
 				"transport/capability-unsupported",
 			);
 
+			// TS5 (#428) — the `--host` flag stands in for `<router>`; with no
+			// `--via`, the host-only target selects ssh like a host positional.
+			const ts5 = await runCliProcess({
+				args: [
+					"terminal",
+					"--host",
+					"127.0.0.1",
+					"--port",
+					String(chr.sshPort),
+					"--username",
+					auth.username,
+					"--ssh-key",
+					key,
+					"--insecure",
+				],
+				stdin: "/system/identity/print\n/quit\n",
+				env: { CENTRS_SKIP_ENV_FILE: "1" },
+			});
+			expect(
+				collapsePrintWrapping(ts5.stdoutText),
+				`terminal --host exit ${ts5.exitCode}; stderr=${ts5.stderrText}`,
+			).toContain(`name: ${identity}`);
+
 			const resource = asRecord(await chr.rest("/system/resource"));
 			await recordIntegrationEvidence({
 				suite: "terminal over ssh (host ssh relay)",
@@ -140,7 +163,7 @@ describeFast("terminal over ssh (host ssh relay)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [1, 2],
+				exampleIds: [1, 2, "TS5"],
 			});
 		} finally {
 			await chr.destroy();

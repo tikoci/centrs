@@ -91,9 +91,9 @@ on the argv.
 
 Harness inputs (from `test/integration/terminal-ssh.test.ts`): `$SSH_PORT` is
 `chr.sshPort` (passed via `--port`), and `$KEY` is the ephemeral private key the
-test mints with `ssh-keygen -f <tmp>/id` and passes via `--ssh-key`. **TS1, TS2 and
-TS4 are the CHR-tested set** — the matrix's `CHR-passed` claim rests on all three.
-TS1–TS2 run in `test/integration/terminal-ssh.test.ts`; TS4 runs in the shared
+test mints with `ssh-keygen -f <tmp>/id` and passes via `--ssh-key`. **TS1, TS2,
+TS4 and TS5 are the CHR-tested set**. The matrix's `CHR-passed` claim rests on
+TS1, TS2 and TS4. TS1, TS2 and TS5 run in `test/integration/terminal-ssh.test.ts`; TS4 runs in the shared
 `test/integration/ssh-identity.test.ts`. **TS3 is the interactive hand-verified
 analog of T4** (a piped subprocess stdin cannot be a TTY), not in CI.
 
@@ -138,6 +138,16 @@ checks the real terminal relay against CHR with a private agent and prompts
 disabled. The rejected key preserves OpenSSH's nonzero exit and
 `Permission denied`; selecting the trusted key or leaving the key unset
 returns the device identity. Covered by `test/integration/ssh-identity.test.ts`.
+
+### TS5. `--host` stands in for `<router>` (#428)
+
+```bash
+printf '/system/identity/print\n/quit\n' | centrs terminal --host 127.0.0.1 --port $SSH_PORT --username $U --ssh-key $KEY --insecure
+```
+
+There's no `<router>` and no `--via`. The host-only target selects ssh, as a
+host `<router>` does, with no CDB lookup. stdout contains the device identity,
+checked as in TS1.
 
 ## MAC target over `--via ssh` resolution (behavior note — not a numbered CHR example)
 
