@@ -302,8 +302,11 @@ rest-api). A CMR failure never falls back to dialing a client directly.
     partial selection is never run as if it were the whole one.
 - **Binding:** `/cmr/device` is read before preflight, between preflight and
   dispatch, and after dispatch. A device whose `ids` key changed is not sent the
-  command (`cmr/membership-changed`), or reports `cmr/outcome-unknown` if the
-  key changed during the call.
+  command (`cmr/membership-changed`). After dispatch, a sent result is reported
+  as `cmr/outcome-unknown` if the key changed during the call, or if the
+  inventory cannot be re-read (cancelled or unreadable) to confirm which client
+  answered. A CMR `skipped` stays `cmr/client-disconnected`, because nothing was
+  sent.
 - **Write gate:** one `--yes`/TTY confirmation, naming how many clients will run
   it, how many were excluded, and through which controller. Clients that failed
   validation are never sent the command.

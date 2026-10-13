@@ -10,7 +10,8 @@ run**.
   `--timeout`) or `std failure: timeout (13)` (CMR's own ~60 s ceiling per call).
 - centrs stopped waiting: its local deadline passed, the operation was
   cancelled, or the controller connection dropped after the request was sent.
-- The client changed its CMR key (`ids`) during the call.
+- The client changed its CMR key (`ids`) during the call, or the controller's
+  inventory could not be re-read afterwards to confirm which client answered.
 
 On RouterOS 7.26beta1, a timed-out or cancelled `run-script` **kept running on
 the client**, and its side effects landed afterwards (#441, #450). A timeout is

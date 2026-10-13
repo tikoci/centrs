@@ -102,6 +102,9 @@ const TRUNCATION_MARKER = /\.\.\.\(\+(\d+) B\)\s*$/;
 const TIMEOUT_OUTPUT =
 	/^(?:timed out \(\d+\)|std failure: timeout \(\d+\))\s*$/;
 const NO_DEVICES_SELECTED = /no devices selected/i;
+const ACCEPTED_IL = /^\(evl\s/;
+/** A missing `/cmr/device`: native `no such command prefix`, REST `no such command or directory (cmr)`. */
+const MISSING_MENU = /no such command (?:prefix|or directory)/i;
 
 export interface ExecuteCmrRequest extends ExecuteRequest {
 	/** RouterOS label expression (comma list; plain = OR, `+` AND, `-` AND NOT, `all`). */
@@ -160,7 +163,10 @@ export interface CmrController {
 }
 
 export interface ExecuteCmrInternals {
-	controller?: (resolved: ResolvedExecuteRequest) => CmrController;
+	controller?: (
+		resolved: ResolvedExecuteRequest,
+		signal: AbortSignal,
+	) => CmrController;
 	nonce?: () => string;
 }
 
@@ -238,7 +244,10 @@ export async function executeCmr(
 	const write = isWriteShaped(resolved.canonical);
 	const controllerName =
 		resolved.target.identity ?? resolved.target.input ?? resolved.target.host;
-	const controller = (internals.controller ?? adapterController)(resolved);
+	const controller = (internals.controller ?? adapterController)(
+		resolved,
+		signal,
+	);
 	const nonce = (internals.nonce ?? defaultNonce)();
 
 	try {
@@ -333,6 +342,8 @@ export async function executeCmr(
 			}
 		}
 
+		if (signal.aborted) throw cancelledError();
+
 		// 3. One write gate, naming the blast radius.
 		const runnable = members.filter((m) => !m.result);
 		if (write && runnable.length > 0) {
@@ -369,23 +380,28 @@ export async function executeCmr(
 				return { member, outcome };
 			},
 		);
-		// S3 can only downgrade a result. If it cannot be read, each row still
-		// came from a `numbers=<.id>` call pinned to its member, so it stands.
+		// S3 re-binds every sent result to the key it was validated on. If it
+		// cannot be read (or the run was cancelled), sent results are unknown.
 		const after =
-			dispatched.length > 0
+			dispatched.length > 0 && !signal.aborted
 				? await readInventory(controller).catch(() => undefined)
-				: middle;
+				: undefined;
 		let sentCount = 0;
 		for (const { member, outcome } of dispatched) {
 			if (outcome.sent) sentCount += 1;
 			const now = after?.find((d) => d.id === member.device.id);
-			const drifted = after !== undefined && now?.ids !== member.device.ids;
+			const binding =
+				after === undefined
+					? "unverified"
+					: now?.ids === member.device.ids
+						? "bound"
+						: "drifted";
 			member.result = judgeDispatch(
 				member,
 				outcome,
 				resolved,
 				controllerName,
-				drifted,
+				binding,
 			);
 		}
 
@@ -497,8 +513,10 @@ function judgePreflight(
 		member.result = memberError(member, resolved, controllerName, rejected);
 		return member;
 	}
-	// Positive evidence: an accepted `:parse` returns parenthesized IL.
-	if (!parse.startsWith("(")) return incomplete("`:parse` return is not IL");
+	// Positive evidence: every accepted `:parse` return seen (structured,
+	// console spacing, multi-statement, blocks, `:if`/`:foreach`; 7.24.5 and
+	// 7.26beta1) starts `(evl `. A comment-only script returns `/`.
+	if (!ACCEPTED_IL.test(parse)) return incomplete("`:parse` return is not IL");
 	return member;
 }
 
@@ -507,7 +525,7 @@ function judgeDispatch(
 	outcome: CmrScriptOutcome,
 	resolved: ResolvedExecuteRequest,
 	controllerName: string,
-	drifted: boolean,
+	binding: "bound" | "drifted" | "unverified",
 ): ExecuteEnvelope {
 	const device = member.device;
 	if (!outcome.selected) {
@@ -523,28 +541,46 @@ function judgeDispatch(
 		);
 	}
 	const row = outcome.row;
-	if (!row || !FINAL_STATUSES.has(row.status)) {
-		if (!outcome.sent) {
-			return memberError(
-				member,
-				resolved,
-				controllerName,
-				outcome.error ?? cancelledError(),
-			);
-		}
+	if (!outcome.sent && !(row && FINAL_STATUSES.has(row.status))) {
 		return memberError(
 			member,
 			resolved,
 			controllerName,
-			unknownOutcome(device, outcome.error, row),
+			outcome.error ?? cancelledError(),
 		);
 	}
-	if (row.status === "skipped") {
+	// CMR itself declined to send: nothing ran, whichever client this was.
+	if (row?.status === "skipped") {
 		return memberError(
 			member,
 			resolved,
 			controllerName,
 			disconnectedError(device, row),
+		);
+	}
+	// A sent call whose member cannot be re-bound after dispatch (its `ids`
+	// changed, or S3 was not read) has no attributable result.
+	if (binding !== "bound") {
+		return memberError(
+			member,
+			resolved,
+			controllerName,
+			unknownOutcome(
+				device,
+				undefined,
+				row,
+				binding === "drifted"
+					? "its `ids` changed during the call"
+					: "the controller inventory was not re-read (cancelled or unreadable) to confirm which client answered",
+			),
+		);
+	}
+	if (!row || !FINAL_STATUSES.has(row.status)) {
+		return memberError(
+			member,
+			resolved,
+			controllerName,
+			unknownOutcome(device, outcome.error, row),
 		);
 	}
 	if (row.status === "failed") {
@@ -565,19 +601,6 @@ function judgeDispatch(
 					resolved.via.value === "rest-api" ? "rest-api" : "native-api",
 				context: { cmr: { id: device.id, identity: device.identity } },
 			}),
-		);
-	}
-	if (drifted) {
-		return memberError(
-			member,
-			resolved,
-			controllerName,
-			unknownOutcome(
-				device,
-				undefined,
-				row,
-				"its `ids` changed during the call",
-			),
 		);
 	}
 	const warnings: Warning[] = [];
@@ -697,14 +720,16 @@ async function readInventory(controller: CmrController): Promise<CmrDevice[]> {
 	try {
 		return await controller.devices();
 	} catch (error) {
-		if (error instanceof CentrsError && error.code.startsWith("routeros/")) {
+		const detail =
+			error instanceof CentrsError ? error.context?.["detail"] : undefined;
+		if (typeof detail === "string" && MISSING_MENU.test(detail)) {
 			throw new CentrsError({
 				code: "cmr/not-a-controller",
 				summary:
 					"The target did not answer `/cmr/device`; it is not a CMR controller.",
 				remediation:
 					"Point `--cmr` at the router running the optional `cmr` package (RouterOS 7.26beta1+) with `/cmr set enabled=yes`.",
-				context: { detail: error.summary },
+				context: { detail },
 				cause: error,
 			});
 		}
@@ -924,7 +949,10 @@ function defaultNonce(): string {
 // Production controller: one protocol adapter to the controller
 // ---------------------------------------------------------------------------
 
-function adapterController(resolved: ResolvedExecuteRequest): CmrController {
+function adapterController(
+	resolved: ResolvedExecuteRequest,
+	signal: AbortSignal,
+): CmrController {
 	const via = resolved.via.value;
 	const config = (timeoutMs: number, signal?: AbortSignal) => ({
 		protocol: via,
@@ -941,7 +969,7 @@ function adapterController(resolved: ResolvedExecuteRequest): CmrController {
 	// Native: one session for every call (concurrent tagged commands).
 	// REST: an adapter per call, so each carries its own deadline signal.
 	const shared: ProtocolAdapter = createProtocolAdapter(
-		config(resolved.timeoutMs.value),
+		config(resolved.timeoutMs.value, signal),
 	);
 	return {
 		async devices() {

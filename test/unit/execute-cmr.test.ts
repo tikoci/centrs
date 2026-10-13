@@ -58,11 +58,13 @@ interface Fake {
 
 /** `inventory` is returned per read (S1, S2, S3…); the last one repeats. */
 function fake(options: {
-	inventory: CmrDevice[][];
+	/** One entry per read (S1, S2, S3…); the last repeats. An error is thrown. */
+	inventory: Array<CmrDevice[] | CentrsError>;
 	preflight?: Record<string, CmrScriptOutcome>;
 	dispatch?: Record<string, CmrScriptOutcome | Script>;
-	devicesError?: CentrsError;
 	onDispatch?: () => void;
+	/** Called with the 0-based read number before each inventory read. */
+	onRead?: (read: number) => void;
 }): Fake {
 	const state: Fake = {
 		preflight: [],
@@ -72,10 +74,11 @@ function fake(options: {
 	let reads = 0;
 	state.controller = {
 		async devices() {
-			if (options.devicesError) throw options.devicesError;
+			options.onRead?.(reads);
 			const snapshot =
 				options.inventory[Math.min(reads, options.inventory.length - 1)] ?? [];
 			reads += 1;
+			if (snapshot instanceof CentrsError) throw snapshot;
 			return snapshot;
 		},
 		async runScript(call) {
@@ -118,6 +121,14 @@ async function runFake(f: Fake, overrides: Partial<ExecuteCmrRequest> = {}) {
 			nonce: () => NONCE,
 		},
 	);
+}
+
+function codes(envelope: {
+	data: {
+		targets: readonly ({ ok: true } | { ok: false; error: { code: string } })[];
+	};
+}): string[] {
+	return envelope.data.targets.map((t) => (t.ok ? "ok" : t.error.code));
 }
 
 async function rejection(promise: Promise<unknown>): Promise<CentrsError> {
@@ -223,15 +234,92 @@ describe("execute --cmr: selection and binding", () => {
 		expect(fanoutExitCode(envelope)).toBe(0);
 	});
 
-	test("a target without /cmr/device is named as not a controller", async () => {
-		const f = fake({
-			inventory: [[]],
-			devicesError: new CentrsError({
+	// The two ways a missing `/cmr/device` arrives (7.24.5 CHR, no `cmr` package).
+	const missingMenu: Array<[string, CentrsError]> = [
+		[
+			"native-api",
+			new CentrsError({
 				code: "routeros/unknown-path",
-				summary: "no such command prefix",
+				summary: "x",
+				context: { detail: "no such command prefix" },
 			}),
+		],
+		[
+			"rest-api",
+			new CentrsError({
+				code: "routeros/request-failed",
+				summary: "x",
+				context: { detail: "no such command or directory (cmr)" },
+			}),
+		],
+	];
+	for (const [via, error] of missingMenu) {
+		test(`a missing /cmr/device (${via}) is named as not a controller`, async () => {
+			const f = fake({ inventory: [error] });
+			expect((await rejection(runFake(f))).code).toBe("cmr/not-a-controller");
 		});
-		expect((await rejection(runFake(f))).code).toBe("cmr/not-a-controller");
+	}
+
+	test("any other inventory failure (e.g. permissions) propagates unchanged", async () => {
+		const f = fake({
+			inventory: [
+				new CentrsError({
+					code: "routeros/command-failed",
+					summary: "x",
+					context: { detail: "not enough permissions (9)" },
+				}),
+			],
+		});
+		expect((await rejection(runFake(f))).code).toBe("routeros/command-failed");
+	});
+
+	test("an inventory that cannot be re-read after dispatch leaves sent results unknown", async () => {
+		const unreadable = new CentrsError({
+			code: "transport/timeout",
+			summary: "t",
+		});
+		const f = fake({ inventory: [[CTL, C1], [CTL, C1], unreadable] });
+		const envelope = await runFake(f);
+		expect(f.dispatch.length).toBe(2);
+		expect(codes(envelope)).toEqual([
+			"cmr/outcome-unknown",
+			"cmr/outcome-unknown",
+		]);
+	});
+
+	test("a key change after dispatch makes even a runtime failure unknown; a CMR skip stays a skip", async () => {
+		const f = fake({
+			inventory: [
+				[CTL, C1],
+				[CTL, C1],
+				[
+					{ ...CTL, ids: "9999/CCCC" },
+					{ ...C1, ids: "EEEE/CCCC" },
+				],
+			],
+			dispatch: {
+				"*1": row("failed", "no such item (/interface/set; line 1)\n"),
+				"*2": row("skipped", "disconnected"),
+			},
+		});
+		const envelope = await runFake(f);
+		expect(codes(envelope)).toEqual([
+			"cmr/outcome-unknown",
+			"cmr/client-disconnected",
+		]);
+	});
+
+	test("cancelling while the pre-dispatch inventory is read sends nothing", async () => {
+		const abort = new AbortController();
+		const f = fake({
+			inventory: [[CTL, C1]],
+			onRead: (read) => {
+				if (read === 1) abort.abort();
+			},
+		});
+		const error = await rejection(runFake(f, { signal: abort.signal }));
+		expect(error.code).toBe("cmr/cancelled");
+		expect(f.dispatch).toEqual([]);
 	});
 });
 
@@ -262,6 +350,12 @@ describe("execute --cmr: client validation completeness", () => {
 		],
 		["last row still running", row("running", ""), "last status running"],
 		["not IL", row("success", `hello\r\n${NONCE}\r\n`), "not IL"],
+		[
+			"parenthesized but not IL",
+			row("success", `(not IL)\r\n${NONCE}\r\n`),
+			"not IL",
+		],
+		["comment-only parse (`/`)", row("success", `/\r\n${NONCE}\r\n`), "not IL"],
 		[
 			"validation call failed",
 			row("failed", "std failure: timeout (13)"),

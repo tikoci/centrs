@@ -10,6 +10,10 @@ it is not a CMR controller.
   `/cmr/client`; the controller needs the package.
 - The target is a CMR *client*, not its controller.
 
+Only a missing menu raises this: native API reports `no such command prefix`,
+REST `no such command or directory (cmr)`. Any other failure reading
+`/cmr/device`, such as a permissions error, is reported unchanged.
+
 ## Fix
 
 Point the command at the controller: the router with the `cmr` package and
