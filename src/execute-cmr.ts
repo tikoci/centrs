@@ -55,6 +55,7 @@ import type {
 import { notReachedReason } from "./core/envelope.ts";
 import { isWriteShaped } from "./core/execute-command.ts";
 import {
+	NOT_SENT_TRANSPORT_CODES,
 	resolveFanoutConcurrency,
 	runBoundedPool,
 	summarizeFanout,
@@ -1303,12 +1304,7 @@ async function restRunScript(
 		const mapped = signal.aborted ? abortError(outer, call) : asCmrError(error);
 		// REST cannot say whether a failed request reached RouterOS, except when
 		// the connection itself never opened.
-		const neverOpened = [
-			"transport/connection-refused",
-			"transport/dns",
-			"transport/tls-certificate",
-			"transport/auth-failed",
-		].includes(mapped.code);
+		const neverOpened = NOT_SENT_TRANSPORT_CODES.includes(mapped.code);
 		return { selected: true, sent: !neverOpened, error: mapped };
 	} finally {
 		await adapter.close();

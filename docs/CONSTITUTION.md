@@ -309,7 +309,9 @@ orchestration error or every target failed.
 
 A multi-target **RouterOS write** (e.g. `execute` / `api` add/set/remove across a
 selection) is gated by **`--yes`**, confirmed **once** up front; when it is missing
-the error names the blast radius (how many routers). The separate **`--force`**
+the error names the blast radius (how many routers). A write that was **sent** is
+never retried, because it may already have run; it fails with the warning
+`transport/write-outcome-unknown` instead (#448). The separate **`--force`**
 gate is scoped to destructive **`devices` CDB mutations** (e.g. `devices remove`
 across a group), not RouterOS writes. `terminal`, `api --stream`,
 `retrieve --follow` and `retrieve --sample` are single-session, not fan-out

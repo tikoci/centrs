@@ -39,6 +39,17 @@ documenting cross-cutting shifts that affect contributors and consumers.
 - `execute --cmr` accepts a command that opens with a relative menu change
   (`/system; identity/print`); its `:parse` return was read as incomplete.
 
+### Fixed
+
+- `execute` and `api` never replay a write that was sent (#448). Fan-out
+  retried every `transport/network` and `transport/connection-closed` failure
+  up to twice, so a write whose connection dropped after the router had run
+  it could be applied up to three times. A write is now retried only when one
+  of those failures came before it was sent, for example during validation or
+  a native API login. A write that failed after it was sent, in single-target
+  or fan-out mode, carries the new warning `transport/write-outcome-unknown`,
+  because it may have run. Reads keep the retry.
+
 ## 0.1.8 — 2026-10-12
 
 Release (npm tag `latest`; `next` moves forward to 0.1.8). Everything in

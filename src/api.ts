@@ -29,6 +29,7 @@ import type {
 	Warning,
 } from "./core/envelope.ts";
 import { buildTip, notReachedReason } from "./core/envelope.ts";
+import { sentWriteWarnings } from "./core/fanout.ts";
 import {
 	inspectArgumentNames,
 	inspectChildrenOrEmpty,
@@ -394,6 +395,11 @@ export async function runResolvedApi(
 			resolved === request
 				? protocolRequest
 				: buildProtocolApiRequest(resolved),
+			{
+				onSent: () => {
+					trace.dispatched = true;
+				},
+			},
 		);
 		const routerOsFailure = apiRouterOsFailureFromResult(resolved, result);
 		if (routerOsFailure) {
@@ -564,7 +570,10 @@ async function* streamResolvedApi(
 		const protocolRequest = buildProtocolApiRequest(resolved);
 		for await (const reply of backend.stream(protocolRequest, {
 			signal: controller.signal,
-			onListening,
+			onListening: () => {
+				trace.dispatched = true;
+				onListening?.();
+			},
 			onCancelUnacknowledged: () => {
 				cancelUnacknowledged = true;
 			},
@@ -603,7 +612,7 @@ async function* streamResolvedApi(
 			done,
 		);
 	} catch (error) {
-		const envelope = buildApiErrorEnvelopeFromResolved(resolved, error);
+		const envelope = buildApiErrorEnvelopeFromResolved(resolved, error, trace);
 		envelope.meta.validation = validation;
 		envelope.warnings = [...envelope.warnings, ...cancellationWarnings()];
 		envelope.tips = [...envelope.tips, ...tips];
@@ -1720,7 +1729,14 @@ export function buildApiErrorEnvelopeFromResolved(
 	return {
 		ok: false,
 		error: serializeCentrsError(centrsError),
-		warnings: [...resolved.warnings],
+		warnings: [
+			...resolved.warnings,
+			...sentWriteWarnings(
+				isApiMutating(resolved.method, resolved.path),
+				centrsError,
+				trace,
+			),
+		],
 		tips: [],
 		meta: metaFromResolved(
 			resolved,

@@ -47,6 +47,7 @@ import {
 	buildFanoutResolveFailure,
 	commonVia,
 	defaultFanoutSleep,
+	mayRetryUnsentWrite,
 	resolveFanoutConcurrency,
 	runFanout,
 	summarizeFanout,
@@ -105,7 +106,10 @@ export interface ApiFanoutInternals {
 		env: Record<string, string | undefined>,
 		config?: Record<string, string | undefined>,
 	) => Promise<SelectionExpansion>;
-	execute?: (resolved: ResolvedApiRequest) => Promise<ApiSuccessEnvelope>;
+	execute?: (
+		resolved: ResolvedApiRequest,
+		trace: ValidationTrace,
+	) => Promise<ApiSuccessEnvelope>;
 	sleep?: (ms: number) => Promise<void>;
 }
 
@@ -318,6 +322,8 @@ export async function apiFanout(
 				),
 				member,
 			),
+		mayRetry: (resolved) =>
+			mayRetryUnsentWrite(requestSummary.write, traces.get(resolved)),
 		sleep,
 	});
 

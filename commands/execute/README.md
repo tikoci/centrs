@@ -265,6 +265,13 @@ the command alone (`canonicalizeExecuteCommand` + `isWriteShaped`), so the gate
 fires before any target is dialed. Per-target validation still runs because
 RouterOS schemas can differ by version.
 
+A sent write is **never retried** (#448). Fan-out retries a target only for
+`transport/network` and `transport/connection-closed`, and for a write only
+when the failure came before the request was sent (for example while it was
+being validated). A write that failed after it was sent may have run, so its
+error envelope, single-target or fan-out, carries the warning
+`transport/write-outcome-unknown`.
+
 ## CMR clients through their controller (`--cmr`)
 
 `execute <controller> --cmr --labels <expr> -- '<command>'` runs one command on
