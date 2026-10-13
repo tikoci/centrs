@@ -17,6 +17,7 @@ export type CentrsErrorCode =
 	| `wait/${string}`
 	| `auth/${string}`
 	| `cdb/${string}`
+	| `cmr/${string}`
 	| `discover/${string}`
 	| `identity/${string}`
 	| `input/${string}`

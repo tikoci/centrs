@@ -109,6 +109,17 @@ export interface EnvelopeTargetMeta {
 	source?: SettingSource;
 	/** Provenance per resolved field once the resolver is wired (WP-0c). */
 	sources?: Record<string, SettingSource>;
+	/**
+	 * `execute --cmr`: the CMR client this result belongs to, as the controller
+	 * knows it. `id` is the controller's `/cmr/device` row; `deviceKey` is the
+	 * device half of its `ids`. The client is never dialed directly.
+	 */
+	cmr?: {
+		controller: string;
+		id: string;
+		deviceKey?: string;
+		address?: string;
+	};
 }
 
 /**

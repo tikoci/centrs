@@ -87,6 +87,8 @@ Usage: centrs execute <target> <command> [flags] | centrs execute <target...> --
 | `--default` |  | Select the reserved `__default__` record. |
 | `--quickchr` | `<name>` | Target a running quickchr-managed CHR VM by name (repeatable; fans out when repeated). Exclusive of positional targets and CDB selectors; conflicts with direct connection overrides (--host/--port/--username/--password, and --ssh-key where the command has it). |
 | `--concurrency` | `<n>` | Max in-flight targets during fan-out (transport-aware default: rest-api 8, native-api 4). |
+| `--cmr` |  | Run on CMR clients through their controller: the `<target>` is the controller (RouterOS 7.26beta1+, `cmr` package). Needs `--labels`; native-api or rest-api only. |
+| `--labels` | `<expr>` | With `--cmr`: RouterOS label expression selecting clients (comma list; plain = OR, `+` AND, `-` AND NOT, `all`). |
 | `--host` | &lt;host\|url&gt; | Host or base URL to dial. With no `<target>` it is the target (no CDB lookup); with one it overrides the resolved host. |
 | `--port` | `<port>` | Override the resolved management port. |
 | `--username / --user / -u` | `<name>` | RouterOS username (aliases `--user`, `-u`). Falls back to `CENTRS_USERNAME`. |

@@ -265,6 +265,86 @@ the command alone (`canonicalizeExecuteCommand` + `isWriteShaped`), so the gate
 fires before any target is dialed. Per-target validation still runs because
 RouterOS schemas can differ by version.
 
+## CMR clients through their controller (`--cmr`)
+
+`execute <controller> --cmr --labels <expr> -- '<command>'` runs one command on
+the CMR clients (RouterOS 7.26beta1+) that a RouterOS label expression selects
+on the controller (#450). The `<controller>` is an ordinary single target: a
+positional or CDB identity, one `--quickchr`, or `--host`. It is resolved and
+authenticated as usual, and **only the controller's credentials are used**. A
+client is never dialed, so a client behind NAT or reachable only through its
+controller works the same way. CMR is a selection source, not a protocol:
+`--via` pins the **controller** transport (native-api, the default, or
+rest-api). A CMR failure never falls back to dialing a client directly.
+
+- `--labels` is required and passed to RouterOS unchanged: a comma list where
+  plain labels are OR, `+label` must match, `-label` excludes, and `all` also
+  selects the controller. CDB selectors (`--group`/`--where`/`--all`/
+  `--default`/geo), several targets, and `--via mac-telnet|ssh` are
+  `usage/conflicting-flags`. `--labels` without `--cmr` is refused the same way.
+- **One `run-script` call per device.** On 7.26beta1, `run-script` result rows
+  carry no device id, and their `device` key (`identity@address`) changed
+  *during* a call when a client dropped. So centrs never matches rows to
+  devices by name. Every controller call selects exactly one `/cmr/device` row
+  with `numbers=<.id>`, together with `labels=<expr>`, so a device that left
+  the labels is refused up front instead of run.
+- **Preflight, per inventory row:** the call sends `:put [:parse <command>]`
+  followed by `:put "<nonce>"`, or the nonce alone with `--no-validate`.
+  - A refusal (`no devices selected`) means the device is not a member.
+  - Any row means it is a member; its validation result must be **complete**
+    before it is classified:
+    - status `success`;
+    - the nonce as the last line;
+    - no `...(+N B)` clip marker;
+    - a non-empty return that is IL.
+  - A device with no answer at all (timeout, lost connection) makes the
+    selection incomplete: `cmr/selection-incomplete`, and nothing runs. A
+    partial selection is never run as if it were the whole one.
+- **Binding:** `/cmr/device` is read before preflight, between preflight and
+  the write gate, again for each member just before its own call (the prompt
+  and the fan-out queue can both wait), and after dispatch. A device whose row
+  is gone or whose `ids` key changed is not sent the command
+  (`cmr/membership-changed`); a replacement row is never adopted, even when it
+  matches the labels. If that per-member read fails, the member is not sent the
+  command and its error says so (`context.dispatched: false`). The per-member
+  read is host-side, not atomic with the call: on 7.26beta1 a client script
+  cannot check its own key (`/cmr/client get local-id` reads `*****` inside
+  `run-script`) and `numbers=` does not take `ids`. After dispatch, a sent result is reported
+  as `cmr/outcome-unknown` if the key changed during the call, or if the
+  inventory cannot be re-read (cancelled or unreadable) to confirm which client
+  answered. A CMR `skipped` stays `cmr/client-disconnected`, because nothing was
+  sent.
+- **Write gate:** one `--yes`/TTY confirmation, naming how many clients will run
+  it, how many were excluded, and through which controller. Clients that failed
+  validation are never sent the command.
+- **Dispatch:** one call per validated member, sending the input unchanged with
+  `timeout=` set from `--timeout` (capped at 55 s, under CMR's ~60 s per-call
+  ceiling). Every call pins `strategy=parallel fail-policy=continue
+  freeze-frame-interval=20ms`. **Never retried.**
+- **Outcomes** are a `FanoutData` envelope in inventory order, with exit codes
+  0/2/1. Each member's `meta.target.cmr` carries `{controller, id, deviceKey,
+  address}`. `success` → `data.ret` holds the client's output; a clipped
+  output adds `cmr/output-truncated` and `meta.truncated`. `--max-results`
+  applies per member, as in plain execute fan-out: a member whose rendered
+  envelope exceeds it (UTF-8 bytes) becomes `input/max-results-exceeded`, and
+  that error says the command already ran (`context.dispatched: true`). A `failed` runtime
+  error maps through the usual `routeros/*` table. `skipped` →
+  `cmr/client-disconnected`.
+- **Unknown outcomes:** a CMR timeout (`timed out (6)`, `std failure: timeout
+  (13)`), a local deadline, a cancellation, or a lost call after sending all
+  give `cmr/outcome-unknown`. A cancellation before anything is sent, including
+  one that makes an inventory read fail, is `cmr/cancelled`. On 7.26beta1 the client script **kept running**
+  in each of these cases.
+- **Validation metadata** reports what ran: `source: ":put [:parse ...] via cmr
+  run-script"`, the same claim the console gate makes. There is no client
+  `/console/inspect` stage.
+- **Not on MCP** until delegated authorization is designed (#449). `retrieve
+  --cmr` is deferred (#441).
+
+Calling `/cmr/device/run-script` yourself, through `api` or plain `execute`,
+validates only the controller request. The envelope then carries the warning
+`cmr/client-script-not-validated`.
+
 ## mac-telnet L2 validation
 
 Decided (2026-06-06): the real-L2 integration path is `@tikoci/quickchr`'s

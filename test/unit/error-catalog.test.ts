@@ -17,6 +17,7 @@ const SRC_DIR = join(import.meta.dir, "..", "..", "src");
 const KNOWN_FAMILIES = new Set([
 	"auth",
 	"cdb",
+	"cmr",
 	"discover",
 	"identity",
 	"input",

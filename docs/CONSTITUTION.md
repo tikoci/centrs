@@ -365,6 +365,32 @@ single host/port: that shape is the contract quickchr's descriptor and TikTOML's
 exists to prevent. A `--via` whose service key a provider does not supply is a
 typed unsupported-provider error, never a silent fallback.
 
+#### Controller-mediated selection (CMR)
+
+A **CMR controller** (RouterOS 7.26beta1+) is a third kind of source: a live
+inventory whose members centrs never dials. `execute <controller> --cmr
+--labels <expr>` (#450) resolves the **controller** as an ordinary single
+target, and only its credentials are used. RouterOS's label expression selects
+the members, and the command runs on each through the controller's
+`run-script`. Normative:
+
+- CMR is a selection source, **not a protocol**. `--via` pins the controller
+  transport, and a CMR failure never falls back to dialing a client.
+- A member is bound by the controller's row id, never by its display name. A
+  result that cannot be bound to the member it was validated on is not run, or
+  is reported as an unknown outcome.
+- Validation runs **on each client** (`:parse` through CMR) and must be complete
+  before it counts. A client that fails validation is never sent the command,
+  and an incomplete selection runs nothing.
+- A CMR dispatch is **never retried**. A timeout, cancellation or lost call
+  after sending is `cmr/outcome-unknown`, because the client script may still
+  be running.
+- CMR mode is not on MCP until delegated authorization is designed (#449).
+  Registering a controller must not authorize its clients.
+
+The contract and its device evidence are in
+[`commands/execute/README.md` → CMR](../commands/execute/README.md#cmr-clients-through-their-controller---cmr).
+
 ### MCP surface: the CDB is the allowlist
 
 The MCP frontend (`commands/mcp/`) is an adapter over this core, not a new set of

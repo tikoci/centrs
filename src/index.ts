@@ -287,6 +287,23 @@ export {
 	validateExecuteRequestShape,
 } from "./execute.ts";
 export {
+	buildExecuteCmrErrorEnvelope,
+	CMR_VALIDATION_SOURCE,
+	type CmrController,
+	type CmrDevice,
+	type CmrScriptCall,
+	type CmrScriptOutcome,
+	type CmrScriptRow,
+	type ExecuteCmrData,
+	type ExecuteCmrEnvelope,
+	type ExecuteCmrErrorEnvelope,
+	type ExecuteCmrInternals,
+	type ExecuteCmrOperationMeta,
+	type ExecuteCmrRequest,
+	executeCmr,
+	renderExecuteCmrEnvelope,
+} from "./execute-cmr.ts";
+export {
 	buildExecuteFanoutErrorEnvelope,
 	type ExecuteFanoutData,
 	type ExecuteFanoutEnvelope,

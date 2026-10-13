@@ -192,6 +192,14 @@ export const PROPLIST_HIGHLIGHT_SPLIT_SINCE = "7.23beta1";
 export const FIREWALL_WHERE_UNQUOTED_LITERALS_SINCE = "7.25beta3";
 
 /**
+ * CMR (`/cmr`, `/cmr/client`, the optional `cmr` package) first shipped in
+ * 7.26beta1 (MikroTik manual). No earlier build has the menus, so
+ * `execute --cmr` suites boot this version explicitly instead of following
+ * `CENTRS_CHR_CHANNEL`; see `cmr-lab.ts`.
+ */
+export const CMR_SINCE = "7.26beta1";
+
+/**
  * How a `:parse` REJECTION reads, as an accepted set rather than one wording
  * (#296) — the `VALIDATION_REJECT_CODES` pattern applied to raw device text.
  *
