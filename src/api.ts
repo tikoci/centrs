@@ -15,6 +15,7 @@
  * structured validation, confirmation, and result-envelope surface.
  */
 
+import { cmrRunScriptWarnings } from "./core/cmr.ts";
 import type {
 	CentrsEnvelope,
 	CentrsErrorEnvelope,
@@ -1029,9 +1030,10 @@ export async function resolveApiRequest(
 		insecure,
 		yes: request.yes ?? false,
 		verbose: request.verbose ?? false,
-		warnings: connection
-			? [...connection.warnings]
-			: (cdbResolution?.warnings ?? []),
+		warnings: [
+			...(connection ? connection.warnings : (cdbResolution?.warnings ?? [])),
+			...(verb === "run" ? cmrRunScriptWarnings(normalized.path) : []),
+		],
 	};
 }
 

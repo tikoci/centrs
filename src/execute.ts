@@ -1,3 +1,4 @@
+import { cmrRunScriptWarnings, cmrScriptWarnings } from "./core/cmr.ts";
 import type {
 	CentrsEnvelope,
 	CentrsErrorEnvelope,
@@ -450,9 +451,12 @@ export async function resolveExecuteRequest(
 		maxResultsBytes,
 		yes: request.yes ?? false,
 		verbose: request.verbose ?? false,
-		warnings: connection
-			? [...connection.warnings]
-			: (cdbResolution?.warnings ?? []),
+		warnings: [
+			...(connection ? connection.warnings : (cdbResolution?.warnings ?? [])),
+			...(canonical.mode === "structured"
+				? cmrRunScriptWarnings(`${canonical.path}/${canonical.verb}`)
+				: cmrScriptWarnings(canonical.input)),
+		],
 	};
 }
 
@@ -729,7 +733,7 @@ function deviceStageSource(resolved: ResolvedExecuteRequest): string {
  * judge. An absent verdict means the caller did not thread a trace, so say
  * nothing extra rather than invent the reason.
  */
-function offlineStagePassed(
+export function offlineStagePassed(
 	verdict: ValidationTrace["offlineVerdict"],
 ): EnvelopeValidationStage {
 	return {
@@ -748,7 +752,7 @@ function offlineStagePassed(
  * a consumer reading `stages` never has to special-case the disabled shape.
  * `reason` is left off — `enabled: false` already says why.
  */
-function disabledValidationMeta(): EnvelopeValidationMeta {
+export function disabledValidationMeta(): EnvelopeValidationMeta {
 	return {
 		enabled: false,
 		source: "disabled",
@@ -908,7 +912,7 @@ async function validateConsoleParseCommand(
  * `warn` is an abstention, and saying so is the difference between "the analyzer
  * read all of this" and "it declined to judge part of it".
  */
-function passedStages(
+export function passedStages(
 	offline: OfflineGateResult,
 	deviceSource: string,
 ): EnvelopeValidationStage[] {

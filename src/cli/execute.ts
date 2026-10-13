@@ -1,5 +1,9 @@
 import { fanoutExitCode } from "../core/fanout.ts";
-import { asCentrsError, formatCentrsErrorText } from "../errors.ts";
+import {
+	asCentrsError,
+	CentrsError,
+	formatCentrsErrorText,
+} from "../errors.ts";
 import {
 	buildExecuteErrorEnvelope,
 	type ExecuteOutputFormat,
@@ -8,6 +12,11 @@ import {
 	executeOutputFormats,
 	renderExecuteEnvelope,
 } from "../execute.ts";
+import {
+	buildExecuteCmrErrorEnvelope,
+	executeCmr,
+	renderExecuteCmrEnvelope,
+} from "../execute-cmr.ts";
 import {
 	buildExecuteFanoutErrorEnvelope,
 	executeFanout,
@@ -54,6 +63,17 @@ export const executeCommand: CliCommandMetadata = {
 				"Pin the protocol selector; no silent downgrade when set. A bare MAC target defaults to mac-telnet.",
 		},
 		...selectionCommandOptions,
+		{
+			flag: "--cmr",
+			description:
+				"Run on CMR clients through their controller: the <target> is the controller (RouterOS 7.26beta1+, `cmr` package). Needs `--labels`; native-api or rest-api only.",
+		},
+		{
+			flag: "--labels",
+			valueName: "<expr>",
+			description:
+				"With `--cmr`: RouterOS label expression selecting clients (comma list; plain = OR, `+` AND, `-` AND NOT, `all`).",
+		},
 		{
 			flag: "--host",
 			valueName: "<host|url>",
@@ -147,6 +167,8 @@ export const executeCommand: CliCommandMetadata = {
 
 interface ExecuteCliArgs extends ExecuteRequest {
 	help?: boolean;
+	cmr?: boolean;
+	labels?: string;
 	format?: ExecuteOutputFormat;
 	selectionFlags?: SelectionFlags;
 	targetPositionals?: readonly string[];
@@ -193,6 +215,12 @@ export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
 				break;
 			case "--yes":
 				parsed.yes = true;
+				break;
+			case "--cmr":
+				parsed.cmr = true;
+				break;
+			case "--labels":
+				parsed.labels = expectValue(args, ++index, arg);
 				break;
 			case "--validate":
 				parsed.validate = true;
@@ -322,6 +350,14 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 				selectionFlags.quickchr[0] ?? "",
 			);
 		}
+		if (parsed.cmr || parsed.labels !== undefined) {
+			return await runExecuteCmrCli(
+				parsed,
+				selectionFlags,
+				targetPositionals,
+				args,
+			);
+		}
 		if (isFanoutMode(selectionFlags, targetPositionals.length)) {
 			return await runExecuteFanoutCli(
 				parsed,
@@ -447,6 +483,94 @@ async function runExecuteFanoutCli(
 			}),
 		);
 		return 1;
+	}
+}
+
+/**
+ * `execute --cmr`: the single target is the CMR controller; `--labels` picks
+ * the clients. Fan-out selectors would mix two selection sources, so they are
+ * refused rather than combined (#450).
+ */
+async function runExecuteCmrCli(
+	parsed: ExecuteCliArgs,
+	selectionFlags: SelectionFlags,
+	targetPositionals: readonly string[],
+	args: readonly string[],
+): Promise<number> {
+	const format = inferExecuteFormat(args, parsed);
+	const controller = new AbortController();
+	const onSigint = (): void => controller.abort();
+	process.on("SIGINT", onSigint);
+	try {
+		if (!parsed.cmr) {
+			throw new CentrsError({
+				code: "usage/conflicting-flags",
+				summary:
+					"`--labels` selects CMR clients and only applies with `--cmr`.",
+				remediation:
+					"Add `--cmr` and name the controller as the target, or drop `--labels`.",
+			});
+		}
+		if (
+			hasTargetSelector({ ...selectionFlags, quickchr: [] }) ||
+			selectionFlags.quickchr.length > 1 ||
+			targetPositionals.length > 1
+		) {
+			throw new CentrsError({
+				code: "usage/conflicting-flags",
+				summary:
+					"`--cmr` takes one controller target; CDB fan-out selectors and several targets cannot be combined with it.",
+				remediation:
+					"Name one controller (a positional, `--host` or one `--quickchr`) and pick clients with `--labels`.",
+				context: {
+					positionals: targetPositionals.length,
+					quickchr: selectionFlags.quickchr.length,
+				},
+			});
+		}
+		if (selectionFlags.quickchr.length === 1) {
+			parsed.quickchr = selectionFlags.quickchr[0];
+		}
+		if (
+			!parsed.targetInput &&
+			parsed.quickchr === undefined &&
+			parsed.host === undefined
+		) {
+			throw missingTargetError({
+				command: "execute",
+				summary:
+					"`centrs execute --cmr` requires the CMR controller as its <target>.",
+				remediation:
+					'Name the controller, e.g. `centrs execute ctl --cmr --labels all -- ":put ok"`.',
+			});
+		}
+		const envelope = await executeCmr({
+			...parsed,
+			labels: parsed.labels ?? "",
+			concurrency: selectionFlags.concurrency,
+			signal: controller.signal,
+		});
+		const resolvedFormat = envelope.meta.operation?.request.format ?? format;
+		console.log(
+			renderExecuteCmrEnvelope(envelope, resolvedFormat, {
+				verbose: parsed.verbose ?? false,
+			}),
+		);
+		return fanoutExitCode(envelope);
+	} catch (error) {
+		console.error(
+			// codeql[js/clear-text-logging] No secret logged: the CMR error envelope's meta carries only the target input and via.
+			renderExecuteCmrEnvelope(
+				buildExecuteCmrErrorEnvelope(parsed, error),
+				format,
+				{
+					verbose: parsed.verbose ?? false,
+				},
+			),
+		);
+		return 1;
+	} finally {
+		process.off("SIGINT", onSigint);
 	}
 }
 

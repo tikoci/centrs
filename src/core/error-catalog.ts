@@ -262,6 +262,58 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "A received MNDP datagram could not be decoded.",
 	},
 
+	// cmr/* — `execute --cmr` (#450)
+	{
+		code: "cmr/cancelled",
+		summary:
+			"The operation was cancelled before the command was sent to a CMR client.",
+	},
+	{
+		code: "cmr/client-script-not-validated",
+		summary:
+			"Warning: a caller-addressed `/cmr/device/run-script` was validated as a controller request; its script was not validated on the clients.",
+	},
+	{
+		code: "cmr/client-disconnected",
+		summary:
+			"CMR skipped a client that is not connected to its controller; the command was not sent.",
+	},
+	{
+		code: "cmr/empty-selection",
+		summary:
+			"Warning: the `--labels` expression matched no CMR device on the controller.",
+	},
+	{
+		code: "cmr/membership-changed",
+		summary:
+			"A CMR client left the label selection or changed its key between validation and dispatch; the command was not sent.",
+	},
+	{
+		code: "cmr/not-a-controller",
+		summary:
+			"The target does not answer `/cmr/device`; it is not a CMR controller.",
+	},
+	{
+		code: "cmr/outcome-unknown",
+		summary:
+			"The command was sent to a CMR client but no final status came back; it may still be running.",
+	},
+	{
+		code: "cmr/output-truncated",
+		summary:
+			"Warning: CMR clipped a client's command output at its ~60 KiB cap.",
+	},
+	{
+		code: "cmr/selection-incomplete",
+		summary:
+			"The controller did not answer whether every device matches the labels, so nothing was run.",
+	},
+	{
+		code: "cmr/validation-incomplete",
+		summary:
+			"A CMR client's validation result was incomplete or clipped, so the command was not sent to it.",
+	},
+
 	// quickchr/*
 	{
 		code: "quickchr/package-unavailable",
@@ -566,6 +618,10 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "usage/invalid-method",
 		summary: "The -X/--method value is not a supported HTTP method.",
+	},
+	{
+		code: "usage/missing-labels",
+		summary: "`--cmr` was given without a `--labels` expression.",
 	},
 	{
 		code: "usage/missing-group",

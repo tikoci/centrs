@@ -769,3 +769,91 @@ centrs execute --quickchr $NAME --quickchr no-such-machine -- ':put 1' --json
 Envelope: outer `ok: true`, `data.summary = { total: 2, ok: 1, failed: 1 }`;
 the unknown machine's inner error is `quickchr/machine-not-found`. Exit code 2
 (partial).
+
+## CMR clients through a controller (#450)
+
+`test/integration/execute-cmr.test.ts` runs these on a two-CHR CMR lab
+(`test/integration/cmr-lab.ts`): `$CTL` is a 7.26beta1 controller with the
+`cmr` package, paired with one client over a socket link. Examples CMR1–CMR7
+run over **both** `--via native-api` and `--via rest-api` to the controller,
+with validation on. The same test first asserts the device behaviour the
+design depends on (CMR-D1–D6 in the test file).
+
+### CMR1. A read on every client
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels all -- ':put [/system/identity/get name]'
+```
+
+`data.summary` is `{total: 2, ok: 2}`. Each target's `data.ret` is that
+device's own identity. `meta.validation.source` is `:put [:parse ...] via cmr
+run-script` with `result: passed`, and `meta.target.cmr.id` is its
+`/cmr/device` row.
+
+### CMR2. Per-client validation: a controller-only menu
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels all -- /cmr/device/print
+```
+
+The controller runs it. The client has no `cmr` package and is rejected on
+the client itself with `validation/package-missing`, so it is not sent the
+command (`meta.operation.cmr.dispatched` is 1). Exit code 2.
+
+### CMR3. A confirmed write
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels all --yes -- '/system/note/set note="centrs-cmr3"'
+```
+
+Both targets are `ok`, and both routers' `/system/note` reads `centrs-cmr3`.
+
+### CMR4. An unconfirmed write is refused before dispatch
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels all -- '/system/note/set note="centrs-cmr4"'
+```
+
+Outer `usage/confirmation-required` naming the client count and the
+controller. No note changes.
+
+### CMR5. A command every client rejects is never sent
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels all --yes -- '/system/note/set note="x" bogus-arg=1'
+```
+
+Both targets are `validation/unknown-attribute`, `dispatched` is 0, and no note
+changes.
+
+### CMR6. A CMR timeout is an unknown outcome
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels <client> --timeout 2s --yes -- ':delay 4s; :log info "<marker>"'
+```
+
+The target is `cmr/outcome-unknown`, and `<marker>` still appears in the
+client's log afterwards.
+
+### CMR7. Labels that match nothing
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels no-such-label -- ':put x'
+```
+
+`ok: true`, `data.summary.total` is 0, warning `cmr/empty-selection`, exit
+code 0.
+
+### CMR8. CLI exit code for a mixed result
+
+CMR2 through `runCli` exits `2`.
+
+### CMR9. A client that is down
+
+With the client VM stopped and the controller showing it `connected=false`:
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels <client> -- ':put x'
+```
+
+The target is `cmr/client-disconnected` and `dispatched` is 0.
