@@ -926,9 +926,45 @@ describe("console-only CMR views are refused before dialing", () => {
 	const env = { CENTRS_SKIP_ENV_FILE: "1" };
 	const target = { targetInput: "192.0.2.1", stdinIsTty: false };
 
-	test("execute", async () => {
+	// Every spelling RouterOS runs: literal, abbreviated, console spacing, and
+	// inside a multi-line script (CMR12 proves those run every line).
+	for (const command of [
+		DASHBOARD,
+		"/cmr/dev/dash numbers=*2",
+		"/cm/d/d",
+		"/cmr device dashboard numbers=*2",
+		':put "before"\n/cmr/device/dashboard numbers=*2',
+		":do { /cmr/device/da } on-error={}",
+	]) {
+		test(`execute ${JSON.stringify(command)}`, async () => {
+			const error = await rejection(
+				resolveExecuteRequest({ ...target, command }, env),
+			);
+			expect(error.code).toBe("cmr/console-only");
+		});
+	}
+
+	test("api POST /execute with the dashboard as its script", async () => {
 		const error = await rejection(
-			resolveExecuteRequest({ ...target, command: DASHBOARD }, env),
+			resolveApiRequest(
+				{
+					...target,
+					method: "POST",
+					endpoint: "execute",
+					fields: { script: "/cmr/dev/dashboard" },
+				},
+				env,
+			),
+		);
+		expect(error.code).toBe("cmr/console-only");
+	});
+
+	test("api with an abbreviated path", async () => {
+		const error = await rejection(
+			resolveApiRequest(
+				{ ...target, method: "POST", endpoint: "cmr/dev/dash" },
+				env,
+			),
 		);
 		expect(error.code).toBe("cmr/console-only");
 	});
@@ -952,13 +988,20 @@ describe("console-only CMR views are refused before dialing", () => {
 		expect(f.preflight).toEqual([]);
 	});
 
-	test("other /cmr/device commands are not refused", async () => {
-		const resolved = await resolveExecuteRequest(
-			{ ...target, command: "/cmr/device/print" },
-			env,
-		);
-		expect(resolved.command).toBe("/cmr/device/print");
-	});
+	for (const command of [
+		"/cmr/device/print",
+		"/cmr/device/print detail",
+		"/cmr/device/disable *2",
+		"/system/device-mode/print",
+		":put cmr-device-dashboard",
+		':put ("cmr" . "device" . "dashboard")',
+		'/cmr/device/run-script labels=all script=":put x"',
+	]) {
+		test(`not refused: ${JSON.stringify(command)}`, async () => {
+			const resolved = await resolveExecuteRequest({ ...target, command }, env);
+			expect(resolved.command).toBe(command);
+		});
+	}
 });
 
 describe("raw run-script through api/execute: validation is scoped to the controller", () => {

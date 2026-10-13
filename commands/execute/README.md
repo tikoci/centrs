@@ -354,9 +354,11 @@ rest-api). A CMR failure never falls back to dialing a client directly.
   --cmr` is deferred (#441).
 
 `/cmr/device/dashboard` is an interactive console view. Through `execute` or
-`api` it is refused before dialing (`cmr/console-only`): on 7.26beta1 it closed
-a native API session, and over REST it held the controller's REST service for
-every caller for 10–30 s.
+`api` it is refused before dialing (`cmr/console-only`), in any spelling:
+abbreviated (`/cmr/dev/dash`), with console spacing, inside a multi-line script,
+or as an `api POST /execute` script. On 7.26beta1 it closed a native API
+session, and over REST it held the controller's REST service for every caller
+for 10–30 s.
 
 Calling `/cmr/device/run-script` yourself, through `api` or plain `execute`,
 validates only the controller request. The envelope then carries the warning

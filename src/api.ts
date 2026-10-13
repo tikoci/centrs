@@ -818,6 +818,9 @@ export async function resolveApiRequest(
 	}
 	const raw = request.raw ?? false;
 	const body = buildApiBody(request);
+	if (scriptMode && typeof body["script"] === "string") {
+		assertNotCmrConsoleOnly(body["script"]);
+	}
 	const structuredQuery =
 		(request.query?.length ?? 0) > 0
 			? parseQueries(request.query ?? [])

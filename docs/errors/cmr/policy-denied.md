@@ -11,7 +11,9 @@ happens only when it runs. Nothing was changed on that client.
 
 - `/user add`, `/user group add` (needs `policy`).
 - `/tool sniffer` (needs `sniff`).
-- Reading a sensitive value returns `*` or an empty value rather than failing.
+
+Reading a sensitive value is not this error: it succeeds and returns `*` or an
+empty value.
 
 ## Fix
 

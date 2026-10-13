@@ -11,7 +11,9 @@ before opening any connection.
 - over **REST** it never returned, and every other REST request to the
   controller then waited 10–30 s until it timed out.
 
-centrs matches the literal path; an abbreviated spelling is not recognized.
+centrs refuses it in any spelling: abbreviated (`/cmr/dev/dash`), with
+console spacing, inside a multi-line script, or as an `api POST /execute`
+script. It cannot follow a relative menu change across statements.
 
 ## Fix
 
