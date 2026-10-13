@@ -28,6 +28,10 @@
  *   - Output is clipped at ~60 KiB with an in-band `...(+N B)` and status
  *     `success`. A validation result therefore passes a completeness gate (a
  *     trailing nonce line) before its `:parse` text is classified.
+ *   - Scripts run with only the `read`, `write`, `test` and `reboot` policies
+ *     (no user session). `/user/add` and `/tool/sniffer` fail at RUN time with
+ *     `not enough permissions (9)` although `:parse` accepted them, so that is
+ *     a dispatch outcome (`cmr/policy-denied`), never a validation result.
  *   - A client cannot check its own key: inside `run-script`,
  *     `/cmr/client get local-id` reads `*****` (no `sensitive` policy), and
  *     `numbers=` takes `.id` or identity but not `ids`. So binding is a
@@ -107,6 +111,8 @@ const TRUNCATION_MARKER = /\.\.\.\(\+(\d+) B\)\s*$/;
 const TIMEOUT_OUTPUT =
 	/^(?:timed out \(\d+\)|std failure: timeout \(\d+\))\s*$/;
 const NO_DEVICES_SELECTED = /no devices selected/i;
+/** run-script lacks `policy`, `sniff`, `sensitive` (…); `:parse` cannot see that. */
+const POLICY_DENIED = /^not enough permissions \(9\)/;
 const ACCEPTED_IL = /^\(evl\s/;
 /** A missing `/cmr/device`: native `no such command prefix`, REST `no such command or directory (cmr)`. */
 const MISSING_MENU = /no such command (?:prefix|or directory)/i;
@@ -595,6 +601,24 @@ function judgeDispatch(
 				resolved,
 				controllerName,
 				unknownOutcome(device, undefined, row),
+			);
+		}
+		if (POLICY_DENIED.test(row.output.trim())) {
+			return memberError(
+				member,
+				resolved,
+				controllerName,
+				new CentrsError({
+					code: "cmr/policy-denied",
+					summary: `${device.identity} refused the command: CMR runs scripts with only the read, write, test and reboot policies (\`${row.output.trim()}\`).`,
+					remediation:
+						"Commands that need another policy (`/user`, `/tool/sniffer`, reading a sensitive value) cannot run through CMR. Run this one directly on the device, e.g. `centrs execute <device> -- '<command>'`.",
+					context: {
+						id: device.id,
+						identity: device.identity,
+						output: row.output,
+					},
+				}),
 			);
 		}
 		return memberError(

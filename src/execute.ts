@@ -1,4 +1,8 @@
-import { cmrRunScriptWarnings, cmrScriptWarnings } from "./core/cmr.ts";
+import {
+	assertNotCmrConsoleOnly,
+	cmrRunScriptWarnings,
+	cmrScriptWarnings,
+} from "./core/cmr.ts";
 import type {
 	CentrsEnvelope,
 	CentrsErrorEnvelope,
@@ -320,6 +324,9 @@ export async function resolveExecuteRequest(
 ): Promise<ResolvedExecuteRequest> {
 	validateExecuteRequestShape(request);
 	const canonical = canonicalizeExecuteCommand(request.command);
+	if (canonical.mode === "structured") {
+		assertNotCmrConsoleOnly(`${canonical.path}/${canonical.verb}`);
+	}
 	const config = options.config ?? (await loadEnvFileDefaults(env));
 	// A quickchr target is a named-live-provider: it supplies host/port/auth from
 	// the live descriptor and bypasses CDB/env resolution for those fields
@@ -481,6 +488,9 @@ export function resolveExecuteGlobalContext(
 ): ExecuteGlobalContext {
 	validateExecuteRequestShape(request);
 	const canonical = canonicalizeExecuteCommand(request.command);
+	if (canonical.mode === "structured") {
+		assertNotCmrConsoleOnly(`${canonical.path}/${canonical.verb}`);
+	}
 	const via = resolveExecuteProtocol(request, env, undefined, config);
 	const format = resolveFormat(request, env, config);
 	const validate = resolveBooleanSetting(

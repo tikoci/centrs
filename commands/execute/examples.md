@@ -775,9 +775,9 @@ the unknown machine's inner error is `quickchr/machine-not-found`. Exit code 2
 `test/integration/execute-cmr.test.ts` runs these on a two-CHR CMR lab
 (`test/integration/cmr-lab.ts`): `$CTL` is a 7.26beta1 controller with the
 `cmr` package, paired with one client over a socket link. Examples CMR1–CMR7
-and CMR10 run over **both** `--via native-api` and `--via rest-api` to the
-controller, with validation on. The same test first asserts the device
-behaviour the design depends on (CMR-D1–D7 in the test file).
+and CMR10–CMR12 run over **both** `--via native-api` and `--via rest-api` to
+the controller, with validation on. The same test first asserts the device
+behaviour the design depends on (CMR-D1–D8 in the test file).
 
 ### CMR1. A read on every client
 
@@ -869,3 +869,21 @@ centrs execute --quickchr $CTL --cmr --labels <client> --timeout 20s --yes -- ':
 The target is `cmr/outcome-unknown` with `dispatched` 1. `<marker>` is not in
 the client's log when the call returns, and appears afterwards: cancelling
 the controller call did not stop the client script.
+
+### CMR11. A command needing a policy CMR scripts lack
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels <client> --yes -- '/user/add name=<user> group=read password=<x>'
+```
+
+Validation passes on the client (`:parse` accepts it), then the client refuses
+it when it runs: the target is `cmr/policy-denied`, and `<user>` does not exist
+on the client afterwards.
+
+### CMR12. A multi-line command
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels <client> -- $':put centrs-l1\n:put centrs-l2'
+```
+
+The target is `ok` and `data.ret` holds both lines.

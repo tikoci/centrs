@@ -294,6 +294,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"The target does not answer `/cmr/device`; it is not a CMR controller.",
 	},
 	{
+		code: "cmr/console-only",
+		summary:
+			"The CMR command is an interactive console view that breaks an API session, so centrs refused it before dialing.",
+	},
+	{
 		code: "cmr/outcome-unknown",
 		summary:
 			"The command was sent to a CMR client but no final status came back; it may still be running.",
@@ -302,6 +307,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "cmr/output-truncated",
 		summary:
 			"Warning: CMR clipped a client's command output at its ~60 KiB cap.",
+	},
+	{
+		code: "cmr/policy-denied",
+		summary:
+			"A CMR client refused the command because CMR scripts run without the policy it needs.",
 	},
 	{
 		code: "cmr/selection-incomplete",

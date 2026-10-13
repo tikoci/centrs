@@ -8,6 +8,27 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Added
+
+- `execute <controller> --cmr --labels <expr> -- '<command>'` runs one
+  validated command on CMR clients through their controller (RouterOS
+  7.26beta1+; #450, #451). Only the controller is dialed, with its own
+  credentials. Each selected client validates the command with `:parse`
+  first, and a client whose answer is incomplete or rejected is not sent it.
+  The command then goes to each client in its own `run-script` call, bound to
+  the `/cmr/device` row and key it was validated on, and is never retried; a
+  timeout, cancellation or lost call is `cmr/outcome-unknown`. One `--yes`
+  covers the whole selection. Native API (default) and REST to the controller
+  are both CHR-tested. Raw `run-script` through `api` or plain `execute` warns
+  `cmr/client-script-not-validated`. Not on MCP yet.
+- `cmr/policy-denied`: a command CMR scripts may not run (`/user add`,
+  `/tool sniffer`: the client allows only `read`, `write`, `test` and
+  `reboot`) is reported as such instead of a generic RouterOS failure.
+  `:parse` accepts these commands, so validation cannot catch them.
+- `cmr/console-only`: `execute` and `api` refuse `/cmr/device/dashboard`
+  before dialing. On 7.26beta1 it closed a native API session, and over REST
+  it held the controller's REST service for every caller for 10–30 s.
+
 ## 0.1.8 — 2026-10-12
 
 Release (npm tag `latest`; `next` moves forward to 0.1.8). Everything in

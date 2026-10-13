@@ -197,6 +197,24 @@ describe("parseExecuteCliArgs — `--` boundary + selectors", () => {
 describe("executeFanout", () => {
 	const base = { command: READ, stdinIsTty: false };
 
+	test("a console-only CMR view is an outer refusal, before any target is dialed", async () => {
+		let dialed = 0;
+		const error = await executeFanout(
+			{ command: "/cmr/device/dashboard numbers=*1", stdinIsTty: false },
+			selection(),
+			{},
+			{
+				expand: async () => expansionOf([cdbMember("10.0.0.1", 0)]),
+				execute: async (resolved) => {
+					dialed += 1;
+					return fakeSuccess(resolved);
+				},
+			},
+		).catch((e: CentrsError) => e);
+		expect((error as CentrsError).code).toBe("cmr/console-only");
+		expect(dialed).toBe(0);
+	});
+
 	test("fans a read out across members, ordered by record index, exit 0", async () => {
 		const internals: ExecuteFanoutInternals = {
 			expand: async () =>

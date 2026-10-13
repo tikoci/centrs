@@ -559,6 +559,11 @@ describe("execute --cmr: dispatch outcomes", () => {
 		],
 		["skipped", row("skipped", "disconnected"), "cmr/client-disconnected"],
 		[
+			"policy the CMR script lacks",
+			row("failed", "not enough permissions (9) (/user/add; line 1)\n"),
+			"cmr/policy-denied",
+		],
+		[
 			"sent, no final row",
 			{
 				selected: true,
@@ -914,6 +919,46 @@ describe("execute --cmr: CLI usage", () => {
 			expect(JSON.parse(result.err).error.code).toBe(code);
 		});
 	}
+});
+
+describe("console-only CMR views are refused before dialing", () => {
+	const DASHBOARD = "/cmr/device/dashboard numbers=*2";
+	const env = { CENTRS_SKIP_ENV_FILE: "1" };
+	const target = { targetInput: "192.0.2.1", stdinIsTty: false };
+
+	test("execute", async () => {
+		const error = await rejection(
+			resolveExecuteRequest({ ...target, command: DASHBOARD }, env),
+		);
+		expect(error.code).toBe("cmr/console-only");
+	});
+
+	for (const method of ["POST", "GET"]) {
+		test(`api ${method}`, async () => {
+			const error = await rejection(
+				resolveApiRequest(
+					{ ...target, method, endpoint: "/cmr/device/dashboard/" },
+					env,
+				),
+			);
+			expect(error.code).toBe("cmr/console-only");
+		});
+	}
+
+	test("execute --cmr refuses it before reading the inventory", async () => {
+		const f = fake({ inventory: [[CTL, C1]] });
+		const error = await rejection(runFake(f, { command: DASHBOARD }));
+		expect(error.code).toBe("cmr/console-only");
+		expect(f.preflight).toEqual([]);
+	});
+
+	test("other /cmr/device commands are not refused", async () => {
+		const resolved = await resolveExecuteRequest(
+			{ ...target, command: "/cmr/device/print" },
+			env,
+		);
+		expect(resolved.command).toBe("/cmr/device/print");
+	});
 });
 
 describe("raw run-script through api/execute: validation is scoped to the controller", () => {

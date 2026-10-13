@@ -282,6 +282,11 @@ rest-api). A CMR failure never falls back to dialing a client directly.
   selects the controller. CDB selectors (`--group`/`--where`/`--all`/
   `--default`/geo), several targets, and `--via mac-telnet|ssh` are
   `usage/conflicting-flags`. `--labels` without `--cmr` is refused the same way.
+  Labels that no device has are accepted silently by RouterOS; an empty
+  selection is `ok: true` with the warning `cmr/empty-selection`. A device's
+  identity selects it only while the controller's `/cmr auto-labels` includes
+  `identity` (the default `all` does). On 7.26beta1, after `auto-labels=version`
+  a client's row still *showed* its identity label but no longer matched it.
 - **One `run-script` call per device.** On 7.26beta1, `run-script` result rows
   carry no device id, and their `device` key (`identity@address`) changed
   *during* a call when a client dropped. So centrs never matches rows to
@@ -330,6 +335,13 @@ rest-api). A CMR failure never falls back to dialing a client directly.
   that error says the command already ran (`context.dispatched: true`). A `failed` runtime
   error maps through the usual `routeros/*` table. `skipped` →
   `cmr/client-disconnected`.
+- **What a client script may do:** CMR runs it with only the `read`, `write`,
+  `test` and `reboot` policies and no user session. A command that needs
+  another policy (`/user add`, `/tool sniffer`) passes `:parse` on the client
+  and is refused when it runs: `cmr/policy-denied`, nothing changed. Sensitive
+  values read back as `*` or empty. Multi-line commands run every line (the
+  manual says single-line; 7.26beta1 ran both LF and CRLF scripts in full), and
+  `/export` works.
 - **Unknown outcomes:** a CMR timeout (`timed out (6)`, `std failure: timeout
   (13)`), a local deadline, a cancellation, or a lost call after sending all
   give `cmr/outcome-unknown`. A cancellation before anything is sent, including
@@ -340,6 +352,11 @@ rest-api). A CMR failure never falls back to dialing a client directly.
   `/console/inspect` stage.
 - **Not on MCP** until delegated authorization is designed (#449). `retrieve
   --cmr` is deferred (#441).
+
+`/cmr/device/dashboard` is an interactive console view. Through `execute` or
+`api` it is refused before dialing (`cmr/console-only`): on 7.26beta1 it closed
+a native API session, and over REST it held the controller's REST service for
+every caller for 10–30 s.
 
 Calling `/cmr/device/run-script` yourself, through `api` or plain `execute`,
 validates only the controller request. The envelope then carries the warning

@@ -3,10 +3,43 @@
  * directly (`api`, plain `execute`) and by `execute --cmr` (#450).
  */
 
+import { CentrsError } from "../errors.ts";
 import type { Warning } from "./envelope.ts";
 
 /** The controller command that runs a script on CMR clients. */
 export const CMR_RUN_SCRIPT_PATH = "/cmr/device/run-script";
+
+/**
+ * Console-only live views. Grounded on 7.26beta1 CHR: over the native API
+ * `/cmr/device/dashboard` closed the API session; over REST it never returned,
+ * and every other REST call on the controller then waited 10–30 s.
+ */
+const CMR_CONSOLE_ONLY: ReadonlySet<string> = new Set([
+	"/cmr/device/dashboard",
+]);
+
+/**
+ * Refuse a console-only CMR view before anything is dialed. Matches the
+ * literal path only; an abbreviated spelling is not recognized.
+ */
+export function assertNotCmrConsoleOnly(commandPath: string): void {
+	const path = withoutTrailingSlashes(commandPath);
+	if (!CMR_CONSOLE_ONLY.has(path)) return;
+	throw new CentrsError({
+		code: "cmr/console-only",
+		summary: `\`${path}\` is an interactive console view, not an API command. Over the native API it closes the session; over REST it holds the controller's REST service for every caller until it times out.`,
+		remediation:
+			"Open it in WinBox 4 or WebFig, or run it in `centrs terminal <controller>`. For the data behind it, read `/cmr/device`, `/cmr/alert` or `/cmr/upgrade/job` with `centrs retrieve`.",
+		context: { path },
+	});
+}
+
+function withoutTrailingSlashes(path: string): string {
+	// A loop, not `/\/+$/`: that regex is quadratic on a long run of `/`.
+	let end = path.length;
+	while (end > 0 && path[end - 1] === "/") end -= 1;
+	return path.slice(0, end);
+}
 
 const clientScriptNotValidated: Warning = {
 	code: "cmr/client-script-not-validated",
@@ -22,10 +55,7 @@ const clientScriptNotValidated: Warning = {
  * on every selected client, so say so next to the `passed` gate.
  */
 export function cmrRunScriptWarnings(commandPath: string): Warning[] {
-	// A loop, not `/\/+$/`: that regex is quadratic on a long run of `/`.
-	let end = commandPath.length;
-	while (end > 0 && commandPath[end - 1] === "/") end -= 1;
-	if (commandPath.slice(0, end) !== CMR_RUN_SCRIPT_PATH) return [];
+	if (withoutTrailingSlashes(commandPath) !== CMR_RUN_SCRIPT_PATH) return [];
 	return [clientScriptNotValidated];
 }
 
