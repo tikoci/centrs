@@ -6,7 +6,7 @@
  *   - CMR-D*: the device behaviour `src/execute-cmr.ts` is built on, asserted
  *     directly against the controller so a later RouterOS build that changes it
  *     fails here first, not as a silent mis-binding in centrs.
- *   - CMR1–CMR9: the examples in `commands/execute/examples.md` → CMR, through
+ *   - CMR1–CMR10: the examples in `commands/execute/examples.md` → CMR, through
  *     the library and the CLI, with validation on, over native-api AND
  *     rest-api to the controller.
  */
@@ -69,7 +69,7 @@ async function note(router: CmrLab["controller"]): Promise<string> {
 
 describeFast("execute --cmr against a CMR lab (#450)", () => {
 	test(
-		"device contract, then CMR1–CMR9 over native-api and rest-api",
+		"device contract, then CMR1–CMR10 over native-api and rest-api",
 		async () => {
 			const lab = await startCmrLab(
 				`centrs-cmr-${crypto.randomUUID().slice(0, 6)}`,
@@ -164,6 +164,29 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 					],
 				).toStartWith("syntax error");
 
+				// CMR-D7. A client cannot check its own key, so binding stays a
+				// host-side read: `local-id` (whose first 64 hex are the device key
+				// in `ids`) is masked inside run-script, and `numbers=` refuses `ids`.
+				expect(
+					(await client.read("/cmr/client"))[0]?.["local-id"]?.slice(0, 64),
+				).toBe(clientRow?.["ids"]?.split("/")[0]);
+				const d7 = await runScriptRest(lab, {
+					numbers: clientId,
+					script: ":put [/cmr/client get local-id]",
+				});
+				expect(lastRows(d7.body)[0]).toMatchObject({
+					status: "success",
+					output: "*****\r\n",
+				});
+				expect(
+					(
+						await runScriptRest(lab, {
+							numbers: clientRow?.["ids"] ?? "",
+							script: ":put x",
+						})
+					).status,
+				).toBe(404);
+
 				for (const via of ["native-api", "rest-api"] as const) {
 					const base: ExecuteCmrRequest = {
 						quickchr: controller.name,
@@ -251,6 +274,24 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 					await Bun.sleep(4_000);
 					expect(await clientLogHas(lab, marker)).toBe(true);
 
+					// CMR10. A caller cancel after dispatch is an unknown outcome, through
+					// the real adapter — and the client script really kept going.
+					const cancelMarker = `centrs-cmr10-${via}-${crypto.randomUUID().slice(0, 6)}`;
+					const abort = new AbortController();
+					const timer = setTimeout(() => abort.abort(), 2_000);
+					const cancelled = await run({
+						labels: client.identity,
+						timeout: "20s",
+						command: `:delay 6s; :log info "${cancelMarker}"`,
+						yes: true,
+						signal: abort.signal,
+					}).finally(() => clearTimeout(timer));
+					expect(codes(cancelled)).toEqual(["cmr/outcome-unknown"]);
+					expect(cancelled.meta.operation?.cmr.dispatched).toBe(1);
+					expect(await clientLogHas(lab, cancelMarker)).toBe(false);
+					await Bun.sleep(6_000);
+					expect(await clientLogHas(lab, cancelMarker)).toBe(true);
+
 					// CMR7. Labels that match nothing: empty success with a warning.
 					const empty = await run({
 						labels: "no-such-label",
@@ -309,8 +350,18 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						"CMR7",
 						"CMR8",
 						"CMR9",
+						"CMR10",
 					],
-					"rest-api": ["CMR1", "CMR2", "CMR3", "CMR4", "CMR5", "CMR6", "CMR7"],
+					"rest-api": [
+						"CMR1",
+						"CMR2",
+						"CMR3",
+						"CMR4",
+						"CMR5",
+						"CMR6",
+						"CMR7",
+						"CMR10",
+					],
 				};
 				for (const [protocol, exampleIds] of Object.entries(proven)) {
 					await recordIntegrationEvidence({

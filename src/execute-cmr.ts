@@ -28,6 +28,10 @@
  *   - Output is clipped at ~60 KiB with an in-band `...(+N B)` and status
  *     `success`. A validation result therefore passes a completeness gate (a
  *     trailing nonce line) before its `:parse` text is classified.
+ *   - A client cannot check its own key: inside `run-script`,
+ *     `/cmr/client get local-id` reads `*****` (no `sensitive` policy), and
+ *     `numbers=` takes `.id` or identity but not `ids`. So binding is a
+ *     host-side `/cmr/device` read just before each call, not an atomic check.
  *   - `freeze-frame-interval=20ms` brings a trivial call from ~1 s to ~25 ms;
  *     `strategy`/`fail-policy` are pinned and `order` is never sent (it adds
  *     `pending` and policy-`skipped` statuses).
@@ -70,6 +74,7 @@ import {
 	passedStages,
 	promptForWriteConfirmation,
 	type ResolvedExecuteRequest,
+	renderExecuteEnvelope,
 	resolveExecuteRequest,
 } from "./execute.ts";
 import { assertOfflineSyntax, type OfflineGateResult } from "./offline-gate.ts";
@@ -252,7 +257,7 @@ export async function executeCmr(
 
 	try {
 		// 1. Inventory and per-row preflight (membership + client validation).
-		const before = await readInventory(controller);
+		const before = await readInventoryBeforeDispatch(controller, signal);
 		const preflightScript = resolved.validate.value
 			? `:put [:parse ${routerOsStringLiteral(resolved.command)}]; :put "${nonce}"`
 			: `:put "${nonce}"`;
@@ -324,7 +329,7 @@ export async function executeCmr(
 		}
 
 		// 2. Bind: a member whose `ids` changed since S1 was validated as another key.
-		const middle = await readInventory(controller);
+		const middle = await readInventoryBeforeDispatch(controller, signal);
 		for (const member of members) {
 			if (member.result) continue;
 			const now = middle.find((d) => d.id === member.device.id);
@@ -342,8 +347,6 @@ export async function executeCmr(
 			}
 		}
 
-		if (signal.aborted) throw cancelledError();
-
 		// 3. One write gate, naming the blast radius.
 		const runnable = members.filter((m) => !m.result);
 		if (write && runnable.length > 0) {
@@ -357,17 +360,20 @@ export async function executeCmr(
 			);
 		}
 
-		// 4. Dispatch: one call per member, no retry.
+		// 4. Dispatch: one call per member, no retry. The prompt and the pool
+		// queue can both wait arbitrarily long after S2, so each member is
+		// re-bound to the key it was validated on just before its own call.
 		const dispatched = await runBoundedPool(
 			runnable,
 			concurrency,
 			async (member) => {
-				if (signal.aborted) {
-					return {
-						member,
-						outcome: { selected: true, sent: false, error: cancelledError() },
-					};
-				}
+				const unsent = (error: CentrsError) => ({
+					member,
+					outcome: { selected: true, sent: false, error },
+				});
+				if (signal.aborted) return unsent(cancelledError());
+				const rebound = await rebindBeforeSend(controller, member, signal);
+				if (rebound) return unsent(rebound);
 				const outcome = await controller.runScript(
 					{
 						numbers: member.device.id,
@@ -396,12 +402,11 @@ export async function executeCmr(
 					: now?.ids === member.device.ids
 						? "bound"
 						: "drifted";
-			member.result = judgeDispatch(
+			member.result = applyMemberBudget(
+				judgeDispatch(member, outcome, resolved, controllerName, binding),
 				member,
-				outcome,
 				resolved,
 				controllerName,
-				binding,
 			);
 		}
 
@@ -632,6 +637,48 @@ function judgeDispatch(
 	};
 }
 
+/**
+ * `--max-results` per member, as plain execute fan-out applies it per target:
+ * the member's rendered envelope in the requested format, in UTF-8 bytes. The
+ * command already ran, so the error says so rather than implying it did not.
+ */
+function applyMemberBudget(
+	envelope: ExecuteEnvelope,
+	member: Member,
+	resolved: ResolvedExecuteRequest,
+	controllerName: string,
+): ExecuteEnvelope {
+	const budget = resolved.maxResultsBytes?.value;
+	if (!budget || !envelope.ok) return envelope;
+	const format = resolved.format.value;
+	const requiredBytes = new TextEncoder().encode(
+		renderExecuteEnvelope(envelope, format, {
+			verbose: format === "text" && resolved.verbose,
+		}),
+	).length;
+	if (requiredBytes <= budget) return envelope;
+	const device = member.device;
+	return memberError(
+		member,
+		resolved,
+		controllerName,
+		new CentrsError({
+			code: "input/max-results-exceeded",
+			summary: `The command ran on ${device.identity}, but its result (${requiredBytes} bytes) exceeded the requested ${budget}-byte budget, so it is not returned.`,
+			remediation:
+				"Increase `--max-results` or narrow the command's output. The command already ran on this client; check its state before re-running anything that is not idempotent.",
+			context: {
+				id: device.id,
+				identity: device.identity,
+				requiredBytes,
+				maxResultsBytes: budget,
+				command: resolved.command,
+				dispatched: true,
+			},
+		}),
+	);
+}
+
 // ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
@@ -690,12 +737,13 @@ function unknownOutcome(
 	});
 }
 
-function cancelledError(): CentrsError {
+function cancelledError(cause?: unknown): CentrsError {
 	return new CentrsError({
 		code: "cmr/cancelled",
 		summary:
 			"The operation was cancelled before the command was sent to this CMR client.",
 		remediation: "Nothing ran on this client. Re-run when ready.",
+		...(cause ? { cause } : {}),
 	});
 }
 
@@ -714,6 +762,63 @@ function isNoDevicesSelected(error: unknown): boolean {
 	return NO_DEVICES_SELECTED.test(
 		`${error.summary} ${typeof detail === "string" ? detail : ""}`,
 	);
+}
+
+/**
+ * The per-member check before its call: `undefined` when the row still carries
+ * the `.id` + `ids` the member was validated on, otherwise why it is not sent.
+ * The original member set is fixed; a replacement row is never adopted, even
+ * when it matches the labels. A host-side read is not atomic with the call:
+ * a re-key inside that gap is still caught, after the fact, by S3.
+ */
+async function rebindBeforeSend(
+	controller: CmrController,
+	member: Member,
+	signal: AbortSignal,
+): Promise<CentrsError | undefined> {
+	const device = member.device;
+	let current: CmrDevice[];
+	try {
+		current = await readInventoryBeforeDispatch(controller, signal);
+	} catch (error) {
+		const cause = asCmrError(error);
+		return new CentrsError({
+			code: cause.code,
+			summary: `The CMR inventory could not be re-read before sending to ${device.identity}, so the command was not sent to it: ${cause.summary}`,
+			remediation:
+				cause.remediation ??
+				"Check the controller is reachable and responsive, then re-run.",
+			context: { id: device.id, identity: device.identity, dispatched: false },
+			cause,
+		});
+	}
+	const now = current.find((d) => d.id === device.id);
+	if (now && now.ids === device.ids) return undefined;
+	return notDispatched(
+		"cmr/membership-changed",
+		`CMR device ${device.id} (${device.identity}) changed or left the inventory before its command was sent.`,
+		{ before: device, after: now ?? null },
+	);
+}
+
+/**
+ * S1/S2: nothing has been sent yet, so a caller abort is `cmr/cancelled`
+ * whether the read resolved or the adapter rejected because of it.
+ */
+async function readInventoryBeforeDispatch(
+	controller: CmrController,
+	signal: AbortSignal,
+): Promise<CmrDevice[]> {
+	if (signal.aborted) throw cancelledError();
+	let devices: CmrDevice[];
+	try {
+		devices = await readInventory(controller);
+	} catch (error) {
+		if (signal.aborted) throw cancelledError(error);
+		throw error;
+	}
+	if (signal.aborted) throw cancelledError();
+	return devices;
 }
 
 async function readInventory(controller: CmrController): Promise<CmrDevice[]> {

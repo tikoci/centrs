@@ -278,7 +278,10 @@ describe("execute --cmr: selection and binding", () => {
 			code: "transport/timeout",
 			summary: "t",
 		});
-		const f = fake({ inventory: [[CTL, C1], [CTL, C1], unreadable] });
+		// S1, S2, one re-bind read per member, then S3.
+		const f = fake({
+			inventory: [[CTL, C1], [CTL, C1], [CTL, C1], [CTL, C1], unreadable],
+		});
 		const envelope = await runFake(f);
 		expect(f.dispatch.length).toBe(2);
 		expect(codes(envelope)).toEqual([
@@ -290,6 +293,8 @@ describe("execute --cmr: selection and binding", () => {
 	test("a key change after dispatch makes even a runtime failure unknown; a CMR skip stays a skip", async () => {
 		const f = fake({
 			inventory: [
+				[CTL, C1],
+				[CTL, C1],
 				[CTL, C1],
 				[CTL, C1],
 				[
@@ -320,6 +325,108 @@ describe("execute --cmr: selection and binding", () => {
 		const error = await rejection(runFake(f, { signal: abort.signal }));
 		expect(error.code).toBe("cmr/cancelled");
 		expect(f.dispatch).toEqual([]);
+	});
+
+	// Production adapters REJECT when the caller aborts mid-read; the fake above
+	// resolves. Both S1 and S2 must still say cancelled, not transport.
+	for (const [phase, read] of [
+		["S1", 0],
+		["S2", 1],
+	] as const) {
+		test(`an inventory read the abort makes reject (${phase}) is cmr/cancelled, not a transport fault`, async () => {
+			const abort = new AbortController();
+			let reads = 0;
+			const f = fake({ inventory: [[CTL, C1]] });
+			const devices = f.controller.devices.bind(f.controller);
+			f.controller.devices = async () => {
+				if (reads++ === read) {
+					abort.abort();
+					throw new CentrsError({
+						code: "transport/network",
+						summary: "Network request to 192.0.2.1 failed.",
+					});
+				}
+				return devices();
+			};
+			const error = await rejection(runFake(f, { signal: abort.signal }));
+			expect(error.code).toBe("cmr/cancelled");
+			expect(f.preflight.length).toBe(read === 0 ? 0 : 2);
+			expect(f.dispatch).toEqual([]);
+		});
+	}
+
+	test("a client replaced while the write prompt waits is never sent the command", async () => {
+		const inventory: Array<CmrDevice[]> = [[CTL, C1]];
+		const f = fake({ inventory });
+		const envelope = await runFake(f, {
+			command: '/system/note/set note="review"',
+			stdinIsTty: true,
+			confirm: async () => {
+				inventory.push([CTL, { ...C1, ids: "EEEE/CCCC" }]);
+				return true;
+			},
+		});
+		expect(f.dispatch.map((c) => c.numbers)).toEqual(["*1"]);
+		expect(codes(envelope)).toEqual(["ok", "cmr/membership-changed"]);
+		expect(envelope.data.targets[1]).toMatchObject({
+			error: { context: { after: { ids: "EEEE/CCCC" } } },
+		});
+		expect(envelope.meta.operation?.cmr.dispatched).toBe(1);
+	});
+
+	test("a client replaced while queued behind the pool is never sent the command", async () => {
+		const inventory: Array<CmrDevice[]> = [[CTL, C1, C3]];
+		const f = fake({
+			inventory,
+			onDispatch: () => {
+				if (inventory.length === 1) inventory.push([CTL, C1]); // C3 left
+			},
+		});
+		const envelope = await runFake(f, { concurrency: 1 });
+		expect(f.dispatch.map((c) => c.numbers)).toEqual(["*1", "*2"]);
+		expect(codes(envelope)).toEqual(["ok", "ok", "cmr/membership-changed"]);
+		expect(envelope.data.targets[2]).toMatchObject({
+			error: { context: { after: null } },
+		});
+	});
+
+	test("cancelling during a member's re-bind read sends nothing to it", async () => {
+		const abort = new AbortController();
+		let reads = 0;
+		const f = fake({ inventory: [[C1]] });
+		const devices = f.controller.devices.bind(f.controller);
+		f.controller.devices = async () => {
+			if (reads++ === 2) {
+				abort.abort();
+				throw new CentrsError({ code: "transport/network", summary: "n" });
+			}
+			return devices();
+		};
+		const envelope = await runFake(f, { signal: abort.signal });
+		expect(f.dispatch).toEqual([]);
+		expect(envelope.data.targets[0]).toMatchObject({
+			ok: false,
+			error: { code: "cmr/cancelled", context: { dispatched: false } },
+		});
+	});
+
+	test("a re-bind read that fails sends nothing to that member and says so", async () => {
+		const f = fake({
+			inventory: [
+				[C1],
+				[C1],
+				new CentrsError({ code: "transport/timeout", summary: "t" }),
+			],
+		});
+		const envelope = await runFake(f);
+		expect(f.dispatch).toEqual([]);
+		expect(envelope.data.targets[0]).toMatchObject({
+			ok: false,
+			error: {
+				code: "transport/timeout",
+				context: { dispatched: false },
+			},
+		});
 	});
 });
 
@@ -538,8 +645,45 @@ describe("execute --cmr: dispatch outcomes", () => {
 		expect(target?.meta.truncated).toMatchObject({ truncated: true });
 	});
 
+	test("--max-results is enforced per member in UTF-8 bytes; the error says the command ran", async () => {
+		const output = `${"é".repeat(1_000)}\r\n`;
+		const dispatch = { "*2": row("success", output) };
+		const unbounded = await runFake(fake({ inventory: [[C1]], dispatch }), {
+			format: "json",
+		});
+		const rendered = JSON.stringify(unbounded.data.targets[0], null, 2);
+		const bytes = new TextEncoder().encode(rendered).length;
+		// Between the character count and the byte count: only UTF-8 counting trips.
+		const budget = Math.floor((rendered.length + bytes) / 2);
+		expect(rendered.length).toBeLessThan(budget);
+
+		const f = fake({ inventory: [[C1]], dispatch });
+		const envelope = await runFake(f, {
+			format: "json",
+			maxResultsBytes: budget,
+		});
+		expect(f.dispatch.length).toBe(1);
+		expect(envelope.data.targets[0]).toMatchObject({
+			ok: false,
+			error: {
+				code: "input/max-results-exceeded",
+				context: { maxResultsBytes: budget, dispatched: true },
+			},
+		});
+		expect(JSON.stringify(envelope)).not.toContain("é".repeat(100));
+
+		const roomy = await runFake(fake({ inventory: [[C1]], dispatch }), {
+			format: "json",
+			// The budget itself is echoed in meta, so leave room for that field.
+			maxResultsBytes: bytes + 64,
+		});
+		expect(codes(roomy)).toEqual(["ok"]);
+	});
+
 	test("a key change seen after dispatch turns a success into an unknown outcome", async () => {
-		const f = fake({ inventory: [[C1], [C1], [{ ...C1, ids: "FFFF/CCCC" }]] });
+		const f = fake({
+			inventory: [[C1], [C1], [C1], [{ ...C1, ids: "FFFF/CCCC" }]],
+		});
 		const envelope = await runFake(f);
 		expect(envelope.data.targets[0]).toMatchObject({
 			ok: false,
@@ -627,6 +771,82 @@ describe("execute --cmr: write gate and cancellation", () => {
 			envelope.data.targets.slice(1).map((t) => (t.ok ? "ok" : t.error.code)),
 		).toEqual(["cmr/cancelled", "cmr/cancelled"]);
 	});
+});
+
+describe("execute --cmr: cancellation through the production adapters", () => {
+	// The fake controller above resolves when cancelled; the real adapters
+	// reject. Hold the controller's first answer on loopback, abort once the
+	// request has arrived, and the outcome must still be cmr/cancelled.
+	test("rest-api: aborting while /cmr/device is held is cmr/cancelled", async () => {
+		const arrived = Promise.withResolvers<void>();
+		const server = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch(req) {
+				arrived.resolve();
+				return new Promise<Response>((resolve) => {
+					req.signal.addEventListener("abort", () =>
+						resolve(new Response(null, { status: 499 })),
+					);
+				});
+			},
+		});
+		try {
+			const abort = new AbortController();
+			const running = executeCmr(
+				{
+					targetInput: "127.0.0.1",
+					port: server.port,
+					username: "admin",
+					password: "",
+					via: "rest-api",
+					labels: "all",
+					command: ":put x",
+					stdinIsTty: false,
+					timeout: "5s",
+					signal: abort.signal,
+				},
+				{ CENTRS_SKIP_ENV_FILE: "1" },
+			);
+			await arrived.promise;
+			abort.abort();
+			expect((await rejection(running)).code).toBe("cmr/cancelled");
+		} finally {
+			server.stop(true);
+		}
+	}, 5_000);
+
+	test("native-api: aborting while the controller login is held is cmr/cancelled", async () => {
+		const arrived = Promise.withResolvers<void>();
+		const listener = Bun.listen<undefined>({
+			hostname: "127.0.0.1",
+			port: 0,
+			socket: { data: () => arrived.resolve() },
+		});
+		try {
+			const abort = new AbortController();
+			const running = executeCmr(
+				{
+					targetInput: "127.0.0.1",
+					port: listener.port,
+					username: "admin",
+					password: "",
+					via: "native-api",
+					labels: "all",
+					command: ":put x",
+					stdinIsTty: false,
+					timeout: "5s",
+					signal: abort.signal,
+				},
+				{ CENTRS_SKIP_ENV_FILE: "1" },
+			);
+			await arrived.promise;
+			abort.abort();
+			expect((await rejection(running)).code).toBe("cmr/cancelled");
+		} finally {
+			listener.stop(true);
+		}
+	}, 5_000);
 });
 
 describe("execute --cmr: CLI usage", () => {

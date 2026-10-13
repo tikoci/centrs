@@ -301,8 +301,15 @@ rest-api). A CMR failure never falls back to dialing a client directly.
     selection incomplete: `cmr/selection-incomplete`, and nothing runs. A
     partial selection is never run as if it were the whole one.
 - **Binding:** `/cmr/device` is read before preflight, between preflight and
-  dispatch, and after dispatch. A device whose `ids` key changed is not sent the
-  command (`cmr/membership-changed`). After dispatch, a sent result is reported
+  the write gate, again for each member just before its own call (the prompt
+  and the fan-out queue can both wait), and after dispatch. A device whose row
+  is gone or whose `ids` key changed is not sent the command
+  (`cmr/membership-changed`); a replacement row is never adopted, even when it
+  matches the labels. If that per-member read fails, the member is not sent the
+  command and its error says so (`context.dispatched: false`). The per-member
+  read is host-side, not atomic with the call: on 7.26beta1 a client script
+  cannot check its own key (`/cmr/client get local-id` reads `*****` inside
+  `run-script`) and `numbers=` does not take `ids`. After dispatch, a sent result is reported
   as `cmr/outcome-unknown` if the key changed during the call, or if the
   inventory cannot be re-read (cancelled or unreadable) to confirm which client
   answered. A CMR `skipped` stays `cmr/client-disconnected`, because nothing was
@@ -317,12 +324,16 @@ rest-api). A CMR failure never falls back to dialing a client directly.
 - **Outcomes** are a `FanoutData` envelope in inventory order, with exit codes
   0/2/1. Each member's `meta.target.cmr` carries `{controller, id, deviceKey,
   address}`. `success` → `data.ret` holds the client's output; a clipped
-  output adds `cmr/output-truncated` and `meta.truncated`. A `failed` runtime
+  output adds `cmr/output-truncated` and `meta.truncated`. `--max-results`
+  applies per member, as in plain execute fan-out: a member whose rendered
+  envelope exceeds it (UTF-8 bytes) becomes `input/max-results-exceeded`, and
+  that error says the command already ran (`context.dispatched: true`). A `failed` runtime
   error maps through the usual `routeros/*` table. `skipped` →
   `cmr/client-disconnected`.
 - **Unknown outcomes:** a CMR timeout (`timed out (6)`, `std failure: timeout
   (13)`), a local deadline, a cancellation, or a lost call after sending all
-  give `cmr/outcome-unknown`. On 7.26beta1 the client script **kept running**
+  give `cmr/outcome-unknown`. A cancellation before anything is sent, including
+  one that makes an inventory read fail, is `cmr/cancelled`. On 7.26beta1 the client script **kept running**
   in each of these cases.
 - **Validation metadata** reports what ran: `source: ":put [:parse ...] via cmr
   run-script"`, the same claim the console gate makes. There is no client

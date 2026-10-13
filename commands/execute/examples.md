@@ -775,9 +775,9 @@ the unknown machine's inner error is `quickchr/machine-not-found`. Exit code 2
 `test/integration/execute-cmr.test.ts` runs these on a two-CHR CMR lab
 (`test/integration/cmr-lab.ts`): `$CTL` is a 7.26beta1 controller with the
 `cmr` package, paired with one client over a socket link. Examples CMR1–CMR7
-run over **both** `--via native-api` and `--via rest-api` to the controller,
-with validation on. The same test first asserts the device behaviour the
-design depends on (CMR-D1–D6 in the test file).
+and CMR10 run over **both** `--via native-api` and `--via rest-api` to the
+controller, with validation on. The same test first asserts the device
+behaviour the design depends on (CMR-D1–D7 in the test file).
 
 ### CMR1. A read on every client
 
@@ -857,3 +857,15 @@ centrs execute --quickchr $CTL --cmr --labels <client> -- ':put x'
 ```
 
 The target is `cmr/client-disconnected` and `dispatched` is 0.
+
+### CMR10. Cancelling after dispatch is an unknown outcome
+
+A library caller aborts `signal` two seconds into:
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels <client> --timeout 20s --yes -- ':delay 6s; :log info "<marker>"'
+```
+
+The target is `cmr/outcome-unknown` with `dispatched` 1. `<marker>` is not in
+the client's log when the call returns, and appears afterwards: cancelling
+the controller call did not stop the client script.
