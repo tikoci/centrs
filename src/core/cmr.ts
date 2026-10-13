@@ -22,7 +22,10 @@ const clientScriptNotValidated: Warning = {
  * on every selected client, so say so next to the `passed` gate.
  */
 export function cmrRunScriptWarnings(commandPath: string): Warning[] {
-	if (commandPath.replace(/\/+$/, "") !== CMR_RUN_SCRIPT_PATH) return [];
+	// A loop, not `/\/+$/`: that regex is quadratic on a long run of `/`.
+	let end = commandPath.length;
+	while (end > 0 && commandPath[end - 1] === "/") end -= 1;
+	if (commandPath.slice(0, end) !== CMR_RUN_SCRIPT_PATH) return [];
 	return [clientScriptNotValidated];
 }
 

@@ -296,7 +296,23 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 				expect(codes(down)).toEqual(["cmr/client-disconnected"]);
 				expect(down.meta.operation?.cmr.dispatched).toBe(0);
 
-				for (const protocol of ["native-api", "rest-api"]) {
+				// CMR1–CMR7 ran over both controller transports; CMR8 (CLI default)
+				// and CMR9 over native-api only.
+				const proven = {
+					"native-api": [
+						"CMR1",
+						"CMR2",
+						"CMR3",
+						"CMR4",
+						"CMR5",
+						"CMR6",
+						"CMR7",
+						"CMR8",
+						"CMR9",
+					],
+					"rest-api": ["CMR1", "CMR2", "CMR3", "CMR4", "CMR5", "CMR6", "CMR7"],
+				};
+				for (const [protocol, exampleIds] of Object.entries(proven)) {
 					await recordIntegrationEvidence({
 						suite: "execute-cmr",
 						command: "execute --cmr",
@@ -304,17 +320,7 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						routerosVersion: `${controller.version} (controller), ${client.version} (client)`,
 						quickChrName: controller.name,
 						requestedVersion: CMR_SINCE,
-						exampleIds: [
-							"CMR1",
-							"CMR2",
-							"CMR3",
-							"CMR4",
-							"CMR5",
-							"CMR6",
-							"CMR7",
-							"CMR8",
-							"CMR9",
-						],
+						exampleIds,
 					});
 				}
 			} finally {

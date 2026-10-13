@@ -338,6 +338,7 @@ export async function executeCmr(
 		if (write && runnable.length > 0) {
 			await confirmCmrWrite(
 				request,
+				signal,
 				resolved,
 				controllerName,
 				runnable.length,
@@ -877,6 +878,7 @@ function requestSummary(
 
 async function confirmCmrWrite(
 	request: ExecuteCmrRequest,
+	signal: AbortSignal,
 	resolved: ResolvedExecuteRequest,
 	controllerName: string,
 	runnable: number,
@@ -885,10 +887,20 @@ async function confirmCmrWrite(
 	if (resolved.yes) return;
 	const scope = `${runnable} CMR client(s) via controller ${controllerName}${excluded > 0 ? ` (${excluded} excluded)` : ""}`;
 	if (request.stdinIsTty ?? process.stdin.isTTY) {
-		const confirmed = await (request.confirm ?? promptForWriteConfirmation)(
-			`Run write-shaped \`${resolved.command}\` on ${scope}? Type yes to continue: `,
-		);
-		if (confirmed) return;
+		// The prompt reads stdin and cannot see `signal`, so race it: a cancel at
+		// the prompt returns here and the dispatch loop reports every member
+		// `cmr/cancelled` without sending anything.
+		const cancelled = new Promise<false>((resolve) => {
+			if (signal.aborted) resolve(false);
+			signal.addEventListener("abort", () => resolve(false), { once: true });
+		});
+		const confirmed = await Promise.race([
+			(request.confirm ?? promptForWriteConfirmation)(
+				`Run write-shaped \`${resolved.command}\` on ${scope}? Type yes to continue: `,
+			),
+			cancelled,
+		]);
+		if (confirmed || signal.aborted) return;
 	}
 	throw new CentrsError({
 		code: "usage/confirmation-required",
@@ -1102,7 +1114,7 @@ function asCmrError(error: unknown): CentrsError {
 
 /** Outer error envelope for a CMR run that failed before any member result. */
 export function buildExecuteCmrErrorEnvelope(
-	request: ExecuteRequest,
+	request: Pick<ExecuteRequest, "targetInput" | "via">,
 	error: unknown,
 ): ExecuteCmrErrorEnvelope {
 	const centrsError = asCmrError(error);

@@ -499,7 +499,12 @@ async function runExecuteCmrCli(
 ): Promise<number> {
 	const format = inferExecuteFormat(args, parsed);
 	const controller = new AbortController();
-	const onSigint = (): void => controller.abort();
+	// First Ctrl-C cancels (unsent members become `cmr/cancelled`); a second
+	// one exits at once in case a controller call does not end promptly.
+	const onSigint = (): void => {
+		if (controller.signal.aborted) process.exit(130);
+		controller.abort();
+	};
 	process.on("SIGINT", onSigint);
 	try {
 		if (!parsed.cmr) {
@@ -559,9 +564,11 @@ async function runExecuteCmrCli(
 		return fanoutExitCode(envelope);
 	} catch (error) {
 		console.error(
-			// codeql[js/clear-text-logging] No secret logged: the CMR error envelope's meta carries only the target input and via.
 			renderExecuteCmrEnvelope(
-				buildExecuteCmrErrorEnvelope(parsed, error),
+				buildExecuteCmrErrorEnvelope(
+					{ targetInput: parsed.targetInput, via: parsed.via },
+					error,
+				),
 				format,
 				{
 					verbose: parsed.verbose ?? false,

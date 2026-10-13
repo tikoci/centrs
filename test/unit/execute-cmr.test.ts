@@ -490,6 +490,23 @@ describe("execute --cmr: write gate and cancellation", () => {
 		).toEqual(["cmr/cancelled", "cmr/cancelled"]);
 	});
 
+	test("Ctrl-C while the write prompt waits ends the prompt; nothing is sent", async () => {
+		const abort = new AbortController();
+		const f = fake({ inventory: [[CTL, C1]] });
+		setTimeout(() => abort.abort(), 20);
+		const envelope = await runFake(f, {
+			command: "/ip/address/add address=192.0.2.9/32 interface=ether1",
+			stdinIsTty: true,
+			signal: abort.signal,
+			// A prompt still waiting on stdin: it never answers.
+			confirm: () => new Promise<boolean>(() => {}),
+		});
+		expect(f.dispatch).toEqual([]);
+		expect(
+			envelope.data.targets.map((t) => (t.ok ? "ok" : t.error.code)),
+		).toEqual(["cmr/cancelled", "cmr/cancelled"]);
+	}, 2_000);
+
 	test("cancelling during preflight is an outer cmr/cancelled, not a selection fault", async () => {
 		const abort = new AbortController();
 		abort.abort();

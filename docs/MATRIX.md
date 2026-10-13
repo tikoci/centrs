@@ -58,8 +58,8 @@ and implementation sequencing in the linked issues.
   evidence are in their command READMEs and integration tests.
 - `execute --cmr` (#450) is not a grid column: CMR is a selection source, and
   its controller transports are the `execute` rest-api/native-api cells.
-  CMR1–CMR9 pass on a 7.26beta1 CHR lab over both
-  (`test/integration/execute-cmr.test.ts`).
+  CMR1–CMR7 pass on a 7.26beta1 CHR lab over both, and CMR8–CMR9 over
+  native-api (`test/integration/execute-cmr.test.ts`).
 - There is no `update` command. RouterOS CLI-shaped writes ride `execute`; the
   structured operation surface is `api`.
 - `api --stream` absorbs the former `stream`/`tail` surface; native-api stream
