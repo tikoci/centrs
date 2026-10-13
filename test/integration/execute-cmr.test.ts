@@ -337,8 +337,8 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 				expect(codes(down)).toEqual(["cmr/client-disconnected"]);
 				expect(down.meta.operation?.cmr.dispatched).toBe(0);
 
-				// CMR1–CMR7 ran over both controller transports; CMR8 (CLI default)
-				// and CMR9 over native-api only.
+				// CMR1–CMR7 and CMR10 ran over both controller transports; CMR8 (CLI
+				// default) and CMR9 over native-api only.
 				const proven = {
 					"native-api": [
 						"CMR1",

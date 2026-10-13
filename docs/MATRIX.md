@@ -58,8 +58,8 @@ and implementation sequencing in the linked issues.
   evidence are in their command READMEs and integration tests.
 - `execute --cmr` (#450) is not a grid column: CMR is a selection source, and
   its controller transports are the `execute` rest-api/native-api cells.
-  CMR1–CMR7 pass on a 7.26beta1 CHR lab over both, and CMR8–CMR9 over
-  native-api (`test/integration/execute-cmr.test.ts`).
+  CMR1–CMR7 and CMR10 pass on a 7.26beta1 CHR lab over both, and CMR8–CMR9
+  over native-api (`test/integration/execute-cmr.test.ts`).
 - There is no `update` command. RouterOS CLI-shaped writes ride `execute`; the
   structured operation surface is `api`.
 - `api --stream` absorbs the former `stream`/`tail` surface; native-api stream
@@ -185,7 +185,7 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 2026-10-12 on [#441](https://github.com/tikoci/centrs/issues/441)). It runs one
 validated command on CMR clients through their controller. The contract is in
 [`commands/execute/README.md` → CMR](../commands/execute/README.md#cmr-clients-through-their-controller---cmr),
-with examples CMR1–CMR9. Deferred: CDB linkage, a default controller and a
+with examples CMR1–CMR10. Deferred: CDB linkage, a default controller and a
 `devices` view (#449), `retrieve --cmr` (#441), and the separate write fan-out
 replay fix (#448). Live `explain` resumes after this.
 
