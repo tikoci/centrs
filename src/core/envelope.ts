@@ -164,6 +164,11 @@ export interface ValidationTrace {
 	 * to judge.
 	 */
 	offlineVerdict?: "pass" | "warn";
+	/**
+	 * Set immediately before the RouterOS request is sent. A failure after this
+	 * point may have run on the router, so a write must not be replayed (#448).
+	 */
+	dispatched?: boolean;
 }
 
 export interface EnvelopeValidationMeta {

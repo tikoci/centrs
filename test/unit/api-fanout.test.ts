@@ -156,6 +156,45 @@ describe("apiFanout", () => {
 		stdinIsTty: false,
 	};
 
+	// #448: a sent write is never replayed; a read keeps the retry allowlist.
+	for (const [name, method, tries, warned] of [
+		[
+			"a sent PUT is tried once and says its outcome is unknown",
+			"PUT",
+			1,
+			true,
+		],
+		["a sent GET is retried", "GET", 3, false],
+	] as const) {
+		test(`#448: ${name}`, async () => {
+			let attempts = 0;
+			const envelope = await apiFanout(
+				{ ...base, method, yes: true },
+				selection(),
+				{},
+				{
+					expand: async () => expansionOf([cdbMember("10.0.0.1", 0)]),
+					execute: async (_resolved, trace) => {
+						attempts += 1;
+						trace.dispatched = true;
+						throw new CentrsError({
+							code: "transport/connection-closed",
+							summary: "closed",
+						});
+					},
+					sleep: async () => {},
+				},
+			);
+			expect(attempts).toBe(tries);
+			const target = envelope.data.targets[0];
+			expect(
+				target?.warnings.some(
+					(w) => w.code === "transport/write-outcome-unknown",
+				),
+			).toBe(warned);
+		});
+	}
+
 	test("fans a GET out across members, ordered by record index, exit 0", async () => {
 		const internals: ApiFanoutInternals = {
 			expand: async () =>

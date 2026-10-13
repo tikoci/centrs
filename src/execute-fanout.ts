@@ -33,6 +33,7 @@ import {
 	buildFanoutResolveFailure,
 	commonVia,
 	defaultFanoutSleep,
+	mayRetryUnsentWrite,
 	resolveFanoutConcurrency,
 	runFanout,
 	summarizeFanout,
@@ -105,6 +106,7 @@ export interface ExecuteFanoutInternals {
 	) => Promise<SelectionExpansion>;
 	execute?: (
 		resolved: ResolvedExecuteRequest,
+		trace: ValidationTrace,
 	) => Promise<ExecuteSuccessEnvelope>;
 	sleep?: (ms: number) => Promise<void>;
 }
@@ -308,6 +310,8 @@ export async function executeFanout(
 				),
 				member,
 			),
+		mayRetry: (resolved) =>
+			mayRetryUnsentWrite(global.summary.write, traces.get(resolved)),
 		sleep,
 	});
 

@@ -585,6 +585,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "transport/unsupported-operation",
 		summary: "The chosen transport does not support this operation.",
 	},
+	{
+		code: "transport/write-outcome-unknown",
+		summary:
+			"Warning: a write failed after it was sent, so it may have run on the router; centrs did not retry it.",
+	},
 
 	// usage/*
 	{

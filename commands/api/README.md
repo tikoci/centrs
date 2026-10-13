@@ -110,6 +110,11 @@ vs `--query` distinction.
 - **Writes fan out under `--yes`**, confirmed once up front (not per target).
   Without `--yes`, the error names the blast radius (how many routers) and that
   `--yes` is required.
+- **A sent write is never retried** (#448). Reads, and writes that failed
+  before they were sent, keep the `transport/network` /
+  `transport/connection-closed` retry. A mutating request that failed after it
+  was sent carries the warning `transport/write-outcome-unknown`, in single-target
+  and fan-out mode alike.
 - **`--stream` (or a `/listen` endpoint) is single-session** → `usage/fanout-not-supported` in
   fan-out mode. **`--raw` strips the envelope** → `usage/conflicting-flags` in
   fan-out mode (per-target envelopes can't be bare).
