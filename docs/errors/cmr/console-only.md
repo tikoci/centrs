@@ -1,7 +1,7 @@
 # `cmr/console-only`
 
 The command is one of CMR's interactive console views, so centrs refused it
-before opening any connection.
+before running it.
 
 ## Typical trigger
 
@@ -11,9 +11,15 @@ before opening any connection.
 - over **REST** it never returned, and every other REST request to the
   controller then waited 10–30 s until it timed out.
 
-centrs refuses it in any spelling: abbreviated (`/cmr/dev/dash`), with
-console spacing, inside a multi-line script, or as an `api POST /execute`
-script. It cannot follow a relative menu change across statements.
+A plain path, abbreviated or not (`/cmr/dev/dash`), is refused before any
+connection opens. Every other spelling is found in the controller's `:parse`
+return during validation, which resolves it to one invocation: console
+spacing, a relative menu change (`/cmr/device; dashboard`), a `:do`/`:if`
+block, a `[...]` substitution, or an `api POST /execute` script. Strings and
+comments that only spell the words are not refused.
+
+With `--validate=false` there is no `:parse` return, so only the plain path is
+refused.
 
 ## Fix
 

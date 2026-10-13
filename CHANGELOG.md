@@ -21,13 +21,23 @@ documenting cross-cutting shifts that affect contributors and consumers.
   covers the whole selection. Native API (default) and REST to the controller
   are both CHR-tested. Raw `run-script` through `api` or plain `execute` warns
   `cmr/client-script-not-validated`. Not on MCP yet.
-- `cmr/policy-denied`: a command CMR scripts may not run (`/user add`,
+- `cmr/policy-denied`: a statement CMR scripts may not run (`/user add`,
   `/tool sniffer`: the client allows only `read`, `write`, `test` and
-  `reboot`) is reported as such instead of a generic RouterOS failure.
-  `:parse` accepts these commands, so validation cannot catch them.
-- `cmr/console-only`: `execute` and `api` refuse `/cmr/device/dashboard`
-  before dialing. On 7.26beta1 it closed a native API session, and over REST
-  it held the controller's REST service for every caller for 10–30 s.
+  `reboot`) is reported as such instead of a generic RouterOS failure, also
+  after earlier output. `:parse` accepts these commands, so validation cannot
+  catch them, and statements before the refused one have already run.
+- `cmr/console-only`: `execute` and `api` refuse `/cmr/device/dashboard`. A
+  plain path is refused before dialing; any other spelling (a relative menu
+  change, a block, an `/execute` script) is found in the controller's `:parse`
+  return. On 7.26beta1 it closed a native API session, and over REST it held
+  the controller's REST service for every caller for 10–30 s.
+- `execute --cmr` against a router with no `/cmr/device` says why. RouterOS
+  older than 7.26beta1 (CMR is beta-only) is `routeros/version-unsupported`
+  with `capability: cmr-controller`. A 7.26beta1+ router without the `cmr`
+  package stays `cmr/not-a-controller`, now naming its version and, for a CMR
+  client, its controller.
+- `execute --cmr` accepts a command that opens with a relative menu change
+  (`/system; identity/print`); its `:parse` return was read as incomplete.
 
 ## 0.1.8 — 2026-10-12
 

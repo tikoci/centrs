@@ -18,45 +18,53 @@ const CMR_DASHBOARD = ["cmr", "device", "dashboard"] as const;
 const DASHBOARD_PATH = "/cmr/device/dashboard";
 
 /**
- * Whether `text` (a path, a command or a whole script) names the dashboard:
- * three consecutive words joined only by spaces or `/`, each a non-empty
- * prefix of `cmr`, `device`, `dashboard` in turn. That covers RouterOS abbreviations
- * (`/cmr/dev/dash`) and console spacing anywhere in a multi-line script. It
- * cannot follow a relative menu change across statements; a false positive
- * (a string spelling the same words) costs a refusal with this remediation.
+ * Whether a structured RouterOS path (an `api` endpoint, or a single
+ * `execute` command's path and verb) is the dashboard. Each segment may be an
+ * abbreviation, as RouterOS accepts (`/cmr/dev/dash`). This needs no router, so
+ * it refuses the plain spellings before anything is dialed.
  */
-export function namesCmrDashboard(text: string): boolean {
-	const words = [...text.matchAll(/[A-Za-z0-9-]+/g)].map((match) => ({
-		word: match[0].toLowerCase(),
-		start: match.index,
-		end: match.index + match[0].length,
-	}));
-	for (let i = 0; i + 2 < words.length; i += 1) {
-		const run = words.slice(i, i + 3);
-		const matches = run.every((current, k) => {
-			const target = CMR_DASHBOARD[k] as string;
-			if (!target.startsWith(current.word)) return false;
-			const previous = run[k - 1];
-			return (
-				previous === undefined ||
-				/^[\s/]+$/.test(text.slice(previous.end, current.start))
-			);
-		});
-		if (matches) return true;
-	}
-	return false;
+export function isCmrDashboardPath(path: string): boolean {
+	const segments = path
+		.split("/")
+		.filter((segment) => segment.length > 0)
+		.map((segment) => segment.toLowerCase());
+	return (
+		segments.length === CMR_DASHBOARD.length &&
+		segments.every((segment, k) =>
+			(CMR_DASHBOARD[k] as string).startsWith(segment),
+		)
+	);
 }
 
-/** Refuse the console-only CMR view before anything is dialed. */
-export function assertNotCmrConsoleOnly(text: string): void {
-	if (!namesCmrDashboard(text)) return;
-	throw new CentrsError({
+/**
+ * Whether a `:parse` return invokes the dashboard. The device resolves every
+ * spelling to one invocation: abbreviations, console spacing, a relative menu
+ * change across `;` or a newline, and `:do`/`:if`/`[...]` bodies. Strings stay
+ * `=` values and comments are dropped (7.26beta1 CHR). An invocation follows
+ * the start of the IL, a `;` or another `(evl `. A string value sits after `=`.
+ */
+export function ilInvokesCmrDashboard(il: string): boolean {
+	return /(?:^|;|\(evl )\(evl \/cmr\/device\/dashboard/.test(il);
+}
+
+function consoleOnlyError(input: string): CentrsError {
+	return new CentrsError({
 		code: "cmr/console-only",
 		summary: `\`${DASHBOARD_PATH}\` (in any spelling) is an interactive console view, not an API command. Over the native API it closes the session; over REST it holds the controller's REST service for every caller until it times out.`,
 		remediation:
 			"Open it in WinBox 4 or WebFig, or run it in `centrs terminal <controller>`. For the data behind it, read `/cmr/device`, `/cmr/alert` or `/cmr/upgrade/job` with `centrs retrieve`.",
-		context: { path: DASHBOARD_PATH, input: text },
+		context: { path: DASHBOARD_PATH, input },
 	});
+}
+
+/** Refuse a structured dashboard path before anything is dialed. */
+export function assertNotCmrDashboardPath(path: string): void {
+	if (isCmrDashboardPath(path)) throw consoleOnlyError(path);
+}
+
+/** Refuse a command whose accepted `:parse` return invokes the dashboard. */
+export function assertNotCmrDashboardIl(il: string, command: string): void {
+	if (ilInvokesCmrDashboard(il)) throw consoleOnlyError(command);
 }
 
 function withoutTrailingSlashes(path: string): string {

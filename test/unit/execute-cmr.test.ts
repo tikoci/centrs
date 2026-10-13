@@ -1,10 +1,20 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { resolveApiRequest } from "../../src/api.ts";
+import {
+	afterAll,
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	test,
+} from "bun:test";
+import { apiEnvelope, resolveApiRequest } from "../../src/api.ts";
+import { ilInvokesCmrDashboard } from "../../src/core/cmr.ts";
 import { fanoutExitCode } from "../../src/core/fanout.ts";
+import { routerOsStringLiteral } from "../../src/core/routeros-string.ts";
 import { CentrsError } from "../../src/errors.ts";
-import { resolveExecuteRequest } from "../../src/execute.ts";
+import { executeEnvelope, resolveExecuteRequest } from "../../src/execute.ts";
 import {
 	CMR_VALIDATION_SOURCE,
+	type CmrAbsence,
 	type CmrController,
 	type CmrDevice,
 	type CmrScriptCall,
@@ -260,6 +270,61 @@ describe("execute --cmr: selection and binding", () => {
 		});
 	}
 
+	// What the target says about itself decides which error names the gap.
+	const withAbsence = (absence: CmrAbsence) => {
+		const f = fake({ inventory: [missingMenu[0]?.[1] as CentrsError] });
+		f.controller.absence = async () => absence;
+		return f;
+	};
+
+	for (const version of ["7.25", "7.25beta3", "7.24.5 (stable)"]) {
+		test(`RouterOS ${version} is named as too old for CMR, not a missing package`, async () => {
+			const error = await rejection(runFake(withAbsence({ version })));
+			expect(error.code).toBe("routeros/version-unsupported");
+			expect(error.summary).toContain(`RouterOS ${version}`);
+			expect(error.summary).toContain("7.26beta1");
+			expect(error.context).toMatchObject({
+				capability: "cmr-controller",
+				version,
+				versionSource: "live",
+				supported: [{ min: "7.26beta1" }],
+			});
+		});
+	}
+
+	test("a 7.26beta1 router without the package is named as such", async () => {
+		const error = await rejection(
+			runFake(withAbsence({ version: "7.26beta1" })),
+		);
+		expect(error.code).toBe("cmr/not-a-controller");
+		expect(error.summary).toContain("`cmr` package is not installed");
+		expect(error.context).toMatchObject({ version: "7.26beta1" });
+	});
+
+	test("a CMR client names its controller", async () => {
+		const error = await rejection(
+			runFake(
+				withAbsence({
+					version: "7.26",
+					controllerIdentity: "ctl",
+					controllerAddress: "10.255.0.1",
+				}),
+			),
+		);
+		expect(error.code).toBe("cmr/not-a-controller");
+		expect(error.summary).toContain("CMR client of ctl (10.255.0.1)");
+	});
+
+	test("an unreadable version keeps the plain not-a-controller error", async () => {
+		const f = fake({ inventory: [missingMenu[1]?.[1] as CentrsError] });
+		f.controller.absence = async () => {
+			throw new CentrsError({ code: "transport/timeout", summary: "t" });
+		};
+		const error = await rejection(runFake(f));
+		expect(error.code).toBe("cmr/not-a-controller");
+		expect(error.context).not.toHaveProperty("version");
+	});
+
 	test("any other inventory failure (e.g. permissions) propagates unchanged", async () => {
 		const f = fake({
 			inventory: [
@@ -508,6 +573,42 @@ describe("execute --cmr: client validation completeness", () => {
 		});
 	});
 
+	test("a relative menu change before the command is accepted IL", async () => {
+		const f = fake({
+			inventory: [[C1]],
+			preflight: {
+				"*2": row(
+					"success",
+					`/system/;(evl /system/identity/print)\r\n${NONCE}\r\n`,
+				),
+			},
+		});
+		const envelope = await runFake(f, {
+			command: "/system; identity/print",
+			yes: true,
+		});
+		expect(f.dispatch.map((c) => c.numbers)).toEqual(["*2"]);
+		expect(envelope.data.targets[0]?.ok).toBe(true);
+	});
+
+	test("a client whose :parse resolves to the dashboard is refused, not dispatched", async () => {
+		const f = fake({
+			inventory: [[C1]],
+			preflight: {
+				"*2": row(
+					"success",
+					`/cmr/device/;(evl /cmr/device/dashboard)\r\n${NONCE}\r\n`,
+				),
+			},
+		});
+		const envelope = await runFake(f, { command: "/cmr/device; dashboard" });
+		expect(f.dispatch).toEqual([]);
+		expect(envelope.data.targets[0]).toMatchObject({
+			ok: false,
+			error: { code: "cmr/console-only" },
+		});
+	});
+
 	test("an unknown attribute on the client is validation/unknown-attribute", async () => {
 		const f = fake({
 			inventory: [[C1]],
@@ -610,6 +711,29 @@ describe("execute --cmr: dispatch outcomes", () => {
 			expect(f.dispatch.length).toBe(1);
 		});
 	}
+
+	test("a policy refusal after earlier output is cmr/policy-denied and keeps that output", async () => {
+		// 7.26beta1, reported in the #454 review: the earlier statements ran.
+		const output =
+			"before\r\nnot enough permissions (9) (/user/add; line 3)\r\n";
+		const f = fake({
+			inventory: [[C1]],
+			dispatch: { "*2": row("failed", output) },
+		});
+		const envelope = await runFake(f, {
+			command:
+				':put before\n/system/note/set note="x"\n/user/add name=u group=read',
+			yes: true,
+		});
+		const target = envelope.data.targets[0];
+		expect(target).toMatchObject({
+			ok: false,
+			error: { code: "cmr/policy-denied", context: { output } },
+		});
+		expect(target?.ok === false && target.error.summary).toContain(
+			"`not enough permissions (9) (/user/add; line 3)`",
+		);
+	});
 
 	test("a write is dispatched exactly once even when the call is lost (no retry)", async () => {
 		const f = fake({
@@ -926,38 +1050,18 @@ describe("console-only CMR views are refused before dialing", () => {
 	const env = { CENTRS_SKIP_ENV_FILE: "1" };
 	const target = { targetInput: "192.0.2.1", stdinIsTty: false };
 
-	// Every spelling RouterOS runs: literal, abbreviated, console spacing, and
-	// inside a multi-line script (CMR12 proves those run every line).
-	for (const command of [
-		DASHBOARD,
-		"/cmr/dev/dash numbers=*2",
-		"/cm/d/d",
-		"/cmr device dashboard numbers=*2",
-		':put "before"\n/cmr/device/dashboard numbers=*2',
-		":do { /cmr/device/da } on-error={}",
-	]) {
-		test(`execute ${JSON.stringify(command)}`, async () => {
-			const error = await rejection(
-				resolveExecuteRequest({ ...target, command }, env),
-			);
-			expect(error.code).toBe("cmr/console-only");
-		});
+	// The plain (structured) spellings, abbreviated or not. Script spellings
+	// are refused from the `:parse` return, below.
+	for (const command of [DASHBOARD, "/cmr/dev/dash numbers=*2", "/cm/d/d"]) {
+		for (const validate of [true, false]) {
+			test(`execute ${JSON.stringify(command)} (validate ${validate})`, async () => {
+				const error = await rejection(
+					resolveExecuteRequest({ ...target, command, validate }, env),
+				);
+				expect(error.code).toBe("cmr/console-only");
+			});
+		}
 	}
-
-	test("api POST /execute with the dashboard as its script", async () => {
-		const error = await rejection(
-			resolveApiRequest(
-				{
-					...target,
-					method: "POST",
-					endpoint: "execute",
-					fields: { script: "/cmr/dev/dashboard" },
-				},
-				env,
-			),
-		);
-		expect(error.code).toBe("cmr/console-only");
-	});
 
 	test("api with an abbreviated path", async () => {
 		const error = await rejection(
@@ -988,6 +1092,8 @@ describe("console-only CMR views are refused before dialing", () => {
 		expect(f.preflight).toEqual([]);
 	});
 
+	// Strings and comments are not commands, and a script spelling is left to
+	// the device's `:parse` (below), so none of these is refused offline.
 	for (const command of [
 		"/cmr/device/print",
 		"/cmr/device/print detail",
@@ -996,10 +1102,170 @@ describe("console-only CMR views are refused before dialing", () => {
 		":put cmr-device-dashboard",
 		':put ("cmr" . "device" . "dashboard")',
 		'/cmr/device/run-script labels=all script=":put x"',
+		':put "CMR device dashboard"',
+		'/system/note/set note="c d d"',
+		"# /cmr/device/dashboard\n:put ok",
 	]) {
-		test(`not refused: ${JSON.stringify(command)}`, async () => {
+		test(`not refused offline: ${JSON.stringify(command)}`, async () => {
 			const resolved = await resolveExecuteRequest({ ...target, command }, env);
 			expect(resolved.command).toBe(command);
+		});
+	}
+});
+
+/**
+ * `:parse` returns captured on a 7.26beta1 CHR controller (cmr package
+ * installed) on 2026-10-13, source → IL. The device resolves abbreviations,
+ * console spacing and a relative menu change; strings stay `=` values and
+ * comments are dropped. IL glues a command to its first argument's name.
+ */
+// cspell:ignore dashboardnumbers docommand ifcondition scriptlabels
+const DASHBOARD_IL: Array<[string, string, boolean]> = [
+	["/cmr/device/dashboard", "(evl /cmr/device/dashboard)", true],
+	[
+		"/cmr/device/dashboard numbers=0",
+		"(evl /cmr/device/dashboardnumbers=0)",
+		true,
+	],
+	["/cmr device dashboard", "(evl /cmr/device/dashboard)", true],
+	["/cmr/device; dashboard", "/cmr/device/;(evl /cmr/device/dashboard)", true],
+	["/cmr/dev; dash", "/cmr/device/;(evl /cmr/device/dashboard)", true],
+	["/cmr dev\ndash", "/cmr/device/;(evl /cmr/device/dashboard)", true],
+	["/cmr\ndevice/dashboard", "/cmr/;(evl /cmr/device/dashboard)", true],
+	[
+		"/cmr/device\n:put x\ndashboard",
+		"/cmr/device/;(evl /putmessage=x);(evl /cmr/device/dashboard)",
+		true,
+	],
+	[
+		":do { /cmr/device/dashboard } on-error={}",
+		"(evl /docommand=;(evl (evl /cmr/device/dashboard));on-error=;(evl /))",
+		true,
+	],
+	[
+		":if (true) do={/cmr/dev/dash}",
+		"(evl /ifcondition=true;do=;(evl (evl /cmr/device/dashboard)))",
+		true,
+	],
+	[
+		":put [/cmr/device/dashboard]",
+		"(evl /putmessage=(evl (evl /cmr/device/dashboard)))",
+		true,
+	],
+	["/cmr/device { dashboard }", "(evl (evl /cmr/device/dashboard))", true],
+	[
+		':put "CMR device dashboard"',
+		"(evl /putmessage=CMR device dashboard)",
+		false,
+	],
+	['/system/note/set note="c d d"', "(evl /system/note/setnote=c d d)", false],
+	["# /cmr/device/dashboard\n:put ok", "(evl /putmessage=ok)", false],
+	[
+		':put "(evl /cmr/device/dashboard"',
+		"(evl /putmessage=(evl /cmr/device/dashboard)",
+		false,
+	],
+	[
+		'/cmr/device/run-script labels=x script="/cmr/device/dashboard"',
+		"(evl /cmr/device/run-scriptlabels=;;x;script=/cmr/device/dashboard)",
+		false,
+	],
+	[
+		':local f "/cmr/device/dashboard"',
+		"(evl /localname=$f;value=/cmr/device/dashboard)",
+		false,
+	],
+	["/cmr/device/apptraffic", "(evl /cmr/device/apptraffic)", false],
+];
+
+describe("the dashboard is found in the device's `:parse` return", () => {
+	for (const [source, il, invokes] of DASHBOARD_IL) {
+		test(`${JSON.stringify(source)} → ${invokes ? "refused" : "accepted"}`, () => {
+			expect(ilInvokesCmrDashboard(il)).toBe(invokes);
+		});
+	}
+
+	/** A loopback REST controller answering `:parse` with the captured IL. */
+	function parsingController() {
+		const sent: string[] = [];
+		const server = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json().catch(() => ({}))) as {
+					script?: string;
+				};
+				const script = body.script ?? "";
+				const parsed = DASHBOARD_IL.find(
+					([source]) =>
+						script === `:put [:parse ${routerOsStringLiteral(source)}]`,
+				);
+				if (parsed) return Response.json({ ret: parsed[1] });
+				if (new URL(req.url).pathname === "/rest/console/inspect") {
+					return Response.json([
+						{ type: "child", "node-type": "arg", name: "note" },
+					]);
+				}
+				sent.push(script || new URL(req.url).pathname);
+				return Response.json({ ret: "ok" });
+			},
+		});
+		return { server, sent };
+	}
+	const controller = parsingController();
+	afterAll(() => controller.server.stop(true));
+	const common = {
+		targetInput: "127.0.0.1",
+		username: "admin",
+		password: "",
+		via: "rest-api",
+		yes: true,
+		stdinIsTty: false,
+		timeout: "2s",
+	} as const;
+	const env = { CENTRS_SKIP_ENV_FILE: "1", HOME: "/nonexistent-centrs-454" };
+
+	for (const command of ["/cmr/device; dashboard", "/cmr dev\ndash"]) {
+		test(`execute ${JSON.stringify(command)} is refused and never sent`, async () => {
+			controller.sent.length = 0;
+			const envelope = await executeEnvelope(
+				{ ...common, port: controller.server.port, command },
+				env,
+			);
+			expect(!envelope.ok && envelope.error.code).toBe("cmr/console-only");
+			expect(controller.sent).toEqual([]);
+		});
+	}
+
+	test("api POST /execute with a relative dashboard script is refused and never sent", async () => {
+		controller.sent.length = 0;
+		const envelope = await apiEnvelope(
+			{
+				...common,
+				port: controller.server.port,
+				method: "POST",
+				endpoint: "execute",
+				fields: { script: "/cmr/dev; dash" },
+			},
+			env,
+		);
+		expect(!envelope.ok && envelope.error.code).toBe("cmr/console-only");
+		expect(controller.sent).toEqual([]);
+	});
+
+	for (const command of [
+		':put "CMR device dashboard"',
+		'/system/note/set note="c d d"',
+		"# /cmr/device/dashboard\n:put ok",
+	]) {
+		test(`execute ${JSON.stringify(command)} is sent`, async () => {
+			controller.sent.length = 0;
+			const envelope = await executeEnvelope(
+				{ ...common, port: controller.server.port, command },
+				env,
+			);
+			expect(envelope.ok).toBe(true);
+			expect(controller.sent.length).toBe(1);
 		});
 	}
 });

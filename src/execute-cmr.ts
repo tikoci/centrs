@@ -41,7 +41,7 @@
  *     `pending` and policy-`skipped` statuses).
  */
 
-import { CMR_RUN_SCRIPT_PATH } from "./core/cmr.ts";
+import { assertNotCmrDashboardIl, CMR_RUN_SCRIPT_PATH } from "./core/cmr.ts";
 import type {
 	CentrsErrorEnvelope,
 	CentrsSuccessEnvelope,
@@ -59,6 +59,11 @@ import {
 	runBoundedPool,
 	summarizeFanout,
 } from "./core/fanout.ts";
+import {
+	assertCapability,
+	type CapabilityRequirement,
+	probeDeviceVersion,
+} from "./core/preflight.ts";
 import { mapRouterOsError } from "./core/routeros-errors.ts";
 import { routerOsStringLiteral } from "./core/routeros-string.ts";
 import { toYaml } from "./core/yaml.ts";
@@ -112,8 +117,9 @@ const TIMEOUT_OUTPUT =
 	/^(?:timed out \(\d+\)|std failure: timeout \(\d+\))\s*$/;
 const NO_DEVICES_SELECTED = /no devices selected/i;
 /** run-script lacks `policy`, `sniff`, `sensitive` (…); `:parse` cannot see that. */
-const POLICY_DENIED = /^not enough permissions \(9\)/;
-const ACCEPTED_IL = /^\(evl\s/;
+const POLICY_DENIED = /^not enough permissions \(9\).*$/m;
+/** An invocation, optionally after a relative menu change (`/ip/address/;(evl …`). */
+const ACCEPTED_IL = /^(?:\/[^\s;()]*;)?\(evl\s/;
 /** A missing `/cmr/device`: native `no such command prefix`, REST `no such command or directory (cmr)`. */
 const MISSING_MENU = /no such command (?:prefix|or directory)/i;
 
@@ -164,8 +170,19 @@ export interface CmrScriptOutcome {
 }
 
 /** Controller seam: production wraps a protocol adapter; tests inject a fake. */
+/** What a router without `/cmr/device` says about itself, read only on that failure. */
+export interface CmrAbsence {
+	/** `/system/resource` version. */
+	version?: string;
+	/** `/cmr/client` `controller-identity` / `controller-address`, when it is a client. */
+	controllerIdentity?: string;
+	controllerAddress?: string;
+}
+
 export interface CmrController {
 	devices(): Promise<CmrDevice[]>;
+	/** Explain a missing `/cmr/device`; each read is best effort. */
+	absence?(): Promise<CmrAbsence>;
 	runScript(
 		call: CmrScriptCall,
 		signal: AbortSignal,
@@ -518,6 +535,7 @@ function judgePreflight(
 	if (parse.length === 0) return incomplete("empty `:parse` return");
 	try {
 		classifyParseResult(parse, resolved.command, "cmr run-script");
+		assertNotCmrDashboardIl(parse, resolved.command);
 	} catch (error) {
 		const rejected = error as CentrsError;
 		member.validation = deviceRejected(resolved, offline, rejected);
@@ -526,7 +544,8 @@ function judgePreflight(
 	}
 	// Positive evidence: every accepted `:parse` return seen (structured,
 	// console spacing, multi-statement, blocks, `:if`/`:foreach`; 7.24.5 and
-	// 7.26beta1) starts `(evl `. A comment-only script returns `/`.
+	// 7.26beta1) starts `(evl `, after a relative menu change if the command
+	// opens with one (7.26beta1). A comment-only script returns `/`.
 	if (!ACCEPTED_IL.test(parse)) return incomplete("`:parse` return is not IL");
 	return member;
 }
@@ -603,16 +622,18 @@ function judgeDispatch(
 				unknownOutcome(device, undefined, row),
 			);
 		}
-		if (POLICY_DENIED.test(row.output.trim())) {
+		// The diagnostic follows whatever the script printed before it.
+		const denied = POLICY_DENIED.exec(row.output.replaceAll("\r\n", "\n"));
+		if (denied) {
 			return memberError(
 				member,
 				resolved,
 				controllerName,
 				new CentrsError({
 					code: "cmr/policy-denied",
-					summary: `${device.identity} refused the command: CMR runs scripts with only the read, write, test and reboot policies (\`${row.output.trim()}\`).`,
+					summary: `${device.identity} refused a statement: CMR runs scripts with only the read, write, test and reboot policies (\`${denied[0].trim()}\`). Any statements before it already ran.`,
 					remediation:
-						"Commands that need another policy (`/user`, `/tool/sniffer`, reading a sensitive value) cannot run through CMR. Run this one directly on the device, e.g. `centrs execute <device> -- '<command>'`.",
+						"A statement that needs another policy (`/user`, `/tool/sniffer`) cannot run through CMR. Check what the earlier statements changed (the output is in `context.output`), then run only the refused statement and the ones after it directly on the device, e.g. `centrs execute <device> -- '<command>'`.",
 					context: {
 						id: device.id,
 						identity: device.identity,
@@ -852,18 +873,65 @@ async function readInventory(controller: CmrController): Promise<CmrDevice[]> {
 		const detail =
 			error instanceof CentrsError ? error.context?.["detail"] : undefined;
 		if (typeof detail === "string" && MISSING_MENU.test(detail)) {
-			throw new CentrsError({
-				code: "cmr/not-a-controller",
-				summary:
-					"The target did not answer `/cmr/device`; it is not a CMR controller.",
-				remediation:
-					"Point `--cmr` at the router running the optional `cmr` package (RouterOS 7.26beta1+) with `/cmr set enabled=yes`.",
-				context: { detail },
-				cause: error,
-			});
+			throw await noCmrError(controller, detail, error);
 		}
 		throw error;
 	}
+}
+
+/** CMR first shipped in 7.26beta1 (manual; the quickchr CMR lab). */
+const CMR_CONTROLLER: CapabilityRequirement = {
+	capability: "cmr-controller",
+	summary: "be a CMR controller (`/cmr` first shipped in 7.26beta1, a beta)",
+	supported: [{ min: "7.26beta1" }],
+	remediation:
+		"Upgrade the controller to a RouterOS build with CMR (7.26beta1 or later), install the optional `cmr` package, and run `/cmr set enabled=yes`.",
+};
+
+/**
+ * A missing `/cmr/device` has three causes, told apart only on this failure
+ * path: RouterOS older than CMR (`routeros/version-unsupported`), or a 7.26+
+ * router without the `cmr` package, possibly a CMR client.
+ */
+async function noCmrError(
+	controller: CmrController,
+	detail: string,
+	cause: unknown,
+): Promise<CentrsError> {
+	const found = (await controller.absence?.().catch(() => undefined)) ?? {};
+	if (found.version !== undefined) {
+		try {
+			assertCapability(CMR_CONTROLLER, {
+				version: found.version,
+				source: "live",
+			});
+		} catch (error) {
+			return error as CentrsError;
+		}
+	}
+	const client = found.controllerIdentity
+		? ` It is a CMR client of ${found.controllerIdentity}${found.controllerAddress ? ` (${found.controllerAddress})` : ""}; point \`--cmr\` at that controller.`
+		: "";
+	return new CentrsError({
+		code: "cmr/not-a-controller",
+		summary:
+			found.version !== undefined
+				? `RouterOS ${found.version} supports CMR, but the target has no \`/cmr/device\`: the optional \`cmr\` package is not installed.${client}`
+				: "The target did not answer `/cmr/device`; it is not a CMR controller.",
+		remediation:
+			"Point `--cmr` at the router running the optional `cmr` package (RouterOS 7.26beta1+) with `/cmr set enabled=yes`, or install that package on this router.",
+		context: {
+			detail,
+			...(found.version !== undefined ? { version: found.version } : {}),
+			...(found.controllerIdentity
+				? {
+						controllerIdentity: found.controllerIdentity,
+						controllerAddress: found.controllerAddress,
+					}
+				: {}),
+		},
+		cause,
+	});
 }
 
 // ---------------------------------------------------------------------------
@@ -1124,6 +1192,17 @@ function adapterController(
 						call,
 						signal,
 					);
+		},
+		async absence() {
+			const version = await probeDeviceVersion(shared).catch(() => undefined);
+			const client = (await shared
+				.getSingleton("/cmr/client")
+				.catch(() => undefined)) as Record<string, string> | undefined;
+			return {
+				version: version?.version,
+				controllerIdentity: client?.["controller-identity"] || undefined,
+				controllerAddress: client?.["controller-address"] || undefined,
+			};
 		},
 		close: () => shared.close(),
 	};

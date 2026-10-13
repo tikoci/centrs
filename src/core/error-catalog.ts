@@ -296,7 +296,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "cmr/console-only",
 		summary:
-			"The CMR command is an interactive console view that breaks an API session, so centrs refused it before dialing.",
+			"The CMR command is an interactive console view that breaks an API session, so centrs refused it before running it.",
 	},
 	{
 		code: "cmr/outcome-unknown",
@@ -311,7 +311,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "cmr/policy-denied",
 		summary:
-			"A CMR client refused the command because CMR scripts run without the policy it needs.",
+			"A CMR client refused a statement because CMR scripts run without the policy it needs; earlier statements already ran.",
 	},
 	{
 		code: "cmr/selection-incomplete",

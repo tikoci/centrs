@@ -1,12 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import type { CentrsError } from "../../src/errors.ts";
 import { executeEnvelope } from "../../src/execute.ts";
+import { executeCmr } from "../../src/execute-cmr.ts";
 import { retrieve } from "../../src/retrieve.ts";
 import {
+	CMR_SINCE,
 	exampleIds,
 	isChrIntegrationEnabled,
 	readEnv,
 	recordIntegrationEvidence,
+	routerOsAtLeast,
 	splitQuickChrAuth,
 	startIntegrationChr,
 	VALIDATION_REJECT_CODES,
@@ -578,6 +582,25 @@ describeFast("execute against CHR", () => {
 				],
 			).toEqual({ kind: "default", key: "via:target-url" });
 
+			// CMR0 — `--cmr` on a router with no `/cmr/device` says why: RouterOS
+			// older than CMR, or (7.26beta1+) no `cmr` package. Never dispatched.
+			const noCmr = await executeCmr({
+				...base,
+				labels: "all",
+				command: ":put x",
+			}).then(
+				() => undefined,
+				(error: CentrsError) => error,
+			);
+			const cmrCapable = routerOsAtLeast(chr.state.version, CMR_SINCE);
+			expect(noCmr?.code).toBe(
+				cmrCapable ? "cmr/not-a-controller" : "routeros/version-unsupported",
+			);
+			// `/system/resource` adds the channel: "7.24.5 (stable)".
+			expect(String(noCmr?.context?.["version"])).toStartWith(
+				chr.state.version,
+			);
+
 			await recordIntegrationEvidence({
 				suite: "execute against CHR",
 				command: "execute",
@@ -602,6 +625,7 @@ describeFast("execute against CHR", () => {
 					"R1",
 					"R2",
 					"P1",
+					"CMR0",
 				],
 			});
 		} finally {
