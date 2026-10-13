@@ -12,8 +12,10 @@ whether the write happened.
 
 centrs never retries a write that it has sent, in single-target or fan-out
 mode, because replaying an `add`, a script run or a counter change would apply
-it twice (#448). A write that failed *before* it was sent, for example while
-it was being validated, is retried in fan-out like a read.
+it twice (#448). In fan-out, a write is retried only when a retryable
+transport failure (`transport/network` or `transport/connection-closed`) ends
+it *before* it was sent, for example during remote validation or a native API
+login. Any other failure, sent or not, is not retried.
 
 ## Fix
 

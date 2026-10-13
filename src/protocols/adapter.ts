@@ -180,6 +180,16 @@ export interface ProtocolApiResult {
 	data: unknown;
 }
 
+/**
+ * Options for a single `execute`/`apiRequest` call. `onSent` fires once the
+ * command itself is about to leave for the router: after a native or console
+ * login, never during it. A failure before it fired cannot have run the
+ * command (#448).
+ */
+export interface ProtocolSendOptions {
+	onSent?: () => void;
+}
+
 /** Options for incremental native command replies. */
 export interface ProtocolListenOptions {
 	/** Abort the listen (sends `/cancel`); the generator then ends cleanly. */
@@ -237,9 +247,15 @@ export interface ProtocolAdapter {
 	/** Read a menu as an array of records, optionally projected/detailed. */
 	list(path: string, options: RetrieveListOptions): Promise<unknown[]>;
 	/** Run a CLI-shaped command (WP-1c write surface). */
-	execute(request: ProtocolExecuteRequest): Promise<ProtocolExecuteResult>;
+	execute(
+		request: ProtocolExecuteRequest,
+		options?: ProtocolSendOptions,
+	): Promise<ProtocolExecuteResult>;
 	/** Run a normalized structured `api` request (the gh-api passthrough surface). */
-	apiRequest(request: ProtocolApiRequest): Promise<ProtocolApiResult>;
+	apiRequest(
+		request: ProtocolApiRequest,
+		options?: ProtocolSendOptions,
+	): Promise<ProtocolApiResult>;
 	/**
 	 * Incremental native replies to the literal command (the same mapping as
 	 * `apiRequest`; never rewritten into a `listen`). Yields each `!re` and
@@ -341,7 +357,10 @@ class RestAdapter implements ProtocolAdapter {
 
 	async execute(
 		request: ProtocolExecuteRequest,
+		options?: ProtocolSendOptions,
 	): Promise<ProtocolExecuteResult> {
+		// REST has no session to open first: the request is the command.
+		options?.onSent?.();
 		if (request.script !== undefined) {
 			const data = await this.restPost<unknown>("/execute", {
 				script: request.script,
@@ -369,7 +388,11 @@ class RestAdapter implements ProtocolAdapter {
 		return normalizeRestExecute(data);
 	}
 
-	async apiRequest(request: ProtocolApiRequest): Promise<ProtocolApiResult> {
+	async apiRequest(
+		request: ProtocolApiRequest,
+		options?: ProtocolSendOptions,
+	): Promise<ProtocolApiResult> {
+		options?.onSent?.();
 		const base = request.path.replace(/\/$/, "");
 		switch (request.verb) {
 			case "print": {
@@ -765,9 +788,12 @@ class NativeApiAdapter implements ProtocolAdapter {
 
 	async execute(
 		request: ProtocolExecuteRequest,
+		options?: ProtocolSendOptions,
 	): Promise<ProtocolExecuteResult> {
 		if (request.script !== undefined) {
-			return normalizeNativeExecute(await this.executeScript(request.script));
+			return normalizeNativeExecute(
+				await this.executeScript(request.script, options),
+			);
 		}
 		const command: NativeApiCommand = {
 			command: `${request.path.replace(/\/$/, "")}/${request.command}`,
@@ -781,7 +807,7 @@ class NativeApiAdapter implements ProtocolAdapter {
 		if (request.binary) {
 			command.binary = true;
 		}
-		const replies = await this.talk(command);
+		const replies = await this.talk(command, options);
 		return { records: repliesToRecords(replies) };
 	}
 
@@ -794,17 +820,24 @@ class NativeApiAdapter implements ProtocolAdapter {
 	 */
 	private async executeScript(
 		script: string,
+		options?: ProtocolSendOptions,
 	): Promise<Record<string, string>[]> {
-		const replies = await this.talk({
-			command: "/execute",
-			attributes: { script, "as-string": "" },
-		});
+		const replies = await this.talk(
+			{
+				command: "/execute",
+				attributes: { script, "as-string": "" },
+			},
+			options,
+		);
 		return repliesToRecords(replies);
 	}
 
-	async apiRequest(request: ProtocolApiRequest): Promise<ProtocolApiResult> {
+	async apiRequest(
+		request: ProtocolApiRequest,
+		options?: ProtocolSendOptions,
+	): Promise<ProtocolApiResult> {
 		const records = repliesToRecords(
-			await this.talk(nativeCommandFor(request)),
+			await this.talk(nativeCommandFor(request), options),
 		);
 		switch (request.verb) {
 			case "print":
@@ -880,8 +913,13 @@ class NativeApiAdapter implements ProtocolAdapter {
 		return session;
 	}
 
-	private async talk(command: NativeApiCommand): Promise<ApiReply[]> {
+	private async talk(
+		command: NativeApiCommand,
+		options?: ProtocolSendOptions,
+	): Promise<ApiReply[]> {
+		// Connecting logs in lazily; only the sentence after `/login` is the command.
 		const session = await this.connect();
+		options?.onSent?.();
 		return this.withTimeout(session.talk(command));
 	}
 
@@ -982,6 +1020,7 @@ class MacTelnetAdapter implements ProtocolAdapter {
 
 	async execute(
 		request: ProtocolExecuteRequest,
+		options?: ProtocolSendOptions,
 	): Promise<ProtocolExecuteResult> {
 		const cli = request.script;
 		if (cli === undefined) {
@@ -994,6 +1033,7 @@ class MacTelnetAdapter implements ProtocolAdapter {
 			});
 		}
 		const console = await this.open();
+		options?.onSent?.();
 		const { output } = await console.run(cli);
 		return { records: [], ret: output };
 	}
@@ -1134,6 +1174,7 @@ class SshExecAdapter implements ProtocolAdapter {
 
 	async execute(
 		request: ProtocolExecuteRequest,
+		options?: ProtocolSendOptions,
 	): Promise<ProtocolExecuteResult> {
 		const cli = request.script;
 		if (cli === undefined) {
@@ -1145,6 +1186,7 @@ class SshExecAdapter implements ProtocolAdapter {
 					"Report this bug; runCommand must pass the raw command as `script` for ssh.",
 			});
 		}
+		options?.onSent?.();
 		const output = await this.client.exec(cli);
 		return { records: [], ret: output };
 	}

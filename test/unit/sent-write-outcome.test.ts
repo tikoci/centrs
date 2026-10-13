@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { type ApiEnvelope, apiEnvelope, apiStream } from "../../src/api.ts";
+import { apiFanout } from "../../src/api-fanout.ts";
 import { sentWriteWarnings } from "../../src/core/fanout.ts";
 import { CentrsError } from "../../src/errors.ts";
 import { executeEnvelope } from "../../src/execute.ts";
@@ -7,6 +8,7 @@ import {
 	encodeSentence,
 	SentenceReader,
 } from "../../src/protocols/native-api.ts";
+import type { SelectionMember } from "../../src/resolver/selection.ts";
 import { closedPort } from "./closed-port.ts";
 
 /**
@@ -160,6 +162,119 @@ describe("api --stream marks a write sent once its sentence is on the wire (#448
 			const put = await lastStreamEnvelope(router.port, "PUT");
 			expect(put?.ok).toBe(false);
 			expect(put && warned(put)).toBe(false);
+		} finally {
+			router.stop(true);
+		}
+	});
+});
+
+/**
+ * A native session logs in lazily inside the call that sends the command, so
+ * a drop during `/login` must not count as sent: only `/login` reached the
+ * router (#452 review).
+ */
+describe("a native write whose session dropped at login was not sent (#448)", () => {
+	const native = { ...common, via: "native-api" } as const;
+	const write = '/system/note/set note="x"';
+
+	test("execute: a login drop does not warn; a drop after login does", async () => {
+		const atLogin = droppingRouter(true);
+		const afterLogin = droppingRouter();
+		try {
+			const dropped = await executeEnvelope(
+				{ ...native, port: atLogin.port, command: write },
+				ENV,
+			);
+			expect(!dropped.ok && dropped.error.code).toBe(
+				"transport/connection-closed",
+			);
+			expect(warned(dropped)).toBe(false);
+
+			const sent = await executeEnvelope(
+				{ ...native, port: afterLogin.port, command: write },
+				ENV,
+			);
+			expect(!sent.ok && sent.error.code).toBe("transport/connection-closed");
+			expect(warned(sent)).toBe(true);
+		} finally {
+			atLogin.stop(true);
+			afterLogin.stop(true);
+		}
+	});
+
+	test("api: a PUT dropped at login does not warn", async () => {
+		const router = droppingRouter(true);
+		try {
+			const put = await apiEnvelope(
+				{
+					...native,
+					port: router.port,
+					method: "PUT",
+					endpoint: "ip/address",
+					fields: { address: "192.0.2.9/32", interface: "ether1" },
+				},
+				ENV,
+			);
+			expect(!put.ok && put.error.code).toBe("transport/connection-closed");
+			expect(warned(put)).toBe(false);
+		} finally {
+			router.stop(true);
+		}
+	});
+
+	test("api fan-out: a PUT dropped at login is retried and does not warn", async () => {
+		const router = droppingRouter(true);
+		let retries = 0;
+		const member: SelectionMember = {
+			kind: "cdb",
+			recordIndex: 0,
+			resolution: {
+				target: "127.0.0.1",
+				identity: "login-drop",
+				username: "admin",
+				password: "",
+				recordIndex: 0,
+				overrides: {},
+				warnings: [],
+			},
+		};
+		try {
+			const envelope = await apiFanout(
+				{
+					...native,
+					port: router.port,
+					method: "PUT",
+					endpoint: "ip/address",
+					fields: { address: "192.0.2.9/32", interface: "ether1" },
+				},
+				{
+					positionals: [],
+					groups: ["lab"],
+					all: false,
+					default: false,
+					where: [],
+				},
+				ENV,
+				{
+					expand: async () => ({
+						targets: [member],
+						warnings: [],
+						empty: false,
+					}),
+					sleep: async () => {
+						retries += 1;
+					},
+				},
+			);
+			const target = envelope.data.targets[0];
+			expect(target?.ok).toBe(false);
+			expect(JSON.stringify(target)).toContain("transport/connection-closed");
+			expect(retries).toBe(2);
+			expect(
+				target?.warnings.some(
+					(w) => w.code === "transport/write-outcome-unknown",
+				),
+			).toBe(false);
 		} finally {
 			router.stop(true);
 		}

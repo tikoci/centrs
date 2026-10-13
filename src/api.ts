@@ -391,11 +391,15 @@ export async function runResolvedApi(
 			trace.validation = validation;
 		}
 
-		trace.dispatched = true;
 		const result = await backend.apiRequest(
 			resolved === request
 				? protocolRequest
 				: buildProtocolApiRequest(resolved),
+			{
+				onSent: () => {
+					trace.dispatched = true;
+				},
+			},
 		);
 		const routerOsFailure = apiRouterOsFailureFromResult(resolved, result);
 		if (routerOsFailure) {

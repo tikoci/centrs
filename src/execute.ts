@@ -39,6 +39,7 @@ import {
 	getProtocolPlan,
 	type ProtocolAdapter,
 	type ProtocolExecuteResult,
+	type ProtocolSendOptions,
 	plannedProtocols,
 	type RouterOsProtocol,
 } from "./protocols/index.ts";
@@ -290,8 +291,11 @@ export async function runResolvedExecute(
 		// reports the gate that actually passed rather than a guess.
 		trace.validation = validation;
 
-		trace.dispatched = true;
-		const result = await runCommand(resolved, backend);
+		const result = await runCommand(resolved, backend, {
+			onSent: () => {
+				trace.dispatched = true;
+			},
+		});
 		const routerOsFailure = routerOsFailureFromResult(
 			result,
 			resolved.via.value,
@@ -1011,22 +1015,32 @@ function isPreflightTransportError(error: CentrsError): boolean {
 async function runCommand(
 	resolved: ResolvedExecuteRequest,
 	backend: ProtocolAdapter,
+	options: ProtocolSendOptions,
 ): Promise<ProtocolExecuteResult> {
 	if (resolved.via.value === "mac-telnet" || resolved.via.value === "ssh") {
 		// Console transports: run the raw CLI line and capture the console output
 		// (structured path-POST / tagged talk do not apply). ssh runs it as a
 		// single `ssh host "<command>"`; mac-telnet drives the L2 console.
-		return backend.execute({ path: "", command: "", script: resolved.command });
+		return backend.execute(
+			{ path: "", command: "", script: resolved.command },
+			options,
+		);
 	}
 	if (resolved.canonical.mode === "script") {
-		return backend.execute({ path: "", command: "", script: resolved.command });
+		return backend.execute(
+			{ path: "", command: "", script: resolved.command },
+			options,
+		);
 	}
-	return backend.execute({
-		path: resolved.canonical.path,
-		command: resolved.canonical.verb,
-		attributes: resolved.canonical.attributes,
-		queries: resolved.canonical.queries,
-	});
+	return backend.execute(
+		{
+			path: resolved.canonical.path,
+			command: resolved.canonical.verb,
+			attributes: resolved.canonical.attributes,
+			queries: resolved.canonical.queries,
+		},
+		options,
+	);
 }
 
 async function assertWriteConfirmed(
