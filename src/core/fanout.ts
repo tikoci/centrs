@@ -84,8 +84,9 @@ export function isRetryableFanoutError(error: unknown): boolean {
 
 /**
  * Transport failures that prove the request never reached RouterOS (or reached
- * it and was refused before running): the connection, name, route, trust or
- * login failed. Any other transport failure after a send is ambiguous.
+ * it and was refused before running): the local client, connection, name,
+ * route, trust or login failed. Any other transport failure after a send is
+ * ambiguous.
  */
 export const NOT_SENT_TRANSPORT_CODES: readonly string[] = [
 	"transport/auth-failed",
@@ -93,6 +94,7 @@ export const NOT_SENT_TRANSPORT_CODES: readonly string[] = [
 	"transport/dns",
 	"transport/host-key-mismatch",
 	"transport/insecure-trust",
+	"transport/local-tool-missing",
 	"transport/provider-trust",
 	"transport/tls-certificate",
 	"transport/unreachable",

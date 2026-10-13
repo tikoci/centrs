@@ -566,7 +566,10 @@ async function* streamResolvedApi(
 		const protocolRequest = buildProtocolApiRequest(resolved);
 		for await (const reply of backend.stream(protocolRequest, {
 			signal: controller.signal,
-			onListening,
+			onListening: () => {
+				trace.dispatched = true;
+				onListening?.();
+			},
 			onCancelUnacknowledged: () => {
 				cancelUnacknowledged = true;
 			},
@@ -605,7 +608,7 @@ async function* streamResolvedApi(
 			done,
 		);
 	} catch (error) {
-		const envelope = buildApiErrorEnvelopeFromResolved(resolved, error);
+		const envelope = buildApiErrorEnvelopeFromResolved(resolved, error, trace);
 		envelope.meta.validation = validation;
 		envelope.warnings = [...envelope.warnings, ...cancellationWarnings()];
 		envelope.tips = [...envelope.tips, ...tips];

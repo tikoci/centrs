@@ -1,6 +1,12 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { apiEnvelope } from "../../src/api.ts";
+import { type ApiEnvelope, apiEnvelope, apiStream } from "../../src/api.ts";
+import { sentWriteWarnings } from "../../src/core/fanout.ts";
+import { CentrsError } from "../../src/errors.ts";
 import { executeEnvelope } from "../../src/execute.ts";
+import {
+	encodeSentence,
+	SentenceReader,
+} from "../../src/protocols/native-api.ts";
 import { closedPort } from "./closed-port.ts";
 
 /**
@@ -83,4 +89,87 @@ describe("a write that failed after it was sent says its outcome is unknown (#44
 		expect(get.ok).toBe(false);
 		expect(warned(get)).toBe(false);
 	});
+});
+
+/**
+ * A loopback native-API router that accepts the login, then drops the
+ * connection when the next sentence arrives (or, with `atLogin`, at login).
+ */
+function droppingRouter(atLogin = false) {
+	const reader = new SentenceReader();
+	const listener = Bun.listen<undefined>({
+		hostname: "127.0.0.1",
+		port: 0,
+		socket: {
+			data(socket, chunk) {
+				for (const words of reader.push(new Uint8Array(chunk))) {
+					if (words[0] === "/login" && !atLogin) {
+						const tag = words.find((w) => w.startsWith(".tag="));
+						socket.write(encodeSentence(tag ? ["!done", tag] : ["!done"]));
+					} else {
+						socket.end();
+					}
+				}
+			},
+		},
+	});
+	return listener;
+}
+
+async function lastStreamEnvelope(
+	port: number,
+	method: string,
+): Promise<ApiEnvelope | undefined> {
+	let last: ApiEnvelope | undefined;
+	for await (const envelope of apiStream(
+		{
+			...common,
+			via: "native-api",
+			port,
+			method,
+			endpoint: "ip/address",
+			...(method === "PUT"
+				? { fields: { address: "192.0.2.9/32", interface: "ether1" } }
+				: {}),
+		},
+		ENV,
+	)) {
+		last = envelope;
+	}
+	return last;
+}
+
+describe("api --stream marks a write sent once its sentence is on the wire (#448)", () => {
+	test("a streamed PUT dropped after sending warns; a streamed GET does not", async () => {
+		const router = droppingRouter();
+		try {
+			const put = await lastStreamEnvelope(router.port, "PUT");
+			expect(put?.ok).toBe(false);
+			expect(put && warned(put)).toBe(true);
+			const get = await lastStreamEnvelope(router.port, "GET");
+			expect(get?.ok).toBe(false);
+			expect(get && warned(get)).toBe(false);
+		} finally {
+			router.stop(true);
+		}
+	});
+
+	test("a streamed PUT whose session dropped at login does not warn", async () => {
+		const router = droppingRouter(true);
+		try {
+			const put = await lastStreamEnvelope(router.port, "PUT");
+			expect(put?.ok).toBe(false);
+			expect(put && warned(put)).toBe(false);
+		} finally {
+			router.stop(true);
+		}
+	});
+});
+
+test("a missing local client (e.g. no ssh binary) never counts as sent", () => {
+	const error = new CentrsError({
+		code: "transport/local-tool-missing",
+		summary: "ssh not found",
+	});
+	expect(sentWriteWarnings(true, error, { dispatched: true })).toEqual([]);
 });
