@@ -8,6 +8,12 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+## 0.1.9-next.0 — 2026-10-13
+
+Pre-release (npm tag `next`; `latest` stays on 0.1.8). Install with
+`bunx @tikoci/centrs@next`. First cut of `execute --cmr`; expect another
+`next` after the next round of CMR work.
+
 ### Added
 
 - `execute <controller> --cmr --labels <expr> -- '<command>'` runs one
