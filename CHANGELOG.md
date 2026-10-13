@@ -8,6 +8,37 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Added
+
+- `execute <controller> --cmr --labels <expr> -- '<command>'` runs one
+  validated command on CMR clients through their controller (RouterOS
+  7.26beta1+; #450, #451). Only the controller is dialed, with its own
+  credentials. Each selected client validates the command with `:parse`
+  first, and a client whose answer is incomplete or rejected is not sent it.
+  The command then goes to each client in its own `run-script` call, bound to
+  the `/cmr/device` row and key it was validated on, and is never retried; a
+  timeout, cancellation or lost call is `cmr/outcome-unknown`. One `--yes`
+  covers the whole selection. Native API (default) and REST to the controller
+  are both CHR-tested. Raw `run-script` through `api` or plain `execute` warns
+  `cmr/client-script-not-validated`. Not on MCP yet.
+- `cmr/policy-denied`: a statement CMR scripts may not run (`/user add`,
+  `/tool sniffer`: the client allows only `read`, `write`, `test` and
+  `reboot`) is reported as such instead of a generic RouterOS failure, also
+  after earlier output. `:parse` accepts these commands, so validation cannot
+  catch them, and statements before the refused one have already run.
+- `cmr/console-only`: `execute` and `api` refuse `/cmr/device/dashboard`. A
+  plain path is refused before dialing; any other spelling (a relative menu
+  change, a block, an `/execute` script) is found in the controller's `:parse`
+  return. On 7.26beta1 it closed a native API session, and over REST it held
+  the controller's REST service for every caller for 10–30 s.
+- `execute --cmr` against a router with no `/cmr/device` says why. RouterOS
+  older than 7.26beta1 (CMR is beta-only) is `routeros/version-unsupported`
+  with `capability: cmr-controller`. A 7.26beta1+ router without the `cmr`
+  package stays `cmr/not-a-controller`, now naming its version and, for a CMR
+  client, its controller.
+- `execute --cmr` accepts a command that opens with a relative menu change
+  (`/system; identity/print`); its `:parse` return was read as incomplete.
+
 ### Fixed
 
 - `execute` and `api` never replay a write that was sent (#448). Fan-out
@@ -15,10 +46,9 @@ documenting cross-cutting shifts that affect contributors and consumers.
   up to twice, so a write whose connection dropped after the router had run
   it could be applied up to three times. A write is now retried only when one
   of those failures came before it was sent, for example during validation or
-  a native API login. A write that failed
-  after it was sent, in single-target or fan-out mode, carries the new warning
-  `transport/write-outcome-unknown`, because it may have run. Reads keep the
-  retry.
+  a native API login. A write that failed after it was sent, in single-target
+  or fan-out mode, carries the new warning `transport/write-outcome-unknown`,
+  because it may have run. Reads keep the retry.
 
 ## 0.1.8 — 2026-10-12
 

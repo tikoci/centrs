@@ -1,4 +1,9 @@
-import { cmrRunScriptWarnings, cmrScriptWarnings } from "./core/cmr.ts";
+import {
+	assertNotCmrDashboardIl,
+	assertNotCmrDashboardPath,
+	cmrRunScriptWarnings,
+	cmrScriptWarnings,
+} from "./core/cmr.ts";
 import type {
 	CentrsEnvelope,
 	CentrsErrorEnvelope,
@@ -326,6 +331,7 @@ export async function resolveExecuteRequest(
 ): Promise<ResolvedExecuteRequest> {
 	validateExecuteRequestShape(request);
 	const canonical = canonicalizeExecuteCommand(request.command);
+	assertNotStructuredDashboard(canonical);
 	const config = options.config ?? (await loadEnvFileDefaults(env));
 	// A quickchr target is a named-live-provider: it supplies host/port/auth from
 	// the live descriptor and bypasses CDB/env resolution for those fields
@@ -487,6 +493,7 @@ export function resolveExecuteGlobalContext(
 ): ExecuteGlobalContext {
 	validateExecuteRequestShape(request);
 	const canonical = canonicalizeExecuteCommand(request.command);
+	assertNotStructuredDashboard(canonical);
 	const via = resolveExecuteProtocol(request, env, undefined, config);
 	const format = resolveFormat(request, env, config);
 	const validate = resolveBooleanSetting(
@@ -905,6 +912,7 @@ async function validateConsoleParseCommand(
 	});
 	// Throws validation/syntax or validation/unknown-attribute on a bad parse.
 	classifyParseResult(result.ret ?? "", resolved.command, resolved.via.value);
+	assertNotCmrDashboardIl(result.ret ?? "", resolved.command);
 	return {
 		enabled: true,
 		source: `:put [:parse ...] over ${resolved.via.value}`,
@@ -956,6 +964,7 @@ export async function validateRouterOsScript(
 	via: RouterOsProtocol,
 ): Promise<void> {
 	const script = `:put [:parse ${routerOsStringLiteral(command)}]`;
+	let il: string;
 	try {
 		// GH#230: `:parse` never throws (CHR 7.23.3). The diagnostic rides the
 		// success value's text — over REST/native the `ret` field (HTTP 200 /
@@ -964,7 +973,8 @@ export async function validateRouterOsScript(
 		// Read the return and classify it: one `:parse` covers syntax and the
 		// unknown-attribute (name-level) gate.
 		const result = await backend.execute({ path: "", command: "", script });
-		classifyParseResult(result.ret ?? "", command, via);
+		il = result.ret ?? "";
+		classifyParseResult(il, command, via);
 	} catch (error) {
 		// The preflight is a syntax gate, but `backend.execute` also surfaces
 		// connection and authentication failures (login happens lazily here).
@@ -1000,6 +1010,20 @@ export async function validateRouterOsScript(
 			cause: error,
 			causeData: syntaxCause(error),
 		});
+	}
+	assertNotCmrDashboardIl(il, command);
+}
+
+/**
+ * The plain spellings of the dashboard are refused before anything is dialed.
+ * Every other spelling (a relative menu change, a block, a substitution) is
+ * found in the `:parse` return, so it is refused by validation.
+ */
+function assertNotStructuredDashboard(
+	canonical: CanonicalExecuteCommand,
+): void {
+	if (canonical.mode === "structured") {
+		assertNotCmrDashboardPath(`${canonical.path}/${canonical.verb}`);
 	}
 }
 

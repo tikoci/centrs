@@ -775,9 +775,21 @@ the unknown machine's inner error is `quickchr/machine-not-found`. Exit code 2
 `test/integration/execute-cmr.test.ts` runs these on a two-CHR CMR lab
 (`test/integration/cmr-lab.ts`): `$CTL` is a 7.26beta1 controller with the
 `cmr` package, paired with one client over a socket link. Examples CMR1–CMR7
-and CMR10 run over **both** `--via native-api` and `--via rest-api` to the
-controller, with validation on. The same test first asserts the device
-behaviour the design depends on (CMR-D1–D7 in the test file).
+and CMR10–CMR14 run over **both** `--via native-api` and `--via rest-api` to
+the controller, with validation on. The same test first asserts the device
+behaviour the design depends on (CMR-D1–D8 in the test file).
+
+### CMR0. A router without CMR
+
+```bash
+centrs execute <router> --cmr --labels all -- ':put x'
+```
+
+On RouterOS older than 7.26beta1 this is `routeros/version-unsupported` with
+`context.capability` `cmr-controller` and the running version. On 7.26beta1 or
+later without the `cmr` package it is `cmr/not-a-controller` with the version.
+Nothing is dispatched. `test/integration/execute.test.ts` runs this on the
+channel's CHR and expects the code its version calls for.
 
 ### CMR1. A read on every client
 
@@ -869,3 +881,53 @@ centrs execute --quickchr $CTL --cmr --labels <client> --timeout 20s --yes -- ':
 The target is `cmr/outcome-unknown` with `dispatched` 1. `<marker>` is not in
 the client's log when the call returns, and appears afterwards: cancelling
 the controller call did not stop the client script.
+
+### CMR11. A command needing a policy CMR scripts lack
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels <client> --yes -- '/user/add name=<user> group=read password=<x>'
+```
+
+Validation passes on the client (`:parse` accepts it), then the client refuses
+it when it runs: the target is `cmr/policy-denied`, and `<user>` does not exist
+on the client afterwards.
+
+### CMR12. A multi-line command
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels <client> -- $':put centrs-l1\n:put centrs-l2'
+```
+
+The target is `ok` and `data.ret` holds both lines.
+
+### CMR11b. A refused statement after others have run
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels <client> --yes -- $':put before\n/system/note/set note="<m>-before"\n/user/add name=<user> group=read password=<x>\n/system/note/set note="<m>-after"'
+```
+
+The target is `cmr/policy-denied`, and its `context.output` starts with
+`before` followed by the `not enough permissions (9)` line. The client's note
+is `<m>-before`: the statement before the refused one ran and stays, and the
+script stopped at the refused one. `<user>` does not exist.
+
+### CMR14. `--cmr` pointed at a client
+
+```bash
+centrs execute --quickchr <client> --cmr --labels all -- ':put x'
+```
+
+`cmr/not-a-controller`: the client runs 7.26beta1 but has no `cmr` package.
+`context.controllerIdentity` names the controller it is paired to.
+
+### CMR13. The dashboard behind a relative menu change
+
+```bash
+centrs execute --quickchr $CTL -- '/cmr/dev; dash'
+centrs execute --quickchr $CTL -- ':put "CMR device dashboard"'
+```
+
+The first is `cmr/console-only`: the controller's `:parse` resolves it to
+`/cmr/device/;(evl /cmr/device/dashboard)`, so it is refused before it runs.
+The second is `ok` with `data.ret` `CMR device dashboard`: a string that spells
+the words is not a command.

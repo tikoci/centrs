@@ -6,18 +6,20 @@
  *   - CMR-D*: the device behaviour `src/execute-cmr.ts` is built on, asserted
  *     directly against the controller so a later RouterOS build that changes it
  *     fails here first, not as a silent mis-binding in centrs.
- *   - CMR1–CMR10: the examples in `commands/execute/examples.md` → CMR, through
+ *   - CMR1–CMR14: the examples in `commands/execute/examples.md` → CMR, through
  *     the library and the CLI, with validation on, over native-api AND
  *     rest-api to the controller.
  */
 
 import { describe, expect, test } from "bun:test";
 import { runCli } from "../../src/cli.ts";
+import { executeEnvelope } from "../../src/execute.ts";
 import {
 	type ExecuteCmrEnvelope,
 	type ExecuteCmrRequest,
 	executeCmr,
 } from "../../src/execute-cmr.ts";
+import { createProtocolAdapter } from "../../src/protocols/index.ts";
 import {
 	CMR_SINCE,
 	isChrIntegrationEnabled,
@@ -69,7 +71,7 @@ async function note(router: CmrLab["controller"]): Promise<string> {
 
 describeFast("execute --cmr against a CMR lab (#450)", () => {
 	test(
-		"device contract, then CMR1–CMR10 over native-api and rest-api",
+		"device contract, then CMR1–CMR14 over native-api and rest-api",
 		async () => {
 			const lab = await startCmrLab(
 				`centrs-cmr-${crypto.randomUUID().slice(0, 6)}`,
@@ -187,6 +189,35 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 					).status,
 				).toBe(404);
 
+				// CMR-D8. `dashboard` is console-only: over the native API it ends the
+				// session (why centrs refuses it as `cmr/console-only`). REST is not
+				// exercised: there it holds the controller's REST service for 10–30 s.
+				const native = createProtocolAdapter({
+					protocol: "native-api",
+					host: "127.0.0.1",
+					port: controller.ports.api,
+					tls: false,
+					baseUrl: `api://127.0.0.1:${controller.ports.api}`,
+					username: controller.username,
+					password: controller.password,
+					timeoutMs: 15_000,
+				});
+				try {
+					const dashboard = await native
+						.apiRequest({
+							verb: "run",
+							path: "/cmr/device/dashboard",
+							attributes: { numbers: clientId },
+						})
+						.then(
+							() => "returned",
+							(e: { code?: string }) => e.code,
+						);
+					expect(dashboard).toBe("transport/connection-closed");
+				} finally {
+					await native.close();
+				}
+
 				for (const via of ["native-api", "rest-api"] as const) {
 					const base: ExecuteCmrRequest = {
 						quickchr: controller.name,
@@ -292,6 +323,96 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 					await Bun.sleep(6_000);
 					expect(await clientLogHas(lab, cancelMarker)).toBe(true);
 
+					// CMR11. A command needing a policy CMR scripts lack passes `:parse`
+					// on the client, then is refused there at run time; nothing changes.
+					const user = `centrs-cmr11-${via === "native-api" ? "n" : "r"}`;
+					const denied = await run({
+						labels: client.identity,
+						command: `/user/add name=${user} group=read password=centrs-cmr11-x`,
+						yes: true,
+					});
+					expect(codes(denied)).toEqual(["cmr/policy-denied"]);
+					expect(denied.data.targets[0]?.meta.validation).toMatchObject({
+						result: "passed",
+					});
+					expect(
+						(await client.read("/user")).some((u) => u["name"] === user),
+					).toBe(false);
+
+					// CMR11b. After earlier output: the statements before the refused one
+					// ran and stay; the script stopped at it.
+					const mark = `centrs-cmr11b-${via === "native-api" ? "n" : "r"}`;
+					const partial = await run({
+						labels: client.identity,
+						command: [
+							":put before",
+							`/system/note/set note="${mark}-before"`,
+							`/user/add name=${user} group=read password=centrs-cmr11-x`,
+							`/system/note/set note="${mark}-after"`,
+						].join("\n"),
+						yes: true,
+					});
+					expect(codes(partial)).toEqual(["cmr/policy-denied"]);
+					const partialTarget = partial.data.targets[0];
+					expect(
+						partialTarget?.ok === false &&
+							String(partialTarget.error.context?.["output"]),
+					).toMatch(/^before\r?\nnot enough permissions \(9\)/);
+					expect(await note(client)).toBe(`${mark}-before`);
+					expect(
+						(await client.read("/user")).some((u) => u["name"] === user),
+					).toBe(false);
+
+					// CMR13. Plain execute on the controller: a relative-menu dashboard is
+					// refused from its `:parse` return and never sent; a string that only
+					// spells the words runs.
+					const relative = await executeEnvelope({
+						quickchr: controller.name,
+						via,
+						command: "/cmr/dev; dash",
+						// Script-shaped, so write-gated before validation runs.
+						yes: true,
+					});
+					expect(!relative.ok && relative.error.code).toBe("cmr/console-only");
+					const spelled = await executeEnvelope({
+						quickchr: controller.name,
+						via,
+						command: ':put "CMR device dashboard"',
+					});
+					expect(spelled.ok && (spelled.data as { ret: string }).ret).toBe(
+						"CMR device dashboard",
+					);
+
+					// CMR14. `--cmr` pointed at the client (7.26beta1, no `cmr` package)
+					// names the missing package and the controller it is paired to.
+					const atClient = await executeCmr({
+						quickchr: client.name,
+						via,
+						labels: "all",
+						command: ":put x",
+					}).then(
+						() => undefined,
+						(error: { code?: string; context?: Record<string, unknown> }) =>
+							error,
+					);
+					expect(atClient?.code).toBe("cmr/not-a-controller");
+					expect(atClient?.context).toMatchObject({
+						controllerIdentity: controller.identity,
+					});
+					expect(String(atClient?.context?.["version"])).toStartWith(
+						client.version,
+					);
+
+					// CMR12. A multi-line command runs every line on the client.
+					const lines = await run({
+						labels: client.identity,
+						command: ":put centrs-l1\n:put centrs-l2",
+					});
+					expect(codes(lines)).toEqual(["ok"]);
+					const target = lines.data.targets[0];
+					const ret = target?.ok ? (target.data as { ret: string }).ret : "";
+					expect(ret.replaceAll("\r\n", "\n")).toBe("centrs-l1\ncentrs-l2\n");
+
 					// CMR7. Labels that match nothing: empty success with a warning.
 					const empty = await run({
 						labels: "no-such-label",
@@ -337,8 +458,8 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 				expect(codes(down)).toEqual(["cmr/client-disconnected"]);
 				expect(down.meta.operation?.cmr.dispatched).toBe(0);
 
-				// CMR1–CMR7 and CMR10 ran over both controller transports; CMR8 (CLI
-				// default) and CMR9 over native-api only.
+				// CMR1–CMR7 and CMR10–CMR14 ran over both controller transports; CMR8
+				// (CLI default) and CMR9 over native-api only.
 				const proven = {
 					"native-api": [
 						"CMR1",
@@ -351,6 +472,10 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						"CMR8",
 						"CMR9",
 						"CMR10",
+						"CMR11",
+						"CMR12",
+						"CMR13",
+						"CMR14",
 					],
 					"rest-api": [
 						"CMR1",
@@ -361,6 +486,10 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						"CMR6",
 						"CMR7",
 						"CMR10",
+						"CMR11",
+						"CMR12",
+						"CMR13",
+						"CMR14",
 					],
 				};
 				for (const [protocol, exampleIds] of Object.entries(proven)) {

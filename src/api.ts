@@ -15,7 +15,7 @@
  * structured validation, confirmation, and result-envelope surface.
  */
 
-import { cmrRunScriptWarnings } from "./core/cmr.ts";
+import { assertNotCmrDashboardPath, cmrRunScriptWarnings } from "./core/cmr.ts";
 import type {
 	CentrsEnvelope,
 	CentrsErrorEnvelope,
@@ -2038,6 +2038,7 @@ export function validateApiRequestShape(request: ApiRequest): void {
 		});
 	}
 	const normalized = normalizeApiEndpoint(request.endpoint);
+	assertNotCmrDashboardPath(normalized.path);
 	if (pathTokens(normalized.path).length === 0) {
 		throw new CentrsError({
 			code: "input/invalid-path",

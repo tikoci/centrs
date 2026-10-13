@@ -9,6 +9,10 @@ error.
 Distinct from `routeros/unsupported-capability`, where the chosen *protocol*
 cannot carry the operation at all regardless of device version.
 
+`execute --cmr` raises it with `capability: cmr-controller` when the target has
+no `/cmr/device` and runs RouterOS older than 7.26beta1, where CMR first
+shipped. That check reads the version only after the missing menu, not before.
+
 ## Context fields
 
 - `capability` — stable slug of the missing operation.
