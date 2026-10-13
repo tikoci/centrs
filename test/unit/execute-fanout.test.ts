@@ -197,6 +197,56 @@ describe("parseExecuteCliArgs — `--` boundary + selectors", () => {
 describe("executeFanout", () => {
 	const base = { command: READ, stdinIsTty: false };
 
+	// #448: a write that was sent may have run, so it is never replayed. A read,
+	// and a write that failed before it was sent, keep the retry allowlist.
+	const sentDrop = (sent: boolean, attempts: { n: number }) =>
+		(async (_resolved, trace) => {
+			attempts.n += 1;
+			if (sent) trace.dispatched = true;
+			throw new CentrsError({ code: "transport/network", summary: "reset" });
+		}) satisfies ExecuteFanoutInternals["execute"];
+	for (const [name, command, sent, tries, warned] of [
+		[
+			"a sent write is tried once and says its outcome is unknown",
+			WRITE,
+			true,
+			1,
+			true,
+		],
+		[
+			"a write that failed before it was sent is retried",
+			WRITE,
+			false,
+			3,
+			false,
+		],
+		["a sent read is retried", READ, true, 3, false],
+	] as const) {
+		test(`#448: ${name}`, async () => {
+			const attempts = { n: 0 };
+			const envelope = await executeFanout(
+				{ command, yes: true, stdinIsTty: false },
+				selection(),
+				{},
+				{
+					expand: async () => expansionOf([cdbMember("10.0.0.1", 0)]),
+					execute: sentDrop(sent, attempts),
+					sleep: async () => {},
+				},
+			);
+			expect(attempts.n).toBe(tries);
+			const target = envelope.data.targets[0];
+			expect(target?.ok === false && target.error.code).toBe(
+				"transport/network",
+			);
+			expect(
+				target?.warnings.some(
+					(w) => w.code === "transport/write-outcome-unknown",
+				),
+			).toBe(warned);
+		});
+	}
+
 	test("fans a read out across members, ordered by record index, exit 0", async () => {
 		const internals: ExecuteFanoutInternals = {
 			expand: async () =>

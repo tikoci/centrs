@@ -513,7 +513,8 @@ retrieve-specific behavior on top of the shared engine:
   `transport/connection-closed` (REST 5xx is mapped to
   `transport/connection-closed`). It does **not** retry `routeros/*`,
   `validation/*`, `auth/*`, `cdb/*`, `target/*`, timeouts, DNS, TLS, or refused
-  connections.
+  connections. (`execute` and `api` share this engine but never replay a write
+  that was sent.)
 
 ## Definition of done
 

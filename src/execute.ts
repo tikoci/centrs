@@ -17,6 +17,7 @@ import {
 	canonicalizeExecuteCommand,
 	isWriteShaped,
 } from "./core/execute-command.ts";
+import { sentWriteWarnings } from "./core/fanout.ts";
 import { inspectArgumentNames, pathTokens } from "./core/inspect.ts";
 import { mapRouterOsResultError } from "./core/routeros-errors.ts";
 import { routerOsStringLiteral } from "./core/routeros-string.ts";
@@ -289,6 +290,7 @@ export async function runResolvedExecute(
 		// reports the gate that actually passed rather than a guess.
 		trace.validation = validation;
 
+		trace.dispatched = true;
 		const result = await runCommand(resolved, backend);
 		const routerOsFailure = routerOsFailureFromResult(
 			result,
@@ -603,7 +605,14 @@ export function buildExecuteErrorEnvelopeFromResolved(
 	return {
 		ok: false,
 		error: serializeCentrsError(centrsError),
-		warnings: [...resolved.warnings],
+		warnings: [
+			...resolved.warnings,
+			...sentWriteWarnings(
+				isWriteShaped(resolved.canonical),
+				centrsError,
+				trace,
+			),
+		],
 		tips: resolvedExecuteTips(resolved),
 		meta: metaFromResolved(
 			resolved,

@@ -29,6 +29,7 @@ import type {
 	Warning,
 } from "./core/envelope.ts";
 import { buildTip, notReachedReason } from "./core/envelope.ts";
+import { sentWriteWarnings } from "./core/fanout.ts";
 import {
 	inspectArgumentNames,
 	inspectChildrenOrEmpty,
@@ -390,6 +391,7 @@ export async function runResolvedApi(
 			trace.validation = validation;
 		}
 
+		trace.dispatched = true;
 		const result = await backend.apiRequest(
 			resolved === request
 				? protocolRequest
@@ -1720,7 +1722,14 @@ export function buildApiErrorEnvelopeFromResolved(
 	return {
 		ok: false,
 		error: serializeCentrsError(centrsError),
-		warnings: [...resolved.warnings],
+		warnings: [
+			...resolved.warnings,
+			...sentWriteWarnings(
+				isApiMutating(resolved.method, resolved.path),
+				centrsError,
+				trace,
+			),
+		],
 		tips: [],
 		meta: metaFromResolved(
 			resolved,

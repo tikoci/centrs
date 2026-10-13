@@ -21,6 +21,7 @@ import type {
 	EnvelopeTargetMeta,
 	FanoutData,
 	FanoutSummary,
+	ValidationTrace,
 	Warning,
 } from "./envelope.ts";
 
@@ -81,6 +82,57 @@ export function isRetryableFanoutError(error: unknown): boolean {
 	return (FANOUT_RETRYABLE_CODES as readonly string[]).includes(error.code);
 }
 
+/**
+ * Transport failures that prove the request never reached RouterOS (or reached
+ * it and was refused before running): the connection, name, route, trust or
+ * login failed. Any other transport failure after a send is ambiguous.
+ */
+export const NOT_SENT_TRANSPORT_CODES: readonly string[] = [
+	"transport/auth-failed",
+	"transport/connection-refused",
+	"transport/dns",
+	"transport/host-key-mismatch",
+	"transport/insecure-trust",
+	"transport/provider-trust",
+	"transport/tls-certificate",
+	"transport/unreachable",
+];
+
+/**
+ * #448: a write whose request was already sent when a transport failure ended
+ * it may have run on the router. It is never retried, and its error envelope
+ * says the outcome is unknown rather than implying nothing happened.
+ */
+export function sentWriteWarnings(
+	write: boolean,
+	error: unknown,
+	trace: ValidationTrace | undefined,
+): Warning[] {
+	if (!write || !trace?.dispatched) return [];
+	if (
+		!(error instanceof CentrsError) ||
+		!error.code.startsWith("transport/") ||
+		NOT_SENT_TRANSPORT_CODES.includes(error.code)
+	) {
+		return [];
+	}
+	return [
+		{
+			code: "transport/write-outcome-unknown",
+			message: `The write was sent before it failed with ${error.code}, so it may have run on the router. centrs does not retry a write it has sent; check the router's state before running it again.`,
+			context: { cause: error.code },
+		},
+	];
+}
+
+/** A fan-out retry veto: never replay a write whose request was sent (#448). */
+export function mayRetryUnsentWrite(
+	write: boolean,
+	trace: ValidationTrace | undefined,
+): boolean {
+	return !write || trace?.dispatched !== true;
+}
+
 /** Count inner `ok`/`failed` across a completed target set. */
 export function summarizeFanout(
 	targets: readonly { ok: boolean }[],
@@ -128,9 +180,11 @@ export async function runBoundedPool<I, O>(
 
 /**
  * Run `run`, retrying only {@link isRetryableFanoutError} failures up to
- * `maxRetries` times with jittered backoff. A non-retryable error, or the final
- * exhausted attempt, is converted to a value via `recover` (so a fan-out target
- * yields an inner error envelope instead of throwing out of the batch).
+ * `maxRetries` times with jittered backoff. `mayRetry` vetoes a retry the
+ * allowlist would allow, e.g. a write that was already sent (#448). A
+ * non-retryable error, or the final exhausted attempt, is converted to a value
+ * via `recover` (so a fan-out target yields an inner error envelope instead of
+ * throwing out of the batch).
  */
 export async function runWithRetry<T>(
 	run: () => Promise<T>,
@@ -138,6 +192,7 @@ export async function runWithRetry<T>(
 	options: {
 		sleep?: (ms: number) => Promise<void>;
 		maxRetries?: number;
+		mayRetry?: (error: unknown) => boolean;
 	} = {},
 ): Promise<T> {
 	const sleep = options.sleep ?? defaultFanoutSleep;
@@ -147,7 +202,11 @@ export async function runWithRetry<T>(
 		try {
 			return await run();
 		} catch (error) {
-			if (attempt < maxRetries && isRetryableFanoutError(error)) {
+			if (
+				attempt < maxRetries &&
+				isRetryableFanoutError(error) &&
+				(options.mayRetry?.(error) ?? true)
+			) {
 				attempt += 1;
 				await sleep(fanoutBackoffMs(attempt));
 				continue;
@@ -173,9 +232,10 @@ export function defaultFanoutSleep(ms: number): Promise<void> {
  * per-target plan, and the inner envelope type. Mirrors the original
  * `retrieveGroup` worker exactly: resolve each member (a resolve failure becomes
  * an inner error envelope, never a throw out of the batch); run the resolved
- * request through {@link runWithRetry} (a retryable transient drop is retried,
- * everything else recovers to an inner error envelope). Results are returned in
- * input (record-index) order via {@link runBoundedPool}.
+ * request through {@link runWithRetry} (a retryable transient drop is retried
+ * unless `mayRetry` vetoes it, everything else recovers to an inner error
+ * envelope). Results are returned in input (record-index) order via
+ * {@link runBoundedPool}.
  */
 export async function runFanout<Member, Resolved, Env>(opts: {
 	members: readonly Member[];
@@ -184,6 +244,8 @@ export async function runFanout<Member, Resolved, Env>(opts: {
 	onResolveError: (member: Member, error: unknown) => Env;
 	execute: (resolved: Resolved, member: Member) => Promise<Env>;
 	onExecuteError: (resolved: Resolved, member: Member, error: unknown) => Env;
+	/** Veto a retry for this target, e.g. a write that was already sent. */
+	mayRetry?: (resolved: Resolved, error: unknown) => boolean;
 	sleep?: (ms: number) => Promise<void>;
 }): Promise<Env[]> {
 	return runBoundedPool(opts.members, opts.concurrency, async (member) => {
@@ -196,7 +258,12 @@ export async function runFanout<Member, Resolved, Env>(opts: {
 		return runWithRetry<Env>(
 			() => opts.execute(resolved, member),
 			(error) => opts.onExecuteError(resolved, member, error),
-			{ sleep: opts.sleep },
+			{
+				sleep: opts.sleep,
+				mayRetry: opts.mayRetry
+					? (error) => opts.mayRetry?.(resolved, error) ?? true
+					: undefined,
+			},
 		);
 	});
 }
