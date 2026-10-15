@@ -195,6 +195,29 @@ describeFast("transfer fan-out against CHR", () => {
 			expect(f2.data.summary).toEqual({ total: 0, ok: 0, failed: 0 });
 			expect(f2.warnings.map((w) => w.code)).toContain("cdb/empty-group");
 
+			// F2b: for a write verb the empty group is an outer error, even with
+			// --yes (#460).
+			const f2bStart = consoleCapture.errors.length;
+			const f2bExit = await runCli([
+				"transfer",
+				"--group",
+				"no-such-group",
+				"remove",
+				"fanout-test.txt",
+				"--via",
+				"rest",
+				"--cdb-file",
+				cdbPath,
+				"--yes",
+				"--json",
+			]);
+			const f2b = JSON.parse(
+				consoleCapture.errors.slice(f2bStart)[0] ?? "",
+			) as FanoutTestEnvelope;
+			expect(f2bExit).toBe(1);
+			expect(f2b.ok).toBe(false);
+			expect(f2b.error?.code).toBe("cdb/empty-group");
+
 			// F3: `--where role=edge` selects only the reachable record, exit 0.
 			const f3Start = consoleCapture.logs.length;
 			const f3Exit = await runCli([

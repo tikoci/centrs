@@ -463,6 +463,15 @@ centrs transfer --group no-such-group list --via rest --cdb-file $CDB --json
 `ok: true`, `data.summary = { total: 0, ok: 0, failed: 0 }`,
 `warnings` include `cdb/empty-group`. Exit `0`.
 
+A write verb (`upload`, `remove`, `mkdir`, `copy`) over the same group is an
+outer error, with or without `--yes` (#460):
+
+```bash
+centrs transfer --group no-such-group remove fanout-test.txt --via rest --cdb-file $CDB --yes --json
+```
+
+`ok: false`, `error.code` `cdb/empty-group`. Exit `1`.
+
 ### F3. `--where` device-class selector (subset)
 
 ```bash

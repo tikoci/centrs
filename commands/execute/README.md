@@ -307,8 +307,12 @@ when the target is itself a CMR client.
   selects the controller. CDB selectors (`--group`/`--where`/`--all`/
   `--default`/geo), several targets, and `--via mac-telnet|ssh` are
   `usage/conflicting-flags`. `--labels` without `--cmr` is refused the same way.
-  Labels that no device has are accepted silently by RouterOS; an empty
-  selection is `ok: true` with the warning `cmr/empty-selection`. A device's
+  Labels that no device has are accepted silently by RouterOS. An empty
+  selection is `ok: true` with the warning `cmr/empty-selection` for a read,
+  and the outer error `cmr/empty-selection` for a write-shaped command, with
+  or without `--yes` (#460), as RouterOS refuses it (`no devices selected`). A
+  mistyped label then exits 1 instead of looking like a successful bulk write.
+  A device's
   identity selects it only while the controller's `/cmr auto-labels` includes
   `identity` (the default `all` does). On 7.26beta1, after `auto-labels=version`
   a client's row still *showed* its identity label but no longer matched it.
@@ -347,6 +351,21 @@ when the target is itself a CMR client.
 - **Write gate:** one `--yes`/TTY confirmation, naming how many clients will run
   it, how many were excluded, and through which controller. Clients that failed
   validation are never sent the command.
+- **The controller login is not the limit (#456).** On 7.26beta1, RouterOS
+  does not check the caller's policy against a CMR script. `run-script`
+  needed only `read` + `api` on the controller login, and
+  `/cmr/device/reboot` only `read` + `test` + `api`. A login refused a direct
+  write (`not enough permissions (9)`) still wrote to clients and to the
+  controller's own row through `run-script`, and rebooted a client through
+  both. So a "reader" login on a 7.26beta1 controller is not read-only, and
+  centrs' write gate (and `mcp=ro` on MCP) is the only gate. MikroTik
+  [says](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/139) 7.26beta2 refuses this for a `read` group; that is not yet
+  checked on a beta2 build. For a write,
+  centrs reads the login's own `/user` row and `/user/group` once (both are
+  readable with just `read` + `api`). When the login lacks `write`, `test` or
+  `reboot`, the result and the confirmation error carry
+  `cmr/caller-policy-not-enforced` naming what it lacks. A failed read only
+  loses the warning.
 - **Dispatch:** one call per validated member, sending the input unchanged with
   `timeout=` set from `--timeout` (capped at 55 s, under CMR's ~60 s per-call
   ceiling). Every call pins `strategy=parallel fail-policy=continue
@@ -377,8 +396,15 @@ when the target is itself a CMR client.
 - **Validation metadata** reports what ran: `source: ":put [:parse ...] via cmr
   run-script"`, the same claim the console gate makes. There is no client
   `/console/inspect` stage.
-- **Not on MCP** until delegated authorization is designed (#449). `retrieve
-  --cmr` is deferred (#441).
+- **No progress stream.** `run-script` returns a client's output only when its
+  script ends, and no `/cmr` menu records a running script. To watch a long
+  CMR job, follow what it changes on a client:
+  `centrs retrieve <client> /ip/address --follow` while
+  `execute <controller> --cmr` adds addresses. That only works when the client
+  can also be reached directly; otherwise re-run a read through `--cmr`.
+- **Not on MCP** until delegated authorization is designed (#449). That design
+  must not assume RouterOS refuses a fleet write for a `!write` login (see
+  above). `retrieve --cmr` is deferred (#441).
 
 `/cmr/device/dashboard` is an interactive console view, refused as
 `cmr/console-only`. A plain path, abbreviated or not (`/cmr/dev/dash`), is

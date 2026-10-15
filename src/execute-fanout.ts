@@ -60,6 +60,7 @@ import {
 } from "./execute.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
+	emptyWriteSelectionError,
 	expandSelection,
 	isDefaultRecordTarget,
 	loadEnvFileDefaults,
@@ -225,6 +226,12 @@ export async function executeFanout(
 	const concurrency = resolveFanoutConcurrency(options.concurrency, via);
 
 	if (expansion.empty) {
+		if (global.summary.write) {
+			throw emptyWriteSelectionError(
+				expansion,
+				`\`${global.summary.command}\``,
+			);
+		}
 		return executeFanoutEnvelope({
 			selection: selectionSummary,
 			concurrency,

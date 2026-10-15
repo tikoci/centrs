@@ -48,6 +48,7 @@ import {
 import { promptForWriteConfirmation } from "./execute.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
+	emptyWriteSelectionError,
 	expandSelection,
 	isDefaultRecordTarget,
 	loadEnvFileDefaults,
@@ -299,6 +300,9 @@ export async function transferFanout(
 	const concurrency = resolveFanoutConcurrency(options.concurrency, "rest-api");
 
 	if (expansion.empty) {
+		if (isTransferWriteVerb(request.verb)) {
+			throw emptyWriteSelectionError(expansion, `\`${request.verb}\``);
+		}
 		return transferFanoutEnvelope({
 			selection: selectionSummary,
 			concurrency,

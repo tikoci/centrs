@@ -12,9 +12,22 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 - `centrs --version` / `-V` prints the package version alone; `--json` (or
   `--format json|yaml`) returns an envelope with `data.version` (#463).
+- `execute --cmr` warns `cmr/caller-policy-not-enforced` when a write runs
+  through a controller login that lacks `write`, `test` or `reboot`. On
+  7.26beta1 RouterOS runs the client script with all four anyway, so the
+  login is not the limit (#456). MikroTik says 7.26beta2 refuses this for a
+  `read` group. The warning is also in the confirmation
+  error. centrs reads the login's own `/user` row and group once, only for a
+  write; a failed read only loses the warning.
 
 ### Changed
 
+- An empty selection is an error for a write: `execute`, mutating `api` and
+  `transfer upload|remove|mkdir|copy` fan-outs (`cdb/empty-group`,
+  `cdb/empty-selection`) and `execute --cmr` (`cmr/empty-selection`) now exit 1
+  with `ok: false`, with or without `--yes`. A mistyped group or label passed
+  for a successful bulk write with exit 0 (#460). A read over an empty
+  selection is unchanged: `ok: true` with the warning.
 - The write gate treats pure script functions as reads, so a structured read
   such as `:put [:serialize to=json [/system/resource/print as-value]]` no
   longer needs `--yes` (#458). The added directives are `:serialize`,

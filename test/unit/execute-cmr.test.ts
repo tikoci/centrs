@@ -7,12 +7,17 @@ import {
 	test,
 } from "bun:test";
 import { apiEnvelope, resolveApiRequest } from "../../src/api.ts";
-import { ilInvokesCmrDashboard } from "../../src/core/cmr.ts";
+import {
+	type CmrCallerPolicy,
+	ilInvokesCmrDashboard,
+	readCmrCallerPolicy,
+} from "../../src/core/cmr.ts";
 import { fanoutExitCode } from "../../src/core/fanout.ts";
 import { routerOsStringLiteral } from "../../src/core/routeros-string.ts";
 import { CentrsError } from "../../src/errors.ts";
 import { executeEnvelope, resolveExecuteRequest } from "../../src/execute.ts";
 import {
+	buildExecuteCmrErrorEnvelope,
 	CMR_VALIDATION_SOURCE,
 	type CmrAbsence,
 	type CmrController,
@@ -242,6 +247,137 @@ describe("execute --cmr: selection and binding", () => {
 			"cmr/empty-selection",
 		);
 		expect(fanoutExitCode(envelope)).toBe(0);
+	});
+
+	test("an empty selection is an error for a write, even with --yes (#460)", async () => {
+		const f = fake({
+			inventory: [[CTL, C1]],
+			preflight: { "*1": notSelected, "*2": notSelected },
+		});
+		const error = await runFake(f, {
+			command: '/system/note/set note="x"',
+			yes: true,
+		}).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(CentrsError);
+		expect(error).toMatchObject({
+			code: "cmr/empty-selection",
+			context: { labels: "lab", inventory: 2, write: true },
+		});
+		expect(f.dispatch).toEqual([]);
+	});
+
+	describe("a login whose policy RouterOS does not enforce (#456)", () => {
+		const READER: CmrCallerPolicy = {
+			username: "agent",
+			group: "reader",
+			policy: ["read", "test", "api", "rest-api"],
+		};
+		const withPolicy = (
+			policy: () => Promise<CmrCallerPolicy | undefined>,
+		): { f: Fake; reads: () => number } => {
+			const f = fake({ inventory: [[C1]] });
+			let reads = 0;
+			f.controller.callerPolicy = () => {
+				reads += 1;
+				return policy();
+			};
+			return { f, reads: () => reads };
+		};
+		const WRITE = '/system/note/set note="x"';
+
+		test("a write names the policies the login lacks", async () => {
+			const { f, reads } = withPolicy(async () => READER);
+			const envelope = await runFake(f, { command: WRITE, yes: true });
+			expect(reads()).toBe(1);
+			expect(envelope.data.targets[0]?.ok).toBe(true);
+			const warning = envelope.warnings.find(
+				(w) => w.code === "cmr/caller-policy-not-enforced",
+			);
+			expect(warning?.context).toEqual({
+				username: "agent",
+				group: "reader",
+				missing: ["write", "reboot"],
+				runsWith: ["read", "write", "test", "reboot"],
+			});
+		});
+
+		test("the confirmation error carries it before anything runs", async () => {
+			const { f } = withPolicy(async () => READER);
+			const error = await runFake(f, { command: WRITE }).catch(
+				(e: unknown) => e,
+			);
+			expect(error).toMatchObject({
+				code: "usage/confirmation-required",
+				context: { callerPolicy: { missing: ["write", "reboot"] } },
+			});
+			expect((error as CentrsError).summary).toContain("lacks write, reboot");
+			expect(f.dispatch).toEqual([]);
+			// The CLI's outer envelope keeps the warning itself, not only its context.
+			const envelope = buildExecuteCmrErrorEnvelope(
+				{ targetInput: "192.0.2.1", via: "native-api" },
+				error,
+			);
+			expect(envelope.warnings.map((w) => w.code)).toEqual([
+				"cmr/caller-policy-not-enforced",
+			]);
+		});
+
+		test("a login with every script policy gets no warning", async () => {
+			const { f } = withPolicy(async () => ({
+				...READER,
+				policy: ["read", "write", "test", "reboot", "api"],
+			}));
+			const envelope = await runFake(f, { command: WRITE, yes: true });
+			expect(envelope.warnings.map((w) => w.code)).not.toContain(
+				"cmr/caller-policy-not-enforced",
+			);
+		});
+
+		test("a read never reads the policy", async () => {
+			const { f, reads } = withPolicy(async () => READER);
+			const envelope = await runFake(f);
+			expect(reads()).toBe(0);
+			expect(envelope.data.targets[0]?.ok).toBe(true);
+		});
+
+		test("the policy read: own row, then its group, `!name` entries dropped", async () => {
+			const asked: string[] = [];
+			const adapter = {
+				apiRequest: async (request: {
+					path: string;
+					query?: readonly string[];
+				}) => {
+					asked.push(`${request.path}?${request.query?.join("&")}`);
+					return {
+						data:
+							request.path === "/user"
+								? [{ name: "agent", group: "reader" }]
+								: [{ name: "reader", policy: "read,test,api,!write,!reboot" }],
+					};
+				},
+			} as unknown as Parameters<typeof readCmrCallerPolicy>[0];
+			expect(await readCmrCallerPolicy(adapter, "agent")).toEqual({
+				username: "agent",
+				group: "reader",
+				policy: ["read", "test", "api"],
+			});
+			expect(asked).toEqual(["/user?name=agent", "/user/group?name=reader"]);
+			const none = {
+				apiRequest: async () => ({ data: [] }),
+			} as unknown as Parameters<typeof readCmrCallerPolicy>[0];
+			expect(await readCmrCallerPolicy(none, "radius-user")).toBeUndefined();
+		});
+
+		test("an unreadable policy only loses the warning", async () => {
+			const { f } = withPolicy(async () => {
+				throw new Error("no permission");
+			});
+			const envelope = await runFake(f, { command: WRITE, yes: true });
+			expect(envelope.data.targets[0]?.ok).toBe(true);
+			expect(envelope.warnings.map((w) => w.code)).not.toContain(
+				"cmr/caller-policy-not-enforced",
+			);
+		});
 	});
 
 	// The two ways a missing `/cmr/device` arrives (7.24.5 CHR, no `cmr` package).

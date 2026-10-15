@@ -637,6 +637,16 @@ centrs execute --group no-such-group --via rest-api --cdb-file $CDB --json -- /s
 `ok: true`, `data.summary = { total: 0, ok: 0, failed: 0 }`,
 `warnings` include `cdb/empty-group`. Exit `0`.
 
+The same group with a write is an outer error, with or without `--yes`, so a
+misspelled group cannot pass for a successful bulk write (#460):
+
+```bash
+centrs execute --group no-such-group --via rest-api --cdb-file $CDB --yes --json -- '/system/identity/set name=x'
+```
+
+`ok: false`, `error.code` `cdb/empty-group`, `error.context.write` `true`.
+Exit `1`. Nothing is dialed.
+
 ### F3. `--where` device-class selector (subset)
 
 ```bash
@@ -790,7 +800,7 @@ the unknown machine's inner error is `quickchr/machine-not-found`. Exit code 2
 `test/integration/execute-cmr.test.ts` runs these on a two-CHR CMR lab
 (`test/integration/cmr-lab.ts`): `$CTL` is a 7.26beta1 controller with the
 `cmr` package, paired with one client over a socket link. Examples CMR1–CMR7
-and CMR10–CMR14 run over **both** `--via native-api` and `--via rest-api` to
+and CMR10–CMR15 run over **both** `--via native-api` and `--via rest-api` to
 the controller, with validation on. The same test first asserts the device
 behaviour the design depends on (CMR-D1–D8 in the test file).
 
@@ -871,6 +881,16 @@ centrs execute --quickchr $CTL --cmr --labels no-such-label -- ':put x'
 `ok: true`, `data.summary.total` is 0, warning `cmr/empty-selection`, exit
 code 0.
 
+The same labels with a write are an outer error, with or without `--yes`, as
+RouterOS itself refuses an empty selection (#460):
+
+```bash
+centrs execute --quickchr $CTL --cmr --labels no-such-label --yes -- '/system/note/set note="x"'
+```
+
+`ok: false`, `error.code` `cmr/empty-selection`, `error.context.write` `true`,
+exit code 1. No note changes.
+
 ### CMR8. CLI exit code for a mixed result
 
 CMR2 through `runCli` exits `2`.
@@ -934,6 +954,21 @@ centrs execute --quickchr <client> --cmr --labels all -- ':put x'
 
 `cmr/not-a-controller`: the client runs 7.26beta1 but has no `cmr` package.
 `context.controllerIdentity` names the controller it is paired to.
+
+### CMR15. A controller login without `write` or `reboot`
+
+The controller has a group with `read,test,api,rest-api,!write,!reboot,!sensitive,!policy`
+and a user `$READER` in it. That login cannot write on the controller
+directly, but:
+
+```bash
+centrs execute 127.0.0.1 --port $API --username $READER --password $PW --cmr --labels <client> --yes -- '/system/note/set note="<marker>"'
+```
+
+The target is `ok`, the client's note reads `<marker>`, and the envelope warns
+`cmr/caller-policy-not-enforced` with `context.missing` `["write", "reboot"]`:
+CMR ran the script with `read,write,test,reboot` (#456). The same write as the
+lab's admin login has no such warning.
 
 ### CMR13. The dashboard behind a relative menu change
 

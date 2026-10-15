@@ -55,11 +55,13 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	},
 	{
 		code: "cdb/empty-group",
-		summary: "The named CDB group contains no records.",
+		summary:
+			"The named CDB group contains no records: a warning for a read, an error for a write-shaped fan-out.",
 	},
 	{
 		code: "cdb/empty-selection",
-		summary: "The target selection matched no CDB records.",
+		summary:
+			"The target selection matched no CDB records: a warning for a read, an error for a write-shaped fan-out.",
 	},
 	{
 		code: "cdb/file-exists",
@@ -269,6 +271,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"The operation was cancelled before the command was sent to a CMR client.",
 	},
 	{
+		code: "cmr/caller-policy-not-enforced",
+		summary:
+			"Warning: the controller login lacks a policy the CMR command runs with on the clients, and RouterOS does not check it.",
+	},
+	{
 		code: "cmr/client-script-not-validated",
 		summary:
 			"Warning: a caller-addressed `/cmr/device/run-script` was validated as a controller request; its script was not validated on the clients.",
@@ -281,7 +288,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "cmr/empty-selection",
 		summary:
-			"Warning: the `--labels` expression matched no CMR device on the controller.",
+			"The `--labels` expression matched no CMR device on the controller: a warning for a read, an error for a write.",
 	},
 	{
 		code: "cmr/membership-changed",

@@ -62,6 +62,7 @@ import {
 import { promptForWriteConfirmation } from "./execute.ts";
 import { plannedProtocols, type RouterOsProtocol } from "./protocols/index.ts";
 import {
+	emptyWriteSelectionError,
 	expandSelection,
 	isDefaultRecordTarget,
 	loadEnvFileDefaults,
@@ -242,6 +243,12 @@ export async function apiFanout(
 	const concurrency = resolveFanoutConcurrency(options.concurrency, via);
 
 	if (expansion.empty) {
+		if (requestSummary.write) {
+			throw emptyWriteSelectionError(
+				expansion,
+				`${method} ${requestSummary.path}`,
+			);
+		}
 		return buildApiFanoutSuccess({
 			summary: { total: 0, ok: 0, failed: 0 },
 			targets: [],
