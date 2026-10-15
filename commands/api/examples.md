@@ -712,6 +712,23 @@ target fails deterministically: inner `ok:false` with
 `error.code=target/unresolved` (never a `transport/dns` attempt on `"__default__"`).
 `data.summary = { total: 1, ok: 0, failed: 1 }`. Exit code 1 (every target failed).
 
+## CMR fleet commands (#453)
+
+`test/integration/execute-cmr.test.ts` runs these on the CMR lab described in
+[execute → CMR](../execute/examples.md#cmr-clients-through-a-controller-450),
+over both `--via native-api` and `--via rest-api`.
+
+### CMR1. `POST /cmr/device/reboot` names the devices it reaches
+
+```bash
+centrs api --quickchr $CTL -X POST /cmr/device/reboot -f labels=<client>
+```
+
+Without `--yes` (no TTY) this is `usage/confirmation-required`. Its summary
+names `1 CMR device(s)`, and `error.context.cmr` is
+`{devices: 1, controllerIncluded: false, identities: ["<client>"]}`. Nothing
+reboots.
+
 ## `--query` grammar (#397)
 
 `--query` takes the `print where` grammar shared with `retrieve --query`. The

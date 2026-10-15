@@ -4,6 +4,13 @@ import {
 	cmrRunScriptWarnings,
 	cmrScriptWarnings,
 } from "./core/cmr.ts";
+import {
+	type CmrFleetRead,
+	cmrFleetCommand,
+	cmrFleetGate,
+	cmrFleetReadable,
+	readCmrFleet,
+} from "./core/cmr-fleet.ts";
 import type {
 	CentrsEnvelope,
 	CentrsErrorEnvelope,
@@ -171,6 +178,8 @@ export interface ResolvedExecuteRequest {
 	yes: boolean;
 	verbose: boolean;
 	warnings: readonly Warning[];
+	/** A CMR fleet command's reach, read before the write gate (#453). */
+	cmrFleet?: CmrFleetRead;
 }
 
 export async function execute(
@@ -202,6 +211,7 @@ export async function executeEnvelope(
 	const trace: ValidationTrace = {};
 	try {
 		resolved = await resolveExecuteRequest(request, env);
+		resolved = await withCmrFleetScope(resolved);
 		await assertWriteConfirmed(request, resolved);
 		return await runResolvedExecute(resolved, trace);
 	} catch (error) {
@@ -1074,9 +1084,13 @@ async function assertWriteConfirmed(
 	if (!isWriteShaped(resolved.canonical) || resolved.yes) {
 		return;
 	}
+	const fleet = resolved.cmrFleet
+		? cmrFleetGate(resolved.cmrFleet, targetName(resolved))
+		: undefined;
 	if (request.stdinIsTty ?? process.stdin.isTTY) {
 		const confirmed = await (request.confirm ?? promptForWriteConfirmation)(
-			`Run write-shaped RouterOS command over ${resolved.via.value}? Type yes to continue: `,
+			fleet?.prompt ??
+				`Run write-shaped RouterOS command over ${resolved.via.value}? Type yes to continue: `,
 		);
 		if (confirmed) {
 			return;
@@ -1085,6 +1099,7 @@ async function assertWriteConfirmed(
 	throw new CentrsError({
 		code: "usage/confirmation-required",
 		summary:
+			fleet?.summary ??
 			"Write-shaped RouterOS execute commands require explicit confirmation.",
 		remediation:
 			"Pass `--yes` in non-interactive automation, or answer `yes` at the TTY prompt after reviewing the command.",
@@ -1093,8 +1108,73 @@ async function assertWriteConfirmed(
 			path: resolved.canonical.path,
 			verb: resolved.canonical.verb,
 			via: resolved.via.value,
+			...fleet?.context,
 		},
 	});
+}
+
+function targetName(resolved: ResolvedExecuteRequest): string {
+	return (
+		resolved.target.identity ?? resolved.target.input ?? resolved.target.host
+	);
+}
+
+/**
+ * #453: a write-shaped CMR fleet command (`/cmr/device/reboot labels=all`) is
+ * one request to the controller that acts on every device it selects. Read
+ * the controller's inventory before the gate so the gate names that reach,
+ * and add the fleet warnings, with or without `--yes`. Structured input only:
+ * a script's selectors (`[find …]`, positionals) are not resolved.
+ */
+async function withCmrFleetScope(
+	resolved: ResolvedExecuteRequest,
+): Promise<ResolvedExecuteRequest> {
+	const { canonical } = resolved;
+	if (canonical.mode !== "structured" || !isWriteShaped(canonical)) {
+		return resolved;
+	}
+	const command = cmrFleetCommand(
+		`${canonical.path}/${canonical.verb}`,
+		canonical.attributes,
+	);
+	if (!command) return resolved;
+	if (!cmrFleetReadable(resolved.via.value)) {
+		return {
+			...resolved,
+			cmrFleet: {
+				scope: {
+					command: command.command,
+					unresolved: `${resolved.via.value} has no structured read`,
+				},
+				warnings: [],
+			},
+		};
+	}
+	const adapter = createProtocolAdapter({
+		protocol: resolved.via.value,
+		host: resolved.target.host,
+		port: resolved.target.port,
+		tls: resolved.target.tls,
+		baseUrl: resolved.target.baseUrl,
+		username: resolved.auth.username,
+		password: resolved.auth.password,
+		timeoutMs: resolved.timeoutMs.value,
+		insecure: resolved.insecure.value,
+	});
+	try {
+		const cmrFleet = await readCmrFleet(
+			command,
+			adapter,
+			resolved.auth.username,
+		);
+		return {
+			...resolved,
+			cmrFleet,
+			warnings: [...resolved.warnings, ...cmrFleet.warnings],
+		};
+	} finally {
+		await adapter.close();
+	}
 }
 
 export async function promptForWriteConfirmation(

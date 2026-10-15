@@ -6,13 +6,19 @@
  *   - CMR-D*: the device behaviour `src/execute-cmr.ts` is built on, asserted
  *     directly against the controller so a later RouterOS build that changes it
  *     fails here first, not as a silent mis-binding in centrs.
- *   - CMR1–CMR15: the examples in `commands/execute/examples.md` → CMR, through
+ *   - CMR1–CMR18: the examples in `commands/execute/examples.md` → CMR, through
  *     the library and the CLI, with validation on, over native-api AND
- *     rest-api to the controller.
+ *     rest-api to the controller. CMR16–CMR18 are plain `execute` of fleet
+ *     commands (#453), and `commands/api/examples.md` → CMR1 is `api`.
  */
 
 import { describe, expect, test } from "bun:test";
+import { apiEnvelope } from "../../src/api.ts";
 import { runCli } from "../../src/cli.ts";
+import {
+	cmrFleetCommand,
+	resolveCmrFleetScope,
+} from "../../src/core/cmr-fleet.ts";
 import { executeEnvelope } from "../../src/execute.ts";
 import {
 	type ExecuteCmrEnvelope,
@@ -71,7 +77,7 @@ async function note(router: CmrLab["controller"]): Promise<string> {
 
 describeFast("execute --cmr against a CMR lab (#450)", () => {
 	test(
-		"device contract, then CMR1–CMR15 over native-api and rest-api",
+		"device contract, then CMR1–CMR18 over native-api and rest-api",
 		async () => {
 			const lab = await startCmrLab(
 				`centrs-cmr-${crypto.randomUUID().slice(0, 6)}`,
@@ -204,6 +210,52 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						})
 					).status,
 				).toBe(404);
+
+				// CMR-D9. #453 resolves a fleet command's selection host-side: the
+				// manual's label rules over each row's `labels` ∪ `auto-labels`. The
+				// device's own selection (a run-script probe per row) must agree, or
+				// the write gate would name the wrong devices. Before CMR-D8 (REST).
+				await controller.run(
+					`/cmr/device/set [find identity=${client.identity}] labels=edge,site-a`,
+				);
+				const inventoryD9 = await lab.devices();
+				for (const labels of [
+					"all",
+					"-x",
+					controller.identity,
+					client.identity,
+					"x86",
+					"no-such-label",
+					`all,-${controller.identity}`,
+					`${client.identity},+x86`,
+					`${client.identity},+no-such-label`,
+					controller.identity.toUpperCase(),
+					"edge",
+					"site-a,+edge",
+					"edge,-site-a",
+					"Edge",
+					"all,-edge",
+				]) {
+					const command = cmrFleetCommand("/cmr/device/run-script", {
+						labels,
+					});
+					const resolved = command
+						? await resolveCmrFleetScope(command, async () => inventoryD9)
+						: undefined;
+					const onDevice: string[] = [];
+					for (const row of inventoryD9) {
+						const probe = await runScriptRest(lab, {
+							numbers: row[".id"] ?? "",
+							labels,
+							script: ":put x",
+						});
+						if (probe.status === 200) onDevice.push(row["identity"] ?? "");
+					}
+					expect({
+						labels,
+						selected: resolved?.devices?.map((d) => d.identity).sort(),
+					}).toEqual({ labels, selected: onDevice.sort() });
+				}
 
 				// CMR-D8. `dashboard` is console-only: over the native API it ends the
 				// session (why centrs refuses it as `cmr/console-only`). REST is not
@@ -484,6 +536,125 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 					expect(asAdmin.warnings.map((w) => w.code)).not.toContain(
 						"cmr/caller-policy-not-enforced",
 					);
+
+					// CMR16. #453: the gate of a fleet command names the devices it
+					// reaches, the controller's own row included. Nothing is sent.
+					const reboot = await executeEnvelope({
+						quickchr: controller.name,
+						via,
+						command: "/cmr/device/reboot labels=all",
+						stdinIsTty: false,
+					});
+					expect(!reboot.ok && reboot.error.code).toBe(
+						"usage/confirmation-required",
+					);
+					if (!reboot.ok) {
+						expect(reboot.error.summary).toContain(
+							`2 CMR device(s) through controller ${controller.identity}, the controller itself among them`,
+						);
+						const cmr = reboot.error.context?.["cmr"] as {
+							devices: number;
+							controllerIncluded: boolean;
+							identities: string[];
+						};
+						expect(cmr.devices).toBe(2);
+						expect(cmr.controllerIncluded).toBe(true);
+						expect([...cmr.identities].sort()).toEqual(
+							[controller.identity, client.identity].sort(),
+						);
+					}
+					expect(reboot.warnings.map((w) => w.code)).toContain(
+						"cmr/selection-includes-controller",
+					);
+
+					// api CMR1. The same gate on `POST /cmr/device/reboot`.
+					const apiReboot = await apiEnvelope({
+						quickchr: controller.name,
+						via,
+						endpoint: "/cmr/device/reboot",
+						method: "POST",
+						fields: { labels: client.identity },
+						stdinIsTty: false,
+					});
+					expect(!apiReboot.ok && apiReboot.error.code).toBe(
+						"usage/confirmation-required",
+					);
+					expect(
+						!apiReboot.ok && apiReboot.error.context?.["cmr"],
+					).toMatchObject({
+						devices: 1,
+						controllerIncluded: false,
+						identities: [client.identity],
+					});
+
+					// CMR17. A VLAN rule with no labels and no port-labels warns; added
+					// disabled, so nothing is provisioned. Its removal reads the rule.
+					const marker17 = `centrs-cmr17-${via}`;
+					const rule = await executeEnvelope({
+						quickchr: controller.name,
+						via,
+						command: `/cmr/vlan/add vlan-ids=4001 disabled=yes comment=${marker17}`,
+						yes: true,
+					});
+					expect(rule.ok).toBe(true);
+					expect(rule.warnings.map((w) => w.code)).toContain(
+						"cmr/rule-selects-every-device",
+					);
+					const ruleId = (await controller.read("/cmr/vlan")).find(
+						(r) => r["comment"] === marker17,
+					)?.[".id"];
+					expect(ruleId).toBeDefined();
+					const removed = await executeEnvelope({
+						quickchr: controller.name,
+						via,
+						command: `/cmr/vlan/remove numbers=${ruleId}`,
+						yes: true,
+					});
+					expect(removed.ok).toBe(true);
+					expect(removed.warnings.map((w) => w.code)).toContain(
+						"cmr/rule-selects-every-device",
+					);
+					expect(
+						(await controller.read("/cmr/vlan")).some(
+							(r) => r["comment"] === marker17,
+						),
+					).toBe(false);
+
+					// CMR18. `run-script` called directly by the restricted login (#456,
+					// #453): it runs, and the result says the login is not the limit.
+					const runScript18 = `/cmr/device/run-script labels=${client.identity} script=":put centrs-cmr18"`;
+					const direct = await executeEnvelope({
+						targetInput: via === "rest-api" ? controller.restUrl : "127.0.0.1",
+						...(via === "native-api" ? { port: controller.ports.api } : {}),
+						via,
+						username: restricted.user,
+						password: restricted.password,
+						command: runScript18,
+						yes: true,
+						stdinIsTty: false,
+					});
+					expect(direct.ok).toBe(true);
+					expect(
+						direct.warnings.find(
+							(w) => w.code === "cmr/caller-policy-not-enforced",
+						)?.context,
+					).toMatchObject({ missing: ["write", "reboot"] });
+					expect(direct.warnings.map((w) => w.code)).toContain(
+						"cmr/client-script-not-validated",
+					);
+					const directAdmin = await executeEnvelope({
+						quickchr: controller.name,
+						via,
+						command: runScript18,
+						yes: true,
+					});
+					expect(directAdmin.ok).toBe(true);
+					expect(directAdmin.warnings.map((w) => w.code)).not.toContain(
+						"cmr/caller-policy-not-enforced",
+					);
+					expect(directAdmin.warnings.map((w) => w.code)).not.toContain(
+						"cmr/selection-includes-controller",
+					);
 				}
 
 				// CMR8. The CLI reports a mixed result as exit code 2.
@@ -520,8 +691,8 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 				expect(codes(down)).toEqual(["cmr/client-disconnected"]);
 				expect(down.meta.operation?.cmr.dispatched).toBe(0);
 
-				// CMR1–CMR7 and CMR10–CMR15 ran over both controller transports; CMR8
-				// (CLI default) and CMR9 over native-api only.
+				// CMR1–CMR7 and CMR10–CMR18 ran over both controller transports; CMR8
+				// (CLI default) and CMR9 over native-api only. api CMR1 over both.
 				const proven = {
 					"native-api": [
 						"CMR1",
@@ -539,6 +710,9 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						"CMR13",
 						"CMR14",
 						"CMR15",
+						"CMR16",
+						"CMR17",
+						"CMR18",
 					],
 					"rest-api": [
 						"CMR1",
@@ -554,6 +728,9 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						"CMR13",
 						"CMR14",
 						"CMR15",
+						"CMR16",
+						"CMR17",
+						"CMR18",
 					],
 				};
 				for (const [protocol, exampleIds] of Object.entries(proven)) {
@@ -565,6 +742,17 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						quickChrName: controller.name,
 						requestedVersion: CMR_SINCE,
 						exampleIds,
+					});
+				}
+				for (const protocol of ["native-api", "rest-api"]) {
+					await recordIntegrationEvidence({
+						suite: "execute-cmr",
+						command: "api",
+						protocol,
+						routerosVersion: `${controller.version} (controller), ${client.version} (client)`,
+						quickChrName: controller.name,
+						requestedVersion: CMR_SINCE,
+						exampleIds: ["CMR1"],
 					});
 				}
 			} finally {

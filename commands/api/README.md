@@ -183,6 +183,13 @@ prompt) → otherwise `usage/confirmation-required`. Consequences:
   `/cmr/upgrade/trigger`, `/cmr/upgrade/job/run-next`) are writes whatever
   RouterOS policy the login has: on 7.26beta1 `run-script` needs only `read` +
   `api` on the controller (#456).
+  Before the gate, `api` reads the controller's `/cmr/device` inventory and
+  names the devices the request reaches, the controller's own row included,
+  with the same warnings as plain `execute` (#453; see
+  [execute → Fleet commands run directly](../execute/README.md#fleet-commands-run-directly-453)).
+  `PUT`, `PATCH` and `DELETE` on `/cmr/vlan`, `/cmr/wifi`, `/cmr/wifi/radio`
+  and `/cmr/upgrade` are the menus' `add`, `set` and `remove`, and the `*id`
+  is the rule they act on.
 
 `--raw` does not bypass this gate.
 

@@ -419,6 +419,53 @@ Calling `/cmr/device/run-script` yourself, through `api` or plain `execute`,
 validates only the controller request. The envelope then carries the warning
 `cmr/client-script-not-validated`.
 
+### Fleet commands run directly (#453)
+
+A controller's fleet commands are one request to one router that act on many
+devices: `/cmr/device/{reboot,upgrade,pair,run-script}`,
+`/cmr/upgrade/trigger`, `/cmr/upgrade/job/run-next`, and `add`, `set`,
+`remove`, `enable` or `disable` on `/cmr/vlan`, `/cmr/wifi`,
+`/cmr/wifi/radio` and `/cmr/upgrade`. They are write-shaped, so they need
+`--yes`. Before that gate, plain `execute` (and `api`) reads the controller's
+`/cmr/device` inventory, read-only, and resolves which rows the command
+reaches. The command still runs exactly as typed.
+
+- **The gate names the reach.** The prompt and the `usage/confirmation-required`
+  summary say how many CMR devices the command reaches and whether the
+  controller's own row (`controller=true`) is one of them. `error.context.cmr`
+  has `devices`, `connected`, `controllerIncluded`, `identities` and
+  `inventory`.
+- **How the selection is resolved.** `numbers` matches a row's `.id` or
+  identity. `labels` follows the manual's rules over the row's `labels` and
+  `auto-labels`: plain labels are OR, `+label` must match, `-label` excludes,
+  `all` selects every row, and an expression with only exclusions starts from
+  every row. On a 7.26beta1 lab this matched the device's own selection
+  (a `run-script` probe per row) for every expression tried; the lab test
+  re-checks it (CMR-D9). It is the controller's current view: a disconnected
+  device's `auto-labels` can be stale. `/cmr/upgrade/trigger` reaches the rows
+  whose `upgrade-rule` it names. A rule's `set`, `remove`, `enable` or
+  `disable` reads the rule's own `labels`; a `set` that changes `labels`
+  reaches the old and the new devices. WiFi band labels (`+2ghz`, `+5ghz`,
+  `+6ghz`) pick radios, not devices, so they are left out.
+- **Warnings, with or without `--yes`:**
+  - `cmr/selection-includes-controller`: the selection includes the
+    controller's own row (`labels=all` does, per the manual).
+  - `cmr/rule-selects-every-device`: a rule command with no device `labels`
+    (for `/cmr/vlan`, no `port-labels` either). The manual warns that such a
+    VLAN rule provisions every port of every connected device, the controller
+    included, and cuts the fleet's management access.
+  - `cmr/empty-selection`: by the controller's inventory now, nothing is
+    selected. RouterOS refuses this for a `/cmr/device` command; it accepts
+    a rule whose labels match nothing.
+  - `cmr/caller-policy-not-enforced` for `run-script` and `reboot`, as for
+    `--cmr` above (#456).
+- **Not resolved**, so the gate keeps its plain wording: script-shaped input
+  (a positional id or `[find …]`), an abbreviated selector argument
+  (`lab=all`), `--via ssh` or `mac-telnet`, `/cmr/upgrade/job/run-next`
+  (a job's devices are not in the inventory), and a failed read. A failed read
+  never blocks the command. CDB fan-out to several controllers keeps its own
+  gate.
+
 ## mac-telnet L2 validation
 
 Decided (2026-06-06): the real-L2 integration path is `@tikoci/quickchr`'s
