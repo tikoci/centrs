@@ -1057,11 +1057,24 @@ describe("centrs explain — the CLI surface", () => {
 		expect(code).toBe(1);
 	});
 
-	test("`--verbose` after `--` is an operand, not a flag", async () => {
-		// The private error context must not be unlocked by RouterOS input.
+	test("`--verbose` after `--` is refused, never read as a flag", async () => {
+		// The private error context must not be unlocked by RouterOS input; the
+		// refusal (#459) still renders without it.
 		const { err } = await run(["explain", "--", "--verbose", "--yaml"]);
-		expect(err).toContain("[usage/not-implemented]");
+		expect(err).toContain("[usage/flag-after-separator]");
 		expect(err).not.toContain("Context:");
+	});
+
+	test("a trailing centrs flag after `--` is refused with the fixed line (#459)", async () => {
+		const { code, err } = await run([
+			"explain",
+			"--",
+			"/ip/address print",
+			"--json",
+		]);
+		expect(code).toBe(1);
+		expect(err).toContain("[usage/flag-after-separator]");
+		expect(err).toContain("`centrs explain --json -- '/ip/address print'`");
 	});
 
 	test("the live form is refused BEFORE any input source is touched", async () => {
@@ -1144,12 +1157,12 @@ describe("centrs explain — the CLI surface", () => {
 	});
 
 	test("the error format follows the same grammar as the parser", async () => {
-		// Flags after `--` are operands, so the error renders TEXT even though the
-		// argv contains `--json`; and when two format flags are given, the LAST one
-		// wins, matching what the parse loop would have decided.
+		// Flags after `--` are never read as flags, so the error renders TEXT even
+		// though the argv contains `--json`; and when two format flags are given,
+		// the LAST one wins, matching what the parse loop would have decided.
 		const literal = await run(["explain", "--", "--json", "--yaml"]);
 		expect(literal.code).toBe(1);
-		expect(literal.err).toContain("[usage/not-implemented]");
+		expect(literal.err).toContain("[usage/flag-after-separator]");
 		expect(() => JSON.parse(literal.err)).toThrow();
 
 		const lastWins = await run(["explain", "--json", "--yaml", "--nope"]);

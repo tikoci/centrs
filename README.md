@@ -11,9 +11,10 @@ installing centrs or connecting to a router:
 bunx @tikoci/centrs@next explain '/ip/address print' --json
 ```
 
-Use `bunx @tikoci/centrs@next --help` to inspect the full preview CLI. Since
-0.1.6 the dist-tag follows standard SemVer semantics rather than the old
-even/odd-minor rule: a plain version (`0.1.6`) publishes to `latest` and carries
+Use `bunx @tikoci/centrs@next --help` to inspect the full preview CLI, and
+`bunx @tikoci/centrs@next --version` (`-V`; `--json` for an envelope) to print
+the exact version for scripts and field reports. Since 0.1.6 the dist-tag
+follows standard SemVer semantics rather than the old even/odd-minor rule: a plain version (`0.1.6`) publishes to `latest` and carries
 `next` forward with it, while a pre-release suffix (`0.1.7-next.0`) publishes to
 `next` only and never moves `latest`. So `@next` is the leading edge and can
 equal `@latest` between cuts — `npm view @tikoci/centrs dist-tags` is the

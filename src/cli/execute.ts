@@ -27,6 +27,7 @@ import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
+	rejectFlagsAfterSeparator,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -160,7 +161,7 @@ export const executeCommand: CliCommandMetadata = {
 		{
 			flag: "--",
 			description:
-				"End centrs option parsing: every following token is the literal RouterOS command, even flag-shaped ones (e.g. `-- /interface print where disabled=yes`).",
+				"End centrs option parsing: every following token is the literal RouterOS command (e.g. `-- /interface print where disabled=yes`). Put centrs flags before it; one of execute's own long flags after it is refused as `usage/flag-after-separator`.",
 		},
 	],
 };
@@ -175,6 +176,7 @@ interface ExecuteCliArgs extends ExecuteRequest {
 }
 
 export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
+	rejectFlagsAfterSeparator("execute", args, executeCommand.options);
 	const parsed: ExecuteCliArgs = { command: "" };
 	const selectionFlags = emptySelectionFlags();
 	const positional: string[] = [];
@@ -581,6 +583,12 @@ async function runExecuteCmrCli(
 	}
 }
 
+/**
+ * The output format for an error that may have struck before parsing finished.
+ * Reads the argv the way the parser does: only tokens before `--` (after it is
+ * RouterOS input), last format flag wins, and a value-taking flag's value is
+ * skipped, so `--format yaml -- '/x' --json` renders YAML.
+ */
 function inferExecuteFormat(
 	args: readonly string[],
 	parsed?: ExecuteCliArgs,
@@ -588,21 +596,32 @@ function inferExecuteFormat(
 	if (parsed?.format) {
 		return parsed.format;
 	}
-	if (args.includes("--json")) {
-		return "json";
-	}
-	const index = args.indexOf("--format");
-	if (index >= 0) {
-		const value = args[index + 1];
-		if (
-			value !== undefined &&
-			executeOutputFormats.includes(value as ExecuteOutputFormat)
-		) {
-			return value as ExecuteOutputFormat;
+	let format: ExecuteOutputFormat = "text";
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
+		if (arg === undefined || arg === "--") break;
+		if (arg === "--json") {
+			format = "json";
+		} else if (arg === "--format") {
+			const value = args[index + 1];
+			if (executeOutputFormats.includes(value as ExecuteOutputFormat)) {
+				format = value as ExecuteOutputFormat;
+			}
+			index += 1;
+		} else if (EXECUTE_VALUE_FLAGS.has(arg)) {
+			index += 1;
 		}
 	}
-	return "text";
+	return format;
 }
+
+const EXECUTE_VALUE_FLAGS: ReadonlySet<string> = new Set(
+	executeCommand.options.flatMap((option) =>
+		option.valueName === undefined
+			? []
+			: option.flag.split("/").map((token) => token.trim()),
+	),
+);
 
 function parseIntegerFlag(value: string, flag: string): number {
 	const parsed = Number.parseInt(value, 10);

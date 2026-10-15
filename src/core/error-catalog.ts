@@ -612,6 +612,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "Two or more supplied flags conflict.",
 	},
 	{
+		code: "usage/flag-after-separator",
+		summary:
+			"A centrs flag was written after `--`, where every token is RouterOS input.",
+	},
+	{
 		code: "usage/invalid-concurrency",
 		summary: "The --concurrency value must be an integer >= 1.",
 	},

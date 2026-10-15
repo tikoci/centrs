@@ -106,6 +106,97 @@ export function unknownFlagError(
 	});
 }
 
+/** Single-quote a token for a shell line a user can copy, unless it is plain. */
+function shellQuote(token: string): string {
+	return /^[\w/:=.,@%+-]+$/.test(token)
+		? token
+		: `'${token.replaceAll("'", `'\\''`)}'`;
+}
+
+/**
+ * A centrs flag written after a bare `--` (#459).
+ *
+ * `--` makes every later token RouterOS input, so a trailing `--json` (the
+ * habitual position: `execute r1 -- '/cmd' --json`) went to the router and
+ * failed there as `unknown-attribute`. The RouterOS command is one quoted
+ * argument in every documented form, so a later token that is exactly one of
+ * this command's LONG flags (or its `--flag=value` spelling) is this mistake.
+ * Short aliases (`-u`, `-h`) are left alone: a lone `-x` is plausible
+ * RouterOS input, `--json` is not. A command that really needs such a token
+ * can carry it inside the quoted command.
+ *
+ * Throws `usage/flag-after-separator` with the command line rewritten with the
+ * flags (and their values) moved before `--`. Password values are never
+ * echoed. A no-op when there is no `--`.
+ */
+export function rejectFlagsAfterSeparator(
+	command: string,
+	args: readonly string[],
+	options: readonly CliCommandOption[],
+): void {
+	const separator = args.indexOf("--");
+	if (separator === -1) return;
+	const optionByFlag = new Map<string, CliCommandOption>();
+	for (const option of options) {
+		for (const token of option.flag.split("/")) {
+			const trimmed = token.trim();
+			if (trimmed.startsWith("--") && trimmed !== "--") {
+				optionByFlag.set(trimmed, option);
+			}
+		}
+	}
+	const secret = (flag: string) =>
+		flag.startsWith("-") && flag.includes("password");
+	const before = args.slice(0, separator).map((token, index, all) => {
+		const [name = ""] = token.split("=");
+		if (token.includes("=") && secret(name)) return `${name}=<password>`;
+		const previous = all[index - 1];
+		return previous !== undefined && secret(previous) ? "<password>" : token;
+	});
+	const moved: string[] = [];
+	const kept: string[] = [];
+	const flags: string[] = [];
+	const after = args.slice(separator + 1);
+	for (let index = 0; index < after.length; index += 1) {
+		const token = after[index] ?? "";
+		const [name = "", ...valueParts] = token.split("=");
+		const option = optionByFlag.get(name);
+		if (option === undefined) {
+			kept.push(token);
+			continue;
+		}
+		flags.push(name);
+		// The parsers take a value flag's value as the next token (`--timeout 30s`,
+		// never `--timeout=30s`), so the fixed line splits it; only a boolean's
+		// `=` form (`--validate=no`) is kept as typed.
+		if (valueParts.length > 0) {
+			if (option.valueName === undefined) {
+				moved.push(token);
+			} else {
+				moved.push(name, secret(name) ? "<password>" : valueParts.join("="));
+			}
+			continue;
+		}
+		moved.push(name);
+		const value = after[index + 1];
+		if (option.valueName !== undefined && value !== undefined) {
+			moved.push(secret(name) ? "<password>" : value);
+			index += 1;
+		}
+	}
+	if (flags.length === 0) return;
+	const fixed = ["centrs", command, ...before, ...moved, "--", ...kept]
+		.map(shellQuote)
+		.join(" ");
+	const list = flags.map((flag) => `\`${flag}\``).join(", ");
+	throw new CentrsError({
+		code: "usage/flag-after-separator",
+		summary: `${list} ${flags.length === 1 ? "comes" : "come"} after \`--\`, so ${flags.length === 1 ? "it" : "they"} would be sent to RouterOS as part of the command.`,
+		remediation: `Put centrs flags before \`--\`: \`${fixed}\``,
+		context: { flags },
+	});
+}
+
 export function renderCommandHelp(
 	describe: string,
 	command: CliCommandMetadata,

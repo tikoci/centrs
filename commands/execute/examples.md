@@ -763,7 +763,7 @@ transport.
 ### Q3. Repeated `--quickchr` fans out; an unknown machine is an inner failure
 
 ```bash
-centrs execute --quickchr $NAME --quickchr no-such-machine -- ':put 1' --json
+centrs execute --quickchr $NAME --quickchr no-such-machine --json -- ':put 1'
 ```
 
 Envelope: outer `ok: true`, `data.summary = { total: 2, ok: 1, failed: 1 }`;

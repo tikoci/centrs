@@ -8,6 +8,11 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Added
+
+- `centrs --version` / `-V` prints the package version alone; `--json` (or
+  `--format json|yaml`) returns an envelope with `data.version` (#463).
+
 ### Changed
 
 - CI, release, Pages and the Docker image run Bun 1.4.2 (was 1.3.14), the
@@ -18,6 +23,12 @@ documenting cross-cutting shifts that affect contributors and consumers.
 - QA records a CHR leg in `qa-history` only when its test step passed or
   failed. A leg cancelled by a newer push, or skipped after a setup failure,
   was recorded as `fail` (#442).
+- A centrs flag written after `--` is refused before anything dials, as
+  `usage/flag-after-separator`, with the corrected command line (#459). This
+  applies to `execute` (including `--cmr`) and `explain`. Before, a trailing
+  `--json` was sent to RouterOS and failed there as `unknown-attribute`. Only
+  a command's own long flags are matched (short aliases such as `-u` stay
+  RouterOS input), and password values are not echoed.
 
 ## 0.1.9-next.0 — 2026-10-13
 

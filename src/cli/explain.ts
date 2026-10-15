@@ -51,6 +51,7 @@ import type { ResolvedSetting } from "../resolver/settings.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
+	rejectFlagsAfterSeparator,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -118,6 +119,7 @@ export interface ExplainCliArgs {
 }
 
 export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
+	rejectFlagsAfterSeparator("explain", args, explainCliCommand.options);
 	const parsed: ExplainCliArgs = {
 		positionals: [],
 		failOn: "error",
