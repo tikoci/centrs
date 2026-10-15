@@ -105,7 +105,7 @@ Usage: centrs execute <target> <command> [flags] | centrs execute <target...> --
 | `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope. |
 | `--json` |  | Shortcut for `--format json`. |
 | `--verbose` |  | Include additional context in text output. |
-| `--` |  | End centrs option parsing: every following token is the literal RouterOS command, even flag-shaped ones (e.g. `-- /interface print where disabled=yes`). |
+| `--` |  | End centrs option parsing: every following token is the literal RouterOS command (e.g. `-- /interface print where disabled=yes`). Put centrs flags before it; one of execute's own long flags after it is refused as `usage/flag-after-separator`. |
 
 ## api
 

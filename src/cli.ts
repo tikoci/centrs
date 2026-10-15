@@ -12,6 +12,7 @@ import { retrieveCommand, runRetrieveCli } from "./cli/retrieve.ts";
 import { runSettingsCli, settingsCommand } from "./cli/settings.ts";
 import { runTerminalCli, terminalCommand } from "./cli/terminal.ts";
 import { runTransferCli, transferCommand } from "./cli/transfer.ts";
+import { runVersionCli } from "./cli/version.ts";
 import { asCentrsError, formatCentrsErrorText } from "./errors.ts";
 import { describeCentrs, plannedProtocols, plannedSurfaces } from "./index.ts";
 
@@ -48,7 +49,7 @@ export function renderCliHelp(): string {
 			(command) => `  ${command.name.padEnd(12)} ${command.summary}`,
 		),
 		"",
-		"Use `centrs <command> --help` for command-specific options.",
+		"Use `centrs <command> --help` for command-specific options, and `centrs --version` (`-V`) for the version alone.",
 	].join("\n");
 }
 
@@ -59,6 +60,9 @@ export async function runCli(
 		if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
 			console.log(renderCliHelp());
 			return 0;
+		}
+		if (args[0] === "--version" || args[0] === "-V") {
+			return runVersionCli(args.slice(1));
 		}
 
 		const [command, ...rest] = args;

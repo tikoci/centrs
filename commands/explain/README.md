@@ -392,7 +392,8 @@ bare menu path. The positional grammar stays **target-first like every other
 router-taking command** (amended in PR review — the shared resolver/selection
 helpers assume it): one positional means offline and it *is* the input; two
 positionals mean live with the router first; `--` is accepted before the
-input; **`--file` replaces the input positional in either form**, so with it
+input, and one of explain's own long flags after it is refused as
+`usage/flag-after-separator` (#459); **`--file` replaces the input positional in either form**, so with it
 every positional is a target. Adding a
 router therefore never reinterprets a previously valid offline invocation.
 

@@ -27,6 +27,7 @@ import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
+	rejectFlagsAfterSeparator,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -160,7 +161,7 @@ export const executeCommand: CliCommandMetadata = {
 		{
 			flag: "--",
 			description:
-				"End centrs option parsing: every following token is the literal RouterOS command, even flag-shaped ones (e.g. `-- /interface print where disabled=yes`).",
+				"End centrs option parsing: every following token is the literal RouterOS command (e.g. `-- /interface print where disabled=yes`). Put centrs flags before it; one of execute's own long flags after it is refused as `usage/flag-after-separator`.",
 		},
 	],
 };
@@ -175,6 +176,7 @@ interface ExecuteCliArgs extends ExecuteRequest {
 }
 
 export function parseExecuteCliArgs(args: readonly string[]): ExecuteCliArgs {
+	rejectFlagsAfterSeparator("execute", args, executeCommand.options);
 	const parsed: ExecuteCliArgs = { command: "" };
 	const selectionFlags = emptySelectionFlags();
 	const positional: string[] = [];

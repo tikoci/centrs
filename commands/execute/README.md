@@ -180,7 +180,9 @@ duplicate that table. Behavior notes the generated reference cannot carry:
 - `--` — use it when the command contains tokens that would otherwise be
   claimed as centrs flags; otherwise the command must be quoted as a single
   argument. In fan-out, positional targets come BEFORE `--` and the command
-  AFTER it (see **Target selection**).
+  AFTER it (see **Target selection**). centrs flags go before `--` too: one of
+  execute's own long flags after it (a trailing `--json`) is refused before
+  dialing as `usage/flag-after-separator`, with the corrected line (#459).
 
 ### Designed, not implemented
 
