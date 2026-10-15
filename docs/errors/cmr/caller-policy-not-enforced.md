@@ -1,8 +1,9 @@
 # `cmr/caller-policy-not-enforced`
 
-A warning on `execute --cmr`: the controller login lacks a policy that the
-command runs with on the clients, and RouterOS does not check it. The login
-does not limit what a CMR command can change.
+A warning on `execute --cmr`, and on `/cmr/device/run-script` or
+`/cmr/device/reboot` run directly with `execute` or `api`: the controller login
+lacks a policy that the command runs with on the clients, and RouterOS does
+not check it. The login does not limit what a CMR command can change.
 
 ## Typical trigger
 
@@ -27,10 +28,13 @@ the RouterOS version. On a build that refuses the write, the members fail
 instead and the warning only says what the login lacks.
 
 `context` names the login (`username`, `group`), the policies it lacks
-(`missing`) and the ones the script ran with (`runsWith`). centrs reads the
-policy once per run, from the login's own `/user` row and `/user/group`, and
-only for a write. When that read fails (for example a RADIUS login with no
-`/user` row) there is no warning.
+(`missing`) and the ones the command runs with (`runsWith`): `read`, `write`,
+`test` and `reboot` for `run-script`, and `reboot` for `/cmr/device/reboot`.
+centrs reads the policy once per run, from the login's own `/user` row and
+`/user/group`, and only for a write. When that read fails (for example a
+RADIUS login with no `/user` row) there is no warning. Other fleet commands
+(`/cmr/device/upgrade`, `pair`, the rule menus) were not measured, so they
+carry no such warning.
 
 ## Fix
 

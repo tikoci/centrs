@@ -187,10 +187,11 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 (#450), which runs one validated command on CMR clients through their
 controller. The contract is in
 [`commands/execute/README.md` → CMR](../commands/execute/README.md#cmr-clients-through-their-controller---cmr),
-with examples CMR0–CMR14. The CMR-vs-centrs feature map is on #441
-(2026-10-13). Next, in order: the fleet blast-radius gate for controller fleet
-commands (#453), then #449's read-only slice (a `devices` view of members and a
-default controller). Deferred: CDB linkage (#449) and `retrieve --cmr` (#441).
+with examples CMR0–CMR15. Also done: the fleet blast-radius gate for
+controller fleet commands run with plain `execute` or `api` (#453), with
+examples CMR16–CMR18 and api CMR1. The feature map of CMR against centrs is
+on #441 (2026-10-13). Next is the read-only slice of #449 (a `devices` view
+of members and a default controller). Deferred: CDB linkage (#449) and `retrieve --cmr` (#441).
 Live `explain` resumes after this.
 
 **The native-api / NDJSON line** (maintainer decision on

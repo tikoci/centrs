@@ -800,9 +800,9 @@ the unknown machine's inner error is `quickchr/machine-not-found`. Exit code 2
 `test/integration/execute-cmr.test.ts` runs these on a two-CHR CMR lab
 (`test/integration/cmr-lab.ts`): `$CTL` is a 7.26beta1 controller with the
 `cmr` package, paired with one client over a socket link. Examples CMR1–CMR7
-and CMR10–CMR15 run over **both** `--via native-api` and `--via rest-api` to
+and CMR10–CMR18 run over **both** `--via native-api` and `--via rest-api` to
 the controller, with validation on. The same test first asserts the device
-behaviour the design depends on (CMR-D1–D8 in the test file).
+behaviour the design depends on (CMR-D1–D9 in the test file).
 
 ### CMR0. A router without CMR
 
@@ -981,3 +981,42 @@ The first is `cmr/console-only`: the controller's `:parse` resolves it to
 `/cmr/device/;(evl /cmr/device/dashboard)`, so it is refused before it runs.
 The second is `ok` with `data.ret` `CMR device dashboard`: a string that spells
 the words is not a command.
+
+### CMR16. A fleet command names the devices it reaches (#453)
+
+```bash
+centrs execute --quickchr $CTL -- '/cmr/device/reboot labels=all'
+```
+
+Without `--yes` (no TTY) this is `usage/confirmation-required`. Its summary
+says it would reach 2 CMR devices, the controller itself among them, and
+`error.context.cmr` is `{devices: 2, controllerIncluded: true}` with both
+identities. The envelope warns `cmr/selection-includes-controller`.
+Nothing reboots.
+
+### CMR17. A rule with no labels
+
+```bash
+centrs execute --quickchr $CTL --yes -- '/cmr/vlan/add vlan-ids=4001 disabled=yes comment=<marker>'
+```
+
+`ok: true` with the warning `cmr/rule-selects-every-device`: the rule has no
+`labels` and no `port-labels`. It is added disabled, so nothing is
+provisioned. Removing it by its `.id` warns the same way, read from the rule:
+
+```bash
+centrs execute --quickchr $CTL --yes -- '/cmr/vlan/remove numbers=<id>'
+```
+
+### CMR18. `run-script` called directly by a login without `write` or `reboot`
+
+With CMR15's restricted login:
+
+```bash
+centrs execute 127.0.0.1 --port $API --username $READER --password $PW --yes -- '/cmr/device/run-script labels=<client> script=":put centrs-cmr18"'
+```
+
+`ok: true`, with the warnings `cmr/caller-policy-not-enforced`
+(`context.missing` `["write", "reboot"]`) and
+`cmr/client-script-not-validated`. The same command as the lab's admin login
+has neither the policy warning nor `cmr/selection-includes-controller`.

@@ -288,7 +288,7 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "cmr/empty-selection",
 		summary:
-			"The `--labels` expression matched no CMR device on the controller: a warning for a read, an error for a write.",
+			"The CMR selection matched no device on the controller: for `--cmr`, a warning for a read and an error for a write; for a fleet command such as `/cmr/vlan/add`, a warning.",
 	},
 	{
 		code: "cmr/membership-changed",
@@ -319,6 +319,16 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		code: "cmr/policy-denied",
 		summary:
 			"A CMR client refused a statement because CMR scripts run without the policy it needs; earlier statements already ran.",
+	},
+	{
+		code: "cmr/rule-selects-every-device",
+		summary:
+			"Warning: a CMR rule command has no device `labels` (and, for VLAN, no `port-labels`), so the rule applies to every device, the controller included.",
+	},
+	{
+		code: "cmr/selection-includes-controller",
+		summary:
+			"Warning: a CMR fleet command selects the controller's own row as well as its clients.",
 	},
 	{
 		code: "cmr/selection-incomplete",

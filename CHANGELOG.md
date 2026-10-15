@@ -19,6 +19,20 @@ documenting cross-cutting shifts that affect contributors and consumers.
   `read` group. The warning is also in the confirmation
   error. centrs reads the login's own `/user` row and group once, only for a
   write; a failed read only loses the warning.
+- The write gate of a CMR controller fleet command run with plain `execute` or
+  `api` names the devices it reaches (#453). `/cmr/device/reboot labels=all`
+  used to read as one router; centrs now reads the controller's `/cmr/device`
+  inventory first and says, for example, "2 CMR device(s) through controller
+  ctl, the controller itself among them" (`error.context.cmr`). The covered commands are
+  `/cmr/device/{reboot,upgrade,pair,run-script}`, `/cmr/upgrade/trigger` and
+  rule changes on `/cmr/vlan`, `/cmr/wifi`, `/cmr/wifi/radio` and
+  `/cmr/upgrade`. New warnings, with or without `--yes`:
+  `cmr/selection-includes-controller` and `cmr/rule-selects-every-device`
+  (a VLAN rule with no `labels` and no `port-labels` cuts the fleet's
+  management access). `cmr/empty-selection` is also a warning here.
+  `run-script` and `reboot` carry `cmr/caller-policy-not-enforced` as
+  `execute --cmr` does. The command still runs as typed, and a failed read
+  never blocks it.
 
 ### Changed
 

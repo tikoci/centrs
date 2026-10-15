@@ -16,6 +16,13 @@
  */
 
 import { assertNotCmrDashboardPath, cmrRunScriptWarnings } from "./core/cmr.ts";
+import {
+	type CmrFleetRead,
+	cmrFleetCommand,
+	cmrFleetGate,
+	cmrFleetReadable,
+	readCmrFleet,
+} from "./core/cmr-fleet.ts";
 import type {
 	CentrsEnvelope,
 	CentrsErrorEnvelope,
@@ -311,6 +318,8 @@ export interface ResolvedApiRequest {
 	yes: boolean;
 	verbose: boolean;
 	warnings: readonly Warning[];
+	/** A CMR fleet command's reach, read before the write gate (#453). */
+	cmrFleet?: CmrFleetRead;
 }
 
 export async function api(
@@ -342,6 +351,7 @@ export async function apiEnvelope(
 	const trace: ValidationTrace = {};
 	try {
 		resolved = await resolveApiRequest(request, env);
+		resolved = await withCmrFleetScope(resolved);
 		await assertApiWriteConfirmed(request, resolved);
 		return await runResolvedApi(resolved, trace);
 	} catch (error) {
@@ -473,6 +483,7 @@ export async function* apiStream(
 	let resolved: ResolvedApiRequest | undefined;
 	try {
 		resolved = await resolveApiRequest(streamRequest, env);
+		resolved = await withCmrFleetScope(resolved);
 		await assertApiWriteConfirmed(streamRequest, resolved);
 		if (resolved.via.value !== "native-api") {
 			throw new CentrsError({
@@ -1513,9 +1524,18 @@ async function assertApiWriteConfirmed(
 	if (!isApiMutating(resolved.method, resolved.path) || resolved.yes) {
 		return;
 	}
+	const fleet = resolved.cmrFleet
+		? cmrFleetGate(
+				resolved.cmrFleet,
+				resolved.target.identity ??
+					resolved.target.input ??
+					resolved.target.host,
+			)
+		: undefined;
 	if (request.stdinIsTty ?? process.stdin.isTTY) {
 		const confirmed = await (request.confirm ?? promptForWriteConfirmation)(
-			`Run mutating ${resolved.method} ${resolved.path} over ${resolved.via.value}? Type yes to continue: `,
+			fleet?.prompt ??
+				`Run mutating ${resolved.method} ${resolved.path} over ${resolved.via.value}? Type yes to continue: `,
 		);
 		if (confirmed) {
 			return;
@@ -1523,7 +1543,9 @@ async function assertApiWriteConfirmed(
 	}
 	throw new CentrsError({
 		code: "usage/confirmation-required",
-		summary: `A mutating ${resolved.method} ${resolved.path} request requires explicit confirmation.`,
+		summary:
+			fleet?.summary ??
+			`A mutating ${resolved.method} ${resolved.path} request requires explicit confirmation.`,
 		remediation:
 			"Pass `--yes` in non-interactive automation, or answer `yes` at the TTY prompt after reviewing the request.",
 		context: {
@@ -1531,8 +1553,59 @@ async function assertApiWriteConfirmed(
 			path: resolved.path,
 			method: resolved.method,
 			via: resolved.via.value,
+			...fleet?.context,
 		},
 	});
+}
+
+/**
+ * #453: a mutating CMR fleet request (`POST /cmr/device/reboot`, `PUT
+ * /cmr/vlan`) is one request to the controller that acts on every device it
+ * selects. Read the controller's inventory before the gate so the gate names
+ * that reach, and add the fleet warnings, with or without `--yes`. A `PUT`,
+ * `PATCH` or `DELETE` is the menu's `add`, `set` or `remove`; the `*id` is its
+ * `numbers`.
+ */
+async function withCmrFleetScope(
+	resolved: ResolvedApiRequest,
+): Promise<ResolvedApiRequest> {
+	if (resolved.scriptMode || !isApiMutating(resolved.method, resolved.path)) {
+		return resolved;
+	}
+	const command = cmrFleetCommand(
+		resolved.verb === "run"
+			? resolved.path
+			: `${resolved.path}/${resolved.verb}`,
+		resolved.id === undefined
+			? resolved.body
+			: { ...resolved.body, numbers: resolved.id },
+	);
+	if (!command || !cmrFleetReadable(resolved.via.value)) return resolved;
+	const adapter = createProtocolAdapter({
+		protocol: resolved.via.value,
+		host: resolved.target.host,
+		port: resolved.target.port,
+		tls: resolved.target.tls,
+		baseUrl: resolved.target.baseUrl,
+		username: resolved.auth.username,
+		password: resolved.auth.password,
+		timeoutMs: resolved.timeoutMs.value,
+		insecure: resolved.insecure.value,
+	});
+	try {
+		const cmrFleet = await readCmrFleet(
+			command,
+			adapter,
+			resolved.auth.username,
+		);
+		return {
+			...resolved,
+			cmrFleet,
+			warnings: [...resolved.warnings, ...cmrFleet.warnings],
+		};
+	} finally {
+		await adapter.close();
+	}
 }
 
 function assertStreamCapability(resolved: ResolvedApiRequest): void {
