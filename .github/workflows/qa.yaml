@@ -242,6 +242,13 @@ jobs:
           restore-keys: |
             chr-cache-${{ runner.os }}-${{ matrix.routeros_channel }}-
             chr-cache-${{ runner.os }}-
+      - name: Pre-fetch CHR image
+        # Download outside every test timeout (#468). On a cache hit it only
+        # names the version; it must match the cache key step above.
+        env:
+          CENTRS_CHR_CHANNEL: ${{ matrix.routeros_channel }}
+          CENTRS_CHR_VERSION: ${{ inputs.routeros_version || '' }}
+        run: bun run chr:prefetch
       - name: Test against CHR
         id: chr_test
         env:

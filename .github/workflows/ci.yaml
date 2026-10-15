@@ -298,6 +298,12 @@ jobs:
           restore-keys: |
             chr-cache-${{ runner.os }}-stable-
             chr-cache-${{ runner.os }}-
+      - name: Pre-fetch CHR image
+        # Download outside every test timeout (#468). On a cache hit it only
+        # names the version; it must match the cache key step above.
+        env:
+          CENTRS_CHR_CHANNEL: stable
+        run: bun run chr:prefetch
       - name: CHR smoke (stable channel)
         id: smoke
         env:

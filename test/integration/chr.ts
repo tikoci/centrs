@@ -379,15 +379,73 @@ export async function withBootReadyRetry<T>(
 	}
 }
 
+/**
+ * The CHR build the env selects: `CENTRS_CHR_VERSION` pins a version (it wins
+ * over the channel), else `CENTRS_CHR_CHANNEL` (default `stable`), plus the
+ * `CENTRS_CHR_ARCH` and `CENTRS_CHR_PACKAGES` pins. {@link startIntegrationChr}
+ * boots it and {@link prefetchIntegrationChrImage} caches it, so the two can
+ * never disagree about which image a run needs.
+ */
+export function integrationChrSelection(
+	env: Record<string, string | undefined> = Bun.env,
+): {
+	version?: string;
+	channel: Channel;
+	arch?: Arch;
+	packages: string[];
+} {
+	const version = readEnv(env, "CENTRS_CHR_VERSION")?.trim();
+	const arch = asArch(readEnv(env, "CENTRS_CHR_ARCH"));
+	return {
+		...(version ? { version } : {}),
+		channel: asChannel(readEnv(env, "CENTRS_CHR_CHANNEL")),
+		...(arch ? { arch } : {}),
+		packages: parsePackages(readEnv(env, "CENTRS_CHR_PACKAGES")),
+	};
+}
+
+/**
+ * Download and cache the selected CHR image without booting it (quickchr
+ * `cacheAdd`, the library form of `quickchr cache add`). On a cold cache the
+ * first boot otherwise downloads inside a test's timeout: 108.8 s of a 120 s
+ * budget for a 43 MB image at 0.4 MB/s during #467, which reads as a product
+ * hang (#468). Runs from `test/integration/preload.ts` and `bun run
+ * chr:prefetch`, outside every test timeout. Covers the image only; extra
+ * packages still download at boot.
+ */
+export async function prefetchIntegrationChrImage(
+	env: Record<string, string | undefined> = Bun.env,
+): Promise<{ version: string; arch: Arch; cacheHit: boolean; path: string }> {
+	const selection = integrationChrSelection(env);
+	const moduleName = "@tikoci/quickchr";
+	const quickChrModule = (await import(moduleName)) as unknown as {
+		cacheAdd(options: {
+			version?: string;
+			channel?: Channel;
+			arch?: Arch;
+		}): Promise<{
+			version: string;
+			arch: Arch;
+			cacheHit: boolean;
+			path: string;
+		}>;
+	};
+	return quickChrModule.cacheAdd({
+		...(selection.version
+			? { version: selection.version }
+			: { channel: selection.channel }),
+		...(selection.arch ? { arch: selection.arch } : {}),
+	});
+}
+
 export async function startIntegrationChr(
 	extra: Partial<StartOptions> = {},
 ): Promise<StartedChr> {
-	const requestedVersion = readEnv(Bun.env, "CENTRS_CHR_VERSION")?.trim();
-	const requestedChannel = asChannel(readEnv(Bun.env, "CENTRS_CHR_CHANNEL"));
-	const requestedArch = asArch(readEnv(Bun.env, "CENTRS_CHR_ARCH"));
-	const requestedPackages = parsePackages(
-		readEnv(Bun.env, "CENTRS_CHR_PACKAGES"),
-	);
+	const selection = integrationChrSelection();
+	const requestedVersion = selection.version;
+	const requestedChannel = selection.channel;
+	const requestedArch = selection.arch;
+	const requestedPackages = selection.packages;
 	const options: StartOptions = {
 		...(requestedVersion
 			? { version: requestedVersion }
