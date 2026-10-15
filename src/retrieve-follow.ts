@@ -28,17 +28,22 @@ import {
 	buildRetrieveErrorEnvelope,
 	buildRetrieveErrorEnvelopeFromResolved,
 	type ResolvedRetrieveRequest,
-	type RetrieveEnvelope,
 	type RetrieveFollowCounts,
+	type RetrieveFollowLine,
 	type RetrieveFollowStopReason,
 	type RetrieveFollowSummary,
 	type RetrieveRequest,
+	type RetrieveStreamLineEnvelope,
 	type RetrieveStreamMeta,
 	type RetrieveSuccessEnvelope,
 	resolveRetrieveRequest,
 	validateRetrieveRead,
 } from "./retrieve.ts";
-import { failedStreamEnvelope, streamEnvelope } from "./retrieve-stream.ts";
+import {
+	failedStreamEnvelope,
+	streamEnvelope,
+	streamLineEnvelope,
+} from "./retrieve-stream.ts";
 
 /** Changes allowed to wait unread before the follow ends (`transport/stream-overflow`). */
 export const FOLLOW_BUFFER_LIMIT = 50_000;
@@ -52,7 +57,8 @@ export interface RetrieveFollowOptions {
 	bufferLimit?: number;
 }
 
-type FollowEvent =
+/** `at`: when the reply arrived (host clock), stamped by `push` in the wire tap. */
+type FollowEvent = { at?: number } & (
 	| { type: "listen"; reply: ProtocolTappedReply; version?: number }
 	| { type: "listen-end" }
 	| { type: "snapshot-row"; row: Record<string, string> }
@@ -65,7 +71,8 @@ type FollowEvent =
 			rows: Map<string, Record<string, string>>;
 	  }
 	| { type: "stop" }
-	| { type: "error"; error: unknown };
+	| { type: "error"; error: unknown }
+);
 
 /**
  * The wire-ordered event queue: every source feeds it from a synchronous
@@ -154,7 +161,7 @@ export async function* retrieveFollow(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined> = Bun.env,
 	options: RetrieveFollowOptions = {},
-): AsyncGenerator<RetrieveEnvelope, void, void> {
+): AsyncGenerator<RetrieveFollowLine, void, void> {
 	const followRequest: RetrieveRequest = { ...request, follow: true };
 	let resolved: ResolvedRetrieveRequest;
 	try {
@@ -269,7 +276,7 @@ async function* runFollow(
 	options: RetrieveFollowOptions,
 	startedAt: number,
 	query?: readonly string[],
-): AsyncGenerator<RetrieveEnvelope, void, void> {
+): AsyncGenerator<RetrieveFollowLine, void, void> {
 	const follow = resolved.follow ?? { sweepMs: 0 };
 	const bufferLimit = options.bufferLimit ?? FOLLOW_BUFFER_LIMIT;
 	const counts: RetrieveFollowCounts = {
@@ -322,7 +329,7 @@ async function* runFollow(
 			controller.abort();
 			return;
 		}
-		queue.push(event);
+		queue.push({ ...event, at: Date.now() });
 	};
 	const stop = (reason: RetrieveFollowStopReason): void => {
 		stopReason ??= reason;
@@ -529,14 +536,16 @@ async function* runFollow(
 		id: string,
 		source: FrameMeta["source"],
 		row: Record<string, string> | null,
-	): RetrieveSuccessEnvelope => {
+		at: number | undefined,
+	): RetrieveStreamLineEnvelope => {
 		counts.frames += 1;
 		if (phase === "snapshot") counts.snapshot += 1;
 		else counts.changes += 1;
 		const data = row === null ? null : projectRow(row, resolved.attributes);
-		return streamEnvelope(resolved, validation, data, {
+		return streamLineEnvelope(data, {
 			kind: "frame",
 			index: counts.frames,
+			observedAt: new Date(at ?? Date.now()).toISOString(),
 			phase,
 			change,
 			id,
@@ -547,7 +556,7 @@ async function* runFollow(
 	const applyListen = (
 		event: Extract<FollowEvent, { type: "listen" }>,
 		phase: FrameMeta["phase"],
-	): RetrieveSuccessEnvelope | undefined => {
+	): RetrieveStreamLineEnvelope | undefined => {
 		const { reply } = event;
 		// `!empty` on a listen is the cancel acknowledgement, never a table state.
 		if (reply.type === "empty") return undefined;
@@ -568,10 +577,10 @@ async function* runFollow(
 		if (reply.attributes[".dead"] === "true") {
 			// A `.dead` for an id never reported is a coalesced add+delete.
 			if (!held.delete(id)) return undefined;
-			return frame(phase, "removed", id, "listen", null);
+			return frame(phase, "removed", id, "listen", null, event.at);
 		}
 		held.add(id);
-		return frame(phase, "upsert", id, "listen", reply.attributes);
+		return frame(phase, "upsert", id, "listen", reply.attributes, event.at);
 	};
 	/**
 	 * Between frames of one batch (the A1 replay, a sweep's removals): a stop
@@ -587,13 +596,7 @@ async function* runFollow(
 
 	try {
 		if (tips.length > 0) {
-			yield streamEnvelope(
-				resolved,
-				validation,
-				null,
-				{ kind: "notice" },
-				tips,
-			);
+			yield streamLineEnvelope(null, { kind: "notice" }, tips);
 		}
 		loop: for (;;) {
 			const event = await queue.next();
@@ -620,7 +623,7 @@ async function* runFollow(
 					const id = event.row[".id"];
 					if (id !== undefined) {
 						held.add(id);
-						yield frame("snapshot", "upsert", id, "print", event.row);
+						yield frame("snapshot", "upsert", id, "print", event.row, event.at);
 					}
 					break;
 				}
@@ -660,9 +663,9 @@ async function* runFollow(
 						const phase = counts.synced ? "live" : "snapshot";
 						if (row) {
 							held.add(id);
-							yield frame(phase, "upsert", id, "membership", row);
+							yield frame(phase, "upsert", id, "membership", row, event.at);
 						} else if (held.delete(id)) {
-							yield frame(phase, "removed", id, "membership", null);
+							yield frame(phase, "removed", id, "membership", null, event.at);
 						}
 						if (counts.synced && countReached()) {
 							stopReason ??= "count-reached";
@@ -688,13 +691,8 @@ async function* runFollow(
 							continue;
 						if (haltRequested()) break loop;
 						held.delete(id);
-						yield frame(
-							"live",
-							"removed",
-							id,
-							query ? "membership" : "sweep",
-							null,
-						);
+						// The sweep found it gone, filtered or not (#462).
+						yield frame("live", "removed", id, "sweep", null, event.at);
 						if (countReached()) {
 							stopReason ??= "count-reached";
 							break loop;

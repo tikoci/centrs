@@ -20,7 +20,9 @@ import type {
 	CommonSettingsMeta,
 	EnvelopeTargetMeta,
 	FanoutData,
+	FanoutMemberOperation,
 	FanoutSummary,
+	SettingSource,
 	ValidationTrace,
 	Warning,
 } from "./envelope.ts";
@@ -310,29 +312,140 @@ export function commonVia(
 	return via ?? null;
 }
 
+/** The part of an outer fan-out `operation` its targets may share. */
+interface SharedOperation {
+	request?: unknown;
+	auth?: unknown;
+}
+
+/**
+ * Write shared meta once (#461): the outer envelope keeps the run's settings,
+ * request and auth, and each target keeps only what differs from them. A
+ * settings key the outer envelope lacks, and the `auth`, move out when every
+ * target that reached an operation agrees on them. A target's `settings`
+ * keeps the keys whose source differs from the outer key's; its
+ * `request`/`auth` are dropped when equal to the outer ones.
+ */
+export function compactFanoutTargets<Data, Op, OuterOp extends object>(
+	settings: CommonSettingsMeta,
+	operation: OuterOp,
+	targets: readonly CentrsEnvelope<Data, Op>[],
+): {
+	settings: CommonSettingsMeta;
+	operation: OuterOp;
+	targets: CentrsEnvelope<Data, FanoutMemberOperation<Op>>[];
+} {
+	// A target that failed before it had an operation (a resolve failure)
+	// has no settings or auth to agree or disagree with.
+	const reached = targets.flatMap((target) => {
+		const inner = target.meta.operation as SharedOperation | undefined;
+		return inner ? [{ settings: target.meta.settings, auth: inner.auth }] : [];
+	});
+	const agreed = (value: (member: (typeof reached)[number]) => unknown) => {
+		const first = reached[0] && value(reached[0]);
+		return first !== undefined &&
+			reached.every((member) => Bun.deepEquals(value(member), first))
+			? first
+			: undefined;
+	};
+	const outerSettings: CommonSettingsMeta = { ...settings };
+	for (const key of Object.keys(reached[0]?.settings ?? {})) {
+		if (outerSettings[key] !== undefined) continue;
+		const source = agreed((member) => member.settings[key]);
+		if (source !== undefined) outerSettings[key] = source as SettingSource;
+	}
+	const outer = operation as SharedOperation;
+	const auth = outer.auth === undefined ? agreed((m) => m.auth) : undefined;
+	const shared: SharedOperation =
+		auth === undefined ? outer : { ...outer, auth };
+	return {
+		settings: outerSettings,
+		operation: shared as OuterOp,
+		targets: targets.map((target) => {
+			const own: CommonSettingsMeta = {};
+			for (const [key, source] of Object.entries(target.meta.settings)) {
+				if (!Bun.deepEquals(source, outerSettings[key])) own[key] = source;
+			}
+			const meta = { ...target.meta, settings: own };
+			const inner = target.meta.operation as
+				| (Record<string, unknown> & SharedOperation)
+				| undefined;
+			if (inner) {
+				const { request, auth, ...rest } = inner;
+				meta.operation = {
+					...rest,
+					...(Bun.deepEquals(request, shared.request) ? {} : { request }),
+					...(Bun.deepEquals(auth, shared.auth) ? {} : { auth }),
+				} as Op;
+			}
+			return { ...target, meta } as CentrsEnvelope<
+				Data,
+				FanoutMemberOperation<Op>
+			>;
+		}),
+	};
+}
+
+/**
+ * The inverse of {@link compactFanoutTargets}: a target's full meta, read as
+ * `target ?? outer` (per key for settings). A target that failed before it
+ * had an operation gets no operation.
+ */
+export function expandFanoutTarget<Data, Op>(
+	outer: { meta: { settings: CommonSettingsMeta; operation?: unknown } },
+	target: CentrsEnvelope<Data, FanoutMemberOperation<Op>>,
+): CentrsEnvelope<Data, Op> {
+	const shared = (outer.meta.operation ?? {}) as SharedOperation;
+	const inner = target.meta.operation as
+		| (Record<string, unknown> & SharedOperation)
+		| undefined;
+	const settings = { ...outer.meta.settings, ...target.meta.settings };
+	const operation = inner && {
+		...inner,
+		...(inner.request === undefined && shared.request !== undefined
+			? { request: shared.request }
+			: {}),
+		...(inner.auth === undefined && shared.auth !== undefined
+			? { auth: shared.auth }
+			: {}),
+	};
+	return {
+		...target,
+		meta: { ...target.meta, settings, ...(operation ? { operation } : {}) },
+	} as CentrsEnvelope<Data, Op>;
+}
+
 /**
  * Assemble the locked fan-out success envelope: `data = { summary, targets }`,
  * outer `ok: true` = orchestration succeeded. The command owns its outer
- * `operation` meta shape and passes it in.
+ * `operation` meta shape and passes it in; shared meta is hoisted out of the
+ * targets by {@link compactFanoutTargets}. `target` is the outer target, set
+ * only when the fan-out runs through one router (a CMR controller).
  */
-export function buildFanoutEnvelope<Data, Op, OuterOp>(input: {
+export function buildFanoutEnvelope<Data, Op, OuterOp extends object>(input: {
 	summary: FanoutSummary;
 	targets: readonly CentrsEnvelope<Data, Op>[];
 	warnings: readonly Warning[];
 	settings: CommonSettingsMeta;
 	via: RouterOsProtocol | null;
 	operation: OuterOp;
+	target?: EnvelopeTargetMeta;
 }): CentrsSuccessEnvelope<FanoutData<Data, Op>, OuterOp> {
+	const { settings, operation, targets } = compactFanoutTargets(
+		input.settings,
+		input.operation,
+		input.targets,
+	);
 	return {
 		ok: true,
-		data: { summary: input.summary, targets: input.targets },
+		data: { summary: input.summary, targets },
 		warnings: input.warnings,
 		tips: [],
 		meta: {
-			target: {},
+			target: input.target ?? {},
 			via: input.via,
-			settings: input.settings,
-			operation: input.operation,
+			settings,
+			operation,
 		},
 	};
 }

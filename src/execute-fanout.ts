@@ -86,6 +86,8 @@ export interface ExecuteFanoutOperationMeta {
 	concurrency: number;
 	summary: FanoutSummary;
 	request: ExecuteRequestSummary;
+	/** Hoisted from the targets when every target used the same login (#461). */
+	auth?: { username?: string; passwordProvided: boolean };
 	selection: ExecuteSelectionSummary;
 }
 

@@ -434,7 +434,9 @@ centrs retrieve $A /ip/address --follow --duration 3s --port $API_PORT --usernam
 Every line parses as an envelope. Frames before `synced` have
 `phase: "snapshot"` and `source: "print"`; exactly one `synced`; the last line
 is the summary with `stopReason: "duration-elapsed"`, `synced: true`,
-`changes: 0`. Every frame carries `meta.operation.stream.id`.
+`changes: 0`. Every frame carries `meta.operation.stream.id` and an ISO 8601
+`observedAt`, and no other meta; `synced` and the summary carry the full
+`meta` (`target`, `via`, `settings`, …).
 
 ### FL2. A live change, and `--count` that ignores the snapshot
 
@@ -687,7 +689,7 @@ centrs retrieve $A /ip/firewall/address-list --via native-api --port $API_PORT -
 
 The harness adds a row with a 10-second timeout. A sweep removes it from the
 selected set as its remaining timeout crosses 8 seconds, with
-`source: "membership"`; the row still exists in an unfiltered read.
+`source: "sweep"`; the row still exists in an unfiltered read.
 
 ### FQ4. CLI alias and predicate validation
 

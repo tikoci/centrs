@@ -97,6 +97,8 @@ export interface RetrieveFanoutOperationMeta {
 	concurrency: number;
 	summary: FanoutSummary;
 	request: RetrieveRequestSummary;
+	/** Hoisted from the targets when every target used the same login (#461). */
+	auth?: { username?: string; passwordProvided: boolean };
 	selection: RetrieveSelectionSummary;
 }
 

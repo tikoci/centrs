@@ -15,6 +15,10 @@
  * - `meta` is invariant across commands. Only `data` and `meta.operation` vary
  *   per command. Do not add command-specific keys beside `target`/`via`/
  *   `settings`/`validation`/`timing`/`truncated`; put them in `meta.operation`.
+ * - Shared meta is written once (#461, #462). A fan-out target omits what its
+ *   outer envelope already says ({@link FanoutMemberOperation}); a follow
+ *   stream line between `synced` and `summary` carries only its
+ *   `meta.operation` ({@link StreamLineEnvelope}).
  * - CLI render must be lossless against the JSON envelope; `--format json|yaml`
  *   select serialization, not different shapes. Omit `undefined`; use `null`
  *   only where absence is meaningful and must round-trip (e.g. `via: null` when
@@ -112,10 +116,10 @@ export interface EnvelopeTargetMeta {
 	/**
 	 * `execute --cmr`: the CMR client this result belongs to, as the controller
 	 * knows it. `id` is the controller's `/cmr/device` row; `deviceKey` is the
-	 * device half of its `ids`. The client is never dialed directly.
+	 * device half of its `ids`. The client is never dialed directly; the
+	 * controller is the fan-out's outer `meta.target`.
 	 */
 	cmr?: {
-		controller: string;
 		id: string;
 		deviceKey?: string;
 		address?: string;
@@ -287,9 +291,34 @@ export interface FanoutSummary {
 	failed: number;
 }
 
+/**
+ * A fan-out target's `meta.operation`. `request` and `auth` are omitted when
+ * they equal the outer `meta.operation`'s, and the target's `meta.settings`
+ * keeps only the keys whose source differs from the outer `meta.settings`, so
+ * a reader takes `target ?? outer` (per key for settings).
+ */
+export type FanoutMemberOperation<Operation> = Omit<
+	Operation,
+	"request" | "auth"
+> &
+	Partial<Pick<Operation, Extract<keyof Operation, "request" | "auth">>>;
+
 export interface FanoutData<Data = unknown, Operation = unknown> {
 	summary: FanoutSummary;
-	targets: readonly CentrsEnvelope<Data, Operation>[];
+	targets: readonly CentrsEnvelope<Data, FanoutMemberOperation<Operation>>[];
+}
+
+/**
+ * A stream line that carries only its own `meta.operation`; the rest of its
+ * meta is on the stream's reference lines (`retrieve --follow`: `synced` and
+ * `summary`).
+ */
+export interface StreamLineEnvelope<Data = unknown, Operation = unknown> {
+	ok: true;
+	data: Data;
+	warnings: readonly Warning[];
+	tips: readonly Tip[];
+	meta: { operation: Operation };
 }
 
 /** Normalize an optional warnings list to a readonly array. */

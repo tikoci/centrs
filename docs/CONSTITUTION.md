@@ -179,6 +179,15 @@ Notes:
   is exempt — use it sparingly, since most operations are fast.
 - `data` is the only field whose *shape* varies by command. Everything else —
   including `warnings` and `tips` — is invariant in shape; only contents differ.
+- **Shared meta is written once** (#461, #462). A fan-out target's
+  `meta.settings` keeps only the keys whose source differs from the outer
+  `meta.settings`, and its `meta.operation` drops `request` and `auth` when
+  they equal the outer operation's. When every target agrees on `auth`, or
+  on a setting the outer `meta.settings` lacks, it moves to the outer
+  envelope. A reader takes the target's value, else
+  the outer one (`expandFanoutTarget`). A `retrieve --follow` frame or notice
+  line carries only `meta.operation`; the full meta is on the stream's
+  `synced` and `summary` lines.
 
 ## Error model
 

@@ -371,11 +371,13 @@ when the target is itself a CMR client.
   ceiling). Every call pins `strategy=parallel fail-policy=continue
   freeze-frame-interval=20ms`. **Never retried.**
 - **Outcomes** are a `FanoutData` envelope in inventory order, with exit codes
-  0/2/1. Each member's `meta.target.cmr` carries `{controller, id, deviceKey,
-  address}`. `success` → `data.ret` holds the client's output; a clipped
+  0/2/1. The outer `meta.target` is the controller, and the settings,
+  request and login every member shares are written once on the outer
+  envelope ([constitution](../../docs/CONSTITUTION.md#result-envelope)). Each
+  member's `meta.target.cmr` carries `{id, deviceKey, address}`. `success` → `data.ret` holds the client's output; a clipped
   output adds `cmr/output-truncated` and `meta.truncated`. `--max-results`
   applies per member, as in plain execute fan-out: a member whose rendered
-  envelope exceeds it (UTF-8 bytes) becomes `input/max-results-exceeded`, and
+  envelope (with its full meta, as it would render alone) exceeds it (UTF-8 bytes) becomes `input/max-results-exceeded`, and
   that error says the command already ran (`context.dispatched: true`). A `failed` runtime
   error maps through the usual `routeros/*` table. `skipped` →
   `cmr/client-disconnected`.
