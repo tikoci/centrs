@@ -337,8 +337,10 @@ jobs:
       # failed; that reds this job on its own) are not RouterOS results, and
       # writing them as `fail` faked regressions in qa-history (#442). A run with
       # no legs recorded passes the gate with a warning (scripts/qa-history.ts).
+      # `!cancelled()` also covers a test step the cancellation killed that still
+      # reports `failure`: a cancelled run records nothing.
       - name: Record QA result
-        if: always() && (steps.chr_test.outcome == 'success' || steps.chr_test.outcome == 'failure')
+        if: ${{ !cancelled() && (steps.chr_test.outcome == 'success' || steps.chr_test.outcome == 'failure') }}
         continue-on-error: true
         env:
           CHANNEL: ${{ matrix.routeros_channel }}
