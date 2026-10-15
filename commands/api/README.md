@@ -185,7 +185,9 @@ prompt) → otherwise `usage/confirmation-required`. Consequences:
   `api` on the controller (#456).
   Before the gate, `api` reads the controller's `/cmr/device` inventory and
   names the devices the request reaches, the controller's own row included,
-  with the same warnings as plain `execute` (#453; see
+  with the same warnings as plain `execute`. Where the reach cannot be
+  resolved (for example `/cmr/upgrade/job/run-next`), the gate says so and
+  why (#453; see
   [execute → Fleet commands run directly](../execute/README.md#fleet-commands-run-directly-453)).
   `PUT`, `PATCH` and `DELETE` on `/cmr/vlan`, `/cmr/wifi`, `/cmr/wifi/radio`
   and `/cmr/upgrade` are the menus' `add`, `set` and `remove`, and the `*id`

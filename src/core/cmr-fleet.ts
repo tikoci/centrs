@@ -295,11 +295,15 @@ export async function resolveCmrFleetScope(
 	}
 
 	// A rule: `add` uses its own selectors; the others act on existing items,
-	// and a `set` that changes `labels` reaches the old and the new devices.
-	const expressions: (string | undefined)[] = [];
-	let portLabels = attributes["port-labels"]?.trim() || undefined;
+	// and a `set` that changes a selector reaches the old and the new state.
+	// Each state is judged on its own: one unscoped rule among several still
+	// reaches every device.
+	const states: { labels?: string; portLabels?: string }[] = [];
 	if (command.verb === "add") {
-		expressions.push(attributes["labels"]);
+		states.push({
+			labels: attributes["labels"],
+			portLabels: attributes["port-labels"],
+		});
 	} else {
 		const numbers = attributes["numbers"]?.trim();
 		if (!numbers) return scope({ inventory, unresolved: "no `numbers`" });
@@ -314,25 +318,30 @@ export async function resolveCmrFleetScope(
 			});
 		}
 		for (const rule of named as Row[]) {
-			expressions.push(rule["labels"]);
-			portLabels ??= rule["port-labels"]?.trim() || undefined;
-		}
-		if (command.verb === "set" && "labels" in attributes) {
-			expressions.push(attributes["labels"]);
+			const old = { labels: rule["labels"], portLabels: rule["port-labels"] };
+			states.push(old);
+			if (
+				command.verb === "set" &&
+				("labels" in attributes || "port-labels" in attributes)
+			) {
+				states.push({
+					labels: attributes["labels"] ?? old.labels,
+					portLabels: attributes["port-labels"] ?? old.portLabels,
+				});
+			}
 		}
 	}
 	const reached = new Map<string, CmrFleetDevice>();
 	let everyDevice = false;
-	for (const expression of expressions) {
-		const labels = deviceLabels(command, expression?.trim() ?? "");
-		if (labels.length === 0) everyDevice = true;
+	for (const state of states) {
+		const labels = deviceLabels(command, state.labels?.trim() ?? "");
+		// VLAN: no `labels` but `port-labels` still narrows which ports change.
+		const narrowedByPort =
+			command.menu === "/cmr/vlan" && (state.portLabels?.trim() ?? "") !== "";
+		if (labels.length === 0 && !narrowedByPort) everyDevice = true;
 		for (const device of select(labels || "all")) {
 			reached.set(device.id, device);
 		}
-	}
-	// VLAN: no `labels` but `port-labels` still narrows which ports change.
-	if (command.menu === "/cmr/vlan" && portLabels !== undefined) {
-		everyDevice = false;
 	}
 	return scope({ inventory, devices: [...reached.values()], everyDevice });
 }
@@ -450,11 +459,14 @@ export async function readCmrFleet(
 		return Array.isArray(result.data) ? (result.data as Row[]) : [];
 	};
 	let scope: CmrFleetScope;
+	let unreachable = false;
 	try {
 		scope = await resolveCmrFleetScope(command, read);
 	} catch (error) {
 		const code =
 			error instanceof Error && "code" in error ? String(error.code) : "error";
+		// The policy read would wait out the same dead controller (or login).
+		unreachable = code.startsWith("transport/") || code.startsWith("auth/");
 		scope = {
 			command: command.command,
 			unresolved: `the controller read failed (${code})`,
@@ -462,7 +474,7 @@ export async function readCmrFleet(
 	}
 	const warnings = cmrFleetWarnings(scope);
 	const runsWith = RUNS_WITH[command.command];
-	if (runsWith !== undefined && username) {
+	if (runsWith !== undefined && username && !unreachable) {
 		const caller: CmrCallerPolicy | undefined = await readCmrCallerPolicy(
 			adapter,
 			username,

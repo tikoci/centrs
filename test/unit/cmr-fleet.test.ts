@@ -254,6 +254,42 @@ describe("resolveCmrFleetScope", () => {
 		expect(scope.unresolved).toContain("did not match");
 	});
 
+	test("each VLAN rule is judged on its own selectors", async () => {
+		const vlan: Record<string, Row[]> = {
+			"/cmr/device": INVENTORY,
+			"/cmr/vlan": [
+				{ ".id": "*1", "port-labels": "ether5", "vlan-ids": "10" },
+				{ ".id": "*2", "vlan-ids": "11" },
+			],
+		};
+		const every = async (attributes: Row) => {
+			const { read } = reader(vlan);
+			return (
+				await resolveCmrFleetScope(
+					command("/cmr/vlan/remove", attributes),
+					read,
+				)
+			).everyDevice;
+		};
+		// One port-scoped rule does not cover for an unscoped one beside it.
+		expect(await every({ numbers: "*1,*2" })).toBe(true);
+		expect(await every({ numbers: "*2,*1" })).toBe(true);
+		expect(await every({ numbers: "*1" })).toBe(false);
+		const { read } = reader(vlan);
+		// Scoping an unscoped rule still reaches every device it leaves.
+		const narrowed = await resolveCmrFleetScope(
+			command("/cmr/vlan/set", { numbers: "*2", "port-labels": "ether5" }),
+			read,
+		);
+		expect(narrowed.everyDevice).toBe(true);
+		// …and a set that drops the port selector is unscoped in its new state.
+		const widened = await resolveCmrFleetScope(
+			command("/cmr/vlan/set", { numbers: "*1", "port-labels": "" }),
+			read,
+		);
+		expect(widened.everyDevice).toBe(true);
+	});
+
 	test("disabling a label-less rule reaches every device", async () => {
 		const { read } = reader({
 			"/cmr/device": INVENTORY,
@@ -305,6 +341,33 @@ describe("readCmrFleet", () => {
 		},
 	});
 
+	test("an unreachable controller is not asked again for the policy", async () => {
+		const calls: string[] = [];
+		const fail = (code: string) => ({
+			apiRequest: async (request: { path: string }) => {
+				calls.push(request.path);
+				if (request.path === "/cmr/device") {
+					throw Object.assign(new Error("boom"), { code });
+				}
+				return { data: [] } as never;
+			},
+		});
+		await readCmrFleet(
+			command("/cmr/device/reboot", { labels: "all" }),
+			fail("transport/timeout"),
+			"reader",
+		);
+		expect(calls).toEqual(["/cmr/device"]);
+		calls.length = 0;
+		// A refusal that is not about reaching the controller keeps the policy read.
+		await readCmrFleet(
+			command("/cmr/device/reboot", { labels: "all" }),
+			fail("routeros/permission-denied"),
+			"reader",
+		);
+		expect(calls).toEqual(["/cmr/device", "/user"]);
+	});
+
 	test("a failed inventory read leaves the scope unresolved, never throws", async () => {
 		const read = await readCmrFleet(
 			command("/cmr/device/reboot", { labels: "all" }),
@@ -337,6 +400,24 @@ describe("readCmrFleet", () => {
 });
 
 describe("cmrFleetGate wording", () => {
+	test("an unresolved reach still names the fleet command and why", async () => {
+		const read = await readCmrFleet(
+			command("/cmr/upgrade/job/run-next", { number: "*1" }),
+			{ apiRequest: async () => ({ data: [] }) as never },
+			undefined,
+		);
+		const gate = cmrFleetGate(read, "lab-ctl");
+		expect(gate.summary).toBe(
+			"A write-shaped `/cmr/upgrade/job/run-next` would reach the CMR devices it selects through controller lab-ctl (not resolved: an upgrade job's devices are not in the inventory), and needs explicit confirmation.",
+		);
+		expect(gate.context).toEqual({
+			cmr: {
+				command: "/cmr/upgrade/job/run-next",
+				unresolved: "an upgrade job's devices are not in the inventory",
+			},
+		});
+	});
+
 	test("names the reach and repeats every warning but the controller one", async () => {
 		const read = await readCmrFleet(
 			command("/cmr/vlan/add", { "vlan-ids": "10" }),

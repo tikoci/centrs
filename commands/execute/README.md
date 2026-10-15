@@ -428,7 +428,8 @@ devices: `/cmr/device/{reboot,upgrade,pair,run-script}`,
 `/cmr/wifi/radio` and `/cmr/upgrade`. They are write-shaped, so they need
 `--yes`. Before that gate, plain `execute` (and `api`) reads the controller's
 `/cmr/device` inventory, read-only, and resolves which rows the command
-reaches. The command still runs exactly as typed.
+reaches, where it can (see "Not resolved" below). The command still runs
+exactly as typed.
 
 - **The gate names the reach.** The prompt and the `usage/confirmation-required`
   summary say how many CMR devices the command reaches and whether the
@@ -459,12 +460,17 @@ reaches. The command still runs exactly as typed.
     a rule whose labels match nothing.
   - `cmr/caller-policy-not-enforced` for `run-script` and `reboot`, as for
     `--cmr` above (#456).
-- **Not resolved**, so the gate keeps its plain wording: script-shaped input
-  (a positional id or `[find …]`), an abbreviated selector argument
-  (`lab=all`), `--via ssh` or `mac-telnet`, `/cmr/upgrade/job/run-next`
-  (a job's devices are not in the inventory), and a failed read. A failed read
-  never blocks the command. CDB fan-out to several controllers keeps its own
-  gate.
+- **Not resolved:** an abbreviated selector argument (`lab=all`),
+  `--via ssh` or `mac-telnet`, `/cmr/upgrade/job/run-next` (a job's devices
+  are not in the inventory), and a failed read. The gate still names the
+  fleet command and says why its reach is unknown, for example `would reach
+  the CMR devices it selects through controller ctl (not resolved: an upgrade
+  job's devices are not in the inventory)`, and `error.context.cmr` has
+  `unresolved` instead of the counts. A failed read never blocks the command,
+  and after a transport or login failure the policy read is skipped. Two
+  cases are not recognized as fleet commands at all and keep the plain
+  wording: script-shaped input (a positional id or `[find …]`) and CDB fan-out
+  to several controllers, which has its own gate.
 
 ## mac-telnet L2 validation
 
