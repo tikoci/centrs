@@ -293,6 +293,7 @@ export async function executeCmr(
 	);
 	const nonce = (internals.nonce ?? defaultNonce)();
 
+	const warnings: Warning[] = [...resolved.warnings];
 	try {
 		// 1. Inventory and per-row preflight (membership + client validation).
 		const before = await readInventoryBeforeDispatch(controller, signal);
@@ -357,7 +358,6 @@ export async function executeCmr(
 				),
 			);
 		});
-		const warnings: Warning[] = [...resolved.warnings];
 		if (members.length === 0) {
 			const message = `No CMR device on the controller matches \`${labels}\`. Labels are case-sensitive and RouterOS accepts unknown ones silently.`;
 			const context = { labels, inventory: before.length };
@@ -492,10 +492,20 @@ export async function executeCmr(
 				},
 			},
 		};
+	} catch (error) {
+		// An outer error keeps the warnings gathered before it, such as
+		// `cmr/caller-policy-not-enforced` on a refused confirmation.
+		if (error instanceof CentrsError && warnings.length > 0) {
+			OUTER_ERROR_WARNINGS.set(error, [...warnings]);
+		}
+		throw error;
 	} finally {
 		await controller.close();
 	}
 }
+
+/** Warnings an outer `executeCmr` error carried; read by {@link buildExecuteCmrErrorEnvelope}. */
+const OUTER_ERROR_WARNINGS = new WeakMap<CentrsError, Warning[]>();
 
 // ---------------------------------------------------------------------------
 // Preflight and dispatch judgement
@@ -1393,7 +1403,7 @@ export function buildExecuteCmrErrorEnvelope(
 	return {
 		ok: false,
 		error: serializeCentrsError(centrsError),
-		warnings: [],
+		warnings: OUTER_ERROR_WARNINGS.get(centrsError) ?? [],
 		tips: [],
 		meta: { target: { input: request.targetInput }, via, settings: {} },
 	};

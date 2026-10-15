@@ -17,6 +17,7 @@ import { routerOsStringLiteral } from "../../src/core/routeros-string.ts";
 import { CentrsError } from "../../src/errors.ts";
 import { executeEnvelope, resolveExecuteRequest } from "../../src/execute.ts";
 import {
+	buildExecuteCmrErrorEnvelope,
 	CMR_VALIDATION_SOURCE,
 	type CmrAbsence,
 	type CmrController,
@@ -311,6 +312,14 @@ describe("execute --cmr: selection and binding", () => {
 			});
 			expect((error as CentrsError).summary).toContain("lacks write, reboot");
 			expect(f.dispatch).toEqual([]);
+			// The CLI's outer envelope keeps the warning itself, not only its context.
+			const envelope = buildExecuteCmrErrorEnvelope(
+				{ targetInput: "192.0.2.1", via: "native-api" },
+				error,
+			);
+			expect(envelope.warnings.map((w) => w.code)).toEqual([
+				"cmr/caller-policy-not-enforced",
+			]);
 		});
 
 		test("a login with every script policy gets no warning", async () => {

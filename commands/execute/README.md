@@ -351,14 +351,16 @@ when the target is itself a CMR client.
 - **Write gate:** one `--yes`/TTY confirmation, naming how many clients will run
   it, how many were excluded, and through which controller. Clients that failed
   validation are never sent the command.
-- **The controller login is not the limit (#456).** RouterOS does not check the
-  caller's policy against a CMR script. On 7.26beta1 `run-script` needed only
-  `read` + `api` on the controller login, and `/cmr/device/reboot` only
-  `read` + `test` + `api`. A login refused a direct write
-  (`not enough permissions (9)`) still wrote to and rebooted clients through
-  them, the controller's own row included. So a "reader" login on a
-  controller is not read-only once the `cmr` package is installed, and
-  centrs' write gate (and `mcp=ro` on MCP) is the only gate. For a write,
+- **The controller login is not the limit (#456).** On 7.26beta1, RouterOS
+  does not check the caller's policy against a CMR script. `run-script`
+  needed only `read` + `api` on the controller login, and
+  `/cmr/device/reboot` only `read` + `test` + `api`. A login refused a direct
+  write (`not enough permissions (9)`) still wrote to clients and to the
+  controller's own row through `run-script`, and rebooted a client through
+  both. So a "reader" login on a 7.26beta1 controller is not read-only, and
+  centrs' write gate (and `mcp=ro` on MCP) is the only gate. MikroTik
+  [says](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/139) 7.26beta2 refuses this for a `read` group; that is not yet
+  checked on a beta2 build. For a write,
   centrs reads the login's own `/user` row and `/user/group` once (both are
   readable with just `read` + `api`). When the login lacks `write`, `test` or
   `reboot`, the result and the confirmation error carry

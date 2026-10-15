@@ -178,11 +178,14 @@ MCP server applies it as a hard allowlist:
   regardless of `confirm`; a local CDB mutation through `centrs_devices` or
   `centrs_discover` `save` fails with `usage/confirmation-required` unless
   explicitly confirmed.
-- **`mcp=ro` does not rest on RouterOS policy.** On a CMR controller
-  (7.26beta1), a login without `write` or `reboot` still wrote to and rebooted
-  every selected client, the controller included, through
-  `/cmr/device/run-script` and `/cmr/device/reboot` (#456). So these and the
-  other fleet commands (`upgrade`, `pair`, `/cmr/upgrade/trigger`, …) are
+- **`mcp=ro` does not rest on RouterOS policy.** On a 7.26beta1 CMR
+  controller, a login without `write` or `reboot` wrote to a client and to the
+  controller's own row through `/cmr/device/run-script`, and rebooted a client
+  through `run-script` and `/cmr/device/reboot`. That is the CHR reproduction
+  on #456; the integration test re-proves the `run-script` write (CMR15).
+  MikroTik [says](https://forum.mikrotik.com/t/7-26beta-development-is-released/273582/139) 7.26beta2 will refuse this for a `read` group, but
+  centrs' classification does not depend on it: every CMR fleet command
+  (`run-script`, `reboot`, `upgrade`, `pair`, `/cmr/upgrade/trigger`, …) is
   write-shaped over every path, pinned by `test/unit/write-gate-tables.test.ts`,
   and `mcp=ro` refuses them whatever the controller login's group is. Any
   future MCP route to CMR clients (#449) must keep that assumption.

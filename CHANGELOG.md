@@ -15,7 +15,8 @@ documenting cross-cutting shifts that affect contributors and consumers.
 - `execute --cmr` warns `cmr/caller-policy-not-enforced` when a write runs
   through a controller login that lacks `write`, `test` or `reboot`. On
   7.26beta1 RouterOS runs the client script with all four anyway, so the
-  login is not the limit (#456). The warning is also in the confirmation
+  login is not the limit (#456). MikroTik says 7.26beta2 refuses this for a
+  `read` group. The warning is also in the confirmation
   error. centrs reads the login's own `/user` row and group once, only for a
   write; a failed read only loses the warning.
 

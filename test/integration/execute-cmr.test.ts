@@ -447,7 +447,9 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 					expect(await note(client)).not.toBe(`centrs-cmr7-${via}`);
 
 					// CMR15. A login without write or reboot still writes through CMR
-					// (#456), so the result says the login is not the limit.
+					// (#456), so the result says the login is not the limit. MikroTik
+					// says 7.26beta2 refuses this for a `read` group: under
+					// CENTRS_CMR_VERSION=7.26beta2 this step should go red first.
 					const marker15 = `centrs-cmr15-${via}`;
 					const viaReader = await executeCmr({
 						targetInput: via === "rest-api" ? controller.restUrl : "127.0.0.1",

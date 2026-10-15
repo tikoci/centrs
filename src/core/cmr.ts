@@ -160,7 +160,8 @@ export async function readCmrCallerPolicy(
  * {@link CMR_SCRIPT_POLICIES}. A "reader" login wrote and rebooted clients
  * through it. Warn when the login lacks a policy the command will run with,
  * so a caller does not take the login for the limit; centrs' own write gate
- * is the only one.
+ * is the only one. MikroTik says 7.26beta2 refuses this for a `read` group
+ * (forum topic 273582, post 139); not yet checked on a beta2 build.
  */
 export function cmrCallerPolicyWarning(
 	caller: CmrCallerPolicy,
@@ -170,7 +171,7 @@ export function cmrCallerPolicyWarning(
 	if (missing.length === 0) return undefined;
 	return {
 		code: "cmr/caller-policy-not-enforced",
-		message: `The controller login \`${caller.username}\` (group \`${caller.group}\`) lacks ${missing.join(", ")}, but CMR runs this on the clients with ${runsWith.join(", ")}. RouterOS does not check the caller's policy here, so the login does not limit what a CMR command can change.`,
+		message: `The controller login \`${caller.username}\` (group \`${caller.group}\`) lacks ${missing.join(", ")}, but CMR runs this on the clients with ${runsWith.join(", ")}. RouterOS 7.26beta1 does not check the caller's policy here, so the login does not limit what a CMR command can change (MikroTik says 7.26beta2 will).`,
 		context: {
 			username: caller.username,
 			group: caller.group,
