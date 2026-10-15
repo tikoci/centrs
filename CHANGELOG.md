@@ -8,6 +8,17 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ## Unreleased
 
+### Changed
+
+- CI, release, Pages and the Docker image run Bun 1.4.2 (was 1.3.14), the
+  version local development already used; `@types/bun` moves with it (#438).
+  `engines.bun` stays `>=1.3.11 <2`. The `typescript` peer stays `^6.0.3`:
+  the source passes `tsc --noEmit` under TypeScript 7.0.2, but typedoc 0.28 (the
+  API reference build) supports TypeScript up to 6.0.x only.
+- QA records a CHR leg in `qa-history` only when its test step passed or
+  failed. A leg cancelled by a newer push, or skipped after a setup failure,
+  was recorded as `fail` (#442).
+
 ## 0.1.9-next.0 — 2026-10-13
 
 Pre-release (npm tag `next`; `latest` stays on 0.1.8). Install with
