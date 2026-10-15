@@ -363,8 +363,11 @@ export function compactFanoutTargets<Data, Op, OuterOp extends object>(
 		operation: shared as OuterOp,
 		targets: targets.map((target) => {
 			const own: CommonSettingsMeta = {};
+			// An `undefined` source is never written: JSON drops it, so a direct
+			// and a serialized reader would disagree on what the target inherits.
 			for (const [key, source] of Object.entries(target.meta.settings)) {
-				if (!Bun.deepEquals(source, outerSettings[key])) own[key] = source;
+				if (source !== undefined && !Bun.deepEquals(source, outerSettings[key]))
+					own[key] = source;
 			}
 			const meta = { ...target.meta, settings: own };
 			const inner = target.meta.operation as
@@ -372,10 +375,15 @@ export function compactFanoutTargets<Data, Op, OuterOp extends object>(
 				| undefined;
 			if (inner) {
 				const { request, auth, ...rest } = inner;
+				// `auth` is shared only when every reached target has the same
+				// defined one, and every inner operation type requires `request`,
+				// so an omitted field always means "equal to the outer one".
+				const differs = (value: unknown, outer: unknown) =>
+					value !== undefined && !Bun.deepEquals(value, outer);
 				meta.operation = {
 					...rest,
-					...(Bun.deepEquals(request, shared.request) ? {} : { request }),
-					...(Bun.deepEquals(auth, shared.auth) ? {} : { auth }),
+					...(differs(request, shared.request) ? { request } : {}),
+					...(differs(auth, shared.auth) ? { auth } : {}),
 				} as Op;
 			}
 			return { ...target, meta } as CentrsEnvelope<
@@ -399,7 +407,10 @@ export function expandFanoutTarget<Data, Op>(
 	const inner = target.meta.operation as
 		| (Record<string, unknown> & SharedOperation)
 		| undefined;
-	const settings = { ...outer.meta.settings, ...target.meta.settings };
+	const settings: CommonSettingsMeta = { ...outer.meta.settings };
+	for (const [key, source] of Object.entries(target.meta.settings)) {
+		if (source !== undefined) settings[key] = source;
+	}
 	const operation = inner && {
 		...inner,
 		...(inner.request === undefined && shared.request !== undefined

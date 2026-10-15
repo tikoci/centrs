@@ -349,6 +349,37 @@ describe("compactFanoutTargets (#461)", () => {
 				expandFanoutTarget(envelope, target),
 			),
 		).toEqual(targets);
+		// The serialized envelope expands to the same thing (no `undefined` holes).
+		const wire = JSON.parse(JSON.stringify(envelope)) as typeof envelope;
+		expect(
+			wire.data.targets.map((target) => expandFanoutTarget(wire, target)),
+		).toEqual(JSON.parse(JSON.stringify(targets)));
+	});
+
+	test("an undefined settings source neither stays on the target nor shadows the outer one", () => {
+		const reached = member(cli, { request, auth });
+		reached.meta.settings.username = undefined;
+		const envelope = buildFanoutEnvelope({
+			summary: summarizeFanout([reached]),
+			targets: [reached],
+			warnings: [],
+			settings: { via: cli, host: cli, username: cdb },
+			via: "rest-api",
+			operation: { kind: "fanout", request },
+		});
+		const [compact] = envelope.data.targets;
+		if (!compact) throw new Error("no target");
+		expect("username" in compact.meta.settings).toBe(false);
+		expect(
+			expandFanoutTarget(envelope, compact).meta.settings.username,
+		).toEqual(cdb);
+		const shadowed = {
+			...compact,
+			meta: { ...compact.meta, settings: { username: undefined } },
+		};
+		expect(
+			expandFanoutTarget(envelope, shadowed).meta.settings.username,
+		).toEqual(cdb);
 	});
 });
 

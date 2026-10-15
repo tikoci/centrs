@@ -265,7 +265,9 @@ filtered with the same `--query`/`--filter` grammar as a one-shot read (#397).
 `meta.operation.stream`. Only `synced` and `summary` carry the full `meta`
 (target, settings, validation, request, auth). A `frame` or `notice` line
 carries only `meta.operation` (`kind`, `objectCount`, `stream`), because the
-rest is the same on every line
+rest is the same on every line. An error line is a full error envelope: the
+one line of a follow that fails before it starts (resolution, validation, a
+non-followable menu, a non-native transport), and a failed `summary`
 ([constitution](../../docs/CONSTITUTION.md#result-envelope)).
 
 | `kind` | When | `data` | Fields |
