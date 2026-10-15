@@ -339,6 +339,29 @@ describe("transferFanout", () => {
 		expect(fanoutExitCode(envelope)).toBe(0);
 	});
 
+	test("an empty selection is an error for a write verb, even with --yes (#460)", async () => {
+		const internals: TransferFanoutInternals = {
+			expand: async () => ({
+				targets: [],
+				warnings: [
+					{ code: "cdb/empty-selection", message: "none", context: {} },
+				],
+				empty: true,
+			}),
+		};
+		const error = await transferFanout(
+			{ verb: "remove", remote: "/f", yes: true, stdinIsTty: false },
+			selection(),
+			{},
+			internals,
+		).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(CentrsError);
+		expect(error).toMatchObject({
+			code: "cdb/empty-selection",
+			context: { write: true },
+		});
+	});
+
 	test("download fan-out without --out-dir is an outer error", async () => {
 		const internals: TransferFanoutInternals = {
 			expand: async () => expansionOf([cdbMember("10.0.0.1", 0)]),

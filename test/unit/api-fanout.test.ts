@@ -250,6 +250,33 @@ describe("apiFanout", () => {
 		expect(fanoutExitCode(envelope)).toBe(0);
 	});
 
+	test("an empty selection is an error for a write, even with --yes (#460)", async () => {
+		let dialed = 0;
+		const internals = {
+			expand: async () => ({
+				targets: [],
+				warnings: [{ code: "cdb/empty-group", message: "none", context: {} }],
+				empty: true,
+			}),
+			execute: async () => {
+				dialed += 1;
+				throw new Error("must not dial");
+			},
+		};
+		const error = await apiFanout(
+			{ ...base, method: "PUT", fields: { address: "10.0.0.1/32" }, yes: true },
+			selection(),
+			{},
+			internals,
+		).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(CentrsError);
+		expect(error).toMatchObject({
+			code: "cdb/empty-group",
+			context: { write: true },
+		});
+		expect(dialed).toBe(0);
+	});
+
 	test("a mutating fan-out without --yes is rejected, naming the blast radius", async () => {
 		const internals: ApiFanoutInternals = {
 			expand: async () =>

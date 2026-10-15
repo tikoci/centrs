@@ -633,7 +633,7 @@ centrs api --where board=chr ip/address --cdb-file $CDB --json
 The device-class selector matches only record 0, so `data.summary = { total: 1,
 ok: 1, failed: 0 }`, one inner success. Exit code 0.
 
-### F3. An empty selection is `ok:true` with summary 0/0/0
+### F3. An empty selection is `ok:true` with summary 0/0/0 for a read
 
 ```bash
 centrs api --group no-such-group ip/address --cdb-file $CDB --json
@@ -641,6 +641,15 @@ centrs api --group no-such-group ip/address --cdb-file $CDB --json
 
 `ok: true`, `data.summary = { total: 0, ok: 0, failed: 0 }`, `data.targets = []`,
 and a `cdb/empty-group` warning. Exit code 0.
+
+A mutating method over the same group is an outer error, with or without
+`--yes`, so a misspelled group cannot pass for a successful bulk write (#460):
+
+```bash
+centrs api -X PUT --group no-such-group ip/address -f address=10.99.0.9/32 -f interface=ether1 --yes --cdb-file $CDB --json
+```
+
+`ok: false`, `error.code` `cdb/empty-group`. Exit code 1.
 
 ### F4. A mutating fan-out without `--yes` is rejected, naming the blast radius
 

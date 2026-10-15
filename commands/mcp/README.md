@@ -178,6 +178,14 @@ MCP server applies it as a hard allowlist:
   regardless of `confirm`; a local CDB mutation through `centrs_devices` or
   `centrs_discover` `save` fails with `usage/confirmation-required` unless
   explicitly confirmed.
+- **`mcp=ro` does not rest on RouterOS policy.** On a CMR controller
+  (7.26beta1), a login without `write` or `reboot` still wrote to and rebooted
+  every selected client, the controller included, through
+  `/cmr/device/run-script` and `/cmr/device/reboot` (#456). So these and the
+  other fleet commands (`upgrade`, `pair`, `/cmr/upgrade/trigger`, …) are
+  write-shaped over every path, pinned by `test/unit/write-gate-tables.test.ts`,
+  and `mcp=ro` refuses them whatever the controller login's group is. Any
+  future MCP route to CMR clients (#449) must keep that assumption.
 - **`--allow-adhoc-targets`** (off by default) is reserved for one-off lab/power
   user flows. Current RouterOS-facing tools expose no inline host+credential
   schema, so the CDB allowlist remains the only active target source.

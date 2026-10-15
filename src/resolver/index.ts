@@ -97,6 +97,7 @@ export {
 	SUPPORTED_DESCRIPTOR_VERSION,
 } from "./quickchr-provider.ts";
 export {
+	emptyWriteSelectionError,
 	expandSelection,
 	isDefaultRecordTarget,
 	type SelectionExpansion,

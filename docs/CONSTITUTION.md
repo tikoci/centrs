@@ -304,8 +304,10 @@ Fan-out output is the locked **`FanoutData`** envelope: `data = { summary, targe
 is an inner `ok:false` envelope (output, not metadata). `targets[]` is reassembled
 in resolved record order, not completion order, so repeated runs diff cleanly. The
 **process exit code** is granular and uniform across fan-out commands: `0` every
-target ok (or an empty selection), `2` partial (some ok, some failed), `1`
-orchestration error or every target failed.
+target ok (or an empty selection for a read), `2` partial (some ok, some
+failed), `1` orchestration error or every target failed. An empty selection is
+a warning for a read and an orchestration error for a write, `--yes` or not,
+so a mistyped selector never passes for a successful bulk write (#460).
 
 A multi-target **RouterOS write** (e.g. `execute` / `api` add/set/remove across a
 selection) is gated by **`--yes`**, confirmed **once** up front; when it is missing

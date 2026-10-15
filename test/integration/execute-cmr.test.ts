@@ -6,7 +6,7 @@
  *   - CMR-D*: the device behaviour `src/execute-cmr.ts` is built on, asserted
  *     directly against the controller so a later RouterOS build that changes it
  *     fails here first, not as a silent mis-binding in centrs.
- *   - CMR1–CMR14: the examples in `commands/execute/examples.md` → CMR, through
+ *   - CMR1–CMR15: the examples in `commands/execute/examples.md` → CMR, through
  *     the library and the CLI, with validation on, over native-api AND
  *     rest-api to the controller.
  */
@@ -71,7 +71,7 @@ async function note(router: CmrLab["controller"]): Promise<string> {
 
 describeFast("execute --cmr against a CMR lab (#450)", () => {
 	test(
-		"device contract, then CMR1–CMR14 over native-api and rest-api",
+		"device contract, then CMR1–CMR15 over native-api and rest-api",
 		async () => {
 			const lab = await startCmrLab(
 				`centrs-cmr-${crypto.randomUUID().slice(0, 6)}`,
@@ -217,6 +217,20 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 				} finally {
 					await native.close();
 				}
+
+				// A controller login with the field site's group (#456): no write,
+				// no reboot, no sensitive, no policy.
+				const restricted = {
+					group: "centrs-reader",
+					user: "centrs-reader-u",
+					password: `Reader-${crypto.randomUUID().slice(0, 8)}`,
+				};
+				await controller.run(
+					`/user/group/add name=${restricted.group} policy=read,test,api,rest-api,!write,!reboot,!sensitive,!policy`,
+				);
+				await controller.run(
+					`/user/add name=${restricted.user} group=${restricted.group} password="${restricted.password}"`,
+				);
 
 				for (const via of ["native-api", "rest-api"] as const) {
 					const base: ExecuteCmrRequest = {
@@ -422,6 +436,50 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 					expect(empty.warnings.map((w) => w.code)).toContain(
 						"cmr/empty-selection",
 					);
+					// …and an error for a write, even with --yes (#460).
+					const emptyWrite = await run({
+						labels: "no-such-label",
+						command: `/system/note/set note="centrs-cmr7-${via}"`,
+						yes: true,
+					}).catch((e) => e);
+					expect(emptyWrite.code).toBe("cmr/empty-selection");
+					expect(emptyWrite.context).toMatchObject({ write: true });
+					expect(await note(client)).not.toBe(`centrs-cmr7-${via}`);
+
+					// CMR15. A login without write or reboot still writes through CMR
+					// (#456), so the result says the login is not the limit.
+					const marker15 = `centrs-cmr15-${via}`;
+					const viaReader = await executeCmr({
+						targetInput: via === "rest-api" ? controller.restUrl : "127.0.0.1",
+						...(via === "native-api" ? { port: controller.ports.api } : {}),
+						via,
+						username: restricted.user,
+						password: restricted.password,
+						labels: client.identity,
+						command: `/system/note/set note="${marker15}"`,
+						yes: true,
+						stdinIsTty: false,
+					});
+					expect(codes(viaReader)).toEqual(["ok"]);
+					expect(await note(client)).toBe(marker15);
+					expect(
+						viaReader.warnings.find(
+							(w) => w.code === "cmr/caller-policy-not-enforced",
+						)?.context,
+					).toMatchObject({
+						username: restricted.user,
+						group: restricted.group,
+						missing: ["write", "reboot"],
+					});
+					// The full admin login gets no such warning.
+					const asAdmin = await run({
+						labels: client.identity,
+						command: `/system/note/set note="${marker15}-admin"`,
+						yes: true,
+					});
+					expect(asAdmin.warnings.map((w) => w.code)).not.toContain(
+						"cmr/caller-policy-not-enforced",
+					);
 				}
 
 				// CMR8. The CLI reports a mixed result as exit code 2.
@@ -458,7 +516,7 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 				expect(codes(down)).toEqual(["cmr/client-disconnected"]);
 				expect(down.meta.operation?.cmr.dispatched).toBe(0);
 
-				// CMR1–CMR7 and CMR10–CMR14 ran over both controller transports; CMR8
+				// CMR1–CMR7 and CMR10–CMR15 ran over both controller transports; CMR8
 				// (CLI default) and CMR9 over native-api only.
 				const proven = {
 					"native-api": [
@@ -476,6 +534,7 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						"CMR12",
 						"CMR13",
 						"CMR14",
+						"CMR15",
 					],
 					"rest-api": [
 						"CMR1",
@@ -490,6 +549,7 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						"CMR12",
 						"CMR13",
 						"CMR14",
+						"CMR15",
 					],
 				};
 				for (const [protocol, exampleIds] of Object.entries(proven)) {

@@ -4,6 +4,7 @@
  */
 
 import { CentrsError } from "../errors.ts";
+import type { ProtocolAdapter } from "../protocols/adapter.ts";
 import type { Warning } from "./envelope.ts";
 
 /** The controller command that runs a script on CMR clients. */
@@ -101,4 +102,80 @@ export function cmrScriptWarnings(script: string): Warning[] {
 	return /cmr[\s/]+device[\s/]+run-script\b/.test(script)
 		? [clientScriptNotValidated]
 		: [];
+}
+
+/** The policies CMR gives every `run-script` script on a client (manual; 7.26beta1). */
+export const CMR_SCRIPT_POLICIES = ["read", "write", "test", "reboot"] as const;
+
+/** The controller login's own group and its granted policies. */
+export interface CmrCallerPolicy {
+	username: string;
+	group: string;
+	/** Granted policy names; `!name` entries are dropped. */
+	policy: readonly string[];
+}
+
+/**
+ * Read the session user's group policy on the controller, or `undefined` when
+ * it cannot be read (a RADIUS login has no `/user` row). Grounded on
+ * 7.26beta1 over REST and native API: a login with only `read` and `api`
+ * (`!sensitive !policy` too) can read its own `/user` row and `/user/group`.
+ */
+export async function readCmrCallerPolicy(
+	adapter: Pick<ProtocolAdapter, "apiRequest">,
+	username: string,
+): Promise<CmrCallerPolicy | undefined> {
+	const first = async (path: string, name: string) => {
+		const result = await adapter.apiRequest({
+			verb: "print",
+			path,
+			query: [`name=${name}`],
+		});
+		return Array.isArray(result.data)
+			? (result.data[0] as Record<string, string> | undefined)
+			: undefined;
+	};
+	try {
+		const group = (await first("/user", username))?.["group"];
+		if (!group) return undefined;
+		const policy = (await first("/user/group", group))?.["policy"];
+		if (policy === undefined) return undefined;
+		return {
+			username,
+			group,
+			policy: policy
+				.split(",")
+				.map((name) => name.trim())
+				.filter((name) => name.length > 0 && !name.startsWith("!")),
+		};
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * #456: RouterOS does not hold a CMR fleet command to the caller's policy. On
+ * 7.26beta1 `run-script` needs only `read` + `api` on the controller login,
+ * yet the script runs on each client (the controller's own row included) with
+ * {@link CMR_SCRIPT_POLICIES}. A "reader" login wrote and rebooted clients
+ * through it. Warn when the login lacks a policy the command will run with,
+ * so a caller does not take the login for the limit; centrs' own write gate
+ * is the only one.
+ */
+export function cmrCallerPolicyWarning(
+	caller: CmrCallerPolicy,
+	runsWith: readonly string[],
+): Warning | undefined {
+	const missing = runsWith.filter((name) => !caller.policy.includes(name));
+	if (missing.length === 0) return undefined;
+	return {
+		code: "cmr/caller-policy-not-enforced",
+		message: `The controller login \`${caller.username}\` (group \`${caller.group}\`) lacks ${missing.join(", ")}, but CMR runs this on the clients with ${runsWith.join(", ")}. RouterOS does not check the caller's policy here, so the login does not limit what a CMR command can change.`,
+		context: {
+			username: caller.username,
+			group: caller.group,
+			missing,
+			runsWith: [...runsWith],
+		},
+	};
 }

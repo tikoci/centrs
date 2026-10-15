@@ -39,9 +39,21 @@
  *   - `freeze-frame-interval=20ms` brings a trivial call from ~1 s to ~25 ms;
  *     `strategy`/`fail-policy` are pinned and `order` is never sent (it adds
  *     `pending` and policy-`skipped` statuses).
+ *   - The caller's policy is not checked against the script (#456):
+ *     `run-script` needs only `read` + `api` on the controller login, and a
+ *     `!write !reboot` login wrote to and rebooted clients, the controller's
+ *     own row included. The write gate here is the only one; a write run by
+ *     such a login carries `cmr/caller-policy-not-enforced`.
  */
 
-import { assertNotCmrDashboardIl, CMR_RUN_SCRIPT_PATH } from "./core/cmr.ts";
+import {
+	assertNotCmrDashboardIl,
+	CMR_RUN_SCRIPT_PATH,
+	CMR_SCRIPT_POLICIES,
+	type CmrCallerPolicy,
+	cmrCallerPolicyWarning,
+	readCmrCallerPolicy,
+} from "./core/cmr.ts";
 import type {
 	CentrsErrorEnvelope,
 	CentrsSuccessEnvelope,
@@ -184,6 +196,8 @@ export interface CmrController {
 	devices(): Promise<CmrDevice[]>;
 	/** Explain a missing `/cmr/device`; each read is best effort. */
 	absence?(): Promise<CmrAbsence>;
+	/** The login's own group policy; `undefined` when it cannot be read. */
+	callerPolicy?(): Promise<CmrCallerPolicy | undefined>;
 	runScript(
 		call: CmrScriptCall,
 		signal: AbortSignal,
@@ -345,11 +359,20 @@ export async function executeCmr(
 		});
 		const warnings: Warning[] = [...resolved.warnings];
 		if (members.length === 0) {
-			warnings.push({
-				code: "cmr/empty-selection",
-				message: `No CMR device on the controller matches \`${labels}\`. Labels are case-sensitive and RouterOS accepts unknown ones silently.`,
-				context: { labels, inventory: before.length },
-			});
+			const message = `No CMR device on the controller matches \`${labels}\`. Labels are case-sensitive and RouterOS accepts unknown ones silently.`;
+			const context = { labels, inventory: before.length };
+			// #460: RouterOS refuses an empty selection (`no devices selected`);
+			// a write here must not exit 0 on a mistyped label.
+			if (write) {
+				throw new CentrsError({
+					code: "cmr/empty-selection",
+					summary: `${message} Nothing ran: a write-shaped command must select at least one client.`,
+					remediation:
+						"Check the labels with `centrs retrieve <controller> /cmr/device` (`labels`, `auto-labels`), then re-run. A read over the same labels succeeds with a warning instead.",
+					context: { ...context, write: true },
+				});
+			}
+			warnings.push({ code: "cmr/empty-selection", message, context });
 		}
 
 		// 2. Bind: a member whose `ids` changed since S1 was validated as another key.
@@ -371,9 +394,14 @@ export async function executeCmr(
 			}
 		}
 
-		// 3. One write gate, naming the blast radius.
+		// 3. One write gate, naming the blast radius. The login's policy is read
+		// once, best effort: a failed read only loses the warning.
 		const runnable = members.filter((m) => !m.result);
 		if (write && runnable.length > 0) {
+			const caller = await controller.callerPolicy?.().catch(() => undefined);
+			const notEnforced =
+				caller && cmrCallerPolicyWarning(caller, CMR_SCRIPT_POLICIES);
+			if (notEnforced) warnings.push(notEnforced);
 			await confirmCmrWrite(
 				request,
 				signal,
@@ -381,6 +409,7 @@ export async function executeCmr(
 				controllerName,
 				runnable.length,
 				members.length - runnable.length,
+				notEnforced,
 			);
 		}
 
@@ -1106,9 +1135,11 @@ async function confirmCmrWrite(
 	controllerName: string,
 	runnable: number,
 	excluded: number,
+	notEnforced: Warning | undefined,
 ): Promise<void> {
 	if (resolved.yes) return;
 	const scope = `${runnable} CMR client(s) via controller ${controllerName}${excluded > 0 ? ` (${excluded} excluded)` : ""}`;
+	const policyNote = notEnforced ? ` ${notEnforced.message}` : "";
 	if (request.stdinIsTty ?? process.stdin.isTTY) {
 		// The prompt reads stdin and cannot see `signal`, so race it: a cancel at
 		// the prompt returns here and the dispatch loop reports every member
@@ -1119,7 +1150,7 @@ async function confirmCmrWrite(
 		});
 		const confirmed = await Promise.race([
 			(request.confirm ?? promptForWriteConfirmation)(
-				`Run write-shaped \`${resolved.command}\` on ${scope}? Type yes to continue: `,
+				`Run write-shaped \`${resolved.command}\` on ${scope}?${policyNote} Type yes to continue: `,
 			),
 			cancelled,
 		]);
@@ -1127,7 +1158,7 @@ async function confirmCmrWrite(
 	}
 	throw new CentrsError({
 		code: "usage/confirmation-required",
-		summary: `A write-shaped \`${resolved.command}\` would run on ${scope} and needs explicit confirmation.`,
+		summary: `A write-shaped \`${resolved.command}\` would run on ${scope} and needs explicit confirmation.${policyNote}`,
 		remediation:
 			"Pass `--yes` after reviewing the selection, or answer `yes` at the TTY prompt. Clients that failed validation are never sent the command.",
 		context: {
@@ -1135,6 +1166,7 @@ async function confirmCmrWrite(
 			routers: runnable,
 			excluded,
 			controller: controllerName,
+			...(notEnforced ? { callerPolicy: notEnforced.context } : {}),
 		},
 	});
 }
@@ -1205,6 +1237,10 @@ function adapterController(
 				controllerAddress: client?.["controller-address"] || undefined,
 			};
 		},
+		callerPolicy: () =>
+			resolved.auth.username
+				? readCmrCallerPolicy(shared, resolved.auth.username)
+				: Promise.resolve(undefined),
 		close: () => shared.close(),
 	};
 }

@@ -106,8 +106,34 @@ export interface SelectionExpansion {
 	/** Members ordered by record index; literals appended in positional order. */
 	targets: readonly SelectionMember[];
 	warnings: readonly ResolverWarning[];
-	/** True when nothing matched (an empty/unknown selection is not an error). */
+	/** True when nothing matched (an error only for a write; see {@link emptyWriteSelectionError}). */
 	empty: boolean;
+}
+
+/**
+ * An empty selection for a write-shaped fan-out (#460). A read over it is
+ * `ok: true` with the expansion's warning, so a poller over an occasionally
+ * empty group stays quiet. A write is an error, as RouterOS refuses an empty
+ * CMR selection (`no devices selected`): a misspelled group must not look like
+ * a successful bulk write. The code is the expansion's own empty warning.
+ */
+export function emptyWriteSelectionError(
+	expansion: Pick<SelectionExpansion, "warnings">,
+	action: string,
+): CentrsError {
+	const warning = expansion.warnings.findLast(
+		(w) => w.code === "cdb/empty-group" || w.code === "cdb/empty-selection",
+	);
+	return new CentrsError({
+		code:
+			warning?.code === "cdb/empty-group"
+				? "cdb/empty-group"
+				: "cdb/empty-selection",
+		summary: `${warning?.message ?? "The target selection matched no CDB records."} Nothing ran: a write-shaped ${action} must select at least one router.`,
+		remediation:
+			"Check the selector against `centrs devices list` and `centrs devices groups` (groups and `--where` values match as written), then re-run. A read over the same selection succeeds with a warning instead.",
+		context: { ...warning?.context, write: true },
+	});
 }
 
 /** True when a resolved target is the reserved credential-fallback record. */

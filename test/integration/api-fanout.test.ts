@@ -206,6 +206,31 @@ describeFast("api fanout against CHR", () => {
 			expect(f3env.data.targets).toHaveLength(0);
 			expect(f3env.warnings.map((w) => w.code)).toContain("cdb/empty-group");
 
+			// F3b. For a mutating method it is an outer error, even with --yes (#460).
+			const f3b = await run([
+				"api",
+				"-X",
+				"PUT",
+				"--group",
+				"no-such-group",
+				"ip/address",
+				"-f",
+				"address=10.99.0.9/32",
+				"-f",
+				"interface=ether1",
+				"--yes",
+				"--cdb-file",
+				cdb,
+				"--json",
+			]);
+			expect(f3b.exit).toBe(1);
+			const f3bEnvelope = JSON.parse(f3b.err[0] ?? "") as {
+				ok: boolean;
+				error?: { code: string };
+			};
+			expect(f3bEnvelope.ok).toBe(false);
+			expect(f3bEnvelope.error?.code).toBe("cdb/empty-group");
+
 			// F4. A mutating fan-out without `--yes` is rejected, naming the blast radius.
 			const f4 = await run([
 				"api",
