@@ -176,7 +176,13 @@ Notes:
   Text mode renders tips under a `Tips:` footer, distinct from warnings. This
   lossless rule applies to **stdout** only: **stderr** carries progress and
   interactive prompts (discover scan progress, write/ambiguity confirmation) and
-  is exempt — use it sparingly, since most operations are fast.
+  is exempt — use it sparingly, since most operations are fast. In text mode,
+  a single-target command also writes its warnings to stderr, one
+  `warning [<code>]: <message>` line each, so a warning never mixes into the
+  data a pipe reads (#470). `transport/provider-trust` is left out of text because it rides
+  every quickchr run over TLS or SSH; `--json` keeps every warning, and
+  `api --raw` stays a bare payload. Fan-out text is a report, not data, so
+  its warnings stay on stdout.
 - `data` is the only field whose *shape* varies by command. Everything else —
   including `warnings` and `tips` — is invariant in shape; only contents differ.
 - **Shared meta is written once** (#461, #462). A fan-out target's

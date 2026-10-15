@@ -26,6 +26,7 @@ import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
+	printTextWarnings,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -548,10 +549,14 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 		});
 		if (envelope.ok) {
 			console.log(rendered);
-			return 0;
+		} else {
+			console.error(rendered);
 		}
-		console.error(rendered);
-		return 1;
+		// `--raw` is a bare payload by contract; `--json` carries the warnings.
+		if (resolvedFormat === "text" && !parsed.raw) {
+			printTextWarnings(envelope.warnings);
+		}
+		return envelope.ok ? 0 : 1;
 	} catch (error) {
 		const format = inferApiFormat(args, parsed);
 		const tips = isMissingTargetError(error)

@@ -118,6 +118,24 @@ describeFast("--quickchr targets against CHR (#134)", () => {
 			expect(eq1Env.meta.via).toBe("native-api");
 			expect(eq1Env.meta.target.source?.kind).toBe("provider");
 
+			// execute (#470): a successful text run puts the device's answer on
+			// stdout and the envelope's warning on stderr. The CMR run-script
+			// detector is text-based, so a `:put` of the words raises one.
+			const eqWarn = await run([
+				"execute",
+				"--quickchr",
+				name,
+				':put "cmr device run-script"',
+			]);
+			expect(eqWarn.exit).toBe(0);
+			expect(eqWarn.out.join("\n")).toContain("cmr device run-script");
+			expect(eqWarn.out.join("\n")).not.toContain("warning [");
+			expect(eqWarn.err).toContainEqual(
+				expect.stringMatching(
+					/^warning \[cmr\/client-script-not-validated\]: /,
+				),
+			);
+
 			// execute Q1 (#426): an ambient CENTRS_HOST URL must not steer a
 			// quickchr target's transport; the descriptor owns the endpoint.
 			const savedHost = process.env["CENTRS_HOST"];

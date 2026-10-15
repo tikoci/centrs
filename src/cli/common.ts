@@ -6,7 +6,38 @@
  * together.
  */
 
-import { CentrsError } from "../errors.ts";
+import type { Warning } from "../core/envelope.ts";
+import { CentrsError, terminalSafeLine } from "../errors.ts";
+
+/**
+ * Warnings that a single-target text-mode CLI leaves out (#470).
+ * `transport/provider-trust` rides every quickchr run over TLS or SSH, so
+ * printing it would be noise. `--json` keeps every warning.
+ */
+const TEXT_QUIET_WARNING_CODES: readonly string[] = [
+	"transport/provider-trust",
+];
+
+/**
+ * One `warning [<code>]: <message>` line per envelope warning, in the same form
+ * as fan-out text, minus {@link TEXT_QUIET_WARNING_CODES}.
+ */
+export function textWarningLines(warnings: readonly Warning[]): string[] {
+	return warnings
+		.filter((warning) => !TEXT_QUIET_WARNING_CODES.includes(warning.code))
+		.map((warning) =>
+			terminalSafeLine(`warning [${warning.code}]: ${warning.message}`),
+		);
+}
+
+/**
+ * #470: a single-target command in text mode writes its warnings to stderr, so
+ * a warning never mixes into the data a pipe reads. It does so on success and
+ * on failure alike, so a write whose outcome is unknown still says so.
+ */
+export function printTextWarnings(warnings: readonly Warning[]): void {
+	for (const line of textWarningLines(warnings)) console.error(line);
+}
 
 export interface CliCommandOption {
 	flag: string;

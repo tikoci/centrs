@@ -27,6 +27,7 @@ import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
+	printTextWarnings,
 	rejectFlagsAfterSeparator,
 	renderCommandHelp,
 	unknownFlagError,
@@ -406,10 +407,11 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 		});
 		if (envelope.ok) {
 			console.log(rendered);
-			return 0;
+		} else {
+			console.error(rendered);
 		}
-		console.error(rendered);
-		return 1;
+		if (resolvedFormat === "text") printTextWarnings(envelope.warnings);
+		return envelope.ok ? 0 : 1;
 	} catch (error) {
 		// Parse/usage errors land here too: surface them through the same typed
 		// envelope as every other runner (no raw message, no exit code 2).

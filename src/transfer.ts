@@ -1658,13 +1658,6 @@ function renderSuccessText(
 		lines.push(`via: ${envelope.meta.via}`);
 	}
 
-	if (envelope.warnings.length > 0) {
-		lines.push("");
-		for (const warning of envelope.warnings) {
-			lines.push(`warning [${warning.code}]: ${warning.message}`);
-		}
-	}
-
 	return lines.join("\n");
 }
 

@@ -435,3 +435,46 @@ describe("CLI smoke (real subprocess, no network)", () => {
 		expect(envelope.ok).toBe(true);
 	});
 });
+
+// #470: a single-target text run writes envelope warnings to stderr. Port 1 on
+// loopback refuses at once, so the envelope is an error that still carries the
+// request's warnings. The CMR run-script detector is text-based (a false
+// positive "costs only a warning", src/core/cmr.ts), so a `:put` of the words
+// is enough to raise one without a CMR controller.
+describe("text-mode warnings go to stderr (#470, no network)", () => {
+	const closed = [
+		"--host",
+		"127.0.0.1:1",
+		"--username",
+		"a",
+		"--password",
+		"b",
+	];
+	const warningLine = "warning [cmr/client-script-not-validated]:";
+
+	test("execute prints the warning after the error, on stderr", async () => {
+		const res = await runCliProcess({
+			args: ["execute", ...closed, ':put "cmr device run-script"'],
+		});
+		expect(res.exitCode).toBe(1);
+		expect(res.stdoutText).toBe("");
+		expect(res.stderrText).toContain("[transport/connection-refused]");
+		expect(res.stderrText).toContain(warningLine);
+	});
+
+	test("api text prints it; --raw keeps its bare error payload", async () => {
+		const args = ["api", ...closed, "cmr/device/run-script", "-X", "POST"];
+		const text = await runCliProcess({
+			args: [...args, "--yes", "--format", "text"],
+		});
+		expect(text.exitCode).toBe(1);
+		expect(text.stderrText).toContain(warningLine);
+
+		const raw = await runCliProcess({ args: [...args, "--yes", "--raw"] });
+		expect(raw.exitCode).toBe(1);
+		expect(raw.stderrText).not.toContain("warning [");
+		expect((JSON.parse(raw.stderrText) as { code?: string }).code).toBe(
+			"transport/connection-refused",
+		);
+	});
+});

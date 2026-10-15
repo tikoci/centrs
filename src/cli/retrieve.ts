@@ -35,6 +35,7 @@ import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
+	printTextWarnings,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -291,6 +292,7 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 				{ verbose: request.verbose },
 			),
 		);
+		if (resolvedFormat === "text") printTextWarnings(envelope.warnings);
 		return 0;
 	} catch (error) {
 		const format = inferRequestedFormat(args, request);
@@ -383,14 +385,13 @@ async function runRetrieveWaitCli(
 		const envelope = await retrieveWait(request, Bun.env, {
 			signal: controller.signal,
 		});
+		const format =
+			envelope.meta.operation?.request.format ??
+			inferRequestedFormat(args, request);
 		console.log(
-			renderRetrieveEnvelope(
-				envelope,
-				envelope.meta.operation?.request.format ??
-					inferRequestedFormat(args, request),
-				{ verbose: request.verbose },
-			),
+			renderRetrieveEnvelope(envelope, format, { verbose: request.verbose }),
 		);
+		if (format === "text") printTextWarnings(envelope.warnings);
 		return envelope.ok ? 0 : 1;
 	} finally {
 		process.off("SIGINT", onSigint);

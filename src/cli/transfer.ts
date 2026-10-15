@@ -27,6 +27,7 @@ import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
+	printTextWarnings,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -211,6 +212,7 @@ export async function runTransferCli(
 				// codeql[js/clear-text-logging] The envelope carries auth provenance only (`username`, `passwordProvided`, setting sources), never the password; see buildTransferErrorEnvelopeFromResolved.
 				format === "text" ? rendered + formatTipsText(envelope.tips) : rendered,
 			);
+			if (format === "text") printTextWarnings(envelope.warnings);
 			return 1;
 		}
 		// A download to stdout (`local === "-"`) has already streamed the file bytes
@@ -221,6 +223,7 @@ export async function runTransferCli(
 		} else {
 			console.log(rendered);
 		}
+		if (format === "text") printTextWarnings(envelope.warnings);
 		return 0;
 	} catch (error) {
 		// Drop credential fields before any renderer touches the request: error

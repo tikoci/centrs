@@ -721,13 +721,6 @@ function renderRetrieveSuccessText(
 		lines.push(JSON.stringify(envelope.data, null, 2));
 	}
 
-	if (envelope.warnings.length > 0) {
-		lines.push("");
-		for (const warning of envelope.warnings) {
-			lines.push(`warning [${warning.code}]: ${warning.message}`);
-		}
-	}
-
 	if (envelope.tips.length > 0) {
 		lines.push("");
 		lines.push("Tips:");
