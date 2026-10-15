@@ -74,7 +74,7 @@ function idOf(data: unknown): string {
 }
 
 describeFast("api against CHR (rest-api)", () => {
-	test("runs rest-api examples 1-22", async () => {
+	test("runs rest-api examples 1-23", async () => {
 		const started = await startIntegrationChr();
 		const chr = started.chr;
 		try {
@@ -522,6 +522,19 @@ describeFast("api against CHR (rest-api)", () => {
 				expect(payload).not.toHaveProperty("ok");
 			}
 
+			// 23. POST /console/inspect is a read: non-TTY, no --yes (#458).
+			const inspected = await apiEnvelope({
+				...base,
+				endpoint: "console/inspect",
+				method: "POST",
+				fields: { request: "child", path: "system,identity" },
+				stdinIsTty: false,
+			});
+			expect(inspected.ok).toBe(true);
+			if (inspected.ok) {
+				expect(JSON.stringify(inspected.data)).toContain('"print"');
+			}
+
 			// Clean up the rows added above.
 			for (const cleanupId of [dataId, inputId]) {
 				await apiEnvelope({
@@ -540,7 +553,7 @@ describeFast("api against CHR (rest-api)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [...exampleIds(21), "16b", "16c", "16d", "16e"],
+				exampleIds: [...exampleIds(21), "16b", "16c", "16d", "16e", "23"],
 			});
 		} finally {
 			await chr.destroy();

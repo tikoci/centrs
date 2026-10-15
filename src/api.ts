@@ -1093,7 +1093,7 @@ export function mapMethodToVerb(method: ApiMethod): ApiVerb {
 
 /**
  * Read-only **iff** the method is `GET`, the terminal path verb is
- * `print`/`get`/`listen`, or the path is exactly `/console/inspect`. Everything
+ * `print`/`get`/`listen`, or it is a POST to exactly `/console/inspect`. Everything
  * else is a write needing confirmation. Keyed
  * on the verb/method, not the wire HTTP method — a `POST …/print` paged read does
  * not prompt; `--listen` never relaxes the gate (a streaming-but-mutating
@@ -1105,8 +1105,9 @@ export function isApiMutating(method: ApiMethod, path: string): boolean {
 	}
 	// `/console/inspect` describes the command tree and parses input; it never
 	// runs it, so a POST to it (the only way to pass `request=`) is a read
-	// (#458). Exact path only: an abbreviation stays a write.
-	if (pathTokens(path).join("/") === "console/inspect") {
+	// (#458). POST and the exact path only: PUT/PATCH/DELETE map to
+	// add/set/remove, and an abbreviation stays a write.
+	if (method === "POST" && pathTokens(path).join("/") === "console/inspect") {
 		return false;
 	}
 	const terminal = pathTokens(path).at(-1);

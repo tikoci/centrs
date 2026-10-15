@@ -170,7 +170,7 @@ the suspect.
 ## Write confirmation
 
 Read-only **iff** the method is `GET`, or the endpoint terminal verb is
-`print`/`get`, or it is `listen`, or the endpoint is exactly `/console/inspect`
+`print`/`get`, or it is `listen`, or it is a POST to exactly `/console/inspect`
 (it describes and parses commands, never runs them; #458). Everything else is
 treated as a write and needs confirmation (`--yes` non-interactively, or a TTY
 prompt) → otherwise `usage/confirmation-required`. Consequences:

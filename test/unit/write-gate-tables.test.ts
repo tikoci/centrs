@@ -114,6 +114,25 @@ describe("script directives: read or write (#458)", () => {
 		expect(writes("/export file-name=x")).toBe(true);
 	});
 
+	test("the absolute `/name` spelling of a root directive is the directive", () => {
+		expect(writes("/serialize to=json value=1")).toBe(false);
+		expect(writes("/delay 1s")).toBe(false);
+		expect(writes("/put [/system/identity/get name]")).toBe(false);
+		// Its body and redirect rules still apply.
+		expect(writes("/put [/system/reboot]")).toBe(true);
+		expect(writes("/serialize to=json value=1 file-name=x")).toBe(true);
+		// A root write keeps its write class in either spelling.
+		expect(writes("/global g 1")).toBe(true);
+		expect(writes("/execute {/system/reboot}")).toBe(true);
+	});
+
+	test("a bare directive word keeps the menu-verb rule (it may be relative)", () => {
+		// After `/ip address`, a bare word names a menu command, so the gate
+		// cannot tell a root directive from a relative command. Fails closed.
+		expect(writes("delay 1s")).toBe(true);
+		expect(writes("/ip address\nserialize to=json value=1")).toBe(true);
+	});
+
 	test("a write in a control-flow body is still a write", () => {
 		// RouterOS runs only a `{…}` block in a script-typed argument (a quoted
 		// string is refused, CHR 7.24.5 and 7.26beta1), and each block is checked.
@@ -164,7 +183,7 @@ const FLEET_COMMANDS: readonly string[] = [
 
 describe("CMR fleet commands are always writes (#456)", () => {
 	for (const command of FLEET_COMMANDS) {
-		test(`execute: ${command.replace("\n", "\\n")}`, () => {
+		test(`execute: ${command.replaceAll("\n", "\\n")}`, () => {
 			expect(writes(command)).toBe(true);
 		});
 	}
@@ -189,10 +208,16 @@ describe("CMR fleet commands are always writes (#456)", () => {
 	});
 });
 
-describe("api: /console/inspect is a read whatever the method (#458)", () => {
+describe("api: POST /console/inspect is a read (#458)", () => {
 	test("POST to the exact path is a read", () => {
 		expect(isApiMutating("POST", "/console/inspect")).toBe(false);
 		expect(isApiMutating("POST", "console/inspect")).toBe(false);
+	});
+
+	test("PUT, PATCH and DELETE (add/set/remove) stay writes", () => {
+		for (const method of ["PUT", "PATCH", "DELETE"] as const) {
+			expect(isApiMutating(method, "/console/inspect")).toBe(true);
+		}
 	});
 
 	test("an abbreviation or a deeper path stays a write", () => {

@@ -332,6 +332,19 @@ function commandWords(head: string, following: readonly string[]): string[] {
 	const words: string[] = [];
 	const headWord = trimGroupingPunctuation(head);
 	if (headWord.startsWith(":")) return [headWord];
+	// `/serialize …` is the root command `:serialize`: at statement start the
+	// sigil is optional and `/` binds the root vocabulary (CHR 7.23.2, see
+	// `src/explain/symbols.ts`). Only the absolute one-segment form is read
+	// this way. A bare `delay` may be a relative menu command after earlier
+	// navigation, so it keeps the menu-verb rule and fails closed.
+	const root = /^\/([A-Za-z0-9-]+)$/.exec(headWord)?.[1]?.toLowerCase();
+	if (
+		root !== undefined &&
+		READ_ONLY_SCRIPT_DIRECTIVES.has(`:${root}`) &&
+		!isKnownMenuPath([root])
+	) {
+		return [`:${root}`];
+	}
 	words.push(...headWord.split("/").filter(Boolean));
 	if (headWord !== head) return words;
 	for (const token of following) {
