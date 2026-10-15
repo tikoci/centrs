@@ -260,6 +260,33 @@ describe("handleExecute (offline gates)", () => {
 		}
 	});
 
+	test("CMR fleet commands are writes to an mcp=ro controller (#456)", async () => {
+		// RouterOS lets a read+api controller login run them, so this refusal is
+		// the only barrier.
+		const { path, cleanup } = await makeMcpTestCdb([
+			{ target: "ctl", comment: "mcp=ro" },
+		]);
+		try {
+			for (const command of [
+				'/cmr/device/run-script numbers=0 script=":put 1"',
+				"/cmr/device/reboot numbers=0",
+				"/cmr device upgrade labels=all",
+				"/cmr/upgrade/trigger",
+				":put [/cmr/dev/reb numbers=0]",
+			]) {
+				const env = await handleExecute(
+					{ target: "ctl", command, confirm: true },
+					config(path),
+				);
+				expect(env.ok ? undefined : env.error.code).toBe(
+					"cdb/write-not-permitted",
+				);
+			}
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("an mcp=rw write without confirm is refused as confirmation-required", async () => {
 		const { path, cleanup } = await makeMcpTestCdb([
 			{ target: "rw-box", comment: "mcp=rw" },

@@ -1092,14 +1092,21 @@ export function mapMethodToVerb(method: ApiMethod): ApiVerb {
 }
 
 /**
- * Read-only **iff** the method is `GET`, or the terminal path verb is
- * `print`/`get`/`listen`. Everything else is a write needing confirmation. Keyed
+ * Read-only **iff** the method is `GET`, the terminal path verb is
+ * `print`/`get`/`listen`, or the path is exactly `/console/inspect`. Everything
+ * else is a write needing confirmation. Keyed
  * on the verb/method, not the wire HTTP method — a `POST …/print` paged read does
  * not prompt; `--listen` never relaxes the gate (a streaming-but-mutating
  * `/system/license/renew` still confirms). See `commands/api/README.md`.
  */
 export function isApiMutating(method: ApiMethod, path: string): boolean {
 	if (method === "GET") {
+		return false;
+	}
+	// `/console/inspect` describes the command tree and parses input; it never
+	// runs it, so a POST to it (the only way to pass `request=`) is a read
+	// (#458). Exact path only: an abbreviation stays a write.
+	if (pathTokens(path).join("/") === "console/inspect") {
 		return false;
 	}
 	const terminal = pathTokens(path).at(-1);
