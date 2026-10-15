@@ -36,6 +36,22 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Changed
 
+- Shared meta is written once (#461, #462). In a fan-out envelope, each
+  target's `meta.settings` keeps only the keys whose source differs from the
+  outer `meta.settings`. Its `meta.operation` drops `request` and `auth` when
+  they equal the outer operation's. When every target agrees on `auth`, or on
+  a setting the outer `meta.settings` lacks (`api` and `transfer` had none), it
+  moves to the outer envelope. An `execute --cmr` member no longer
+  repeats the controller in `meta.target.cmr`, because the outer `meta.target`
+  is the controller. A 3-client `execute --cmr` result went from 9.8 KB to
+  5.4 KB. `expandFanoutTarget()` returns a target's full meta. A
+  `retrieve --follow` frame or notice line now carries only `meta.operation`;
+  `synced` and the summary still carry the full meta. A frame line went from
+  about 1.15 KB to 270 bytes.
+- `retrieve --follow` frames carry `observedAt` (ISO 8601, host clock): when
+  centrs received the reply the frame is built from (#462).
+- With `--query`, a removal the follow's sweep finds is `source: "sweep"`,
+  as documented; it was labelled `membership` (#462).
 - An empty selection is an error for a write: `execute`, mutating `api` and
   `transfer upload|remove|mkdir|copy` fan-outs (`cdb/empty-group`,
   `cdb/empty-selection`) and `execute --cmr` (`cmr/empty-selection`) now exit 1

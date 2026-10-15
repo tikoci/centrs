@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { api } from "../../src/api.ts";
 import { createProtocolAdapter } from "../../src/protocols/adapter.ts";
 import {
-	type RetrieveEnvelope,
+	type RetrieveFollowLine,
 	type RetrieveRequest,
 	retrieve,
 } from "../../src/retrieve.ts";
@@ -26,7 +26,7 @@ async function follow(
 	afterSynced?: () => Promise<void>,
 	onListening?: () => void,
 ) {
-	const out: RetrieveEnvelope[] = [];
+	const out: RetrieveFollowLine[] = [];
 	let work: Promise<void> | undefined;
 	for await (const envelope of retrieveFollow(request, Bun.env, {
 		onListening,
@@ -40,7 +40,7 @@ async function follow(
 	return out;
 }
 
-function frames(out: RetrieveEnvelope[]) {
+function frames(out: RetrieveFollowLine[]) {
 	return out.flatMap((envelope) => {
 		const stream = envelope.meta.operation?.stream;
 		return stream?.kind === "frame" && envelope.ok
@@ -184,7 +184,7 @@ describeFast("filtered retrieve --follow against CHR", () => {
 					id: timed,
 					change: "removed",
 					phase: "live",
-					source: "membership",
+					source: "sweep",
 				}),
 			]);
 			expect(
@@ -221,7 +221,7 @@ describeFast("filtered retrieve --follow against CHR", () => {
 					.map((line) => JSON.parse(line))
 					.some((envelope) => envelope.meta.operation.stream.kind === "synced"),
 			).toBe(true);
-			const bad: RetrieveEnvelope[] = [];
+			const bad: RetrieveFollowLine[] = [];
 			for await (const envelope of retrieveFollow({
 				...base,
 				path: PATH,

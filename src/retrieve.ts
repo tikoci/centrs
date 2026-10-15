@@ -5,6 +5,7 @@ import type {
 	CommonSettingsMeta,
 	SettingSource as CoreSettingSource,
 	EnvelopeValidationMeta,
+	StreamLineEnvelope,
 	ValidationTrace,
 } from "./core/envelope.ts";
 import { notReachedReason } from "./core/envelope.ts";
@@ -230,7 +231,9 @@ export interface RetrieveSampleSummary {
  * (`commands/retrieve/README.md` → Follow, Sample). A `frame` is one row
  * change: `upsert` carries the latest full row, `removed` carries
  * `data: null`; `id` is the row identity even when the projection leaves `.id`
- * out of `data`. A `sample` is one complete read; `at` is when it was sent
+ * out of `data`. `observedAt` is when centrs received the reply the frame is
+ * built from (host clock, ISO 8601; a replayed bootstrap change keeps its
+ * arrival time). A `sample` is one complete read; `at` is when it was sent
  * (host clock) and `readMs` how long it took. The two summaries are told apart
  * by their counts (`frames` vs `samples`).
  */
@@ -239,6 +242,7 @@ export type RetrieveStreamMeta =
 	| {
 			kind: "frame";
 			index: number;
+			observedAt: string;
 			phase: "snapshot" | "live";
 			change: "upsert" | "removed";
 			id: string;
@@ -264,6 +268,20 @@ export interface RetrieveOperationMeta {
 }
 
 export type RetrieveEnvelope = CentrsEnvelope<unknown, RetrieveOperationMeta>;
+
+/**
+ * A `--follow` frame or notice line: only its own `meta.operation` (#462). The
+ * rest of the meta is on the stream's `synced` and `summary` lines.
+ */
+export type RetrieveStreamLineEnvelope = StreamLineEnvelope<
+	unknown,
+	Pick<RetrieveOperationMeta, "kind" | "objectCount"> & {
+		stream: RetrieveStreamMeta;
+	}
+>;
+
+/** One `retrieve --follow` line: a full envelope or a frame/notice line. */
+export type RetrieveFollowLine = RetrieveEnvelope | RetrieveStreamLineEnvelope;
 export type RetrieveSuccessEnvelope = CentrsSuccessEnvelope<
 	unknown,
 	RetrieveOperationMeta
@@ -1443,6 +1461,18 @@ function resolveProtocol(
 	}
 
 	return via as ResolvedSetting<RouterOsProtocol>;
+}
+
+/**
+ * The output format a request resolves to (config < env < CLI; the CDB never
+ * sets it). The `--follow` CLI needs it before the first line, because frame
+ * lines carry no `meta.operation.request` (#462).
+ */
+export async function resolveRetrieveOutputFormat(
+	request: RetrieveRequest,
+	env: Record<string, string | undefined> = Bun.env,
+): Promise<RetrieveOutputFormat> {
+	return resolveFormat(request, env, await loadEnvFileDefaults(env)).value;
 }
 
 function resolveFormat(

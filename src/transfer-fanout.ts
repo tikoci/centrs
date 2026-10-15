@@ -96,6 +96,8 @@ export interface TransferFanoutOperationMeta {
 	concurrency: number;
 	summary: FanoutSummary;
 	request: TransferFanoutRequestSummary;
+	/** Hoisted from the targets when every target used the same login (#461). */
+	auth?: { username?: string; passwordProvided: boolean };
 	selection: TransferSelectionSummary;
 }
 

@@ -17,7 +17,7 @@ import {
 	SentenceReader,
 } from "../../src/protocols/native-api.ts";
 import {
-	type RetrieveEnvelope,
+	type RetrieveFollowLine,
 	type RetrieveRequest,
 	retrieve,
 } from "../../src/retrieve.ts";
@@ -286,19 +286,19 @@ function request(
 }
 
 type Stream = NonNullable<
-	NonNullable<RetrieveEnvelope["meta"]["operation"]>["stream"]
+	NonNullable<RetrieveFollowLine["meta"]["operation"]>["stream"]
 >;
 
-function dataOf(envelope: RetrieveEnvelope | undefined): unknown {
+function dataOf(envelope: RetrieveFollowLine | undefined): unknown {
 	return envelope?.ok ? envelope.data : undefined;
 }
 
-function streamOf(envelope: RetrieveEnvelope): Stream | undefined {
+function streamOf(envelope: RetrieveFollowLine): Stream | undefined {
 	return envelope.meta.operation?.stream;
 }
 
 /** `phase change id source` for frames, `synced:N` and `summary:<reason>` markers. */
-function shape(envelope: RetrieveEnvelope): string {
+function shape(envelope: RetrieveFollowLine): string {
 	const stream = streamOf(envelope);
 	switch (stream?.kind) {
 		case "frame":
@@ -325,8 +325,8 @@ async function follow(
 		signal?: AbortSignal;
 		bufferLimit?: number;
 	} = {},
-): Promise<RetrieveEnvelope[]> {
-	const out: RetrieveEnvelope[] = [];
+): Promise<RetrieveFollowLine[]> {
+	const out: RetrieveFollowLine[] = [];
 	for await (const envelope of retrieveFollow(req, ENV, {
 		signal: hooks.signal,
 		bufferLimit: hooks.bufferLimit,
@@ -377,6 +377,72 @@ describe("retrieveFollow bootstrap (A1)", () => {
 			changes: 0,
 			synced: true,
 		});
+	});
+
+	test("frames and notices carry only their stream meta; synced and summary carry the full meta (#462)", async () => {
+		const router = fakeRouter();
+		const out = await follow(
+			request(router, { duration: "300ms", sweep: 0 }),
+			{},
+		);
+		expect(out.map(shape)).toEqual([
+			"notice",
+			"snapshot upsert *1 print",
+			"snapshot upsert *2 print",
+			"synced:2",
+			"summary:duration-elapsed",
+		]);
+		const [notice, frame, , synced, summary] = out;
+		expect(notice?.meta).toEqual({
+			operation: { kind: "data", objectCount: 0, stream: { kind: "notice" } },
+		});
+		expect(Object.keys(frame?.meta ?? {})).toEqual(["operation"]);
+		expect(frame?.meta.operation).toEqual({
+			kind: "data",
+			objectCount: 1,
+			stream: {
+				kind: "frame",
+				index: 1,
+				observedAt: expect.any(String),
+				phase: "snapshot",
+				change: "upsert",
+				id: "*1",
+				source: "print",
+			},
+		});
+		for (const full of [synced, summary]) {
+			expect(full?.meta).toMatchObject({
+				target: expect.any(Object),
+				via: "native-api",
+				settings: expect.any(Object),
+				validation: expect.any(Object),
+				operation: { request: expect.any(Object), auth: expect.any(Object) },
+			});
+		}
+	});
+
+	test("observedAt is when the reply arrived, not when the frame was read (#462)", async () => {
+		const router = fakeRouter();
+		const req = request(router, { count: 1, duration: "5s", sweep: 0 });
+		let changedAt = 0;
+		let readAt = 0;
+		let observedAt = "";
+		for await (const envelope of retrieveFollow(req, ENV)) {
+			const stream = streamOf(envelope);
+			if (stream?.kind === "synced") {
+				changedAt = Date.now();
+				router.set("*3", { address: "192.0.2.3/24" });
+				// A slow consumer: the change waits in the queue meanwhile.
+				await Bun.sleep(150);
+			}
+			if (stream?.kind === "frame" && stream.phase === "live") {
+				readAt = Date.now();
+				observedAt = stream.observedAt;
+			}
+		}
+		const observed = Date.parse(observedAt);
+		expect(observed).toBeGreaterThanOrEqual(changedAt);
+		expect(readAt - observed).toBeGreaterThanOrEqual(100);
 	});
 
 	test("live changes count toward --count; snapshot frames never do", async () => {
@@ -464,7 +530,7 @@ describe("retrieveFollow sweep", () => {
 		expect(shapes).toContain("live upsert *9 listen");
 		const last = out.at(-1);
 		expect(last?.ok).toBe(false);
-		expect(streamOf(last as RetrieveEnvelope)).toMatchObject({
+		expect(streamOf(last as RetrieveFollowLine)).toMatchObject({
 			kind: "summary",
 			stopReason: "routeros-error",
 			changes: 1,
@@ -474,7 +540,7 @@ describe("retrieveFollow sweep", () => {
 	test("--sweep 0 sends no sweep and leads with the follow-sweep-off notice", async () => {
 		const router = fakeRouter();
 		const out = await follow(request(router, { duration: "300ms", sweep: 0 }));
-		expect(shape(out[0] as RetrieveEnvelope)).toBe("notice");
+		expect(shape(out[0] as RetrieveFollowLine)).toBe("notice");
 		expect(out[0]?.tips.map((tip) => tip.code)).toEqual([
 			"tip/follow-sweep-off",
 		]);
@@ -530,7 +596,7 @@ describe("retrieveFollow projection and bounds", () => {
 			afterSynced: () => controller.abort(),
 		});
 		expect(out.at(-1)?.ok).toBe(true);
-		expect(shape(out.at(-1) as RetrieveEnvelope)).toBe("summary:interrupted");
+		expect(shape(out.at(-1) as RetrieveFollowLine)).toBe("summary:interrupted");
 	});
 	test("an abort mid-replay ends at once: no rest of the batch, no synced", async () => {
 		const router = fakeRouter({
@@ -541,7 +607,7 @@ describe("retrieveFollow projection and bounds", () => {
 			},
 		});
 		const controller = new AbortController();
-		const out: RetrieveEnvelope[] = [];
+		const out: RetrieveFollowLine[] = [];
 		for await (const envelope of retrieveFollow(
 			request(router, { duration: "5s", sweep: 0 }),
 			ENV,
@@ -565,7 +631,7 @@ describe("retrieveFollow projection and bounds", () => {
 			router.set(`*${n}`, { address: `192.0.2.${n}/24` }, false);
 		}
 		const controller = new AbortController();
-		const out: RetrieveEnvelope[] = [];
+		const out: RetrieveFollowLine[] = [];
 		for await (const envelope of retrieveFollow(
 			request(router, { duration: "5s", sweep: "50ms" }),
 			ENV,
@@ -722,7 +788,9 @@ describe("retrieveFollow filtered membership", () => {
 					router.set("*1", { address: "192.0.2.1/24", comment: "out" }, false),
 			},
 		);
-		expect(out.map(shape)).toContain("live removed *1 membership");
+		// The sweep found the exit, so the frame says sweep, not membership (#462).
+		expect(out.map(shape)).toContain("live removed *1 sweep");
+		expect(out.map(shape)).not.toContain("live removed *1 membership");
 		const dead = await follow(
 			request(router, {
 				query: "comment=old",
@@ -758,7 +826,7 @@ describe("retrieveFollow filtered membership", () => {
 			},
 		});
 		const controller = new AbortController();
-		const out: RetrieveEnvelope[] = [];
+		const out: RetrieveFollowLine[] = [];
 		for await (const envelope of retrieveFollow(
 			request(router, { query: "comment=in", sweep: 0, duration: "2s" }),
 			ENV,
@@ -781,7 +849,7 @@ describe("retrieveFollow filtered membership", () => {
 				r.set("*2", { address: "192.0.2.2/24", comment: "in" });
 			},
 		});
-		const out: RetrieveEnvelope[] = [];
+		const out: RetrieveFollowLine[] = [];
 		let paused = false;
 		for await (const envelope of retrieveFollow(
 			request(router, { query: "comment=in", sweep: 0, duration: "300ms" }),

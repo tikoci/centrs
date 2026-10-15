@@ -3,7 +3,10 @@ import {
 	createProtocolAdapter,
 	type ProtocolAdapter,
 } from "../../src/protocols/adapter.ts";
-import type { RetrieveEnvelope, RetrieveRequest } from "../../src/retrieve.ts";
+import type {
+	RetrieveFollowLine,
+	RetrieveRequest,
+} from "../../src/retrieve.ts";
 import { retrieveFollow } from "../../src/retrieve-follow.ts";
 import {
 	isChrIntegrationEnabled,
@@ -25,14 +28,16 @@ import { runCliProcess } from "./cli-process.ts";
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
 
 type Stream = NonNullable<
-	NonNullable<RetrieveEnvelope["meta"]["operation"]>["stream"]
+	NonNullable<RetrieveFollowLine["meta"]["operation"]>["stream"]
 >;
 
-function streamOf(envelope: RetrieveEnvelope | undefined): Stream | undefined {
+function streamOf(
+	envelope: RetrieveFollowLine | undefined,
+): Stream | undefined {
 	return envelope?.meta.operation?.stream;
 }
 
-function frames(out: readonly RetrieveEnvelope[]) {
+function frames(out: readonly RetrieveFollowLine[]) {
 	return out.flatMap((envelope) => {
 		const stream = streamOf(envelope);
 		return stream?.kind === "frame" && envelope.ok
@@ -41,7 +46,7 @@ function frames(out: readonly RetrieveEnvelope[]) {
 	});
 }
 
-function summaryOf(out: readonly RetrieveEnvelope[]) {
+function summaryOf(out: readonly RetrieveFollowLine[]) {
 	const stream = streamOf(out.at(-1));
 	return stream?.kind === "summary" && "frames" in stream ? stream : undefined;
 }
@@ -55,10 +60,10 @@ async function follow(
 	hooks: {
 		afterSynced?: () => Promise<void> | void;
 		onListening?: () => void;
-		until?: (envelope: RetrieveEnvelope) => boolean;
+		until?: (envelope: RetrieveFollowLine) => boolean;
 	} = {},
-): Promise<RetrieveEnvelope[]> {
-	const out: RetrieveEnvelope[] = [];
+): Promise<RetrieveFollowLine[]> {
+	const out: RetrieveFollowLine[] = [];
 	const pendingHooks: Promise<void>[] = [];
 	for await (const envelope of retrieveFollow(request, Bun.env, {
 		onListening: hooks.onListening,
@@ -138,9 +143,19 @@ describeFast("retrieve --follow against CHR (native-api)", () => {
 					(f) =>
 						f.phase === "snapshot" &&
 						f.source === "print" &&
-						/^\*[0-9A-F]+$/i.test(f.id),
+						/^\*[0-9A-F]+$/i.test(f.id) &&
+						!Number.isNaN(Date.parse(f.observedAt)),
 				),
 			).toBe(true);
+			// #462: frames carry only their stream meta; synced and summary the full meta.
+			for (const envelope of fl1) {
+				const kind = streamOf(envelope)?.kind;
+				expect(Object.keys(envelope.meta)).toEqual(
+					kind === "frame"
+						? ["operation"]
+						: expect.arrayContaining(["target", "via", "settings"]),
+				);
+			}
 			expect(fl1.filter((e) => streamOf(e)?.kind === "synced")).toHaveLength(1);
 			expect(summaryOf(fl1)).toMatchObject({
 				stopReason: "duration-elapsed",

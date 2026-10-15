@@ -262,11 +262,17 @@ target only: a fan-out selector fails `usage/fanout-not-supported`. Follow is
 filtered with the same `--query`/`--filter` grammar as a one-shot read (#397).
 
 **What each line means.** Every line is one envelope; read
-`meta.operation.stream`:
+`meta.operation.stream`. Only `synced` and `summary` carry the full `meta`
+(target, settings, validation, request, auth). A `frame` or `notice` line
+carries only `meta.operation` (`kind`, `objectCount`, `stream`), because the
+rest is the same on every line. An error line is a full error envelope: the
+one line of a follow that fails before it starts (resolution, validation, a
+non-followable menu, a non-native transport), and a failed `summary`
+([constitution](../../docs/CONSTITUTION.md#result-envelope)).
 
 | `kind` | When | `data` | Fields |
 | ------ | ---- | ------ | ------ |
-| `frame` | One row change | the row (`upsert`), `null` (`removed`) | `index`, `phase` (`snapshot`/`live`), `change` (`upsert`/`removed`), `id`, `source` (`print`/`listen`/`sweep`/`membership`) |
+| `frame` | One row change | the row (`upsert`), `null` (`removed`) | `index`, `observedAt`, `phase` (`snapshot`/`live`), `change` (`upsert`/`removed`), `id`, `source` (`print`/`listen`/`sweep`/`membership`) |
 | `synced` | Once, after the snapshot | `null` | `rows`: rows held at that point |
 | `notice` | First, only when there is advice | `null` | — (`tips` carries it) |
 | `summary` | Last, exactly once | the counts | `stopReason`, `frames`, `snapshot`, `changes`, `sweeps`, `synced`, `durationMs` |
@@ -279,6 +285,11 @@ filtered with the same `--query`/`--filter` grammar as a one-shot read (#397).
   order resurrects deleted rows (#396 round 3). `synced` means the bootstrap
   was processed. It is not an atomic snapshot, a full event history, or
   routing convergence.
+- **`observedAt`** (ISO 8601, host clock) is when centrs received the reply
+  the frame is built from: the `listen` change, the snapshot row, the
+  membership read or the sweep. A bootstrap change replayed after the
+  snapshot keeps its arrival time, so `observedAt` is not ordered by `index`.
+  A slow reader does not move it.
 - **`upsert`** carries the latest full row; replace what you hold for `id`.
   **`removed`** carries `data: null`; drop `id`. The row identity is always
   `meta.operation.stream.id`, even when `--attributes` leaves `.id` out of
@@ -320,7 +331,8 @@ filtered with the same `--query`/`--filter` grammar as a one-shot read (#397).
   indefinitely or postpone the first sweep and live `--count`. This may
   coalesce more changes than unfiltered A1 replay.
   The filtered sweep also detects silent exits from a predicate (e.g. a
-  decreasing address-list `timeout`). It does not discover silent entries or
+  decreasing address-list `timeout`), reported as `removed` with
+  `source: "sweep"`. It does not discover silent entries or
   repair silent field updates: use `--sample` for such state. With `--sweep 0`,
   silent exits remain held until a listen notification arrives.
 - **Projection.** `--attribute(s)` projects `data`; centrs still asks RouterOS

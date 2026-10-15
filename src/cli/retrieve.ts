@@ -21,6 +21,7 @@ import {
 	renderRetrieveEnvelope,
 	renderRetrieveFanoutEnvelope,
 	renderRetrieveStreamLine,
+	resolveRetrieveOutputFormat,
 	retrieve,
 	retrieveFanout,
 	retrieveFollow,
@@ -347,7 +348,12 @@ async function runRetrieveStreamCli(
 	request: RetrieveCliArgs,
 	args: readonly string[],
 ): Promise<number> {
-	const format = inferRequestedFormat(args, request);
+	// Resolved once, up front: a config-file `CENTRS_FORMAT` is not in `args`,
+	// and follow frame lines carry no request (#462). An invalid format is
+	// reported by the stream's own error line, rendered as the args ask.
+	const format = await resolveRetrieveOutputFormat(request, Bun.env).catch(() =>
+		inferRequestedFormat(args, request),
+	);
 	const controller = new AbortController();
 	const onSigint = (): void => controller.abort();
 	process.on("SIGINT", onSigint);
@@ -357,9 +363,7 @@ async function runRetrieveStreamCli(
 		for await (const envelope of stream(request, Bun.env, {
 			signal: controller.signal,
 		})) {
-			// A config-file `CENTRS_FORMAT` is known only after resolution.
-			const resolvedFormat = envelope.meta.operation?.request.format ?? format;
-			console.log(renderRetrieveStreamLine(envelope, resolvedFormat));
+			console.log(renderRetrieveStreamLine(envelope, format));
 			if (!envelope.ok) exitCode = 1;
 		}
 	} finally {

@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { CentrsEnvelope } from "../../src/core/envelope.ts";
+import type { CentrsEnvelope, SettingSource } from "../../src/core/envelope.ts";
 import {
 	buildFanoutEnvelope,
 	buildFanoutResolveFailure,
 	commonVia,
+	compactFanoutTargets,
+	expandFanoutTarget,
 	FANOUT_CONCURRENCY_DEFAULTS,
 	FANOUT_MAX_RETRIES,
 	fanoutBackoffMs,
@@ -249,9 +251,135 @@ describe("buildFanoutEnvelope", () => {
 		});
 		expect(envelope.ok).toBe(true);
 		expect(envelope.data.summary).toEqual({ total: 1, ok: 1, failed: 0 });
-		expect(envelope.data.targets).toBe(targets);
+		expect<unknown>(envelope.data.targets).toEqual(targets);
 		expect(envelope.meta.operation).toEqual({ kind: "fanout", count: 1 });
 		expect(envelope.meta.via).toBe("rest-api");
+	});
+});
+
+describe("compactFanoutTargets (#461)", () => {
+	const cli = { kind: "cli" as const, key: "via" };
+	const cdb = { kind: "cdb" as const, key: "host" };
+	const request = { command: "/system/identity/print" };
+	const auth = { username: "admin", passwordProvided: true };
+	const member = (
+		host: SettingSource,
+		op: Record<string, unknown> | undefined,
+	): CentrsEnvelope => ({
+		ok: true,
+		data: { n: 1 },
+		warnings: [],
+		tips: [],
+		meta: {
+			target: { identity: "r" },
+			via: "rest-api",
+			settings: { via: cli, host },
+			...(op ? { operation: op } : {}),
+		},
+	});
+
+	test("keeps only the settings, request and auth that differ from the outer ones", () => {
+		const targets = [
+			member(cli, { kind: "execute", objectCount: 1, request, auth }),
+			member(cdb, {
+				kind: "execute",
+				objectCount: 1,
+				request: { command: "/other" },
+				auth,
+			}),
+		];
+		const { operation, targets: compact } = compactFanoutTargets(
+			{ via: cli, host: cli },
+			{ kind: "fanout", request },
+			targets,
+		);
+		expect<unknown>(operation).toEqual({ kind: "fanout", request, auth });
+		expect(compact[0]?.meta.settings).toEqual({});
+		expect(compact[0]?.meta.operation).toEqual({
+			kind: "execute",
+			objectCount: 1,
+		});
+		expect(compact[1]?.meta.settings).toEqual({ host: cdb });
+		expect(compact[1]?.meta.operation).toEqual({
+			kind: "execute",
+			objectCount: 1,
+			request: { command: "/other" },
+		});
+	});
+
+	test("leaves auth on each target when the targets disagree; hoists agreed settings the outer lacks", () => {
+		const other = { username: "ops", passwordProvided: true };
+		const { settings, operation, targets } = compactFanoutTargets(
+			{},
+			{ request },
+			[
+				member(cli, { request, auth }),
+				member(cli, { request, auth: other }),
+				// A resolve failure has no operation and does not block the vote.
+				member(cli, undefined),
+			],
+		);
+		expect(operation).toEqual({ request });
+		expect(settings).toEqual({ via: cli, host: cli });
+		expect(targets.map((t) => t.meta.settings)).toEqual([{}, {}, {}]);
+		expect(targets.map((t) => t.meta.operation)).toEqual([
+			{ auth },
+			{ auth: other },
+			undefined,
+		]);
+	});
+
+	test("expandFanoutTarget restores every target's full meta", () => {
+		const settings = { via: cli, host: cli };
+		const targets = [
+			member(cli, { kind: "execute", objectCount: 1, request, auth }),
+			member(cdb, { kind: "execute", objectCount: 2, request, auth }),
+			member(cli, undefined),
+		];
+		const envelope = buildFanoutEnvelope({
+			summary: summarizeFanout(targets),
+			targets,
+			warnings: [],
+			settings,
+			via: "rest-api",
+			operation: { kind: "fanout", request },
+		});
+		expect(
+			envelope.data.targets.map((target) =>
+				expandFanoutTarget(envelope, target),
+			),
+		).toEqual(targets);
+		// The serialized envelope expands to the same thing (no `undefined` holes).
+		const wire = JSON.parse(JSON.stringify(envelope)) as typeof envelope;
+		expect(
+			wire.data.targets.map((target) => expandFanoutTarget(wire, target)),
+		).toEqual(JSON.parse(JSON.stringify(targets)));
+	});
+
+	test("an undefined settings source neither stays on the target nor shadows the outer one", () => {
+		const reached = member(cli, { request, auth });
+		reached.meta.settings.username = undefined;
+		const envelope = buildFanoutEnvelope({
+			summary: summarizeFanout([reached]),
+			targets: [reached],
+			warnings: [],
+			settings: { via: cli, host: cli, username: cdb },
+			via: "rest-api",
+			operation: { kind: "fanout", request },
+		});
+		const [compact] = envelope.data.targets;
+		if (!compact) throw new Error("no target");
+		expect("username" in compact.meta.settings).toBe(false);
+		expect(
+			expandFanoutTarget(envelope, compact).meta.settings.username,
+		).toEqual(cdb);
+		const shadowed = {
+			...compact,
+			meta: { ...compact.meta, settings: { username: undefined } },
+		};
+		expect(
+			expandFanoutTarget(envelope, shadowed).meta.settings.username,
+		).toEqual(cdb);
 	});
 });
 

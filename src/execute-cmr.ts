@@ -67,6 +67,7 @@ import type {
 import { notReachedReason } from "./core/envelope.ts";
 import { isWriteShaped } from "./core/execute-command.ts";
 import {
+	buildFanoutEnvelope,
 	NOT_SENT_TRANSPORT_CODES,
 	resolveFanoutConcurrency,
 	runBoundedPool,
@@ -218,6 +219,8 @@ export interface ExecuteCmrOperationMeta {
 	concurrency: number;
 	summary: FanoutSummary;
 	request: ExecuteRequestSummary;
+	/** Hoisted from the members: every member runs under the controller login. */
+	auth?: { username?: string; passwordProvided: boolean };
 	cmr: {
 		labels: string;
 		/** `/cmr/device` rows considered. */
@@ -347,16 +350,7 @@ export async function executeCmr(
 		before.forEach((device, index) => {
 			const outcome = preflight[index];
 			if (!outcome?.selected || !outcome.row) return;
-			members.push(
-				judgePreflight(
-					device,
-					outcome,
-					resolved,
-					controllerName,
-					offline,
-					nonce,
-				),
-			);
+			members.push(judgePreflight(device, outcome, resolved, offline, nonce));
 		});
 		if (members.length === 0) {
 			const message = `No CMR device on the controller matches \`${labels}\`. Labels are case-sensitive and RouterOS accepts unknown ones silently.`;
@@ -384,7 +378,6 @@ export async function executeCmr(
 				member.result = memberError(
 					member,
 					resolved,
-					controllerName,
 					notDispatched(
 						"cmr/membership-changed",
 						`CMR device ${member.device.id} (${member.device.identity}) changed or left the inventory between validation and dispatch.`,
@@ -456,42 +449,41 @@ export async function executeCmr(
 						? "bound"
 						: "drifted";
 			member.result = applyMemberBudget(
-				judgeDispatch(member, outcome, resolved, controllerName, binding),
+				judgeDispatch(member, outcome, resolved, binding),
 				member,
 				resolved,
-				controllerName,
 			);
 		}
 
 		const targets = members.map(
 			(member) =>
-				member.result ??
-				memberError(member, resolved, controllerName, internalUndecided()),
+				member.result ?? memberError(member, resolved, internalUndecided()),
 		);
 		const summary = summarizeFanout(targets);
-		return {
-			ok: true,
-			data: { summary, targets },
+		return buildFanoutEnvelope<
+			unknown,
+			ExecuteOperationMeta,
+			ExecuteCmrOperationMeta
+		>({
+			summary,
+			targets,
 			warnings,
-			tips: [],
-			meta: {
-				target: controllerTargetMeta(resolved),
-				via,
-				settings: settingsMeta(resolved),
-				operation: {
-					kind: "cmr",
-					concurrency,
-					summary,
-					request: requestSummary(resolved),
-					cmr: {
-						labels,
-						inventory: before.length,
-						selected: members.length,
-						dispatched: sentCount,
-					},
+			settings: settingsMeta(resolved),
+			via,
+			target: controllerTargetMeta(resolved),
+			operation: {
+				kind: "cmr",
+				concurrency,
+				summary,
+				request: requestSummary(resolved),
+				cmr: {
+					labels,
+					inventory: before.length,
+					selected: members.length,
+					dispatched: sentCount,
 				},
 			},
-		};
+		});
 	} catch (error) {
 		// An outer error keeps the warnings gathered before it, such as
 		// `cmr/caller-policy-not-enforced` on a refused confirmation.
@@ -515,7 +507,6 @@ function judgePreflight(
 	device: CmrDevice,
 	outcome: CmrScriptOutcome,
 	resolved: ResolvedExecuteRequest,
-	controllerName: string,
 	offline: OfflineGateResult | undefined,
 	nonce: string,
 ): Member {
@@ -535,7 +526,6 @@ function judgePreflight(
 		member.result = memberError(
 			member,
 			resolved,
-			controllerName,
 			disconnectedError(device, row),
 		);
 		return member;
@@ -549,7 +539,6 @@ function judgePreflight(
 		member.result = memberError(
 			member,
 			resolved,
-			controllerName,
 			notDispatched(
 				"cmr/validation-incomplete",
 				`The validation result from CMR device ${device.identity} was incomplete (${why}), so the command was not sent to it.`,
@@ -579,7 +568,7 @@ function judgePreflight(
 	} catch (error) {
 		const rejected = error as CentrsError;
 		member.validation = deviceRejected(resolved, offline, rejected);
-		member.result = memberError(member, resolved, controllerName, rejected);
+		member.result = memberError(member, resolved, rejected);
 		return member;
 	}
 	// Positive evidence: every accepted `:parse` return seen (structured,
@@ -594,7 +583,6 @@ function judgeDispatch(
 	member: Member,
 	outcome: CmrScriptOutcome,
 	resolved: ResolvedExecuteRequest,
-	controllerName: string,
 	binding: "bound" | "drifted" | "unverified",
 ): ExecuteEnvelope {
 	const device = member.device;
@@ -602,7 +590,6 @@ function judgeDispatch(
 		return memberError(
 			member,
 			resolved,
-			controllerName,
 			notDispatched(
 				"cmr/membership-changed",
 				`CMR device ${device.identity} no longer matched the labels at dispatch, so the command was not sent to it.`,
@@ -612,21 +599,11 @@ function judgeDispatch(
 	}
 	const row = outcome.row;
 	if (!outcome.sent && !(row && FINAL_STATUSES.has(row.status))) {
-		return memberError(
-			member,
-			resolved,
-			controllerName,
-			outcome.error ?? cancelledError(),
-		);
+		return memberError(member, resolved, outcome.error ?? cancelledError());
 	}
 	// CMR itself declined to send: nothing ran, whichever client this was.
 	if (row?.status === "skipped") {
-		return memberError(
-			member,
-			resolved,
-			controllerName,
-			disconnectedError(device, row),
-		);
+		return memberError(member, resolved, disconnectedError(device, row));
 	}
 	// A sent call whose member cannot be re-bound after dispatch (its `ids`
 	// changed, or S3 was not read) has no attributable result.
@@ -634,7 +611,6 @@ function judgeDispatch(
 		return memberError(
 			member,
 			resolved,
-			controllerName,
 			unknownOutcome(
 				device,
 				undefined,
@@ -649,7 +625,6 @@ function judgeDispatch(
 		return memberError(
 			member,
 			resolved,
-			controllerName,
 			unknownOutcome(device, outcome.error, row),
 		);
 	}
@@ -658,7 +633,6 @@ function judgeDispatch(
 			return memberError(
 				member,
 				resolved,
-				controllerName,
 				unknownOutcome(device, undefined, row),
 			);
 		}
@@ -668,7 +642,6 @@ function judgeDispatch(
 			return memberError(
 				member,
 				resolved,
-				controllerName,
 				new CentrsError({
 					code: "cmr/policy-denied",
 					summary: `${device.identity} refused a statement: CMR runs scripts with only the read, write, test and reboot policies (\`${denied[0].trim()}\`). Any statements before it already ran.`,
@@ -685,7 +658,6 @@ function judgeDispatch(
 		return memberError(
 			member,
 			resolved,
-			controllerName,
 			mapRouterOsError(row.output.trim(), {
 				transport:
 					resolved.via.value === "rest-api" ? "rest-api" : "native-api",
@@ -708,7 +680,7 @@ function judgeDispatch(
 		warnings,
 		tips: [],
 		meta: {
-			...memberMeta(member, resolved, controllerName),
+			...memberMeta(member, resolved),
 			...(clipped
 				? {
 						truncated: {
@@ -731,7 +703,6 @@ function applyMemberBudget(
 	envelope: ExecuteEnvelope,
 	member: Member,
 	resolved: ResolvedExecuteRequest,
-	controllerName: string,
 ): ExecuteEnvelope {
 	const budget = resolved.maxResultsBytes?.value;
 	if (!budget || !envelope.ok) return envelope;
@@ -746,7 +717,6 @@ function applyMemberBudget(
 	return memberError(
 		member,
 		resolved,
-		controllerName,
 		new CentrsError({
 			code: "input/max-results-exceeded",
 			summary: `The command ran on ${device.identity}, but its result (${requiredBytes} bytes) exceeded the requested ${budget}-byte budget, so it is not returned.`,
@@ -981,7 +951,6 @@ async function noCmrError(
 function memberError(
 	member: Member,
 	resolved: ResolvedExecuteRequest,
-	controllerName: string,
 	error: CentrsError,
 ): ExecuteEnvelope {
 	return {
@@ -989,21 +958,19 @@ function memberError(
 		error: serializeCentrsError(error),
 		warnings: [],
 		tips: [],
-		meta: memberMeta(member, resolved, controllerName),
+		meta: memberMeta(member, resolved),
 	};
 }
 
 function memberMeta(
 	member: Member,
 	resolved: ResolvedExecuteRequest,
-	controllerName: string,
 ): ExecuteEnvelope["meta"] {
 	const device = member.device;
 	const target: EnvelopeTargetMeta = {
 		input: device.identity,
 		identity: device.identity,
 		cmr: {
-			controller: controllerName,
 			id: device.id,
 			deviceKey: device.ids.split("/")[0] || undefined,
 			address: device.address,

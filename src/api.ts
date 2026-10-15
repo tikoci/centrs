@@ -2196,9 +2196,15 @@ export function apiRequestSummaryFromRequest(
 		validate: summarizedValidate(request),
 		raw: request.raw ?? false,
 		format: resolveErrorFormat(request, env),
-		query: summaryQuery(request),
-		proplist: buildApiProplist(request),
+		// Empty lists are omitted, as in the resolved summary, so a fan-out
+		// target's request compares equal to the outer one (#461).
+		query: nonEmpty(summaryQuery(request)),
+		proplist: nonEmpty(buildApiProplist(request)),
 	};
+}
+
+function nonEmpty(list: string[] | undefined): string[] | undefined {
+	return list && list.length > 0 ? list : undefined;
 }
 
 /** {@link buildApiQuery} for an error summary, which must not throw on the expression it reports. */

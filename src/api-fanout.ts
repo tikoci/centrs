@@ -88,6 +88,8 @@ export interface ApiFanoutOperationMeta {
 	concurrency: number;
 	summary: FanoutSummary;
 	request: ApiRequestSummary;
+	/** Hoisted from the targets when every target used the same login (#461). */
+	auth?: { username?: string; passwordProvided: boolean };
 	selection: ApiSelectionSummary;
 }
 

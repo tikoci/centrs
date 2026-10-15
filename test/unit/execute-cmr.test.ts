@@ -12,7 +12,7 @@ import {
 	ilInvokesCmrDashboard,
 	readCmrCallerPolicy,
 } from "../../src/core/cmr.ts";
-import { fanoutExitCode } from "../../src/core/fanout.ts";
+import { expandFanoutTarget, fanoutExitCode } from "../../src/core/fanout.ts";
 import { routerOsStringLiteral } from "../../src/core/routeros-string.ts";
 import { CentrsError } from "../../src/errors.ts";
 import { executeEnvelope, resolveExecuteRequest } from "../../src/execute.ts";
@@ -188,12 +188,16 @@ describe("execute --cmr: selection and binding", () => {
 		expect(second?.meta.target).toMatchObject({
 			identity: "c1",
 			cmr: {
-				controller: "192.0.2.1",
 				id: "*2",
 				deviceKey: "BBBB",
 				address: "192.0.2.2",
 			},
 		});
+		// #461: the controller, settings, request and auth are written once, outside.
+		expect(envelope.meta.target).toMatchObject({ host: "192.0.2.1" });
+		expect(envelope.meta.operation?.auth).toEqual({ passwordProvided: false });
+		expect(second?.meta.settings).toEqual({});
+		expect(second?.meta.operation).toEqual({ kind: "execute", objectCount: 1 });
 		expect(second?.meta.validation).toMatchObject({
 			source: CMR_VALIDATION_SOURCE,
 			result: "passed",
@@ -916,7 +920,15 @@ describe("execute --cmr: dispatch outcomes", () => {
 		const unbounded = await runFake(fake({ inventory: [[C1]], dispatch }), {
 			format: "json",
 		});
-		const rendered = JSON.stringify(unbounded.data.targets[0], null, 2);
+		// The budget is per member as it would render alone (as plain fan-out
+		// applies it), so measure the full meta, not the compacted target.
+		const member = unbounded.data.targets[0];
+		if (!member) throw new Error("no member");
+		const rendered = JSON.stringify(
+			expandFanoutTarget(unbounded, member),
+			null,
+			2,
+		);
 		const bytes = new TextEncoder().encode(rendered).length;
 		// Between the character count and the byte count: only UTF-8 counting trips.
 		const budget = Math.floor((rendered.length + bytes) / 2);

@@ -14,6 +14,7 @@ import {
 	type RetrieveEnvelope,
 	type RetrieveErrorEnvelope,
 	type RetrieveOutputFormat,
+	type RetrieveStreamLineEnvelope,
 	type RetrieveStreamMeta,
 	type RetrieveSuccessEnvelope,
 	retrieveRequestSummary,
@@ -42,6 +43,30 @@ export function streamEnvelope(
 			},
 			stream,
 		}),
+	};
+}
+
+/**
+ * A `--follow` frame or notice line: the frame fields only (#462). Readers key
+ * on `meta.operation.stream`; the full meta is on `synced` and `summary`.
+ */
+export function streamLineEnvelope(
+	data: unknown,
+	stream: RetrieveStreamMeta,
+	tips: Tip[] = [],
+): RetrieveStreamLineEnvelope {
+	return {
+		ok: true,
+		data,
+		warnings: [],
+		tips,
+		meta: {
+			operation: {
+				kind: "data",
+				objectCount: data === null ? 0 : 1,
+				stream,
+			},
+		},
 	};
 }
 
@@ -80,7 +105,7 @@ export function failedStreamEnvelope(
  * bytes.
  */
 export function renderRetrieveStreamLine(
-	envelope: RetrieveEnvelope,
+	envelope: RetrieveEnvelope | RetrieveStreamLineEnvelope,
 	format: RetrieveOutputFormat,
 ): string {
 	if (format !== "text") return JSON.stringify(envelope);

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { isFanoutMode } from "../../src/cli/selection.ts";
 import { parseTransferCliArgs } from "../../src/cli/transfer.ts";
-import { fanoutExitCode } from "../../src/core/fanout.ts";
+import { expandFanoutTarget, fanoutExitCode } from "../../src/core/fanout.ts";
 import { CentrsError } from "../../src/errors.ts";
 import type {
 	SelectionExpansion,
@@ -293,7 +293,10 @@ describe("transferFanout", () => {
 				},
 			);
 			expect(envelope.data.summary).toEqual({ total: 2, ok: 0, failed: 2 });
-			const [cdb, literal] = envelope.data.targets;
+			// Read each target's full meta: shared settings and auth are on the outer envelope (#461).
+			const [cdb, literal] = envelope.data.targets.map((target) =>
+				expandFanoutTarget(envelope, target),
+			);
 			for (const target of [cdb, literal]) {
 				expect(target?.ok).toBe(false);
 				if (!target || target.ok) continue;
