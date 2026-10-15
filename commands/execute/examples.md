@@ -573,6 +573,21 @@ argument happens to be `print`, so it returns `usage/confirmation-required`.
 Every command head in a statement is checked, including `[…]` and `do={…}`
 bodies.
 
+### W4. Pure script functions are reads; an output file is not (#458)
+
+```bash
+centrs execute $R ':put [:serialize to=json [/system/resource/print as-value]]' --via rest-api --username $U --password $P </dev/null
+```
+
+Envelope: `ok: true` without `--yes`; `data.ret` parses as JSON whose
+`version` is the router's. `:delay`, `:convert`, `:deserialize`, `:find`,
+`:timestamp`, `:rndnum`, `:rndstr`, the `:to*` converters, `:retry` and `:time` are reads
+too; any command inside their arguments or `{…}` bodies is still checked.
+RouterOS runs only a `{…}` block in a script-typed argument and refuses a quoted
+string there, so no body hides in text. `:serialize … file-name=centrs-w4`
+creates a device file, so it returns `usage/confirmation-required`, as `file=`
+does under a read verb. `:global`, `:set`, `:execute` and `:parse` stay writes.
+
 ### R1. A post-validation `/execute` rejection fails the overall envelope
 
 ```bash

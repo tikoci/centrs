@@ -363,6 +363,41 @@ describeFast("execute against CHR", () => {
 				"usage/confirmation-required",
 			);
 
+			// W4 — pure script functions are reads (#458): the field run's
+			// structured read needs no `--yes`; `:serialize file-name=` creates a
+			// device file, so it is gated before dispatch.
+			const serialized = expectExecuteSuccess(
+				await executeEnvelope({
+					...base,
+					command:
+						":put [:serialize to=json [/system/resource/print as-value]]",
+					stdinIsTty: false,
+				}),
+				"rest-api",
+			);
+			const resource = JSON.parse(
+				String((serialized.data as { ret?: unknown }).ret),
+			) as { version?: unknown };
+			expect(String(resource.version)).toStartWith(chr.state.version);
+			for (const command of [
+				":delay 1s; :put done",
+				":retry command={:put [:timestamp]} max=1 delay=1s",
+			]) {
+				expectExecuteSuccess(
+					await executeEnvelope({ ...base, command, stdinIsTty: false }),
+					"rest-api",
+				);
+			}
+			expectExecuteFailure(
+				await executeEnvelope({
+					...base,
+					command: ":serialize to=json value=1 file-name=centrs-w4",
+					stdinIsTty: false,
+				}),
+				"rest-api",
+				"usage/confirmation-required",
+			);
+
 			// R1/R2 — RouterOS can carry a post-validation runtime rejection in
 			// HTTP-200 `ret`. The gate remains passed; the overall envelope fails.
 			const invalidCertificate = expectExecuteFailure(
@@ -622,6 +657,7 @@ describeFast("execute against CHR", () => {
 					"W1",
 					"W2",
 					"W3",
+					"W4",
 					"R1",
 					"R2",
 					"P1",

@@ -101,7 +101,7 @@ export function canonicalizeExecuteCommand(
 
 export function isWriteShaped(command: CanonicalExecuteCommand): boolean {
 	if (command.mode === "structured") {
-		if (FILE_OUTPUT_ATTRIBUTE in command.attributes) {
+		if (FILE_OUTPUT_ATTRIBUTES.some((name) => name in command.attributes)) {
 			return true;
 		}
 		return !READ_ONLY_EXECUTE_VERBS.has(command.verb.toLowerCase());
@@ -110,21 +110,22 @@ export function isWriteShaped(command: CanonicalExecuteCommand): boolean {
 }
 
 /**
- * The attribute that turns an otherwise read-only verb into a device write.
+ * The attributes that turn an otherwise read-only command into a device write.
  *
  * RouterOS routes command output to a file on the device when `file=` is
  * supplied, so a read verb creates a file: `/ip/address/export file=address`
  * writes `address.rsc`, and `/file/print file=test` writes `test.txt` (both
  * from the RouterOS manual — "Configuration Export" and "Scripting Tips and
  * Tricks", where that idiom is the documented way to create a file and needs
- * the script `write` policy). The verb allowlist cannot see that, so the
- * attribute is checked independently of it.
+ * the script `write` policy). `:serialize` spells it `file-name=` (its
+ * `/console/inspect` arguments, 7.13.5 through 7.26beta1). The verb and
+ * directive allowlists cannot see either, so they are checked independently.
  */
-const FILE_OUTPUT_ATTRIBUTE = "file";
+const FILE_OUTPUT_ATTRIBUTES: readonly string[] = ["file", "file-name"];
 
-/** True for a `file=<name>` token — the write-shaping output redirect. */
+/** True for a `file=<name>` / `file-name=<name>` token — an output redirect. */
 function isFileOutputToken(token: string): boolean {
-	return token.startsWith(`${FILE_OUTPUT_ATTRIBUTE}=`);
+	return FILE_OUTPUT_ATTRIBUTES.some((name) => token.startsWith(`${name}=`));
 }
 
 /**
@@ -193,27 +194,59 @@ const WRITE_SHAPED_SCRIPT_DIRECTIVES: ReadonlySet<string> = new Set([
 /**
  * Script directives that are safe to run without device-write confirmation:
  * output, control flow and pure value functions, all members of `explain`'s
- * grounded root-cmd vocabulary (`ROOT_CMDS` in `src/explain/write.ts`). A
- * directive's `do={…}` or `[…]` body is its own command head and is checked on
- * its own. Deliberately absent: `:execute` and `:parse` (run built code),
- * `:global` and `:set` (outlive the script), and `:import`, `:password`,
- * `:undo`, `:redo` (configuration changes).
+ * grounded root-cmd vocabulary (`ROOT_CMDS` in `src/explain/write.ts`) and
+ * present on 7.26beta1. A directive's `do={…}` or `[…]` body is its own
+ * command head and is checked on its own. That holds because a script-typed
+ * argument (`:do command=`, `:if do=`, `:retry command=`, `:time`, `:onerror
+ * in=`) runs only a `{…}` block: RouterOS refuses a quoted string or a variable
+ * holding one there as an invalid value (CHR 7.24.5 and 7.26beta1, #458), so
+ * no body can hide in text the gate blanks. The value functions (#458) take
+ * only values; `:serialize` alone can write, through `file-name=` (it creates
+ * the file on 7.26beta1), which the file-output check catches.
+ *
+ * Deliberately absent: `:execute` and `:parse` (run built code), `:global` and
+ * `:set` (outlive the script), and `:import`, `:password`, `:undo`, `:redo`
+ * (configuration changes). A directive missing here costs `--yes`; one wrongly
+ * here bypasses the gate.
  */
 const READ_ONLY_SCRIPT_DIRECTIVES: ReadonlySet<string> = new Set([
 	":break",
 	":continue",
+	":convert",
+	":delay",
+	":deserialize",
 	":do",
 	":error",
+	":find",
 	":for",
 	":foreach",
 	":if",
+	":jobname",
 	":len",
 	":local",
+	":nothing",
 	":onerror",
 	":pick",
 	":put",
+	":range",
+	":retry",
 	":return",
+	":rndnum",
+	":rndstr",
+	":serialize",
+	":time",
+	":timestamp",
+	":toarray",
+	":tobool",
+	":tocrlf",
+	":toid",
+	":toip",
+	":toip6",
+	":tolf",
+	":tonsec",
+	":tonum",
 	":tostr",
+	":totime",
 	":typeof",
 	":while",
 ]);
@@ -299,6 +332,19 @@ function commandWords(head: string, following: readonly string[]): string[] {
 	const words: string[] = [];
 	const headWord = trimGroupingPunctuation(head);
 	if (headWord.startsWith(":")) return [headWord];
+	// `/serialize …` is the root command `:serialize`: at statement start the
+	// sigil is optional and `/` binds the root vocabulary (CHR 7.23.2, see
+	// `src/explain/symbols.ts`). Only the absolute one-segment form is read
+	// this way. A bare `delay` may be a relative menu command after earlier
+	// navigation, so it keeps the menu-verb rule and fails closed.
+	const root = /^\/([A-Za-z0-9-]+)$/.exec(headWord)?.[1]?.toLowerCase();
+	if (
+		root !== undefined &&
+		READ_ONLY_SCRIPT_DIRECTIVES.has(`:${root}`) &&
+		!isKnownMenuPath([root])
+	) {
+		return [`:${root}`];
+	}
 	words.push(...headWord.split("/").filter(Boolean));
 	if (headWord !== head) return words;
 	for (const token of following) {

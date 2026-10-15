@@ -15,6 +15,20 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Changed
 
+- The write gate treats pure script functions as reads, so a structured read
+  such as `:put [:serialize to=json [/system/resource/print as-value]]` no
+  longer needs `--yes` (#458). The added directives are `:serialize`,
+  `:deserialize`, `:convert`, `:delay`, `:find`, `:timestamp`, `:jobname`,
+  `:nothing`, `:range`, `:rndnum`, `:rndstr`, `:retry`, `:time` and the `:to*`
+  converters, all from the grounded root-command vocabulary. Commands inside
+  their arguments and `{…}` bodies are still checked; on CHR 7.24.5 and
+  7.26beta1, RouterOS refuses a quoted string as a script body. `file-name=`
+  (`:serialize`'s output file) now gates like `file=`. `api POST
+  /console/inspect` is a read.
+- CMR fleet commands (`/cmr/device/{run-script,reboot,upgrade,pair}`,
+  `/cmr/upgrade/trigger`, `/cmr/upgrade/job/run-next`) are pinned as writes in
+  every spelling, over `execute`, `api` and MCP `mcp=ro`. On 7.26beta1 a
+  controller login with only `read` + `api` can run them (#456).
 - CI, release, Pages and the Docker image run Bun 1.4.2 (was 1.3.14), the
   version local development already used; `@types/bun` moves with it (#438).
   `engines.bun` stays `>=1.3.11 <2`. The `typescript` peer stays `^6.0.3`:

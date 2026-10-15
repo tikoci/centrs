@@ -170,14 +170,19 @@ the suspect.
 ## Write confirmation
 
 Read-only **iff** the method is `GET`, or the endpoint terminal verb is
-`print`/`get`, or it is `listen`. Everything else is treated as a write and needs
-confirmation (`--yes` non-interactively, or a TTY prompt) → otherwise
-`usage/confirmation-required`. Two consequences:
+`print`/`get`, or it is `listen`, or it is a POST to exactly `/console/inspect`
+(it describes and parses commands, never runs them; #458). Everything else is
+treated as a write and needs confirmation (`--yes` non-interactively, or a TTY
+prompt) → otherwise `usage/confirmation-required`. Consequences:
 
 - A `POST …/print` paged read does **not** prompt (keyed on the verb, not the
   wire HTTP method).
 - Streaming does **not** imply read-only: an async-but-mutating command like
   `/system/license/renew --stream` still confirms.
+- A controller's CMR fleet commands (`/cmr/device/{run-script,reboot,upgrade,pair}`,
+  `/cmr/upgrade/trigger`, `/cmr/upgrade/job/run-next`) are writes whatever
+  RouterOS policy the login has: on 7.26beta1 `run-script` needs only `read` +
+  `api` on the controller (#456).
 
 `--raw` does not bypass this gate.
 

@@ -47,12 +47,21 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   write-shaped operation. In script mode every command head in a statement
   (the statement start and each `[…]` or `{…}` body) must be a read: its verb
   is the first word past the known menu prefix, so `/ip address print` is a
-  read and `/user expire-password print` is not (examples W3). Root mutators such as `/import` and indirect
-  execution through `:execute` are write-shaped too, and so is any command
-  carrying `file=`: RouterOS redirects command output into a device file, so
-  `/ip/address/export file=address` creates `address.rsc` and
-  `/file/print file=test` creates `test.txt` even though `export` and `print`
-  are read verbs. The shared
+  read and `/user expire-password print` is not (examples W3). Script
+  directives that only output, branch or compute a value are reads, including
+  the pure functions `:serialize`, `:deserialize`, `:convert`, `:delay`,
+  `:find`, `:timestamp`, `:rndnum`/`:rndstr` and the `:to*` converters, and the
+  `{…}`-bodied `:retry` and `:time` (example W4, #458). The absolute
+  `/serialize` spelling counts too; a bare `serialize` keeps the menu-verb rule,
+  because after navigation it could name a menu command. RouterOS runs only a
+  `{…}` block in a script-typed argument, so every body is visible to the gate.
+  Root mutators such as `/import` and indirect
+  execution through `:execute` are write-shaped too, as are `:global`, `:set`
+  and `:parse`, and so is any command carrying `file=` or `file-name=`:
+  RouterOS redirects output into a device file, so
+  `/ip/address/export file=address` creates `address.rsc`,
+  `/file/print file=test` creates `test.txt` and `:serialize … file-name=x`
+  creates `x`, even though `export`, `print` and `:serialize` are reads. The shared
   `rosetta`/`lsp-routeros-ts`
   canonicalizer is for canonicalization only — never the structured predicate
   (widening `structured` is a product regression). Pinned by

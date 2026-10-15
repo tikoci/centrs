@@ -277,6 +277,18 @@ key. Contrast example 13, where bare `--raw` skips the preflight entirely. This
 pair is how you tell a RouterOS rejection from a centrs bug while staying on the
 bare-passthrough surface.
 
+### 23. POST `/console/inspect` is a read: no `--yes` needed (#458)
+
+```bash
+centrs api $R console/inspect -X POST -f request=child -f path=system,identity --username $U --password $P </dev/null
+```
+
+Envelope: `ok: true`, `data` lists the children of `/system/identity`
+(including `print`). Inspect describes and parses commands but never runs them,
+so a POST to exactly `console/inspect` skips the write gate, non-TTY and
+without `--yes`. PUT/PATCH/DELETE to it (add/set/remove) and abbreviations
+such as `con/insp` are still gated like example 15.
+
 ### H1. `--host` stands in for `<router>` (#428)
 
 ```bash
