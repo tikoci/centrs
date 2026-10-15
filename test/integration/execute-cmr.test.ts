@@ -89,6 +89,22 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 				expect(clientRow?.["ids"]).toMatch(/^[0-9A-F]+\/[0-9A-F]+$/);
 				const clientId = clientRow?.[".id"] ?? "";
 
+				// A controller login with the field site's group (#456): no write,
+				// no reboot, no sensitive, no policy. Created before CMR-D8: the
+				// dashboard probe blocks the controller's REST service for 10–30 s,
+				// and this setup goes over REST.
+				const restricted = {
+					group: "centrs-reader",
+					user: "centrs-reader-u",
+					password: `Reader-${crypto.randomUUID().slice(0, 8)}`,
+				};
+				await controller.run(
+					`/user/group/add name=${restricted.group} policy=read,test,api,rest-api,!write,!reboot,!sensitive,!policy`,
+				);
+				await controller.run(
+					`/user/add name=${restricted.user} group=${restricted.group} password="${restricted.password}"`,
+				);
+
 				// CMR-D1. Rows carry no device id; `device` is a display key.
 				const d1 = await runScriptRest(lab, {
 					labels: "all",
@@ -217,20 +233,6 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 				} finally {
 					await native.close();
 				}
-
-				// A controller login with the field site's group (#456): no write,
-				// no reboot, no sensitive, no policy.
-				const restricted = {
-					group: "centrs-reader",
-					user: "centrs-reader-u",
-					password: `Reader-${crypto.randomUUID().slice(0, 8)}`,
-				};
-				await controller.run(
-					`/user/group/add name=${restricted.group} policy=read,test,api,rest-api,!write,!reboot,!sensitive,!policy`,
-				);
-				await controller.run(
-					`/user/add name=${restricted.user} group=${restricted.group} password="${restricted.password}"`,
-				);
 
 				for (const via of ["native-api", "rest-api"] as const) {
 					const base: ExecuteCmrRequest = {
