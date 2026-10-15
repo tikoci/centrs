@@ -166,8 +166,15 @@ export function rejectFlagsAfterSeparator(
 			continue;
 		}
 		flags.push(name);
+		// The parsers take a value flag's value as the next token (`--timeout 30s`,
+		// never `--timeout=30s`), so the fixed line splits it; only a boolean's
+		// `=` form (`--validate=no`) is kept as typed.
 		if (valueParts.length > 0) {
-			moved.push(secret(name) ? `${name}=<password>` : token);
+			if (option.valueName === undefined) {
+				moved.push(token);
+			} else {
+				moved.push(name, secret(name) ? "<password>" : valueParts.join("="));
+			}
 			continue;
 		}
 		moved.push(name);

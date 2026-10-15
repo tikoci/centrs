@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { parseExecuteCliArgs } from "../../src/cli/execute.ts";
 import { CentrsError } from "../../src/errors.ts";
+import { runCliCaptured } from "./cli-capture.ts";
 
 /**
  * Arg-parsing anchor tests for `centrs execute` — the `--` end-of-options
@@ -109,6 +110,45 @@ describe("execute: a centrs flag after `--` (#459)", () => {
 		expect(refusal(["r1", "--", "/x", "--validate=no"]).context).toEqual({
 			flags: ["--validate"],
 		});
+	});
+
+	test("a value flag's `=` spelling is split in the fixed line; a boolean's is kept", () => {
+		const error = refusal([
+			"r1",
+			"--",
+			"/x",
+			"--timeout=30s",
+			"--group=lab",
+			"--password=pw=1",
+			"--validate=no",
+		]);
+		expect(error.context).toEqual({
+			flags: ["--timeout", "--group", "--password", "--validate"],
+		});
+		expect(error.remediation).toContain(
+			"`centrs execute r1 --timeout 30s --group lab --password '<password>' --validate=no -- /x`",
+		);
+		expect(error.remediation).not.toContain("pw=1");
+	});
+
+	test("the refusal renders in the format chosen before `--`, not after it", async () => {
+		const yaml = await runCliCaptured([
+			"execute",
+			"--format",
+			"yaml",
+			"r1",
+			"--",
+			"/x",
+			"--json",
+		]);
+		expect(yaml.code).toBe(1);
+		expect(() => JSON.parse(yaml.err)).toThrow();
+		expect(
+			(Bun.YAML.parse(yaml.err) as { error: { code: string } }).error.code,
+		).toBe("usage/flag-after-separator");
+
+		const text = await runCliCaptured(["execute", "r1", "--", "/x", "--json"]);
+		expect(text.err).toContain("[usage/flag-after-separator]");
 	});
 
 	test("password values are never echoed, before or after `--`", () => {
