@@ -178,8 +178,6 @@ export function rejectFlagsAfterSeparator(
 	args: readonly string[],
 	options: readonly CliCommandOption[],
 ): void {
-	const separator = args.indexOf("--");
-	if (separator === -1) return;
 	const optionByFlag = new Map<string, CliCommandOption>();
 	for (const option of options) {
 		for (const token of option.flag.split("/")) {
@@ -189,6 +187,17 @@ export function rejectFlagsAfterSeparator(
 			}
 		}
 	}
+	let separator = -1;
+	for (let index = 0; index < args.length; index += 1) {
+		const token = args[index] ?? "";
+		if (token === "--") {
+			separator = index;
+			break;
+		}
+		// A flag's value may itself be `--`; only the parser's separator counts.
+		if (optionByFlag.get(token)?.valueName !== undefined) index += 1;
+	}
+	if (separator === -1) return;
 	const secret = (flag: string) =>
 		flag.startsWith("-") && flag.includes("password");
 	const before: string[] = [];

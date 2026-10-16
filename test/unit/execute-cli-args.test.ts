@@ -228,6 +228,29 @@ describe("execute: a centrs flag after `--` (#459)", () => {
 		);
 	});
 
+	test("a value equal to -- is not the option separator", () => {
+		const secret = "separator-canary";
+		const error = refusal([
+			"--password",
+			"--",
+			`http://admin:${secret}@127.0.0.1:1`,
+			"--",
+			"/x",
+			"--json",
+		]);
+		expect(error.remediation).not.toContain(secret);
+		const parsed = parseExecuteCliArgs([
+			"--password",
+			"--",
+			"r1",
+			"/system/identity/print",
+			"--json",
+		]);
+		expect(parsed.password).toBe("--");
+		expect(parsed.command).toBe("/system/identity/print");
+		expect(parsed.format).toBe("json");
+	});
+
 	test("the credential redaction survives JSON, YAML and text error rendering", async () => {
 		const secret = "separator-canary";
 		for (const format of ["json", "yaml", "text"]) {
