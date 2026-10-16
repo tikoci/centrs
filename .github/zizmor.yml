@@ -2,7 +2,8 @@
 # the Security tab) and locally with `bun run lint:actions`.
 rules:
   # Action refs are tags, not commit SHAs, by decision: SECURITY.md →
-  # GitHub Actions (#266).
+  # GitHub Actions (#266). zizmor has no tag-only policy; `ref-pin` would
+  # also accept a branch ref, which review has to catch.
   unpinned-uses:
     config:
       policies:
