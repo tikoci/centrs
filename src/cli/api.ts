@@ -718,6 +718,10 @@ async function runApiStreamCli(
 			} else {
 				console.error(line);
 			}
+			// #470: text warnings go to stderr; `--raw` stays bare payloads.
+			if (format === "text" && !parsed.raw) {
+				printTextNotes({ warnings: envelope.warnings, tips: [] });
+			}
 			if (!envelope.ok) exitCode = 1;
 		}
 	} finally {

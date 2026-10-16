@@ -372,6 +372,10 @@ async function runRetrieveStreamCli(
 			signal: controller.signal,
 		})) {
 			console.log(renderRetrieveStreamLine(envelope, format));
+			// A notice line already renders its tips; warnings go to stderr (#470).
+			if (format === "text") {
+				printTextNotes({ warnings: envelope.warnings, tips: [] });
+			}
 			if (!envelope.ok) exitCode = 1;
 		}
 	} finally {

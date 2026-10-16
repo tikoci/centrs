@@ -49,6 +49,8 @@ interface FakeRouterOptions {
 	onInspect?: () => void;
 	/** A newer wire change before an older membership result is returned. */
 	onMembership?: (router: FakeFollowRouter) => void;
+	/** Answer `/cancel` but never end the cancelled listen. */
+	ignoreCancel?: boolean;
 }
 
 /**
@@ -188,7 +190,7 @@ class FakeFollowRouter {
 			}
 			case "/cancel": {
 				const target = attrs["tag"] ?? "";
-				if (this.listens.delete(target)) {
+				if (!this.options.ignoreCancel && this.listens.delete(target)) {
 					this.send([
 						"!trap",
 						"=category=2",
@@ -1019,5 +1021,34 @@ describe("retrieve --follow CLI", () => {
 		);
 		const ndjson = out.map((e) => renderRetrieveStreamLine(e, "yaml"));
 		expect(ndjson.every((line) => JSON.parse(line).ok === true)).toBe(true);
+	});
+});
+
+describe("retrieve --follow text mode (#470)", () => {
+	test("a summary warning goes to stderr, never into the stdout rows", async () => {
+		const router = fakeRouter({ ignoreCancel: true });
+		const result = await runCliCaptured([
+			"retrieve",
+			"127.0.0.1",
+			"/ip/address",
+			"--port",
+			String(router.port),
+			"--username",
+			"admin",
+			"--password",
+			"",
+			"--follow",
+			"--duration",
+			"200ms",
+			"--timeout",
+			"300ms",
+			"--format",
+			"text",
+		]);
+		expect(result.code).toBe(0);
+		expect(result.out).not.toContain("warning [");
+		expect(result.err).toMatch(
+			/^warning \[transport\/cancel-unacknowledged\]: /m,
+		);
 	});
 });
