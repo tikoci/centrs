@@ -277,7 +277,9 @@ not report as tips (CHR 7.23.7 + 7.24.5). Because that advice depends only on
 the request, it arrives **first**, in the `tips` of the leading `started`
 line, before any reply — so a filtered watch that never gets a reply still
 shows it. The same tips are repeated on the terminal summary, successful or
-failed. `--raw` omits the `started` line.
+failed. Advice from the live gate (such as `tip/rest-verb-mapping`) rides the
+same two lines, as it does on a one-shot call. `--raw` omits the `started`
+line.
 
 - `tip/filtered-follow` — a `listen` (or `follow`) with a query reports
   neither rows leaving the filter nor deletes. Follow unfiltered and filter

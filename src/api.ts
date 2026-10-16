@@ -282,7 +282,9 @@ export type ApiEnvelope = CentrsEnvelope<unknown, ApiOperationMeta>;
 /** A `--stream` frame line: only its own `meta.operation` (#473). */
 export type ApiStreamFrameEnvelope = StreamLineEnvelope<
 	unknown,
-	Pick<ApiOperationMeta, "kind" | "objectCount"> & { stream: ApiStreamMeta }
+	Pick<ApiOperationMeta, "kind" | "objectCount"> & {
+		stream: Extract<ApiStreamMeta, { kind: "frame" }>;
+	}
 >;
 /** One `--stream` line: a full envelope (`started`, `summary`, error) or a frame. */
 export type ApiStreamLine = ApiEnvelope | ApiStreamFrameEnvelope;
@@ -471,10 +473,11 @@ function apiRouterOsFailureFromResult(
 }
 
 /**
- * The `--stream` path: an async generator yielding one {@link ApiEnvelope} per
- * native reply (`!re` row or `!empty`) to the literal command, then a
- * terminating summary envelope (`data` = {@link ApiStreamSummary}). It never
- * rewrites the command; a `<menu>/listen` endpoint is how to follow changes.
+ * The `--stream` path: an async generator yielding a full-meta `started` line,
+ * one {@link ApiStreamFrameEnvelope} per native reply (`!re` row or `!empty`)
+ * to the literal command, then a terminating summary envelope (`data` =
+ * {@link ApiStreamSummary}). It never rewrites the command; a `<menu>/listen`
+ * endpoint is how to follow changes.
  * Streaming is native-api only — a `rest-api` (or otherwise unresolved)
  * transport yields a single error envelope. `--count`/`--duration` and
  * `externalSignal` (Ctrl-C) bound it. Errors before the first frame
@@ -527,11 +530,13 @@ async function* streamResolvedApi(
 
 	let resolved = request;
 	let validation: EnvelopeValidationMeta;
+	let validationTips: Tip[] = [];
 	const trace: ValidationTrace = {};
 	try {
 		if (resolved.validate.value) {
 			const result = await validateApiRequest(resolved, backend, trace);
 			validation = result.validation;
+			validationTips = result.tips;
 			// The boolean probe below runs after the gate passed (GH#435).
 			trace.validation = validation;
 			resolved = await withQueryBooleans(resolved, backend, result.queryMenu);
@@ -546,10 +551,25 @@ async function* streamResolvedApi(
 
 	// Request-shape advice is known before the first reply: deliver it on
 	// `started`, and keep it on whichever terminal summary follows (#409 review).
-	const tips = streamTips(resolved);
+	// The gate's own tips are the same advice the one-shot path returns.
+	const tips = [...validationTips, ...streamTips(resolved)];
 	// Arrival times in wire order, stamped by the synchronous reply tap: the
-	// session queues replies, so a slow reader must not move them.
+	// session queues replies, so a slow reader must not move them. Read by a
+	// head index, not `shift()`, which is O(n) per frame on a backlog.
 	const arrivals: number[] = [];
+	let arrivalsHead = 0;
+	const nextArrival = (): number => {
+		const at = arrivals[arrivalsHead] ?? Date.now();
+		arrivalsHead += 1;
+		if (arrivalsHead >= arrivals.length) {
+			arrivals.length = 0;
+			arrivalsHead = 0;
+		} else if (arrivalsHead >= 1024 && arrivalsHead * 2 >= arrivals.length) {
+			arrivals.splice(0, arrivalsHead);
+			arrivalsHead = 0;
+		}
+		return at;
+	};
 	const controller = new AbortController();
 	const startedAt = Date.now();
 	const counts = { frames: 0, rows: 0, empty: 0 };
@@ -616,11 +636,7 @@ async function* streamResolvedApi(
 			counts.frames += 1;
 			if (reply.type === "empty") counts.empty += 1;
 			else counts.rows += 1;
-			yield streamFrameEnvelope(
-				reply,
-				counts.frames,
-				arrivals.shift() ?? Date.now(),
-			);
+			yield streamFrameEnvelope(reply, counts.frames, nextArrival());
 			// `--count` counts rows only: an empty tick must never use up the
 			// count before the data it is waiting for arrives.
 			if (
@@ -1660,7 +1676,7 @@ function assertStreamCapability(resolved: ResolvedApiRequest): void {
 		summary:
 			"`--stream` yields incremental replies instead of a one-shot `api` result.",
 		remediation:
-			"Consume the stream via `apiStream()` (library) or `centrs api … --stream` (CLI); both yield an NDJSON envelope per reply frame plus a final summary.",
+			"Consume the stream via `apiStream()` (library) or `centrs api … --stream` (CLI); both yield a `started` line, a line per reply frame, then a final summary.",
 		context: { via: resolved.via.value, capability: "stream" },
 	});
 }
@@ -2057,8 +2073,9 @@ export function renderApiEnvelope(
  * object per line) for both `json` and `yaml`, and a concise human row for
  * `text`. `yaml` deliberately falls back to NDJSON here — YAML's multi-line
  * document form is incompatible with line-delimited streaming. Unlike
- * {@link renderApiEnvelope} this never pretty-prints — every frame and the
- * summary are one line each, so a consumer can read the stream line by line.
+ * {@link renderApiEnvelope} this never pretty-prints — `started`, every frame
+ * and the summary are one line each, so a consumer can read the stream line
+ * by line. In text, a `started` line without tips renders as an empty string.
  */
 export function renderApiStreamLine(
 	envelope: ApiStreamLine,

@@ -136,7 +136,7 @@ export const retrieveCommand: CliCommandMetadata = {
 			flag: "--sample",
 			valueName: "<interval>",
 			description:
-				"Read the menu again every interval (with a unit, e.g. `5s`): one line per complete read, then a summary. With --wait, sets polling cadence and returns one final envelope. Sees counters and state listen never reports. Single target; rest-api or native-api.",
+				"Read the menu again every interval (with a unit, e.g. `5s`): a `started` line, one line per complete read, then a summary. With --wait, sets polling cadence and returns one final envelope. Sees counters and state listen never reports. Single target; rest-api or native-api.",
 		},
 		{
 			flag: "--wait",

@@ -109,7 +109,7 @@ export const apiCommand: CliCommandMetadata = {
 		{
 			flag: "--stream",
 			description:
-				"Stream the command's native replies (`!re` rows and `!empty`) as NDJSON, then a summary envelope. Never changes the command: a GET streams one print. To follow changes, request `<menu>/listen`, which implies it.",
+				"Stream the command's native replies (`!re` rows and `!empty`) as NDJSON: a `started` line, a line per reply, then a summary envelope. Never changes the command: a GET streams one print. To follow changes, request `<menu>/listen`, which implies it.",
 		},
 		{
 			flag: "--count",

@@ -52,7 +52,7 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 | `--list-attributes / --list` |  | List inspect-derived attributes without running the data call. |
 | `--query / --filter` | `<expr>` | Row filter written as after `print where` (`disabled`, `mtu>=1500 and !dynamic`), run on the router as an API query; repeatable, AND-ed. No `~` or `in`. |
 | `--follow` |  | Keep the menu's rows current over native-api `listen`: a `started` line, snapshot frames, a `synced` line, then a line per change, then a summary (NDJSON for json/yaml/ndjson). Single target, list menus whose print takes follow-only. |
-| `--sample` | `<interval>` | Read the menu again every interval (with a unit, e.g. `5s`): one line per complete read, then a summary. With --wait, sets polling cadence and returns one final envelope. Sees counters and state listen never reports. Single target; rest-api or native-api. |
+| `--sample` | `<interval>` | Read the menu again every interval (with a unit, e.g. `5s`): a `started` line, one line per complete read, then a summary. With --wait, sets polling cadence and returns one final envelope. Sees counters and state listen never reports. Single target; rest-api or native-api. |
 | `--wait` | `<deadline>` | Wait for a successful read or a condition until this overall deadline, with a unit (e.g. `2m`). Retries refused, closed, reset and timed-out connections and a down or unreachable host; other errors fail at once. One final envelope; single target. |
 | `--until` | `<expr>` | With --wait: succeed when any selected row matches this --query grammar predicate; repeatable, AND-ed. Returns the matching rows. Already true succeeds on the initial read. |
 | `--until-empty` |  | With --wait: succeed on a completed read with zero rows selected by --query. Silence and failed reads never satisfy it. |
@@ -126,7 +126,7 @@ Usage: centrs api <router> <endpoint> [flags] | centrs api --host <host|url> <en
 | `--attribute / --proplist` | `<a,b>` | Property projection → `.proplist`. |
 | `--raw` |  | Strip the envelope; emit bare RouterOS JSON. Defaults `--validate` to false (an explicit `--validate=true` still runs the gate); does not imply `--yes`. |
 | `--yes` |  | Confirm a mutating (non-read) request in non-interactive runs. |
-| `--stream` |  | Stream the command's native replies (`!re` rows and `!empty`) as NDJSON, then a summary envelope. Never changes the command: a GET streams one print. To follow changes, request `<menu>/listen`, which implies it. |
+| `--stream` |  | Stream the command's native replies (`!re` rows and `!empty`) as NDJSON: a `started` line, a line per reply, then a summary envelope. Never changes the command: a GET streams one print. To follow changes, request `<menu>/listen`, which implies it. |
 | `--count` | `<n>` | Stop a `--stream` after N `!re` rows; `!empty` replies do not count (not the device count= argument). |
 | `--duration` | `<dur>` | Stop a `--stream` after this wall-clock window (e.g. `5s`). |
 | `--via` | &lt;rest-api\|native-api&gt; | Pin the transport; no silent downgrade. Default rest-api. |
