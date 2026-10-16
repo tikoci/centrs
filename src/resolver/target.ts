@@ -572,7 +572,7 @@ export function parseHostCandidate(value: string): URL {
 	if (hasScheme && url.pathname !== "/" && url.pathname !== "") {
 		throw new CentrsError({
 			code: "input/invalid-target",
-			summary: `Target URL must not include a path. Received: ${value}`,
+			summary: `Target URL must not include a path. Received: ${redactTargetInput(value)}`,
 			remediation:
 				"Pass only the RouterOS host or base URL, then provide the RouterOS menu path as the second positional argument.",
 		});

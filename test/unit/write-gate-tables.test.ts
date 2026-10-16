@@ -276,3 +276,21 @@ describe("api: POST /console/inspect is a read (#458)", () => {
 		expect(isApiMutating("POST", "/console/clear-history")).toBe(true);
 	});
 });
+
+describe("parentheses are expressions, not commands (PR #483)", () => {
+	// CHR 7.26beta1: `:parse` reads `(:serialize … file-n=x)` as the variable
+	// `$:serialize` with comparisons, and neither `( … )` nor `"$( … )"` creates
+	// the file. Only a bracket runs it: `"$([:serialize … file-n x])"` does.
+	test("a bracketed command inside `$( … )` is still a head", () => {
+		for (const separator of ["=", " "]) {
+			expect(
+				writes(
+					`:put "$([:serialize to=json value=1 file-n${separator}out.json])"`,
+				),
+			).toBe(true);
+		}
+	});
+	test("an expression-only `$( … )` stays a read", () => {
+		expect(writes(':put "$(1 + 2)"')).toBe(false);
+	});
+});

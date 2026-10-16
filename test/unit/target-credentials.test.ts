@@ -208,16 +208,19 @@ describe("passwords that end a URL authority early (#478)", () => {
 	});
 
 	test("a parse error from parseHostCandidate does not echo them", () => {
-		let caught: unknown;
-		try {
-			parseHostCandidate(`http://admin:x/${secret}@router.example`);
-		} catch (error) {
-			caught = error;
+		// `admin:x` fails URL parsing; `admin:80` parses with a path.
+		for (const port of ["x", "80"]) {
+			let caught: unknown;
+			try {
+				parseHostCandidate(`http://admin:${port}/${secret}@router.example`);
+			} catch (error) {
+				caught = error;
+			}
+			expect(caught).toBeInstanceOf(CentrsError);
+			expect(JSON.stringify((caught as CentrsError).toJSON())).not.toContain(
+				secret,
+			);
 		}
-		expect(caught).toBeInstanceOf(CentrsError);
-		expect(JSON.stringify((caught as CentrsError).toJSON())).not.toContain(
-			secret,
-		);
 	});
 });
 
