@@ -5,6 +5,8 @@ import { handleRetrieve, handleValidate } from "../../src/mcp/tools.ts";
 import { identityFromComment, resolveCdb } from "../../src/resolver/cdb.ts";
 import {
 	assertNoTargetCredentials,
+	assertNoTargetPassword,
+	parseHostCandidate,
 	redactTargetInput,
 } from "../../src/resolver/index.ts";
 import { makeMcpTestCdb } from "./mcp-cdb-fixture.ts";
@@ -142,5 +144,80 @@ describe("credentials never reach an echo path (#478)", () => {
 		} finally {
 			await cleanup();
 		}
+	});
+});
+
+// CodeRabbit on PR #479: a password holding `/`, `?` or `#` ends a URL
+// authority early, so a userinfo pattern alone misses it.
+describe("passwords that end a URL authority early (#478)", () => {
+	const secret = "hunter2";
+	const odd = [
+		`http://admin:x/${secret}@192.0.2.1`,
+		`http://admin:x?${secret}@192.0.2.1`,
+		`http://admin:x#${secret}@192.0.2.1`,
+		`admin:x/${secret}@192.0.2.1`,
+		`admin:${secret}@@192.0.2.1`,
+	];
+
+	test("are refused before any lookup, and the error never repeats them", () => {
+		for (const value of odd) {
+			for (const check of [assertNoTargetPassword, assertNoTargetCredentials]) {
+				let caught: unknown;
+				try {
+					check(value);
+				} catch (error) {
+					caught = error;
+				}
+				expect(caught).toBeInstanceOf(CentrsError);
+				expect(JSON.stringify((caught as CentrsError).toJSON())).not.toContain(
+					secret,
+				);
+			}
+		}
+	});
+
+	test("are redacted up to the last @", () => {
+		expect(redactTargetInput(odd[0] as string)).toBe("http://***@192.0.2.1");
+		expect(redactTargetInput(odd[3] as string)).toBe("***@192.0.2.1");
+		expect(redactTargetInput(odd[4] as string)).toBe("***@192.0.2.1");
+	});
+
+	test("a parse error from parseHostCandidate does not echo them", () => {
+		let caught: unknown;
+		try {
+			parseHostCandidate(`http://admin:x/${secret}@router.example`);
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBeInstanceOf(CentrsError);
+		expect(JSON.stringify((caught as CentrsError).toJSON())).not.toContain(
+			secret,
+		);
+	});
+});
+
+describe("a CDB identity with @ still resolves (#478)", () => {
+	test("`user@host` holds no password, so the lookup runs first", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([
+			{ target: "192.0.2.9", comment: "identity=rtr@site" },
+		]);
+		try {
+			const resolved = await resolveCdb(
+				{ targetInput: "rtr@site", cdbFile: path },
+				{},
+			);
+			expect(resolved?.target).toBe("192.0.2.9");
+			expect(resolved?.identity).toBe("rtr@site");
+			expect(redactTargetInput("rtr@site")).toBe("rtr@site");
+		} finally {
+			await cleanup();
+		}
+	});
+
+	test("an unmatched `user@host` is still refused before it is dialed", () => {
+		expect(() => assertNoTargetCredentials("admin@192.0.2.1")).toThrow(
+			CentrsError,
+		);
+		expect(() => assertNoTargetPassword("admin@192.0.2.1")).not.toThrow();
 	});
 });

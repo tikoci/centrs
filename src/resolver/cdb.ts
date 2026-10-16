@@ -44,7 +44,7 @@ import {
 	parseDuration,
 	type ResolvedSetting,
 } from "./settings.ts";
-import { assertNoTargetCredentials, redactTargetInput } from "./target.ts";
+import { assertNoTargetPassword, redactTargetInput } from "./target.ts";
 
 const ENV_CDB_FILE = "CENTRS_CDB_FILE";
 const ENV_CDB_PASSWORD = "CENTRS_CDB_PASSWORD";
@@ -163,7 +163,7 @@ export async function resolveCdb(
 		return undefined;
 	}
 	// Before any lookup: a CDB miss echoes the target it was given (#478).
-	assertNoTargetCredentials(input.targetInput);
+	assertNoTargetPassword(input.targetInput);
 
 	const settings = resolveDevicesSettings({
 		cdbFile: input.cdbFile,

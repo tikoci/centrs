@@ -95,7 +95,9 @@ documenting cross-cutting shifts that affect contributors and consumers.
   and it echoed the whole string, password included, in `meta.target.input`,
   the fan-out selection and the `--verbose` header. The refusal covers the
   positional, `--host`, `CENTRS_HOST`, CDB targets and fan-out literals, and
-  any displayed target has `user:pass@` replaced by `***@`.
+  any displayed target has `user:pass@` replaced by `***@`, even when the
+  password holds `/`, `?` or `#`. A CDB identity containing `@` (`rtr@site`)
+  still resolves.
 
 ## 0.1.9-next.0 — 2026-10-13
 

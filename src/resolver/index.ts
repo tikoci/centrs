@@ -132,6 +132,7 @@ export {
 } from "./settings.ts";
 export {
 	assertNoTargetCredentials,
+	assertNoTargetPassword,
 	defaultPortForScheme,
 	parseHostCandidate,
 	type ResolvedAuth,
