@@ -319,9 +319,18 @@ function commandHeads(
 ): { words: string[]; spacedFileOutput: boolean }[] {
 	const heads: { words: string[]; spacedFileOutput: boolean }[] = [];
 	const starts = [0];
+	// Match group ends once. Each command can then skip its nested bodies
+	// without rescanning them; deeply nested reads stay linear in input size.
+	const closes = new Map<number, number>();
+	const open: number[] = [];
 	for (let index = 0; index < statement.length; index += 1) {
-		const char = statement[index];
+		const char = statement[index] ?? "";
 		if (char === "[" || char === "{") starts.push(index + 1);
+		if ("[{(".includes(char)) open.push(index);
+		else if ("]})".includes(char)) {
+			const start = open.pop();
+			if (start !== undefined) closes.set(start, index);
+		}
 	}
 	for (const start of starts) {
 		const nextOpener = statement.slice(start).search(/[[{(]/);
@@ -337,7 +346,7 @@ function commandHeads(
 		if (words.length > 0)
 			heads.push({
 				words,
-				spacedFileOutput: hasSpacedFileOutput(statement, start, words),
+				spacedFileOutput: hasSpacedFileOutput(statement, start, words, closes),
 			});
 	}
 	return heads;
@@ -355,6 +364,7 @@ function hasSpacedFileOutput(
 	statement: string,
 	start: number,
 	words: readonly string[],
+	closes: ReadonlyMap<number, number>,
 ): boolean {
 	let commandWords: number;
 	if (words[0] === ":serialize") {
@@ -365,16 +375,14 @@ function hasSpacedFileOutput(
 		commandWords = depth + 1;
 	}
 	let own = "";
-	let nested = 0;
 	for (let index = start; index < statement.length; index += 1) {
 		const char = statement[index] ?? "";
 		if ("[{(".includes(char)) {
-			if (nested === 0) own += " ";
-			nested += 1;
+			own += " ";
+			index = closes.get(index) ?? statement.length;
 		} else if ("]})".includes(char)) {
-			if (nested === 0) break;
-			nested -= 1;
-		} else if (nested === 0) own += char;
+			break;
+		} else own += char;
 	}
 	let consumed = 0;
 	for (const token of tokenizeRouterOsCli(own)) {

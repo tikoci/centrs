@@ -156,6 +156,14 @@ describe("script directives: read or write (#458)", () => {
 			expect(writes(command)).toBe(false);
 	});
 
+	test("checking deeply nested read arguments stays bounded", () => {
+		const depth = 1600;
+		const input = `${":serialize value=[".repeat(depth)}:put 1${"]".repeat(depth)}`;
+		const started = performance.now();
+		expect(writes(input)).toBe(false);
+		expect(performance.now() - started).toBeLessThan(1000);
+	});
+
 	test("the absolute `/name` spelling of a root directive is the directive", () => {
 		expect(writes("/serialize to=json value=1")).toBe(false);
 		expect(writes("/delay 1s")).toBe(false);
