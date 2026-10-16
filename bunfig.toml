@@ -1,1 +1,6 @@
 entrypoint = "src/index.ts"
+
+[test]
+# Cache the CHR image before any test starts (#468); no-op without
+# CENTRS_RUN_FAST_INTEGRATION=1.
+preload = ["./test/integration/preload.ts"]

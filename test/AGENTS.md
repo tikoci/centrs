@@ -45,6 +45,12 @@ Measured: ~22s for one file, 73–120s for two — against ~18 minutes for a ful
 CI leg. Every version-drift instance in #297 would have been caught by this
 before the PR was opened.
 
+Those times assume a cached image. On a cold cache, the `bunfig.toml`
+preload (`test/integration/preload.ts`) downloads the selected image before
+the first test starts, so the download never counts against a test timeout
+(#468). Its `CHR prefetch: …` line names the version. To fetch ahead of
+time, run `CENTRS_CHR_CHANNEL=long-term bun run chr:prefetch`.
+
 This is prevention for *version drift*, not for flakes. A harness that mishandles
 normal teardown (an unhandled socket error when a subprocess exits, #300) is a
 different failure and only shows up by running the thing.
