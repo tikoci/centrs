@@ -192,6 +192,14 @@ part of this section.
   `0.1.9-next.0` sections are folded into theirs.
 - The CodeQL workflow no longer runs the AI-findings probe job (#486). Code
   Quality AI findings are a paid feature this repository does not enable.
+- Workflows reference actions by major tag, never by commit SHA, and
+  `SECURITY.md` records why (#266). Every `setup-bun` step reads the Bun
+  version from `packageManager`, so changing Bun is a one-line edit. Every
+  checkout except the QA history push drops its git credentials.
+- zizmor audits the workflows: in CI as `Analyze (zizmor)` in `codeql.yaml`
+  (Security tab), and locally with `bun run lint:actions` (#266). Its first
+  run found two `${{ … }}` expansions inside shell scripts, in `lab.yaml` and
+  `qa.yaml`; both now go through `env:`.
 
 ## 0.1.8 — 2026-10-12
 

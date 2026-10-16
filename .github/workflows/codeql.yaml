@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
@@ -48,3 +50,19 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: /language:${{ matrix.language }}
+
+  # GitHub Actions audit. Findings go to the Security tab as code-scanning
+  # alerts and do not fail the job. Config: .github/zizmor.yml.
+  zizmor:
+    name: Analyze (zizmor)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@v0.7.1

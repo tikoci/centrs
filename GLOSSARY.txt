@@ -487,6 +487,14 @@ iff
 smol
 katex
 
+# CI tooling vocabulary
+# %zizmor: GitHub Actions static analyzer; config .github/zizmor.yml (#266).
+#   https://docs.zizmor.sh
+# artipacked: zizmor audit for git credentials persisted by checkout.
+zizmor
+zizmorcore
+artipacked
+
 # GitHub Pages build vocabulary (scripts/build-pages-site.ts, pages.yaml)
 # typedoc/pandoc: the API-reference generator and the markdown->HTML converter
 #   the Pages build chains together. gfm: GitHub-Flavored Markdown, pandoc's

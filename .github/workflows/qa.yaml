@@ -72,17 +72,15 @@ jobs:
       channels: ${{ steps.matrix.outputs.channels }}
     steps:
       # Read-only job (resolves the matrix axis; no commits), so it needs no git
-      # credentials — drop them to limit token exposure. (Tag-pinned like the rest
-      # of this workflow: repo convention is tags for first-party actions/*, SHA
-      # pins for third-party actions such as setup-bun.)
+      # credentials — drop them to limit token exposure.
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Setup Bun 1.4.2
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version-file: package.json
       - name: Install dependencies
         run: bun install --frozen-lockfile
       # quickchr 0.4.1+ resolves MikroTik hosts over public DNS, so this works on
@@ -120,10 +118,10 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Setup Bun 1.4.2
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version-file: package.json
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Check src/explain/menus.ts against the pinned restraml trees
@@ -152,10 +150,10 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Setup Bun 1.4.2
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version-file: package.json
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Check src/explain/catalog.ts against CLI Reference and the trees
@@ -205,6 +203,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Install QEMU
         run: |
           sudo apt-get update
@@ -217,10 +217,10 @@ jobs:
           else
            echo "::warning::/dev/kvm is unavailable; quickchr will use slower TCG emulation."
           fi
-      - name: Setup Bun 1.4.2
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version-file: package.json
       - name: Install dependencies
         run: bun install --frozen-lockfile
       # The image cache key must name the RouterOS build this leg will boot:
@@ -300,10 +300,12 @@ jobs:
       # agent reads the signal directly (github-actions-rich-data instruction).
       - name: Surface result to job summary
         if: always()
+        env:
+          ROUTEROS_CHANNEL: ${{ matrix.routeros_channel }}
         run: |
           set -o pipefail
           {
-            echo "## CHR • ${{ matrix.routeros_channel }}"
+            echo "## CHR • ${ROUTEROS_CHANNEL}"
             if grep -qE '\(fail\)' /tmp/chr-output.txt 2>/dev/null; then
               echo "### ❌ Failing tests"
               echo '```'
@@ -393,10 +395,10 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Setup Bun 1.4.2
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version-file: package.json
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Unit tests
@@ -418,13 +420,15 @@ jobs:
       contents: write # commit the accumulating history to the qa-history branch
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7 # zizmor: ignore[artipacked]
+        # The one checkout that keeps git credentials: this job pushes to
+        # the qa-history branch. It uploads no artifact, so they can't leak.
         with:
           fetch-depth: 0
-      - name: Setup Bun 1.4.2
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version-file: package.json
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Download per-leg QA results

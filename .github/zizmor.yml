@@ -1,0 +1,13 @@
+# zizmor — GitHub Actions static analysis. Runs in codeql.yaml (results in
+# the Security tab) and locally with `bun run lint:actions`.
+rules:
+  # Action refs are tags, not commit SHAs, by decision: SECURITY.md →
+  # GitHub Actions (#266).
+  unpinned-uses:
+    config:
+      policies:
+        "*": ref-pin
+  # A cooldown delays updates until a release has aged. The policy in #266
+  # takes the newest release instead, so it is not wanted here.
+  dependabot-cooldown:
+    disable: true
