@@ -225,6 +225,7 @@ export function rejectFlagsAfterSeparator(
 			}
 		}
 	}
+	const unsupportedInlineBooleans: string[] = [];
 	const moved: string[] = [];
 	const kept: string[] = [];
 	const flags: string[] = [];
@@ -240,9 +241,12 @@ export function rejectFlagsAfterSeparator(
 		flags.push(name);
 		// The parsers take a value flag's value as the next token (`--timeout 30s`,
 		// never `--timeout=30s`), so the fixed line splits it; only a boolean's
-		// `=` form (`--validate=no`) is kept as typed.
+		// supported `=` form (`--validate=no`) is kept as typed.
 		if (valueParts.length > 0) {
 			if (option.valueName === undefined) {
+				if (command !== "execute" || name !== "--validate") {
+					unsupportedInlineBooleans.push(name);
+				}
 				moved.push(token);
 			} else {
 				moved.push(name, secret(name) ? "<password>" : valueParts.join("="));
@@ -273,7 +277,10 @@ export function rejectFlagsAfterSeparator(
 	throw new CentrsError({
 		code: "usage/flag-after-separator",
 		summary: `${list} ${flags.length === 1 ? "comes" : "come"} after \`--\`, so ${flags.length === 1 ? "it" : "they"} would be sent to RouterOS as part of the command.`,
-		remediation: `Put centrs flags before \`--\`: \`${fixed}\``,
+		remediation:
+			unsupportedInlineBooleans.length > 0
+				? `Put centrs flags before \`--\`. These flags accept no value: ${unsupportedInlineBooleans.map((flag) => `\`${flag}\``).join(", ")}. Use a bare flag to enable it, or omit it to keep the default.`
+				: `Put centrs flags before \`--\`: \`${fixed}\``,
 		context: { flags },
 	});
 }

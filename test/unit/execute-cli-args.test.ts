@@ -112,6 +112,15 @@ describe("execute: a centrs flag after `--` (#459)", () => {
 		});
 	});
 
+	test("unsupported boolean values get guidance instead of a broken fixed command", () => {
+		for (const flag of ["--json=true", "--yes=false", "--cmr=yes"]) {
+			const error = refusal(["r1", "--", "/x", flag]);
+			expect(error.code).toBe("usage/flag-after-separator");
+			expect(error.remediation).toContain("accept no value");
+			expect(error.remediation).not.toContain("`centrs execute");
+		}
+	});
+
 	test("a value flag's `=` spelling is split in the fixed line; a boolean's is kept", () => {
 		const error = refusal([
 			"r1",

@@ -522,7 +522,11 @@ describe("a target URL with credentials is refused, never echoed (#478)", () => 
 	const secret = "hunter2pw";
 	const url = `http://admin:${secret}@127.0.0.1:1`;
 	const encodedUrl = `http://admin%3A${secret}@127.0.0.1:1`;
+	const bareEncoded = `admin%3A${secret}@127.0.0.1:1`;
 	const cases: string[][] = [
+		["execute", bareEncoded, ":put 1", "--json"],
+		["retrieve", "--host", bareEncoded, "/system/identity", "--json"],
+		["retrieve", bareEncoded, "127.0.0.2", "/system/identity", "--json"],
 		["retrieve", url, "/system/identity", "--json"],
 		["retrieve", url, "/system/identity", "--verbose"],
 		["execute", url, ":put 1", "--json"],

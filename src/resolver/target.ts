@@ -479,20 +479,25 @@ const TARGET_PREFIX = /^\s*(?:[a-z][a-z0-9+.-]*:\/\/)?/i;
 
 /**
  * Where credentials could sit: a `:` before the LAST `@`, or explicit URL
- * userinfo (whose colon may be percent-encoded). Bare `user@host` remains a
- * CDB identity candidate. Index arithmetic, so a password holding `/`, `?` or
+ * userinfo. Display also masks a percent-encoded colon; lookup validation
+ * allows that ambiguous spelling until CDB lookup has run. Bare `user@host`
+ * remains a CDB identity candidate. Index arithmetic, so a password holding `/`, `?` or
  * `#` (which ends a URL authority early, CodeRabbit on PR #479) still counts,
  * and nothing can backtrack (CodeQL js/polynomial-redos).
  */
 function targetCredentialsSpan(
 	value: string,
+	includeEncodedColon = true,
 ): { start: number; at: number } | undefined {
 	const at = value.lastIndexOf("@");
 	if (at < 0) return undefined;
 	const prefix = TARGET_PREFIX.exec(value)?.[0] ?? "";
 	const start = prefix.length;
 	const urlUserinfo = prefix.includes("://") && URL_USERINFO.test(value);
-	return value.slice(start, at).includes(":") || urlUserinfo
+	const userinfo = value.slice(start, at);
+	return userinfo.includes(":") ||
+		(includeEncodedColon && /%3a/i.test(userinfo)) ||
+		urlUserinfo
 		? { start, at }
 		: undefined;
 }
@@ -504,6 +509,7 @@ function targetCredentialsSpan(
  * password part must never reach them, not even when the target is refused.
  * Everything up to the last `@` goes, so an odd password cannot slip past.
  * Other targets, including a CDB identity like `rtr@site`, pass unchanged.
+ * An encoded colon is masked conservatively without changing lookup input.
  */
 export function redactTargetInput(value: string): string;
 export function redactTargetInput(
@@ -537,7 +543,7 @@ function targetCredentialsError(value: string): CentrsError {
  * Explicit URL userinfo is always refused, including percent-encoded forms.
  */
 export function assertNoTargetPassword(value: string): void {
-	if (targetCredentialsSpan(value)) throw targetCredentialsError(value);
+	if (targetCredentialsSpan(value, false)) throw targetCredentialsError(value);
 }
 
 /**

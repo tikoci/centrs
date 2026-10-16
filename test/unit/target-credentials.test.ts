@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { loadCdb } from "../../src/devices.ts";
 import { CentrsError } from "../../src/errors.ts";
 import { resolveMcpConfig } from "../../src/mcp/config.ts";
+import { resolveRegisteredTarget } from "../../src/mcp/safety.ts";
 import { handleRetrieve, handleValidate } from "../../src/mcp/tools.ts";
 import { identityFromComment, resolveCdb } from "../../src/resolver/cdb.ts";
 import {
@@ -8,7 +10,9 @@ import {
 	assertNoTargetPassword,
 	parseHostCandidate,
 	redactTargetInput,
+	resolveTarget,
 } from "../../src/resolver/index.ts";
+import { expandSelection } from "../../src/resolver/selection.ts";
 import { makeMcpTestCdb } from "./mcp-cdb-fixture.ts";
 
 describe("redactTargetInput (#478)", () => {
@@ -34,7 +38,8 @@ describe("redactTargetInput (#478)", () => {
 		}
 		// These are CDB identity candidates, not explicit URLs.
 		expect(redactTargetInput("rtr@site")).toBe("rtr@site");
-		expect(redactTargetInput("rtr%3A-west@site")).toBe("rtr%3A-west@site");
+		expect(redactTargetInput("rtr%3A-west@site")).toBe("***@site");
+		expect(() => assertNoTargetPassword("rtr%3A-west@site")).not.toThrow();
 	});
 
 	test("stays linear on a long run of colons (polynomial ReDoS guard)", () => {
@@ -81,6 +86,7 @@ describe("assertNoTargetCredentials (#478)", () => {
 			`http://admin:${secret}@192.0.2.1`,
 			`admin:${secret}@192.0.2.1`,
 			`http://admin%3A${secret}@192.0.2.1`,
+			`admin%3a${secret}@192.0.2.1`,
 			"https://admin@192.0.2.1",
 			"admin@192.0.2.1",
 		]) {
@@ -235,6 +241,31 @@ describe("a CDB identity with @ still resolves (#478)", () => {
 			);
 			expect(encoded?.target).toBe("192.0.2.10");
 			expect(encoded?.identity).toBe("rtr%3A-west@site");
+			const target = resolveTarget(
+				{ targetInput: "rtr%3A-west@site" },
+				{},
+				"rest-api",
+				encoded,
+			);
+			expect(target.host).toBe("192.0.2.10");
+			expect(target.identity).toBe("rtr%3A-west@site");
+			const cdb = await loadCdb({ cdbFile: path, env: {} });
+			expect(resolveRegisteredTarget(cdb, "rtr%3A-west@site").target).toBe(
+				"192.0.2.10",
+			);
+			const selection = await expandSelection(
+				{
+					positionals: ["rtr%3A-west@site"],
+					groups: [],
+					all: false,
+					default: false,
+					where: [],
+				},
+				{ cdbFile: path, allowAdhoc: false },
+				{},
+			);
+			expect(selection.targets).toHaveLength(1);
+			expect(selection.targets[0]?.kind).toBe("cdb");
 		} finally {
 			await cleanup();
 		}
@@ -245,5 +276,46 @@ describe("a CDB identity with @ still resolves (#478)", () => {
 			CentrsError,
 		);
 		expect(() => assertNoTargetPassword("admin@192.0.2.1")).not.toThrow();
+	});
+});
+
+describe("bare encoded credentials after CDB lookup", () => {
+	test("lookup failures and MCP refusals never echo encoded credentials", async () => {
+		const secret = "encoded-canary";
+		const target = `admin%3a${secret}@192.0.2.1`;
+		const { path, cleanup } = await makeMcpTestCdb([{ target: "known" }]);
+		try {
+			const config = resolveMcpConfig({ cdbFile: path, env: {} });
+			const error = await resolveCdb(
+				{ targetInput: target, cdbFile: path },
+				{},
+			).catch((error: unknown) => error);
+			expect(error).toBeInstanceOf(CentrsError);
+			expect(JSON.stringify(error)).not.toContain(secret);
+			for (const allowAdhoc of [false, true]) {
+				const error = await expandSelection(
+					{
+						positionals: [target],
+						groups: [],
+						all: false,
+						default: false,
+						where: [],
+					},
+					{ cdbFile: path, allowAdhoc },
+					{},
+				).catch((error: unknown) => error);
+				expect(error).toBeInstanceOf(CentrsError);
+				expect(JSON.stringify(error)).not.toContain(secret);
+			}
+			for (const envelope of [
+				await handleValidate({ target, command: "/interface/print" }, config),
+				await handleRetrieve({ target, path: "/system/resource" }, config),
+			]) {
+				expect(envelope.ok).toBe(false);
+				expect(JSON.stringify(envelope)).not.toContain(secret);
+			}
+		} finally {
+			await cleanup();
+		}
 	});
 });

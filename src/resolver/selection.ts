@@ -47,7 +47,11 @@ import {
 	matchesNear,
 	type NearPredicate,
 } from "./geo.ts";
-import { assertNoTargetPassword } from "./target.ts";
+import {
+	assertNoTargetCredentials,
+	assertNoTargetPassword,
+	redactTargetInput,
+} from "./target.ts";
 
 /** One `--where attr=value` device-class clause (exact-match, AND-combined). */
 export interface SelectionWhereClause {
@@ -281,6 +285,10 @@ export async function expandSelection(
 			const shown = showDevice({ cdb, target: positional });
 			indices.add(shown.data.entry.cdbRecordIndex);
 		} catch (error) {
+			// Preserve registered identities; mask credential-shaped lookup failures.
+			if (redactTargetInput(positional) !== positional) {
+				assertNoTargetCredentials(positional);
+			}
 			if (
 				error instanceof CentrsError &&
 				error.code === "cdb/not-found-target"

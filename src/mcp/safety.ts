@@ -19,7 +19,11 @@ import {
 import { CentrsError } from "../errors.ts";
 import type { McpWritePolicy } from "../mcp.ts";
 import { parseCommentKv } from "../resolver/comment-kv.ts";
-import { assertNoTargetPassword } from "../resolver/target.ts";
+import {
+	assertNoTargetCredentials,
+	assertNoTargetPassword,
+	redactTargetInput,
+} from "../resolver/target.ts";
 import type { CentrsMcpConfig } from "./config.ts";
 
 export interface RegisteredTarget {
@@ -75,6 +79,10 @@ export function resolveRegisteredTarget(
 	try {
 		entry = showDevice({ cdb, target }).data.entry;
 	} catch (error) {
+		// Preserve registered identities; mask credential-shaped lookup failures.
+		if (redactTargetInput(target) !== target) {
+			assertNoTargetCredentials(target);
+		}
 		if (error instanceof CentrsError && error.code === "cdb/not-found-target") {
 			throw new CentrsError({
 				code: "cdb/target-not-registered",
