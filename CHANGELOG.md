@@ -190,6 +190,8 @@ part of this section.
   the tag and a GitHub Release. A pushed `v*` tag no longer publishes. The
   changelog keeps one section per stable version; the `0.1.8-next.0` and
   `0.1.9-next.0` sections are folded into theirs.
+- The CodeQL workflow no longer runs the AI-findings probe job (#486). Code
+  Quality AI findings are a paid feature this repository does not enable.
 
 ## 0.1.8 — 2026-10-12
 

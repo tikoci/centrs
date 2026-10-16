@@ -25,7 +25,7 @@ Use `SECURITY.md` as the source-of-truth summary for scanning posture.
   true-positive (deliberately break the invariant on a throwaway branch, dispatch
   `codeql.yaml`, confirm the finding fires) before it goes in `codeql-config.yml`.
 - Treat the GitHub Security tab as the live alert state and aim for 0 open findings.
-- AI findings are noisy; address each finding on its merits or dismiss false positives in the GitHub UI (or `gh api .../code-scanning/alerts/{n} -X PATCH`) with a written justification — this is still the right first move for a *new* finding, since the UI dismissal is the audit-log record.
+- Address each CodeQL or Code Quality finding on its merits or dismiss false positives in the GitHub UI (or `gh api .../code-scanning/alerts/{n} -X PATCH`) with a written justification — this is still the right first move for a *new* finding, since the UI dismissal is the audit-log record.
 - Do not rely on in-code `codeql[...]` or `lgtm[...]` comments to suppress a
   finding. CodeQL 2.26.2 ignored both forms on PR #233, including trailing
   `lgtm[...]` comments on the exact sink lines; moving the sinks merely changed
