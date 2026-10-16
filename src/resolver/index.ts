@@ -131,10 +131,13 @@ export {
 	toCoreSource,
 } from "./settings.ts";
 export {
+	assertNoTargetCredentials,
+	assertNoTargetPassword,
 	defaultPortForScheme,
 	parseHostCandidate,
 	type ResolvedAuth,
 	type ResolvedTarget,
+	redactTargetInput,
 	resolveAuth,
 	resolveTarget,
 	type TargetResolveInput,

@@ -44,6 +44,7 @@ import {
 	parseDuration,
 	type ResolvedSetting,
 } from "./settings.ts";
+import { assertNoTargetPassword, redactTargetInput } from "./target.ts";
 
 const ENV_CDB_FILE = "CENTRS_CDB_FILE";
 const ENV_CDB_PASSWORD = "CENTRS_CDB_PASSWORD";
@@ -161,6 +162,8 @@ export async function resolveCdb(
 	if (!input.targetInput) {
 		return undefined;
 	}
+	// Before any lookup: a CDB miss echoes the target it was given (#478).
+	assertNoTargetPassword(input.targetInput);
 
 	const settings = resolveDevicesSettings({
 		cdbFile: input.cdbFile,
@@ -366,7 +369,8 @@ export function resolutionFromEntry(
  * ambiguity path). See `commands/devices/README.md` (Identity model).
  */
 export function identityFromComment(comment: string, target: string): string {
-	return parseCommentKv(comment).lookups.identity ?? target;
+	// The record's target is shown as its handle; never with a password (#478).
+	return parseCommentKv(comment).lookups.identity ?? redactTargetInput(target);
 }
 
 /**

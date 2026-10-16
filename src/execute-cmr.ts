@@ -107,7 +107,7 @@ import {
 	type RouterOsProtocol,
 } from "./protocols/index.ts";
 import { classifyParseResult } from "./protocols/mac-telnet-console.ts";
-import { toCoreSource } from "./resolver/index.ts";
+import { redactTargetInput, toCoreSource } from "./resolver/index.ts";
 
 /** The device-stage validator identity for a CMR client. */
 export const CMR_VALIDATION_SOURCE = ":put [:parse ...] via cmr run-script";
@@ -1372,7 +1372,11 @@ export function buildExecuteCmrErrorEnvelope(
 		error: serializeCentrsError(centrsError),
 		warnings: OUTER_ERROR_WARNINGS.get(centrsError) ?? [],
 		tips: [],
-		meta: { target: { input: request.targetInput }, via, settings: {} },
+		meta: {
+			target: { input: redactTargetInput(request.targetInput) },
+			via,
+			settings: {},
+		},
 	};
 }
 

@@ -36,6 +36,7 @@ import {
 import type { CommentKvUpdate } from "../resolver/comment-kv.ts";
 import { parseBbox, parseNear } from "../resolver/geo.ts";
 import { parseDuration } from "../resolver/settings.ts";
+import { redactTargetInput } from "../resolver/target.ts";
 import { retrieveEnvelope } from "../retrieve.ts";
 import {
 	buildRetrieveFanoutErrorEnvelope,
@@ -89,7 +90,9 @@ function mcpErrorEnvelope(
 		warnings: [],
 		tips: [],
 		meta: {
-			target: context.target ? { input: context.target } : {},
+			target: context.target
+				? { input: redactTargetInput(context.target) }
+				: {},
 			via: null,
 			settings: {},
 			operation: { kind: "mcp", tool },

@@ -109,6 +109,7 @@ export function resolveTarget(
 	}
 
 	const rawCandidate = hostSetting.value.trim();
+	assertNoTargetCredentials(rawCandidate);
 	const macCandidate = normalizeMac(rawCandidate);
 
 	// L2 transports (mac-telnet) address the device by **MAC** directly — no IP
@@ -178,7 +179,7 @@ export function resolveTarget(
 		const deliveryHost = deliveryHostSetting?.value.trim() || "255.255.255.255";
 		const port = macPortSetting?.value ?? MAC_TELNET_PORT;
 		return {
-			input: input.targetInput,
+			input: redactTargetInput(input.targetInput),
 			host: deliveryHost,
 			mac,
 			port,
@@ -290,7 +291,7 @@ export function resolveTarget(
 	};
 
 	return {
-		input: input.targetInput,
+		input: redactTargetInput(input.targetInput),
 		// WHATWG keeps an IPv6 hostname bracketed; sockets and ssh need the bare
 		// address (`baseUrl` re-brackets it).
 		host: parsedUrl.hostname.replace(/^\[(.*)\]$/, "$1"),
@@ -471,6 +472,79 @@ export function resolveAuth(
 	};
 }
 
+/** An authority with userinfo: `user@host`, `user:pass@host`, with or without a scheme. */
+const URL_USERINFO = /^\s*([a-z][a-z0-9+.-]*:\/\/)?[^/@\s]*@/i;
+/** Leading whitespace and an optional `scheme://`, kept by redaction. */
+const TARGET_PREFIX = /^\s*(?:[a-z][a-z0-9+.-]*:\/\/)?/i;
+
+/**
+ * Where a password could sit: a `:` between the optional `scheme://` and the
+ * LAST `@`. Index arithmetic, not a pattern, so a password holding `/`, `?` or
+ * `#` (which ends a URL authority early, CodeRabbit on PR #479) still counts,
+ * and nothing can backtrack (CodeQL js/polynomial-redos).
+ */
+function passwordSpan(
+	value: string,
+): { start: number; at: number } | undefined {
+	const at = value.lastIndexOf("@");
+	if (at < 0) return undefined;
+	const start = TARGET_PREFIX.exec(value)?.[0].length ?? 0;
+	return value.slice(start, at).includes(":") ? { start, at } : undefined;
+}
+
+/**
+ * A target string with any `user:pass@` replaced by `***@`, for display (#478).
+ * A target is echoed in `meta.target.input` and in error messages, so the
+ * password part must never reach them, not even when the target is refused.
+ * Everything up to the last `@` goes, so an odd password cannot slip past.
+ * Other targets, including a CDB identity like `rtr@site`, pass unchanged.
+ */
+export function redactTargetInput(value: string): string;
+export function redactTargetInput(
+	value: string | undefined,
+): string | undefined;
+export function redactTargetInput(
+	value: string | undefined,
+): string | undefined {
+	if (value === undefined) return value;
+	const span = passwordSpan(value);
+	return span
+		? `${value.slice(0, span.start)}***${value.slice(span.at)}`
+		: value;
+}
+
+function targetCredentialsError(value: string): CentrsError {
+	const target = redactTargetInput(value);
+	return new CentrsError({
+		code: "input/invalid-target",
+		summary: `A target must not carry credentials (\`user[:password]@\`): ${target}`,
+		remediation:
+			"Drop the `user:password@` part and pass the credentials with `--username` and `--password` (or `CENTRS_USERNAME`/`CENTRS_PASSWORD`, or a CDB record); give the target as `host[:port]` or `http(s)://host[:port]`.",
+		context: { target },
+	});
+}
+
+/**
+ * Refuse a target that may hold a password, BEFORE any lookup whose miss would
+ * echo it (#478): `resolveCdb`, the MCP allowlist, the fan-out selection. A
+ * bare `user@host` holds no secret, so it is left to the lookup; a CDB
+ * identity may contain `@`.
+ */
+export function assertNoTargetPassword(value: string): void {
+	if (passwordSpan(value)) throw targetCredentialsError(value);
+}
+
+/**
+ * centrs never reads credentials from a target (#478): `user:pass@host` used
+ * to be accepted with its credentials ignored, and echoed the password back.
+ * After lookup, refuse any userinfo in the host to dial, from any source.
+ */
+export function assertNoTargetCredentials(value: string): void {
+	if (passwordSpan(value) || URL_USERINFO.test(value)) {
+		throw targetCredentialsError(value);
+	}
+}
+
 export function parseHostCandidate(value: string): URL {
 	const hasScheme = /^https?:\/\//i.test(value);
 	// A bare IPv6 literal (`2001:db8::1`) has no port; URL needs it bracketed.
@@ -500,12 +574,12 @@ function invalidTargetError(value: string, cause: unknown): CentrsError {
 	const quickchrGuess = /^quickchr:(.+)$/i.exec(value)?.[1];
 	return new CentrsError({
 		code: "input/invalid-target",
-		summary: `Target is not a known device or a valid host: ${value}`,
+		summary: `Target is not a known device or a valid host: ${redactTargetInput(value)}`,
 		remediation:
 			quickchrGuess !== undefined
 				? `Select a quickchr VM with the flag: \`--quickchr ${quickchrGuess}\` (there is no \`quickchr:\` target prefix).`
 				: "Pass a CDB target or identity (see `centrs devices list`), an IP or hostname with optional `:port`, or an `http(s)://host[:port]` base URL.",
-		context: { target: value },
+		context: { target: redactTargetInput(value) },
 		cause,
 	});
 }
