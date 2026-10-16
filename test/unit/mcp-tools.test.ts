@@ -268,6 +268,8 @@ describe("handleExecute (offline gates)", () => {
 			for (const command of [
 				":serialize to=json value=1 file-n=out.json",
 				"/system/identity/export fi=out",
+				":serialize to=json value=1 file-name out.json",
+				'/system identity export fi "out"',
 			]) {
 				for (const confirm of [undefined, true]) {
 					const envelope = await handleExecute(

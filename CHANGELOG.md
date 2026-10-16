@@ -114,7 +114,8 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Fixed
 
-- Abbreviated output-file arguments (`fi=`, `file-n=`) require write
+- Abbreviated output-file arguments (`fi=`, `file-n=`), and the spaced
+  `file-name value` form under print/export/serialize, require write
   confirmation in `execute`, including inside scripts, and are refused for
   MCP `mcp=ro` records. RouterOS accepted these spellings while centrs
   recognized only `file=` and `file-name=`, letting file creation bypass

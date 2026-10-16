@@ -58,7 +58,8 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   Root mutators such as `/import` and indirect
   execution through `:execute` are write-shaped too, as are `:global`, `:set`
   and `:parse`, and so is any command carrying `file=` or `file-name=`
-  (including argument prefixes such as `fi=` and `file-n=`, example W5):
+  (including argument prefixes such as `fi=` and `file-n=`, and the spaced
+  `file-name value` spelling under print/export/serialize, example W5):
   RouterOS redirects output into a device file, so
   `/ip/address/export file=address` creates `address.rsc`,
   `/file/print file=test` creates `test.txt` and `:serialize … file-name=x`

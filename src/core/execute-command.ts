@@ -295,7 +295,11 @@ function scriptContainsWriteShapedCommand(input: string): boolean {
 		// Every command the statement runs must be proven read-only, not just the
 		// first: `:foreach i in=[/ip address find] do={/user expire-password $i}`
 		// reads with `find` and writes with an unlearned mutator.
-		if (!commandHeads(statement).every(isReadOnlyCommand)) {
+		if (
+			!commandHeads(statement).every(
+				(head) => !head.spacedFileOutput && isReadOnlyCommand(head.words),
+			)
+		) {
 			return true;
 		}
 	}
@@ -310,8 +314,10 @@ function scriptContainsWriteShapedCommand(input: string): boolean {
  * expressions, not commands, so they do not start one. Each head reads only up
  * to the next opener, which begins its own head.
  */
-function commandHeads(statement: string): string[][] {
-	const heads: string[][] = [];
+function commandHeads(
+	statement: string,
+): { words: string[]; spacedFileOutput: boolean }[] {
+	const heads: { words: string[]; spacedFileOutput: boolean }[] = [];
 	const starts = [0];
 	for (let index = 0; index < statement.length; index += 1) {
 		const char = statement[index];
@@ -328,9 +334,57 @@ function commandHeads(statement: string): string[][] {
 		if (head === undefined) continue;
 		const words = commandWords(head, tokens.slice(1));
 		// A lone closer (`}` ending a multi-line block) runs nothing.
-		if (words.length > 0) heads.push(words);
+		if (words.length > 0)
+			heads.push({
+				words,
+				spacedFileOutput: hasSpacedFileOutput(statement, start, words),
+			});
 	}
 	return heads;
+}
+
+/**
+ * RouterOS also accepts `file value` / `file-name value` without `=`. These
+ * belong to print/export/serialize, not a loop variable or a pure function's
+ * value. Read the command's own tokens, skipping nested expressions and
+ * blocks: `:serialize value=[:tostr file] file-n "out"` has one file argument
+ * after its nested read. Quoted text is already masked by the statement split.
+ * Grounded on CHR 7.26beta1, with export also checked on long-term.
+ */
+function hasSpacedFileOutput(
+	statement: string,
+	start: number,
+	words: readonly string[],
+): boolean {
+	let commandWords: number;
+	if (words[0] === ":serialize") {
+		commandWords = 1;
+	} else {
+		const depth = menuDepth(words);
+		if (words[depth] !== "print" && words[depth] !== "export") return false;
+		commandWords = depth + 1;
+	}
+	let own = "";
+	let nested = 0;
+	for (let index = start; index < statement.length; index += 1) {
+		const char = statement[index] ?? "";
+		if ("[{(".includes(char)) {
+			if (nested === 0) own += " ";
+			nested += 1;
+		} else if ("]})".includes(char)) {
+			if (nested === 0) break;
+			nested -= 1;
+		} else if (nested === 0) own += char;
+	}
+	let consumed = 0;
+	for (const token of tokenizeRouterOsCli(own)) {
+		if (consumed < commandWords) {
+			consumed += token.split("/").filter(Boolean).length;
+			continue;
+		}
+		if (!token.includes("=") && isFileOutputAttribute(token)) return true;
+	}
+	return false;
 }
 
 /**
@@ -384,12 +438,16 @@ function commandWords(head: string, following: readonly string[]): string[] {
 function isReadOnlyCommand(words: readonly string[]): boolean {
 	const head = words[0] ?? "";
 	if (head.startsWith(":")) return READ_ONLY_SCRIPT_DIRECTIVES.has(head);
+	const verb = words[menuDepth(words)];
+	return verb !== undefined && READ_ONLY_EXECUTE_VERBS.has(verb.toLowerCase());
+}
+
+function menuDepth(words: readonly string[]): number {
 	let depth = 0;
 	while (depth < words.length && isKnownMenuPath(words.slice(0, depth + 1))) {
 		depth += 1;
 	}
-	const verb = words[depth];
-	return verb !== undefined && READ_ONLY_EXECUTE_VERBS.has(verb.toLowerCase());
+	return depth;
 }
 
 function trimGroupingPunctuation(value: string): string {

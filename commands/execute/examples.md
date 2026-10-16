@@ -601,6 +601,10 @@ commands with `--yes` pass validation and create `centrs-w5.rsc` and
 `centrs_execute`, an `mcp=ro` record returns `cdb/write-not-permitted` with or
 without `confirm: true`, and creates no file.
 
+RouterOS also accepts `fi "centrs-w5"` and `file-n "centrs-w5.json"`, without
+`=`. They keep the same confirmation and MCP policy gates, including when
+serialize's file argument follows a nested value expression.
+
 `test/integration/execute-write-gate.test.ts` proves the refusal, absence and
 confirmed creation. The export control runs on the selected channel; the
 serialize control pins CHR 7.26beta1, where its file output was reproduced.

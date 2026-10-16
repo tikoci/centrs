@@ -134,6 +134,28 @@ describe("script directives: read or write (#458)", () => {
 		expect(writes('/ip/address/print where comment="fi=out"')).toBe(false);
 	});
 
+	test("output-file arguments may omit =, including after a nested value", () => {
+		for (const command of [
+			':serialize to=json value=1 file-name "out.json"',
+			':put [:serialize to=json value=1 file-n "out.json"]',
+			':serialize to=json value=[:tonum 1] file-n "out.json"',
+			'/system identity export fi "out"',
+			'/system/identity/export file "out"',
+			'/file print detail=yes fi "out"',
+		])
+			expect(writes(command)).toBe(true);
+
+		// A loop variable or a value under a pure directive is not an argument
+		// of a print/export/serialize, even when it looks like a file prefix.
+		for (const command of [
+			":foreach f in=[/file/find] do={/file/print}",
+			":local file 1; :put $file",
+			":put file",
+			":serialize to=json value=[:tostr file]",
+		])
+			expect(writes(command)).toBe(false);
+	});
+
 	test("the absolute `/name` spelling of a root directive is the directive", () => {
 		expect(writes("/serialize to=json value=1")).toBe(false);
 		expect(writes("/delay 1s")).toBe(false);

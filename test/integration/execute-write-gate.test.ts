@@ -52,55 +52,57 @@ describeFast("output-file write gates against CHR", () => {
 						...(via === "native-api" ? { port: chr.ports.api } : {}),
 						...auth,
 					};
-					const name = `centrs-w5-${kind}-${via}`;
-					const fileName =
-						kind === "serialize" ? `${name}.json` : `${name}.rsc`;
-					const command =
-						kind === "serialize"
-							? `:serialize to=json value=1 file-n=${fileName}`
-							: `/system identity export fi=${name}`;
-					const refused = await executeEnvelope(
-						{ ...base, command, stdinIsTty: false },
-						{},
-					);
-					expect(refused.ok ? undefined : refused.error.code).toBe(
-						"usage/confirmation-required",
-					);
-					for (const confirm of [undefined, true]) {
-						const denied = await handleExecute(
-							{ target: chr.restUrl, command, via, confirm },
-							config,
+					for (const separator of ["=", " "]) {
+						const name = `centrs-w5-${kind}-${via}-${separator === "=" ? "equals" : "space"}`;
+						const fileName =
+							kind === "serialize" ? `${name}.json` : `${name}.rsc`;
+						const command =
+							kind === "serialize"
+								? `:serialize to=json value=1 file-n${separator}"${fileName}"`
+								: `/system identity export fi${separator}"${name}"`;
+						const refused = await executeEnvelope(
+							{ ...base, command, stdinIsTty: false },
+							{},
 						);
-						expect(denied.ok ? undefined : denied.error.code).toBe(
-							"cdb/write-not-permitted",
+						expect(refused.ok ? undefined : refused.error.code).toBe(
+							"usage/confirmation-required",
 						);
-					}
-					const before = await retrieve({ ...base, path: "/file" }, {});
-					expect(before.ok).toBe(true);
-					expect(Array.isArray(before.data)).toBe(true);
-					expect(
-						(before.data as { name?: string }[]).some(
-							(row) => row.name === fileName,
-						),
-					).toBe(false);
+						for (const confirm of [undefined, true]) {
+							const denied = await handleExecute(
+								{ target: chr.restUrl, command, via, confirm },
+								config,
+							);
+							expect(denied.ok ? undefined : denied.error.code).toBe(
+								"cdb/write-not-permitted",
+							);
+						}
+						const before = await retrieve({ ...base, path: "/file" }, {});
+						expect(before.ok).toBe(true);
+						expect(Array.isArray(before.data)).toBe(true);
+						expect(
+							(before.data as { name?: string }[]).some(
+								(row) => row.name === fileName,
+							),
+						).toBe(false);
 
-					// The exact same command is accepted by the device with --yes.
-					// This keeps a parser rejection from masquerading as a safe gate.
-					const confirmed = await executeEnvelope(
-						{ ...base, command, yes: true },
-						{},
-					);
-					expect(confirmed).toMatchObject({
-						ok: true,
-						meta: { validation: { result: "passed" } },
-					});
-					const after = await retrieve({ ...base, path: "/file" }, {});
-					expect(after.ok).toBe(true);
-					expect(
-						(after.data as { name?: string }[]).some(
-							(row) => row.name === fileName,
-						),
-					).toBe(true);
+						// The exact same command is accepted by the device with --yes.
+						// This keeps a parser rejection from masquerading as a safe gate.
+						const confirmed = await executeEnvelope(
+							{ ...base, command, yes: true },
+							{},
+						);
+						expect(confirmed).toMatchObject({
+							ok: true,
+							meta: { validation: { result: "passed" } },
+						});
+						const after = await retrieve({ ...base, path: "/file" }, {});
+						expect(after.ok).toBe(true);
+						expect(
+							(after.data as { name?: string }[]).some(
+								(row) => row.name === fileName,
+							),
+						).toBe(true);
+					}
 				}
 				await recordIntegrationEvidence({
 					suite: `output-file write gates (${kind})`,
