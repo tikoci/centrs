@@ -105,8 +105,7 @@ scheme as the reference):
   the gate is defined once in `scripts/qa-results-db.ts` (`channelPolicy` /
   `evaluateMustPassGate`), the matrix axis in `scripts/qa-active-channels.ts`, the
   accumulator in `scripts/qa-history.ts`.
-- **Security/quality** → `codeql.yaml` (PR + push + weekly + dispatch) + the
-  AI-findings probe.
+- **Security/quality** → `codeql.yaml` (PR + push + weekly + dispatch).
 - **Release/publish** → `release.yaml`: dispatch-only from `main` (a pushed
   `v*` tag triggers nothing). `channel=next` → `<base>-next.<run_number>` on
   npm `next`; `channel=latest` → the committed version on `latest`, `next`
