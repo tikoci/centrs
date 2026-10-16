@@ -521,10 +521,13 @@ describe("text-mode warnings go to stderr (#470, no network)", () => {
 describe("a target URL with credentials is refused, never echoed (#478)", () => {
 	const secret = "hunter2pw";
 	const url = `http://admin:${secret}@127.0.0.1:1`;
+	const encodedUrl = `http://admin%3A${secret}@127.0.0.1:1`;
 	const cases: string[][] = [
 		["retrieve", url, "/system/identity", "--json"],
 		["retrieve", url, "/system/identity", "--verbose"],
 		["execute", url, ":put 1", "--json"],
+		["execute", encodedUrl, ":put 1", "--json"],
+		["retrieve", "--host", encodedUrl, "/system/identity", "--json"],
 		["api", url, "system/identity", "--raw"],
 		["transfer", url, "list", "--json"],
 		["retrieve", url, "127.0.0.2", "/system/identity", "--json"],
@@ -542,4 +545,21 @@ describe("a target URL with credentials is refused, never echoed (#478)", () => 
 			expect(res.stderrText).not.toContain(secret);
 		});
 	}
+	test("a separator refusal redacts encoded URL userinfo in the real CLI", async () => {
+		const res = await runCliProcess({
+			args: [
+				"execute",
+				encodedUrl,
+				"--json",
+				"--",
+				"/system/identity/print",
+				"--verbose",
+			],
+		});
+		expect(res.exitCode).toBe(1);
+		expect(res.stdoutText + res.stderrText).toContain(
+			"usage/flag-after-separator",
+		);
+		expect(res.stdoutText + res.stderrText).not.toContain(secret);
+	});
 });

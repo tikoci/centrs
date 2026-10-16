@@ -184,21 +184,38 @@ export function rejectFlagsAfterSeparator(
 	for (const option of options) {
 		for (const token of option.flag.split("/")) {
 			const trimmed = token.trim();
-			if (trimmed.startsWith("--") && trimmed !== "--") {
+			if (trimmed.startsWith("-") && trimmed !== "--") {
 				optionByFlag.set(trimmed, option);
 			}
 		}
 	}
 	const secret = (flag: string) =>
 		flag.startsWith("-") && flag.includes("password");
-	const before = args.slice(0, separator).map((token, index, all) => {
+	const before: string[] = [];
+	for (let index = 0; index < separator; index += 1) {
+		const token = args[index] ?? "";
 		const [name = ""] = token.split("=");
-		if (token.includes("=") && secret(name)) return `${name}=<password>`;
-		const previous = all[index - 1];
-		return previous !== undefined && secret(previous)
-			? "<password>"
-			: redactTargetInput(token);
-	});
+		const equal = token.indexOf("=");
+		if (equal >= 0 && optionByFlag.get(name)?.valueName !== undefined) {
+			before.push(
+				name,
+				secret(name) ? "<password>" : redactTargetInput(token.slice(equal + 1)),
+			);
+			continue;
+		}
+		if (equal >= 0 && secret(name)) {
+			before.push(`${name}=<password>`);
+			continue;
+		}
+		before.push(redactTargetInput(token));
+		if (optionByFlag.get(name)?.valueName !== undefined || secret(name)) {
+			const value = args[index + 1];
+			if (index + 1 < separator && value !== undefined) {
+				before.push(secret(name) ? "<password>" : redactTargetInput(value));
+				index += 1;
+			}
+		}
+	}
 	const moved: string[] = [];
 	const kept: string[] = [];
 	const flags: string[] = [];
@@ -206,7 +223,7 @@ export function rejectFlagsAfterSeparator(
 	for (let index = 0; index < after.length; index += 1) {
 		const token = after[index] ?? "";
 		const [name = "", ...valueParts] = token.split("=");
-		const option = optionByFlag.get(name);
+		const option = name.startsWith("--") ? optionByFlag.get(name) : undefined;
 		if (option === undefined) {
 			kept.push(token);
 			continue;

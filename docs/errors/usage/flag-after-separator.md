@@ -21,6 +21,8 @@ needs such a token, put it inside the quoted command. Password values are
 replaced by `<password>` in the printed command line.
 Credentials embedded in a positional target or a `--host` value are redacted
 to `***@host`, including when `--host` is moved before the separator.
+Explicit URL userinfo is redacted even when its colon is percent-encoded;
+bare CDB identities such as `rtr@site` remain unchanged.
 
 See [`docs/CONSTITUTION.md`](../../CONSTITUTION.md) for the centrs error
 contract.

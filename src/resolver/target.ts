@@ -478,22 +478,28 @@ const URL_USERINFO = /^\s*([a-z][a-z0-9+.-]*:\/\/)?[^/@\s]*@/i;
 const TARGET_PREFIX = /^\s*(?:[a-z][a-z0-9+.-]*:\/\/)?/i;
 
 /**
- * Where a password could sit: a `:` between the optional `scheme://` and the
- * LAST `@`. Index arithmetic, not a pattern, so a password holding `/`, `?` or
+ * Where credentials could sit: a `:` before the LAST `@`, or explicit URL
+ * userinfo (whose colon may be percent-encoded). Bare `user@host` remains a
+ * CDB identity candidate. Index arithmetic, so a password holding `/`, `?` or
  * `#` (which ends a URL authority early, CodeRabbit on PR #479) still counts,
  * and nothing can backtrack (CodeQL js/polynomial-redos).
  */
-function passwordSpan(
+function targetCredentialsSpan(
 	value: string,
 ): { start: number; at: number } | undefined {
 	const at = value.lastIndexOf("@");
 	if (at < 0) return undefined;
-	const start = TARGET_PREFIX.exec(value)?.[0].length ?? 0;
-	return value.slice(start, at).includes(":") ? { start, at } : undefined;
+	const prefix = TARGET_PREFIX.exec(value)?.[0] ?? "";
+	const start = prefix.length;
+	const urlUserinfo = prefix.includes("://") && URL_USERINFO.test(value);
+	return value.slice(start, at).includes(":") || urlUserinfo
+		? { start, at }
+		: undefined;
 }
 
 /**
- * A target string with any `user:pass@` replaced by `***@`, for display (#478).
+ * A target string with any `user:pass@` or explicit URL userinfo replaced by
+ * `***@`, for display (#478).
  * A target is echoed in `meta.target.input` and in error messages, so the
  * password part must never reach them, not even when the target is refused.
  * Everything up to the last `@` goes, so an odd password cannot slip past.
@@ -507,7 +513,7 @@ export function redactTargetInput(
 	value: string | undefined,
 ): string | undefined {
 	if (value === undefined) return value;
-	const span = passwordSpan(value);
+	const span = targetCredentialsSpan(value);
 	return span
 		? `${value.slice(0, span.start)}***${value.slice(span.at)}`
 		: value;
@@ -527,11 +533,11 @@ function targetCredentialsError(value: string): CentrsError {
 /**
  * Refuse a target that may hold a password, BEFORE any lookup whose miss would
  * echo it (#478): `resolveCdb`, the MCP allowlist, the fan-out selection. A
- * bare `user@host` holds no secret, so it is left to the lookup; a CDB
- * identity may contain `@`.
+ * bare `user@host` is left to the lookup; a CDB identity may contain `@`.
+ * Explicit URL userinfo is always refused, including percent-encoded forms.
  */
 export function assertNoTargetPassword(value: string): void {
-	if (passwordSpan(value)) throw targetCredentialsError(value);
+	if (targetCredentialsSpan(value)) throw targetCredentialsError(value);
 }
 
 /**
@@ -540,7 +546,7 @@ export function assertNoTargetPassword(value: string): void {
  * After lookup, refuse any userinfo in the host to dial, from any source.
  */
 export function assertNoTargetCredentials(value: string): void {
-	if (passwordSpan(value) || URL_USERINFO.test(value)) {
+	if (targetCredentialsSpan(value) || URL_USERINFO.test(value)) {
 		throw targetCredentialsError(value);
 	}
 }

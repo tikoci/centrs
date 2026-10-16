@@ -23,6 +23,20 @@ describe("redactTargetInput (#478)", () => {
 		expect(redactTargetInput("admin:@192.0.2.1")).toBe("***@192.0.2.1");
 	});
 
+	test("explicit URL userinfo is redacted even with a percent-encoded colon", () => {
+		const secret = "userinfo-canary";
+		for (const target of [
+			`http://admin%3A${secret}@192.0.2.1`,
+			`https://admin@192.0.2.1`,
+		]) {
+			expect(redactTargetInput(target)).toEndWith("***@192.0.2.1");
+			expect(() => assertNoTargetPassword(target)).toThrow(CentrsError);
+		}
+		// These are CDB identity candidates, not explicit URLs.
+		expect(redactTargetInput("rtr@site")).toBe("rtr@site");
+		expect(redactTargetInput("rtr%3Awest@site")).toBe("rtr%3Awest@site");
+	});
+
 	test("stays linear on a long run of colons (polynomial ReDoS guard)", () => {
 		const hostile = ":".repeat(200_000);
 		const started = performance.now();
@@ -66,6 +80,7 @@ describe("assertNoTargetCredentials (#478)", () => {
 		for (const value of [
 			`http://admin:${secret}@192.0.2.1`,
 			`admin:${secret}@192.0.2.1`,
+			`http://admin%3A${secret}@192.0.2.1`,
 			"https://admin@192.0.2.1",
 			"admin@192.0.2.1",
 		]) {
@@ -98,7 +113,11 @@ describe("credentials never reach an echo path (#478)", () => {
 	const withCreds = `admin:${secret}@192.0.2.1`;
 
 	test("resolveCdb refuses before any CDB lookup, even with leading whitespace", async () => {
-		for (const target of [withCreds, `  ${withCreds}`]) {
+		for (const target of [
+			withCreds,
+			`  ${withCreds}`,
+			`http://admin%3A${secret}@192.0.2.1`,
+		]) {
 			const error = await resolveCdb(
 				{ targetInput: target, cdbFile: "/nonexistent/centrs-478.cdb" },
 				{},
@@ -200,6 +219,7 @@ describe("a CDB identity with @ still resolves (#478)", () => {
 	test("`user@host` holds no password, so the lookup runs first", async () => {
 		const { path, cleanup } = await makeMcpTestCdb([
 			{ target: "192.0.2.9", comment: "identity=rtr@site" },
+			{ target: "192.0.2.10", comment: "identity=rtr%3Awest@site" },
 		]);
 		try {
 			const resolved = await resolveCdb(
@@ -209,6 +229,12 @@ describe("a CDB identity with @ still resolves (#478)", () => {
 			expect(resolved?.target).toBe("192.0.2.9");
 			expect(resolved?.identity).toBe("rtr@site");
 			expect(redactTargetInput("rtr@site")).toBe("rtr@site");
+			const encoded = await resolveCdb(
+				{ targetInput: "rtr%3Awest@site", cdbFile: path },
+				{},
+			);
+			expect(encoded?.target).toBe("192.0.2.10");
+			expect(encoded?.identity).toBe("rtr%3Awest@site");
 		} finally {
 			await cleanup();
 		}
