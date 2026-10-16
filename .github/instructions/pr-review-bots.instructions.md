@@ -55,9 +55,12 @@ misread the state of the PR.
 required conversation resolution**, `enforce_admins: false` (an admin can still
 override the button or merge via `gh`).
 
-Because every reviewer submits `COMMENTED` (never `CHANGES_REQUESTED`),
-`gh pr view N --json reviewDecision` stays **empty** — it is *not* the signal to
-watch. The block surfaces as `mergeStateStatus: BLOCKED`, driven by the
+Because the bots and local reviewers submit `COMMENTED` (never
+`CHANGES_REQUESTED`), `gh pr view N --json reviewDecision` stays **empty** for
+them — it is *not* the signal to watch. A human reviewer can submit `APPROVED`
+or `CHANGES_REQUESTED`. Branch protection requires no approving review, so a
+human `CHANGES_REQUESTED` does not disable the merge button; do not merge over
+it. The block surfaces as `mergeStateStatus: BLOCKED`, driven by the
 **unresolved review threads**. Resolving every thread is what clears the gate.
 A clear gate means the threads that exist are resolved; it does not mean the
 current head was reviewed.
@@ -134,8 +137,11 @@ When a report says a PR "was reviewed", check which commits the review covered:
   replies to your thread replies show up the same way.
 
 ```sh
+# One line per review with a body: login, commit_id, time, and CodeRabbit's
+# stated range when the body has one. Compare with the PR head.
 gh api --paginate repos/tikoci/centrs/pulls/N/reviews \
-  --jq '.[] | select(.body != "") | "\(.user.login) \(.commit_id[0:7]) \(.submitted_at)"'
+  --jq '.[] | select((.body // "") != "") | "\(.user.login) \(.commit_id[0:7]) \(.submitted_at) \((.body | capture("between (?<base>[0-9a-f]{7,40}) and (?<head>[0-9a-f]{7,40})") | "range=\(.base[0:7])..\(.head[0:7])") // "")"'
+gh pr view N --json headRefOid --jq '.headRefOid[0:7]'
 ```
 
 If the last covered commit is older than the head, say so in the report: the
