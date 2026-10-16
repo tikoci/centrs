@@ -56,6 +56,23 @@ describe("CentrsError", () => {
 		});
 		expect(serializeCentrsError(error).cause).toEqual({ reason: "timeout" });
 	});
+
+	test("a raw cause keeps name, message and code, never the stack (#476)", () => {
+		const raw = Object.assign(new TypeError("Unable to connect"), {
+			code: "ConnectionRefused",
+		});
+		const error = new CentrsError({
+			code: "transport/connection-refused",
+			summary: "refused",
+			cause: raw,
+		});
+		expect(serializeCentrsError(error).cause).toEqual({
+			name: "TypeError",
+			message: "Unable to connect",
+			code: "ConnectionRefused",
+		});
+		expect(JSON.stringify(error)).not.toContain(import.meta.dir);
+	});
 });
 
 describe("asCentrsError", () => {

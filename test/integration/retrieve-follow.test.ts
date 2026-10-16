@@ -195,7 +195,7 @@ describeFast("retrieve --follow against CHR (native-api)", () => {
 				{ ...base, path: "/ip/address", sweep: 0, count: 1, duration: "15s" },
 				{ afterSynced: () => remove(writer, "/ip/address", seeded) },
 			);
-			expect(streamOf(fl3[0])?.kind).toBe("notice");
+			expect(streamOf(fl3[0])?.kind).toBe("started");
 			expect(fl3[0]?.tips.map((tip) => tip.code)).toEqual([
 				"tip/follow-sweep-off",
 			]);

@@ -2,7 +2,9 @@
  * Line helpers shared by the two streaming forms of `retrieve`: `--follow`
  * (`src/retrieve-follow.ts`) and `--sample` (`src/retrieve-sample.ts`). Each
  * line is one envelope whose `meta.operation.stream` says what it is
- * (`commands/retrieve/README.md` → Follow, Sample).
+ * (`commands/retrieve/README.md` → Follow, Sample). A stream opens with a
+ * full-meta `started` line and ends with a full-meta `summary`; the data lines
+ * between carry only `meta.operation` (#462, #473).
  */
 
 import type { EnvelopeValidationMeta, Tip } from "./core/envelope.ts";
@@ -11,16 +13,16 @@ import {
 	buildRetrieveErrorEnvelopeFromResolved,
 	metaFromResolved,
 	type ResolvedRetrieveRequest,
-	type RetrieveEnvelope,
 	type RetrieveErrorEnvelope,
 	type RetrieveOutputFormat,
+	type RetrieveStreamLine,
 	type RetrieveStreamLineEnvelope,
 	type RetrieveStreamMeta,
 	type RetrieveSuccessEnvelope,
 	retrieveRequestSummary,
 } from "./retrieve.ts";
 
-/** One stream line's envelope: `data` plus its `meta.operation.stream` marker. */
+/** A full-meta stream line (`started`, `synced`, `summary`): `data` plus its marker. */
 export function streamEnvelope(
 	resolved: ResolvedRetrieveRequest,
 	validation: EnvelopeValidationMeta,
@@ -46,10 +48,7 @@ export function streamEnvelope(
 	};
 }
 
-/**
- * A `--follow` frame or notice line: the frame fields only (#462). Readers key
- * on `meta.operation.stream`; the full meta is on `synced` and `summary`.
- */
+/** A `frame` or `sample` line: only its `meta.operation` (#462, #473). */
 export function streamLineEnvelope(
 	data: unknown,
 	stream: RetrieveStreamMeta,
@@ -63,7 +62,7 @@ export function streamLineEnvelope(
 		meta: {
 			operation: {
 				kind: "data",
-				objectCount: data === null ? 0 : 1,
+				objectCount: data === null ? 0 : Array.isArray(data) ? data.length : 1,
 				stream,
 			},
 		},
@@ -102,17 +101,19 @@ export function failedStreamEnvelope(
  * One stream envelope as one line: compact NDJSON for every structured format
  * (a multi-line YAML document cannot be a stream line), and a short row for
  * `text`. Router text is JSON-escaped so it cannot carry terminal control
- * bytes.
+ * bytes. In text, only `frame` and `sample` rows are data
+ * ({@link isStreamDataLine}); the CLI writes the rest to stderr, and an empty
+ * string (a `started` line without tips) prints nothing.
  */
 export function renderRetrieveStreamLine(
-	envelope: RetrieveEnvelope | RetrieveStreamLineEnvelope,
+	envelope: RetrieveStreamLine,
 	format: RetrieveOutputFormat,
 ): string {
 	if (format !== "text") return JSON.stringify(envelope);
 	if (!envelope.ok) return formatCentrsErrorLine(envelope.error);
 	const stream = envelope.meta.operation?.stream;
 	switch (stream?.kind) {
-		case "notice":
+		case "started":
 			return envelope.tips
 				.map((tip) => `tip: ${tip.message}${tip.fix ? ` ${tip.fix}` : ""}`)
 				.join("\n");
@@ -133,6 +134,12 @@ export function renderRetrieveStreamLine(
 		default:
 			return JSON.stringify(envelope.data);
 	}
+}
+
+/** Whether a stream line is a data row: text stdout carries only these (#473). */
+export function isStreamDataLine(envelope: RetrieveStreamLine): boolean {
+	const kind = envelope.ok ? envelope.meta.operation?.stream?.kind : undefined;
+	return kind === "frame" || kind === "sample";
 }
 
 function escaped(text: string): string {

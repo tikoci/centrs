@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { type ApiEnvelope, apiEnvelope, apiStream } from "../../src/api.ts";
+import {
+	type ApiEnvelope,
+	type ApiStreamLine,
+	apiEnvelope,
+	apiStream,
+} from "../../src/api.ts";
 import {
 	exampleIds,
 	isChrIntegrationEnabled,
@@ -12,15 +17,17 @@ import {
 
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
 
-/** The `--stream` marker on an envelope: a change frame or the terminating summary. */
-function streamKind(envelope: ApiEnvelope): "frame" | "summary" | undefined {
+/** The `--stream` marker on a line: `started`, a reply frame or the terminating summary. */
+function streamKind(
+	envelope: ApiStreamLine,
+): "started" | "frame" | "summary" | undefined {
 	const operation = envelope.meta.operation as
-		| { stream?: { kind?: "frame" | "summary" } }
+		| { stream?: { kind?: "started" | "frame" | "summary" } }
 		| undefined;
 	return operation?.stream?.kind;
 }
 
-function summaryData(envelope: ApiEnvelope | undefined): {
+function summaryData(envelope: ApiStreamLine | undefined): {
 	stopReason?: string;
 	frames?: number;
 	rows?: number;
@@ -31,18 +38,20 @@ function summaryData(envelope: ApiEnvelope | undefined): {
 }
 
 /** The rest-style record on a success (frame) envelope; `{}` for an error envelope or an `!empty` frame. */
-function recordOf(envelope: ApiEnvelope | undefined): Record<string, unknown> {
+function recordOf(
+	envelope: ApiStreamLine | undefined,
+): Record<string, unknown> {
 	return (
 		envelope?.ok && envelope.data !== null ? envelope.data : {}
 	) as Record<string, unknown>;
 }
 
-function replyOf(envelope: ApiEnvelope): string | undefined {
+function replyOf(envelope: ApiStreamLine): string | undefined {
 	const stream = envelope.meta.operation?.stream;
 	return stream?.kind === "frame" ? stream.reply : undefined;
 }
 
-function tipCodes(envelope: ApiEnvelope | undefined): string[] {
+function tipCodes(envelope: ApiStreamLine | undefined): string[] {
 	return (envelope?.tips ?? []).map((tip) => tip.code);
 }
 
@@ -62,8 +71,8 @@ function idOf(data: unknown): string {
 async function streamWithTrigger(
 	listenRequest: Parameters<typeof apiStream>[0],
 	trigger: () => Promise<void>,
-): Promise<ApiEnvelope[]> {
-	const envelopes: ApiEnvelope[] = [];
+): Promise<ApiStreamLine[]> {
+	const envelopes: ApiStreamLine[] = [];
 	let signalReady: () => void = () => {};
 	const ready = new Promise<void>((resolve) => {
 		signalReady = resolve;
@@ -138,12 +147,12 @@ describeFast("api --stream against CHR (native-api)", () => {
 			expect(l1Frames.length).toBeGreaterThanOrEqual(1);
 			expect(l1Frames.every((e) => e.ok)).toBe(true);
 			expect(l1Summary).toBeDefined();
-			expect(l1Summary?.meta.via).toBe("native-api");
-			expect(summaryData(l1Summary as ApiEnvelope).stopReason).toBe(
+			expect(l1Summary?.meta).toMatchObject({ via: "native-api" });
+			expect(summaryData(l1Summary as ApiStreamLine).stopReason).toBe(
 				"count-reached",
 			);
 			expect(
-				summaryData(l1Summary as ApiEnvelope).frames ?? 0,
+				summaryData(l1Summary as ApiStreamLine).frames ?? 0,
 			).toBeGreaterThanOrEqual(1);
 
 			// L2. A deletion frame carries `.dead`. Seed an address, then remove it
@@ -198,8 +207,8 @@ describeFast("api --stream against CHR (native-api)", () => {
 			const l3Frames = l3.filter((e) => streamKind(e) === "frame");
 			const l3Summary = l3.find((e) => streamKind(e) === "summary");
 			expect(l3Frames.length).toBeGreaterThanOrEqual(1);
-			expect(l3Summary?.meta.via).toBe("native-api");
-			expect(summaryData(l3Summary as ApiEnvelope).stopReason).toBe(
+			expect(l3Summary?.meta).toMatchObject({ via: "native-api" });
+			expect(summaryData(l3Summary as ApiStreamLine).stopReason).toBe(
 				"count-reached",
 			);
 
@@ -207,7 +216,7 @@ describeFast("api --stream against CHR (native-api)", () => {
 			// RouterOS answers the /cancel of a listen that sent nothing with
 			// interrupted, `!empty`, `!done`: that `!empty` is a frame marked
 			// `afterStop`, never evidence of an empty table (#402).
-			const l4: ApiEnvelope[] = [];
+			const l4: ApiStreamLine[] = [];
 			for await (const envelope of apiStream({
 				...nativeBase,
 				endpoint: "ip/address/listen",
@@ -217,20 +226,22 @@ describeFast("api --stream against CHR (native-api)", () => {
 			}
 			const l4Summary = l4.find((e) => streamKind(e) === "summary");
 			expect(l4Summary).toBeDefined();
-			expect(summaryData(l4Summary as ApiEnvelope)).toMatchObject({
+			expect(summaryData(l4Summary as ApiStreamLine)).toMatchObject({
 				stopReason: "duration-elapsed",
 				rows: 0,
 				empty: 1,
 			});
-			expect(l4[0]?.meta.operation?.stream).toEqual({
+			expect(streamKind(l4[0] as ApiStreamLine)).toBe("started");
+			expect(l4[1]?.meta.operation?.stream).toEqual({
 				kind: "frame",
 				index: 1,
+				observedAt: expect.any(String),
 				reply: "empty",
 				afterStop: true,
 			});
 
 			async function collect(request: Parameters<typeof apiStream>[0]) {
-				const result: ApiEnvelope[] = [];
+				const result: ApiStreamLine[] = [];
 				for await (const envelope of apiStream(request)) result.push(envelope);
 				return result;
 			}
@@ -322,7 +333,7 @@ describeFast("api --stream against CHR (native-api)", () => {
 				request: Omit<Parameters<typeof apiStream>[0], "endpoint"> & {
 					endpoint: (id: string) => string;
 				},
-			): Promise<{ id: string; envelopes: ApiEnvelope[] }> {
+			): Promise<{ id: string; envelopes: ApiStreamLine[] }> {
 				const seed = await apiEnvelope({
 					...restBase,
 					endpoint: "ip/address",
@@ -347,7 +358,7 @@ describeFast("api --stream against CHR (native-api)", () => {
 				expect(envelopes.every((e) => e.ok)).toBe(true);
 				return { id, envelopes };
 			}
-			const deadFor = (envelopes: ApiEnvelope[], id: string) =>
+			const deadFor = (envelopes: ApiStreamLine[], id: string) =>
 				envelopes.some(
 					(e) => recordOf(e)[".id"] === id && recordOf(e)[".dead"] === "true",
 				);
@@ -407,13 +418,21 @@ describeFast("api --stream against CHR (native-api)", () => {
 				filtered.envelopes
 					.filter((e) => streamKind(e) === "frame")
 					.map((e) => e.meta.operation?.stream),
-			).toEqual([{ kind: "frame", index: 1, reply: "empty", afterStop: true }]);
+			).toEqual([
+				{
+					kind: "frame",
+					index: 1,
+					observedAt: expect.any(String),
+					reply: "empty",
+					afterStop: true,
+				},
+			]);
 			expect(tipCodes(filtered.envelopes.at(-1))).toEqual([
 				"tip/filtered-follow",
 			]);
-			// The advice is the first line, before RouterOS has said anything.
+			// The advice rides the first line, before RouterOS has said anything.
 			expect(filtered.envelopes[0]?.meta.operation?.stream).toEqual({
-				kind: "notice",
+				kind: "started",
 			});
 			expect(tipCodes(filtered.envelopes[0])).toEqual(["tip/filtered-follow"]);
 
@@ -453,10 +472,10 @@ describeFast("api --stream against CHR (native-api)", () => {
 				duration: "5s",
 			});
 			expect(created.every((e) => e.ok)).toBe(true);
-			expect(created).toHaveLength(1);
-			expect(summaryData(created[0]).stopReason).toBe("completed");
+			expect(created.map(streamKind)).toEqual(["started", "summary"]);
+			expect(summaryData(created[1]).stopReason).toBe("completed");
 			const createdId = String(
-				(recordOf(created[0])["done"] as Record<string, string>)["ret"],
+				(recordOf(created[1])["done"] as Record<string, string>)["ret"],
 			);
 			expect(createdId).toMatch(/^\*[0-9A-F]+$/i);
 			const readBack = await apiEnvelope({
@@ -508,8 +527,8 @@ describeFast("api --stream against CHR (native-api)", () => {
 				fields: { script: "/ip/service/set www-ssl certificate=nope" },
 				yes: true,
 			});
-			expect(scriptRejected).toHaveLength(1);
-			expect(scriptRejected[0]).toMatchObject({
+			expect(scriptRejected.map(streamKind)).toEqual(["started", "summary"]);
+			expect(scriptRejected[1]).toMatchObject({
 				ok: false,
 				error: { code: "routeros/invalid-value" },
 				meta: {
@@ -519,9 +538,9 @@ describeFast("api --stream against CHR (native-api)", () => {
 				},
 			});
 			expect(
-				scriptRejected[0]?.meta.validation?.stages?.map(
-					(stage) => stage.result,
-				),
+				(
+					scriptRejected[1] as ApiEnvelope | undefined
+				)?.meta.validation?.stages?.map((stage) => stage.result),
 			).toEqual(["passed", "passed"]);
 			const scriptOutput = await collect({
 				...nativeBase,

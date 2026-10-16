@@ -223,7 +223,7 @@ centrs never substitutes polling.
   `ip/address/*1/listen` follows one row (`?.id=*1`).
 - **GET menu + `--stream`** streams one literal print and completes; it does
   not follow. Its summary carries `tip/stream-print` naming the `/listen`
-  form (see the notice below). A streamed GET (or a `/listen`) rejects `-f` fields rather than
+  form (see `started` below). A streamed GET (or a `/listen`) rejects `-f` fields rather than
   silently dropping them.
 - **POST command + `--stream`** runs the literal command with its attributes:
   `api $R /tool/ping -X POST -f address=10.0.2.2 -f count=3 --stream --yes`.
@@ -233,14 +233,22 @@ centrs never substitutes polling.
   `usage/conflicting-flags` instead of being ignored. `/execute` retains
   synchronous `as-string` script semantics. Streaming never makes a command
   read-only.
-- Each wire reply emits one envelope with `meta.operation.stream.kind=frame`
-  and `reply`: **`re`** (a row; `data` is the row, device `.section`,
+- A stream that passed its preflight opens with one `started` line
+  (`meta.operation.stream.kind=started`, `data: null`). It carries the full
+  `meta` (target, settings, validation, request, auth) and any advice in
+  `tips`, and is not counted in `frames`/`rows`.
+- Each wire reply emits one envelope with `meta.operation.stream.kind=frame`,
+  `observedAt` (when centrs received it, host clock, ISO 8601; a slow reader
+  does not move it) and `reply`: **`re`** (a row; `data` is the row, device `.section`,
   `.dead`, `.nextid` and `.about` verbatim) or **`empty`** (RouterOS `!empty`:
   zero rows; `data` is `null`). RouterOS sends `!empty` for an empty finite
   read, for **each zero-row tick** of `print interval=`, and for a listen
   cancelled before it sent anything. A frame received after centrs stopped the
   stream locally carries `afterStop: true` — that cancellation `!empty` is not
-  evidence of an empty table. A terminal `!done` is not a frame: its
+  evidence of an empty table. A frame carries only `meta.operation` (`kind`,
+  `objectCount`, `stream`); the rest is on `started` and the summary
+  ([constitution](../../docs/CONSTITUTION.md#result-envelope)). A terminal
+  `!done` is not a frame: its
   attributes, when received, appear in successful summary `data.done`,
   including a terminal result received during local cancellation. The stop
   reason still reports the first local bound.
@@ -259,17 +267,19 @@ centrs never substitutes polling.
   one error envelope without starting a stream.
 - Structured streams put **all** envelopes, including errors, on stdout as
   NDJSON and exit nonzero for any failure, even after successful rows. Text
-  mode uses the same outcome/exit rules. `--raw` retains bare payloads and
-  stderr errors; it does not provide the structured stream contract.
+  mode uses the same exit rules but puts only frame rows on stdout; the
+  `started` tips, the summary, warnings and errors go to stderr. `--raw`
+  retains bare payloads and stderr errors; it does not provide the
+  structured stream contract.
 
 `api` never edits a change feed to make it safer; it says what RouterOS will
 not report as tips (CHR 7.23.7 + 7.24.5). Because that advice depends only on
-the request, it arrives **first**: a leading envelope with
-`meta.operation.stream.kind=notice`, `data: null` and the `tips`, before any
-reply — so a filtered watch that never gets a reply still shows it. A notice is
-not a reply and is not counted in `frames`/`rows`; a stream with no advice has
-no notice. The same tips are repeated on the terminal summary, successful or
-failed. `--raw` omits the notice.
+the request, it arrives **first**, in the `tips` of the leading `started`
+line, before any reply — so a filtered watch that never gets a reply still
+shows it. The same tips are repeated on the terminal summary, successful or
+failed. Advice from the live gate (such as `tip/rest-verb-mapping`) rides the
+same two lines, as it does on a one-shot call. `--raw` omits the `started`
+line.
 
 - `tip/filtered-follow` — a `listen` (or `follow`) with a query reports
   neither rows leaving the filter nor deletes. Follow unfiltered and filter

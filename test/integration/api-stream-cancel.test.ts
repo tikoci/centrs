@@ -120,7 +120,8 @@ async function runStream(
 		env: { HOME, XDG_CONFIG_HOME: join(HOME, ".config") },
 		killAfterMs: 8000,
 		onStdoutLine: (line, child) => {
-			if (line.trim().length === 0) return;
+			// The leading `started` line (#473) is not a frame.
+			if (!line.includes('"kind":"frame"')) return;
 			frames += 1;
 			if (frames === 1) onFirstFrame?.(child);
 		},
@@ -205,7 +206,7 @@ describe("api --stream stops within a bound (#385)", () => {
 });
 
 describe("api --stream text mode (#470)", () => {
-	test("a summary warning goes to stderr, never into the stdout rows", async () => {
+	test("stdout is the frame rows; the summary and its warning go to stderr (#473)", async () => {
 		peer = startPeer(false);
 		const result = await runCliProcess({
 			args: [
@@ -231,7 +232,12 @@ describe("api --stream text mode (#470)", () => {
 			killAfterMs: 8000,
 		});
 		expect(result.exitCode).toBe(0);
-		expect(result.stdoutText).not.toContain("warning [");
+		expect(result.stdoutText.trimEnd().split("\n")).toEqual([
+			'1\t{".id":"*1","state":"fixture"}',
+		]);
+		expect(result.stderrText).toMatch(
+			/^— duration-elapsed: 1 row\(s\) in \d+ms$/m,
+		);
 		expect(result.stderrText).toMatch(
 			/^warning \[transport\/cancel-unacknowledged\]: /m,
 		);

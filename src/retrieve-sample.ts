@@ -17,15 +17,19 @@ import {
 	buildRetrieveErrorEnvelopeFromResolved,
 	executeRetrieve,
 	type ResolvedRetrieveRequest,
-	type RetrieveEnvelope,
 	type RetrieveRequest,
 	type RetrieveSampleStopReason,
 	type RetrieveSampleSummary,
+	type RetrieveStreamLine,
 	type RetrieveSuccessEnvelope,
 	resolveRetrieveRequest,
 	validateRetrieveRead,
 } from "./retrieve.ts";
-import { failedStreamEnvelope, streamEnvelope } from "./retrieve-stream.ts";
+import {
+	failedStreamEnvelope,
+	streamEnvelope,
+	streamLineEnvelope,
+} from "./retrieve-stream.ts";
 
 export interface RetrieveSampleOptions {
 	/** Ctrl-C: ends the sample with `stopReason: "interrupted"`. */
@@ -33,16 +37,17 @@ export interface RetrieveSampleOptions {
 }
 
 /**
- * Sample one menu: yields a `sample` line per complete read, then exactly one
- * summary (successful, or an error envelope carrying the partial count).
- * Errors before the first read (resolution, validation) yield one error
- * envelope without a summary.
+ * Sample one menu: yields `started` (the full meta), a `sample` line per
+ * complete read (only its `meta.operation`), then exactly one summary
+ * (successful, or an error envelope carrying the partial count). Errors before
+ * the first read (resolution, validation) yield one error envelope without a
+ * summary.
  */
 export async function* retrieveSample(
 	request: RetrieveRequest,
 	env: Record<string, string | undefined> = Bun.env,
 	options: RetrieveSampleOptions = {},
-): AsyncGenerator<RetrieveEnvelope, void, void> {
+): AsyncGenerator<RetrieveStreamLine, void, void> {
 	if (request.wait !== undefined) {
 		yield buildRetrieveErrorEnvelope(
 			request,
@@ -126,6 +131,7 @@ export async function* retrieveSample(
 				sample.durationMs,
 			);
 		}
+		yield streamEnvelope(resolved, validation, null, { kind: "started" });
 		try {
 			while (stopReason === undefined) {
 				const sentAt = Date.now();
@@ -141,7 +147,7 @@ export async function* retrieveSample(
 				// A read still in flight at the stop is not a complete sample.
 				if (result === undefined) break;
 				samples += 1;
-				yield streamEnvelope(resolved, validation, result.data, {
+				yield streamLineEnvelope(result.data, {
 					kind: "sample",
 					index: samples,
 					at: new Date(sentAt).toISOString(),

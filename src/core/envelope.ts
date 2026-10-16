@@ -15,9 +15,9 @@
  * - `meta` is invariant across commands. Only `data` and `meta.operation` vary
  *   per command. Do not add command-specific keys beside `target`/`via`/
  *   `settings`/`validation`/`timing`/`truncated`; put them in `meta.operation`.
- * - Shared meta is written once (#461, #462). A fan-out target omits what its
- *   outer envelope already says ({@link FanoutMemberOperation}); a follow
- *   stream line between `synced` and `summary` carries only its
+ * - Shared meta is written once (#461, #462, #473). A fan-out target omits
+ *   what its outer envelope already says ({@link FanoutMemberOperation}); a
+ *   stream's data lines between `started` and `summary` carry only their
  *   `meta.operation` ({@link StreamLineEnvelope}).
  * - CLI render must be lossless against the JSON envelope; `--format json|yaml`
  *   select serialization, not different shapes. Omit `undefined`; use `null`
@@ -309,9 +309,9 @@ export interface FanoutData<Data = unknown, Operation = unknown> {
 }
 
 /**
- * A stream line that carries only its own `meta.operation`; the rest of its
- * meta is on the stream's reference lines (`retrieve --follow`: `synced` and
- * `summary`).
+ * A stream data line that carries only its own `meta.operation`; the rest of
+ * its meta is on the stream's `started` and `summary` lines (and `synced` for
+ * `retrieve --follow`).
  */
 export interface StreamLineEnvelope<Data = unknown, Operation = unknown> {
 	ok: true;

@@ -265,11 +265,12 @@ export function serializeUnknownError(error: unknown): unknown {
 		return serializeCentrsError(error);
 	}
 
+	// No `stack`: it is raw exception text with local install paths, and the
+	// constitution summarizes those rather than embedding them (#476).
 	if (error instanceof Error) {
 		return {
 			name: error.name,
 			message: error.message,
-			stack: error.stack,
 			code: extractErrorCode(error),
 		};
 	}

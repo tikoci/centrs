@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
 	type ApiOutputFormat,
 	apiEnvelope,
@@ -22,6 +22,7 @@ import {
 import { CentrsError } from "../../src/errors.ts";
 import { OFFLINE_GATE_SOURCE } from "../../src/offline-gate.ts";
 import { closedPort } from "./closed-port.ts";
+import { FakeFollowRouter } from "./fake-follow-router.ts";
 
 describe("normalizeApiEndpoint", () => {
 	test("lenient variants canonicalize to one slash path", () => {
@@ -378,6 +379,42 @@ describe("api meta.validation on a gate that never answered (GH#435)", () => {
 			scriptStages(envelope.error.code),
 		);
 		expect(envelope.error.code).toStartWith("transport/");
+	});
+});
+
+describe("apiStream tips (#480 review)", () => {
+	const routers: FakeFollowRouter[] = [];
+	afterEach(() => {
+		while (routers.length > 0) routers.pop()?.stop();
+	});
+
+	// The live gate's own advice is the same on a stream as on a one-shot call:
+	// it rides `started` and the terminal summary, beside the stream's own tips.
+	test("the gate's tips ride started and the summary", async () => {
+		const router = new FakeFollowRouter();
+		routers.push(router);
+		const lines = [];
+		for await (const line of apiStream(
+			{
+				targetInput: "127.0.0.1",
+				port: router.port,
+				username: "admin",
+				password: "",
+				timeout: "2s",
+				endpoint: "ip/address",
+				method: "POST",
+				fields: { address: "192.0.2.9/24" },
+				yes: true,
+			},
+			{},
+		)) {
+			lines.push(line);
+		}
+		const codes = lines.map((line) => line.tips.map((tip) => tip.code));
+		expect(lines[0]?.meta.operation?.stream?.kind).toBe("started");
+		expect(codes[0]).toEqual(["tip/rest-verb-mapping"]);
+		expect(lines.at(-1)?.meta.operation?.stream?.kind).toBe("summary");
+		expect(codes.at(-1)).toEqual(["tip/rest-verb-mapping"]);
 	});
 });
 

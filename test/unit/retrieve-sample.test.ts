@@ -11,6 +11,7 @@ import type { Server } from "bun";
 import {
 	type RetrieveEnvelope,
 	type RetrieveRequest,
+	type RetrieveStreamLine,
 	retrieve,
 } from "../../src/retrieve.ts";
 import { retrieveFanout } from "../../src/retrieve-fanout.ts";
@@ -162,11 +163,13 @@ type Stream = NonNullable<
 	NonNullable<RetrieveEnvelope["meta"]["operation"]>["stream"]
 >;
 
-function streamOf(envelope: RetrieveEnvelope | undefined): Stream | undefined {
+function streamOf(
+	envelope: RetrieveStreamLine | undefined,
+): Stream | undefined {
 	return envelope?.meta.operation?.stream;
 }
 
-function samplesOf(out: readonly RetrieveEnvelope[]) {
+function samplesOf(out: readonly RetrieveStreamLine[]) {
 	return out.flatMap((envelope) => {
 		const stream = streamOf(envelope);
 		return stream?.kind === "sample" && envelope.ok
@@ -175,7 +178,7 @@ function samplesOf(out: readonly RetrieveEnvelope[]) {
 	});
 }
 
-function summaryOf(out: readonly RetrieveEnvelope[]) {
+function summaryOf(out: readonly RetrieveStreamLine[]) {
 	const stream = streamOf(out.at(-1));
 	return stream?.kind === "summary" && "samples" in stream ? stream : undefined;
 }
@@ -186,8 +189,8 @@ async function sample(
 		signal?: AbortSignal;
 		onSample?: (index: number) => void;
 	} = {},
-): Promise<RetrieveEnvelope[]> {
-	const out: RetrieveEnvelope[] = [];
+): Promise<RetrieveStreamLine[]> {
+	const out: RetrieveStreamLine[] = [];
 	for await (const envelope of retrieveSample(req, ENV, {
 		signal: hooks.signal,
 	})) {
@@ -216,15 +219,32 @@ describe("retrieveSample lines", () => {
 			expect(Number.isNaN(Date.parse(line.at))).toBe(false);
 			expect(line.readMs).toBeGreaterThanOrEqual(0);
 		}
-		expect(out[0]?.meta.via).toBe("rest-api");
-		expect(out[0]?.meta.operation?.objectCount).toBe(2);
+		expect(out).toHaveLength(5);
+		// `started` carries the full meta once; a sample line only its own (#473).
+		const [started, first] = out;
+		expect(started?.meta.operation?.stream).toEqual({ kind: "started" });
+		expect(started?.ok && started.data).toBeNull();
+		expect(started?.meta).toMatchObject({
+			target: expect.any(Object),
+			via: "rest-api",
+			settings: expect.any(Object),
+			validation: expect.any(Object),
+			operation: { request: expect.any(Object), auth: expect.any(Object) },
+		});
+		expect(Object.keys(first?.meta ?? {})).toEqual(["operation"]);
+		expect(Object.keys(first?.meta.operation ?? {})).toEqual([
+			"kind",
+			"objectCount",
+			"stream",
+		]);
+		expect(first?.meta.operation?.objectCount).toBe(2);
 		expect(summaryOf(out)).toMatchObject({
 			kind: "summary",
 			stopReason: "count-reached",
 			samples: 3,
 		});
 		expect(out.at(-1)?.ok).toBe(true);
-		expect(out).toHaveLength(4);
+		expect(out.at(-1)?.meta).toMatchObject({ via: "rest-api" });
 	});
 
 	test("a singleton yields its record per line; one --attribute yields the bare value", async () => {
@@ -487,10 +507,36 @@ describe("retrieve --sample CLI", () => {
 		expect(result.code).toBe(0);
 		const lines = result.out.split("\n").map((line) => JSON.parse(line));
 		expect(lines.map((line) => line.meta.operation.stream.kind)).toEqual([
+			"started",
 			"sample",
 			"sample",
 			"summary",
 		]);
+		expect(result.err).toBe("");
+	});
+
+	test("text: stdout carries only sample rows; the summary goes to stderr (#473)", async () => {
+		const router = fakeRouter();
+		const result = await runCliCaptured([
+			"retrieve",
+			"127.0.0.1",
+			"/ip/address",
+			"--port",
+			String(router.port),
+			"--username",
+			"admin",
+			"--password",
+			"",
+			"--sample",
+			"20ms",
+			"--count",
+			"2",
+		]);
+		expect(result.code).toBe(0);
+		const rows = result.out.split("\n");
+		expect(rows).toHaveLength(2);
+		for (const row of rows) expect(row).toMatch(/^[12]\t\d{4}-/);
+		expect(result.err).toMatch(/^— count-reached: 2 sample\(s\) in \d+ms$/);
 	});
 
 	test("text lines: one per sample and one summary", async () => {
@@ -498,7 +544,9 @@ describe("retrieve --sample CLI", () => {
 		const out = await sample(request(router, { count: 2 }));
 		const lines = out.map((e) => renderRetrieveStreamLine(e, "text"));
 		expect(lines.every((line) => !line.includes("\n"))).toBe(true);
-		expect(lines[0]).toMatch(/^1\t\d{4}-\d\d-\d\dT[^\t]+\t\[\{".id":"\*1"/);
+		// `started` without tips renders nothing.
+		expect(lines[0]).toBe("");
+		expect(lines[1]).toMatch(/^1\t\d{4}-\d\d-\d\dT[^\t]+\t\[\{".id":"\*1"/);
 		expect(lines.at(-1)).toMatch(/^— count-reached: 2 sample\(s\) in \d+ms$/);
 	});
 });

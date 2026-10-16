@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { type ApiEnvelope, apiEnvelope, apiStream } from "../../src/api.ts";
+import { type ApiStreamLine, apiEnvelope, apiStream } from "../../src/api.ts";
 import { apiFanout } from "../../src/api-fanout.ts";
 import { sentWriteWarnings } from "../../src/core/fanout.ts";
 import { CentrsError } from "../../src/errors.ts";
@@ -121,8 +121,8 @@ function droppingRouter(atLogin = false) {
 async function lastStreamEnvelope(
 	port: number,
 	method: string,
-): Promise<ApiEnvelope | undefined> {
-	let last: ApiEnvelope | undefined;
+): Promise<ApiStreamLine | undefined> {
+	let last: ApiStreamLine | undefined;
 	for await (const envelope of apiStream(
 		{
 			...common,

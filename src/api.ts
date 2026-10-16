@@ -31,6 +31,7 @@ import type {
 	SettingSource as CoreSettingSource,
 	EnvelopeValidationMeta,
 	EnvelopeValidationStage,
+	StreamLineEnvelope,
 	Tip,
 	ValidationTrace,
 	Warning,
@@ -221,19 +222,24 @@ export type ApiStreamStopReason =
 	| "transport-error";
 
 /**
- * Per-line marker on `--stream` NDJSON output: a leading `notice`, one wire
- * reply, or the terminating summary. A `notice` (`data: null`, not counted)
- * comes first only when the request has advice in `tips` — what RouterOS will
- * not report for it — so even a watch that never gets a reply sees it. A frame's `reply` is `re` (a row; `data` is the row) or
- * `empty` (RouterOS `!empty`: zero rows; `data` is `null`). `afterStop` marks a
- * reply that arrived after centrs stopped the stream locally, such as the
- * `!empty` a cancelled listen sends; it is not evidence of an empty table.
+ * Per-line marker on `--stream` NDJSON output: the leading `started`, one wire
+ * reply, or the terminating summary. `started` (`data: null`, not counted)
+ * comes first on every stream that passed its preflight: it carries the full
+ * meta and any advice in `tips` — what RouterOS will not report for the
+ * request — so even a watch that never gets a reply sees both (#473). A frame
+ * carries only its `meta.operation`. Its `reply` is `re` (a row; `data` is the
+ * row) or `empty` (RouterOS `!empty`: zero rows; `data` is `null`), and
+ * `observedAt` is when centrs received it (host clock, ISO 8601; a slow reader
+ * does not move it). `afterStop` marks a reply that arrived after centrs
+ * stopped the stream locally, such as the `!empty` a cancelled listen sends;
+ * it is not evidence of an empty table.
  */
 export type ApiStreamMeta =
-	| { kind: "notice" }
+	| { kind: "started" }
 	| {
 			kind: "frame";
 			index: number;
+			observedAt: string;
 			reply: "re" | "empty";
 			afterStop?: true;
 	  }
@@ -273,6 +279,15 @@ export interface ApiOperationMeta {
 }
 
 export type ApiEnvelope = CentrsEnvelope<unknown, ApiOperationMeta>;
+/** A `--stream` frame line: only its own `meta.operation` (#473). */
+export type ApiStreamFrameEnvelope = StreamLineEnvelope<
+	unknown,
+	Pick<ApiOperationMeta, "kind" | "objectCount"> & {
+		stream: Extract<ApiStreamMeta, { kind: "frame" }>;
+	}
+>;
+/** One `--stream` line: a full envelope (`started`, `summary`, error) or a frame. */
+export type ApiStreamLine = ApiEnvelope | ApiStreamFrameEnvelope;
 export type ApiSuccessEnvelope = CentrsSuccessEnvelope<
 	unknown,
 	ApiOperationMeta
@@ -458,10 +473,11 @@ function apiRouterOsFailureFromResult(
 }
 
 /**
- * The `--stream` path: an async generator yielding one {@link ApiEnvelope} per
- * native reply (`!re` row or `!empty`) to the literal command, then a
- * terminating summary envelope (`data` = {@link ApiStreamSummary}). It never
- * rewrites the command; a `<menu>/listen` endpoint is how to follow changes.
+ * The `--stream` path: an async generator yielding a full-meta `started` line,
+ * one {@link ApiStreamFrameEnvelope} per native reply (`!re` row or `!empty`)
+ * to the literal command, then a terminating summary envelope (`data` =
+ * {@link ApiStreamSummary}). It never rewrites the command; a `<menu>/listen`
+ * endpoint is how to follow changes.
  * Streaming is native-api only — a `rest-api` (or otherwise unresolved)
  * transport yields a single error envelope. `--count`/`--duration` and
  * `externalSignal` (Ctrl-C) bound it. Errors before the first frame
@@ -475,7 +491,7 @@ export async function* apiStream(
 	env: Record<string, string | undefined> = Bun.env,
 	externalSignal?: AbortSignal,
 	onListening?: () => void,
-): AsyncGenerator<ApiEnvelope, void, void> {
+): AsyncGenerator<ApiStreamLine, void, void> {
 	// `apiStream` is inherently the streaming surface, so force `stream` on the
 	// request: otherwise a caller that omits it would resolve `via` to the
 	// rest-api default and be rejected. An explicit `--via rest-api` still
@@ -509,16 +525,18 @@ async function* streamResolvedApi(
 	request: ResolvedApiRequest,
 	externalSignal?: AbortSignal,
 	onListening?: () => void,
-): AsyncGenerator<ApiEnvelope, void, void> {
+): AsyncGenerator<ApiStreamLine, void, void> {
 	const backend = adapterForResolved(request);
 
 	let resolved = request;
 	let validation: EnvelopeValidationMeta;
+	let validationTips: Tip[] = [];
 	const trace: ValidationTrace = {};
 	try {
 		if (resolved.validate.value) {
 			const result = await validateApiRequest(resolved, backend, trace);
 			validation = result.validation;
+			validationTips = result.tips;
 			// The boolean probe below runs after the gate passed (GH#435).
 			trace.validation = validation;
 			resolved = await withQueryBooleans(resolved, backend, result.queryMenu);
@@ -531,9 +549,27 @@ async function* streamResolvedApi(
 		return;
 	}
 
-	// Request-shape advice is known before the first reply: deliver it first,
-	// and keep it on whichever terminal summary follows (#409 review).
-	const tips = streamTips(resolved);
+	// Request-shape advice is known before the first reply: deliver it on
+	// `started`, and keep it on whichever terminal summary follows (#409 review).
+	// The gate's own tips are the same advice the one-shot path returns.
+	const tips = [...validationTips, ...streamTips(resolved)];
+	// Arrival times in wire order, stamped by the synchronous reply tap: the
+	// session queues replies, so a slow reader must not move them. Read by a
+	// head index, not `shift()`, which is O(n) per frame on a backlog.
+	const arrivals: number[] = [];
+	let arrivalsHead = 0;
+	const nextArrival = (): number => {
+		const at = arrivals[arrivalsHead] ?? Date.now();
+		arrivalsHead += 1;
+		if (arrivalsHead >= arrivals.length) {
+			arrivals.length = 0;
+			arrivalsHead = 0;
+		} else if (arrivalsHead >= 1024 && arrivalsHead * 2 >= arrivals.length) {
+			arrivals.splice(0, arrivalsHead);
+			arrivalsHead = 0;
+		}
+		return at;
+	};
 	const controller = new AbortController();
 	const startedAt = Date.now();
 	const counts = { frames: 0, rows: 0, empty: 0 };
@@ -574,14 +610,17 @@ async function* streamResolvedApi(
 	}
 
 	try {
-		// A consumer may return immediately after this notice; keep it inside
+		// A consumer may return immediately after this line; keep it inside
 		// the session cleanup scope, just like every wire reply.
-		if (tips.length > 0) {
-			yield streamNoticeEnvelope(resolved, validation, tips);
-		}
+		yield streamStartedEnvelope(resolved, validation, tips);
 		const protocolRequest = buildProtocolApiRequest(resolved);
 		for await (const reply of backend.stream(protocolRequest, {
 			signal: controller.signal,
+			onReply: (tapped) => {
+				if (tapped.type === "re" || tapped.type === "empty") {
+					arrivals.push(Date.now());
+				}
+			},
 			onListening: () => {
 				trace.dispatched = true;
 				onListening?.();
@@ -597,7 +636,7 @@ async function* streamResolvedApi(
 			counts.frames += 1;
 			if (reply.type === "empty") counts.empty += 1;
 			else counts.rows += 1;
-			yield streamFrameEnvelope(resolved, validation, reply, counts.frames);
+			yield streamFrameEnvelope(reply, counts.frames, nextArrival());
 			// `--count` counts rows only: an empty tick must never use up the
 			// count before the data it is waiting for arrives.
 			if (
@@ -650,29 +689,39 @@ async function* streamResolvedApi(
 }
 
 function streamFrameEnvelope(
-	resolved: ResolvedApiRequest,
-	validation: EnvelopeValidationMeta,
 	reply: ProtocolStreamReply,
 	index: number,
-): ApiSuccessEnvelope {
+	observedAt: number,
+): ApiStreamFrameEnvelope {
 	const data = reply.type === "empty" ? null : reply.attributes;
-	const meta = metaFromResolved(resolved, validation, data);
-	meta.operation.stream = {
-		kind: "frame",
-		index,
-		reply: reply.type,
-		...(reply.afterStop ? { afterStop: true as const } : {}),
+	return {
+		ok: true,
+		data,
+		warnings: [],
+		tips: [],
+		meta: {
+			operation: {
+				kind: "api",
+				objectCount: countResultObjects(data),
+				stream: {
+					kind: "frame",
+					index,
+					observedAt: new Date(observedAt).toISOString(),
+					reply: reply.type,
+					...(reply.afterStop ? { afterStop: true as const } : {}),
+				},
+			},
+		},
 	};
-	return { ok: true, data, warnings: [], tips: [], meta };
 }
 
-function streamNoticeEnvelope(
+function streamStartedEnvelope(
 	resolved: ResolvedApiRequest,
 	validation: EnvelopeValidationMeta,
 	tips: Tip[],
 ): ApiSuccessEnvelope {
 	const meta = metaFromResolved(resolved, validation, null);
-	meta.operation.stream = { kind: "notice" };
+	meta.operation.stream = { kind: "started" };
 	return { ok: true, data: null, warnings: [], tips, meta };
 }
 
@@ -1627,7 +1676,7 @@ function assertStreamCapability(resolved: ResolvedApiRequest): void {
 		summary:
 			"`--stream` yields incremental replies instead of a one-shot `api` result.",
 		remediation:
-			"Consume the stream via `apiStream()` (library) or `centrs api … --stream` (CLI); both yield an NDJSON envelope per reply frame plus a final summary.",
+			"Consume the stream via `apiStream()` (library) or `centrs api … --stream` (CLI); both yield a `started` line, a line per reply frame, then a final summary.",
 		context: { via: resolved.via.value, capability: "stream" },
 	});
 }
@@ -2024,11 +2073,12 @@ export function renderApiEnvelope(
  * object per line) for both `json` and `yaml`, and a concise human row for
  * `text`. `yaml` deliberately falls back to NDJSON here — YAML's multi-line
  * document form is incompatible with line-delimited streaming. Unlike
- * {@link renderApiEnvelope} this never pretty-prints — every frame and the
- * summary are one line each, so a consumer can read the stream line by line.
+ * {@link renderApiEnvelope} this never pretty-prints — `started`, every frame
+ * and the summary are one line each, so a consumer can read the stream line
+ * by line. In text, a `started` line without tips renders as an empty string.
  */
 export function renderApiStreamLine(
-	envelope: ApiEnvelope,
+	envelope: ApiStreamLine,
 	format: ApiOutputFormat,
 	options: { raw?: boolean; verbose?: boolean } = {},
 ): string {
@@ -2051,13 +2101,15 @@ export function renderApiStreamLine(
 	return JSON.stringify(envelope);
 }
 
-function renderApiStreamFrameText(envelope: ApiSuccessEnvelope): string {
+function renderApiStreamFrameText(
+	envelope: Exclude<ApiStreamLine, ApiErrorEnvelope>,
+): string {
 	const stream = envelope.meta.operation?.stream;
 	if (stream?.kind === "summary") {
 		const empty = stream.empty > 0 ? `, ${stream.empty} empty` : "";
 		return `— ${stream.stopReason}: ${stream.rows} row(s)${empty} in ${stream.durationMs}ms`;
 	}
-	if (stream?.kind === "notice") {
+	if (stream?.kind === "started") {
 		return envelope.tips
 			.map((tip) => `tip: ${tip.message}${tip.fix ? ` ${tip.fix}` : ""}`)
 			.join("\n");
