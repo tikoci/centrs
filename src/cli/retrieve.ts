@@ -27,6 +27,7 @@ import {
 	retrieveFollow,
 	retrieveOutputFormats,
 	retrieveSample,
+	retrieveVerboseLines,
 	retrieveWait,
 	type ValidationTrace,
 	validateRetrieveRequestShape,
@@ -35,7 +36,8 @@ import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
-	printTextWarnings,
+	printTextHeader,
+	printTextNotes,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -208,7 +210,7 @@ export const retrieveCommand: CliCommandMetadata = {
 		},
 		{
 			flag: "--verbose",
-			description: "Show resolved setting sources in text output.",
+			description: "Show resolved setting sources in text output, on stderr.",
 		},
 	],
 };
@@ -285,6 +287,10 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 					request?: { format?: RetrieveOutputFormat };
 				}
 			)?.request?.format ?? "text";
+		const text = resolvedFormat === "text";
+		if (text && request.verbose) {
+			printTextHeader(retrieveVerboseLines(envelope));
+		}
 		console.log(
 			renderRetrieveEnvelope(
 				envelope as Parameters<typeof renderRetrieveEnvelope>[0],
@@ -292,7 +298,7 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 				{ verbose: request.verbose },
 			),
 		);
-		if (resolvedFormat === "text") printTextWarnings(envelope.warnings);
+		if (text) printTextNotes(envelope);
 		return 0;
 	} catch (error) {
 		const format = inferRequestedFormat(args, request);
@@ -388,10 +394,14 @@ async function runRetrieveWaitCli(
 		const format =
 			envelope.meta.operation?.request.format ??
 			inferRequestedFormat(args, request);
+		const text = format === "text";
+		if (text && envelope.ok && request.verbose) {
+			printTextHeader(retrieveVerboseLines(envelope));
+		}
 		console.log(
 			renderRetrieveEnvelope(envelope, format, { verbose: request.verbose }),
 		);
-		if (format === "text") printTextWarnings(envelope.warnings);
+		if (text) printTextNotes(envelope);
 		return envelope.ok ? 0 : 1;
 	} finally {
 		process.off("SIGINT", onSigint);

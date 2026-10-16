@@ -10,6 +10,7 @@ import {
 	type ExecuteRequest,
 	executeEnvelope,
 	executeOutputFormats,
+	executeVerboseLines,
 	renderExecuteEnvelope,
 } from "../execute.ts";
 import {
@@ -27,7 +28,8 @@ import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
-	printTextWarnings,
+	printTextHeader,
+	printTextNotes,
 	rejectFlagsAfterSeparator,
 	renderCommandHelp,
 	unknownFlagError,
@@ -157,7 +159,7 @@ export const executeCommand: CliCommandMetadata = {
 		},
 		{
 			flag: "--verbose",
-			description: "Include additional context in text output.",
+			description: "Include additional context in text output, on stderr.",
 		},
 		{
 			flag: "--",
@@ -402,6 +404,10 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 			)?.request?.format ??
 			parsed.format ??
 			"text";
+		const text = resolvedFormat === "text";
+		if (text && envelope.ok && parsed.verbose) {
+			printTextHeader(executeVerboseLines(envelope));
+		}
 		const rendered = renderExecuteEnvelope(envelope, resolvedFormat, {
 			verbose: parsed.verbose,
 		});
@@ -410,7 +416,7 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 		} else {
 			console.error(rendered);
 		}
-		if (resolvedFormat === "text") printTextWarnings(envelope.warnings);
+		if (text) printTextNotes(envelope);
 		return envelope.ok ? 0 : 1;
 	} catch (error) {
 		// Parse/usage errors land here too: surface them through the same typed

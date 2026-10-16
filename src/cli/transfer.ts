@@ -21,13 +21,15 @@ import {
 	transferEnvelope,
 	transferFanout,
 	transferOutputFormats,
+	transferVerboseLines,
 	transferVerbs,
 } from "../index.ts";
 import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
-	printTextWarnings,
+	printTextHeader,
+	printTextNotes,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -168,7 +170,7 @@ export const transferCommand: CliCommandMetadata = {
 		},
 		{
 			flag: "--verbose",
-			description: "Show the resolved transport in text output.",
+			description: "Show the resolved transport in text output, on stderr.",
 		},
 	],
 };
@@ -210,20 +212,23 @@ export async function runTransferCli(
 		if (!envelope.ok) {
 			console.error(
 				// codeql[js/clear-text-logging] The envelope carries auth provenance only (`username`, `passwordProvided`, setting sources), never the password; see buildTransferErrorEnvelopeFromResolved.
-				format === "text" ? rendered + formatTipsText(envelope.tips) : rendered,
+				rendered,
 			);
-			if (format === "text") printTextWarnings(envelope.warnings);
+			if (format === "text") printTextNotes(envelope);
 			return 1;
 		}
 		// A download to stdout (`local === "-"`) has already streamed the file bytes
 		// to stdout inside `transfer()`; keep the structured envelope on stderr so it
 		// cannot interleave with — and corrupt — the piped payload.
+		if (format === "text" && request.verbose) {
+			printTextHeader(transferVerboseLines(envelope));
+		}
 		if (request.verb === "download" && request.local === "-") {
 			console.error(rendered);
 		} else {
 			console.log(rendered);
 		}
-		if (format === "text") printTextWarnings(envelope.warnings);
+		if (format === "text") printTextNotes(envelope);
 		return 0;
 	} catch (error) {
 		// Drop credential fields before any renderer touches the request: error

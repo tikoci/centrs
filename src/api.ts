@@ -2011,7 +2011,7 @@ export function renderApiEnvelope(
 			return toYaml(envelope);
 		case "text":
 			return envelope.ok
-				? renderApiSuccessText(envelope, options)
+				? renderApiSuccessText(envelope)
 				: formatCentrsErrorText(envelope.error, options);
 		default:
 			return exhaustiveFormat(format);
@@ -2084,24 +2084,20 @@ function rawErrorPayload(
 	return payload;
 }
 
-function renderApiSuccessText(
-	envelope: ApiSuccessEnvelope,
-	options: { verbose?: boolean },
-): string {
-	const lines: string[] = [];
-	if (options.verbose) {
-		lines.push(`via: ${envelope.meta.via}`);
-		if (envelope.meta.validation?.source) {
-			lines.push(`validation: ${envelope.meta.validation.source}`);
-		}
-		lines.push("");
+/** Text mode renders only the data; the CLI writes the rest to stderr (#470). */
+function renderApiSuccessText(envelope: ApiSuccessEnvelope): string {
+	return typeof envelope.data === "string"
+		? envelope.data
+		: JSON.stringify(envelope.data, null, 2);
+}
+
+/** The `--verbose` header of a text-mode api result (stderr, #470). */
+export function apiVerboseLines(envelope: ApiSuccessEnvelope): string[] {
+	const lines = [`via: ${envelope.meta.via}`];
+	if (envelope.meta.validation?.source) {
+		lines.push(`validation: ${envelope.meta.validation.source}`);
 	}
-	lines.push(
-		typeof envelope.data === "string"
-			? envelope.data
-			: JSON.stringify(envelope.data, null, 2),
-	);
-	return lines.join("\n");
+	return lines;
 }
 
 export function validateApiRequestShape(request: ApiRequest): void {

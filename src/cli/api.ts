@@ -4,6 +4,7 @@ import {
 	apiEnvelope,
 	apiOutputFormats,
 	apiStream,
+	apiVerboseLines,
 	buildApiErrorEnvelope,
 	normalizeApiEndpoint,
 	removedListenError,
@@ -26,7 +27,8 @@ import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
-	printTextWarnings,
+	printTextHeader,
+	printTextNotes,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -191,7 +193,7 @@ export const apiCommand: CliCommandMetadata = {
 		},
 		{
 			flag: "--verbose",
-			description: "Include additional context in text output.",
+			description: "Include additional context in text output, on stderr.",
 		},
 	],
 };
@@ -543,6 +545,11 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 			)?.request?.format ??
 			parsed.format ??
 			"json";
+		// `--raw` is a bare payload by contract; `--json` carries the notes.
+		const text = resolvedFormat === "text" && !parsed.raw;
+		if (text && envelope.ok && parsed.verbose) {
+			printTextHeader(apiVerboseLines(envelope));
+		}
 		const rendered = renderApiEnvelope(envelope, resolvedFormat, {
 			raw: parsed.raw,
 			verbose: parsed.verbose,
@@ -552,10 +559,7 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 		} else {
 			console.error(rendered);
 		}
-		// `--raw` is a bare payload by contract; `--json` carries the warnings.
-		if (resolvedFormat === "text" && !parsed.raw) {
-			printTextWarnings(envelope.warnings);
-		}
+		if (text) printTextNotes(envelope);
 		return envelope.ok ? 0 : 1;
 	} catch (error) {
 		const format = inferApiFormat(args, parsed);

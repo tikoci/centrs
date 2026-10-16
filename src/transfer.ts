@@ -1615,19 +1615,16 @@ export function renderTransferEnvelope(
 			return toYaml(envelope);
 		case "text":
 			return envelope.ok
-				? renderSuccessText(envelope, options)
+				? renderSuccessText(envelope)
 				: formatCentrsErrorText(envelope.error, options);
 		default:
 			return exhaustiveFormat(format);
 	}
 }
 
-function renderSuccessText(
-	envelope: TransferSuccessEnvelope,
-	options: { verbose?: boolean },
-): string {
+/** Text mode renders only the data; the CLI writes the rest to stderr (#470). */
+function renderSuccessText(envelope: TransferSuccessEnvelope): string {
 	const lines: string[] = [];
-	const operation = envelope.meta.operation;
 
 	if (Array.isArray(envelope.data)) {
 		// list
@@ -1653,12 +1650,14 @@ function renderSuccessText(
 		lines.push(parts.join(" "));
 	}
 
-	if (options.verbose && operation) {
-		lines.push("");
-		lines.push(`via: ${envelope.meta.via}`);
-	}
-
 	return lines.join("\n");
+}
+
+/** The `--verbose` header of a text-mode transfer result (stderr, #470). */
+export function transferVerboseLines(
+	envelope: TransferSuccessEnvelope,
+): string[] {
+	return envelope.meta.operation ? [`via: ${envelope.meta.via}`] : [];
 }
 
 // ── Small helpers ────────────────────────────────────────────────────────────

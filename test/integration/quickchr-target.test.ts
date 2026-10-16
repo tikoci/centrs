@@ -136,6 +136,32 @@ describeFast("--quickchr targets against CHR (#134)", () => {
 				),
 			);
 
+			// #470: `--verbose` text keeps stdout to the data; the header goes to
+			// stderr, ahead of any warning.
+			const eqVerbose = await run([
+				"execute",
+				"--quickchr",
+				name,
+				':put "cmr device run-script"',
+				"--verbose",
+			]);
+			expect(eqVerbose.exit).toBe(0);
+			expect(eqVerbose.out.join("\n").trim()).toBe(
+				eqWarn.out.join("\n").trim(),
+			);
+			expect(eqVerbose.err[0]).toMatch(/^target: .*\nvia: native-api/);
+			const rqVerbose = await run([
+				"retrieve",
+				"--quickchr",
+				name,
+				"/system/identity",
+				"--verbose",
+			]);
+			expect(rqVerbose.exit).toBe(0);
+			expect(rqVerbose.out.join("\n")).not.toMatch(/^(target|via|sources):/m);
+			expect(rqVerbose.err.join("\n")).toMatch(/^via: rest-api$/m);
+			expect(rqVerbose.err.join("\n")).toMatch(/^sources: via=/m);
+
 			// execute Q1 (#426): an ambient CENTRS_HOST URL must not steer a
 			// quickchr target's transport; the descriptor owns the endpoint.
 			const savedHost = process.env["CENTRS_HOST"];

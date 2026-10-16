@@ -6,8 +6,9 @@
  * together.
  */
 
-import type { Warning } from "../core/envelope.ts";
+import type { Tip, Warning } from "../core/envelope.ts";
 import { CentrsError, terminalSafeLine } from "../errors.ts";
+import { formatTipsText } from "./missing-target.ts";
 
 /**
  * Warnings that a single-target text-mode CLI leaves out (#470).
@@ -31,12 +32,23 @@ export function textWarningLines(warnings: readonly Warning[]): string[] {
 }
 
 /**
- * #470: a single-target command in text mode writes its warnings to stderr, so
- * a warning never mixes into the data a pipe reads. It does so on success and
- * on failure alike, so a write whose outcome is unknown still says so.
+ * #470: in text mode a single-target command's stdout is its data and nothing
+ * else. The notes around the data go to stderr: the `--verbose` header before
+ * it ({@link printTextHeader}), then warnings and tips after it. This applies
+ * on success and on failure, so a write whose outcome is unknown still says so.
  */
-export function printTextWarnings(warnings: readonly Warning[]): void {
-	for (const line of textWarningLines(warnings)) console.error(line);
+export function printTextNotes(envelope: {
+	warnings: readonly Warning[];
+	tips: readonly Tip[];
+}): void {
+	for (const line of textWarningLines(envelope.warnings)) console.error(line);
+	const tips = formatTipsText(envelope.tips);
+	if (tips) console.error(tips);
+}
+
+/** The `--verbose` header of a text-mode result, on stderr (#470). */
+export function printTextHeader(lines: readonly string[]): void {
+	if (lines.length > 0) console.error(lines.join("\n"));
 }
 
 export interface CliCommandOption {
