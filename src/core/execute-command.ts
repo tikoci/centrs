@@ -320,7 +320,7 @@ function commandHeads(
 	const heads: { words: string[]; spacedFileOutput: boolean }[] = [];
 	const starts = [0];
 	// Match group ends once. Each command can then skip its nested bodies
-	// without rescanning them; deeply nested reads stay linear in input size.
+	// without walking them again; deeply nested reads stay linear in input size.
 	const closes = new Map<number, number>();
 	const open: number[] = [];
 	for (let index = 0; index < statement.length; index += 1) {
