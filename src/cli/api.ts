@@ -688,8 +688,9 @@ function endpointInfersListen(endpoint: string): boolean {
 
 /**
  * Emit all structured stream outcomes on stdout. Any failure sets exit 1,
- * including a terminal error after successful rows. Raw mode retains its
- * stderr error contract; Ctrl-C requests bounded cancellation.
+ * including a terminal error after successful rows. Text puts only frame rows
+ * on stdout; raw mode retains its stderr error contract; Ctrl-C requests
+ * bounded cancellation.
  */
 async function runApiStreamCli(
 	parsed: ApiCliArgs,
@@ -706,20 +707,24 @@ async function runApiStreamCli(
 			Bun.env,
 			controller.signal,
 		)) {
-			// `--raw` is bare payloads only; a notice has none.
-			if (parsed.raw && envelope.meta.operation?.stream?.kind === "notice")
-				continue;
+			const kind = envelope.ok
+				? envelope.meta.operation?.stream?.kind
+				: undefined;
+			// `--raw` is bare payloads only; `started` has none.
+			if (parsed.raw && kind === "started") continue;
 			const line = renderApiStreamLine(envelope, format, {
 				raw: parsed.raw,
 				verbose: parsed.verbose,
 			});
-			if (envelope.ok || !parsed.raw) {
+			if (parsed.raw) {
+				if (envelope.ok) console.log(line);
+				else console.error(line);
+			} else if (format !== "text" || kind === "frame") {
 				console.log(line);
 			} else {
-				console.error(line);
-			}
-			// #470: text warnings go to stderr; `--raw` stays bare payloads.
-			if (format === "text" && !parsed.raw) {
+				// Text stdout is data (#470, #473): status lines, tips, warnings
+				// and errors go to stderr. `started` renders its own tips.
+				if (line) console.error(line);
 				printTextNotes({ warnings: envelope.warnings, tips: [] });
 			}
 			if (!envelope.ok) exitCode = 1;

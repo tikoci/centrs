@@ -236,10 +236,12 @@ export interface RetrieveSampleSummary {
  * built from (host clock, ISO 8601; a replayed bootstrap change keeps its
  * arrival time). A `sample` is one complete read; `at` is when it was sent
  * (host clock) and `readMs` how long it took. The two summaries are told apart
- * by their counts (`frames` vs `samples`).
+ * by their counts (`frames` vs `samples`). `started` is the first line of
+ * every stream that got past validation: the full meta, `data: null`, and any
+ * advice in `tips` (#473).
  */
 export type RetrieveStreamMeta =
-	| { kind: "notice" }
+	| { kind: "started" }
 	| {
 			kind: "frame";
 			index: number;
@@ -271,8 +273,9 @@ export interface RetrieveOperationMeta {
 export type RetrieveEnvelope = CentrsEnvelope<unknown, RetrieveOperationMeta>;
 
 /**
- * A `--follow` frame or notice line: only its own `meta.operation` (#462). The
- * rest of the meta is on the stream's `synced` and `summary` lines.
+ * A `--follow` frame or `--sample` sample line: only its own `meta.operation`
+ * (#462, #473). The rest of the meta is on the stream's `started` and
+ * `summary` lines (and `synced` for `--follow`).
  */
 export type RetrieveStreamLineEnvelope = StreamLineEnvelope<
 	unknown,
@@ -281,8 +284,10 @@ export type RetrieveStreamLineEnvelope = StreamLineEnvelope<
 	}
 >;
 
-/** One `retrieve --follow` line: a full envelope or a frame/notice line. */
-export type RetrieveFollowLine = RetrieveEnvelope | RetrieveStreamLineEnvelope;
+/** One `retrieve --follow` or `--sample` line: a full envelope or a data line. */
+export type RetrieveStreamLine = RetrieveEnvelope | RetrieveStreamLineEnvelope;
+/** One `retrieve --follow` line. */
+export type RetrieveFollowLine = RetrieveStreamLine;
 export type RetrieveSuccessEnvelope = CentrsSuccessEnvelope<
 	unknown,
 	RetrieveOperationMeta
@@ -371,7 +376,7 @@ export async function retrieve(
 			summary:
 				"`follow` yields a stream of envelopes instead of one `retrieve` result.",
 			remediation:
-				"Consume it with `retrieveFollow()` (library) or `centrs retrieve … --follow` (CLI): snapshot frames, `synced`, live frames, then a summary.",
+				"Consume it with `retrieveFollow()` (library) or `centrs retrieve … --follow` (CLI): `started`, snapshot frames, `synced`, live frames, then a summary.",
 			context: { capability: "follow" },
 		});
 	}
@@ -381,7 +386,7 @@ export async function retrieve(
 			summary:
 				"`sample` yields a stream of envelopes instead of one `retrieve` result.",
 			remediation:
-				"Consume it with `retrieveSample()` (library) or `centrs retrieve … --sample <interval>` (CLI): one line per complete read, then a summary.",
+				"Consume it with `retrieveSample()` (library) or `centrs retrieve … --sample <interval>` (CLI): `started`, one line per complete read, then a summary.",
 			context: { capability: "sample" },
 		});
 	}

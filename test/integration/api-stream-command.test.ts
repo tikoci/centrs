@@ -198,17 +198,20 @@ async function run(
 			killAfterMs: 5000,
 			...(onStdoutLine ? { onStdoutLine } : {}),
 		});
-		return {
-			...result,
-			sent,
-			lines: !stream
-				? [JSON.parse(result.stdoutText || result.stderrText)]
-				: result.stdoutText
-						.trim()
-						.split("\n")
-						.filter(Boolean)
-						.map((line) => JSON.parse(line)),
-		};
+		const lines = !stream
+			? [JSON.parse(result.stdoutText || result.stderrText)]
+			: result.stdoutText
+					.trim()
+					.split("\n")
+					.filter(Boolean)
+					.map((line) => JSON.parse(line));
+		// The leading `started` line (#473) is split off so `lines` stays the
+		// replies and the summary; the shape test below pins it.
+		const started =
+			lines[0]?.meta?.operation?.stream?.kind === "started"
+				? lines.shift()
+				: undefined;
+		return { ...result, sent, started, lines };
 	} finally {
 		peer.stop(true);
 	}
@@ -422,25 +425,62 @@ describe("api --stream command lifecycle (#399)", () => {
 			expect.objectContaining({ code: "tip/follow-proplist" }),
 		]);
 	});
-	// #409 review: request-shape advice is known before any reply, so it is a
-	// leading `notice` line, kept on the terminal summary whatever the outcome.
-	test("a notice with the tips is the first line, before any reply", async () => {
+	// #473: the leading `started` line carries the full meta once; a frame
+	// carries only its `meta.operation`, and the summary the full meta again.
+	test("started carries the full meta; a frame only its operation", async () => {
+		const result = await run("done", ["-f", "address=192.0.2.1"]);
+		expect(result.exitCode).toBe(0);
+		const fullMeta = {
+			target: expect.any(Object),
+			via: "native-api",
+			settings: expect.any(Object),
+			validation: expect.any(Object),
+			operation: { request: expect.any(Object), auth: expect.any(Object) },
+		};
+		expect(result.started).toMatchObject({
+			ok: true,
+			data: null,
+			tips: [],
+			meta: { ...fullMeta, operation: { stream: { kind: "started" } } },
+		});
+		const [frame, summary] = result.lines;
+		expect(frame.meta).toEqual({
+			operation: {
+				kind: "api",
+				objectCount: 1,
+				stream: {
+					kind: "frame",
+					index: 1,
+					observedAt: expect.any(String),
+					reply: "re",
+				},
+			},
+		});
+		expect(
+			Number.isNaN(Date.parse(frame.meta.operation.stream.observedAt)),
+		).toBe(false);
+		expect(summary.meta).toMatchObject(fullMeta);
+	});
+	// #409 review: request-shape advice is known before any reply, so it rides
+	// the leading `started` line, kept on the terminal summary whatever the
+	// outcome.
+	test("started carries the tips, before any reply", async () => {
 		const result = await run(
 			"delete",
 			["-X", "GET", "--query", "interface=ether1"],
 			"ip/address/listen",
 		);
 		expect(result.exitCode).toBe(0);
-		expect(result.lines[0]).toMatchObject({
+		expect(result.started).toMatchObject({
 			ok: true,
 			data: null,
 			tips: [{ code: "tip/filtered-follow" }],
-			meta: { operation: { stream: { kind: "notice" } } },
+			meta: { operation: { stream: { kind: "started" } } },
 		});
-		expect(result.lines[1].meta.operation.stream.kind).toBe("frame");
+		expect(result.lines[0].meta.operation.stream.kind).toBe("frame");
 		expect(result.lines.at(-1).data).toMatchObject({ frames: 1, rows: 1 });
 	});
-	test("a silent watch prints its notice while it is still running", async () => {
+	test("a silent watch prints its started line while it is still running", async () => {
 		let noticeAt: number | undefined;
 		const result = await run(
 			"cancel-empty",
@@ -449,7 +489,7 @@ describe("api --stream command lifecycle (#399)", () => {
 			true,
 			true,
 			(line) => {
-				if (noticeAt === undefined && line.includes('"notice"'))
+				if (noticeAt === undefined && line.includes('"started"'))
 					noticeAt = Date.now();
 			},
 		);
@@ -466,14 +506,16 @@ describe("api --stream command lifecycle (#399)", () => {
 			"ip/address/listen",
 		);
 		expect(result.exitCode).toBe(1);
-		expect(result.lines[0].meta.operation.stream.kind).toBe("notice");
+		expect(result.started?.tips).toEqual([
+			expect.objectContaining({ code: "tip/follow-proplist" }),
+		]);
 		expect(result.lines.at(-1)).toMatchObject({
 			ok: false,
 			tips: [{ code: "tip/follow-proplist" }],
 			meta: { operation: { stream: { kind: "summary" } } },
 		});
 	});
-	test("--raw omits the notice: bare payloads only", async () => {
+	test("--raw omits the started line: bare payloads only", async () => {
 		const result = await run(
 			"delete",
 			["-X", "GET", "--query", "interface=ether1", "--raw"],
@@ -523,6 +565,7 @@ describe("api --stream command lifecycle (#399)", () => {
 		expect(result.lines[0].meta.operation.stream).toEqual({
 			kind: "frame",
 			index: 1,
+			observedAt: expect.any(String),
 			reply: "empty",
 			afterStop: true,
 		});
@@ -620,8 +663,8 @@ describe("api --stream command lifecycle (#399)", () => {
 	});
 });
 
-// A notice is emitted after validation has opened the native session.
-test("returning after a library stream notice closes the validated session", async () => {
+// `started` is emitted after validation has opened the native session.
+test("returning after a library stream's started line closes the validated session", async () => {
 	const readers = new WeakMap<object, SentenceReader>();
 	let signalClosed: () => void = () => {};
 	const closed = new Promise<void>((resolve) => {
@@ -666,7 +709,7 @@ test("returning after a library stream notice closes the validated session", asy
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	try {
 		const first = await stream.next();
-		expect(first.value?.meta.operation?.stream?.kind).toBe("notice");
+		expect(first.value?.meta.operation?.stream?.kind).toBe("started");
 		await stream.return();
 		await Promise.race([
 			closed,

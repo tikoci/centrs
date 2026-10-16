@@ -51,7 +51,7 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 | `--all-attributes` |  | Request the RouterOS detail/all-attributes shape. |
 | `--list-attributes / --list` |  | List inspect-derived attributes without running the data call. |
 | `--query / --filter` | `<expr>` | Row filter written as after `print where` (`disabled`, `mtu>=1500 and !dynamic`), run on the router as an API query; repeatable, AND-ed. No `~` or `in`. |
-| `--follow` |  | Keep the menu's rows current over native-api `listen`: snapshot frames, a `synced` line, then a line per change, then a summary (NDJSON for json/yaml/ndjson). Single target, list menus whose print takes follow-only. |
+| `--follow` |  | Keep the menu's rows current over native-api `listen`: a `started` line, snapshot frames, a `synced` line, then a line per change, then a summary (NDJSON for json/yaml/ndjson). Single target, list menus whose print takes follow-only. |
 | `--sample` | `<interval>` | Read the menu again every interval (with a unit, e.g. `5s`): one line per complete read, then a summary. With --wait, sets polling cadence and returns one final envelope. Sees counters and state listen never reports. Single target; rest-api or native-api. |
 | `--wait` | `<deadline>` | Wait for a successful read or a condition until this overall deadline, with a unit (e.g. `2m`). Retries refused, closed, reset and timed-out connections and a down or unreachable host; other errors fail at once. One final envelope; single target. |
 | `--until` | `<expr>` | With --wait: succeed when any selected row matches this --query grammar predicate; repeatable, AND-ed. Returns the matching rows. Already true succeeds on the initial read. |

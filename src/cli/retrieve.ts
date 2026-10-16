@@ -15,6 +15,7 @@ import {
 	buildRetrieveFanoutErrorEnvelope,
 	describeCentrs,
 	fanoutExitCode,
+	isStreamDataLine,
 	type ResolvedRetrieveRequest,
 	type RetrieveOutputFormat,
 	type RetrieveRequest,
@@ -129,7 +130,7 @@ export const retrieveCommand: CliCommandMetadata = {
 		{
 			flag: "--follow",
 			description:
-				"Keep the menu's rows current over native-api `listen`: snapshot frames, a `synced` line, then a line per change, then a summary (NDJSON for json/yaml/ndjson). Single target, list menus whose print takes follow-only.",
+				"Keep the menu's rows current over native-api `listen`: a `started` line, snapshot frames, a `synced` line, then a line per change, then a summary (NDJSON for json/yaml/ndjson). Single target, list menus whose print takes follow-only.",
 		},
 		{
 			flag: "--sample",
@@ -349,8 +350,10 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 
 /**
  * Every `--follow`/`--sample` envelope goes to stdout, one per line, errors
- * included; any failure sets exit 1, even after successful lines. Ctrl-C asks
- * for a bounded stop that still ends with a summary.
+ * included; any failure sets exit 1, even after successful lines. In text,
+ * stdout is data (#470, #473): only `frame`/`sample` rows go there, and the
+ * status lines, tips, warnings and errors go to stderr. Ctrl-C asks for a
+ * bounded stop that still ends with a summary.
  */
 async function runRetrieveStreamCli(
 	request: RetrieveCliArgs,
@@ -371,9 +374,12 @@ async function runRetrieveStreamCli(
 		for await (const envelope of stream(request, Bun.env, {
 			signal: controller.signal,
 		})) {
-			console.log(renderRetrieveStreamLine(envelope, format));
-			// A notice line already renders its tips; warnings go to stderr (#470).
-			if (format === "text") {
+			const line = renderRetrieveStreamLine(envelope, format);
+			if (format !== "text" || isStreamDataLine(envelope)) {
+				console.log(line);
+			} else {
+				// `started` renders its own tips; the summary repeats them.
+				if (line) console.error(line);
 				printTextNotes({ warnings: envelope.warnings, tips: [] });
 			}
 			if (!envelope.ok) exitCode = 1;

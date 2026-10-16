@@ -309,8 +309,8 @@ function shape(envelope: RetrieveFollowLine): string {
 			return `synced:${stream.rows}`;
 		case "summary":
 			return `summary:${stream.stopReason}`;
-		case "notice":
-			return "notice";
+		case "started":
+			return "started";
 		default:
 			return envelope.ok ? "?" : `error:${envelope.error.code}`;
 	}
@@ -354,7 +354,7 @@ describe("retrieveFollow bootstrap (A1)", () => {
 			{},
 		);
 		expect(out.map(shape)).toEqual([
-			"notice",
+			"started",
 			"snapshot upsert *1 print",
 			"snapshot upsert *2 print",
 			"snapshot upsert *2 listen",
@@ -381,22 +381,24 @@ describe("retrieveFollow bootstrap (A1)", () => {
 		});
 	});
 
-	test("frames and notices carry only their stream meta; synced and summary carry the full meta (#462)", async () => {
+	test("frames carry only their stream meta; started, synced and summary carry the full meta (#462, #473)", async () => {
 		const router = fakeRouter();
 		const out = await follow(
 			request(router, { duration: "300ms", sweep: 0 }),
 			{},
 		);
 		expect(out.map(shape)).toEqual([
-			"notice",
+			"started",
 			"snapshot upsert *1 print",
 			"snapshot upsert *2 print",
 			"synced:2",
 			"summary:duration-elapsed",
 		]);
-		const [notice, frame, , synced, summary] = out;
-		expect(notice?.meta).toEqual({
-			operation: { kind: "data", objectCount: 0, stream: { kind: "notice" } },
+		const [started, frame, , synced, summary] = out;
+		expect(started?.meta.operation).toMatchObject({
+			kind: "data",
+			objectCount: 0,
+			stream: { kind: "started" },
 		});
 		expect(Object.keys(frame?.meta ?? {})).toEqual(["operation"]);
 		expect(frame?.meta.operation).toEqual({
@@ -412,7 +414,7 @@ describe("retrieveFollow bootstrap (A1)", () => {
 				source: "print",
 			},
 		});
-		for (const full of [synced, summary]) {
+		for (const full of [started, synced, summary]) {
 			expect(full?.meta).toMatchObject({
 				target: expect.any(Object),
 				via: "native-api",
@@ -456,7 +458,7 @@ describe("retrieveFollow bootstrap (A1)", () => {
 			},
 		);
 		expect(
-			out.filter((e) => streamOf(e)?.kind !== "notice").map(shape),
+			out.filter((e) => streamOf(e)?.kind !== "started").map(shape),
 		).toEqual([
 			"snapshot upsert *1 print",
 			"snapshot upsert *2 print",
@@ -539,10 +541,10 @@ describe("retrieveFollow sweep", () => {
 		});
 	});
 
-	test("--sweep 0 sends no sweep and leads with the follow-sweep-off notice", async () => {
+	test("--sweep 0 sends no sweep and leads with the follow-sweep-off tip on started", async () => {
 		const router = fakeRouter();
 		const out = await follow(request(router, { duration: "300ms", sweep: 0 }));
-		expect(shape(out[0] as RetrieveFollowLine)).toBe("notice");
+		expect(shape(out[0] as RetrieveFollowLine)).toBe("started");
 		expect(out[0]?.tips.map((tip) => tip.code)).toEqual([
 			"tip/follow-sweep-off",
 		]);
@@ -619,7 +621,7 @@ describe("retrieveFollow projection and bounds", () => {
 			if (shape(envelope) === "snapshot upsert *2 listen") controller.abort();
 		}
 		expect(out.map(shape)).toEqual([
-			"notice",
+			"started",
 			"snapshot upsert *1 print",
 			"snapshot upsert *2 print",
 			"snapshot upsert *2 listen",
@@ -691,7 +693,7 @@ describe("retrieveFollow filtered membership", () => {
 			},
 		);
 		expect(out.map(shape)).toEqual([
-			"notice",
+			"started",
 			"snapshot upsert *1 print",
 			"synced:1",
 			"live removed *1 membership",
@@ -738,7 +740,7 @@ describe("retrieveFollow filtered membership", () => {
 			request(router, { query: "comment=a", sweep: 0, duration: "300ms" }),
 		);
 		expect(out.map(shape)).toEqual([
-			"notice",
+			"started",
 			"snapshot upsert *1 print",
 			"snapshot removed *1 membership",
 			"snapshot upsert *2 membership",
@@ -838,7 +840,7 @@ describe("retrieveFollow filtered membership", () => {
 			if (shape(envelope).endsWith(" membership")) controller.abort();
 		}
 		expect(out.map(shape)).toEqual([
-			"notice",
+			"started",
 			"snapshot upsert *1 membership",
 			"summary:interrupted",
 		]);

@@ -262,19 +262,19 @@ target only: a fan-out selector fails `usage/fanout-not-supported`. Follow is
 filtered with the same `--query`/`--filter` grammar as a one-shot read (#397).
 
 **What each line means.** Every line is one envelope; read
-`meta.operation.stream`. Only `synced` and `summary` carry the full `meta`
-(target, settings, validation, request, auth). A `frame` or `notice` line
-carries only `meta.operation` (`kind`, `objectCount`, `stream`), because the
-rest is the same on every line. An error line is a full error envelope: the
-one line of a follow that fails before it starts (resolution, validation, a
+`meta.operation.stream`. Only `started`, `synced` and `summary` carry the full
+`meta` (target, settings, validation, request, auth). A `frame` line carries
+only `meta.operation` (`kind`, `objectCount`, `stream`), because the rest is
+the same on every line. An error line is a full error envelope: the one line
+of a follow that fails before it starts (resolution, validation, a
 non-followable menu, a non-native transport), and a failed `summary`
 ([constitution](../../docs/CONSTITUTION.md#result-envelope)).
 
 | `kind` | When | `data` | Fields |
 | ------ | ---- | ------ | ------ |
 | `frame` | One row change | the row (`upsert`), `null` (`removed`) | `index`, `observedAt`, `phase` (`snapshot`/`live`), `change` (`upsert`/`removed`), `id`, `source` (`print`/`listen`/`sweep`/`membership`) |
+| `started` | First, once validation passed | `null` | — (`tips` carries any advice) |
 | `synced` | Once, after the snapshot | `null` | `rows`: rows held at that point |
-| `notice` | First, only when there is advice | `null` | — (`tips` carries it) |
 | `summary` | Last, exactly once | the counts | `stopReason`, `frames`, `snapshot`, `changes`, `sweeps`, `synced`, `durationMs` |
 
 - **Bootstrap (A1).** centrs starts the `listen`, then the `print`, on one
@@ -308,8 +308,8 @@ non-followable menu, a non-native transport), and a failed `summary`
   sweep only checks membership: it does not repair a missed field update or
   report rows `listen` never announced. `--sweep` needs a unit (`10s`,
   `500ms`); a bare number fails `settings/invalid-timeout`, as for `--sample`.
-  `--sweep 0` turns it off, with a notice tip saying view-menu removals will
-  not be reported.
+  `--sweep 0` turns it off, with a tip on `started` saying view-menu removals
+  will not be reported.
 - **What `listen` never reports.** Hot counters (`rx-byte`, firewall
   `bytes`/`packets`) and some protocol state (BFD sessions accept `listen` but
   stay silent). The follow is correct but quiet there; `--sample` (below)
@@ -358,9 +358,11 @@ new snapshot. `--sweep` without `--follow`, and `--count` or `--duration`
 without `--follow` or `--sample`, fail `usage/conflicting-flags`.
 
 **Format.** Under `--follow`, `json`, `yaml` and `ndjson` all print one compact
-envelope per line (as `api --stream` does); `text` prints one short row per
-line. Every envelope, errors included, goes to stdout, and the exit code is
-nonzero for any failure, even after rows. Without `--follow`,
+envelope per line (as `api --stream` does), errors included, on stdout.
+`text` prints one short row per `frame` on stdout; the `started` tips, the
+`synced` and summary lines, warnings and errors go to stderr, since text
+stdout is data ([constitution](../../docs/CONSTITUTION.md#result-envelope)).
+The exit code is nonzero for any failure, even after rows. Without `--follow`,
 `--format ndjson` prints the ordinary envelope as one compact line; it never
 starts a follow.
 
@@ -399,10 +401,13 @@ stays available as `api <router> <menu>/print -X POST -f interval=1s --stream`
 (`commands/api/README.md`).
 
 **What each line means.** Every line is one envelope; read
-`meta.operation.stream`:
+`meta.operation.stream`. `started` and `summary` carry the full `meta`; a
+`sample` line carries only `meta.operation` (`kind`, `objectCount`, `stream`),
+as a follow `frame` does:
 
 | `kind` | When | `data` | Fields |
 | ------ | ---- | ------ | ------ |
+| `started` | First, once validation passed | `null` | — |
 | `sample` | One complete read | the whole read: a row array (list), the record (singleton), or the bare value (one `--attribute` on a singleton) | `index` (1-based), `at` (when the read was sent, host clock, ISO 8601), `readMs` |
 | `summary` | Last, exactly once | the counts | `stopReason`, `samples`, `durationMs` |
 
@@ -427,9 +432,9 @@ carrying the partial `samples` count; there is no retry. `--list-attributes`, `-
 `--sweep` conflict with `--sample` (`usage/conflicting-flags`).
 
 **Format.** As for `--follow`: `json`, `yaml` and `ndjson` print one compact
-envelope per line, and `text` prints `index`, `at` and the data on one line.
-Every envelope, errors included, goes to stdout; the exit code is nonzero for
-any failure, even after samples.
+envelope per line, errors included, on stdout. `text` prints `index`, `at` and
+the data on one stdout line per sample, and the summary, warnings and errors
+on stderr. The exit code is nonzero for any failure, even after samples.
 
 Recipes (bounded, so an agent can run them unattended):
 

@@ -151,8 +151,8 @@ class FollowQueue {
 type FrameMeta = Extract<RetrieveStreamMeta, { kind: "frame" }>;
 
 /**
- * Follow one menu: yields an optional `notice`, the snapshot frames, `synced`,
- * live frames, then exactly one summary (successful, or an error envelope
+ * Follow one menu: yields `started` (the full meta and any advice), the
+ * snapshot frames, `synced`, live frames, then exactly one summary (successful, or an error envelope
  * carrying the partial counts). Errors before the follow starts (resolution,
  * validation, a non-followable menu, a non-native transport) yield one error
  * envelope without a summary.
@@ -595,9 +595,7 @@ async function* runFollow(
 		follow.count !== undefined && counts.changes >= follow.count;
 
 	try {
-		if (tips.length > 0) {
-			yield streamLineEnvelope(null, { kind: "notice" }, tips);
-		}
+		yield streamEnvelope(resolved, validation, null, { kind: "started" }, tips);
 		loop: for (;;) {
 			const event = await queue.next();
 			switch (event.type) {

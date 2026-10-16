@@ -6,6 +6,8 @@ export {
 	type ApiOutputFormat,
 	type ApiRequest,
 	type ApiRequestSummary,
+	type ApiStreamFrameEnvelope,
+	type ApiStreamLine,
 	type ApiStreamMeta,
 	type ApiStreamStopReason,
 	type ApiStreamSummary,
@@ -623,6 +625,7 @@ export {
 	type RetrieveSampleSettings,
 	type RetrieveSampleStopReason,
 	type RetrieveSampleSummary,
+	type RetrieveStreamLine,
 	type RetrieveStreamLineEnvelope,
 	type RetrieveStreamMeta,
 	type RetrieveSuccessEnvelope,
@@ -660,7 +663,10 @@ export {
 	type RetrieveSampleOptions,
 	retrieveSample,
 } from "./retrieve-sample.ts";
-export { renderRetrieveStreamLine } from "./retrieve-stream.ts";
+export {
+	isStreamDataLine,
+	renderRetrieveStreamLine,
+} from "./retrieve-stream.ts";
 export { type RetrieveWaitOptions, retrieveWait } from "./retrieve-wait.ts";
 export {
 	buildSettingsErrorEnvelope,

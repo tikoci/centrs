@@ -456,7 +456,8 @@ centrs retrieve $A /ip/address --follow --sweep 0 --count 1 --duration 15s --por
 
 After `synced`, remove an address that existed before the follow. One `live`
 `removed` frame, `source: "listen"`, `data: null`. `--sweep 0` keeps the sweep
-out of the race, and its `tip/follow-sweep-off` notice is the first line.
+out of the race, and its `tip/follow-sweep-off` tip rides the first line,
+`started`.
 
 ### FL4. A removal RouterOS does not send (view menu → sweep)
 
@@ -531,9 +532,10 @@ centrs retrieve $R /ip/address --sample 1s --count 3 --username $U --password $P
 centrs retrieve $A /ip/address --via native-api --sample 1s --count 3 --port $API_PORT --username $U --password $P --json
 ```
 
-Each run prints three `sample` lines (`index` 1–3, `data` a row array) and a
-summary with `stopReason: "count-reached"`, `samples: 3`. Consecutive `at`
-values are at least one second apart. `meta.via` is the transport used.
+Each run prints `started`, three `sample` lines (`index` 1–3, `data` a row
+array) and a summary with `stopReason: "count-reached"`, `samples: 3`.
+Consecutive `at` values are at least one second apart. The `started` line's
+`meta.via` is the transport used.
 
 ### SA2. Counters `listen` never reports
 

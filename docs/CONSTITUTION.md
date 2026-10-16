@@ -184,7 +184,9 @@ Notes:
   success and on failure alike. `transport/provider-trust` is left out of text
   because it rides every quickchr run over TLS or SSH. `--json` keeps
   everything, `api --raw` stays a bare payload, and fan-out text is a report,
-  not data, so it keeps its warnings on stdout.
+  not data, so it keeps its warnings on stdout. A text stream writes only its
+  data rows (`frame`, `sample`) to stdout; its `started`, `synced` and
+  `summary` lines, tips, warnings and errors go to stderr (#473).
 - `data` is the only field whose *shape* varies by command. Everything else —
   including `warnings` and `tips` — is invariant in shape; only contents differ.
 - **Shared meta is written once** (#461, #462). A fan-out target's
@@ -193,9 +195,11 @@ Notes:
   they equal the outer operation's. When every target agrees on `auth`, or
   on a setting the outer `meta.settings` lacks, it moves to the outer
   envelope. A reader takes the target's value, else
-  the outer one (`expandFanoutTarget`). A `retrieve --follow` frame or notice
-  line carries only `meta.operation`; the full meta is on the stream's
-  `synced` and `summary` lines.
+  the outer one (`expandFanoutTarget`). A stream (`retrieve --follow`,
+  `retrieve --sample`, `api --stream`) opens with a `started` line that
+  carries the full meta and any request advice in `tips`, and ends with a
+  full-meta `summary` (`--follow`'s `synced` is full too). The data lines
+  between (`frame`, `sample`) carry only `meta.operation` (#473).
 
 ## Error model
 

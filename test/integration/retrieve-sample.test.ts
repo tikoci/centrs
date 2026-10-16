@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createProtocolAdapter } from "../../src/protocols/adapter.ts";
-import type { RetrieveEnvelope, RetrieveRequest } from "../../src/retrieve.ts";
+import type {
+	RetrieveEnvelope,
+	RetrieveRequest,
+	RetrieveStreamLine,
+} from "../../src/retrieve.ts";
 import { retrieveSample } from "../../src/retrieve-sample.ts";
 import {
 	isChrIntegrationEnabled,
@@ -23,11 +27,13 @@ type Stream = NonNullable<
 	NonNullable<RetrieveEnvelope["meta"]["operation"]>["stream"]
 >;
 
-function streamOf(envelope: RetrieveEnvelope | undefined): Stream | undefined {
+function streamOf(
+	envelope: RetrieveStreamLine | undefined,
+): Stream | undefined {
 	return envelope?.meta.operation?.stream;
 }
 
-function samplesOf(out: readonly RetrieveEnvelope[]) {
+function samplesOf(out: readonly RetrieveStreamLine[]) {
 	return out.flatMap((envelope) => {
 		const stream = streamOf(envelope);
 		return stream?.kind === "sample" && envelope.ok
@@ -36,7 +42,7 @@ function samplesOf(out: readonly RetrieveEnvelope[]) {
 	});
 }
 
-function summaryOf(out: readonly RetrieveEnvelope[]) {
+function summaryOf(out: readonly RetrieveStreamLine[]) {
 	const stream = streamOf(out.at(-1));
 	return stream?.kind === "summary" && "samples" in stream ? stream : undefined;
 }
@@ -44,8 +50,8 @@ function summaryOf(out: readonly RetrieveEnvelope[]) {
 async function sample(
 	request: RetrieveRequest,
 	onSample?: (index: number) => Promise<void>,
-): Promise<RetrieveEnvelope[]> {
-	const out: RetrieveEnvelope[] = [];
+): Promise<RetrieveStreamLine[]> {
+	const out: RetrieveStreamLine[] = [];
 	for await (const envelope of retrieveSample(request, Bun.env)) {
 		out.push(envelope);
 		const stream = streamOf(envelope);
@@ -102,7 +108,11 @@ describeFast("retrieve --sample against CHR", () => {
 					count: 3,
 				});
 				expect(sa1.every((envelope) => envelope.ok)).toBe(true);
-				expect(sa1[0]?.meta.via).toBe(name);
+				// `started` carries the full meta once (#473).
+				expect(sa1[0]?.meta).toMatchObject({
+					via: name,
+					operation: { stream: { kind: "started" } },
+				});
 				const lines = samplesOf(sa1);
 				expect(lines.map((line) => line.index)).toEqual([1, 2, 3]);
 				expect(lines.every((line) => Array.isArray(line.data))).toBe(true);
