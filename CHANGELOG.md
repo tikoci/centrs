@@ -122,9 +122,9 @@ documenting cross-cutting shifts that affect contributors and consumers.
   both gates.
 - The suggested command in `usage/flag-after-separator` redacts credentials
   in positional targets and `--host` values, including a host flag moved
-  before `--` and percent-encoded URL userinfo. Inline value flags keep their
+  before `--` and percent-encoded URL credentials. Inline value flags keep their
   flag names in the correction. This closes error-path gaps in the target
-  redaction below; explicit URL userinfo is refused before CDB lookup too.
+  redaction below; explicit URL credentials is refused before CDB lookup too.
 - Serialized error causes keep `name`, `message` and `code` and omit raw JS
   stack traces and their local installation paths (#476, #480).
 - A target with credentials in it (`http://admin:pass@host`, `admin:pass@host`,

@@ -34,7 +34,7 @@ describe("redactTargetInput (#478)", () => {
 		}
 		// These are CDB identity candidates, not explicit URLs.
 		expect(redactTargetInput("rtr@site")).toBe("rtr@site");
-		expect(redactTargetInput("rtr%3Awest@site")).toBe("rtr%3Awest@site");
+		expect(redactTargetInput("rtr%3A-west@site")).toBe("rtr%3A-west@site");
 	});
 
 	test("stays linear on a long run of colons (polynomial ReDoS guard)", () => {
@@ -219,7 +219,7 @@ describe("a CDB identity with @ still resolves (#478)", () => {
 	test("`user@host` holds no password, so the lookup runs first", async () => {
 		const { path, cleanup } = await makeMcpTestCdb([
 			{ target: "192.0.2.9", comment: "identity=rtr@site" },
-			{ target: "192.0.2.10", comment: "identity=rtr%3Awest@site" },
+			{ target: "192.0.2.10", comment: "identity=rtr%3A-west@site" },
 		]);
 		try {
 			const resolved = await resolveCdb(
@@ -230,11 +230,11 @@ describe("a CDB identity with @ still resolves (#478)", () => {
 			expect(resolved?.identity).toBe("rtr@site");
 			expect(redactTargetInput("rtr@site")).toBe("rtr@site");
 			const encoded = await resolveCdb(
-				{ targetInput: "rtr%3Awest@site", cdbFile: path },
+				{ targetInput: "rtr%3A-west@site", cdbFile: path },
 				{},
 			);
 			expect(encoded?.target).toBe("192.0.2.10");
-			expect(encoded?.identity).toBe("rtr%3Awest@site");
+			expect(encoded?.identity).toBe("rtr%3A-west@site");
 		} finally {
 			await cleanup();
 		}
