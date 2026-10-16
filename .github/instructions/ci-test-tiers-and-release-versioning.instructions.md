@@ -23,8 +23,9 @@ it upstream rather than working around it.
 - **On push to main** — the definitive QA run: every active RouterOS channel
   on CHR, plus unit tests on macOS and Windows.
 - **On publish** (`@next` or `@latest`) — the published commit must have a green
-  QA run. The release reuses main's run on that commit and sweeps only when
-  every run there was cancelled. Richer quickchr options at release (extra
+  QA run. The release reuses main's push or scheduled run on that commit, waits
+  if one is still running, and sweeps only when there is none or every one was
+  cancelled. Richer quickchr options at release (extra
   packages such as `container`, arm64) are not wired yet (#97).
 - CI must be runnable **separately from the release process**, so agents can fix
   bugs or improve CI without triggering an actual publish (`workflow_dispatch`
@@ -42,7 +43,7 @@ dist-tag. **Both publish to NPM**, from one button on `main` (#484):
 ```sh
 gh workflow run release.yaml                     # @next
 gh workflow run release.yaml -f channel=latest   # stable
-gh workflow run release.yaml -f dry-run=true     # every gate, publish nothing
+gh workflow run release.yaml -f dry-run=true     # gates checked, CHR gate reported, nothing published
 ```
 
 - **`@next`** publishes `<base>-next.<run_number>` (`0.1.9-next.23`) to npm tag
@@ -111,7 +112,8 @@ scheme as the reference):
   npm `next`; `channel=latest` → the committed version on `latest`, `next`
   moved forward, tag + GitHub Release. Lint/unit/build on the commit, then
   main's QA on that commit is reused; `qa.yaml` is called through
-  `workflow_call` only when every run there was cancelled. `--provenance`;
+  `workflow_call` only when there is no push/scheduled run there or every one
+  was cancelled. `--provenance`;
   needs `NPM_TOKEN`.
 - **Extended platforms** → `verify-extended.yaml` (dispatch): macOS-x86 (HVF) +
   Windows-x86 (TCG, informational). A `packages` input installs extra RouterOS

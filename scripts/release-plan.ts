@@ -77,15 +77,28 @@ export interface WorkflowRun {
 	status: string;
 	conclusion: string | null;
 	head_sha: string;
-	html_url: string;
 }
+
+// Run conclusions as GitHub documents them. A verdict echoes one of these
+// literals, never the API's string, so nothing from the API reaches the step
+// summary or $GITHUB_OUTPUT.
+const CONCLUSIONS = [
+	"success",
+	"failure",
+	"cancelled",
+	"skipped",
+	"timed_out",
+	"action_required",
+	"neutral",
+	"stale",
+	"startup_failure",
+] as const;
 
 export type QaAction = "reuse" | "wait" | "sweep" | "refuse";
 
 export interface QaVerdict {
 	action: QaAction;
 	message: string;
-	run?: WorkflowRun;
 }
 
 /**
@@ -108,28 +121,21 @@ export function qaVerdict(
 	);
 	const green = relevant.find((run) => run.conclusion === "success");
 	if (green) {
-		return {
-			action: "reuse",
-			run: green,
-			message: `QA passed on this commit: ${green.html_url}`,
-		};
+		return { action: "reuse", message: "QA passed on this commit." };
 	}
 	const running = relevant.find((run) => run.status !== "completed");
 	if (running) {
-		return {
-			action: "wait",
-			run: running,
-			message: `QA is still running on this commit: ${running.html_url}`,
-		};
+		return { action: "wait", message: "QA is still running on this commit." };
 	}
 	const failed = relevant.find(
 		(run) => run.conclusion !== "cancelled" && run.conclusion !== "skipped",
 	);
 	if (failed) {
+		const conclusion =
+			CONCLUSIONS.find((known) => known === failed.conclusion) ?? "unknown";
 		return {
 			action: "refuse",
-			run: failed,
-			message: `QA ${failed.conclusion} on this commit, so it is not released: ${failed.html_url}`,
+			message: `QA ended ${conclusion} on this commit, so it is not released.`,
 		};
 	}
 	return {
@@ -169,7 +175,7 @@ export function planRelease(input: {
 		}
 		if (npm.latest && Bun.semver.order(version, npm.latest) <= 0) {
 			return new Error(
-				`${version} would sort below latest (${npm.latest}). Set package.json to the next version with a -next suffix.`,
+				`${version} would not sort above npm's latest (see npm view @tikoci/centrs dist-tags). Set package.json to the next version with a -next suffix.`,
 			);
 		}
 		return {
@@ -186,6 +192,11 @@ export function planRelease(input: {
 	}
 	if (npm.versions.includes(packageVersion)) {
 		return new Error(`${packageVersion} is already on npm.`);
+	}
+	if (npm.latest && Bun.semver.order(packageVersion, npm.latest) <= 0) {
+		return new Error(
+			`${packageVersion} would not sort above npm's latest, so publishing it would move latest backwards (see npm view @tikoci/centrs dist-tags).`,
+		);
 	}
 	if (input.tagExists) {
 		return new Error(`Tag v${packageVersion} already exists.`);
@@ -239,7 +250,7 @@ async function qaRuns(sha: string): Promise<WorkflowRun[]> {
 
 async function npmState(name: string): Promise<NpmState> {
 	const response = await fetch(
-		`https://registry.npmjs.org/${name.replace("/", "%2f")}`,
+		`https://registry.npmjs.org/${encodeURIComponent(name)}`,
 	);
 	if (response.status === 404) return { versions: [], latest: undefined };
 	if (!response.ok) throw new Error(`npm registry: HTTP ${response.status}`);
@@ -251,6 +262,15 @@ async function npmState(name: string): Promise<NpmState> {
 		versions: Object.keys(doc.versions ?? {}),
 		latest: doc["dist-tags"]?.["latest"],
 	};
+}
+
+/** 404 is the only answer that means "no such tag"; any other failure stops the
+ * release rather than letting a stable publish run into an existing tag. */
+async function tagExists(version: string): Promise<boolean> {
+	const response = await github(`git/ref/tags/v${version}`);
+	if (response.status === 404) return false;
+	if (!response.ok) throw new Error(`Tag lookup: HTTP ${response.status}`);
+	return true;
 }
 
 async function writeLines(
@@ -282,17 +302,19 @@ async function plan(args: string[]): Promise<number> {
 		version: string;
 	};
 	const changelog = await Bun.file("CHANGELOG.md").text();
-	const tagExists = (await github(`git/ref/tags/v${pkg.version}`)).ok;
 	const result = planRelease({
 		channel,
 		packageVersion: pkg.version,
 		runNumber: Number(env("GITHUB_RUN_NUMBER")),
 		npm: await npmState(pkg.name),
 		changelog,
-		tagExists,
+		tagExists: await tagExists(pkg.version),
 	});
 	if (result instanceof Error) return refuse(result.message);
 
+	// Built from this run's own context, not from the API: every QA run on the
+	// commit is listed there.
+	const checks = `https://github.com/${env("GITHUB_REPOSITORY")}/commit/${sha}/checks`;
 	const deadline = Date.now() + WAIT_LIMIT_MS;
 	let verdict = qaVerdict(await qaRuns(sha), sha);
 	while (verdict.action === "wait" && wait && Date.now() < deadline) {
@@ -300,11 +322,11 @@ async function plan(args: string[]): Promise<number> {
 		await Bun.sleep(WAIT_POLL_MS);
 		verdict = qaVerdict(await qaRuns(sha), sha);
 	}
-	if (verdict.action === "refuse") return refuse(verdict.message);
+	if (verdict.action === "refuse") {
+		return refuse(`${verdict.message} ${checks}`);
+	}
 	if (verdict.action === "wait" && wait) {
-		return refuse(
-			`QA did not finish within 45 minutes: ${verdict.run?.html_url}`,
-		);
+		return refuse(`QA did not finish within 45 minutes: ${checks}`);
 	}
 
 	const section = changelogSection(changelog, result.base);
@@ -319,7 +341,7 @@ async function plan(args: string[]): Promise<number> {
 		"",
 		`- Version: \`${result.version}\` → npm tag \`${result.npmTag}\`${result.npmTag === "latest" ? " (and `next` moved to it)" : ""}`,
 		`- Commit: \`${sha}\``,
-		`- CHR gate: ${verdict.message}`,
+		`- CHR gate: ${verdict.message} ([checks](${checks}))${wait ? "" : " Dry run: reported as it stands, not waited on or swept."}`,
 		"",
 		section
 			? `### CHANGELOG — ${section.version} — ${section.label}\n\n${section.body}`

@@ -5,7 +5,7 @@ run-name: Release • ${{ inputs.channel }}${{ inputs.dry-run && ' (dry run)' ||
 #
 #   gh workflow run release.yaml                     # @next (default)
 #   gh workflow run release.yaml -f channel=latest   # stable
-#   gh workflow run release.yaml -f dry-run=true     # every gate, publish nothing
+#   gh workflow run release.yaml -f dry-run=true     # gates checked, CHR gate reported, nothing published
 #
 # It publishes the commit the dispatch ran on (github.sha), never an older one —
 # npm provenance attests that commit.
@@ -21,8 +21,9 @@ run-name: Release • ${{ inputs.channel }}${{ inputs.dry-run && ' (dry run)' ||
 # Gate: lint/unit/build on the commit (~1.5 min), and the CHR gate reuses main's
 # QA on that commit instead of sweeping again — wait if it is running, sweep via
 # qa.yaml only if every run was cancelled, refuse if it failed. The decisions are
-# scripts/release-plan.ts (unit-tested). A pushed v* tag no longer triggers
-# anything.
+# scripts/release-plan.ts (unit-tested). A dry run reports the CHR gate as it
+# stands — it neither waits nor sweeps — so a green dry run is not a QA result.
+# A pushed v* tag no longer triggers anything.
 #
 # Requires NPM_TOKEN (npm automation token with publish access to @tikoci/centrs)
 # resolvable as `secrets.NPM_TOKEN` — a repo secret, or a tikoci org secret with
@@ -43,7 +44,7 @@ on:
           - latest
         default: next
       dry-run:
-        description: "Run every gate but publish nothing (npm pack --dry-run instead)"
+        description: "Check the version gates and run lint/unit/build; report the CHR gate as it stands (no wait, no sweep); publish nothing"
         type: boolean
         default: false
 
@@ -124,7 +125,9 @@ jobs:
   publish:
     name: Publish to npm
     needs: [plan, checks, qa]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.checks.result == 'success' && (needs.qa.result == 'success' || needs.qa.result == 'skipped') }}
+    # qa=wait only comes out of a dry run (the plan refuses on a wait timeout);
+    # the last clause keeps a real publish from ever riding on one.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.checks.result == 'success' && (needs.qa.result == 'success' || needs.qa.result == 'skipped') && (needs.plan.outputs.qa != 'wait' || inputs.dry-run) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

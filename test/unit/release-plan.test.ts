@@ -16,7 +16,6 @@ function run(overrides: Partial<WorkflowRun>): WorkflowRun {
 		status: "completed",
 		conclusion: "success",
 		head_sha: SHA,
-		html_url: "https://github.com/tikoci/centrs/actions/runs/1",
 		...overrides,
 	};
 }
@@ -110,10 +109,17 @@ describe("qaVerdict (#484)", () => {
 		expect(qaVerdict([], SHA).action).toBe("sweep");
 	});
 
-	test("a failed run refuses and names it", () => {
-		const verdict = qaVerdict([run({ conclusion: "failure" })], SHA);
+	test("a failed run refuses and names its conclusion", () => {
+		const verdict = qaVerdict([run({ conclusion: "timed_out" })], SHA);
 		expect(verdict.action).toBe("refuse");
-		expect(verdict.message).toContain("actions/runs/1");
+		expect(verdict.message).toContain("timed_out");
+	});
+
+	test("a conclusion GitHub does not document is not echoed", () => {
+		const verdict = qaVerdict([run({ conclusion: "x\n::error::y" })], SHA);
+		expect(verdict.action).toBe("refuse");
+		expect(verdict.message).toContain("unknown");
+		expect(verdict.message).not.toContain("::error::");
 	});
 
 	test("dispatch runs and other commits do not count", () => {
@@ -172,6 +178,17 @@ describe("planRelease (#484)", () => {
 			npmTag: "latest",
 			base: "0.1.9",
 		});
+	});
+
+	test("latest refuses a version that would move npm's latest backwards", () => {
+		const result = planRelease({
+			...base,
+			channel: "latest",
+			packageVersion: "0.1.9",
+			npm: { versions: ["0.1.10"], latest: "0.1.10" },
+			changelog: CHANGELOG,
+		});
+		expect(result).toBeInstanceOf(Error);
 	});
 
 	test("latest refuses a -next version, an undated section, a published version or an existing tag", () => {
