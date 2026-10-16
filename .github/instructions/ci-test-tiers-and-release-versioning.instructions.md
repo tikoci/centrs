@@ -20,10 +20,12 @@ it upstream rather than working around it.
 - **On push** — unit tests + a *smoke* integration tier on quickchr (does the
   CLI/API generally work: core paths, common commands). Stable channel only,
   x86 Linux runner.
-- **On pre-release** — same workflow as push, **also** on macOS and Windows
-  runners. (A pre-release is a `-`-suffixed version, e.g. `0.1.7-next.0`.)
-- **On release** — more sophisticated tests with richer quickchr options (extra
-  packages, e.g. `container`); exercise all four RouterOS release channels.
+- **On push to main** — the definitive QA run: every active RouterOS channel
+  on CHR, plus unit tests on macOS and Windows.
+- **On publish** (`@next` or `@latest`) — the published commit must have a green
+  QA run. The release reuses main's run on that commit and sweeps only when
+  every run there was cancelled. Richer quickchr options at release (extra
+  packages such as `container`, arm64) are not wired yet (#97).
 - CI must be runnable **separately from the release process**, so agents can fix
   bugs or improve CI without triggering an actual publish (`workflow_dispatch`
   with a version input is the pattern; a deep "all versions" sweep can be its own
@@ -35,26 +37,40 @@ it upstream rather than working around it.
 ## Release versioning
 
 Standard npm semantics: the **SemVer pre-release identifier** selects the
-dist-tag. **Both publish to NPM.**
+dist-tag. **Both publish to NPM**, from one button on `main` (#484):
 
-- A version carrying a pre-release suffix (`0.1.7-next.0`) = **pre-release** →
-  npm tag `next`. It never moves `latest`, so it reaches only people who ask for
-  it by tag or exact version.
-- A plain version (`0.1.6`) = **release** → npm tag `latest`, and `release.yaml`
-  then moves `next` forward to the same version, so `@next` never resolves older
-  than `@latest` between cuts.
+```sh
+gh workflow run release.yaml                     # @next
+gh workflow run release.yaml -f channel=latest   # stable
+gh workflow run release.yaml -f dry-run=true     # every gate, publish nothing
+```
 
-The even/odd **minor** rule this replaces is gone: `0.1.x` was "pre-release"
-only by that convention, which meant a plain `npm install @tikoci/centrs`
-resolved to whatever odd-minor build last touched `latest` — in practice
-`0.1.0`, months stale — while every subsequent cut landed on `next` alone.
-Pre-release status now lives in the version string itself, where npm, `npm
-outdated`, and range resolvers can all see it.
+- **`@next`** publishes `<base>-next.<run_number>` (`0.1.9-next.23`) to npm tag
+  `next`. It needs no commit, PR, git tag or GitHub Release: the version is
+  written into `package.json` inside the runner only, and provenance records the
+  commit. Cut one whenever main is worth trying.
+- **`@latest`** publishes the committed plain version (`0.1.9`), moves `next`
+  to it so `@next` never resolves older than `@latest`, and creates tag
+  `v0.1.9` with a GitHub Release whose notes are the CHANGELOG section.
+- The release publishes the commit the dispatch ran on, never an older green
+  one, because npm provenance attests `GITHUB_SHA`.
 
-Cutting one: bump `package.json`, move `## Unreleased` in `CHANGELOG.md` to the
-new version heading, commit, then push the matching `v<version>` tag — the tag
-is what triggers the publish, and `release.yaml` fails the run if the tag and
-`package.json` disagree. Keep `CHANGELOG.md` current with the bump.
+`package.json` on main holds the version the work is heading to with a `-next`
+suffix (`0.1.9-next`); `<base>` is that version without the suffix. A plain
+version that already shipped makes `<base>` the following patch, so a `@next`
+cut never waits on a bump commit.
+
+`CHANGELOG.md` has **one section per stable version** (#485). Work in progress
+goes under `## 0.1.9 — next`; a `-next.N` build gets no section of its own.
+Cutting stable: one commit that sets `package.json` to `0.1.9` and the heading
+to `## 0.1.9 — YYYY-MM-DD`, then the `latest` dispatch once that commit's QA is
+green. The first change after a stable cut adds `## 0.1.10 — next` and sets
+`package.json` to `0.1.10-next`.
+
+The even/odd **minor** rule is gone: pre-release status lives in the version
+string, where npm, `npm outdated` and range resolvers can all see it.
+`scripts/release-plan.ts` holds every release decision (version, gates, CHR
+reuse) and is unit-tested; the workflow only calls it.
 
 ## Realized in
 
@@ -90,10 +106,13 @@ scheme as the reference):
   accumulator in `scripts/qa-history.ts`.
 - **Security/quality** → `codeql.yaml` (PR + push + weekly + dispatch) + the
   AI-findings probe.
-- **Release/publish** → `release.yaml`: `v*` tag or dispatch(dry-run);
-  pre-release suffix → npm `next`, plain version → `latest` + `next` moved
-  forward; release-tier sweep via `qa.yaml` `workflow_call`
-  (all channels); `--provenance`; needs `NPM_TOKEN`.
+- **Release/publish** → `release.yaml`: dispatch-only from `main` (a pushed
+  `v*` tag triggers nothing). `channel=next` → `<base>-next.<run_number>` on
+  npm `next`; `channel=latest` → the committed version on `latest`, `next`
+  moved forward, tag + GitHub Release. Lint/unit/build on the commit, then
+  main's QA on that commit is reused; `qa.yaml` is called through
+  `workflow_call` only when every run there was cancelled. `--provenance`;
+  needs `NPM_TOKEN`.
 - **Extended platforms** → `verify-extended.yaml` (dispatch): macOS-x86 (HVF) +
   Windows-x86 (TCG, informational). A `packages` input installs extra RouterOS
   packages into the CHR (e.g. `container`) for a fuller-RouterOS run.
@@ -106,5 +125,4 @@ packages from quickchr (`CENTRS_CHR_ARCH`, `CENTRS_CHR_PACKAGES`), so the
 centrs side is ready; what stays deferred is the **arm64 job** — quickchr 0.4.2
 has an arm64 REST-POST bug (returns the prior GET's body; quickchr BACKLOG P3)
 that breaks centrs's execute path, so an arm64 job would be known-red until that
-upstream fix lands — and wiring the **release-tier** extra-packages through
-`qa.yaml`, folded into the release re-review.
+upstream fix lands — and wiring extra packages into the release gate (#97).

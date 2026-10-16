@@ -4,7 +4,8 @@ run-name: QA • ${{ github.event_name }} • ${{ github.ref_name }}
 # QA is the *definitive* RouterOS surface: every active channel booted on a real
 # CHR via quickchr, with results recorded to a bun:sqlite store. It runs on every
 # push to main (the integrated branch), a weekly cron, on demand, and is
-# workflow_call-able by release.yaml for the release-tier sweep. The fast
+# workflow_call-able by release.yaml, which sweeps only when main's QA never
+# finished on the commit it publishes (#484). The fast
 # lint/unit/build/CHR-smoke gate is ci.yaml; security scanning is codeql.yaml —
 # neither runs here, so there is no duplicate test/coverage/CodeQL work.
 
@@ -47,10 +48,12 @@ permissions:
 # piling up stale full-matrix runs), but dispatched / scheduled / called runs each
 # get a unique group (github.run_id) so they never cancel one another — manual
 # multi-channel verification stays independent. (Fixes the same-ref self-cancel
-# that forced serial-by-hand channel dispatch.)
+# that forced serial-by-hand channel dispatch.) The ref check matters for called
+# runs, which see the caller's event: a release sweep triggered by a tag push
+# joined the main-push group and cancelled main's QA (#484).
 concurrency:
-  group: qa-${{ github.event_name == 'push' && 'main-push' || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  group: qa-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'main-push' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
 jobs:
   # Recency-aware matrix axis (B-2 / quickchr#3). quickchr resolves the live
@@ -189,7 +192,7 @@ jobs:
     # but never reds the run — best-effort legs are `continue-on-error`, mirroring
     # `channelPolicy` in scripts/qa-results-db.ts. The downstream
     # `accumulate-and-gate` job is the policy gate + cross-run history accumulator.
-    # Explicit versions are on demand; the release-tier sweep arrives via
+    # Explicit versions are on demand; a release sweep arrives via
     # workflow_call. macOS/arm CHR coverage lives in verify-extended.yaml (KVM).
     strategy:
       fail-fast: false

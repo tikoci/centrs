@@ -6,7 +6,14 @@ The product evolves as a stream of changes; there are no alpha gates.
 Per-feature status is tracked in `docs/MATRIX.md`. Use this file for
 documenting cross-cutting shifts that affect contributors and consumers.
 
-## Unreleased
+Each stable version has one section. Work in progress goes under
+`## X.Y.Z — next`, which is what `@next` installs (`X.Y.Z-next.N`); the stable
+release dates that heading. A `-next.N` build has no section of its own.
+
+## 0.1.9 — next
+
+In progress on npm tag `next`. The `0.1.9-next.0` cut (2026-10-13) carried
+part of this section.
 
 ### Added
 
@@ -33,6 +40,35 @@ documenting cross-cutting shifts that affect contributors and consumers.
   `run-script` and `reboot` carry `cmr/caller-policy-not-enforced` as
   `execute --cmr` does. The command still runs as typed, and a failed read
   never blocks it.
+
+- `execute <controller> --cmr --labels <expr> -- '<command>'` runs one
+  validated command on CMR clients through their controller (RouterOS
+  7.26beta1+; #450, #451). Only the controller is dialed, with its own
+  credentials. Each selected client validates the command with `:parse`
+  first, and a client whose answer is incomplete or rejected is not sent it.
+  The command then goes to each client in its own `run-script` call, bound to
+  the `/cmr/device` row and key it was validated on, and is never retried; a
+  timeout, cancellation or lost call is `cmr/outcome-unknown`. One `--yes`
+  covers the whole selection. Native API (default) and REST to the controller
+  are both CHR-tested. Raw `run-script` through `api` or plain `execute` warns
+  `cmr/client-script-not-validated`. Not on MCP yet.
+- `cmr/policy-denied`: a statement CMR scripts may not run (`/user add`,
+  `/tool sniffer`: the client allows only `read`, `write`, `test` and
+  `reboot`) is reported as such instead of a generic RouterOS failure, also
+  after earlier output. `:parse` accepts these commands, so validation cannot
+  catch them, and statements before the refused one have already run.
+- `cmr/console-only`: `execute` and `api` refuse `/cmr/device/dashboard`. A
+  plain path is refused before dialing; any other spelling (a relative menu
+  change, a block, an `/execute` script) is found in the controller's `:parse`
+  return. On 7.26beta1 it closed a native API session, and over REST it held
+  the controller's REST service for every caller for 10–30 s.
+- `execute --cmr` against a router with no `/cmr/device` says why. RouterOS
+  older than 7.26beta1 (CMR is beta-only) is `routeros/version-unsupported`
+  with `capability: cmr-controller`. A 7.26beta1+ router without the `cmr`
+  package stays `cmr/not-a-controller`, now naming its version and, for a CMR
+  client, its controller.
+- `execute --cmr` accepts a command that opens with a relative menu change
+  (`/system; identity/print`); its `:parse` return was read as incomplete.
 
 ### Changed
 
@@ -137,45 +173,6 @@ documenting cross-cutting shifts that affect contributors and consumers.
   password holds `/`, `?` or `#`. A CDB identity containing `@` (`rtr@site`)
   still resolves.
 
-## 0.1.9-next.0 — 2026-10-13
-
-Pre-release (npm tag `next`; `latest` stays on 0.1.8). Install with
-`bunx @tikoci/centrs@next`. First cut of `execute --cmr`; expect another
-`next` after the next round of CMR work.
-
-### Added
-
-- `execute <controller> --cmr --labels <expr> -- '<command>'` runs one
-  validated command on CMR clients through their controller (RouterOS
-  7.26beta1+; #450, #451). Only the controller is dialed, with its own
-  credentials. Each selected client validates the command with `:parse`
-  first, and a client whose answer is incomplete or rejected is not sent it.
-  The command then goes to each client in its own `run-script` call, bound to
-  the `/cmr/device` row and key it was validated on, and is never retried; a
-  timeout, cancellation or lost call is `cmr/outcome-unknown`. One `--yes`
-  covers the whole selection. Native API (default) and REST to the controller
-  are both CHR-tested. Raw `run-script` through `api` or plain `execute` warns
-  `cmr/client-script-not-validated`. Not on MCP yet.
-- `cmr/policy-denied`: a statement CMR scripts may not run (`/user add`,
-  `/tool sniffer`: the client allows only `read`, `write`, `test` and
-  `reboot`) is reported as such instead of a generic RouterOS failure, also
-  after earlier output. `:parse` accepts these commands, so validation cannot
-  catch them, and statements before the refused one have already run.
-- `cmr/console-only`: `execute` and `api` refuse `/cmr/device/dashboard`. A
-  plain path is refused before dialing; any other spelling (a relative menu
-  change, a block, an `/execute` script) is found in the controller's `:parse`
-  return. On 7.26beta1 it closed a native API session, and over REST it held
-  the controller's REST service for every caller for 10–30 s.
-- `execute --cmr` against a router with no `/cmr/device` says why. RouterOS
-  older than 7.26beta1 (CMR is beta-only) is `routeros/version-unsupported`
-  with `capability: cmr-controller`. A 7.26beta1+ router without the `cmr`
-  package stays `cmr/not-a-controller`, now naming its version and, for a CMR
-  client, its controller.
-- `execute --cmr` accepts a command that opens with a relative menu change
-  (`/system; identity/print`); its `:parse` return was read as incomplete.
-
-### Fixed
-
 - `execute` and `api` never replay a write that was sent (#448). Fan-out
   retried every `transport/network` and `transport/connection-closed` failure
   up to twice, so a write whose connection dropped after the router had run
@@ -185,44 +182,18 @@ Pre-release (npm tag `next`; `latest` stays on 0.1.8). Install with
   or fan-out mode, carries the new warning `transport/write-outcome-unknown`,
   because it may have run. Reads keep the retry.
 
-## 0.1.8 — 2026-10-12
-
-Release (npm tag `latest`; `next` moves forward to 0.1.8). Everything in
-0.1.8-next.0 below, plus two fixes from field-testing it.
-
-### Fixed
-
-- `retrieve --wait` with no deadline value names `--wait` (#445). Written as a
-  bare switch, `--wait --until 'expr'` read `--until` as the deadline and
-  shifted the predicate into a second target, so the CLI reported
-  `usage/fanout-not-supported`. It now fails `settings/invalid-timeout`
-  ("Received the flag: --until"), and every deadline without a unit gets the
-  `--wait`-specific message. A real multi-target `--wait` still gets the
-  fanout refusal.
-- MCP accepts a registered device by its `identity=`, `mac=` or `ip=` comment
-  key, as the CLI does (#444). The allowlist gate now matches with the same
-  resolver the call dials with, so the `mcp=` write policy checked is the
-  policy of the record the call runs against. A name on more than one record
-  fails `identity/ambiguous` with the candidates in `context.matches` and an
-  MCP remediation, instead of resolving to the first.
-
-## 0.1.8-next.0 — 2026-10-12
-
-Pre-release (npm tag `next`; `latest` stays on 0.1.7). Install with
-`bunx @tikoci/centrs@next`.
-
 ### Maintenance
 
-- Refresh vulnerable dependencies within existing ranges and use Bun's
-  Dependabot ecosystem for `bun.lock` (#390). Preserve the dependency group
-  and the `has-flag` major-version ignore. Remaining dependency advisories
-  and updater verification are tracked in #390.
-- Pre-release dependency alignment (#390): runtime ranges now floor at the
-  tested versions (`@modelcontextprotocol/sdk ^1.32.1`, `zod ^4.6.7`),
-  `smol-toml` is overridden past its advisories, and `@types/bun` is pinned
-  exactly to the 1.3.14 runtime (re-pin tracked in #438). The two residual
-  advisories (`braces`, `katex`) are dev-tool-only and do not ship in the
-  package.
+- Releases are one dispatch from `main` (#484, #485). `@next` publishes
+  `X.Y.Z-next.<run_number>` with no commit, PR or tag, and reuses main's QA
+  run on the commit instead of sweeping every channel again. `@latest` creates
+  the tag and a GitHub Release. A pushed `v*` tag no longer publishes. The
+  changelog keeps one section per stable version; the `0.1.8-next.0` and
+  `0.1.9-next.0` sections are folded into theirs.
+
+## 0.1.8 — 2026-10-12
+
+Most of this section first shipped as `0.1.8-next.0` (2026-10-12).
 
 ### Added
 
@@ -259,6 +230,20 @@ Pre-release (npm tag `next`; `latest` stays on 0.1.7). Install with
   the unreleased `renderRetrieveFollowLine()`).
 
 ### Fixed
+
+- `retrieve --wait` with no deadline value names `--wait` (#445). Written as a
+  bare switch, `--wait --until 'expr'` read `--until` as the deadline and
+  shifted the predicate into a second target, so the CLI reported
+  `usage/fanout-not-supported`. It now fails `settings/invalid-timeout`
+  ("Received the flag: --until"), and every deadline without a unit gets the
+  `--wait`-specific message. A real multi-target `--wait` still gets the
+  fanout refusal.
+- MCP accepts a registered device by its `identity=`, `mac=` or `ip=` comment
+  key, as the CLI does (#444). The allowlist gate now matches with the same
+  resolver the call dials with, so the `mcp=` write policy checked is the
+  policy of the record the call runs against. A name on more than one record
+  fails `identity/ambiguous` with the candidates in `context.matches` and an
+  MCP remediation, instead of resolving to the first.
 
 - `execute` honors an explicit target URL, and native-api honors a typed port
   (#426, from #384). With no `via` pinned, an `http(s)://host[:port]` target
@@ -438,6 +423,19 @@ Pre-release (npm tag `next`; `latest` stays on 0.1.7). Install with
   stopped dropping RouterOS's message from `context.detail`. `--json` output is
   unchanged apart from those remediation strings and the restored
   `context.detail`.
+
+### Maintenance
+
+- Refresh vulnerable dependencies within existing ranges and use Bun's
+  Dependabot ecosystem for `bun.lock` (#390). Preserve the dependency group
+  and the `has-flag` major-version ignore. Remaining dependency advisories
+  and updater verification are tracked in #390.
+- Pre-release dependency alignment (#390): runtime ranges now floor at the
+  tested versions (`@modelcontextprotocol/sdk ^1.32.1`, `zod ^4.6.7`),
+  `smol-toml` is overridden past its advisories, and `@types/bun` is pinned
+  exactly to the 1.3.14 runtime (re-pin tracked in #438). The two residual
+  advisories (`braces`, `katex`) are dev-tool-only and do not ship in the
+  package.
 
 ## 0.1.7 — 2026-09-27
 

@@ -13,12 +13,13 @@ bunx @tikoci/centrs@next explain '/ip/address print' --json
 
 Use `bunx @tikoci/centrs@next --help` to inspect the full preview CLI, and
 `bunx @tikoci/centrs@next --version` (`-V`; `--json` for an envelope) to print
-the exact version for scripts and field reports. Since 0.1.6 the dist-tag
-follows standard SemVer semantics rather than the old even/odd-minor rule: a plain version (`0.1.6`) publishes to `latest` and carries
-`next` forward with it, while a pre-release suffix (`0.1.7-next.0`) publishes to
-`next` only and never moves `latest`. So `@next` is the leading edge and can
-equal `@latest` between cuts — `npm view @tikoci/centrs dist-tags` is the
-authority.
+the exact version for scripts and field reports. The dist-tag follows standard
+SemVer semantics: a plain version (`0.1.8`) publishes to `latest` and carries
+`next` forward with it, while a `next` build (`0.1.9-next.23`) publishes to
+`next` only and never moves `latest`. A `next` build is described by the
+`## 0.1.9 — next` section of [`CHANGELOG.md`](CHANGELOG.md). So `@next` is the
+leading edge and can equal `@latest` between cuts —
+`npm view @tikoci/centrs dist-tags` is the authority.
 
 The full flag reference for every command is generated from the CLI metadata
 into [`docs/CLI.md`](docs/CLI.md); per-command behavior lives in
