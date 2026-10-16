@@ -126,7 +126,6 @@ export async function runCli(
 		}
 
 		console.error(
-			// codeql[js/clear-text-logging] password reaches here only as SettingSource provenance ({kind,key}), never the value — see CommonSettingsMeta.password in src/core/envelope.ts.
 			formatCentrsErrorText(
 				asCentrsError(new Error(`Unknown centrs command: ${command}`), {
 					code: "input/invalid-command",
@@ -141,7 +140,6 @@ export async function runCli(
 		// to a structured envelope, so reaching here means an unconverted throw
 		// escaped. Never let a raw stack trace reach the user.
 		console.error(
-			// codeql[js/clear-text-logging] password reaches here only as SettingSource provenance ({kind,key}), never the value — see CommonSettingsMeta.password in src/core/envelope.ts.
 			formatCentrsErrorText(
 				asCentrsError(error, {
 					code: "internal/unhandled",
