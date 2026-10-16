@@ -1,53 +1,104 @@
 name: Release
-run-name: Release • ${{ github.event_name }} • ${{ github.ref_name }}
+run-name: Release • ${{ inputs.channel }}${{ inputs.dry-run && ' (dry run)' || '' }} • ${{ github.ref_name }}
 
-# Publishes @tikoci/centrs to npm. Triggered by a pushed v* tag (real publish) or
-# a manual dispatch (dry-run by default — set dry-run=false to publish from a
-# dispatch). Pipeline: checks ‖ unit → release-tier CHR sweep (all channels via
-# qa.yaml workflow_call) → publish.
+# One-button publish of @tikoci/centrs from main (#484):
 #
-# The SemVer PRE-RELEASE identifier selects the npm dist-tag — standard npm
-# semantics, no even/odd minor rule:
-#   0.1.7-next.0 (any `-` suffix) → npm tag "next"   (pre-release)
-#   0.1.6        (no suffix)      → npm tag "latest" (release), and "next" is
-#                                   moved forward to it so `@next` never resolves
-#                                   older than `@latest`.
-# Keep CHANGELOG.md current with the bump (move "## Unreleased" to the version).
+#   gh workflow run release.yaml                     # @next (default)
+#   gh workflow run release.yaml -f channel=latest   # stable
+#   gh workflow run release.yaml -f dry-run=true     # gates checked, CHR gate reported, nothing published
+#
+# It publishes the commit the dispatch ran on (github.sha), never an older one —
+# npm provenance attests that commit.
+#
+#   next:   <base>-next.<run_number> → npm tag "next". package.json is rewritten
+#           in the runner only: no commit, no PR, no git tag, no GitHub Release.
+#           <base> is package.json's version without its suffix (0.1.9-next →
+#           0.1.9); a plain version that already shipped bumps the patch.
+#   latest: the committed plain version → npm tag "latest", "next" moved to it,
+#           tag v<version> + GitHub Release from its CHANGELOG section. Commit the
+#           version and the dated `## X.Y.Z — YYYY-MM-DD` heading first.
+#
+# Gate: lint/unit/build on the commit (~1.5 min), and the CHR gate reuses main's
+# QA on that commit instead of sweeping again — wait if it is running, sweep via
+# qa.yaml only if every run was cancelled, refuse if it failed. The decisions are
+# scripts/release-plan.ts (unit-tested). A dry run reports the CHR gate as it
+# stands — it neither waits nor sweeps — so a green dry run is not a QA result.
+# A pushed v* tag no longer triggers anything.
 #
 # Requires NPM_TOKEN (npm automation token with publish access to @tikoci/centrs)
 # resolvable as `secrets.NPM_TOKEN` — a repo secret, or a tikoci org secret with
-# centrs in its repository access. Provenance uses id-token: write on the publish
-# job only.
+# centrs in its repository access.
 # Policy: .github/instructions/ci-test-tiers-and-release-versioning.instructions.md.
 #
 # Injection safety: every workflow value used in a `run:` block arrives via `env:`
-# (or a built-in like $GITHUB_REF_NAME) — never inlined `${{ }}` — so a crafted
-# tag/version is treated as data, not code.
+# (or a built-in like $GITHUB_SHA) — never inlined `${{ }}`.
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
+      channel:
+        description: "next = <base>-next.<run_number> on npm tag next; latest = the committed version"
+        type: choice
+        options:
+          - next
+          - latest
+        default: next
       dry-run:
-        description: "Run all checks + the CHR sweep but skip npm publish (npm pack --dry-run instead)."
+        description: "Check the version gates and run lint/unit/build; report the CHR gate as it stands (no wait, no sweep); publish nothing"
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read
+# Never two releases at once; never cancel one mid-flight.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
+  plan:
+    name: Plan + CHR gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      npm-tag: ${{ steps.plan.outputs.npm-tag }}
+      base: ${{ steps.plan.outputs.base }}
+      qa: ${{ steps.plan.outputs.qa }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Setup Bun 1.4.2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
+        with:
+          bun-version: 1.4.2
+          no-cache: true
+      - name: Plan the version and check main's QA on this commit
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        # A dry run reports the CHR gate as it stands instead of waiting on it.
+        run: |
+          set -eo pipefail
+          args=(plan --channel "$CHANNEL")
+          if [ "$DRY_RUN" = "true" ]; then args+=(--no-wait); fi
+          bun run scripts/release-plan.ts "${args[@]}"
+
   checks:
-    name: Repo checks
+    name: Lint, unit, build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Setup Bun 1.4.2
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
         with:
@@ -55,36 +106,16 @@ jobs:
           no-cache: true
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - name: Lint
-        run: bun run lint
-      - name: Lint CI (docs, spelling, secrets)
-        run: bun run lint:ci
+      - name: Lint CI, unit, build
+        run: bun run ci
 
-  unit:
-    name: Unit tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-      - name: Setup Bun 1.4.2
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
-        with:
-          bun-version: 1.4.2
-          no-cache: true
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-      - name: Test
-        run: bun run test
-
-  # Release-tier sweep: the full RouterOS channel matrix on real CHR, reusing the
-  # definitive qa.yaml. "all" fans over the active set (stable/long-term/dev).
-  # A reusable workflow can't be granted more than the calling job, and qa.yaml's
-  # accumulate-and-gate job commits to the qa-history branch (contents: write), so
-  # grant it here — else the run fails at startup (the caller's read cap can't
-  # satisfy the callee's write).
-  release-tier:
-    name: Release-tier CHR sweep
-    needs: [checks, unit]
+  # Only when main's QA never finished on this commit (a newer push cancelled
+  # it). qa.yaml's accumulate-and-gate commits to qa-history, and a reusable
+  # workflow cannot get more than its caller grants, hence contents: write.
+  qa:
+    name: CHR sweep
+    needs: plan
+    if: ${{ needs.plan.outputs.qa == 'sweep' && !inputs.dry-run }}
     permissions:
       contents: write
     uses: ./.github/workflows/qa.yaml
@@ -93,14 +124,23 @@ jobs:
 
   publish:
     name: Publish to npm
-    needs: [release-tier]
+    needs: [plan, checks, qa]
+    # qa=wait only comes out of a dry run (the plan refuses on a wait timeout);
+    # the last clause keeps a real publish from ever riding on one.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.checks.result == 'success' && (needs.qa.result == 'success' || needs.qa.result == 'skipped') && (needs.plan.outputs.qa != 'wait' || inputs.dry-run) }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      NPM_TAG: ${{ needs.plan.outputs.npm-tag }}
+      DRY_RUN: ${{ inputs.dry-run }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Setup Bun 1.4.2
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # setup-bun action v2.2.0
         with:
@@ -113,51 +153,11 @@ jobs:
           package-manager-cache: false
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - name: Determine version and npm tag
-        id: version
-        env:
-          DRY_RUN: ${{ inputs.dry-run || 'false' }}
-        run: |
-          set -eo pipefail
-          VERSION=$(node -pe "require('./package.json').version")
-          PKG_NAME=$(node -pe "require('./package.json').name")
-          # SemVer: anything after the first `-` is a pre-release identifier, so
-          # stripping it changes the string only for a pre-release version.
-          if [ "${VERSION%%-*}" != "$VERSION" ]; then
-            NPM_TAG="next"
-            ALSO_NEXT="false"
-            echo "::notice::Pre-release $VERSION → npm tag 'next'"
-          else
-            NPM_TAG="latest"
-            ALSO_NEXT="true"
-            echo "::notice::Release $VERSION → npm tag 'latest' (and 'next' moved to it)"
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "package=$PKG_NAME" >> "$GITHUB_OUTPUT"
-          echo "npm-tag=$NPM_TAG" >> "$GITHUB_OUTPUT"
-          echo "also-next=$ALSO_NEXT" >> "$GITHUB_OUTPUT"
-          {
-            echo "## Release"
-            echo "- Version: \`$VERSION\`"
-            echo "- npm tag: \`$NPM_TAG\`"
-            if [ "$ALSO_NEXT" = "true" ]; then
-              echo "- Also moves: \`next\` → \`$VERSION\`"
-            fi
-            echo "- Dry run: \`$DRY_RUN\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Validate tag matches package.json version
-        if: github.ref_type == 'tag'
-        env:
-          PKG_VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          set -eo pipefail
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error::package.json version ($PKG_VERSION) does not match git tag ($TAG_VERSION)"
-            exit 1
-          fi
-      # `secrets.NPM_TOKEN` must resolve on this runner — a repo secret, or a
-      # tikoci org secret with centrs in its repository access. Prove that BEFORE
+      # The published package.json carries the planned version, so
+      # `centrs --version` names the exact build. Never committed.
+      - name: Set the package version
+        run: bunx npm pkg set "version=$VERSION"
+      # `secrets.NPM_TOKEN` must resolve on this runner. Prove that BEFORE
       # attempting publish (and on a dry-run, so a dispatch validates it without
       # publishing). The value is masked by Actions; only its presence is logged.
       - name: Verify NPM_TOKEN reaches this runner
@@ -173,24 +173,28 @@ jobs:
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_TAG: ${{ steps.version.outputs.npm-tag }}
-          ALSO_NEXT: ${{ steps.version.outputs.also-next }}
-          VERSION: ${{ steps.version.outputs.version }}
-          PKG_NAME: ${{ steps.version.outputs.package }}
-          DRY_RUN: ${{ inputs.dry-run || 'false' }}
         run: |
           set -eo pipefail
+          PKG_NAME=$(node -pe "require('./package.json').name")
           if [ "$DRY_RUN" = "true" ]; then
-            echo "Dry run — not publishing $VERSION (would use npm tag '$NPM_TAG')"
-            if [ "$ALSO_NEXT" = "true" ]; then
-              echo "Dry run — would then move 'next' to $PKG_NAME@$VERSION"
-            fi
+            echo "Dry run — not publishing $PKG_NAME@$VERSION (would use npm tag '$NPM_TAG')"
             bunx npm pack --dry-run
-          else
-            bunx npm publish --access public --provenance --tag "$NPM_TAG"
-            # A plain release publishes to 'latest'; carry 'next' forward with it so
-            # `npm i pkg@next` never resolves older than `@latest` between cuts.
-            if [ "$ALSO_NEXT" = "true" ]; then
-              bunx npm dist-tag add "$PKG_NAME@$VERSION" next
-            fi
+            exit 0
           fi
+          bunx npm publish --access public --provenance --tag "$NPM_TAG"
+          # A stable release carries 'next' forward with it so `@next` never
+          # resolves older than `@latest` between cuts.
+          if [ "$NPM_TAG" = "latest" ]; then
+            bunx npm dist-tag add "$PKG_NAME@$VERSION" next
+          fi
+          echo "- Published \`$PKG_NAME@$VERSION\` → npm tag \`$NPM_TAG\`" >> "$GITHUB_STEP_SUMMARY"
+      # After publish: if this step fails, the version is already on npm and a
+      # re-dispatch is refused, so create the release by hand with the same command.
+      - name: Tag and GitHub Release (latest only)
+        if: ${{ needs.plan.outputs.npm-tag == 'latest' && !inputs.dry-run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eo pipefail
+          bun run scripts/release-plan.ts notes "$VERSION" > "$RUNNER_TEMP/notes.md"
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md"

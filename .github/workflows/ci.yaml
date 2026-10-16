@@ -11,8 +11,8 @@ run-name: CI • ${{ github.event_name }} • ${{ github.ref_name }}
 # booting a ~10-min CHR until the core x86 path is green.
 # Cross-platform unit (macOS + Windows) runs in qa.yaml on push to main, so
 # escapes are caught there without slowing every PR. The full RouterOS channel
-# × OS matrix lives in qa.yaml; the release-tier sweep in release.yaml; the
-# platform/arch sweep in verify-extended.yaml. See
+# × OS matrix lives in qa.yaml (release.yaml reuses its result on the commit it
+# publishes); the platform/arch sweep in verify-extended.yaml. See
 # .github/instructions/ci-test-tiers-and-release-versioning.instructions.md.
 #
 # IMPORTANT: every `bun test … | tee` step runs under `set -eo pipefail` — without
