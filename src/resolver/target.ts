@@ -104,7 +104,7 @@ export function resolveTarget(
 			summary: "No host could be resolved for `retrieve`.",
 			remediation:
 				"Pass a target positional like `centrs retrieve 192.0.2.10 /system/resource --via rest-api` or set `--host` / `CENTRS_HOST`.",
-			context: { targetInput: input.targetInput },
+			context: { targetInput: redactTargetInput(input.targetInput) },
 		});
 	}
 
@@ -128,11 +128,13 @@ export function resolveTarget(
 		if (!mac) {
 			throw new CentrsError({
 				code: "target/mac-required",
-				summary: `mac-telnet needs a MAC address target; got "${input.targetInput ?? cdb?.target ?? rawCandidate}".`,
+				summary: `mac-telnet needs a MAC address target; got "${redactTargetInput(input.targetInput ?? cdb?.target ?? rawCandidate)}".`,
 				remediation:
 					"Pass the device MAC (aa:bb:cc:dd:ee:ff), or pin an IP transport with `--via native-api`/`rest-api` (add `--resolve arp` for a MAC).",
 				context: {
-					target: input.targetInput ?? cdb?.target ?? rawCandidate,
+					target: redactTargetInput(
+						input.targetInput ?? cdb?.target ?? rawCandidate,
+					),
 					via,
 				},
 			});

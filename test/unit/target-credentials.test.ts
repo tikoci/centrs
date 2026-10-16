@@ -280,6 +280,24 @@ describe("a CDB identity with @ still resolves (#478)", () => {
 });
 
 describe("bare encoded credentials after CDB lookup", () => {
+	test("host overrides cannot expose the original input in resolver errors", () => {
+		const secret = "override-canary";
+		const targetInput = `admin%3A${secret}@192.0.2.1`;
+		for (const [host, via] of [
+			["", "rest-api"],
+			["192.0.2.2", "mac-telnet"],
+		] as const) {
+			let caught: unknown;
+			try {
+				resolveTarget({ targetInput, host }, {}, via);
+			} catch (error) {
+				caught = error;
+			}
+			expect(caught).toBeInstanceOf(CentrsError);
+			expect(JSON.stringify(caught)).not.toContain(secret);
+		}
+	});
+
 	test("lookup failures and MCP refusals never echo encoded credentials", async () => {
 		const secret = "encoded-canary";
 		const target = `admin%3a${secret}@192.0.2.1`;
