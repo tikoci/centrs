@@ -60,6 +60,7 @@ import {
 	type ResolvedAuth,
 	type ResolvedSetting,
 	type ResolvedTarget,
+	redactTargetInput,
 	resolveAuth,
 	resolveBooleanSetting,
 	resolveCdb,
@@ -1594,7 +1595,7 @@ export function buildTransferErrorEnvelope(
 		warnings: [],
 		tips: [],
 		meta: {
-			target: { input: request.targetInput },
+			target: { input: redactTargetInput(request.targetInput) },
 			via: null,
 			settings: {},
 		},

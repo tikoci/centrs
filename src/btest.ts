@@ -37,7 +37,12 @@ import {
 	handleBtestServerConnection,
 	runBtestClientSession,
 } from "./protocols/btest-session.ts";
-import { resolveAuth, resolveCdb, resolveTarget } from "./resolver/index.ts";
+import {
+	redactTargetInput,
+	resolveAuth,
+	resolveCdb,
+	resolveTarget,
+} from "./resolver/index.ts";
 
 export { BTEST_PORT, BTEST_UDP_PORT_START };
 
@@ -424,7 +429,7 @@ function buildClientErrorEnvelope(
 			target: {
 				...(request.host !== undefined ? { host: request.host } : {}),
 				...(request.targetInput !== undefined
-					? { input: request.targetInput }
+					? { input: redactTargetInput(request.targetInput) }
 					: {}),
 				port: operation.controlPort,
 			},

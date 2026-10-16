@@ -19,6 +19,7 @@ import {
 import { CentrsError } from "../errors.ts";
 import type { McpWritePolicy } from "../mcp.ts";
 import { parseCommentKv } from "../resolver/comment-kv.ts";
+import { assertNoTargetPassword } from "../resolver/target.ts";
 import type { CentrsMcpConfig } from "./config.ts";
 
 export interface RegisteredTarget {
@@ -68,6 +69,8 @@ export function resolveRegisteredTarget(
 	cdb: LoadedCdb,
 	target: string,
 ): RegisteredTarget {
+	// Before the lookup, whose refusal echoes the target (#478).
+	assertNoTargetPassword(target);
 	let entry: DevicesShowItem;
 	try {
 		entry = showDevice({ cdb, target }).data.entry;

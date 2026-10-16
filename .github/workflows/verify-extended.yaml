@@ -89,6 +89,9 @@ jobs:
             done
             echo "list=$files" >> "$GITHUB_OUTPUT"
           fi
+      - name: Pre-fetch CHR image
+        # Download outside every test timeout (#468); the log names the version.
+        run: bun run chr:prefetch
       - name: Run integration (per-file, x86 CHR via HVF)
         id: run
         env:
@@ -179,6 +182,9 @@ jobs:
             done
             echo "list=$files" >> "$GITHUB_OUTPUT"
           fi
+      - name: Pre-fetch CHR image
+        # Download outside every test timeout (#468); the log names the version.
+        run: bun run chr:prefetch
       - name: Run integration (per-file, x86 CHR via TCG)
         env:
           FILES: ${{ steps.files.outputs.list }}

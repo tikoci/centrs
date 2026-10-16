@@ -514,3 +514,32 @@ describe("text-mode warnings go to stderr (#470, no network)", () => {
 		);
 	});
 });
+
+// #478: centrs never reads credentials from a target URL. It refuses one,
+// and the password must not appear anywhere in the output, including fan-out
+// envelopes that echo their selection.
+describe("a target URL with credentials is refused, never echoed (#478)", () => {
+	const secret = "hunter2pw";
+	const url = `http://admin:${secret}@127.0.0.1:1`;
+	const cases: string[][] = [
+		["retrieve", url, "/system/identity", "--json"],
+		["retrieve", url, "/system/identity", "--verbose"],
+		["execute", url, ":put 1", "--json"],
+		["api", url, "system/identity", "--raw"],
+		["transfer", url, "list", "--json"],
+		["retrieve", url, "127.0.0.2", "/system/identity", "--json"],
+		["api", url, "127.0.0.2", "system/identity", "--json"],
+		["retrieve", "--host", url, "/system/identity", "--json"],
+		["retrieve", ` admin:${secret}@127.0.0.1`, "/system/identity", "--json"],
+		["btest", "client", url],
+	];
+	for (const args of cases) {
+		test(args.join(" ").replace(secret, "***"), async () => {
+			const res = await runCliProcess({ args });
+			expect(res.exitCode).toBe(1);
+			expect(res.stdoutText + res.stderrText).toContain("input/invalid-target");
+			expect(res.stdoutText).not.toContain(secret);
+			expect(res.stderrText).not.toContain(secret);
+		});
+	}
+});

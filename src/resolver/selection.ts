@@ -47,6 +47,7 @@ import {
 	matchesNear,
 	type NearPredicate,
 } from "./geo.ts";
+import { assertNoTargetPassword } from "./target.ts";
 
 /** One `--where attr=value` device-class clause (exact-match, AND-combined). */
 export interface SelectionWhereClause {
@@ -275,6 +276,7 @@ export async function expandSelection(
 	const literals: SelectionMember[] = [];
 	const seenLiteral = new Set<string>();
 	for (const positional of selection.positionals) {
+		assertNoTargetPassword(positional);
 		try {
 			const shown = showDevice({ cdb, target: positional });
 			indices.add(shown.data.entry.cdbRecordIndex);

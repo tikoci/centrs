@@ -52,6 +52,7 @@ import {
 	expandSelection,
 	isDefaultRecordTarget,
 	loadEnvFileDefaults,
+	redactTargetInput,
 	type SelectionExpansion,
 	type SelectionMember,
 	type SelectionResolveInput,
@@ -138,7 +139,7 @@ function summarizeSelection(
 		where: selection.where.map((clause) => `${clause.key}=${clause.value}`),
 		all: selection.all,
 		default: selection.default,
-		positionals: selection.positionals,
+		positionals: selection.positionals.map((value) => redactTargetInput(value)),
 		quickchr: selection.quickchr,
 	};
 }
