@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { executeEnvelope } from "../../src/execute.ts";
 import { resolveMcpConfig } from "../../src/mcp/config.ts";
 import { handleExecute } from "../../src/mcp/tools.ts";
@@ -6,6 +6,7 @@ import { retrieve } from "../../src/retrieve.ts";
 import { makeMcpTestCdb } from "../unit/mcp-cdb-fixture.ts";
 import {
 	isChrIntegrationEnabled,
+	prefetchIntegrationChrImage,
 	readEnv,
 	recordIntegrationEvidence,
 	splitQuickChrAuth,
@@ -13,15 +14,28 @@ import {
 } from "./chr.ts";
 
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
+const serializeVersion = "7.26beta1";
 
 describeFast("output-file write gates against CHR", () => {
+	beforeAll(async () => {
+		// The shared preload fetches the channel's image. This control pins a
+		// different build, so fetch it here, outside either test's timeout.
+		const image = await prefetchIntegrationChrImage({
+			...Bun.env,
+			CENTRS_CHR_VERSION: serializeVersion,
+		});
+		console.error(
+			`CHR prefetch (W5 serialize): ${image.version} (${image.arch})`,
+		);
+	}, 600_000);
+
 	// Export follows the selected channel, including long-term. The serialize
 	// file-output control is pinned to the build on which it was reproduced;
 	// this is evidence on one version, not a claimed introduction boundary.
 	for (const kind of ["export", "serialize"] as const) {
 		test(`${kind}: an argument prefix cannot bypass confirmation or mcp=ro (W5)`, async () => {
 			const started = await startIntegrationChr(
-				kind === "serialize" ? { version: "7.26beta1" } : {},
+				kind === "serialize" ? { version: serializeVersion } : {},
 			);
 			const { chr } = started;
 			let cleanupCdb: (() => Promise<void>) | undefined;
@@ -111,7 +125,7 @@ describeFast("output-file write gates against CHR", () => {
 					routerosVersion: chr.state.version,
 					quickChrName: chr.name,
 					...(kind === "serialize"
-						? { requestedVersion: "7.26beta1" }
+						? { requestedVersion: serializeVersion }
 						: {
 								requestedChannel: started.requestedChannel,
 								requestedVersion: started.requestedVersion,
