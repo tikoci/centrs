@@ -17,6 +17,14 @@ describe("redactTargetInput (#478)", () => {
 		expect(redactTargetInput("admin:@192.0.2.1")).toBe("***@192.0.2.1");
 	});
 
+	test("stays linear on a long run of colons (polynomial ReDoS guard)", () => {
+		const hostile = ":".repeat(200_000);
+		const started = performance.now();
+		expect(redactTargetInput(hostile)).toBe(hostile);
+		expect(() => assertNoTargetCredentials(hostile)).not.toThrow();
+		expect(performance.now() - started).toBeLessThan(250);
+	});
+
 	test("leaves every target without a password untouched", () => {
 		for (const value of [
 			"192.0.2.1",
