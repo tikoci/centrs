@@ -46,8 +46,8 @@ documenting cross-cutting shifts that affect contributors and consumers.
   them into stdout. `transport/provider-trust` stays out of text output.
   `--json` keeps everything, `api --raw` is unchanged, and fan-out text still
   lists warnings in its report.
-- Shared meta is written once (#461, #462). In a fan-out envelope, each
-  target's `meta.settings` keeps only the keys whose source differs from the
+- **Breaking:** shared meta is written once (#461, #462). In a fan-out
+  envelope, each target's `meta.settings` keeps only the keys whose source differs from the
   outer `meta.settings`. Its `meta.operation` drops `request` and `auth` when
   they equal the outer operation's. When every target agrees on `auth`, or on
   a setting the outer `meta.settings` lacks (`api` and `transfer` had none), it
@@ -55,9 +55,21 @@ documenting cross-cutting shifts that affect contributors and consumers.
   repeats the controller in `meta.target.cmr`, because the outer `meta.target`
   is the controller. A 3-client `execute --cmr` result went from 9.8 KB to
   5.4 KB. `expandFanoutTarget()` returns a target's full meta. A
-  `retrieve --follow` frame or notice line now carries only `meta.operation`;
-  `synced` and the summary still carry the full meta. A frame line went from
-  about 1.15 KB to 270 bytes.
+  `retrieve --follow` frame now carries only `meta.operation`;
+  `started`, `synced` and the summary still carry the full meta. A frame line
+  went from about 1.15 KB to 270 bytes.
+- **Breaking:** all three streams (`retrieve --follow`, `retrieve --sample`,
+  `api --stream`) open with a full-meta `started` line (`data: null`), replacing
+  `notice` where it was emitted (#473, #480). Advice is in its `tips`. Only
+  `meta.operation` remains on each `frame` or `sample`; the full meta stays
+  on `started`, `summary`, and follow's `synced`. Consumers must handle
+  `started` and read shared meta from those lines. `apiStream()` now yields
+  `ApiStreamLine`, and `retrieveSample()` yields `RetrieveStreamLine`;
+  `ApiStreamFrameEnvelope`, `StreamLineEnvelope` and `isStreamDataLine` are
+  exported for consumers. API frames also gain `observedAt` (host receipt
+  time, ISO 8601). In text mode only frame/sample rows go to stdout; status
+  lines, tips, warnings and errors go to stderr. Structured formats keep
+  every line on stdout, and `api --raw` omits `started`.
 - `retrieve --follow` frames carry `observedAt` (ISO 8601, host clock): when
   centrs received the reply the frame is built from (#462).
 - With `--query`, a removal the follow's sweep finds is `source: "sweep"`,
@@ -90,6 +102,9 @@ documenting cross-cutting shifts that affect contributors and consumers.
 - QA records a CHR leg in `qa-history` only when its test step passed or
   failed. A leg cancelled by a newer push, or skipped after a setup failure,
   was recorded as `fail` (#442).
+- CHR integration runs prefetch their selected image before tests start,
+  including direct file runs, so a cold-cache download does not consume a
+  test timeout. `bun run chr:prefetch` is the explicit entry point (#468).
 - A centrs flag written after `--` is refused before anything dials, as
   `usage/flag-after-separator`, with the corrected command line (#459). This
   applies to `execute` (including `--cmr`) and `explain`. Before, a trailing
@@ -99,6 +114,16 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Fixed
 
+- Abbreviated output-file arguments (`fi=`, `file-n=`) require write
+  confirmation in `execute`, including inside scripts, and are refused for
+  MCP `mcp=ro` records. RouterOS accepted these spellings while centrs
+  recognized only `file=` and `file-name=`, letting file creation bypass
+  both gates.
+- The suggested command in `usage/flag-after-separator` redacts credentials
+  in positional targets and `--host` values, including a host flag moved
+  before `--`. This closes an error-path gap in the target redaction below.
+- Serialized error causes keep `name`, `message` and `code` and omit raw JS
+  stack traces and their local installation paths (#476, #480).
 - A target with credentials in it (`http://admin:pass@host`, `admin:pass@host`,
   `admin@host`) is refused with `input/invalid-target`, which names
   `--username` and `--password` (#478). centrs never used those credentials,

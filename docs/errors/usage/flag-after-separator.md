@@ -19,6 +19,8 @@ is exactly one of the command's long flags (or its `--flag=value` spelling);
 short aliases such as `-u` pass through as RouterOS input. If RouterOS really
 needs such a token, put it inside the quoted command. Password values are
 replaced by `<password>` in the printed command line.
+Credentials embedded in a positional target or a `--host` value are redacted
+to `***@host`, including when `--host` is moved before the separator.
 
 See [`docs/CONSTITUTION.md`](../../CONSTITUTION.md) for the centrs error
 contract.

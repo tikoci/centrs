@@ -8,6 +8,7 @@
 
 import type { Tip, Warning } from "../core/envelope.ts";
 import { CentrsError, terminalSafeLine } from "../errors.ts";
+import { redactTargetInput } from "../resolver/target.ts";
 import { formatTipsText } from "./missing-target.ts";
 
 /**
@@ -194,7 +195,9 @@ export function rejectFlagsAfterSeparator(
 		const [name = ""] = token.split("=");
 		if (token.includes("=") && secret(name)) return `${name}=<password>`;
 		const previous = all[index - 1];
-		return previous !== undefined && secret(previous) ? "<password>" : token;
+		return previous !== undefined && secret(previous)
+			? "<password>"
+			: redactTargetInput(token);
 	});
 	const moved: string[] = [];
 	const kept: string[] = [];
@@ -228,7 +231,16 @@ export function rejectFlagsAfterSeparator(
 		}
 	}
 	if (flags.length === 0) return;
-	const fixed = ["centrs", command, ...before, ...moved, "--", ...kept]
+	// A moved --host value needs the same redaction as a positional target.
+	// Keep the RouterOS command itself verbatim; it is not a target.
+	const fixed = [
+		"centrs",
+		command,
+		...before,
+		...moved.map((token) => redactTargetInput(token)),
+		"--",
+		...kept,
+	]
 		.map(shellQuote)
 		.join(" ");
 	const list = flags.map((flag) => `\`${flag}\``).join(", ");

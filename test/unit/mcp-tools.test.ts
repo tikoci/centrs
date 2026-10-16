@@ -260,6 +260,30 @@ describe("handleExecute (offline gates)", () => {
 		}
 	});
 
+	test("output-file abbreviations are refused for mcp=ro before dialing", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([
+			{ target: "ro-box", comment: "mcp=ro" },
+		]);
+		try {
+			for (const command of [
+				":serialize to=json value=1 file-n=out.json",
+				"/system/identity/export fi=out",
+			]) {
+				for (const confirm of [undefined, true]) {
+					const envelope = await handleExecute(
+						{ target: "ro-box", command, confirm },
+						config(path),
+					);
+					expect(envelope.ok ? undefined : envelope.error.code).toBe(
+						"cdb/write-not-permitted",
+					);
+				}
+			}
+		} finally {
+			await cleanup();
+		}
+	});
+
 	test("CMR fleet commands are writes to an mcp=ro controller (#456)", async () => {
 		// RouterOS lets a read+api controller login run them, so this refusal is
 		// the only barrier.

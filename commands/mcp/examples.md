@@ -131,6 +131,12 @@ With `$NAME` registered `mcp=ro` (default):
 Envelope: `ok: false`, `error.code = "cdb/write-not-permitted"`. The router is not
 mutated even though `confirm` is true — the CDB policy is authoritative.
 
+Output-file arguments count as writes even when abbreviated:
+`:serialize to=json value=1 file-n=out.json` and
+`/system identity export fi=out` are refused with or without `confirm`.
+The CHR refusal and file read-back controls are
+[execute example W5](../execute/examples.md#w5-abbreviated-output-file-arguments-keep-the-write-gate).
+
 ### 8. Write against an `mcp=rw` target succeeds with `confirm: true`
 
 With `$NAME` registered `mcp=rw`:

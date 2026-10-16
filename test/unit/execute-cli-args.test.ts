@@ -169,6 +169,45 @@ describe("execute: a centrs flag after `--` (#459)", () => {
 		expect(error.remediation).toContain("'--cdb-password=<password>'");
 	});
 
+	test("the corrected command redacts credential-bearing targets and host values", () => {
+		const secret = "separator-canary";
+		for (const target of [
+			`http://admin:${secret}@127.0.0.1:1`,
+			`admin:x/${secret}@127.0.0.1:1`,
+		]) {
+			for (const args of [
+				[target, "--", "/system/identity/print", "--json"],
+				["--host", target, "--", "/system/identity/print", "--json"],
+				["r1", "--", "/system/identity/print", "--host", target],
+				["r1", "--", "/system/identity/print", `--host=${target}`],
+			]) {
+				const error = refusal(args);
+				expect(error.code).toBe("usage/flag-after-separator");
+				expect(JSON.stringify(error.toJSON())).not.toContain(secret);
+				expect(error.remediation).toContain("***@127.0.0.1:1");
+			}
+		}
+	});
+
+	test("the credential redaction survives JSON, YAML and text error rendering", async () => {
+		const secret = "separator-canary";
+		for (const format of ["json", "yaml", "text"]) {
+			const result = await runCliCaptured([
+				"execute",
+				`http://admin:${secret}@127.0.0.1:1`,
+				"--format",
+				format,
+				"--",
+				"/system/identity/print",
+				"--verbose",
+			]);
+			expect(result.code).toBe(1);
+			expect(result.out).toBe("");
+			expect(result.err).toContain("usage/flag-after-separator");
+			expect(result.err).not.toContain(secret);
+		}
+	});
+
 	test("short aliases and non-flag tokens after `--` stay RouterOS input", () => {
 		const parsed = parseExecuteCliArgs([
 			"r1",

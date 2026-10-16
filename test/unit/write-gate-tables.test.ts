@@ -114,6 +114,26 @@ describe("script directives: read or write (#458)", () => {
 		expect(writes("/export file-name=x")).toBe(true);
 	});
 
+	test("output-file argument abbreviations stay writes in scripts and structured commands", () => {
+		for (const name of [
+			"f",
+			"fi",
+			"fil",
+			"file",
+			"file-",
+			"file-n",
+			"file-na",
+			"file-nam",
+			"file-name",
+		]) {
+			expect(writes(`:serialize to=json value=1 ${name}=out.json`)).toBe(true);
+			expect(writes(`/serialize to=json value=1 ${name}=out.json`)).toBe(true);
+			expect(writes(`/system/identity/export ${name}=out`)).toBe(true);
+		}
+		expect(writes(':put "file-n=out.json"')).toBe(false);
+		expect(writes('/ip/address/print where comment="fi=out"')).toBe(false);
+	});
+
 	test("the absolute `/name` spelling of a root directive is the directive", () => {
 		expect(writes("/serialize to=json value=1")).toBe(false);
 		expect(writes("/delay 1s")).toBe(false);

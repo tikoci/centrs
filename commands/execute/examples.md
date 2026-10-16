@@ -588,6 +588,28 @@ string there, so no body hides in text. `:serialize … file-name=centrs-w4`
 creates a device file, so it returns `usage/confirmation-required`, as `file=`
 does under a read verb. `:global`, `:set`, `:execute` and `:parse` stay writes.
 
+### W5. Abbreviated output-file arguments keep the write gate
+
+```bash
+centrs execute $R '/system identity export fi=centrs-w5' --via rest-api --username $U --password $P </dev/null
+centrs execute $R ':serialize to=json value=1 file-n=centrs-w5.json' --via rest-api --username $U --password $P </dev/null
+```
+
+Both return `usage/confirmation-required` and create no file. The same
+commands with `--yes` pass validation and create `centrs-w5.rsc` and
+`centrs-w5.json`, respectively. Native API has the same result. Through
+`centrs_execute`, an `mcp=ro` record returns `cdb/write-not-permitted` with or
+without `confirm: true`, and creates no file.
+
+`test/integration/execute-write-gate.test.ts` proves the refusal, absence and
+confirmed creation. The export control runs on the selected channel; the
+serialize control pins CHR 7.26beta1, where its file output was reproduced.
+The export uses CLI script spelling: structured attribute validation requires
+full argument names and rejects `fi` as `validation/unknown-attribute`.
+This is a grounding version, not an introduction boundary. Unknown or
+ambiguous output-file prefixes stay write-shaped until the device resolves
+them.
+
 ### R1. A post-validation `/execute` rejection fails the overall envelope
 
 ```bash

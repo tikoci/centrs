@@ -101,7 +101,7 @@ export function canonicalizeExecuteCommand(
 
 export function isWriteShaped(command: CanonicalExecuteCommand): boolean {
 	if (command.mode === "structured") {
-		if (FILE_OUTPUT_ATTRIBUTES.some((name) => name in command.attributes)) {
+		if (Object.keys(command.attributes).some(isFileOutputAttribute)) {
 			return true;
 		}
 		return !READ_ONLY_EXECUTE_VERBS.has(command.verb.toLowerCase());
@@ -123,9 +123,22 @@ export function isWriteShaped(command: CanonicalExecuteCommand): boolean {
  */
 const FILE_OUTPUT_ATTRIBUTES: readonly string[] = ["file", "file-name"];
 
-/** True for a `file=<name>` / `file-name=<name>` token — an output redirect. */
+/**
+ * RouterOS accepts argument prefixes (`fi=`, `file-n=`), including on
+ * `:serialize` (CHR 7.26beta1). An ambiguous prefix stays write-shaped too:
+ * only the device can disambiguate it, so the local gate fails closed.
+ */
+function isFileOutputAttribute(name: string): boolean {
+	return (
+		name.length > 0 &&
+		FILE_OUTPUT_ATTRIBUTES.some((full) => full.startsWith(name))
+	);
+}
+
+/** True for an output-file argument, including its abbreviated spellings. */
 function isFileOutputToken(token: string): boolean {
-	return FILE_OUTPUT_ATTRIBUTES.some((name) => token.startsWith(`${name}=`));
+	const separator = token.indexOf("=");
+	return separator > 0 && isFileOutputAttribute(token.slice(0, separator));
 }
 
 /**
