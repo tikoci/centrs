@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { CentrsError } from "../../src/errors.ts";
+import { resolveMcpConfig } from "../../src/mcp/config.ts";
+import { handleRetrieve, handleValidate } from "../../src/mcp/tools.ts";
+import { identityFromComment, resolveCdb } from "../../src/resolver/cdb.ts";
 import {
 	assertNoTargetCredentials,
 	redactTargetInput,
 } from "../../src/resolver/index.ts";
+import { makeMcpTestCdb } from "./mcp-cdb-fixture.ts";
 
 describe("redactTargetInput (#478)", () => {
 	test("replaces user:password@ with ***@, with or without a scheme", () => {
@@ -81,6 +85,62 @@ describe("assertNoTargetCredentials (#478)", () => {
 			"router.example",
 		]) {
 			expect(() => assertNoTargetCredentials(value)).not.toThrow();
+		}
+	});
+});
+
+// Copilot review on PR #479: every entry point refuses before its own lookup,
+// and a CDB record's target is never shown with its password.
+describe("credentials never reach an echo path (#478)", () => {
+	const secret = "hunter2";
+	const withCreds = `admin:${secret}@192.0.2.1`;
+
+	test("resolveCdb refuses before any CDB lookup, even with leading whitespace", async () => {
+		for (const target of [withCreds, `  ${withCreds}`]) {
+			const error = await resolveCdb(
+				{ targetInput: target, cdbFile: "/nonexistent/centrs-478.cdb" },
+				{},
+			).catch((caught: unknown) => caught);
+			expect(error).toBeInstanceOf(CentrsError);
+			expect((error as CentrsError).code).toBe("input/invalid-target");
+			expect(JSON.stringify((error as CentrsError).toJSON())).not.toContain(
+				secret,
+			);
+		}
+	});
+
+	test("a CDB record's target is its handle without the password", () => {
+		expect(identityFromComment("", `http://${withCreds}`)).toBe(
+			"http://***@192.0.2.1",
+		);
+		expect(identityFromComment("identity=core", withCreds)).toBe("core");
+	});
+
+	test("redaction keeps leading whitespace and still removes the password", () => {
+		expect(redactTargetInput(`\t${withCreds}`)).toBe("\t***@192.0.2.1");
+	});
+
+	test("the MCP allowlist refuses before its lookup, and the envelope has no password", async () => {
+		const { path, cleanup } = await makeMcpTestCdb([{ target: "known" }]);
+		try {
+			const config = resolveMcpConfig({ cdbFile: path, env: {} });
+			for (const env of [
+				await handleValidate(
+					{ target: withCreds, command: "/interface/print" },
+					config,
+				),
+				await handleRetrieve(
+					{ target: withCreds, path: "/system/resource" },
+					config,
+				),
+			]) {
+				expect(env.ok).toBe(false);
+				if (env.ok) continue;
+				expect(env.error.code).toBe("input/invalid-target");
+				expect(JSON.stringify(env)).not.toContain(secret);
+			}
+		} finally {
+			await cleanup();
 		}
 	});
 });

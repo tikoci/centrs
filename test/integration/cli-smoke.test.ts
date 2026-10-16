@@ -451,6 +451,8 @@ describe("a target URL with credentials is refused, never echoed (#478)", () => 
 		["retrieve", url, "127.0.0.2", "/system/identity", "--json"],
 		["api", url, "127.0.0.2", "system/identity", "--json"],
 		["retrieve", "--host", url, "/system/identity", "--json"],
+		["retrieve", ` admin:${secret}@127.0.0.1`, "/system/identity", "--json"],
+		["btest", "client", url],
 	];
 	for (const args of cases) {
 		test(args.join(" ").replace(secret, "***"), async () => {

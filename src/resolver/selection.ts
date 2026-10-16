@@ -276,6 +276,7 @@ export async function expandSelection(
 	const literals: SelectionMember[] = [];
 	const seenLiteral = new Set<string>();
 	for (const positional of selection.positionals) {
+		assertNoTargetCredentials(positional);
 		try {
 			const shown = showDevice({ cdb, target: positional });
 			indices.add(shown.data.entry.cdbRecordIndex);
@@ -284,7 +285,6 @@ export async function expandSelection(
 				error instanceof CentrsError &&
 				error.code === "cdb/not-found-target"
 			) {
-				assertNoTargetCredentials(positional);
 				if (!input.allowAdhoc) {
 					throw new CentrsError({
 						code: "cdb/target-not-registered",

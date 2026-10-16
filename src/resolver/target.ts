@@ -473,7 +473,7 @@ export function resolveAuth(
 }
 
 /** An authority with userinfo: `user@host`, `user:pass@host`, with or without a scheme. */
-const URL_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)?[^/@\s]*@/i;
+const URL_USERINFO = /^\s*([a-z][a-z0-9+.-]*:\/\/)?[^/@\s]*@/i;
 /**
  * The password-bearing form, `user:pass@`. The user part excludes `:` (the
  * first colon ends it), which also keeps the match linear: with `:` in both
@@ -481,7 +481,7 @@ const URL_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)?[^/@\s]*@/i;
  * js/polynomial-redos).
  */
 const URL_USERINFO_WITH_PASSWORD =
-	/^([a-z][a-z0-9+.-]*:\/\/)?[^/@\s:]*:[^/@\s]*@/i;
+	/^(\s*(?:[a-z][a-z0-9+.-]*:\/\/)?)[^/@\s:]*:[^/@\s]*@/i;
 
 /**
  * A target string with any `user:pass@` replaced by `***@`, for display (#478).
