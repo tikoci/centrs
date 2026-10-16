@@ -105,7 +105,11 @@ scheme as the reference):
   the gate is defined once in `scripts/qa-results-db.ts` (`channelPolicy` /
   `evaluateMustPassGate`), the matrix axis in `scripts/qa-active-channels.ts`, the
   accumulator in `scripts/qa-history.ts`.
-- **Security/quality** → `codeql.yaml` (PR + push + weekly + dispatch).
+- **Security/quality** → `codeql.yaml` (PR + push + weekly + dispatch): CodeQL
+  plus zizmor. After editing a workflow, run `bun run lint:actions` (zizmor,
+  needs `uv`; not in `lint:ci`). Action refs are tags, never SHAs; `setup-bun`
+  reads `bun-version-file: package.json`; checkouts set
+  `persist-credentials: false` unless the job pushes (SECURITY.md, #266).
 - **Release/publish** → `release.yaml`: dispatch-only from `main` (a pushed
   `v*` tag triggers nothing). `channel=next` → `<base>-next.<run_number>` on
   npm `next`; `channel=latest` → the committed version on `latest`, `next`

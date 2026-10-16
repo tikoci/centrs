@@ -16,3 +16,10 @@ queries:
 # Sources inside src/ are still analyzed.
 paths-ignore:
   - test
+
+# Action refs are tags, not commit SHAs, by decision: SECURITY.md → GitHub
+# Actions (#266). This rule flags every third-party action on a tag, so it
+# would only restate that decision at each `uses:` line.
+query-filters:
+  - exclude:
+      id: actions/unpinned-tag

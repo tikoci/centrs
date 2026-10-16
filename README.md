@@ -213,8 +213,10 @@ GitHub issues it links are the roadmap.
 
 Requirements:
 
-- Bun 1.3.11 or newer (CI pinned to 1.4.2; Bun 2.x not yet validated).
+- Bun 1.3.11 or newer (CI runs the `packageManager` version in `package.json`;
+  Bun 2.x not yet validated).
 - Git.
+- `uv`, only for `bun run lint:actions` (zizmor workflow audit).
 - For integration tests: QEMU plus `@tikoci/quickchr` (handles CHR image
   download and boot).
 

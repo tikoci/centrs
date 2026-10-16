@@ -74,6 +74,7 @@
 		"lint:biome": "biome check .",
 		"lint:fix": "biome check --write .",
 		"lint:secretlint": "secretlint \"**/*\"",
+		"lint:actions": "uvx zizmor --offline .",
 		"test": "bun test",
 		"test:smoke": "bun test test/integration/cli-smoke.test.ts",
 		"test:integration:fast": "bun test test/integration/devices.test.ts test/integration/settings.test.ts",
