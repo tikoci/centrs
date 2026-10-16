@@ -4,7 +4,9 @@
  * `CENTRS_CHR_CHANNEL`, `CENTRS_CHR_ARCH`) through `integrationChrSelection`,
  * so it cannot fetch a different build from the one the tests boot.
  *
- * CLI (the `Pre-fetch CHR image` step in ci.yaml, qa.yaml, verify-extended.yaml):
+ * CLI: the `Pre-fetch CHR image` step in ci.yaml, qa.yaml and
+ * verify-extended.yaml, and the first step of the `test:integration` and
+ * `test:integration:smoke` package scripts.
  *   bun run chr:prefetch
  *
  * Fails the step on any error: a CI leg that can't get its image can't test.
