@@ -2091,8 +2091,12 @@ function renderApiSuccessText(envelope: ApiSuccessEnvelope): string {
 		: JSON.stringify(envelope.data, null, 2);
 }
 
-/** The `--verbose` header of a text-mode api result (stderr, #470). */
-export function apiVerboseLines(envelope: ApiSuccessEnvelope): string[] {
+/**
+ * The `--verbose` header of a text-mode api result (stderr, #470); none for a
+ * failure before resolution (`via: null`).
+ */
+export function apiVerboseLines(envelope: ApiEnvelope): string[] {
+	if (envelope.meta.via === null) return [];
 	const lines = [`via: ${envelope.meta.via}`];
 	if (envelope.meta.validation?.source) {
 		lines.push(`validation: ${envelope.meta.validation.source}`);

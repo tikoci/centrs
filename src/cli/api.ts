@@ -547,7 +547,7 @@ export async function runApiCli(args: readonly string[]): Promise<number> {
 			"json";
 		// `--raw` is a bare payload by contract; `--json` carries the notes.
 		const text = resolvedFormat === "text" && !parsed.raw;
-		if (text && envelope.ok && parsed.verbose) {
+		if (text && parsed.verbose) {
 			printTextHeader(apiVerboseLines(envelope));
 		}
 		const rendered = renderApiEnvelope(envelope, resolvedFormat, {

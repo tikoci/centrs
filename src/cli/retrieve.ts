@@ -399,7 +399,7 @@ async function runRetrieveWaitCli(
 			envelope.meta.operation?.request.format ??
 			inferRequestedFormat(args, request);
 		const text = format === "text";
-		if (text && envelope.ok && request.verbose) {
+		if (text && request.verbose) {
 			printTextHeader(retrieveVerboseLines(envelope));
 		}
 		console.log(

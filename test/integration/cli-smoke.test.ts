@@ -462,6 +462,42 @@ describe("text-mode warnings go to stderr (#470, no network)", () => {
 		expect(res.stderrText).toContain(warningLine);
 	});
 
+	test("--verbose on a failure after resolution: header, then error, all on stderr", async () => {
+		for (const [args, header] of [
+			[
+				["execute", ...closed, ":put 1"],
+				/^target: 127\.0\.0\.1\nvia: native-api\n/,
+			],
+			[
+				["api", ...closed, "system/identity", "--format", "text"],
+				/^via: rest-api\n/,
+			],
+			[["transfer", ...closed, "list"], /^via: rest-api\n/],
+		] as const) {
+			const res = await runCliProcess({ args: [...args, "--verbose"] });
+			expect(res.exitCode).toBe(1);
+			expect(res.stdoutText).toBe("");
+			expect(res.stderrText).toMatch(header);
+			expect(res.stderrText).toContain("[transport/connection-refused]");
+		}
+	});
+
+	test("--verbose on a failure before resolution prints no header", async () => {
+		const res = await runCliProcess({
+			args: [
+				"execute",
+				"--host",
+				"127.0.0.1:1",
+				"--via",
+				"bogus",
+				":put 1",
+				"--verbose",
+			],
+		});
+		expect(res.exitCode).toBe(1);
+		expect(res.stderrText).not.toMatch(/^(target|via):/m);
+	});
+
 	test("api text prints it; --raw keeps its bare error payload", async () => {
 		const args = ["api", ...closed, "cmr/device/run-script", "-X", "POST"];
 		const text = await runCliProcess({

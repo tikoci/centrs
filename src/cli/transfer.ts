@@ -209,6 +209,9 @@ export async function runTransferCli(
 		const rendered = renderTransferEnvelope(envelope, format, {
 			verbose: request.verbose,
 		});
+		if (format === "text" && request.verbose) {
+			printTextHeader(transferVerboseLines(envelope));
+		}
 		if (!envelope.ok) {
 			console.error(
 				// codeql[js/clear-text-logging] The envelope carries auth provenance only (`username`, `passwordProvided`, setting sources), never the password; see buildTransferErrorEnvelopeFromResolved.
@@ -220,9 +223,6 @@ export async function runTransferCli(
 		// A download to stdout (`local === "-"`) has already streamed the file bytes
 		// to stdout inside `transfer()`; keep the structured envelope on stderr so it
 		// cannot interleave with — and corrupt — the piped payload.
-		if (format === "text" && request.verbose) {
-			printTextHeader(transferVerboseLines(envelope));
-		}
 		if (request.verb === "download" && request.local === "-") {
 			console.error(rendered);
 		} else {

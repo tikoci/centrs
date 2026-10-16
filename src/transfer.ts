@@ -1653,11 +1653,14 @@ function renderSuccessText(envelope: TransferSuccessEnvelope): string {
 	return lines.join("\n");
 }
 
-/** The `--verbose` header of a text-mode transfer result (stderr, #470). */
-export function transferVerboseLines(
-	envelope: TransferSuccessEnvelope,
-): string[] {
-	return envelope.meta.operation ? [`via: ${envelope.meta.via}`] : [];
+/**
+ * The `--verbose` header of a text-mode transfer result (stderr, #470); none
+ * for a failure before resolution.
+ */
+export function transferVerboseLines(envelope: TransferEnvelope): string[] {
+	return envelope.meta.operation && envelope.meta.via !== null
+		? [`via: ${envelope.meta.via}`]
+		: [];
 }
 
 // ── Small helpers ────────────────────────────────────────────────────────────

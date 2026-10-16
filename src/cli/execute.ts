@@ -405,7 +405,7 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 			parsed.format ??
 			"text";
 		const text = resolvedFormat === "text";
-		if (text && envelope.ok && parsed.verbose) {
+		if (text && parsed.verbose) {
 			printTextHeader(executeVerboseLines(envelope));
 		}
 		const rendered = renderExecuteEnvelope(envelope, resolvedFormat, {

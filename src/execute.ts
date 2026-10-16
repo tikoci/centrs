@@ -1537,10 +1537,13 @@ function renderExecuteSuccessText(envelope: ExecuteSuccessEnvelope): string {
 		: JSON.stringify(envelope.data, null, 2);
 }
 
-/** The `--verbose` header of a text-mode execute result (stderr, #470). */
-export function executeVerboseLines(
-	envelope: ExecuteSuccessEnvelope,
-): string[] {
+/**
+ * The `--verbose` header of a text-mode execute result (stderr, #470). A
+ * failure after resolution still names its target; one before has no
+ * transport (`via: null`) and no header.
+ */
+export function executeVerboseLines(envelope: ExecuteEnvelope): string[] {
+	if (envelope.meta.via === null) return [];
 	const lines = [
 		`target: ${envelope.meta.target.input ?? envelope.meta.target.host}`,
 		`via: ${envelope.meta.via}`,

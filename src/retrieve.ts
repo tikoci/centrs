@@ -695,14 +695,16 @@ function renderRetrieveSuccessText(envelope: RetrieveSuccessEnvelope): string {
 		: JSON.stringify(envelope.data, null, 2);
 }
 
-/** The `--verbose` header of a text-mode retrieve result (stderr, #470). */
-export function retrieveVerboseLines(
-	envelope: RetrieveSuccessEnvelope,
-): string[] {
+/**
+ * The `--verbose` header of a text-mode retrieve result (stderr, #470); none
+ * for a failure before resolution (`via: null`).
+ */
+export function retrieveVerboseLines(envelope: RetrieveEnvelope): string[] {
 	const meta = envelope.meta;
+	if (meta.via === null) return [];
 	const target = meta.target;
 	const lines = [
-		`target: ${target.input ?? target.host} -> ${target.baseUrl}`,
+		`target: ${target.input ?? target.host}${target.baseUrl ? ` -> ${target.baseUrl}` : ""}`,
 		`via: ${meta.via}`,
 		`sources: via=${formatCoreSource(meta.settings.via)}, host=${formatCoreSource(
 			meta.settings.host,
