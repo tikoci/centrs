@@ -87,6 +87,16 @@ documenting cross-cutting shifts that affect contributors and consumers.
   a command's own long flags are matched (short aliases such as `-u` stay
   RouterOS input), and password values are not echoed.
 
+### Fixed
+
+- A target with credentials in it (`http://admin:pass@host`, `admin:pass@host`,
+  `admin@host`) is refused with `input/invalid-target`, which names
+  `--username` and `--password` (#478). centrs never used those credentials,
+  and it echoed the whole string, password included, in `meta.target.input`,
+  the fan-out selection and the `--verbose` header. The refusal covers the
+  positional, `--host`, `CENTRS_HOST`, CDB targets and fan-out literals, and
+  any displayed target has `user:pass@` replaced by `***@`.
+
 ## 0.1.9-next.0 — 2026-10-13
 
 Pre-release (npm tag `next`; `latest` stays on 0.1.8). Install with

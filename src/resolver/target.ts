@@ -109,6 +109,7 @@ export function resolveTarget(
 	}
 
 	const rawCandidate = hostSetting.value.trim();
+	assertNoTargetCredentials(rawCandidate);
 	const macCandidate = normalizeMac(rawCandidate);
 
 	// L2 transports (mac-telnet) address the device by **MAC** directly — no IP
@@ -178,7 +179,7 @@ export function resolveTarget(
 		const deliveryHost = deliveryHostSetting?.value.trim() || "255.255.255.255";
 		const port = macPortSetting?.value ?? MAC_TELNET_PORT;
 		return {
-			input: input.targetInput,
+			input: redactTargetInput(input.targetInput),
 			host: deliveryHost,
 			mac,
 			port,
@@ -290,7 +291,7 @@ export function resolveTarget(
 	};
 
 	return {
-		input: input.targetInput,
+		input: redactTargetInput(input.targetInput),
 		// WHATWG keeps an IPv6 hostname bracketed; sockets and ssh need the bare
 		// address (`baseUrl` re-brackets it).
 		host: parsedUrl.hostname.replace(/^\[(.*)\]$/, "$1"),
@@ -469,6 +470,45 @@ export function resolveAuth(
 		sshKey: sshKey?.value,
 		sshKeySource: sshKey?.source,
 	};
+}
+
+/** An authority with userinfo: `user@host`, `user:pass@host`, with or without a scheme. */
+const URL_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)?[^/@\s]*@/i;
+/** The password-bearing form, `user:pass@`. */
+const URL_USERINFO_WITH_PASSWORD =
+	/^([a-z][a-z0-9+.-]*:\/\/)?[^/@\s]*:[^/@\s]*@/i;
+
+/**
+ * A target string with any `user:pass@` replaced by `***@`, for display (#478).
+ * A target is echoed in `meta.target.input` and in error messages, so the
+ * password part of a URL must never reach them, not even when the target is
+ * refused. Other targets pass through unchanged.
+ */
+export function redactTargetInput(value: string): string;
+export function redactTargetInput(
+	value: string | undefined,
+): string | undefined;
+export function redactTargetInput(
+	value: string | undefined,
+): string | undefined {
+	return value?.replace(URL_USERINFO_WITH_PASSWORD, "$1***@");
+}
+
+/**
+ * centrs never reads credentials from a target URL (#478): a `user:pass@host`
+ * target used to be accepted with its credentials ignored, and echoed the
+ * password back. Refuse it, from any host source, and name the flags.
+ */
+export function assertNoTargetCredentials(value: string): void {
+	if (!URL_USERINFO.test(value)) return;
+	const target = redactTargetInput(value);
+	throw new CentrsError({
+		code: "input/invalid-target",
+		summary: `A target must not carry credentials (\`user[:password]@\`): ${target}`,
+		remediation:
+			"Drop the `user:password@` part and pass the credentials with `--username` and `--password` (or `CENTRS_USERNAME`/`CENTRS_PASSWORD`, or a CDB record); give the target as `host[:port]` or `http(s)://host[:port]`.",
+		context: { target },
+	});
 }
 
 export function parseHostCandidate(value: string): URL {

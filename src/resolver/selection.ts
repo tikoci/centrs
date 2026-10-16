@@ -47,6 +47,7 @@ import {
 	matchesNear,
 	type NearPredicate,
 } from "./geo.ts";
+import { assertNoTargetCredentials } from "./target.ts";
 
 /** One `--where attr=value` device-class clause (exact-match, AND-combined). */
 export interface SelectionWhereClause {
@@ -283,6 +284,7 @@ export async function expandSelection(
 				error instanceof CentrsError &&
 				error.code === "cdb/not-found-target"
 			) {
+				assertNoTargetCredentials(positional);
 				if (!input.allowAdhoc) {
 					throw new CentrsError({
 						code: "cdb/target-not-registered",
