@@ -16,6 +16,7 @@ export {
 	apiOutputFormats,
 	apiRequestSummaryFromRequest,
 	apiStream,
+	apiVerboseLines,
 	buildApiBody,
 	buildApiErrorEnvelope,
 	buildApiErrorEnvelopeFromResolved,
@@ -283,6 +284,7 @@ export {
 	execute,
 	executeEnvelope,
 	executeOutputFormats,
+	executeVerboseLines,
 	isWriteShaped,
 	renderExecuteEnvelope,
 	resolveExecuteGlobalContext,
@@ -632,6 +634,7 @@ export {
 	retrieve,
 	retrieveEnvelope,
 	retrieveOutputFormats,
+	retrieveVerboseLines,
 	runResolvedRetrieve,
 	validateRetrieveRequestShape,
 } from "./retrieve.ts";
@@ -725,6 +728,7 @@ export {
 	transferEnvelope,
 	transferMethods,
 	transferOutputFormats,
+	transferVerboseLines,
 	transferVerbs,
 	validateTransferRequestShape,
 } from "./transfer.ts";

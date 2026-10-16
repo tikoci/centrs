@@ -66,7 +66,7 @@ Usage: centrs retrieve <target> <routeros-path> [flags] | centrs retrieve <targe
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
 | `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
 | `--validate / --no-validate` |  | Enable or disable inspect-backed preflight validation. |
-| `--verbose` |  | Show resolved setting sources in text output. |
+| `--verbose` |  | Show resolved setting sources in text output, on stderr. |
 
 ## execute
 
@@ -104,7 +104,7 @@ Usage: centrs execute <target> <command> [flags] | centrs execute <target...> --
 | `--max-results` | `<bytes>` | Fail if the rendered envelope exceeds this byte budget. |
 | `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. Defaults to text; use --json or --format json for the structured envelope. |
 | `--json` |  | Shortcut for `--format json`. |
-| `--verbose` |  | Include additional context in text output. |
+| `--verbose` |  | Include additional context in text output, on stderr. |
 | `--` |  | End centrs option parsing: every following token is the literal RouterOS command (e.g. `-- /interface print where disabled=yes`). Put centrs flags before it; one of execute's own long flags after it is refused as `usage/flag-after-separator`. |
 
 ## api
@@ -150,7 +150,7 @@ Usage: centrs api <router> <endpoint> [flags] | centrs api --host <host|url> <en
 | `--validate / --no-validate` |  | Run `/console/inspect` validation before the request (default true; `--validate=false` also accepted). |
 | `--format` | &lt;json\|ndjson\|yaml\|text&gt; | Output format. Defaults to json for api; `CENTRS_FORMAT` overrides. |
 | `--json` |  | Shortcut for `--format json`. |
-| `--verbose` |  | Include additional context in text output. |
+| `--verbose` |  | Include additional context in text output, on stderr. |
 
 ## transfer
 
@@ -190,7 +190,7 @@ Usage: centrs transfer <router>|--host <host> upload <local> [remote] | download
 | `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
 | `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
 | `--validate / --no-validate` |  | Enable or disable the existence-probe preflight. |
-| `--verbose` |  | Show the resolved transport in text output. |
+| `--verbose` |  | Show the resolved transport in text output, on stderr. |
 
 ## terminal
 

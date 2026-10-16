@@ -6,7 +6,50 @@
  * together.
  */
 
-import { CentrsError } from "../errors.ts";
+import type { Tip, Warning } from "../core/envelope.ts";
+import { CentrsError, terminalSafeLine } from "../errors.ts";
+import { formatTipsText } from "./missing-target.ts";
+
+/**
+ * Warnings that a single-target text-mode CLI leaves out (#470).
+ * `transport/provider-trust` rides every quickchr run over TLS or SSH, so
+ * printing it would be noise. `--json` keeps every warning.
+ */
+const TEXT_QUIET_WARNING_CODES: readonly string[] = [
+	"transport/provider-trust",
+];
+
+/**
+ * One `warning [<code>]: <message>` line per envelope warning, in the same form
+ * as fan-out text, minus {@link TEXT_QUIET_WARNING_CODES}.
+ */
+export function textWarningLines(warnings: readonly Warning[]): string[] {
+	return warnings
+		.filter((warning) => !TEXT_QUIET_WARNING_CODES.includes(warning.code))
+		.map((warning) =>
+			terminalSafeLine(`warning [${warning.code}]: ${warning.message}`),
+		);
+}
+
+/**
+ * #470: in text mode a single-target command's stdout is its data and nothing
+ * else. The notes around the data go to stderr: the `--verbose` header before
+ * it ({@link printTextHeader}), then warnings and tips after it. This applies
+ * on success and on failure, so a write whose outcome is unknown still says so.
+ */
+export function printTextNotes(envelope: {
+	warnings: readonly Warning[];
+	tips: readonly Tip[];
+}): void {
+	for (const line of textWarningLines(envelope.warnings)) console.error(line);
+	const tips = formatTipsText(envelope.tips);
+	if (tips) console.error(tips);
+}
+
+/** The `--verbose` header of a text-mode result, on stderr (#470). */
+export function printTextHeader(lines: readonly string[]): void {
+	if (lines.length > 0) console.error(lines.join("\n"));
+}
 
 export interface CliCommandOption {
 	flag: string;

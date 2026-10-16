@@ -672,7 +672,7 @@ export function renderRetrieveEnvelope(
 		case "text":
 			return (
 				(envelope.ok
-					? renderRetrieveSuccessText(envelope, options)
+					? renderRetrieveSuccessText(envelope)
 					: formatCentrsErrorText(envelope.error, options)) +
 				(envelope.meta.operation?.wait
 					? `\nwait: ${envelope.meta.operation.wait.stopReason}; ${envelope.meta.operation.wait.elapsedMs}ms; ${envelope.meta.operation.wait.attempts} attempt(s), ${envelope.meta.operation.wait.observations} observation(s)`
@@ -683,64 +683,42 @@ export function renderRetrieveEnvelope(
 	}
 }
 
-function renderRetrieveSuccessText(
-	envelope: RetrieveSuccessEnvelope,
-	options: { verbose?: boolean },
-): string {
-	const lines: string[] = [];
-	const verbose = options.verbose ?? false;
-	const meta = envelope.meta;
-	const operation = meta.operation;
-
-	if (verbose) {
-		const target = meta.target;
-		lines.push(`target: ${target.input ?? target.host} -> ${target.baseUrl}`);
-		lines.push(`via: ${meta.via}`);
-		lines.push(
-			`sources: via=${formatCoreSource(meta.settings.via)}, host=${formatCoreSource(
-				meta.settings.host,
-			)}, port=${formatCoreSource(meta.settings.port)}, timeout=${formatCoreSource(
-				meta.settings.timeoutMs,
-			)}, format=${formatCoreSource(meta.settings.format)}, validate=${formatCoreSource(
-				meta.settings.validate,
-			)}`,
-		);
-		if (meta.validation?.enabled) {
-			lines.push(`validation: ${meta.validation.source}`);
-		}
-		lines.push("");
-	}
-
-	if (operation?.kind === "attributes") {
+/** Text mode renders only the data; the CLI writes the rest to stderr (#470). */
+function renderRetrieveSuccessText(envelope: RetrieveSuccessEnvelope): string {
+	if (envelope.meta.operation?.kind === "attributes") {
 		const attributes = Array.isArray(envelope.data)
 			? (envelope.data as readonly string[])
 			: [];
-		lines.push(...attributes);
-	} else if (typeof envelope.data === "string") {
-		lines.push(envelope.data);
-	} else {
-		lines.push(JSON.stringify(envelope.data, null, 2));
+		return attributes.join("\n");
 	}
+	return typeof envelope.data === "string"
+		? envelope.data
+		: JSON.stringify(envelope.data, null, 2);
+}
 
-	if (envelope.warnings.length > 0) {
-		lines.push("");
-		for (const warning of envelope.warnings) {
-			lines.push(`warning [${warning.code}]: ${warning.message}`);
-		}
+/**
+ * The `--verbose` header of a text-mode retrieve result (stderr, #470); none
+ * for a failure before resolution (`via: null`).
+ */
+export function retrieveVerboseLines(envelope: RetrieveEnvelope): string[] {
+	const meta = envelope.meta;
+	if (meta.via === null) return [];
+	const target = meta.target;
+	const lines = [
+		`target: ${target.input ?? target.host}${target.baseUrl ? ` -> ${target.baseUrl}` : ""}`,
+		`via: ${meta.via}`,
+		`sources: via=${formatCoreSource(meta.settings.via)}, host=${formatCoreSource(
+			meta.settings.host,
+		)}, port=${formatCoreSource(meta.settings.port)}, timeout=${formatCoreSource(
+			meta.settings.timeoutMs,
+		)}, format=${formatCoreSource(meta.settings.format)}, validate=${formatCoreSource(
+			meta.settings.validate,
+		)}`,
+	];
+	if (meta.validation?.enabled) {
+		lines.push(`validation: ${meta.validation.source}`);
 	}
-
-	if (envelope.tips.length > 0) {
-		lines.push("");
-		lines.push("Tips:");
-		for (const item of envelope.tips) {
-			lines.push(`  - [${item.code}] ${item.message}`);
-			if (item.fix) {
-				lines.push(`    fix: ${item.fix}`);
-			}
-		}
-	}
-
-	return lines.join("\n");
+	return lines;
 }
 
 export function retrieveRequestSummary(

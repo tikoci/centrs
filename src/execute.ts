@@ -809,7 +809,7 @@ export function renderExecuteEnvelope(
 			return toYaml(envelope);
 		case "text":
 			return envelope.ok
-				? renderExecuteSuccessText(envelope, options)
+				? renderExecuteSuccessText(envelope)
 				: formatCentrsErrorText(envelope.error, options);
 		default:
 			return exhaustiveOutputFormat(format);
@@ -1531,27 +1531,28 @@ function applyMaxResultsBudget(
 	return envelope;
 }
 
-function renderExecuteSuccessText(
-	envelope: ExecuteSuccessEnvelope,
-	options: { verbose?: boolean },
-): string {
-	const lines: string[] = [];
-	if (options.verbose) {
-		lines.push(
-			`target: ${envelope.meta.target.input ?? envelope.meta.target.host}`,
-		);
-		lines.push(`via: ${envelope.meta.via}`);
-		if (envelope.meta.validation?.source) {
-			lines.push(`validation: ${envelope.meta.validation.source}`);
-		}
-		lines.push("");
+/** Text mode renders only the data; the CLI writes the rest to stderr (#470). */
+function renderExecuteSuccessText(envelope: ExecuteSuccessEnvelope): string {
+	return typeof envelope.data === "string"
+		? envelope.data
+		: JSON.stringify(envelope.data, null, 2);
+}
+
+/**
+ * The `--verbose` header of a text-mode execute result (stderr, #470). A
+ * failure after resolution still names its target; one before has no
+ * transport (`via: null`) and no header.
+ */
+export function executeVerboseLines(envelope: ExecuteEnvelope): string[] {
+	if (envelope.meta.via === null) return [];
+	const lines = [
+		`target: ${envelope.meta.target.input ?? envelope.meta.target.host}`,
+		`via: ${envelope.meta.via}`,
+	];
+	if (envelope.meta.validation?.source) {
+		lines.push(`validation: ${envelope.meta.validation.source}`);
 	}
-	if (typeof envelope.data === "string") {
-		lines.push(envelope.data);
-	} else {
-		lines.push(JSON.stringify(envelope.data, null, 2));
-	}
-	return lines.join("\n");
+	return lines;
 }
 
 function syntaxCause(error: unknown): unknown {

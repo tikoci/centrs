@@ -27,6 +27,7 @@ import {
 	retrieveFollow,
 	retrieveOutputFormats,
 	retrieveSample,
+	retrieveVerboseLines,
 	retrieveWait,
 	type ValidationTrace,
 	validateRetrieveRequestShape,
@@ -35,6 +36,8 @@ import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
+	printTextHeader,
+	printTextNotes,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -207,7 +210,7 @@ export const retrieveCommand: CliCommandMetadata = {
 		},
 		{
 			flag: "--verbose",
-			description: "Show resolved setting sources in text output.",
+			description: "Show resolved setting sources in text output, on stderr.",
 		},
 	],
 };
@@ -284,6 +287,10 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 					request?: { format?: RetrieveOutputFormat };
 				}
 			)?.request?.format ?? "text";
+		const text = resolvedFormat === "text";
+		if (text && request.verbose) {
+			printTextHeader(retrieveVerboseLines(envelope));
+		}
 		console.log(
 			renderRetrieveEnvelope(
 				envelope as Parameters<typeof renderRetrieveEnvelope>[0],
@@ -291,6 +298,7 @@ export async function runRetrieveCli(args: readonly string[]): Promise<number> {
 				{ verbose: request.verbose },
 			),
 		);
+		if (text) printTextNotes(envelope);
 		return 0;
 	} catch (error) {
 		const format = inferRequestedFormat(args, request);
@@ -364,6 +372,10 @@ async function runRetrieveStreamCli(
 			signal: controller.signal,
 		})) {
 			console.log(renderRetrieveStreamLine(envelope, format));
+			// A notice line already renders its tips; warnings go to stderr (#470).
+			if (format === "text") {
+				printTextNotes({ warnings: envelope.warnings, tips: [] });
+			}
 			if (!envelope.ok) exitCode = 1;
 		}
 	} finally {
@@ -383,14 +395,17 @@ async function runRetrieveWaitCli(
 		const envelope = await retrieveWait(request, Bun.env, {
 			signal: controller.signal,
 		});
+		const format =
+			envelope.meta.operation?.request.format ??
+			inferRequestedFormat(args, request);
+		const text = format === "text";
+		if (text && request.verbose) {
+			printTextHeader(retrieveVerboseLines(envelope));
+		}
 		console.log(
-			renderRetrieveEnvelope(
-				envelope,
-				envelope.meta.operation?.request.format ??
-					inferRequestedFormat(args, request),
-				{ verbose: request.verbose },
-			),
+			renderRetrieveEnvelope(envelope, format, { verbose: request.verbose }),
 		);
+		if (text) printTextNotes(envelope);
 		return envelope.ok ? 0 : 1;
 	} finally {
 		process.off("SIGINT", onSigint);

@@ -36,6 +36,16 @@ documenting cross-cutting shifts that affect contributors and consumers.
 
 ### Changed
 
+- Text stdout is data (#470). In text mode, single-target `execute`, `api`,
+  `retrieve` and `transfer` write only the result to stdout. Everything else
+  goes to **stderr** on success and on failure: the `--verbose` header, one
+  `warning [<code>]: <message>` line per warning, and the `Tips:` footer.
+  Plain `execute` and `api` used to drop warnings and envelope tips, so a
+  `--yes` write never showed, for example, `cmr/rule-selects-every-device` or
+  `transport/write-outcome-unknown`. `retrieve` and `transfer` used to mix
+  them into stdout. `transport/provider-trust` stays out of text output.
+  `--json` keeps everything, `api --raw` is unchanged, and fan-out text still
+  lists warnings in its report.
 - Shared meta is written once (#461, #462). In a fan-out envelope, each
   target's `meta.settings` keeps only the keys whose source differs from the
   outer `meta.settings`. Its `meta.operation` drops `request` and `auth` when

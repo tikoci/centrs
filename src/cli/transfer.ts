@@ -21,12 +21,15 @@ import {
 	transferEnvelope,
 	transferFanout,
 	transferOutputFormats,
+	transferVerboseLines,
 	transferVerbs,
 } from "../index.ts";
 import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
+	printTextHeader,
+	printTextNotes,
 	renderCommandHelp,
 	unknownFlagError,
 } from "./common.ts";
@@ -167,7 +170,7 @@ export const transferCommand: CliCommandMetadata = {
 		},
 		{
 			flag: "--verbose",
-			description: "Show the resolved transport in text output.",
+			description: "Show the resolved transport in text output, on stderr.",
 		},
 	],
 };
@@ -206,11 +209,15 @@ export async function runTransferCli(
 		const rendered = renderTransferEnvelope(envelope, format, {
 			verbose: request.verbose,
 		});
+		if (format === "text" && request.verbose) {
+			printTextHeader(transferVerboseLines(envelope));
+		}
 		if (!envelope.ok) {
 			console.error(
 				// codeql[js/clear-text-logging] The envelope carries auth provenance only (`username`, `passwordProvided`, setting sources), never the password; see buildTransferErrorEnvelopeFromResolved.
-				format === "text" ? rendered + formatTipsText(envelope.tips) : rendered,
+				rendered,
 			);
+			if (format === "text") printTextNotes(envelope);
 			return 1;
 		}
 		// A download to stdout (`local === "-"`) has already streamed the file bytes
@@ -221,6 +228,7 @@ export async function runTransferCli(
 		} else {
 			console.log(rendered);
 		}
+		if (format === "text") printTextNotes(envelope);
 		return 0;
 	} catch (error) {
 		// Drop credential fields before any renderer touches the request: error

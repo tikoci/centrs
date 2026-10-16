@@ -436,6 +436,85 @@ describe("CLI smoke (real subprocess, no network)", () => {
 	});
 });
 
+// #470: a single-target text run writes envelope warnings to stderr. Port 1 on
+// loopback refuses at once, so the envelope is an error that still carries the
+// request's warnings. The CMR run-script detector is text-based (a false
+// positive "costs only a warning", src/core/cmr.ts), so a `:put` of the words
+// is enough to raise one without a CMR controller.
+describe("text-mode warnings go to stderr (#470, no network)", () => {
+	const closed = [
+		"--host",
+		"127.0.0.1:1",
+		"--username",
+		"a",
+		"--password",
+		"b",
+	];
+	const warningLine = "warning [cmr/client-script-not-validated]:";
+
+	test("execute prints the warning after the error, on stderr", async () => {
+		const res = await runCliProcess({
+			args: ["execute", ...closed, ':put "cmr device run-script"'],
+		});
+		expect(res.exitCode).toBe(1);
+		expect(res.stdoutText).toBe("");
+		expect(res.stderrText).toContain("[transport/connection-refused]");
+		expect(res.stderrText).toContain(warningLine);
+	});
+
+	test("--verbose on a failure after resolution: header, then error, all on stderr", async () => {
+		for (const [args, header] of [
+			[
+				["execute", ...closed, ":put 1"],
+				/^target: 127\.0\.0\.1\nvia: native-api\n/,
+			],
+			[
+				["api", ...closed, "system/identity", "--format", "text"],
+				/^via: rest-api\n/,
+			],
+			[["transfer", ...closed, "list"], /^via: rest-api\n/],
+		] as const) {
+			const res = await runCliProcess({ args: [...args, "--verbose"] });
+			expect(res.exitCode).toBe(1);
+			expect(res.stdoutText).toBe("");
+			expect(res.stderrText).toMatch(header);
+			expect(res.stderrText).toContain("[transport/connection-refused]");
+		}
+	});
+
+	test("--verbose on a failure before resolution prints no header", async () => {
+		const res = await runCliProcess({
+			args: [
+				"execute",
+				"--host",
+				"127.0.0.1:1",
+				"--via",
+				"bogus",
+				":put 1",
+				"--verbose",
+			],
+		});
+		expect(res.exitCode).toBe(1);
+		expect(res.stderrText).not.toMatch(/^(target|via):/m);
+	});
+
+	test("api text prints it; --raw keeps its bare error payload", async () => {
+		const args = ["api", ...closed, "cmr/device/run-script", "-X", "POST"];
+		const text = await runCliProcess({
+			args: [...args, "--yes", "--format", "text"],
+		});
+		expect(text.exitCode).toBe(1);
+		expect(text.stderrText).toContain(warningLine);
+
+		const raw = await runCliProcess({ args: [...args, "--yes", "--raw"] });
+		expect(raw.exitCode).toBe(1);
+		expect(raw.stderrText).not.toContain("warning [");
+		expect((JSON.parse(raw.stderrText) as { code?: string }).code).toBe(
+			"transport/connection-refused",
+		);
+	});
+});
+
 // #478: centrs never reads credentials from a target URL. It refuses one,
 // and the password must not appear anywhere in the output, including fan-out
 // envelopes that echo their selection.

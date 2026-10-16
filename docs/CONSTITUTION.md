@@ -177,6 +177,14 @@ Notes:
   lossless rule applies to **stdout** only: **stderr** carries progress and
   interactive prompts (discover scan progress, write/ambiguity confirmation) and
   is exempt — use it sparingly, since most operations are fast.
+- **Text stdout is data** (#470). In text mode a single-target `execute`,
+  `api`, `retrieve` or `transfer` writes only `data` (or its error) to stdout.
+  The notes around it go to stderr: the `--verbose` header first, then one
+  `warning [<code>]: <message>` line per warning, then the `Tips:` footer, on
+  success and on failure alike. `transport/provider-trust` is left out of text
+  because it rides every quickchr run over TLS or SSH. `--json` keeps
+  everything, `api --raw` stays a bare payload, and fan-out text is a report,
+  not data, so it keeps its warnings on stdout.
 - `data` is the only field whose *shape* varies by command. Everything else —
   including `warnings` and `tips` — is invariant in shape; only contents differ.
 - **Shared meta is written once** (#461, #462). A fan-out target's

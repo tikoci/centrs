@@ -10,6 +10,7 @@ import {
 	type ExecuteRequest,
 	executeEnvelope,
 	executeOutputFormats,
+	executeVerboseLines,
 	renderExecuteEnvelope,
 } from "../execute.ts";
 import {
@@ -27,6 +28,8 @@ import { assertNoQuickchrOverrideConflict } from "../resolver/index.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
+	printTextHeader,
+	printTextNotes,
 	rejectFlagsAfterSeparator,
 	renderCommandHelp,
 	unknownFlagError,
@@ -156,7 +159,7 @@ export const executeCommand: CliCommandMetadata = {
 		},
 		{
 			flag: "--verbose",
-			description: "Include additional context in text output.",
+			description: "Include additional context in text output, on stderr.",
 		},
 		{
 			flag: "--",
@@ -401,15 +404,20 @@ export async function runExecuteCli(args: readonly string[]): Promise<number> {
 			)?.request?.format ??
 			parsed.format ??
 			"text";
+		const text = resolvedFormat === "text";
+		if (text && parsed.verbose) {
+			printTextHeader(executeVerboseLines(envelope));
+		}
 		const rendered = renderExecuteEnvelope(envelope, resolvedFormat, {
 			verbose: parsed.verbose,
 		});
 		if (envelope.ok) {
 			console.log(rendered);
-			return 0;
+		} else {
+			console.error(rendered);
 		}
-		console.error(rendered);
-		return 1;
+		if (text) printTextNotes(envelope);
+		return envelope.ok ? 0 : 1;
 	} catch (error) {
 		// Parse/usage errors land here too: surface them through the same typed
 		// envelope as every other runner (no raw message, no exit code 2).

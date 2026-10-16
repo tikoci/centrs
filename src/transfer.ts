@@ -1616,19 +1616,16 @@ export function renderTransferEnvelope(
 			return toYaml(envelope);
 		case "text":
 			return envelope.ok
-				? renderSuccessText(envelope, options)
+				? renderSuccessText(envelope)
 				: formatCentrsErrorText(envelope.error, options);
 		default:
 			return exhaustiveFormat(format);
 	}
 }
 
-function renderSuccessText(
-	envelope: TransferSuccessEnvelope,
-	options: { verbose?: boolean },
-): string {
+/** Text mode renders only the data; the CLI writes the rest to stderr (#470). */
+function renderSuccessText(envelope: TransferSuccessEnvelope): string {
 	const lines: string[] = [];
-	const operation = envelope.meta.operation;
 
 	if (Array.isArray(envelope.data)) {
 		// list
@@ -1654,19 +1651,17 @@ function renderSuccessText(
 		lines.push(parts.join(" "));
 	}
 
-	if (options.verbose && operation) {
-		lines.push("");
-		lines.push(`via: ${envelope.meta.via}`);
-	}
-
-	if (envelope.warnings.length > 0) {
-		lines.push("");
-		for (const warning of envelope.warnings) {
-			lines.push(`warning [${warning.code}]: ${warning.message}`);
-		}
-	}
-
 	return lines.join("\n");
+}
+
+/**
+ * The `--verbose` header of a text-mode transfer result (stderr, #470); none
+ * for a failure before resolution.
+ */
+export function transferVerboseLines(envelope: TransferEnvelope): string[] {
+	return envelope.meta.operation && envelope.meta.via !== null
+		? [`via: ${envelope.meta.via}`]
+		: [];
 }
 
 // ── Small helpers ────────────────────────────────────────────────────────────

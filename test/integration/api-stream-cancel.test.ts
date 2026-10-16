@@ -203,3 +203,37 @@ describe("api --stream stops within a bound (#385)", () => {
 		expect(summary.data.stopReason).toBe("count-reached");
 	}, 15_000);
 });
+
+describe("api --stream text mode (#470)", () => {
+	test("a summary warning goes to stderr, never into the stdout rows", async () => {
+		peer = startPeer(false);
+		const result = await runCliProcess({
+			args: [
+				"api",
+				"127.0.0.1",
+				"/ip/address/listen",
+				"--via",
+				"native-api",
+				"--port",
+				String(peer.port),
+				"--username",
+				"fixture",
+				"--password",
+				"dummy",
+				"--timeout",
+				"300ms",
+				"--duration",
+				"200ms",
+				"--format",
+				"text",
+			],
+			env: { HOME, XDG_CONFIG_HOME: join(HOME, ".config") },
+			killAfterMs: 8000,
+		});
+		expect(result.exitCode).toBe(0);
+		expect(result.stdoutText).not.toContain("warning [");
+		expect(result.stderrText).toMatch(
+			/^warning \[transport\/cancel-unacknowledged\]: /m,
+		);
+	}, 15_000);
+});
