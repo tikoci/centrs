@@ -112,6 +112,15 @@ describe("execute: a centrs flag after `--` (#459)", () => {
 		});
 	});
 
+	test("unsupported boolean values get guidance instead of a broken fixed command", () => {
+		for (const flag of ["--json=true", "--yes=false", "--cmr=yes"]) {
+			const error = refusal(["r1", "--", "/x", flag]);
+			expect(error.code).toBe("usage/flag-after-separator");
+			expect(error.remediation).toContain("accept no value");
+			expect(error.remediation).not.toContain("`centrs execute");
+		}
+	});
+
 	test("a value flag's `=` spelling is split in the fixed line; a boolean's is kept", () => {
 		const error = refusal([
 			"r1",
@@ -166,7 +175,108 @@ describe("execute: a centrs flag after `--` (#459)", () => {
 		expect(error.remediation).not.toContain("vault-key");
 		expect(error.remediation).not.toContain("other");
 		expect(error.remediation).toContain("--password '<password>'");
-		expect(error.remediation).toContain("'--cdb-password=<password>'");
+		expect(error.remediation).toContain("--cdb-password '<password>'");
+	});
+
+	test("the corrected command redacts credential-bearing targets and host values", () => {
+		const secret = "separator-canary";
+		for (const target of [
+			`http://admin:${secret}@127.0.0.1:1`,
+			`http://admin%3A${secret}@127.0.0.1:1`,
+			`admin:x/${secret}@127.0.0.1:1`,
+		]) {
+			for (const args of [
+				[target, "--", "/system/identity/print", "--json"],
+				["--host", target, "--", "/system/identity/print", "--json"],
+				[`--host=${target}`, "--", "/system/identity/print", "--json"],
+				["r1", "--", "/system/identity/print", "--host", target],
+				["r1", "--", "/system/identity/print", `--host=${target}`],
+			]) {
+				const error = refusal(args);
+				expect(error.code).toBe("usage/flag-after-separator");
+				expect(JSON.stringify(error.toJSON())).not.toContain(secret);
+				expect(error.remediation).toContain("***@127.0.0.1:1");
+			}
+		}
+	});
+
+	test("a value flag's inline form before -- keeps its flag in the correction", () => {
+		const secret = "separator-canary";
+		const error = refusal([
+			`--host=http://admin:${secret}@127.0.0.1:1`,
+			"--",
+			"/x",
+			"--json",
+		]);
+		expect(error.remediation).toContain("--host 'http://***@127.0.0.1:1'");
+		expect(error.remediation).not.toContain(secret);
+	});
+
+	test("flag-shaped password values are masked as values, never moved as flags", () => {
+		const secret = "separator-canary";
+		for (const value of [
+			`--host=${secret}`,
+			`--password=${secret}`,
+			`--username=${secret}`,
+		]) {
+			const error = refusal(["r1", "--password", value, "--", "/x", "--json"]);
+			expect(error.remediation).toContain(
+				"centrs execute r1 --password '<password>' --json -- /x",
+			);
+			expect(error.remediation).not.toContain(secret);
+		}
+		const inline = refusal([
+			`--password=${secret}`,
+			"r1",
+			"--",
+			"/x",
+			"--json",
+		]);
+		expect(inline.remediation).toContain(
+			"centrs execute --password '<password>' r1 --json -- /x",
+		);
+	});
+
+	test("a value equal to -- is not the option separator", () => {
+		const secret = "separator-canary";
+		const error = refusal([
+			"--password",
+			"--",
+			`http://admin:${secret}@127.0.0.1:1`,
+			"--",
+			"/x",
+			"--json",
+		]);
+		expect(error.remediation).not.toContain(secret);
+		const parsed = parseExecuteCliArgs([
+			"--password",
+			"--",
+			"r1",
+			"/system/identity/print",
+			"--json",
+		]);
+		expect(parsed.password).toBe("--");
+		expect(parsed.command).toBe("/system/identity/print");
+		expect(parsed.format).toBe("json");
+	});
+
+	test("the credential redaction survives JSON, YAML and text error rendering", async () => {
+		const secret = "separator-canary";
+		for (const format of ["json", "yaml", "text"]) {
+			const result = await runCliCaptured([
+				"execute",
+				`http://admin:${secret}@127.0.0.1:1`,
+				"--format",
+				format,
+				"--",
+				"/system/identity/print",
+				"--verbose",
+			]);
+			expect(result.code).toBe(1);
+			expect(result.out).toBe("");
+			expect(result.err).toContain("usage/flag-after-separator");
+			expect(result.err).not.toContain(secret);
+		}
 	});
 
 	test("short aliases and non-flag tokens after `--` stay RouterOS input", () => {

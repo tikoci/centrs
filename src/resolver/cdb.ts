@@ -44,7 +44,11 @@ import {
 	parseDuration,
 	type ResolvedSetting,
 } from "./settings.ts";
-import { assertNoTargetPassword, redactTargetInput } from "./target.ts";
+import {
+	assertNoTargetCredentials,
+	assertNoTargetPassword,
+	redactTargetInput,
+} from "./target.ts";
 
 const ENV_CDB_FILE = "CENTRS_CDB_FILE";
 const ENV_CDB_PASSWORD = "CENTRS_CDB_PASSWORD";
@@ -228,6 +232,10 @@ export async function resolveCdb(
 			...(defaults ? { defaults } : {}),
 		};
 	} catch (error) {
+		// Preserve registered identities; mask credential-shaped lookup failures.
+		if (redactTargetInput(input.targetInput) !== input.targetInput) {
+			assertNoTargetCredentials(input.targetInput);
+		}
 		if (error instanceof CentrsError && error.code === "cdb/not-found-target") {
 			// A `__default__` record supplies fallback credentials even when the
 			// target has no record of its own. On the CLI/API this fills creds for

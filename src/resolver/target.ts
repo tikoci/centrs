@@ -104,7 +104,7 @@ export function resolveTarget(
 			summary: "No host could be resolved for `retrieve`.",
 			remediation:
 				"Pass a target positional like `centrs retrieve 192.0.2.10 /system/resource --via rest-api` or set `--host` / `CENTRS_HOST`.",
-			context: { targetInput: input.targetInput },
+			context: { targetInput: redactTargetInput(input.targetInput) },
 		});
 	}
 
@@ -128,11 +128,13 @@ export function resolveTarget(
 		if (!mac) {
 			throw new CentrsError({
 				code: "target/mac-required",
-				summary: `mac-telnet needs a MAC address target; got "${input.targetInput ?? cdb?.target ?? rawCandidate}".`,
+				summary: `mac-telnet needs a MAC address target; got "${redactTargetInput(input.targetInput ?? cdb?.target ?? rawCandidate)}".`,
 				remediation:
 					"Pass the device MAC (aa:bb:cc:dd:ee:ff), or pin an IP transport with `--via native-api`/`rest-api` (add `--resolve arp` for a MAC).",
 				context: {
-					target: input.targetInput ?? cdb?.target ?? rawCandidate,
+					target: redactTargetInput(
+						input.targetInput ?? cdb?.target ?? rawCandidate,
+					),
 					via,
 				},
 			});
@@ -478,26 +480,38 @@ const URL_USERINFO = /^\s*([a-z][a-z0-9+.-]*:\/\/)?[^/@\s]*@/i;
 const TARGET_PREFIX = /^\s*(?:[a-z][a-z0-9+.-]*:\/\/)?/i;
 
 /**
- * Where a password could sit: a `:` between the optional `scheme://` and the
- * LAST `@`. Index arithmetic, not a pattern, so a password holding `/`, `?` or
+ * Where credentials could sit: a `:` before the LAST `@`, or explicit URL
+ * userinfo. Display also masks a percent-encoded colon; lookup validation
+ * allows that ambiguous spelling until CDB lookup has run. Bare `user@host`
+ * remains a CDB identity candidate. Index arithmetic, so a password holding `/`, `?` or
  * `#` (which ends a URL authority early, CodeRabbit on PR #479) still counts,
  * and nothing can backtrack (CodeQL js/polynomial-redos).
  */
-function passwordSpan(
+function targetCredentialsSpan(
 	value: string,
+	includeEncodedColon = true,
 ): { start: number; at: number } | undefined {
 	const at = value.lastIndexOf("@");
 	if (at < 0) return undefined;
-	const start = TARGET_PREFIX.exec(value)?.[0].length ?? 0;
-	return value.slice(start, at).includes(":") ? { start, at } : undefined;
+	const prefix = TARGET_PREFIX.exec(value)?.[0] ?? "";
+	const start = prefix.length;
+	const urlUserinfo = prefix.includes("://") && URL_USERINFO.test(value);
+	const userinfo = value.slice(start, at);
+	return userinfo.includes(":") ||
+		(includeEncodedColon && /%3a/i.test(userinfo)) ||
+		urlUserinfo
+		? { start, at }
+		: undefined;
 }
 
 /**
- * A target string with any `user:pass@` replaced by `***@`, for display (#478).
+ * A target string with any `user:pass@` or explicit URL userinfo replaced by
+ * `***@`, for display (#478).
  * A target is echoed in `meta.target.input` and in error messages, so the
  * password part must never reach them, not even when the target is refused.
  * Everything up to the last `@` goes, so an odd password cannot slip past.
  * Other targets, including a CDB identity like `rtr@site`, pass unchanged.
+ * An encoded colon is masked conservatively without changing lookup input.
  */
 export function redactTargetInput(value: string): string;
 export function redactTargetInput(
@@ -507,7 +521,7 @@ export function redactTargetInput(
 	value: string | undefined,
 ): string | undefined {
 	if (value === undefined) return value;
-	const span = passwordSpan(value);
+	const span = targetCredentialsSpan(value);
 	return span
 		? `${value.slice(0, span.start)}***${value.slice(span.at)}`
 		: value;
@@ -527,11 +541,11 @@ function targetCredentialsError(value: string): CentrsError {
 /**
  * Refuse a target that may hold a password, BEFORE any lookup whose miss would
  * echo it (#478): `resolveCdb`, the MCP allowlist, the fan-out selection. A
- * bare `user@host` holds no secret, so it is left to the lookup; a CDB
- * identity may contain `@`.
+ * bare `user@host` is left to the lookup; a CDB identity may contain `@`.
+ * Explicit URL userinfo is always refused, including percent-encoded forms.
  */
 export function assertNoTargetPassword(value: string): void {
-	if (passwordSpan(value)) throw targetCredentialsError(value);
+	if (targetCredentialsSpan(value, false)) throw targetCredentialsError(value);
 }
 
 /**
@@ -540,7 +554,7 @@ export function assertNoTargetPassword(value: string): void {
  * After lookup, refuse any userinfo in the host to dial, from any source.
  */
 export function assertNoTargetCredentials(value: string): void {
-	if (passwordSpan(value) || URL_USERINFO.test(value)) {
+	if (targetCredentialsSpan(value) || URL_USERINFO.test(value)) {
 		throw targetCredentialsError(value);
 	}
 }
@@ -558,7 +572,7 @@ export function parseHostCandidate(value: string): URL {
 	if (hasScheme && url.pathname !== "/" && url.pathname !== "") {
 		throw new CentrsError({
 			code: "input/invalid-target",
-			summary: `Target URL must not include a path. Received: ${value}`,
+			summary: `Target URL must not include a path. Received: ${redactTargetInput(value)}`,
 			remediation:
 				"Pass only the RouterOS host or base URL, then provide the RouterOS menu path as the second positional argument.",
 		});

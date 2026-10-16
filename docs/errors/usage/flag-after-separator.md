@@ -19,6 +19,16 @@ is exactly one of the command's long flags (or its `--flag=value` spelling);
 short aliases such as `-u` pass through as RouterOS input. If RouterOS really
 needs such a token, put it inside the quoted command. Password values are
 replaced by `<password>` in the printed command line.
+Credentials embedded in a positional target or a `--host` value are redacted
+to `***@host`, including when `--host` is moved before the separator.
+Credentials in an explicit URL are redacted even when its colon is percent-encoded;
+bare CDB identities such as `rtr@site` remain unchanged. A bare target with
+a percent-encoded colon is masked in diagnostics while remaining eligible
+for CDB identity lookup.
+
+For boolean flags that accept no value (such as `--json` and `--yes`), the
+error explains how to remove an unsupported `=value` rather than printing
+a command that the parser would reject.
 
 See [`docs/CONSTITUTION.md`](../../CONSTITUTION.md) for the centrs error
 contract.

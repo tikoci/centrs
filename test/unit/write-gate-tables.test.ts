@@ -114,6 +114,56 @@ describe("script directives: read or write (#458)", () => {
 		expect(writes("/export file-name=x")).toBe(true);
 	});
 
+	test("output-file argument abbreviations stay writes in scripts and structured commands", () => {
+		for (const name of [
+			"f",
+			"fi",
+			"fil",
+			"file",
+			"file-",
+			"file-n",
+			"file-na",
+			"file-nam",
+			"file-name",
+		]) {
+			expect(writes(`:serialize to=json value=1 ${name}=out.json`)).toBe(true);
+			expect(writes(`/serialize to=json value=1 ${name}=out.json`)).toBe(true);
+			expect(writes(`/system/identity/export ${name}=out`)).toBe(true);
+		}
+		expect(writes(':put "file-n=out.json"')).toBe(false);
+		expect(writes('/ip/address/print where comment="fi=out"')).toBe(false);
+	});
+
+	test("output-file arguments may omit =, including after a nested value", () => {
+		for (const command of [
+			':serialize to=json value=1 file-name "out.json"',
+			':put [:serialize to=json value=1 file-n "out.json"]',
+			':serialize to=json value=[:tonum 1] file-n "out.json"',
+			'/system identity export fi "out"',
+			'/system/identity/export file "out"',
+			'/file print detail=yes fi "out"',
+		])
+			expect(writes(command)).toBe(true);
+
+		// A loop variable or a value under a pure directive is not an argument
+		// of a print/export/serialize, even when it looks like a file prefix.
+		for (const command of [
+			":foreach f in=[/file/find] do={/file/print}",
+			":local file 1; :put $file",
+			":put file",
+			":serialize to=json value=[:tostr file]",
+		])
+			expect(writes(command)).toBe(false);
+	});
+
+	test("checking deeply nested read arguments stays bounded", () => {
+		const depth = 1600;
+		const input = `${":serialize value=[".repeat(depth)}:put 1${"]".repeat(depth)}`;
+		const started = performance.now();
+		expect(writes(input)).toBe(false);
+		expect(performance.now() - started).toBeLessThan(1000);
+	});
+
 	test("the absolute `/name` spelling of a root directive is the directive", () => {
 		expect(writes("/serialize to=json value=1")).toBe(false);
 		expect(writes("/delay 1s")).toBe(false);
@@ -224,5 +274,23 @@ describe("api: POST /console/inspect is a read (#458)", () => {
 		expect(isApiMutating("POST", "/con/insp")).toBe(true);
 		expect(isApiMutating("POST", "/console/inspect/x")).toBe(true);
 		expect(isApiMutating("POST", "/console/clear-history")).toBe(true);
+	});
+});
+
+describe("parentheses are expressions, not commands (PR #483)", () => {
+	// CHR 7.26beta1: `:parse` reads `(:serialize … file-n=x)` as the variable
+	// `$:serialize` with comparisons, and neither `( … )` nor `"$( … )"` creates
+	// the file. Only a bracket runs it: `"$([:serialize … file-n x])"` does.
+	test("a bracketed command inside `$( … )` is still a head", () => {
+		for (const separator of ["=", " "]) {
+			expect(
+				writes(
+					`:put "$([:serialize to=json value=1 file-n${separator}out.json])"`,
+				),
+			).toBe(true);
+		}
+	});
+	test("an expression-only `$( … )` stays a read", () => {
+		expect(writes(':put "$(1 + 2)"')).toBe(false);
 	});
 });

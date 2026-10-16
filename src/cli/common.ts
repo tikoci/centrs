@@ -8,6 +8,7 @@
 
 import type { Tip, Warning } from "../core/envelope.ts";
 import { CentrsError, terminalSafeLine } from "../errors.ts";
+import { redactTargetInput } from "../resolver/target.ts";
 import { formatTipsText } from "./missing-target.ts";
 
 /**
@@ -177,25 +178,54 @@ export function rejectFlagsAfterSeparator(
 	args: readonly string[],
 	options: readonly CliCommandOption[],
 ): void {
-	const separator = args.indexOf("--");
-	if (separator === -1) return;
 	const optionByFlag = new Map<string, CliCommandOption>();
 	for (const option of options) {
 		for (const token of option.flag.split("/")) {
 			const trimmed = token.trim();
-			if (trimmed.startsWith("--") && trimmed !== "--") {
+			if (trimmed.startsWith("-") && trimmed !== "--") {
 				optionByFlag.set(trimmed, option);
 			}
 		}
 	}
+	let separator = -1;
+	for (let index = 0; index < args.length; index += 1) {
+		const token = args[index] ?? "";
+		if (token === "--") {
+			separator = index;
+			break;
+		}
+		// A flag's value may itself be `--`; only the parser's separator counts.
+		if (optionByFlag.get(token)?.valueName !== undefined) index += 1;
+	}
+	if (separator === -1) return;
 	const secret = (flag: string) =>
 		flag.startsWith("-") && flag.includes("password");
-	const before = args.slice(0, separator).map((token, index, all) => {
+	const before: string[] = [];
+	for (let index = 0; index < separator; index += 1) {
+		const token = args[index] ?? "";
 		const [name = ""] = token.split("=");
-		if (token.includes("=") && secret(name)) return `${name}=<password>`;
-		const previous = all[index - 1];
-		return previous !== undefined && secret(previous) ? "<password>" : token;
-	});
+		const equal = token.indexOf("=");
+		if (equal >= 0 && optionByFlag.get(name)?.valueName !== undefined) {
+			before.push(
+				name,
+				secret(name) ? "<password>" : redactTargetInput(token.slice(equal + 1)),
+			);
+			continue;
+		}
+		if (equal >= 0 && secret(name)) {
+			before.push(`${name}=<password>`);
+			continue;
+		}
+		before.push(redactTargetInput(token));
+		if (optionByFlag.get(name)?.valueName !== undefined || secret(name)) {
+			const value = args[index + 1];
+			if (index + 1 < separator && value !== undefined) {
+				before.push(secret(name) ? "<password>" : redactTargetInput(value));
+				index += 1;
+			}
+		}
+	}
+	const unsupportedInlineBooleans: string[] = [];
 	const moved: string[] = [];
 	const kept: string[] = [];
 	const flags: string[] = [];
@@ -203,7 +233,7 @@ export function rejectFlagsAfterSeparator(
 	for (let index = 0; index < after.length; index += 1) {
 		const token = after[index] ?? "";
 		const [name = "", ...valueParts] = token.split("=");
-		const option = optionByFlag.get(name);
+		const option = name.startsWith("--") ? optionByFlag.get(name) : undefined;
 		if (option === undefined) {
 			kept.push(token);
 			continue;
@@ -211,9 +241,12 @@ export function rejectFlagsAfterSeparator(
 		flags.push(name);
 		// The parsers take a value flag's value as the next token (`--timeout 30s`,
 		// never `--timeout=30s`), so the fixed line splits it; only a boolean's
-		// `=` form (`--validate=no`) is kept as typed.
+		// supported `=` form (`--validate=no`) is kept as typed.
 		if (valueParts.length > 0) {
 			if (option.valueName === undefined) {
+				if (command !== "execute" || name !== "--validate") {
+					unsupportedInlineBooleans.push(name);
+				}
 				moved.push(token);
 			} else {
 				moved.push(name, secret(name) ? "<password>" : valueParts.join("="));
@@ -228,14 +261,26 @@ export function rejectFlagsAfterSeparator(
 		}
 	}
 	if (flags.length === 0) return;
-	const fixed = ["centrs", command, ...before, ...moved, "--", ...kept]
+	// A moved --host value needs the same redaction as a positional target.
+	// Keep the RouterOS command itself verbatim; it is not a target.
+	const fixed = [
+		"centrs",
+		command,
+		...before,
+		...moved.map((token) => redactTargetInput(token)),
+		"--",
+		...kept,
+	]
 		.map(shellQuote)
 		.join(" ");
 	const list = flags.map((flag) => `\`${flag}\``).join(", ");
 	throw new CentrsError({
 		code: "usage/flag-after-separator",
 		summary: `${list} ${flags.length === 1 ? "comes" : "come"} after \`--\`, so ${flags.length === 1 ? "it" : "they"} would be sent to RouterOS as part of the command.`,
-		remediation: `Put centrs flags before \`--\`: \`${fixed}\``,
+		remediation:
+			unsupportedInlineBooleans.length > 0
+				? `Put centrs flags before \`--\`. These flags accept no value: ${unsupportedInlineBooleans.map((flag) => `\`${flag}\``).join(", ")}. Use a bare flag to enable it, or omit it to keep the default.`
+				: `Put centrs flags before \`--\`: \`${fixed}\``,
 		context: { flags },
 	});
 }
