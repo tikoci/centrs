@@ -8,3 +8,11 @@ name: centrs CodeQL security and quality configuration
 queries:
   - uses: security-and-quality
   - uses: ./.github/codeql-house-rules
+
+# Tests are not shipped (package.json "files") and are not an input surface.
+# Extracting them made integration-test CLI argv (`"--password",
+# auth.password`) a js/clear-text-logging source for every CLI render path,
+# and those alerts reopened whenever a PR shifted lines in src/cli/*.
+# Sources inside src/ are still analyzed.
+paths-ignore:
+  - test

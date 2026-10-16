@@ -101,7 +101,6 @@ export async function runMcpCli(args: readonly string[]): Promise<number> {
 		return 0;
 	} catch (error) {
 		console.error(
-			// codeql[js/clear-text-logging] password reaches here only as SettingSource provenance ({kind,key}), never the value — see CommonSettingsMeta.password in src/core/envelope.ts.
 			formatCentrsErrorText(
 				asCentrsError(error, {
 					code: "internal/mcp-start",
