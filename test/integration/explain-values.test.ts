@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { routerOsStringLiteral } from "../../src/core/routeros-string.ts";
+import { executeEnvelope } from "../../src/execute.ts";
 import { lexValueAnchors } from "../../src/explain/args.ts";
 import { resolveDocument } from "../../src/explain/pathresolve.ts";
 import { resolveSymbols } from "../../src/explain/symbols.ts";
@@ -9,8 +10,10 @@ import {
 	PARSE_REJECTED,
 	PARSE_REJECTED_HINT,
 	PROPLIST_HIGHLIGHT_SPLIT_SINCE,
+	readEnv,
 	recordIntegrationEvidence,
 	routerOsAtLeast,
+	splitQuickChrAuth,
 	startIntegrationChr,
 	TOBOOL_STRING_COERCED_SINCE,
 } from "./chr.ts";
@@ -914,10 +917,37 @@ describeFast("explain value facts against CHR", () => {
 			expect((await parseIl(unknown)).startsWith("(evl")).toBe(true);
 			expect(braces(unknown)).toBe(1);
 
+			// The gate path #502 is about: `execute` now runs the read, through
+			// both stages, and still refuses the named comparison offline.
+			const auth = splitQuickChrAuth(
+				readEnv(started.env, "QUICKCHR_AUTH") ?? "admin:",
+			);
+			const base = {
+				targetInput: started.chr.restUrl,
+				via: "rest-api" as const,
+				username: auth.username,
+				password: auth.password,
+			};
+			const read = await executeEnvelope({
+				...base,
+				command: '/ip address print where interface in {"ether1";"ether2"}',
+			});
+			expect(read.ok).toBe(true);
+			expect(read.meta.via).toBe("rest-api");
+			const refused = await executeEnvelope({
+				...base,
+				command: '/ip address print where interface={"ether1"}',
+			});
+			expect(refused.ok).toBe(false);
+			if (!refused.ok) {
+				expect(refused.error.code).toBe("validation/syntax");
+				expect(refused.error.context?.["validationStage"]).toBe("offline");
+			}
+
 			await recordIntegrationEvidence({
 				suite: "explain value facts against CHR",
 				command: "explain",
-				protocol: "rest-api (:parse IL)",
+				protocol: "rest-api (:parse IL + execute)",
 				routerosVersion: started.chr.state.version,
 				quickChrName: started.chr.name,
 				requestedChannel: started.requestedChannel,

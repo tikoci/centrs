@@ -985,6 +985,19 @@ describe("value anchors", () => {
 		// that way, so the device accepts `foo-bar={…}`. Offline has no property
 		// list (decision 3) and treats every bare name as one.
 		expect(brace('/ip address print where foo-bar={"y"}')).toBe(1);
+
+		// Both stay errors, on the device's evidence (7.24.5 and 7.23.8). The
+		// keyword is case-sensitive: `print WHERE interface in {"x"}` is a
+		// `syntax error` at the brace. At the root, `print` and `find` are not
+		// menu commands, and `print where name in {"ether1"}` and
+		// `find where name in {"ether1"}` are rejected at the brace too.
+		for (const input of [
+			'/ip address print WHERE interface in {"x"}',
+			'print where name in {"ether1"}',
+			'find where name in {"ether1"}',
+			'/print where name in {"ether1"}',
+		])
+			expect({ input, braces: brace(input) }).toEqual({ input, braces: 1 });
 	});
 
 	test("a scope slot may drop its `=` before the brace (#347)", () => {
