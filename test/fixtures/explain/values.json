@@ -271,7 +271,6 @@
 		"emptyArrayElementType": "nothing"
 	},
 	"corpus": {
-		"censusCommand": "bun run explain:value-census --json",
 		"sourceScripts": 948,
 		"valueOccurrences": 19690,
 		"elementOccurrences": 5636,
@@ -307,8 +306,12 @@
 			"ip6-prefix": 1,
 			"time": 1
 		},
-		"snapshot": "da632dc8e85d",
-		"controlsExcluded": 7
+		"snapshot": "e12d5d4e58a4",
+		"excluded": {
+			"capture-controls": 7,
+			"wiresage-conformance": 875
+		},
+		"censusCommand": "bun run explain:value-census --json"
 	},
 	"scalars": [
 		{

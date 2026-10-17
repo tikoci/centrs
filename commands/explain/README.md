@@ -954,10 +954,10 @@ and its phase is named below.
 
   <!-- BEGIN GENERATED value-census — regenerate with `bun run explain:value-census:readme` -->
   The corpus census is re-derivable with `bun run explain:value-census` and
-  covers 948 source scripts of corpus snapshot `da632dc8e85d`, with the 7
-  `capture-controls` rows excluded. The figures below are generated from
-  `test/fixtures/explain/values.json` → `corpus` by
-  `bun run explain:value-census:readme` and gated against it by
+  covers 948 source scripts of corpus snapshot `e12d5d4e58a4`, with 882
+  auxiliary rows (7 `capture-controls`, 875 `wiresage-conformance`) excluded.
+  The figures below are generated from `test/fixtures/explain/values.json` →
+  `corpus` by `bun run explain:value-census:readme` and gated against it by
   `bun run explain:value-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:value-census:check`. Of the
   13,152 emitted values in a statement the strict argument lexer ALSO read, 0
@@ -1796,10 +1796,10 @@ And the grounded complement — asked, and refused:
 
   <!-- BEGIN GENERATED token-census — regenerate with `bun run explain:token-census:readme` -->
   The token census is re-derivable with `bun run explain:token-census` and
-  covers 948 source scripts of corpus snapshot `da632dc8e85d`, with the 7
-  `capture-controls` rows excluded. The figures below are generated from
-  `test/fixtures/explain/tokens.json` → `corpus` by
-  `bun run explain:token-census:readme` and gated against it by
+  covers 948 source scripts of corpus snapshot `e12d5d4e58a4`, with 882
+  auxiliary rows (7 `capture-controls`, 875 `wiresage-conformance`) excluded.
+  The figures below are generated from `test/fixtures/explain/tokens.json` →
+  `corpus` by `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
   1,426,731 analyzed bytes, 1,022,882 are classified (71.69%), the remaining
@@ -1884,7 +1884,7 @@ what was wrong was the accounting of it. They are re-derived by
 `bun run explain:bracket-equals:readme:check`.
 
 <!-- BEGIN GENERATED bracket-equals — regenerate with `bun run explain:bracket-equals:readme` -->
-Measured by `bun run explain:bracket-equals` over the population of corpus snapshot `da632dc8e85d`, with the 7 `capture-controls` rows excluded:
+Measured by `bun run explain:bracket-equals` over the population of corpus snapshot `e12d5d4e58a4`, with 882 auxiliary rows (7 `capture-controls`, 875 `wiresage-conformance`) excluded:
 **1,079** `=` bytes sit inside `[ … ]`, across
 263 of 948 scripts, and **1,067** of them come back
 `unclassified` — the operator fill abstains on essentially all of it. No
@@ -2515,8 +2515,9 @@ config genre in question). Since phase 0 the corpus has grown to 948 with a
 export-banner share to 4.6%; **that stratum is not part of any phase-0 figure
 above**. Current whole-corpus offline censuses include its source text.
 
-The pinned snapshot (schema 5, tikoci/lsp-routeros-ts#40) carries one recorded
-capture session per release channel — long-term `7.23.8`, stable `7.24.5`,
+The pinned snapshot (schema 5, tikoci/lsp-routeros-ts#40, plus the
+`wiresage-conformance` collection from tikoci/lsp-routeros-ts#42) carries one
+recorded capture session per release channel — long-term `7.23.8`, stable `7.24.5`,
 testing `7.25rc2` and development `7.26beta1`. Each is a `:parse` run and a
 `highlight` run over all 948 population scripts, bound to the exact submitted
 bytes and one device environment with every package installed. Two legacy
@@ -2527,8 +2528,11 @@ exact-input evidence.
 Every census reads the corpus through `scripts/corpus-db.ts`, in three ways
 (#498):
 
-- **Population.** `v_corpus_population` leaves out the 7 upstream
-  `capture-controls` rows.
+- **Population.** `v_corpus_population` leaves out the upstream auxiliary
+  collections: 7 `capture-controls` rows and 875 `wiresage-conformance`
+  synthetic grammar cases. An observation is in the population by `script_id`,
+  not by path prefix, so a collection added upstream cannot leak into a census
+  (it did, briefly, when #42 added 875 rows to every run).
 - **Sessions.** Comparable figures name their channel run ids
   (`capture_channels`), not a coverage label.
 - **Verdict.** The device verdict is the upstream `response_class`. Only

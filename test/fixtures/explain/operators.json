@@ -10,7 +10,7 @@
 		"captureFailedRows": 4,
 		"unbalancedRows": 24,
 		"versions": "7.23.8,7.24.5,7.25rc2,7.26beta1",
-		"runs": "6f313fad-20d3-48f7-b1ac-68906acbd95c-parseil,b4ecf5e8-711e-4e81-aea3-72ccf850240a-parseil,b5a9755e-fd18-47e4-8756-e9ed39e64a9a-parseil,c4cd2a11-d944-4f5d-80d1-99d4d686ae2a-parseil",
+		"runs": "187fa073-8e5b-4bce-9444-bd77f1aff8a6-parseil,673b2b91-ca6a-45b1-a55e-4c0cd4d7ca0d-parseil,93ce4df0-ceb9-4d8b-83fc-cf465efc9a3a-parseil,8b297c32-00d6-46e5-a389-5d68173cf4ed-parseil",
 		"distinctHeads": 128,
 		"headOccurrences": {
 			"1978": 4,
@@ -1326,8 +1326,11 @@
 			"utf-8": "7.20.8"
 		},
 		"firstSeenVersions": "7.20.8,7.22.1,7.23.8,7.24.5,7.25rc2,7.26beta1",
-		"snapshot": "da632dc8e85d",
-		"controlsExcluded": 7
+		"snapshot": "e12d5d4e58a4",
+		"excluded": {
+			"capture-controls": 7,
+			"wiresage-conformance": 875
+		}
 	},
 	"sweep": {
 		"_source": {

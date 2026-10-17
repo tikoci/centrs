@@ -2,7 +2,7 @@
 	"_note": "centrs → RouterOS `highlight` agreement, raw per-byte confusion matrix only — see scripts/explain-highlight-agreement.ts (#264 B4 / #263). Re-derive with `bun run explain:highlight-agreement --json`. Buckets and percentages are DERIVED at render time from this matrix plus src/explain/highlight-projection.ts; nothing here is a pass threshold.",
 	"slice": {
 		"path": "test/fixtures/explain/highlight-streams.slice.json",
-		"sha256": "37e89bda70cca256aa53a3f3bf5ada317eef02240ff74e4d9364224b96271311",
+		"sha256": "ffc6d9fc42c7e18423a5d39bc8c8ab94ef29e12a29e2f88f4ef94a773f9d23d2",
 		"baseVersion": "7.24.5",
 		"scripts": 67,
 		"versionDiffering": 25

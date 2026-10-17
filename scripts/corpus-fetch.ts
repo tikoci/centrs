@@ -66,9 +66,9 @@ export interface CorpusPin {
 	/** `corpus_metadata.schema_version` of the pinned DB, for the record. */
 	readonly schemaVersion: number;
 	/**
-	 * The study population (`v_corpus_population`, controls excluded), for the
-	 * record. `source_scripts` itself also holds the upstream classifier
-	 * controls on schema 5.
+	 * The study population (`v_corpus_population`, auxiliary collections
+	 * excluded), for the record. `source_scripts` itself also holds the
+	 * upstream classifier controls and the `wiresage-conformance` cases.
 	 */
 	readonly scripts: number;
 }

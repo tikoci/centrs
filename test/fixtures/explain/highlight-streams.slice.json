@@ -7,9 +7,9 @@
 			"version": "7.24.5",
 			"routerosVersion": "7.24.5",
 			"channels": ["stable"],
-			"highlightRuns": ["b4ecf5e8-711e-4e81-aea3-72ccf850240a-highlight"],
+			"highlightRuns": ["673b2b91-ca6a-45b1-a55e-4c0cd4d7ca0d-highlight"],
 			"environments": [
-				"d1d190b1eebaef36410510d3ab5660d396e6f25025073b1ffa75955ae325c65f"
+				"def68abd012a3541eb0ff0d4f70c287d4f2032ddc820340579865b341b998ab9"
 			],
 			"corpusRows": 948,
 			"aligned": 948,
@@ -21,9 +21,9 @@
 			"version": "7.23.8",
 			"routerosVersion": "7.23.8",
 			"channels": ["long-term"],
-			"highlightRuns": ["6f313fad-20d3-48f7-b1ac-68906acbd95c-highlight"],
+			"highlightRuns": ["187fa073-8e5b-4bce-9444-bd77f1aff8a6-highlight"],
 			"environments": [
-				"24bf01080c749ebfdf51dcb0ee234097d5887db31be0ae3d7bfd23a8ada543dc"
+				"a2757bdba94b1196673f3bd9dc1a6ddc25062d3408044569566faedb6985064f"
 			],
 			"corpusRows": 948,
 			"aligned": 948,
@@ -35,9 +35,9 @@
 			"version": "7.25rc2",
 			"routerosVersion": "7.25rc2",
 			"channels": ["testing"],
-			"highlightRuns": ["b5a9755e-fd18-47e4-8756-e9ed39e64a9a-highlight"],
+			"highlightRuns": ["93ce4df0-ceb9-4d8b-83fc-cf465efc9a3a-highlight"],
 			"environments": [
-				"37cb2f7a30339590ddc38d59872c1d0e90b0910c4aa4efbe7e936cafe2daaebe"
+				"bfe48a2b0540e87f823203f0bfa952169916ede1e63df5d59c6955caac5041ec"
 			],
 			"corpusRows": 948,
 			"aligned": 948,
@@ -49,9 +49,9 @@
 			"version": "7.26beta1",
 			"routerosVersion": "7.26beta1",
 			"channels": ["development"],
-			"highlightRuns": ["c4cd2a11-d944-4f5d-80d1-99d4d686ae2a-highlight"],
+			"highlightRuns": ["8b297c32-00d6-46e5-a389-5d68173cf4ed-highlight"],
 			"environments": [
-				"d2df722c5a6ea1ed160131c39d5eab719663c6e05460426c73cee047c80c0afa"
+				"4f1bd28f79487aacadc09e5e45de8d21057bd25fe51bec0e1544d37660fbe7f0"
 			],
 			"corpusRows": 948,
 			"aligned": 948,
@@ -63,7 +63,7 @@
 	"source": {
 		"generatedBy": "scripts/explain-highlight-slice.ts",
 		"partition": "test/fixtures/explain/corpus-partition.json",
-		"corpus": "sha256:da632dc8e85da065d3092347234bfdc8e0bea34a5b6d08d348205eacce079253",
+		"corpus": "sha256:e12d5d4e58a4b111ff65678d1157281dcc44b9f59b53b99b5e35bdd5afe388bf",
 		"note": "Cut from the pinned corpus (scripts/corpus-pin.json) by session run id. Re-cut with `bun run explain:highlight-slice`; the sha256 above identifies the exact snapshot this slice was cut from."
 	},
 	"selection": {

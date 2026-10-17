@@ -7,10 +7,15 @@
 
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	channelSession,
 	channelSessions,
+	corpusProvenance,
 	decodeHighlightRuns,
+	describeExcluded,
 	describePopulation,
 	highlightObservations,
 	isAcceptedParse,
@@ -26,7 +31,8 @@ function corpus(schemaVersion = 5): Database {
 		CREATE TABLE source_scripts (id INTEGER PRIMARY KEY, path TEXT, collection TEXT,
 			text TEXT, has_cli_prompt INTEGER, sha256 TEXT);
 		CREATE VIEW v_corpus_population AS
-			SELECT * FROM source_scripts WHERE collection != 'capture-controls';
+			SELECT * FROM source_scripts
+			WHERE collection NOT IN ('capture-controls', 'wiresage-conformance', 'next-collection');
 		CREATE TABLE capture_runs (id TEXT PRIMARY KEY, probe TEXT, routeros_version TEXT);
 		CREATE TABLE capture_channels (channel TEXT PRIMARY KEY, routeros_version TEXT,
 			parse_run_id TEXT, highlight_run_id TEXT, environment_sha256 TEXT);
@@ -45,7 +51,9 @@ function corpus(schemaVersion = 5): Database {
 	db.run(`INSERT INTO source_scripts VALUES
 		(1, 'b.rsc', 'root', ':put 1', 0, 'h1'),
 		(2, 'a.rsc', 'root', '/x', 0, 'h2'),
-		(3, 'capture-controls/c.rsc', 'capture-controls', ':put', 0, 'h3')`);
+		(3, 'capture-controls/c.rsc', 'capture-controls', ':put', 0, 'h3'),
+		(4, 'wiresage-conformance/e/e14.rsc', 'wiresage-conformance', ':put ()', 0, 'h4'),
+		(5, 'next-collection/x.rsc', 'next-collection', ':put 5', 0, 'h5')`);
 	db.run(`INSERT INTO capture_runs VALUES
 		('lt-parse', 'parseil', '7.23.8'), ('st-parse', 'parseil', '7.24.5'),
 		('st-hl', 'highlight', '7.24.5'), ('lt-hl', 'highlight', '7.23.8')`);
@@ -60,11 +68,19 @@ function corpus(schemaVersion = 5): Database {
 		('st-parse', 2, 'a.rsc', 'h2', NULL, 'failed', 'capture-failed', NULL, '{}', 'raw-json-v1', NULL),
 		('st-parse', 3, 'capture-controls/c.rsc', 'h3', NULL, 'ok', 'plain-diagnostic',
 			'syntax error (line 1 column 5)', '{}', 'parse-ret-v1', NULL),
+		('st-parse', 4, 'wiresage-conformance/e/e14.rsc', 'h4', NULL, 'ok', 'plain-diagnostic',
+			'syntax error (line 1 column 7)', '{}', 'parse-ret-v1', NULL),
+		('st-parse', 5, 'next-collection/x.rsc', 'h5', NULL, 'ok', 'il-no-recognized-diagnostic',
+			'(evl /putmessage=5)', '{}', 'parse-ret-v1', NULL),
 		('st-hl', 1, 'b.rsc', 'h1', 'i1', 'ok', 'highlight-no-hard-error', NULL,
 			'[{"highlight":[["dir",1],["cmd",3],["none",1],["cmd",0],["none",1]]}]',
 			'highlight-rle-v1', '{"aligned":true}'),
 		('st-hl', 2, 'a.rsc', 'h2', 'i1', 'ok', 'highlight-no-hard-error', NULL,
-			'[{"highlight":[["dir",5]]}]', 'highlight-rle-v1', '{"aligned":false}')`);
+			'[{"highlight":[["dir",5]]}]', 'highlight-rle-v1', '{"aligned":false}'),
+		('st-hl', 4, 'wiresage-conformance/e/e14.rsc', 'h4', 'i1', 'ok', 'highlight-no-hard-error', NULL,
+			'[{"highlight":[["cmd",7]]}]', 'highlight-rle-v1', '{"aligned":true}'),
+		('st-hl', 5, 'next-collection/x.rsc', 'h5', 'i1', 'ok', 'highlight-no-hard-error', NULL,
+			'[{"highlight":[["cmd",6]]}]', 'highlight-rle-v1', '{"aligned":true}')`);
 	db.run(
 		"INSERT INTO capture_inputs VALUES ('i1', '{\"truncated\":false,\"replacedCodeUnits\":0}')",
 	);
@@ -76,7 +92,7 @@ describe("corpus-db readers (#498)", () => {
 		expect(() => requireCorpusSchema(corpus(4))).toThrow(/--repin/);
 	});
 
-	test("the population leaves out the capture controls, in path order", () => {
+	test("the population leaves out the auxiliary collections, in path order", () => {
 		expect(populationScripts(corpus()).map((s) => s.path)).toEqual([
 			"a.rsc",
 			"b.rsc",
@@ -93,7 +109,7 @@ describe("corpus-db readers (#498)", () => {
 		expect(() => channelSession(db, "testing")).toThrow(/testing/);
 	});
 
-	test("parse observations skip controls, and a failed capture has no readout", () => {
+	test("parse observations skip auxiliary collections, and a failed capture has no readout", () => {
 		const rows = parseObservations(corpus(), ["st-parse"]);
 		expect(rows.map((r) => [r.path, r.responseClass, r.il])).toEqual([
 			["a.rsc", "capture-failed", undefined],
@@ -116,6 +132,20 @@ describe("corpus-db readers (#498)", () => {
 			[" 1", "none"],
 		]);
 		expect(row?.aligned).toBe(true);
+	});
+
+	// Membership is the view's, by script id. A path-prefix filter names the
+	// collections it knows, so `next-collection` stands in for whatever upstream
+	// adds after `wiresage-conformance` (#42 leaked 875 rows that way).
+	test("observations follow v_corpus_population, not a list of path prefixes", () => {
+		const db = corpus();
+		expect(parseObservations(db, ["st-parse"]).map((r) => r.scriptId)).toEqual([
+			2, 1,
+		]);
+		expect(highlightObservations(db, "st-hl").map((r) => r.path)).toEqual([
+			"a.rsc",
+			"b.rsc",
+		]);
 	});
 
 	test("a misaligned row is reported without pairs, not thrown on", () => {
@@ -151,11 +181,34 @@ describe("corpus-db readers (#498)", () => {
 		expect(() => decodeHighlightRuns([["cmd", 4]], "abc")).toThrow(/overrun/);
 	});
 
-	test("the README clause states the snapshot and the exclusion", () => {
-		expect(
-			describePopulation({ snapshot: "da632dc8e85d", controlsExcluded: 7 }),
-		).toBe(
-			" of corpus snapshot `da632dc8e85d`, with the 7 `capture-controls` rows excluded",
+	// Every collection the view leaves out is counted, including one this
+	// reader has never heard of, and nothing the view keeps is.
+	test("provenance counts the rows the view excludes, by collection", () => {
+		const dir = mkdtempSync(join(tmpdir(), "corpus-db-"));
+		try {
+			const dbPath = join(dir, "corpus.sqlite");
+			writeFileSync(dbPath, "x");
+			expect(corpusProvenance(corpus(), dbPath)).toEqual({
+				snapshot: "2d711642b726",
+				excluded: {
+					"capture-controls": 1,
+					"next-collection": 1,
+					"wiresage-conformance": 1,
+				},
+			});
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("the README clause states the snapshot and each excluded collection", () => {
+		const excluded = { "capture-controls": 7, "wiresage-conformance": 875 };
+		expect(describePopulation({ snapshot: "e12d5d4e58a4", excluded })).toBe(
+			" of corpus snapshot `e12d5d4e58a4`, with 882 auxiliary rows " +
+				"(7 `capture-controls`, 875 `wiresage-conformance`) excluded",
+		);
+		expect(describeExcluded({ "capture-controls": 7 })).toBe(
+			"7 auxiliary rows (7 `capture-controls`)",
 		);
 		expect(describePopulation({})).toBe("");
 	});
