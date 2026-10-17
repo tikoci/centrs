@@ -916,6 +916,77 @@ describe("value anchors", () => {
 			).toBeFalse();
 	});
 
+	test("a brace in a `where` clause is an array value (#502)", () => {
+		// CHR 7.24.5 and 7.23.8 `:parse` accept every input below, with IL such as
+		// `(in $interface ether1;ether2)`. Before #502 each one was a top-level
+		// `invalid-command-brace`, so the execute gate refused a valid read.
+		const brace = (input: string) =>
+			explainCommand(input).diagnostics.filter((diagnostic) =>
+				diagnostic.code.endsWith("/invalid-command-brace"),
+			).length;
+		for (const input of [
+			'/ip address print where interface in {"ether1";"ether2"}',
+			'/ip address print where interface in {"ether1"}',
+			'/ip address print detail where interface in {"ether1"}',
+			'/ip address print where interface in {"ether1"} and disabled=no',
+			'/ip address print where disabled=no and interface in {"ether1"}',
+			'ip address print where interface in {"ether1"}',
+			'/ip address { print where interface in {"ether1"} }',
+			'/ip address export where interface in {"ether1"}',
+			'/ip address print where {"ether1"} in interface',
+			'/ip address print where interface~{"x"}',
+			'/ip address print where interface<={"x"}',
+			'/ip address print where !interface={"x"}',
+			'/ip address print where "a"={"x"}',
+			"/ip/route/print where comment in {1;2}",
+		])
+			expect({
+				input,
+				verdict: explainCommand(input).verdict,
+				braces: brace(input),
+			}).toEqual({ input, verdict: "pass", braces: 0 });
+
+		// The array is read member by member, exactly as its `(…)` twin is.
+		const members = (input: string) =>
+			explainCommand(input).values.occurrences.map((value) => ({
+				span: value.span,
+				kind: value.kind,
+				shape: value.facts.shapeHints?.values,
+			}));
+		expect(
+			members('/ip address print where interface in {"ether1";"ether2"}'),
+		).toEqual(
+			members('/ip address print where interface in ("ether1","ether2")'),
+		);
+		expect(
+			members('/ip address print where interface in {"ether1";"ether2"}'),
+		).toHaveLength(3);
+
+		// After `<name>=`, `!=` or `==` the device reads the value with the
+		// property's own parser and rejects the brace (`expected interface value`,
+		// `expected yes or no`), spaced or not.
+		for (const [input, at] of [
+			['/ip address print where interface={"ether1"}', 34],
+			['/ip address print where interface = {"ether1"}', 36],
+			['/ip address print where interface!={"ether1"}', 35],
+			['/ip address print where interface==\t{"x"}', 36],
+			['/ip address print where interface in {"x"} disabled={"y"}', 52],
+			['/ip address print where interface<{"x"} and interface={"y"}', 54],
+		] as const)
+			expect({
+				input,
+				verdict: explainCommand(input).verdict,
+				at: explainCommand(input).diagnostics.find((diagnostic) =>
+					diagnostic.code.endsWith("/invalid-command-brace"),
+				)?.span.start,
+			}).toEqual({ input, verdict: "fail", at });
+
+		// Pinned over-strict reading: only a property the menu KNOWS is parsed
+		// that way, so the device accepts `foo-bar={…}`. Offline has no property
+		// list (decision 3) and treats every bare name as one.
+		expect(brace('/ip address print where foo-bar={"y"}')).toBe(1);
+	});
+
 	test("a scope slot may drop its `=` before the brace (#347)", () => {
 		// CHR 7.21.5/7.23.5/7.24.2/7.25beta3: `:parse` lowers all three spellings
 		// below to BYTE-IDENTICAL IL (`…;do=;(evl …);else=;(evl …)`), so the `=` is

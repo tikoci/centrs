@@ -327,6 +327,12 @@ interface WalkOptions {
 	 * see {@link braceSlotTakesArray}.
 	 */
 	directiveVerb?: string;
+	/**
+	 * Where a command's top-level `where` positional ends, set by the walk itself
+	 * once it reads one. From there on a brace is an expression value
+	 * (see {@link comparesNamedValue}).
+	 */
+	whereAt?: number;
 }
 
 /** How deep member scanning descends before it stops and keeps only the shape. */
@@ -363,7 +369,11 @@ function braceOpensArray(
 	options: WalkOptions,
 ): boolean {
 	const verb = options.directiveVerb;
-	if (verb === undefined) return false;
+	if (verb === undefined)
+		return (
+			options.whereAt !== undefined &&
+			!comparesNamedValue(text, at, options.whereAt)
+		);
 	const owner = braceValueOwner(text, tokenStart, at);
 	if (owner === undefined) return false;
 	return braceSlotTakesArray(
@@ -390,6 +400,7 @@ function* walkArguments(
 	let i = Math.max(0, from);
 	// How many positionals have been read, which is the NEXT positional's index.
 	let positionals = 0;
+	let walk = options;
 	while (i < text.length) {
 		// The MASKED view decides whitespace, because `maskComments` blanks a
 		// continuation comment that `text` still spells with a `#`. Reading `text`
@@ -412,7 +423,7 @@ function* walkArguments(
 			i += continuation;
 			continue;
 		}
-		const token = scanToken(text, structural, i, positionals, options);
+		const token = scanToken(text, structural, i, positionals, walk);
 		if (typeof token === "string") {
 			yield token;
 			return;
@@ -430,7 +441,7 @@ function* walkArguments(
 		// the refusal exists to prevent. Shape only, never a value.
 		const read =
 			token.why === undefined
-				? readToken(text, structural, i, token.end, options)
+				? readToken(text, structural, i, token.end, walk)
 				: undecidedToken(text, i, token.end, token.why);
 		if (typeof read === "string") {
 			if (options.tolerant !== true) {
@@ -446,6 +457,13 @@ function* walkArguments(
 			continue;
 		}
 		if (read.kind === "positional") positionals++;
+		if (
+			read.kind === "positional" &&
+			read.text === "where" &&
+			walk.directiveVerb === undefined &&
+			walk.whereAt === undefined
+		)
+			walk = { ...walk, whereAt: token.end };
 		yield read;
 		i = token.end;
 	}
@@ -1662,12 +1680,43 @@ export function lexValueAnchors(
 }
 
 /**
+ * Whether the brace at `at` is the right side of a `where` comparison that
+ * RouterOS reads with the named property's own value parser (#502).
+ *
+ * A `where` clause is expression context, so a brace there is an array value —
+ * except straight after `<name>=`, `<name>!=` or `<name>==`, spaced or not.
+ * On CHR 7.24.5 and 7.23.8, `:parse` rejects `/ip/route/print where
+ * comment={1;2}` with `expected comment value`, and `where disabled={…}` with
+ * `expected yes or no`. It accepts the brace after `in`, `~`, `<`, `>`, `<=`
+ * and `>=`, on the left of `=`, and after `!interface=`, `$x=` and `"a"=`.
+ *
+ * Only a property name the menu KNOWS is read this way: `where foo-bar={…}` is
+ * accepted. Offline has no per-menu property list (decision 3), so every bare
+ * name counts, and an unknown one is a pinned over-strict reading.
+ */
+function comparesNamedValue(text: string, at: number, floor: number): boolean {
+	let j = at - 1;
+	while (j > floor && /\s/.test(text[j] as string)) j--;
+	if (text[j] !== "=") return false;
+	while (j > floor && text[j] === "=") j--;
+	if (text[j] === "<" || text[j] === ">") return false;
+	if (text[j] === "!") j--;
+	while (j > floor && /\s/.test(text[j] as string)) j--;
+	const nameEnd = j + 1;
+	while (j > floor && /[A-Za-z0-9._-]/.test(text[j] as string)) j--;
+	const name = text.slice(j + 1, nameEnd);
+	return /^[A-Za-z.]/.test(name) && /\s/.test(text[j] as string);
+}
+
+/**
  * Locate top-level `{...}` values that RouterOS rejects in command arguments.
  *
  * Parentheses and substitutions restore expression context, where a brace
- * literal is legal. Stored-script attributes are also excluded: their brace is
- * a script body, not an array. The caller applies this only to non-root
- * commands; root scripting directives use the `(verb, slot)` table instead.
+ * literal is legal, and so does a `where` clause, apart from the comparisons
+ * {@link comparesNamedValue} names. Stored-script attributes are also
+ * excluded: their brace is a script body, not an array. The caller applies
+ * this only to non-root commands; root scripting directives use the
+ * `(verb, slot)` table instead.
  */
 export function invalidCommandBraceOffsets(
 	text: string,
@@ -1681,6 +1730,7 @@ export function invalidCommandBraceOffsets(
 	let i = Math.max(0, from);
 	let tokenStart: number | null = null;
 	let positionals = 0;
+	let whereAt: number | null = null;
 	while (i < structural.length) {
 		const c = structural[i] as string;
 		if (
@@ -1689,6 +1739,7 @@ export function invalidCommandBraceOffsets(
 		) {
 			if (tokenStart !== null) {
 				const token = structural.slice(tokenStart, i);
+				if (whereAt === null && token === "where") whereAt = i;
 				if (
 					!token.startsWith("?") &&
 					unquotedEquals(token, 0, token.length) === null
@@ -1737,7 +1788,10 @@ export function invalidCommandBraceOffsets(
 				: braceStartsStatements(range.masked, range.start + i, range.start)) ||
 			(directiveVerb !== undefined &&
 				slot !== undefined &&
-				braceSlotAcceptsBrace(directiveVerb, slot))
+				braceSlotAcceptsBrace(directiveVerb, slot)) ||
+			(directiveVerb === undefined &&
+				whereAt !== null &&
+				!comparesNamedValue(structural, i, whereAt))
 		) {
 			i = end ?? structural.length;
 			continue;

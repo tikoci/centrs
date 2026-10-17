@@ -907,7 +907,14 @@ and its phase is named below.
   top-level brace value in any other command argument emits
   `explain/canonicalizer/invalid-command-brace` at the `{`; parentheses or a
   `[…]` substitution restore the expression context where the same literal is
-  legal. An empty member is a
+  legal. So does a top-level `where` clause (#502): `print where interface in
+  {"ether1";"ether2"}` is a read, and its array is read member by member like
+  its `(…)` twin. The exception is the right side of `<name>=`, `!=` or `==`,
+  spaced or not, which the device reads with that property's own parser
+  (`expected interface value`), so `where comment={1;2}` keeps its error. The
+  device does that only for a property the menu knows (`where foo-bar={…}`
+  parses). Offline has no property list, so it treats every bare name as one.
+  An empty member is a
   syntax error (`{;}`, `{;1}`, `{1;;2}`, `(1,)`) and withdraws the enclosing
   `array` shape with it; a single trailing separator is legal in the brace form
   only (`{1;}` and `{1;2;}` parse, `{1;2,}` and `{2,}` do not).
