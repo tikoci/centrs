@@ -92,6 +92,7 @@ import {
 	isIndexedStatementStart,
 	matchingBraceEnd,
 	scopeNameFromMasked,
+	startsArrayCommentLine,
 } from "./scope-brace.ts";
 
 /** One top-level statement located in analyzed-byte space. */
@@ -511,7 +512,12 @@ function maskUncached(
 		// indented `#` is a comment when the statement is still empty (`do={\` +
 		// newline + `  # c`) and content when it is not (`:put a\` + newline +
 		// `  # x`, which the device classes `error`) — exactly what `atLead` says.
-		if (c === "#" && (atLead || contComment)) {
+		if (
+			c === "#" &&
+			(atLead ||
+				contComment ||
+				startsArrayCommentLine(original, i, contexts.at(-1)))
+		) {
 			const commentStart = i;
 			while (i < original.length && original[i] !== "\n") i++;
 			if (pieces === undefined) pieces = [];
@@ -933,7 +939,12 @@ function scanAscii(
 		// mid-continuation stays content.
 		const inCont = f.cont !== "none";
 		const contComment = c === "#" && inCont && f.contLineStart;
-		if (c === "#" && (f.atLead || contComment)) {
+		if (
+			c === "#" &&
+			(f.atLead ||
+				contComment ||
+				startsArrayCommentLine(ascii, i, delimStack.at(-1)))
+		) {
 			const nl = ascii.indexOf("\n", i);
 			const end = nl === -1 ? ascii.length : nl;
 			comments.push({ start: i, end });

@@ -308,7 +308,11 @@
 import { analyzeCoordinates } from "./coordinates.ts";
 import { type Defect, defectAt } from "./defects.ts";
 import { isMenuPath } from "./menus.ts";
-import { braceStartsStatements, hashStartsHardError } from "./scope-brace.ts";
+import {
+	braceStartsStatements,
+	hashStartsHardError,
+	startsArrayCommentLine,
+} from "./scope-brace.ts";
 import type { Continuation } from "./segment.ts";
 
 /** The five variable classes the console assigns. */
@@ -904,6 +908,18 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		// nested string flipping the quote phase, so every later `#` line read as
 		// string content) is now fixed in the shared scanner too, via the same
 		// frame model (#199); the two must stay in step.
+		// #503 — a column-0 `#` inside an array literal is a comment line too, but
+		// it ends nothing: the array's statement carries on past it. A continued
+		// line's comment keeps the H5 branch below, as in `maskUncached`.
+		if (
+			c === "#" &&
+			!contComment &&
+			startsArrayCommentLine(text, i, frames.at(-1))
+		) {
+			while (i < text.length && text[i] !== "\n") i++;
+			i--; // let the loop advance onto the newline (or end)
+			continue;
+		}
 		if (c === "#" && (atLead || contComment)) {
 			while (i < text.length && text[i] !== "\n") i++;
 			if (contComment) {

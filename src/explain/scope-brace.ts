@@ -502,6 +502,27 @@ export function braceStartsStatements(
 }
 
 /**
+ * Whether the `#` at `at` opens a comment line inside an array literal (#503).
+ *
+ * `frame` is the innermost open delimiter. CHR 7.24.5 and 7.22.1 agree: inside
+ * a `{…}` that is not a statement body, a `#` at column 0 comments out the
+ * rest of its line, at any nesting depth and in argument values too
+ * (`:local z {a=1;⏎# c⏎b=2}` → `value=a=1;b=2`, `:foreach i in={1;⏎# c⏎2}`).
+ * An indented `#` (space or tab), a `#` after a value or `;` on the same line,
+ * and a `#` directly inside `( … )` are still syntax errors. A comment-only
+ * array is rejected, but so is `{}`: that is the empty-array rule, not this one.
+ */
+export function startsArrayCommentLine(
+	text: string,
+	at: number,
+	frame: { char: string; statements: boolean } | undefined,
+): boolean {
+	return (
+		text[at - 1] === "\n" && frame?.char === "{" && frame.statements === false
+	);
+}
+
+/**
  * Whether an unquoted, non-comment `#` is a device hard error (#245).
  *
  * `inExpression` is the caller's already-known delimiter role: arrays and
