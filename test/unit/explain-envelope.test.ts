@@ -550,6 +550,8 @@ describe("diagnostics", () => {
 			":local z {\n# c\na=1}",
 			":local z {a=1;\n# c\nb=2}",
 			":local z {a=1;\r\n# c\r\nb=2}",
+			// A `\`-continued line's comment takes the H5 branch in every walker.
+			":local z {a=1;\\\n# c\nb=2}",
 			":local z {a={\n# c\n1}}",
 			":local z ({\n# c\n1})",
 			':local z {1;2\n# c "x\n}',

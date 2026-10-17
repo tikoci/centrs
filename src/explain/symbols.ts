@@ -909,8 +909,13 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		// string content) is now fixed in the shared scanner too, via the same
 		// frame model (#199); the two must stay in step.
 		// #503 — a column-0 `#` inside an array literal is a comment line too, but
-		// it ends nothing: the array's statement carries on past it.
-		if (c === "#" && startsArrayCommentLine(text, i, frames.at(-1))) {
+		// it ends nothing: the array's statement carries on past it. A continued
+		// line's comment keeps the H5 branch below, as in `maskUncached`.
+		if (
+			c === "#" &&
+			!contComment &&
+			startsArrayCommentLine(text, i, frames.at(-1))
+		) {
 			while (i < text.length && text[i] !== "\n") i++;
 			i--; // let the loop advance onto the newline (or end)
 			continue;
