@@ -544,6 +544,56 @@ describe("diagnostics", () => {
 		).toBeFalse();
 	});
 
+	test("a column-0 `#` line inside an array is a comment (#503)", () => {
+		// examples.md example 37; CHR 7.24.5 and 7.22.1 accept every row here.
+		for (const input of [
+			":local z {\n# c\na=1}",
+			":local z {a=1;\n# c\nb=2}",
+			":local z {a=1;\r\n# c\r\nb=2}",
+			":local z {a={\n# c\n1}}",
+			":local z ({\n# c\n1})",
+			':local z {1;2\n# c "x\n}',
+			":foreach i in={1;\n# c\n2} do={:put $i}",
+			":do {\n  :local z {a=1;\n# c\nb=2}\n}",
+		]) {
+			const data = explainCommand(input);
+			const hash = input.indexOf("#");
+			expect({ input, verdict: data.verdict }).toEqual({
+				input,
+				verdict: "pass",
+			});
+			expect(data.spans.find((span) => span.class === "comment")?.start).toBe(
+				hash,
+			);
+		}
+		// The comment ends nothing: both members survive it.
+		const members = explainCommand(":local z {a=1;\n# c\nb=2}")
+			.values.occurrences.filter((o) => o.kind === "element")
+			.map((o) => o.name);
+		expect(members).toEqual(["a", "b"]);
+
+		// Column 0 only, and only in a brace: the device rejects these at the `#`.
+		for (const input of [
+			":local z { # c\na=1}",
+			":local z {a=1;\n  # c\nb=2}",
+			":local z {a=1;\n\t# c\nb=2}",
+			":local z {a=1; # c\nb=2}",
+			":local z (1+\n# c\n2)",
+		]) {
+			const hashes = explainCommand(input).diagnostics.filter((diagnostic) =>
+				diagnostic.code.endsWith("/invalid-hash"),
+			);
+			expect({ input, at: hashes.map((d) => d.span?.start) }).toEqual({
+				input,
+				at: [input.indexOf("#")],
+			});
+		}
+		// A comment that swallows the closing brace leaves the array unclosed.
+		expect(
+			explainCommand(":local z {a=1\n#c}").diagnostics.map((d) => d.code),
+		).toContain("explain/canonicalizer/unclosed");
+	});
+
 	test("structural defects are errors and carry their region", () => {
 		const data = explainCommand(':put "unterminated');
 		expect(data.verdict).toBe("fail");

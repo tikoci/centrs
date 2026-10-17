@@ -483,7 +483,8 @@ REST body; the comment text is never rendered as an operand.
 
 The CHR assertion grounds the wider placement rule on the requested RouterOS
 channel via `/console/inspect request=highlight` plus `:parse`: unquoted `#`
-inside brace arrays and parenthesized expressions is a hard error; the first
+inside brace arrays and parenthesized expressions is a hard error, except at
+column 0 inside an array (example 37); the first
 non-space `#` in `do`, `else`, `foreach do`, and `on-event` bodies that are
 themselves in a statement context is a comment — the same `do={ # c` nested
 inside an array is an array and `#` is an error (placement table, #249), while
@@ -803,3 +804,23 @@ value with that property's parser and rejects the brace. Two examples are
 `invalid-command-brace` at the `{` there. The device does this only for a
 property the menu knows: `where foo-bar={"y"}` parses. Offline cannot tell
 property names apart without a per-menu list, so it reports that one too.
+
+### 37. A column-0 `#` line inside an array is a comment
+
+```bash
+centrs explain ':local z {a=1;
+# c
+b=2}' --json
+```
+
+`data.verdict` is `pass`. `data.spans` holds a `comment` span over `# c`, and
+`data.values.occurrences` holds the array and its two members `a` and `b`. CHR
+7.24.5 and 7.22.1 `:parse` lower it to `value=a=1;b=2`. Before #503, offline
+failed it with `invalid-hash` at the `#`.
+
+The rule holds at any depth (`{a={⏎# c⏎1}}`) and in argument values
+(`:foreach i in={1;⏎# c⏎2} do={:put $i}`). It needs column 0: an indented `#`
+(`{a=1;⏎  # c⏎b=2}`), and one after `{`, a value or `;` on the same line, keep
+`invalid-hash` at the `#`. A `#` directly inside `( … )` stays an error too. A
+comment-only array, `:local z {⏎# c⏎}`, now passes like `:local z {}`, though the
+device rejects both: an empty array is a separate missed rejection (#511).

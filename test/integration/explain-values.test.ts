@@ -958,4 +958,109 @@ describeFast("explain value facts against CHR", () => {
 			await started.chr.destroy();
 		}
 	}, 300_000);
+
+	test("example 37 reads a column-0 `#` line inside an array as a comment (#503)", async () => {
+		const started = await startIntegrationChr();
+		const parseIl = async (source: string): Promise<string> =>
+			outputOf(
+				await started.chr.exec(
+					`:put [:parse ${routerOsStringLiteral(source)}]`,
+				),
+			).replaceAll("\n", " ");
+		const hashes = (input: string): number =>
+			explainCommand(input).diagnostics.filter((diagnostic) =>
+				diagnostic.code.endsWith("/invalid-hash"),
+			).length;
+		try {
+			// Accepted on the device with the comment dropped from the value; passes
+			// offline with a comment span over the line.
+			for (const [input, needle] of [
+				[":local z {\n# c\na=1}", "value=a=1)"],
+				[":local z {a=1\n# c\n}", "value=a=1)"],
+				[':local z {"x";\n# c\n"y"}', "value=x;y)"],
+				[":local z {a=1;\n# c\nb=2}", "value=a=1;b=2)"],
+				[":local z {a=1;\r\n# c\r\nb=2}", "value=a=1;b=2)"],
+				[":local z {a=1;\n# c\n# d\nb=2}", "value=a=1;b=2)"],
+				[":local z {a={\n# c\n1}}", "value=a=1)"],
+				[":local z ({\n# c\n1})", "value=1)"],
+				[':local z {1;2\n# c "x\n}', "value=1;2)"],
+				[":foreach i in={1;\n# c\n2} do={:put $i}", "in=1;2)"],
+			] as const) {
+				const il = await parseIl(input);
+				const classes = await highlightClasses(started.chr, input);
+				const data = explainCommand(input);
+				const hash = input.indexOf("#");
+				expect({
+					input,
+					evl: il.startsWith("(evl"),
+					named: il.includes(needle),
+					highlightError: classes.includes("error"),
+					verdict: data.verdict,
+					comment: data.spans.some(
+						(span) => span.class === "comment" && span.start === hash,
+					),
+				}).toEqual({
+					input,
+					evl: true,
+					named: true,
+					highlightError: false,
+					verdict: "pass",
+					comment: true,
+				});
+			}
+
+			// Rejected at the `#` on the device; offline keeps `invalid-hash` there.
+			for (const input of [
+				":local z { # c\na=1}",
+				":local z {# c\na=1}",
+				":local z {a=1;\n  # c\nb=2}",
+				":local z {a=1;\n\t# c\nb=2}",
+				":local z {a=1; # c\nb=2}",
+				":local z {a=1 # c\n}",
+				":local z {a=1;#b=2}",
+				":local z {#test}",
+			]) {
+				const classes = await highlightClasses(started.chr, input);
+				const data = explainCommand(input);
+				const hash = input.indexOf("#");
+				expect({
+					input,
+					parse: PARSE_REJECTED_HINT.test(await parseIl(input)),
+					highlight: classes[hash],
+					verdict: data.verdict,
+					hashes: hashes(input),
+					at: data.diagnostics.find((diagnostic) =>
+						diagnostic.code.endsWith("/invalid-hash"),
+					)?.span?.start,
+				}).toEqual({
+					input,
+					parse: true,
+					highlight: "error",
+					verdict: "fail",
+					hashes: 1,
+					at: hash,
+				});
+			}
+
+			// The comment-only array is rejected, but so is its comment-free twin:
+			// that is the empty-array rule (#511), so both read alike offline.
+			for (const input of [":local z {\n# c\n}", ":local z {}"]) {
+				expect(PARSE_REJECTED_HINT.test(await parseIl(input))).toBe(true);
+				expect(hashes(input)).toBe(0);
+			}
+
+			await recordIntegrationEvidence({
+				suite: "explain value facts against CHR",
+				command: "explain",
+				protocol: "rest-api (:parse IL + highlight)",
+				routerosVersion: started.chr.state.version,
+				quickChrName: started.chr.name,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+				exampleIds: [37],
+			});
+		} finally {
+			await started.chr.destroy();
+		}
+	}, 300_000);
 });

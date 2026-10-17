@@ -990,7 +990,8 @@ comment, a literal hash value, and a hard error at the exact byte.
 | Statement-leading at the document root, after a real statement separator, in a `do`/`else`/`foreach do` body, or immediately inside a `[…]` command substitution | `comment` through newline | Mask it and preserve byte offsets. A command first consumes that lead, so `[:put #test]` keeps `#test` as the value. |
 | First non-space content inside a stored-script brace such as `on-event={ # c` | `comment` | Treat exact `source`/`script` and `on-*`-named brace values as comment-bearing script bodies; a suffix such as `myScript` is not one. |
 | Immediate line start after `\` + newline | `comment`; the pending statement survives | Mask it in both argument views; the continuation-reach rules remain H5/#215. |
-| Inside an array (`{#test}`, `{1;#test}`, `{a=1;#b=2}`) or parenthesized expression (`(1,#test)`) | hard `error` at `#`; `:parse` reports `syntax error` | Do not mask it or emit an array value hint; semantic resolution stops there. |
+| Inside an array (`{#test}`, `{1;#test}`, `{a=1;#b=2}`) or parenthesized expression (`(1,#test)`), except at column 0 inside an array (next row) | hard `error` at `#`; `:parse` reports `syntax error` | Do not mask it or emit an array value hint; semantic resolution stops there. |
+| At column 0 of its own line inside an array, at any depth and in argument values (`:local z {a=1;⏎# c⏎b=2}`, `{a={⏎# c⏎1}}`, `({⏎# c⏎1})`, `:foreach i in={1;⏎# c⏎2} do=…`), including after `\r⏎` and a `\`-continued line (#503) | `comment` through newline; `:parse` drops it (`value=a=1;b=2`) and `highlight` has no `error` on CHR 7.24.5 and 7.22.1 | Mask it with `startsArrayCommentLine`, which every walker asks with its innermost frame. It ends nothing: the array's statement carries on. An indented `#` (space or tab), one after `{`, a value or `;` on the same line, and one at column 0 directly inside `( … )` stay errors. A comment-only array (`{⏎# c⏎}`) is rejected only because an empty array is (#511). |
 | A scope-named brace (`do=`/`else=`/`command=`/`script=`/`source=`/`on-*=`) nested inside an array (`:local z {do={ # c⏎:put 1}}`, `:local z {script={ # c⏎…}}`, `:local z { { # c…}}`) — and likewise a bare `{` or `/menu {` inside an array | hard `error` at `#`; `/console/inspect` request `highlight` classes that byte `error` on CHR 7.23.3 (grounded in #249 on the four `#249` rows plus `bare {`/`source`/`on-event` corners) | A brace bears statements only when its enclosing context already does — `enclosing && braceStartsStatements(…)` on each walker's stack (`contexts`/`delimStack`/`frames`/`stack`). Inside an array the name is an array key and its `{…}` is a nested array. A `[…]` substitution nested in that array does re-enter a statement context, so `[:do { # c…}]` stays a real comment and a bare `{` under a bracket does too. |
 | Inside a `[…]` substitution that is itself nested in an array (`{[:put #test]}`, `{1;[:put #test]}`) | literal value (`none`) — the bracket restores the statement role the array dropped | Keep it as content and keep the enclosing array readable. The role is per frame, so an array or group opened again inside that bracket (`{[:put {#test}]}`, `{[:put (1,#test)]}`) is `error` once more; skipping whole `[…]` regions would wrongly accept those. |
 | In an attribute or bare value (`comment=#test`, `comment=a#b`, `:global y #test`) | literal value (`none` highlight class) | Keep it as content. |
@@ -1027,6 +1028,14 @@ non-RouterOS material: one NGINX server block, one JavaScript highlighter, one
 JSON-like transcript, and two shell-shaped snippets. No RouterOS command reading
 moved; these diagnostics say those bytes are not valid RouterOS, not that the
 foreign snippets were expected to parse as RouterOS.
+
+Corpus re-measurement for #503: one script of 947 moves. It is a pasted console
+session (`forum/amm0/topic-264287-…/post-0005-snippet-01.rsc`, which opens with
+`[admin@MikroTik] > {`), and it moves from `fail` to `warn`. Its `invalid-hash` sat on a column-0
+`# ... more code` line inside the brace after `>`, which the device reads as
+an array (`:local z (1 > {⏎:local a 1⏎# c⏎})` parses). The device rejects the
+script earlier, at the prompt's `@`, which is #512. Every census gate except
+the token census is unchanged; that one gains the two comment spans.
 
 The default text renderer surfaces comment spans in a `comments:` section; JSON
 continues to carry the same ranges as `spans[]` entries with `class: "comment"`.
@@ -1793,8 +1802,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 1,022,805 are classified (71.69%), the remaining
-  403,926 are `unclassified`. The census emits 241,442 tokens (avg 254.7 per
+  1,426,731 analyzed bytes, 1,022,882 are classified (71.69%), the remaining
+  403,849 are `unclassified`. The census emits 241,453 tokens (avg 254.7 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is the
   vocabulary #264 B5 settled. Each B2 fill should move the classified
