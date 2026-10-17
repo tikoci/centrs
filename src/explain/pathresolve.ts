@@ -48,6 +48,15 @@
  *      filter` and `firewall/filter` under `/ip` are one form. If neither table
  *      knows the joined path, offline abstains and the following relative
  *      statements lose context certainty.
+ *   R14 An absolute bare path is navigation only when a shipped table names it
+ *      as a menu, exactly as R13 reads a relative one (#211). The verb-free
+ *      residue R9 and R12 leave (`/terminal/cuu`, a no-argument command neither
+ *      table lists) is a menu or a command, and offline cannot say which. So it
+ *      abstains, and the statements after it lose context certainty until an
+ *      absolute navigation re-establishes it. Absence is not evidence of a
+ *      command either: RouterOS accepts abbreviated menus (`/ip fire conn` is
+ *      `/ip/firewall/connection` in the device's own IL), so this does not read
+ *      the tables as a closed world.
  *
  * Verb-vs-menu identification is deliberately NOT decided here — offline cannot
  * tell `find` (verb) from a deeper menu without a schema (that is Q6). A
@@ -76,13 +85,15 @@
  *   - context-DEPENDENT — a relative statement (`add address=…`) resolves
  *     against the context, so it degrades.
  *
- * Three things make the context unknown, all cases where the statement might
+ * Four things make the context unknown, all cases where the statement might
  * have been navigation and offline cannot read where to:
  *   - a structural defect (the text is unreadable, so it may have been a nav),
  *   - a `/`-led statement whose leading run is unreadable (`/ip/$menu`, and
  *     equally the mixed spelling `/ip route/$menu`), which is a navigation to a
  *     computed menu as easily as it is a command,
- *   - a relative bare path that neither shipped structure table knows (#235).
+ *   - a relative bare path that neither shipped structure table knows (#235),
+ *   - an absolute bare path that neither table knows and no rule reads as a
+ *     command (#211, R14).
  * A dynamic-headed statement (`$x`, `[…]`, `(…)`) is context-NEUTRAL — it
  * evaluates a value and does not navigate — so it must NOT poison; that
  * distinction is the whole reason this lives here rather than in a caller,
@@ -519,6 +530,12 @@ export interface StatementResolution {
 	text: string;
 	/** Offline read this statement as menu navigation, not a command. */
 	isNav: boolean;
+	/**
+	 * A verb-free bare path that neither shipped table knows (#211, #235): it is
+	 * a menu navigation or a command, and offline cannot say which. `isNav` is
+	 * false, and the statements after it lose context certainty.
+	 */
+	maybeNav?: true;
 	/** Context in force BEFORE this statement. */
 	context: string;
 	/**
@@ -772,9 +789,9 @@ function walk(
 			certain = false;
 			continue;
 		}
-		// #235 — a relative bare-word that abstained (neither table) poisons
+		// #235, #211 — a bare path that abstained (neither table) poisons
 		// downstream context, so the next relative statement cannot fabricate.
-		const poisonAbstention = isAbstainedRelativeNav(text, ctx, range);
+		const poisonAbstention = isAbstainedNav(text, ctx, range);
 		// R3 — the statement's own path is the context its brackets see.
 		const stmtCtx = statementPath(text, ctx, range);
 		// Derived BEFORE the poison, from the certainty in force at this statement:
@@ -880,10 +897,10 @@ function walkStatements(
 			certain = false;
 			continue;
 		}
-		// #235 — a relative bare-word that abstained (neither table) poisons
+		// #235, #211 — a bare path that abstained (neither table) poisons
 		// downstream context. Capture before the push so the current statement's
 		// own `contextCertain` stays true while the following statements lose it.
-		const poisonAbstention = isAbstainedRelativeNav(text, ctx, range);
+		const poisonAbstention = isAbstainedNav(text, ctx, range);
 		// Q14 C3b — the cascade. A statement that CONSUMES the context cannot be
 		// resolved against a value the resolver has already admitted it lost.
 		// Applied to the RESOLUTION, not ahead of it, so a statement that would
@@ -892,6 +909,7 @@ function walkStatements(
 		out.push({
 			text,
 			isNav: false,
+			...(poisonAbstention ? { maybeNav: true as const } : {}),
 			context: ctx,
 			...(resolved.path !== null &&
 			!certain &&
@@ -981,6 +999,12 @@ function walkStatements(
  * contradiction R9 closed — and worse than before, since the two modules would
  * now disagree CONFIDENTLY rather than one of them refusing. The same test pins
  * the invariant for both rules.
+ *
+ * R14 (#211) — "absence from both still abstains" was not true here until R14.
+ * A verb-free path neither table knows still came back as a navigation, so
+ * `/terminal/cuu` moved the context and the `print` after it resolved
+ * confidently to `/terminal/cuu/print`. Now it abstains the way R13's relative
+ * path does: the statement is not navigation, and what follows loses certainty.
  */
 function menuNavPath(
 	text: string,
@@ -999,6 +1023,19 @@ function menuNavPath(
 		const reading = readRelativeBare(text, ctx, range);
 		return reading?.kind === "nav" ? reading.path : null;
 	}
+	const reading = readAbsoluteBare(trimmed);
+	return reading?.kind === "nav" ? reading.path : null;
+}
+
+/**
+ * How an ABSOLUTE bare-path statement reads (R9, R12, R14).
+ *
+ * The `/`-led twin of {@link readRelativeBare}, with the same three answers. A
+ * run carrying a vocabulary verb (R9) or naming a published command (R12) is a
+ * COMMAND: `null`. Otherwise it is verb-free, and a shipped table decides: a
+ * known menu is `nav`, and a path neither table knows is `abstain` (R14).
+ */
+function readAbsoluteBare(trimmed: string): BarePathReading | null {
 	if (/[=[({"$]/.test(trimmed)) return null;
 	const tokens = asciiWords(trimmed);
 	if (
@@ -1016,7 +1053,11 @@ function menuNavPath(
 	if (segments.some((segment) => VERBS.has(segment))) return null;
 	// R12 — the same segments, against the published command axis.
 	if (commandVerbIndex(segments) !== null) return null;
-	return joinPath("/", tokens.join("/"));
+	// R14 (#211) — the verb-free residue. Presence in a table decides, as R13
+	// decides a relative one; absence abstains rather than navigate.
+	return isKnownMenuPath(segments)
+		? { kind: "nav", path: joinPath("/", tokens.join("/")) }
+		: { kind: "abstain" };
 }
 
 /**
@@ -1036,13 +1077,13 @@ function menuNavPath(
  * they can drift, and a drift there is silently either a lost navigation or a
  * poisoned document.
  */
-type RelativeBareReading = { kind: "nav"; path: string } | { kind: "abstain" };
+type BarePathReading = { kind: "nav"; path: string } | { kind: "abstain" };
 
 function readRelativeBare(
 	text: string,
 	ctx: string,
 	range: MaskedRange,
-): RelativeBareReading | null {
+): BarePathReading | null {
 	const trimmed = trimAscii(text);
 	if (
 		trimmed.length === 0 ||
@@ -1074,17 +1115,22 @@ function readRelativeBare(
 }
 
 /**
- * #235 — does `text` look like a relative menu navigation that ABSTAINED?
+ * #235, #211 — does `text` look like a menu navigation that ABSTAINED, in
+ * either spelling?
  *
  * Presence in a table → nav; absence → abstain → poison downstream, so the
  * next relative statement cannot resolve against a context that may have moved.
  */
-function isAbstainedRelativeNav(
+function isAbstainedNav(
 	text: string,
 	ctx: string,
 	range: MaskedRange,
 ): boolean {
-	return readRelativeBare(text, ctx, range)?.kind === "abstain";
+	const trimmed = trimAscii(text);
+	const reading = trimmed.startsWith("/")
+		? readAbsoluteBare(trimmed)
+		: readRelativeBare(text, ctx, range);
+	return reading?.kind === "abstain";
 }
 
 function canonicalPath(

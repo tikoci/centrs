@@ -424,6 +424,28 @@ describe("explain/write — the published command axis (#228)", () => {
 		expect(got.verdict).toBe("unknown");
 		expect(got.blockers.map((b) => b.klass)).toEqual(["ambiguous"]);
 	});
+
+	/**
+	 * #211 R14 took the absolute spelling off navigation, but not off the
+	 * unconfirmed-navigation branch it was classified by: its own reading is
+	 * unchanged, and only the statements after it lose their invented path.
+	 */
+	test("an absolute path in neither table keeps its own classification (#211)", () => {
+		const cuu = containsWrite("/terminal/cuu");
+		expect(cuu.verdict).toBe("unknown");
+		expect(cuu.blockers).toMatchObject([
+			{ verb: "cuu", klass: "unknown-verb" },
+		]);
+		expect(containsWrite("/zzz/qqq/reset").verdict).toBe("true");
+		// The `add` after it is `bad command name add` on CHR 7.24.5. Its write
+		// rode on the invented `/terminal/cuu/add`, so it is unknown now.
+		const after = containsWrite("/terminal/cuu\nadd name=x");
+		expect(after.verdict).toBe("unknown");
+		expect(after.blockers.map((b) => b.klass)).toEqual([
+			"unknown-verb",
+			"defect",
+		]);
+	});
 });
 
 describe("explain/write — the (menu, verb) dependency", () => {

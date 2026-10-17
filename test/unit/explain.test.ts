@@ -701,6 +701,33 @@ describe("commands/explain/examples.md — offline", () => {
 			),
 		).toBeFalse();
 	});
+
+	test("34. An unlisted bare path does not become a menu (#211)", async () => {
+		const input = "/terminal/cuu\nprint\nadd name=x";
+		const { data, code } = await explainJson([input]);
+		const [cuu, print, add] = data.structure.statements;
+		expect(cuu?.resolution).toBe("ambiguous");
+		for (const after of [print, add]) {
+			expect(after).toMatchObject({
+				resolution: "unknown",
+				unresolved: "context lost to an earlier unreadable statement",
+				contextCertain: false,
+			});
+			expect(after?.command).toBeUndefined();
+			expect(after?.transport).toBeUndefined();
+		}
+		expect(data.structure.containsWrite).toBe("unknown");
+		expect(data.verdict).toBe("warn");
+		expect(code).toBe(0);
+
+		// A known absolute navigation re-establishes the context.
+		const recovered = await explainJson(["/terminal/cuu\n/ip address\nprint"]);
+		expect(recovered.data.structure.statements[2]).toMatchObject({
+			resolution: "resolved",
+			command: { path: "/ip/address", verb: "print" },
+			contextCertain: true,
+		});
+	});
 });
 
 test("64 KiB separator-free input stays bounded through public explain (#248)", () => {
