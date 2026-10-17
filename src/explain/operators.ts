@@ -1,12 +1,12 @@
 /**
  * The RouterOS operator surface, as the DEVICE describes it (#255).
  *
- * Every row here was scored by `bun run explain:probe:operators` on the three
- * builds the pinned corpus classes `complete` — stable 7.24.2 (which is also
- * the current testing build), long-term 7.23.5 and development 7.25beta3 — so
- * the operator axis and the token partition are measured on the same firmware
- * (#342). A fourth capture, 7.21.5, is kept as an **age anchor** rather than a
- * channel claim: it is the only live evidence that this surface behaves the
+ * Every row here was scored by `bun run explain:probe:operators` on the four
+ * builds the pinned corpus records a channel session for — stable 7.24.5,
+ * long-term 7.23.8, testing 7.25rc2 and development 7.26beta1 — so the
+ * operator axis and the token partition are measured on the same firmware
+ * (#342, #498). A fifth capture, 7.21.5, is kept as an **age anchor** rather
+ * than a channel claim: it is the only live evidence that this surface behaves the
  * same on a pre-7.23 branch. The reviewed slice is
  * `test/fixtures/explain/operators.json` → `sweep`, and
  * `test/unit/explain-operators.test.ts` asserts this table still equals it.
@@ -366,24 +366,25 @@ function notOp(
  * The single version-dependent fact the sweep found.
  *
  * Every operator, arity, precedence level, associativity, `highlight` class and
- * op-axis row is identical on all four swept builds — 7.24.2, 7.23.5,
- * 7.25beta3 and the 7.21.5 age anchor — and identical is a measurement here,
- * not a reading: `buildSweep` diffs each of those axes per version, so a build
- * that re-ranked `->` would appear in `sweep.versionDifferences` rather than in
- * nobody's notes.
+ * op-axis row is identical on all five swept builds — 7.24.5, 7.23.8,
+ * 7.25rc2, 7.26beta1 and the 7.21.5 age anchor — and identical is a
+ * measurement here, not a reading: `buildSweep` diffs each of those axes per
+ * version, so a build that re-ranked `->` would appear in
+ * `sweep.versionDifferences` rather than in nobody's notes.
  *
  * The one row that moved is a RUNTIME semantic, not a lexer fact:
- * `:put ({2;1} > {1;2;3})` evaluates on 7.24.2 and 7.25beta3 and errors on both
- * long-term builds. So the offline lexer needs no version gate for operators —
+ * `:put ({2;1} > {1;2;3})` evaluates on 7.24.5, 7.25rc2 and 7.26beta1 and
+ * errors on both long-term builds. So the offline lexer needs no version gate for operators —
  * and anything that reports what a comparison MEANS does.
  */
 export const ARRAY_COMPARISON_NOTE =
-	"array comparison with `>` evaluates on 7.24.2 and 7.25beta3 and errors on " +
-	"7.23.5 and 7.21.5; the operator table itself is identical on all four. " +
-	"**It is not fixed on current long-term**: 7.23.5 is newer than the 7.23.3 " +
-	"this was first measured on and still errors, so the change rode the 7.24 " +
-	"line and was not backported. The two errors are not the same error: " +
-	"7.23.5 says `cannot compare if array is more than array` and 7.21.5 says " +
+	"array comparison with `>` evaluates on 7.24.5, 7.25rc2 and 7.26beta1 and " +
+	"errors on 7.23.8 and 7.21.5; the operator table itself is identical on all " +
+	"five. **It is not fixed on current long-term**: 7.23.8 is newer than the " +
+	"7.23.3 this was first measured on (and the 7.23.5 of #342) and still " +
+	"errors, so the change rode the 7.24 line and was not backported. The two " +
+	"errors are not the same error: 7.23.8 says `cannot compare if array is more " +
+	"than array` and 7.21.5 says " +
 	"`cannot compare if nothing is more than nothing`, so on 7.21.5 the " +
 	"`{2;1}` operands did not survive to the comparison at all. That is a " +
 	"RUNTIME difference either way — no version disagrees about what `>` is";

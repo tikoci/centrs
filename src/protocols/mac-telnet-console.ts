@@ -640,6 +640,22 @@ const BARE_SYNTAX =
 	/^[ \t]*(?:syntax error|bad command name|(?:expected|missing) [a-z]+(?: [a-z]+)*)[^\n]*\(line \d+ column \d+\)/im;
 
 /**
+ * Whether the printed value of `:parse` carries a rejection, by the same
+ * position-anchored grammar {@link classifyParseResult} throws on. For probes
+ * and censuses that need the verdict as a boolean. On the schema-5 corpus it
+ * agrees with the upstream `response_class` on every one of 5,640 channel and
+ * legacy observations (#498).
+ */
+export function isParseRejection(output: string): boolean {
+	return (
+		WRAPPED_BAD_PARAMETER.test(output) ||
+		BARE_BAD_PARAMETER.test(output) ||
+		WRAPPED_BAD_COMMAND.test(output) ||
+		BARE_SYNTAX.test(output)
+	);
+}
+
+/**
  * Classify the printed value of `:put [:parse "<cli>"]`. Grounded on CHR 7.23.3
  * (see GH#230): `:parse` *never* throws — it returns a value whose text carries
  * the verdict. For a bare menu path the accepted form is `(evl /canonical/path)`

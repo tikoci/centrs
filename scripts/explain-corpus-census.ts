@@ -86,6 +86,7 @@
  */
 
 import { Database } from "bun:sqlite";
+import { populationScripts } from "./corpus-db.ts";
 import {
 	describeResolution,
 	resolveCorpusDb,
@@ -536,25 +537,12 @@ function has(args: readonly string[], name: string): boolean {
 function loadRows(dbPath: string): CorpusRow[] {
 	const db = new Database(dbPath, { readonly: true });
 	try {
-		return db
-			.query(
-				"SELECT path, collection, text, has_cli_prompt FROM source_scripts",
-			)
-			.all()
-			.map((r) => {
-				const row = r as {
-					path: string;
-					collection: string;
-					text: string;
-					has_cli_prompt: number;
-				};
-				return {
-					path: row.path,
-					collection: row.collection,
-					text: row.text,
-					hasCliPrompt: row.has_cli_prompt === 1,
-				};
-			});
+		return populationScripts(db).map((row) => ({
+			path: row.path,
+			collection: row.collection,
+			text: row.text,
+			hasCliPrompt: row.hasCliPrompt === 1,
+		}));
 	} finally {
 		db.close();
 	}

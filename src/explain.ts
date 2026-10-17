@@ -1981,7 +1981,8 @@ function invalidCommandBraceDiagnostics(
 				// A menu block body is a statement list, and a statement may be a
 				// scripting directive or an ABSOLUTE command — neither of which the
 				// enclosing menu can vouch for, and neither of which any array literal
-				// can start with. `/interface { ethernet { :put x } }` is corpus 521,
+				// can start with. `/interface { ethernet { :put x } }` is the shape of
+				// corpus script `forum/amm0/topic-184067-routeros-lsp-for-better-syntax-checking-command-completion-in-editors-like-vscod/post-0014-snippet-02.rsc`,
 				// accepted on 7.21.5/7.23.5/7.24.2/7.25beta3 as
 				// `(evl /interface/ethernet/ (evl /putmessage=…))` — #348.
 				menuBraceAt = braceAt;

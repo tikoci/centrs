@@ -306,7 +306,9 @@
 			"ip-prefix": 1,
 			"ip6-prefix": 1,
 			"time": 1
-		}
+		},
+		"snapshot": "da632dc8e85d",
+		"controlsExcluded": 7
 	},
 	"scalars": [
 		{

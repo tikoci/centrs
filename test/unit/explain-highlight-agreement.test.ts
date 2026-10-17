@@ -113,7 +113,7 @@ describe("#263 — the committed report is what a fresh run measures", () => {
 		);
 	});
 
-	test("the same 70 scripts and bytes are scored on every version", () => {
+	test("the same scripts and bytes are scored on every version", () => {
 		for (const measurement of Object.values(fixture.versions)) {
 			const all = allSplits(measurement);
 			expect(all.scripts).toBe(fixture.slice.scripts);

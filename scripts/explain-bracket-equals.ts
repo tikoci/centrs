@@ -34,8 +34,9 @@
  * delimiter is `[`, with quoted strings and `#` comments skipped. That is a
  * property of the corpus, not of the pipeline, so it is stable across
  * fill-order changes — which is exactly what the old figure was not.
- * `source_scripts` is byte-identical across both #336 repins, so this
- * denominator cannot move without the corpus moving.
+ * The population (`v_corpus_population`, controls excluded) is byte-identical
+ * across the #336 repins and the schema-5 repin (#498), so this denominator
+ * cannot move without the corpus moving.
  *
  * The scan runs on the ANALYZED surface, not the original string: token offsets
  * are UTF-8 byte counts, and 112 of the 948 scripts carry non-ASCII. Mixing the
@@ -84,6 +85,17 @@ import { analyzeCoordinates } from "../src/explain/coordinates.ts";
 import { scanQuotedString } from "../src/explain/quoted-string.ts";
 import { explainCommand } from "../src/explain.ts";
 import {
+	type CorpusProvenance,
+	channelSession,
+	channelSessions,
+	corpusProvenance,
+	describePopulation,
+	isAcceptedParse,
+	type ParseResponseClass,
+	parseObservations,
+	populationScripts,
+} from "./corpus-db.ts";
+import {
 	describeResolution,
 	resolveCorpusDb,
 	unreachableMessage,
@@ -101,9 +113,11 @@ const CLOSERS = ")]}";
  */
 const QUERY_VERBS = new Set(["find", "where"]);
 
-export interface BracketEqualsCensus {
-	/** `source_scripts` rows read. */
+export interface BracketEqualsCensus extends Partial<CorpusProvenance> {
+	/** Population scripts read. */
 	scripts: number;
+	/** The `:parse` run ids read, oldest version first. */
+	runs?: string;
 	/** Scripts carrying at least one bracket-interior `=`. */
 	scriptsWithBracketEquals: number;
 	/** The universe: `=` bytes whose innermost source opener is `[`. */
@@ -127,24 +141,27 @@ export interface BracketEqualsCensus {
 	unclassifiedQuery: number;
 	unclassifiedArgument: number;
 	/**
-	 * Device corroboration, per version-comparable build: `(= …)` head nodes in
-	 * the corpus IL. Not equal to {@link queryComparisons} — IL comparison nodes
+	 * Device corroboration, per channel session: `(= …)` head nodes in the
+	 * corpus IL. Not equal to {@link queryComparisons} — IL comparison nodes
 	 * also come from `:if ($a = $b)` and other contexts the fill already claims —
 	 * but it is the oracle that says query `k=v` lowers to a comparison at all.
 	 */
 	ilComparisonNodes: Record<string, number>;
 	/**
 	 * Whether the device actually backs the query reading, script by script, on
-	 * {@link CORROBORATION_BUILD}.
+	 * the {@link CORROBORATION_CHANNEL} session.
 	 *
-	 * `corroborated` means the IL holds at least as many `(= …)` nodes as this
-	 * scan called query comparisons in that script. The shortfalls are NOT scan
-	 * errors: they are scripts whose enclosing command the capture device could
-	 * not resolve, so it emitted a diagnostic instead of a comparison — a forum
-	 * snippet using `/interface wireless` on a build that answers `bad command
-	 * name wireless` still has a perfectly good `find default-name=…` in its
-	 * text. `rejectedParse` counts scripts the console refused outright, where
-	 * the IL is prose and carries no nodes at all.
+	 * `corroborated` means the device ACCEPTED the script
+	 * (`il-no-recognized-diagnostic`) and its IL holds at least as many
+	 * comparison nodes (`(= …)`, `(!= …)`, `(<= …)`, `(>= …)`) as this scan
+	 * called query comparisons in it. `commandUnresolved` is every other
+	 * readout that is not a plain refusal: an embedded diagnostic, or accepted
+	 * IL with fewer nodes. Typically the capture device could not resolve the
+	 * enclosing command, so it emitted a diagnostic instead of a comparison: a snippet calling `regex` on a build that answers
+	 * `bad command name regex` still has a perfectly good `find …=…` in its
+	 * text. `rejectedParse` counts scripts the console refused outright
+	 * (`response_class = plain-diagnostic`), where the readout is prose and
+	 * carries no nodes at all.
 	 */
 	ilCorroboration: {
 		build: string;
@@ -156,14 +173,15 @@ export interface BracketEqualsCensus {
 }
 
 /**
- * A console rejection is PROSE where IL would be. Same predicate as
- * `explain-operator-census.ts`.
+ * A comparison node whose operator carries an `=` byte. The scan counts `=`
+ * BYTES, so the `=` of `comment!="Optional"` is a query site, and the device
+ * lowers it to `(!= $comment Optional)`, not `(= …)`. Counting only `(= ` read
+ * that script as a shortfall on the schema-5 repin (#498).
  */
-const CONSOLE_REJECTION =
-	/^(syntax error|expected |missing |invalid |unknown |unexpected |no such |bad )/i;
+const QUERY_COMPARISON_NODE = /\((?:=|!=|<=|>=) /g;
 
-/** The build the per-script corroboration is scored on: current stable. */
-export const CORROBORATION_BUILD = "7.24.2";
+/** The channel whose session the per-script corroboration is scored on. */
+export const CORROBORATION_CHANNEL = "stable";
 
 interface EqualsSite {
 	offset: number;
@@ -307,9 +325,17 @@ function analyzedSurface(text: string): string {
 	return out;
 }
 
+export interface BracketEqualsScript {
+	text: string;
+	/** The corroboration session's readout, when the capture has one. */
+	il?: string;
+	responseClass?: ParseResponseClass;
+}
+
 export function census(
-	scripts: readonly { text: string; il?: string }[],
+	scripts: readonly BracketEqualsScript[],
 	ilComparisonNodes: Record<string, number>,
+	corroborationBuild = "",
 ): BracketEqualsCensus {
 	const result: BracketEqualsCensus = {
 		scripts: scripts.length,
@@ -323,14 +349,14 @@ export function census(
 		unclassifiedArgument: 0,
 		ilComparisonNodes,
 		ilCorroboration: {
-			build: CORROBORATION_BUILD,
+			build: corroborationBuild,
 			scriptsWithQueryEquals: 0,
 			corroborated: 0,
 			commandUnresolved: 0,
 			rejectedParse: 0,
 		},
 	};
-	for (const { text, il } of scripts) {
+	for (const { text, il, responseClass } of scripts) {
 		// Both sides in the ANALYZED coordinate space, or the class attribution
 		// silently shifts on every script carrying non-ASCII.
 		const analyzed = analyzedSurface(text);
@@ -360,8 +386,16 @@ export function census(
 		if (queryHere === 0 || il === undefined) continue;
 		const co = result.ilCorroboration;
 		co.scriptsWithQueryEquals++;
-		if (CONSOLE_REJECTION.test(il)) co.rejectedParse++;
-		else if ((il.match(/\(= /g) ?? []).length >= queryHere) co.corroborated++;
+		// Only an accepted readout can corroborate. An embedded diagnostic is a
+		// device rejection whose IL may still carry comparison nodes, so it is
+		// counted with the shortfalls it explains, never as corroboration.
+		if (responseClass === "plain-diagnostic") co.rejectedParse++;
+		else if (
+			responseClass !== undefined &&
+			isAcceptedParse(responseClass) &&
+			(il.match(QUERY_COMPARISON_NODE) ?? []).length >= queryHere
+		)
+			co.corroborated++;
 		else co.commandUnresolved++;
 	}
 	return result;
@@ -414,7 +448,7 @@ export function renderReadmeBlock(c: BracketEqualsCensus): string[] {
 	const builds = Object.keys(c.ilComparisonNodes).sort(compareRouterOsVersion);
 	const co = c.ilCorroboration;
 	return [
-		`Measured by \`bun run explain:bracket-equals\` over the pinned corpus:`,
+		`Measured by \`bun run explain:bracket-equals\` over the population${describePopulation(c)}:`,
 		`**${c.bracketEquals.toLocaleString()}** \`=\` bytes sit inside \`[ … ]\`, across`,
 		`${c.scriptsWithBracketEquals} of ${c.scripts.toLocaleString()} scripts, and **${unclassified.toLocaleString()}** of them come back`,
 		`\`unclassified\` — the operator fill abstains on essentially all of it. No`,
@@ -430,13 +464,13 @@ export function renderReadmeBlock(c: BracketEqualsCensus): string[] {
 		`**${c.expressionEquals.toLocaleString()}** \`=\` bytes whose innermost opener is \`(\`.`,
 		"",
 		`The query reading is the device's, not a guess: on ${co.build}, ${co.corroborated} of the`,
-		`${co.scriptsWithQueryEquals} scripts carrying one have IL with at least as many \`(= …)\` nodes.`,
-		`Of the rest, ${co.rejectedParse} are scripts the console refused outright — their IL is prose,`,
-		`with no nodes of any kind — and ${co.commandUnresolved} use a menu the capture build could not`,
-		`resolve (a forum snippet on \`/interface wireless\` answers \`bad command name`,
-		`wireless\`), so the device never reached the query to lower it. Neither is a`,
-		`counter-example to the reading. Whole-corpus \`(= …)\` head nodes, which also`,
-		`count expression comparisons the fill already claims:`,
+		`${co.scriptsWithQueryEquals} scripts carrying one have IL with at least as many comparison nodes.`,
+		`Of the rest, ${co.rejectedParse} are scripts the console refused outright — their readout is`,
+		`prose, with no nodes of any kind — and ${co.commandUnresolved} lowered fewer comparison nodes than the`,
+		`scan counted, typically because a command the capture build could not resolve`,
+		`(\`bad command name …\`) stopped the device before it reached the query. Neither is`,
+		`a counter-example to the reading. Whole-corpus \`(= …)\` head nodes per channel`,
+		`session, which also count expression comparisons the fill already claims:`,
 		`${builds.map((b) => `${b} ${(c.ilComparisonNodes[b] ?? 0).toLocaleString()}`).join(", ")}.`,
 	];
 }
@@ -527,48 +561,45 @@ export async function main(args: readonly string[]): Promise<number> {
 	console.error(describeResolution(resolution));
 
 	const db = new Database(dbPath, { readonly: true });
-	let scripts: { text: string; il?: string }[];
+	let scripts: BracketEqualsScript[];
+	let corroborationBuild: string;
+	let provenance: CorpusProvenance;
+	let runs: string;
 	const ilComparisonNodes: Record<string, number> = {};
 	try {
-		// LEFT JOIN: `source_scripts` is version-independent and always holds all
-		// 948, while a probe table may not — a script with no row on the
-		// corroboration build must still count in the denominator.
-		scripts = (
-			db
-				.query(
-					"SELECT s.text AS text, p.il_text AS il FROM source_scripts s " +
-						"LEFT JOIN parseil_results p " +
-						"ON p.script_id = s.id AND p.routeros_version = ? " +
-						"ORDER BY s.path",
-				)
-				.all(CORROBORATION_BUILD) as { text: string; il: string | null }[]
-		).map((row) => ({ text: row.text, il: row.il ?? undefined }));
-		// Only the version-comparable builds, for the same reason the operator
-		// census filters: a partial capture cannot support a count.
-		const complete = (
-			db
-				.query(
-					"SELECT routeros_version AS version FROM v_version_coverage " +
-						"WHERE coverage_class = 'complete' ORDER BY routeros_version",
-				)
-				.all() as { version: string }[]
-		).map((row) => row.version);
-		for (const version of complete) {
-			const rows = db
-				.query(
-					"SELECT il_text AS il FROM parseil_results " +
-						"WHERE routeros_version = ? AND il_text IS NOT NULL",
-				)
-				.all(version) as { il: string }[];
+		// Joined from the population side: a script with no observation in the
+		// corroboration session must still count in the denominator.
+		const session = channelSession(db, CORROBORATION_CHANNEL);
+		corroborationBuild = session.version;
+		const observed = new Map(
+			parseObservations(db, [session.parseRunId]).map((o) => [o.scriptId, o]),
+		);
+		scripts = populationScripts(db).map((row) => {
+			const o = observed.get(row.id);
+			return o?.il === undefined
+				? { text: row.text }
+				: { text: row.text, il: o.il, responseClass: o.responseClass };
+		});
+		// Only the channel sessions, for the same reason the operator census
+		// filters: a legacy capture cannot support a count.
+		const sessions = channelSessions(db);
+		runs = sessions.map((s) => s.parseRunId).join(",");
+		for (const s of sessions) {
 			let nodes = 0;
-			for (const row of rows) nodes += (row.il.match(/\(= /g) ?? []).length;
-			ilComparisonNodes[version] = nodes;
+			for (const o of parseObservations(db, [s.parseRunId]))
+				nodes += (o.il?.match(/\(= /g) ?? []).length;
+			ilComparisonNodes[s.version] = nodes;
 		}
+		provenance = corpusProvenance(db, dbPath);
 	} finally {
 		db.close();
 	}
 
-	const result = census(scripts, ilComparisonNodes);
+	const result = {
+		...census(scripts, ilComparisonNodes, corroborationBuild),
+		runs,
+		...provenance,
+	};
 
 	if (args.includes("--check")) {
 		// A gate cannot pass on an unstated premise. `resolveCorpusDb` prefers a

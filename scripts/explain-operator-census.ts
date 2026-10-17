@@ -39,19 +39,22 @@
  * column: a head seen in one script is one author's string, a head seen in
  * three hundred is a language feature.
  *
- * ## The version set is part of the measurement
+ * ## The session set is part of the measurement
  *
- * The census reads ONLY the builds where both oracles cover every script
- * (`v_version_coverage.coverage_class = 'complete'`); see
- * {@link completeVersions}. Occurrences are summed across versions, so
- * admitting a partial capture would scale the headline by an artifact of what
- * was captured rather than by anything about the language. The `versions` field
- * states which builds a given census actually read, and the gate compares it —
- * a census is not comparable to one taken over a different set.
+ * The census counts ONLY the recorded channel sessions (`capture_channels`):
+ * one `:parse` run per release channel, each bound to exact submitted inputs
+ * and one device environment (#498). Occurrences are summed across sessions,
+ * so admitting a legacy capture (913 scripts, unknown input bytes) would scale
+ * the headline by an artifact of what was captured rather than by anything
+ * about the language. The `versions` and `runs` fields state which sessions a
+ * given census actually read, and the gate compares both. A census is not
+ * comparable to one taken over a different set.
  *
- * Those builds do NOT agree with each other, and that is a finding, not noise:
- * on `7d62355`, parseIL differs on 87 of 948 scripts between long-term 7.23.5
- * and stable 7.24.2, but on only 11 between stable and development 7.25beta3.
+ * The verdict is the upstream classifier's `response_class`, never a prose
+ * test on the IL. Only `il-no-recognized-diagnostic` is counted. An
+ * `embedded-diagnostic` row is IL that carries a device diagnostic
+ * (`(evl bad parameter … (line 1 column 49) …)`), so its "heads" include
+ * prose like `line`; it is a rejection, and is counted as one.
  *
  * ```
  * bun run explain:operator-census              # markdown
@@ -62,9 +65,8 @@
  * ```
  *
  * The corpus is not in this repo; it is resolved through `corpus-fetch.ts` and
- * the source plus its sha256 are announced on stderr (#186). Read
- * `parseil_results.il_text` and NEVER the `ok` column: `:parse` returns its
- * diagnostic as a value, so a rejected script still records `ok=1`.
+ * read through `corpus-db.ts`, and the source plus its sha256 are announced on
+ * stderr (#186).
  */
 
 import { Database } from "bun:sqlite";
@@ -72,20 +74,20 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { compareRouterOsVersion } from "../src/core/preflight.ts";
 import {
+	allParseRunIds,
+	type CorpusProvenance,
+	channelSessions,
+	corpusProvenance,
+	isAcceptedParse,
+	type ParseObservation,
+	parseObservations,
+	populationScripts,
+} from "./corpus-db.ts";
+import {
 	describeResolution,
 	resolveCorpusDb,
 	unreachableMessage,
 } from "./corpus-fetch.ts";
-
-/**
- * A RouterOS console rejection is PROSE where a result would be IL, and always
- * opens with one of these verbs. Same predicate as
- * `test/integration/explain-string-escape.test.ts` — matching the opening word
- * rather than `expected .* value` keeps `expected end of command` and `bad
- * command name` on the reject side.
- */
-const CONSOLE_REJECTION =
-	/^(syntax error|expected |missing |invalid |unknown |unexpected |no such |bad )/i;
 
 export type HeadShape = "punctuation" | "word" | "other";
 
@@ -103,14 +105,23 @@ export function headShape(head: string): HeadShape {
  * `explain-value-census.ts` does. Comparing serialized tallies would make JSON
  * key order — which is corpus visit order — read as drift (#260).
  */
-export interface OperatorCensus {
+export interface OperatorCensus extends Partial<CorpusProvenance> {
 	sourceScripts: number;
+	/** Observations that carry a device readout (the 413 row carries none). */
 	ilRows: number;
+	/** `il-no-recognized-diagnostic`, the only rows whose heads are counted. */
 	acceptedRows: number;
+	/** Plain and embedded diagnostics together. */
 	rejectedRows: number;
+	/** Of {@link rejectedRows}, IL carrying an embedded device diagnostic. */
+	embeddedDiagnosticRows: number;
+	/** Observations with no readout at all: a failed acquisition. */
+	captureFailedRows: number;
 	/** IL the tolerant reader could not balance. Reported, never swallowed. */
 	unbalancedRows: number;
 	versions: string;
+	/** The `:parse` run ids counted, in {@link versions} order. */
+	runs: string;
 	distinctHeads: number;
 	/** `head` -> occurrences in head position, across every accepted IL row. */
 	headOccurrences: Record<string, number>;
@@ -124,26 +135,24 @@ export interface OperatorCensus {
 	headShapes: Record<string, string>;
 	/**
 	 * `head` -> the OLDEST RouterOS build whose IL shows it, read across EVERY
-	 * captured version including the partial ones.
+	 * captured version including the legacy ones.
 	 *
 	 * This is the age axis, and it is deliberately the one field that does not
-	 * obey the `coverage_class = 'complete'` filter. A partial capture cannot
-	 * support a *count* — it covers 913 of 948 scripts, so a sum over it means
-	 * nothing — but it is perfectly good evidence that a head EXISTED on that
-	 * build. Presence is monotone in coverage: seeing `any` on 7.20.8 proves
-	 * 7.20.8 had it, and no amount of missing scripts can take that back.
+	 * obey the channel-session filter. A legacy capture cannot support a
+	 * *count* — it covers 913 of 948 scripts, so a sum over it means nothing —
+	 * but it is perfectly good evidence that a head EXISTED on that build.
+	 * Presence is monotone in coverage: seeing `any` on 7.20.8 proves 7.20.8
+	 * had it, and no amount of missing scripts can take that back.
 	 *
-	 * So the partial builds earn their keep here and nowhere else: they answer
+	 * So the legacy builds earn their keep here and nowhere else: they answer
 	 * "since when", never "how often". Never sum or compare these.
 	 *
 	 * **A late first-seen is not evidence of a new operator.** Coverage is what
-	 * moved, not the language: the partial builds have no `tangentsoft` stratum,
-	 * so anything appearing only in those 35 device `/export` captures cannot
-	 * date earlier than the first complete build no matter how old it really is.
-	 * On `7d62355` that is exactly the two heads that do not reach 7.20.8 —
-	 * `configuration.mode=` and `[system`, both `other`-shaped string noise from
-	 * that stratum. Read a late date as "not captured before here", and promote
-	 * it to a version claim only from a build that actually covered the script.
+	 * moved, not the language. The legacy builds have no `tangentsoft` stratum,
+	 * and they ran the base package only, so a script that needs a package was
+	 * rejected there and its heads first appear on the all-packages channel
+	 * sessions. Read a late date as "not captured before here", and promote it
+	 * to a version claim only from a build that actually covered the script.
 	 */
 	headFirstSeen: Record<string, string>;
 	/** Every version read for {@link headFirstSeen}, oldest first. */
@@ -240,18 +249,17 @@ function bump(counts: Record<string, number>, key: string): void {
 	counts[key] = (counts[key] ?? 0) + 1;
 }
 
-export interface IlRow {
-	scriptId: number;
-	version: string;
-	il: string;
-}
+export type IlRow = Pick<
+	ParseObservation,
+	"scriptId" | "version" | "runId" | "responseClass" | "il"
+>;
 
 /**
- * @param rows IL from the version-comparable builds only; every count is a sum
- *   over these, so a ragged set would scale the headline by an artifact.
- * @param historyRows IL from EVERY captured build, partial ones included, used
- *   for {@link OperatorCensus.headFirstSeen} and nothing else. Defaults to
- *   `rows`, which makes the age axis no older than the comparable set.
+ * @param rows observations from the channel sessions only; every count is a
+ *   sum over these, so a ragged set would scale the headline by an artifact.
+ * @param historyRows observations from EVERY `:parse` run, legacy ones
+ *   included, used for {@link OperatorCensus.headFirstSeen} and nothing else.
+ *   Defaults to `rows`, which makes the age axis no older than the sessions.
  */
 export function census(
 	rows: readonly IlRow[],
@@ -260,11 +268,14 @@ export function census(
 ): OperatorCensus {
 	const result: OperatorCensus = {
 		sourceScripts,
-		ilRows: rows.length,
+		ilRows: 0,
 		acceptedRows: 0,
 		rejectedRows: 0,
+		embeddedDiagnosticRows: 0,
+		captureFailedRows: 0,
 		unbalancedRows: 0,
 		versions: "",
+		runs: "",
 		distinctHeads: 0,
 		headOccurrences: {},
 		headScripts: {},
@@ -278,10 +289,19 @@ export function census(
 	/** `head` -> the script ids it was seen in, so scripts are counted once. */
 	const scriptsPerHead = new Map<string, Set<number>>();
 
+	const runs = new Map<string, string>();
 	for (const row of rows) {
 		versions.add(row.version);
-		if (CONSOLE_REJECTION.test(row.il)) {
+		runs.set(row.runId, row.version);
+		if (row.il === undefined) {
+			result.captureFailedRows++;
+			continue;
+		}
+		result.ilRows++;
+		if (!isAcceptedParse(row.responseClass)) {
 			result.rejectedRows++;
+			if (row.responseClass === "embedded-diagnostic")
+				result.embeddedDiagnosticRows++;
 			continue;
 		}
 		result.acceptedRows++;
@@ -302,16 +322,20 @@ export function census(
 	}
 	for (const [head, seen] of scriptsPerHead)
 		result.headScripts[head] = seen.size;
-	result.versions = [...versions].sort().join(",");
+	result.versions = [...versions].sort(compareRouterOsVersion).join(",");
+	result.runs = [...runs]
+		.sort(([, a], [, b]) => compareRouterOsVersion(a, b))
+		.map(([id]) => id)
+		.join(",");
 	result.distinctHeads = Object.keys(result.headOccurrences).length;
 
 	// The age axis, over every build. Rejected IL is skipped the same way the
-	// counting pass skips it: a console rejection is the device refusing to
-	// parse, so its text is a diagnostic and its "heads" are prose, not history.
+	// counting pass skips it: its text carries a diagnostic, and the "heads" a
+	// diagnostic contributes are prose, not history.
 	const historyVersions = new Set<string>();
 	for (const row of historyRows) {
 		historyVersions.add(row.version);
-		if (CONSOLE_REJECTION.test(row.il)) continue;
+		if (row.il === undefined || !isAcceptedParse(row.responseClass)) continue;
 		for (const node of flattenIl(readIlTree(row.il))) {
 			const seen = result.headFirstSeen[node.head];
 			if (seen === undefined || compareRouterOsVersion(row.version, seen) < 0)
@@ -363,9 +387,12 @@ function renderMarkdown(result: OperatorCensus): string {
 	);
 	const versions = result.versions.split(",");
 	const lines = [
-		`corpus: ${result.sourceScripts} scripts, ${result.ilRows} IL rows ` +
-			`(${result.acceptedRows} accepted, ${result.rejectedRows} rejected, ` +
-			`${result.unbalancedRows} unbalanced), versions ${result.versions}`,
+		`corpus: ${result.sourceScripts} scripts (snapshot ${result.snapshot ?? "?"}, ` +
+			`${result.controlsExcluded ?? "?"} controls excluded), ${result.ilRows} IL rows ` +
+			`(${result.acceptedRows} accepted, ${result.rejectedRows} rejected of which ` +
+			`${result.embeddedDiagnosticRows} embedded, ${result.unbalancedRows} unbalanced), ` +
+			`${result.captureFailedRows} capture failures, versions ${result.versions}`,
+		`runs: ${result.runs}`,
 		`distinct heads: ${result.distinctHeads}`,
 		"",
 		`| head | shape | scripts | occurrences | arities | ${versions.join(" | ")} |`,
@@ -458,37 +485,6 @@ export function diffAgainstFixture(
 	return drift;
 }
 
-/**
- * The builds this census is allowed to read: those where BOTH oracles cover
- * EVERY script (`v_version_coverage.coverage_class = 'complete'`).
- *
- * The census sums occurrences across versions, so a ragged version set silently
- * scales the headline: the `7d62355` snapshot carries three complete builds at
- * 948 scripts and three partial ones at 913, and admitting all six inflated
- * every count by ~20% for no reason a reader could see. Filtering here keeps the
- * universe rectangular — one row per script per build — so a moved number means
- * the language moved, not that a capture landed.
- *
- * Returns `[]` when the view is absent (a pre-v4 snapshot); the caller turns
- * that into an actionable repin message rather than a bare SQL error.
- */
-function completeVersions(db: Database): string[] {
-	const hasView = db
-		.query(
-			"SELECT 1 FROM sqlite_master WHERE type = 'view' AND name = 'v_version_coverage'",
-		)
-		.get();
-	if (hasView === null) return [];
-	return (
-		db
-			.query(
-				"SELECT routeros_version AS version FROM v_version_coverage " +
-					"WHERE coverage_class = 'complete' ORDER BY routeros_version",
-			)
-			.all() as { version: string }[]
-	).map((row) => row.version);
-}
-
 export async function main(args: readonly string[]): Promise<number> {
 	const resolution = resolveCorpusDb(flag(args, "--db"));
 	// stderr, not stdout: `--json` is piped into the fixture.
@@ -506,37 +502,19 @@ export async function main(args: readonly string[]): Promise<number> {
 	let rows: IlRow[];
 	let historyRows: IlRow[];
 	let sourceScripts: number;
+	let provenance: CorpusProvenance;
 	try {
-		const complete = completeVersions(db);
-		if (complete.length === 0) {
-			console.error(
-				"::error title=explain operator census::the corpus has no " +
-					"`coverage_class = 'complete'` build, so there is no version-comparable " +
-					"IL to census. The pinned snapshot must be schema v4 or newer and carry " +
-					"at least one build with both oracles over every script. Re-pin with " +
-					"`bun run corpus:fetch --repin <40-hex commit>`, and fast-forward a " +
-					"sibling lsp-routeros-ts checkout if one is shadowing the cache.",
-			);
-			return 1;
-		}
-		historyRows = db
-			.query(
-				"SELECT script_id AS scriptId, routeros_version AS version, il_text AS il " +
-					"FROM parseil_results WHERE il_text IS NOT NULL " +
-					"ORDER BY routeros_version, script_id",
-			)
-			.all() as IlRow[];
-		const comparable = new Set(complete);
-		rows = historyRows.filter((row) => comparable.has(row.version));
-		sourceScripts = (
-			db.query("SELECT COUNT(*) AS n FROM source_scripts").get() as {
-				n: number;
-			}
-		).n;
+		rows = parseObservations(
+			db,
+			channelSessions(db).map((session) => session.parseRunId),
+		);
+		historyRows = parseObservations(db, allParseRunIds(db));
+		sourceScripts = populationScripts(db).length;
+		provenance = corpusProvenance(db, dbPath);
 	} finally {
 		db.close();
 	}
-	const result = census(rows, sourceScripts, historyRows);
+	const result = { ...census(rows, sourceScripts, historyRows), ...provenance };
 
 	if (args.includes("--check")) {
 		// A gate cannot pass on an unstated premise. `resolveCorpusDb` prefers a

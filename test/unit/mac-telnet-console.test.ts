@@ -5,6 +5,7 @@ import {
 	classifyParseResult,
 	emulateScreen,
 	extractCommandOutput,
+	isParseRejection,
 	ROUTEROS_PROMPT_RE,
 } from "../../src/protocols/mac-telnet-console.ts";
 
@@ -283,6 +284,27 @@ describe("parse-oracle.json (GH#230 frozen fixtures, CHR 7.23.3)", () => {
 			column: number;
 		}>;
 	};
+
+	test("isParseRejection is classifyParseResult's verdict as a boolean (#498)", () => {
+		// Probes and censuses read the boolean; the gate reads the throw. One
+		// grammar, so they cannot disagree about any captured return.
+		const rows = [
+			...oracle.canonicalAccepted,
+			...oracle.badParameter,
+			...oracle.badCommandName,
+			...oracle.syntaxExpected,
+		];
+		expect(rows.length).toBeGreaterThan(10);
+		for (const row of rows) {
+			let threw = false;
+			try {
+				classifyParseResult(row.raw, row.input);
+			} catch {
+				threw = true;
+			}
+			expect(isParseRejection(row.raw)).toBe(threw);
+		}
+	});
 
 	test("fixture shape carries the class vocabulary", () => {
 		expect(oracle.chr).toMatch(/7\.23/);

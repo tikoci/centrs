@@ -61,6 +61,13 @@ async function parse(src: string): Promise<string> {
 	return exec(`:put [:parse "${src}"]`);
 }
 
+/**
+ * A WHOLE-PROBE rejection only. Deliberately not `isParseRejection`: an
+ * embedded `(<%% bad command name 1 …)` is how the device says it read
+ * `{1;2}` as a code body, and {@link classify} reads that as the `code`
+ * outcome. Treating it as a rejection (the #498 corpus rule, where it is one)
+ * turned all 21 code rows into `error` on 7.24.5.
+ */
 function rejected(il: string): boolean {
 	return /syntax error|expected /.test(il);
 }

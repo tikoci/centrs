@@ -1,19 +1,18 @@
 /**
- * Cut the committed stratified slice of the Q13 per-character highlight streams
- * (#186 workstream 3, gating #263).
+ * Cut the committed stratified slice of the per-character highlight streams
+ * (#186 workstream 3, gating #263; read from the corpus since #498).
  *
  * ## Why a slice exists at all
  *
  * `/console/inspect request=highlight` is the ONLY per-token oracle RouterOS
- * offers. The corpus DB cannot stand in for it: `highlight_results` stores
- * summary statistics — `token_count`, `elapsed_ms`, and a
- * `token_types_json` that is the *distinct set* of classes in a script. No
- * offsets, no per-token classes. The per-token capture is
- * `.scratch/explain-lab-q13-streams.v<version>.json`, ~7.5 MB per RouterOS
- * version, produced by `bun run explain:probe:highlight-recapture`. Committing
- * 15 MB of it to measure a trend line is not a trade worth making; committing
- * nothing leaves the measurement runnable on one machine. So: a slice, chosen
- * by a rule stated in the output.
+ * offers. Since schema 5 the pinned corpus carries it: every channel session's
+ * highlight run stores the per-character stream as run-length
+ * `[class, count]` pairs (`response_encoding = 'highlight-rle-v1'`), bound to
+ * the exact submitted bytes and one device environment. Before #498 the only
+ * copy was `.scratch/explain-lab-q13-streams.v<version>.json`, ~7.5 MB per
+ * version on one machine. The scorer still reads a committed slice rather
+ * than the 36 MB corpus, so the agreement report runs on every PR without a
+ * download. So: a slice, chosen by a rule stated in the output.
  *
  * ## The rule
  *
@@ -24,8 +23,10 @@
  *     stream does not concatenate to the document. A consumer scoring an
  *     offline lexer over a partial document would read the cut as a mismatch.
  *     The truncation FACT is metadata and is recorded in `selection.excluded`.
- *   - **outside the split** (2 scripts): the content-hash duplicates the
- *     partition dropped. Keeping them double-weights one document.
+ *   - **outside the split** (37 scripts): the 2 content-hash duplicates the
+ *     partition dropped, which would double-weight one document, and the 35
+ *     scripts added after the frozen 913-script split was cut, which belong to
+ *     neither arm (`test/fixtures/explain/README.md`).
  *
  * Neither exclusion costs a class: every class present in the full capture is
  * still present in the universe, which the script asserts rather than assumes.
@@ -46,11 +47,20 @@
  * The `_source` block says so in the fixture itself, because the number will
  * outlive this comment.
  *
- * Run: bun run explain:highlight-slice [--streams <dir>] [--out <path>]
+ * Run: bun run explain:highlight-slice [--db <path>] [--out <path>]
+ *      bun run explain:highlight-slice:check   # gate: fresh cut vs fixture
  */
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
+import {
+	type ChannelSession,
+	channelSessions,
+	type HighlightObservation,
+	type HighlightPair,
+	highlightObservations,
+	populationScripts,
+} from "./corpus-db.ts";
 import {
 	describeResolution,
 	resolveCorpusDb,
@@ -58,25 +68,19 @@ import {
 } from "./corpus-fetch.ts";
 
 /**
- * RouterOS versions captured, base first. The base carries the pairs.
+ * The channel whose stream every script carries. The others serialize as
+ * `null` where they match it, so the base choice is what the fixture costs.
+ * Stable is the build users are told to run, and on the #498 sessions the
+ * newer channels agree with it on almost every script, so basing anywhere
+ * else would pay for the long-term split more than once.
  *
- * These are the three builds the pinned corpus classes `complete`
- * (`v_version_coverage.coverage_class`), and they cover all four current
- * release channels: stable 7.24.2, long-term 7.23.5, development 7.25beta3 —
- * and **testing, which is the same 7.24.2 build as stable**, so it is measured
- * here rather than missing from it. Before #342 this was
- * `7.23.2` / `7.24rc2`, neither of which was a current channel and neither of
- * which the corpus covers with both oracles, so the token-partition score and
- * the operator axis were never about the same firmware.
- *
- * **Stable is the base on purpose.** A script whose stream matches the base
- * serializes as `null`, so the base choice is what the fixture costs. On this
- * capture set highlight agrees exactly between stable and development (0 of 948
- * differ) and splits from long-term on 33 — so basing on 7.24.2 pays for those
- * 33 once, while basing on 7.23.5 would pay for them twice.
+ * The version set itself is the corpus's channel sessions, read at cut time:
+ * long-term, stable, testing and development, each one recorded run. Before
+ * #342 this was `7.23.2` / `7.24rc2`, neither a current channel, so the
+ * token-partition score and the operator axis were never about the same
+ * firmware. Before #498 it was a hand-listed trio of `.scratch` files.
  */
-const VERSIONS = ["7.24.2", "7.23.5", "7.25beta3"] as const;
-type Version = (typeof VERSIONS)[number];
+const BASE_CHANNEL = "stable";
 
 /** Carriers to take per (split, class) cell. */
 const CARRIERS_PER_CELL = 4;
@@ -99,7 +103,6 @@ function replaceNonAscii(text: string, replacement: string): string {
 	return result;
 }
 
-const DEFAULT_STREAM_DIR = ".scratch";
 const DEFAULT_OUT = resolve(
 	import.meta.dir,
 	"../test/fixtures/explain/highlight-streams.slice.json",
@@ -109,27 +112,22 @@ const PARTITION = resolve(
 	"../test/fixtures/explain/corpus-partition.json",
 );
 
-type Pair = [text: string, cls: string];
+type Pair = HighlightPair;
 
-interface CapturedStream {
-	bytes: number;
-	truncated: boolean;
-	tokenCount: number;
-	aligned: boolean;
-	pairs?: Pair[];
-}
-
+/**
+ * One RouterOS build's highlight streams, keyed by population path.
+ *
+ * Keyed by BUILD, not channel: the fixture's `streams[<version>]` is a build
+ * axis, and two channels can carry the same build (stable and testing did on
+ * the #342 pin). Every session of a build is loaded, and the extras must
+ * match the primary stream for stream, or the slice refuses.
+ */
 interface Capture {
-	routerosVersion: string;
-	chrBuildTime: string;
-	capturedAt: string;
-	corpusRows: number;
-	aligned: number;
-	misaligned: number;
-	/** Absent on captures cut before REST failures were split out of `misaligned`. */
-	failed?: number;
-	truncated: number;
-	streams: Record<string, CapturedStream>;
+	/** Primary first: the base channel if it carries this build. */
+	sessions: ChannelSession[];
+	streams: Map<string, HighlightObservation>;
+	/** Paths whose stream differs between two sessions of this build. */
+	sessionDisagreements: string[];
 }
 
 interface PartitionGroup {
@@ -159,42 +157,90 @@ function classesOf(streams: readonly (Pair[] | undefined)[]): Set<string> {
 }
 
 /**
- * Serialized cost of one script in the output: the base pairs, plus the other
+ * Serialized cost of one script in the output: the base pairs, plus another
  * version's only when it differs. Drives smallest-first selection.
  */
-function costOf(pairsByVersion: Map<Version, Pair[]>): number {
-	const base = JSON.stringify(pairsByVersion.get(VERSIONS[0]) ?? []);
+function costOf(versions: readonly string[], byVersion: Map<string, Pair[]>) {
+	const base = JSON.stringify(byVersion.get(versions[0] as string) ?? []);
 	let total = base.length;
-	for (const version of VERSIONS.slice(1)) {
-		const other = JSON.stringify(pairsByVersion.get(version as Version) ?? []);
+	for (const version of versions.slice(1)) {
+		const other = JSON.stringify(byVersion.get(version) ?? []);
 		if (other !== base) total += other.length;
 	}
 	return total;
 }
 
 export async function main(args: readonly string[]): Promise<number> {
-	const streamDir = flag(args, "--streams") ?? DEFAULT_STREAM_DIR;
+	// `--check` re-cuts and compares instead of writing: the slice is now cut
+	// from the pinned corpus, so CI can hold it to the pin like a census.
+	const check = args.includes("--check");
 	const outPath = flag(args, "--out") ?? DEFAULT_OUT;
 
-	const captures = new Map<Version, Capture>();
-	const sourceHashes: Record<string, string> = {};
-	for (const version of VERSIONS) {
-		const path = `${streamDir}/explain-lab-q13-streams.v${version}.json`;
-		const file = Bun.file(path);
-		if (!(await file.exists())) {
+	const corpus = resolveCorpusDb(flag(args, "--db"));
+	if (corpus.warning) {
+		console.error(`::warning title=explain highlight slice::${corpus.warning}`);
+		if (check) {
 			console.error(
-				`::error title=explain highlight slice::${path} is not present\n` +
-					"The full per-character captures are ~7.5 MB per version and are not " +
-					"committed. Recapture them with `bun run explain:probe:highlight-recapture` " +
-					"against a CHR of each version, or pass --streams <dir>.",
+				"::error title=explain highlight slice::refusing to check against a " +
+					"corpus that is not the pinned snapshot — the result would not be " +
+					"comparable to CI's.",
 			);
 			return 1;
 		}
-		sourceHashes[path] = sha256(new Uint8Array(await file.arrayBuffer()));
-		captures.set(version, (await file.json()) as Capture);
 	}
-
-	const base = captures.get(VERSIONS[0]) as Capture;
+	if (corpus.path === undefined) {
+		console.error(unreachableMessage("explain highlight slice"));
+		return 1;
+	}
+	console.error(describeResolution(corpus));
+	const db = new Database(corpus.path, { readonly: true });
+	const captures = new Map<string, Capture>();
+	const corpusText = new Map<string, string>();
+	let VERSIONS: string[];
+	try {
+		const sessions = channelSessions(db);
+		const base = sessions.find((s) => s.channel === BASE_CHANNEL);
+		if (base === undefined)
+			throw new Error(`the corpus records no \`${BASE_CHANNEL}\` session`);
+		const ordered = [base, ...sessions.filter((s) => s !== base)];
+		VERSIONS = [...new Set(ordered.map((s) => s.version))];
+		const streamsOf = (session: ChannelSession) =>
+			new Map(
+				highlightObservations(db, session.highlightRunId).map((o) => [
+					o.path,
+					o,
+				]),
+			);
+		for (const version of VERSIONS) {
+			const [primary, ...others] = ordered.filter((s) => s.version === version);
+			const streams = streamsOf(primary as ChannelSession);
+			const sessionDisagreements = new Set<string>();
+			for (const other of others)
+				for (const [path, o] of streamsOf(other))
+					if (
+						JSON.stringify(o.pairs) !== JSON.stringify(streams.get(path)?.pairs)
+					)
+						sessionDisagreements.add(path);
+			captures.set(version, {
+				sessions: [primary as ChannelSession, ...others],
+				streams,
+				sessionDisagreements: [...sessionDisagreements].sort(),
+			});
+		}
+		for (const row of populationScripts(db)) corpusText.set(row.path, row.text);
+	} finally {
+		db.close();
+	}
+	const counters = (capture: Capture) => {
+		const rows = [...capture.streams.values()];
+		return {
+			rows: rows.length,
+			aligned: rows.filter((r) => r.acquired && r.aligned).length,
+			misaligned: rows.filter((r) => r.acquired && !r.aligned).length,
+			failed: rows.filter((r) => !r.acquired).length,
+			truncated: rows.filter((r) => r.truncated).length,
+		};
+	};
 
 	// --- the captures must be what they claim, before anything reads them ----
 	//
@@ -205,50 +251,42 @@ export async function main(args: readonly string[]): Promise<number> {
 	// looks exactly like a script with nothing to say. So the claims are only
 	// made after the inputs are verified, not repaired around.
 	const captureProblems: string[] = [];
+	const populationPaths = [...corpusText.keys()];
 	for (const version of VERSIONS) {
 		const capture = captures.get(version) as Capture;
-		// A file named v7.23.2 holding a 7.99 capture would publish the alias.
-		if (capture.routerosVersion !== version) {
+		const c = counters(capture);
+		if (c.misaligned > 0 || c.failed > 0) {
 			captureProblems.push(
-				`the capture at v${version} reports routerosVersion "${capture.routerosVersion}"`,
+				`v${version} has ${c.misaligned} misaligned and ${c.failed} failed ` +
+					"rows — the corpus session is not sliceable",
 			);
 		}
-		const paths = Object.keys(capture.streams);
-		if (paths.length !== capture.corpusRows) {
+		if (capture.sessionDisagreements.length > 0) {
 			captureProblems.push(
-				`v${version} holds ${paths.length} streams but claims corpusRows=${capture.corpusRows}`,
+				`v${version} is carried by ${capture.sessions.map((s) => s.channel).join(" and ")}, ` +
+					`whose streams differ on ${capture.sessionDisagreements.length} scripts, ` +
+					`e.g. ${capture.sessionDisagreements.slice(0, 3).join(", ")}`,
 			);
 		}
-		const counted =
-			capture.aligned + capture.misaligned + (capture.failed ?? 0);
-		if (counted !== capture.corpusRows) {
+		// Every version must cover exactly the population, or a version-only
+		// class or a version difference is invisible rather than absent. Held
+		// to the population, not to the base session: a subset every session
+		// shares would otherwise pass and shrink the universe unannounced.
+		const missing = populationPaths.filter((p) => !capture.streams.has(p));
+		const unexpected = [...capture.streams.keys()].filter(
+			(p) => !corpusText.has(p),
+		);
+		if (missing.length > 0 || unexpected.length > 0) {
 			captureProblems.push(
-				`v${version} counters do not add up: aligned ${capture.aligned} + ` +
-					`misaligned ${capture.misaligned} + failed ${capture.failed ?? 0} ` +
-					`!= corpusRows ${capture.corpusRows}`,
+				`v${version} covers ${capture.streams.size} scripts of a ` +
+					`${populationPaths.length}-script population` +
+					(missing.length > 0
+						? `, missing e.g. ${missing.slice(0, 3).join(", ")}`
+						: "") +
+					(unexpected.length > 0
+						? `, outside it e.g. ${unexpected.slice(0, 3).join(", ")}`
+						: ""),
 			);
-		}
-		if (capture.misaligned > 0 || (capture.failed ?? 0) > 0) {
-			captureProblems.push(
-				`v${version} has ${capture.misaligned} misaligned and ` +
-					`${capture.failed ?? 0} failed rows — recapture before slicing`,
-			);
-		}
-		// Every version must cover the same scripts, or a version-only class or a
-		// version difference is invisible rather than absent.
-		const basePaths = Object.keys(base.streams);
-		if (paths.length !== basePaths.length) {
-			captureProblems.push(
-				`v${version} covers ${paths.length} scripts, v${VERSIONS[0]} covers ${basePaths.length}`,
-			);
-		} else {
-			const missing = basePaths.filter((p) => capture.streams[p] === undefined);
-			if (missing.length > 0) {
-				captureProblems.push(
-					`v${version} is missing ${missing.length} scripts present in ` +
-						`v${VERSIONS[0]}, e.g. ${missing.slice(0, 3).join(", ")}`,
-				);
-			}
 		}
 	}
 	if (captureProblems.length > 0) {
@@ -256,7 +294,7 @@ export async function main(args: readonly string[]): Promise<number> {
 			"::error title=explain highlight slice::the captures are not complete " +
 				"enough to slice:\n" +
 				captureProblems.map((problem) => `  - ${problem}`).join("\n") +
-				"\nRecapture with `bun run explain:probe:highlight-recapture`. This " +
+				"\nRe-pin a corpus whose sessions are complete. This " +
 				"refuses rather than shrinking the universe, because a slice cut from " +
 				"a short capture still claims to cover every class and every version " +
 				"difference.",
@@ -270,11 +308,11 @@ export async function main(args: readonly string[]): Promise<number> {
 		for (const script of group.scripts) splitOf.set(script, group.split);
 	}
 
-	const allPaths = Object.keys(base.streams).sort();
-	const pairsFor = (path: string): Map<Version, Pair[]> => {
-		const out = new Map<Version, Pair[]>();
+	const allPaths = [...populationPaths].sort();
+	const pairsFor = (path: string): Map<string, Pair[]> => {
+		const out = new Map<string, Pair[]>();
 		for (const version of VERSIONS) {
-			const stream = captures.get(version)?.streams[path];
+			const stream = captures.get(version)?.streams.get(path);
 			if (stream?.pairs) out.set(version, stream.pairs);
 		}
 		return out;
@@ -285,8 +323,8 @@ export async function main(args: readonly string[]): Promise<number> {
 	const excludedUnsplit: string[] = [];
 	const universe: string[] = [];
 	for (const path of allPaths) {
-		const streamsForPath = [...VERSIONS].map(
-			(v) => captures.get(v)?.streams[path],
+		const streamsForPath = VERSIONS.map((v) =>
+			captures.get(v)?.streams.get(path),
 		);
 		if (streamsForPath.some((s) => s?.truncated)) {
 			excludedTruncated.push(path);
@@ -341,7 +379,7 @@ export async function main(args: readonly string[]): Promise<number> {
 		}
 	}
 
-	const cost = new Map(universe.map((p) => [p, costOf(pairsFor(p))]));
+	const cost = new Map(universe.map((p) => [p, costOf(VERSIONS, pairsFor(p))]));
 	const selected = new Set<string>();
 	for (const [, candidates] of [...cells].sort((a, b) =>
 		a[0] < b[0] ? -1 : 1,
@@ -362,10 +400,10 @@ export async function main(args: readonly string[]): Promise<number> {
 	const versionDiffering: string[] = [];
 	for (const path of universe) {
 		const byVersion = pairsFor(path);
-		const baseJson = JSON.stringify(byVersion.get(VERSIONS[0]));
+		const baseJson = JSON.stringify(byVersion.get(VERSIONS[0] as string));
 		if (
 			VERSIONS.slice(1).some(
-				(v) => JSON.stringify(byVersion.get(v as Version)) !== baseJson,
+				(v) => JSON.stringify(byVersion.get(v)) !== baseJson,
 			)
 		) {
 			versionDiffering.push(path);
@@ -380,24 +418,6 @@ export async function main(args: readonly string[]): Promise<number> {
 	// rather than asserting it in prose, and get the true replacement count on
 	// the way (an earlier draft counted `?` in the output, which over-counts
 	// every genuine question mark in a script).
-	const corpus = resolveCorpusDb();
-	if (corpus.path === undefined) {
-		console.error(unreachableMessage("explain highlight slice"));
-		return 1;
-	}
-	console.error(describeResolution(corpus));
-	const db = new Database(corpus.path, { readonly: true });
-	const corpusText = new Map<string, string>();
-	try {
-		for (const row of db
-			.query("SELECT path, text FROM source_scripts")
-			.all() as { path: string; text: string }[]) {
-			corpusText.set(row.path, row.text);
-		}
-	} finally {
-		db.close();
-	}
-
 	// How many of the WHOLE capture the transform altered, not just the selected
 	// scripts — the `_readAs` sentence is about the capture, and a figure that
 	// silently means something narrower is the drift this file exists to avoid.
@@ -416,7 +436,7 @@ export async function main(args: readonly string[]): Promise<number> {
 	const unverified: string[] = [];
 	for (const path of [...selected].sort()) {
 		const byVersion = pairsFor(path);
-		const basePairs = byVersion.get(VERSIONS[0]) as Pair[];
+		const basePairs = byVersion.get(VERSIONS[0] as string) as Pair[];
 		const baseJson = JSON.stringify(basePairs);
 		const split = splitOf.get(path) as "dev" | "holdout";
 		const text = basePairs.map(([fragment]) => fragment).join("");
@@ -428,10 +448,10 @@ export async function main(args: readonly string[]): Promise<number> {
 			else if (sent !== source) nonAscii++;
 		}
 		const streams: Record<string, Pair[] | null> = {
-			[VERSIONS[0]]: basePairs,
+			[VERSIONS[0] as string]: basePairs,
 		};
 		for (const version of VERSIONS.slice(1)) {
-			const other = byVersion.get(version as Version) as Pair[];
+			const other = byVersion.get(version) as Pair[];
 			streams[version] = JSON.stringify(other) === baseJson ? null : other;
 		}
 		scripts[path] = { split, chars: text.length, streams };
@@ -455,9 +475,10 @@ export async function main(args: readonly string[]): Promise<number> {
 	const totalCost = [...selected].reduce((a, p) => a + (cost.get(p) ?? 0), 0);
 	const output = {
 		_source:
-			"Stratified slice of the Q13 per-character `/console/inspect " +
-			"request=highlight` captures (centrs#185 phase 0, promoted by #186 " +
-			"workstream 3 to unblock #263). Every pair is device output; no row is " +
+			"Stratified slice of the per-character `/console/inspect " +
+			"request=highlight` streams in the pinned corpus's channel sessions " +
+			"(centrs#185 phase 0, promoted by #186 workstream 3 to unblock #263, " +
+			"cut from the corpus since #498). Every pair is device output; no row is " +
 			"hand-written. NOT A RANDOM SAMPLE: selection is a per-(split, class) " +
 			"quota taken smallest-first, over a corpus that is already 96.8% two " +
 			"forum authors (#203). An agreement percentage computed over this file " +
@@ -475,34 +496,28 @@ export async function main(args: readonly string[]): Promise<number> {
 		baseVersion: VERSIONS[0],
 		versions: VERSIONS.map((version) => {
 			const capture = captures.get(version) as Capture;
+			const c = counters(capture);
 			return {
 				version,
-				routerosVersion: capture.routerosVersion,
-				chrBuildTime: capture.chrBuildTime,
-				capturedAt: capture.capturedAt,
-				corpusRows: capture.corpusRows,
-				aligned: capture.aligned,
-				misaligned: capture.misaligned,
-				/**
-				 * A capture cut before the probe separated the two counters reports
-				 * `null` here, and its `misaligned` may include REST failures — a
-				 * transport error is not a token/byte desync, and folding them
-				 * together publishes a wrong alignment figure. Recapture to get a
-				 * number.
-				 */
-				failed: capture.failed ?? null,
-				truncated: capture.truncated,
+				routerosVersion: version,
+				channels: capture.sessions.map((s) => s.channel),
+				highlightRuns: capture.sessions.map((s) => s.highlightRunId),
+				environments: capture.sessions.map((s) => s.environmentSha256),
+				corpusRows: c.rows,
+				aligned: c.aligned,
+				misaligned: c.misaligned,
+				failed: c.failed,
+				truncated: c.truncated,
 			};
 		}),
 		source: {
 			generatedBy: "scripts/explain-highlight-slice.ts",
 			partition: "test/fixtures/explain/corpus-partition.json",
-			corpus: `${corpus.source}${corpus.sha256 ? ` sha256:${corpus.sha256}` : ""}`,
-			captures: sourceHashes,
+			corpus: `sha256:${sha256(new Uint8Array(await Bun.file(corpus.path).arrayBuffer()))}`,
 			note:
-				"The full captures are ~7.5 MB per version and are gitignored. " +
-				"Recapture with `bun run explain:probe:highlight-recapture`; the " +
-				"sha256 above identifies the exact bytes this slice was cut from.",
+				"Cut from the pinned corpus (scripts/corpus-pin.json) by session run " +
+				"id. Re-cut with `bun run explain:highlight-slice`; the sha256 above " +
+				"identifies the exact snapshot this slice was cut from.",
 		},
 		selection: {
 			rule:
@@ -543,26 +558,45 @@ export async function main(args: readonly string[]): Promise<number> {
 		scripts,
 	};
 
-	await Bun.write(outPath, `${JSON.stringify(output, null, "\t")}\n`);
-
-	// Format with the repo's own formatter before returning. `JSON.stringify`
+	// Format with the repo's own formatter before writing. `JSON.stringify`
 	// with a tab indent puts every run-length pair on three lines; biome collapses
 	// what fits. Without this the command the fixture README tells contributors to
 	// run emits a file that fails `bun run lint` and shows up as a 160 KB
 	// formatting-only diff — a regeneration path that cannot be followed is not a
-	// regeneration path.
-	const formatted = await Bun.$`bunx --bun biome format --write ${outPath}`
-		.nothrow()
-		.quiet();
+	// regeneration path. Through stdin, named as the fixture, so `--check` and
+	// `--out` format exactly as the committed file is formatted.
+	const raw = new Response(`${JSON.stringify(output, null, "\t")}\n`);
+	const formatted =
+		await Bun.$`bunx --bun biome format --stdin-file-path=${DEFAULT_OUT} < ${raw}`
+			.nothrow()
+			.quiet();
 	if (formatted.exitCode !== 0) {
 		console.error(
-			"::error title=explain highlight slice::biome could not format " +
-				`${outPath} (exit ${formatted.exitCode}). The fixture was written but ` +
-				"is not in the repo's canonical form and will fail `bun run lint`.\n" +
+			"::error title=explain highlight slice::biome could not format the slice " +
+				`(exit ${formatted.exitCode}), so it is not in the repo's canonical form.\n` +
 				formatted.stderr.toString().trim(),
 		);
 		return 1;
 	}
+	const fresh = formatted.stdout.toString();
+	if (check) {
+		const committed = (await Bun.file(DEFAULT_OUT).text()).replaceAll(
+			"\r\n",
+			"\n",
+		);
+		if (fresh !== committed) {
+			console.error(
+				"::error title=explain highlight slice::a fresh cut from the pinned " +
+					"corpus no longer matches test/fixtures/explain/highlight-streams.slice.json. " +
+					"Re-cut with `bun run explain:highlight-slice`, then " +
+					"`bun run explain:highlight-agreement --json` and its README block.",
+			);
+			return 1;
+		}
+		console.error("highlight slice matches the committed fixture");
+		return 0;
+	}
+	await Bun.write(outPath, fresh);
 	const bytes = Bun.file(outPath).size;
 	console.error(
 		`wrote ${outPath}: ${selected.size} scripts of ${universe.length} in universe ` +
