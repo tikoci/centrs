@@ -700,3 +700,28 @@ envelope would otherwise have to derive the name/value boundary from
 The same command also shows the two `=` bytes staying apart: the one in
 `($x = 1)` is a comparison and comes back `operator`, decided by fill order
 rather than by a scan for the byte.
+
+### 33. A space for the `=` is not an empty argument list
+
+```bash
+centrs explain '/ip/firewall/layer7-protocol add comment "something" regexp 1.1' --json
+```
+
+RouterOS accepts this as `comment="something" regexp=1.1`: `:parse` lowers both
+spellings to the same IL, and `highlight` marks each gap `syntax-obsolete`.
+Which word is an argument name is per-command schema, so offline publishes
+neither reading. The statement stays `resolved` on
+`/ip/firewall/layer7-protocol add`, `command.args` is absent, `arguments.read`
+is `false` with a `why` naming `` `comment "something"` ``, and
+`transport.classification` stays `"unknown"`.
+
+`data.verdict` is `warn`, with one
+`explain/canonicalizer/possible-spaced-argument` **warning** per pair,
+spanning `comment "something"` and `regexp 1.1`. Each says to write the `=`.
+The warning needs a value that cannot be a flag: `/interface set ether1 name x`
+also abstains but does not warn, because `/interface print detail
+without-paging` is the same shape and is two flags
+(`detail=true;without-paging=true`). The `=` spelling still reads both
+arguments, and a script body may drop its `=` too:
+`/system/script add name=beep source { :beep }` is the `source={ :beep }` body,
+not an invalid brace.

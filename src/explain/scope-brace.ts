@@ -58,8 +58,23 @@ export const DIRECTIVE_BODY: Record<string, string> = {
 	onerror: "in",
 };
 
-/** Script-valued attribute naming convention already used by the corpus census. */
-const SCRIPT_BODY_ARG = /^(?:source|script|on-.*)$/;
+/**
+ * Script-valued attribute naming convention, the corpus census's
+ * `SCRIPT_BEARING_KEY` shape (`scripts/explain-corpus-census.ts`).
+ *
+ * A shape, not a list, and only ever used to WITHHOLD the `invalid-command-brace`
+ * error, so it must cover every slot where a body is legal and may cover more.
+ * Which slots take a body is per-menu and per-version schema: on CHR 7.24.5
+ * `/tool/netwatch add … up-script={ :beep }` and `/ip/dhcp-server set 0
+ * lease-script={ :beep }` both parse, while 7.22.1 accepts the first and
+ * rejects the second; `comment={ :beep }` and `zzzscript={ :beep }` are
+ * `syntax error` on both (#350). The earlier `^(?:source|script|on-.*)$` missed
+ * every `…-script` argument and hard-failed the netwatch row the device accepts.
+ * The suffix keeps its hyphen, which is how RouterOS spells these names: a bare
+ * `…script` would take `:put myScript={#test}`, whose brace CHR 7.23.3 reads as
+ * an array (#245).
+ */
+const SCRIPT_BODY_ARG = /^(?:source|script|.+-script|on-.+)$/;
 
 /** Grounded scripting directives whose positional arity makes a later `#` fatal. */
 const DIRECTIVE_POSITIONAL_ARITY: Readonly<Record<string, number>> = {
@@ -271,6 +286,19 @@ function trailingBareScopeName(
 	start: number,
 	end: number,
 ): string | null {
+	const name = trailingBareArgumentName(text, start, end);
+	return name !== null && SCOPE_ARG_NAMES.has(name) ? name : null;
+}
+
+/**
+ * The bare word before a `{` when it can be an argument name: not the
+ * statement's leading word, and not a `:` directive. Lower-cased.
+ */
+function trailingBareArgumentName(
+	text: string,
+	start: number,
+	end: number,
+): string | null {
 	let i = end - 1;
 	while (i >= start && isAsciiWhitespace(text[i])) i--;
 	const nameEnd = i + 1;
@@ -278,7 +306,6 @@ function trailingBareScopeName(
 	const nameStart = i + 1;
 	if (nameStart === nameEnd) return null;
 	const name = text.slice(nameStart, nameEnd).toLowerCase();
-	if (!SCOPE_ARG_NAMES.has(name)) return null;
 	// A COLON makes it a directive, never an argument name, and the device is
 	// emphatic: `:if (1=1) :do { :put a }` is `expected end of command` on both
 	// 7.21.5 and 7.24.2, while the bare `:if (1=1) do { :put a }` parses. So the
@@ -416,6 +443,20 @@ export function braceStartsStatements(
 	const start = Math.max(boundary + 1, floor);
 	const named = trailingName(text, start, open);
 	if (named !== null) return SCRIPT_BODY_ARG.test(named.toLowerCase());
+	// `source { :beep }` — the same body with the `=` left out (#350). Every
+	// grounded spelling lowers to the `source=` IL on CHR 7.22.1 and 7.24.5:
+	// `/system/script add name=beep source { :beep }`, `/system/scheduler add
+	// name=x on-event { :beep }`, `/tool/netwatch add … down-script { :beep }`.
+	// The control is `comment { :beep }`, a `syntax error` on both. A
+	// declaration's operand is a variable name, not an argument, so
+	// `:local myscript {1;2}` keeps its brace an array.
+	const bare = trailingBareArgumentName(text, start, open);
+	if (bare !== null && SCRIPT_BODY_ARG.test(bare)) {
+		const head = index.firstContent[open] ?? -1;
+		const word =
+			head < start ? "" : (leadingWords(text, head, open, 1)[0] ?? "");
+		if (!/^:|^(?:local|global)$/i.test(word)) return true;
+	}
 
 	// H7's bare `{...}` and `/menu {...}` containers are statement bodies too.
 	const first = index.firstContent[open] ?? -1;

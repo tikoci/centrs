@@ -157,6 +157,7 @@ import {
 	findMissingSeparators,
 	type MissingSeparator,
 } from "./explain/separator.ts";
+import { findSpacedPairs, type SpacedPair } from "./explain/spaced-args.ts";
 import { stringSpans } from "./explain/string-tokens.ts";
 import { augmentSymbolOccurrences } from "./explain/symbol-values.ts";
 import {
@@ -750,6 +751,7 @@ const EV = {
 	braces: "e14",
 	separators: "e15",
 	escapes: "e16",
+	spaced: "e17",
 } as const;
 
 type EvidenceKey = keyof typeof EV;
@@ -901,6 +903,19 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		id: EV.separators,
 		source: "canonicalizer",
 		probe: "findMissingSeparators",
+		basis: "heuristic",
+		outcome: "ok",
+	},
+	/**
+	 * `heuristic`: which adjacent operands could be the spaced spelling is read
+	 * from the token shapes alone. That the device pairs them, and marks the gap
+	 * `syntax-obsolete`, is grounded (`src/explain/spaced-args.ts`); which pairs
+	 * it pairs is per-command schema.
+	 */
+	spaced: {
+		id: EV.spaced,
+		source: "canonicalizer",
+		probe: "findSpacedPairs",
 		basis: "heuristic",
 		outcome: "ok",
 	},
@@ -1366,14 +1381,30 @@ export function explainCommand(
 			? findMissingSeparators(argumentTokens[index] ?? [])
 			: [],
 	);
+	// #350: the same order for the space-for-`=` spelling. Root directives are
+	// excluded because their operands are positional by grammar
+	// (`src/explain/spaced-args.ts`).
+	const spaced = readStatements.map((statement, index) =>
+		statement.resolution === "resolved" &&
+		statement.kind === "command" &&
+		statement.command.path !== "/"
+			? findSpacedPairs(argumentTokens[index] ?? [])
+			: [],
+	);
 	const gated = enforceGateParity(readStatements, canonical);
 	const statements = gated.map((statement, index) => {
 		const runs = separators[index] ?? [];
+		const pairs = spaced[index] ?? [];
+		const separated = withoutSeparatedArguments(statement, runs);
+		const unpaired = withoutSpacedArguments(separated, pairs);
 		return withStatementTransport(
-			withoutSeparatedArguments(statement, runs),
+			unpaired,
 			verbs.splits[index]?.text ?? "",
 			options,
 			runs.length === 0 ? undefined : rejectedBySeparator(runs),
+			// Only a reading this step withdrew. One the lexer already refused
+			// (`source {…}`, `[find]`) keeps the `execute` line it had.
+			unpaired === separated ? undefined : unpairedBySpacing(pairs),
 		);
 	});
 
@@ -1390,6 +1421,9 @@ export function explainCommand(
 		}),
 		...invalidCommandBraceDiagnostics(verbs.splits, analyzed, analyzedRange),
 		...separators.flatMap((runs) => runs.map(missingSeparatorDiagnostic)),
+		...spaced.flatMap((pairs) =>
+			pairs.filter((pair) => pair.valueShaped).map(spacedArgumentDiagnostic),
+		),
 		...statements.flatMap((s) => diagnosticsForStatement(s)),
 	].sort(
 		(a, b) =>
@@ -1610,6 +1644,7 @@ function withStatementTransport(
 	source: string,
 	options: ExplainCommandOptions,
 	rejected?: string,
+	unpaired?: string,
 ): ExplainStatement {
 	if (statement.kind !== "command" || statement.arguments === undefined)
 		return statement;
@@ -1621,6 +1656,7 @@ function withStatementTransport(
 				arguments: statement.arguments,
 				source,
 				...(rejected === undefined ? {} : { rejected }),
+				...(unpaired === undefined ? {} : { unpaired }),
 			},
 			{ renderCurl: options.curl, evidenceId: EV.transport },
 		),
@@ -1849,6 +1885,55 @@ function withoutSeparatedArguments(
 function rejectedBySeparator(runs: readonly MissingSeparator[]): string {
 	const first = runs[0];
 	return `a second command-shaped run (\`${first?.path} ${first?.verb}\`) sits in this operand stream with no \`;\` or newline before it, so this is not one accepted statement`;
+}
+
+/**
+ * Withdraw an argument reading that may be the spaced spelling (#350).
+ *
+ * `read: true` with `args: {}` and the operands as positionals is an
+ * affirmative claim that the list was read and names no argument, and the
+ * device contradicts it: `comment "something" regexp 1.1` is
+ * `comment=something;regexp=1.1`. Which adjacent words pair is per-command
+ * schema, so neither reading is published. The statement stays `resolved`;
+ * only the argument list is withdrawn, as #311 does.
+ */
+function withoutSpacedArguments(
+	statement: ExplainStatement,
+	pairs: readonly SpacedPair[],
+): ExplainStatement {
+	if (pairs.length === 0 || statement.kind !== "command") return statement;
+	if (statement.arguments?.read !== true) return statement;
+	const { args: _dropped, ...command } = statement.command;
+	return {
+		...statement,
+		command,
+		arguments: { read: false, why: unpairedBySpacing(pairs) },
+	};
+}
+
+/** The one sentence both the withdrawn argument list and transport give. */
+function unpairedBySpacing(pairs: readonly SpacedPair[]): string {
+	const first = pairs[0];
+	return `\`${first?.name} ${first?.value}\` may be an argument and its value with the \`=\` left out, which RouterOS accepts; offline has no per-command argument list to tell an argument name from a positional operand or a value-less flag`;
+}
+
+/**
+ * The spaced spelling, said out loud where the value proves it is not a flag.
+ *
+ * `warning`, not `error`: RouterOS accepts the form, but its own highlighter
+ * marks the gap `syntax-obsolete`, which is RouterOS calling the spelling
+ * deprecated. "Possible" because the name is unconfirmed offline;
+ * `/system/script add zzznotanarg "beep"` is the same shape and the device
+ * rejects it. A live `request=child` probe (#491) confirms the name.
+ */
+function spacedArgumentDiagnostic(pair: SpacedPair): ExplainDiagnostic {
+	return {
+		code: "explain/canonicalizer/possible-spaced-argument",
+		severity: "warning",
+		message: `possible obsolete spelling: \`${pair.name} ${pair.value}\` reads as \`${pair.name}=${pair.value}\` if \`${pair.name}\` is an argument of this command — RouterOS accepts a space for the \`=\` but marks it obsolete; write \`${pair.name}=${pair.value}\``,
+		span: { start: pair.span.start, end: pair.span.end },
+		ev: EV.spaced,
+	};
 }
 
 function invalidCommandBraceDiagnostics(

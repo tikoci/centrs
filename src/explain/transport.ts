@@ -111,6 +111,17 @@ export interface ExplainTransportInput {
 	 * centrs surface should be offered for them and none is rendered.
 	 */
 	rejected?: string;
+	/**
+	 * Why offline cannot pair the operands into a request, when two adjacent
+	 * words may be an argument and its value with the `=` left out (#350).
+	 *
+	 * Also distinct from an unread argument list: the bytes are no evaluation,
+	 * and nothing is wrong with them, but which word is an argument name is
+	 * per-command schema. The reading before #350 classified these `unknown`
+	 * through its positionals, and this keeps that fail-closed answer rather
+	 * than letting the withdrawal turn it into an `execute` line.
+	 */
+	unpaired?: string;
 }
 
 export interface ExplainTransportOptions {
@@ -440,6 +451,8 @@ export function classifyExplainTransport(
 	// syntax error, which is the false confident reading in a second place.
 	if (input.rejected !== undefined)
 		return unknown(input.rejected, options.evidenceId);
+	if (input.unpaired !== undefined)
+		return unknown(input.unpaired, options.evidenceId);
 
 	// Root scripting directives have no RouterOS REST path. They always ride the
 	// raw execute surface, regardless of whether their operands are literal.
