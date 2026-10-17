@@ -23,9 +23,11 @@
 //     corpusRows, aligned, misaligned, truncated,
 //     streams: { [rel]: { pairs:[[frag,cls],…], bytes, truncated } } }
 //
-// The full capture is ~7.5 MB per RouterOS version and stays out of the repo;
-// `explain-highlight-slice.ts` cuts the committed stratified slice from it
-// (`test/fixtures/explain/highlight-streams.slice.json`).
+// SUPERSEDED for the committed slice (#498): the schema-5 corpus now persists
+// the per-character stream for every channel session (the upstream ask above,
+// done in lsp-routeros-ts#40), and `explain-highlight-slice.ts` cuts from that.
+// This probe remains for a build the corpus has no session for. Its output is
+// in-flight only.
 //
 // Usage:  CHR_URL=http://127.0.0.1:9150 bun run explain:probe:highlight-recapture [--limit N]
 

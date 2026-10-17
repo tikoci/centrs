@@ -49,6 +49,7 @@ import { resolveStatements } from "../src/explain/pathresolve.ts";
 import { findMissingSeparators } from "../src/explain/separator.ts";
 import { resolveVerbsFromStatements } from "../src/explain/verbsplit.ts";
 import { explainCommand } from "../src/explain.ts";
+import { populationScripts } from "./corpus-db.ts";
 import {
 	describeResolution,
 	resolveCorpusDb,
@@ -345,9 +346,7 @@ export async function main(args: readonly string[]): Promise<number> {
 	const db = new Database(dbPath, { readonly: true });
 	let scripts: string[];
 	try {
-		scripts = (
-			db.query("SELECT text FROM source_scripts").all() as { text: string }[]
-		).map((row) => row.text);
+		scripts = populationScripts(db).map((row) => row.text);
 	} finally {
 		db.close();
 	}

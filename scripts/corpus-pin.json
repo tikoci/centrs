@@ -1,10 +1,10 @@
 {
 	"comment": "Which corpus snapshot centrs measures against. See scripts/corpus-fetch.ts (issue #186). Regenerate with `bun run corpus:fetch --repin <40-hex commit>` — never hand-edit the hash.",
 	"repo": "tikoci/lsp-routeros-ts",
-	"ref": "7d623557d257e0a4d50f47c87d6a842ff2699401",
+	"ref": "1cc0dff31db62d8487d3c3e492b39d327a0a0f81",
 	"path": "test-data/corpus.sqlite",
-	"sha256": "4f1560f757265570b5b04c9f93d6d57b432064cf655ce2d1852da95536e313a9",
-	"bytes": 21442560,
-	"schemaVersion": 4,
+	"sha256": "da632dc8e85da065d3092347234bfdc8e0bea34a5b6d08d348205eacce079253",
+	"bytes": 36286464,
+	"schemaVersion": 5,
 	"scripts": 948
 }

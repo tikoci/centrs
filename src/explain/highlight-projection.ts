@@ -45,21 +45,23 @@
  *   agreement (probes: "an abstention is not a disagreement").
  * - **parser-stop** — `error`. Measured over the committed slice this byte
  *   appears **at most once per script, always exactly one byte wide**, and on
- *   long-term 7.23.5 every byte after it is `none`: the device stops
+ *   long-term 7.23.8 every byte after it is `none`: the device stops
  *   classifying rather than recovering. Most of the slice's bytes sit in that
  *   tail, so a percentage that ignores it measures the device giving up.
- *   Stable 7.24.2 and development 7.25beta3 do classify again after the `error`
- *   in one run, which is why the report gives that a bucket of its own instead
- *   of asserting the rule (the counts live in the generated README block, not
- *   here, so they cannot go stale). The rule and its exception swapped builds
- *   with the #342 channel realignment; the shape of the claim did not.
+ *   Stable 7.24.5, testing 7.25rc2 and development 7.26beta1 do classify again
+ *   after the `error` in one run, which is why the report gives that a bucket
+ *   of its own instead of asserting the rule (the counts live in the generated
+ *   README block, not here, so they cannot go stale). The rule and its
+ *   exception swapped builds with the #342 channel realignment and held
+ *   through the #498 repin; the shape of the claim did not change.
  *
  * ## Upstream drift
  *
  * `DEVICE_CLASS_KIND` lists the 19 classes the phase-0 capture observed on
  * 7.23.2 / 7.24rc2 — and the #342 recapture found the SAME 19 on 7.24.2,
- * 7.23.5 and 7.25beta3, so the vocabulary has held across five builds and two
- * capture rounds. A class outside it is `"unknown"` — reported, never
+ * 7.23.5 and 7.25beta3, as did the #498 corpus sessions on 7.23.8, 7.24.5,
+ * 7.25rc2 and 7.26beta1, so the vocabulary has held across nine builds and
+ * three capture rounds. A class outside it is `"unknown"` — reported, never
  * silently folded into one of the four kinds — because a new upstream class is
  * exactly the drift the centrs-owned vocabulary exists to absorb, and guessing
  * its kind would hide it.

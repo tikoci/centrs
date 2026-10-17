@@ -245,11 +245,13 @@ non-authoritative `.scratch/` citation cleanup. #350 (the broad optional `=`,
 schema-dependent and so belonging to step 3), #351 (an unresolvable menu that
 abstains at 2-deep nesting but hard-fails at 3-deep) and #355 (`'` is not a
 RouterOS token — a false ACCEPT the corpus join cannot see) are bounded analyzer
-defects that step 2 now surfaces through the `execute`/`api` gate. #336 and #342 are complete: the
-corpus is repinned to three *complete* builds (long-term 7.23.5, stable 7.24.2,
-development 7.25beta3), and the operator sweep and highlight slice are re-swept
-onto those same builds — plus 7.21.5 retained as an age anchor — so the operator
-axis and the token partition are scored on the same firmware. The #335
+defects that step 2 now surfaces through the `execute`/`api` gate. #336, #342 and #498 are complete: the
+corpus is pinned to schema 5, with one recorded session per release channel
+(long-term 7.23.8, stable 7.24.5, testing 7.25rc2, development 7.26beta1) read
+through `scripts/corpus-db.ts`. The highlight slice is cut from those sessions
+and gated in CI, and the operator sweep is re-run on the same builds — plus
+7.21.5 retained as an age anchor — so the operator axis and the token partition
+are scored on the same firmware. The #335
 source refresh pins both architectures of those versions beside the 7.10.2 /
 7.16 history anchors and accepts the current CLI-Reference drift. Issue #223 is
 a separate MCP response migration. If live evidence finds a wrong offline

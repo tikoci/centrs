@@ -74,12 +74,18 @@ import { lexArguments, lexValueAnchors } from "../src/explain/args.ts";
 import { valueShapeHints } from "../src/explain/values.ts";
 import { resolveVerbs } from "../src/explain/verbsplit.ts";
 import {
+	type CorpusProvenance,
+	corpusProvenance,
+	describePopulation,
+	populationScripts,
+} from "./corpus-db.ts";
+import {
 	describeResolution,
 	resolveCorpusDb,
 	unreachableMessage,
 } from "./corpus-fetch.ts";
 
-export interface ValueCensus {
+export interface ValueCensus extends Partial<CorpusProvenance> {
 	sourceScripts: number;
 	valueOccurrences: number;
 	elementOccurrences: number;
@@ -328,7 +334,7 @@ export function renderReadmeBlock(result: ValueCensus): string[] {
 			: `${count(idCount)} are \`id\``;
 	return wrap(
 		`The corpus census is re-derivable with \`bun run explain:value-census\` and ` +
-			`covers ${count(result.sourceScripts)} source scripts. The figures below are generated from ` +
+			`covers ${count(result.sourceScripts)} source scripts${describePopulation(result)}. The figures below are generated from ` +
 			"`test/fixtures/explain/values.json` → `corpus` by " +
 			"`bun run explain:value-census:readme` and gated against it by " +
 			"`bun run explain:value-census:readme:check`; the fixture itself is gated " +
@@ -481,14 +487,14 @@ export async function main(args: readonly string[]): Promise<number> {
 	console.error(describeResolution(resolution));
 	const db = new Database(dbPath, { readonly: true });
 	let scripts: string[];
+	let provenance: CorpusProvenance;
 	try {
-		scripts = (
-			db.query("SELECT text FROM source_scripts").all() as { text: string }[]
-		).map((row) => row.text);
+		scripts = populationScripts(db).map((row) => row.text);
+		provenance = corpusProvenance(db, dbPath);
 	} finally {
 		db.close();
 	}
-	const result = census(scripts);
+	const result = { ...census(scripts), ...provenance };
 	if (args.includes("--check")) {
 		const drift = diffAgainstFixture(result, readFixtureCensus());
 		if (drift.length > 0) {

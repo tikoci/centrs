@@ -161,9 +161,10 @@ export interface Buckets {
 	 *
 	 * Its own bucket rather than part of the stopped tail because "the device
 	 * gives up at its first error" is a claim, and this is the number that
-	 * says how far it holds: zero on long-term 7.23.5, non-zero on stable 7.24.2
-	 * and development 7.25beta3. Folding these bytes into `parserStopped` would
-	 * let the report assert a rule its own measurement contradicts.
+	 * says how far it holds: zero on long-term 7.23.8, non-zero on stable
+	 * 7.24.5, testing 7.25rc2 and development 7.26beta1. Folding these bytes
+	 * into `parserStopped` would let the report assert a rule its own
+	 * measurement contradicts.
 	 */
 	parserRecovered: number;
 }
@@ -254,9 +255,9 @@ export function bucketOf(
  *
  * Everything past the `error` byte used to be counted as `parserStopped`
  * wholesale, which threw away the one measurement that tests the claim: stable
- * 7.24.2 and development 7.25beta3 each classify 96 bytes after the `error`,
- * and folding them into the stopped tail made the report assert "the device
- * does not recover" while its own fixture said otherwise. The `error` byte
+ * 7.24.5, testing 7.25rc2 and development 7.26beta1 each classify 96 bytes
+ * after the `error`, and folding them into the stopped tail made the report
+ * assert "the device does not recover" while its own fixture said otherwise. The `error` byte
  * itself is the stop marker, not a recovery.
  */
 export function stoppedBucketOf(deviceClass: string): keyof Buckets {

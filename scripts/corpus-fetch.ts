@@ -2,12 +2,13 @@
 /**
  * Reach the RouterOS script corpus the `explain` censuses read (issue #186).
  *
- * The corpus is `tikoci/lsp-routeros-ts`'s `test-data/corpus.sqlite` — 948
- * scripts, schema v3, built there by `scripts/build-corpus-db.ts`. It does not
- * live here and is not moving here: a 10 MB binary SQLite is unreadable in a
- * web review either way, and it carries third-party script text (one GPL
- * collection, one with no grant at all) that has no business inside centrs's
- * licensed surface.
+ * The corpus is `tikoci/lsp-routeros-ts`'s `test-data/corpus.sqlite`, built
+ * there by `scripts/build-corpus-db.ts`. `corpus-pin.json` records its schema
+ * and population size; read it through `corpus-db.ts`, which owns the schema-5
+ * population, session and verdict rules (#498). It does not live here and is
+ * not moving here: a ~36 MB binary SQLite is unreadable in a web review either
+ * way, and it carries third-party script text (one GPL collection, one with
+ * no grant at all) that has no business inside centrs's licensed surface.
  *
  * The ownership boundary that settles it: **`lsp-routeros-ts` owns producing
  * snapshots; centrs owns which snapshot it measures against.** That second half
@@ -64,7 +65,11 @@ export interface CorpusPin {
 	readonly bytes: number;
 	/** `corpus_metadata.schema_version` of the pinned DB, for the record. */
 	readonly schemaVersion: number;
-	/** `count(*)` of `source_scripts`, for the record. */
+	/**
+	 * The study population (`v_corpus_population`, controls excluded), for the
+	 * record. `source_scripts` itself also holds the upstream classifier
+	 * controls on schema 5.
+	 */
 	readonly scripts: number;
 }
 
@@ -92,7 +97,7 @@ export const SIBLING_CORPUS_DB = resolve(
 	"../../lsp-routeros-ts/test-data/corpus.sqlite",
 );
 const CACHE_DIR = resolve(import.meta.dir, "../.cache/corpus");
-/** 10 MB over a cold CI link needs more room than the 30 s text default. */
+/** ~36 MB over a cold CI link needs more room than the 30 s text default. */
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 export function readPin(): CorpusPin {
@@ -294,9 +299,14 @@ async function readDbFacts(
 		const version = db
 			.query("SELECT value FROM corpus_metadata WHERE key = 'schema_version'")
 			.get() as { value: string } | null;
-		const count = db
-			.query("SELECT count(*) AS c FROM source_scripts")
-			.get() as {
+		const population = db
+			.query(
+				"SELECT 1 FROM sqlite_master WHERE type = 'view' AND name = 'v_corpus_population'",
+			)
+			.get()
+			? "v_corpus_population"
+			: "source_scripts";
+		const count = db.query(`SELECT count(*) AS c FROM ${population}`).get() as {
 			c: number;
 		};
 		return {

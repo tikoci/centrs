@@ -39,17 +39,18 @@ Two live consequences of it being older than the pinned corpus:
 
 ## `highlight-streams.slice.json` — the per-token device oracle
 
-See the file's own `_source` block. It is a stratified slice of the two
-full-corpus `highlight` captures; the full captures are ~7.5 MB per RouterOS
-version and are not committed. Re-cut with
-`bun run explain:highlight-slice`, recapture with
-`bun run explain:probe:highlight-recapture`.
+See the file's own `_source` block. It is a stratified slice of the
+per-character `highlight` streams in the pinned corpus's channel sessions
+(#498): one run per release channel, named by run id in `versions[]`. Re-cut
+with `bun run explain:highlight-slice`. CI's corpus job re-cuts it with
+`bun run explain:highlight-slice:check` and fails on any difference.
 
 **Generated output — never hand-edit it.** Patching a single pair by hand
-breaks the chain the file claims for itself: its `source.captures` sha256 would
-no longer identify the bytes it was cut from, and `test/unit/explain-highlight-
-slice.test.ts` checks the header against the data, not the data against the
-device. Change the rule in the generator and re-cut.
+breaks the chain the file claims for itself: its `source.corpus` sha256 would
+no longer identify the snapshot it was cut from, and the `--check` gate would
+fail. `test/unit/explain-highlight-slice.test.ts` checks the header against
+the data, not the data against the device. Change the rule in the generator and
+re-cut.
 
 ## `transport-rest-q8.v7.23.2.json` / `.v7.24rc2.json` — the Q8 REST probe
 

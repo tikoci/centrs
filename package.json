@@ -108,6 +108,7 @@
 		"explain:highlight-agreement:readme": "bun run scripts/explain-highlight-agreement.ts --readme",
 		"explain:highlight-agreement:readme:check": "bun run scripts/explain-highlight-agreement.ts --readme --check",
 		"explain:highlight-slice": "bun run scripts/explain-highlight-slice.ts",
+		"explain:highlight-slice:check": "bun run scripts/explain-highlight-slice.ts --check",
 		"explain:menus": "bun run scripts/gen-explain-menus.ts",
 		"explain:operator-census": "bun run scripts/explain-operator-census.ts",
 		"explain:operator-census:check": "bun run scripts/explain-operator-census.ts --check",

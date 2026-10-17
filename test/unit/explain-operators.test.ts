@@ -29,10 +29,11 @@ interface OperatorFixture {
 	corpus: {
 		acceptedRows: number;
 		rejectedRows: number;
-		/** The version-comparable builds only; see `explain-operator-census.ts`. */
+		/** The channel sessions only; see `explain-operator-census.ts`. */
 		versions: string;
 		headOccurrences: Record<string, number>;
 		headShapes: Record<string, string>;
+		headScripts: Record<string, number>;
 		headVersions: Record<string, number>;
 		/** `head` -> oldest captured build, read across partial captures too. */
 		headFirstSeen: Record<string, string>;
@@ -144,22 +145,23 @@ describe("operator table vs the device sweep", () => {
 	});
 
 	test("the sweep covered every current channel, plus an age anchor", () => {
-		// Realigned to the CURRENT channels (#342): the previous set — 7.23.3
-		// stable, 7.24rc4 testing, 7.21.5 long-term — had gone stale, and none of
-		// those three is a build the corpus covers with both oracles, so the
-		// operator axis and the token partition were never scored on the same
-		// firmware. These first three are exactly the corpus's `complete` builds.
+		// Realigned to the CURRENT channels twice: #342 moved off a stale
+		// 7.23.3 / 7.24rc4 / 7.21.5 set, and #498 moved onto the corpus's
+		// schema-5 channel sessions. These first four are exactly the builds of
+		// `capture_channels` (stable, long-term, testing, development), so the
+		// operator axis and the token partition are scored on the same firmware.
 		//
-		// `7.21.5` is kept as a fourth on purpose, and it is NOT a channel claim:
+		// `7.21.5` is kept as a fifth on purpose, and it is NOT a channel claim:
 		// it is the age anchor. It is the only live evidence that the operator
 		// surface behaves the same on a pre-7.23 branch, and dropping it to
 		// "align to current channels" would have retired a fact rather than
 		// refreshed one. Two builds report `(long-term)` because both held that
-		// channel; 7.23.5 is the current one.
+		// channel; 7.23.8 is the current one.
 		expect(fixture.sweep._source.versions).toEqual([
-			"7.24.2 (stable) (x86_64)",
-			"7.23.5 (long-term) (x86_64)",
-			"7.25beta3 (x86_64)",
+			"7.24.5 (stable) (x86_64)",
+			"7.23.8 (long-term) (x86_64)",
+			"7.25rc2 (x86_64)",
+			"7.26beta1 (x86_64)",
 			"7.21.5 (long-term) (x86_64)",
 		]);
 	});
@@ -334,19 +336,19 @@ describe("what the device does that the manual does not say", () => {
 	test("`any` has been an operator since at least 7.20.8", () => {
 		// Offline corroboration: the corpus IL shows head `any` on 7.20.8, the
 		// oldest build captured. That fact now rides `headFirstSeen`, NOT the
-		// counting tallies: the census counts only the version-comparable builds
-		// (`coverage_class = 'complete'`), and 7.20.8 is a partial capture, so it
-		// contributes no occurrences at all. Presence is monotone in coverage
-		// though — a 913-of-948 capture that shows `any` still proves 7.20.8 had
-		// it — which is exactly the age axis's job.
+		// counting tallies: the census counts only the channel sessions (#498),
+		// and 7.20.8 is a legacy capture, so it contributes no occurrences at
+		// all. Presence is monotone in coverage though — a 913-of-948 capture
+		// that shows `any` still proves 7.20.8 had it — which is exactly the age
+		// axis's job.
 		expect(fixture.corpus.headFirstSeen["any"]).toBe("7.20.8");
 		expect(fixture.corpus.firstSeenVersions).toContain("7.20.8");
-		// The counting side is the three complete builds, and `any` is on all
-		// three. This is what the census can compare; the line above is what it
+		// The counting side is the four channel sessions, and `any` is on all
+		// four. This is what the census can compare; the line above is what it
 		// can date.
-		expect(fixture.corpus.versions).toBe("7.23.5,7.24.2,7.25beta3");
-		expect(fixture.corpus.headOccurrences["any"]).toBe(6);
-		expect(fixture.corpus.headVersions["any|7.23.5"]).toBe(2);
+		expect(fixture.corpus.versions).toBe("7.23.8,7.24.5,7.25rc2,7.26beta1");
+		expect(fixture.corpus.headOccurrences["any"]).toBe(8);
+		expect(fixture.corpus.headVersions["any|7.23.8"]).toBe(2);
 		// Live corroboration on the oldest branch swept. The runtime rows above
 		// come from the PRIMARY capture only, so asserting one of them again
 		// would prove nothing about long-term — the evidence that 7.21.5 answers
@@ -405,8 +407,8 @@ describe("what the device does that the manual does not say", () => {
 	});
 
 	test("only one fact in the sweep is version-dependent", () => {
-		// Three versions, so one differing row yields two diff entries — each
-		// version is compared against the primary. Asserted as "every difference
+		// One differing row yields one diff entry per version that disagrees
+		// with the primary (the two long-term builds). Asserted as "every difference
 		// is that row" rather than a count, so adding a fourth CHR cannot turn a
 		// new finding into an off-by-one.
 		expect(
@@ -415,11 +417,12 @@ describe("what the device does that the manual does not say", () => {
 		expect(
 			new Set(fixture.sweep.versionDifferences.map((row) => row["id"])),
 		).toEqual(new Set(["array-compare"]));
-		// The boundary moved with the channel realignment (#342), and the new
+		// The boundary moved with the channel realignments (#342, #498), and the
 		// evidence is sharper than "it landed in 7.24rc4": current long-term
-		// 7.23.5 is NEWER than the 7.23.3 first measured and still errors, so the
+		// 7.23.8 is NEWER than the 7.23.3 first measured and still errors, so the
 		// change rode the 7.24 line and was never backported.
-		expect(ARRAY_COMPARISON_NOTE).toContain("7.24.2");
+		expect(ARRAY_COMPARISON_NOTE).toContain("7.24.5");
+		expect(ARRAY_COMPARISON_NOTE).toContain("7.23.8");
 		expect(ARRAY_COMPARISON_NOTE).toContain("not fixed on current long-term");
 	});
 
@@ -430,16 +433,16 @@ describe("what the device does that the manual does not say", () => {
 		// `->` used to be reported as identical. Guarded by mutation: flip any
 		// one of those in a capture and a row appears here.
 		//
-		// Four builds since #342, not three. Both diff rows come from the two
-		// long-term captures (7.23.5 and 7.21.5); 7.25beta3 matches the primary
-		// exactly, which is why the count of rows is 2 rather than 3.
+		// Five builds since #498. Both diff rows come from the two long-term
+		// captures (7.23.8 and 7.21.5); testing 7.25rc2 and development
+		// 7.26beta1 match the primary exactly, which is why there are 2 rows.
 		const kinds = new Set(
 			fixture.sweep.versionDifferences.map((row) => row["kind"]),
 		);
 		expect(kinds.has("precedence")).toBe(false);
 		expect(kinds.has("associativity")).toBe(false);
 		expect(kinds.has("opAxis")).toBe(false);
-		expect(fixture.sweep._source.versions).toHaveLength(4);
+		expect(fixture.sweep._source.versions).toHaveLength(5);
 	});
 
 	test("outer-count separates `never outer` from `never measured`", () => {
@@ -481,29 +484,58 @@ describe("what the device does that the manual does not say", () => {
 describe("the corpus census that generated the candidates", () => {
 	test("`not` never appears as an IL head in 948 corpus scripts", () => {
 		// Corroboration, not proof: the corpus can only falsify. But a spelling
-		// the device never emits as a head in 1,833 accepted parses is not one it
-		// has an operator for. Stronger than the count suggests: `not` is absent
-		// from `headFirstSeen` too, which reads every captured build including
-		// the partial ones, so no version ever emitted it.
+		// the device never emits as a head in thousands of accepted parses is
+		// not one it has an operator for. Stronger than the count suggests: `not`
+		// is absent from `headFirstSeen` too, which reads every captured build
+		// including the legacy ones, so no version ever emitted it.
 		expect(fixture.corpus.headOccurrences["not"]).toBeUndefined();
 		expect(fixture.corpus.headFirstSeen["not"]).toBeUndefined();
 	});
 
 	test("a late first-seen build is a coverage artifact, not a new operator", () => {
-		// The partial captures have no `tangentsoft` stratum, so a head that only
-		// occurs in those 35 device `/export` files cannot date earlier than the
-		// first complete build however old it actually is. Exactly two heads are
-		// in that position, and both are `other`-shaped string noise — the class
-		// the census already refuses to trust. If a `punctuation` or `word` head
-		// ever lands here, that is a real version claim to go and check, not a
-		// number to adopt.
+		// The legacy captures (7.20.8, 7.22.1) cover less than the channel
+		// sessions in two ways: no `tangentsoft` stratum, and the base package
+		// only, so a script that needs a package was rejected there and its
+		// heads first appear on the all-packages sessions (#498). Either way a
+		// late date says "not captured before here", not "new in this build".
+		//
+		// Every late head must be one of: `other`-shaped string noise, seen in
+		// a single script (below the sweep's candidate threshold, so never
+		// asked), or a spelling the sweep grounded as a non-operator. If a
+		// sweep-confirmed operator or a new multi-script `punctuation`/`word`
+		// head ever lands here, that is a real version claim to go and check,
+		// not a number to adopt. The exact list is pinned so it cannot grow
+		// unread.
 		const late = Object.entries(fixture.corpus.headFirstSeen)
 			.filter(([, version]) => version !== "7.20.8")
 			.map(([head]) => head)
 			.sort();
-		expect(late).toEqual(["[system", "configuration.mode="]);
-		for (const head of late)
-			expect(fixture.corpus.headShapes[head]).toBe("other");
+		expect(late).toEqual([
+			"MB",
+			"btrfs|ext4",
+			"d,",
+			"json.load",
+			"k",
+			"none",
+			"s",
+			"sys.stdin",
+			"to",
+			"without",
+		]);
+		const notOperators = new Set(
+			fixture.sweep.notOperators.map((row) => row.spelling),
+		);
+		const operators = new Set(
+			fixture.sweep.operators.map((row) => row.spelling),
+		);
+		for (const head of late) {
+			expect(operators.has(head)).toBe(false);
+			const explained =
+				fixture.corpus.headShapes[head] === "other" ||
+				fixture.corpus.headScripts[head] === 1 ||
+				notOperators.has(head);
+			expect(explained).toBe(true);
+		}
 	});
 
 	test("every operator in the table that the corpus saw is a punctuation or word head", () => {

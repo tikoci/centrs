@@ -947,7 +947,8 @@ and its phase is named below.
 
   <!-- BEGIN GENERATED value-census — regenerate with `bun run explain:value-census:readme` -->
   The corpus census is re-derivable with `bun run explain:value-census` and
-  covers 948 source scripts. The figures below are generated from
+  covers 948 source scripts of corpus snapshot `da632dc8e85d`, with the 7
+  `capture-controls` rows excluded. The figures below are generated from
   `test/fixtures/explain/values.json` → `corpus` by
   `bun run explain:value-census:readme` and gated against it by
   `bun run explain:value-census:readme:check`; the fixture itself is gated
@@ -1395,7 +1396,8 @@ print } }` is `(evl (evl (evl /ip/address/print)))` on device and
 form failed. A menu block's body is a statement list, so it may open with a
 submenu, with one of the thirteen frozen CRUD verbs (`verbs.ts`), with a
 catalog-named command, with a `:` scripting directive, or with an absolute
-command — corpus 521 is the directive case, `ethernet { :put … }`.
+command — corpus script `forum/amm0/topic-184067-routeros-lsp-for-better-syntax-checking-command-completion-in-editors-like-vscod/post-0014-snippet-02.rsc` is the directive case,
+`ethernet { :put … }`.
 
 That last rule is bounded by what a STATEMENT can start with, which is what
 keeps `{1;2}` an array literal: an array member opens with a digit or a quote
@@ -1485,11 +1487,14 @@ Occurrences BEFORE the defect stand, which is the lab's X1 rule.
 
 **This was a false ACCEPT, which the corpus join cannot see.** The false-reject
 measurement scores one direction only, so the analyzer passing all four forms
-with zero diagnostics never appeared in it. Over the pinned corpus the rule
-fires on 40 of the 7.24.2 scripts and **every one of them is a script the device
-rejects** — none of the 617 it accepts. It moves the false-reject count not at
-all (still 1, the extra `}` of corpus 228) while taking the caught count from 62
-to 93.
+with zero diagnostics never appeared in it. Over the corpus pinned at the time
+(stable 7.24.2, before the #498 schema-5 repin) the rule fires on 40 scripts and
+**every one of them is a script the device rejects** — none of the 617 it
+accepted. It moves the false-reject count not at all (still 1, the extra `}` of
+corpus script
+`forum/amm0/topic-167087-can-t-turn-code-into-a-function/post-0005-snippet-02.rsc`)
+while taking the caught count from 62 to 93. On the #498 sessions both figures
+hold on every channel: 1 false reject among 573 accepts, 93 caught.
 
 The token census moves, and only in the direction the fail-closed symbol stop
 predicts: 68 fewer `variable-*` tokens and their 306 bytes returning to
@@ -1566,12 +1571,12 @@ Grounded, not transcribed, for the same reason the escape set above is: the
 [manual's operator list](https://manual.mikrotik.com/docs/developer-guides/scripting/index.md#operators)
 is a lower bound. `bun run explain:probe:operators` sweeps the manual's list
 **plus** plausible non-operators (`not`, `..`, `xor`, `mod`, `is`, `div`, …)
-**plus** every IL head the corpus census saw, on CHR 7.24.2 stable, 7.23.5
-long-term and 7.25beta3 development — the same three builds the pinned corpus
-classes `complete`, so the operator axis and the token partition are finally
-scored on the same firmware (#342) — plus 7.21.5 as an **age anchor**, which is
-not a channel claim but the only live evidence that the surface behaves the same
-on a pre-7.23 branch. Re-cut the fixture with
+**plus** every IL head the corpus census saw. It runs on CHR 7.24.5 stable,
+7.23.8 long-term, 7.25rc2 testing and 7.26beta1 development, the builds the
+pinned corpus records a channel session for, so the operator axis and the token
+partition are scored on the same firmware (#342, #498). It also runs on 7.21.5
+as an **age anchor**, which is not a channel claim but the only live evidence
+that the surface behaves the same on a pre-7.23 branch. Re-cut the fixture with
 `bun run explain:operator-slice`; the table
 below is generated from `src/explain/operators.ts` by
 `bun run explain:operator-readme` and gated by
@@ -1674,13 +1679,13 @@ not concat at all** — `1.` lexes as a *variable name* and the row comes back a
 juxtaposition, `(  $1. 2)`. A rule that claims every `.` byte for the operator
 emits a span the device does not have.
 
-Everything in the sweep is identical across all four builds except one runtime
-row: `:put ({2;1} > {1;2;3})` evaluates to `true` on 7.24.2 and 7.25beta3 and
-errors on both long-term builds. **Array comparison is not fixed on current
-long-term** — 7.23.5 is newer than the 7.23.3 this was first measured on and
-still errors — so the change rode the 7.24 line and was not backported. The two
-errors also differ: 7.23.5 says `cannot compare if array is more than array`,
-7.21.5 says `cannot compare if nothing is more than nothing`, so on 7.21.5 the
+Everything in the sweep is identical across all five builds except one runtime
+row: `:put ({2;1} > {1;2;3})` evaluates to `true` on 7.24.5, 7.25rc2 and
+7.26beta1 and errors on both long-term builds. **Array comparison is not fixed
+on current long-term** — 7.23.8 is newer than the 7.23.3 this was first
+measured on and still errors — so the change rode the 7.24 line and was not
+backported. The two errors also differ: 7.23.8 says `cannot compare if array
+is more than array`, 7.21.5 says `cannot compare if nothing is more than nothing`, so on 7.21.5 the
 operands did not survive to the comparison at all.
 Identical is measured, not assumed — the slice diffs verdict, arity, precedence,
 associativity, `highlight` run, unary placement and op-axis per version. So the
@@ -1775,7 +1780,8 @@ And the grounded complement — asked, and refused:
 
   <!-- BEGIN GENERATED token-census — regenerate with `bun run explain:token-census:readme` -->
   The token census is re-derivable with `bun run explain:token-census` and
-  covers 948 source scripts. The figures below are generated from
+  covers 948 source scripts of corpus snapshot `da632dc8e85d`, with the 7
+  `capture-controls` rows excluded. The figures below are generated from
   `test/fixtures/explain/tokens.json` → `corpus` by
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
@@ -1862,7 +1868,7 @@ what was wrong was the accounting of it. They are re-derived by
 `bun run explain:bracket-equals:readme:check`.
 
 <!-- BEGIN GENERATED bracket-equals — regenerate with `bun run explain:bracket-equals:readme` -->
-Measured by `bun run explain:bracket-equals` over the pinned corpus:
+Measured by `bun run explain:bracket-equals` over the population of corpus snapshot `da632dc8e85d`, with the 7 `capture-controls` rows excluded:
 **1,079** `=` bytes sit inside `[ … ]`, across
 263 of 948 scripts, and **1,067** of them come back
 `unclassified` — the operator fill abstains on essentially all of it. No
@@ -1877,15 +1883,15 @@ genuine comparisons — the device lowers `[find address=$IP]` to
 fill can take the query half later. For contrast the fill does claim
 **1,402** `=` bytes whose innermost opener is `(`.
 
-The query reading is the device's, not a guess: on 7.24.2, 93 of the
-137 scripts carrying one have IL with at least as many `(= …)` nodes.
-Of the rest, 28 are scripts the console refused outright — their IL is prose,
-with no nodes of any kind — and 16 use a menu the capture build could not
-resolve (a forum snippet on `/interface wireless` answers `bad command name
-wireless`), so the device never reached the query to lower it. Neither is a
-counter-example to the reading. Whole-corpus `(= …)` head nodes, which also
-count expression comparisons the fill already claims:
-7.23.5 1,233, 7.24.2 1,240, 7.25beta3 1,240.
+The query reading is the device's, not a guess: on 7.24.5, 111 of the
+137 scripts carrying one have IL with at least as many comparison nodes.
+Of the rest, 25 are scripts the console refused outright — their readout is
+prose, with no nodes of any kind — and 1 lowered fewer comparison nodes than the
+scan counted, typically because a command the capture build could not resolve
+(`bad command name …`) stopped the device before it reached the query. Neither is
+a counter-example to the reading. Whole-corpus `(= …)` head nodes per channel
+session, which also count expression comparisons the fill already claims:
+7.23.8 1,300, 7.24.5 1,306, 7.25rc2 1,306, 7.26beta1 1,306.
 <!-- END GENERATED bracket-equals -->
 
 ### Device agreement for the token partition (#264 B4, #263)
@@ -1935,13 +1941,13 @@ to be filled by assumption.
 
 **The device stops classifying at its first `error`, and mostly does not
 recover.** Measured over the slice, `error` appears **at most once per script
-and is always exactly one byte wide**, and on long-term 7.23.5 every byte after
+and is always exactly one byte wide**, and on long-term 7.23.8 every byte after
 it comes back `none`. Most of the slice sits in that tail. A percentage computed
 over the whole stream therefore measures the device giving up, not the parser,
 which is why the tail is its own outcome and is never folded into agreement. The
 rule is not absolute across versions, so the report does not assert it: stable
-7.24.2 and development 7.25beta3 classify again after the `error` in one run and
-stop on fewer scripts, and
+7.24.5, testing 7.25rc2 and development 7.26beta1 classify again after the
+`error` in one run and stop on fewer scripts, and
 `parser-recovered` in the table below is the figure that says by how much —
 zero would have been the claim, and it is not zero. Both counts are generated,
 not quoted here, so neither can go stale against the fixture.
@@ -1963,56 +1969,57 @@ a score.
 The agreement report is re-derivable with
 `bun run explain:highlight-agreement` and needs no router and no corpus: it
 scores the token partition against
-`test/fixtures/explain/highlight-streams.slice.json`, 70 stratified scripts of
+`test/fixtures/explain/highlight-streams.slice.json`, 67 stratified scripts of
 committed `/console/inspect request=highlight` output. The figures below are
 generated from `test/fixtures/explain/highlight-agreement.json` by
 `bun run explain:highlight-agreement:readme`, gated against it by
 `bun run explain:highlight-agreement:readme:check`, and the fixture itself is
 gated against a fresh measurement by
-`test/unit/explain-highlight-agreement.test.ts`. Of 85,529 bytes at 7.24.2,
-27,974 are bytes **both** sides decided a syntax class for, and 99.99% of
-those agree (dev 99.99%, holdout 100.00%). Set `comment` aside — it is 65.63%
+`test/unit/explain-highlight-agreement.test.ts`. Of 81,143 bytes at 7.24.5,
+27,538 are bytes **both** sides decided a syntax class for, and 99.99% of
+those agree (dev 99.99%, holdout 100.00%). Set `comment` aside — it is 63.66%
 of that decided region and mostly the corpus's harness-injected `# Source:`
-banner (#203) — and the remaining 9,615 bytes agree 99.98%. The device stops
-classifying at its one-byte `error`: 36 of 70 scripts carry one, and the
-41,968 bytes from there on are not a judgment about anything. The oracle
-itself moves between captures: 36 stop at 7.24.2 and 43 stop at 7.23.5 and 36
-stop at 7.25beta3, and 27 of the 70 streams differ between them. **This is a
-trend line, not a pass gate** — the slice is a per-(split, class) quota over a
-corpus that is 96.8% two authors, so the percentage describes this slice.
+banner (#203) — and the remaining 10,008 bytes agree 99.98%. The device stops
+classifying at its one-byte `error`: 34 of 67 scripts carry one, and the
+38,278 bytes from there on are not a judgment about anything. The oracle
+itself moves between captures: 34 stop at 7.24.5 and 39 stop at 7.23.8 and 34
+stop at 7.25rc2 and 34 stop at 7.26beta1, and 25 of the 67 streams differ
+between them. **This is a trend line, not a pass gate** — the slice is a
+per-(split, class) quota over a corpus that is 96.8% two authors, so the
+percentage describes this slice.
 
 | centrs class | projects to | agree | disagree | unprojected | of decided |
 | ------------ | ----------- | ----: | -------: | ----------: | ---------: |
-| `comment` | `comment` | 18,359 | 0 | 0 | 100.00% |
-| `variable-local` | `variable-local` | 1,123 | 0 | 0 | 100.00% |
+| `comment` | `comment` | 17,530 | 0 | 0 | 100.00% |
+| `variable-local` | `variable-local` | 1,547 | 0 | 0 | 100.00% |
 | `variable-global` | `variable-global` | 582 | 0 | 0 | 100.00% |
-| `variable-auto` | `variable-auto` | 92 | 0 | 0 | 100.00% |
-| `variable-parameter` | `variable-parameter` | 459 | 0 | 0 | 100.00% |
-| `dir` | `dir` | 1,677 | 0 | 0 | 100.00% |
-| `cmd` | `cmd` | 2,244 | 0 | 0 | 100.00% |
-| `arg` | `arg`, `arg-dot`, `arg-scope` | 2,188 | 0 | 0 | 100.00% |
-| `arg-sep` | `syntax-meta` | 382 | 0 | 0 | 100.00% |
-| `operator` | `syntax-meta` | 237 | 2 | 0 | 99.16% |
-| `brace` | `syntax-meta` | 211 | 0 | 0 | 100.00% |
-| `string` | *abstains* | 0 | 0 | 499 | — |
+| `variable-auto` | `variable-auto` | 93 | 0 | 0 | 100.00% |
+| `variable-parameter` | `variable-parameter` | 456 | 0 | 0 | 100.00% |
+| `dir` | `dir` | 1,701 | 0 | 0 | 100.00% |
+| `cmd` | `cmd` | 2,224 | 0 | 0 | 100.00% |
+| `arg` | `arg`, `arg-dot`, `arg-scope` | 2,167 | 0 | 0 | 100.00% |
+| `arg-sep` | `syntax-meta` | 368 | 0 | 0 | 100.00% |
+| `operator` | `syntax-meta` | 240 | 2 | 0 | 99.17% |
+| `brace` | `syntax-meta` | 210 | 0 | 0 | 100.00% |
+| `string` | *abstains* | 0 | 0 | 573 | — |
 | `escaped` | `escaped` | 418 | 0 | 0 | 100.00% |
-| `value` | *abstains* | 0 | 0 | 144 | — |
+| `value` | *abstains* | 0 | 0 | 135 | — |
 
-| outcome | bytes @7.24.2 | bytes @7.23.5 | bytes @7.25beta3 |
-| ------- | ----: | ----: | ----: |
-| agree — both decided, projection accepts | 27,972 | 27,218 | 27,972 |
-| disagree — both decided, projection rejects | 2 | 2 | 2 |
-| unprojected — no declared projection covers the pair | 643 | 633 | 643 |
-| offline-silent — device decided, centrs abstained | 4,300 | 4,150 | 4,300 |
-| non-syntax — the device answered something syntax cannot decide | 847 | 733 | 847 |
-| device-silent — centrs decided, device said `none` | 5,815 | 5,674 | 5,815 |
-| both-silent | 3,886 | 3,702 | 3,886 |
-| parser-stopped — at/after the device's `error` byte, and silent from there | 41,968 | 43,417 | 41,968 |
-| parser-recovered — past that `error`, and the device classified anyway | 96 | 0 | 96 |
+| outcome | bytes @7.24.5 | bytes @7.23.8 | bytes @7.25rc2 | bytes @7.26beta1 |
+| ------- | ----: | ----: | ----: | ----: |
+| agree — both decided, projection accepts | 27,536 | 27,173 | 27,536 | 27,536 |
+| disagree — both decided, projection rejects | 2 | 2 | 2 | 2 |
+| unprojected — no declared projection covers the pair | 708 | 705 | 708 | 708 |
+| offline-silent — device decided, centrs abstained | 4,288 | 4,187 | 4,288 | 4,288 |
+| non-syntax — the device answered something syntax cannot decide | 731 | 662 | 721 | 721 |
+| device-silent — centrs decided, device said `none` | 5,676 | 5,606 | 5,676 | 5,676 |
+| both-silent | 3,828 | 3,736 | 3,838 | 3,838 |
+| parser-stopped — at/after the device's `error` byte, and silent from there | 38,278 | 39,072 | 38,278 | 38,278 |
+| parser-recovered — past that `error`, and the device classified anyway | 96 | 0 | 96 | 96 |
 
-Where the device decided and offline analysis did not (4,300 bytes at 7.24.2,
-the next fill's target list): `syntax-meta` 3,122, `comment` 355,
-`variable-local` 326, `arg` 197, `escaped` 145, `dir` 66, 89 across the rest.
+Where the device decided and offline analysis did not (4,288 bytes at 7.24.5,
+the next fill's target list): `syntax-meta` 3,090, `comment` 341,
+`variable-local` 328, `arg` 230, `escaped` 145, `dir` 65, 89 across the rest.
 Most of the `syntax-meta` share is whitespace the device merged into an
 adjacent structure run rather than a token centrs missed.
 
@@ -2024,14 +2031,14 @@ every measured byte, the post-`error` tail included: where one capture stops
 parsing and the next does not, that tail IS the version disagreement, which is
 why it dominates the category.
 
-| applicability @7.24.2 | bytes | leading cells |
+| applicability @7.24.5 | bytes | leading cells |
 | ---------------------------- | ----: | ------------- |
-| offline-decidable | 32,002 | `comment` → `comment` 18,006, `unclassified` → `syntax-meta` 2,999, `cmd` → `cmd` 2,132 |
-| schema-dependent | 326 | `arg` → `obj-inactive` 326 |
-| state-dependent | 168 | `dir` → `obj-inactive` 120, `cmd` → `obj-inactive` 21, `unclassified` → `obj-dynamic` 20 |
-| version-dependent | 1,158 | `comment` → `comment` 353, `unclassified` → `obj-inactive` 159, `unclassified` → `syntax-meta` 123 |
-| uncategorized | 213 | `unclassified` → `obj-inactive` 90, `unclassified` → `variable-undefined` 75, `value` → `variable-undefined` 21 |
-| no-device-answer | 51,662 | `none` where the captures agree, wherever it falls |
+| offline-decidable | 32,043 | `comment` → `comment` 17,395, `unclassified` → `syntax-meta` 3,002, `cmd` → `cmd` 2,158 |
+| schema-dependent | 307 | `arg` → `obj-inactive` 307 |
+| state-dependent | 94 | `dir` → `obj-inactive` 49, `unclassified` → `obj-dynamic` 20, `cmd` → `obj-inactive` 18 |
+| version-dependent | 707 | `comment` → `comment` 135, `unclassified` → `obj-inactive` 124, `unclassified` → `syntax-meta` 88 |
+| uncategorized | 240 | `unclassified` → `obj-inactive` 116, `unclassified` → `variable-undefined` 75, `value` → `variable-undefined` 21 |
+| no-device-answer | 47,752 | `none` where the captures agree, wherever it falls |
 
 One representative run per cell, so B5 reads a fragment rather than a count.
 `runs` is how often that exact fragment occurs; the location is a slice script
@@ -2040,9 +2047,8 @@ and a byte offset into the stream the device saw.
 | outcome | cell | fragment | runs | first at |
 | ------- | ---- | -------- | ---: | -------- |
 | disagree | `operator` → `arg` | `"in"` | 1 | `forum/amm0/topic-169456-having-the-where-filter-in-scripting-signifantly-increases-the-execution-time-an/post-0006-snippet-01.rsc` @615 |
-| unprojected | `string` → `syntax-meta` | `"\""` | 311 | `eworm/ppp-on-up.rsc` @435 |
-| unprojected | `value` → `syntax-meta` | `"\""` | 88 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @1436 |
-| unprojected | `string` → `arg` | `"as-value"` | 1 | `forum/amm0/topic-266499-how-to-condense-variables-passed-through-to-function/post-0020-snippet-01.rsc` @279 |
+| unprojected | `string` → `syntax-meta` | `"\""` | 326 | `eworm/ppp-on-up.rsc` @435 |
+| unprojected | `value` → `syntax-meta` | `"\""` | 84 | `forum/amm0/topic-153357-using-wifiwave2-to-bridge-two-audience-wirelessly-thoughts-4-address-mode/post-0001-snippet-01.rsc` @1436 |
 | unprojected | `string` → `cmd` | `"len"` | 1 | `forum/amm0/topic-155978-zerotier-on-mikrotik-a-rosetta-stone-v7-1-1/post-0001-snippet-01.rsc` @1794 |
 | unprojected | `string` → `dir` | `":"` | 1 | `forum/amm0/topic-155978-zerotier-on-mikrotik-a-rosetta-stone-v7-1-1/post-0001-snippet-01.rsc` @1793 |
 <!-- END GENERATED highlight-agreement -->
@@ -2493,31 +2499,48 @@ config genre in question). Since phase 0 the corpus has grown to 948 with a
 export-banner share to 4.6%; **that stratum is not part of any phase-0 figure
 above**. Current whole-corpus offline censuses include its source text.
 
-The pinned snapshot carries **three complete builds** — long-term `7.23.5`,
-stable `7.24.2` and development `7.25beta3` — each with *both* oracles over all
-948 scripts, alongside six partial captures (parseIL at 7.20.8, 7.22.1,
-7.23rc1; highlight at 7.9.2, 7.23.2, 7.24rc2) that cover only 913. Schema v4
-names that split rather than leaving it to be discovered by hand: the
-`v_version_coverage` view classifies each build, and
-`coverage_class = 'complete'` is the filter every version-comparable query uses.
-`source_scripts` is byte-identical across both repins that reached this
-snapshot, so every text-derived report — the token and value censuses,
-`explain:arg-reach`, the browser-consumer proof — is unchanged by construction,
-and only the IL-derived operator census moved.
+The pinned snapshot (schema 5, tikoci/lsp-routeros-ts#40) carries one recorded
+capture session per release channel — long-term `7.23.8`, stable `7.24.5`,
+testing `7.25rc2` and development `7.26beta1`. Each is a `:parse` run and a
+`highlight` run over all 948 population scripts, bound to the exact submitted
+bytes and one device environment with every package installed. Two legacy
+`:parse` captures (7.20.8 and 7.22.1: 913 scripts, unknown input bytes, base
+package only) and a legacy 7.9.2 highlight summary remain as history, never as
+exact-input evidence.
 
-**The three complete builds do not agree with each other, and that is the
-finding.** Scored over all 948 scripts:
+Every census reads the corpus through `scripts/corpus-db.ts`, in three ways
+(#498):
 
-| oracle | long-term 7.23.5 ↔ stable 7.24.2 | stable 7.24.2 ↔ development 7.25beta3 |
-| ------ | -------------------------------: | ------------------------------------: |
-| `:parse` IL (`il_sha256`) | 87 scripts differ | 11 |
-| `highlight` (count + class set) | 33 | 0 |
+- **Population.** `v_corpus_population` leaves out the 7 upstream
+  `capture-controls` rows.
+- **Sessions.** Comparable figures name their channel run ids
+  (`capture_channels`), not a coverage label.
+- **Verdict.** The device verdict is the upstream `response_class`. Only
+  `il-no-recognized-diagnostic` is an accept, so IL carrying an embedded
+  `bad command name …` is a rejection. The shipped `:parse` reader
+  (`classifyParseResult`) agrees with it on all 5,640 channel and legacy
+  observations.
 
-Stable and development are the same build for these purposes; long-term is the
-one that moves. So an operator-axis or token-partition figure is a claim *about
-a channel*, not about RouterOS — which is why the census reports its builds as
-separate columns and states its version set, rather than collapsing them to one
-number. Long-term is also the channel a real device most likely runs.
+The population text is byte-identical to the previous snapshot, so the
+text-derived reports are unchanged by construction: the token and value
+censuses, `explain:arg-reach` and the browser-consumer proof. The IL- and
+highlight-derived figures moved.
+
+**The channels do not agree with each other, and that is the finding.** Scored
+over all 948 scripts:
+
+| oracle | long-term 7.23.8 ↔ stable 7.24.5 | stable ↔ testing 7.25rc2 | testing ↔ development 7.26beta1 |
+| ------ | -------------------------------: | -----------------------: | ------------------------------: |
+| `:parse` readout | 95 scripts differ | 12 | 13 |
+| `:parse` response class | 5 | 0 | 0 |
+| `highlight` stream | 24 | 1 | 0 |
+
+The newer channels are nearly the same build for these purposes; long-term is
+the one that moves. So an operator-axis or token-partition figure is a claim
+*about a channel*, not about RouterOS. That is why the census reports its
+builds as separate columns and states its session set, rather than collapsing
+them to one number. Long-term is also the channel a real device most likely
+runs.
 
 The corpus itself is not in this repo and is not moving here — `lsp-routeros-ts`
 owns producing snapshots, centrs owns which snapshot it measures against.

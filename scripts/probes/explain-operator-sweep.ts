@@ -57,12 +57,9 @@
  * Run: bun run explain:probe:operators [existing-chr-name]
  *      CHR_VERSION=7.24rc4 bun run explain:probe:operators
  */
+import { isParseRejection } from "../../src/protocols/mac-telnet-console.ts";
 import { readIlTree } from "../explain-operator-census.ts";
 import { openChr, type ProbeChr, probeOutputPath } from "./chr.ts";
-
-/** Same rejection predicate as the census and the integration tier. */
-const CONSOLE_REJECTION =
-	/^(syntax error|expected |missing |invalid |unknown |unexpected |no such |bad )/i;
 
 async function exec(chr: ProbeChr, input: string): Promise<string> {
 	const out = await chr.exec(input);
@@ -220,7 +217,7 @@ export function splitMarkers(output: string, count: number): (string | null)[] {
 }
 
 function describeParse(source: string, il: string): ParseResult {
-	const accepted = !CONSOLE_REJECTION.test(il);
+	const accepted = !isParseRejection(il);
 	const node = accepted ? readOperatorNode(il) : { head: null, arity: null };
 	return {
 		source,
@@ -421,6 +418,10 @@ const UNDOCUMENTED = ["<%%", "<%", "%%", "$", "[", "]"];
  */
 const CENSUS_HEADS = [
 	"evl",
+	// Not a census head since the schema-5 repin (#498): it was the
+	// `(line N column M)` prose of embedded diagnostics, which the old prose
+	// oracle counted as accepted IL. Still asked, because it is grounded below
+	// as a non-operator and the sweep must ask the same questions everywhere.
 	"line",
 	";",
 	"[",

@@ -156,6 +156,33 @@ describe("the census over a tiny corpus", () => {
 		expect(result.bracketEquals).toBe(0);
 		expect(result.scriptsWithBracketEquals).toBe(0);
 	});
+
+	test("the corroboration verdict reads the response class, and `!=` is a comparison node", () => {
+		// The `=` of `!=` is a query site in the byte scan, and the device lowers
+		// it to `(!= …)`. Counting only `(= ` read this as a shortfall (#498).
+		const text = '/ip/firewall/address-list remove [find list=a comment!="b"]';
+		const corroborate = (
+			il: string,
+			responseClass: "il-no-recognized-diagnostic" | "plain-diagnostic",
+		) => census([{ text, il, responseClass }], {}, "7.24.5").ilCorroboration;
+		expect(
+			corroborate(
+				"(evl /ip/firewall/address-list/removenumbers=(  (= $list a) (!= $comment b)))",
+				"il-no-recognized-diagnostic",
+			),
+		).toEqual({
+			build: "7.24.5",
+			scriptsWithQueryEquals: 1,
+			corroborated: 1,
+			commandUnresolved: 0,
+			rejectedParse: 0,
+		});
+		// A prose rejection carries no nodes, whatever its first word.
+		expect(
+			corroborate("syntax error (line 1 column 4)", "plain-diagnostic")
+				.rejectedParse,
+		).toBe(1);
+	});
 });
 
 describe("the committed corpus figures", () => {
@@ -191,7 +218,7 @@ describe("the committed corpus figures", () => {
 
 	test("the device corroborates the query reading where it could resolve the command", () => {
 		const co = fixture.ilCorroboration;
-		expect(co.build).toBe("7.24.2");
+		expect(co.build).toBe("7.24.5");
 		expect(co.corroborated + co.commandUnresolved + co.rejectedParse).toBe(
 			co.scriptsWithQueryEquals,
 		);
@@ -216,6 +243,6 @@ describe("the README projection", () => {
 		expect(block).toContain("1,067");
 		expect(block).toContain("448");
 		expect(block).toContain("619");
-		expect(block).toContain("7.24.2");
+		expect(block).toContain("7.24.5");
 	});
 });

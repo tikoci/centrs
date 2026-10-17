@@ -974,8 +974,9 @@ describe("value anchors", () => {
 			"/ip { address { print } }",
 			"/ip { address print }",
 			"/interface { ethernet { print } }",
-			// A body statement need not be a menu command: corpus 521 nests a
-			// scripting directive, and an absolute command is a statement too.
+			// A body statement need not be a menu command: corpus script
+			// `forum/amm0/topic-184067-routeros-lsp-for-better-syntax-checking-command-completion-in-editors-like-vscod/post-0014-snippet-02.rsc`
+			// nests a scripting directive, and an absolute command is a statement too.
 			"/interface { ethernet { :put x } }",
 			"/ip { address { /log info x } }",
 		]) {

@@ -119,7 +119,7 @@ jobs:
           path: /tmp/coverage-report.txt
           retention-days: 14
       # Report-only, and corpus-free: the agreement scorer reads the committed
-      # highlight slice, so the trend is visible on every PR without the 10 MB
+      # highlight slice, so the trend is visible on every PR without the ~36 MB
       # corpus the censuses need. Drift is already gated — the fixture by
       # test/unit/explain-highlight-agreement.test.ts above, the README block by
       # `lint:ci` in the checks job — so this step only publishes the figures.
@@ -171,7 +171,8 @@ jobs:
       - name: Build
         run: bun run build
 
-  # The `explain` censuses read a 948-script RouterOS corpus that lives in
+  # The `explain` censuses read a 948-script RouterOS corpus (schema 5, read
+  # through scripts/corpus-db.ts since #498) that lives in
   # tikoci/lsp-routeros-ts, not here. Until #186 they resolved it only as a
   # sibling checkout, so they ran on exactly one machine and never on a PR —
   # which is what #260 hit. `corpus:fetch` pulls the snapshot pinned by
@@ -182,7 +183,10 @@ jobs:
   # block of test/fixtures/explain/values.json, the OPERATOR IL-head census
   # against the same block of test/fixtures/explain/operators.json (#255), and
   # the TOKEN partition census against `test/fixtures/explain/tokens.json` →
-  # `corpus` (#289 B1). That is the reachability this job was built to provide.
+  # `corpus` (#289 B1), the bracket-`=` census (#341), and, since the slice is
+  # cut from the corpus's channel sessions (#498), the per-character highlight
+  # slice the agreement report scores. That is the reachability this job was
+  # built to provide.
   # The genre census still only reports: it has no committed fixture to be
   # asserted against.
   #
@@ -208,7 +212,7 @@ jobs:
         run: bun install --frozen-lockfile
       # Keyed on the whole pin file, so any edit to it — a repin, or just a
       # changed byte count — misses the cache. Broader than keying on the sha256
-      # alone, and deliberately so: a spurious miss costs one 10 MB download,
+      # alone, and deliberately so: a spurious miss costs one ~36 MB download,
       # while a spurious HIT would serve bytes the pin no longer describes.
       # The fetch step re-hashes what it finds either way.
       - name: Cache pinned corpus
@@ -257,6 +261,8 @@ jobs:
         run: bun run explain:token-census:check
       - name: Bracket-`=` census matches the committed fixture
         run: bun run explain:bracket-equals:check
+      - name: Highlight slice matches a fresh cut from the corpus
+        run: bun run explain:highlight-slice:check
 
   chr-smoke:
     name: CHR smoke (stable)
