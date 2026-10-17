@@ -9,7 +9,7 @@
  * - **Population.** `source_scripts` also holds upstream auxiliary
  *   collections: `capture-controls` (7 challenge scripts that exercise the
  *   classifier) and `wiresage-conformance` (875 synthetic grammar cases,
- *   lsp-routeros-ts#41). Counting them moves every denominator. The
+ *   lsp-routeros-ts#42). Counting them moves every denominator. The
  *   population is `v_corpus_population`, never the table, and an observation
  *   belongs to it by `script_id`. A path-prefix filter names the collections
  *   it knows, so the next collection upstream adds would leak through it.

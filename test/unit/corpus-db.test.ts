@@ -7,9 +7,13 @@
 
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	channelSession,
 	channelSessions,
+	corpusProvenance,
 	decodeHighlightRuns,
 	describeExcluded,
 	describePopulation,
@@ -175,6 +179,26 @@ describe("corpus-db readers (#498)", () => {
 	test("a highlight stream that does not cover the text exactly is refused", () => {
 		expect(() => decodeHighlightRuns([["cmd", 2]], "abc")).toThrow(/2 of 3/);
 		expect(() => decodeHighlightRuns([["cmd", 4]], "abc")).toThrow(/overrun/);
+	});
+
+	// Every collection the view leaves out is counted, including one this
+	// reader has never heard of, and nothing the view keeps is.
+	test("provenance counts the rows the view excludes, by collection", () => {
+		const dir = mkdtempSync(join(tmpdir(), "corpus-db-"));
+		try {
+			const dbPath = join(dir, "corpus.sqlite");
+			writeFileSync(dbPath, "x");
+			expect(corpusProvenance(corpus(), dbPath)).toEqual({
+				snapshot: "2d711642b726",
+				excluded: {
+					"capture-controls": 1,
+					"next-collection": 1,
+					"wiresage-conformance": 1,
+				},
+			});
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 
 	test("the README clause states the snapshot and each excluded collection", () => {
