@@ -216,6 +216,8 @@ vrf
 webproxy
 WinAppDriver
 winbox
+# wiresage/routeros-lsp: third-party RouterOS checker; its 875 conformance cases are the corpus's `wiresage-conformance` collection (lsp-routeros-ts#42).
+wiresage
 Wireshark
 workstream
 workstreams

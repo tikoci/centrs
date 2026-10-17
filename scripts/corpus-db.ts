@@ -6,10 +6,13 @@
  * verdict on its own. Each of those had a private copy before schema 5, and
  * each copy was wrong in its own way:
  *
- * - **Population.** `source_scripts` now also holds the upstream
- *   `capture-controls` collection (7 challenge scripts that exercise the
- *   classifier). Counting them moves every denominator. The population is
- *   `v_corpus_population`, never the table.
+ * - **Population.** `source_scripts` also holds upstream auxiliary
+ *   collections: `capture-controls` (7 challenge scripts that exercise the
+ *   classifier) and `wiresage-conformance` (875 synthetic grammar cases,
+ *   lsp-routeros-ts#41). Counting them moves every denominator. The
+ *   population is `v_corpus_population`, never the table, and an observation
+ *   belongs to it by `script_id`. A path-prefix filter names the collections
+ *   it knows, so the next collection upstream adds would leak through it.
  * - **Sessions.** "The builds where `coverage_class = 'complete'`" was a label
  *   over legacy rows, and schema 5 renamed it and stopped vouching for it. A
  *   comparable measurement is now an explicit run id: `capture_channels`
@@ -32,9 +35,6 @@ import { sha256File } from "./corpus-fetch.ts";
 
 /** The oldest snapshot schema these readers understand. */
 export const CORPUS_SCHEMA_VERSION = 5;
-
-/** The upstream collection that is classifier controls, not corpus. */
-export const CONTROL_COLLECTION = "capture-controls";
 
 /**
  * Refuse a snapshot older than schema 5, with the fix in the message. Reading a
@@ -63,7 +63,7 @@ export interface PopulationScript {
 	hasCliPrompt: number;
 }
 
-/** The study population, controls excluded, in path order. */
+/** The study population, auxiliary collections excluded, in path order. */
 export function populationScripts(db: Database): PopulationScript[] {
 	requireCorpusSchema(db);
 	return db
@@ -76,12 +76,12 @@ export function populationScripts(db: Database): PopulationScript[] {
 
 /**
  * What every census figure states about its input: the snapshot it read (the
- * first 12 hex of the DB's sha256, as `describeResolution` prints it) and how
- * many control rows the population left out.
+ * first 12 hex of the DB's sha256, as `describeResolution` prints it) and the
+ * rows the population left out, by collection.
  */
 export interface CorpusProvenance {
 	snapshot: string;
-	controlsExcluded: number;
+	excluded: Record<string, number>;
 }
 
 export function corpusProvenance(
@@ -89,10 +89,25 @@ export function corpusProvenance(
 	dbPath: string,
 ): CorpusProvenance {
 	requireCorpusSchema(db);
-	const row = db
-		.query("SELECT COUNT(*) AS n FROM source_scripts WHERE collection = ?")
-		.get(CONTROL_COLLECTION) as { n: number };
-	return { snapshot: sha256File(dbPath).slice(0, 12), controlsExcluded: row.n };
+	const rows = db
+		.query(
+			"SELECT collection, COUNT(*) AS n FROM source_scripts " +
+				"WHERE id NOT IN (SELECT id FROM v_corpus_population) " +
+				"GROUP BY collection ORDER BY collection",
+		)
+		.all() as { collection: string; n: number }[];
+	return {
+		snapshot: sha256File(dbPath).slice(0, 12),
+		excluded: Object.fromEntries(rows.map((r) => [r.collection, r.n])),
+	};
+}
+
+/** The excluded rows as prose: the total, then each collection's count. */
+export function describeExcluded(excluded: Record<string, number>): string {
+	const entries = Object.entries(excluded);
+	const total = entries.reduce((sum, [, n]) => sum + n, 0);
+	const parts = entries.map(([collection, n]) => `${n} \`${collection}\``);
+	return `${total} auxiliary rows (${parts.join(", ")})`;
 }
 
 /**
@@ -101,11 +116,11 @@ export function corpusProvenance(
  */
 export function describePopulation(p: Partial<CorpusProvenance>): string {
 	if (p.snapshot === undefined) return "";
-	const controls =
-		p.controlsExcluded === undefined
+	const excluded =
+		p.excluded === undefined
 			? ""
-			: `, with the ${p.controlsExcluded} \`${CONTROL_COLLECTION}\` rows excluded`;
-	return ` of corpus snapshot \`${p.snapshot}\`${controls}`;
+			: `, with ${describeExcluded(p.excluded)} excluded`;
+	return ` of corpus snapshot \`${p.snapshot}\`${excluded}`;
 }
 
 /** One release channel's recorded capture session. */
@@ -217,15 +232,15 @@ export function parseObservations(
 			"o.response_class AS responseClass, o.response_text AS il, " +
 			"o.acquisition_status AS acquisition " +
 			"FROM capture_observations o JOIN capture_runs r ON r.id = o.run_id " +
-			"WHERE r.id = ? AND r.probe = 'parseil' AND o.source_path NOT LIKE ? " +
-			"ORDER BY o.source_path",
+			"JOIN v_corpus_population p ON p.id = o.script_id " +
+			"WHERE r.id = ? AND r.probe = 'parseil' ORDER BY o.source_path",
 	);
 	const out: ParseObservation[] = [];
 	for (const runId of runIds) {
-		const rows = query.all(runId, `${CONTROL_COLLECTION}/%`) as (Omit<
-			ParseObservation,
-			"il"
-		> & { il: string | null; acquisition: string })[];
+		const rows = query.all(runId) as (Omit<ParseObservation, "il"> & {
+			il: string | null;
+			acquisition: string;
+		})[];
 		if (rows.length === 0)
 			throw new Error(
 				`the corpus has no parseil observations for run ${runId}`,
@@ -320,12 +335,12 @@ export function highlightObservations(
 				"o.highlight_json AS highlight, i.input_json AS input, " +
 				"v.submitted_text AS submitted " +
 				"FROM capture_observations o JOIN capture_runs r ON r.id = o.run_id " +
+				"JOIN v_corpus_population p ON p.id = o.script_id " +
 				"LEFT JOIN capture_inputs i ON i.id = o.input_id " +
 				"LEFT JOIN v_capture_inputs v ON v.observation_id = o.id " +
-				"WHERE r.id = ? AND r.probe = 'highlight' AND o.source_path NOT LIKE ? " +
-				"ORDER BY o.source_path",
+				"WHERE r.id = ? AND r.probe = 'highlight' ORDER BY o.source_path",
 		)
-		.all(runId, `${CONTROL_COLLECTION}/%`) as {
+		.all(runId) as {
 		path: string;
 		acquisition: string;
 		encoding: string;

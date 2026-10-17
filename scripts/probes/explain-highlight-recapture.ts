@@ -12,8 +12,8 @@
 // The upstream "persist streams in collect-highlight.ts" ask stands as a
 // follow-up — this does not need to entangle the two repos to get the number.
 //
-// It reads the EXACT corpus text the Q13 scorer feeds the SUT (corpus.sqlite
-// source_scripts.text) and applies the EXACT upstream transform
+// It reads the EXACT corpus text the Q13 scorer feeds the SUT (the population's
+// source_scripts.text, via populationScripts) and applies the EXACT upstream transform
 // (replaceNonAscii(text.substring(0, 32767), '?')) so the stream and the SUT see
 // byte-identical input. Files whose token count != byte length are recorded as
 // misaligned and carry NO pairs (no fabrication past a desync — the X3 posture).
@@ -32,6 +32,7 @@
 // Usage:  CHR_URL=http://127.0.0.1:9150 bun run explain:probe:highlight-recapture [--limit N]
 
 import { Database } from "bun:sqlite";
+import { populationScripts } from "../corpus-db.ts";
 import {
 	describeResolution,
 	resolveCorpusDb,
@@ -163,9 +164,7 @@ async function main() {
 	const db = new Database(resolution.path, { readonly: true });
 	let rows: { path: string; text: string }[];
 	try {
-		rows = db
-			.query("SELECT path, text FROM source_scripts ORDER BY path")
-			.all() as { path: string; text: string }[];
+		rows = populationScripts(db).map(({ path, text }) => ({ path, text }));
 	} finally {
 		db.close();
 	}

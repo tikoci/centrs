@@ -78,6 +78,7 @@ import {
 	type CorpusProvenance,
 	channelSessions,
 	corpusProvenance,
+	describeExcluded,
 	isAcceptedParse,
 	type ParseObservation,
 	parseObservations,
@@ -388,7 +389,8 @@ function renderMarkdown(result: OperatorCensus): string {
 	const versions = result.versions.split(",");
 	const lines = [
 		`corpus: ${result.sourceScripts} scripts (snapshot ${result.snapshot ?? "?"}, ` +
-			`${result.controlsExcluded ?? "?"} controls excluded), ${result.ilRows} IL rows ` +
+			`${result.excluded === undefined ? "?" : describeExcluded(result.excluded)} excluded), ` +
+			`${result.ilRows} IL rows ` +
 			`(${result.acceptedRows} accepted, ${result.rejectedRows} rejected of which ` +
 			`${result.embeddedDiagnosticRows} embedded, ${result.unbalancedRows} unbalanced), ` +
 			`${result.captureFailedRows} capture failures, versions ${result.versions}`,

@@ -34,8 +34,9 @@
  * delimiter is `[`, with quoted strings and `#` comments skipped. That is a
  * property of the corpus, not of the pipeline, so it is stable across
  * fill-order changes — which is exactly what the old figure was not.
- * The population (`v_corpus_population`, controls excluded) is byte-identical
- * across the #336 repins and the schema-5 repin (#498), so this denominator
+ * The population (`v_corpus_population`, auxiliary collections excluded) is
+ * byte-identical across the #336 repins, the schema-5 repin (#498) and the
+ * `wiresage-conformance` repin (lsp-routeros-ts#42), so this denominator
  * cannot move without the corpus moving.
  *
  * The scan runs on the ANALYZED surface, not the original string: token offsets
