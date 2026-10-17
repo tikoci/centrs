@@ -223,6 +223,20 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 					rejected: PARSE_REJECTED.test(await parseOf(started.chr, input)),
 				}).toEqual({ input, rejected: true });
 			}
+			// The fail-open direction, pinned so the unit test's claim stays true:
+			// an argument the command lacks is rejected on device, while offline
+			// reads the brace as a body and reports nothing.
+			for (const input of [
+				"/tool/netwatch add host=1.1.1.1 zzz-script={ :beep }",
+				"/tool/netwatch add host=1.1.1.1 on-zzz={ :beep }",
+			]) {
+				expect({
+					input,
+					rejected: PARSE_REJECTED.test(await parseOf(started.chr, input)),
+					braces: offline(input).braces,
+				}).toEqual({ input, rejected: true, braces: 0 });
+			}
+
 			// All three stay the offline error: `zzzscript` lacks the hyphen of
 			// RouterOS's `…-script` names, so it is not a script-body shape.
 			for (const input of [

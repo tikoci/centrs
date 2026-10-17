@@ -1441,8 +1441,12 @@ The same applies before a script body. `source { :beep }`,
 bare spelling, and its name shape gained the `…-script` arguments
 (`up-script`, `lease-script`) that hard-failed even with the `=`. Which slots
 take a body is per-menu and per-version schema (`lease-script={…}` parses on
-7.24.5 and not on 7.22.1), so the shape only ever withholds the
-`invalid-command-brace` error and never asserts a body.
+7.24.5 and not on 7.22.1). The shape decides the brace's role for every
+reader, not just the error, and it errs toward a body: an argument the
+command does not have (`zzz-script={…}`, and `on-zzz={…}` before #350) is a
+device `syntax error` that offline does not report. That is a missed
+rejection for the device preflight to catch, never a false reject. On the
+pinned corpus the widening changed no census.
 
 ### `'` is not a RouterOS token (#355)
 

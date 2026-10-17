@@ -60,7 +60,7 @@
  * `[…]` substitution or a quoted run is one token by construction.
  */
 
-import type { Argument } from "./args.ts";
+import { ARGUMENT_NAME, type Argument } from "./args.ts";
 
 /** Two adjacent operands that may be the spaced spelling of `name=value`. */
 export interface SpacedPair {
@@ -77,8 +77,11 @@ export interface SpacedPair {
 	valueShaped: boolean;
 }
 
-/** An argument-name-shaped bare word: `comment`, `without-paging`, `input.filter`. */
-const NAME_SHAPED = /^[A-Za-z][A-Za-z0-9.-]*$/;
+/**
+ * An argument-name-shaped bare word. This is the lexer's own grammar, so a word
+ * the lexer would read as `name=` in the `=` spelling is a name here too.
+ */
+const NAME_SHAPED = ARGUMENT_NAME;
 
 function isWhere(token: Argument): boolean {
 	return token.kind === "positional" && token.text.toLowerCase() === "where";

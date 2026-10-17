@@ -62,8 +62,16 @@ export const DIRECTIVE_BODY: Record<string, string> = {
  * Script-valued attribute naming convention, the corpus census's
  * `SCRIPT_BEARING_KEY` shape (`scripts/explain-corpus-census.ts`).
  *
- * A shape, not a list, and only ever used to WITHHOLD the `invalid-command-brace`
- * error, so it must cover every slot where a body is legal and may cover more.
+ * A shape, not a list. It decides a brace's ROLE (statement body or value) for
+ * every reader of {@link braceStartsStatements}: segmentation, the argument
+ * lexer, symbols and path resolution, as well as the `invalid-command-brace`
+ * exemption. A name inside the shape is read as a body; a name outside it as a
+ * value. The shape errs toward body because the other error is the worse one:
+ * reading a real `up-script={ :beep }` as an array hard-failed input the device
+ * accepts. The cost is the fail-open direction. An argument the command does
+ * not have, `zzz-script={ :beep }` or `on-zzz={ :beep }`, is a device
+ * `syntax error` on CHR 7.24.5 that offline does not report, because naming the
+ * command's arguments is schema. The `on-…` half of that predates #350.
  * Which slots take a body is per-menu and per-version schema: on CHR 7.24.5
  * `/tool/netwatch add … up-script={ :beep }` and `/ip/dhcp-server set 0
  * lease-script={ :beep }` both parse, while 7.22.1 accepts the first and

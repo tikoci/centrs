@@ -59,6 +59,22 @@ describe("explain/spaced-args — the space-for-`=` spelling (#350)", () => {
 		});
 	});
 
+	test("the name shape is the lexer's own, dotted and underscored too", () => {
+		// `ARGUMENT_NAME` reads `.proplist=` and `my_x=` as names, so their spaced
+		// spellings abstain as well. Neither is accepted on CHR 7.24.5
+		// (`bad parameter .proplist`, and `my_thing` lands in `numbers=`), but
+		// `read: true` with `args: {}` is false for them all the same.
+		for (const input of [
+			"/interface print .proplist name",
+			"/interface set my_thing x",
+		]) {
+			expect({ input, read: onlyCommand(input)?.arguments?.read }).toEqual({
+				input,
+				read: false,
+			});
+		}
+	});
+
 	describe("warns: the second operand cannot be a flag", () => {
 		test("one warning per value-shaped pair, spanning name through value", () => {
 			const input =
@@ -221,6 +237,22 @@ describe("explain — a script body may drop its `=` before the brace (#350)", (
 			expect({ input, verdict: explainCommand(input, {}).verdict }).toEqual({
 				input,
 				verdict: "pass",
+			});
+		}
+	});
+
+	test("an argument the command lacks is read as a body: the fail-open direction", () => {
+		// `zzz-script={ :beep }` and `on-zzz={ :beep }` are a device `syntax error`
+		// on CHR 7.24.5 (the integration twin pins it). Offline cannot name a
+		// command's arguments, so it misses the rejection rather than risk a false
+		// one on a real `up-script`. `on-zzz` already passed before #350.
+		for (const input of [
+			"/tool/netwatch add host=1.1.1.1 zzz-script={ :beep }",
+			"/tool/netwatch add host=1.1.1.1 on-zzz={ :beep }",
+		]) {
+			expect({ input, braces: braceErrors(input) }).toEqual({
+				input,
+				braces: [],
 			});
 		}
 	});

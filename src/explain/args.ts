@@ -87,7 +87,7 @@ import {
 } from "./segment.ts";
 
 /** A RouterOS argument name: bare word, optionally dotted (`.id`, `.proplist`). */
-const ARGUMENT_NAME = /^\.?[A-Za-z][A-Za-z0-9._-]*$/;
+export const ARGUMENT_NAME = /^\.?[A-Za-z][A-Za-z0-9._-]*$/;
 
 /** What one argument token is. */
 export type ArgumentKind = "attribute" | "positional" | "query";
