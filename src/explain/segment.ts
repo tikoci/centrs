@@ -84,6 +84,7 @@ import {
 	MAX_STRING_FRAME_DEPTH,
 	scanQuotedString as scanQuotedStringShared,
 } from "./quoted-string.ts";
+import { runNamesCommand } from "./run-tokens.ts";
 import {
 	braceStartsStatements,
 	canRetainStatementIndex,
@@ -699,6 +700,8 @@ interface Frame {
 	/** Incremental equivalent of trimming and checking the H7 prefix. */
 	prefixSawNonSpace: boolean;
 	prefixValid: boolean;
+	/** The prefix's run has been checked for a command verb (#496). */
+	prefixVerbChecked: boolean;
 	/** statements collected here; the flattened output for a committed container. */
 	buffer: RawSegment[];
 	/** true for a container frame; false for the synthetic top level. */
@@ -752,6 +755,7 @@ function scanAscii(
 		prefixScanEnd: -1,
 		prefixSawNonSpace: false,
 		prefixValid: true,
+		prefixVerbChecked: false,
 		buffer: [],
 		container: false,
 		openIndex: -1,
@@ -777,6 +781,7 @@ function scanAscii(
 		f.prefixScanEnd = -1;
 		f.prefixSawNonSpace = false;
 		f.prefixValid = true;
+		f.prefixVerbChecked = false;
 	};
 
 	const makeSegment = (
@@ -814,7 +819,8 @@ function scanAscii(
 	};
 
 	// A container prefix is empty or a bare `/`-menu path with no `=[($"` — the
-	// same test the old `containerOpen` applied to the group's prefix.
+	// same test the old `containerOpen` applied to the group's prefix — whose
+	// run names no command (#496).
 	const validPrefix = (f: Frame, start: number, end: number): boolean => {
 		if (f.prefixScanStart !== start || f.prefixScanEnd > end) {
 			resetPrefixScan(f);
@@ -841,6 +847,12 @@ function scanAscii(
 			}
 		}
 		f.prefixScanEnd = end;
+		// Checked once per statement: a later `{` sits behind this one, which
+		// already ended the run, so the answer cannot change.
+		if (f.prefixValid && !f.prefixVerbChecked) {
+			f.prefixVerbChecked = true;
+			if (runNamesCommand(ascii.slice(start, end))) f.prefixValid = false;
+		}
 		return f.prefixValid;
 	};
 
@@ -860,6 +872,7 @@ function scanAscii(
 			prefixScanEnd: -1,
 			prefixSawNonSpace: false,
 			prefixValid: true,
+			prefixVerbChecked: false,
 			buffer: [],
 			container: true,
 			openIndex: i,

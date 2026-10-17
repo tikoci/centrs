@@ -4,6 +4,7 @@ import { explainCommand } from "../../src/explain.ts";
 import {
 	isChrIntegrationEnabled,
 	PARSE_REJECTED,
+	PARSE_REJECTED_HINT,
 	recordIntegrationEvidence,
 	startIntegrationChr,
 } from "./chr.ts";
@@ -248,6 +249,68 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 					input,
 					braces: 1,
 				});
+		} finally {
+			await started.chr.destroy();
+		}
+	}, 300_000);
+
+	test("a brace after a command is its operand, not a menu block (#496)", async () => {
+		const started = await startIntegrationChr();
+		try {
+			// The all-bare spelling is one command whose body is the argument.
+			for (const input of [
+				"/system/script add name beep source { :beep }",
+				"/system/scheduler add name beep on-event { :beep }",
+			]) {
+				expect({ input, parsed: await parseOf(started.chr, input) }).toEqual({
+					input,
+					parsed: await parseOf(started.chr, input.replace(" {", "={")),
+				});
+				expect({
+					input,
+					statements: explainCommand(input, {}).structure.statements.length,
+					braces: offline(input).braces,
+				}).toEqual({ input, statements: 1, braces: 0 });
+			}
+
+			// A positional brace after a command is rejected, whether the verb is a
+			// CRUD word or a catalog command.
+			for (const input of [
+				"/system/script add { :beep }",
+				"/ip/route/print {1;2}",
+				"/system/reboot { :beep }",
+				"/tool fetch { :beep }",
+				"/system/script add name beep comment { :beep }",
+			]) {
+				expect({
+					input,
+					rejected: PARSE_REJECTED.test(await parseOf(started.chr, input)),
+					braces: offline(input).braces,
+				}).toEqual({ input, rejected: true, braces: 1 });
+			}
+
+			// A run that names no command still opens a menu block.
+			for (const input of [
+				"/system script { print }",
+				"/ip firewall filter { print }",
+				"/system { script add name beep source { :beep } }",
+			]) {
+				expect({
+					input,
+					rejected: PARSE_REJECTED_HINT.test(await parseOf(started.chr, input)),
+					braces: offline(input).braces,
+				}).toEqual({ input, rejected: false, braces: 0 });
+			}
+
+			await recordIntegrationEvidence({
+				suite: "explain-spaced-args",
+				command: "explain",
+				protocol: "rest-api",
+				routerosVersion: started.chr.state.version,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+				exampleIds: [35],
+			});
 		} finally {
 			await started.chr.destroy();
 		}

@@ -8,6 +8,7 @@
  */
 
 import { scanQuotedString } from "./quoted-string.ts";
+import { runNamesCommand } from "./run-tokens.ts";
 
 /** Error-variable shape for `:onerror V { … }` — a bare/`$`-prefixed name. */
 const ERROR_VAR = /^\$?[A-Za-z][A-Za-z0-9._-]*$/;
@@ -466,11 +467,15 @@ export function braceStartsStatements(
 		if (!/^:|^(?:local|global)$/i.test(word)) return true;
 	}
 
-	// H7's bare `{...}` and `/menu {...}` containers are statement bodies too.
+	// H7's bare `{...}` and `/menu {...}` containers are statement bodies too,
+	// but a run that already names a command makes the brace its operand (#496).
+	// `start` follows the last `{`, so each brace reads its own run: linear.
 	const first = index.firstContent[open] ?? -1;
 	return (
 		first < start ||
-		(text[first] === "/" && (index.lastForbidden[open] ?? -1) < start)
+		(text[first] === "/" &&
+			(index.lastForbidden[open] ?? -1) < start &&
+			!runNamesCommand(text.slice(first, open)))
 	);
 }
 

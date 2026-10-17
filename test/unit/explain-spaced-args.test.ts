@@ -286,3 +286,82 @@ describe("explain — a script body may drop its `=` before the brace (#350)", (
 		}
 	});
 });
+
+describe("explain — a brace after a command is its operand, not a menu block (#496)", () => {
+	const braceErrors = (input: string) =>
+		explainCommand(input, {}).diagnostics.filter((d) =>
+			d.code.endsWith("/invalid-command-brace"),
+		).length;
+
+	test("the all-bare body spelling is one statement, with no root `:beep`", () => {
+		// Each lowers to the IL of its `=` spelling on CHR 7.22.1 and 7.24.5: one
+		// `evl` whose `source=` carries the body. The lexical `/menu {` rule used
+		// to open a container here and publish `:beep` as a sibling.
+		for (const input of [
+			"/system/script add name beep source { :beep }",
+			"/system script add name beep source { :beep }",
+			"/system/scheduler add name beep on-event { :beep }",
+		]) {
+			expect({
+				input,
+				segments: segmentStatements(input).segments.length,
+				spans: explainCommand(input, {}).structure.statements.map(
+					(s) => s.span,
+				),
+				braces: braceErrors(input),
+				verdict: explainCommand(input, {}).verdict,
+			}).toEqual({
+				input,
+				segments: 1,
+				spans: [{ start: 0, end: input.length }],
+				braces: 0,
+				verdict: "warn",
+			});
+		}
+	});
+
+	test("a positional brace after a command is an error", () => {
+		// `expected end of command` or `syntax error` on CHR 7.24.5 for every row.
+		// The verb comes from the frozen vocabulary or, for `reboot` and `fetch`,
+		// from the catalog's command axis.
+		for (const input of [
+			"/system/script add { :beep }",
+			"/ip/route/print {1;2}",
+			"/ip/route print { :beep }",
+			"/system/reboot { :beep }",
+			"/tool fetch { :beep }",
+			"/system/script add name beep comment { :beep }",
+		]) {
+			expect({
+				input,
+				braces: braceErrors(input),
+				verdict: explainCommand(input, {}).verdict,
+			}).toEqual({ input, braces: 1, verdict: "fail" });
+		}
+	});
+
+	test("a run that names no command still opens a menu block", () => {
+		// `(evl (evl /system/script/print))` and its kin on CHR 7.24.5.
+		for (const input of [
+			"/system script { print }",
+			"/ip firewall filter { print }",
+			"/system { script { print } }",
+			"/system { script add name beep source { :beep } }",
+		]) {
+			const result = explainCommand(input, {});
+			expect({
+				input,
+				braces: braceErrors(input),
+				failed: result.verdict === "fail",
+			}).toEqual({ input, braces: 0, failed: false });
+		}
+		expect(
+			explainCommand("/system script { print }", {}).structure.statements.map(
+				(s) => s.command,
+			),
+		).toEqual([
+			{ path: "/system/script" },
+			{ path: "/system/script", verb: "print", args: {} },
+		]);
+	});
+});
