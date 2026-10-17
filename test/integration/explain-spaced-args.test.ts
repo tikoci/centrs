@@ -1,0 +1,255 @@
+import { describe, expect, test } from "bun:test";
+import { routerOsStringLiteral } from "../../src/core/routeros-string.ts";
+import { explainCommand } from "../../src/explain.ts";
+import {
+	isChrIntegrationEnabled,
+	PARSE_REJECTED,
+	recordIntegrationEvidence,
+	startIntegrationChr,
+} from "./chr.ts";
+
+const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
+
+const WARNING = "explain/canonicalizer/possible-spaced-argument";
+const BRACE = "explain/canonicalizer/invalid-command-brace";
+
+interface Chr {
+	exec(command: string): Promise<unknown>;
+	rest(path: string, init?: RequestInit): Promise<unknown>;
+}
+
+/** `:parse` on the exact bytes — its diagnostic, or the IL when it accepted. */
+async function parseOf(chr: Chr, input: string): Promise<string> {
+	const result = (await chr.exec(
+		`:put [:parse ${routerOsStringLiteral(input)}]`,
+	)) as { output?: unknown };
+	return String(result.output ?? "")
+		.replaceAll("\r\n", "\n")
+		.trim();
+}
+
+/** The `highlight` class of every byte. */
+async function highlightOf(chr: Chr, input: string): Promise<string[]> {
+	const rows = (await chr.rest("/console/inspect", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ request: "highlight", input }),
+	})) as { highlight?: string }[];
+	return (rows[0]?.highlight ?? "").split(",");
+}
+
+function offline(input: string) {
+	const result = explainCommand(input, {});
+	return {
+		read: result.structure.statements[0]?.arguments?.read,
+		warnings: result.diagnostics
+			.filter((d) => d.code === WARNING)
+			.map((d) => input.slice(d.span.start, d.span.end)),
+		braces: result.diagnostics.filter((d) => d.code === BRACE).length,
+	};
+}
+
+/**
+ * The spaced spelling and its `=` twin (#350). The device lowers both to the
+ * same IL and marks each gap in `obsolete` `syntax-obsolete`. Offline abstains
+ * on every row and warns on exactly the `warns` pairs: those whose value cannot
+ * be a flag. The bare-word rows are obsolete on device too, which is the
+ * deliberate gap — offline cannot tell them from the flag rows below.
+ */
+const PAIRED: {
+	input: string;
+	twin: string;
+	obsolete: string[];
+	warns: string[];
+}[] = [
+	{
+		input: '/ip/firewall/layer7-protocol add comment "something" regexp 1.1',
+		twin: '/ip/firewall/layer7-protocol add comment="something" regexp=1.1',
+		obsolete: ['comment "something"', "regexp 1.1"],
+		warns: ['comment "something"', "regexp 1.1"],
+	},
+	{
+		input: '/system/note set note "hello there"',
+		twin: '/system/note set note="hello there"',
+		obsolete: ['note "hello there"'],
+		warns: ['note "hello there"'],
+	},
+	{
+		input: '/interface set ether1 comment "x"',
+		twin: '/interface set ether1 comment="x"',
+		obsolete: ['comment "x"'],
+		warns: ['comment "x"'],
+	},
+	{
+		input: "/interface set ether1 name x",
+		twin: "/interface set ether1 name=x",
+		obsolete: ["name x"],
+		warns: [],
+	},
+	{
+		input: "/interface set ether1 disabled yes",
+		twin: "/interface set ether1 disabled=yes",
+		obsolete: ["disabled yes"],
+		warns: [],
+	},
+];
+
+/** Two value-less flags: the same bytes as a pair, with no `syntax-obsolete`. */
+const FLAGS: { input: string; il: string }[] = [
+	{
+		input: "/interface print detail without-paging",
+		il: "detail=true;without-paging=true",
+	},
+	{
+		input: "/interface print without-paging detail",
+		il: "detail=true;without-paging=true",
+	},
+];
+
+/** A body after a script-valued argument, with the `=` left out: the `=` IL. */
+const BODIES: { input: string; twin: string }[] = [
+	{
+		input: "/system/script add name=beep source { :beep }",
+		twin: "/system/script add name=beep source={ :beep }",
+	},
+	{
+		input: "/system/scheduler add name=x on-event { :beep }",
+		twin: "/system/scheduler add name=x on-event={ :beep }",
+	},
+	{
+		input: "/tool/netwatch add host=1.1.1.1 down-script { :beep }",
+		twin: "/tool/netwatch add host=1.1.1.1 down-script={ :beep }",
+	},
+];
+
+describeFast("explain spaced arguments against CHR (#350)", () => {
+	test("pairs lower to their `=` twin and flags do not pair", async () => {
+		const started = await startIntegrationChr();
+		try {
+			for (const { input, twin, obsolete, warns } of PAIRED) {
+				const parsed = await parseOf(started.chr, input);
+				expect({ input, parsed }).toEqual({
+					input,
+					parsed: await parseOf(started.chr, twin),
+				});
+				const classes = await highlightOf(started.chr, input);
+				for (const pair of obsolete) {
+					const gap = input.indexOf(pair) + pair.indexOf(" ");
+					expect({ input, pair, gap: classes[gap] }).toEqual({
+						input,
+						pair,
+						gap: "syntax-obsolete",
+					});
+				}
+				expect({ input, ...offline(input) }).toEqual({
+					input,
+					read: false,
+					warnings: warns,
+					braces: 0,
+				});
+			}
+
+			for (const { input, il } of FLAGS) {
+				expect(await parseOf(started.chr, input)).toContain(il);
+				const classes = await highlightOf(started.chr, input);
+				expect({
+					input,
+					obsolete: classes.includes("syntax-obsolete"),
+				}).toEqual({ input, obsolete: false });
+				expect({ input, ...offline(input) }).toEqual({
+					input,
+					read: false,
+					warnings: [],
+					braces: 0,
+				});
+			}
+
+			// The control that makes pairing schema: an argument the command does not
+			// have. 7.24.x names it (`bad parameter zzznotanarg`); 7.22.1 answers
+			// `expected end of command`. Either way, not accepted.
+			const unknown = await parseOf(
+				started.chr,
+				"/system/script add zzznotanarg beep",
+			);
+			expect(
+				PARSE_REJECTED.test(unknown) || unknown.includes("bad parameter"),
+			).toBeTrue();
+
+			// A root directive's operands are positional by grammar, not spaced.
+			expect(await parseOf(started.chr, ":pick abc 0 1")).toContain(
+				"counter=abc",
+			);
+
+			await recordIntegrationEvidence({
+				suite: "explain-spaced-args",
+				command: "explain",
+				protocol: "rest-api",
+				routerosVersion: started.chr.state.version,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+				exampleIds: [33],
+			});
+		} finally {
+			await started.chr.destroy();
+		}
+	}, 300_000);
+
+	test("a script body may drop its `=`; any other brace may not", async () => {
+		const started = await startIntegrationChr();
+		try {
+			for (const { input, twin } of BODIES) {
+				expect({ input, parsed: await parseOf(started.chr, input) }).toEqual({
+					input,
+					parsed: await parseOf(started.chr, twin),
+				});
+				expect({ input, braces: offline(input).braces }).toEqual({
+					input,
+					braces: 0,
+				});
+			}
+
+			// `…-script` is a body slot in the `=` spelling too.
+			const upScript = "/tool/netwatch add host=1.1.1.1 up-script={ :beep }";
+			expect(await parseOf(started.chr, upScript)).toContain("up-script=");
+			expect(explainCommand(upScript, {}).verdict).toBe("pass");
+
+			for (const input of [
+				"/system/scheduler add name=x comment { :beep }",
+				"/tool/netwatch add host=1.1.1.1 comment={ :beep }",
+				"/system/script add name=x zzzscript { :beep }",
+			]) {
+				expect({
+					input,
+					rejected: PARSE_REJECTED.test(await parseOf(started.chr, input)),
+				}).toEqual({ input, rejected: true });
+			}
+			// The fail-open direction, pinned so the unit test's claim stays true:
+			// an argument the command lacks is rejected on device, while offline
+			// reads the brace as a body and reports nothing.
+			for (const input of [
+				"/tool/netwatch add host=1.1.1.1 zzz-script={ :beep }",
+				"/tool/netwatch add host=1.1.1.1 on-zzz={ :beep }",
+			]) {
+				expect({
+					input,
+					rejected: PARSE_REJECTED.test(await parseOf(started.chr, input)),
+					braces: offline(input).braces,
+				}).toEqual({ input, rejected: true, braces: 0 });
+			}
+
+			// All three stay the offline error: `zzzscript` lacks the hyphen of
+			// RouterOS's `…-script` names, so it is not a script-body shape.
+			for (const input of [
+				"/system/scheduler add name=x comment { :beep }",
+				"/tool/netwatch add host=1.1.1.1 comment={ :beep }",
+				"/system/script add name=x zzzscript { :beep }",
+			])
+				expect({ input, braces: offline(input).braces }).toEqual({
+					input,
+					braces: 1,
+				});
+		} finally {
+			await started.chr.destroy();
+		}
+	}, 300_000);
+});

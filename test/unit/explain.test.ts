@@ -632,6 +632,75 @@ describe("commands/explain/examples.md — offline", () => {
 		).toBe(input);
 		expect(code).toBe(0);
 	});
+
+	test("33. A space for the `=` is not an empty argument list (#350)", async () => {
+		const input =
+			'/ip/firewall/layer7-protocol add comment "something" regexp 1.1';
+		const { data, code } = await explainJson([input]);
+		const [only] = data.structure.statements;
+		expect(only?.resolution).toBe("resolved");
+		expect(only?.command).toEqual({
+			path: "/ip/firewall/layer7-protocol",
+			verb: "add",
+		});
+		expect(only?.arguments?.read).toBe(false);
+		if (only?.arguments?.read !== false) throw new Error("unreachable");
+		expect(only.arguments.why).toContain('`comment "something"`');
+		expect(only?.transport?.classification).toBe("unknown");
+
+		expect(data.verdict).toBe("warn");
+		expect(
+			data.diagnostics.map((d) => [
+				d.code,
+				d.severity,
+				input.slice(d.span.start, d.span.end),
+			]),
+		).toEqual([
+			[
+				"explain/canonicalizer/possible-spaced-argument",
+				"warning",
+				'comment "something"',
+			],
+			[
+				"explain/canonicalizer/possible-spaced-argument",
+				"warning",
+				"regexp 1.1",
+			],
+		]);
+		// A warning, so the default `--fail-on error` still exits 0.
+		expect(code).toBe(0);
+
+		// Two bare words abstain without a warning: flags are the same shape.
+		for (const bare of [
+			"/interface set ether1 name x",
+			"/interface print detail without-paging",
+		]) {
+			const result = await explainJson([bare]);
+			expect({
+				bare,
+				read: result.data.structure.statements[0]?.arguments?.read,
+				verdict: result.data.verdict,
+			}).toEqual({ bare, read: false, verdict: "pass" });
+		}
+
+		const equals = await explainJson([
+			'/ip/firewall/layer7-protocol add comment="something" regexp=1.1',
+		]);
+		expect(equals.data.structure.statements[0]?.command).toEqual({
+			path: "/ip/firewall/layer7-protocol",
+			verb: "add",
+			args: { comment: "something", regexp: "1.1" },
+		});
+
+		const body = await explainJson([
+			"/system/script add name=beep source { :beep }",
+		]);
+		expect(
+			body.data.diagnostics.some((d) =>
+				d.code.endsWith("/invalid-command-brace"),
+			),
+		).toBeFalse();
+	});
 });
 
 test("64 KiB separator-free input stays bounded through public explain (#248)", () => {

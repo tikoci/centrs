@@ -1077,7 +1077,8 @@ navigated, so the context stays as unknown as it already was.
     `missing-statement-separator` (#311, below). Nine classes
     the device itself rejects.
   - `warning` — `over-depth`, because it is centrs's own resource bound and says
-    nothing about whether the input is legal; and an `ambiguous`/`unknown`
+    nothing about whether the input is legal; `possible-spaced-argument`
+    (#350), a spelling RouterOS accepts and marks obsolete; and an `ambiguous`/`unknown`
     resolution, never an error, so the default `--fail-on error` cannot fail a
     document whose only sin is being unreadable without a schema — which is most
     of RouterOS scripting.
@@ -1405,6 +1406,47 @@ no schema, so a catalog MISS abstains rather than being decided either way.
 That is the catalog's own "a hit is decisive, a miss says nothing" contract, and
 turning such a miss into an acceptance would be the mirror-image defect of the
 one being fixed here.
+
+### The `=` is optional in ordinary arguments too (#350)
+
+The #347 rule is the narrow half of a general one: a space can stand in for the
+`=` of any command argument. `/ip/firewall/layer7-protocol add comment
+"something" regexp 1.1` lowers to the IL of `comment="something" regexp=1.1`
+on CHR 7.22.1, 7.23.8 and 7.24.5, and `highlight` marks each gap
+`syntax-obsolete`, which is RouterOS calling the spelling deprecated. Unlike
+the four #347 scope names, this one cannot be read offline. The device pairs
+`comment` with its value because it knows the command has a `comment`
+argument, and `/system/script add zzznotanarg beep` is rejected. Which words
+are argument names is per-command schema, which offline does not ship.
+
+Offline used to publish the worst reading available: `arguments.read: true`,
+`args: {}`, the operands as positionals. That is an affirmative claim that the
+list was read and holds no arguments. Now any adjacent pair of a
+name-shaped bare operand and another operand withdraws the argument reading,
+as #311 does. The statement stays `resolved`, `command.args` is absent,
+`arguments.why` names the pair, and transport stays the `unknown` it already
+was. A **warning** (`possible-spaced-argument`, example 33) is raised only
+where the second operand cannot be a flag (quoted, numeric, `$`-led). That is
+because the same bytes are also two flags: `print detail without-paging`
+lowers to `detail=true;without-paging=true` with no `syntax-obsolete` marker,
+while `set ether1 name x` pairs. So two bare words abstain silently. `where`
+ends the scan, and root directives are excluded because their operands are
+positional by grammar (`:pick abc 0 1` lowers to `counter=abc`). Live
+`request=child` discovery (#491) is what confirms a name and makes the warning
+definite.
+
+The same applies before a script body. `source { :beep }`,
+`on-event { :beep }` and `down-script { :beep }` lower to their `=` IL, while
+`comment { :beep }` is a `syntax error`. So the brace exemption accepts the
+bare spelling, and its name shape gained the `…-script` arguments
+(`up-script`, `lease-script`) that hard-failed even with the `=`. Which slots
+take a body is per-menu and per-version schema (`lease-script={…}` parses on
+7.24.5 and not on 7.22.1). The shape decides the brace's role for every
+reader, not just the error, and it errs toward a body: an argument the
+command does not have (`zzz-script={…}`, and `on-zzz={…}` before #350) is a
+device `syntax error` that offline does not report. That is a missed
+rejection for the device preflight to catch, never a false reject. On the
+pinned corpus the widening changed no census.
 
 ### `'` is not a RouterOS token (#355)
 

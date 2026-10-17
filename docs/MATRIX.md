@@ -182,17 +182,26 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 
 ## Current priority
 
-**First: the CMR track** (maintainer decision 2026-10-12 on
-[#441](https://github.com/tikoci/centrs/issues/441)). Done: `execute --cmr`
+**First: `explain`** (maintainer decision 2026-10-16 on
+[#90](https://github.com/tikoci/centrs/issues/90)). In order: make the
+published offline readings honest (#350, #211), give the result a statement
+tree, then the live probe foundation (#491). Then use those probes to
+ground #351, #358 and #371, and finish live (#492 → #236 closeout). The
+plan, and what is deliberately out of this run, is the 2026-10-16 plan
+comment on #90. It is step 3 of the validation track below.
+
+**The CMR track is paused until RouterOS 7.26beta2** (maintainer decision
+2026-10-16). It was first from the 2026-10-12 decision on
+[#441](https://github.com/tikoci/centrs/issues/441). Done: `execute --cmr`
 (#450), which runs one validated command on CMR clients through their
 controller. The contract is in
 [`commands/execute/README.md` → CMR](../commands/execute/README.md#cmr-clients-through-their-controller---cmr),
 with examples CMR0–CMR15. Also done: the fleet blast-radius gate for
 controller fleet commands run with plain `execute` or `api` (#453), with
 examples CMR16–CMR18 and api CMR1. The feature map of CMR against centrs is
-on #441 (2026-10-13). Next is the read-only slice of #449 (a `devices` view
-of members and a default controller). Deferred: CDB linkage (#449) and `retrieve --cmr` (#441).
-Live `explain` resumes after this.
+on #441 (2026-10-13). When it resumes, next is the read-only slice of #449 (a
+`devices` view of members and a default controller). Deferred: CDB linkage
+(#449) and `retrieve --cmr` (#441).
 
 **The native-api / NDJSON line** (maintainer decision on
 [#396](https://github.com/tikoci/centrs/issues/396), 2026-10-07): agents in the

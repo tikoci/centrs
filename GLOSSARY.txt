@@ -409,6 +409,16 @@ globalname
 localname
 setnote
 runnumber
+# addcomment/setcomment/setname/setdisabled/setnumbers/printdetail/pickbegin: the
+# same IL rendering, quoted as evidence for the spaced-argument rule (GH#350) —
+# "/interface set ether1 comment \"x\"" is "(evl /interface/setcomment=x;numbers=ether1)".
+addcomment
+setcomment
+setname
+setdisabled
+setnumbers
+printdetail
+pickbegin
 # unconfigured: a freshly-flashed RouterOS device with no IP — the mac-telnet use case.
 unconfigured
 unwired
@@ -783,6 +793,8 @@ dgram # Node's `node:dgram` UDP socket module — reached by `mac-telnet`, and o
 # pair, so its spelling is load-bearing and must not be "corrected".
 elsy # the misspelled `else` in `:if (1=1) do={…} elsy {…}` — rejected as `expected end of command` on CHR 7.21.5/7.23.5/7.24.2/7.25beta3, which is what proves the bare-brace `else {` acceptance is a real device fact and not a probe artifact (#347)
 prnt # a misspelt `print` verb — `/ip/address/prnt` is the offline analyzer's ABSTENTION fixture (`verdict: warn`, not `fail`), which is what proves the two-stage validation gate passes an abstention through to the device rather than refusing it (#354)
+zzznotanarg # an argument name no RouterOS command has — `/system/script add zzznotanarg beep` is `bad parameter zzznotanarg` (7.24.5) or `expected end of command` (7.22.1), which proves the device pairs a spaced `name value` against per-command schema (#350)
+zzzscript # a `…script`-shaped name no command has — `zzzscript={ :beep }` is a `syntax error` on CHR 7.22.1/7.24.5, the control for the script-body brace exemption (#350)
 zzznotamenu # a menu name no RouterOS build has — `/ip { zzznotamenu { print } }` is a `syntax error` on device, so menu-scope resolution is schema-dependent and a catalog MISS must abstain rather than accept (#348)
 
 # #361 absent-menu controls. Deliberate NON-words: each names a path no RouterOS
