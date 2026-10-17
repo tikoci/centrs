@@ -58,6 +58,18 @@ describe("offline gate — what it lets through", () => {
 			expect(assertOfflineSyntax(command, surface).verdict).not.toBe("fail");
 	});
 
+	test("a `where … in {…}` read reaches the device (#502)", () => {
+		// CHR 7.24.5 and 7.23.8 accept both; stage 1 used to refuse them.
+		for (const command of [
+			'/ip address print where interface in {"ether1";"ether2"}',
+			'/ip/firewall/filter print where chain in {"input";"forward"}',
+		])
+			expect(assertOfflineSyntax(command, surface).verdict).toBe("pass");
+		expect(
+			reject('/ip address print where interface={"ether1"}').causeData,
+		).toBe("explain/canonicalizer/invalid-command-brace");
+	});
+
 	test("an abstention is not a rejection", () => {
 		// `warn` means the analyzer declined to judge part of the input. Turning
 		// that into a refusal would make every unrecognized menu unreachable

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { routerOsStringLiteral } from "../../src/core/routeros-string.ts";
+import { executeEnvelope } from "../../src/execute.ts";
 import { lexValueAnchors } from "../../src/explain/args.ts";
 import { resolveDocument } from "../../src/explain/pathresolve.ts";
 import { resolveSymbols } from "../../src/explain/symbols.ts";
@@ -9,8 +10,10 @@ import {
 	PARSE_REJECTED,
 	PARSE_REJECTED_HINT,
 	PROPLIST_HIGHLIGHT_SPLIT_SINCE,
+	readEnv,
 	recordIntegrationEvidence,
 	routerOsAtLeast,
+	splitQuickChrAuth,
 	startIntegrationChr,
 	TOBOOL_STRING_COERCED_SINCE,
 } from "./chr.ts";
@@ -820,6 +823,136 @@ describeFast("explain value facts against CHR", () => {
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
 				exampleIds: [28, "28b", "28c"],
+			});
+		} finally {
+			await started.chr.destroy();
+		}
+	}, 300_000);
+
+	test("example 36 reads a brace in a `where` clause as an array value (#502)", async () => {
+		const started = await startIntegrationChr();
+		const parseIl = async (source: string): Promise<string> =>
+			outputOf(
+				await started.chr.exec(
+					`:put [:parse ${routerOsStringLiteral(source)}]`,
+				),
+			).replaceAll("\n", " ");
+		const braces = (input: string): number =>
+			explainCommand(input).diagnostics.filter((diagnostic) =>
+				diagnostic.code.endsWith("/invalid-command-brace"),
+			).length;
+		try {
+			// Accepted on the device, with the operand the IL names; passes offline.
+			for (const [input, needle] of [
+				[
+					'/ip address print where interface in {"ether1";"ether2"}',
+					"(in $interface ether1;ether2)",
+				],
+				[
+					'/ip address print detail where interface in {"ether1"}',
+					"(in $interface ether1)",
+				],
+				[
+					'/ip address print where interface in {"ether1"} and disabled=no',
+					"(and (in $interface ether1) (= $disabled false))",
+				],
+				[
+					'/ip address print where {"ether1"} in interface',
+					"(in ether1 $interface)",
+				],
+				['/ip address print where interface~{"x"}', "$interface"],
+				['/ip address print where !interface={"x"}', "$interface"],
+			] as const) {
+				const il = await parseIl(input);
+				expect({
+					input,
+					evl: il.startsWith("(evl"),
+					rejected: PARSE_REJECTED_HINT.test(il) || /expected /.test(il),
+					named: il.includes(needle),
+					verdict: explainCommand(input).verdict,
+					braces: braces(input),
+				}).toEqual({
+					input,
+					evl: true,
+					rejected: false,
+					named: true,
+					verdict: "pass",
+					braces: 0,
+				});
+			}
+
+			// A named comparison reads the value with the property's own parser.
+			for (const [input, wording] of [
+				[
+					'/ip address print where interface={"ether1"}',
+					"expected interface value",
+				],
+				[
+					'/ip address print where interface = {"ether1"}',
+					"expected interface value",
+				],
+				[
+					'/ip address print where interface!={"ether1"}',
+					"expected interface value",
+				],
+				["/ip/route/print where comment={1;2}", "expected comment value"],
+				[
+					'/ip address print where interface in {"x"} disabled={"y"}',
+					"expected yes or no",
+				],
+			] as const)
+				expect({
+					input,
+					parse: await parseIl(input),
+					braces: braces(input),
+				}).toEqual({
+					input,
+					parse: expect.stringContaining(wording),
+					braces: 1,
+				});
+
+			// The pinned over-strict reading: an unknown name is accepted on the
+			// device, and offline has no property list to know it is unknown.
+			const unknown = '/ip address print where foo-bar={"y"}';
+			expect((await parseIl(unknown)).startsWith("(evl")).toBe(true);
+			expect(braces(unknown)).toBe(1);
+
+			// The gate path #502 is about: `execute` now runs the read, through
+			// both stages, and still refuses the named comparison offline.
+			const auth = splitQuickChrAuth(
+				readEnv(started.env, "QUICKCHR_AUTH") ?? "admin:",
+			);
+			const base = {
+				targetInput: started.chr.restUrl,
+				via: "rest-api" as const,
+				username: auth.username,
+				password: auth.password,
+			};
+			const read = await executeEnvelope({
+				...base,
+				command: '/ip address print where interface in {"ether1";"ether2"}',
+			});
+			expect(read.ok).toBe(true);
+			expect(read.meta.via).toBe("rest-api");
+			const refused = await executeEnvelope({
+				...base,
+				command: '/ip address print where interface={"ether1"}',
+			});
+			expect(refused.ok).toBe(false);
+			if (!refused.ok) {
+				expect(refused.error.code).toBe("validation/syntax");
+				expect(refused.error.context?.["validationStage"]).toBe("offline");
+			}
+
+			await recordIntegrationEvidence({
+				suite: "explain value facts against CHR",
+				command: "explain",
+				protocol: "rest-api (:parse IL + execute)",
+				routerosVersion: started.chr.state.version,
+				quickChrName: started.chr.name,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+				exampleIds: [36],
 			});
 		} finally {
 			await started.chr.destroy();

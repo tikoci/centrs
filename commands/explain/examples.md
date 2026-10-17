@@ -778,3 +778,28 @@ A brace straight after a command is a device error, and offline now reports it.
 `fail`. A run that names no command still opens a block, so
 `/system script { print }` is navigation to `/system/script` followed by
 `print`.
+
+### 36. A brace in a `where` clause is an array value
+
+```bash
+centrs explain '/ip address print where interface in {"ether1";"ether2"}' --json
+```
+
+A `where` clause is expression context, so the brace is the array operand of
+`in`. CHR 7.24.5 and 7.23.8 `:parse` lower it to
+`(in $interface ether1;ether2)`. `data.verdict` is `pass`, so `centrs execute`
+runs this read. Before #502 its offline stage refused it with
+`invalid-command-brace`. `data.values.occurrences` holds the array and its two
+string members, the same three records as
+`where interface in ("ether1","ether2")`.
+
+The brace is also a value after `~`, `<`, `>`, `<=` and `>=`, on the left of an
+operator (`where {"ether1"} in interface`), and after `!interface=` or `"a"=`.
+
+After `<name>=`, `<name>!=` or `<name>==`, spaced or not, the device reads the
+value with that property's parser and rejects the brace. Two examples are
+`where interface={"ether1"}` (`expected interface value`) and
+`where disabled={"y"}` (`expected yes or no`). Offline keeps
+`invalid-command-brace` at the `{` there. The device does this only for a
+property the menu knows: `where foo-bar={"y"}` parses. Offline cannot tell
+property names apart without a per-menu list, so it reports that one too.
