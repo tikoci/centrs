@@ -49,6 +49,15 @@ describe("offline gate — what it lets through", () => {
 		).toBe("pass");
 	});
 
+	test("an abbreviated script slot reaches the device (#496)", () => {
+		// CHR 7.24.5 and 7.23.8 accept both, under `source=` and `down-script=`.
+		for (const command of [
+			"/system/script add name beep sour { :beep }",
+			"/tool/netwatch add host 1.1.1.1 down-scr { :beep }",
+		])
+			expect(assertOfflineSyntax(command, surface).verdict).not.toBe("fail");
+	});
+
 	test("an abstention is not a rejection", () => {
 		// `warn` means the analyzer declined to judge part of the input. Turning
 		// that into a refusal would make every unrecognized menu unreachable

@@ -85,6 +85,28 @@ export const DIRECTIVE_BODY: Record<string, string> = {
  */
 const SCRIPT_BODY_ARG = /^(?:source|script|.+-script|on-.+)$/;
 
+/**
+ * An abbreviation the {@link SCRIPT_BODY_ARG} shape still pins down (#496).
+ * RouterOS takes any unique prefix of an argument name: on CHR 7.24.5 and
+ * 7.23.8, `sour { :beep }` and `s={ :beep }` lower to `source=`, `on`/`o=` to
+ * `on-event=`, and `down-scr`/`down-s=` to `down-script=`. These are the
+ * prefixes of `source` and `script`, of `on-`, and a name ending in `-` plus a
+ * prefix of `script`, so each can only abbreviate a script-valued name. Like
+ * the shape, it errs toward body: `sc { :beep }` is rejected on device and
+ * offline misses it.
+ *
+ * Abbreviating the FIRST segment (`down={ :beep }` for `down-script`, also
+ * accepted on device) stays outside. Every word is a prefix of `<word>-script`,
+ * so admitting it would admit `comment={ :beep }`. Telling them apart needs the
+ * command's argument list, which is schema.
+ */
+const SCRIPT_BODY_ABBREVIATION =
+	/^(?:s(?:o(?:u(?:r(?:c)?)?)?)?|sc(?:r(?:i(?:p)?)?)?|on?|.+-(?:s(?:c(?:r(?:i(?:p)?)?)?)?)?)$/;
+
+function isScriptBodyName(name: string): boolean {
+	return SCRIPT_BODY_ARG.test(name) || SCRIPT_BODY_ABBREVIATION.test(name);
+}
+
 /** Grounded scripting directives whose positional arity makes a later `#` fatal. */
 const DIRECTIVE_POSITIONAL_ARITY: Readonly<Record<string, number>> = {
 	local: 2,
@@ -451,7 +473,7 @@ export function braceStartsStatements(
 	const boundary = index.boundaries[open] ?? -1;
 	const start = Math.max(boundary + 1, floor);
 	const named = trailingName(text, start, open);
-	if (named !== null) return SCRIPT_BODY_ARG.test(named.toLowerCase());
+	if (named !== null) return isScriptBodyName(named.toLowerCase());
 	// `source { :beep }` — the same body with the `=` left out (#350). Every
 	// grounded spelling lowers to the `source=` IL on CHR 7.22.1 and 7.24.5:
 	// `/system/script add name=beep source { :beep }`, `/system/scheduler add
@@ -460,7 +482,7 @@ export function braceStartsStatements(
 	// declaration's operand is a variable name, not an argument, so
 	// `:local myscript {1;2}` keeps its brace an array.
 	const bare = trailingBareArgumentName(text, start, open);
-	if (bare !== null && SCRIPT_BODY_ARG.test(bare)) {
+	if (bare !== null && isScriptBodyName(bare)) {
 		const head = index.firstContent[open] ?? -1;
 		const word =
 			head < start ? "" : (leadingWords(text, head, open, 1)[0] ?? "");

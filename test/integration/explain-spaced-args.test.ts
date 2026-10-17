@@ -256,15 +256,53 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 
 	test("a brace after a command is its operand, not a menu block (#496)", async () => {
 		const started = await startIntegrationChr();
+		/** `:parse` accepted `input`, and its IL names every `needle`. */
+		const accepted = async (input: string, needles: string[]) => {
+			const parsed = await parseOf(started.chr, input);
+			expect({
+				input,
+				rejected: PARSE_REJECTED_HINT.test(parsed),
+				evl: parsed.startsWith("(evl"),
+				missing: needles.filter((needle) => !parsed.includes(needle)),
+			}).toEqual({ input, rejected: false, evl: true, missing: [] });
+			return parsed;
+		};
 		try {
-			// The all-bare spelling is one command whose body is the argument.
-			for (const input of [
-				"/system/script add name beep source { :beep }",
-				"/system/scheduler add name beep on-event { :beep }",
-			]) {
-				expect({ input, parsed: await parseOf(started.chr, input) }).toEqual({
+			// One command whose body is the script-valued argument. Each spelling is
+			// proved accepted on its own before it is compared with the full one, so
+			// two identical rejections cannot pass as agreement.
+			const bodies: { input: string; full: string; needles: string[] }[] = [
+				{
+					input: "/system/script add name beep source { :beep }",
+					full: "/system/script add name beep source={ :beep }",
+					needles: ["(evl /system/script/add", "source= :beep"],
+				},
+				{
+					input: "/system/scheduler add name beep on-event { :beep }",
+					full: "/system/scheduler add name beep on-event={ :beep }",
+					needles: ["(evl /system/scheduler/add", "on-event= :beep"],
+				},
+				// Abbreviations the script-slot shape still pins down.
+				{
+					input: "/system/script add name beep sour { :beep }",
+					full: "/system/script add name beep source { :beep }",
+					needles: ["(evl /system/script/add", "source= :beep"],
+				},
+				{
+					input: "/tool/netwatch add host 1.1.1.1 down-scr { :beep }",
+					full: "/tool/netwatch add host 1.1.1.1 down-script { :beep }",
+					needles: ["(evl /tool/netwatch/add", "down-script= :beep"],
+				},
+				{
+					input: "/system/scheduler add name=x o={ :beep }",
+					full: "/system/scheduler add name=x on-event={ :beep }",
+					needles: ["(evl /system/scheduler/add", "on-event= :beep"],
+				},
+			];
+			for (const { input, full, needles } of bodies) {
+				expect({ input, parsed: await accepted(input, needles) }).toEqual({
 					input,
-					parsed: await parseOf(started.chr, input.replace(" {", "={")),
+					parsed: await accepted(full, needles),
 				});
 				expect({
 					input,
@@ -274,13 +312,15 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 			}
 
 			// A positional brace after a command is rejected, whether the verb is a
-			// CRUD word or a catalog command.
+			// CRUD word or a catalog command, and so is a body after an argument
+			// that cannot take one.
 			for (const input of [
 				"/system/script add { :beep }",
 				"/ip/route/print {1;2}",
 				"/system/reboot { :beep }",
 				"/tool fetch { :beep }",
 				"/system/script add name beep comment { :beep }",
+				"/system/script add name beep com { :beep }",
 			]) {
 				expect({
 					input,
@@ -289,17 +329,32 @@ describeFast("explain spaced arguments against CHR (#350)", () => {
 				}).toEqual({ input, rejected: true, braces: 1 });
 			}
 
+			// The known limit, pinned: a first-segment abbreviation is accepted on
+			// device, and offline cannot tell it from `comment` without schema.
+			const firstSegment = "/tool/netwatch add host=1.1.1.1 down={ :beep }";
+			await accepted(firstSegment, ["down-script= :beep"]);
+			expect(offline(firstSegment).braces).toBe(1);
+
 			// A run that names no command still opens a menu block.
-			for (const input of [
-				"/system script { print }",
-				"/ip firewall filter { print }",
-				"/system { script add name beep source { :beep } }",
+			for (const { input, needles } of [
+				{
+					input: "/system script { print }",
+					needles: ["(evl (evl /system/script/print"],
+				},
+				{
+					input: "/ip firewall filter { print }",
+					needles: ["(evl (evl /ip/firewall/filter/print"],
+				},
+				{
+					input: "/system { script add name beep source { :beep } }",
+					needles: ["(evl (evl /system/script/add", "source= :beep"],
+				},
 			]) {
-				expect({
+				await accepted(input, needles);
+				expect({ input, braces: offline(input).braces }).toEqual({
 					input,
-					rejected: PARSE_REJECTED_HINT.test(await parseOf(started.chr, input)),
-					braces: offline(input).braces,
-				}).toEqual({ input, rejected: false, braces: 0 });
+					braces: 0,
+				});
 			}
 
 			await recordIntegrationEvidence({

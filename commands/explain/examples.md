@@ -763,6 +763,15 @@ span covers the whole input. `:beep` is no longer published as a second
 top-level statement, which RouterOS never runs. `data.verdict` is `warn`, from
 the `possible-spaced-argument` diagnostic on `source { :beep }`.
 
+RouterOS accepts any unique prefix of an argument name. An abbreviation that
+can only stand for a script-valued name keeps its body in either spelling:
+`sour { :beep }`, `down-scr { :beep }` and `o={ :beep }` lower to `source=`,
+`down-script=` and `on-event=` on CHR 7.24.5 and 7.23.8. Abbreviating the first
+segment (`down={ :beep }` for `down-script`) is accepted on the device too, but
+offline still reports `invalid-command-brace`. Every word is a prefix of some
+`<word>-script`, so telling it from `comment={ :beep }` needs the command's
+argument list.
+
 A brace straight after a command is a device error, and offline now reports it.
 `/system/script add { :beep }`, `/ip/route/print {1;2}` and
 `/system/reboot { :beep }` each get `invalid-command-brace` and `data.verdict`
