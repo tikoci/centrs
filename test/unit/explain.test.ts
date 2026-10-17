@@ -728,6 +728,43 @@ describe("commands/explain/examples.md — offline", () => {
 			contextCertain: true,
 		});
 	});
+
+	test("35. A brace after a command is its argument, not a menu block (#496)", async () => {
+		const input = "/system/script add name beep source { :beep }";
+		const { data, code } = await explainJson([input]);
+		expect(data.structure.statements).toHaveLength(1);
+		expect(data.structure.statements[0]).toMatchObject({
+			span: { start: 0, end: input.length },
+			command: { path: "/system/script", verb: "add" },
+		});
+		expect(data.diagnostics.map((d) => d.code)).toEqual([
+			"explain/canonicalizer/possible-spaced-argument",
+		]);
+		expect(data.verdict).toBe("warn");
+		expect(code).toBe(0);
+
+		for (const positional of [
+			"/system/script add { :beep }",
+			"/ip/route/print {1;2}",
+			"/system/reboot { :beep }",
+		]) {
+			const rejected = await explainJson([positional]);
+			expect({
+				positional,
+				codes: rejected.data.diagnostics.map((d) => d.code),
+				verdict: rejected.data.verdict,
+			}).toEqual({
+				positional,
+				codes: ["explain/canonicalizer/invalid-command-brace"],
+				verdict: "fail",
+			});
+		}
+
+		const block = await explainJson(["/system script { print }"]);
+		expect(block.data.structure.statements.map((s) => s.command)).toMatchObject(
+			[{ path: "/system/script" }, { path: "/system/script", verb: "print" }],
+		);
+	});
 });
 
 test("64 KiB separator-free input stays bounded through public explain (#248)", () => {

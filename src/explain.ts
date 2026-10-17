@@ -1953,10 +1953,19 @@ function invalidCommandBraceDiagnostics(
 		// Require evidence that the brace actually opens a menu container
 		// (body starts with a submenu name), so `/ip/route/print {1;2}` and
 		// `/ip { firewall/filter/print {1;2} }` still diagnose the `{1;2}` array.
+		//
+		// A verb the vocabulary or the catalog names is no menu, so its leading
+		// brace is a positional operand: `/system/script add { :beep }` and
+		// `/system/reboot { :beep }` are rejected on CHR 7.24.5 (#496).
 		const argsText = text.slice(split.argsAt);
 		const leadingBraceAt = argsText.search(/\S/);
+		const verbIsCommand =
+			VERBS.has(split.verb) ||
+			lookupPath([...split.path.split("/").filter(Boolean), split.verb])
+				?.kind === "command";
 		let menuBraceAt: number | null = null;
 		if (
+			!verbIsCommand &&
 			leadingBraceAt >= 0 &&
 			argsText[leadingBraceAt] === "{" &&
 			split.candidates.some((candidate) =>

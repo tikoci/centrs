@@ -1015,6 +1015,11 @@ export function lookupPath(
 	return PATH_CATALOG.get(\`/\${segments.join("/").toLowerCase()}\`);
 }
 
+/** Segments in the deepest catalog path; no lookup past it can match. */
+const MAX_PATH_DEPTH = Math.max(
+	...Array.from(PATH_CATALOG.keys(), (path) => path.split("/").length - 1),
+);
+
 /**
  * Where a published COMMAND ends inside a path run: the index of the run
  * segment that is the VERB, or \`null\` when no prefix of \`segments\` is one.
@@ -1038,12 +1043,14 @@ export function lookupPath(
  * question; what the segment IS is not.
  */
 export function commandVerbIndex(segments: readonly string[]): number | null {
-	for (let depth = 1; depth <= segments.length; depth++)
-		if (
-			PATH_CATALOG.get(\`/\${segments.slice(0, depth).join("/").toLowerCase()}\`)
-				?.kind === "command"
-		)
-			return depth - 1;
+	// Bounded by the deepest row and built incrementally: a run of thousands of
+	// bare words would otherwise re-join every prefix (#496).
+	const limit = Math.min(segments.length, MAX_PATH_DEPTH);
+	let path = "";
+	for (let depth = 0; depth < limit; depth++) {
+		path += \`/\${(segments[depth] as string).toLowerCase()}\`;
+		if (PATH_CATALOG.get(path)?.kind === "command") return depth;
+	}
 	return null;
 }
 
