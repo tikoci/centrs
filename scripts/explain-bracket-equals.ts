@@ -90,6 +90,7 @@ import {
 	channelSessions,
 	corpusProvenance,
 	describePopulation,
+	isAcceptedParse,
 	type ParseResponseClass,
 	parseObservations,
 	populationScripts,
@@ -150,11 +151,13 @@ export interface BracketEqualsCensus extends Partial<CorpusProvenance> {
 	 * Whether the device actually backs the query reading, script by script, on
 	 * the {@link CORROBORATION_CHANNEL} session.
 	 *
-	 * `corroborated` means the IL holds at least as many comparison nodes
-	 * (`(= …)`, `(!= …)`, `(<= …)`, `(>= …)`) as this scan called query
-	 * comparisons in that script. A shortfall is a script whose enclosing
-	 * command the capture device could not resolve, so it emitted a diagnostic
-	 * instead of a comparison: a snippet calling `regex` on a build that answers
+	 * `corroborated` means the device ACCEPTED the script
+	 * (`il-no-recognized-diagnostic`) and its IL holds at least as many
+	 * comparison nodes (`(= …)`, `(!= …)`, `(<= …)`, `(>= …)`) as this scan
+	 * called query comparisons in it. `commandUnresolved` is every other
+	 * readout that is not a plain refusal: an embedded diagnostic, or accepted
+	 * IL with fewer nodes. Typically the capture device could not resolve the
+	 * enclosing command, so it emitted a diagnostic instead of a comparison: a snippet calling `regex` on a build that answers
 	 * `bad command name regex` still has a perfectly good `find …=…` in its
 	 * text. `rejectedParse` counts scripts the console refused outright
 	 * (`response_class = plain-diagnostic`), where the readout is prose and
@@ -383,8 +386,15 @@ export function census(
 		if (queryHere === 0 || il === undefined) continue;
 		const co = result.ilCorroboration;
 		co.scriptsWithQueryEquals++;
+		// Only an accepted readout can corroborate. An embedded diagnostic is a
+		// device rejection whose IL may still carry comparison nodes, so it is
+		// counted with the shortfalls it explains, never as corroboration.
 		if (responseClass === "plain-diagnostic") co.rejectedParse++;
-		else if ((il.match(QUERY_COMPARISON_NODE) ?? []).length >= queryHere)
+		else if (
+			responseClass !== undefined &&
+			isAcceptedParse(responseClass) &&
+			(il.match(QUERY_COMPARISON_NODE) ?? []).length >= queryHere
+		)
 			co.corroborated++;
 		else co.commandUnresolved++;
 	}

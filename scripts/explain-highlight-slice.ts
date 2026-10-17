@@ -114,10 +114,20 @@ const PARTITION = resolve(
 
 type Pair = HighlightPair;
 
-/** One channel session's highlight run, keyed by population path. */
+/**
+ * One RouterOS build's highlight streams, keyed by population path.
+ *
+ * Keyed by BUILD, not channel: the fixture's `streams[<version>]` is a build
+ * axis, and two channels can carry the same build (stable and testing did on
+ * the #342 pin). Every session of a build is loaded, and the extras must
+ * match the primary stream for stream, or the slice refuses.
+ */
 interface Capture {
-	session: ChannelSession;
+	/** Primary first: the base channel if it carries this build. */
+	sessions: ChannelSession[];
 	streams: Map<string, HighlightObservation>;
+	/** Paths whose stream differs between two sessions of this build. */
+	sessionDisagreements: string[];
 }
 
 interface PartitionGroup {
@@ -192,24 +202,35 @@ export async function main(args: readonly string[]): Promise<number> {
 		const base = sessions.find((s) => s.channel === BASE_CHANNEL);
 		if (base === undefined)
 			throw new Error(`the corpus records no \`${BASE_CHANNEL}\` session`);
-		VERSIONS = [base, ...sessions.filter((s) => s !== base)].map(
-			(s) => s.version,
-		);
-		for (const session of sessions)
-			captures.set(session.version, {
-				session,
-				streams: new Map(
-					highlightObservations(db, session.highlightRunId).map((o) => [
-						o.path,
-						o,
-					]),
-				),
+		const ordered = [base, ...sessions.filter((s) => s !== base)];
+		VERSIONS = [...new Set(ordered.map((s) => s.version))];
+		const streamsOf = (session: ChannelSession) =>
+			new Map(
+				highlightObservations(db, session.highlightRunId).map((o) => [
+					o.path,
+					o,
+				]),
+			);
+		for (const version of VERSIONS) {
+			const [primary, ...others] = ordered.filter((s) => s.version === version);
+			const streams = streamsOf(primary as ChannelSession);
+			const sessionDisagreements = new Set<string>();
+			for (const other of others)
+				for (const [path, o] of streamsOf(other))
+					if (
+						JSON.stringify(o.pairs) !== JSON.stringify(streams.get(path)?.pairs)
+					)
+						sessionDisagreements.add(path);
+			captures.set(version, {
+				sessions: [primary as ChannelSession, ...others],
+				streams,
+				sessionDisagreements: [...sessionDisagreements].sort(),
 			});
+		}
 		for (const row of populationScripts(db)) corpusText.set(row.path, row.text);
 	} finally {
 		db.close();
 	}
-	const base = captures.get(VERSIONS[0] as string) as Capture;
 	const counters = (capture: Capture) => {
 		const rows = [...capture.streams.values()];
 		return {
@@ -230,7 +251,7 @@ export async function main(args: readonly string[]): Promise<number> {
 	// looks exactly like a script with nothing to say. So the claims are only
 	// made after the inputs are verified, not repaired around.
 	const captureProblems: string[] = [];
-	const basePaths = [...base.streams.keys()];
+	const populationPaths = [...corpusText.keys()];
 	for (const version of VERSIONS) {
 		const capture = captures.get(version) as Capture;
 		const c = counters(capture);
@@ -240,13 +261,31 @@ export async function main(args: readonly string[]): Promise<number> {
 					"rows — the corpus session is not sliceable",
 			);
 		}
-		// Every version must cover the same scripts, or a version-only class or a
-		// version difference is invisible rather than absent.
-		const missing = basePaths.filter((p) => !capture.streams.has(p));
-		if (capture.streams.size !== basePaths.length || missing.length > 0) {
+		if (capture.sessionDisagreements.length > 0) {
 			captureProblems.push(
-				`v${version} covers ${capture.streams.size} scripts, v${VERSIONS[0]} ` +
-					`covers ${basePaths.length}${missing.length > 0 ? `, e.g. missing ${missing.slice(0, 3).join(", ")}` : ""}`,
+				`v${version} is carried by ${capture.sessions.map((s) => s.channel).join(" and ")}, ` +
+					`whose streams differ on ${capture.sessionDisagreements.length} scripts, ` +
+					`e.g. ${capture.sessionDisagreements.slice(0, 3).join(", ")}`,
+			);
+		}
+		// Every version must cover exactly the population, or a version-only
+		// class or a version difference is invisible rather than absent. Held
+		// to the population, not to the base session: a subset every session
+		// shares would otherwise pass and shrink the universe unannounced.
+		const missing = populationPaths.filter((p) => !capture.streams.has(p));
+		const unexpected = [...capture.streams.keys()].filter(
+			(p) => !corpusText.has(p),
+		);
+		if (missing.length > 0 || unexpected.length > 0) {
+			captureProblems.push(
+				`v${version} covers ${capture.streams.size} scripts of a ` +
+					`${populationPaths.length}-script population` +
+					(missing.length > 0
+						? `, missing e.g. ${missing.slice(0, 3).join(", ")}`
+						: "") +
+					(unexpected.length > 0
+						? `, outside it e.g. ${unexpected.slice(0, 3).join(", ")}`
+						: ""),
 			);
 		}
 	}
@@ -269,7 +308,7 @@ export async function main(args: readonly string[]): Promise<number> {
 		for (const script of group.scripts) splitOf.set(script, group.split);
 	}
 
-	const allPaths = [...basePaths].sort();
+	const allPaths = [...populationPaths].sort();
 	const pairsFor = (path: string): Map<string, Pair[]> => {
 		const out = new Map<string, Pair[]>();
 		for (const version of VERSIONS) {
@@ -460,9 +499,10 @@ export async function main(args: readonly string[]): Promise<number> {
 			const c = counters(capture);
 			return {
 				version,
-				channel: capture.session.channel,
-				highlightRun: capture.session.highlightRunId,
-				environment: capture.session.environmentSha256,
+				routerosVersion: version,
+				channels: capture.sessions.map((s) => s.channel),
+				highlightRuns: capture.sessions.map((s) => s.highlightRunId),
+				environments: capture.sessions.map((s) => s.environmentSha256),
 				corpusRows: c.rows,
 				aligned: c.aligned,
 				misaligned: c.misaligned,

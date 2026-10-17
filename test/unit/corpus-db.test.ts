@@ -62,7 +62,9 @@ function corpus(schemaVersion = 5): Database {
 			'syntax error (line 1 column 5)', '{}', 'parse-ret-v1', NULL),
 		('st-hl', 1, 'b.rsc', 'h1', 'i1', 'ok', 'highlight-no-hard-error', NULL,
 			'[{"highlight":[["dir",1],["cmd",3],["none",1],["cmd",0],["none",1]]}]',
-			'highlight-rle-v1', '{"aligned":true}')`);
+			'highlight-rle-v1', '{"aligned":true}'),
+		('st-hl', 2, 'a.rsc', 'h2', 'i1', 'ok', 'highlight-no-hard-error', NULL,
+			'[{"highlight":[["dir",5]]}]', 'highlight-rle-v1', '{"aligned":false}')`);
 	db.run(
 		"INSERT INTO capture_inputs VALUES ('i1', '{\"truncated\":false,\"replacedCodeUnits\":0}')",
 	);
@@ -107,13 +109,41 @@ describe("corpus-db readers (#498)", () => {
 	});
 
 	test("highlight runs expand over the submitted text, merging equal neighbors", () => {
-		const [row] = highlightObservations(corpus(), "st-hl");
+		const [, row] = highlightObservations(corpus(), "st-hl");
 		expect(row?.pairs).toEqual([
 			[":", "dir"],
 			["put", "cmd"],
 			[" 1", "none"],
 		]);
 		expect(row?.aligned).toBe(true);
+	});
+
+	test("a misaligned row is reported without pairs, not thrown on", () => {
+		// `a.rsc` is 2 characters and its stream claims 5: a desync. Decoding it
+		// would throw and hide every other row of the run.
+		const [row] = highlightObservations(corpus(), "st-hl");
+		expect(row?.path).toBe("a.rsc");
+		expect([row?.acquired, row?.aligned, row?.pairs]).toEqual([
+			true,
+			false,
+			undefined,
+		]);
+	});
+
+	test("an unknown response class is refused, not read as a reject", () => {
+		const db = corpus();
+		db.run(
+			"UPDATE capture_observations SET response_class = 'new-class' WHERE script_id = 1 AND run_id = 'st-parse'",
+		);
+		expect(() => parseObservations(db, ["st-parse"])).toThrow(/new-class/);
+	});
+
+	test("a session whose runs record another version is refused", () => {
+		const db = corpus();
+		db.run(
+			"UPDATE capture_runs SET routeros_version = '7.99' WHERE id = 'st-hl'",
+		);
+		expect(() => channelSessions(db)).toThrow(/st-hl records 7\.99/);
 	});
 
 	test("a highlight stream that does not cover the text exactly is refused", () => {

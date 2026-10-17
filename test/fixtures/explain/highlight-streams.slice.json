@@ -5,9 +5,12 @@
 	"versions": [
 		{
 			"version": "7.24.5",
-			"channel": "stable",
-			"highlightRun": "b4ecf5e8-711e-4e81-aea3-72ccf850240a-highlight",
-			"environment": "d1d190b1eebaef36410510d3ab5660d396e6f25025073b1ffa75955ae325c65f",
+			"routerosVersion": "7.24.5",
+			"channels": ["stable"],
+			"highlightRuns": ["b4ecf5e8-711e-4e81-aea3-72ccf850240a-highlight"],
+			"environments": [
+				"d1d190b1eebaef36410510d3ab5660d396e6f25025073b1ffa75955ae325c65f"
+			],
 			"corpusRows": 948,
 			"aligned": 948,
 			"misaligned": 0,
@@ -16,9 +19,12 @@
 		},
 		{
 			"version": "7.23.8",
-			"channel": "long-term",
-			"highlightRun": "6f313fad-20d3-48f7-b1ac-68906acbd95c-highlight",
-			"environment": "24bf01080c749ebfdf51dcb0ee234097d5887db31be0ae3d7bfd23a8ada543dc",
+			"routerosVersion": "7.23.8",
+			"channels": ["long-term"],
+			"highlightRuns": ["6f313fad-20d3-48f7-b1ac-68906acbd95c-highlight"],
+			"environments": [
+				"24bf01080c749ebfdf51dcb0ee234097d5887db31be0ae3d7bfd23a8ada543dc"
+			],
 			"corpusRows": 948,
 			"aligned": 948,
 			"misaligned": 0,
@@ -27,9 +33,12 @@
 		},
 		{
 			"version": "7.25rc2",
-			"channel": "testing",
-			"highlightRun": "b5a9755e-fd18-47e4-8756-e9ed39e64a9a-highlight",
-			"environment": "37cb2f7a30339590ddc38d59872c1d0e90b0910c4aa4efbe7e936cafe2daaebe",
+			"routerosVersion": "7.25rc2",
+			"channels": ["testing"],
+			"highlightRuns": ["b5a9755e-fd18-47e4-8756-e9ed39e64a9a-highlight"],
+			"environments": [
+				"37cb2f7a30339590ddc38d59872c1d0e90b0910c4aa4efbe7e936cafe2daaebe"
+			],
 			"corpusRows": 948,
 			"aligned": 948,
 			"misaligned": 0,
@@ -38,9 +47,12 @@
 		},
 		{
 			"version": "7.26beta1",
-			"channel": "development",
-			"highlightRun": "c4cd2a11-d944-4f5d-80d1-99d4d686ae2a-highlight",
-			"environment": "d2df722c5a6ea1ed160131c39d5eab719663c6e05460426c73cee047c80c0afa",
+			"routerosVersion": "7.26beta1",
+			"channels": ["development"],
+			"highlightRuns": ["c4cd2a11-d944-4f5d-80d1-99d4d686ae2a-highlight"],
+			"environments": [
+				"d2df722c5a6ea1ed160131c39d5eab719663c6e05460426c73cee047c80c0afa"
+			],
 			"corpusRows": 948,
 			"aligned": 948,
 			"misaligned": 0,

@@ -132,6 +132,20 @@ export function channelSessions(db: Database): ChannelSession[] {
 			"the corpus records no channel sessions (`capture_channels` is empty), " +
 				"so there is no exact-input capture to measure against",
 		);
+	// The channel row and its two runs record the version independently, so a
+	// session whose runs disagree with its label is caught rather than cited.
+	const runVersion = db.query(
+		"SELECT routeros_version AS version FROM capture_runs WHERE id = ?",
+	);
+	for (const row of rows)
+		for (const runId of [row.parseRunId, row.highlightRunId]) {
+			const run = runVersion.get(runId) as { version: string } | null;
+			if (run?.version !== row.version)
+				throw new Error(
+					`the ${row.channel} session is labelled ${row.version}, but its run ` +
+						`${runId} records ${run === null ? "nothing" : run.version}`,
+				);
+		}
 	return rows.sort((a, b) => compareRouterOsVersion(a.version, b.version));
 }
 
@@ -156,12 +170,21 @@ export function describeSessions(sessions: readonly ChannelSession[]): string {
  * `embedded-diagnostic` row is IL whose text carries a device diagnostic, so
  * it is a rejection even though it does not open with prose.
  */
-export type ParseResponseClass =
-	| "il-no-recognized-diagnostic"
-	| "embedded-diagnostic"
-	| "plain-diagnostic"
-	| "capture-failed"
-	| "unknown-response";
+export const PARSE_RESPONSE_CLASSES = [
+	"il-no-recognized-diagnostic",
+	"embedded-diagnostic",
+	"plain-diagnostic",
+	"ambiguous-diagnostic",
+	"unknown-response",
+	"missing-response",
+	"capture-failed",
+] as const;
+
+export type ParseResponseClass = (typeof PARSE_RESPONSE_CLASSES)[number];
+
+const KNOWN_PARSE_CLASSES: ReadonlySet<string> = new Set(
+	PARSE_RESPONSE_CLASSES,
+);
 
 export function isAcceptedParse(responseClass: string): boolean {
 	return responseClass === "il-no-recognized-diagnostic";
@@ -207,11 +230,20 @@ export function parseObservations(
 			throw new Error(
 				`the corpus has no parseil observations for run ${runId}`,
 			);
-		for (const { acquisition, il, ...row } of rows)
+		for (const { acquisition, il, ...row } of rows) {
+			// A class this reader does not know would silently fall on the reject
+			// side of `isAcceptedParse`. Refuse it, so a classifier change upstream
+			// is read before it moves a figure.
+			if (!KNOWN_PARSE_CLASSES.has(row.responseClass))
+				throw new Error(
+					`${row.path} on run ${runId} has response class ` +
+						`${JSON.stringify(row.responseClass)}, which corpus-db.ts does not know`,
+				);
 			out.push({
 				...row,
 				il: acquisition === "ok" && il !== null ? il : undefined,
 			});
+		}
 	}
 	return out;
 }
@@ -314,9 +346,13 @@ export function highlightObservations(
 		const summary = JSON.parse(row.highlight ?? "{}") as { aligned?: boolean };
 		const acquired =
 			row.acquisition === "ok" && row.encoding === "highlight-rle-v1";
+		const aligned = summary.aligned === true;
 		const submitted = row.submitted ?? "";
+		// A misaligned stream does not cover its submitted text, so it carries
+		// no pairs (no classes past a desync). Decoding it would throw and take
+		// the whole run down with it, hiding the row a caller wants to report.
 		let pairs: HighlightPair[] | undefined;
-		if (acquired && row.response !== null) {
+		if (acquired && aligned && row.response !== null) {
 			const [first] = JSON.parse(row.response) as {
 				highlight: [string, number][];
 			}[];
@@ -327,7 +363,7 @@ export function highlightObservations(
 			submitted,
 			replacedCodeUnits: input.replacedCodeUnits ?? 0,
 			truncated: input.truncated === true,
-			aligned: summary.aligned === true,
+			aligned,
 			acquired,
 			pairs,
 		};

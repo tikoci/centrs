@@ -1883,10 +1883,10 @@ genuine comparisons — the device lowers `[find address=$IP]` to
 fill can take the query half later. For contrast the fill does claim
 **1,402** `=` bytes whose innermost opener is `(`.
 
-The query reading is the device's, not a guess: on 7.24.5, 111 of the
+The query reading is the device's, not a guess: on 7.24.5, 91 of the
 137 scripts carrying one have IL with at least as many comparison nodes.
 Of the rest, 25 are scripts the console refused outright — their readout is
-prose, with no nodes of any kind — and 1 lowered fewer comparison nodes than the
+prose, with no nodes of any kind — and 21 lowered fewer comparison nodes than the
 scan counted, typically because a command the capture build could not resolve
 (`bad command name …`) stopped the device before it reached the query. Neither is
 a counter-example to the reading. Whole-corpus `(= …)` head nodes per channel

@@ -177,6 +177,20 @@ describe("the census over a tiny corpus", () => {
 			commandUnresolved: 0,
 			rejectedParse: 0,
 		});
+		// An embedded diagnostic is a rejection even when its IL still carries
+		// the comparison nodes: it is a shortfall, never corroboration.
+		const embedded = census(
+			[
+				{
+					text,
+					il: "(evl (<%% bad command name x (line 1 column 1) (= $list a) (!= $comment b)))",
+					responseClass: "embedded-diagnostic",
+				},
+			],
+			{},
+			"7.24.5",
+		).ilCorroboration;
+		expect([embedded.corroborated, embedded.commandUnresolved]).toEqual([0, 1]);
 		// A prose rejection carries no nodes, whatever its first word.
 		expect(
 			corroborate("syntax error (line 1 column 4)", "plain-diagnostic")
