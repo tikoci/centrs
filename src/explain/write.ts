@@ -694,7 +694,14 @@ function collect(
 			});
 			continue;
 		}
-		if (statement.isNav && !isCommandShaped(described, catalogAt)) {
+		// An ABSOLUTE `maybeNav` statement (#211) was `isNav` before R14, so it
+		// keeps this branch. `isConfirmedNav` cannot drop it, because its path is
+		// in neither table. A relative one never took this branch (#235), and
+		// still does not.
+		if (
+			(statement.isNav || (statement.maybeNav && t.startsWith("/"))) &&
+			!isCommandShaped(described, catalogAt)
+		) {
 			if (
 				isConfirmedNav(described) &&
 				!isDanglingBarePath(described, lastNonEmpty, index)

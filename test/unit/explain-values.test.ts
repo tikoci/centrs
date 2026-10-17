@@ -170,8 +170,8 @@ describe("#225 value-shape grounding matrix", () => {
 			"bun run explain:value-census --json",
 		);
 		expect(fixture.corpus.sourceScripts).toBe(948);
-		expect(fixture.corpus.strictComparableAnchors).toBe(13_161);
-		expect(fixture.corpus.valueOccurrences).toBe(19_699);
+		expect(fixture.corpus.strictComparableAnchors).toBe(13_152);
+		expect(fixture.corpus.valueOccurrences).toBe(19_690);
 		expect(fixture.corpus.unreadStatementsWithAnchors).toBe(568);
 		expect(fixture.corpus.recoveredPrefixAnchors).toBe(6_538);
 		expect(fixture.corpus.elementOccurrences).toBe(5_636);

@@ -239,7 +239,8 @@ producers owned with #225. REST and native-api cells advance only when their
 applicable examples pass on CHR via `bun run test:integration`.
 
 Open offline follow-ups remain explicit but do not reopen the verified baseline.
-Issue #211 retains the fail-closed unlisted-path decision; #272 owns
+Issue #211 made an unlisted absolute bare path abstain (rule F, R14); rule
+P's closed-world reading is still not adopted (#372). #272 owns
 non-authoritative `.scratch/` citation cleanup. #350 (the broad optional `=`,
 schema-dependent and so belonging to step 3), #351 (an unresolvable menu that
 abstains at 2-deep nesting but hard-fails at 3-deep) and #355 (`'` is not a

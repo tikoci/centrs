@@ -952,10 +952,10 @@ and its phase is named below.
   `bun run explain:value-census:readme` and gated against it by
   `bun run explain:value-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:value-census:check`. Of the
-  13,161 emitted values in a statement the strict argument lexer ALSO read, 0
+  13,152 emitted values in a statement the strict argument lexer ALSO read, 0
   disagree with it on half-open byte span or decoded text, while the
   prefix-safe scan retains a further 6,538 values across 568 statements whose
-  strict REST reading abstains. Of 19,699 emitted occurrences, 5,636 are array
+  strict REST reading abstains. Of 19,690 emitted occurrences, 5,636 are array
   members (529 keyed, 1,147 nested inside another member) and 808 are arrays;
   the corpus holds no source-literal `id` example. The three structural
   counters — spans addressing bytes outside their own source, members naming a
@@ -1780,8 +1780,8 @@ And the grounded complement — asked, and refused:
   `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 1,023,107 are classified (71.71%), the remaining
-  403,624 are `unclassified`. The census emits 241,539 tokens (avg 254.8 per
+  1,426,731 analyzed bytes, 1,022,805 are classified (71.69%), the remaining
+  403,926 are `unclassified`. The census emits 241,442 tokens (avg 254.7 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is the
   vocabulary #264 B5 settled. Each B2 fill should move the classified
@@ -2132,9 +2132,10 @@ the 16,526 bytes `arg-sep` claims, one per attribute. Token count rises 214,503
 → 231,026 because one run became two. **This is a retag.**
 
 (Those totals are the corpus as it stood for THIS measurement. The classified
-total is 1,023,107 today: #347/#348 later classified 8 further bytes, and #355's
+total is 1,022,805 today: #347/#348 later classified 8 further bytes, #355's
 fail-closed symbol stop then unclaimed 306 of them — variable bytes sitting
-after a bare apostrophe, which the device never reaches. The identity being
+after a bare apostrophe, which the device never reaches — and #211's unlisted
+bare-path abstention unclaimed 302 more. The identity being
 claimed here is between the two sides of the split, not with any later total —
 restating it against today's figure would credit this retag with a movement a
 different change made. The generated block above carries the current numbers.)
@@ -2222,7 +2223,7 @@ bytes came from a fill that already held it — `string` gives up 17,672 and
 last decimal**, 1,023,405 of 1,426,731 (71.73076073906013%), so in byte terms
 this is a retag even though it took a new walk to make — again, the identity is
 between this change's own before and after, and the corpus total has since moved
-to 1,023,107 / 241,539 tokens under #347/#348 and #355. Only the token count
+to 1,022,805 / 241,442 tokens under #347/#348, #355 and #211. Only the token count
 moves, 231,026 → 241,663: the 7,408 new `escaped` tokens plus the 3,229
 fragments they leave behind when they split a run they sit inside (`string`
 +2,643, `value` +586). That second number is well under one per escape because
@@ -2586,9 +2587,26 @@ to mention. `/system/reboot` no longer moves the context, so a statement after
 it resolves where it actually is; `verbsplit` and `pathresolve` agree, which
 they would otherwise now do *confidently* in opposite directions. What is left
 is the honest residue of both floors — `/terminal/cuu` is a real no-argument
-command MikroTik publishes nowhere — and it stays pinned as a KNOWN LIMIT
-fixture rather than assumed closed. The contradiction that #202 would have
+command MikroTik publishes nowhere. The contradiction that #202 would have
 rendered is gone.
+
+**#211 makes that residue abstain (R14).** A verb-free absolute path that
+neither table knows used to still move the context, so `/terminal/cuu` then
+`print` resolved to an invented `/terminal/cuu/print`. On CHR 7.24.5 `:parse`
+reads `/terminal/cuu` as a command and that `print` as `bad command name print`
+at the root. `/ip fire conn` has the same shape and is navigation to
+`/ip/firewall/connection`, because RouterOS accepts abbreviated menus. A table
+miss therefore cannot decide either way. The statement now reads as R13's
+relative abstention does: not navigation, flagged `maybeNav`, with the
+statements after it `unknown` until a known absolute navigation recovers the
+context ([example 34](examples.md#34-an-unlisted-bare-path-does-not-become-a-menu)).
+Over the pinned corpus, 14 of 18,650 statement readings lose a path, in 6
+scripts. Every one was an invented path: `/ip/fire/conn/remove`,
+`/ip/firewall/layer7/add`, the v6 `/routing/bgp/network/add`, and
+`/terminal/style/error/put`. No `explain` verdict changes. Four `containsWrite`
+verdicts move from `true` to `unknown`, because their write was proven only at
+an invented path. Rule P, which would read the tables as a per-menu closed
+world and expand abbreviations, is not adopted (#372).
 
 **The command axis also outranks the punctuation guess.** `splitRun`'s last
 rule reads the first space-separated token as the verb, which lands on the
@@ -2719,8 +2737,8 @@ The offline capability can advance from `coded` to `verified` when:
 - **Reachable evidence and explicit residue:** changed RouterOS semantic claims
   have committed CHR-grounded controls and a reproducible capture/replay path.
   Every remaining issue has a stated scope and dependency; #225 distinguishes
-  offline value work from live types, #272 owns evidence reachability, and #211's
-  unlisted-path decision retains the current abstention until separately decided.
+  offline value work from live types, #272 owns evidence reachability, and an
+  unlisted bare path abstains (#211) until #372 prices a closed-world reading.
 
 Retain the existing checks: `bun run lint`, `bun run test`, `bun run build`, and
 `bun run lint:ci`, plus the affected CHR grounding/integration procedure from

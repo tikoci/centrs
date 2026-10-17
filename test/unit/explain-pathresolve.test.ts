@@ -338,6 +338,52 @@ describe("Q14 C3b — a lost context poisons dependent statements", () => {
 		});
 	});
 
+	test("an unknown ABSOLUTE bare path poisons the same way, with its controls (#211)", () => {
+		const res = resolveStatements(
+			"/terminal/cuu\nprint\n:put 1\n/system/reboot\nadd name=x\n/ip address\nprint",
+		).statements;
+		// The statement itself keeps the context it found; what follows loses it.
+		expect(res[0]).toMatchObject({ maybeNav: true, contextCertain: true });
+		expect(res[1]).toMatchObject({ path: null, unresolved: LOST });
+		// A `:` directive is context-independent and keeps resolving.
+		expect(res[2]?.path).toBe("/put");
+		// A published no-argument command does not move the context (R12), so it
+		// re-establishes nothing either.
+		expect(res[3]).toMatchObject({ isNav: false, path: "/system/reboot" });
+		expect(res[3]?.maybeNav).toBeUndefined();
+		expect(res[4]).toMatchObject({ path: null, unresolved: LOST });
+		// A known absolute navigation replaces the context and recovers.
+		expect(res[5]).toMatchObject({ isNav: true, path: "/ip/address" });
+		expect(res[6]).toMatchObject({
+			path: "/ip/address/print",
+			contextCertain: true,
+		});
+	});
+
+	test("…and a known navigation, before or after it, is unaffected (#211)", () => {
+		const res = resolveStatements(
+			"/ip route\nadd gateway=1.1.1.1\n/terminal/cuu\n/ip route\nadd gateway=2.2.2.2",
+		).statements;
+		expect(res[1]?.path).toBe("/ip/route/add");
+		expect(res[4]).toMatchObject({
+			path: "/ip/route/add",
+			contextCertain: true,
+		});
+	});
+
+	test("the bracket walk and a block body follow the same #211 contract", () => {
+		const doc = resolveDocument("/terminal/cuu\nremove [find]");
+		expect(doc.resolutions[0]?.path).toBeNull();
+		expect(doc.resolutions[0]?.unresolved).toBe(LOST);
+		// Inside a body the abstention poisons that body's later statements; CHR
+		// 7.24.5 reads the `print` there as `bad command name print`.
+		const body = resolveStatements(
+			":if (true) do={ /terminal/cuu\nprint }",
+		).statements;
+		expect(body.at(-2)).toMatchObject({ maybeNav: true });
+		expect(body.at(-1)).toMatchObject({ path: null, unresolved: LOST });
+	});
+
 	test("context-INDEPENDENT statements keep resolving while context is lost", () => {
 		const res = resolveStatements(
 			"/ip) address\n/ip/route/add gateway=1.1.1.1\n:global x 1",
@@ -725,20 +771,48 @@ describe("R9 — pathresolve and verbsplit cannot contradict each other", () => 
 		expect(stmts[2]?.path).toBe("/ip/route/add");
 	});
 
-	test("KNOWN LIMIT — a verb-free bare path NEITHER table knows is still navigation", () => {
-		// What is left of #211 B2. `/terminal/cuu` is a real no-argument command
-		// published nowhere, so offline still claims navigation into a menu that
-		// does not exist and cascades. Pinned so the residue stays visible rather
-		// than being assumed closed by R12: the tables are floors in both
-		// directions, and neither absence is evidence.
-		const stmts = resolveStatements(
-			"/ip route\n/terminal cuu\nadd x=1",
-		).statements;
-		expect(stmts[1]?.isNav).toBe(true);
-		expect(resolveVerbs("/terminal cuu").splits[0]?.resolution).toBe(
-			"ambiguous",
-		);
-		expect(stmts[2]?.path).toBe("/terminal/cuu/add");
+	test("R14 (#211) — a verb-free bare path NEITHER table knows is not navigation", () => {
+		// What was left of #211 B2. `/terminal/cuu` is a real no-argument command
+		// published nowhere: on CHR 7.24.5 `:parse` reads it as `(evl
+		// /terminal/cuu)` and the `add` after it as `bad command name add` at the
+		// root. `/ip fire conn` has the identical shape and IS navigation (to
+		// `/ip/firewall/connection`). Offline cannot tell them apart, so it
+		// abstains, and both modules agree that it abstains.
+		for (const spelling of ["/terminal cuu", "/terminal/cuu"]) {
+			const stmts = resolveStatements(
+				`/ip route\n${spelling}\nadd x=1`,
+			).statements;
+			expect(stmts[1]).toMatchObject({
+				isNav: false,
+				maybeNav: true,
+				path: "/terminal/cuu",
+				contextCertain: true,
+			});
+			expect(resolveVerbs(spelling).splits[0]?.resolution).toBe("ambiguous");
+			expect(stmts[2]).toMatchObject({
+				path: null,
+				unresolved: "context lost to an earlier unreadable statement",
+				contextCertain: false,
+			});
+		}
+	});
+
+	test("R14 — an abbreviated menu abstains too: absence is not a command", () => {
+		// The device reads both as navigation (CHR 7.24.5 IL:
+		// `/ip/firewall/connection/` and `/ip/firewall/layer7-protocol/`), so R14
+		// must not read the tables as a closed world and call them commands.
+		for (const [nav, next] of [
+			["/ip fire conn", "remove [find]"],
+			["/ip/firewall/layer7", "add name=x regexp=y"],
+		] as const) {
+			const [first, second] = resolveStatements(`${nav}\n${next}`).statements;
+			expect(first).toMatchObject({ isNav: false, maybeNav: true });
+			expect(second?.path).toBeNull();
+		}
+		const [bracket] = resolveDocument(
+			"/ip fire conn\nremove [find]",
+		).resolutions;
+		expect(bracket).toMatchObject({ path: null, contextCertain: false });
 	});
 });
 

@@ -725,3 +725,24 @@ without-paging` is the same shape and is two flags
 arguments, and a script body may drop its `=` too:
 `/system/script add name=beep source { :beep }` is the `source={ :beep }` body,
 not an invalid brace.
+
+### 34. An unlisted bare path does not become a menu
+
+```bash
+centrs explain $'/terminal/cuu\nprint\nadd name=x' --json
+```
+
+`/terminal/cuu` is a no-argument command that neither the menu table nor the
+command catalog lists. `/ip fire conn` has the same shape and is navigation:
+RouterOS accepts abbreviated menus. CHR 7.24.5 `:parse` confirms both, so a
+table miss cannot decide between a menu and a command.
+
+The first statement stays `ambiguous`. The two after it are `unknown`
+(`context lost to an earlier unreadable statement`, `contextCertain: false`),
+with no `command` and no `transport`, where they used to resolve to an
+invented `/terminal/cuu/print` and `/terminal/cuu/add`. On the device they are
+`bad command name print` and `bad command name add` at the root.
+`structure.containsWrite` is `unknown` and `data.verdict` is `warn`. A known
+absolute navigation recovers the context: in
+`/terminal/cuu`, `/ip address`, `print`, the last statement resolves to `print`
+at `/ip/address` again.
