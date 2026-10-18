@@ -168,6 +168,7 @@ const INFIX_SPELLINGS = [
 ];
 const OPERATOR_BYTES = "+-*/%<>=!~|^&.,";
 const WORD_OPERATORS = new Set(["and", "or", "in"]);
+const BARE_DECLARATIONS = new Set(["local", "global"]);
 
 function statementFrame(char: StatementFrame["char"]): StatementFrame {
 	return {
@@ -458,8 +459,15 @@ export function findGroupFaults(text: string, masked: string): GroupFault[] {
 						start: i + at,
 						end: i + at + 1,
 					});
-				// Only a `:` directive: a bare `set` or `find` may be a menu command.
-				frame.verb = word.startsWith(":") ? word.slice(1) : null;
+				// A `:` directive, or a bare declaration: `local where (comment={})`
+				// is `/localname=$where` at the root on CHR 7.24.5 and 7.23.8 (in a
+				// menu it is `bad command name local`). A bare `set` or `find` may be
+				// a menu command, so it stays unread.
+				frame.verb = word.startsWith(":")
+					? word.slice(1)
+					: BARE_DECLARATIONS.has(word)
+						? word
+						: null;
 			}
 			if (word.includes("=")) token.equals = true;
 			const lower = word.toLowerCase();

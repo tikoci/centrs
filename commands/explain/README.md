@@ -1212,8 +1212,8 @@ the frame roles every other walker uses: `[` opens a statement, `(` an
 expression, and `{` a body when `braceStartsStatements` says so or the
 directive takes a program in that slot (`:execute {…}`, `:time {…}`). Each
 rule is a `:parse` answer on CHR 7.24.5 and 7.23.8, identical on both, and
-`test/fixtures/explain/group-faults.json` pins all 176 rows (94 rejections,
-82 controls). `test/integration/explain-group-faults.test.ts` holds the
+`test/fixtures/explain/group-faults.json` pins all 186 rows (100 rejections,
+86 controls). `test/integration/explain-group-faults.test.ts` holds the
 device to that fixture, and `test/unit/explain-group-faults.test.ts` holds
 offline to it.
 
@@ -1253,7 +1253,10 @@ runs on across blank lines and line-leading comment lines, as H5 does
 elsewhere, so `(1 +\⏎# c⏎2)` and `{1\⏎⏎;2}` parse, while a blank line after a
 comment line ends it (`(1 +\⏎# c⏎⏎2)` is rejected at the blank line). A
 directive's operand is a name, so `:local where (comment={})` parses and
-`:local where (1 +)` is checked like any expression. And a named element takes
+`:local where (1 +)` is checked like any expression. A bare `local`/`global`
+is the same directive at the root (`local where (comment={})` is
+`/localname=$where`), while a bare `set` or `find` may be a menu command and
+stays unread. And a named element takes
 a trailing `,` (`{a=1,}` is `value=a`, `{a=1,;b=2}` is `value=a;b=2`), while
 `{a=,1}`, `{a=1,,2}` and a positional `{1,}` are rejected. A faulted group's
 descendants are opaque, since the device stops at the fault.

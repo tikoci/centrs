@@ -478,6 +478,35 @@
 			"span": [14, 15]
 		},
 		{
+			"issue": "#511",
+			"input": "local z {}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 11)",
+			"code": "empty-group",
+			"span": [8, 10]
+		},
+		{
+			"issue": "#511",
+			"input": "global z {}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 12)",
+			"code": "empty-group",
+			"span": [9, 11]
+		},
+		{
+			"issue": "#511",
+			"input": "local z {1;;2}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 12)",
+			"code": "misplaced-separator",
+			"span": [11, 12]
+		},
+		{
+			"issue": "#511",
+			"input": "local z {1;{}}",
+			"device": "accept"
+		},
+		{
 			"issue": "#505",
 			"input": ":put ()",
 			"device": "reject",
@@ -945,6 +974,30 @@
 			"device": "accept"
 		},
 		{
+			"issue": "#505",
+			"input": "local where (1 +)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 18)",
+			"code": "missing-operand",
+			"span": [15, 16]
+		},
+		{
+			"issue": "#505",
+			"input": "global where (1 +)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 19)",
+			"code": "missing-operand",
+			"span": [16, 17]
+		},
+		{
+			"issue": "#505",
+			"input": "local find (1 +)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 17)",
+			"code": "missing-operand",
+			"span": [14, 15]
+		},
+		{
 			"issue": "#512",
 			"input": "admin@x",
 			"device": "reject",
@@ -1163,6 +1216,21 @@
 			"parse": "expected interface value (line 1 column 36)",
 			"code": "invalid-command-brace",
 			"span": [35, 36]
+		},
+		{
+			"issue": "#509",
+			"input": "local where (comment={})",
+			"device": "accept"
+		},
+		{
+			"issue": "#509",
+			"input": "global where (comment={})",
+			"device": "accept"
+		},
+		{
+			"issue": "#509",
+			"input": "local other (comment={})",
+			"device": "accept"
 		}
 	]
 }

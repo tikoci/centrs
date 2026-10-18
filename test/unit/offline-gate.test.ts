@@ -91,6 +91,8 @@ describe("offline gate — what it lets through", () => {
 			":put (1 +\\\r\n# comment\r\n2)",
 			":local z {1\\\r\n\r\n;2}",
 			":local where (comment={})",
+			"local where (comment={})",
+			"global where (comment={})",
 			":local z {a=1,;b=2}",
 		])
 			expect(assertOfflineSyntax(command, surface).verdict).not.toBe("fail");
