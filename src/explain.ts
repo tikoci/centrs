@@ -377,7 +377,15 @@ export interface ExplainStatementFacts {
 	ev: string;
 }
 
-export type ExplainStatement = ExplainStatementFacts & ExplainReading;
+export type ExplainStatement = ExplainStatementFacts &
+	ExplainReading & {
+		/** Stable within this result: `s0`, `s1`, … in discovery order. */
+		id: string;
+		/** Owning statement's id; absent at top level. Source containment only. */
+		parent?: string;
+		/** Index of the innermost published `blocks[]` body containing this statement. */
+		block?: number;
+	};
 
 /**
  * A `[…]` command substitution, re-constituted against its enclosing menu.
@@ -397,6 +405,8 @@ export type ExplainStatement = ExplainStatementFacts & ExplainReading;
  * opinion.
  */
 export interface ExplainSubcommandFacts extends ExplainStatementFacts {
+	/** Id of the statement containing this substitution, including nested brackets. */
+	owner: string;
 	/** Menu context in force at the bracket, `/` at document root. */
 	context: string;
 	/** Every path the inner command could resolve to, shortest first. */
@@ -409,6 +419,8 @@ export type ExplainSubcommand = ExplainSubcommandFacts & ExplainReading;
 
 /** A `{…}` scope at document level. */
 export interface ExplainBlock {
+	/** Owning statement's id, when the body belongs to a published statement. */
+	owner?: string;
 	/** The argument or directive that opened it (`do`, `on-error`, …). */
 	name: string;
 	/** The BODY's span, braces excluded. */
@@ -427,10 +439,9 @@ export interface ExplainStructure {
 	 *
 	 * A `do={…}` body's statements are flattened in after their parent (which is
 	 * what RouterOS IL does to them), so a body statement's span is CONTAINED by
-	 * its parent's rather than following it, and spans may overlap. A consumer
-	 * that wants only the top level filters on containment; one that wants "every
-	 * command in this script" — the common case, and the reason to flatten — reads
-	 * the list as it stands.
+	 * its parent's rather than following it, and spans may overlap. Filter on an
+	 * absent `parent` for the top level; use `id`/`parent` for source ancestry.
+	 * Links assert no lexical inheritance, execution order, or shared environment.
 	 */
 	statements: ExplainStatement[];
 	blocks: ExplainBlock[];
@@ -1392,8 +1403,14 @@ export function explainCommand(
 	// segments and pairing the two by index attaches the wrong span to every statement after
 	// the first block. Each split carries its own document-space span.
 	//
-	const readStatements: ExplainStatement[] = verbs.splits.map((split) =>
-		statementOf(split, analyzed, analyzedRange),
+	const readStatements: ExplainStatement[] = verbs.splits.map((split, index) =>
+		statementOf(
+			split,
+			analyzed,
+			analyzedRange,
+			index,
+			statementAnalysis.statements[index]?.ownership?.parent,
+		),
 	);
 	const canonical = canonicalizeExecuteCommand(input);
 	// The skip-tolerant token stream every TOKEN-LEVEL rule reads (#316), one
@@ -1507,14 +1524,57 @@ export function explainCommand(
 		),
 	};
 
+	const blocks: ExplainBlock[] = scopeBlocks(input).map((b) => ({
+		name: b.name,
+		span: { start: b.start, end: b.start + b.body.length },
+		ev: EV.blocks,
+	}));
+	// Preserve the existing outer-block inventory and its source offsets. Q4's
+	// traversal supplies parentage even when Unicode widened descendant spans.
+	const sourceOffset = (byte: number): number =>
+		coordinates.ascii
+			? byte
+			: byte === coordinates.analyzed.length
+				? input.length
+				: runAtByte(coordinates, byte).utf16Start;
+	const roots = statements.filter(
+		(statement) => statement.parent === undefined,
+	);
+	let rootAt = 0;
+	const blockIndexes = new Map<number, number>();
+	for (const [index, block] of blocks.entries()) {
+		blockIndexes.set(block.span.start, index);
+		while (
+			roots[rootAt] !== undefined &&
+			sourceOffset((roots[rootAt] as ExplainStatement).span.end) <
+				block.span.start
+		)
+			rootAt++;
+		const owner = roots[rootAt];
+		if (
+			owner !== undefined &&
+			sourceOffset(owner.span.start) <= block.span.start &&
+			sourceOffset(owner.span.end) >= block.span.end
+		)
+			block.owner = owner.id;
+	}
+	for (const [index, statement] of statements.entries()) {
+		const ownership = statementAnalysis.statements[index]?.ownership;
+		if (ownership === undefined) continue;
+		const parent = statements[ownership.parent] as ExplainStatement;
+		const block =
+			parent.block ??
+			(parent.parent === undefined
+				? blockIndexes.get(
+						sourceOffset(parent.span.start) + ownership.bodyStart,
+					)
+				: undefined);
+		if (block !== undefined) statement.block = block;
+	}
 	const structure: ExplainStructure = {
 		statementCount: statements.length,
 		statements,
-		blocks: scopeBlocks(input).map((b) => ({
-			name: b.name,
-			span: { start: b.start, end: b.start + b.body.length },
-			ev: EV.blocks,
-		})),
+		blocks,
 		containsWrite: renderWriteVerdict(write.verdict),
 		subcommands: brackets.resolutions.map(subcommandOf),
 		// `containsWrite` is the fact `structure` itself asserts; the statements
@@ -1797,9 +1857,13 @@ function statementOf(
 	split: DocumentVerbSplit,
 	analyzed: string,
 	analyzedRange: MaskedRange,
+	index: number,
+	parent?: number,
 ): ExplainStatement {
 	const reading = readingOf(split);
 	return {
+		id: `s${index}`,
+		...(parent === undefined ? {} : { parent: `s${parent}` }),
 		span: { start: split.span.start, end: split.span.end },
 		...(reading.kind === "command"
 			? withArguments(reading, split, analyzed, analyzedRange)
@@ -2386,6 +2450,7 @@ function subcommandOf(r: Resolution): ExplainSubcommand {
 					),
 				);
 	return {
+		owner: `s${r.owner}`,
 		span: { start: r.span.start, end: r.span.end },
 		context: r.context,
 		...reading,

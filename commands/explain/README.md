@@ -460,6 +460,7 @@ Standard envelope (constitution: result envelope); `data` sketch:
     "statementCount": 1,
     "statements": [
       {
+        "id": "s0",
         "span": { "start": 0, "end": 51 },
         "resolution": "resolved",
         "kind": "command",
@@ -511,6 +512,36 @@ Standard envelope (constitution: result envelope); `data` sketch:
   classification, and evidence id. This is where multi-statement scripts and
   partial recovery live; a single top-level transport object cannot represent
   them.
+- **Statement ownership is syntactic (#497).** Every published statement has
+  an `id` (`s0`, `s1`, …) in discovery order, stable within one result. A nested
+  scope-body statement's `parent` names its owning statement; absence means
+  top level. Each substitution's `owner` names its containing statement,
+  including nested brackets. These links come from the resolver's traversal,
+  so widened Unicode spans do not turn siblings into ancestors. IDs are not
+  persistent across edits.
+
+  The existing `blocks[]` inventory still lists outer scope bodies only.
+  A block's optional `owner` names the statement carrying it, and a statement's
+  optional `block` indexes its innermost **published** enclosing block. A nested
+  body can therefore share its ancestor's block index. Bare/menu containers
+  add no synthetic statement or block nodes; the tree links only statements
+  the existing analysis exposes. Existing lists, order, spans and readings stay
+  unchanged. A widened span remains a coordinate limitation, not a second
+  parentage rule.
+
+  Stored/deferred `source=`, `on-event=` and callback bodies remain opaque:
+  their statements are not added to this tree. Creation versus explicit
+  stored-script execution is grounded by
+  `test/fixtures/explain/statement-ownership.json` and replayed by
+  `test/integration/explain-structure.test.ts`. Ownership asserts no lexical
+  inheritance, immediate execution, or shared user/policy environment;
+  context-sensitive binding/value semantics remain #507's responsibility.
+
+  `test/unit/explain-structure.test.ts` independently checks ancestry against
+  span containment where spans recover exact source text, with explicit
+  widened-span controls. After `bun run corpus:fetch`, run
+  `CENTRS_CHECK_CORPUS=1 bun test test/unit/explain-structure.test.ts` for the
+  same contract over the pinned study population; the corpus CI job runs it.
 - **Every derived fact keeps provenance via `evidence[]`** — facts reference
   a stable evidence id (`ev`), and the evidence entry carries source
   (`canonicalizer` vs `live-inspect`), probe, basis (direct response vs

@@ -13,10 +13,9 @@
  * name (and, for the one head-dependent case, the leading directive) off the
  * statement itself.
  *
- * This module ships only the (single-pass, non-recursive) classification
- * primitives the path resolver needs. The recursive block *tree* / topology
- * surface stays in the lab until it can be promoted with a bounded, index-based
- * traversal of its own.
+ * This module ships the single-pass, non-recursive classification primitives
+ * the path resolver needs. `explain.ts` publishes source ownership from that
+ * resolver's existing bounded traversal; `scopeBlocks` remains a shallow scan.
  *
  * Every string skip here goes through `segment.ts`'s `scanQuotedString` rather
  * than a local quote-to-quote loop, so this module and the segmenter cannot

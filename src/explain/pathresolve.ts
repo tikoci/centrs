@@ -468,6 +468,8 @@ function handsKnownContext(
 
 /** A re-constituted `[…]` command substitution (Q3). */
 export interface Resolution {
+	/** Index of the owning statement in `resolveStatements(text).statements`. */
+	owner: number;
 	/** Raw text inside the brackets. */
 	inner: string;
 	/** Context in force at the bracket, `/` when at document root. */
@@ -527,6 +529,13 @@ export function rangeForResolution(
 
 /** The canonical path of one statement in source order (Q4). */
 export interface StatementResolution {
+	/** Source ownership from traversal, independent of potentially widened spans. */
+	ownership?: {
+		/** Index of the statement whose scope body contains this statement. */
+		parent: number;
+		/** Body start as a UTF-16 offset in that parent's original text. */
+		bodyStart: number;
+	};
 	text: string;
 	/** Offline read this statement as menu navigation, not a command. */
 	isNav: boolean;
@@ -754,7 +763,7 @@ export function resolveDocument(text: string): DocumentAnalysis {
 	const resolutions: Resolution[] = [];
 	const top = locate(segmented, DOCUMENT_LOC, rootRange(text, segmented));
 	defects.push(...top.defects);
-	walk(top.units, "/", resolutions, 0, defects, true);
+	walk(top.units, "/", resolutions, 0, defects, true, { next: 0 });
 	return { resolutions, defects: mergeDefects(defects) };
 }
 
@@ -765,10 +774,14 @@ function walk(
 	blockDepth: number,
 	defects: Defect[],
 	contextCertain: boolean,
+	statements: { next: number },
 ): void {
 	let ctx = context;
 	let certain = contextCertain;
 	for (const unit of units) {
+		// Count navigation and unreadable statements too, exactly as the Q4 walk
+		// does. Brackets in one unit (including nested brackets) share its owner.
+		const owner = statements.next++;
 		const { text, loc, range } = unit;
 		// R4 — a menu-navigation statement moves the document context.
 		const nav = menuNavPath(text, ctx, range);
@@ -802,7 +815,7 @@ function walk(
 			? false
 			: handsKnownContext(text, certain, range);
 		if (isUnreadableAbsolute(text) || poisonAbstention) certain = false;
-		collectBrackets(range, stmtCtx, 0, out, defects, stmtCertain, loc);
+		collectBrackets(range, stmtCtx, 0, out, defects, stmtCertain, loc, owner);
 		// R5 — block bodies inherit the context in force here.
 		for (const block of scopeBlocksIn(range)) {
 			if (blockDepth >= MAX_DEPTH) {
@@ -821,7 +834,15 @@ function walk(
 				bodyRange(range, block),
 			);
 			defects.push(...body.defects);
-			walk(body.units, stmtCtx, out, blockDepth + 1, defects, stmtCertain);
+			walk(
+				body.units,
+				stmtCtx,
+				out,
+				blockDepth + 1,
+				defects,
+				stmtCertain,
+				statements,
+			);
 		}
 	}
 }
@@ -845,10 +866,16 @@ function walkStatements(
 	blockDepth: number,
 	defects: Defect[],
 	contextCertain: boolean,
+	ownership?: StatementResolution["ownership"],
 ): void {
 	let ctx = context;
 	let certain = contextCertain;
+	const push = (statement: StatementResolution): void => {
+		if (ownership !== undefined) statement.ownership = ownership;
+		out.push(statement);
+	};
 	for (const unit of units) {
+		const parent = out.length;
 		const { text, span, range } = unit;
 		const nav = menuNavPath(text, ctx, range);
 		if (nav !== null) {
@@ -857,7 +884,7 @@ function walkStatements(
 			// therefore re-establishes certainty.
 			const relative = !trimAscii(text).startsWith("/");
 			if (relative && !certain) {
-				out.push({
+				push({
 					text,
 					isNav: true,
 					context: ctx,
@@ -868,7 +895,7 @@ function walkStatements(
 				});
 				continue;
 			}
-			out.push({
+			push({
 				text,
 				isNav: true,
 				context: ctx,
@@ -885,7 +912,7 @@ function walkStatements(
 		// BEEN a navigation, so what the context now is becomes unknown.
 		const defectReason = structuralDefectIn(range);
 		if (defectReason !== null) {
-			out.push({
+			push({
 				text,
 				isNav: false,
 				context: ctx,
@@ -906,7 +933,7 @@ function walkStatements(
 		// Applied to the RESOLUTION, not ahead of it, so a statement that would
 		// have refused on its own terms keeps its own — more specific — reason.
 		const resolved = canonicalPath(text, ctx, range);
-		out.push({
+		push({
 			text,
 			isNav: false,
 			...(poisonAbstention ? { maybeNav: true as const } : {}),
@@ -951,6 +978,7 @@ function walkStatements(
 				blockDepth + 1,
 				defects,
 				bodyCertain,
+				{ parent, bodyStart: block.start },
 			);
 		}
 	}
@@ -1260,6 +1288,7 @@ function collectBrackets(
 	defects: Defect[],
 	contextCertain: boolean,
 	loc: Loc,
+	owner: number,
 	inLiteral = false,
 ): void {
 	const { masked, start: lo, end: hi } = range;
@@ -1286,6 +1315,7 @@ function collectBrackets(
 				defects,
 				contextCertain,
 				nest(loc, i + 1 - lo, loc.fallback),
+				owner,
 			);
 			i = strEnd;
 			continue;
@@ -1305,6 +1335,7 @@ function collectBrackets(
 					defects,
 					contextCertain,
 					nest(loc, i + 1 - lo, loc.fallback),
+					owner,
 					true,
 				);
 			i = end;
@@ -1319,6 +1350,7 @@ function collectBrackets(
 		const inner = masked.slice(innerAt, innerEnd);
 		// The span covers the whole `[…]`, closing bracket included.
 		const resolution: Resolution = {
+			owner,
 			...resolveInner(inner, ctx, depth, contextCertain),
 			span: spanIn(loc, i - lo, Math.min(end + 1, hi) - lo),
 			innerSpan: spanIn(loc, innerAt - lo, innerEnd - lo),
@@ -1335,6 +1367,7 @@ function collectBrackets(
 			defects,
 			nestedCertainty(resolution, contextCertain),
 			nest(loc, innerAt - lo, loc.fallback),
+			owner,
 		);
 		i = end;
 	}
@@ -1392,6 +1425,7 @@ function scanInterpolations(
 	defects: Defect[],
 	contextCertain: boolean,
 	loc: Loc,
+	owner: number,
 ): void {
 	const { text, start: lo, end: hi } = range;
 	for (let i = lo; i < hi - 1; i++) {
@@ -1413,6 +1447,7 @@ function scanInterpolations(
 		// Span the `$[…]` from its sigil through the closing bracket; `innerSpan`
 		// is the two-byte-in start that difference makes non-derivable.
 		const resolution: Resolution = {
+			owner,
 			...resolveInner(maskedInner, ctx, depth, contextCertain),
 			inner,
 			span: spanIn(loc, i - lo, Math.min(end + 1, hi) - lo),
@@ -1428,6 +1463,7 @@ function scanInterpolations(
 			defects,
 			nestedCertainty(resolution, contextCertain),
 			nest(loc, innerAt - lo, loc.fallback),
+			owner,
 		);
 		i = end;
 	}
@@ -1481,7 +1517,7 @@ function resolveInner(
 	ctx: string,
 	depth: number,
 	contextCertain: boolean,
-): Omit<Resolution, "span" | "innerSpan"> {
+): Omit<Resolution, "span" | "innerSpan" | "owner"> {
 	const absolute = inner.startsWith("/");
 	const klass = classify(inner, absolute, depth);
 	if (klass === "cli-prompt-artifact")

@@ -223,6 +223,8 @@ jobs:
           key: corpus-${{ hashFiles('scripts/corpus-pin.json') }}
       - name: Fetch pinned corpus
         run: bun run corpus:fetch
+      - name: Statement ownership agrees with corpus source containment
+        run: CENTRS_CHECK_CORPUS=1 bun test test/unit/explain-structure.test.ts
       - name: Censuses
         run: |
           set -eo pipefail

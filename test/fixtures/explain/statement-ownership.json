@@ -1,0 +1,61 @@
+{
+	"issue": 497,
+	"capturedAt": "2026-10-18T16:55:35.570Z",
+	"device": {
+		"version": "7.24.5",
+		"architecture": "x86_64",
+		"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+	},
+	"method": "centrs executeEnvelope over rest-api with both validation stages enabled; parse commands inspect input, execution controls run only on a disposable CHR",
+	"rows": [
+		{
+			"kind": "parse",
+			"input": ":if (true) do={ :foreach i in={1;2} do={ :put $i } } else={ :put 0 }; :put 3",
+			"command": ":put [:parse \":if (true) do={ :foreach i in={1;2} do={ :put \\$i } } else={ :put 0 }; :put 3\"]",
+			"sha256": "8b56ba2b7316318c83a9a40959dba75107fa2ce1ee6e879d32017c6f7a02c739",
+			"ret": "(evl /ifcondition=true;do=;(evl (evl /foreachcounter=$i;do=;(evl (evl /putmessage=$i));in=1;2));else=;(evl (evl /putmessage=0)));(evl /putmessage=3)"
+		},
+		{
+			"kind": "parse",
+			"input": ":do { :put [/system/resource/get uptime] } on-error={ :put \"error\" }; :put 2",
+			"command": ":put [:parse \":do { :put [/system/resource/get uptime] } on-error={ :put \\\"error\\\" }; :put 2\"]",
+			"sha256": "eb98c527b6bc53e3203a5c3dafe3d39fb66cbec8bea76070f95ea5f31b502f9d",
+			"ret": "(evl /docommand=;(evl (evl /putmessage=(evl (evl /system/resource/getvalue-name=uptime))));on-error=;(evl (evl /putmessage=error)));(evl /putmessage=2)"
+		},
+		{
+			"kind": "parse",
+			"input": "/ip { address { print } }; :put 1",
+			"command": ":put [:parse \"/ip { address { print } }; :put 1\"]",
+			"sha256": "9bfec965fa07771270a606546f4e239fc7ce56a8354ce88112bc652319273b54",
+			"ret": "(evl (evl (evl /ip/address/print)));(evl /putmessage=1)"
+		},
+		{
+			"kind": "parse",
+			"input": ":if (true) do={ :put \"é\"; :put [/system/resource/get uptime] }; :put 3",
+			"command": ":put [:parse \":if (true) do={ :put \\\"é\\\"; :put [/system/resource/get uptime] }; :put 3\"]",
+			"sha256": "0a1163724dbc7dd45bdbed654a3e3d63a8f6eb6c9ace0d2c80eadd252752cbe4",
+			"ret": "(evl /ifcondition=true;do=;(evl (evl /putmessage=é) (evl /putmessage=(evl (evl /system/resource/getvalue-name=uptime)))));(evl /putmessage=3)"
+		},
+		{
+			"kind": "execute",
+			"input": ":global centrs497 \"before\"; /system/script/add name=centrs497-proof source={ :global centrs497; :set centrs497 \"ran\" }; :put $centrs497",
+			"command": ":global centrs497 \"before\"; /system/script/add name=centrs497-proof source={ :global centrs497; :set centrs497 \"ran\" }; :put $centrs497",
+			"sha256": "2d49141688af423c2e6c1c16e1bc0433d4cc0324c44283f2350bb19779407e87",
+			"ret": "before"
+		},
+		{
+			"kind": "execute",
+			"input": "/system/script/run centrs497-proof; :global centrs497; :put $centrs497",
+			"command": "/system/script/run centrs497-proof; :global centrs497; :put $centrs497",
+			"sha256": "86fbd32c0632dee9b3bfe47605d3e1de62afa547fa50d2011e023ab2f9d908b3",
+			"ret": "ran"
+		},
+		{
+			"kind": "execute",
+			"input": ":global centrs497 \"before\"; :do { :set centrs497 \"immediate\" }; :put $centrs497",
+			"command": ":global centrs497 \"before\"; :do { :set centrs497 \"immediate\" }; :put $centrs497",
+			"sha256": "0d17ccc47313e10f41c947aa63ba4431a882832d4803443e342137754611fe0a",
+			"ret": "immediate"
+		}
+	]
+}
