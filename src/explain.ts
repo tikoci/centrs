@@ -423,7 +423,7 @@ export interface ExplainBlock {
 	owner?: string;
 	/** The argument or directive that opened it (`do`, `on-error`, …). */
 	name: string;
-	/** The BODY's span, braces excluded. */
+	/** The BODY's analyzed-byte span, braces excluded. */
 	span: ExplainSpanRange;
 	ev: string;
 }
@@ -1529,8 +1529,8 @@ export function explainCommand(
 		span: { start: b.start, end: b.start + b.body.length },
 		ev: EV.blocks,
 	}));
-	// Preserve the existing outer-block inventory and its source offsets. Q4's
-	// traversal supplies parentage even when Unicode widened descendant spans.
+	// Link the existing outer-block inventory in UTF-16 source coordinates.
+	// Q4's traversal supplies parentage even when Unicode widened descendant spans.
 	const sourceOffset = (byte: number): number =>
 		coordinates.ascii
 			? byte
@@ -1570,6 +1570,22 @@ export function explainCommand(
 					)
 				: undefined);
 		if (block !== undefined) statement.block = block;
+	}
+	// Publish analyzed-byte spans only after ownership has used source offsets.
+	// Shallow blocks are disjoint and ordered, so one forward walk maps both
+	// boundaries without scanning or encoding a source prefix for every body.
+	if (!coordinates.ascii) {
+		let runAt = 0;
+		const byteOffset = (offset: number): number => {
+			while ((coordinates.runs[runAt]?.utf16Start ?? Infinity) < offset)
+				runAt++;
+			return coordinates.runs[runAt]?.byteStart ?? coordinates.analyzed.length;
+		};
+		for (const block of blocks)
+			block.span = {
+				start: byteOffset(block.span.start),
+				end: byteOffset(block.span.end),
+			};
 	}
 	const structure: ExplainStructure = {
 		statementCount: statements.length,
