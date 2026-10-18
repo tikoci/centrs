@@ -185,8 +185,9 @@ jobs:
   # the TOKEN partition census against `test/fixtures/explain/tokens.json` →
   # `corpus` (#289 B1), the bracket-`=` census (#341), and, since the slice is
   # cut from the corpus's channel sessions (#498), the per-character highlight
-  # slice the agreement report scores. That is the reachability this job was
-  # built to provide.
+  # slice the agreement report scores, and offline explain against the device
+  # on the `wiresage-conformance` cases (test/fixtures/explain/conformance.json).
+  # That is the reachability this job was built to provide.
   # The genre census still only reports: it has no committed fixture to be
   # asserted against.
   #
@@ -263,6 +264,8 @@ jobs:
         run: bun run explain:bracket-equals:check
       - name: Highlight slice matches a fresh cut from the corpus
         run: bun run explain:highlight-slice:check
+      - name: Conformance census matches the committed fixture
+        run: bun run explain:conformance:check
 
   chr-smoke:
     name: CHR smoke (stable)

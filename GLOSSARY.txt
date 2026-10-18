@@ -206,6 +206,8 @@ tzsp
 TZSP
 UDP
 UIA
+# unscorable: a corpus observation with no device answer (failed/missing capture, unknown or ambiguous readout); `parseVerdict` in scripts/corpus-db.ts.
+unscorable
 uvx
 vcs
 venv
