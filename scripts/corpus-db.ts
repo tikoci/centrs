@@ -205,7 +205,7 @@ export function isAcceptedParse(responseClass: string): boolean {
 	return responseClass === "il-no-recognized-diagnostic";
 }
 
-/** One `:parse` observation of one population script. */
+/** One `:parse` observation of one population (or collection) script. */
 export interface ParseObservation {
 	scriptId: number;
 	path: string;
@@ -217,33 +217,53 @@ export interface ParseObservation {
 }
 
 /**
- * `:parse` observations of the population on the given runs, in run then path
- * order. The readout is `response_text` for both `parse-ret-v1` and
- * `legacy-text`; a `raw-json-v1` row is a failed acquisition and has none.
+ * Which scripts an observation reader returns: the study population by
+ * default, or one named auxiliary collection (`wiresage-conformance`) that a
+ * caller opts into. Membership is by `script_id` either way.
+ */
+export interface ObservationScope {
+	collection?: string;
+}
+
+/**
+ * `:parse` observations of the population (or of `scope.collection`) on the
+ * given runs, in run then path order. The readout is `response_text` for both
+ * `parse-ret-v1` and `legacy-text`; a `raw-json-v1` row is a failed acquisition
+ * and has none.
  */
 export function parseObservations(
 	db: Database,
 	runIds: readonly string[],
+	scope: ObservationScope = {},
 ): ParseObservation[] {
 	requireCorpusSchema(db);
+	const members =
+		scope.collection === undefined
+			? "JOIN v_corpus_population p ON p.id = o.script_id "
+			: "JOIN source_scripts p ON p.id = o.script_id AND p.collection = ? ";
 	const query = db.query(
 		"SELECT o.script_id AS scriptId, o.source_path AS path, " +
 			"r.routeros_version AS version, r.id AS runId, " +
 			"o.response_class AS responseClass, o.response_text AS il, " +
 			"o.acquisition_status AS acquisition " +
 			"FROM capture_observations o JOIN capture_runs r ON r.id = o.run_id " +
-			"JOIN v_corpus_population p ON p.id = o.script_id " +
+			members +
 			"WHERE r.id = ? AND r.probe = 'parseil' ORDER BY o.source_path",
 	);
 	const out: ParseObservation[] = [];
 	for (const runId of runIds) {
-		const rows = query.all(runId) as (Omit<ParseObservation, "il"> & {
+		const params =
+			scope.collection === undefined ? [runId] : [scope.collection, runId];
+		const rows = query.all(...params) as (Omit<ParseObservation, "il"> & {
 			il: string | null;
 			acquisition: string;
 		})[];
 		if (rows.length === 0)
 			throw new Error(
-				`the corpus has no parseil observations for run ${runId}`,
+				`the corpus has no parseil observations for run ${runId}` +
+					(scope.collection === undefined
+						? ""
+						: ` in collection \`${scope.collection}\``),
 			);
 		for (const { acquisition, il, ...row } of rows) {
 			// A class this reader does not know would silently fall on the reject
@@ -261,6 +281,64 @@ export function parseObservations(
 		}
 	}
 	return out;
+}
+
+/** The upstream collection of third-party synthetic grammar cases (lsp-routeros-ts#42). */
+export const CONFORMANCE_COLLECTION = "wiresage-conformance";
+
+/**
+ * One `wiresage-conformance` case. `upstreamValid` is the third party's label
+ * from a DIFFERENT oracle (RouterOS 7.21.4, `/import … verbose=yes dry-run`,
+ * which compiles per line). It is a recorded observation to compare against,
+ * never the device verdict: read `parseObservations(…, { collection })` for
+ * that (centrs#507 has why the two contexts disagree).
+ */
+export interface ConformanceCase {
+	scriptId: number;
+	path: string;
+	text: string;
+	upstreamId: string;
+	upstreamSection: string;
+	upstreamValid: boolean;
+	upstreamRevision: string;
+	upstreamOracle: string;
+}
+
+/**
+ * Every conformance case, in path order. Upstream IDs repeat across sections
+ * (31 of them), so `path` is the identity, not `upstreamId`. A case whose
+ * recorded source hash is not its script's is refused: the label would then
+ * describe other bytes.
+ */
+export function conformanceCases(db: Database): ConformanceCase[] {
+	requireCorpusSchema(db);
+	const rows = db
+		.query(
+			"SELECT s.id AS scriptId, s.path, s.text, s.sha256, " +
+				"t.source_sha256 AS recordedSha256, t.upstream_id AS upstreamId, " +
+				"t.upstream_section AS upstreamSection, t.upstream_valid AS upstreamValid, " +
+				"t.upstream_revision AS upstreamRevision, t.upstream_oracle AS upstreamOracle " +
+				"FROM third_party_cases t JOIN source_scripts s ON s.id = t.script_id " +
+				"WHERE s.collection = ? ORDER BY s.path",
+		)
+		.all(CONFORMANCE_COLLECTION) as (Omit<ConformanceCase, "upstreamValid"> & {
+		sha256: string;
+		recordedSha256: string;
+		upstreamValid: number;
+	})[];
+	if (rows.length === 0)
+		throw new Error(
+			`the corpus records no \`${CONFORMANCE_COLLECTION}\` cases ` +
+				"(`third_party_cases` is empty); it predates lsp-routeros-ts#42",
+		);
+	return rows.map(({ sha256, recordedSha256, upstreamValid, ...row }) => {
+		if (sha256 !== recordedSha256)
+			throw new Error(
+				`${row.path} is recorded with source sha256 ${recordedSha256}, ` +
+					`but the script's is ${sha256}`,
+			);
+		return { ...row, upstreamValid: upstreamValid === 1 };
+	});
 }
 
 /** Every `:parse` run, channel sessions and legacy history alike. */

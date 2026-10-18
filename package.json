@@ -103,6 +103,8 @@
 		"explain:catalog": "bun run scripts/gen-explain-catalog.ts",
 		"explain:catalog:check": "bun run scripts/gen-explain-catalog.ts --check",
 		"explain:corpus-census": "bun run scripts/explain-corpus-census.ts",
+		"explain:conformance": "bun run scripts/explain-conformance.ts",
+		"explain:conformance:check": "bun run scripts/explain-conformance.ts --check",
 		"explain:highlight-agreement": "bun run scripts/explain-highlight-agreement.ts",
 		"explain:highlight-agreement:check": "bun run scripts/explain-highlight-agreement.ts --check",
 		"explain:highlight-agreement:readme": "bun run scripts/explain-highlight-agreement.ts --readme",

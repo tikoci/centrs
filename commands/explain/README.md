@@ -2562,6 +2562,18 @@ builds as separate columns and states its session set, rather than collapsing
 them to one number. Long-term is also the channel a real device most likely
 runs.
 
+**The `wiresage-conformance` cases are read separately, never as population.**
+`conformanceCases` returns the 875 third-party grammar probes with their
+upstream label, and `parseObservations(…, { collection })` returns their
+device answers. `bun run explain:conformance` scores the execute gate's offline
+answer (`fail` refuses) against `:parse` on every channel. It lists false
+rejects, missed rejections (split by device class: `plain-diagnostic` is
+syntax, while `embedded-diagnostic` is mostly a menu or parameter name, which
+needs the #501 argument lists), cases where the channels disagree, and the
+upstream-label disagreements that #507 needs. The lists are committed in
+`test/fixtures/explain/conformance.json` and gated in CI, so a fix for any
+of #504–#506 shows the cases it moved.
+
 The corpus itself is not in this repo and is not moving here — `lsp-routeros-ts`
 owns producing snapshots, centrs owns which snapshot it measures against.
 `scripts/corpus-pin.json` is that second half: the commit and the blob sha256 a

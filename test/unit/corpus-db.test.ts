@@ -11,8 +11,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	CONFORMANCE_COLLECTION,
 	channelSession,
 	channelSessions,
+	conformanceCases,
 	corpusProvenance,
 	decodeHighlightRuns,
 	describeExcluded,
@@ -41,6 +43,10 @@ function corpus(schemaVersion = 5): Database {
 			source_path TEXT, source_sha256 TEXT, input_id TEXT, acquisition_status TEXT,
 			response_class TEXT, response_text TEXT, response_json TEXT,
 			response_encoding TEXT, highlight_json TEXT);
+		CREATE TABLE third_party_cases (script_id INTEGER PRIMARY KEY, upstream_id TEXT,
+			upstream_section TEXT, upstream_index INTEGER, upstream_revision TEXT,
+			upstream_source TEXT, upstream_oracle TEXT, upstream_valid INTEGER,
+			source_sha256 TEXT, upstream_metadata_json TEXT);
 		CREATE VIEW v_capture_inputs AS SELECT o.id AS observation_id,
 			(SELECT s.text FROM source_scripts s WHERE s.sha256 = o.source_sha256) AS submitted_text
 			FROM capture_observations o;
@@ -84,6 +90,9 @@ function corpus(schemaVersion = 5): Database {
 	db.run(
 		"INSERT INTO capture_inputs VALUES ('i1', '{\"truncated\":false,\"replacedCodeUnits\":0}')",
 	);
+	db.run(`INSERT INTO third_party_cases VALUES
+		(4, 'e14', 'unary and binary forms', 0, 'a3a646f', 'cases.json',
+			'RouterOS 7.21.4 /import verbose=yes dry-run', 0, 'h4', '{}')`);
 	return db;
 }
 
@@ -146,6 +155,42 @@ describe("corpus-db readers (#498)", () => {
 			"a.rsc",
 			"b.rsc",
 		]);
+	});
+
+	test("a collection scope reads only that collection's observations", () => {
+		expect(
+			parseObservations(corpus(), ["st-parse"], {
+				collection: CONFORMANCE_COLLECTION,
+			}).map((r) => [r.path, r.responseClass]),
+		).toEqual([["wiresage-conformance/e/e14.rsc", "plain-diagnostic"]]);
+		expect(() =>
+			parseObservations(corpus(), ["st-parse"], { collection: "absent" }),
+		).toThrow(/collection `absent`/);
+	});
+
+	test("conformance cases carry the upstream label beside their bytes", () => {
+		expect(conformanceCases(corpus())).toEqual([
+			{
+				scriptId: 4,
+				path: "wiresage-conformance/e/e14.rsc",
+				text: ":put ()",
+				upstreamId: "e14",
+				upstreamSection: "unary and binary forms",
+				upstreamValid: false,
+				upstreamRevision: "a3a646f",
+				upstreamOracle: "RouterOS 7.21.4 /import verbose=yes dry-run",
+			},
+		]);
+	});
+
+	test("a conformance label recorded for other bytes is refused", () => {
+		const db = corpus();
+		db.run("UPDATE third_party_cases SET source_sha256 = 'other'");
+		expect(() => conformanceCases(db)).toThrow(
+			/recorded with source sha256 other/,
+		);
+		db.run("DELETE FROM third_party_cases");
+		expect(() => conformanceCases(db)).toThrow(/predates lsp-routeros-ts#42/);
 	});
 
 	test("a misaligned row is reported without pairs, not thrown on", () => {
