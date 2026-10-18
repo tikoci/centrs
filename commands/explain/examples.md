@@ -929,3 +929,33 @@ bare word run into a `"`, `$` or bracket (`:put a"b"`, `name=a$v`). Inside
 comment="a"b` and `("a"b)` parse). A command argument whose property parser
 takes the glued part also passes: `dst-address-list=!"my list"` and
 `dst-port=80,"443"`.
+
+### 46. Statement ids and source ownership
+
+```bash
+centrs explain ':if (true) do={ :foreach i in={1;2} do={ :put $i } } else={ :put 0 }; :put 3' --json
+```
+
+The statements keep discovery order and have ids `s0` through `s4`.
+The `foreach` (`s1`) has `parent: "s0"`; its `put` (`s2`) has `parent: "s1"`;
+the `else` body's `put` (`s3`) has `parent: "s0"`. The final `put` (`s4`) has
+no parent. The published `do` and `else` blocks both have `owner: "s0"`;
+`s1` and `s2` share `block: 0`, and `s3` has `block: 1`. A `[find]` inside a
+body names that body's statement as its `owner`. Links describe source
+ownership; binding and execution-context claims remain separate (#507).
+
+### 47. A stored script stays opaque
+
+```bash
+centrs explain '/system/script/add name=proof source={ :local x 1; :put $x }; :put 2' --json
+```
+
+Only the installing command (`s0`) and final `put` (`s1`) appear in
+`statements[]`; neither has a parent, and `blocks[]` stays empty. The deferred
+body's local and `put` are not exposed as statements. Scheduler `on-event=`
+and Netwatch `down-script=` have the same structural boundary.
+
+The CHR controls in `test/integration/explain-structure.test.ts` parse the
+scope examples and compare stored-script creation, explicit `run`, and an
+immediate `:do` body. Those are test operations on disposable CHR; explain
+itself never executes the analyzed input.
