@@ -72,6 +72,7 @@ import {
 } from "./btest.ts";
 import {
 	bytesToBigIntBE,
+	type EcSrp5Shared,
 	ecSrp5ClientConfirm,
 	ecSrp5ClientShared,
 	ecSrp5Id,
@@ -676,11 +677,13 @@ async function runClientEcSrp5(
 
 	const challenge = parseServerChallenge(await readAuthFrame(channel));
 	const validator = ecSrp5Id(username, password, challenge.salt);
-	const shared = ecSrp5ClientShared(
-		keypair.privateKey,
-		challenge.serverPublicKey,
-		keypair.publicKey,
-		validator,
+	const shared = btestShared(
+		ecSrp5ClientShared(
+			keypair.privateKey,
+			challenge.serverPublicKey,
+			keypair.publicKey,
+			validator,
+		),
 	);
 	const clientCc = ecSrp5ClientConfirm(shared);
 	await channel.write(encodeConfirmation(clientCc));
@@ -782,11 +785,13 @@ async function runServerEcSrp5(
 	);
 	await channel.write(encodeServerChallenge(serverPublicKey, salt));
 
-	const shared = ecSrp5ServerShared(
-		keypair.privateKey,
-		validatorScalar,
-		hello.publicKey,
-		serverPublicKey,
+	const shared = btestShared(
+		ecSrp5ServerShared(
+			keypair.privateKey,
+			validatorScalar,
+			hello.publicKey,
+			serverPublicKey,
+		),
 	);
 	const clientCc = await readAuthFrame(channel);
 	const expectedCc = ecSrp5ClientConfirm(shared);
@@ -797,6 +802,21 @@ async function runServerEcSrp5(
 		encodeConfirmation(ecSrp5ServerConfirm(shared, clientCc)),
 	);
 	return hello.username;
+}
+
+/**
+ * The shared secret as btest hashes it: `z` without its leading zero bytes
+ * (OpenSSL `BN_bn2bin`), where MAC-Telnet's `mtwei.c` pads it to 32
+ * (`BN_bn2binpad`), so the shared math in `ec-srp5.ts` keeps 32 bytes.
+ *
+ * Grounded on CHR 7.24.5 `/tool/bandwidth-server`: over 800 client handshakes,
+ * every one whose `z` began with 0x00 (9) failed with the padded form and no
+ * other did. Stripped, 600 of 600 verified, 4 of them with a leading zero.
+ */
+export function btestShared(shared: EcSrp5Shared): EcSrp5Shared {
+	let start = 0;
+	while (start < shared.z.length - 1 && shared.z[start] === 0) start++;
+	return start === 0 ? shared : { j: shared.j, z: shared.z.subarray(start) };
 }
 
 function ecSrp5RandomSalt(): Uint8Array {

@@ -70,6 +70,40 @@ describe("offline gate — what it lets through", () => {
 		).toBe("explain/canonicalizer/invalid-command-brace");
 	});
 
+	test("a group fault is refused before the device (#505, #511, #512)", () => {
+		// CHR 7.24.5 and 7.23.8 reject each with `syntax error`; their controls
+		// parse and must still reach the device.
+		for (const [command, code] of [
+			[":put (1 +)", "missing-operand"],
+			[":local z {}", "empty-group"],
+			[":local z {1\n;2}", "misplaced-separator"],
+			["[admin@MikroTik] > /ip address print", "invalid-at-sign"],
+		] as const)
+			expect(reject(command).causeData).toBe(`explain/canonicalizer/${code}`);
+		for (const command of [
+			":put (1 + -2)",
+			":local z {1;{}}",
+			"/ip address print where (comment=+)",
+			"/ip { route { } }",
+			// PR #516 review: a continuation across a comment or blank line, a
+			// directive operand named `where`, and a named element's trailing `,`.
+			":put (1 +\\\n# comment\n2)",
+			":put (1 +\\\r\n# comment\r\n2)",
+			":local z {1\\\r\n\r\n;2}",
+			":local where (comment={})",
+			"local where (comment={})",
+			"global where (comment={})",
+			":local z {a=1,;b=2}",
+		])
+			expect(assertOfflineSyntax(command, surface).verdict).not.toBe("fail");
+		for (const command of [
+			":put (1 +\\\n# c\n\n2)",
+			":local where (1 +)",
+			":local z {a=,1}",
+		])
+			expect(reject(command).causeData).toMatch(/^explain\/canonicalizer\//);
+	});
+
 	test("an abstention is not a rejection", () => {
 		// `warn` means the analyzer declined to judge part of the input. Turning
 		// that into a refusal would make every unrecognized menu unreachable

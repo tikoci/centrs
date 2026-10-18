@@ -914,7 +914,9 @@ and its phase is named below.
   (`expected interface value`), so `where comment={1;2}` keeps its error. The
   device does that only for a property the menu knows (`where foo-bar={…}`
   parses). Offline has no property list, so it treats every bare name as one.
-  An empty member is a
+  The same comparison inside `( … )` or a `[ … ]` command
+  (`[find where interface={"x"}]`, `where (interface={"x"})`) is caught by the
+  group walk (#509, below) and reported with the same code. An empty member is a
   syntax error (`{;}`, `{;1}`, `{1;;2}`, `(1,)`) and withdraws the enclosing
   `array` shape with it; a single trailing separator is legal in the brace form
   only (`{1;}` and `{1;2;}` parse, `{1;2,}` and `{2,}` do not).
@@ -1091,8 +1093,10 @@ navigated, so the context stays as unknown as it already was.
       `:parse` `expected message value`, grounded stable+testing #247),
     `bad-sigil`,
     `invalid-hash`, `invalid-apostrophe` (#355, below),
-    `missing-statement-separator` (#311, below). Nine classes
-    the device itself rejects.
+    `missing-statement-separator` (#311, below), and the four group faults
+    `empty-group`, `misplaced-separator`, `missing-operand` and
+    `invalid-at-sign` (#505, #511, #512, below). Thirteen classes the device
+    itself rejects.
   - `warning` — `over-depth`, because it is centrs's own resource bound and says
     nothing about whether the input is legal; `possible-spaced-argument`
     (#350), a spelling RouterOS accepts and marks obsolete; and an `ambiguous`/`unknown`
@@ -1199,6 +1203,84 @@ it. The corpus count is unchanged at **0** for the same reason it always was
 (#203's genre bias), so this buys reach rather than a number. What still stops
 the rule is an unterminated string or an unbalanced delimiter, because neither
 walk can find a boundary to resume from.
+
+### Faults inside groups (#505, #509, #511, #512)
+
+Four missed-rejection families share one walk, `src/explain/group-faults.ts`
+(evidence pass `findGroupFaults`). It reads the comment-masked document with
+the frame roles every other walker uses: `[` opens a statement, `(` an
+expression, and `{` a body when `braceStartsStatements` says so or the
+directive takes a program in that slot (`:execute {…}`, `:time {…}`). Each
+rule is a `:parse` answer on CHR 7.24.5 and 7.23.8, identical on both, and
+`test/fixtures/explain/group-faults.json` pins all 186 rows (100 rejections,
+86 controls). `test/integration/explain-group-faults.test.ts` holds the
+device to that fixture, and `test/unit/explain-group-faults.test.ts` holds
+offline to it.
+
+| Code | Device rule | Rejected | Accepted |
+| ---- | ----------- | -------- | -------- |
+| `empty-group` | A `( )` with nothing in it, and a `{}` that is the whole value of a directive slot | `:put ()`, `:if () do={}`, `:local z {}`, `:put [:len {}]`, `:foreach i in={} do={}` | `{1;{}}`, `{a={}}`, `({})`, `[{}]`, `where … in {}`, `do={}`, `source={}`, `:execute {}` |
+| `misplaced-separator` | A `;` with no array element before it on its line; a `;` or a bare newline directly inside `( … )` | `{;1}`, `{1;;2}`, `{1⏎;2}`, `(1; 2)`, `(1⏎+ 2)` | `{1;}`, `{1;2;⏎}`, `{1⏎2}`, `{1 \⏎;2}`, `(1 +\⏎2)`, `({1;2})` |
+| `missing-operand` | An operator with no operand: a binary one first in a group or after another operator, any one last, and a leading or trailing `,` in an array | `(1 +)`, `(+ 1)`, `(1 + + 2)`, `(1 == 2)`, `(!)`, `(1 and)`, `{1,}`, `{,1}` | `(1 2)`, `(- 1)`, `(1 + -2)`, `(-> 1)`, `(any any 1)`, `(and 1)`, `(. 1)`, `(1.)` |
+| `invalid-at-sign` | A `@` in a statement's head word, in an array, or in an expression | `[admin@MikroTik]`, `admin@x`, `:put@x`, `{1;a@b}`, `(a@b)` | `:put a@b`, `comment=a@b`, `[:len a@b]`, `[:len x] a@b` |
+
+`invalid-command-brace` gains the #509 positions: a brace after `<name>=`
+inside `( … )` or a `[ … ]` command whose statement says `where`. The top level
+and scope bodies stay with `args.ts` (#502), and a `do={` body is never read as
+a comparison.
+
+**Prefix operators are the device's set, not the operator table's arity.**
+`-`, `!`, `>`, `~` and `any` take one operand after them, so `(1 + -2)` and
+`(-> 1)` (`(- (> 1))`) parse. Every other operator needs a left operand. At
+operand position `and`, `or`, `in`, `.` and `/` are variable names
+(`(and 1)` is `( $and 1)`). `1.`, `1/`, `a_b`, `1:2` and `1.2.3.4/24` are
+single words, while `-` is always an operator (`(a-b)` is `(- $a $b)`).
+
+**A query is not an expression.** Inside `where …` and `find …`, the device
+reads the value after `<name>=` with the property's parser. So
+`where (comment=+)`, `where (comment=a-)`, `where (comment=@)` and
+`where (.id=*1)` parse, though each is an error in a plain group. A group in a
+query gets only the structural checks (empty, `;`, newline) and #509.
+
+**A brace offline cannot place is opaque, not an array.** A `{` after a
+relative menu word is a menu body (`/ip { route { } }` parses empty), and a
+brace in a command argument is `args.ts`'s. Neither is checked here. The
+array rules apply where the role is grounded: a directive slot in the
+`brace-slots.ts` array table, and an array nested in an array or an expression.
+
+**Three readings the review round grounded (PR #516).** A `\` continuation
+runs on across blank lines and line-leading comment lines, as H5 does
+elsewhere, so `(1 +\⏎# c⏎2)` and `{1\⏎⏎;2}` parse, while a blank line after a
+comment line ends it (`(1 +\⏎# c⏎⏎2)` is rejected at the blank line). A
+directive's operand is a name, so `:local where (comment={})` parses and
+`:local where (1 +)` is checked like any expression. A bare `local`/`global`
+is the same directive at the root (`local where (comment={})` is
+`/localname=$where`), while a bare `set` or `find` may be a menu command and
+stays unread. And a named element takes
+a trailing `,` (`{a=1,}` is `value=a`, `{a=1,;b=2}` is `value=a;b=2`), while
+`{a=,1}`, `{a=1,,2}` and a positional `{1,}` are rejected. A faulted group's
+descendants are opaque, since the device stops at the fault.
+
+**Spans.** Each fault spans the token it is about: the operator, the
+separator, the `@`, or the whole empty group. The device's column is the same
+byte for every rule except an empty group and a dangling operator, where it is
+the byte after.
+
+**Measured.** Corpus `e12d5d4e58a4`: 70 of 948 scripts gain an error and all
+70 are device rejections on every channel. 42 of those errors sit on the exact
+byte the 7.24.5 diagnostic names, and the other 28 come after an earlier device
+error in pasted non-RouterOS text. None precedes the device's error. 41
+verdicts move to `fail` (40 from `warn`, one from `pass`), so offline now fails
+133 of the 374 device-rejected scripts, up from 92, and false rejects stay at 1.
+`invalid-at-sign` is mostly pasted console prompts. On the conformance cases,
+22 `plain-diagnostic` missed rejections move to `fail`, with no new false
+reject.
+
+Not covered here: a `$( … )` group, a group under a `find` head
+(`[find (1 +)]`, read as a query), a `@` in a later head word
+(`/ip address@ print`), operand rules for array elements other than `,`, a
+group in a query beyond its structure, and adjacency without whitespace
+(`"x"~a`, `}else=`), which is a separate rule.
 
 ### The token stream a rule reads (#316)
 
