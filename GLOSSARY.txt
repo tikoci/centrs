@@ -322,6 +322,9 @@ REUSEADDR
 # L2 bridge frame-parsing terms (test/integration/mndp-l2-bridge.ts):
 # ethertype: 16-bit EtherType field in an Ethernet frame (0x0800 = IPv4).
 ethertype
+# binpad: OpenSSL `BN_bn2binpad`, a big number as fixed-width big-endian bytes;
+#   MAC-Telnet's mtwei.c hashes EC-SRP `z` with it, btest does not (#516).
+binpad
 # ihl: IPv4 Internet Header Length (low nibble of the first byte, in 32-bit words).
 ihl
 # PIIX: Intel PCI-ISA bridge chipset QEMU emulates; shows up in CHR's REST board-name.
