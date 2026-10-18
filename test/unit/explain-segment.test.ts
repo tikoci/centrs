@@ -5,6 +5,7 @@ import {
 	byteToPosition,
 } from "../../src/explain/coordinates.ts";
 import { type Defect, hasStructuralDefect } from "../../src/explain/defects.ts";
+import { scanQuotedString as scanQuotedStringShared } from "../../src/explain/quoted-string.ts";
 import * as scopeBrace from "../../src/explain/scope-brace.ts";
 import {
 	documentRange,
@@ -439,11 +440,63 @@ describe("scanQuotedString — substitution frames inside a string", () => {
 			end: nested(256).length,
 			closed: false,
 		});
-		// The cap bounds work, not just memory: an unclosed run exits early.
-		const hostile = `"${"$[".repeat(500_000)}`;
-		const started = performance.now();
-		expect(scanQuotedString(hostile, 0).closed).toBeFalse();
-		expect(performance.now() - started).toBeLessThan(250);
+	});
+
+	// Count indexed reads through slices too, so the comment-aware segmenter
+	// cannot hide a document scan behind a new string. Unexpected operations fail
+	// rather than silently dropping out of the measurement.
+	const withReadBudget = (text: string, budget: number) => {
+		let reads = 0;
+		const watch = (source: string): string =>
+			new Proxy(
+				{ length: source.length },
+				{
+					get(target, key) {
+						if (key === "length") return target.length;
+						if (key === "slice")
+							return (start?: number, end?: number) =>
+								watch(source.slice(start, end));
+						if (typeof key === "string" && /^\d+$/.test(key)) {
+							if (++reads > budget)
+								throw new Error(`String scan exceeded ${budget} indexed reads`);
+							return source[Number(key)];
+						}
+						throw new Error(`Unmeasured string operation: ${String(key)}`);
+					},
+				},
+			) as unknown as string;
+		return { text: watch(text), reads: () => reads };
+	};
+
+	test("shared string frame work stays bounded as hostile input grows (#494)", () => {
+		for (const count of [50_000, 500_000, 1_000_000]) {
+			const hostile = `"${"$[".repeat(count)}`;
+			// Fewer than four indexed reads per allowed frame, independent of
+			// input size. Removing the depth guard exceeds this budget.
+			const watched = withReadBudget(hostile, 1_024);
+			expect(scanQuotedStringShared(watched.text, 0)).toEqual({
+				end: hostile.length,
+				closed: false,
+			});
+			expect(watched.reads()).toBeGreaterThan(0);
+			expect(watched.reads()).toBeLessThanOrEqual(1_024);
+		}
+	});
+
+	test("comment-aware string scanning uses at most one input pass beyond capped frame work (#494)", () => {
+		for (const count of [50_000, 500_000, 1_000_000]) {
+			const hostile = `"${"$[".repeat(count)}`;
+			// The segmenter's $[…] callback masks the input before scanning its
+			// frames. That pass is linear, not constant work or a 250 ms promise.
+			const budget = hostile.length + 1_024;
+			const watched = withReadBudget(hostile, budget);
+			expect(scanQuotedString(watched.text, 0)).toEqual({
+				end: hostile.length,
+				closed: false,
+			});
+			expect(watched.reads()).toBeGreaterThan(0);
+			expect(watched.reads()).toBeLessThanOrEqual(budget);
+		}
 	});
 
 	test("an unterminated string reports the end of input", () => {
