@@ -60,7 +60,8 @@ tikoci/lsp-routeros-ts#42), and gated in CI by
 `bun run explain:conformance:check`. Each case's offline answer is the execute
 gate's (`fail` refuses); the device answer is `:parse` on every channel
 session. A case is a false reject or a missed rejection only when all four
-channels agree.
+channels agree. A case with no device answer on some channel (a failed capture,
+an unknown or ambiguous readout) is listed as `unscorable` and scored nowhere.
 
 The `upstreamDisagreements` list is the upstream `valid` label (RouterOS
 7.21.4, `/import … verbose=yes dry-run`) against the device. It is evidence

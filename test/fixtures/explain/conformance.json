@@ -6,25 +6,29 @@
 			"version": "7.23.8",
 			"parseRunId": "187fa073-8e5b-4bce-9444-bd77f1aff8a6-parseil",
 			"accepted": 544,
-			"rejected": 331
+			"rejected": 331,
+			"unscorable": 0
 		},
 		"stable": {
 			"version": "7.24.5",
 			"parseRunId": "673b2b91-ca6a-45b1-a55e-4c0cd4d7ca0d-parseil",
 			"accepted": 544,
-			"rejected": 331
+			"rejected": 331,
+			"unscorable": 0
 		},
 		"testing": {
 			"version": "7.25rc2",
 			"parseRunId": "93ce4df0-ceb9-4d8b-83fc-cf465efc9a3a-parseil",
 			"accepted": 544,
-			"rejected": 331
+			"rejected": 331,
+			"unscorable": 0
 		},
 		"development": {
 			"version": "7.26beta1",
 			"parseRunId": "8b297c32-00d6-46e5-a389-5d68173cf4ed-parseil",
 			"accepted": 544,
-			"rejected": 331
+			"rejected": 331,
+			"unscorable": 0
 		}
 	},
 	"offline": {
@@ -35,7 +39,8 @@
 	"device": {
 		"accept": 544,
 		"reject": 331,
-		"split": 0
+		"split": 0,
+		"unscorable": 0
 	},
 	"falseRejects": {
 		"wiresage-conformance/statements-that-start-with-a-literal/u44.rsc": "explain/canonicalizer/unbalanced-close",
@@ -350,6 +355,7 @@
 		"embedded-diagnostic": 67
 	},
 	"split": {},
+	"unscorable": {},
 	"upstreamDisagreements": {
 		"wiresage-conformance/bare-words-that-match-a-parameter-name/b39.rsc": "upstream invalid, device accept",
 		"wiresage-conformance/characters-in-a-declared-name/n20.rsc": "upstream invalid, device accept",

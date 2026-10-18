@@ -14,8 +14,11 @@
  *   channel.
  *
  * A case whose channels disagree is `split` and is listed on its own, never in
- * either list. The device answer is the corpus `response_class`, so only
- * `il-no-recognized-diagnostic` is an accept (`isAcceptedParse`).
+ * either list. The device answer is the corpus `response_class` read by
+ * `parseVerdict`: only `il-no-recognized-diagnostic` is an accept, only a
+ * recognized diagnostic is a reject, and a case with no answer on some channel
+ * (a failed capture, an unknown or ambiguous readout) is `unscorable`, listed
+ * on its own and scored nowhere.
  *
  * The upstream `valid` label is a third oracle (7.21.4, `/import … verbose=yes
  * dry-run`, per line). Where it disagrees with an all-channel device verdict
@@ -44,14 +47,15 @@ import {
 	channelSessions,
 	conformanceCases,
 	corpusProvenance,
-	isAcceptedParse,
 	parseObservations,
+	parseVerdict,
 } from "./corpus-db.ts";
 import {
 	describeResolution,
 	resolveCorpusDb,
 	unreachableMessage,
 } from "./corpus-fetch.ts";
+import { flag } from "./explain-corpus-census.ts";
 
 const FIXTURE_PATH = join(
 	import.meta.dir,
@@ -62,7 +66,7 @@ const FIXTURE_PATH = join(
 	"conformance.json",
 );
 
-export type DeviceVerdict = "accept" | "reject" | "split";
+export type DeviceVerdict = "accept" | "reject" | "split" | "unscorable";
 
 /** One case, joined: its bytes, the offline answer and every channel's. */
 export interface ConformanceRow {
@@ -82,6 +86,7 @@ export interface ChannelFigures {
 	parseRunId: string;
 	accepted: number;
 	rejected: number;
+	unscorable: number;
 }
 
 export interface ConformanceCensus {
@@ -102,15 +107,23 @@ export interface ConformanceCensus {
 	missedByClass: Record<string, number>;
 	/** path → `channel=class` for each channel. */
 	split: Record<string, string>;
+	/** path → `channel=class` for each channel. */
+	unscorable: Record<string, string>;
 	/** path → `upstream valid|invalid, device accept|reject`. */
 	upstreamDisagreements: Record<string, string>;
 }
 
 export function deviceVerdict(device: Record<string, string>): DeviceVerdict {
-	const accepted = Object.values(device).map(isAcceptedParse);
-	if (accepted.every(Boolean)) return "accept";
-	if (accepted.some(Boolean)) return "split";
-	return "reject";
+	const verdicts = new Set(Object.values(device).map(parseVerdict));
+	if (verdicts.has("unscorable")) return "unscorable";
+	if (verdicts.size > 1) return "split";
+	return verdicts.has("accept") ? "accept" : "reject";
+}
+
+function perChannel(device: Record<string, string>): string {
+	return Object.entries(device)
+		.map(([channel, cls]) => `${channel}=${cls}`)
+		.join(", ");
 }
 
 function classes(device: Record<string, string>): string {
@@ -127,21 +140,20 @@ export function census(
 		cases: rows.length,
 		channels,
 		offline: { pass: 0, warn: 0, fail: 0 },
-		device: { accept: 0, reject: 0, split: 0 },
+		device: { accept: 0, reject: 0, split: 0, unscorable: 0 },
 		falseRejects: {},
 		missedRejections: {},
 		missedByClass: {},
 		split: {},
+		unscorable: {},
 		upstreamDisagreements: {},
 	};
 	for (const row of rows) {
 		result.offline[row.offline]++;
 		const device = deviceVerdict(row.device);
 		result.device[device]++;
-		if (device === "split") {
-			result.split[row.path] = Object.entries(row.device)
-				.map(([channel, cls]) => `${channel}=${cls}`)
-				.join(", ");
+		if (device === "split" || device === "unscorable") {
+			result[device][row.path] = perChannel(row.device);
 			continue;
 		}
 		if (device === "accept" && row.offline === "fail")
@@ -198,6 +210,7 @@ function loadRows(dbPath: string): {
 				parseRunId: session.parseRunId,
 				accepted: 0,
 				rejected: 0,
+				unscorable: 0,
 			};
 			for (const o of parseObservations(db, [session.parseRunId], {
 				collection: CONFORMANCE_COLLECTION,
@@ -205,8 +218,10 @@ function loadRows(dbPath: string): {
 				const byChannel = device.get(o.path) ?? {};
 				byChannel[session.channel] = o.responseClass;
 				device.set(o.path, byChannel);
-				if (isAcceptedParse(o.responseClass)) figures.accepted++;
-				else figures.rejected++;
+				const verdict = parseVerdict(o.responseClass);
+				if (verdict === "accept") figures.accepted++;
+				else if (verdict === "reject") figures.rejected++;
+				else figures.unscorable++;
 			}
 			channels[session.channel] = figures;
 		}
@@ -255,6 +270,7 @@ export function diffAgainstFixture(
 		"falseRejects",
 		"missedRejections",
 		"split",
+		"unscorable",
 		"upstreamDisagreements",
 	] as const) {
 		const a = fresh[key];
@@ -272,8 +288,20 @@ export function diffAgainstFixture(
 	return drift;
 }
 
-function shown(text: string): string {
-	return `\`${text.replaceAll("\r", "\\r").replaceAll("\n", "\\n").replaceAll("`", "\\`")}\``;
+/**
+ * The case as an inline code span. A backslash does not escape inside one, so
+ * the fence is one backtick longer than the longest run in the text, padded
+ * when the text starts or ends with a backtick (CommonMark).
+ */
+export function shown(text: string): string {
+	const body = text.replaceAll("\r", "\\r").replaceAll("\n", "\\n");
+	const longest = Math.max(
+		0,
+		...(body.match(/`+/g) ?? []).map((r) => r.length),
+	);
+	const fence = "`".repeat(longest + 1);
+	const pad = body.startsWith("`") || body.endsWith("`") ? " " : "";
+	return `${fence}${pad}${body}${pad}${fence}`;
 }
 
 export function renderMarkdown(
@@ -287,13 +315,14 @@ export function renderMarkdown(
 		"",
 		`${result.cases} cases. Offline: ${result.offline.pass} pass, ${result.offline.warn} warn, ` +
 			`${result.offline.fail} fail. Device (all channels): ${result.device.accept} accept, ` +
-			`${result.device.reject} reject, ${result.device.split} split.`,
+			`${result.device.reject} reject, ${result.device.split} split, ` +
+			`${result.device.unscorable} unscorable.`,
 		"",
-		"| channel | version | accepted | rejected |",
-		"| ------- | ------- | -------- | -------- |",
+		"| channel | version | accepted | rejected | unscorable |",
+		"| ------- | ------- | -------- | -------- | ---------- |",
 		...Object.entries(result.channels).map(
 			([channel, c]) =>
-				`| ${channel} | ${c.version} | ${c.accepted} | ${c.rejected} |`,
+				`| ${channel} | ${c.version} | ${c.accepted} | ${c.rejected} | ${c.unscorable} |`,
 		),
 		"",
 		`Missed rejections by device class: ${Object.entries(result.missedByClass)
@@ -318,13 +347,9 @@ export function renderMarkdown(
 		result.missedRejections,
 	);
 	list("Channels disagree", result.split);
+	list("Unscorable: no device answer on some channel", result.unscorable);
 	list("Upstream label vs device (#507)", result.upstreamDisagreements);
 	return lines.join("\n");
-}
-
-function flag(args: readonly string[], name: string): string | undefined {
-	const at = args.indexOf(name);
-	return at < 0 ? undefined : args[at + 1];
 }
 
 export async function main(args: readonly string[]): Promise<number> {

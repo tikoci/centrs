@@ -11,6 +11,7 @@ import {
 	census,
 	deviceVerdict,
 	diffAgainstFixture,
+	shown,
 } from "../../scripts/explain-conformance.ts";
 
 const ACCEPT = "il-no-recognized-diagnostic";
@@ -38,6 +39,7 @@ const channels = {
 		parseRunId: "lt",
 		accepted: 0,
 		rejected: 0,
+		unscorable: 0,
 	},
 };
 
@@ -48,6 +50,13 @@ describe("explain conformance census", () => {
 			deviceVerdict({ a: "plain-diagnostic", b: "embedded-diagnostic" }),
 		).toBe("reject");
 		expect(deviceVerdict({ a: ACCEPT, b: "plain-diagnostic" })).toBe("split");
+		// No answer on one channel outranks a split: nothing can be said.
+		expect(deviceVerdict({ a: ACCEPT, b: "capture-failed" })).toBe(
+			"unscorable",
+		);
+		expect(
+			deviceVerdict({ a: "plain-diagnostic", b: "ambiguous-diagnostic" }),
+		).toBe("unscorable");
 	});
 
 	test("only a fail is a refusal, and a split case is in neither list", () => {
@@ -93,7 +102,38 @@ describe("explain conformance census", () => {
 			schema: "upstream valid, device reject",
 		});
 		expect(result.offline).toEqual({ pass: 1, warn: 1, fail: 3 });
-		expect(result.device).toEqual({ accept: 1, reject: 3, split: 1 });
+		expect(result.device).toEqual({
+			accept: 1,
+			reject: 3,
+			split: 1,
+			unscorable: 0,
+		});
+	});
+
+	// A failed capture is not a device rejection: read as one, `lost` would be a
+	// missed rejection, and an upstream-label disagreement besides.
+	test("a case with no device answer is listed apart and scored nowhere", () => {
+		const result = census(
+			[row("lost", "pass", { a: "capture-failed", b: "plain-diagnostic" })],
+			channels,
+			"abc",
+		);
+		expect(result.unscorable).toEqual({
+			lost: "a=capture-failed, b=plain-diagnostic",
+		});
+		expect(result.device).toEqual({
+			accept: 0,
+			reject: 0,
+			split: 0,
+			unscorable: 1,
+		});
+		expect(result.missedRejections).toEqual({});
+		expect(result.upstreamDisagreements).toEqual({});
+	});
+
+	test("a case renders as one code span, backticks and line ends included", () => {
+		expect(shown(":put 1\r\n:put 2")).toBe("`:put 1\\r\\n:put 2`");
+		expect(shown(":put `a``b`")).toBe("``` :put `a``b` ```");
 	});
 
 	test("drift names each case that entered, left or changed a list", () => {
@@ -121,7 +161,10 @@ describe("explain conformance census", () => {
 			Object.keys(fixture.missedRejections).length,
 		);
 		expect(Object.keys(fixture.split).length).toBe(fixture.device.split);
+		expect(Object.keys(fixture.unscorable).length).toBe(
+			fixture.device.unscorable,
+		);
 		for (const c of Object.values(fixture.channels))
-			expect(c.accepted + c.rejected).toBe(fixture.cases);
+			expect(c.accepted + c.rejected + c.unscorable).toBe(fixture.cases);
 	});
 });

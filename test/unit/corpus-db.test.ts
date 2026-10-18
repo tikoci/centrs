@@ -21,7 +21,9 @@ import {
 	describePopulation,
 	highlightObservations,
 	isAcceptedParse,
+	PARSE_RESPONSE_CLASSES,
 	parseObservations,
+	parseVerdict,
 	populationScripts,
 	requireCorpusSchema,
 } from "../../scripts/corpus-db.ts";
@@ -131,6 +133,22 @@ describe("corpus-db readers (#498)", () => {
 		expect(isAcceptedParse("il-no-recognized-diagnostic")).toBe(true);
 		expect(isAcceptedParse("embedded-diagnostic")).toBe(false);
 		expect(isAcceptedParse("plain-diagnostic")).toBe(false);
+	});
+
+	test("only a recognized diagnostic is a rejection; no answer is unscorable", () => {
+		expect(
+			Object.fromEntries(
+				PARSE_RESPONSE_CLASSES.map((cls) => [cls, parseVerdict(cls)]),
+			),
+		).toEqual({
+			"il-no-recognized-diagnostic": "accept",
+			"embedded-diagnostic": "reject",
+			"plain-diagnostic": "reject",
+			"ambiguous-diagnostic": "unscorable",
+			"unknown-response": "unscorable",
+			"missing-response": "unscorable",
+			"capture-failed": "unscorable",
+		});
 	});
 
 	test("highlight runs expand over the submitted text, merging equal neighbors", () => {

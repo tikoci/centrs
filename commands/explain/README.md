@@ -2569,7 +2569,8 @@ device answers. `bun run explain:conformance` scores the execute gate's offline
 answer (`fail` refuses) against `:parse` on every channel. It lists false
 rejects, missed rejections (split by device class: `plain-diagnostic` is
 syntax, while `embedded-diagnostic` is mostly a menu or parameter name, which
-needs the #501 argument lists), cases where the channels disagree, and the
+needs the #501 argument lists), cases where the channels disagree, cases
+with no device answer (`unscorable`, never read as a rejection), and the
 upstream-label disagreements that #507 needs. The lists are committed in
 `test/fixtures/explain/conformance.json` and gated in CI, so a fix for any
 of #504–#506 shows the cases it moved.

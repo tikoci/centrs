@@ -205,6 +205,24 @@ export function isAcceptedParse(responseClass: string): boolean {
 	return responseClass === "il-no-recognized-diagnostic";
 }
 
+/**
+ * The device's answer, when it gave one. Only a recognized diagnostic is a
+ * rejection. A failed or missing capture and an `unknown-response` carry no
+ * answer, and `ambiguous-diagnostic` is IL whose diagnostic-shaped text may be
+ * a string value, so all four are `unscorable` rather than read as a reject.
+ */
+export function parseVerdict(
+	responseClass: string,
+): "accept" | "reject" | "unscorable" {
+	if (isAcceptedParse(responseClass)) return "accept";
+	if (
+		responseClass === "plain-diagnostic" ||
+		responseClass === "embedded-diagnostic"
+	)
+		return "reject";
+	return "unscorable";
+}
+
 /** One `:parse` observation of one population (or collection) script. */
 export interface ParseObservation {
 	scriptId: number;
