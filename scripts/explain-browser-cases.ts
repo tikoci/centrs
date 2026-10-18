@@ -65,6 +65,10 @@ export const BROWSER_CONSUMER_CASES: readonly ConsumerCase[] = [
 	},
 	{ name: "unicode", input: '/system identity set name="café-日本語"' },
 	{ name: "astral", input: '/log info message="emoji 🇯🇵🧑‍🚀 tail"' },
+	{
+		name: "unicode-block-spans",
+		input: '\uFEFF:put "é🚀"; :if (true) do={ :put "α" } else={ :put "🧑‍🚀" }',
+	},
 	{ name: "bom-leading", input: "﻿/system identity print" },
 	{
 		name: "ipv6-address",

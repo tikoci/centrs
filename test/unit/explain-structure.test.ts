@@ -191,6 +191,42 @@ test("published block indexes survive Unicode before and inside multiple bodies"
 	checkOwnership(input);
 });
 
+test("block spans select the original body bytes after Unicode and BOM (#523)", () => {
+	for (const [prefix, first, second] of [
+		["", " :put 1 ", " :put 2 "],
+		["", ' :put "é🚀" ', ""],
+		[':put "é"; ', " :put 1 ", ' :put "α" '],
+		[':put "🚀"; ', ' :put "🧑‍🚀" ', ' :put "é" '],
+		["\uFEFF", ' :put "é🚀" ', ""],
+		['\uFEFF:put "é🚀";\r\n', ' :put "α"\r\n', ' :put "🚀" '],
+	] as const) {
+		const input = `${prefix}:if (true) do={${first}} else={${second}}`;
+		const result = explainCommand(input, { tokens: true });
+		expect(result.verdict).toBe(prefix.startsWith("\uFEFF") ? "warn" : "pass");
+		expect(result.structure.blocks).toHaveLength(2);
+		const bytes = Buffer.from(input);
+		const doStart = Buffer.byteLength(`${prefix}:if (true) do={`);
+		const elseStart = Buffer.byteLength(
+			`${prefix}:if (true) do={${first}} else={`,
+		);
+		for (const [index, body, start] of [
+			[0, first, doStart],
+			[1, second, elseStart],
+		] as const) {
+			const block = result.structure.blocks[index];
+			expect(block?.span).toEqual({
+				start,
+				end: start + Buffer.byteLength(body),
+			});
+			expect(
+				bytes.subarray(block?.span.start, block?.span.end).toString(),
+			).toBe(body);
+			expect(block?.owner).toBe(prefix.includes(":put") ? "s1" : "s0");
+		}
+		checkOwnership(input);
+	}
+});
+
 test("navigation, uncertainty and string interpolation preserve bracket statement indexes", () => {
 	for (const [input, owners] of [
 		["/ip) address\n:put [/system/resource/get uptime]", ["s1"]],
