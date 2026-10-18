@@ -134,6 +134,11 @@ export function braceSlotTakesArray(verb: string, slot: string): boolean {
 	return BRACE_ARRAY_SLOTS.get(verb)?.has(slot) === true;
 }
 
+/** Whether a `{…}` in this root-directive slot is code or script text. */
+export function braceSlotTakesProgram(verb: string, slot: string): boolean {
+	return BRACE_PROGRAM_SLOTS.get(verb)?.has(slot) === true;
+}
+
 /** Whether the device sweep proved this root-directive slot accepts `{...}`. */
 export function braceSlotAcceptsBrace(verb: string, slot: string): boolean {
 	return (

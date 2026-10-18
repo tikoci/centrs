@@ -822,5 +822,55 @@ The rule holds at any depth (`{a={⏎# c⏎1}}`) and in argument values
 (`:foreach i in={1;⏎# c⏎2} do={:put $i}`). It needs column 0: an indented `#`
 (`{a=1;⏎  # c⏎b=2}`), and one after `{`, a value or `;` on the same line, keep
 `invalid-hash` at the `#`. A `#` directly inside `( … )` stays an error too. A
-comment-only array, `:local z {⏎# c⏎}`, now passes like `:local z {}`, though the
-device rejects both: an empty array is a separate missed rejection (#511).
+comment-only array, `:local z {⏎# c⏎}`, fails like `:local z {}`: both are empty
+arrays, which the device rejects (#511, example 38).
+
+### 38. An empty array value and a misplaced `;` are rejected
+
+```bash
+centrs explain ':local z {}' --json
+```
+
+`data.verdict` is `fail` with `explain/canonicalizer/empty-group` over `{}`. CHR
+7.24.5 and 7.23.8 `:parse` answer `syntax error (line 1 column 12)`, the byte
+after the brace. The same holds for `:put {}`, `:return {}`, `[:len {}]` and
+`:foreach i in={} do={…}`. A nested `{}` (`{1;{}}`), one in parentheses
+(`({})`), `where … in {}` and a body (`do={}`, `:execute {}`) parse and pass.
+
+`:local z {1⏎;2}` fails with `misplaced-separator` at the `;`: a `;` needs an
+element before it on its line. `{1;}` and `{1⏎2}` pass.
+
+### 39. An expression with a missing operand is rejected
+
+```bash
+centrs explain ':put (1 +)' --json
+```
+
+`data.verdict` is `fail` with `explain/canonicalizer/missing-operand` at the
+`+`. The device answers `syntax error (line 1 column 11)`, at the `)`. `()`
+fails with `empty-group`, and `(1; 2)` and `(1⏎+ 2)` fail with
+`misplaced-separator`. `(1 2)`, `(- 1)` and `(1 + -2)` pass. Inside a query,
+`where (comment=+)` passes: the device reads that value with the property's
+parser.
+
+### 40. A `@` in a command word is rejected
+
+```bash
+centrs explain '[admin@MikroTik] > /ip address print' --json
+```
+
+`data.verdict` is `fail` with `explain/canonicalizer/invalid-at-sign` at the
+`@`. The device answers `syntax error (line 1 column 7)`, the same byte. This
+is a pasted console prompt. `:put a@b` and `comment=a@b` pass, because a `@` is
+a value byte in an argument.
+
+### 41. A named comparison brace inside a `[find where …]` is rejected
+
+```bash
+centrs explain ':put [/ip address find where interface={"x"}]' --json
+```
+
+`data.verdict` is `fail` with `explain/canonicalizer/invalid-command-brace` at
+the `{`, as at the top level (example 36). The device answers
+`expected interface value (line 1 column 40)`. `where (interface={"x"})` fails
+the same way, and `[find where interface in {"x"}]` passes.

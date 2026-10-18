@@ -70,6 +70,25 @@ describe("offline gate — what it lets through", () => {
 		).toBe("explain/canonicalizer/invalid-command-brace");
 	});
 
+	test("a group fault is refused before the device (#505, #511, #512)", () => {
+		// CHR 7.24.5 and 7.23.8 reject each with `syntax error`; their controls
+		// parse and must still reach the device.
+		for (const [command, code] of [
+			[":put (1 +)", "missing-operand"],
+			[":local z {}", "empty-group"],
+			[":local z {1\n;2}", "misplaced-separator"],
+			["[admin@MikroTik] > /ip address print", "invalid-at-sign"],
+		] as const)
+			expect(reject(command).causeData).toBe(`explain/canonicalizer/${code}`);
+		for (const command of [
+			":put (1 + -2)",
+			":local z {1;{}}",
+			"/ip address print where (comment=+)",
+			"/ip { route { } }",
+		])
+			expect(assertOfflineSyntax(command, surface).verdict).not.toBe("fail");
+	});
+
 	test("an abstention is not a rejection", () => {
 		// `warn` means the analyzer declined to judge part of the input. Turning
 		// that into a refusal would make every unrecognized menu unreachable

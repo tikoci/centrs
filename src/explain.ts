@@ -136,6 +136,7 @@ import {
 	isPositionalFact,
 } from "./explain/defects.ts";
 import { escapeSpans } from "./explain/escape-tokens.ts";
+import { findGroupFaults, type GroupFault } from "./explain/group-faults.ts";
 import { isKnownMenuPath } from "./explain/is-known-menu.ts";
 import { operatorSpans } from "./explain/operator-tokens.ts";
 import { type PathTokenCandidate, pathSpans } from "./explain/path-tokens.ts";
@@ -752,6 +753,7 @@ const EV = {
 	separators: "e15",
 	escapes: "e16",
 	spaced: "e17",
+	groups: "e18",
 } as const;
 
 type EvidenceKey = keyof typeof EV;
@@ -916,6 +918,19 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 		id: EV.spaced,
 		source: "canonicalizer",
 		probe: "findSpacedPairs",
+		basis: "heuristic",
+		outcome: "ok",
+	},
+	/**
+	 * `heuristic`: every rejection it reports is a `:parse` answer
+	 * (`src/explain/group-faults.ts`), but which group is an array, an
+	 * expression or a query rests on the brace-role and `where` readings a live
+	 * probe could overturn.
+	 */
+	groups: {
+		id: EV.groups,
+		source: "canonicalizer",
+		probe: "findGroupFaults",
 		basis: "heuristic",
 		outcome: "ok",
 	},
@@ -1408,6 +1423,11 @@ export function explainCommand(
 		);
 	});
 
+	const braceDiagnostics = invalidCommandBraceDiagnostics(
+		verbs.splits,
+		analyzed,
+		analyzedRange,
+	);
 	const diagnostics: ExplainDiagnostic[] = [
 		...defects.map(({ defect: d, ev }) => {
 			const render = DEFECT_DIAGNOSTICS[d.code];
@@ -1419,7 +1439,11 @@ export function explainCommand(
 				ev,
 			};
 		}),
-		...invalidCommandBraceDiagnostics(verbs.splits, analyzed, analyzedRange),
+		...braceDiagnostics,
+		...groupFaultDiagnostics(
+			findGroupFaults(analyzedRange.masked),
+			braceDiagnostics,
+		),
 		...separators.flatMap((runs) => runs.map(missingSeparatorDiagnostic)),
 		...spaced.flatMap((pairs) =>
 			pairs.filter((pair) => pair.valueShaped).map(spacedArgumentDiagnostic),
@@ -1936,6 +1960,66 @@ function spacedArgumentDiagnostic(pair: SpacedPair): ExplainDiagnostic {
 	};
 }
 
+const INVALID_COMMAND_BRACE =
+	"brace arrays are not valid in command arguments — use a parenthesized comma list such as `(1,2)`, or a bare comma list where the argument schema accepts one";
+
+/**
+ * The group faults as diagnostics (#505, #509, #511, #512).
+ *
+ * All `error`: each is a `:parse` rejection on CHR 7.24.5 and 7.23.8. An
+ * empty `{}` that `invalidCommandBraceDiagnostics` already rejects as a brace
+ * array in a command argument is one defect, so it is reported once, as that.
+ * The span is the token the fault is about (the operator, the separator, the
+ * `@`, or the whole empty group); the device's column is the byte after an
+ * empty group or a dangling operator.
+ */
+function groupFaultDiagnostics(
+	faults: readonly GroupFault[],
+	braces: readonly ExplainDiagnostic[],
+): ExplainDiagnostic[] {
+	const braceAt = new Set(braces.map((d) => d.span.start));
+	return faults
+		.filter(
+			(f) =>
+				!(
+					f.code === "empty-group" &&
+					f.detail === "{" &&
+					braceAt.has(f.start)
+				) && !(f.code === "named-value-brace" && braceAt.has(f.start)),
+		)
+		.map((f) => ({
+			code:
+				f.code === "named-value-brace"
+					? "explain/canonicalizer/invalid-command-brace"
+					: `explain/canonicalizer/${f.code}`,
+			severity: "error",
+			message: groupFaultMessage(f),
+			span: { start: f.start, end: f.end },
+			ev: f.code === "named-value-brace" ? EV.values : EV.groups,
+		}));
+}
+
+function groupFaultMessage(f: GroupFault): string {
+	switch (f.code) {
+		case "empty-group":
+			return f.detail === "("
+				? "empty expression: `()` has nothing to evaluate, and RouterOS rejects it (`syntax error`)"
+				: "empty array: RouterOS rejects a `{}` that is the whole value of a statement or an argument (`syntax error`); a nested `{}` (`{1;{}}`) or one in parentheses (`({})`) parses";
+		case "misplaced-separator":
+			if (f.group === "{")
+				return "`;` with no array element before it on its line: RouterOS rejects it (`syntax error`) — a `;` must follow an element, and a newline already separates elements";
+			return f.detail === ";"
+				? "`;` inside `( … )`: an expression cannot hold a statement separator, and RouterOS rejects it (`syntax error`)"
+				: "a newline inside `( … )` ends the statement in the middle of the expression, and RouterOS rejects it (`syntax error`) — join the lines, or end the line with `\\` to continue it";
+		case "missing-operand":
+			return `operator \`${f.detail}\` is missing an operand, and RouterOS rejects it (\`syntax error\`) — only \`-\`, \`!\`, \`>\`, \`~\` and \`any\` take a single operand after them; every other operator needs one on each side`;
+		case "invalid-at-sign":
+			return "unquoted `@` is a syntax error in a command word, an array or an expression — RouterOS accepts it only inside an argument value (`comment=a@b`); quote it, and drop a pasted console prompt such as `[admin@MikroTik] >`";
+		case "named-value-brace":
+			return INVALID_COMMAND_BRACE;
+	}
+}
+
 function invalidCommandBraceDiagnostics(
 	splits: readonly DocumentVerbSplit[],
 	analyzed: string,
@@ -2029,8 +2113,7 @@ function invalidCommandBraceDiagnostics(
 			out.push({
 				code: "explain/canonicalizer/invalid-command-brace",
 				severity: "error",
-				message:
-					"brace arrays are not valid in command arguments — use a parenthesized comma list such as `(1,2)`, or a bare comma list where the argument schema accepts one",
+				message: INVALID_COMMAND_BRACE,
 				span: { start: start + at, end: start + at + 1 },
 				ev: EV.values,
 			});

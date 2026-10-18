@@ -1693,8 +1693,15 @@ export function lexValueAnchors(
  * Only a property name the menu KNOWS is read this way: `where foo-bar={…}` is
  * accepted. Offline has no per-menu property list (decision 3), so every bare
  * name counts, and an unknown one is a pinned over-strict reading.
+ *
+ * The name may open a group, `where (interface={"x"})` and `or(comment={…})`,
+ * which `group-faults.ts` asks about (#509).
  */
-function comparesNamedValue(text: string, at: number, floor: number): boolean {
+export function comparesNamedValue(
+	text: string,
+	at: number,
+	floor: number,
+): boolean {
 	let j = at - 1;
 	while (j > floor && /\s/.test(text[j] as string)) j--;
 	if (text[j] !== "=") return false;
@@ -1705,7 +1712,7 @@ function comparesNamedValue(text: string, at: number, floor: number): boolean {
 	const nameEnd = j + 1;
 	while (j > floor && /[A-Za-z0-9._-]/.test(text[j] as string)) j--;
 	const name = text.slice(j + 1, nameEnd);
-	return /^[A-Za-z.]/.test(name) && /\s/.test(text[j] as string);
+	return /^[A-Za-z.]/.test(name) && /[\s(]/.test(text[j] as string);
 }
 
 /**
