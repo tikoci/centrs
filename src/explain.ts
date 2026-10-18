@@ -1441,7 +1441,7 @@ export function explainCommand(
 		}),
 		...braceDiagnostics,
 		...groupFaultDiagnostics(
-			findGroupFaults(analyzedRange.masked),
+			findGroupFaults(analyzed, analyzedRange.masked),
 			braceDiagnostics,
 		),
 		...separators.flatMap((runs) => runs.map(missingSeparatorDiagnostic)),

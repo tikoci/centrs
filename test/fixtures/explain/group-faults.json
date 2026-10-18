@@ -355,6 +355,129 @@
 			"device": "accept"
 		},
 		{
+			"issue": "#511",
+			"input": ":local z {1\\\n# comment\n;2}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {1\\\n\n;2}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {1\\\n# c\n\n;2}",
+			"device": "reject",
+			"parse": "syntax error (line 4 column 1)",
+			"code": "misplaced-separator",
+			"span": [18, 19]
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {1\\\r\n\r\n;2}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=1,}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=1,;b=2}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=1,\nb=2}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=(1,)}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 17)",
+			"code": "missing-operand",
+			"span": [14, 15]
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=,1}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 13)",
+			"code": "missing-operand",
+			"span": [12, 13]
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=1,,2}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 15)",
+			"code": "missing-operand",
+			"span": [14, 15]
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=,}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 13)",
+			"code": "missing-operand",
+			"span": [12, 13]
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {1;a=1,}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=1,2,}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=;b=1}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=1,\n}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=b=c,}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {1\\\n\n\n;2}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {\"a\"=1,}",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=1, }",
+			"device": "accept"
+		},
+		{
+			"issue": "#511",
+			"input": ":local z {a=1;,}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 15)",
+			"code": "missing-operand",
+			"span": [14, 15]
+		},
+		{
 			"issue": "#505",
 			"input": ":put ()",
 			"device": "reject",
@@ -757,6 +880,71 @@
 			"device": "accept"
 		},
 		{
+			"issue": "#505",
+			"input": ":put (1 +\\\n# comment\n2)",
+			"device": "accept"
+		},
+		{
+			"issue": "#505",
+			"input": ":put (1 +\\\n\n2)",
+			"device": "accept"
+		},
+		{
+			"issue": "#505",
+			"input": ":put (1 +\\\n# c\n\n2)",
+			"device": "reject",
+			"parse": "syntax error (line 3 column 1)",
+			"code": "misplaced-separator",
+			"span": [15, 16]
+		},
+		{
+			"issue": "#505",
+			"input": ":put (1 +\\\r\n# comment\r\n2)",
+			"device": "accept"
+		},
+		{
+			"issue": "#505",
+			"input": ":local where (1 +)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 19)",
+			"code": "missing-operand",
+			"span": [16, 17]
+		},
+		{
+			"issue": "#505",
+			"input": ":local find (1 +)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 18)",
+			"code": "missing-operand",
+			"span": [15, 16]
+		},
+		{
+			"issue": "#505",
+			"input": ":global where (1 +)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 20)",
+			"code": "missing-operand",
+			"span": [17, 18]
+		},
+		{
+			"issue": "#505",
+			"input": ":put (1; (2 +))",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "misplaced-separator",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#505",
+			"input": ":put (1 +\\\n# c\n# d\n2)",
+			"device": "accept"
+		},
+		{
+			"issue": "#505",
+			"input": ":put (1 +\\\r\n\r\n2)",
+			"device": "accept"
+		},
+		{
 			"issue": "#512",
 			"input": "admin@x",
 			"device": "reject",
@@ -954,6 +1142,27 @@
 			"issue": "#509",
 			"input": "/ip address print where (interface in {\"x\"})",
 			"device": "accept"
+		},
+		{
+			"issue": "#509",
+			"input": ":local where (comment={})",
+			"device": "accept"
+		},
+		{
+			"issue": "#509",
+			"input": ":local z [/ip address find where (comment={})]",
+			"device": "reject",
+			"parse": "expected comment value (line 1 column 43)",
+			"code": "invalid-command-brace",
+			"span": [42, 43]
+		},
+		{
+			"issue": "#509",
+			"input": "/ip address print where (interface={;1})",
+			"device": "reject",
+			"parse": "expected interface value (line 1 column 36)",
+			"code": "invalid-command-brace",
+			"span": [35, 36]
 		}
 	]
 }

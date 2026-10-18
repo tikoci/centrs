@@ -96,10 +96,12 @@ interface StatementFrame {
 interface ArrayFrame {
 	kind: "array";
 	open: number;
-	/** What the last significant byte was. */
-	last: "open" | "separator" | "comma" | "element";
+	/** What the last significant byte was; `key` is a named element's `=`. */
+	last: "open" | "separator" | "comma" | "element" | "key";
 	commaAt: number;
 	element: boolean;
+	/** The current element is `name=value`, which takes a trailing `,`. */
+	named: boolean;
 	query: boolean;
 	done: boolean;
 }
@@ -120,11 +122,16 @@ interface ExpressionFrame {
 /**
  * A `{` whose role is not grounded: a brace after a relative menu word
  * (`/ip { route { } }`, a menu body the device accepts empty), or one in a
- * command argument, which `args.ts` already judges. Only nesting is tracked.
+ * command argument, which `args.ts` already judges. Also every group inside
+ * one that has already faulted, since the device never reads past the fault.
+ * Only nesting is tracked.
  */
 interface OpaqueFrame {
 	kind: "opaque";
+	close: ")" | "]" | "}";
 	query: boolean;
+	/** Inside a faulted group: every descendant is opaque too. */
+	muted: boolean;
 }
 
 type Frame = StatementFrame | ArrayFrame | ExpressionFrame | OpaqueFrame;
@@ -232,8 +239,13 @@ function directiveSlotRole(
 	return braceSlotTakesArray(frame.verb, slot) ? "array" : null;
 }
 
-/** Find every group fault in a comment-masked, analyzed document. */
-export function findGroupFaults(masked: string): GroupFault[] {
+const CLOSER = { "(": ")", "[": "]", "{": "}" } as const;
+
+/**
+ * Find every group fault in an analyzed document. `masked` is its comment
+ * mask; `text` is read only to tell a masked comment line from spaces.
+ */
+export function findGroupFaults(text: string, masked: string): GroupFault[] {
 	const faults: GroupFault[] = [];
 	const frames: Frame[] = [statementFrame("")];
 	const top = (): Frame => frames[frames.length - 1] as Frame;
@@ -254,12 +266,38 @@ export function findGroupFaults(masked: string): GroupFault[] {
 		}
 	};
 
+	// H5, as `segment.ts` → `maskUncached` reads it: a `\` continuation runs on
+	// across blank lines and line-leading comment lines, and a blank line after
+	// a comment line ends it. CHR 7.24.5 and 7.23.8 join `(1 +\⏎# c⏎2)` and
+	// `(1 +\⏎⏎2)`, and reject `(1 +\⏎# c⏎⏎2)` at the blank line.
+	let cont: "none" | "escape" | "comment" = "none";
+	let contLineStart = false;
 	let i = 0;
 	while (i < masked.length) {
 		const c = masked[i] as string;
 		const frame = top();
+		if (cont !== "none") {
+			if (c === "\n" && cont === "escape") {
+				contLineStart = true;
+				i++;
+				continue;
+			}
+			if (text[i] === "#" && contLineStart) {
+				const newline = masked.indexOf("\n", i);
+				cont = "comment";
+				contLineStart = true;
+				i = newline < 0 ? masked.length : newline + 1;
+				continue;
+			}
+			if (isSpace(c)) contLineStart = false;
+			else cont = "none";
+		}
 		const continued = continuationLength(masked, i);
 		if (continued > 0 || isSpace(c)) {
+			if (continued > 0) {
+				cont = "escape";
+				contLineStart = true;
+			}
 			if (frame.kind === "statement") closeToken(frame);
 			i += Math.max(continued, 1);
 			continue;
@@ -276,6 +314,15 @@ export function findGroupFaults(masked: string): GroupFault[] {
 				frame.kind === "statement" || frame.kind === "expression"
 					? frame.whereEnd
 					: null;
+			if (
+				((frame.kind === "array" || frame.kind === "expression") &&
+					frame.done) ||
+				(frame.kind === "opaque" && frame.muted)
+			) {
+				frames.push({ kind: "opaque", close: CLOSER[c], query, muted: true });
+				i++;
+				continue;
+			}
 			// #509: the top level and scope bodies are `args.ts`'s; a bracket
 			// command and a group are only visible here.
 			const floor =
@@ -296,8 +343,16 @@ export function findGroupFaults(masked: string): GroupFault[] {
 				role !== "program" &&
 				floor !== null &&
 				comparesNamedValue(masked, i, floor)
-			)
+			) {
+				// The device stops at this brace, so neither its contents nor the
+				// rest of the enclosing group are read.
 				faults.push({ code: "named-value-brace", start: i, end: i + 1 });
+				if (frame.kind === "expression") frame.done = true;
+				frames.push({ kind: "opaque", close: "}", query, muted: true });
+				if (frame.kind === "statement") openToken(frame, i);
+				i++;
+				continue;
+			}
 			if (c === "[") frames.push(statementFrame("["));
 			else if (c === "(")
 				frames.push({
@@ -315,7 +370,7 @@ export function findGroupFaults(masked: string): GroupFault[] {
 				frame.kind === "opaque" ||
 				(frame.kind === "statement" && role !== "array")
 			)
-				frames.push({ kind: "opaque", query });
+				frames.push({ kind: "opaque", close: "}", query, muted: false });
 			else
 				frames.push({
 					kind: "array",
@@ -323,6 +378,7 @@ export function findGroupFaults(masked: string): GroupFault[] {
 					last: "open",
 					commaAt: -1,
 					element: false,
+					named: false,
 					query,
 					done: false,
 				});
@@ -335,9 +391,11 @@ export function findGroupFaults(masked: string): GroupFault[] {
 			const matches =
 				frame.kind === "expression"
 					? c === ")"
-					: frame.kind === "array" || frame.kind === "opaque"
+					: frame.kind === "array"
 						? c === "}"
-						: frame.char === (c === "]" ? "[" : c === "}" ? "{" : "");
+						: frame.kind === "opaque"
+							? c === frame.close
+							: frame.char === (c === "]" ? "[" : c === "}" ? "{" : "");
 			if (!matches || frames.length === 1) {
 				i++;
 				continue;
@@ -361,7 +419,7 @@ export function findGroupFaults(masked: string): GroupFault[] {
 					});
 			}
 			if (frame.kind === "array" && !frame.done) {
-				if (frame.last === "comma")
+				if (frame.last === "comma" && !frame.named)
 					faults.push({
 						code: "missing-operand",
 						start: frame.commaAt,
@@ -405,7 +463,13 @@ export function findGroupFaults(masked: string): GroupFault[] {
 			}
 			if (word.includes("=")) token.equals = true;
 			const lower = word.toLowerCase();
-			if (token.start === i && (lower === "where" || lower === "find")) {
+			// A directive's operand is a name, never a query: `:local where
+			// (comment={})` parses, and `:local where (1 +)` is a syntax error.
+			if (
+				frame.verb === null &&
+				token.start === i &&
+				(lower === "where" || lower === "find")
+			) {
 				frame.query = true;
 				if (lower === "where") frame.whereEnd = end;
 			}
@@ -424,7 +488,10 @@ export function findGroupFaults(masked: string): GroupFault[] {
 				continue;
 			}
 			if (c === ";" || c === "\n") {
-				if (frame.last === "comma")
+				// A named element takes a trailing `,`: `{a=1,}` is `value=a` and
+				// `{a=1,;b=2}` is `value=a;b=2` on CHR 7.24.5 and 7.23.8, while
+				// `{1,}`, `{a=,1}` and `{a=1,,2}` are syntax errors.
+				if (frame.last === "comma" && !frame.named)
 					report(
 						{
 							code: "missing-operand",
@@ -434,7 +501,10 @@ export function findGroupFaults(masked: string): GroupFault[] {
 						},
 						frame,
 					);
-				else if (c === ";" && frame.last !== "element")
+				else if (
+					c === ";" &&
+					(frame.last === "open" || frame.last === "separator")
+				)
 					report(
 						{
 							code: "misplaced-separator",
@@ -446,6 +516,13 @@ export function findGroupFaults(masked: string): GroupFault[] {
 						frame,
 					);
 				frame.last = "separator";
+				frame.named = false;
+				i++;
+				continue;
+			}
+			if (c === "=" && frame.last === "element" && !frame.named) {
+				frame.named = true;
+				frame.last = "key";
 				i++;
 				continue;
 			}

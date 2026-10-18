@@ -101,6 +101,21 @@ describe("explain group faults (#505, #509, #511, #512)", () => {
 		expect(groupFaults(input)).toEqual([]);
 	});
 
+	test("a faulted group's descendants are not read (#516 review)", () => {
+		// The device stops at the first fault, so nothing nested after it in the
+		// same group may be reported: `(1; (2 +))` stops at the `;`, and a
+		// named-value brace stops before its own contents.
+		const codes = (input: string) =>
+			groupFaults(input).map((d) =>
+				d.code.replace("explain/canonicalizer/", ""),
+			);
+		expect(codes(":put (1; (2 +))")).toEqual(["misplaced-separator"]);
+		expect(codes(":put (1; {;1})")).toEqual(["misplaced-separator"]);
+		expect(codes("/ip address print where (interface={;1})")).toEqual([
+			"invalid-command-brace",
+		]);
+	});
+
 	test("the messages name the device answer and the remedy", () => {
 		const message = (input: string) => groupFaults(input)[0]?.message ?? "";
 		expect(message(":local z {}")).toContain("empty array");

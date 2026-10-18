@@ -85,8 +85,21 @@ describe("offline gate — what it lets through", () => {
 			":local z {1;{}}",
 			"/ip address print where (comment=+)",
 			"/ip { route { } }",
+			// PR #516 review: a continuation across a comment or blank line, a
+			// directive operand named `where`, and a named element's trailing `,`.
+			":put (1 +\\\n# comment\n2)",
+			":put (1 +\\\r\n# comment\r\n2)",
+			":local z {1\\\r\n\r\n;2}",
+			":local where (comment={})",
+			":local z {a=1,;b=2}",
 		])
 			expect(assertOfflineSyntax(command, surface).verdict).not.toBe("fail");
+		for (const command of [
+			":put (1 +\\\n# c\n\n2)",
+			":local where (1 +)",
+			":local z {a=,1}",
+		])
+			expect(reject(command).causeData).toMatch(/^explain\/canonicalizer\//);
 	});
 
 	test("an abstention is not a rejection", () => {

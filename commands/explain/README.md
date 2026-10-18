@@ -1212,8 +1212,8 @@ the frame roles every other walker uses: `[` opens a statement, `(` an
 expression, and `{` a body when `braceStartsStatements` says so or the
 directive takes a program in that slot (`:execute {…}`, `:time {…}`). Each
 rule is a `:parse` answer on CHR 7.24.5 and 7.23.8, identical on both, and
-`test/fixtures/explain/group-faults.json` pins all 142 rows (81 rejections,
-61 controls). `test/integration/explain-group-faults.test.ts` holds the
+`test/fixtures/explain/group-faults.json` pins all 176 rows (94 rejections,
+82 controls). `test/integration/explain-group-faults.test.ts` holds the
 device to that fixture, and `test/unit/explain-group-faults.test.ts` holds
 offline to it.
 
@@ -1248,14 +1248,24 @@ brace in a command argument is `args.ts`'s. Neither is checked here. The
 array rules apply where the role is grounded: a directive slot in the
 `brace-slots.ts` array table, and an array nested in an array or an expression.
 
+**Three readings the review round grounded (PR #516).** A `\` continuation
+runs on across blank lines and line-leading comment lines, as H5 does
+elsewhere, so `(1 +\⏎# c⏎2)` and `{1\⏎⏎;2}` parse, while a blank line after a
+comment line ends it (`(1 +\⏎# c⏎⏎2)` is rejected at the blank line). A
+directive's operand is a name, so `:local where (comment={})` parses and
+`:local where (1 +)` is checked like any expression. And a named element takes
+a trailing `,` (`{a=1,}` is `value=a`, `{a=1,;b=2}` is `value=a;b=2`), while
+`{a=,1}`, `{a=1,,2}` and a positional `{1,}` are rejected. A faulted group's
+descendants are opaque, since the device stops at the fault.
+
 **Spans.** Each fault spans the token it is about: the operator, the
 separator, the `@`, or the whole empty group. The device's column is the same
 byte for every rule except an empty group and a dangling operator, where it is
 the byte after.
 
-**Measured.** Corpus `e12d5d4e58a4`: 71 of 948 scripts gain an error and all
-71 are device rejections on every channel. 42 of those errors sit on the exact
-byte the 7.24.5 diagnostic names, and the other 29 come after an earlier device
+**Measured.** Corpus `e12d5d4e58a4`: 70 of 948 scripts gain an error and all
+70 are device rejections on every channel. 42 of those errors sit on the exact
+byte the 7.24.5 diagnostic names, and the other 28 come after an earlier device
 error in pasted non-RouterOS text. None precedes the device's error. 41
 verdicts move to `fail` (40 from `warn`, one from `pass`), so offline now fails
 133 of the 374 device-rejected scripts, up from 92, and false rejects stay at 1.
@@ -1263,7 +1273,8 @@ verdicts move to `fail` (40 from `warn`, one from `pass`), so offline now fails
 22 `plain-diagnostic` missed rejections move to `fail`, with no new false
 reject.
 
-Not covered here: a `$( … )` group, a `@` in a later head word
+Not covered here: a `$( … )` group, a group under a `find` head
+(`[find (1 +)]`, read as a query), a `@` in a later head word
 (`/ip address@ print`), operand rules for array elements other than `,`, a
 group in a query beyond its structure, and adjacency without whitespace
 (`"x"~a`, `}else=`), which is a separate rule.
