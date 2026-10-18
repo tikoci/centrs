@@ -58,6 +58,10 @@ is unsafe the offline stage is what keeps the gate from degrading to nothing. A
 clean offline pass is **necessary, never sufficient** — `explain` publishes
 `runtimeAcceptance: "not-proven"` for exactly this reason. An offline `warn` is
 an ABSTENTION and passes through to the device stage; only a `fail` rejects.
+The one exception is `discarded-close`: a stray top-level `}` or `]` that the
+device accepts and then silently stops reading at (#504). It is a warning,
+because nothing is rejected, and the gate refuses it by code
+(`src/offline-gate.ts`), because the device would run a different script.
 
 `meta.validation.stages[]` reports what each stage concluded, including a stage
 that was skipped and why. A reader must always be able to tell "the device

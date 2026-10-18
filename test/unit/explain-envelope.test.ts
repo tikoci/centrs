@@ -73,12 +73,15 @@ describe("explainCommand — structural invariants", () => {
 			const bytes = analyzeCoordinates(input).analyzed.length;
 
 			// The count is the list's length — and the list is the RESOLVER's, which
-			// flattens block bodies, so it is at least the top-level segmentation.
+			// flattens block bodies, so it is at least the top-level segmentation
+			// of what the device reads: a top-level stray `}`/`]` ends it (#504).
 			expect(data.structure.statementCount).toBe(
 				data.structure.statements.length,
 			);
+			const segmented = segmentStatements(input);
+			const end = segmented.discardFrom ?? bytes;
 			expect(data.structure.statementCount).toBeGreaterThanOrEqual(
-				segmentStatements(input).segments.length,
+				segmented.segments.filter((s) => s.start < end).length,
 			);
 
 			// Every span is a legal half-open analyzed-byte range in THIS input.

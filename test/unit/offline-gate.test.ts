@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { CentrsError } from "../../src/errors.ts";
+import { DISCARDED_CLOSE_CODE, explainCommand } from "../../src/explain.ts";
 import {
 	assertOfflineSyntax,
 	isOfflineGateRejection,
 	OFFLINE_GATE_SOURCE,
+	REFUSED_WARNING_CODES,
 } from "../../src/offline-gate.ts";
 
 const surface = { surface: "execute", via: "rest-api" };
@@ -161,6 +163,37 @@ describe("offline gate — what it stops", () => {
 		const remediation = reject(":put [").remediation ?? "";
 		expect(remediation).toContain("centrs explain");
 		expect(remediation).toContain("--validate=false");
+	});
+
+	test("a script the device would stop reading early is refused (#504)", () => {
+		// CHR 7.24.5 and 7.23.8 accept `name=a}` and set the identity to `a`.
+		// `explain` warns rather than fails, since nothing is rejected; the gate
+		// refuses that one warning by code, and only that one.
+		const command = "/system identity set name=a}";
+		expect(explainCommand(command).verdict).toBe("warn");
+		const error = reject(command);
+		expect(error.code).toBe("validation/syntax");
+		expect(error.causeData).toBe(DISCARDED_CLOSE_CODE);
+		expect(error.context?.["span"]).toEqual({ start: 27, end: 28 });
+		expect(error.summary).toStartWith("Refused by offline analysis: ");
+		expect([...REFUSED_WARNING_CODES]).toEqual([DISCARDED_CLOSE_CODE]);
+	});
+
+	test("the discarded tail is refused even when it is a whole command", () => {
+		const error = reject(":put 1};/ip address remove 0");
+		expect(error.context?.["span"]).toEqual({ start: 6, end: 28 });
+	});
+
+	test("every other warning still passes as an abstention", () => {
+		// #350's spaced argument: RouterOS accepts it and marks it obsolete.
+		const result = assertOfflineSyntax(
+			"/system/script add name beep source { :beep }",
+			surface,
+		);
+		expect(result.verdict).toBe("warn");
+		expect(result.warnings.map((w) => w.code)).toEqual([
+			"explain/canonicalizer/possible-spaced-argument",
+		]);
 	});
 });
 

@@ -1093,13 +1093,17 @@ navigated, so the context stays as unknown as it already was.
       `:parse` `expected message value`, grounded stable+testing #247),
     `bad-sigil`,
     `invalid-hash`, `invalid-apostrophe` (#355, below),
-    `missing-statement-separator` (#311, below), and the four group faults
+    `missing-statement-separator` (#311, below), the four group faults
     `empty-group`, `misplaced-separator`, `missing-operand` and
-    `invalid-at-sign` (#505, #511, #512, below). Thirteen classes the device
-    itself rejects.
+    `invalid-at-sign` (#505, #511, #512, below), and the four token faults
+    `glued-token`, `invalid-variable`, `bad-string-variable` and
+    `invalid-name` (#506, #518, below). Seventeen classes the device itself
+    rejects.
   - `warning` — `over-depth`, because it is centrs's own resource bound and says
     nothing about whether the input is legal; `possible-spaced-argument`
-    (#350), a spelling RouterOS accepts and marks obsolete; and an `ambiguous`/`unknown`
+    (#350), a spelling RouterOS accepts and marks obsolete; `discarded-close`
+    (#504), a script RouterOS accepts and stops reading early, which the
+    execute gate refuses by code; and an `ambiguous`/`unknown`
     resolution, never an error, so the default `--fail-on error` cannot fail a
     document whose only sin is being unreadable without a schema — which is most
     of RouterOS scripting.
@@ -1280,7 +1284,74 @@ Not covered here: a `$( … )` group, a group under a `find` head
 (`[find (1 +)]`, read as a query), a `@` in a later head word
 (`/ip address@ print`), operand rules for array elements other than `,`, a
 group in a query beyond its structure, and adjacency without whitespace
-(`"x"~a`, `}else=`), which is a separate rule.
+(`"x"~a`, `}else=`), which is the next section's.
+
+### Token faults and the discarded tail (#504, #506, #518)
+
+Three more missed-rejection families, and one reading that was wrong in the
+other direction. The glued-token, variable and name rules ride the same walk as
+the group faults (`src/explain/group-faults.ts`), so they share its statement,
+query and brace roles. The `$` inside a string is checked by the escape walk
+(`src/explain/quoted-string.ts`), and the stray close by the segmenter
+(`src/explain/segment.ts` → `discardFrom`). Every rule is a `:parse` answer on
+CHR 7.24.5 and 7.23.8, identical on both, and
+`test/fixtures/explain/token-faults.json` pins all 145 rows (80 rejections and
+65 acceptances, with the acceptances' IL). `test/integration/explain-token-faults.test.ts`
+holds the device to that fixture, and `test/unit/explain-token-faults.test.ts`
+holds offline to it.
+
+| Code | Device rule | Rejected | Accepted |
+| ---- | ----------- | -------- | -------- |
+| `discarded-close` (warning) | A `}` or `]` that closes nothing at the top level ends the script: the device accepts it and drops that byte and everything after it | — | `}` (IL `/`), `:put 1};:put 2` (IL `(evl /putmessage=1)`), `name=a}` (sets `a`) |
+| `glued-token` | After a closed string, `$name`, `$"…"` or group, only a separator; after a bare word, no `"`, `$`, `(`, `[` or `{` | `:put "a"b`, `$v.b`, `$v$v`, `(1)(2)`, `[:len a]b`, `}else=`, `src-address=$v/24`, `dst-port="80",443`, `:put a"b"`, `name=a$v` | `:put a.b`, `a-b`, `a_b`, `a#b`, `a~b`, `where comment="a"b`, `[find comment="a"b]`, `("a"b)`, `{"a"b}`, `dst-address-list=!"my list"`, `dst-port=80,"443"` |
+| `invalid-variable` | Outside a string, `$` takes a name (`[A-Za-z0-9]+`) or `$"…"` | `:put $`, `$_`, `$-`, `$.`, a `$` before a space | `$v1`, `$"a b"` |
+| `bad-string-variable` | Inside a string, `$` takes a name, `"`, `(` or `[` | `"a$ b"`, `"$-"`, `"$_"`, `"${"`, and the same in `where`, an array, a group and a nested `$[…]` string | `"$v_x"` (`$v` then `_x`), `"\$ x"`, `"$(1)"`, `"$[:len a]"` |
+| `invalid-name` | The first operand of `:local`, `:global`, `:set`, `:for` and `:foreach` is a name of letters and digits, or a string | `:local a_b`, `a-b`, `a.b`, `a$v`, `:local $a`, `:local (a)`, `:for i,j`, `:foreach a,`, `:foreach a,,b` | `:local "a_b"`, `:local 1a`, `:foreach a,b`, `:foreach "a",b`, `:local name=x value=1`, `:set (a) 1` |
+
+**The stray close was the honest-reading bug.** Offline used to fail
+`name=a}` with `unbalanced-close`, and the device accepts it. But the device
+does not just ignore the `}`: it stops reading there. `}⏎:put 1` lowers to `/`,
+and a write after the brace never runs. So `explainCommand` now analyzes only
+the prefix the device reads and adds one `warning` that spans the dropped
+bytes. The token partition still covers the whole input, with the tail
+`unclassified`. A `)` in that position, and any stray close inside an open
+group, are rejections and stay `unbalanced-close` errors. The execute gate
+refuses `discarded-close` by code, the one warning it refuses
+(`src/offline-gate.ts`; `commands/execute/examples.md` V9).
+
+**Where a property's parser decides, the glued-token rule abstains.** In a
+command argument the device hands the value to the property's parser, which can
+take a glued part after a prefix or separator: `dst-address-list=!"my list"`
+and `dst-port=80,"443"` parse, while `name=!"a"` and `name=-"a"` do not. So
+outside a `:` directive, a bare word followed by a `"`, `$` or bracket is a
+fault only after an alphanumeric byte. After a closed part no property was found
+that accepts anything (`"80",443`, `$p-90`, `$v%ether1`, `"ether"1` are all
+rejected), so that half of the rule applies everywhere outside a query.
+
+**Spans.** Each fault spans its byte, which is the device's byte too. For the
+two `$` rules the span is the `$` and the byte after it, and the device names
+that second byte.
+
+**Measured.** Corpus `e12d5d4e58a4`: 23 scripts move to `fail` (18 from
+`warn`, 5 from `pass`), and 29 already-failing scripts gain a new code. All are
+device rejections on every channel. 9 of their first new errors sit on the
+7.24.5 diagnostic's byte, 45 come after it, and none precedes it. Offline now
+fails 154 of the device-rejected scripts, up from 133. The one corpus false
+reject (a stray `}`) is gone, so false rejects are 0. Three scripts move from
+`fail` to `warn`: their `unbalanced-close` became `discarded-close`, and two of
+them are device rejections for an earlier reason offline does not see. On the
+conformance cases, false rejects go from 3 to 0 and missed rejections from 278
+to 151.
+
+**Not covered here.** `"a$"`: the device reads `$"` in a string as a quoted
+variable name, so the next `"` does not close the string. Every scanner in
+`explain` closes it there, so both `$` rules and the glued-token rule abstain
+around a string that ends in `$"` (2 of 948 corpus scripts use the form).
+`$$`, `$(…)`, `$[…]` and `${…}` outside a string, where the device's byte is
+not the `$`. A `\` continuation inside a glued token (`"a"\⏎"b"`). The head
+word of a statement (`$v"a"`, `{…}:put 2`). `:local a=b`, which 7.24.5 reads as
+a named argument and 7.23.8 as a syntax error. And a name in `/local` or
+`:local name=a_b`.
 
 ### The token stream a rule reads (#316)
 
@@ -1884,8 +1955,8 @@ And the grounded complement — asked, and refused:
   `corpus` by `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 1,022,882 are classified (71.69%), the remaining
-  403,849 are `unclassified`. The census emits 241,453 tokens (avg 254.7 per
+  1,426,731 analyzed bytes, 1,022,782 are classified (71.69%), the remaining
+  403,949 are `unclassified`. The census emits 241,279 tokens (avg 254.5 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is the
   vocabulary #264 B5 settled. Each B2 fill should move the classified

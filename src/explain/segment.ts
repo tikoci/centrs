@@ -132,6 +132,15 @@ export interface SegmentResult {
 	 * a throw. Includes the two coordinate-pass classes (`bom`, `non-ascii`).
 	 */
 	defects: Defect[];
+	/**
+	 * The first `}` or `]` that closes nothing at the top level, where RouterOS
+	 * stops reading (#504). The device accepts the script and silently discards
+	 * that byte and everything after it: `:put 1};:put 2` lowers to
+	 * `(evl /putmessage=1)` and `}⏎:put 1` to `/`, on CHR 7.24.5 and 7.23.8.
+	 * A `)` there, or any stray close inside an open group, is a rejection
+	 * instead and is only an `unbalanced-close` defect. Absent when there is none.
+	 */
+	discardFrom?: number;
 }
 
 const isSpace = (c: string): boolean => c === " " || c === "\t" || c === "\r";
@@ -657,6 +666,7 @@ function segmentStatementsInternal(
 			analysis === undefined ? [] : coordinateDefects(analysis),
 			raw.defects,
 		),
+		...(raw.discardFrom === undefined ? {} : { discardFrom: raw.discardFrom }),
 	};
 }
 
@@ -735,6 +745,7 @@ function scanAscii(
 	segments: RawSegment[];
 	comments: { start: number; end: number }[];
 	defects: Defect[];
+	discardFrom?: number;
 } {
 	// Local indices remain local in the result; only index-backed questions use
 	// document coordinates. The floor prevents an enclosing head from becoming
@@ -745,6 +756,7 @@ function scanAscii(
 	const comments: { start: number; end: number }[] = [];
 	const defects: Defect[] = [];
 	const overDepth: number[] = [];
+	let discardFrom: number | undefined;
 	let hardHashSeen = false;
 	let hardApostropheSeen = false;
 	// H2 — every open bracket, for balance. Each frame carries WHERE it opened so
@@ -1115,6 +1127,7 @@ function scanAscii(
 					f.atLead = false;
 				}
 			} else {
+				if (delimStack.length === 0 && c !== ")") discardFrom ??= i;
 				defects.push(defectAt("unbalanced-close", i, c));
 				ensureStmt(f, i);
 				f.atLead = false;
@@ -1172,6 +1185,7 @@ function scanAscii(
 			// event fail to de-duplicate across analyzers.
 			...overDepth.map((offset) => defectAt("over-depth", offset)),
 		],
+		...(discardFrom === undefined ? {} : { discardFrom }),
 	};
 }
 

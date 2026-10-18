@@ -129,6 +129,7 @@ import { lookupPath } from "./explain/catalog.ts";
 import {
 	analyzeCoordinates,
 	type CoordinateAnalysis,
+	runAtByte,
 } from "./explain/coordinates.ts";
 import {
 	type Defect,
@@ -924,8 +925,9 @@ const EVIDENCE: Record<EvidenceKey, ExplainEvidence> = {
 	/**
 	 * `heuristic`: every rejection it reports is a `:parse` answer
 	 * (`src/explain/group-faults.ts`), but which group is an array, an
-	 * expression or a query rests on the brace-role and `where` readings a live
-	 * probe could overturn.
+	 * expression or a query, and which token a property's parser would read
+	 * instead, rests on the brace-role and `where` readings a live probe could
+	 * overturn.
 	 */
 	groups: {
 		id: EV.groups,
@@ -962,6 +964,13 @@ const DEFECT_DIAGNOSTICS: Record<
 		severity: "error",
 		message: () =>
 			'invalid escape in string: unknown escape, truncated hex, or lowercase hex digit — use \\n \\r \\t \\" \\\\ \\$ \\_ \\? \\a \\b \\f \\v, \\XX with uppercase hex, or \\ before whitespace to continue the line',
+	},
+	// #506. The device's answer for every follower but a name, `"`, `(` and
+	// `[` (`src/explain/quoted-string.ts`); the span is the `$` and that byte.
+	"bad-string-variable": {
+		severity: "error",
+		message: () =>
+			`\`$\` in a string must start a variable name (\`$v\`, \`$"v"\`), \`$(…)\` or \`$[…]\`, and RouterOS rejects it (\`syntax error\`) — write \`\\$\` for a literal dollar`,
 	},
 	"bad-sigil": {
 		severity: "error",
@@ -1314,6 +1323,18 @@ export function explainCommand(
 	// `analyzed` is ASCII by construction, so the offsets need no coordinate test.
 	const analyzedRange = documentRange(analyzed, coordinates.ascii);
 	const segmented = segmentStatements(input);
+	if (segmented.discardFrom !== undefined)
+		return withDiscardedTail(
+			explainCommand(
+				input.slice(
+					0,
+					runAtByte(coordinates, segmented.discardFrom).utf16Start,
+				),
+				options,
+			),
+			coordinates,
+			segmented.discardFrom,
+		);
 	const statementAnalysis = resolveStatements(input);
 	const sourceRange = coordinates.ascii ? analyzedRange : undefined;
 	const verbs = resolveVerbsFromStatements(statementAnalysis, sourceRange);
@@ -1662,6 +1683,76 @@ export function explainCommand(
 	};
 }
 
+/** The code the execute gate refuses although it is a warning (#504). */
+export const DISCARDED_CLOSE_CODE = "explain/canonicalizer/discarded-close";
+
+/**
+ * The reading of a script RouterOS stops reading early (#504).
+ *
+ * A `}` or `]` that closes nothing at the top level ends the program on the
+ * device: it accepts the script and silently discards that byte and everything
+ * after it (`segment.ts` → `discardFrom`). So `read` is the analysis of the
+ * prefix the device runs. What is added back is the whole input's coordinate
+ * facts, the tail's one `unclassified` token, and a `warning` that spans the
+ * discarded bytes. It is a warning because nothing was rejected; it is refused
+ * by the execute gate all the same, because running a script that is not the
+ * one the operator wrote is what validation exists to stop.
+ */
+function withDiscardedTail(
+	read: ExplainData,
+	coordinates: CoordinateAnalysis,
+	from: number,
+): ExplainData {
+	const bytes = coordinates.analyzed.length;
+	const close = String.fromCharCode(coordinates.analyzed[from] as number);
+	const diagnostics = [
+		...read.diagnostics,
+		{
+			code: DISCARDED_CLOSE_CODE,
+			severity: "warning" as const,
+			message: `stray \`${close}\` closes nothing: RouterOS accepts the script but stops reading here, silently discarding the \`${close}\` and everything after it — remove it, or add the opener it was meant to close`,
+			span: { start: from, end: bytes },
+			ev: EV.segment,
+		},
+	];
+	let tokens = read.tokens;
+	if (tokens !== undefined) {
+		const last = tokens.at(-1);
+		tokens =
+			last?.class === "unclassified" && last.end === from
+				? [...tokens.slice(0, -1), { ...last, end: bytes }]
+				: [
+						...tokens,
+						{
+							start: from,
+							end: bytes,
+							class: "unclassified",
+							ev: EV.coordinates,
+						},
+					];
+	}
+	return {
+		...read,
+		input: {
+			bytes,
+			normalized: !coordinates.ascii,
+			truncated: false,
+			positionMap: positionMap(coordinates),
+		},
+		verdict: verdictOf(diagnostics),
+		...(tokens === undefined ? {} : { tokens }),
+		diagnostics,
+		evidence: citedEvidence(
+			read.structure,
+			diagnostics,
+			read.spans,
+			read.symbols,
+			read.values,
+			tokens,
+		),
+	};
+}
+
 /** Attach transport only after the gate-parity guard has had the final word. */
 function withStatementTransport(
 	statement: ExplainStatement,
@@ -1985,7 +2076,11 @@ function groupFaultDiagnostics(
 					f.code === "empty-group" &&
 					f.detail === "{" &&
 					braceAt.has(f.start)
-				) && !(f.code === "named-value-brace" && braceAt.has(f.start)),
+				) &&
+				!(
+					(f.code === "named-value-brace" || f.code === "glued-token") &&
+					braceAt.has(f.start)
+				),
 		)
 		.map((f) => ({
 			code:
@@ -2017,6 +2112,12 @@ function groupFaultMessage(f: GroupFault): string {
 			return "unquoted `@` is a syntax error in a command word, an array or an expression — RouterOS accepts it only inside an argument value (`comment=a@b`); quote it, and drop a pasted console prompt such as `[admin@MikroTik] >`";
 		case "named-value-brace":
 			return INVALID_COMMAND_BRACE;
+		case "glued-token":
+			return 'nothing may follow a closed string, `$name` or group in the same token, and a bare word may not run into a `"`, `$` or bracket: RouterOS rejects it (`expected end of command`) — put a space between the two arguments, or join them inside an expression such as `("a" . $v)`';
+		case "invalid-variable":
+			return '`$` must be followed by a variable name (letters and digits) or `"name"`, and RouterOS rejects it here (`syntax error`) — quote a literal dollar (`"\\$"`)';
+		case "invalid-name":
+			return 'a variable name is letters and digits only, and RouterOS rejects any other byte in it (`expected end of command`) — quote the name (`:local "a_b"`) to use other characters';
 	}
 }
 

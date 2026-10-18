@@ -874,3 +874,58 @@ centrs explain ':put [/ip address find where interface={"x"}]' --json
 the `{`, as at the top level (example 36). The device answers
 `expected interface value (line 1 column 40)`. `where (interface={"x"})` fails
 the same way, and `[find where interface in {"x"}]` passes.
+
+### 42. A stray top-level `}` ends the script, and the rest is discarded
+
+```bash
+centrs explain ':put 1};:put 2' --json
+```
+
+`data.verdict` is `warn` with `explain/canonicalizer/discarded-close` over the
+`}` and everything after it. CHR 7.24.5 and 7.23.8 accept the script and lower
+it to `(evl /putmessage=1)`: the device stops reading at a `}` or `]` that closes
+nothing at the top level, so `:put 2` never runs and
+`/system identity set name=a}` sets `a`. `data.structure` reads only the
+prefix. A stray close inside an open group (`:put (1})`, `{:put 1]}`) and any
+stray `)` are still rejections and still fail with `unbalanced-close`. The
+execute gate refuses this warning (`commands/execute/examples.md` V9).
+
+### 43. A variable name is letters and digits
+
+```bash
+centrs explain ':local a_b 1' --json
+```
+
+`data.verdict` is `fail` with `explain/canonicalizer/invalid-name` at the `_`.
+The device answers `expected end of command (line 1 column 9)`, the same byte.
+`:global`, `:set`, `:for` and `:foreach` read the name the same way, and
+`:local $a` and `:local (a)` fail at their first byte. `:local "a_b"`,
+`:local 1a`, `:foreach a,b in={1} do={}` and `:local name=x value=1` pass.
+
+### 44. A `$` must start a variable
+
+```bash
+centrs explain ':put "a$ b"' --json
+```
+
+`data.verdict` is `fail` with `explain/canonicalizer/bad-string-variable` over
+the `$` and the space after it. The device answers `syntax error (line 1 column 9)`, at the space. Outside
+a string, `:put $_` fails with `invalid-variable` the same way. `"$v_x"` (which
+is `$v` then `_x`), `"\$ x"`, `"$(1)"` and `$"a b"` pass. `"a$"` also passes,
+although the device rejects it: it reads `$"` as the start of a quoted name, and
+offline's string scanners end the string there, so offline abstains.
+
+### 45. Nothing may be glued to a closed token
+
+```bash
+centrs explain ':if (true) do={:put 1}else={:put 2}' --json
+```
+
+`data.verdict` is `fail` with `explain/canonicalizer/glued-token` at the `e`.
+The device answers `expected end of command (line 1 column 23)`. The same rule
+rejects `:put "a"b`, `$v.b`, `(1)(2)`, `[:len a]b`, `src-address=$v/24` and a
+bare word run into a `"`, `$` or bracket (`:put a"b"`, `name=a$v`). Inside
+`where` and `find`, and inside a group, the rule does not apply (`where
+comment="a"b` and `("a"b)` parse). A command argument whose property parser
+takes the glued part also passes: `dst-address-list=!"my list"` and
+`dst-port=80,"443"`.
