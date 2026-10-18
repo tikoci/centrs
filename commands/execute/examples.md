@@ -530,6 +530,25 @@ has no `result`, `syntax` or `semantic`. Its stages are `offline: passed`, then
 `device: skipped` with `reason: "not reached: transport/auth-failed"`. RouterOS
 answered 401 before `:parse` could give a verdict.
 
+### V9. A stray `}` that RouterOS would silently discard is refused (#504)
+
+A `}` or `]` that closes nothing at the top level makes RouterOS accept the
+script and stop reading there: everything from that byte on is dropped without a
+word. `/system identity set name=a}` sets the identity to `a`. `explain` reports
+it as a `warning`, because nothing is rejected (`commands/explain/examples.md`
+example 42). The gate refuses that one warning by code, because the script the
+device would run is not the one that was written.
+
+```bash
+centrs execute $R ':put "first"};:put "second"' --via rest-api --username $U --password $P --json
+```
+
+Envelope: `ok: false`, `error.code=validation/syntax`,
+`error.context.validationStage="offline"`, `error.context.span` covering the `}`
+through the end of the input, and
+`error.context.diagnostics[0].code="explain/canonicalizer/discarded-close"`. With
+`--validate=false` the device runs it and prints only `first`.
+
 ## Write authorization and returned runtime faults
 
 These regressions are transport-independent and run in

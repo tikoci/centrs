@@ -113,6 +113,31 @@ function escapeLength(text: string, at: number): 2 | 3 {
 // ---------------------------------------------------------------------------
 
 /**
+ * Whether the byte after a string-phase `$` makes it a device error.
+ *
+ * Inside a string a `$` must start an interpolation: a name
+ * (`"$v"`, `"$v_x"` is `$v` then `_x`), `$"…"`, `$(…)` or `$[…]`. Every other
+ * follower is `syntax error` at that byte on CHR 7.24.5 and 7.23.8, swept with
+ * `:parse` on a stored script source: `"a$ b"`, `"$-"`, `"$."`, `"$,"`, `"$_"`,
+ * `"$;"`, `"$="`, `"${"`, `"$)"`, `"$\n"`, a TAB, and the same inside
+ * `where`, an array, a group and a nested `$[…]` string (#506). A literal
+ * dollar is `\$`.
+ *
+ * `$$` abstains: the device does not stop at the second `$` (`"$$"` is
+ * rejected at the closing quote), so what it reads there is not known.
+ *
+ * `$"` abstains. The device reads it as a quoted variable name (`"a$"v""` is
+ * `(. a $v)`), so the next `"` does not close the string, and every scanner in
+ * `explain` closes it there; `"a$"` is a device rejection this cannot see. A
+ * non-ASCII stand-in (`SUB`) abstains too: the byte it replaced is #371's.
+ */
+function invalidStringSigil(next: string | undefined): boolean {
+	if (next === undefined || next === '"' || next === "$" || next === "\x1a")
+		return false;
+	return !/[A-Za-z0-9[(]/.test(next);
+}
+
+/**
  * One step of the shared frame machine. Owns the depth guard, the `top` read,
  * and the phase dispatch (`"` vs code) so callers cannot drift on them.
  * When inside a string at `\`, delegates to `onStringEscape` so callers can
@@ -125,6 +150,7 @@ function stepFrame(
 	frames: string[],
 	onStringEscape: (at: number) => number | Defect,
 	maxFrameDepth: number = MAX_STRING_FRAME_DEPTH,
+	validateSigil = false,
 ): number | Defect {
 	if (frames.length > maxFrameDepth) return 0;
 	const top = frames[frames.length - 1] as string | undefined;
@@ -139,6 +165,8 @@ function stepFrame(
 			frames.push(text[i + 1] as string);
 			return 2;
 		}
+		if (c === "$" && validateSigil && invalidStringSigil(text[i + 1]))
+			return { code: "bad-string-variable", start: i, end: i + 2 };
 		return 1;
 	}
 	if (c === '"') {
@@ -303,12 +331,19 @@ export function walkStringEscapes(
 				continue;
 			}
 		}
-		const res = stepFrame(text, i, frames, (at) => {
-			const step = stringEscapeValidated(text, at);
-			if (collectEscapes && typeof step === "number")
-				escapes.push({ start: at, end: at + step });
-			return step;
-		});
+		const res = stepFrame(
+			text,
+			i,
+			frames,
+			(at) => {
+				const step = stringEscapeValidated(text, at);
+				if (collectEscapes && typeof step === "number")
+					escapes.push({ start: at, end: at + step });
+				return step;
+			},
+			MAX_STRING_FRAME_DEPTH,
+			true,
+		);
 		if (typeof res !== "number") return { escapes, defects: [res] };
 		if (res === 0) break;
 		i += res;

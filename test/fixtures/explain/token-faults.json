@@ -1,0 +1,1060 @@
+{
+	"$comment": "Device answers for the token rules (#504, #506, #518): the stray top-level close that ends a script (src/explain/segment.ts → discardFrom), the declared-name, variable and glued-token faults (src/explain/group-faults.ts) and the bad `$` in a string (src/explain/quoted-string.ts). `:parse` on a stored `/system script` source, so `$` is not substituted. Every row is identical on CHR 7.24.5 (stable) and 7.23.8 (long-term); `parse` is a rejection's diagnostic and `il` an acceptance's IL, whitespace-collapsed. `code`/`span` is the one fault offline reports (`discarded-close` a warning, the rest errors); a row without one reports none. test/unit/explain-token-faults.test.ts holds offline to it and test/integration/explain-token-faults.test.ts holds the device to it.",
+	"versions": ["7.24.5", "7.23.8"],
+	"rows": [
+		{
+			"issue": "#504",
+			"input": "}",
+			"device": "accept",
+			"il": "/",
+			"code": "discarded-close",
+			"span": [0, 1]
+		},
+		{
+			"issue": "#504",
+			"input": "}\n:put 1",
+			"device": "accept",
+			"il": "/",
+			"code": "discarded-close",
+			"span": [0, 8]
+		},
+		{
+			"issue": "#504",
+			"input": ":put 1};:put 2",
+			"device": "accept",
+			"il": "(evl /putmessage=1)",
+			"code": "discarded-close",
+			"span": [6, 14]
+		},
+		{
+			"issue": "#504",
+			"input": ":put 1 } :put 2",
+			"device": "accept",
+			"il": "(evl /putmessage=1)",
+			"code": "discarded-close",
+			"span": [7, 15]
+		},
+		{
+			"issue": "#504",
+			"input": "/system identity set name=a}",
+			"device": "accept",
+			"il": "(evl /system/identity/setname=a)",
+			"code": "discarded-close",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#504",
+			"input": "/system identity set name=a}b",
+			"device": "accept",
+			"il": "(evl /system/identity/setname=a)",
+			"code": "discarded-close",
+			"span": [27, 29]
+		},
+		{
+			"issue": "#504",
+			"input": ":put ]",
+			"device": "accept",
+			"il": "(evl /put)",
+			"code": "discarded-close",
+			"span": [5, 6]
+		},
+		{
+			"issue": "#504",
+			"input": ":put [:len a]]:put 2",
+			"device": "accept",
+			"il": "(evl /putmessage=(evl (evl /lenvalue=a)))",
+			"code": "discarded-close",
+			"span": [13, 20]
+		},
+		{
+			"issue": "#504",
+			"input": ":if (true) do={:put 1}}",
+			"device": "accept",
+			"il": "(evl /ifcondition=true;do=;(evl (evl /putmessage=1)))",
+			"code": "discarded-close",
+			"span": [22, 23]
+		},
+		{
+			"issue": "#504",
+			"input": ":put 1} \"abc",
+			"device": "accept",
+			"il": "(evl /putmessage=1)",
+			"code": "discarded-close",
+			"span": [6, 12]
+		},
+		{
+			"issue": "#504",
+			"input": "/ip address\n}\nprint",
+			"device": "accept",
+			"il": "/ip/address/",
+			"code": "discarded-close",
+			"span": [12, 19]
+		},
+		{
+			"issue": "#504",
+			"input": ":put (1})",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "unbalanced-close",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#504",
+			"input": "{:put 1]}",
+			"device": "reject",
+			"parse": "missing closing brace (line 1 column 8)",
+			"code": "unbalanced-close",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#504",
+			"input": ":put [:len a}]",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 13)",
+			"code": "unbalanced-close",
+			"span": [12, 13]
+		},
+		{
+			"issue": "#504",
+			"input": ":put a)",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 7)",
+			"code": "unbalanced-close",
+			"span": [6, 7]
+		},
+		{
+			"issue": "#504",
+			"input": ")",
+			"device": "reject",
+			"parse": "expected command name (line 1 column 1)",
+			"code": "unbalanced-close",
+			"span": [0, 1]
+		},
+		{
+			"issue": "#504",
+			"input": "/system identity set name=\"a}\"",
+			"device": "accept",
+			"il": "(evl /system/identity/setname=a})"
+		},
+		{
+			"issue": "#504",
+			"input": "# c }\n:put 1",
+			"device": "accept",
+			"il": "(evl /putmessage=1)"
+		},
+		{
+			"issue": "#504",
+			"input": ":put {1;2}",
+			"device": "accept",
+			"il": "(evl /putmessage=1;2)"
+		},
+		{
+			"issue": "#506",
+			"input": ":local a_b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "invalid-name",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#506",
+			"input": ":local a-b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "invalid-name",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#506",
+			"input": ":local a.b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "invalid-name",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#506",
+			"input": ":local a~b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "invalid-name",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#506",
+			"input": ":local a$v",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "invalid-name",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#506",
+			"input": ":local a\"b\"",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "glued-token",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#506",
+			"input": ":global a_b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 10)",
+			"code": "invalid-name",
+			"span": [9, 10]
+		},
+		{
+			"issue": "#506",
+			"input": ":local $a",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "invalid-name",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#506",
+			"input": ":local -a",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "invalid-name",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#506",
+			"input": ":local _a",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "invalid-name",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#506",
+			"input": ":local (a)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "invalid-name",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#506",
+			"input": ":local [:len a]",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "invalid-name",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#506",
+			"input": ":local v; :set v_b 1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 17)",
+			"code": "invalid-name",
+			"span": [16, 17]
+		},
+		{
+			"issue": "#506",
+			"input": ":for a_b from=1 to=2 do={}",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 7)",
+			"code": "invalid-name",
+			"span": [6, 7]
+		},
+		{
+			"issue": "#506",
+			"input": ":foreach a.b in={1} do={}",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 11)",
+			"code": "invalid-name",
+			"span": [10, 11]
+		},
+		{
+			"issue": "#506",
+			"input": ":foreach a, in={1} do={}",
+			"device": "reject",
+			"parse": "expected variable name (line 1 column 12)",
+			"code": "invalid-name",
+			"span": [11, 12]
+		},
+		{
+			"issue": "#506",
+			"input": ":foreach a,,b in={1} do={}",
+			"device": "reject",
+			"parse": "expected variable name (line 1 column 12)",
+			"code": "invalid-name",
+			"span": [11, 12]
+		},
+		{
+			"issue": "#506",
+			"input": ":foreach ,a in={1} do={}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 10)",
+			"code": "invalid-name",
+			"span": [9, 10]
+		},
+		{
+			"issue": "#506",
+			"input": ":for i,j from=1 to=2 do={}",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 7)",
+			"code": "invalid-name",
+			"span": [6, 7]
+		},
+		{
+			"issue": "#506",
+			"input": ":global a,b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 10)",
+			"code": "invalid-name",
+			"span": [9, 10]
+		},
+		{
+			"issue": "#506",
+			"input": "local a_b 1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 8)",
+			"code": "invalid-name",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#506",
+			"input": ":local \"a_b\"",
+			"device": "accept",
+			"il": "(evl /localname=$a_b)"
+		},
+		{
+			"issue": "#506",
+			"input": ":local 1a",
+			"device": "accept",
+			"il": "(evl /localname=$1a)"
+		},
+		{
+			"issue": "#506",
+			"input": ":local A1",
+			"device": "accept",
+			"il": "(evl /localname=$A1)"
+		},
+		{
+			"issue": "#506",
+			"input": ":local a b",
+			"device": "accept",
+			"il": "(evl /localname=$a;value=b)"
+		},
+		{
+			"issue": "#506",
+			"input": ":local and 1",
+			"device": "accept",
+			"il": "(evl /localname=$and;value=1)"
+		},
+		{
+			"issue": "#506",
+			"input": ":foreach a,b in={1} do={}",
+			"device": "accept",
+			"il": "(evl /foreachcounter=$a;$b;do=;(evl /);in=1)"
+		},
+		{
+			"issue": "#506",
+			"input": ":foreach a,b,c in={1} do={}",
+			"device": "accept",
+			"il": "(evl /foreachcounter=$a;$b;$c;do=;(evl /);in=1)"
+		},
+		{
+			"issue": "#506",
+			"input": ":foreach \"a\",b in={1} do={}",
+			"device": "accept",
+			"il": "(evl /foreachcounter=$a;$b;do=;(evl /);in=1)"
+		},
+		{
+			"issue": "#506",
+			"input": ":foreach a,\"b\" in={1} do={}",
+			"device": "accept",
+			"il": "(evl /foreachcounter=$a;$b;do=;(evl /);in=1)"
+		},
+		{
+			"issue": "#506",
+			"input": ":local name=x value=1",
+			"device": "accept",
+			"il": "(evl /localname=$x;value=1)"
+		},
+		{
+			"issue": "#506",
+			"input": ":set (a) 1",
+			"device": "accept",
+			"il": "(evl /setname=$a;value=1)"
+		},
+		{
+			"issue": "#506",
+			"input": ":local a\\\n_b",
+			"device": "accept",
+			"il": "(evl /localname=$a;value=_b)"
+		},
+		{
+			"issue": "#506",
+			"input": ":local \"a b\" 1",
+			"device": "accept",
+			"il": "(evl /localname=$a b;value=1)"
+		},
+		{
+			"issue": "#506",
+			"input": ":put $",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 7)",
+			"code": "invalid-variable",
+			"span": [5, 6]
+		},
+		{
+			"issue": "#506",
+			"input": ":put $_",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 7)",
+			"code": "invalid-variable",
+			"span": [5, 7]
+		},
+		{
+			"issue": "#506",
+			"input": ":put $-",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 7)",
+			"code": "invalid-variable",
+			"span": [5, 7]
+		},
+		{
+			"issue": "#506",
+			"input": ":put $.",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 7)",
+			"code": "invalid-variable",
+			"span": [5, 7]
+		},
+		{
+			"issue": "#506",
+			"input": ":put $ ",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 7)",
+			"code": "invalid-variable",
+			"span": [5, 7]
+		},
+		{
+			"issue": "#506",
+			"input": ":local v 1; :put $v_b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 20)",
+			"code": "glued-token",
+			"span": [19, 20]
+		},
+		{
+			"issue": "#506",
+			"input": ":local v 1; :put $v.b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 20)",
+			"code": "glued-token",
+			"span": [19, 20]
+		},
+		{
+			"issue": "#506",
+			"input": ":local v 1; :local v1 1; :put $v1",
+			"device": "accept",
+			"il": "(evl /localname=$v;value=1);(evl /localname=$v1;value=1);(evl /putmessage=$v1)"
+		},
+		{
+			"issue": "#506",
+			"input": ":put $\"a b\"",
+			"device": "accept",
+			"il": "(evl /putmessage=$a b)"
+		},
+		{
+			"issue": "#506",
+			"input": ":local x; :put $\"x\"",
+			"device": "accept",
+			"il": "(evl /localname=$x);(evl /putmessage=$x)"
+		},
+		{
+			"issue": "#506",
+			"input": ":put $\"x\"y",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 10)",
+			"code": "glued-token",
+			"span": [9, 10]
+		},
+		{
+			"issue": "#506",
+			"input": ":put \"a$ b\"",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 9)",
+			"code": "bad-string-variable",
+			"span": [7, 9]
+		},
+		{
+			"issue": "#506",
+			"input": ":put \"$-\"",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "bad-string-variable",
+			"span": [6, 8]
+		},
+		{
+			"issue": "#506",
+			"input": ":put \"$_\"",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "bad-string-variable",
+			"span": [6, 8]
+		},
+		{
+			"issue": "#506",
+			"input": ":put \"$.\"",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "bad-string-variable",
+			"span": [6, 8]
+		},
+		{
+			"issue": "#506",
+			"input": ":put \"$,\"",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "bad-string-variable",
+			"span": [6, 8]
+		},
+		{
+			"issue": "#506",
+			"input": ":put \"${\"",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "bad-string-variable",
+			"span": [6, 8]
+		},
+		{
+			"issue": "#506",
+			"input": "/ip address print where comment=\"a$ b\"",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 36)",
+			"code": "bad-string-variable",
+			"span": [34, 36]
+		},
+		{
+			"issue": "#506",
+			"input": ":put {\"a$ b\"}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 10)",
+			"code": "bad-string-variable",
+			"span": [8, 10]
+		},
+		{
+			"issue": "#506",
+			"input": ":put (\"a$ b\")",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 10)",
+			"code": "bad-string-variable",
+			"span": [8, 10]
+		},
+		{
+			"issue": "#506",
+			"input": ":put \"$[:len \"a$ b\"]\"",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 17)",
+			"code": "bad-string-variable",
+			"span": [15, 17]
+		},
+		{
+			"issue": "#506",
+			"input": ":local v 1; :put \"$v_x\"",
+			"device": "accept",
+			"il": "(evl /localname=$v;value=1);(evl /putmessage=(. $v _x))"
+		},
+		{
+			"issue": "#506",
+			"input": ":local v 1; :put \"$v-x\"",
+			"device": "accept",
+			"il": "(evl /localname=$v;value=1);(evl /putmessage=(. $v -x))"
+		},
+		{
+			"issue": "#506",
+			"input": ":put \"\\$ x\"",
+			"device": "accept",
+			"il": "(evl /putmessage=(. $ x))"
+		},
+		{
+			"issue": "#506",
+			"input": ":put \"$(1)\"",
+			"device": "accept",
+			"il": "(evl /putmessage=1)"
+		},
+		{
+			"issue": "#506",
+			"input": ":put \"$[:len a]\"",
+			"device": "accept",
+			"il": "(evl /putmessage=(evl (evl /lenvalue=a)))"
+		},
+		{
+			"issue": "#506",
+			"input": "# \"a$ b\"\n:put 1",
+			"device": "accept",
+			"il": "(evl /putmessage=1)"
+		},
+		{
+			"issue": "#506",
+			"input": ":local v 1; :put \"a$\"v\"\"",
+			"device": "accept",
+			"il": "(evl /localname=$v;value=1);(evl /putmessage=(. a $v))"
+		},
+		{
+			"issue": "#518",
+			"input": ":put a\"b\"",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 7)",
+			"code": "glued-token",
+			"span": [6, 7]
+		},
+		{
+			"issue": "#518",
+			"input": ":put \"a\"b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "glued-token",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#518",
+			"input": ":put \"a\"\"b\"",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "glued-token",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; :put a$v",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 19)",
+			"code": "glued-token",
+			"span": [18, 19]
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; :put \"a\"$v",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 21)",
+			"code": "glued-token",
+			"span": [20, 21]
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; :put $v$v",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 20)",
+			"code": "glued-token",
+			"span": [19, 20]
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; :put $v\"b\"",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 20)",
+			"code": "glued-token",
+			"span": [19, 20]
+		},
+		{
+			"issue": "#518",
+			"input": ":put (1)(2)",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "glued-token",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#518",
+			"input": ":put (1)b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "glued-token",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#518",
+			"input": ":put [:len a]b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 14)",
+			"code": "glued-token",
+			"span": [13, 14]
+		},
+		{
+			"issue": "#518",
+			"input": ":put [:len a][:len b]",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 14)",
+			"code": "glued-token",
+			"span": [13, 14]
+		},
+		{
+			"issue": "#518",
+			"input": ":put {1}b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "glued-token",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#518",
+			"input": ":put \"a\".b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "glued-token",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#518",
+			"input": ":put \"a\"=b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "glued-token",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#518",
+			"input": ":put \"a\"#b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "glued-token",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#518",
+			"input": ":put a(1)",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 7)",
+			"code": "glued-token",
+			"span": [6, 7]
+		},
+		{
+			"issue": "#518",
+			"input": ":put a[:len b]",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 7)",
+			"code": "glued-token",
+			"span": [6, 7]
+		},
+		{
+			"issue": "#518",
+			"input": ":put a~\"x\"",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 8)",
+			"code": "glued-token",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#518",
+			"input": ":put a!\"x\"",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 8)",
+			"code": "glued-token",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#518",
+			"input": ":put -\"a\"",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 7)",
+			"code": "glued-token",
+			"span": [6, 7]
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; :put -$v",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 19)",
+			"code": "glued-token",
+			"span": [18, 19]
+		},
+		{
+			"issue": "#518",
+			"input": ":if (true) do={:put 1}else={:put 2}",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 23)",
+			"code": "glued-token",
+			"span": [22, 23]
+		},
+		{
+			"issue": "#518",
+			"input": ":if (true)do={:put 1}",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 11)",
+			"code": "glued-token",
+			"span": [10, 11]
+		},
+		{
+			"issue": "#518",
+			"input": ":foreach i in={1;2}do={:put $i}",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 20)",
+			"code": "glued-token",
+			"span": [19, 20]
+		},
+		{
+			"issue": "#518",
+			"input": ":do {:put 1}while=(false)",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 13)",
+			"code": "glued-token",
+			"span": [12, 13]
+		},
+		{
+			"issue": "#518",
+			"input": ":if (true) do={:put 1} else={:put 2}:put 3",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 37)",
+			"code": "glued-token",
+			"span": [36, 37]
+		},
+		{
+			"issue": "#518",
+			"input": "/system identity set name=a\"b\"",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 28)",
+			"code": "glued-token",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#518",
+			"input": "/system identity set name=\"a\"b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 30)",
+			"code": "glued-token",
+			"span": [29, 30]
+		},
+		{
+			"issue": "#518",
+			"input": "/system identity set name=\"\"\"\"",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 29)",
+			"code": "glued-token",
+			"span": [28, 29]
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; /system identity set name=a$v",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 40)",
+			"code": "glued-token",
+			"span": [39, 40]
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; /system identity set name=$v.1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 41)",
+			"code": "glued-token",
+			"span": [40, 41]
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; /ip firewall filter add chain=input src-address=$v/24",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 63)",
+			"code": "glued-token",
+			"span": [62, 63]
+		},
+		{
+			"issue": "#518",
+			"input": "/ip firewall filter add chain=input dst-port=\"80\",443",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 50)",
+			"code": "glued-token",
+			"span": [49, 50]
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; /ip firewall filter add chain=input dst-port=$v,443",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 60)",
+			"code": "glued-token",
+			"span": [59, 60]
+		},
+		{
+			"issue": "#518",
+			"input": "/ip address set [find]comment=x",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 23)",
+			"code": "glued-token",
+			"span": [22, 23]
+		},
+		{
+			"issue": "#518",
+			"input": ":put [:len \"a\"b]",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 15)",
+			"code": "glued-token",
+			"span": [14, 15]
+		},
+		{
+			"issue": "#518",
+			"input": ":put ab",
+			"device": "accept",
+			"il": "(evl /putmessage=ab)"
+		},
+		{
+			"issue": "#518",
+			"input": ":put a.b",
+			"device": "accept",
+			"il": "(evl /putmessage=a.b)"
+		},
+		{
+			"issue": "#518",
+			"input": ":put a,b",
+			"device": "accept",
+			"il": "(evl /putmessage=a;b)"
+		},
+		{
+			"issue": "#518",
+			"input": ":put a-b",
+			"device": "accept",
+			"il": "(evl /putmessage=a-b)"
+		},
+		{
+			"issue": "#518",
+			"input": ":put a~b",
+			"device": "accept",
+			"il": "(evl /putmessage=a~b)"
+		},
+		{
+			"issue": "#518",
+			"input": ":put a#b",
+			"device": "accept",
+			"il": "(evl /putmessage=a#b)"
+		},
+		{
+			"issue": "#518",
+			"input": ":put a@b",
+			"device": "accept",
+			"il": "(evl /putmessage=a@b)"
+		},
+		{
+			"issue": "#518",
+			"input": ":put a:b",
+			"device": "accept",
+			"il": "(evl /putmessage=a:b)"
+		},
+		{
+			"issue": "#518",
+			"input": ":put a/b",
+			"device": "accept",
+			"il": "(evl /putmessage=a/b)"
+		},
+		{
+			"issue": "#518",
+			"input": "/system identity set name=a.b",
+			"device": "accept",
+			"il": "(evl /system/identity/setname=a.b)"
+		},
+		{
+			"issue": "#518",
+			"input": "/system identity set name=a_b",
+			"device": "accept",
+			"il": "(evl /system/identity/setname=a_b)"
+		},
+		{
+			"issue": "#518",
+			"input": "/ip address print where comment=\"a\"b",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;( (= $comment a) $b);5)"
+		},
+		{
+			"issue": "#518",
+			"input": ":put [/ip address find comment=\"a\"b]",
+			"device": "accept",
+			"il": "(evl /putmessage=(evl (evl /ip/address/findwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;( (= $comment a) $b);5)))"
+		},
+		{
+			"issue": "#518",
+			"input": ":put [/ip address find comment~\"a\"]",
+			"device": "accept",
+			"il": "(evl /putmessage=(evl (evl /ip/address/findwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(~ $comment a);5)))"
+		},
+		{
+			"issue": "#518",
+			"input": ":put (\"a\"b)",
+			"device": "accept",
+			"il": "(evl /putmessage=( a $b))"
+		},
+		{
+			"issue": "#518",
+			"input": ":put {\"a\"b}",
+			"device": "accept",
+			"il": "(evl /putmessage=( a $b))"
+		},
+		{
+			"issue": "#518",
+			"input": "/ip firewall filter add chain=input dst-address-list=!\"my list\"",
+			"device": "accept",
+			"il": "(evl /ip/firewall/filter/addchain=input;dst-address-list=true;my list)"
+		},
+		{
+			"issue": "#518",
+			"input": "/ip firewall filter add chain=input dst-port=80,\"443\"",
+			"device": "accept",
+			"il": "(evl /ip/firewall/filter/addchain=input;dst-port=;80;443)"
+		},
+		{
+			"issue": "#518",
+			"input": "/ip firewall filter add chain=input src-address=!\"1.2.3.4\"",
+			"device": "accept",
+			"il": "(evl /ip/firewall/filter/addchain=input;src-address=true;1.2.3.4)"
+		},
+		{
+			"issue": "#518",
+			"input": ":if (true) do={:put 1} else={:put 2}",
+			"device": "accept",
+			"il": "(evl /ifcondition=true;do=;(evl (evl /putmessage=1));else=;(evl (evl /putmessage=2)))"
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; :put ($v)",
+			"device": "accept",
+			"il": "(evl /localname=$v;value=1);(evl /putmessage=$v)"
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; :put (\"a\" . $v)",
+			"device": "accept",
+			"il": "(evl /localname=$v;value=1);(evl /putmessage=(. a $v))"
+		},
+		{
+			"issue": "#518",
+			"input": ":put \"x\";:put 1",
+			"device": "accept",
+			"il": "(evl /putmessage=x);(evl /putmessage=1)"
+		},
+		{
+			"issue": "#518",
+			"input": ":put \"a\"\\\n",
+			"device": "accept",
+			"il": "(evl /putmessage=a)"
+		},
+		{
+			"issue": "#518",
+			"input": ":put [:len a]",
+			"device": "accept",
+			"il": "(evl /putmessage=(evl (evl /lenvalue=a)))"
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; :put $v;",
+			"device": "accept",
+			"il": "(evl /localname=$v;value=1);(evl /putmessage=$v)"
+		},
+		{
+			"issue": "#518",
+			"input": ":local v 1; :put $v]",
+			"device": "accept",
+			"il": "(evl /localname=$v;value=1);(evl /putmessage=$v)",
+			"code": "discarded-close",
+			"span": [19, 20]
+		},
+		{
+			"issue": "#518",
+			"input": "/ip address set [find] comment=x",
+			"device": "accept",
+			"il": "(evl /ip/address/setcomment=x;numbers=(evl (evl /ip/address/find)))"
+		}
+	]
+}

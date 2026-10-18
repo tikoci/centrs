@@ -1,6 +1,7 @@
 /**
- * Device syntax errors inside groups: `( … )` expressions, `{ … }` arrays and
- * the head word of a statement (#505, #509, #511, #512).
+ * Device syntax errors inside groups: `( … )` expressions, `{ … }` arrays,
+ * the head word of a statement, and the tokens of one (#505, #506, #509, #511,
+ * #512, #518).
  *
  * One walk over the comment-masked document, with the same frame roles as the
  * other walkers (`segment.ts` → `maskUncached`): `[` opens a statement
@@ -46,10 +47,16 @@
  *   `args.ts` cannot see, inside `( … )` or a `[ … ]` command, uses the
  *   property's parser and is rejected, as at the top level (#502).
  *
+ * - **Tokens (#506, #518).** The same walk reads each statement-level token
+ *   part by part (a bare word, a string, a `$name`, a group) outside a query:
+ *   a closed part glued to the next byte, a `$` with no name after it, and a
+ *   declared name that is not letters and digits. `gluedAt`, `wordFaults` and
+ *   `nameFault` carry the device rules. One token fault is reported per
+ *   statement, and the head word is never read.
+ *
  * Deliberately not here: a `$( … )` group (`:put $({})` is rejected and is
- * read as `({})`), the `@` in a later head word (`/ip address@ print`), operand
- * rules for array elements other than `,`, and adjacency without whitespace
- * (`"x"~a`), which is its own rule.
+ * read as `({})`), the `@` in a later head word (`/ip address@ print`), and
+ * operand rules for array elements other than `,`.
  */
 
 import { comparesNamedValue } from "./args.ts";
@@ -62,7 +69,10 @@ export type GroupFaultCode =
 	| "misplaced-separator"
 	| "missing-operand"
 	| "invalid-at-sign"
-	| "named-value-brace";
+	| "named-value-brace"
+	| "glued-token"
+	| "invalid-variable"
+	| "invalid-name";
 
 export interface GroupFault {
 	code: GroupFaultCode;
@@ -90,7 +100,22 @@ interface StatementFrame {
 	/** No token of the current statement read yet. */
 	lead: boolean;
 	/** The whitespace-delimited token being read, if any. */
-	token: { start: number; head: boolean; equals: boolean } | null;
+	token: StatementToken | null;
+	/**
+	 * The token rules stop for the rest of the statement: one already
+	 * reported, or a boundary they cannot trust (a string ending in `$"`).
+	 */
+	settled: boolean;
+}
+
+interface StatementToken {
+	start: number;
+	head: boolean;
+	equals: boolean;
+	/** Just past the token's last closed part (`"…"`, `$name`, a group), or -1. */
+	closedAt: number;
+	/** Just past the token's last bare-word run, or -1. */
+	wordEnd: number;
 }
 
 interface ArrayFrame {
@@ -169,6 +194,12 @@ const INFIX_SPELLINGS = [
 const OPERATOR_BYTES = "+-*/%<>=!~|^&.,";
 const WORD_OPERATORS = new Set(["and", "or", "in"]);
 const BARE_DECLARATIONS = new Set(["local", "global"]);
+/** Directives whose first operand is a variable name (`:local a_b` is rejected). */
+const NAME_DIRECTIVES = new Set(["local", "global", "set", "for", "foreach"]);
+/** The ones whose name must also START alphanumeric; `:set (a) 1` parses. */
+const STRICT_NAME_DIRECTIVES = new Set(["local", "global", "foreach"]);
+const ALNUM = /[A-Za-z0-9]/;
+const SUB = "\x1a";
 
 function statementFrame(char: StatementFrame["char"]): StatementFrame {
 	return {
@@ -180,6 +211,7 @@ function statementFrame(char: StatementFrame["char"]): StatementFrame {
 		positionals: 0,
 		lead: true,
 		token: null,
+		settled: false,
 	};
 }
 
@@ -207,9 +239,206 @@ function statementWordEnd(text: string, from: number): number {
 /** The token being read in `frame`, opened at `at` if there is none. */
 function openToken(frame: StatementFrame, at: number) {
 	if (frame.token === null)
-		frame.token = { start: at, head: frame.lead, equals: false };
+		frame.token = {
+			start: at,
+			head: frame.lead,
+			equals: false,
+			closedAt: -1,
+			wordEnd: -1,
+		};
 	frame.lead = false;
 	return frame.token;
+}
+
+/** Whether the token rules read this byte of `frame`'s current token. */
+function readsTokens(frame: StatementFrame): frame is StatementFrame & {
+	token: StatementToken;
+} {
+	return (
+		!frame.settled && !frame.query && frame.token !== null && !frame.token.head
+	);
+}
+
+/**
+ * The glued-token fault at `at`, the first byte of a token part (a word, a
+ * string, a `$`, a group), or `null`.
+ *
+ * After a closed part only a separator may follow: `"a"b`, `$v.b`, `(1)"a"`,
+ * `[:len a]b`, `{1}b` and `do={…}else={…}` are `expected end of command` at
+ * this byte, in a directive and in a command argument alike
+ * (`src-address=$v/24`, `dst-port="80",443`). After a bare word the device
+ * rejects a `"`, `$`, `(`, `[` or `{` (`a"b"`, `a$v`, `a(1)`), but in a
+ * command argument the property's own parser can take the glued part when the
+ * word ends in a prefix or a separator (`dst-address-list=!"my list"`,
+ * `dst-port=80,"443"` parse on CHR 7.24.5 and 7.23.8). So there the rule
+ * fires only after an alphanumeric byte, and never after the `=`.
+ */
+function gluedAt(
+	masked: string,
+	frame: StatementFrame & { token: StatementToken },
+	at: number,
+): GroupFault | null {
+	const { token } = frame;
+	const before = masked[at - 1];
+	const glued =
+		token.closedAt === at ||
+		(token.wordEnd === at &&
+			before !== "=" &&
+			(frame.verb !== null || ALNUM.test(before ?? "")));
+	if (!glued) return null;
+	const c = masked[at];
+	// A stray `\` is `symbols.ts`'s, and a non-ASCII stand-in is #371's.
+	if (c === "\\" || c === SUB) {
+		frame.settled = true;
+		return null;
+	}
+	frame.settled = true;
+	return { code: "glued-token", start: at, end: at + 1 };
+}
+
+/** Is the `$` at `at` escaped by an odd run of `\` before it? */
+function escapedAt(text: string, at: number): boolean {
+	let n = 0;
+	for (let j = at - 1; j >= 0 && text[j] === "\\"; j--) n++;
+	return n % 2 === 1;
+}
+
+/**
+ * The faults in one statement-frame word `[at, end)` (a run with no
+ * whitespace, separator, quote, bracket or `\` in it), and the token state it
+ * leaves for the next part.
+ *
+ * - **`$` (#506).** Outside a string a `$` takes a name (`[A-Za-z0-9]+`) or
+ *   `$"…"`; `$_`, `$-`, `$.`, `$` before a space and a bare trailing `$` are
+ *   `syntax error` at the byte after it. The name is a closed part, so
+ *   `$a_b`, `$x$x` and `$a->1` are glued tokens. `$(…)`, `$[…]` and `${…}`
+ *   are rejected too, at the end of the group, and `$$v` after the name;
+ *   both are left unreported.
+ * - **Declared names (#506).** The first operand of `:local`, `:global`,
+ *   `:set`, `:for` and `:foreach` is a name: `[A-Za-z0-9]+` or a string. Any
+ *   other byte after the name is `expected end of command` there (`a_b`,
+ *   `a-b`, `a.b`, `a~b`, `a$v`), and for `:local`, `:global` and `:foreach`
+ *   so is any first byte that is not alphanumeric (`:local $a`, `:local -a`).
+ *   `:foreach` takes a comma list (`a,b`, `a,"b"`), and an empty slot in it
+ *   is rejected (`a,`, `,a`, `a,,b`). A `name=` operand is a named argument
+ *   and is not read here.
+ */
+function wordFaults(
+	masked: string,
+	frame: StatementFrame & { token: StatementToken },
+	at: number,
+	end: number,
+): GroupFault | null {
+	const { token } = frame;
+	const glued = gluedAt(masked, frame, at);
+	if (glued !== null || frame.settled) return glued;
+	let j = at;
+	if (
+		token.start === at &&
+		frame.positionals === 0 &&
+		frame.verb !== null &&
+		NAME_DIRECTIVES.has(frame.verb)
+	) {
+		const named = nameFault(masked, frame, at, end);
+		if (named !== undefined) return named;
+	}
+	while (j < end) {
+		if (masked[j] !== "$") {
+			j++;
+			continue;
+		}
+		if (j > at) {
+			token.wordEnd = j;
+			const fault = gluedAt(masked, frame, j);
+			if (fault !== null || frame.settled) return fault;
+		}
+		const next = masked[j + 1];
+		if (next !== undefined && ALNUM.test(next)) {
+			let k = j + 1;
+			while (k < end && ALNUM.test(masked[k] as string)) k++;
+			token.closedAt = k;
+			token.wordEnd = -1;
+			if (k < end) return gluedAt(masked, frame, k);
+			return null;
+		}
+		if (next === '"') {
+			// `$"name"`: the string branch reads the name, not glued to the `$`.
+			token.closedAt = -1;
+			token.wordEnd = -1;
+			return null;
+		}
+		// `$$v` is rejected after the name, not at the second `$`.
+		if (
+			next === "(" ||
+			next === "[" ||
+			next === "{" ||
+			next === "$" ||
+			next === SUB
+		) {
+			frame.settled = true;
+			return null;
+		}
+		frame.settled = true;
+		return {
+			code: "invalid-variable",
+			start: j,
+			end: Math.min(j + 2, masked.length),
+		};
+	}
+	token.wordEnd = end;
+	token.closedAt = -1;
+	return null;
+}
+
+/**
+ * The declared-name fault in the word at `at`, `null` when the name is
+ * well formed, or `undefined` when the word is not a bare name at all (a
+ * `name=` argument, or a `:set`/`:for` operand that is not one).
+ */
+function nameFault(
+	masked: string,
+	frame: StatementFrame & { token: StatementToken },
+	at: number,
+	end: number,
+): GroupFault | null | undefined {
+	const verb = frame.verb as string;
+	const fault = (start: number): GroupFault => {
+		frame.settled = true;
+		return {
+			code: "invalid-name",
+			start: Math.min(start, masked.length - 1),
+			end: Math.min(start, masked.length - 1) + 1,
+		};
+	};
+	if (!ALNUM.test(masked[at] as string))
+		return STRICT_NAME_DIRECTIVES.has(verb) ? fault(at) : undefined;
+	let k = at;
+	for (;;) {
+		while (k < end && ALNUM.test(masked[k] as string)) k++;
+		const next = masked[k];
+		if (k === end) {
+			frame.token.wordEnd = end;
+			frame.token.closedAt = -1;
+			// `a,"b"`: a string may fill a slot, and the rules after it are the
+			// list's, not the glued-token rule's.
+			if (verb === "foreach" && masked[k - 1] === ",") frame.settled = true;
+			return null;
+		}
+		if (next === "=") return undefined;
+		if (next === "," && verb === "foreach") {
+			const after = masked[k + 1];
+			if (after !== undefined && ALNUM.test(after)) {
+				k++;
+				continue;
+			}
+			if (after === '"' && k + 1 === end) {
+				k++;
+				continue;
+			}
+			return fault(k + 1);
+		}
+		return fault(k);
+	}
 }
 
 function closeToken(frame: StatementFrame) {
@@ -304,12 +533,49 @@ export function findGroupFaults(text: string, masked: string): GroupFault[] {
 			continue;
 		}
 		if (c === '"') {
-			if (frame.kind === "statement") openToken(frame, i);
-			else operand();
-			i = scanQuotedString(masked, i).end;
+			const end = scanQuotedString(masked, i).end;
+			if (frame.kind === "statement") {
+				openToken(frame, i);
+				if (readsTokens(frame)) {
+					const glued = gluedAt(masked, frame, i);
+					if (glued !== null) faults.push(glued);
+					frame.token.closedAt = end;
+					frame.token.wordEnd = -1;
+					// `:foreach "a",b in=…` parses: a string fills a counter slot.
+					if (
+						frame.verb === "foreach" &&
+						frame.positionals === 0 &&
+						frame.token.start === i
+					)
+						frame.settled = true;
+					// `"a$"v""` is ONE string on the device, which reads `$"` as a
+					// quoted name; every scanner here ends it at the second quote.
+					if (masked[end - 2] === "$" && !escapedAt(masked, end - 2))
+						frame.settled = true;
+				}
+			} else operand();
+			i = end;
 			continue;
 		}
 		if (c === "(" || c === "[" || c === "{") {
+			if (frame.kind === "statement") {
+				if (readsTokens(frame)) {
+					const glued = gluedAt(masked, frame, i);
+					if (glued !== null) faults.push(glued);
+				} else if (
+					frame.token === null &&
+					!frame.lead &&
+					!frame.settled &&
+					frame.positionals === 0 &&
+					frame.verb !== null &&
+					STRICT_NAME_DIRECTIVES.has(frame.verb)
+				) {
+					// `:local (a)`, `:local [x]`, `:local {a}`: a name never starts
+					// with a group (`syntax error` at it).
+					frame.settled = true;
+					faults.push({ code: "invalid-name", start: i, end: i + 1 });
+				}
+			}
 			const query = frame.query;
 			const whereEnd =
 				frame.kind === "statement" || frame.kind === "expression"
@@ -403,6 +669,10 @@ export function findGroupFaults(text: string, masked: string): GroupFault[] {
 			}
 			frames.pop();
 			const parent = top();
+			if (parent.kind === "statement" && parent.token !== null) {
+				parent.token.closedAt = i + 1;
+				parent.token.wordEnd = -1;
+			}
 			if (frame.kind === "expression" && !frame.done && frame.wantOperand) {
 				if (frame.empty)
 					faults.push({
@@ -468,6 +738,10 @@ export function findGroupFaults(text: string, masked: string): GroupFault[] {
 					: BARE_DECLARATIONS.has(word)
 						? word
 						: null;
+			}
+			if (readsTokens(frame)) {
+				const fault = wordFaults(masked, frame, i, end);
+				if (fault !== null) faults.push(fault);
 			}
 			if (word.includes("=")) token.equals = true;
 			const lower = word.toLowerCase();

@@ -544,6 +544,38 @@ describeFast("execute against CHR", () => {
 				["device", "failed"],
 			]);
 
+			// V9 (#504) — a stray top-level `}` makes RouterOS stop reading there.
+			// `explain` warns, since nothing is rejected, and the gate refuses that
+			// warning by code. With the gate off the device runs the prefix alone,
+			// which is the proof: `second` is never printed.
+			const strayClose = ':put "first"};:put "second"';
+			const discarded = expectExecuteFailure(
+				await executeEnvelope({ ...base, command: strayClose }),
+				"rest-api",
+				"validation/syntax",
+			);
+			expect(discarded.error.context?.["validationStage"]).toBe("offline");
+			expect(discarded.error.context?.["span"]).toEqual({
+				start: strayClose.indexOf("}"),
+				end: strayClose.length,
+			});
+			const discardedDiagnostics = discarded.error.context?.[
+				"diagnostics"
+			] as ReadonlyArray<{ code: string }>;
+			expect(discardedDiagnostics[0]?.code).toBe(
+				"explain/canonicalizer/discarded-close",
+			);
+			const ranPrefix = expectExecuteSuccess(
+				await executeEnvelope({
+					...base,
+					command: strayClose,
+					validate: false,
+				}),
+				"rest-api",
+			);
+			expect(JSON.stringify(ranPrefix.data)).toContain("first");
+			expect(JSON.stringify(ranPrefix.data)).not.toContain("second");
+
 			// V5–V7 — a menu the device lacks reads as `syntax error` from `:parse`;
 			// centrs names it instead (GH#361). The CHR has no extra packages.
 			const absent = [
@@ -654,6 +686,7 @@ describeFast("execute against CHR", () => {
 					"V6",
 					"V7",
 					"V8",
+					"V9",
 					"W1",
 					"W2",
 					"W3",

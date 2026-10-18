@@ -25,6 +25,15 @@
  * module never reports success on its behalf. `verdict: "warn"` is an
  * ABSTENTION, not a rejection, and passes through for the same reason.
  *
+ * **One warning is refused by code: {@link REFUSED_WARNING_CODES}.** It is not
+ * an abstention but a known device behaviour. A `}` or `]` that closes nothing
+ * at the top level makes RouterOS accept the script and silently stop reading
+ * there, so `/system identity set name=a}` sets `a` and `:put 1};:put 2` runs
+ * one command (#504, CHR 7.24.5 and 7.23.8). `explain` reports it as a warning
+ * because nothing is rejected; the gate refuses it because the script the
+ * device would run is not the one that was written. The list is explicit and
+ * stays small: a code joins it only for the same reason.
+ *
  * `--validate=false` disables BOTH stages — one flag, one meaning. That was
  * settled with the `--raw` precedence layer on GH#154 and is why callers gate
  * this on the same resolved `validate` setting as the device stage; the escape
@@ -39,10 +48,19 @@
  */
 
 import { CentrsError } from "./errors.ts";
-import { type ExplainDiagnostic, explainCommand } from "./explain.ts";
+import {
+	DISCARDED_CLOSE_CODE,
+	type ExplainDiagnostic,
+	explainCommand,
+} from "./explain.ts";
 
 /** Validator identity for `meta.validation` and error context. */
 export const OFFLINE_GATE_SOURCE = "offline explain (canonicalizer)";
+
+/** Warning codes the gate refuses as it refuses an error (module header). */
+export const REFUSED_WARNING_CODES: ReadonlySet<string> = new Set([
+	DISCARDED_CLOSE_CODE,
+]);
 
 /** Which stage of the two-stage gate produced a verdict. */
 export type ValidationStageName = "offline" | "device";
@@ -61,8 +79,8 @@ export interface OfflineGateFinding {
 export interface OfflineGateResult {
 	/**
 	 * `pass` — the analyzer read the whole input. `warn` — it ABSTAINED on part
-	 * of it (an unresolved menu, say). Both proceed to the device stage; only
-	 * `fail` throws.
+	 * of it (an unresolved menu, say). Both proceed to the device stage; a
+	 * `fail`, or a warning in {@link REFUSED_WARNING_CODES}, throws.
 	 */
 	verdict: "pass" | "warn";
 	/** Warning-severity diagnostics, kept so a caller can surface the abstention. */
@@ -95,25 +113,28 @@ export function assertOfflineSyntax(
 ): OfflineGateResult {
 	const analysis = explainCommand(command);
 	const errors = analysis.diagnostics.filter(
-		(diagnostic) => diagnostic.severity === "error",
+		(diagnostic) =>
+			diagnostic.severity === "error" ||
+			REFUSED_WARNING_CODES.has(diagnostic.code),
 	);
 	const warnings = analysis.diagnostics
 		.filter((diagnostic) => diagnostic.severity === "warning")
 		.map(findingOf);
 
-	if (analysis.verdict !== "fail") {
+	if (errors.length === 0) {
 		return { verdict: analysis.verdict === "warn" ? "warn" : "pass", warnings };
 	}
 
-	// A `fail` verdict always carries at least one error diagnostic, but read it
-	// defensively: an empty list would otherwise produce an error that says
-	// nothing about what was wrong, which is worse than a generic summary.
 	const findings = errors.map(findingOf);
 	const first = findings[0];
 	throw new CentrsError({
 		code: "validation/syntax",
 		summary: first
-			? `RouterOS syntax rejected by offline analysis: ${first.message}`
+			? `${
+					REFUSED_WARNING_CODES.has(first.code)
+						? "Refused by offline analysis"
+						: "RouterOS syntax rejected by offline analysis"
+				}: ${first.message}`
 			: "RouterOS syntax rejected by offline analysis.",
 		remediation:
 			"Run `centrs explain '<command>'` to see the offending bytes in context, " +

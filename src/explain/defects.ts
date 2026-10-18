@@ -99,6 +99,7 @@ export type DefectCode =
 	| "over-depth"
 	| "bad-escape"
 	| "bad-string-escape"
+	| "bad-string-variable"
 	| "bad-sigil"
 	| "invalid-hash"
 	| "invalid-apostrophe"
