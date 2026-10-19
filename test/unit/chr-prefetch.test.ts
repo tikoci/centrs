@@ -50,6 +50,16 @@ test("a successful channel prefetch pins later boots until their selection chang
 		prefetchedChrVersion(stable, { version: "7.26beta1" }, cached),
 	).toBeUndefined();
 	expect(
+		prefetchedChrVersion(stable, { arch: "arm64" }, cached),
+	).toBeUndefined();
+	expect(
+		prefetchedChrVersion(
+			integrationChrSelection({ CENTRS_CHR_ARCH: "arm64" }),
+			{ arch: "arm64" },
+			{ ...cached, arch: "arm64" },
+		),
+	).toBe("7.24.5");
+	expect(
 		prefetchedChrVersion(
 			integrationChrSelection({ CENTRS_CHR_CHANNEL: "long-term" }),
 			{},

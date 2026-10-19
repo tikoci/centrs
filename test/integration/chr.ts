@@ -415,6 +415,7 @@ export function prefetchedChrVersion(
 	prefetched = prefetchedBuild,
 ): string | undefined {
 	if (selection.version || extra.version || extra.channel) return undefined;
+	if (extra.arch && extra.arch !== selection.arch) return undefined;
 	if (
 		prefetched?.channel !== selection.channel ||
 		prefetched.arch !== selection.arch
