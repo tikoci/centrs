@@ -5,6 +5,7 @@ import {
 	type ResolvedApiRequest,
 	resolveApiRequest,
 } from "./api.ts";
+import { buildTip } from "./core/envelope.ts";
 import {
 	type InspectChildItem,
 	isArgumentNode,
@@ -28,6 +29,11 @@ import {
 	verdictOf,
 } from "./explain.ts";
 import {
+	collectExplainFacets,
+	type ExplainLiveFacets,
+	resolveExplainCursor,
+} from "./explain-live-facets.ts";
+import {
 	createProtocolAdapter,
 	type ProtocolAdapter,
 } from "./protocols/index.ts";
@@ -36,22 +42,37 @@ import { redactTargetInput, toCoreSource } from "./resolver/index.ts";
 
 export interface ExplainLiveRequest
 	extends Pick<
-		ApiRequest,
-		| "targetInput"
-		| "quickchr"
-		| "via"
-		| "host"
-		| "port"
-		| "username"
-		| "password"
-		| "insecure"
-		| "timeout"
-		| "cdbFile"
-		| "cdbPassword"
-		| "resolve"
-	> {
+			ApiRequest,
+			| "targetInput"
+			| "quickchr"
+			| "via"
+			| "host"
+			| "port"
+			| "username"
+			| "password"
+			| "insecure"
+			| "timeout"
+			| "cdbFile"
+			| "cdbPassword"
+			| "resolve"
+		>,
+		ExplainLiveFacets {
 	input: string;
 	signal?: AbortSignal;
+}
+
+/** What the facet module needs from one live collection. */
+export interface LiveProbeContext {
+	data: ExplainData;
+	input: string;
+	/** The SUB-per-non-ASCII-byte input; its offsets are device byte offsets. */
+	analyzed: string;
+	version?: string;
+	highlightBytes: number;
+	sha256(text: string): string;
+	backend: Pick<ProtocolAdapter, "inspect">;
+	evidence(probe: string, fields?: Partial<ExplainEvidence>): ExplainEvidence;
+	run<T>(ev: ExplainEvidence, action: () => Promise<T>): Promise<T | undefined>;
 }
 
 /** Hard work bounds. Oversize probes are skipped, never silently truncated. */
@@ -83,6 +104,7 @@ export async function explainLiveEnvelope(
 	let resolved: ResolvedApiRequest | undefined;
 	try {
 		assertExplainTarget(request);
+		resolveExplainCursor(request.input, request.cursor);
 		resolved = await resolveApiRequest(
 			{
 				...request,
@@ -111,7 +133,20 @@ export async function explainLiveEnvelope(
 				request.input,
 				backend,
 				request.signal,
+				request,
 			);
+			const schema = envelope.data.schema;
+			if (schema?.truncated)
+				envelope.tips = [
+					...envelope.tips,
+					buildTip(
+						"tip/explain-schema-truncated",
+						`The schema of ${schema.path} was cut to the default size; counts are complete.`,
+						schema.next.length > 0
+							? `Describe a narrower path such as ${schema.next.join(", ")}, or pass --full.`
+							: "Pass --full to lift the size limits.",
+					),
+				];
 			const probes = envelope.data.evidence.filter(
 				(e) => e.source === "live-inspect",
 			);
@@ -216,6 +251,7 @@ export async function collectExplainEvidence(
 		"getSingleton" | "inspect" | "execute" | "protocol"
 	>,
 	signal?: AbortSignal,
+	facets: ExplainLiveFacets = {},
 ): Promise<void> {
 	const live = { arguments: [] } as NonNullable<ExplainData["live"]>;
 	data.live = live;
@@ -481,8 +517,27 @@ export async function collectExplainEvidence(
 		].sort();
 		live.arguments.push({ ev: ev.id, path, statementIds, names });
 	}
+	if (facets.schema || facets.complete)
+		await collectExplainFacets(
+			{
+				data,
+				input,
+				analyzed: normalized,
+				version,
+				highlightBytes: EXPLAIN_LIVE_LIMITS.highlightBytes,
+				sha256: sha,
+				backend,
+				evidence,
+				run,
+			},
+			facets,
+		);
 	for (const ev of data.evidence)
-		if (ev.source === "live-inspect" && ev.outcome !== "ok") {
+		if (
+			ev.source === "live-inspect" &&
+			ev.outcome !== "ok" &&
+			!(ev.facet && ev.outcome === "empty")
+		) {
 			data.diagnostics.push({
 				code: `explain/live-inspect/${ev.outcome}`,
 				severity: "warning",

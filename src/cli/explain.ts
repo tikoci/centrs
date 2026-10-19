@@ -21,7 +21,7 @@
  * ## What this surface refuses to do
  *
  * - **Live probes never execute the input.** The shared live module attaches
- *   device evidence to the offline result; describe/completion remains #492.
+ *   device evidence, `--schema` and `--complete` to the offline result.
  * - **Fan-out is rejected** (`usage/fanout-not-supported`, the `terminal`
  *   pattern): `explain` takes at most one router.
  * - **`--complete` / `--schema` enumerate nothing offline.** They are accepted,
@@ -49,6 +49,7 @@ import {
 	type ExplainLiveRequest,
 	explainLiveEnvelope,
 } from "../explain-live.ts";
+import { resolveExplainCursor } from "../explain-live-facets.ts";
 import { describeCentrs } from "../index.ts";
 import { loadEnvFileDefaults } from "../resolver/config-file.ts";
 import { redactTargetInput } from "../resolver/index.ts";
@@ -104,12 +105,23 @@ export const explainCliCommand: CliCommandMetadata = {
 		{
 			flag: "--complete",
 			description:
-				"Continuation candidates at the cursor. Live evidence — offline emits a tip and enumerates nothing.",
+				"Candidates at the cursor: menus and verbs, argument names, or values. Live evidence — offline emits a tip and enumerates nothing.",
 		},
 		{
 			flag: "--schema",
 			description:
-				"Path enumeration (verbs, args, types, enums). Live evidence — offline emits a tip and enumerates nothing.",
+				"Describe the path at the cursor: a menu's verbs and submenus, a command's arguments, `print`'s proplist. Live evidence — offline emits a tip and enumerates nothing.",
+		},
+		{
+			flag: "--cursor",
+			valueName: "<byte>",
+			description:
+				"UTF-8 byte offset for --complete/--schema. Default: the end of the input.",
+		},
+		{
+			flag: "--full",
+			description:
+				"Lift --complete/--schema sizing to its safety ceiling (1024 names, 128 expansion probes).",
 		},
 		{
 			flag: "--curl",
@@ -138,6 +150,8 @@ export interface ExplainCliArgs extends Omit<ExplainLiveRequest, "input"> {
 	filePath?: string;
 	failOn: ExplainFailOn;
 	facets: string[];
+	cursor?: number;
+	full?: boolean;
 	curl?: boolean;
 	tokens?: boolean;
 	format?: ExplainOutputFormat;
@@ -243,6 +257,22 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 				break;
 			case "--schema":
 				parsed.facets.push("--schema");
+				break;
+			case "--cursor": {
+				const value = expectValue(args, ++index, arg);
+				if (!/^\d+$/.test(value))
+					throw new CentrsError({
+						code: "usage/invalid-cursor",
+						summary: `--cursor must be a non-negative byte offset; got ${value}.`,
+						remediation:
+							"Pass a UTF-8 byte offset into the input, or omit --cursor to complete at the end.",
+						context: { cursor: value },
+					});
+				parsed.cursor = Number(value);
+				break;
+			}
+			case "--full":
+				parsed.full = true;
 				break;
 			case "--curl":
 				parsed.curl = true;
@@ -463,6 +493,7 @@ const VALUE_FLAGS = new Set([
 	"--cdb-password",
 	"--resolve",
 	"--quickchr",
+	"--cursor",
 ]);
 
 const LIVE_CONNECTION_FLAGS = new Set([
@@ -575,16 +606,18 @@ export async function runExplainCli(args: readonly string[]): Promise<number> {
 					"Add <router>, --host <host>, or --quickchr <name>; remove the connection flag for offline analysis.",
 				context: { flag: parsed.connectionFlag },
 			});
-		if (live && parsed.facets.length > 0)
+		if (
+			parsed.facets.length === 0 &&
+			(parsed.cursor !== undefined || parsed.full)
+		)
 			throw new CentrsError({
-				code: "usage/not-implemented",
-				summary:
-					"Live describe/completion facets are not implemented yet (#492).",
-				remediation:
-					"Remove --schema and --complete to collect parse, highlight and child evidence.",
+				code: "usage/conflicting-flags",
+				summary: `${parsed.cursor !== undefined ? "--cursor" : "--full"} applies only with --complete or --schema.`,
+				remediation: "Add --complete or --schema, or remove the flag.",
 			});
 
 		const { input, warnings } = await readInput(parsed, inputPositional);
+		resolveExplainCursor(input, parsed.cursor);
 
 		const options = {
 			format,
@@ -592,13 +625,19 @@ export async function runExplainCli(args: readonly string[]): Promise<number> {
 			tokens: parsed.tokens,
 			warnings,
 			tips:
-				parsed.facets.length > 0
+				!live && parsed.facets.length > 0
 					? [buildExplainFacetTip(parsed.facets)]
 					: undefined,
 		};
 		const envelope = live
 			? await explainLiveEnvelope(
-					{ ...parsed, targetInput: router, input },
+					{
+						...parsed,
+						targetInput: router,
+						input,
+						schema: parsed.facets.includes("--schema"),
+						complete: parsed.facets.includes("--complete"),
+					},
 					options,
 					env,
 				)

@@ -714,6 +714,108 @@ export interface ExplainEvidence {
 	normalization?: "original-utf8" | "sub-per-non-ascii-byte";
 	reason?: string;
 	errorCode?: CentrsError["code"];
+	/** The facet a live probe served; an `empty` facet answer is not a warning. */
+	facet?: "schema" | "complete";
+}
+
+/** One `request=syntax` row, verbatim: the device's declared help for one argument. */
+export interface ExplainSyntaxRow {
+	symbol: string;
+	/** RouterOS `symbol-type` (`definition`, `explanation`, …). */
+	kind: string;
+	text: string;
+	/** RouterOS `nested` depth. */
+	depth: number;
+}
+
+/** A menu or verb under a described menu, with counts when it was expanded. */
+export interface ExplainSchemaChild {
+	name: string;
+	verbs?: number;
+	menus?: number;
+	arguments?: number;
+	ev?: string;
+}
+
+export interface ExplainSchemaArgument {
+	name: string;
+	/** Argument-level `syntax` rows, present when within the probe budget. */
+	syntax?: ExplainSyntaxRow[];
+	ev?: string;
+}
+
+/**
+ * `--schema`: what the device declares at one path (#492). `child` decides
+ * the node; a menu lists verbs and submenus, a command its arguments, `print`
+ * also its `.proplist`. Declared facts only — never print rows or state.
+ */
+export interface ExplainSchema {
+	/** The `child` probe on the described path. */
+	ev: string;
+	path: string;
+	statementId?: string;
+	node: "menu" | "command" | "argument" | "unknown";
+	verbs?: ExplainSchemaChild[];
+	menus?: ExplainSchemaChild[];
+	arguments?: ExplainSchemaArgument[];
+	/** Output-field names a `print` can show; not print rows. */
+	proplist?: {
+		ev: string;
+		source: "print-proplist" | "get-value-name";
+		names: string[];
+	};
+	/** Argument node only: its `syntax` rows. */
+	syntax?: ExplainSyntaxRow[];
+	/** Full sizes as the device reported them, before any list was cut. */
+	counts: {
+		verbs?: number;
+		menus?: number;
+		arguments?: number;
+		proplist?: number;
+	};
+	/** A list was cut or children were left unexpanded. */
+	truncated: boolean;
+	/** Narrower inputs that expand what this result left out. */
+	next: string[];
+	reason?: string;
+}
+
+export interface ExplainCompletionCandidate {
+	text: string;
+	kind: "menu" | "verb" | "argument" | "value";
+	/** `exact` when the typed prefix already spells the whole candidate. */
+	match: "partial" | "exact";
+	/**
+	 * `declared` names come from `child`; `observed` values come from
+	 * `completion` and may reflect configuration state. Neither is a closed set.
+	 */
+	source: "declared" | "observed";
+	ev: string;
+}
+
+/** `--complete`: what may follow at the cursor (#492). */
+export interface ExplainCompletion {
+	/** Analyzed byte offset; equals the device's UTF-8 byte offset. */
+	cursor: number;
+	/** The cursor in the original document: 0-based line, UTF-16 character. */
+	at: { line: number; character: number };
+	statementId?: string;
+	context: "path" | "argument-name" | "value" | "unsupported";
+	/** Bytes a chosen candidate replaces; `end` is the cursor. */
+	replace: ExplainSpanRange;
+	prefix: string;
+	/** The menu or command probed. */
+	path?: string;
+	/** Value context: the argument whose value is being completed. */
+	argument?: string;
+	/** Exact argument name: whether the device completes a value after `=`. */
+	takesValue?: boolean;
+	candidates: ExplainCompletionCandidate[];
+	/** Value context: argument-level `syntax` rows (type information). */
+	syntax?: ExplainSyntaxRow[];
+	count: number;
+	truncated: boolean;
+	reason?: string;
 }
 
 export interface ExplainLiveData {
@@ -750,6 +852,10 @@ export interface ExplainData {
 	spans: ExplainSpan[];
 	/** Read-only device observations, present only on live calls. */
 	live?: ExplainLiveData;
+	/** Live `--schema` only. */
+	schema?: ExplainSchema;
+	/** Live `--complete` only. */
+	completion?: ExplainCompletion;
 	/**
 	 * Total, gapless token partition of `[0, input.bytes)`.
 	 *
@@ -2700,7 +2806,7 @@ export function explainEnvelope(
 		buildTip(
 			"tip/explain-offline-only",
 			"No router was given, so this is the canonicalizer's reading alone.",
-			"Add a router (`centrs explain <router> '<input>'`) for read-only parse, highlight and argument-name evidence. Completion and schema facets remain planned (#492).",
+			"Add a router (`centrs explain <router> '<input>'`) for read-only parse, highlight and argument-name evidence; `--schema` and `--complete` then describe paths and complete at the cursor.",
 		),
 		...(options.tips ?? []),
 	];
@@ -2734,7 +2840,7 @@ export function buildExplainFacetTip(facets: readonly string[]): Tip {
 	return buildTip(
 		"tip/explain-live-facets",
 		`${named} enumerate what a device accepts, and no router was given — so nothing is enumerated here.`,
-		"Live completion and schema facets remain planned (#492); use `rosetta` for documented RouterOS schema facts.",
+		"Name a router (`centrs explain <router> '<input>' --schema`) to ask the device; use `rosetta` for documented RouterOS schema facts.",
 	);
 }
 
@@ -2953,6 +3059,64 @@ function renderLiveSummary(live: ExplainLiveData): string {
 	return `live: ${device} · ${parse} · ${highlight} · arguments ${live.arguments.length} path(s), ${names} name(s)`;
 }
 
+/** Names only, at most a dozen per line; `--json` keeps every fact. */
+function renderSchemaSummary(schema: ExplainSchema): string[] {
+	const list = (label: string, names: readonly string[], total?: number) =>
+		`  ${label} (${total ?? names.length}): ${names.slice(0, 12).join(", ")}${(total ?? names.length) > Math.min(names.length, 12) ? ", …" : ""}`;
+	const lines = [
+		`schema: ${schema.path} is ${schema.node === "unknown" ? "unknown to the device" : `a ${schema.node}`}${schema.truncated ? " (truncated)" : ""}${schema.reason ? ` — ${schema.reason}` : ""}`,
+	];
+	if (schema.verbs)
+		lines.push(
+			list(
+				"verbs",
+				schema.verbs.map((v) => v.name),
+				schema.counts.verbs,
+			),
+		);
+	if (schema.menus?.length)
+		lines.push(
+			list(
+				"menus",
+				schema.menus.map((m) => m.name),
+				schema.counts.menus,
+			),
+		);
+	if (schema.arguments)
+		lines.push(
+			list(
+				"arguments",
+				schema.arguments.map((a) => a.name),
+				schema.counts.arguments,
+			),
+		);
+	if (schema.proplist)
+		lines.push(list("proplist", schema.proplist.names, schema.counts.proplist));
+	if (schema.syntax)
+		for (const row of schema.syntax)
+			lines.push(`  ${row.symbol ? `${row.symbol}: ` : ""}${row.text}`);
+	return lines;
+}
+
+function renderCompletionSummary(completion: ExplainCompletion): string {
+	const head = `complete @${completion.cursor}: ${completion.context}${completion.argument ? ` ${completion.argument}=` : ""}${completion.prefix ? ` "${completion.prefix}"` : ""}`;
+	if (completion.reason && completion.candidates.length === 0)
+		return `${head} — ${completion.reason}`;
+	const shown = completion.candidates
+		.slice(0, 12)
+		.map((c) => (c.match === "exact" ? `${c.text}*` : c.text));
+	const value =
+		completion.takesValue === undefined
+			? ""
+			: completion.takesValue
+				? " (takes a value: `=`)"
+				: " (flag, no value)";
+	const syntax = completion.syntax?.length
+		? ` [${completion.syntax.map((row) => row.text || row.symbol).join("; ")}]`
+		: "";
+	return `${head} → ${completion.count === 0 ? "no candidates" : `${shown.join(", ")}${completion.count > shown.length ? ", …" : ""}`}${value}${syntax}`;
+}
+
 /**
  * The human format.
  *
@@ -2981,6 +3145,8 @@ function renderExplainText(
 	);
 	lines.push(`write: ${structure.containsWrite}`);
 	if (data.live) lines.push(renderLiveSummary(data.live));
+	if (data.schema) lines.push(...renderSchemaSummary(data.schema));
+	if (data.completion) lines.push(renderCompletionSummary(data.completion));
 	if (data.input.normalized)
 		lines.push(
 			`input: ${data.input.bytes} byte(s), normalized (non-ASCII stood in for one-for-one)`,

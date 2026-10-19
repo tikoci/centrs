@@ -653,6 +653,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 			"The command or mode cannot fan out across multiple targets (e.g. terminal, --listen/--stream).",
 	},
 	{
+		code: "usage/invalid-cursor",
+		summary:
+			"An explain --cursor is not a byte offset inside the input being analyzed.",
+	},
+	{
 		code: "usage/invalid-method",
 		summary: "The -X/--method value is not a supported HTTP method.",
 	},

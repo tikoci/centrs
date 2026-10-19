@@ -103,8 +103,9 @@ and implementation sequencing in the linked issues.
   recorded in the README before the cells advance past `designed`.
 - `explain`'s two `designed` protocol cells track the whole live capability
   (#236). `explain <router> '<input>'` now collects read-only `:parse`, highlight
-  and child argument-name evidence (#491). Describe/completion (#492) and live
-  types (#225) remain unfinished, so neither cell advances yet. Offline analysis
+  and child argument-name evidence (#491), and `--schema`/`--complete` describe
+  paths and complete at a cursor (#492). Live types (#225) and the #236
+  closeout remain unfinished, so neither cell advances yet. Offline analysis
   has its own capability entry below. The generated structure tables
   `src/explain/menus.ts` and `src/explain/catalog.ts` keep analysis offline;
   their ownership and regeneration contracts live in `commands/explain/README.md`.
@@ -182,9 +183,11 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 
 ## Current priority
 
-The #491 live foundation now returns read-only parse/highlight/child evidence
-on REST and native API. Whole explain cells remain `designed`: #492 facets,
-live types (#225) and #236 closeout acceptance are still outstanding. The honest
+The #491 live foundation returns read-only parse/highlight/child evidence on
+REST and native API, and #492 adds describe (`--schema`) and cursor completion
+(`--complete`) with their examples green on stable and long-term CHR. Whole
+explain cells remain `designed`: live types (#225) and #236 closeout
+acceptance are still outstanding. The honest
 readings, statement ownership and block byte-span prerequisites are shipped;
 Issue #90 owns the remaining sequencing, including #507 context grounding.
 
@@ -192,8 +195,8 @@ Issue #90 owns the remaining sequencing, including #507 context grounding.
 [#90](https://github.com/tikoci/centrs/issues/90)). In order: make the
 published offline readings honest (#350, #211; complete), give the result a
 statement tree (#497; complete), then the live probe foundation (#491;
-complete). Those probes grounded #351, #358 and #371 (complete). Next is
-finishing live (#492 → #236 closeout). The
+complete). Those probes grounded #351, #358 and #371 (complete), and #492
+added the describe/completion facets. Next is the #236 closeout. The
 plan, and what is deliberately out of this run, is the 2026-10-16 plan
 comment on #90. It is step 3 of the validation track below.
 

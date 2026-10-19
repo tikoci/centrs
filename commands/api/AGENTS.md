@@ -197,6 +197,13 @@ green on CHR 7.23.1.
   validation therefore uses command-level `request=child` only. This does not
   prohibit argument-level completion probes such as `print,proplist`, which are
   a separate shape and returned immediately on the same 7.12.2 controls.
+- **Command-level `request=syntax` is unsafe on 7.12.2 too** (#492,
+  2026-10-19). `path=ip,address,set` got no REST answer within 12 s, and the
+  `child` controls queued behind it also timed out until the handler recovered
+  about 40 s later. Argument-level `syntax` (`ip,address,add,comment`) and
+  input-based value completion (`input="/ip/address add comment="`) answered in
+  20–30 ms on the same build, over REST and native API. Explain's
+  `--schema`/`--complete` therefore send `syntax` for argument paths only.
 
 ## CONFIRMED ON CHR (Phase 4 `--stream` follow — CHR 7.23.1, 2026-06-30)
 
