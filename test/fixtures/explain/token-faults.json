@@ -1,5 +1,5 @@
 {
-	"$comment": "Device answers for the token rules (#504, #506, #518): the stray top-level close that ends a script (src/explain/segment.ts → discardFrom), the declared-name, variable and glued-token faults (src/explain/group-faults.ts) and the bad `$` in a string (src/explain/quoted-string.ts). `:parse` on a stored `/system script` source, so `$` is not substituted. Every row is identical on CHR 7.24.5 (stable) and 7.23.8 (long-term); `parse` is a rejection's diagnostic and `il` an acceptance's IL, whitespace-collapsed. `code`/`span` is the one fault offline reports (`discarded-close` a warning, the rest errors); a row without one reports none. test/unit/explain-token-faults.test.ts holds offline to it and test/integration/explain-token-faults.test.ts holds the device to it.",
+	"$comment": "Device answers for the token rules (#504, #506, #518) and the unquoted-byte rules (#358, #371): the stray top-level close that ends a script (src/explain/segment.ts → discardFrom), the declared-name, variable, glued-token and unquoted-byte faults (src/explain/group-faults.ts) and the bad `$` in a string (src/explain/quoted-string.ts). `:parse` on a stored `/system script` source, so `$` is not substituted. Every row is identical on CHR 7.24.5 (stable) and 7.23.8 (long-term); `parse` is a rejection's diagnostic and `il` an acceptance's IL, whitespace-collapsed. `code`/`span` is the one fault offline reports (`discarded-close` a warning, the rest errors); a row without one reports none. test/unit/explain-token-faults.test.ts holds offline to it and test/integration/explain-token-faults.test.ts holds the device to it. The #358/#371 rows were captured with live explain (`explainLiveEnvelope`, REST, `:put [:parse …]` over the escaped input) on the same two builds.",
 	"versions": ["7.24.5", "7.23.8"],
 	"rows": [
 		{
@@ -1055,6 +1055,880 @@
 			"input": "/ip address set [find] comment=x",
 			"device": "accept",
 			"il": "(evl /ip/address/setcomment=x;numbers=(evl (evl /ip/address/find)))"
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=a?b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 28)",
+			"code": "unquoted-reserved-byte",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=a`b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 28)",
+			"code": "unquoted-reserved-byte",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=a$b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 28)",
+			"code": "glued-token",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=a=b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 28)",
+			"code": "unquoted-reserved-byte",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=?b",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 27)",
+			"code": "unquoted-reserved-byte",
+			"span": [26, 27]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=b?",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 28)",
+			"code": "unquoted-reserved-byte",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=`b",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 27)",
+			"code": "unquoted-reserved-byte",
+			"span": [26, 27]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=b`",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 28)",
+			"code": "unquoted-reserved-byte",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name==b",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 27)",
+			"code": "unquoted-reserved-byte",
+			"span": [26, 27]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=b=",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 28)",
+			"code": "unquoted-reserved-byte",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=a==b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 28)",
+			"code": "unquoted-reserved-byte",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=\"a?b\"",
+			"device": "accept",
+			"il": "(evl /system/identity/setname=a?b)"
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=\"a`b\"",
+			"device": "accept",
+			"il": "(evl /system/identity/setname=a`b)"
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=\"a\\$b\"",
+			"device": "accept",
+			"il": "(evl /system/identity/setname=(. a $ b))"
+		},
+		{
+			"issue": "#358",
+			"input": "/system/identity/set name=\"a=b\"",
+			"device": "accept",
+			"il": "(evl /system/identity/setname=a=b)"
+		},
+		{
+			"issue": "#358",
+			"input": ":put a?b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 7)",
+			"code": "unquoted-reserved-byte",
+			"span": [6, 7]
+		},
+		{
+			"issue": "#358",
+			"input": ":put a`b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 7)",
+			"code": "unquoted-reserved-byte",
+			"span": [6, 7]
+		},
+		{
+			"issue": "#358",
+			"input": ":local x a?b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 11)",
+			"code": "unquoted-reserved-byte",
+			"span": [10, 11]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where comment=a?b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 34)",
+			"code": "unquoted-reserved-byte",
+			"span": [33, 34]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where comment=a=b",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(= (= $comment a) $b);5)"
+		},
+		{
+			"issue": "#358",
+			"input": "# a?b `c` d=e",
+			"device": "accept",
+			"il": "/"
+		},
+		{
+			"issue": "#358",
+			"input": ":put (\"a\".\"?\")",
+			"device": "accept",
+			"il": "(evl /putmessage=(. a ?))"
+		},
+		{
+			"issue": "#358",
+			"input": ":local x \"v\"; /system/identity/set name=$x",
+			"device": "accept",
+			"il": "(evl /localname=$x;value=v);(evl /system/identity/setname=$x)"
+		},
+		{
+			"issue": "#358",
+			"input": ":local x \"v\"; /system/identity/set name=\"a$x\"",
+			"device": "accept",
+			"il": "(evl /localname=$x;value=v);(evl /system/identity/setname=(. a $x))"
+		},
+		{
+			"issue": "#358",
+			"input": ":local x \"v\"; :put $\"x\"",
+			"device": "accept",
+			"il": "(evl /localname=$x;value=v);(evl /putmessage=$x)"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/firewall/filter/add chain=forward comment=a=b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 48)",
+			"code": "unquoted-reserved-byte",
+			"span": [47, 48]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/firewall/filter/add chain=forward comment=a?b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 48)",
+			"code": "unquoted-reserved-byte",
+			"span": [47, 48]
+		},
+		{
+			"issue": "#371",
+			"input": ":local café \"espresso\"",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 11)",
+			"code": "invalid-name",
+			"span": [10, 11]
+		},
+		{
+			"issue": "#371",
+			"input": ":global café 1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 12)",
+			"code": "invalid-name",
+			"span": [11, 12]
+		},
+		{
+			"issue": "#371",
+			"input": ":local cafe \"espresso\"",
+			"device": "accept",
+			"il": "(evl /localname=$cafe;value=espresso)"
+		},
+		{
+			"issue": "#371",
+			"input": ":local cafe 1; :put $café",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 25)",
+			"code": "unquoted-non-ascii",
+			"span": [24, 26]
+		},
+		{
+			"issue": "#371",
+			"input": ":put $café",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 10)",
+			"code": "unquoted-non-ascii",
+			"span": [9, 11]
+		},
+		{
+			"issue": "#371",
+			"input": ":local \"café\" \"x\"",
+			"device": "accept",
+			"il": "(evl /localname=$café;value=x)"
+		},
+		{
+			"issue": "#371",
+			"input": ":local cafe 1; :put $\"café\"",
+			"device": "accept",
+			"il": "(evl /localname=$cafe;value=1);(evl /putmessage=$café)"
+		},
+		{
+			"issue": "#371",
+			"input": ":put $\"café\"",
+			"device": "accept",
+			"il": "(evl /putmessage=$café)"
+		},
+		{
+			"issue": "#371",
+			"input": "/system/identité print",
+			"device": "reject",
+			"parse": "expected command name (line 1 column 16)",
+			"code": "unquoted-non-ascii",
+			"span": [15, 17]
+		},
+		{
+			"issue": "#371",
+			"input": "/system/identity printé",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 23)",
+			"code": "unquoted-non-ascii",
+			"span": [22, 24]
+		},
+		{
+			"issue": "#371",
+			"input": "/system/identity/set namé=x",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 22)",
+			"code": "unquoted-non-ascii",
+			"span": [21, 26]
+		},
+		{
+			"issue": "#371",
+			"input": ":local f do={ :put $\"café\" }; $f café=1",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 38)",
+			"code": "unquoted-non-ascii",
+			"span": [37, 39]
+		},
+		{
+			"issue": "#371",
+			"input": ":put \"café\"",
+			"device": "accept",
+			"il": "(evl /putmessage=café)"
+		},
+		{
+			"issue": "#371",
+			"input": "/system/identity/set name=\"router-café\"",
+			"device": "accept",
+			"il": "(evl /system/identity/setname=router-café)"
+		},
+		{
+			"issue": "#371",
+			"input": "/system/identity/set name=router-café",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 37)",
+			"code": "unquoted-non-ascii",
+			"span": [36, 38]
+		},
+		{
+			"issue": "#371",
+			"input": "# café\n:put 1",
+			"device": "accept",
+			"il": "(evl /putmessage=1)"
+		},
+		{
+			"issue": "#371",
+			"input": ":put \"café\nnaïve\"",
+			"device": "accept",
+			"il": "(evl /putmessage=café naïve)"
+		},
+		{
+			"issue": "#371",
+			"input": "/system/identity/set name=\"🛰\"",
+			"device": "accept",
+			"il": "(evl /system/identity/setname=🛰)"
+		},
+		{
+			"issue": "#371",
+			"input": ":local x 1\n:local naïve 2",
+			"device": "reject",
+			"parse": "expected end of command (line 2 column 10)",
+			"code": "invalid-name",
+			"span": [20, 21]
+		},
+		{
+			"issue": "#371",
+			"input": ":foreach café in={1;2} do={ :put 1 }",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 13)",
+			"code": "invalid-name",
+			"span": [12, 13]
+		},
+		{
+			"issue": "#358",
+			"input": "/tool/fetch url=http://x/a?b=c",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 27)",
+			"code": "unquoted-reserved-byte",
+			"span": [26, 27]
+		},
+		{
+			"issue": "#358",
+			"input": "/tool/fetch url=http://x/a=b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 27)",
+			"code": "unquoted-reserved-byte",
+			"span": [26, 27]
+		},
+		{
+			"issue": "#358",
+			"input": ":put [/ip/address/find comment=a?b]",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 33)",
+			"code": "unquoted-reserved-byte",
+			"span": [32, 33]
+		},
+		{
+			"issue": "#358",
+			"input": ":put [/ip/address/find where comment=a=b]",
+			"device": "accept",
+			"il": "(evl /putmessage=(evl (evl /ip/address/findwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(= (= $comment a) $b);5)))"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where comment=a`b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 34)",
+			"code": "unquoted-reserved-byte",
+			"span": [33, 34]
+		},
+		{
+			"issue": "#358",
+			"input": ":put [:len a?b]",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 13)",
+			"code": "unquoted-reserved-byte",
+			"span": [12, 13]
+		},
+		{
+			"issue": "#358",
+			"input": ":if (true) do={/system/identity/set name=a?b}",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 43)",
+			"code": "unquoted-reserved-byte",
+			"span": [42, 43]
+		},
+		{
+			"issue": "#358",
+			"input": ":put {a=b}",
+			"device": "accept",
+			"il": "(evl /putmessage=a=$b)"
+		},
+		{
+			"issue": "#358",
+			"input": ":local x {a=b;c=d}",
+			"device": "accept",
+			"il": "(evl /localname=$x;value=a=$b;c=$d)"
+		},
+		{
+			"issue": "#358",
+			"input": ":put a?",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 7)",
+			"code": "unquoted-reserved-byte",
+			"span": [6, 7]
+		},
+		{
+			"issue": "#371",
+			"input": ":put café",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "unquoted-non-ascii",
+			"span": [8, 10]
+		},
+		{
+			"issue": "#371",
+			"input": ":local x café",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 13)",
+			"code": "unquoted-non-ascii",
+			"span": [12, 14]
+		},
+		{
+			"issue": "#371",
+			"input": "/system/identity/set name=🛰",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 27)",
+			"code": "unquoted-non-ascii",
+			"span": [26, 30]
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address/print where comment=café",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 36)",
+			"code": "unquoted-non-ascii",
+			"span": [35, 37]
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address/print where comment=\"café\"",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(= $comment café);5)"
+		},
+		{
+			"issue": "#371",
+			"input": ":global caf 1; :set café 2",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 24)",
+			"code": "invalid-name",
+			"span": [23, 24]
+		},
+		{
+			"issue": "#371",
+			"input": ":for café from=1 to=2 do={}",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "invalid-name",
+			"span": [8, 9]
+		},
+		{
+			"issue": "#371",
+			"input": ":local cafe 1; :put $cafe; :put $café",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 37)",
+			"code": "unquoted-non-ascii",
+			"span": [36, 38]
+		},
+		{
+			"issue": "#371",
+			"input": ":local caf 1; :put \"a$café\"",
+			"device": "accept",
+			"il": "(evl /localname=$caf;value=1);(evl /putmessage=(. a $caf é))"
+		},
+		{
+			"issue": "#371",
+			"input": ":local x [:pick café 0 1]",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 20)",
+			"code": "unquoted-non-ascii",
+			"span": [19, 21]
+		},
+		{
+			"issue": "#371",
+			"input": ":put {\"café\"}",
+			"device": "accept",
+			"il": "(evl /putmessage=café)"
+		},
+		{
+			"issue": "#371",
+			"input": ":put {café}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 10)",
+			"code": "unquoted-non-ascii",
+			"span": [9, 11]
+		},
+		{
+			"issue": "#371",
+			"input": ":put [/ip/address/find comment=café]",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 35)",
+			"code": "unquoted-non-ascii",
+			"span": [34, 36]
+		},
+		{
+			"issue": "#371",
+			"input": ":put 1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 5)",
+			"code": "unquoted-non-ascii",
+			"span": [4, 6]
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address print detail",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 18)",
+			"code": "unquoted-non-ascii",
+			"span": [17, 19]
+		},
+		{
+			"issue": "#371",
+			"input": ":put “x”",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 6)",
+			"code": "unquoted-non-ascii",
+			"span": [5, 8]
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address add address=…",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 25)",
+			"code": "unquoted-non-ascii",
+			"span": [24, 27]
+		},
+		{
+			"issue": "#371",
+			"input": ":if (true) do={:put \"café\"}",
+			"device": "accept",
+			"il": "(evl /ifcondition=true;do=;(evl (evl /putmessage=café)))"
+		},
+		{
+			"issue": "#358",
+			"input": ":put [/ip/address/find comment=a=b]",
+			"device": "accept",
+			"il": "(evl /putmessage=(evl (evl /ip/address/findwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(= (= $comment a) $b);5)))"
+		},
+		{
+			"issue": "#358",
+			"input": "/interface/wireguard/peers/add interface=wg1 public-key=aGVsbG8gd29ybGQgaGVsbG8gd29ybGQgaGVsbG8gMTI=",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 100)",
+			"code": "unquoted-reserved-byte",
+			"span": [99, 100]
+		},
+		{
+			"issue": "#358",
+			"input": "/interface/wireguard/peers/add interface=wg1 public-key=\"aGVsbG8gd29ybGQgaGVsbG8gd29ybGQgaGVsbG8gMTI=\"",
+			"device": "accept",
+			"il": "(evl /interface/wireguard/peers/addinterface=wg1;public-key=aGVsbG8gd29ybGQgaGVsbG8gd29ybGQgaGVsbG8gMTI=)"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/ipsec/identity/add peer=p secret=abc==",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 41)",
+			"code": "unquoted-reserved-byte",
+			"span": [40, 41]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/firewall/layer7-protocol/add name=x regexp=^a?b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 50)",
+			"code": "unquoted-reserved-byte",
+			"span": [49, 50]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/dns/static/add regexp=a?b address=1.2.3.4",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 28)",
+			"code": "unquoted-reserved-byte",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/firewall/layer7-protocol/add name=x regexp=a`b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 49)",
+			"code": "unquoted-reserved-byte",
+			"span": [48, 49]
+		},
+		{
+			"issue": "#358",
+			"input": ":put {a?b}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "unquoted-reserved-byte",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#358",
+			"input": ":put (a?b)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "unquoted-reserved-byte",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/firewall/filter/add chain=forward comment=x==",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 48)",
+			"code": "unquoted-reserved-byte",
+			"span": [47, 48]
+		},
+		{
+			"issue": "#358",
+			"input": "/tool/fetch url=http://x http-header-field=a:b=c",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 47)",
+			"code": "unquoted-reserved-byte",
+			"span": [46, 47]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/scheduler/add name=x on-event=a=b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 40)",
+			"code": "unquoted-reserved-byte",
+			"span": [39, 40]
+		},
+		{
+			"issue": "#358",
+			"input": "/user/add name=x group=read password=abc=",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 41)",
+			"code": "unquoted-reserved-byte",
+			"span": [40, 41]
+		},
+		{
+			"issue": "#371",
+			"input": "/system/identity/set nam=x",
+			"device": "accept",
+			"il": "(evl /system/identity/setname=x)"
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address/add addré=1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 17)",
+			"code": "unquoted-non-ascii",
+			"span": [16, 22]
+		},
+		{
+			"issue": "#371",
+			"input": "/system/identity/set éname=x",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 22)",
+			"code": "unquoted-non-ascii",
+			"span": [21, 27]
+		},
+		{
+			"issue": "#371",
+			"input": "/interface/set ether1 commenté=x",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 23)",
+			"code": "unquoted-non-ascii",
+			"span": [22, 31]
+		},
+		{
+			"issue": "#371",
+			"input": ":put café=1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "unquoted-non-ascii",
+			"span": [8, 10]
+		},
+		{
+			"issue": "#371",
+			"input": ":put (café)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 10)",
+			"code": "unquoted-non-ascii",
+			"span": [9, 11]
+		},
+		{
+			"issue": "#371",
+			"input": ":local cafe 1; $café",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 20)",
+			"code": "unquoted-non-ascii",
+			"span": [19, 21]
+		},
+		{
+			"issue": "#371",
+			"input": ":put \"x\"é",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 9)",
+			"code": "unquoted-non-ascii",
+			"span": [8, 10]
+		},
+		{
+			"issue": "#371",
+			"input": "/systemé/identity print",
+			"device": "reject",
+			"parse": "expected command name (line 1 column 8)",
+			"code": "unquoted-non-ascii",
+			"span": [7, 9]
+		},
+		{
+			"issue": "#371",
+			"input": "/interface/wireguard/peers/add interface=wg1 public-key=aé=",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 58)",
+			"code": "unquoted-non-ascii",
+			"span": [57, 59]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/add a?b=1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 17)",
+			"code": "unquoted-reserved-byte",
+			"span": [16, 19]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/add comment`x=1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 17)",
+			"code": "unquoted-reserved-byte",
+			"span": [16, 25]
+		},
+		{
+			"issue": "#358",
+			"input": ":put a?b=1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 7)",
+			"code": "unquoted-reserved-byte",
+			"span": [6, 7]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print?",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 18)",
+			"code": "unquoted-reserved-byte",
+			"span": [17, 18]
+		},
+		{
+			"issue": "#358",
+			"input": ":put? 1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 5)",
+			"code": "unquoted-reserved-byte",
+			"span": [4, 5]
+		},
+		{
+			"issue": "#358",
+			"input": ":put {a`b}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "unquoted-reserved-byte",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#358",
+			"input": ":put (a`b)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 8)",
+			"code": "unquoted-reserved-byte",
+			"span": [7, 8]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where comment~a?b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 34)",
+			"code": "unquoted-reserved-byte",
+			"span": [33, 34]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where comm?ent=1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 29)",
+			"code": "unquoted-reserved-byte",
+			"span": [28, 29]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where commenté=1",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 32)",
+			"code": "unquoted-non-ascii",
+			"span": [31, 33]
+		},
+		{
+			"issue": "#358",
+			"input": ":put $é",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 7)",
+			"code": "unquoted-non-ascii",
+			"span": [6, 8]
+		},
+		{
+			"issue": "#358",
+			"input": ":put {a=b?c}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 10)",
+			"code": "unquoted-reserved-byte",
+			"span": [9, 10]
+		},
+		{
+			"issue": "#358",
+			"input": ":put {\"a?\"=1}",
+			"device": "accept",
+			"il": "(evl /putmessage=a?=1)"
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address/print where comment~café",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 36)",
+			"code": "unquoted-non-ascii",
+			"span": [35, 37]
+		},
+		{
+			"issue": "#371",
+			"input": ":put {café=1}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 10)",
+			"code": "unquoted-non-ascii",
+			"span": [9, 11]
+		},
+		{
+			"issue": "#358",
+			"input": "/system/scheduler/add name=x on-event=a?b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 40)",
+			"code": "unquoted-reserved-byte",
+			"span": [39, 40]
+		},
+		{
+			"issue": "#358",
+			"input": "/tool/netwatch/add host=1.1.1.1 up-script=a=b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 44)",
+			"code": "unquoted-reserved-byte",
+			"span": [43, 44]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/remove [find comment=a=b]",
+			"device": "accept",
+			"il": "(evl /ip/address/removenumbers=(evl (evl /ip/address/findwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(= (= $comment a) $b);5)))"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/set [find] comment=a=b",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 33)",
+			"code": "unquoted-reserved-byte",
+			"span": [32, 33]
 		}
 	]
 }

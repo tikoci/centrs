@@ -821,3 +821,11 @@ apptraffic # two paths new in 7.26beta1 with different published gates: the `/to
 rle # the corpus's `highlight-rle-v1` response encoding: each highlight stream stored as run-length `[class, count]` pairs, decoded by `decodeHighlightRuns` in scripts/corpus-db.ts (#498)
 removenumbers # the IL head `/ip/firewall/address-list/removenumbers=…` that `remove [find …]` renders as, quoted verbatim in the bracket-`=` corroboration test (#498)
 vscod # the last segment of a corpus path the forum importer truncated at its slug limit (`…-editors-like-vscod/post-0014-snippet-02.rsc`); cited as the path, so the spelling must match the corpus row (#498)
+
+# #358/#371 unquoted-byte controls. Deliberate NON-words: each puts a non-ASCII
+# byte where RouterOS reads only ASCII, so the spelling is the probe.
+systemé # `/systemé/identity print` — a non-ASCII byte in a path, `expected command name` at the `é` on CHR 7.24.5/7.23.8 (#371)
+printé # `/system/identity printé` — a non-ASCII byte in a verb, rejected at the `é` (#371)
+namé # `/system/identity/set namé=x` — a non-ASCII byte in a menu command's argument name, rejected at the name's first byte (#371)
+addré # `/ip/address/add addré=1` — as `namé`: the device reports the argument name's first byte, not the `é` (#371)
+caf # the ASCII prefix the device reads of `café` before the `é`: `:put "a$café"` is `$caf` then `é` (#371)

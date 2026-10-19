@@ -987,3 +987,40 @@ submitting a prefix. Parse/hash/normalization evidence preserves the Unicode
 byte coordinates. Run on long-term as well as stable before changing these
 claims. Sanitized captures can be regenerated with `CENTRS_EXPLAIN_CAPTURE`
 pointing at an ignored output file when running the integration suite.
+
+### 49. `?`, a backtick and a second `=` need quotes
+
+```bash
+centrs explain '/tool/fetch url=http://x/a?b=c' --json
+```
+
+`data.verdict` is `fail` with `explain/canonicalizer/unquoted-reserved-byte`
+at the `?`. The device answers `expected end of command (line 1 column 27)`,
+the same byte. A backtick is rejected the same way, in a value, a
+positional, a `where`, a `find`, an array and an expression. A second `=` in
+a menu command's argument is rejected at that `=`. So `name=a=b` and a bare
+base64 key ending in `=` both fail. The value's property parser never takes
+these bytes: `regexp=a?b` and `secret=abc==` are rejected too. In a menu
+command's argument name, the device reports from the name's first byte
+(`/ip/address/add a?b=1` at the `a`). `url="http://x/a?b=c"`,
+`where comment=a=b`, `[find comment=a=b]`, `{a=b}` and `# a?b` pass.
+`:put a=b` abstains: 7.24.5 reads it as a named argument and 7.23.8 rejects
+the `=`.
+
+### 50. A non-ASCII character outside a string is rejected
+
+```bash
+centrs explain ':put $café' --json
+```
+
+`data.verdict` is `fail` with `explain/canonicalizer/unquoted-non-ascii` over
+the `é`. The device answers `expected end of command (line 1 column 10)`, at
+the `é`'s first byte. RouterOS reads only ASCII outside a string. A bare
+value (`name=router-café`, `name=🛰`), a reference, a path (`/systemé`), a
+verb, an argument name, a `where` value, an array and an expression are all
+rejected. So are pasted non-breaking spaces, curly quotes and ellipses. A
+declared name (`:local café`) keeps its `invalid-name` error. Strings and
+comments carry any byte: `:put "café"`, `:local "café" 1`, `$"café"`,
+`name="router-🚀"`, `# café` and a multi-line string pass. The informational
+`non-ascii` fact is still published beside the error, and a leading BOM is
+not read as part of the first word.

@@ -4,7 +4,7 @@ import fixture from "../fixtures/explain/token-faults.json";
 
 /**
  * The token rules against the device rows they were grounded on (#504, #506,
- * #518). The fixture holds the `:parse` answer of CHR 7.24.5 and 7.23.8 for
+ * #518), and the unquoted-byte rules (#358, #371). The fixture holds the `:parse` answer of CHR 7.24.5 and 7.23.8 for
  * every row, and `test/integration/explain-token-faults.test.ts` holds the
  * device to it. This file holds offline to it: a rejected row reports its one
  * fault at its span and fails, an accepted row reports none, and a script the
@@ -19,6 +19,8 @@ const CODES = new Set([
 	"bad-string-variable",
 	"discarded-close",
 	"unbalanced-close",
+	"unquoted-non-ascii",
+	"unquoted-reserved-byte",
 ]);
 
 interface Row {
@@ -99,6 +101,36 @@ describe("explain token faults (#504, #506, #518)", () => {
 		expect(at(":local a_b 1")).toBe("_");
 		expect(at(":foreach a,,b in={1} do={}")).toBe(",");
 		expect(at(":put 1};:put 2")).toBe("};:put 2");
+		expect(at("/system/identity/set name=a?b")).toBe("?");
+		expect(at("/system/identity/set name=a=b")).toBe("=");
+		expect(at(":put {a`b}")).toBe("`");
+		// A menu command's argument name is reported from its first byte.
+		expect(at("/ip/address/add a?b=1")).toBe("a?b");
+	});
+
+	test("a non-ASCII fault spans the whole character in source coordinates", () => {
+		for (const [input, char] of [
+			[":put café", "é"],
+			["/system/identity/set name=🛰", "🛰"],
+			[":put\u00a01", "\u00a0"],
+			[":put “x”", "“"],
+		] as const) {
+			const data = explainCommand(input);
+			const [fault] = tokenFaults(input);
+			expect(fault?.code).toBe("explain/canonicalizer/unquoted-non-ascii");
+			const bytes = Buffer.from(input);
+			const start = bytes.indexOf(Buffer.from(char));
+			expect(fault?.span).toEqual({
+				start,
+				end: start + Buffer.byteLength(char),
+			});
+			// The informational fact is still published beside the error.
+			expect(
+				data.diagnostics.some(
+					(d) => d.code === "explain/canonicalizer/non-ascii",
+				),
+			).toBe(true);
+		}
 	});
 });
 
@@ -112,6 +144,16 @@ describe("where the device's byte is not knowable, the rules abstain", () => {
 		[":local v 1; :put $$v"],
 		[":put $(1)"],
 		[':local v 1; :put "a$"v"b'],
+		// #358: a directive's `a=b` is a named argument on 7.24.5 (`bad
+		// parameter a`, at the end) and a syntax error at the `=` on 7.23.8.
+		[":put a=b"],
+		[":local x a=b"],
+		[":put [:len a=b]"],
+		// The device rejects a query value that starts with `=` (`expected
+		// comment value`), but a query's `=` is otherwise an operator.
+		["/ip/address/print where comment==b"],
+		// A relative menu body is opaque to the walk (#351).
+		["/ip { address { add comment=a?b } }"],
 	])("%j reports no token fault", (input) => {
 		expect(tokenFaults(input)).toEqual([]);
 	});

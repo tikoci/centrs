@@ -53,6 +53,19 @@
  *   declared name that is not letters and digits. `gluedAt`, `wordFaults` and
  *   `nameFault` carry the device rules. One token fault is reported per
  *   statement, and the head word is never read.
+ * - **Unquoted bytes (#358, #371).** A `?`, a backtick and a non-ASCII byte
+ *   are never part of a bare word: the device rejects each at its byte in a
+ *   head word, a name, a `$name`, a value, a query, an array and an
+ *   expression (`/systemé`, `print?`, `$café`, `url=http://x/a?b`,
+ *   `where comment=café`, `{a`b}`, `(café)`), but a menu command's argument
+ *   name at the name's first byte (`addré=1`, `a?b=1`). A second `=` in a
+ *   menu command's argument is rejected too (`name=a=b`, a bare base64 key
+ *   ending in `=`). In a query and in an array it is an operator and a key
+ *   (`where comment=a=b`, `{a=b}` parse); a directive's `a=b` is a named
+ *   argument on 7.24.5 and a syntax error on 7.23.8, so it is left alone. No
+ *   property parser was found that takes these bytes (`regexp=a?b`,
+ *   `public-key=…=`, `secret=…==`, `on-event=a=b` are all rejected). Strings
+ *   and comments carry any byte (`"café"`, `$"café"`, `:local "café"`).
  *
  * Deliberately not here: a `$( … )` group (`:put $({})` is rejected and is
  * read as `({})`), the `@` in a later head word (`/ip address@ print`), and
@@ -72,7 +85,9 @@ export type GroupFaultCode =
 	| "named-value-brace"
 	| "glued-token"
 	| "invalid-variable"
-	| "invalid-name";
+	| "invalid-name"
+	| "unquoted-non-ascii"
+	| "unquoted-reserved-byte";
 
 export interface GroupFault {
 	code: GroupFaultCode;
@@ -95,6 +110,8 @@ interface StatementFrame {
 	whereEnd: number | null;
 	/** The head word without its colon, the key into `brace-slots.ts`. */
 	verb: string | null;
+	/** The head word is a `$` call, whose arguments no menu reads (`$f a=1`). */
+	call: boolean;
 	/** Positional operands read after the head. */
 	positionals: number;
 	/** No token of the current statement read yet. */
@@ -116,6 +133,8 @@ interface StatementToken {
 	closedAt: number;
 	/** Just past the token's last bare-word run, or -1. */
 	wordEnd: number;
+	/** The token's first bare `=`, or -1. */
+	eqAt: number;
 }
 
 interface ArrayFrame {
@@ -201,6 +220,31 @@ const STRICT_NAME_DIRECTIVES = new Set(["local", "global", "foreach"]);
 const ALNUM = /[A-Za-z0-9]/;
 const SUB = "\x1a";
 
+/** A byte no bare word holds: `?`, a backtick, a non-ASCII stand-in (#358, #371). */
+function isUnquotedFaultByte(c: string | undefined): boolean {
+	return c === "?" || c === "`" || c === SUB;
+}
+
+/** The first such byte in `[from, end)`, or -1. */
+function unquotedFaultByteAt(masked: string, from: number, end: number) {
+	for (let j = from; j < end; j++) if (isUnquotedFaultByte(masked[j])) return j;
+	return -1;
+}
+
+/** The fault for the byte at `at`; a non-ASCII run is reported whole. */
+function unquotedByteFault(masked: string, at: number): GroupFault {
+	if (masked[at] !== SUB)
+		return {
+			code: "unquoted-reserved-byte",
+			start: at,
+			end: at + 1,
+			detail: masked[at],
+		};
+	let end = at;
+	while (masked[end] === SUB) end++;
+	return { code: "unquoted-non-ascii", start: at, end };
+}
+
 function statementFrame(char: StatementFrame["char"]): StatementFrame {
 	return {
 		kind: "statement",
@@ -208,6 +252,7 @@ function statementFrame(char: StatementFrame["char"]): StatementFrame {
 		query: false,
 		whereEnd: null,
 		verb: null,
+		call: false,
 		positionals: 0,
 		lead: true,
 		token: null,
@@ -245,6 +290,7 @@ function openToken(frame: StatementFrame, at: number) {
 			equals: false,
 			closedAt: -1,
 			wordEnd: -1,
+			eqAt: -1,
 		};
 	frame.lead = false;
 	return frame.token;
@@ -287,12 +333,10 @@ function gluedAt(
 			(frame.verb !== null || ALNUM.test(before ?? "")));
 	if (!glued) return null;
 	const c = masked[at];
-	// A stray `\` is `symbols.ts`'s, and a non-ASCII stand-in is #371's.
-	if (c === "\\" || c === SUB) {
-		frame.settled = true;
-		return null;
-	}
 	frame.settled = true;
+	// A stray `\` is `symbols.ts`'s; a non-ASCII byte is its own fault (`"x"é`).
+	if (c === "\\") return null;
+	if (c === SUB) return unquotedByteFault(masked, at);
 	return { code: "glued-token", start: at, end: at + 1 };
 }
 
@@ -343,7 +387,21 @@ function wordFaults(
 		if (named !== undefined) return named;
 	}
 	while (j < end) {
-		if (masked[j] !== "$") {
+		const c = masked[j];
+		if (isUnquotedFaultByte(c)) {
+			frame.settled = true;
+			return (
+				argumentNameFault(masked, frame, j, end) ?? unquotedByteFault(masked, j)
+			);
+		}
+		if (c === "=") {
+			if (token.eqAt < 0) token.eqAt = j;
+			else if (frame.verb === null && !frame.call) {
+				frame.settled = true;
+				return unquotedByteFault(masked, j);
+			}
+		}
+		if (c !== "$") {
 			j++;
 			continue;
 		}
@@ -367,14 +425,12 @@ function wordFaults(
 			token.wordEnd = -1;
 			return null;
 		}
+		if (next === SUB) {
+			frame.settled = true;
+			return unquotedByteFault(masked, j + 1);
+		}
 		// `$$v` is rejected after the name, not at the second `$`.
-		if (
-			next === "(" ||
-			next === "[" ||
-			next === "{" ||
-			next === "$" ||
-			next === SUB
-		) {
+		if (next === "(" || next === "[" || next === "{" || next === "$") {
 			frame.settled = true;
 			return null;
 		}
@@ -388,6 +444,26 @@ function wordFaults(
 	token.wordEnd = end;
 	token.closedAt = -1;
 	return null;
+}
+
+/**
+ * A bad byte at `at` inside a menu command's argument name: the device
+ * reports it at the name's first byte (`/ip/address/add addré=1` and
+ * `a?b=1` at the `a`), and the span is the name. A directive (`:put café=1`)
+ * and a `$` call (`$f café=1`) report at the byte, so this is `null` there.
+ */
+function argumentNameFault(
+	masked: string,
+	frame: StatementFrame & { token: StatementToken },
+	at: number,
+	end: number,
+): GroupFault | null {
+	const { token } = frame;
+	if (frame.verb !== null || frame.call || token.eqAt >= 0) return null;
+	const eq = masked.indexOf("=", at);
+	if (eq < 0 || eq >= end) return null;
+	const fault = unquotedByteFault(masked, at);
+	return { ...fault, start: token.start, end: eq };
 }
 
 /**
@@ -473,9 +549,15 @@ const CLOSER = { "(": ")", "[": "]", "{": "}" } as const;
 
 /**
  * Find every group fault in an analyzed document. `masked` is its comment
- * mask; `text` is read only to tell a masked comment line from spaces.
+ * mask; `text` is read only to tell a masked comment line from spaces. The
+ * walk starts at `from`, past a leading BOM, which is a positional fact and
+ * not a byte of the first word.
  */
-export function findGroupFaults(text: string, masked: string): GroupFault[] {
+export function findGroupFaults(
+	text: string,
+	masked: string,
+	from = 0,
+): GroupFault[] {
 	const faults: GroupFault[] = [];
 	const frames: Frame[] = [statementFrame("")];
 	const top = (): Frame => frames[frames.length - 1] as Frame;
@@ -502,7 +584,7 @@ export function findGroupFaults(text: string, masked: string): GroupFault[] {
 	// `(1 +\⏎⏎2)`, and reject `(1 +\⏎# c⏎⏎2)` at the blank line.
 	let cont: "none" | "escape" | "comment" = "none";
 	let contLineStart = false;
-	let i = 0;
+	let i = from;
 	while (i < masked.length) {
 		const c = masked[i] as string;
 		const frame = top();
@@ -738,10 +820,26 @@ export function findGroupFaults(text: string, masked: string): GroupFault[] {
 					: BARE_DECLARATIONS.has(word)
 						? word
 						: null;
+				frame.call = word.startsWith("$");
+				// `[/ip/address/find comment=a=b]` is a query, as `[find …]` is.
+				if (frame.verb === null && /(^|\/)find$/i.test(word))
+					frame.query = true;
+				const bad = unquotedFaultByteAt(masked, i, end);
+				if (bad >= 0 && (at < 0 || i + at > bad)) {
+					frame.settled = true;
+					faults.push(unquotedByteFault(masked, bad));
+				}
 			}
 			if (readsTokens(frame)) {
 				const fault = wordFaults(masked, frame, i, end);
 				if (fault !== null) faults.push(fault);
+			} else if (frame.query && !frame.settled && !token.head) {
+				// A query keeps `=` as an operator, but not these bytes.
+				const bad = unquotedFaultByteAt(masked, i, end);
+				if (bad >= 0) {
+					frame.settled = true;
+					faults.push(unquotedByteFault(masked, bad));
+				}
 			}
 			if (word.includes("=")) token.equals = true;
 			const lower = word.toLowerCase();
@@ -821,6 +919,11 @@ export function findGroupFaults(text: string, masked: string): GroupFault[] {
 			}
 			if (c === "@" && !frame.query) {
 				report({ code: "invalid-at-sign", start: i, end: i + 1 }, frame);
+				i++;
+				continue;
+			}
+			if (isUnquotedFaultByte(c) && !frame.query) {
+				report(unquotedByteFault(masked, i), frame);
 				i++;
 				continue;
 			}
@@ -918,8 +1021,13 @@ export function findGroupFaults(text: string, masked: string): GroupFault[] {
 			i += spelling.length;
 			continue;
 		}
-		// `#`, `?`, a backtick, `'`, a stray `\`, a non-ASCII placeholder: another
-		// rule's byte, and nothing here can say what the group means after it.
+		if (isUnquotedFaultByte(c)) {
+			report(unquotedByteFault(masked, i), frame);
+			i++;
+			continue;
+		}
+		// `#`, `'`, a stray `\`: another rule's byte, and nothing here can say
+		// what the group means after it.
 		frame.done = true;
 		i++;
 	}

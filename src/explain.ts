@@ -1539,7 +1539,11 @@ export function explainCommand(
 		}),
 		...braceDiagnostics,
 		...groupFaultDiagnostics(
-			findGroupFaults(analyzed, analyzedRange.masked),
+			findGroupFaults(
+				analyzed,
+				analyzedRange.masked,
+				defects.find(({ defect }) => defect.code === "bom")?.defect.end,
+			),
 			braceDiagnostics,
 		),
 		...separators.flatMap((runs) => runs.map(missingSeparatorDiagnostic)),
@@ -2254,6 +2258,12 @@ function groupFaultMessage(f: GroupFault): string {
 			return '`$` must be followed by a variable name (letters and digits) or `"name"`, and RouterOS rejects it here (`syntax error`) — quote a literal dollar (`"\\$"`)';
 		case "invalid-name":
 			return 'a variable name is letters and digits only, and RouterOS rejects any other byte in it (`expected end of command`) — quote the name (`:local "a_b"`) to use other characters';
+		case "unquoted-non-ascii":
+			return 'a non-ASCII character outside a string: RouterOS reads only ASCII in a bare word, name, path or value, and rejects it (`expected end of command`) — quote it (`name="café"`, `$"café"`), or retype a pasted non-breaking space, curly quote or ellipsis';
+		case "unquoted-reserved-byte":
+			return f.detail === "="
+				? 'a second `=` in a bare argument value: RouterOS rejects it (`expected end of command`) — quote the value (`comment="a=b"`), as a base64 key ending in `=` needs'
+				: `unquoted \`${f.detail}\` is never part of a bare word, and RouterOS rejects it (\`expected end of command\`) — quote the value (\`url="http://x/a?b"\`)`;
 	}
 }
 

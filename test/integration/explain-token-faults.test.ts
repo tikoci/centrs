@@ -19,7 +19,7 @@ interface Row {
 
 /**
  * The device half of `test/fixtures/explain/token-faults.json` (#504, #506,
- * #518); `test/unit/explain-token-faults.test.ts` is the offline half. A
+ * #518, #358, #371); `test/unit/explain-token-faults.test.ts` is the offline half. A
  * rejected row must draw the fixture's exact `:parse` diagnostic, and an
  * accepted one the fixture's exact IL. The IL is what proves #504: a script
  * with a stray top-level `}` lowers to its prefix alone (`:put 1};:put 2` is
@@ -27,7 +27,7 @@ interface Row {
  */
 const COMPLAINT = /syntax error|expected |bad command|bad parameter|missing /;
 describeFast("explain token faults against CHR", () => {
-	test("examples 42-45: every row parses or fails as the fixture records", async () => {
+	test("examples 42-45, 49 and 50: every row parses or fails as the fixture records", async () => {
 		const started = await startIntegrationChr();
 		try {
 			const answers: Omit<Row, "issue">[] = [];
@@ -59,7 +59,7 @@ describeFast("explain token faults against CHR", () => {
 				quickChrName: started.chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [42, 43, 44, 45],
+				exampleIds: [42, 43, 44, 45, 49, 50],
 			});
 		} finally {
 			await started.chr.destroy();
