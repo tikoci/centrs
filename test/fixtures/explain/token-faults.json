@@ -1,5 +1,5 @@
 {
-	"$comment": "Device answers for the token rules (#504, #506, #518) and the unquoted-byte rules (#358, #371): the stray top-level close that ends a script (src/explain/segment.ts → discardFrom), the declared-name, variable, glued-token and unquoted-byte faults (src/explain/group-faults.ts) and the bad `$` in a string (src/explain/quoted-string.ts). `:parse` on a stored `/system script` source, so `$` is not substituted. Every row is identical on CHR 7.24.5 (stable) and 7.23.8 (long-term); `parse` is a rejection's diagnostic and `il` an acceptance's IL, whitespace-collapsed. `code`/`span` is the one fault offline reports (`discarded-close` a warning, the rest errors); a row without one reports none. test/unit/explain-token-faults.test.ts holds offline to it and test/integration/explain-token-faults.test.ts holds the device to it. The #358/#371 rows were captured with live explain (`explainLiveEnvelope`, REST, `:put [:parse …]` over the escaped input) on the same two builds.",
+	"$comment": "Device answers for the token rules (#504, #506, #518) and the unquoted-byte rules (#358, #371, and inside a relative menu block #351): the stray top-level close that ends a script (src/explain/segment.ts → discardFrom), the declared-name, variable, glued-token and unquoted-byte faults (src/explain/group-faults.ts) and the bad `$` in a string (src/explain/quoted-string.ts). `:parse` on a stored `/system script` source, so `$` is not substituted. Every row is identical on CHR 7.24.5 (stable) and 7.23.8 (long-term); `parse` is a rejection's diagnostic and `il` an acceptance's IL, whitespace-collapsed. `code`/`span` is the one fault offline reports (`discarded-close` a warning, the rest errors); a row without one reports none. test/unit/explain-token-faults.test.ts holds offline to it and test/integration/explain-token-faults.test.ts holds the device to it. The #358/#371 rows were captured with live explain (`explainLiveEnvelope`, REST, `:put [:parse …]` over the escaped input) on the same two builds.",
 	"versions": ["7.24.5", "7.23.8"],
 	"rows": [
 		{
@@ -2145,6 +2145,22 @@
 			"input": "/ip/address/print where (comment in {a=b})",
 			"device": "accept",
 			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(in $comment a=$b);5)"
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { address { add comment=a?b } }",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 30)",
+			"code": "unquoted-reserved-byte",
+			"span": [29, 30]
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { address { print where comment=a?b } }",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 38)",
+			"code": "unquoted-reserved-byte",
+			"span": [37, 38]
 		}
 	]
 }

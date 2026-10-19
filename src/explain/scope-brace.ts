@@ -7,8 +7,11 @@
  * gives comment masking, segmentation, and symbol resolution one rule.
  */
 
+import { commandVerbIndex } from "./catalog.ts";
+import { isKnownMenuPath } from "./is-known-menu.ts";
 import { scanQuotedString } from "./quoted-string.ts";
-import { runNamesCommand } from "./run-tokens.ts";
+import { runNamesCommand, runTokens } from "./run-tokens.ts";
+import { VERBS } from "./verbs.ts";
 
 /** Error-variable shape for `:onerror V { … }` — a bare/`$`-prefixed name. */
 const ERROR_VAR = /^\$?[A-Za-z][A-Za-z0-9._-]*$/;
@@ -121,6 +124,12 @@ interface StatementIndex {
 	boundaries: Int32Array;
 	firstContent: Int32Array;
 	lastForbidden: Int32Array;
+	/**
+	 * The innermost open delimiter at each nested `;`/newline boundary. Sparse,
+	 * because a per-offset array pushed a 540 KiB document past
+	 * `BOUNDARY_CACHE_BYTE_LIMIT` and made every probe rebuild the index.
+	 */
+	nestedSeparators: Map<number, number>;
 	matchingBrace: Map<number, number>;
 }
 
@@ -162,6 +171,7 @@ function boundaryCacheEntryBytes(text: string, index: StatementIndex): number {
 		index.boundaries.byteLength +
 		index.firstContent.byteLength +
 		index.lastForbidden.byteLength +
+		index.nestedSeparators.size * 32 +
 		index.matchingBrace.size * 32
 	);
 }
@@ -223,6 +233,7 @@ function statementIndex(text: string): StatementIndex {
 	firstContent.fill(-1);
 	const lastForbidden = new Int32Array(text.length + 1);
 	lastForbidden.fill(-1);
+	const nestedSeparators = new Map<number, number>();
 	const matchingBrace = new Map<number, number>();
 	const delimiters: { char: string; at: number }[] = [];
 	let boundary = -1;
@@ -255,6 +266,9 @@ function statementIndex(text: string): StatementIndex {
 		if (first === -1 && !isAsciiWhitespace(c)) first = i;
 		if (c === "=" || c === "[" || c === "(" || c === "$") forbidden = i;
 		if (c === "\n" || c === ";" || c === "{" || c === "[") {
+			const open = delimiters.at(-1);
+			if ((c === "\n" || c === ";") && open !== undefined)
+				nestedSeparators.set(i, open.at);
 			boundary = i;
 			first = -1;
 		}
@@ -267,6 +281,7 @@ function statementIndex(text: string): StatementIndex {
 		boundaries,
 		firstContent,
 		lastForbidden,
+		nestedSeparators,
 		matchingBrace,
 	};
 	if (cacheStatementIndex(text, index)) adoptBoundaryText(text, index);
@@ -493,12 +508,108 @@ export function braceStartsStatements(
 	// but a run that already names a command makes the brace its operand (#496).
 	// `start` follows the last `{`, so each brace reads its own run: linear.
 	const first = index.firstContent[open] ?? -1;
-	return (
-		first < start ||
-		(text[first] === "/" &&
+	if (first < start) return true;
+	if (text[first] === "/")
+		return (
 			(index.lastForbidden[open] ?? -1) < start &&
-			!runNamesCommand(text.slice(first, open)))
-	);
+			!runNamesCommand(text.slice(first, open))
+		);
+	return menuBlockPath(text, open, floor) !== null;
+}
+
+/** Nesting a {@link menuBlockPath} lookup follows before it abstains. */
+const MAX_MENU_BLOCK_DEPTH = 64;
+
+/**
+ * A relative run of bare path words, space- or slash-separated. Each word is
+ * `pathresolve`'s `BARE_WORD`: the resolver reads no digit-led word as a path,
+ * so admitting `6to4 {` here would flatten a block whose navigation it then
+ * ignores, resolving the body's `print` against `/interface`.
+ */
+const RELATIVE_MENU_RUN =
+	/^[A-Za-z][A-Za-z0-9._-]*(?:[ \t/]+[A-Za-z][A-Za-z0-9._-]*)*$/;
+
+/**
+ * The menu a `{` opens a statement block over, when the source alone says so
+ * (#351). Null means offline cannot tell, not that the brace is a value.
+ *
+ * On CHR 7.24.5 and 7.23.8 a brace right after a menu word is always a
+ * statement block, at any depth and whatever the body holds:
+ * `/ip { address { 1;2 } }` is `bad command name 1` at the `1`, and
+ * `/ip { address { a;b } }` reads `a` as `add`. A brace after a command word is
+ * always an error at the `{` (`/ip { address { print {1;2} } }`). The `/`-led
+ * spelling was already read as a block; the RELATIVE one (`address {` inside
+ * `/ip { … }`) was read as `/ip address` with a brace operand. That is what
+ * hard-failed the outer brace at depth three and hid every fault in the body.
+ *
+ * A relative run is a block only when the menu it names is known: the
+ * enclosing container's path, read the same way outward, plus the run, named by
+ * a shipped structure table. A miss abstains, so an unknown word keeps today's
+ * reading and the resolver says `unresolved`. The path is lexical: a
+ * navigation statement earlier in the same body (`/ip { firewall; address {`)
+ * is not followed, and the resolver checks the flattened run against the real
+ * context, so that residue can only abstain. Abbreviated menus (`addr {`) are
+ * not expanded, as R13 does not expand them.
+ *
+ * `floor` keeps the ranged-call contract of {@link scopeNameFromMasked}: no
+ * enclosing brace before it is consulted, so a range reads exactly as the same
+ * text taken alone.
+ */
+export function menuBlockPath(
+	text: string,
+	open: number,
+	floor = 0,
+): readonly string[] | null {
+	return blockPathAt(text, statementIndex(text), open, floor, 0);
+}
+
+function blockPathAt(
+	text: string,
+	index: StatementIndex,
+	open: number,
+	floor: number,
+	depth: number,
+): readonly string[] | null {
+	if (depth > MAX_MENU_BLOCK_DEPTH) return null;
+	const start = Math.max((index.boundaries[open] ?? -1) + 1, floor);
+	const first = index.firstContent[open] ?? -1;
+	if (first < start) return enclosingBlockPath(text, index, open, floor, depth);
+	if ((index.lastForbidden[open] ?? -1) >= start) return null;
+	const run = text.slice(first, open);
+	if (text[first] === "/") {
+		if (runNamesCommand(run)) return null;
+		return runTokens(run).map((token) => token.name);
+	}
+	const trimmed = run.trim();
+	if (!RELATIVE_MENU_RUN.test(trimmed)) return null;
+	const names = trimmed.split(/[\s/]+/);
+	if (names.some((name) => VERBS.has(name))) return null;
+	const parent = enclosingBlockPath(text, index, open, floor, depth);
+	if (parent === null) return null;
+	const path = [...parent, ...names];
+	if (commandVerbIndex(path) !== null || !isKnownMenuPath(path)) return null;
+	return path;
+}
+
+/**
+ * The path of the container `{` around the statement that holds `at`, when it
+ * is one. The statement starts after a boundary: an opening `{`/`[` is the
+ * enclosing delimiter itself, and a separator records it.
+ */
+function enclosingBlockPath(
+	text: string,
+	index: StatementIndex,
+	at: number,
+	floor: number,
+	depth: number,
+): readonly string[] | null {
+	const boundary = index.boundaries[at] ?? -1;
+	const outer =
+		boundary < 0 || text[boundary] === "{" || text[boundary] === "["
+			? boundary
+			: (index.nestedSeparators.get(boundary) ?? -1);
+	if (outer < floor || text[outer] !== "{") return null;
+	return blockPathAt(text, index, outer, floor, depth + 1);
 }
 
 /**

@@ -1,5 +1,5 @@
 {
-	"$comment": "Device answers for src/explain/group-faults.ts (#505, #509, #511, #512). `:parse` on a stored `/system script` source, so `$` is not substituted. Every row is identical on CHR 7.24.5 (stable) and 7.23.8 (long-term); `parse` is the 7.24.5 diagnostic. `code`/`span` is the one group fault offline reports; a row without one reports none. test/unit/explain-group-faults.test.ts holds offline to it and test/integration/explain-group-faults.test.ts holds the device to it.",
+	"$comment": "Device answers for src/explain/group-faults.ts (#505, #509, #511, #512) and for the brace after a command inside a relative menu block (#351, src/explain/scope-brace.ts → menuBlockPath). `:parse` on a stored `/system script` source, so `$` is not substituted. Every row is identical on CHR 7.24.5 (stable) and 7.23.8 (long-term); `parse` is the 7.24.5 diagnostic. `code`/`span` is the one group fault offline reports; a row without one reports none. test/unit/explain-group-faults.test.ts holds offline to it and test/integration/explain-group-faults.test.ts holds the device to it.",
 	"versions": ["7.24.5", "7.23.8"],
 	"rows": [
 		{
@@ -1230,6 +1230,94 @@
 		{
 			"issue": "#509",
 			"input": "local other (comment={})",
+			"device": "accept"
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { address { print {1;2} } }",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 23)",
+			"code": "invalid-command-brace",
+			"span": [22, 23]
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { address { print {a;b} } }",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 23)",
+			"code": "invalid-command-brace",
+			"span": [22, 23]
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { address { print { } } }",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 23)",
+			"code": "invalid-command-brace",
+			"span": [22, 23]
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { address { set {1} disabled=yes } }",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 21)",
+			"code": "invalid-command-brace",
+			"span": [20, 21]
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { route { print {1;2} } }",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 21)",
+			"code": "invalid-command-brace",
+			"span": [20, 21]
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { firewall { filter { print {1;2} } } }",
+			"device": "reject",
+			"parse": "expected end of command (line 1 column 33)",
+			"code": "invalid-command-brace",
+			"span": [32, 33]
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { address { print } }",
+			"device": "accept"
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { address { print detail } }",
+			"device": "accept"
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { firewall { filter { print } } }",
+			"device": "accept"
+		},
+		{
+			"issue": "#351",
+			"input": "/interface { bridge { port { print } } }",
+			"device": "accept"
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { :put 1; address { print } }",
+			"device": "accept"
+		},
+		{
+			"issue": "#351",
+			"input": "/ip {\n  address {\n    print\n  }\n}",
+			"device": "accept"
+		},
+		{
+			"issue": "#351",
+			"input": "/system { script { add name=x source={ :put 1 } } }",
+			"device": "accept"
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { address { :put {1;2} } }",
 			"device": "accept"
 		}
 	]

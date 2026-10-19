@@ -191,9 +191,9 @@ Issue #90 owns the remaining sequencing, including #507 context grounding.
 **First: `explain`** (maintainer decision 2026-10-16 on
 [#90](https://github.com/tikoci/centrs/issues/90)). In order: make the
 published offline readings honest (#350, #211; complete), give the result a
-statement tree (#497; complete), then the live probe foundation (#491). Use
-those probes to
-ground #351, #358 and #371, and finish live (#492 → #236 closeout). The
+statement tree (#497; complete), then the live probe foundation (#491;
+complete). Those probes grounded #351, #358 and #371 (complete). Next is
+finishing live (#492 → #236 closeout). The
 plan, and what is deliberately out of this run, is the 2026-10-16 plan
 comment on #90. It is step 3 of the validation track below.
 
@@ -248,11 +248,11 @@ applicable examples pass on CHR via `bun run test:integration`.
 Open offline follow-ups remain explicit but do not reopen the verified baseline.
 Issue #211 made an unlisted absolute bare path abstain (rule F, R14); rule
 P's closed-world reading is still not adopted (#372). #272 owns
-non-authoritative `.scratch/` citation cleanup. #350 (the broad optional `=`,
-schema-dependent and so belonging to step 3), #351 (an unresolvable menu that
-abstains at 2-deep nesting but hard-fails at 3-deep) and #355 (`'` is not a
-RouterOS token — a false ACCEPT the corpus join cannot see) are bounded analyzer
-defects that step 2 now surfaces through the `execute`/`api` gate. #336, #342 and #498 are complete: the
+non-authoritative `.scratch/` citation cleanup. Issues #350 (the broad
+optional `=`), #351 (a relative submenu brace read as a command operand)
+and #355 (`'` is not a RouterOS token) are complete. A submenu block after a navigation statement
+(`/ip⏎address { … }`) keeps the pre-#351 reading; see
+`commands/explain/README.md`. #336, #342 and #498 are complete: the
 corpus is pinned to schema 5, with one recorded session per release channel
 (long-term 7.23.8, stable 7.24.5, testing 7.25rc2, development 7.26beta1) read
 through `scripts/corpus-db.ts`. The highlight slice is cut from those sessions

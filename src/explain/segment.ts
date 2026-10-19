@@ -91,6 +91,7 @@ import {
 	hashStartsHardError,
 	isIndexedStatementStart,
 	matchingBraceEnd,
+	menuBlockPath,
 	scopeNameFromMasked,
 	startsArrayCommentLine,
 } from "./scope-brace.ts";
@@ -1073,7 +1074,10 @@ function scanAscii(
 			if (
 				c === "{" &&
 				atContainerLevel() &&
-				validPrefix(f, f.stmtStart >= 0 ? f.stmtStart : i, i)
+				(validPrefix(f, f.stmtStart >= 0 ? f.stmtStart : i, i) ||
+					// A relative submenu inside a container is one too (#351).
+					(frames.length > 1 &&
+						menuBlockPath(indexed, floor + i, floor) !== null))
 			) {
 				if (frames.length - 1 < MAX_CONTAINER_DEPTH) {
 					openContainer(i);

@@ -170,8 +170,6 @@ describe("where the device's byte is not knowable, the rules abstain", () => {
 		// The device rejects a query value that starts with `=` (`expected
 		// comment value`), but a query's `=` is otherwise an operator.
 		["/ip/address/print where comment==b"],
-		// A relative menu body is opaque to the walk (#351).
-		["/ip { address { add comment=a?b } }"],
 	])("%j reports no token fault", (input) => {
 		expect(tokenFaults(input)).toEqual([]);
 	});

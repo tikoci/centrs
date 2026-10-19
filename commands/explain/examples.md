@@ -1024,3 +1024,26 @@ comments carry any byte: `:put "café"`, `:local "café" 1`, `$"café"`,
 `name="router-🚀"`, `# café` and a multi-line string pass. The informational
 `non-ascii` fact is still published beside the error, and a leading BOM is
 not read as part of the first word.
+
+### 51. A brace after a submenu opens a block at any depth
+
+```bash
+centrs explain '/ip { address { print {1;2} } }' --json
+```
+
+`data.verdict` is `fail` with `explain/canonicalizer/invalid-command-brace` at
+the inner `{`. The device answers `expected end of command (line 1 column 23)`,
+the same byte. `address {` inside `/ip { … }` is a block over `/ip/address`,
+so `data.structure.statements` reads `/ip`, `/ip/address` and
+`/ip/address print`, and the `{1;2}` is the operand of `print`.
+
+The device reads a brace after a menu word as statements whatever the body
+holds, at any depth. A body offline cannot resolve abstains with
+`unresolved-statement` instead of failing as an array:
+`/ip { address { 1;2 } }` (the device says `bad command name 1`) and
+`/ip { address { zzznotamenu { print } } }` (`syntax error`) both give `warn`,
+as `/ip/address { 1;2 }` and `/ip { zzznotamenu { print } }` do.
+`/ip { address { print } }` and `/ip { firewall { filter { print } } }` pass.
+The menu must be known from the source alone, so a block after a navigation
+statement (`/ip⏎address { … }`), an abbreviation (`addr {`) and a digit-led
+menu (`6to4 {`) keep the older reading.
