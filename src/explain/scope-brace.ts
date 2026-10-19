@@ -239,12 +239,28 @@ function statementIndex(text: string): StatementIndex {
 	let boundary = -1;
 	let first = -1;
 	let forbidden = -1;
+	let comment = false;
 	let i = 0;
 	while (i < text.length) {
 		boundaries[i] = boundary;
 		firstContent[i] = first;
 		lastForbidden[i] = forbidden;
 		const c = text[i] as string;
+		// A statement-leading `#` runs to the line end, and a `{`, `}` or `"` in
+		// it is not structure: `/ip { # }⏎address { print {1;2} } }` is rejected
+		// at the inner `{` on CHR 7.24.5 and 7.23.8, so the `}` must not close
+		// `/ip {` (#351). Read raw, the bytes are blank, as `maskComments` makes
+		// them; read masked, they already are.
+		if (comment && c !== "\n") {
+			i++;
+			continue;
+		}
+		comment = false;
+		if (c === "#" && first === -1 && delimiters.at(-1)?.char !== "(") {
+			comment = true;
+			i++;
+			continue;
+		}
 		if (c === '"') {
 			const end = Math.min(scanQuotedString(text, i).end, text.length);
 			boundaries.fill(boundary, i + 1, end + 1);

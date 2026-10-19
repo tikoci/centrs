@@ -1319,6 +1319,48 @@
 			"issue": "#351",
 			"input": "/ip { address { :put {1;2} } }",
 			"device": "accept"
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { # }\n address { print {1;2} } }",
+			"device": "reject",
+			"parse": "expected end of command (line 2 column 18)",
+			"code": "invalid-command-brace",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#351",
+			"input": "/ip {\n# {\n address { print {1;2} } }",
+			"device": "reject",
+			"parse": "expected end of command (line 3 column 18)",
+			"code": "invalid-command-brace",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { # \"\n address { print {1;2} } }",
+			"device": "reject",
+			"parse": "expected end of command (line 2 column 18)",
+			"code": "invalid-command-brace",
+			"span": [27, 28]
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { # }\n address { # }\n print {1;2} } }",
+			"device": "reject",
+			"parse": "expected end of command (line 3 column 8)",
+			"code": "invalid-command-brace",
+			"span": [32, 33]
+		},
+		{
+			"issue": "#351",
+			"input": "/ip { # }\n address { print } }",
+			"device": "accept"
+		},
+		{
+			"issue": "#351",
+			"input": "/ip {\n# {\n address { print } }",
+			"device": "accept"
 		}
 	]
 }
