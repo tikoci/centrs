@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { describePrefetch } from "../../scripts/chr-prefetch.ts";
-import { integrationChrSelection } from "../integration/chr.ts";
+import {
+	integrationChrSelection,
+	prefetchedChrVersion,
+} from "../integration/chr.ts";
 
 describe("integrationChrSelection (boot and prefetch share it, #468)", () => {
 	test("defaults to the stable channel, host arch, no packages", () => {
@@ -34,6 +37,39 @@ describe("integrationChrSelection (boot and prefetch share it, #468)", () => {
 			}),
 		).toEqual({ channel: "stable", packages: [] });
 	});
+});
+
+test("a successful channel prefetch pins later boots until their selection changes", () => {
+	const stable = integrationChrSelection({});
+	const cached = { channel: "stable" as const, version: "7.24.5" };
+	expect(prefetchedChrVersion(stable, {}, cached)).toBe("7.24.5");
+	expect(
+		prefetchedChrVersion(stable, { channel: "long-term" }, cached),
+	).toBeUndefined();
+	expect(
+		prefetchedChrVersion(stable, { version: "7.26beta1" }, cached),
+	).toBeUndefined();
+	expect(
+		prefetchedChrVersion(
+			integrationChrSelection({ CENTRS_CHR_CHANNEL: "long-term" }),
+			{},
+			cached,
+		),
+	).toBeUndefined();
+	expect(
+		prefetchedChrVersion(
+			integrationChrSelection({ CENTRS_CHR_ARCH: "arm64" }),
+			{},
+			cached,
+		),
+	).toBeUndefined();
+	expect(
+		prefetchedChrVersion(
+			integrationChrSelection({ CENTRS_CHR_VERSION: "7.23.8" }),
+			{},
+			cached,
+		),
+	).toBeUndefined();
 });
 
 describe("describePrefetch (the CI step's log line)", () => {
