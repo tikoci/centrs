@@ -1196,6 +1196,19 @@ describe("centrs explain — the CLI surface", () => {
 			"usage/fanout-not-supported",
 		);
 	});
+	test("quickchr and a positional router conflict before reading the file", async () => {
+		const { code, err } = await run([
+			"explain",
+			"edge1",
+			"--quickchr",
+			"missing-491",
+			"--file",
+			"/missing-explain-491.rsc",
+			"--json",
+		]);
+		expect(code).toBe(1);
+		expect(JSON.parse(err).error.code).toBe("usage/conflicting-flags");
+	});
 
 	test("an unquoted input names the likelier mistake", async () => {
 		// `explain /ip/route print` is two positionals, so the grammar reads a

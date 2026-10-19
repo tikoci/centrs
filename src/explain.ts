@@ -1318,6 +1318,17 @@ export function buildTokens(
 	return out;
 }
 
+/** Source order, with the most severe finding first at the same byte. */
+export function compareExplainDiagnostics(
+	a: ExplainDiagnostic,
+	b: ExplainDiagnostic,
+): number {
+	return (
+		a.span.start - b.span.start ||
+		severityRank(b.severity) - severityRank(a.severity)
+	);
+}
+
 function severityRank(s: ExplainSeverity): number {
 	return s === "error" ? 2 : s === "warning" ? 1 : 0;
 }
@@ -1534,11 +1545,7 @@ export function explainCommand(
 			pairs.filter((pair) => pair.valueShaped).map(spacedArgumentDiagnostic),
 		),
 		...statements.flatMap((s) => diagnosticsForStatement(s)),
-	].sort(
-		(a, b) =>
-			a.span.start - b.span.start ||
-			severityRank(b.severity) - severityRank(a.severity),
-	);
+	].sort(compareExplainDiagnostics);
 
 	const valueFacts = valuesOf(
 		verbs.splits,

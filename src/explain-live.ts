@@ -16,6 +16,7 @@ import { CentrsError } from "./errors.ts";
 import { analyzeCoordinates } from "./explain/coordinates.ts";
 import {
 	buildExplainErrorEnvelope,
+	compareExplainDiagnostics,
 	type ExplainData,
 	type ExplainEnvelope,
 	type ExplainEnvelopeOptions,
@@ -59,6 +60,19 @@ export const EXPLAIN_LIVE_LIMITS = {
 	commandPaths: 32,
 } as const;
 
+/** Refuse competing target sources before reading input or resolving a device. */
+export function assertExplainTarget(
+	request: Pick<ExplainLiveRequest, "targetInput" | "quickchr">,
+): void {
+	if (request.quickchr !== undefined && request.targetInput !== undefined)
+		throw new CentrsError({
+			code: "usage/conflicting-flags",
+			summary:
+				"--quickchr cannot be combined with a positional or library target.",
+			remediation: "Choose either one --quickchr machine or one target.",
+		});
+}
+
 /** The shared resolver is used for connection settings only; no api request runs. */
 export async function explainLiveEnvelope(
 	request: ExplainLiveRequest,
@@ -67,6 +81,7 @@ export async function explainLiveEnvelope(
 ): Promise<ExplainEnvelope | ExplainErrorEnvelope> {
 	let resolved: ResolvedApiRequest | undefined;
 	try {
+		assertExplainTarget(request);
 		resolved = await resolveApiRequest(
 			{
 				...request,
@@ -122,7 +137,7 @@ export async function explainLiveEnvelope(
 				});
 			}
 			envelope.warnings = [...envelope.warnings, ...resolved.warnings];
-			envelope.meta = liveMeta(resolved, envelope.data);
+			envelope.meta = liveMeta(resolved, envelope.data, options.format);
 			return envelope;
 		} finally {
 			await backend.close();
@@ -130,7 +145,10 @@ export async function explainLiveEnvelope(
 	} catch (error) {
 		const envelope = buildExplainErrorEnvelope(error, [], options.format);
 		if (resolved)
-			envelope.meta = { ...liveMeta(resolved), operation: undefined };
+			envelope.meta = {
+				...liveMeta(resolved, undefined, options.format),
+				operation: undefined,
+			};
 		else
 			envelope.meta.target = { input: redactTargetInput(request.targetInput) };
 		return envelope;
@@ -140,6 +158,7 @@ export async function explainLiveEnvelope(
 function liveMeta(
 	resolved: ResolvedApiRequest,
 	data?: ExplainData,
+	format?: ExplainEnvelopeOptions["format"],
 ): ExplainEnvelope["meta"] {
 	const target = resolved.target;
 	return {
@@ -165,7 +184,7 @@ function liveMeta(
 			host: toCoreSource(target.hostSource),
 			port: toCoreSource(target.portSource),
 			timeoutMs: toCoreSource(resolved.timeoutMs.source),
-			format: toCoreSource(resolved.format.source),
+			format: toCoreSource(format?.source ?? resolved.format.source),
 			insecure: toCoreSource(resolved.insecure.source),
 			username: resolved.auth.usernameSource
 				? toCoreSource(resolved.auth.usernameSource)
@@ -471,6 +490,7 @@ export async function collectExplainEvidence(
 				ev: ev.id,
 			});
 		}
+	data.diagnostics.sort(compareExplainDiagnostics);
 	data.verdict = data.diagnostics.some((d) => d.severity === "error")
 		? "fail"
 		: data.diagnostics.some((d) => d.severity === "warning")

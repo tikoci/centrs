@@ -86,6 +86,28 @@ async function collect(
 	return data;
 }
 describe("live evidence controls", () => {
+	test("live diagnostics precede later offline findings in source order", async () => {
+		const input = ":put 1; :local bad-name 2";
+		expect(
+			explainCommand(input).diagnostics.some((d) => d.span.start > 1),
+		).toBe(true);
+		const data = await collect(input, {
+			execute: async () => ({ ret: "syntax error (line 1 column 2)" }) as never,
+		});
+		expect(data.diagnostics[0]?.code).toBe(
+			"explain/live-inspect/parse-rejected",
+		);
+		expect(data.diagnostics[0]?.span.start).toBe(1);
+	});
+	test("competing library targets are refused before provider resolution", async () => {
+		const result = await explainLiveEnvelope(
+			{ input: ":put 1", targetInput: "edge1", quickchr: "missing-491" },
+			{},
+			{},
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.error.code).toBe("usage/conflicting-flags");
+	});
 	test("escaped parse wrapper and child-only discovery never execute input", async () => {
 		const input =
 			'/system/identity/set name="x$y"; :put [/system/identity/get name]';
@@ -307,13 +329,17 @@ test("live envelope omits the offline-only tip and preserves caller tips", async
 	});
 	const tip = { code: "tip/caller", message: "Caller context." };
 	try {
-		const result = await explainLiveEnvelope(
-			{ input, targetInput: server.url.href },
-			{ tips: [tip] },
-			{},
-		);
-		expect(result.ok).toBe(true);
-		expect(result.tips).toEqual([tip]);
+		for (const kind of ["env", "config"] as const) {
+			const source = { kind, key: "CENTRS_FORMAT" };
+			const result = await explainLiveEnvelope(
+				{ input, targetInput: server.url.href },
+				{ tips: [tip], format: { value: "yaml", source } },
+				{},
+			);
+			expect(result.ok).toBe(true);
+			expect(result.tips).toEqual([tip]);
+			expect(result.meta.settings.format).toEqual(source);
+		}
 	} finally {
 		await server.stop(true);
 	}
@@ -334,12 +360,21 @@ test("actual REST authentication failure keeps resolved target and produces a co
 				password: "test-only",
 				timeout: "1s",
 			},
-			{},
+			{
+				format: {
+					value: "yaml",
+					source: { kind: "config", key: "CENTRS_FORMAT" },
+				},
+			},
 			{},
 		);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.error.code).toBe("transport/auth-failed");
 		expect(result.meta.target.port).toBe(server.port);
+		expect(result.meta.settings.format).toEqual({
+			kind: "config",
+			key: "CENTRS_FORMAT",
+		});
 		expect(result.meta.validation).toBeUndefined();
 		expect(JSON.stringify(result)).not.toContain("test-only");
 	} finally {

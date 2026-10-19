@@ -45,6 +45,7 @@ import {
 	resolveExplainFormat,
 } from "../explain.ts";
 import {
+	assertExplainTarget,
 	type ExplainLiveRequest,
 	explainLiveEnvelope,
 } from "../explain-live.ts";
@@ -535,6 +536,7 @@ export async function runExplainCli(args: readonly string[]): Promise<number> {
 		const { targets, inputPositional } = splitPositionals(parsed);
 		if (targets.length > 1) throw fanoutNotSupportedError({ targets });
 		const router = targets[0];
+		assertExplainTarget({ targetInput: router, quickchr: parsed.quickchr });
 		if (router !== undefined && (/^\//.test(router) || /^:[a-z]/i.test(router)))
 			throw new CentrsError({
 				code: "input/invalid-command",
