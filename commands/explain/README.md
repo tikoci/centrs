@@ -1122,8 +1122,9 @@ navigated, so the context stays as unknown as it already was.
     `empty-group`, `misplaced-separator`, `missing-operand` and
     `invalid-at-sign` (#505, #511, #512, below), and the four token faults
     `glued-token`, `invalid-variable`, `bad-string-variable` and
-    `invalid-name` (#506, #518, below). Seventeen classes the device itself
-    rejects.
+    `invalid-name` (#506, #518, below), and the two unquoted-byte faults
+    `unquoted-reserved-byte` and `unquoted-non-ascii` (#358, #371, below).
+    Nineteen classes the device itself rejects.
   - `warning` — `over-depth`, because it is centrs's own resource bound and says
     nothing about whether the input is legal; `possible-spaced-argument`
     (#350), a spelling RouterOS accepts and marks obsolete; `discarded-close`
@@ -1320,8 +1321,9 @@ query and brace roles. The `$` inside a string is checked by the escape walk
 (`src/explain/quoted-string.ts`), and the stray close by the segmenter
 (`src/explain/segment.ts` → `discardFrom`). Every rule is a `:parse` answer on
 CHR 7.24.5 and 7.23.8, identical on both, and
-`test/fixtures/explain/token-faults.json` pins all 145 rows (80 rejections and
-65 acceptances, with the acceptances' IL). `test/integration/explain-token-faults.test.ts`
+`test/fixtures/explain/token-faults.json` pins these rows and the unquoted-byte
+rows below: 292 in all (184 rejections and 108 acceptances, with the
+acceptances' IL). `test/integration/explain-token-faults.test.ts`
 holds the device to that fixture, and `test/unit/explain-token-faults.test.ts`
 holds offline to it.
 
@@ -1373,10 +1375,59 @@ variable name, so the next `"` does not close the string. Every scanner in
 `explain` closes it there, so both `$` rules and the glued-token rule abstain
 around a string that ends in `$"` (2 of 948 corpus scripts use the form).
 `$$`, `$(…)`, `$[…]` and `${…}` outside a string, where the device's byte is
-not the `$`. A `\` continuation inside a glued token (`"a"\⏎"b"`). The head
-word of a statement (`$v"a"`, `{…}:put 2`). `:local a=b`, which 7.24.5 reads as
+not the `$`. A `\` continuation inside a glued token (`"a"\⏎"b"`). A glued
+head word (`$v"a"`, `{…}:put 2`). `:local a=b`, which 7.24.5 reads as
 a named argument and 7.23.8 as a syntax error. And a name in `/local` or
 `:local name=a_b`.
+
+### Unquoted bytes (#358, #371)
+
+A `?`, a backtick and a non-ASCII byte are never part of a bare word, and
+neither is a second `=` in a menu command's argument. The rules ride the
+token walk (`src/explain/group-faults.ts`). They were grounded with live
+explain (`explainLiveEnvelope`: `:parse` and `highlight`) on CHR 7.24.5 and
+7.23.8, which answered identically. The 147 rows are in
+`test/fixtures/explain/token-faults.json`.
+
+| Code | Device rule | Rejected | Accepted |
+| ---- | ----------- | -------- | -------- |
+| `unquoted-reserved-byte` | `?` and a backtick, at the byte, outside a string or comment. A second `=` in a menu command's argument, at that `=` | `name=a?b`, ``name=a`b``, `name=?b`, `:put a?b`, `[:len a?b]`, `where comment=a?b`, `[find comment=a?b]`, `where (comment=a?b)`, `where comment in {a?b}`, `{a?b}`, `(a?b)`, `/ip/address/print?`, `name=a=b`, `name==b`, `comment=x==`, `url=http://x/a?b=c`, `regexp=^a?b`, `public-key=…=`, `secret=abc==`, `on-event=a=b` | `name="a?b"`, ``name="a`b"``, `name="a=b"`, `where comment=a=b`, `[find comment=a=b]`, `[/ip/address/find comment=a=b]`, `where (comment=a=b)`, `where comment in {"a?b"}`, `{a=b}`, `{"a?"=1}`, `# a?b`, `("a"."?")` |
+| `unquoted-non-ascii` | A non-ASCII byte outside a string or comment, at its first byte; the span is the whole run | `:put café`, `$café`, `name=router-café`, `name=🛰`, `/systemé/identity`, `printé`, `namé=x`, `where comment=café`, `{café}`, `(café)`, `"x"é`, a non-breaking space, `“x”`, `address=…` | `:put "café"`, `:local "café" 1`, `$"café"`, `"a$café"` (`$caf` then `é`), `name="router-🚀"`, `# café`, `do={:put "café"}` |
+
+**Where the device reports, offline reports.** In a menu command's argument
+name the device names the name's first byte (`/ip/address/add addré=1` and
+`a?b=1` at the `a`), so the span is the name. A directive (`:put café=1`) and
+a `$` call (`$f café=1`) report at the byte. A declared name keeps the
+existing `invalid-name` (`:local café`, `:foreach café`). A query, and a
+group or array inside one, keeps `=` as an operator but not these bytes
+(`where (comment=café)` and `in {café}` are rejected at the `é`), and the slash-joined `[/ip/address/find …]` is a query, as
+`[find …]` is. A leading BOM is a positional fact and is not read as part of
+the first word. The informational `non-ascii` fact is still published beside
+the error, so `isPositionalFact("non-ascii")` is unchanged.
+
+**No property parser takes these bytes.** This is the difference from the
+glued-token rule. `regexp=a?b` (layer7 and DNS static), ``regexp=a`b``,
+`public-key=<base64>=`, `secret=abc==`, `password=abc=`,
+`http-header-field=a:b=c` and the script bodies `on-event=a=b` and
+`up-script=a=b` are all rejected at the byte.
+
+**Measured.** Corpus `e12d5d4e58a4`: 8 scripts move to `fail` (7 from `warn`,
+one from `pass`), and 20 already-failing scripts gain a new code. All 28 are
+device rejections on every channel. 8 of their first new errors sit on the
+7.24.5 diagnostic's byte, 20 come after it, and none precedes it. There are no
+false rejects. On the conformance cases, 10 missed rejections move to `fail`
+(the `non-ascii-outside-strings` u10–u12 and u14–u16, z90, z92, g18 and e33), with no new
+false reject.
+
+**Not covered here.** `:put a=b`, `:local x a=b` and `[:len a=b]`: 7.24.5
+reads them as a named argument (`bad parameter a`, at the end), and 7.23.8
+rejects the `=`. A query value that starts with `=` (`where comment==b`,
+`expected comment value`). A relative menu body (`/ip { address { add
+comment=a?b } }`), which the walk does not read (#351). A bare `source=` value,
+which the device rejects at its first byte whatever it holds (`source=abc`), so
+a byte rule there reports after the device's byte. And `:set` of an undeclared
+name, which the device rejects at the name's first byte (`:set zzz 2`), so
+`:set café` is reported at the `é`, after it.
 
 ### The token stream a rule reads (#316)
 

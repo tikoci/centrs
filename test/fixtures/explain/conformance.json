@@ -32,9 +32,9 @@
 		}
 	},
 	"offline": {
-		"pass": 617,
+		"pass": 607,
 		"warn": 78,
-		"fail": 180
+		"fail": 190
 	},
 	"device": {
 		"accept": 544,
@@ -135,14 +135,6 @@
 		"wiresage-conformance/menu-paths/m18.rsc": "warn; device plain-diagnostic",
 		"wiresage-conformance/menu-paths/m21.rsc": "warn; device embedded-diagnostic",
 		"wiresage-conformance/newlines-inside-brackets/z10.rsc": "pass; device plain-diagnostic",
-		"wiresage-conformance/non-ascii-outside-strings/u10.rsc": "pass; device plain-diagnostic",
-		"wiresage-conformance/non-ascii-outside-strings/u11.rsc": "pass; device plain-diagnostic",
-		"wiresage-conformance/non-ascii-outside-strings/u12.rsc": "pass; device plain-diagnostic",
-		"wiresage-conformance/non-ascii-outside-strings/u14.rsc": "pass; device plain-diagnostic",
-		"wiresage-conformance/non-ascii-outside-strings/u15.rsc": "pass; device plain-diagnostic",
-		"wiresage-conformance/non-ascii-outside-strings/u16.rsc": "pass; device plain-diagnostic",
-		"wiresage-conformance/operators-and-other-characters-in-arguments/z90.rsc": "pass; device plain-diagnostic",
-		"wiresage-conformance/operators-and-other-characters-in-arguments/z92.rsc": "pass; device plain-diagnostic",
 		"wiresage-conformance/parameters-and-flags/r11.rsc": "pass; device embedded-diagnostic",
 		"wiresage-conformance/parameters-and-flags/r12.rsc": "pass; device embedded-diagnostic",
 		"wiresage-conformance/parameters-and-flags/r2.rsc": "pass; device embedded-diagnostic",
@@ -174,12 +166,10 @@
 		"wiresage-conformance/statements-that-start-with-a-literal/u33.rsc": "warn; device plain-diagnostic",
 		"wiresage-conformance/statements-that-start-with-a-literal/u34.rsc": "warn; device plain-diagnostic",
 		"wiresage-conformance/strings-and-quoting-in-command-arguments/g10.rsc": "warn; device embedded-diagnostic",
-		"wiresage-conformance/strings-and-quoting-in-command-arguments/g18.rsc": "pass; device plain-diagnostic",
 		"wiresage-conformance/strings-and-quoting-in-command-arguments/g2.rsc": "pass; device embedded-diagnostic",
 		"wiresage-conformance/strings-and-quoting-in-command-arguments/g4.rsc": "pass; device plain-diagnostic",
 		"wiresage-conformance/trailing-comment-forms-in-real-exports/z100.rsc": "pass; device plain-diagnostic",
 		"wiresage-conformance/trailing-comment-forms-in-real-exports/z115.rsc": "pass; device plain-diagnostic",
-		"wiresage-conformance/unary-and-binary-forms/e33.rsc": "pass; device plain-diagnostic",
 		"wiresage-conformance/undeclared-variables/v5.rsc": "pass; device plain-diagnostic",
 		"wiresage-conformance/what-makes-set-legal/d10.rsc": "pass; device plain-diagnostic",
 		"wiresage-conformance/what-makes-set-legal/d11.rsc": "pass; device plain-diagnostic",
@@ -198,7 +188,7 @@
 	},
 	"missedByClass": {
 		"embedded-diagnostic|plain-diagnostic": 5,
-		"plain-diagnostic": 79,
+		"plain-diagnostic": 69,
 		"embedded-diagnostic": 67
 	},
 	"split": {},
