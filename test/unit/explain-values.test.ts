@@ -1074,14 +1074,51 @@ describe("value anchors", () => {
 		}
 	});
 
-	test("a menu block still does not launder an array literal (#348)", () => {
-		// The widening is bounded by what a STATEMENT can start with. A body that
-		// opens with a digit is an array literal, and the device agrees:
-		// `/ip { zzznotamenu { print } }` is a `syntax error` on 7.21.5 and 7.24.2,
-		// so an unknown menu must not become a pass either — it abstains rather
-		// than hard-failing, which is the catalog's "a miss says nothing" contract.
-		expect(explainCommand("/ip { address { 1;2 } }").verdict).toBe("fail");
-		expect(explainCommand("/ip { zzznotamenu { print } }").verdict).not.toBe(
+	test("a brace after a known submenu is a statement block at any depth (#351)", () => {
+		// CHR 7.24.5 and 7.23.8 read it as statements whatever the body holds:
+		// `/ip { address { 1;2 } }` is `bad command name 1` at the `1`, and
+		// `{ a;b }` there runs `a` as `add`. So a body offline cannot resolve
+		// abstains, as it already did one level up, instead of failing the
+		// outer brace as an array. An unknown menu word is a `syntax error` on
+		// the device at every depth, and offline abstains at every depth.
+		for (const input of [
+			"/ip { address { 1;2 } }",
+			"/ip/address { 1;2 }",
+			"/ip { address { a;b } }",
+			"/ip { zzznotamenu { print } }",
+			"/ip/address { zzznotamenu { print } }",
+			"/ip { address { zzznotamenu { print } } }",
+			"/ip { firewall { zzznotamenu { print } } }",
+			"/ip { address { print; zzz } }",
+		]) {
+			const data = explainCommand(input);
+			expect({
+				input,
+				verdict: data.verdict,
+				codes: [...new Set(data.diagnostics.map((d) => d.code))],
+			}).toEqual({
+				input,
+				verdict: "warn",
+				codes: ["explain/canonicalizer/unresolved-statement"],
+			});
+		}
+		// The body is segmented over the composed menu.
+		expect(
+			explainCommand(
+				"/ip { firewall { filter { print } } }",
+			).structure.statements.map((s) => s.command),
+		).toEqual([
+			{ path: "/ip" },
+			{ path: "/ip/firewall" },
+			{ path: "/ip/firewall/filter" },
+			{ path: "/ip/firewall/filter", verb: "print", args: {} },
+		]);
+		// The run must name a KNOWN menu from the source alone: a digit-led word
+		// is no path to the resolver, and a directive's operand stays an array.
+		expect(
+			explainCommand("/interface { 6to4 { print } }").structure.statements,
+		).toHaveLength(2);
+		expect(explainCommand("/ip { address { :local x {1;2} } }").verdict).toBe(
 			"pass",
 		);
 	});

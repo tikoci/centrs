@@ -2298,12 +2298,15 @@ function invalidCommandBraceDiagnostics(
 		const { start, end } = split.span;
 		const text = analyzed.slice(start, end);
 		if (text !== split.text) continue;
-		// The verb splitter cannot yet flatten every relative nested menu block.
-		// Do not reinterpret a known submenu's leading `{` as an argument value,
-		// but retain diagnostics for rejected braces later in the same split.
-		// Require evidence that the brace actually opens a menu container
-		// (body starts with a submenu name), so `/ip/route/print {1;2}` and
-		// `/ip { firewall/filter/print {1;2} }` still diagnose the `{1;2}` array.
+		// The segmenter flattens a relative submenu block only where the source
+		// alone names the menu (#351, `menuBlockPath`): not after a navigation
+		// statement (`/ip⏎address { … }`), and not for an abbreviated or
+		// digit-led menu word. Those still reach here as one split. Do not
+		// reinterpret a known submenu's leading `{` as an argument value, but
+		// retain diagnostics for rejected braces later in the same split.
+		// Require evidence that the brace actually opens a menu container, so
+		// `/ip/route/print {1;2}` and `/ip { firewall/filter/print {1;2} }` still
+		// diagnose the `{1;2}` array.
 		//
 		// A verb the vocabulary or the catalog names is no menu, so its leading
 		// brace is a positional operand: `/system/script add { :beep }` and

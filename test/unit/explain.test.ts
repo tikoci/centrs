@@ -765,6 +765,38 @@ describe("commands/explain/examples.md — offline", () => {
 			[{ path: "/system/script" }, { path: "/system/script", verb: "print" }],
 		);
 	});
+
+	test("51. A brace after a submenu opens a block at any depth (#351)", async () => {
+		const input = "/ip { address { print {1;2} } }";
+		const { data, code } = await explainJson([input]);
+		expect(data.structure.statements.map((s) => s.command)).toEqual([
+			{ path: "/ip" },
+			{ path: "/ip/address" },
+			{ path: "/ip/address", verb: "print" },
+		]);
+		const brace = input.lastIndexOf("{");
+		expect(
+			data.diagnostics.map((d) => ({ code: d.code, span: d.span })),
+		).toEqual([
+			{
+				code: "explain/canonicalizer/invalid-command-brace",
+				span: { start: brace, end: brace + 1 },
+			},
+		]);
+		expect(data.verdict).toBe("fail");
+		expect(code).not.toBe(0);
+
+		for (const abstains of [
+			"/ip { address { 1;2 } }",
+			"/ip { address { zzznotamenu { print } } }",
+		])
+			expect((await explainJson([abstains])).data.verdict).toBe("warn");
+		for (const passes of [
+			"/ip { address { print } }",
+			"/ip { firewall { filter { print } } }",
+		])
+			expect((await explainJson([passes])).data.verdict).toBe("pass");
+	});
 });
 
 test("64 KiB separator-free input stays bounded through public explain (#248)", () => {

@@ -27,7 +27,7 @@ interface Row {
  */
 const COMPLAINT = /syntax error|expected |bad command|bad parameter/;
 describeFast("explain group faults against CHR", () => {
-	test("examples 38-41: every row parses or fails as the fixture records", async () => {
+	test("examples 38-41 and 51: every row parses or fails as the fixture records", async () => {
 		const started = await startIntegrationChr();
 		try {
 			const answers: { input: string; device: string; parse?: string }[] = [];
@@ -60,7 +60,7 @@ describeFast("explain group faults against CHR", () => {
 				quickChrName: started.chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: [38, 39, 40, 41],
+				exampleIds: [38, 39, 40, 41, 51],
 			});
 		} finally {
 			await started.chr.destroy();

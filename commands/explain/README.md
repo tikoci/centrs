@@ -1422,8 +1422,7 @@ false reject.
 **Not covered here.** `:put a=b`, `:local x a=b` and `[:len a=b]`: 7.24.5
 reads them as a named argument (`bad parameter a`, at the end), and 7.23.8
 rejects the `=`. A query value that starts with `=` (`where comment==b`,
-`expected comment value`). A relative menu body (`/ip { address { add
-comment=a?b } }`), which the walk does not read (#351). A bare `source=` value,
+`expected comment value`). A bare `source=` value,
 which the device rejects at its first byte whatever it holds (`source=abc`), so
 a byte rule there reports after the device's byte. And `:set` of an undeclared
 name, which the device rejects at the name's first byte (`:set zzz 2`), so
@@ -1644,15 +1643,34 @@ catalog-named command, with a `:` scripting directive, or with an absolute
 command — corpus script `forum/amm0/topic-184067-routeros-lsp-for-better-syntax-checking-command-completion-in-editors-like-vscod/post-0014-snippet-02.rsc` is the directive case,
 `ethernet { :put … }`.
 
-That last rule is bounded by what a STATEMENT can start with, which is what
-keeps `{1;2}` an array literal: an array member opens with a digit or a quote
-and never reaches the identifier branch. It is also deliberately not widened
-into a claim of existence. Menu-scope resolution is schema-dependent —
-`/ip { zzznotamenu { print } }` is a `syntax error` on device — and offline has
-no schema, so a catalog MISS abstains rather than being decided either way.
-That is the catalog's own "a hit is decisive, a miss says nothing" contract, and
-turning such a miss into an acceptance would be the mirror-image defect of the
-one being fixed here.
+Issue #348 only stopped the failure. It still read `address { … }` as a command
+`/ip address` whose operand was the brace, so the body was never segmented.
+That rule was bounded by what a statement can start with, on the theory that
+`{1;2}` there is an array. The device says otherwise (#351, CHR 7.24.5 and
+7.23.8): a brace right after a menu word is a statement block whatever the body
+holds. `/ip { address { 1;2 } }` is `bad command name 1` at the `1`, and
+`/ip { address { a;b } }` runs `a` as `add`. The old reading failed the OUTER
+brace at depth three, and passed `print {1;2}` and `print; zzz` inside the body.
+
+So a relative run inside a menu block now opens a block of its own when the
+menu it names is known: the enclosing block's path, read outward from the
+source, plus the run, named by a shipped structure table
+(`scope-brace.ts` → `menuBlockPath`). The segmenter, the comment mask, the
+argument lexer and the group-fault walk all ask it. The body is then read like
+`/ip/address { … }`: `print {1;2}` there fails at its own `{`, the device's
+byte, and an unresolvable body statement abstains at every depth.
+
+It is deliberately not widened into a claim of existence. Menu-scope
+resolution is schema-dependent — `/ip { zzznotamenu { print } }` is a
+`syntax error` on device — and offline has no schema, so a catalog MISS
+abstains rather than being decided either way. That is the catalog's own "a
+hit is decisive, a miss says nothing" contract. Three spellings keep the older
+reading because the source alone does not name the menu: a block after a
+navigation statement (`/ip⏎address { … }`), an abbreviation (`addr {`) and a
+digit-led menu (`6to4 {`, which the resolver does not read as a path). After a
+navigation, `/ip⏎address { 1;2 }` still fails at the outer brace and
+`/ip⏎address { print {1;2} }` still passes; the device answers
+`bad command name 1` and `expected end of command` at the inner brace.
 
 ### The `=` is optional in ordinary arguments too (#350)
 
@@ -2031,8 +2049,8 @@ And the grounded complement — asked, and refused:
   `corpus` by `bun run explain:token-census:readme` and gated against it by
   `bun run explain:token-census:readme:check`; the fixture itself is gated
   against a fresh corpus run by `bun run explain:token-census:check`. Of
-  1,426,731 analyzed bytes, 1,022,782 are classified (71.69%), the remaining
-  403,949 are `unclassified`. The census emits 241,279 tokens (avg 254.5 per
+  1,426,731 analyzed bytes, 1,022,786 are classified (71.69%), the remaining
+  403,945 are `unclassified`. The census emits 241,282 tokens (avg 254.5 per
   script). Every byte belongs to exactly one token — sorted by `start`, no
   gaps, no overlaps, `join(slice) === input` — and the `class` field is the
   vocabulary #264 B5 settled. Each B2 fill should move the classified
