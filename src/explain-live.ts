@@ -491,6 +491,7 @@ export async function collectExplainEvidence(
 			});
 		}
 	data.diagnostics.sort(compareExplainDiagnostics);
+	data.spans.sort((a, b) => a.start - b.start || a.end - b.end);
 	data.verdict = data.diagnostics.some((d) => d.severity === "error")
 		? "fail"
 		: data.diagnostics.some((d) => d.severity === "warning")

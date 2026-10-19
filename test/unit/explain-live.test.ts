@@ -86,6 +86,24 @@ async function collect(
 	return data;
 }
 describe("live evidence controls", () => {
+	test("live spans retain source order and preserve offline spans", async () => {
+		const input = ":local v 1; :put $v # note";
+		const offline = explainCommand(input).spans;
+		expect(offline.length).toBeGreaterThan(1);
+		const data = await collect(input);
+		expect(data.spans[0]?.start).toBe(0);
+		expect(data.spans.filter((span) => !span.ev.startsWith("live"))).toEqual(
+			offline,
+		);
+		for (let index = 1; index < data.spans.length; index++) {
+			const before = data.spans[index - 1];
+			const after = data.spans[index];
+			if (!before || !after) throw new Error("Missing adjacent live spans");
+			expect(after.start >= before.start).toBe(true);
+			if (after.start === before.start)
+				expect(after.end >= before.end).toBe(true);
+		}
+	});
 	test("live diagnostics precede later offline findings in source order", async () => {
 		const input = ":put 1; :local bad-name 2";
 		expect(
