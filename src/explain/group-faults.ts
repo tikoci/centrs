@@ -99,6 +99,12 @@ export interface GroupFault {
 	detail?: string;
 	/** The group the fault sits in, for a message that must say which. */
 	group?: "(" | "{";
+	/**
+	 * Where an unquoted-byte fault sits when it is not in a value: a menu
+	 * command's argument name, or a statement's head word (path, command,
+	 * `$name`). The remedy differs, since neither has a value to quote.
+	 */
+	site?: "argument-name" | "head-word";
 }
 
 interface StatementFrame {
@@ -463,7 +469,7 @@ function argumentNameFault(
 	const eq = masked.indexOf("=", at);
 	if (eq < 0 || eq >= end) return null;
 	const fault = unquotedByteFault(masked, at);
-	return { ...fault, start: token.start, end: eq };
+	return { ...fault, start: token.start, end: eq, site: "argument-name" };
 }
 
 /**
@@ -827,7 +833,7 @@ export function findGroupFaults(
 				const bad = unquotedFaultByteAt(masked, i, end);
 				if (bad >= 0 && (at < 0 || i + at > bad)) {
 					frame.settled = true;
-					faults.push(unquotedByteFault(masked, bad));
+					faults.push({ ...unquotedByteFault(masked, bad), site: "head-word" });
 				}
 			}
 			if (readsTokens(frame)) {

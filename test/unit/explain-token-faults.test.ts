@@ -108,6 +108,24 @@ describe("explain token faults (#504, #506, #518)", () => {
 		expect(at("/ip/address/add a?b=1")).toBe("a?b");
 	});
 
+	test("the remedy follows the site: value, argument name, head word", () => {
+		const message = (input: string) => tokenFaults(input)[0]?.message ?? "";
+		// A value can be quoted.
+		expect(message("/system/identity/set name=a?b")).toContain(
+			"quote the value",
+		);
+		expect(message(":put café")).toContain("quote it");
+		// A name or a path has no value to quote.
+		for (const input of ["/ip/address/add a?b=1", "/ip/address/add addré=1"]) {
+			expect(message(input)).toContain("correct the argument name");
+			expect(message(input)).not.toContain("quote the value");
+		}
+		for (const input of ["/ip/address/print?", "/systemé/identity print"]) {
+			expect(message(input)).toContain("remove or retype the byte");
+			expect(message(input)).not.toContain("quote the value");
+		}
+	});
+
 	test("a non-ASCII fault spans the whole character in source coordinates", () => {
 		for (const [input, char] of [
 			[":put café", "é"],

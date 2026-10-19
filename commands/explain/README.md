@@ -1415,7 +1415,7 @@ one from `pass`), and 20 already-failing scripts gain a new code. All 28 are
 device rejections on every channel. 8 of their first new errors sit on the
 7.24.5 diagnostic's byte, 20 come after it, and none precedes it. There are no
 false rejects. On the conformance cases, 10 missed rejections move to `fail`
-(the `non-ascii-outside-strings` u10–u16, z90, z92, g18 and e33), with no new
+(the `non-ascii-outside-strings` u10–u12 and u14–u16, z90, z92, g18 and e33), with no new
 false reject.
 
 **Not covered here.** `:put a=b`, `:local x a=b` and `[:len a=b]`: 7.24.5

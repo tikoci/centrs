@@ -2259,12 +2259,32 @@ function groupFaultMessage(f: GroupFault): string {
 		case "invalid-name":
 			return 'a variable name is letters and digits only, and RouterOS rejects any other byte in it (`expected end of command`) — quote the name (`:local "a_b"`) to use other characters';
 		case "unquoted-non-ascii":
-			return 'a non-ASCII character outside a string: RouterOS reads only ASCII in a bare word, name, path or value, and rejects it (`expected end of command`) — quote it (`name="café"`, `$"café"`), or retype a pasted non-breaking space, curly quote or ellipsis';
 		case "unquoted-reserved-byte":
-			return f.detail === "="
-				? 'a second `=` in a bare argument value: RouterOS rejects it (`expected end of command`) — quote the value (`comment="a=b"`), as a base64 key ending in `=` needs'
-				: `unquoted \`${f.detail}\` is never part of a bare word, and RouterOS rejects it (\`expected end of command\`) — quote the value (\`url="http://x/a?b"\`)`;
+			return unquotedByteMessage(f);
 	}
+}
+
+/**
+ * The unquoted-byte faults (#358, #371). The remedy follows the site: a value
+ * can be quoted, an argument name must be corrected, and a path, command or
+ * `$name` must lose the byte (a variable name may be quoted, `$"café"`).
+ */
+function unquotedByteMessage(f: GroupFault): string {
+	const what =
+		f.code === "unquoted-non-ascii"
+			? "a non-ASCII character outside a string"
+			: f.detail === "="
+				? "a second `=` in a bare argument"
+				: `an unquoted \`${f.detail}\``;
+	if (f.site === "argument-name")
+		return `${what} in an argument name: RouterOS rejects the name at its first byte (\`expected end of command\`) — correct the argument name; no RouterOS argument name holds this byte`;
+	if (f.site === "head-word")
+		return `${what} in a path or command word: RouterOS rejects it (\`expected command name\` or \`expected end of command\`) — remove or retype the byte (a \`?\` is the console's help key, and a pasted non-breaking space or curly quote only looks like ASCII); a variable name may be quoted (\`$"café"\`)`;
+	if (f.code === "unquoted-non-ascii")
+		return `${what}: RouterOS reads only ASCII in a bare word, name or value, and rejects it (\`expected end of command\`) — quote it (\`name="café"\`, \`$"café"\`), or retype a pasted non-breaking space, curly quote or ellipsis`;
+	return f.detail === "="
+		? `${what} value: RouterOS rejects it (\`expected end of command\`) — quote the value (\`comment="a=b"\`), as a base64 key ending in \`=\` needs`
+		: `${what} is never part of a bare word, and RouterOS rejects it (\`expected end of command\`) — quote the value (\`url="http://x/a?b"\`)`;
 }
 
 function invalidCommandBraceDiagnostics(
