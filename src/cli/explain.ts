@@ -1,6 +1,6 @@
 /**
  * `centrs explain` CLI surface: command metadata, arg parsing, dispatch, and
- * envelope rendering for the phase-1 OFFLINE analysis (#202b, #202c-2).
+ * envelope rendering for offline analysis and read-only live evidence (#491).
  *
  * ## The positional grammar is conditional, and that is deliberate
  *
@@ -20,9 +20,8 @@
  *
  * ## What this surface refuses to do
  *
- * - **The live form is rejected, not degraded.** Phase 2 owns the probes; a
- *   phase-1 run that silently analyzed offline while a router was named would
- *   report `mode: "offline"` about an invocation that asked for more.
+ * - **Live probes never execute the input.** The shared live module attaches
+ *   device evidence to the offline result; describe/completion remains #492.
  * - **Fan-out is rejected** (`usage/fanout-not-supported`, the `terminal`
  *   pattern): `explain` takes at most one router.
  * - **`--complete` / `--schema` enumerate nothing offline.** They are accepted,
@@ -45,9 +44,15 @@ import {
 	renderExplainEnvelope,
 	resolveExplainFormat,
 } from "../explain.ts";
+import {
+	type ExplainLiveRequest,
+	explainLiveEnvelope,
+} from "../explain-live.ts";
 import { describeCentrs } from "../index.ts";
 import { loadEnvFileDefaults } from "../resolver/config-file.ts";
+import { redactTargetInput } from "../resolver/index.ts";
 import type { ResolvedSetting } from "../resolver/settings.ts";
+import { apiCommand } from "./api.ts";
 import {
 	type CliCommandMetadata,
 	expectValue,
@@ -59,10 +64,30 @@ import { selectionFlagTokens } from "./selection.ts";
 
 export const explainCliCommand: CliCommandMetadata = {
 	name: "explain",
-	usage: "centrs explain '<input>' [flags]",
+	usage: "centrs explain [<router>] '<input>' [flags]",
 	summary:
-		"Analyze a RouterOS command offline: canonical form, structure, and syntax diagnostics.",
+		"Analyze RouterOS input offline or add read-only device evidence from one router.",
 	options: [
+		...apiCommand.options.filter((o) =>
+			[
+				"--via",
+				"--host",
+				"--port",
+				"--username / --user / -u",
+				"--password",
+				"--timeout",
+				"--insecure",
+				"--cdb-file",
+				"--cdb-password",
+				"--resolve",
+			].includes(o.flag),
+		),
+		{ flag: "-p", valueName: "<secret>", description: "Alias for --password." },
+		{
+			flag: "--quickchr",
+			valueName: "<name>",
+			description: "Resolve one running quickchr VM by name.",
+		},
 		{
 			flag: "--file",
 			valueName: "<path>",
@@ -106,7 +131,7 @@ export const explainCliCommand: CliCommandMetadata = {
 	],
 };
 
-export interface ExplainCliArgs {
+export interface ExplainCliArgs extends Omit<ExplainLiveRequest, "input"> {
 	help?: boolean;
 	positionals: string[];
 	filePath?: string;
@@ -144,6 +169,54 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 			case "-h":
 				parsed.help = true;
 				break;
+			case "--via":
+				parsed.via = expectValue(args, ++index, arg);
+				break;
+			case "--host":
+				parsed.host = expectValue(args, ++index, arg);
+				break;
+			case "--quickchr":
+				if (parsed.quickchr !== undefined)
+					throw fanoutNotSupportedError({ flag: arg });
+				parsed.quickchr = expectValue(args, ++index, arg);
+				break;
+			case "--timeout":
+				parsed.timeout = expectValue(args, ++index, arg);
+				break;
+			case "--cdb-file":
+				parsed.cdbFile = expectValue(args, ++index, arg);
+				break;
+			case "--cdb-password":
+				parsed.cdbPassword = expectValue(args, ++index, arg);
+				break;
+			case "--resolve":
+				parsed.resolve = expectValue(args, ++index, arg);
+				break;
+			case "--password":
+				parsed.password = expectValue(args, ++index, arg);
+				break;
+			case "-p":
+				parsed.password = expectValue(args, ++index, arg);
+				break;
+			case "-u":
+			case "--user":
+			case "--username":
+				parsed.username = expectValue(args, ++index, arg);
+				break;
+			case "--insecure":
+				parsed.insecure = true;
+				break;
+			case "--port": {
+				const value = expectValue(args, ++index, arg);
+				if (!/^\d+$/.test(value))
+					throw new CentrsError({
+						code: "input/invalid-command",
+						summary: "Port must be an integer.",
+						remediation: "Pass a TCP port between 1 and 65535.",
+					});
+				parsed.port = Number(value);
+				break;
+			}
 			case "--file":
 				parsed.filePath = expectValue(args, ++index, arg);
 				break;
@@ -236,32 +309,8 @@ function fanoutNotSupportedError(context: {
 			...(context.flag === undefined ? {} : { flag: context.flag }),
 			...(context.targets === undefined
 				? {}
-				: { targets: [...context.targets] }),
+				: { targets: context.targets.map(redactTargetInput) }),
 		},
-	});
-}
-
-/**
- * The one live-form error.
- *
- * Named separately because it is a PHASE boundary, not a usage mistake: the
- * invocation is the ratified grammar and will work unchanged when phase 2
- * lands, so the remediation points at the offline form rather than at `--help`.
- */
-function liveNotImplementedError(router: string): CentrsError {
-	// A "router" that starts `/` or `:` is almost always an unquoted input the
-	// shell split, so name that reading first rather than reporting a router
-	// nobody meant to give.
-	const looksLikeInput = /^[/:]/.test(router);
-	return new CentrsError({
-		code: "usage/not-implemented",
-		summary: looksLikeInput
-			? `Read \`${router}\` as a router, because two positionals mean \`<router> '<input>'\` — the input was probably not quoted.`
-			: `\`centrs explain <router> '<input>'\` needs live \`/console/inspect\` evidence, which is phase 2; the router \`${router}\` was not contacted.`,
-		remediation: looksLikeInput
-			? "Quote the whole input as one argument: `centrs explain '/ip/route print'`."
-			: "Drop the router for the offline analysis (`centrs explain '<input>'`), or use `rosetta` for documented RouterOS schema facts.",
-		context: { router, phase: "2" },
 	});
 }
 
@@ -290,11 +339,8 @@ function stdinMayCarryInput(): boolean {
 /**
  * Split the positionals into targets and the one that may be the input.
  *
- * Pure and cheap **on purpose**: the caller must be able to refuse the live and
- * fan-out forms BEFORE any input source is touched. Reading first meant
- * `centrs explain router --file -` blocked on EOF before returning
- * `usage/not-implemented`, and `… --file missing` reported a file error instead
- * of the live refusal — the wrong answer, arrived at slowly.
+ * Pure and cheap: fan-out and unsupported facets are refused before any file
+ * or stdin is read. Supported live calls read the input before connecting.
  *
  * `--file` replaces the input positional, so with it every positional is a
  * target. Otherwise the LAST positional is the input and everything before it is
@@ -320,7 +366,7 @@ function splitPositionals(parsed: ExplainCliArgs): {
 }
 
 /**
- * Read the input text, once the invocation is known to be offline.
+ * Read the input text after the invocation shape has been checked.
  *
  * ## Ambient stdin is read ONLY when nothing else could be the input
  *
@@ -396,7 +442,24 @@ async function readFileInput(path: string): Promise<string> {
 }
 
 /** Flags whose NEXT token is a value, so a scanner must skip it. */
-const VALUE_FLAGS = new Set(["--file", "--fail-on", "--format"]);
+const VALUE_FLAGS = new Set([
+	"--file",
+	"--fail-on",
+	"--format",
+	"--via",
+	"--host",
+	"--port",
+	"--username",
+	"--user",
+	"-u",
+	"--password",
+	"-p",
+	"--timeout",
+	"--cdb-file",
+	"--cdb-password",
+	"--resolve",
+	"--quickchr",
+]);
 
 /**
  * The render options, recovered when the parse loop THREW.
@@ -472,11 +535,30 @@ export async function runExplainCli(args: readonly string[]): Promise<number> {
 		const { targets, inputPositional } = splitPositionals(parsed);
 		if (targets.length > 1) throw fanoutNotSupportedError({ targets });
 		const router = targets[0];
-		if (router !== undefined) throw liveNotImplementedError(router);
+		if (router !== undefined && (/^\//.test(router) || /^:[a-z]/i.test(router)))
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary:
+					"The input was probably not quoted; two positionals mean router then input.",
+				remediation:
+					"Quote the whole input as one argument: `centrs explain '/ip/route print'`.",
+			});
+		const live =
+			router !== undefined ||
+			parsed.quickchr !== undefined ||
+			parsed.host !== undefined;
+		if (live && parsed.facets.length > 0)
+			throw new CentrsError({
+				code: "usage/not-implemented",
+				summary:
+					"Live describe/completion facets are not implemented yet (#492).",
+				remediation:
+					"Remove --schema and --complete to collect parse, highlight and child evidence.",
+			});
 
 		const { input, warnings } = await readInput(parsed, inputPositional);
 
-		const envelope = explainEnvelope(input, {
+		const options = {
 			format,
 			curl: parsed.curl,
 			tokens: parsed.tokens,
@@ -485,9 +567,19 @@ export async function runExplainCli(args: readonly string[]): Promise<number> {
 				parsed.facets.length > 0
 					? [buildExplainFacetTip(parsed.facets)]
 					: undefined,
-		});
-		console.log(renderExplainEnvelope(envelope, format.value));
-		return explainExitCode(envelope.data.verdict, parsed.failOn);
+		};
+		const envelope = live
+			? await explainLiveEnvelope(
+					{ ...parsed, targetInput: router, input },
+					options,
+					env,
+				)
+			: explainEnvelope(input, options);
+		if (envelope.ok) console.log(renderExplainEnvelope(envelope, format.value));
+		else console.error(renderExplainEnvelope(envelope, format.value));
+		return envelope.ok
+			? explainExitCode(envelope.data.verdict, parsed.failOn)
+			: 1;
 	} catch (error) {
 		// Only here is the parser's answer unavailable — it threw. `config` is
 		// whatever loaded before the throw, which is `{}` when the loader itself is

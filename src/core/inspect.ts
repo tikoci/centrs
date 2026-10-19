@@ -41,10 +41,9 @@ export interface InspectBackend {
  * The `/console/inspect` request modes (lsp's `InspectRequest`). Only `child`
  * and `completion` are wired today (the two the {@link InspectBackend} seam
  * exposes), plus `input` for completion over CLI text
- * ({@link inspectWhereBooleans}); `highlight` (token-level error detection),
- * `syntax` (parse tree) and the `.query`/`.proplist` request fields are the
- * documented extension point for value-level validation — widen the adapter
- * seam when adding them.
+ * ({@link inspectWhereBooleans}). The protocol adapter also supports `highlight`
+ * for live explain. `syntax` and extra inspect request fields remain extension
+ * points; they are not used by argument discovery.
  */
 export type InspectRequestKind =
 	| "child"

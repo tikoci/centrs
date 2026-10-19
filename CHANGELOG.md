@@ -17,6 +17,11 @@ part of this section.
 
 ### Added
 
+- `explain <router> '<input>'` and `explainLiveEnvelope()` add read-only parse,
+  highlight and command-argument evidence over REST/native API. Probe outcomes,
+  byte coverage and provenance remain explicit; analyzed input never executes.
+  Describe/completion and live types remain follow-ups (#491).
+
 - `centrs --version` / `-V` prints the package version alone; `--json` (or
   `--format json|yaml`) returns an envelope with `data.version` (#463).
 - `execute --cmr` warns `cmr/caller-policy-not-enforced` when a write runs

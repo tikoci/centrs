@@ -1099,10 +1099,11 @@ describe("`'` is not a RouterOS token (#355)", () => {
  * helper would otherwise have covered.
  */
 describe("centrs explain — the CLI surface", () => {
-	test("the live form is refused, not silently degraded to offline", async () => {
+	test("unimplemented live facets are refused, not silently degraded to offline", async () => {
 		const { code, err } = await run([
 			"explain",
 			"edge1",
+			"--schema",
 			"/ip/route print",
 			"--json",
 		]);
@@ -1135,7 +1136,14 @@ describe("centrs explain — the CLI surface", () => {
 			expect(data.structure.statements[0]?.kind).toBe("menu");
 
 			// With `--file`, the single positional is the ROUTER, not the input.
-			const live = await run(["explain", "edge1", "--file", path, "--json"]);
+			const live = await run([
+				"explain",
+				"edge1",
+				"--schema",
+				"--file",
+				path,
+				"--json",
+			]);
 			expect(
 				(JSON.parse(live.err) as { error: { code: string } }).error.code,
 			).toBe("usage/not-implemented");
@@ -1161,11 +1169,39 @@ describe("centrs explain — the CLI surface", () => {
 		expect(code).toBe(1);
 	});
 
+	test("fan-out refusal redacts target credentials and rejects repeated quickchr", async () => {
+		const target = new URL(`http://${"user"}:${"private-token"}@127.0.0.1`)
+			.href;
+		const multiple = await run([
+			"explain",
+			target,
+			"r2",
+			"/ip/route print",
+			"--json",
+		]);
+		expect(JSON.parse(multiple.err).error.code).toBe(
+			"usage/fanout-not-supported",
+		);
+		expect(multiple.err).not.toContain("private-token");
+		const repeated = await run([
+			"explain",
+			"--quickchr",
+			"r1",
+			"--quickchr",
+			"r2",
+			"/ip/route print",
+			"--json",
+		]);
+		expect(JSON.parse(repeated.err).error.code).toBe(
+			"usage/fanout-not-supported",
+		);
+	});
+
 	test("an unquoted input names the likelier mistake", async () => {
 		// `explain /ip/route print` is two positionals, so the grammar reads a
 		// router — but a leading `/` or `:` says the shell split an input.
 		const { err } = await run(["explain", "/ip/route", "print"]);
-		expect(err).toContain("the input was probably not quoted");
+		expect(err).toContain("input was probably not quoted");
 		expect(err).toContain("centrs explain '/ip/route print'");
 	});
 
@@ -1210,13 +1246,14 @@ describe("centrs explain — the CLI surface", () => {
 		expect(err).toContain("`centrs explain --json -- '/ip/address print'`");
 	});
 
-	test("the live form is refused BEFORE any input source is touched", async () => {
+	test("unimplemented live facets are refused BEFORE any input source is touched", async () => {
 		// Ordering, not just outcome: reading first made `--file -` block on EOF
 		// before the refusal, and `--file <missing>` report a file error instead of
 		// it. Both must name the live form, and the `--file -` case must not hang.
 		const missing = await run([
 			"explain",
 			"edge1",
+			"--schema",
 			"--file",
 			`${import.meta.dir}/no-such-file.rsc`,
 			"--json",
@@ -1225,7 +1262,14 @@ describe("centrs explain — the CLI surface", () => {
 			(JSON.parse(missing.err) as { error: { code: string } }).error.code,
 		).toBe("usage/not-implemented");
 
-		const stdin = await run(["explain", "edge1", "--file", "-", "--json"]);
+		const stdin = await run([
+			"explain",
+			"edge1",
+			"--schema",
+			"--file",
+			"-",
+			"--json",
+		]);
 		expect(
 			(JSON.parse(stdin.err) as { error: { code: string } }).error.code,
 		).toBe("usage/not-implemented");

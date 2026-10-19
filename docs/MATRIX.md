@@ -182,10 +182,17 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 
 ## Current priority
 
+The #491 live foundation now returns read-only parse/highlight/child evidence
+on REST and native API. Whole explain cells remain `designed`: #492 facets,
+live types (#225) and #236 closeout acceptance are still outstanding. The honest
+readings, statement ownership and block byte-span prerequisites are shipped;
+Issue #90 owns the remaining sequencing, including #507 context grounding.
+
 **First: `explain`** (maintainer decision 2026-10-16 on
 [#90](https://github.com/tikoci/centrs/issues/90)). In order: make the
-published offline readings honest (#350, #211), give the result a statement
-tree, then the live probe foundation (#491). Then use those probes to
+published offline readings honest (#350, #211; complete), give the result a
+statement tree (#497; complete), then the live probe foundation (#491). Use
+those probes to
 ground #351, #358 and #371, and finish live (#492 → #236 closeout). The
 plan, and what is deliberately out of this run, is the 2026-10-16 plan
 comment on #90. It is step 3 of the validation track below.

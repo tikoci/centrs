@@ -480,6 +480,7 @@ export {
 	type ExplainEvidence,
 	type ExplainFailOn,
 	type ExplainInput,
+	type ExplainLiveData,
 	type ExplainMenuReading,
 	type ExplainOperationMeta,
 	type ExplainOutputFormat,
@@ -514,6 +515,11 @@ export {
 	explainOutputFormats,
 	renderExplainEnvelope,
 } from "./explain.ts";
+export {
+	EXPLAIN_LIVE_LIMITS,
+	type ExplainLiveRequest,
+	explainLiveEnvelope,
+} from "./explain-live.ts";
 export {
 	assertOfflineSyntax,
 	isOfflineGateRejection,

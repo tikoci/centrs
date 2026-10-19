@@ -1,0 +1,2434 @@
+{
+	"generator": "test/integration/explain-live.test.ts",
+	"packages": [
+		{
+			".id": "*1",
+			"available": "false",
+			"build-time": "2026-09-29 14:21:27",
+			"disabled": "false",
+			"name": "routeros",
+			"scheduled": "",
+			"size": "20841356",
+			"version": "7.24.5"
+		}
+	],
+	"captures": [
+		{
+			"input": "/ip/address add address=bogus interface=",
+			"via": "rest-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.545Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.548Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 40
+					},
+					"inputSha256": "c333fbfa092bb4ed0f464e0aff8a91a3ec5d6b33e5e7738676db4659546a5d35",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.551Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "c333fbfa092bb4ed0f464e0aff8a91a3ec5d6b33e5e7738676db4659546a5d35",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 40
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.553Z",
+					"version": "7.24.5 (stable)",
+					"path": "/ip/address/add",
+					"statementIds": ["s0"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/ip/address/add",
+						"statementIds": ["s0"],
+						"names": [
+							"address",
+							"broadcast",
+							"comment",
+							"copy-from",
+							"disabled",
+							"interface",
+							"netmask",
+							"network"
+						]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "(evl /ip/address/addaddress=bogus;)",
+					"rejected": false
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"none",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"syntax-meta",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"syntax-meta"
+					]
+				}
+			}
+		},
+		{
+			"input": ":if (1 > 2) do={ :put x",
+			"via": "rest-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.560Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.562Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 23
+					},
+					"inputSha256": "d327eb7a5e64423b309a03e624b6d2373192edd3f7f3b8f8e9d8b90874883fd0",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.564Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "d327eb7a5e64423b309a03e624b6d2373192edd3f7f3b8f8e9d8b90874883fd0",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 23
+					}
+				}
+			],
+			"live": {
+				"arguments": [],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "expected closing brace (line 1 column 24)",
+					"rejected": true,
+					"position": {
+						"line": 1,
+						"column": 24
+					}
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"cmd",
+						"cmd",
+						"none",
+						"syntax-meta",
+						"none",
+						"none",
+						"syntax-meta",
+						"none",
+						"none",
+						"syntax-meta",
+						"none",
+						"arg",
+						"arg",
+						"syntax-meta",
+						"syntax-meta",
+						"none",
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"none"
+					]
+				}
+			}
+		},
+		{
+			"input": "/ip/route add dst-address=10.9.0.0/16 blackhole=yes",
+			"via": "rest-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.568Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.570Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 51
+					},
+					"inputSha256": "d51e5689f90fcd290ea0744cc3af0825bd7687be2042c12ed8aae0cee9b91675",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.571Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "d51e5689f90fcd290ea0744cc3af0825bd7687be2042c12ed8aae0cee9b91675",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 51
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.573Z",
+					"version": "7.24.5 (stable)",
+					"path": "/ip/route/add",
+					"statementIds": ["s0"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/ip/route/add",
+						"statementIds": ["s0"],
+						"names": [
+							"blackhole",
+							"check-gateway",
+							"comment",
+							"copy-from",
+							"disabled",
+							"distance",
+							"dst-address",
+							"gateway",
+							"pref-src",
+							"routing-table",
+							"scope",
+							"target-scope",
+							"vrf-interface"
+						]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "expected end of command (line 1 column 48)",
+					"rejected": true,
+					"position": {
+						"line": 1,
+						"column": 48
+					}
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"none",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"syntax-meta",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"error",
+						"none",
+						"none",
+						"none"
+					]
+				}
+			}
+		},
+		{
+			"input": "/interface set ether1 name x",
+			"via": "rest-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.577Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.579Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 28
+					},
+					"inputSha256": "675ef4ad155d459ad1d45a077e542721dd8224ef1399a50ea467dcd6456a940e",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.580Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "675ef4ad155d459ad1d45a077e542721dd8224ef1399a50ea467dcd6456a940e",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 28
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.583Z",
+					"version": "7.24.5 (stable)",
+					"path": "/interface/set",
+					"statementIds": ["s0"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/interface/set",
+						"statementIds": ["s0"],
+						"names": ["comment", "disabled", "l2mtu", "mtu", "name", "numbers"]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "(evl /interface/setname=x;numbers=ether1)",
+					"rejected": false
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"none",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"syntax-obsolete",
+						"none"
+					]
+				}
+			}
+		},
+		{
+			"input": "/interface print detail without-paging",
+			"via": "rest-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.587Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.589Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 38
+					},
+					"inputSha256": "19c2111093169c6eba6878d89882d0836cf9a5da4138255df59303c89138ea1f",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.591Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "19c2111093169c6eba6878d89882d0836cf9a5da4138255df59303c89138ea1f",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 38
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.592Z",
+					"version": "7.24.5 (stable)",
+					"path": "/interface/print",
+					"statementIds": ["s0"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/interface/print",
+						"statementIds": ["s0"],
+						"names": [
+							"append",
+							"as-value",
+							"brief",
+							"comments",
+							"count-only",
+							"detail",
+							"file",
+							"follow",
+							"follow-only",
+							"from",
+							"group-by",
+							"interval",
+							"oid",
+							"on-event",
+							"order-by",
+							"proplist",
+							"show-ids",
+							"stats",
+							"stats-detail",
+							"terse",
+							"timestamp",
+							"value-list",
+							"where",
+							"without-paging"
+						]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "(evl /interface/printdetail=true;without-paging=true)",
+					"rejected": false
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"none",
+						"cmd",
+						"cmd",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg"
+					]
+				}
+			}
+		},
+		{
+			"input": "/interface set ether1 definitely-unknown-491=x",
+			"via": "rest-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.596Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.598Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 46
+					},
+					"inputSha256": "bebc33cee0a7afd98d5d5b2db52836fbcb49f24d752b1ee9b80e30564f5e9dd2",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.599Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "bebc33cee0a7afd98d5d5b2db52836fbcb49f24d752b1ee9b80e30564f5e9dd2",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 46
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.601Z",
+					"version": "7.24.5 (stable)",
+					"path": "/interface/set",
+					"statementIds": ["s0"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/interface/set",
+						"statementIds": ["s0"],
+						"names": ["comment", "disabled", "l2mtu", "mtu", "name", "numbers"]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "(evl bad parameter definitely-unknown-491 (line 1 column 47) /interface/setnumbers=ether1)",
+					"rejected": true,
+					"position": {
+						"line": 1,
+						"column": 47
+					}
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"none",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"syntax-meta",
+						"none"
+					]
+				}
+			}
+		},
+		{
+			"input": ":put \"🛰\"; /system/identity/set name=\"explain-must-not-run-491\"",
+			"via": "rest-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.605Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.607Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 65
+					},
+					"inputSha256": "34300554abe57dfea8a523b55153fc1f289ee6365d4d8320ed2780a3ef23bbc9",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.609Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "d089608a35c10610c5ee4eaaff263e4d107cc85baae0b08d0dbbf72da87a6122",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 65
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.611Z",
+					"version": "7.24.5 (stable)",
+					"path": "/put",
+					"statementIds": ["s0"]
+				},
+				{
+					"id": "live4",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.612Z",
+					"version": "7.24.5 (stable)",
+					"path": "/system/identity/set",
+					"statementIds": ["s1"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/put",
+						"statementIds": ["s0"],
+						"names": ["message"]
+					},
+					{
+						"ev": "live4",
+						"path": "/system/identity/set",
+						"statementIds": ["s1"],
+						"names": ["name"]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "(evl /putmessage=🛰);(evl /system/identity/setname=explain-must-not-run-491)",
+					"rejected": false
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"syntax-meta",
+						"none",
+						"none",
+						"none",
+						"none",
+						"syntax-meta",
+						"syntax-meta",
+						"none",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"syntax-meta",
+						"syntax-meta",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"syntax-meta"
+					]
+				}
+			}
+		},
+		{
+			"input": ":put [/system/identity/get name]; :put \"\\$literal\"",
+			"via": "rest-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.617Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.619Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 50
+					},
+					"inputSha256": "fcf5b37f740b61b20cb5f28d39aaa2ce09a2c103c713f061725f60ace2ed7b3d",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.621Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "fcf5b37f740b61b20cb5f28d39aaa2ce09a2c103c713f061725f60ace2ed7b3d",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 50
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.622Z",
+					"version": "7.24.5 (stable)",
+					"path": "/put",
+					"statementIds": ["s0", "s1"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/put",
+						"statementIds": ["s0", "s1"],
+						"names": ["message"]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "(evl /putmessage=(evl (evl /system/identity/getvalue-name=name)));(evl /putmessage=(. $ literal))",
+					"rejected": false
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"syntax-meta",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"syntax-meta",
+						"syntax-meta",
+						"none",
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"syntax-meta",
+						"escaped",
+						"escaped",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"syntax-meta"
+					]
+				}
+			}
+		},
+		{
+			"input": ":put (1 +)",
+			"via": "rest-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.626Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.628Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 10
+					},
+					"inputSha256": "808207fc28e68f61af7de04fe1c1e18139738e54745ba17713b1a6d42392b9c0",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.629Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "808207fc28e68f61af7de04fe1c1e18139738e54745ba17713b1a6d42392b9c0",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 10
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:27.630Z",
+					"version": "7.24.5 (stable)",
+					"path": "/put",
+					"statementIds": ["s0"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/put",
+						"statementIds": ["s0"],
+						"names": ["message"]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "syntax error (line 1 column 11)",
+					"rejected": true,
+					"position": {
+						"line": 1,
+						"column": 11
+					}
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"syntax-meta",
+						"none",
+						"none",
+						"syntax-meta",
+						"syntax-meta"
+					]
+				}
+			}
+		},
+		{
+			"input": "/ip/address add address=bogus interface=",
+			"via": "native-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.305Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.435Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 40
+					},
+					"inputSha256": "c333fbfa092bb4ed0f464e0aff8a91a3ec5d6b33e5e7738676db4659546a5d35",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.436Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "c333fbfa092bb4ed0f464e0aff8a91a3ec5d6b33e5e7738676db4659546a5d35",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 40
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.438Z",
+					"version": "7.24.5 (stable)",
+					"path": "/ip/address/add",
+					"statementIds": ["s0"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/ip/address/add",
+						"statementIds": ["s0"],
+						"names": [
+							"address",
+							"broadcast",
+							"comment",
+							"copy-from",
+							"disabled",
+							"interface",
+							"netmask",
+							"network"
+						]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "(evl /ip/address/addaddress=bogus;)",
+					"rejected": false
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"none",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"syntax-meta",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"syntax-meta"
+					]
+				}
+			}
+		},
+		{
+			"input": ":if (1 > 2) do={ :put x",
+			"via": "native-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.441Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.563Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 23
+					},
+					"inputSha256": "d327eb7a5e64423b309a03e624b6d2373192edd3f7f3b8f8e9d8b90874883fd0",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.564Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "d327eb7a5e64423b309a03e624b6d2373192edd3f7f3b8f8e9d8b90874883fd0",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 23
+					}
+				}
+			],
+			"live": {
+				"arguments": [],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "expected closing brace (line 1 column 24)",
+					"rejected": true,
+					"position": {
+						"line": 1,
+						"column": 24
+					}
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"cmd",
+						"cmd",
+						"none",
+						"syntax-meta",
+						"none",
+						"none",
+						"syntax-meta",
+						"none",
+						"none",
+						"syntax-meta",
+						"none",
+						"arg",
+						"arg",
+						"syntax-meta",
+						"syntax-meta",
+						"none",
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"none"
+					]
+				}
+			}
+		},
+		{
+			"input": "/ip/route add dst-address=10.9.0.0/16 blackhole=yes",
+			"via": "native-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.567Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.695Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 51
+					},
+					"inputSha256": "d51e5689f90fcd290ea0744cc3af0825bd7687be2042c12ed8aae0cee9b91675",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.696Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "d51e5689f90fcd290ea0744cc3af0825bd7687be2042c12ed8aae0cee9b91675",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 51
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.697Z",
+					"version": "7.24.5 (stable)",
+					"path": "/ip/route/add",
+					"statementIds": ["s0"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/ip/route/add",
+						"statementIds": ["s0"],
+						"names": [
+							"blackhole",
+							"check-gateway",
+							"comment",
+							"copy-from",
+							"disabled",
+							"distance",
+							"dst-address",
+							"gateway",
+							"pref-src",
+							"routing-table",
+							"scope",
+							"target-scope",
+							"vrf-interface"
+						]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "expected end of command (line 1 column 48)",
+					"rejected": true,
+					"position": {
+						"line": 1,
+						"column": 48
+					}
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"none",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"syntax-meta",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"error",
+						"none",
+						"none",
+						"none"
+					]
+				}
+			}
+		},
+		{
+			"input": "/interface set ether1 name x",
+			"via": "native-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.700Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.828Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 28
+					},
+					"inputSha256": "675ef4ad155d459ad1d45a077e542721dd8224ef1399a50ea467dcd6456a940e",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.828Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "675ef4ad155d459ad1d45a077e542721dd8224ef1399a50ea467dcd6456a940e",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 28
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.829Z",
+					"version": "7.24.5 (stable)",
+					"path": "/interface/set",
+					"statementIds": ["s0"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/interface/set",
+						"statementIds": ["s0"],
+						"names": ["comment", "disabled", "l2mtu", "mtu", "name", "numbers"]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "(evl /interface/setname=x;numbers=ether1)",
+					"rejected": false
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"none",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"syntax-obsolete",
+						"none"
+					]
+				}
+			}
+		},
+		{
+			"input": "/interface print detail without-paging",
+			"via": "native-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.831Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.949Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 38
+					},
+					"inputSha256": "19c2111093169c6eba6878d89882d0836cf9a5da4138255df59303c89138ea1f",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.949Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "19c2111093169c6eba6878d89882d0836cf9a5da4138255df59303c89138ea1f",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 38
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.950Z",
+					"version": "7.24.5 (stable)",
+					"path": "/interface/print",
+					"statementIds": ["s0"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/interface/print",
+						"statementIds": ["s0"],
+						"names": [
+							"append",
+							"as-value",
+							"brief",
+							"comments",
+							"count-only",
+							"detail",
+							"file",
+							"follow",
+							"follow-only",
+							"from",
+							"group-by",
+							"interval",
+							"oid",
+							"on-event",
+							"order-by",
+							"proplist",
+							"show-ids",
+							"stats",
+							"stats-detail",
+							"terse",
+							"timestamp",
+							"value-list",
+							"where",
+							"without-paging"
+						]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "(evl /interface/printdetail=true;without-paging=true)",
+					"rejected": false
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"none",
+						"cmd",
+						"cmd",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"arg"
+					]
+				}
+			}
+		},
+		{
+			"input": "/interface set ether1 definitely-unknown-491=x",
+			"via": "native-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:28.954Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.075Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 46
+					},
+					"inputSha256": "bebc33cee0a7afd98d5d5b2db52836fbcb49f24d752b1ee9b80e30564f5e9dd2",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.076Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "bebc33cee0a7afd98d5d5b2db52836fbcb49f24d752b1ee9b80e30564f5e9dd2",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 46
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.077Z",
+					"version": "7.24.5 (stable)",
+					"path": "/interface/set",
+					"statementIds": ["s0"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/interface/set",
+						"statementIds": ["s0"],
+						"names": ["comment", "disabled", "l2mtu", "mtu", "name", "numbers"]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "(evl bad parameter definitely-unknown-491 (line 1 column 47) /interface/setnumbers=ether1)",
+					"rejected": true,
+					"position": {
+						"line": 1,
+						"column": 47
+					}
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"none",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"obj-inactive",
+						"syntax-meta",
+						"none"
+					]
+				}
+			}
+		},
+		{
+			"input": ":put \"🛰\"; /system/identity/set name=\"explain-must-not-run-491\"",
+			"via": "native-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.081Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.197Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 65
+					},
+					"inputSha256": "34300554abe57dfea8a523b55153fc1f289ee6365d4d8320ed2780a3ef23bbc9",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.199Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "d089608a35c10610c5ee4eaaff263e4d107cc85baae0b08d0dbbf72da87a6122",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 65
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.200Z",
+					"version": "7.24.5 (stable)",
+					"path": "/put",
+					"statementIds": ["s0"]
+				},
+				{
+					"id": "live4",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.201Z",
+					"version": "7.24.5 (stable)",
+					"path": "/system/identity/set",
+					"statementIds": ["s1"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/put",
+						"statementIds": ["s0"],
+						"names": ["message"]
+					},
+					{
+						"ev": "live4",
+						"path": "/system/identity/set",
+						"statementIds": ["s1"],
+						"names": ["name"]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "(evl /putmessage=🛰);(evl /system/identity/setname=explain-must-not-run-491)",
+					"rejected": false
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"syntax-meta",
+						"none",
+						"none",
+						"none",
+						"none",
+						"syntax-meta",
+						"syntax-meta",
+						"none",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"arg",
+						"arg",
+						"arg",
+						"arg",
+						"syntax-meta",
+						"syntax-meta",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"syntax-meta"
+					]
+				}
+			}
+		},
+		{
+			"input": ":put [/system/identity/get name]; :put \"\\$literal\"",
+			"via": "native-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.204Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.326Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 50
+					},
+					"inputSha256": "fcf5b37f740b61b20cb5f28d39aaa2ce09a2c103c713f061725f60ace2ed7b3d",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.327Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "fcf5b37f740b61b20cb5f28d39aaa2ce09a2c103c713f061725f60ace2ed7b3d",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 50
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.328Z",
+					"version": "7.24.5 (stable)",
+					"path": "/put",
+					"statementIds": ["s0", "s1"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/put",
+						"statementIds": ["s0", "s1"],
+						"names": ["message"]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "(evl /putmessage=(evl (evl /system/identity/getvalue-name=name)));(evl /putmessage=(. $ literal))",
+					"rejected": false
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"syntax-meta",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"syntax-meta",
+						"syntax-meta",
+						"none",
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"syntax-meta",
+						"escaped",
+						"escaped",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"none",
+						"syntax-meta"
+					]
+				}
+			}
+		},
+		{
+			"input": ":put (1 +)",
+			"via": "native-api",
+			"environment": {
+				"ev": "live0",
+				"version": "7.24.5 (stable)",
+				"architecture": "x86_64",
+				"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+			},
+			"evidence": [
+				{
+					"id": "live0",
+					"source": "live-inspect",
+					"probe": "/system/resource",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.331Z",
+					"version": "7.24.5 (stable)"
+				},
+				{
+					"id": "live1",
+					"source": "live-inspect",
+					"probe": ":parse",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.451Z",
+					"version": "7.24.5 (stable)",
+					"coverage": {
+						"start": 0,
+						"end": 10
+					},
+					"inputSha256": "808207fc28e68f61af7de04fe1c1e18139738e54745ba17713b1a6d42392b9c0",
+					"normalization": "original-utf8"
+				},
+				{
+					"id": "live2",
+					"source": "live-inspect",
+					"probe": "highlight",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.452Z",
+					"version": "7.24.5 (stable)",
+					"inputSha256": "808207fc28e68f61af7de04fe1c1e18139738e54745ba17713b1a6d42392b9c0",
+					"normalization": "sub-per-non-ascii-byte",
+					"coverage": {
+						"start": 0,
+						"end": 10
+					}
+				},
+				{
+					"id": "live3",
+					"source": "live-inspect",
+					"probe": "child",
+					"basis": "direct",
+					"outcome": "ok",
+					"observedAt": "2026-10-19T03:21:29.452Z",
+					"version": "7.24.5 (stable)",
+					"path": "/put",
+					"statementIds": ["s0"]
+				}
+			],
+			"live": {
+				"arguments": [
+					{
+						"ev": "live3",
+						"path": "/put",
+						"statementIds": ["s0"],
+						"names": ["message"]
+					}
+				],
+				"environment": {
+					"ev": "live0",
+					"version": "7.24.5 (stable)",
+					"architecture": "x86_64",
+					"board": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+				},
+				"parse": {
+					"ev": "live1",
+					"output": "syntax error (line 1 column 11)",
+					"rejected": true,
+					"position": {
+						"line": 1,
+						"column": 11
+					}
+				},
+				"highlight": {
+					"ev": "live2",
+					"classes": [
+						"dir",
+						"cmd",
+						"cmd",
+						"cmd",
+						"none",
+						"syntax-meta",
+						"none",
+						"none",
+						"syntax-meta",
+						"syntax-meta"
+					]
+				}
+			}
+		}
+	],
+	"_source": {
+		"channel": "stable",
+		"capture": "CENTRS_EXPLAIN_CAPTURE=<output> CENTRS_CHR_CHANNEL=stable CENTRS_RUN_FAST_INTEGRATION=1 bun test test/integration/explain-live.test.ts",
+		"limits": "Controlled synthetic inputs; read-only parse/highlight/child evidence, never runtime acceptance. Child names are the collected projection, not raw rows."
+	}
+}
