@@ -1,11 +1,13 @@
 /**
  * `execute --cmr` (#450) against a real two-CHR CMR lab (`cmr-lab.ts`): a
- * controller with the `cmr` package and one paired client, 7.26beta1.
+ * controller with the `cmr` package and one paired client (version in `cmr-lab.ts`).
  *
- * Two parts:
+ * Device contracts and functional examples:
  *   - CMR-D*: the device behaviour `src/execute-cmr.ts` is built on, asserted
  *     directly against the controller so a later RouterOS build that changes it
  *     fails here first, not as a silent mis-binding in centrs.
+ *   - CMR-D8 uses a separate lab: its deliberate API disconnect can also close
+ *     the next native session on 7.26beta1.
  *   - CMR1–CMR18: the examples in `commands/execute/examples.md` → CMR, through
  *     the library and the CLI, with validation on, over native-api AND
  *     rest-api to the controller. CMR16–CMR18 are plain `execute` of fleet
@@ -26,12 +28,8 @@ import {
 	executeCmr,
 } from "../../src/execute-cmr.ts";
 import { createProtocolAdapter } from "../../src/protocols/index.ts";
-import {
-	CMR_SINCE,
-	isChrIntegrationEnabled,
-	recordIntegrationEvidence,
-} from "./chr.ts";
-import { type CmrLab, startCmrLab } from "./cmr-lab.ts";
+import { isChrIntegrationEnabled, recordIntegrationEvidence } from "./chr.ts";
+import { CMR_LAB_VERSION, type CmrLab, startCmrLab } from "./cmr-lab.ts";
 
 const describeFast = isChrIntegrationEnabled() ? describe : describe.skip;
 
@@ -96,9 +94,7 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 				const clientId = clientRow?.[".id"] ?? "";
 
 				// A controller login with the field site's group (#456): no write,
-				// no reboot, no sensitive, no policy. Created before CMR-D8: the
-				// dashboard probe blocks the controller's REST service for 10–30 s,
-				// and this setup goes over REST.
+				// no reboot, no sensitive, no policy.
 				const restricted = {
 					group: "centrs-reader",
 					user: "centrs-reader-u",
@@ -214,7 +210,7 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 				// CMR-D9. #453 resolves a fleet command's selection host-side: the
 				// manual's label rules over each row's `labels` ∪ `auto-labels`. The
 				// device's own selection (a run-script probe per row) must agree, or
-				// the write gate would name the wrong devices. Before CMR-D8 (REST).
+				// the write gate would name the wrong devices.
 				await controller.run(
 					`/cmr/device/set [find identity=${client.identity}] labels=edge,site-a`,
 				);
@@ -255,35 +251,6 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						labels,
 						selected: resolved?.devices?.map((d) => d.identity).sort(),
 					}).toEqual({ labels, selected: onDevice.sort() });
-				}
-
-				// CMR-D8. `dashboard` is console-only: over the native API it ends the
-				// session (why centrs refuses it as `cmr/console-only`). REST is not
-				// exercised: there it holds the controller's REST service for 10–30 s.
-				const native = createProtocolAdapter({
-					protocol: "native-api",
-					host: "127.0.0.1",
-					port: controller.ports.api,
-					tls: false,
-					baseUrl: `api://127.0.0.1:${controller.ports.api}`,
-					username: controller.username,
-					password: controller.password,
-					timeoutMs: 15_000,
-				});
-				try {
-					const dashboard = await native
-						.apiRequest({
-							verb: "run",
-							path: "/cmr/device/dashboard",
-							attributes: { numbers: clientId },
-						})
-						.then(
-							() => "returned",
-							(e: { code?: string }) => e.code,
-						);
-					expect(dashboard).toBe("transport/connection-closed");
-				} finally {
-					await native.close();
 				}
 
 				for (const via of ["native-api", "rest-api"] as const) {
@@ -740,7 +707,7 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						protocol,
 						routerosVersion: `${controller.version} (controller), ${client.version} (client)`,
 						quickChrName: controller.name,
-						requestedVersion: CMR_SINCE,
+						requestedVersion: CMR_LAB_VERSION,
 						exampleIds,
 					});
 				}
@@ -751,9 +718,56 @@ describeFast("execute --cmr against a CMR lab (#450)", () => {
 						protocol,
 						routerosVersion: `${controller.version} (controller), ${client.version} (client)`,
 						quickChrName: controller.name,
-						requestedVersion: CMR_SINCE,
+						requestedVersion: CMR_LAB_VERSION,
 						exampleIds: ["CMR1"],
 					});
+				}
+			} finally {
+				await lab.remove();
+			}
+		},
+		{ timeout: 900_000 },
+	);
+
+	test(
+		"CMR-D8 native dashboard disconnect in an isolated lab",
+		async () => {
+			const lab = await startCmrLab(
+				`centrs-cmr-dashboard-${crypto.randomUUID().slice(0, 6)}`,
+			);
+			try {
+				const { controller, client } = lab;
+				const clientId = (await lab.devices()).find(
+					(device) => device["identity"] === client.identity,
+				)?.[".id"];
+				expect(clientId).toBeDefined();
+				// CMR-D8. `dashboard` is console-only: over the native API it ends the
+				// session (why centrs refuses it as `cmr/console-only`). REST is not
+				// exercised: there it holds the controller's REST service for 10–30 s.
+				const native = createProtocolAdapter({
+					protocol: "native-api",
+					host: "127.0.0.1",
+					port: controller.ports.api,
+					tls: false,
+					baseUrl: `api://127.0.0.1:${controller.ports.api}`,
+					username: controller.username,
+					password: controller.password,
+					timeoutMs: 15_000,
+				});
+				try {
+					const dashboard = await native
+						.apiRequest({
+							verb: "run",
+							path: "/cmr/device/dashboard",
+							attributes: { numbers: clientId ?? "" },
+						})
+						.then(
+							() => "returned",
+							(e: { code?: string }) => e.code,
+						);
+					expect(dashboard).toBe("transport/connection-closed");
+				} finally {
+					await native.close();
 				}
 			} finally {
 				await lab.remove();
