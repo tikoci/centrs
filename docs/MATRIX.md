@@ -101,10 +101,10 @@ and implementation sequencing in the linked issues.
   `winbox-terminal` stay `not-started`. Its per-host fan-out is the machinery the
   IP-scan discovery (#149) will iterate; the L2-default timing evidence (#136) is
   recorded in the README before the cells advance past `designed`.
-- `explain`'s two `designed` protocol cells are the future live probes
-  (`/console/inspect` + `:parse`, #236). The live grammar
-  (`explain <router> '<input>'`) is parsed and refused with
-  `usage/not-implemented`, never degraded to an offline run. Offline analysis
+- `explain`'s two `designed` protocol cells track the whole live capability
+  (#236). `explain <router> '<input>'` now collects read-only `:parse`, highlight
+  and child argument-name evidence (#491). Describe/completion (#492) and live
+  types (#225) remain unfinished, so neither cell advances yet. Offline analysis
   has its own capability entry below. The generated structure tables
   `src/explain/menus.ts` and `src/explain/catalog.ts` keep analysis offline;
   their ownership and regeneration contracts live in `commands/explain/README.md`.
