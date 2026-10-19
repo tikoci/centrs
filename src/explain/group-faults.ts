@@ -29,8 +29,8 @@
  *   after `<name>=` with the property's own parser: `where (comment=+)`,
  *   `(comment=a-)`, `(comment=@)` and `(.id=*1)` parse, though each is an
  *   expression error elsewhere. So a group in a query gets only the structural
- *   checks (empty, `;`, newline) and #509's brace rule, never the operand or
- *   `@` rules.
+ *   checks (empty, `;`, newline), #509's brace rule and the unquoted-byte
+ *   rule below, never the operand or `@` rules.
  * - **Arrays (#511).** An array that is the whole value of a statement or an
  *   argument must have an element: `:local z {}`, `:put {}`, `:return {}`,
  *   `[:len {}]` and `in={}` are errors, while `{1;{}}`, `{a={}}`, `({})`,
@@ -61,7 +61,9 @@
  *   name at the name's first byte (`addré=1`, `a?b=1`). A second `=` in a
  *   menu command's argument is rejected too (`name=a=b`, a bare base64 key
  *   ending in `=`). In a query and in an array it is an operator and a key
- *   (`where comment=a=b`, `{a=b}` parse); a directive's `a=b` is a named
+ *   (`where comment=a=b`, `{a=b}` parse), and a query group takes the byte
+ *   rule but no other (`where (comment=a?b)` and `in {a?b}` are rejected at
+ *   the `?`, `where (comment=a=b)` parses); a directive's `a=b` is a named
  *   argument on 7.24.5 and a syntax error on 7.23.8, so it is left alone. No
  *   property parser was found that takes these bytes (`regexp=a?b`,
  *   `public-key=…=`, `secret=…==`, `on-event=a=b` are all rejected). Strings
@@ -864,6 +866,12 @@ export function findGroupFaults(
 		}
 
 		if (frame.kind === "opaque") {
+			// A query's `in {…}` is read as opaque, so `where … in {}` keeps
+			// parsing; its bytes are still rejected (`in {a?b}` at the `?`).
+			if (frame.query && !frame.muted && isUnquotedFaultByte(c)) {
+				faults.push(unquotedByteFault(masked, i));
+				frame.muted = true;
+			}
 			i++;
 			continue;
 		}
@@ -928,7 +936,8 @@ export function findGroupFaults(
 				i++;
 				continue;
 			}
-			if (isUnquotedFaultByte(c) && !frame.query) {
+			// Unlike `@`, these bytes are rejected in a query too (`in {a?b}`).
+			if (isUnquotedFaultByte(c)) {
 				report(unquotedByteFault(masked, i), frame);
 				i++;
 				continue;
@@ -958,8 +967,16 @@ export function findGroupFaults(
 			i++;
 			continue;
 		}
+		// A query group keeps its operators, but not these bytes:
+		// `where (comment=a?b)` is a `syntax error` at the `?`.
+		if (isUnquotedFaultByte(c)) {
+			report(unquotedByteFault(masked, i), frame);
+			i++;
+			continue;
+		}
 		if (frame.query) {
-			// Structural checks only (module header): any other byte is content.
+			// Structural and byte checks only (module header): any other byte is
+			// content.
 			frame.empty = false;
 			frame.wantOperand = false;
 			i++;
@@ -1025,11 +1042,6 @@ export function findGroupFaults(
 			frame.wantOperand = true;
 			frame.pending = { start: i, spelling };
 			i += spelling.length;
-			continue;
-		}
-		if (isUnquotedFaultByte(c)) {
-			report(unquotedByteFault(masked, i), frame);
-			i++;
 			continue;
 		}
 		// `#`, `'`, a stray `\`: another rule's byte, and nothing here can say

@@ -1322,7 +1322,7 @@ query and brace roles. The `$` inside a string is checked by the escape walk
 (`src/explain/segment.ts` → `discardFrom`). Every rule is a `:parse` answer on
 CHR 7.24.5 and 7.23.8, identical on both, and
 `test/fixtures/explain/token-faults.json` pins these rows and the unquoted-byte
-rows below: 262 in all (166 rejections and 96 acceptances, with the
+rows below: 292 in all (184 rejections and 108 acceptances, with the
 acceptances' IL). `test/integration/explain-token-faults.test.ts`
 holds the device to that fixture, and `test/unit/explain-token-faults.test.ts`
 holds offline to it.
@@ -1386,20 +1386,21 @@ A `?`, a backtick and a non-ASCII byte are never part of a bare word, and
 neither is a second `=` in a menu command's argument. The rules ride the
 token walk (`src/explain/group-faults.ts`). They were grounded with live
 explain (`explainLiveEnvelope`: `:parse` and `highlight`) on CHR 7.24.5 and
-7.23.8, which answered identically. The 117 rows are in
+7.23.8, which answered identically. The 147 rows are in
 `test/fixtures/explain/token-faults.json`.
 
 | Code | Device rule | Rejected | Accepted |
 | ---- | ----------- | -------- | -------- |
-| `unquoted-reserved-byte` | `?` and a backtick, at the byte, outside a string or comment. A second `=` in a menu command's argument, at that `=` | `name=a?b`, ``name=a`b``, `name=?b`, `:put a?b`, `[:len a?b]`, `where comment=a?b`, `[find comment=a?b]`, `{a?b}`, `(a?b)`, `/ip/address/print?`, `name=a=b`, `name==b`, `comment=x==`, `url=http://x/a?b=c`, `regexp=^a?b`, `public-key=…=`, `secret=abc==`, `on-event=a=b` | `name="a?b"`, ``name="a`b"``, `name="a=b"`, `where comment=a=b`, `[find comment=a=b]`, `[/ip/address/find comment=a=b]`, `{a=b}`, `{"a?"=1}`, `# a?b`, `("a"."?")` |
+| `unquoted-reserved-byte` | `?` and a backtick, at the byte, outside a string or comment. A second `=` in a menu command's argument, at that `=` | `name=a?b`, ``name=a`b``, `name=?b`, `:put a?b`, `[:len a?b]`, `where comment=a?b`, `[find comment=a?b]`, `where (comment=a?b)`, `where comment in {a?b}`, `{a?b}`, `(a?b)`, `/ip/address/print?`, `name=a=b`, `name==b`, `comment=x==`, `url=http://x/a?b=c`, `regexp=^a?b`, `public-key=…=`, `secret=abc==`, `on-event=a=b` | `name="a?b"`, ``name="a`b"``, `name="a=b"`, `where comment=a=b`, `[find comment=a=b]`, `[/ip/address/find comment=a=b]`, `where (comment=a=b)`, `where comment in {"a?b"}`, `{a=b}`, `{"a?"=1}`, `# a?b`, `("a"."?")` |
 | `unquoted-non-ascii` | A non-ASCII byte outside a string or comment, at its first byte; the span is the whole run | `:put café`, `$café`, `name=router-café`, `name=🛰`, `/systemé/identity`, `printé`, `namé=x`, `where comment=café`, `{café}`, `(café)`, `"x"é`, a non-breaking space, `“x”`, `address=…` | `:put "café"`, `:local "café" 1`, `$"café"`, `"a$café"` (`$caf` then `é`), `name="router-🚀"`, `# café`, `do={:put "café"}` |
 
 **Where the device reports, offline reports.** In a menu command's argument
 name the device names the name's first byte (`/ip/address/add addré=1` and
 `a?b=1` at the `a`), so the span is the name. A directive (`:put café=1`) and
 a `$` call (`$f café=1`) report at the byte. A declared name keeps the
-existing `invalid-name` (`:local café`, `:foreach café`). A query keeps `=`
-as an operator, and the slash-joined `[/ip/address/find …]` is a query, as
+existing `invalid-name` (`:local café`, `:foreach café`). A query, and a
+group or array inside one, keeps `=` as an operator but not these bytes
+(`where (comment=café)` and `in {café}` are rejected at the `é`), and the slash-joined `[/ip/address/find …]` is a query, as
 `[find …]` is. A leading BOM is a positional fact and is not read as part of
 the first word. The informational `non-ascii` fact is still published beside
 the error, so `isPositionalFact("non-ascii")` is unchanged.

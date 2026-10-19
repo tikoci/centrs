@@ -1929,6 +1929,222 @@
 			"parse": "expected end of command (line 1 column 33)",
 			"code": "unquoted-reserved-byte",
 			"span": [32, 33]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where (comment=a?b)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 35)",
+			"code": "unquoted-reserved-byte",
+			"span": [34, 35]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where comment in {a?b}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 38)",
+			"code": "unquoted-reserved-byte",
+			"span": [37, 38]
+		},
+		{
+			"issue": "#358",
+			"input": ":put [/ip/address/find (comment=a?b)]",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 34)",
+			"code": "unquoted-reserved-byte",
+			"span": [33, 34]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where ((comment=a?b) and true)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 36)",
+			"code": "unquoted-reserved-byte",
+			"span": [35, 36]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where (comment=a`b)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 35)",
+			"code": "unquoted-reserved-byte",
+			"span": [34, 35]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where comment in {a`b}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 38)",
+			"code": "unquoted-reserved-byte",
+			"span": [37, 38]
+		},
+		{
+			"issue": "#358",
+			"input": ":put [/ip/address/find (comment=a`b)]",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 34)",
+			"code": "unquoted-reserved-byte",
+			"span": [33, 34]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where ((comment=a`b) and true)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 36)",
+			"code": "unquoted-reserved-byte",
+			"span": [35, 36]
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address/print where (comment=café)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 37)",
+			"code": "unquoted-non-ascii",
+			"span": [36, 38]
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address/print where comment in {café}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 40)",
+			"code": "unquoted-non-ascii",
+			"span": [39, 41]
+		},
+		{
+			"issue": "#371",
+			"input": ":put [/ip/address/find (comment=café)]",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 36)",
+			"code": "unquoted-non-ascii",
+			"span": [35, 37]
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address/print where ((comment=café) and true)",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 38)",
+			"code": "unquoted-non-ascii",
+			"span": [37, 39]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where (comment=\"a?b\")",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(= $comment a?b);5)"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where comment in {\"a?b\"}",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(in $comment a?b);5)"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where (comment=\"a`b\")",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(= $comment a`b);5)"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where comment in {\"a`b\"}",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(in $comment a`b);5)"
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address/print where (comment=\"café\")",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(= $comment café);5)"
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address/print where comment in {\"café\"}",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(in $comment café);5)"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where (comment=a=b)",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(= (= $comment a) $b);5)"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where comment in {a=b}",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(in $comment a=$b);5)"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where (comment=ab)",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(= $comment ab);5)"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where comment in {a;b}",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(in $comment $a;$b);5)"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where (comment in {a?b})",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 39)",
+			"code": "unquoted-reserved-byte",
+			"span": [38, 39]
+		},
+		{
+			"issue": "#358",
+			"input": ":put [/ip/address/find (comment in {a?b})]",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 38)",
+			"code": "unquoted-reserved-byte",
+			"span": [37, 38]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where comment in {1;{a?b}}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 41)",
+			"code": "unquoted-reserved-byte",
+			"span": [40, 41]
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address/print where (comment in {café})",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 41)",
+			"code": "unquoted-non-ascii",
+			"span": [40, 42]
+		},
+		{
+			"issue": "#371",
+			"input": ":put [/ip/address/find (comment in {café})]",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 40)",
+			"code": "unquoted-non-ascii",
+			"span": [39, 41]
+		},
+		{
+			"issue": "#371",
+			"input": "/ip/address/print where comment in {1;{café}}",
+			"device": "reject",
+			"parse": "syntax error (line 1 column 43)",
+			"code": "unquoted-non-ascii",
+			"span": [42, 44]
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where (comment in {\"a?b\"})",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(in $comment a?b);5)"
+		},
+		{
+			"issue": "#358",
+			"input": "/ip/address/print where (comment in {a=b})",
+			"device": "accept",
+			"il": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;(in $comment a=$b);5)"
 		}
 	]
 }
