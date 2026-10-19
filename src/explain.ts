@@ -460,15 +460,21 @@ export interface ExplainStructure {
  *
  * The vocabulary is centrs-owned (the ratified decision): consumers depend on
  * it rather than on raw RouterOS `highlight` classes, so cross-version drift in
- * those classes is centrs's problem to absorb. For these five the two names
- * currently coincide, which is a convenience, not the contract.
+ * those classes is centrs's problem to absorb. Name-coincident classes keep
+ * their spelling; live classes outside this vocabulary remain unclassified
+ * here and are preserved in the raw highlight observation.
  */
 export type ExplainSpanClass =
 	| "comment"
 	| "variable-local"
 	| "variable-global"
 	| "variable-auto"
-	| "variable-parameter";
+	| "variable-parameter"
+	| "dir"
+	| "cmd"
+	| "arg"
+	| "escaped"
+	| "unclassified";
 
 export interface ExplainSpan extends ExplainSpanRange {
 	class: ExplainSpanClass;
@@ -670,18 +676,14 @@ export interface ExplainDiagnostic {
 }
 
 /**
- * Where a derived fact came from — the OFFLINE SUBSET of the contract.
+ * Where an analysis fact came from.
  *
- * The spec's evidence entry also carries `source: "live-inspect"` and a
- * RouterOS version stamp per probe, neither of which phase 1 can produce: no
- * probe runs and there is no device to stamp. The type says only what offline
- * emits rather than pre-declaring variants with no producer, so a consumer
- * cannot narrow on a `source` that never appears; phase 2 widens the union and
- * adds the stamp, which is an ADDITION to the shape a caller reads today.
+ * Live probes add version, observation time, input identity and coverage. Their
+ * outcome describes acquisition, never runtime acceptance.
  */
 export interface ExplainEvidence {
 	id: string;
-	source: "canonicalizer";
+	source: "canonicalizer" | "live-inspect";
 	/** The analyzer that produced the facts citing this entry. */
 	probe: string;
 	/**
@@ -692,7 +694,50 @@ export interface ExplainEvidence {
 	 * drawn from live responses.
 	 */
 	basis: "direct" | "heuristic" | "derived";
-	outcome: "ok" | "empty" | "timeout" | "transport-error";
+	outcome:
+		| "ok"
+		| "empty"
+		| "timeout"
+		| "transport-error"
+		| "auth-error"
+		| "unsupported"
+		| "skipped"
+		| "interrupted"
+		| "invalid-response";
+	/** Live observation provenance; absent on canonicalizer evidence. */
+	version?: string;
+	observedAt?: string;
+	statementIds?: string[];
+	path?: string;
+	coverage?: ExplainSpanRange;
+	inputSha256?: string;
+	normalization?: "original-utf8" | "sub-per-non-ascii-byte";
+	reason?: string;
+	errorCode?: CentrsError["code"];
+}
+
+export interface ExplainLiveData {
+	environment?: {
+		ev: string;
+		version: string;
+		architecture?: string;
+		board?: string;
+	};
+	/** Exact parse output; absent when empty, skipped or unavailable. */
+	parse?: {
+		ev: string;
+		output: string;
+		rejected: boolean;
+		position?: { line: number; column: number };
+	};
+	/** Raw device classes, retained separately from the centrs span vocabulary. */
+	highlight?: { ev: string; classes: string[] };
+	arguments: {
+		ev: string;
+		path: string;
+		statementIds: string[];
+		names: string[];
+	}[];
 }
 
 export interface ExplainData {
@@ -703,6 +748,8 @@ export interface ExplainData {
 	symbols: ExplainSymbols;
 	values: ExplainValues;
 	spans: ExplainSpan[];
+	/** Read-only device observations, present only on live calls. */
+	live?: ExplainLiveData;
 	/**
 	 * Total, gapless token partition of `[0, input.bytes)`.
 	 *
@@ -725,8 +772,8 @@ export interface ExplainData {
 
 export interface ExplainOperationMeta {
 	command: "explain";
-	/** `offline` is the only mode phase 1 has; live evidence is phase 2. */
-	mode: "offline";
+	/** Whether a target was consulted for read-only evidence. */
+	mode: "offline" | "live";
 	statementCount: number;
 	verdict: ExplainVerdict;
 }
@@ -1271,11 +1318,24 @@ export function buildTokens(
 	return out;
 }
 
+/** Source order, with the most severe finding first at the same byte. */
+export function compareExplainDiagnostics(
+	a: ExplainDiagnostic,
+	b: ExplainDiagnostic,
+): number {
+	return (
+		a.span.start - b.span.start ||
+		severityRank(b.severity) - severityRank(a.severity)
+	);
+}
+
 function severityRank(s: ExplainSeverity): number {
 	return s === "error" ? 2 : s === "warning" ? 1 : 0;
 }
 
-function verdictOf(diagnostics: readonly ExplainDiagnostic[]): ExplainVerdict {
+export function verdictOf(
+	diagnostics: readonly ExplainDiagnostic[],
+): ExplainVerdict {
 	let worst = 0;
 	for (const d of diagnostics)
 		worst = Math.max(worst, severityRank(d.severity));
@@ -1487,11 +1547,7 @@ export function explainCommand(
 			pairs.filter((pair) => pair.valueShaped).map(spacedArgumentDiagnostic),
 		),
 		...statements.flatMap((s) => diagnosticsForStatement(s)),
-	].sort(
-		(a, b) =>
-			a.span.start - b.span.start ||
-			severityRank(b.severity) - severityRank(a.severity),
-	);
+	].sort(compareExplainDiagnostics);
 
 	const valueFacts = valuesOf(
 		verbs.splits,
@@ -2611,7 +2667,7 @@ export function explainEnvelope(
 		buildTip(
 			"tip/explain-offline-only",
 			"No router was given, so this is the canonicalizer's reading alone.",
-			"Completion, schema, and `:parse` evidence come from a live target (`centrs explain <router> '<input>'`), which is phase 2 and not accepted yet.",
+			"Add a router (`centrs explain <router> '<input>'`) for read-only parse, highlight and argument-name evidence. Completion and schema facets remain planned (#492).",
 		),
 		...(options.tips ?? []),
 	];
@@ -2645,7 +2701,7 @@ export function buildExplainFacetTip(facets: readonly string[]): Tip {
 	return buildTip(
 		"tip/explain-live-facets",
 		`${named} enumerate what a device accepts, and no router was given — so nothing is enumerated here.`,
-		"Name a router once live evidence lands (phase 2); until then use `rosetta` for documented RouterOS schema facts.",
+		"Live completion and schema facets remain planned (#492); use `rosetta` for documented RouterOS schema facts.",
 	);
 }
 
@@ -2847,6 +2903,23 @@ function renderValue(occurrence: ExplainValueOccurrence): string {
 	return `${occurrence.kind.padEnd(10)}${name}${parent} shapes=${shapes}`;
 }
 
+function renderLiveSummary(live: ExplainLiveData): string {
+	const device = live.environment
+		? `${live.environment.version}${live.environment.architecture ? ` ${live.environment.architecture}` : ""}`
+		: "device unavailable";
+	const parse = live.parse
+		? `parse ${live.parse.rejected ? "rejected" : "accepted"}${live.parse.position ? ` at ${live.parse.position.line}:${live.parse.position.column}` : ""}`
+		: "parse unavailable";
+	const highlight = live.highlight
+		? `highlight ${live.highlight.classes.length} byte(s)`
+		: "highlight unavailable";
+	const names = live.arguments.reduce(
+		(total, entry) => total + entry.names.length,
+		0,
+	);
+	return `live: ${device} · ${parse} · ${highlight} · arguments ${live.arguments.length} path(s), ${names} name(s)`;
+}
+
 /**
  * The human format.
  *
@@ -2874,6 +2947,7 @@ function renderExplainText(
 		`gate: ${canonical.mode}${canonical.path ? ` ${canonical.path}` : ""}${canonical.verb ? ` ${canonical.verb}` : ""} · ${argCount} arg(s)${canonical.writeShaped ? " · write-shaped" : ""}`,
 	);
 	lines.push(`write: ${structure.containsWrite}`);
+	if (data.live) lines.push(renderLiveSummary(data.live));
 	if (data.input.normalized)
 		lines.push(
 			`input: ${data.input.bytes} byte(s), normalized (non-ASCII stood in for one-for-one)`,

@@ -101,10 +101,10 @@ and implementation sequencing in the linked issues.
   `winbox-terminal` stay `not-started`. Its per-host fan-out is the machinery the
   IP-scan discovery (#149) will iterate; the L2-default timing evidence (#136) is
   recorded in the README before the cells advance past `designed`.
-- `explain`'s two `designed` protocol cells are the future live probes
-  (`/console/inspect` + `:parse`, #236). The live grammar
-  (`explain <router> '<input>'`) is parsed and refused with
-  `usage/not-implemented`, never degraded to an offline run. Offline analysis
+- `explain`'s two `designed` protocol cells track the whole live capability
+  (#236). `explain <router> '<input>'` now collects read-only `:parse`, highlight
+  and child argument-name evidence (#491). Describe/completion (#492) and live
+  types (#225) remain unfinished, so neither cell advances yet. Offline analysis
   has its own capability entry below. The generated structure tables
   `src/explain/menus.ts` and `src/explain/catalog.ts` keep analysis offline;
   their ownership and regeneration contracts live in `commands/explain/README.md`.
@@ -182,10 +182,17 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 
 ## Current priority
 
+The #491 live foundation now returns read-only parse/highlight/child evidence
+on REST and native API. Whole explain cells remain `designed`: #492 facets,
+live types (#225) and #236 closeout acceptance are still outstanding. The honest
+readings, statement ownership and block byte-span prerequisites are shipped;
+Issue #90 owns the remaining sequencing, including #507 context grounding.
+
 **First: `explain`** (maintainer decision 2026-10-16 on
 [#90](https://github.com/tikoci/centrs/issues/90)). In order: make the
-published offline readings honest (#350, #211), give the result a statement
-tree, then the live probe foundation (#491). Then use those probes to
+published offline readings honest (#350, #211; complete), give the result a
+statement tree (#497; complete), then the live probe foundation (#491). Use
+those probes to
 ground #351, #358 and #371, and finish live (#492 → #236 closeout). The
 plan, and what is deliberately out of this run, is the 2026-10-16 plan
 comment on #90. It is step 3 of the validation track below.

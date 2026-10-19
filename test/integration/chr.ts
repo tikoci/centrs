@@ -404,6 +404,26 @@ export function integrationChrSelection(
 	};
 }
 
+let prefetchedBuild:
+	| { channel: Channel; arch?: Arch; version: string }
+	| undefined;
+
+/** Reuse the build resolved by this test process's preload for later boots. */
+export function prefetchedChrVersion(
+	selection: ReturnType<typeof integrationChrSelection>,
+	extra: Partial<StartOptions>,
+	prefetched = prefetchedBuild,
+): string | undefined {
+	if (selection.version || extra.version || extra.channel) return undefined;
+	if (extra.arch && extra.arch !== selection.arch) return undefined;
+	if (
+		prefetched?.channel !== selection.channel ||
+		prefetched.arch !== selection.arch
+	)
+		return undefined;
+	return prefetched.version;
+}
+
 /**
  * Download and cache the selected CHR image without booting it (quickchr
  * `cacheAdd`, the library form of `quickchr cache add`). On a cold cache the
@@ -430,12 +450,19 @@ export async function prefetchIntegrationChrImage(
 			path: string;
 		}>;
 	};
-	return quickChrModule.cacheAdd({
+	const result = await quickChrModule.cacheAdd({
 		...(selection.version
 			? { version: selection.version }
 			: { channel: selection.channel }),
 		...(selection.arch ? { arch: selection.arch } : {}),
 	});
+	if (env === Bun.env && !selection.version)
+		prefetchedBuild = {
+			channel: selection.channel,
+			arch: selection.arch,
+			version: result.version,
+		};
+	return result;
 }
 
 export async function startIntegrationChr(
@@ -446,10 +473,13 @@ export async function startIntegrationChr(
 	const requestedChannel = selection.channel;
 	const requestedArch = selection.arch;
 	const requestedPackages = selection.packages;
+	const prefetchedVersion = prefetchedChrVersion(selection, extra);
 	const options: StartOptions = {
 		...(requestedVersion
 			? { version: requestedVersion }
-			: { channel: requestedChannel }),
+			: prefetchedVersion
+				? { version: prefetchedVersion }
+				: { channel: requestedChannel }),
 		// Env supplies defaults; an explicit `extra` (a test's own boot options) wins.
 		...(requestedArch ? { arch: requestedArch } : {}),
 		...(requestedPackages.length > 0 ? { packages: requestedPackages } : {}),

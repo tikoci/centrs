@@ -1,15 +1,10 @@
 # explain — examples
 
-Each numbered example is an executable spec. Once `explain` is implemented,
-offline examples run under `test/unit/explain.test.ts` and live examples under
-`test/integration/explain.test.ts` (rest-api) and
-`test/integration/native-api-explain.test.ts` (native-api) against a CHR booted by
-`@tikoci/quickchr` — one named test per example (example N ↔ named test N); a
-named test may carry several assertions. The offline examples are **green**
-as of #202c-2, including 1, 2, 6 and 23's `transport`/`--curl` assertions.
-The live examples are still the **target**:
-those cells are `designed`, and flag and field names track the ratified surface
-in `README.md`.
+Each numbered example is an executable spec. Offline examples run under the
+named unit/fixture suites. Live foundation examples 11, 12, 16, 24 and 48 run
+under `test/integration/explain-live.test.ts` on REST and native API with a CHR
+booted by `@tikoci/quickchr`. The remaining live describe/completion examples
+are still targets (#492/#225/#236); both whole protocol cells remain `designed`.
 
 A letter-suffixed example (`1b`, `4b`, `18b`) is the **counterpart** of the number it
 follows: the same question with the other answer, added where implementing the
@@ -192,9 +187,21 @@ narrower query (or `--full`) that expands it.
 centrs explain $R '/ip/address add address=bogus interface=' -u $U -p $P --json
 ```
 
-`data.spans` classify the input byte-by-byte using the **centrs** span
-vocabulary (not raw RouterOS highlight classes); the first hard error's byte
-offset appears in a diagnostic citing `live-inspect` evidence.
+`data.spans` includes device-derived spans in the **centrs** vocabulary,
+citing `live-inspect` evidence. On CHR 7.24.5, this original example produces
+no parse rejection or highlight error: `address=bogus` is not value-validated,
+and the trailing empty argument is omitted from the parse output. Keep it as
+a probe-limit control, not a promised syntax error.
+
+A confirmed hard-error control is:
+
+```bash
+centrs explain $R '/ip/route add dst-address=10.9.0.0/16 blackhole=yes' -u $U -p $P --json
+```
+
+On CHR 7.24.5, highlight reports byte 47 and parse reports line 1 column 48.
+The test asserts that source-located diagnostic separately from runtime
+acceptance; the original input remains a control on both transports.
 
 ### 12. Structure via :parse
 
@@ -959,3 +966,24 @@ The CHR controls in `test/integration/explain-structure.test.ts` parse the
 scope examples and compare stored-script creation, explicit `run`, and an
 immediate `:do` body. Those are test operations on disposable CHR; explain
 itself never executes the analyzed input.
+
+### 48. Safe argument discovery distinguishes spaced arguments from flags
+
+```bash
+centrs explain $R '/interface set ether1 name x' -u $U -p $P --json
+centrs explain $R '/interface print detail without-paging' -u $U -p $P --json
+```
+
+`data.live.arguments[]` cites command-level child evidence and statement `s0`.
+The first result includes `name`, the second includes `detail`. Both parse;
+only `name x` gets the device's obsolete-syntax warning. An unknown argument
+control (`/interface set ether1 definitely-unknown-491=x`) carries the shared
+parse classifier's rejection. No command-level completion is requested.
+
+The integration controls also explain a write-shaped identity change and a
+substitution without executing either, verify identity before/after, exercise
+CLI stdin and quickchr resolution, and skip oversized highlight without
+submitting a prefix. Parse/hash/normalization evidence preserves the Unicode
+byte coordinates. Run on long-term as well as stable before changing these
+claims. Sanitized captures can be regenerated with `CENTRS_EXPLAIN_CAPTURE`
+pointing at an ignored output file when running the integration suite.

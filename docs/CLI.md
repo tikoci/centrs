@@ -15,7 +15,7 @@ implemented flags live in each command's `commands/<name>/README.md`.
 | [`api`](#api) | Structured RouterOS API passthrough (gh-api style) over REST or native API. |
 | [`transfer`](#transfer) | Copy files to/from a RouterOS device and manage device files (rest/native/sftp). |
 | [`terminal`](#terminal) | Open an interactive RouterOS console (ssh or mac-telnet). |
-| [`explain`](#explain) | Analyze a RouterOS command offline: canonical form, structure, and syntax diagnostics. |
+| [`explain`](#explain) | Analyze RouterOS input offline or add read-only device evidence from one router. |
 | [`devices`](#devices) | Inspect and mutate the CDB-backed device registry. `devices` is the only command that writes the CDB. |
 | [`discover`](#discover) | Discover RouterOS neighbors over MNDP and optionally save them into the CDB. |
 | [`btest`](#btest) | Run MikroTik's bandwidth test as a client or server (peer measurement). |
@@ -220,14 +220,26 @@ Usage: centrs terminal <router> [flags] | centrs terminal --host <host> [flags]
 
 ## explain
 
-Analyze a RouterOS command offline: canonical form, structure, and syntax diagnostics.
+Analyze RouterOS input offline or add read-only device evidence from one router.
 
 ```text
-Usage: centrs explain '<input>' [flags]
+Usage: centrs explain [<router>] '<input>' [flags]
 ```
 
 | Flag | Value | Description |
 | ---- | ----- | ----------- |
+| `--via` | &lt;rest-api\|native-api&gt; | Pin the transport; no silent downgrade. Default rest-api. |
+| `--host` | &lt;host\|url&gt; | Host or base URL to dial. With no `<router>` it is the target (no CDB lookup); with one it overrides the resolved host. |
+| `--port` | `<port>` | Override the resolved management port. |
+| `--username / --user / -u` | `<name>` | RouterOS username. Falls back to `CENTRS_USERNAME`. |
+| `--password` | `<secret>` | RouterOS password. Falls back to `CENTRS_PASSWORD`. |
+| `--insecure` |  | Accept a self-signed `api-ssl`/REST TLS cert. Default verifies. |
+| `--cdb-file` | `<path>` | Read target credentials from a WinBox CDB file. |
+| `--cdb-password` | `<password>` | Decrypt an encrypted WinBox CDB file. |
+| `--resolve` | &lt;none\|arp&gt; | Resolve a MAC-address target to an IP via the host ARP cache (default none). |
+| `--timeout` | `<duration>` | Per-request timeout (for REST, max 60s). |
+| `-p` | `<secret>` | Alias for --password. |
+| `--quickchr` | `<name>` | Resolve one running quickchr VM by name. |
 | `--file` | `<path>` | Read the input from a file instead of the positional (`-` reads stdin). Piped stdin is used automatically when no input positional is given. |
 | `--fail-on` | &lt;error\|warning\|never&gt; | Exit 2 when the verdict reaches this severity. Default `error`; an ambiguous or unknown statement is a warning, never an error. |
 | `--complete` |  | Continuation candidates at the cursor. Live evidence — offline emits a tip and enumerates nothing. |

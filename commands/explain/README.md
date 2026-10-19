@@ -373,9 +373,8 @@ native API's `/execute` **with `as-string=""`** returns the parser text —
 including the `(line N column M)` diagnostic on a syntax error — byte-identical
 to what a console transport prints. The opaque `*NN` value seen otherwise is the
 **no-`as-string` job handle**, not a `:parse` limitation; the readout rule is
-"pass `as-string` and interpret `ret`". The existing execute gate already passes
-`as-string` but currently discards `ret`; phase 2 must extract/fix that shared
-readout rather than copy the omission. `/console/inspect`
+"pass `as-string` and interpret `ret`". The execute gate passes
+`as-string` and classifies `ret`; live explain reuses that shared classifier. `/console/inspect`
 (highlight/syntax/completion) works over the native API's `talk` framing too. So
 the line/column diagnostic is available on both live cells — the earlier caveat
 that only a console transport surfaces the parser text is retired.
@@ -401,10 +400,8 @@ router therefore never reinterprets a previously valid offline invocation.
 the offline form with nothing else to analyze. A positional always wins, and
 when fd 0 is redirected anyway the result carries a
 [`usage/stdin-ignored`](../../docs/errors/usage/stdin-ignored.md) warning rather
-than quietly dropping the pipe. `--file -` names stdin explicitly; it is the
-offline fix today, since the live form it also spells
-(`… | centrs explain edge1 --file -`) is parsed and then refused with
-`usage/not-implemented` until phase 2. The narrower rule is
+than quietly dropping the pipe. `--file -` names stdin explicitly in both forms,
+including live `… | centrs explain edge1 --file -`. The narrower rule is
 deliberate and measured: `runCli` is called in-process by tests, so reading fd 0
 on any path a positional invocation reaches consumes the invoking shell's
 stdin — it fed those bytes to the analyzer and broke 21 unrelated tests once,
@@ -744,13 +741,10 @@ and its phase is named below.
   rejected by RouterOS at `{` and resolve no reference. In an expression the
   remaining `-dns` is scanned as subtraction plus its right operand; inside a
   string it is literal text.
-- **Evidence is offline-shaped, not the whole contract.** The bullet above says
-  an evidence entry carries `source` (`canonicalizer` vs `live-inspect`) and a
-  RouterOS version stamp; phase 1 emits neither the live source nor the stamp,
-  because no probe ran and there is no device to stamp. `ExplainEvidence` is
-  typed to what offline produces rather than pre-declaring variants nothing can
-  emit, so phase 2 widens the union and adds the stamp — an addition, not a
-  change to what a caller reads today.
+- **Evidence follows its producer.** Offline calls emit only `canonicalizer`
+  entries, with no device version. Live calls add `live-inspect` entries with
+  probe outcomes and available device provenance; existing offline entries
+  retain their meaning. See [Live probe foundation](#live-probe-foundation-491).
 - **Value facts are three axes, never one `type` string (#225).** RouterOS
   types values at parse time while `highlight` classes every value byte `none`,
   so type evidence is not a subset of Q12 spans. Each result-local
@@ -2468,22 +2462,87 @@ last byte. The `$` sigil and the `[` / `]` of a substitution stay `string` on
 the same ground — `structure.subcommands` already publishes the resolution, and
 its `innerSpan` locates the brackets around it.
 
-### Designed, not implemented (the CLI surface, #202b)
+### Live probe foundation (#491)
 
-`src/cli/explain.ts` ships the offline command; implemented flags are generated
-into [`docs/CLI.md`](../../docs/CLI.md) and are not restated here. What the
-[Surface](#surface-option-a--decided) table above describes and the command does
-**not** yet accept:
+`centrs explain <router> '<input>'` (or `--quickchr <name>` / `--host <host>`)
+adds read-only device evidence over REST or native API. Library callers use
+`explainLiveEnvelope({ input, targetInput, via, ... }, options)` from the root
+package; the browser-safe `@tikoci/centrs/explain` entry remains offline.
+Connection/authentication settings use the existing resolver and provider
+precedence. A pinned unsupported transport is refused. No fan-out or protocol
+fallback is performed. `AbortSignal` cancels library probes.
+An explicitly supplied connection flag such as `--via`, `--password` or
+`--timeout` without `<router>`, `--host` or `--quickchr` is a usage error before
+input is read. Connection defaults from environment and config remain inert in
+offline mode.
+Text output summarizes live observations; `--json` retains full parse and
+per-byte highlight evidence.
 
-| Flag / form | Phase | Why it is not accepted yet |
-| ----------- | ----- | -------------------------- |
-| `explain <router> '<input>'` | 2 | The grammar is parsed and **refused** with `usage/not-implemented`, naming the router it did not contact. Running the offline analysis under an invocation that asked for probes would report `mode: "offline"` about a request for more. |
-| `--cursor <byte>` | 2 | It positions `--complete`, which enumerates nothing offline. A cursor with no candidate surface to position is a flag with no effect. |
-| `--full` | 3 | It lifts smart-sizing limits, and the offline result is never truncated (`input.truncated` is always `false`). Same rule: no accepted flag is a no-op. |
+`data.canonical`, structure, symbols, values and optional tokens retain the
+offline result. Live observations are additional facts:
 
-`--complete` and `--schema` **are** accepted, because they have an offline
-behavior the spec names: they enumerate nothing and emit the live-target tip.
-That is the difference — an accepted flag must do something observable.
+- `data.live.environment` records the observed version, architecture and board.
+- `data.live.parse` carries the printed parse result, rejection classification
+  and authoritative line/byte-column when reported. Only an escaped
+  `:put [:parse "…"]` wrapper runs; the analyzed input, substitutions and
+  deferred bodies are never executed.
+- `data.live.highlight` retains raw device classes. Additional `data.spans`
+  cite its evidence and use centrs classes: `dir`, `cmd`, `arg`, `escaped`,
+  comments and variable classes; device state, syntax-meta, error/obsolete and
+  unknown classes map to `unclassified`. Error/obsolete markers produce separate
+  diagnostics. Offline and live spans can overlap; distinguish them by `ev`.
+- `data.live.arguments[]` contains `path`, `names`, `statementIds` and `ev` for
+  command-level `request=child`. Repeated paths share a probe. Names confirm what
+  the device exposes; they do not rewrite offline arguments, transport eligibility
+  or lexical bindings. The highlight obsolete marker distinguishes `name x`
+  from the two flags `detail without-paging` (example 48).
+
+Every live evidence entry identifies its probe, observation time, known version
+and acquisition outcome. Input probes include SHA-256 and normalization;
+`coverage` identifies the submitted byte range for a usable response, not proof
+that every byte is syntactically valid. Parse uses original UTF-8 input;
+highlight uses the existing one-SUB-per-non-ASCII-byte normalization. Its facts
+therefore describe that explicit variant; both spaces align with `positionMap`.
+Parse can stop at its first error; highlight `none` remains unclassified.
+
+Probe outcomes distinguish `ok`, `empty`, `unsupported`, `skipped`, `timeout`,
+`auth-error`, `transport-error`, `interrupted` and `invalid-response`. A parse
+rejection is an acquired response (`ok`) plus a diagnostic, not a transport
+failure. A failed/skipped probe adds a warning diagnostic; acquired offline and
+live facts remain available. `ok:true` means analysis produced a result, never
+that all probes succeeded. Resolver/usage failures and transport/authentication/interruption failures before
+any input probe yields a result remain `ok:false`.
+`meta.operation.mode` is `live`; no execution-validation verdict is invented in
+`meta.validation`. `runtimeAcceptance` always remains `not-proven`.
+
+Work is bounded by the resolved per-request timeout, 32 distinct command paths,
+32,767 bytes for highlight and 65,536 bytes for parse. Larger probes are skipped
+with their reason; no silent prefix is submitted and `input.truncated` stays
+false. A transport/authentication failure stops later requests. Scripting-path
+discovery is conservatively skipped before 7.21.4 or on unknown versions. No
+command-level completion, syntax discovery, user-expression evaluation or
+related configuration-table collection is part of this slice.
+
+Committed controls are
+[`live-probes.stable.json`](../../test/fixtures/explain/live-probes.stable.json)
+(7.24.5) and
+[`live-probes.long-term.json`](../../test/fixtures/explain/live-probes.long-term.json)
+(7.23.8), both CHR reporting `x86_64`, with package manifests, input hashes,
+observation times, raw parse/highlight output and projected child names. Each
+fixture records its capture command. `test/unit/explain-live.test.ts` replays
+the parse classifier and source-aligned highlighter against these controls;
+`test/integration/explain-live.test.ts` repeats the probes on a real CHR and
+checks that the analyzed identity-setting command did not run.
+
+### Designed, not implemented
+
+Implemented flags are generated into [`docs/CLI.md`](../../docs/CLI.md).
+
+| Flag / form | Owner | Current behavior |
+| ----------- | ----- | ---------------- |
+| Live `--complete` / `--schema` | #492 | Refused with `usage/not-implemented` before connecting. Offline still emits its live-target tip and enumerates nothing. |
+| `--cursor <byte>` | #492 | Not accepted until cursor completion is implemented. |
+| `--full` | #492 | Not accepted until describe/completion sizing is implemented; it does not lift safety budgets. |
 
 ## MCP and library surfaces
 

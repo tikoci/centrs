@@ -235,10 +235,10 @@ export interface ProtocolAdapter {
 	readonly protocol: RouterOsProtocol;
 	/** Capability flags describing what this adapter supports. */
 	readonly capabilities: ProtocolAdapterCapabilities;
-	/** `/console/inspect` probe (`request=child` or `request=completion`). */
-	/** `/console/inspect`; `input` is the CLI-text form (`request=completion input=…`). */
+	/** `/console/inspect` discovery, completion or byte highlight. */
+	/** `input` is CLI text for completion or highlight. */
 	inspect(
-		request: "child" | "completion",
+		request: "child" | "completion" | "highlight",
 		path: string,
 		input?: string,
 	): Promise<unknown[]>;
@@ -309,7 +309,7 @@ class RestAdapter implements ProtocolAdapter {
 	}
 
 	async inspect(
-		request: "child" | "completion",
+		request: "child" | "completion" | "highlight",
 		path: string,
 		input?: string,
 	): Promise<unknown[]> {
@@ -750,7 +750,7 @@ class NativeApiAdapter implements ProtocolAdapter {
 	}
 
 	async inspect(
-		request: "child" | "completion",
+		request: "child" | "completion" | "highlight",
 		path: string,
 		input?: string,
 	): Promise<unknown[]> {
