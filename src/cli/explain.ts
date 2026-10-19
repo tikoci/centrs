@@ -142,6 +142,8 @@ export interface ExplainCliArgs extends Omit<ExplainLiveRequest, "input"> {
 	tokens?: boolean;
 	format?: ExplainOutputFormat;
 	verbose?: boolean;
+	/** First explicitly supplied connection flag, for the missing-target refusal. */
+	connectionFlag?: string;
 }
 
 export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
@@ -159,6 +161,7 @@ export function parseExplainCliArgs(args: readonly string[]): ExplainCliArgs {
 			parsed.positionals.push(arg);
 			continue;
 		}
+		if (LIVE_CONNECTION_FLAGS.has(arg)) parsed.connectionFlag ??= arg;
 		switch (arg) {
 			case "--":
 				// Everything after `--` is input, however command-shaped it looks:
@@ -462,6 +465,21 @@ const VALUE_FLAGS = new Set([
 	"--quickchr",
 ]);
 
+const LIVE_CONNECTION_FLAGS = new Set([
+	"--via",
+	"--port",
+	"--username",
+	"--user",
+	"-u",
+	"--password",
+	"-p",
+	"--timeout",
+	"--insecure",
+	"--cdb-file",
+	"--cdb-password",
+	"--resolve",
+]);
+
 /**
  * The render options, recovered when the parse loop THREW.
  *
@@ -549,6 +567,14 @@ export async function runExplainCli(args: readonly string[]): Promise<number> {
 			router !== undefined ||
 			parsed.quickchr !== undefined ||
 			parsed.host !== undefined;
+		if (!live && parsed.connectionFlag !== undefined)
+			throw new CentrsError({
+				code: "input/invalid-command",
+				summary: `${parsed.connectionFlag} requires a router target for live explain.`,
+				remediation:
+					"Add <router>, --host <host>, or --quickchr <name>; remove the connection flag for offline analysis.",
+				context: { flag: parsed.connectionFlag },
+			});
 		if (live && parsed.facets.length > 0)
 			throw new CentrsError({
 				code: "usage/not-implemented",

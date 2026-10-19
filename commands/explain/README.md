@@ -2471,6 +2471,12 @@ package; the browser-safe `@tikoci/centrs/explain` entry remains offline.
 Connection/authentication settings use the existing resolver and provider
 precedence. A pinned unsupported transport is refused. No fan-out or protocol
 fallback is performed. `AbortSignal` cancels library probes.
+An explicitly supplied connection flag such as `--via`, `--password` or
+`--timeout` without `<router>`, `--host` or `--quickchr` is a usage error before
+input is read. Connection defaults from environment and config remain inert in
+offline mode.
+Text output summarizes live observations; `--json` retains full parse and
+per-byte highlight evidence.
 
 `data.canonical`, structure, symbols, values and optional tokens retain the
 offline result. Live observations are additional facts:

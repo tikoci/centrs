@@ -25,6 +25,7 @@ import {
 	type ExplainSpanClass,
 	type ExplainSpanRange,
 	explainEnvelope,
+	verdictOf,
 } from "./explain.ts";
 import {
 	createProtocolAdapter,
@@ -492,11 +493,7 @@ export async function collectExplainEvidence(
 		}
 	data.diagnostics.sort(compareExplainDiagnostics);
 	data.spans.sort((a, b) => a.start - b.start || a.end - b.end);
-	data.verdict = data.diagnostics.some((d) => d.severity === "error")
-		? "fail"
-		: data.diagnostics.some((d) => d.severity === "warning")
-			? "warn"
-			: "pass";
+	data.verdict = verdictOf(data.diagnostics);
 }
 
 function positionSpan(
@@ -528,16 +525,6 @@ function highlightClass(value: string): ExplainSpanClass {
 		case "arg-dot":
 		case "arg-scope":
 			return "arg";
-		case "syntax-meta":
-			return "unclassified";
-		case "syntax-obsolete":
-			return "unclassified";
-		case "variable-undefined":
-			return "unclassified";
-		case "obj-disabled":
-		case "obj-dynamic":
-		case "obj-inactive":
-			return "unclassified";
 		default:
 			return "unclassified";
 	}

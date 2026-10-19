@@ -1333,7 +1333,9 @@ function severityRank(s: ExplainSeverity): number {
 	return s === "error" ? 2 : s === "warning" ? 1 : 0;
 }
 
-function verdictOf(diagnostics: readonly ExplainDiagnostic[]): ExplainVerdict {
+export function verdictOf(
+	diagnostics: readonly ExplainDiagnostic[],
+): ExplainVerdict {
 	let worst = 0;
 	for (const d of diagnostics)
 		worst = Math.max(worst, severityRank(d.severity));
@@ -2901,6 +2903,23 @@ function renderValue(occurrence: ExplainValueOccurrence): string {
 	return `${occurrence.kind.padEnd(10)}${name}${parent} shapes=${shapes}`;
 }
 
+function renderLiveSummary(live: ExplainLiveData): string {
+	const device = live.environment
+		? `${live.environment.version}${live.environment.architecture ? ` ${live.environment.architecture}` : ""}`
+		: "device unavailable";
+	const parse = live.parse
+		? `parse ${live.parse.rejected ? "rejected" : "accepted"}${live.parse.position ? ` at ${live.parse.position.line}:${live.parse.position.column}` : ""}`
+		: "parse unavailable";
+	const highlight = live.highlight
+		? `highlight ${live.highlight.classes.length} byte(s)`
+		: "highlight unavailable";
+	const names = live.arguments.reduce(
+		(total, entry) => total + entry.names.length,
+		0,
+	);
+	return `live: ${device} · ${parse} · ${highlight} · arguments ${live.arguments.length} path(s), ${names} name(s)`;
+}
+
 /**
  * The human format.
  *
@@ -2928,7 +2947,7 @@ function renderExplainText(
 		`gate: ${canonical.mode}${canonical.path ? ` ${canonical.path}` : ""}${canonical.verb ? ` ${canonical.verb}` : ""} · ${argCount} arg(s)${canonical.writeShaped ? " · write-shaped" : ""}`,
 	);
 	lines.push(`write: ${structure.containsWrite}`);
-	if (data.live) lines.push(`live: ${JSON.stringify(data.live)}`);
+	if (data.live) lines.push(renderLiveSummary(data.live));
 	if (data.input.normalized)
 		lines.push(
 			`input: ${data.input.bytes} byte(s), normalized (non-ASCII stood in for one-for-one)`,

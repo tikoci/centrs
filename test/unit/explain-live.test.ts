@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { CentrsError } from "../../src/errors.ts";
-import { explainCommand } from "../../src/explain.ts";
+import {
+	explainCommand,
+	explainEnvelope,
+	renderExplainEnvelope,
+} from "../../src/explain.ts";
 import {
 	collectExplainEvidence,
 	EXPLAIN_LIVE_LIMITS,
@@ -14,6 +18,8 @@ import stable from "../fixtures/explain/live-probes.stable.json";
 
 type Backend = Parameters<typeof collectExplainEvidence>[2];
 
+// Raw child rows were not captured, so the replay covers parse/highlight only;
+// the CHR integration test covers argument-name discovery.
 describe("committed CHR parse/highlight evidence (#491)", () => {
 	for (const fixture of [stable, longTerm]) {
 		for (const capture of fixture.captures) {
@@ -43,7 +49,6 @@ describe("committed CHR parse/highlight evidence (#491)", () => {
 							(d) => d.code === "explain/live-inspect/obsolete-syntax",
 						),
 					).toBe(true);
-					expect(capture.live.arguments[0]?.names).toContain("name");
 				}
 				if (capture.input === "/interface print detail without-paging") {
 					expect(
@@ -51,7 +56,6 @@ describe("committed CHR parse/highlight evidence (#491)", () => {
 							(d) => d.code === "explain/live-inspect/obsolete-syntax",
 						),
 					).toBe(false);
-					expect(capture.live.arguments[0]?.names).toContain("detail");
 				}
 			});
 		}
@@ -86,6 +90,34 @@ async function collect(
 	return data;
 }
 describe("live evidence controls", () => {
+	test("text summarizes live evidence without dumping parse output or byte classes", () => {
+		const envelope = explainEnvelope("/ip/address print");
+		envelope.data.live = {
+			environment: { ev: "live0", version: "7.24.5", architecture: "x86_64" },
+			parse: {
+				ev: "live1",
+				output: "(evl raw parse output)".repeat(40),
+				rejected: true,
+				position: { line: 2, column: 13 },
+			},
+			highlight: { ev: "live2", classes: Array(2048).fill("none") },
+			arguments: [
+				{
+					ev: "live3",
+					path: "/ip/address/print",
+					statementIds: ["s0"],
+					names: ["detail", "without-paging"],
+				},
+			],
+		};
+		const text = renderExplainEnvelope(envelope, "text");
+		expect(text.split("\n").find((line) => line.startsWith("live: "))).toBe(
+			"live: 7.24.5 x86_64 · parse rejected at 2:13 · highlight 2048 byte(s) · arguments 1 path(s), 2 name(s)",
+		);
+		expect(text).not.toContain("raw parse output");
+		expect(text).not.toContain('"classes"');
+	});
+
 	test("live spans retain source order and preserve offline spans", async () => {
 		const input = ":local v 1; :put $v # note";
 		const offline = explainCommand(input).spans;

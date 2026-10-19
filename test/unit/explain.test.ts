@@ -1099,6 +1099,58 @@ describe("`'` is not a RouterOS token (#355)", () => {
  * helper would otherwise have covered.
  */
 describe("centrs explain — the CLI surface", () => {
+	test("explicit connection flags require a target before reading input", async () => {
+		for (const [flag, value] of [
+			["--via", "native-api"],
+			["--port", "8728"],
+			["--username", "admin"],
+			["--user", "admin"],
+			["-u", "admin"],
+			["--password", "dummy-secret"],
+			["-p", "dummy-secret"],
+			["--timeout", "1s"],
+			["--insecure", undefined],
+			["--cdb-file", "/missing-explain-491.cdb"],
+			["--cdb-password", "dummy-secret"],
+			["--resolve", "arp"],
+		] as const) {
+			const { code, err } = await run([
+				"explain",
+				flag,
+				...(value === undefined ? [] : [value]),
+				"/ip/address print",
+				"--json",
+			]);
+			const envelope = JSON.parse(err) as {
+				ok: boolean;
+				error: {
+					code: string;
+					summary: string;
+					remediation: string;
+					context?: { flag?: string };
+				};
+			};
+			expect(code, flag).toBe(1);
+			expect(envelope.ok, flag).toBe(false);
+			expect(envelope.error.code, flag).toBe("input/invalid-command");
+			expect(envelope.error.summary, flag).toContain(flag);
+			expect(envelope.error.remediation, flag).toContain("<router>");
+			expect(envelope.error.context?.flag, flag).toBe(flag);
+			expect(err).not.toContain("dummy-secret");
+		}
+		const missingFile = await run([
+			"explain",
+			"--via",
+			"native-api",
+			"--file",
+			"/missing-explain-491.rsc",
+			"--json",
+		]);
+		expect(JSON.parse(missingFile.err).error.code).toBe(
+			"input/invalid-command",
+		);
+	});
+
 	test("unimplemented live facets are refused, not silently degraded to offline", async () => {
 		const { code, err } = await run([
 			"explain",
