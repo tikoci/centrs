@@ -87,6 +87,9 @@ export async function explainLiveEnvelope(
 		});
 		try {
 			const envelope = explainEnvelope(request.input, options);
+			envelope.tips = envelope.tips.filter(
+				(tip) => tip.code !== "tip/explain-offline-only",
+			);
 			await collectExplainEvidence(
 				envelope.data,
 				request.input,

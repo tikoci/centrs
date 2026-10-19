@@ -2658,7 +2658,7 @@ export function explainEnvelope(
 		buildTip(
 			"tip/explain-offline-only",
 			"No router was given, so this is the canonicalizer's reading alone.",
-			"Completion, schema, and `:parse` evidence come from a live target (`centrs explain <router> '<input>'`), which is phase 2 and not accepted yet.",
+			"Add a router (`centrs explain <router> '<input>'`) for read-only parse, highlight and argument-name evidence. Completion and schema facets remain planned (#492).",
 		),
 		...(options.tips ?? []),
 	];
@@ -2692,7 +2692,7 @@ export function buildExplainFacetTip(facets: readonly string[]): Tip {
 	return buildTip(
 		"tip/explain-live-facets",
 		`${named} enumerate what a device accepts, and no router was given — so nothing is enumerated here.`,
-		"Name a router once live evidence lands (phase 2); until then use `rosetta` for documented RouterOS schema facts.",
+		"Live completion and schema facets remain planned (#492); use `rosetta` for documented RouterOS schema facts.",
 	);
 }
 

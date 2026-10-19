@@ -400,10 +400,8 @@ router therefore never reinterprets a previously valid offline invocation.
 the offline form with nothing else to analyze. A positional always wins, and
 when fd 0 is redirected anyway the result carries a
 [`usage/stdin-ignored`](../../docs/errors/usage/stdin-ignored.md) warning rather
-than quietly dropping the pipe. `--file -` names stdin explicitly; it is the
-offline fix today, since the live form it also spells
-(`… | centrs explain edge1 --file -`) is parsed and then refused with
-`usage/not-implemented` until phase 2. The narrower rule is
+than quietly dropping the pipe. `--file -` names stdin explicitly in both forms,
+including live `… | centrs explain edge1 --file -`. The narrower rule is
 deliberate and measured: `runCli` is called in-process by tests, so reading fd 0
 on any path a positional invocation reaches consumes the invoking shell's
 stdin — it fed those bytes to the analyzer and broke 21 unrelated tests once,
@@ -743,13 +741,10 @@ and its phase is named below.
   rejected by RouterOS at `{` and resolve no reference. In an expression the
   remaining `-dns` is scanned as subtraction plus its right operand; inside a
   string it is literal text.
-- **Evidence is offline-shaped, not the whole contract.** The bullet above says
-  an evidence entry carries `source` (`canonicalizer` vs `live-inspect`) and a
-  RouterOS version stamp; phase 1 emits neither the live source nor the stamp,
-  because no probe ran and there is no device to stamp. `ExplainEvidence` is
-  typed to what offline produces rather than pre-declaring variants nothing can
-  emit, so phase 2 widens the union and adds the stamp — an addition, not a
-  change to what a caller reads today.
+- **Evidence follows its producer.** Offline calls emit only `canonicalizer`
+  entries, with no device version. Live calls add `live-inspect` entries with
+  probe outcomes and available device provenance; existing offline entries
+  retain their meaning. See [Live probe foundation](#live-probe-foundation-491).
 - **Value facts are three axes, never one `type` string (#225).** RouterOS
   types values at parse time while `highlight` classes every value byte `none`,
   so type evidence is not a subset of Q12 spans. Each result-local

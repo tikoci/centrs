@@ -286,6 +286,39 @@ describe("live evidence controls", () => {
 	});
 });
 
+test("live envelope omits the offline-only tip and preserves caller tips", async () => {
+	const input = "/ip/address print";
+	const server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		async fetch(request) {
+			const path = new URL(request.url).pathname;
+			if (path === "/rest/system/resource")
+				return Response.json({ version: "7.24.5" });
+			if (path === "/rest/execute")
+				return Response.json({ ret: "(evl /ip/address/print)" });
+			const body = (await request.json()) as { request: string };
+			return Response.json(
+				body.request === "highlight"
+					? [{ highlight: Array(input.length).fill("none").join(",") }]
+					: [],
+			);
+		},
+	});
+	const tip = { code: "tip/caller", message: "Caller context." };
+	try {
+		const result = await explainLiveEnvelope(
+			{ input, targetInput: server.url.href },
+			{ tips: [tip] },
+			{},
+		);
+		expect(result.ok).toBe(true);
+		expect(result.tips).toEqual([tip]);
+	} finally {
+		await server.stop(true);
+	}
+});
+
 test("actual REST authentication failure keeps resolved target and produces a command failure", async () => {
 	const server = Bun.serve({
 		hostname: "127.0.0.1",

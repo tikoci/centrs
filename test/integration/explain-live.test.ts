@@ -59,6 +59,9 @@ describeFast("explain live foundation (#491)", () => {
 						live: result.data.live,
 					});
 					expect(result.meta.operation?.mode).toBe("live");
+					expect(
+						result.tips.some((tip) => tip.code === "tip/explain-offline-only"),
+					).toBe(false);
 					expect(result.data.runtimeAcceptance).toBe("not-proven");
 					expect(result.data.structure).toEqual(
 						explainCommand(input).structure,
