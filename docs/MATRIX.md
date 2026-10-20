@@ -40,7 +40,7 @@ their command-specific evidence contracts.
 | devices  | —             | —             | —             | —             | —             | —             | —             | —                |
 | discover | —             | —             | —             | —             | —             | `CHR-passed`  | —             | —                |
 | check    | `designed`    | `designed`    | `designed`    | `designed`    | `not-started` | `not-started` | `not-started` | `not-started`    |
-| explain  | `designed`    | `designed`    | —             | —             | —             | —             | —             | —                |
+| explain  | `CHR-passed`  | `CHR-passed`  | —             | —             | —             | —             | —             | —                |
 | settings | —             | —             | —             | —             | —             | —             | —             | —                |
 
 ## Status pointers
@@ -101,13 +101,14 @@ and implementation sequencing in the linked issues.
   `winbox-terminal` stay `not-started`. Its per-host fan-out is the machinery the
   IP-scan discovery (#149) will iterate; the L2-default timing evidence (#136) is
   recorded in the README before the cells advance past `designed`.
-- `explain`'s two `designed` protocol cells track the whole live capability
-  (#236). `explain <router> '<input>'` now collects read-only `:parse`, highlight
+- `explain`'s two `CHR-passed` protocol cells are the whole live capability
+  (#236). `explain <router> '<input>'` collects read-only `:parse`, highlight
   and child argument-name evidence (#491), and `--schema`/`--complete` describe
   paths and complete at a cursor (#492). Live value types (#225) fill
   `observedType` from visible `:parse` conversions and `schemaType` from
-  argument `syntax` (examples 52–53). The #236 closeout remains unfinished, so
-  neither cell advances yet. Offline analysis
+  argument `syntax`. Examples 7–16, 19, 24, 48 and 52–53 pass on REST and
+  native API in `test/integration/explain-live*.test.ts`, on stable 7.24.5 and
+  long-term 7.23.8. `runtimeAcceptance` stays `not-proven`. Offline analysis
   has its own capability entry below. The generated structure tables
   `src/explain/menus.ts` and `src/explain/catalog.ts` keep analysis offline;
   their ownership and regeneration contracts live in `commands/explain/README.md`.
@@ -185,22 +186,18 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 
 ## Current priority
 
-The #491 live foundation returns read-only parse/highlight/child evidence on
-REST and native API, and #492 adds describe (`--schema`) and cursor completion
-(`--complete`) with their examples green on stable and long-term CHR. The
-live value types (#225) are green too: examples 52–53 on both channels and
-transports. Whole explain cells remain `designed` until the #236 closeout
-acceptance. The honest
-readings, statement ownership and block byte-span prerequisites are shipped;
-Issue #90 owns the remaining sequencing, including #507 context grounding.
+Live `explain` (#236) is `CHR-passed` on REST and native API: the #491
+foundation, #492's describe and completion facets, and #225's live value types,
+with every applicable example green on stable and long-term CHR. Issue #90
+owns the remaining sequencing, including #507 context grounding.
 
 **First: `explain`** (maintainer decision 2026-10-16 on
 [#90](https://github.com/tikoci/centrs/issues/90)). In order: make the
 published offline readings honest (#350, #211; complete), give the result a
 statement tree (#497; complete), then the live probe foundation (#491;
 complete). Those probes grounded #351, #358 and #371 (complete), #492
-added the describe/completion facets, and #225 the live value types. Next is
-the #236 closeout. The
+added the describe/completion facets, and #225 the live value types. The
+closeout of #236 promoted both live cells (complete). The
 plan, and what is deliberately out of this run, is the 2026-10-16 plan
 comment on #90. It is step 3 of the validation track below.
 
@@ -236,11 +233,11 @@ order agreed on [#236](https://github.com/tikoci/centrs/issues/236):
 2. **Done** — front the `execute` / `api` device preflight with the offline
    analyzer (#354). The gate is now two-stage; the contract is in
    [`docs/CONSTITUTION.md` → Validation is the product](CONSTITUTION.md#validation-is-the-product).
-3. **Next** — **live `explain` (#236)**, as stage two of a gate that now exists.
-   Start with [the #90 task index](https://github.com/tikoci/centrs/issues/90),
-   then follow [`commands/explain/README.md`](../commands/explain/README.md) and
-   the live examples in
-   [`commands/explain/examples.md`](../commands/explain/examples.md).
+3. **Done** — **live `explain` (#236)**, as stage two of a gate that now exists.
+   The contract is [`commands/explain/README.md`](../commands/explain/README.md)
+   and the live examples in
+   [`commands/explain/examples.md`](../commands/explain/examples.md);
+   [#90](https://github.com/tikoci/centrs/issues/90) indexes what follows.
 
 The offline baseline stays `verified`: #264 closed the measured token vocabulary
 and #322 closed the final bounded-execution gap, including the public depth-axis

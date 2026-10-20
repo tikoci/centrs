@@ -4,8 +4,9 @@ Each numbered example is an executable spec. Offline examples run under the
 named unit/fixture suites. Live foundation examples 11, 12, 16, 24 and 48 run
 under `test/integration/explain-live.test.ts`, and describe/completion examples
 7–10, 13–15 and 19 under `test/integration/explain-live-facets.test.ts`, on REST
-and native API with a CHR booted by `@tikoci/quickchr`. Live types (#225) and
-the #236 closeout remain, so both whole protocol cells stay `designed`.
+and native API with a CHR booted by `@tikoci/quickchr`. Live types 52–53 run
+under `test/integration/explain-live-types.test.ts`. All of them pass on stable
+7.24.5 and long-term 7.23.8, so both protocol cells are `CHR-passed` (#236).
 
 A letter-suffixed example (`1b`, `4b`, `18b`) is the **counterpart** of the number it
 follows: the same question with the other answer, added where implementing the
