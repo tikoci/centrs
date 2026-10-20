@@ -24,9 +24,10 @@ part of this section.
 - Live `explain --schema` describes the path at the cursor: a menu's verbs and
   submenus with counts, a command's arguments with their declared syntax, and
   `print`'s proplist. `--complete [--cursor <byte>]` returns menu, verb,
-  argument-name or value candidates, marking declared names apart from
-  observed values. `--full` lifts the sizing limits up to a safety ceiling.
-  Completion candidates are the device's own input completion at the cursor.
+  argument-name, `where` variable or value candidates. They are the device's
+  own input completion at the cursor, cited by `ev`; declared names and
+  syntax stay in `--schema`. `--full` lifts the sizing limits up to a safety
+  ceiling.
   Only probe shapes that answer on RouterOS 7.12.2 and 7.20.8 are sent (#492).
 
 - `centrs --version` / `-V` prints the package version alone; `--json` (or
