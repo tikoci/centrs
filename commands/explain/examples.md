@@ -474,7 +474,8 @@ full MAC spelling carry `["array"]`, `["time"]`, `["id"]`, and `["mac"]`.
 is `str` while the CLI Reference declares `mac-address` as `macAddr`. Each hint
 fact cites canonicalizer evidence with
 `basis: "heuristic"`; no record has `observedType` or `schemaType`, because
-offline analysis has neither live parser output nor an argument schema. A hint
+offline analysis has neither live parser output nor an argument schema
+(examples 52 and 53 are the live counterparts). A hint
 is not a diagnostic and does not change `data.verdict` or
 `runtimeAcceptance: "not-proven"`.
 
@@ -1062,3 +1063,46 @@ as `/ip/address { 1;2 }` and `/ip { zzznotamenu { print } }` do.
 The menu must be known from the source alone, so a block after a navigation
 statement (`/ip⏎address { … }`), an abbreviation (`addr {`) and a digit-led
 menu (`6to4 {`) keep the older reading.
+
+### 52. A live call observes a type only where the device converts a literal
+
+```bash
+centrs explain $R ':local x 2.2; :set x "2.2"; :local z (1,0x10,2.2); :local t 200ms; :local i *1; :local y yes' -u $U -p $P --json
+```
+
+This is example 26's input against a target. The bare `2.2` gains
+`facts.observedType: { value: "ip", rendered: "2.0.0.2" }`, `200ms` gains
+`time` (`00:00:00.200`) and `yes` gains `bool` (`true`). Of the array's
+members, `0x10` is `num` (`16`) and `2.2` is `ip`, while `1` renders unchanged
+and gets nothing. The quoted `"2.2"` and the id `*1` also get nothing, because
+an unchanged rendering proves no type: `:parse` prints a string unquoted. The
+`shapeHints` are untouched, and no record has `schemaType`, because no value
+here is a menu command's argument.
+
+A scripting directive's named argument is an operand too:
+`:for i from=0x10 to=20 do={:put $i}` gives `from` the fact `num` (`16`), and
+`to=20` renders unchanged and gets nothing. A NAME slot is a variable, never a
+value: in `:local yes 2` and `:local name=no value=yes`, the names `yes` and
+`no` get nothing (the device renders `name=$yes`, `name=$no`), while
+`value=yes` is `bool`.
+
+Each fact cites one `:parse` evidence entry per context (operands, members)
+with `facet: "types"` and `basis: "derived"`. The probe re-parses each literal
+alone, as `:local vN <lit>` or `:local vN {<lit>}`; the analyzed input and
+the literals are never evaluated, and no `:typeof` is sent.
+
+### 53. A live call normalizes each argument's declared type
+
+```bash
+centrs explain $R '/ip/dns/set servers=1.1.1.1,8.8.8.8; /ip/route/add gateway=2.2 dist=2 comment=abc; /ip/firewall/filter/add chain=input dst-port=80,443 protocol=tcp disabled=yes' -u $U -p $P --json
+```
+
+Each `name=value` gains `facts.schemaType` from one argument-level `syntax`
+probe. `servers` is `{ values: ["ip", "ip6", "enum"], declared:
+"Address[@VRF]" }`, and `gateway` is `ip`, `ip6`, `enum`. `dist` resolves as
+the unique prefix of `distance` and is `num`. `comment` is `str`. `chain` is
+`enum` plus `str`, since custom chains are legal. `dst-port` is `num` with
+`list: true`. `disabled` gets nothing, because the device declares a boolean
+with a blank row. No menu argument gets `observedType`: its own parser
+converts it, which is the schema's slot. The text output prints
+`observed=ip(2.0.0.2)` and `schema=ip|ip6|enum` on the value rows.

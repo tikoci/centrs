@@ -17,8 +17,9 @@
  * them; only `:typeof` can. Grounded on CHR 7.21.5, 7.23.3 and 7.24rc4 in
  * `test/fixtures/explain/operators.json` → `sweep.runtime` rows
  * `typeof-deferred` / `deferred-array-typeof` and `sweep.opAxis` `defer-*`.
- * Offline abstains on every such form; a live `observedType` reports the
- * runtime type.
+ * Offline abstains on every such form, and so does the live `observedType`
+ * (#225): it reads only visible `:parse` conversions and never sends
+ * `:typeof`.
  *
  * ## The two contexts are different lexicons, not one lexicon plus a fallback
  *
@@ -51,8 +52,8 @@ import { isIP } from "node:net";
  * tests spellings, so reordering the members here must not change any result.
  * `array` is emitted by the structured anchor reader rather than
  * {@link valueShapeHints}, which receives decoded scalar values only.
- * `op` is not a member: a deferred `(> …)` form abstains offline and is
- * reported only as a live `observedType` (#288).
+ * `op` is not a member: a deferred `(> …)` form abstains offline and live
+ * (#288, #225).
  */
 export const VALUE_SHAPES = [
 	"num",
@@ -69,6 +70,56 @@ export const VALUE_SHAPES = [
 ] as const;
 
 export type ValueShape = (typeof VALUE_SHAPES)[number];
+
+/**
+ * The types a visible `:parse` conversion can name (#225 `observedType`).
+ *
+ * A subset of {@link VALUE_SHAPES}: these are exactly the scalar types whose
+ * device rendering differs from some spelling of them (`2.2` → `2.0.0.2`,
+ * `0x10` → `16`, `yes` → `true`, `200ms` → `00:00:00.200`, `1:0:0::1` →
+ * `1::1`). `str`, `id` and `mac` never convert, so they are never observed.
+ */
+export const OBSERVED_VALUE_TYPES = [
+	"num",
+	"bool",
+	"ip",
+	"ip-prefix",
+	"ip6",
+	"ip6-prefix",
+	"time",
+] as const satisfies readonly ValueShape[];
+
+export type ObservedValueType = (typeof OBSERVED_VALUE_TYPES)[number];
+
+/**
+ * The normalized terms a schema declaration maps to (#225 `schemaType`).
+ *
+ * The scalar names are shared with {@link VALUE_SHAPES} so a schema fact and a
+ * shape hint compare directly. The schema-only terms name declarations no
+ * literal spelling has: `ip-range` (`A.B.C.D[-A.B.C.D|…] (IP address range)`),
+ * `enum` (a listed word set such as `input | forward | output`, never closed:
+ * the device also lists current configuration names this way) and `name` (a
+ * reference to a configuration object). `bool` and `name` are CLI Reference
+ * spellings (`bool`, `iface_enum`) the live projection never emits:
+ * `/console/inspect` declares a boolean with a blank row, and prints the
+ * current interface names exactly like keywords.
+ */
+export const SCHEMA_VALUE_TYPES = [
+	"num",
+	"bool",
+	"ip",
+	"ip-prefix",
+	"ip-range",
+	"ip6",
+	"ip6-prefix",
+	"time",
+	"mac",
+	"str",
+	"enum",
+	"name",
+] as const;
+
+export type SchemaValueType = (typeof SCHEMA_VALUE_TYPES)[number];
 
 /**
  * Where the value sits, because RouterOS reads the same bytes differently.

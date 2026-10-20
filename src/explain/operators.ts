@@ -143,7 +143,8 @@ const OPERATORS: readonly RouterosOperator[] = [
 	// different operator, and arity is the only thing that separates them.
 	// Offline value-shape hints abstain on every such form: identical
 	// `(> …)` syntax can be `op` or `array` at runtime and `:parse` IL cannot
-	// distinguish them, so `op` lives only as a live `observedType` (#288).
+	// distinguish them; only `:typeof` can, and live explain never sends it,
+	// so `op` has no producer at all (#288, #225).
 	op(">", [1, 2], 5, "left", "relational", ">"),
 	op("=", [2], 5, "left", "relational", "="),
 	op("<=", [2], 5, "left", "relational", "<="),

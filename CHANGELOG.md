@@ -20,7 +20,14 @@ part of this section.
 - `explain <router> '<input>'` and `explainLiveEnvelope()` add read-only parse,
   highlight and command-argument evidence over REST/native API. Probe outcomes,
   byte coverage and provenance remain explicit; analyzed input never executes (#491).
-  Live types (#225) remain a follow-up.
+- Live `explain` fills the two live value facts (#225). `observedType` names a
+  type only where the device visibly converts a bare scripting literal
+  (`2.2` → `2.0.0.2` is `ip`, `0x10` → `16` is `num`), read from an escaped
+  `:parse` of the literal alone; an unchanged rendering abstains, and no
+  `:typeof` is sent. `schemaType` normalizes the argument's live `syntax`
+  declaration into leaf types (`gateway` → `ip`, `ip6`, `enum`), with the
+  device's own term in `declared`. Menu arguments are never observed, and
+  `op` has no producer.
 - Live `explain --schema` describes the path at the cursor: a menu's verbs and
   submenus with counts, a command's arguments with their declared syntax, and
   `print`'s proplist. `--complete [--cursor <byte>]` returns menu, verb,
