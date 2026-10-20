@@ -106,11 +106,6 @@ export async function retrieveWait(
 			error = queryErrorForFlag(error, "--until");
 		const envelope = buildRetrieveErrorEnvelopeFromResolved(resolved, error);
 		if (prepared) envelope.meta.validation = prepared.validation;
-		else if (attempts === 0)
-			envelope.meta.validation = {
-				enabled: resolved.validate.value,
-				result: "skipped",
-			};
 		if (envelope.meta.operation) envelope.meta.operation.wait = meta(reason);
 		return envelope;
 	};

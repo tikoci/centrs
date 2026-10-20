@@ -432,6 +432,27 @@ describe("retrieveFollow projection and bounds", () => {
 		expect(out.map(shape)).toEqual(["summary:interrupted"]);
 		expect(out[0]?.ok).toBe(true);
 		expect(router.commands()).toEqual([]);
+		// The gate never ran: not reached, never a `skipped` verdict (#537).
+		expect(out[0]?.meta).toHaveProperty("validation", {
+			enabled: true,
+			source: "live /console/inspect",
+			stages: [
+				{
+					stage: "device",
+					source: "live /console/inspect",
+					result: "skipped",
+					reason: "not reached: interrupted",
+				},
+			],
+		});
+		const disabled = await follow(
+			request(router, { duration: "5s", sweep: 0, validate: false }),
+			{ signal: controller.signal },
+		);
+		expect(disabled[0]?.meta).toHaveProperty("validation", {
+			enabled: false,
+			source: "disabled",
+		});
 	});
 
 	test("an abort during validation never sends the listen", async () => {

@@ -380,6 +380,26 @@ describe("retrieveSample bounds", () => {
 			stopReason: "interrupted",
 			samples: 0,
 		});
+		// The gate never ran: not reached, never a `skipped` verdict (#537).
+		expect(out[0]?.meta).toHaveProperty("validation", {
+			enabled: true,
+			source: "live /console/inspect",
+			stages: [
+				{
+					stage: "device",
+					source: "live /console/inspect",
+					result: "skipped",
+					reason: "not reached: interrupted",
+				},
+			],
+		});
+		const disabled = await sample(request(router, { validate: false }), {
+			signal: controller.signal,
+		});
+		expect(disabled[0]?.meta).toHaveProperty("validation", {
+			enabled: false,
+			source: "disabled",
+		});
 	});
 
 	test("a failed read ends with one failed summary carrying the partial count", async () => {

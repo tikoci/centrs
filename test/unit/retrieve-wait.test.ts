@@ -294,6 +294,28 @@ describe("retrieveWait", () => {
 		});
 		expect(before.ok ? undefined : before.error.code).toBe("wait/interrupted");
 		expect(r.inspections()).toBe(0);
+		// The gate never ran: not reached, never a `skipped` verdict (#537).
+		expect(before.meta.validation).toEqual({
+			enabled: true,
+			source: "live /console/inspect",
+			stages: [
+				{
+					stage: "device",
+					source: "live /console/inspect",
+					result: "skipped",
+					reason: "not reached: wait/interrupted",
+				},
+			],
+		});
+		const disabled = await retrieveWait(
+			{ ...r.request, validate: false },
+			ENV,
+			{ signal: controller.signal },
+		);
+		expect(disabled.meta.validation).toEqual({
+			enabled: false,
+			source: "disabled",
+		});
 		const active = new AbortController();
 		const timer = setTimeout(() => active.abort(), 50);
 		try {
@@ -306,6 +328,39 @@ describe("retrieveWait", () => {
 				"wait/interrupted",
 			);
 			expect(result.meta.operation?.wait?.stopReason).toBe("interrupted");
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	test("a cancellation after retried, unanswered attempts is not a gate refusal (#537)", async () => {
+		// Every attempt is refused, so the gate never settles. Cancelling then
+		// used to fall through to the gate-refused branch and report `failed`.
+		const r = router();
+		servers.splice(servers.indexOf(r.server), 1);
+		r.server.stop(true);
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), 100);
+		try {
+			const result = await retrieveWait({ ...r.request, wait: "5s" }, ENV, {
+				signal: controller.signal,
+			});
+			expect(result.ok ? undefined : result.error.code).toBe(
+				"wait/interrupted",
+			);
+			expect(result.meta.operation?.wait?.attempts).toBeGreaterThan(0);
+			expect(result.meta.validation).toEqual({
+				enabled: true,
+				source: "live /console/inspect",
+				stages: [
+					{
+						stage: "device",
+						source: "live /console/inspect",
+						result: "skipped",
+						reason: "not reached: wait/interrupted",
+					},
+				],
+			});
 		} finally {
 			clearTimeout(timer);
 		}
