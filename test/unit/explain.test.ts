@@ -1183,10 +1183,12 @@ describe("centrs explain — the CLI surface", () => {
 		);
 	});
 
-	test("unimplemented live facets are refused, not silently degraded to offline", async () => {
+	test("live facets go to the router, never silently degraded to offline", async () => {
 		const { code, err } = await run([
 			"explain",
 			"edge1",
+			"--cdb-file",
+			"/nonexistent-explain-492.cdb",
 			"--schema",
 			"/ip/route print",
 			"--json",
@@ -1196,8 +1198,32 @@ describe("centrs explain — the CLI surface", () => {
 			error: { code: string };
 		};
 		expect(envelope.ok).toBe(false);
-		expect(envelope.error.code).toBe("usage/not-implemented");
+		expect(envelope.error.code).toBe("cdb/not-found");
 		expect(code).toBe(1);
+	});
+
+	test("a cursor outside the input is refused, offline and live alike", async () => {
+		for (const target of [[], ["edge1"]]) {
+			const { code, err } = await run([
+				"explain",
+				...target,
+				"--complete",
+				"--cursor",
+				"99",
+				"/ip/route",
+				"--json",
+			]);
+			expect(JSON.parse(err).error.code).toBe("usage/invalid-cursor");
+			expect(code).toBe(1);
+		}
+		const notNumber = await run([
+			"explain",
+			"--complete",
+			"--cursor",
+			"end",
+			"/ip/route",
+		]);
+		expect(notNumber.err).toContain("[usage/invalid-cursor]");
 	});
 
 	test("`--` ends the flags: everything after it is an operand", async () => {
@@ -1223,6 +1249,8 @@ describe("centrs explain — the CLI surface", () => {
 			const live = await run([
 				"explain",
 				"edge1",
+				"--cdb-file",
+				"/nonexistent-explain-492.cdb",
 				"--schema",
 				"--file",
 				path,
@@ -1230,7 +1258,7 @@ describe("centrs explain — the CLI surface", () => {
 			]);
 			expect(
 				(JSON.parse(live.err) as { error: { code: string } }).error.code,
-			).toBe("usage/not-implemented");
+			).toBe("cdb/not-found");
 		} finally {
 			await rm(dir, { recursive: true, force: true });
 		}
@@ -1343,33 +1371,34 @@ describe("centrs explain — the CLI surface", () => {
 		expect(err).toContain("`centrs explain --json -- '/ip/address print'`");
 	});
 
-	test("unimplemented live facets are refused BEFORE any input source is touched", async () => {
+	test("a facet modifier without a facet is refused BEFORE any input source is touched", async () => {
 		// Ordering, not just outcome: reading first made `--file -` block on EOF
 		// before the refusal, and `--file <missing>` report a file error instead of
-		// it. Both must name the live form, and the `--file -` case must not hang.
+		// it. Both must name the flag, and the `--file -` case must not hang.
 		const missing = await run([
 			"explain",
 			"edge1",
-			"--schema",
+			"--full",
 			"--file",
 			`${import.meta.dir}/no-such-file.rsc`,
 			"--json",
 		]);
 		expect(
 			(JSON.parse(missing.err) as { error: { code: string } }).error.code,
-		).toBe("usage/not-implemented");
+		).toBe("usage/conflicting-flags");
 
 		const stdin = await run([
 			"explain",
 			"edge1",
-			"--schema",
+			"--cursor",
+			"3",
 			"--file",
 			"-",
 			"--json",
 		]);
 		expect(
 			(JSON.parse(stdin.err) as { error: { code: string } }).error.code,
-		).toBe("usage/not-implemented");
+		).toBe("usage/conflicting-flags");
 	});
 
 	test("an empty positional is a present argument, not an absent one", async () => {

@@ -2,9 +2,10 @@
 
 Each numbered example is an executable spec. Offline examples run under the
 named unit/fixture suites. Live foundation examples 11, 12, 16, 24 and 48 run
-under `test/integration/explain-live.test.ts` on REST and native API with a CHR
-booted by `@tikoci/quickchr`. The remaining live describe/completion examples
-are still targets (#492/#225/#236); both whole protocol cells remain `designed`.
+under `test/integration/explain-live.test.ts`, and describe/completion examples
+7–10, 13–15 and 19 under `test/integration/explain-live-facets.test.ts`, on REST
+and native API with a CHR booted by `@tikoci/quickchr`. Live types (#225) and
+the #236 closeout remain, so both whole protocol cells stay `designed`.
 
 A letter-suffixed example (`1b`, `4b`, `18b`) is the **counterpart** of the number it
 follows: the same question with the other answer, added where implementing the
@@ -146,10 +147,10 @@ renders no curl.
 centrs explain $R /ip/address -u $U -p $P --schema --json
 ```
 
-`data.schema.verbs` lists the verbs available at `/ip/address` (`add`, `set`,
-`remove`, `print`, …), each with an arg count or a drill-down hint rather than
-the full arg expansion; facts cite `live-inspect` evidence stamped with the
-CHR's RouterOS version.
+`data.schema.node` is `menu`, and `data.schema.verbs` lists the verbs at
+`/ip/address` (`add`, `set`, `remove`, `print`, …). Each carries its argument
+count from one more `child` probe rather than the full argument expansion.
+Facts cite `live-inspect` evidence stamped with the CHR's RouterOS version.
 
 ### 8. Describe a verb: its arguments
 
@@ -157,8 +158,9 @@ CHR's RouterOS version.
 centrs explain $R /ip/address/set -u $U -p $P --schema --json
 ```
 
-`data.schema` enumerates the settable arguments of `set` (`address`,
-`interface`, `disabled`, …) with types where the device reports them.
+`data.schema.arguments` enumerates the settable arguments of `set` (`address`,
+`interface`, `disabled`, …). Each has its argument-level `syntax` rows where the
+device reports them (`address`: `A.B.C.D (IP address)`).
 
 ### 9. Describe print: the proplist special case
 
@@ -166,10 +168,12 @@ centrs explain $R /ip/address/set -u $U -p $P --schema --json
 centrs explain $R /ip/address/print -u $U -p $P --schema --json
 ```
 
-`data.schema` returns the `.proplist` value set — what the output *can*
-contain — rather than treating `print` like a plain verb. The grounded probe is
+`data.schema.proplist` returns the `.proplist` value set — what the output
+*can* contain — besides `print`'s own arguments. The grounded probe is
 `completion input="/ip/address/print proplist="` (dot-free console spelling),
-filtered to rows with `show=true`; each returned fact cites that live evidence.
+filtered to rows with `show=true`; it cites that live evidence. A singleton
+settings menu (`/ip/dns/print`) offers no proplist names, so
+`get value-name=` answers with `source: "get-value-name"`.
 
 ### 10. Smart sizing truncates with counts, `--full` lifts it
 
@@ -177,9 +181,11 @@ filtered to rows with `show=true`; each returned fact cites that live evidence.
 centrs explain $R /ip -u $U -p $P --schema --json
 ```
 
-The `/ip` subtree is large: `data.schema.truncated` is `true`, counts are
-reported in place of the full expansion, and a warning/hint names the
-narrower query (or `--full`) that expands it.
+The `/ip` subtree is large (31 children, past the 16-probe default):
+`data.schema.truncated` is `true`, the names are listed with `counts` but not
+expanded, and `tip/explain-schema-truncated` names the narrower inputs in
+`data.schema.next` or `--full`. With `--full`, every submenu carries its verb
+and menu counts.
 
 ### 11. Spans and the error byte (centrs vocabulary)
 
@@ -220,8 +226,14 @@ here over rest-api; example 24 asserts the same readout over native API using
 centrs explain $R '/ip/address add comm' -u $U -p $P --complete --json
 ```
 
-`data.completion` includes `comment` as a completing candidate for the
-partial word `comm` — a valid partial, no unknown-word diagnostic.
+`data.completion` is `context: "argument-name"` with `comment` as a
+`partial` candidate replacing bytes 16–20. No canonicalizer diagnostic calls
+`comm` unknown. The device still rejects the input as written: `:parse` and
+the highlight `error` both name byte 16. So pass `--fail-on never` when only
+the candidates matter. `--cursor 20` gives the same answer inside a longer
+input. The same candidate comes back for a relative path after `;`
+(`/ip { :put 1; address add comm`), and `where comm` completes `comment` as a
+`variable`.
 
 ### 14. Completion: complete argument name, no value yet
 
@@ -229,9 +241,10 @@ partial word `comm` — a valid partial, no unknown-word diagnostic.
 centrs explain $R '/ip/address add comment' -u $U -p $P --complete --json
 ```
 
-The candidate set marks `comment` as a complete argument name expecting a
-value (`=` continuation) — distinct from example 13's partial match and from
-an unknown word.
+The candidate set marks `comment` as `match: "exact"` with `takesValue: true`,
+because the device offers `=` at the cursor. That is distinct from example 13's
+partial match and from an unknown word. The flag `/interface print detail` is
+exact with `takesValue: false`.
 
 ### 15. Completion: value position
 
@@ -240,9 +253,11 @@ centrs explain $R '/ip/firewall/filter add chain=' -u $U -p $P --complete --json
 ```
 
 With the input ending in `=`, candidates are **values** for `chain`
-(`forward`, `input`, `output` — labeled as observed, never a closed set). For
-a free-form argument like `comment=`, the same probe yields type info (string)
-rather than candidates.
+(`forward`, `input`, `output` — observed from the completion probe, never a closed set). For
+a free-form argument like `comment=`, the same probe yields no candidates and
+`data.completion.syntax` carries `string value`. An unclosed substitution
+(`:local x [/ip/address add interface=`) still completes, from the device's
+own path runs.
 
 ### 16. Runtime acceptance is never claimed
 
@@ -350,9 +365,9 @@ curated read verb; before the command axis this document abstained.
 centrs explain $R '/ip/route' -u $U -p $P --json
 ```
 
-`/console/inspect` completion and highlight agree that the terminal token is a
-`dir`; the first statement is `resolution: "resolved"`, `kind: "menu"`, and
-has no runnable transport rendering. The evidence entry is version-stamped and
+The highlight classes every byte `dir`, and with `--schema` the `child` self
+row says `menu`; the first statement is `resolution: "resolved"`,
+`kind: "menu"`, and has no runnable transport rendering. The evidence entry is version-stamped and
 the probe never executes the path. Since #207 the offline reading (example 18b)
 already says the same thing from the generated table, so what the live probe
 adds here is **provenance and a version stamp**, not the answer — and it is the

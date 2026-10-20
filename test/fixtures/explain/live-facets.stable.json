@@ -1,0 +1,8809 @@
+{
+	"generator": "test/integration/explain-live-facets.test.ts",
+	"version": "7.24.5",
+	"captures": [
+		{
+			"example": "7",
+			"input": "/ip/address",
+			"facets": {
+				"schema": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/address\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "/ip/address/"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/address"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address"],
+					"result": [
+						{
+							"name": "address",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,add"],
+					"result": [
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "broadcast",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "copy-from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "netmask",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "network",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,comment"],
+					"result": [
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,disable"],
+					"result": [
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,edit"],
+					"result": [
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "number",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-name",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,enable"],
+					"result": [
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,export"],
+					"result": [
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "compact",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "hide-sensitive",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "path",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "show-sensitive",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "terse",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "verbose",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,find"],
+					"result": [
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,get"],
+					"result": [
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "as-string",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "as-string-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "number",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-name",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,print"],
+					"result": [
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "append",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "as-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "brief",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comments",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "count-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "detail",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "group-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "on-event",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "order-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "proplist",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "show-ids",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "terse",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "timestamp",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "without-paging",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,remove"],
+					"result": [
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,reset"],
+					"result": [
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "broadcast",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "netmask",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "network",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,set"],
+					"result": [
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "broadcast",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "netmask",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "network",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				}
+			],
+			"schema": {
+				"path": "/ip/address",
+				"statementId": "s0",
+				"counts": {
+					"verbs": 12,
+					"menus": 0
+				},
+				"truncated": false,
+				"next": [],
+				"ev": "live3",
+				"node": "menu",
+				"verbs": [
+					{
+						"name": "add",
+						"ev": "live4",
+						"arguments": 8
+					},
+					{
+						"name": "comment",
+						"ev": "live5",
+						"arguments": 2
+					},
+					{
+						"name": "disable",
+						"ev": "live6",
+						"arguments": 1
+					},
+					{
+						"name": "edit",
+						"ev": "live7",
+						"arguments": 2
+					},
+					{
+						"name": "enable",
+						"ev": "live8",
+						"arguments": 1
+					},
+					{
+						"name": "export",
+						"ev": "live9",
+						"arguments": 8
+					},
+					{
+						"name": "find",
+						"ev": "live10",
+						"arguments": 1
+					},
+					{
+						"name": "get",
+						"ev": "live11",
+						"arguments": 4
+					},
+					{
+						"name": "print",
+						"ev": "live12",
+						"arguments": 21
+					},
+					{
+						"name": "remove",
+						"ev": "live13",
+						"arguments": 1
+					},
+					{
+						"name": "reset",
+						"ev": "live14",
+						"arguments": 8
+					},
+					{
+						"name": "set",
+						"ev": "live15",
+						"arguments": 8
+					}
+				],
+				"menus": []
+			}
+		},
+		{
+			"example": "8",
+			"input": "/ip/address/set",
+			"facets": {
+				"schema": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/address/set\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /ip/address/set)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/address/set"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,cmd,cmd,cmd",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,set"],
+					"result": [
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "broadcast",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "netmask",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "network",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,set"],
+					"result": [
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "broadcast",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "netmask",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "network",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,address,set,address"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Address",
+							"symbol-type": "definition",
+							"text": "A.B.C.D    (IP address)",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,address,set,broadcast"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Broadcast",
+							"symbol-type": "definition",
+							"text": "A.B.C.D    (IP address)",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,address,set,comment"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Comment",
+							"symbol-type": "explanation",
+							"text": "string value",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,address,set,disabled"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "definition",
+							"text": "",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,address,set,interface"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Interface",
+							"symbol-type": "definition",
+							"text": "",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "definition",
+							"text": "lo | ether1",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,address,set,netmask"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Netmask",
+							"symbol-type": "definition",
+							"text": "A.B.C.D    (IP address)",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,address,set,network"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Network",
+							"symbol-type": "definition",
+							"text": "A.B.C.D    (IP address)",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,address,set,numbers"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "definition",
+							"text": "",
+							"type": "syntax"
+						}
+					]
+				}
+			],
+			"schema": {
+				"path": "/ip/address/set",
+				"statementId": "s0",
+				"counts": {
+					"arguments": 8
+				},
+				"truncated": false,
+				"next": [],
+				"ev": "live4",
+				"node": "command",
+				"arguments": [
+					{
+						"name": "address",
+						"ev": "live5",
+						"syntax": [
+							{
+								"symbol": "Address",
+								"kind": "definition",
+								"text": "A.B.C.D    (IP address)",
+								"depth": 0
+							}
+						]
+					},
+					{
+						"name": "broadcast",
+						"ev": "live6",
+						"syntax": [
+							{
+								"symbol": "Broadcast",
+								"kind": "definition",
+								"text": "A.B.C.D    (IP address)",
+								"depth": 0
+							}
+						]
+					},
+					{
+						"name": "comment",
+						"ev": "live7",
+						"syntax": [
+							{
+								"symbol": "Comment",
+								"kind": "explanation",
+								"text": "string value",
+								"depth": 0
+							}
+						]
+					},
+					{
+						"name": "disabled",
+						"ev": "live8",
+						"syntax": []
+					},
+					{
+						"name": "interface",
+						"ev": "live9",
+						"syntax": [
+							{
+								"symbol": "Interface",
+								"kind": "definition",
+								"text": "",
+								"depth": 0
+							},
+							{
+								"symbol": "",
+								"kind": "definition",
+								"text": "lo | ether1",
+								"depth": 1
+							}
+						]
+					},
+					{
+						"name": "netmask",
+						"ev": "live10",
+						"syntax": [
+							{
+								"symbol": "Netmask",
+								"kind": "definition",
+								"text": "A.B.C.D    (IP address)",
+								"depth": 0
+							}
+						]
+					},
+					{
+						"name": "network",
+						"ev": "live11",
+						"syntax": [
+							{
+								"symbol": "Network",
+								"kind": "definition",
+								"text": "A.B.C.D    (IP address)",
+								"depth": 0
+							}
+						]
+					},
+					{
+						"name": "numbers",
+						"ev": "live12",
+						"syntax": []
+					}
+				]
+			}
+		},
+		{
+			"example": "9",
+			"input": "/ip/address/print",
+			"facets": {
+				"schema": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/address/print\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /ip/address/print)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/address/print"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,cmd,cmd,cmd,cmd,cmd",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,print"],
+					"result": [
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "append",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "as-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "brief",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comments",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "count-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "detail",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "group-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "on-event",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "order-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "proplist",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "show-ids",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "terse",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "timestamp",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "without-paging",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,print"],
+					"result": [
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "append",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "as-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "brief",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comments",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "count-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "detail",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "group-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "on-event",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "order-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "proplist",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "show-ids",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "terse",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "timestamp",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "without-paging",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/address/print proplist="],
+					"result": [
+						{
+							"completion": " ",
+							"offset": "27",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "27",
+							"preference": "64",
+							"show": "false",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "[",
+							"offset": "27",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "(",
+							"offset": "27",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of expression",
+							"type": "completion"
+						},
+						{
+							"completion": "$",
+							"offset": "27",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "\"",
+							"offset": "27",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of quoted string",
+							"type": "completion"
+						},
+						{
+							"completion": "about",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "actual-interface",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "Actual interfaces",
+							"type": "completion"
+						},
+						{
+							"completion": "address",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "Local IP address",
+							"type": "completion"
+						},
+						{
+							"completion": "broadcast",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "Broadcast address",
+							"type": "completion"
+						},
+						{
+							"completion": "comment",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "Short description of the item",
+							"type": "completion"
+						},
+						{
+							"completion": "disabled",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "Defines whether item is ignored or used",
+							"type": "completion"
+						},
+						{
+							"completion": "dynamic",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "interface",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "Interface name",
+							"type": "completion"
+						},
+						{
+							"completion": "invalid",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "netmask",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "Network mask",
+							"type": "completion"
+						},
+						{
+							"completion": "network",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "Network prefix",
+							"type": "completion"
+						},
+						{
+							"completion": "slave",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "vrf",
+							"offset": "27",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "*",
+							"offset": "27",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "id prefix",
+							"type": "completion"
+						},
+						{
+							"completion": "<value>",
+							"offset": "27",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "literal value that consists only of digits, letters and characters -.,:<>/|+_*&^%#@!~",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"schema": {
+				"path": "/ip/address/print",
+				"statementId": "s0",
+				"counts": {
+					"arguments": 21,
+					"proplist": 13
+				},
+				"truncated": true,
+				"next": [
+					"/ip/address/print/append",
+					"/ip/address/print/as-value",
+					"/ip/address/print/brief"
+				],
+				"ev": "live4",
+				"node": "command",
+				"arguments": [
+					{
+						"name": "append"
+					},
+					{
+						"name": "as-value"
+					},
+					{
+						"name": "brief"
+					},
+					{
+						"name": "comments"
+					},
+					{
+						"name": "count-only"
+					},
+					{
+						"name": "detail"
+					},
+					{
+						"name": "file"
+					},
+					{
+						"name": "follow"
+					},
+					{
+						"name": "follow-only"
+					},
+					{
+						"name": "from"
+					},
+					{
+						"name": "group-by"
+					},
+					{
+						"name": "interval"
+					},
+					{
+						"name": "on-event"
+					},
+					{
+						"name": "order-by"
+					},
+					{
+						"name": "proplist"
+					},
+					{
+						"name": "show-ids"
+					},
+					{
+						"name": "terse"
+					},
+					{
+						"name": "timestamp"
+					},
+					{
+						"name": "value-list"
+					},
+					{
+						"name": "where"
+					},
+					{
+						"name": "without-paging"
+					}
+				],
+				"proplist": {
+					"ev": "live5",
+					"source": "print-proplist",
+					"names": [
+						"about",
+						"actual-interface",
+						"address",
+						"broadcast",
+						"comment",
+						"disabled",
+						"dynamic",
+						"interface",
+						"invalid",
+						"netmask",
+						"network",
+						"slave",
+						"vrf"
+					]
+				}
+			}
+		},
+		{
+			"example": "9 (singleton)",
+			"input": "/ip/dns/print",
+			"facets": {
+				"schema": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/dns/print\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /ip/dns/print)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/dns/print"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,cmd,cmd,cmd,cmd,cmd",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,dns,print"],
+					"result": [
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "as-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comments",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "without-paging",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,dns,print"],
+					"result": [
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "as-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comments",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "without-paging",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,dns,print,as-value"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "definition",
+							"text": "",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,dns,print,comments"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "definition",
+							"text": "",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,dns,print,file"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "File",
+							"symbol-type": "definition",
+							"text": "",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "explanation",
+							"text": "filename",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,dns,print,interval"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Interval",
+							"symbol-type": "explanation",
+							"text": "00:00:00.200..    (time interval)",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,dns,print,without-paging"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "definition",
+							"text": "",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/dns/print proplist="],
+					"result": [
+						{
+							"completion": "<value>",
+							"offset": "23",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "literal value that consists only of digits, letters and characters -.,:<>/|+_*&^%#@!~",
+							"type": "completion"
+						},
+						{
+							"completion": "[",
+							"offset": "23",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "(",
+							"offset": "23",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of expression",
+							"type": "completion"
+						},
+						{
+							"completion": "$",
+							"offset": "23",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "\"",
+							"offset": "23",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of quoted string",
+							"type": "completion"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/dns/get value-name="],
+					"result": [
+						{
+							"completion": " ",
+							"offset": "23",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "23",
+							"preference": "64",
+							"show": "false",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "[",
+							"offset": "23",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "(",
+							"offset": "23",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of expression",
+							"type": "completion"
+						},
+						{
+							"completion": "$",
+							"offset": "23",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "\"",
+							"offset": "23",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of quoted string",
+							"type": "completion"
+						},
+						{
+							"completion": "address-list-extra-time",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "allow-remote-requests",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "Allow requests from network",
+							"type": "completion"
+						},
+						{
+							"completion": "cache-max-ttl",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "Specifies maximum time-to-live for cache records",
+							"type": "completion"
+						},
+						{
+							"completion": "cache-size",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "DNS cache size in kB",
+							"type": "completion"
+						},
+						{
+							"completion": "cache-used",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "doh-max-concurrent-queries",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "doh-max-server-connections",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "doh-timeout",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "dynamic-servers",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "max-concurrent-queries",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "max-concurrent-tcp-sessions",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "max-udp-packet-size",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "mdns-repeat-ifaces",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "query-server-timeout",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "query-total-timeout",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "servers",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "use-doh-server",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "verify-doh-cert",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "vrf",
+							"offset": "23",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "*",
+							"offset": "23",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "id prefix",
+							"type": "completion"
+						},
+						{
+							"completion": "<value>",
+							"offset": "23",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "literal value that consists only of digits, letters and characters -.,:<>/|+_*&^%#@!~",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"schema": {
+				"path": "/ip/dns/print",
+				"statementId": "s0",
+				"counts": {
+					"arguments": 5,
+					"proplist": 19
+				},
+				"truncated": false,
+				"next": [],
+				"ev": "live4",
+				"node": "command",
+				"arguments": [
+					{
+						"name": "as-value",
+						"ev": "live5",
+						"syntax": []
+					},
+					{
+						"name": "comments",
+						"ev": "live6",
+						"syntax": []
+					},
+					{
+						"name": "file",
+						"ev": "live7",
+						"syntax": [
+							{
+								"symbol": "File",
+								"kind": "definition",
+								"text": "",
+								"depth": 0
+							},
+							{
+								"symbol": "",
+								"kind": "explanation",
+								"text": "filename",
+								"depth": 1
+							}
+						]
+					},
+					{
+						"name": "interval",
+						"ev": "live8",
+						"syntax": [
+							{
+								"symbol": "Interval",
+								"kind": "explanation",
+								"text": "00:00:00.200..    (time interval)",
+								"depth": 0
+							}
+						]
+					},
+					{
+						"name": "without-paging",
+						"ev": "live9",
+						"syntax": []
+					}
+				],
+				"proplist": {
+					"ev": "live11",
+					"source": "get-value-name",
+					"names": [
+						"address-list-extra-time",
+						"allow-remote-requests",
+						"cache-max-ttl",
+						"cache-size",
+						"cache-used",
+						"doh-max-concurrent-queries",
+						"doh-max-server-connections",
+						"doh-timeout",
+						"dynamic-servers",
+						"max-concurrent-queries",
+						"max-concurrent-tcp-sessions",
+						"max-udp-packet-size",
+						"mdns-repeat-ifaces",
+						"query-server-timeout",
+						"query-total-timeout",
+						"servers",
+						"use-doh-server",
+						"verify-doh-cert",
+						"vrf"
+					]
+				}
+			}
+		},
+		{
+			"example": "10",
+			"input": "/ip",
+			"facets": {
+				"schema": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "/ip/"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip"],
+					"result": [
+						{
+							"name": "ip",
+							"node-type": "path",
+							"type": "self"
+						},
+						{
+							"name": "address",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "arp",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "cloud",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "dhcp-client",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "dhcp-relay",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "dhcp-server",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "dns",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "firewall",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "hotspot",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "ipsec",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "kid-control",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "media",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "nat-pmp",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "neighbor",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "packing",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "pool",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "proxy",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "reverse-proxy",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "route",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "service",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "settings",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "smb",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "socks",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "socksify",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "ssh",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "tftp",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "traffic-flow",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "upnp",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "vrf",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "recursive-print",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				}
+			],
+			"schema": {
+				"path": "/ip",
+				"statementId": "s0",
+				"counts": {
+					"verbs": 2,
+					"menus": 29
+				},
+				"truncated": true,
+				"next": ["/ip/export", "/ip/recursive-print", "/ip/address"],
+				"ev": "live3",
+				"node": "menu",
+				"verbs": [
+					{
+						"name": "export"
+					},
+					{
+						"name": "recursive-print"
+					}
+				],
+				"menus": [
+					{
+						"name": "address"
+					},
+					{
+						"name": "arp"
+					},
+					{
+						"name": "cloud"
+					},
+					{
+						"name": "dhcp-client"
+					},
+					{
+						"name": "dhcp-relay"
+					},
+					{
+						"name": "dhcp-server"
+					},
+					{
+						"name": "dns"
+					},
+					{
+						"name": "firewall"
+					},
+					{
+						"name": "hotspot"
+					},
+					{
+						"name": "ipsec"
+					},
+					{
+						"name": "kid-control"
+					},
+					{
+						"name": "media"
+					},
+					{
+						"name": "nat-pmp"
+					},
+					{
+						"name": "neighbor"
+					},
+					{
+						"name": "packing"
+					},
+					{
+						"name": "pool"
+					},
+					{
+						"name": "proxy"
+					},
+					{
+						"name": "reverse-proxy"
+					},
+					{
+						"name": "route"
+					},
+					{
+						"name": "service"
+					},
+					{
+						"name": "settings"
+					},
+					{
+						"name": "smb"
+					},
+					{
+						"name": "socks"
+					},
+					{
+						"name": "socksify"
+					},
+					{
+						"name": "ssh"
+					},
+					{
+						"name": "tftp"
+					},
+					{
+						"name": "traffic-flow"
+					},
+					{
+						"name": "upnp"
+					},
+					{
+						"name": "vrf"
+					}
+				]
+			}
+		},
+		{
+			"example": "10 (--full)",
+			"input": "/ip",
+			"facets": {
+				"schema": true,
+				"full": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "/ip/"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip"],
+					"result": [
+						{
+							"name": "ip",
+							"node-type": "path",
+							"type": "self"
+						},
+						{
+							"name": "address",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "arp",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "cloud",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "dhcp-client",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "dhcp-relay",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "dhcp-server",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "dns",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "firewall",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "hotspot",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "ipsec",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "kid-control",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "media",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "nat-pmp",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "neighbor",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "packing",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "pool",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "proxy",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "reverse-proxy",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "route",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "service",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "settings",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "smb",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "socks",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "socksify",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "ssh",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "tftp",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "traffic-flow",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "upnp",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "vrf",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "recursive-print",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,export"],
+					"result": [
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "compact",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "hide-sensitive",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "path",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "show-sensitive",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "terse",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "verbose",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,recursive-print"],
+					"result": []
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address"],
+					"result": [
+						{
+							"name": "address",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,arp"],
+					"result": [
+						{
+							"name": "arp",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,cloud"],
+					"result": [
+						{
+							"name": "cloud",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "advanced",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "force-update",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,dhcp-client"],
+					"result": [
+						{
+							"name": "dhcp-client",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "option",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "release",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "renew",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "unset",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,dhcp-relay"],
+					"result": [
+						{
+							"name": "dhcp-relay",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "monitor",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset-counters",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "unset",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,dhcp-server"],
+					"result": [
+						{
+							"name": "dhcp-server",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "alert",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "config",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "lease",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "matcher",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "network",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "option",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "setup",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,dns"],
+					"result": [
+						{
+							"name": "dns",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "adlist",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "cache",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "forwarders",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "static",
+							"node-type": "dir",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,firewall"],
+					"result": [
+						{
+							"name": "firewall",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "address-list",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "calea",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "connection",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "filter",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "layer7-protocol",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "mangle",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "nat",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "raw",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "service-port",
+							"node-type": "dir",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,hotspot"],
+					"result": [
+						{
+							"name": "hotspot",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "active",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "cookie",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "host",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "ip-binding",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "profile",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset-html",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "service-port",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "setup",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "user",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "walled-garden",
+							"node-type": "dir",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,ipsec"],
+					"result": [
+						{
+							"name": "ipsec",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "active-peers",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "identity",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "installed-sa",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "key",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "mode-config",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "peer",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "policy",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "profile",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "proposal",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "settings",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "statistics",
+							"node-type": "dir",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,kid-control"],
+					"result": [
+						{
+							"name": "kid-control",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "device",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "pause",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "resume",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,media"],
+					"result": [
+						{
+							"name": "media",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "settings",
+							"node-type": "dir",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,nat-pmp"],
+					"result": [
+						{
+							"name": "nat-pmp",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "interfaces",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,neighbor"],
+					"result": [
+						{
+							"name": "neighbor",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "discovery-settings",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "lldp",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "unset",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,packing"],
+					"result": [
+						{
+							"name": "packing",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,pool"],
+					"result": [
+						{
+							"name": "pool",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "used",
+							"node-type": "dir",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,proxy"],
+					"result": [
+						{
+							"name": "proxy",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "access",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "cache",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "cache-contents",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "clear-cache",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "connections",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "direct",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "inserts",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "lookups",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "monitor",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "refreshes",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset-html",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,reverse-proxy"],
+					"result": [
+						{
+							"name": "reverse-proxy",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route"],
+					"result": [
+						{
+							"name": "route",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "check",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "unset",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,service"],
+					"result": [
+						{
+							"name": "service",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "webserver",
+							"node-type": "dir",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,settings"],
+					"result": [
+						{
+							"name": "settings",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,smb"],
+					"result": [
+						{
+							"name": "smb",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "shares",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "users",
+							"node-type": "dir",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,socks"],
+					"result": [
+						{
+							"name": "socks",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "access",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "connections",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "users",
+							"node-type": "dir",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,socksify"],
+					"result": [
+						{
+							"name": "socksify",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,ssh"],
+					"result": [
+						{
+							"name": "ssh",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export-host-key",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "import-host-key",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "regenerate-host-key",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,tftp"],
+					"result": [
+						{
+							"name": "tftp",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "move",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "settings",
+							"node-type": "dir",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,traffic-flow"],
+					"result": [
+						{
+							"name": "traffic-flow",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "ipfix",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "monitor",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "target",
+							"node-type": "dir",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,upnp"],
+					"result": [
+						{
+							"name": "upnp",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "interfaces",
+							"node-type": "dir",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,vrf"],
+					"result": [
+						{
+							"name": "vrf",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "move",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				}
+			],
+			"schema": {
+				"path": "/ip",
+				"statementId": "s0",
+				"counts": {
+					"verbs": 2,
+					"menus": 29
+				},
+				"truncated": false,
+				"next": [],
+				"ev": "live3",
+				"node": "menu",
+				"verbs": [
+					{
+						"name": "export",
+						"ev": "live4",
+						"arguments": 8
+					},
+					{
+						"name": "recursive-print",
+						"ev": "live5",
+						"verbs": 0,
+						"menus": 0
+					}
+				],
+				"menus": [
+					{
+						"name": "address",
+						"ev": "live6",
+						"verbs": 12,
+						"menus": 0
+					},
+					{
+						"name": "arp",
+						"ev": "live7",
+						"verbs": 12,
+						"menus": 0
+					},
+					{
+						"name": "cloud",
+						"ev": "live8",
+						"verbs": 7,
+						"menus": 1
+					},
+					{
+						"name": "dhcp-client",
+						"ev": "live9",
+						"verbs": 15,
+						"menus": 1
+					},
+					{
+						"name": "dhcp-relay",
+						"ev": "live10",
+						"verbs": 14,
+						"menus": 0
+					},
+					{
+						"name": "dhcp-server",
+						"ev": "live11",
+						"verbs": 13,
+						"menus": 6
+					},
+					{
+						"name": "dns",
+						"ev": "live12",
+						"verbs": 6,
+						"menus": 4
+					},
+					{
+						"name": "firewall",
+						"ev": "live13",
+						"verbs": 1,
+						"menus": 9
+					},
+					{
+						"name": "hotspot",
+						"ev": "live14",
+						"verbs": 13,
+						"menus": 8
+					},
+					{
+						"name": "ipsec",
+						"ev": "live15",
+						"verbs": 1,
+						"menus": 11
+					},
+					{
+						"name": "kid-control",
+						"ev": "live16",
+						"verbs": 13,
+						"menus": 1
+					},
+					{
+						"name": "media",
+						"ev": "live17",
+						"verbs": 11,
+						"menus": 1
+					},
+					{
+						"name": "nat-pmp",
+						"ev": "live18",
+						"verbs": 6,
+						"menus": 1
+					},
+					{
+						"name": "neighbor",
+						"ev": "live19",
+						"verbs": 5,
+						"menus": 2
+					},
+					{
+						"name": "packing",
+						"ev": "live20",
+						"verbs": 11,
+						"menus": 0
+					},
+					{
+						"name": "pool",
+						"ev": "live21",
+						"verbs": 10,
+						"menus": 1
+					},
+					{
+						"name": "proxy",
+						"ev": "live22",
+						"verbs": 9,
+						"menus": 8
+					},
+					{
+						"name": "reverse-proxy",
+						"ev": "live23",
+						"verbs": 12,
+						"menus": 0
+					},
+					{
+						"name": "route",
+						"ev": "live24",
+						"verbs": 14,
+						"menus": 0
+					},
+					{
+						"name": "service",
+						"ev": "live25",
+						"verbs": 9,
+						"menus": 1
+					},
+					{
+						"name": "settings",
+						"ev": "live26",
+						"verbs": 5,
+						"menus": 0
+					},
+					{
+						"name": "smb",
+						"ev": "live27",
+						"verbs": 6,
+						"menus": 2
+					},
+					{
+						"name": "socks",
+						"ev": "live28",
+						"verbs": 6,
+						"menus": 3
+					},
+					{
+						"name": "socksify",
+						"ev": "live29",
+						"verbs": 12,
+						"menus": 0
+					},
+					{
+						"name": "ssh",
+						"ev": "live30",
+						"verbs": 9,
+						"menus": 0
+					},
+					{
+						"name": "tftp",
+						"ev": "live31",
+						"verbs": 13,
+						"menus": 1
+					},
+					{
+						"name": "traffic-flow",
+						"ev": "live32",
+						"verbs": 7,
+						"menus": 2
+					},
+					{
+						"name": "upnp",
+						"ev": "live33",
+						"verbs": 6,
+						"menus": 1
+					},
+					{
+						"name": "vrf",
+						"ev": "live34",
+						"verbs": 13,
+						"menus": 0
+					}
+				]
+			}
+		},
+		{
+			"example": "13",
+			"input": "/ip/address add comm",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/address add comm\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "expected end of command (line 1 column 17)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/address add comm"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,none,cmd,cmd,cmd,none,error,arg,arg,arg",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,add"],
+					"result": [
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "broadcast",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "copy-from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "netmask",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "network",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/address add comm"],
+					"result": [
+						{
+							"completion": "comment",
+							"offset": "16",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "Short description of the item",
+							"type": "completion"
+						},
+						{
+							"completion": "=",
+							"offset": "20",
+							"preference": "95",
+							"show": "true",
+							"style": "syntax-meta",
+							"text": "argument value separator",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "20",
+							"preference": "-10",
+							"show": "false",
+							"style": "syntax-obsolete",
+							"text": "old syntax",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 20,
+				"at": {
+					"line": 0,
+					"character": 20
+				},
+				"statementId": "s0",
+				"context": "argument-name",
+				"replace": {
+					"start": 16,
+					"end": 20
+				},
+				"prefix": "comm",
+				"candidates": [
+					{
+						"text": "comment",
+						"kind": "argument",
+						"match": "partial",
+						"ev": "live4"
+					}
+				],
+				"count": 1,
+				"truncated": false,
+				"path": "/ip/address/add"
+			}
+		},
+		{
+			"example": "14",
+			"input": "/ip/address add comment",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/address add comment\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "expected end of command (line 1 column 17)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/address add comment"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,none,cmd,cmd,cmd,none,error,arg,arg,arg,arg,arg,arg",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,add"],
+					"result": [
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "broadcast",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "copy-from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "netmask",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "network",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/address add comment"],
+					"result": [
+						{
+							"completion": "comment",
+							"offset": "16",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "Short description of the item",
+							"type": "completion"
+						},
+						{
+							"completion": "=",
+							"offset": "23",
+							"preference": "95",
+							"show": "true",
+							"style": "syntax-meta",
+							"text": "argument value separator",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "23",
+							"preference": "-10",
+							"show": "false",
+							"style": "syntax-obsolete",
+							"text": "old syntax",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 23,
+				"at": {
+					"line": 0,
+					"character": 23
+				},
+				"statementId": "s0",
+				"context": "argument-name",
+				"replace": {
+					"start": 16,
+					"end": 23
+				},
+				"prefix": "comment",
+				"candidates": [
+					{
+						"text": "comment",
+						"kind": "argument",
+						"match": "exact",
+						"ev": "live4"
+					}
+				],
+				"count": 1,
+				"truncated": false,
+				"path": "/ip/address/add",
+				"takesValue": true
+			}
+		},
+		{
+			"example": "14 (flag)",
+			"input": "/interface print detail",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/interface print detail\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /interface/printdetail=true)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/interface print detail"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,none,cmd,cmd,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,arg",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "interface,print"],
+					"result": [
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "append",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "as-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "brief",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comments",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "count-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "detail",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "group-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "oid",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "on-event",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "order-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "proplist",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "show-ids",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "stats",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "stats-detail",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "terse",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "timestamp",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "without-paging",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/interface print detail"],
+					"result": [
+						{
+							"completion": "detail",
+							"offset": "17",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "Displays detailed information",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "23",
+							"preference": "80",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": ";",
+							"offset": "23",
+							"preference": "40",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "end of command",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 23,
+				"at": {
+					"line": 0,
+					"character": 23
+				},
+				"statementId": "s0",
+				"context": "argument-name",
+				"replace": {
+					"start": 17,
+					"end": 23
+				},
+				"prefix": "detail",
+				"candidates": [
+					{
+						"text": "detail",
+						"kind": "argument",
+						"match": "exact",
+						"ev": "live4"
+					}
+				],
+				"count": 1,
+				"truncated": false,
+				"path": "/interface/print",
+				"takesValue": false
+			}
+		},
+		{
+			"example": "15",
+			"input": "/ip/firewall/filter add chain=",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/firewall/filter add chain=\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /ip/firewall/filter/add)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/firewall/filter add chain="],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,none,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,syntax-meta",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,firewall,filter,add"],
+					"result": [
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "action",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "address-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "address-list-timeout",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "chain",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-bytes",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-limit",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-mark",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-nat-state",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-rate",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-state",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-type",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "content",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "copy-from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dscp",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-address-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-address-type",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-limit",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-port",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "fragment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "hotspot",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "icmp-options",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "in-bridge-port",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "in-bridge-port-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "in-interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "in-interface-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "ingress-priority",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "ipsec-policy",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "ipv4-options",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "jump-target",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "layer7-protocol",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "limit",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "log",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "log-prefix",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "nth",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "out-bridge-port",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "out-bridge-port-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "out-interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "out-interface-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "p2p",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "packet-mark",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "packet-size",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "per-connection-classifier",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "place-before",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "port",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "priority",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "protocol",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "psd",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "random",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "realm",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "reject-with",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "routing-mark",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "src-address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "src-address-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "src-address-type",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "src-mac-address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "src-port",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "tcp-flags",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "tcp-mss",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "time",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "tls-host",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "tos",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "ttl",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/firewall/filter add chain="],
+					"result": [
+						{
+							"completion": " ",
+							"offset": "30",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "30",
+							"preference": "64",
+							"show": "false",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "[",
+							"offset": "30",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "(",
+							"offset": "30",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of expression",
+							"type": "completion"
+						},
+						{
+							"completion": "$",
+							"offset": "30",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "\"",
+							"offset": "30",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of quoted string",
+							"type": "completion"
+						},
+						{
+							"completion": "forward",
+							"offset": "30",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "input",
+							"offset": "30",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "output",
+							"offset": "30",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "<value>",
+							"offset": "30",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "literal value that consists only of digits, letters and characters -.,:<>/|+_*&^%#@!~",
+							"type": "completion"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,firewall,filter,add,chain"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Chain",
+							"symbol-type": "definition",
+							"text": "",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "definition",
+							"text": "input | forward | output",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "explanation",
+							"text": "string value",
+							"type": "syntax"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 30,
+				"at": {
+					"line": 0,
+					"character": 30
+				},
+				"statementId": "s0",
+				"context": "value",
+				"replace": {
+					"start": 30,
+					"end": 30
+				},
+				"prefix": "",
+				"candidates": [
+					{
+						"text": "forward",
+						"kind": "value",
+						"match": "partial",
+						"ev": "live4"
+					},
+					{
+						"text": "input",
+						"kind": "value",
+						"match": "partial",
+						"ev": "live4"
+					},
+					{
+						"text": "output",
+						"kind": "value",
+						"match": "partial",
+						"ev": "live4"
+					}
+				],
+				"count": 3,
+				"truncated": false,
+				"path": "/ip/firewall/filter/add",
+				"argument": "chain",
+				"syntax": [
+					{
+						"symbol": "Chain",
+						"kind": "definition",
+						"text": "",
+						"depth": 0
+					},
+					{
+						"symbol": "",
+						"kind": "definition",
+						"text": "input | forward | output",
+						"depth": 1
+					},
+					{
+						"symbol": "",
+						"kind": "explanation",
+						"text": "string value",
+						"depth": 1
+					}
+				]
+			}
+		},
+		{
+			"example": "15 (free-form)",
+			"input": "/ip/address add comment=",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/address add comment=\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /ip/address/add)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/address add comment="],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,none,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,arg,arg,syntax-meta",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,add"],
+					"result": [
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "broadcast",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "copy-from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "netmask",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "network",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/address add comment="],
+					"result": [
+						{
+							"completion": " ",
+							"offset": "24",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "24",
+							"preference": "64",
+							"show": "false",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "[",
+							"offset": "24",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "(",
+							"offset": "24",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of expression",
+							"type": "completion"
+						},
+						{
+							"completion": "$",
+							"offset": "24",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "\"",
+							"offset": "24",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of quoted string",
+							"type": "completion"
+						},
+						{
+							"completion": "<value>",
+							"offset": "24",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "literal value that consists only of digits, letters and characters -.,:<>/|+_*&^%#@!~",
+							"type": "completion"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,address,add,comment"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Comment",
+							"symbol-type": "explanation",
+							"text": "string value",
+							"type": "syntax"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 24,
+				"at": {
+					"line": 0,
+					"character": 24
+				},
+				"statementId": "s0",
+				"context": "value",
+				"replace": {
+					"start": 24,
+					"end": 24
+				},
+				"prefix": "",
+				"candidates": [],
+				"count": 0,
+				"truncated": false,
+				"path": "/ip/address/add",
+				"argument": "comment",
+				"syntax": [
+					{
+						"symbol": "Comment",
+						"kind": "explanation",
+						"text": "string value",
+						"depth": 0
+					}
+				]
+			}
+		},
+		{
+			"example": "15 (incomplete substitution)",
+			"input": ":put \"é\"; :local x [/ip/address add interface=",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \":put \\\"é\\\"; :local x [/ip/address add interface=\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "syntax error (line 1 column 48)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": [
+						"highlight",
+						"",
+						":put \"\u001a\u001a\"; :local x [/ip/address add interface="
+					],
+					"result": [
+						{
+							"highlight": "dir,cmd,cmd,cmd,none,syntax-meta,none,none,syntax-meta,syntax-meta,none,dir,cmd,cmd,cmd,cmd,cmd,none,variable-local,none,syntax-meta,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,none,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,arg,arg,arg,arg,syntax-meta",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "put"],
+					"result": [
+						{
+							"name": "put",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "message",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": [
+						"completion",
+						"",
+						":put \"\u001a\u001a\"; :local x [/ip/address add interface="
+					],
+					"result": [
+						{
+							"completion": " ",
+							"offset": "47",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "47",
+							"preference": "64",
+							"show": "false",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "[",
+							"offset": "47",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "(",
+							"offset": "47",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of expression",
+							"type": "completion"
+						},
+						{
+							"completion": "$",
+							"offset": "47",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "\"",
+							"offset": "47",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of quoted string",
+							"type": "completion"
+						},
+						{
+							"completion": "ether1",
+							"offset": "47",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "lo",
+							"offset": "47",
+							"preference": "96",
+							"show": "true",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "*",
+							"offset": "47",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "id prefix",
+							"type": "completion"
+						},
+						{
+							"completion": "<value>",
+							"offset": "47",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "literal value that consists only of digits, letters and characters -.,:<>/|+_*&^%#@!~",
+							"type": "completion"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,address,add,interface"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Interface",
+							"symbol-type": "definition",
+							"text": "",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "definition",
+							"text": "lo | ether1",
+							"type": "syntax"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 47,
+				"at": {
+					"line": 0,
+					"character": 46
+				},
+				"statementId": "s1",
+				"context": "value",
+				"replace": {
+					"start": 47,
+					"end": 47
+				},
+				"prefix": "",
+				"candidates": [
+					{
+						"text": "ether1",
+						"kind": "value",
+						"match": "partial",
+						"ev": "live4"
+					},
+					{
+						"text": "lo",
+						"kind": "value",
+						"match": "partial",
+						"ev": "live4"
+					}
+				],
+				"count": 2,
+				"truncated": false,
+				"path": "/ip/address/add",
+				"argument": "interface",
+				"syntax": [
+					{
+						"symbol": "Interface",
+						"kind": "definition",
+						"text": "",
+						"depth": 0
+					},
+					{
+						"symbol": "",
+						"kind": "definition",
+						"text": "lo | ether1",
+						"depth": 1
+					}
+				]
+			}
+		},
+		{
+			"example": "13 (path)",
+			"input": "/ip/address re",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/address re\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(<%% bad command name re (line 1 column 13) re)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/address re"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,none,obj-inactive,obj-inactive",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/address re"],
+					"result": [
+						{
+							"completion": "remove",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Remove item",
+							"type": "completion"
+						},
+						{
+							"completion": "reset",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "",
+							"offset": "12",
+							"preference": "-20",
+							"show": "false",
+							"style": "obj-inactive",
+							"text": "unknown command",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "14",
+							"preference": "64",
+							"show": "false",
+							"style": "none",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "14",
+							"preference": "80",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "14",
+							"preference": "80",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 14,
+				"at": {
+					"line": 0,
+					"character": 14
+				},
+				"statementId": "s0",
+				"context": "path",
+				"replace": {
+					"start": 12,
+					"end": 14
+				},
+				"prefix": "re",
+				"candidates": [
+					{
+						"text": "remove",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					},
+					{
+						"text": "reset",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					}
+				],
+				"count": 2,
+				"truncated": false
+			}
+		},
+		{
+			"example": "13 (cursor)",
+			"input": "/ip/address add comm address=192.0.2.1/24",
+			"facets": {
+				"complete": true,
+				"cursor": 20
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/address add comm address=192.0.2.1/24\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "expected end of command (line 1 column 29)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": [
+						"highlight",
+						"",
+						"/ip/address add comm address=192.0.2.1/24"
+					],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,none,cmd,cmd,cmd,none,arg,arg,arg,arg,syntax-obsolete,none,none,none,none,none,none,none,error,none,none,none,none,none,none,none,none,none,none,none,none",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,add"],
+					"result": [
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "broadcast",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "copy-from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "netmask",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "network",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/address add comm"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,none,cmd,cmd,cmd,none,error,arg,arg,arg",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/address add comm"],
+					"result": [
+						{
+							"completion": "comment",
+							"offset": "16",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "Short description of the item",
+							"type": "completion"
+						},
+						{
+							"completion": "=",
+							"offset": "20",
+							"preference": "95",
+							"show": "true",
+							"style": "syntax-meta",
+							"text": "argument value separator",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "20",
+							"preference": "-10",
+							"show": "false",
+							"style": "syntax-obsolete",
+							"text": "old syntax",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 20,
+				"at": {
+					"line": 0,
+					"character": 20
+				},
+				"statementId": "s0",
+				"context": "argument-name",
+				"replace": {
+					"start": 16,
+					"end": 20
+				},
+				"prefix": "comm",
+				"candidates": [
+					{
+						"text": "comment",
+						"kind": "argument",
+						"match": "partial",
+						"ev": "live5"
+					}
+				],
+				"count": 1,
+				"truncated": false,
+				"path": "/ip/address/add"
+			}
+		},
+		{
+			"example": "13 (relative after ;)",
+			"input": "/ip { :put 1; address add comm",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip { :put 1; address add comm\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "expected end of command (line 1 column 27)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip { :put 1; address add comm"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,none,syntax-meta,none,dir,cmd,cmd,cmd,none,none,syntax-meta,none,dir,dir,dir,dir,dir,dir,dir,none,cmd,cmd,cmd,none,error,arg,arg,arg",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip { :put 1; address add comm"],
+					"result": [
+						{
+							"completion": "comment",
+							"offset": "26",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "Short description of the item",
+							"type": "completion"
+						},
+						{
+							"completion": "=",
+							"offset": "30",
+							"preference": "95",
+							"show": "true",
+							"style": "syntax-meta",
+							"text": "argument value separator",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "30",
+							"preference": "-10",
+							"show": "false",
+							"style": "syntax-obsolete",
+							"text": "old syntax",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 30,
+				"at": {
+					"line": 0,
+					"character": 30
+				},
+				"statementId": "s0",
+				"context": "argument-name",
+				"replace": {
+					"start": 26,
+					"end": 30
+				},
+				"prefix": "comm",
+				"candidates": [
+					{
+						"text": "comment",
+						"kind": "argument",
+						"match": "partial",
+						"ev": "live3"
+					}
+				],
+				"count": 1,
+				"truncated": false
+			}
+		},
+		{
+			"example": "13 (after navigation)",
+			"input": "/ip address\n",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip address\\n\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "/ip/address/"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip address\n"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,none,dir,dir,dir,dir,dir,dir,dir,none",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip address\n"],
+					"result": [
+						{
+							"completion": " ",
+							"offset": "12",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": "/",
+							"offset": "12",
+							"preference": "95",
+							"show": "true",
+							"style": "dir",
+							"text": "top of command hierarchy",
+							"type": "completion"
+						},
+						{
+							"completion": ":",
+							"offset": "12",
+							"preference": "95",
+							"show": "true",
+							"style": "dir",
+							"text": "special commands",
+							"type": "completion"
+						},
+						{
+							"completion": "[",
+							"offset": "12",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "(",
+							"offset": "12",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of expression",
+							"type": "completion"
+						},
+						{
+							"completion": "$",
+							"offset": "12",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "{",
+							"offset": "12",
+							"preference": "40",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command block",
+							"type": "completion"
+						},
+						{
+							"completion": ";",
+							"offset": "12",
+							"preference": "40",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "end of command",
+							"type": "completion"
+						},
+						{
+							"completion": "..",
+							"offset": "12",
+							"preference": "95",
+							"show": "true",
+							"style": "dir",
+							"text": "up to ip",
+							"type": "completion"
+						},
+						{
+							"completion": "add",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Create a new item",
+							"type": "completion"
+						},
+						{
+							"completion": "comment",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Set comment for items",
+							"type": "completion"
+						},
+						{
+							"completion": "disable",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Disable items",
+							"type": "completion"
+						},
+						{
+							"completion": "edit",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "enable",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Enable items",
+							"type": "completion"
+						},
+						{
+							"completion": "export",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Print or save an export script that can be used to restore configuration",
+							"type": "completion"
+						},
+						{
+							"completion": "find",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Find items by value",
+							"type": "completion"
+						},
+						{
+							"completion": "get",
+							"offset": "12",
+							"preference": "95",
+							"show": "true",
+							"style": "cmd",
+							"text": "Gets value of item's property",
+							"type": "completion"
+						},
+						{
+							"completion": "print",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Print values of item properties",
+							"type": "completion"
+						},
+						{
+							"completion": "remove",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Remove item",
+							"type": "completion"
+						},
+						{
+							"completion": "reset",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "set",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Change item properties",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 12,
+				"at": {
+					"line": 1,
+					"character": 0
+				},
+				"context": "path",
+				"replace": {
+					"start": 12,
+					"end": 12
+				},
+				"prefix": "",
+				"candidates": [
+					{
+						"text": "add",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					},
+					{
+						"text": "comment",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					},
+					{
+						"text": "disable",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					},
+					{
+						"text": "edit",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					},
+					{
+						"text": "enable",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					},
+					{
+						"text": "export",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					},
+					{
+						"text": "find",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					},
+					{
+						"text": "get",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					},
+					{
+						"text": "print",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					},
+					{
+						"text": "remove",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					},
+					{
+						"text": "reset",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					},
+					{
+						"text": "set",
+						"kind": "verb",
+						"match": "partial",
+						"ev": "live3"
+					}
+				],
+				"count": 12,
+				"truncated": false
+			}
+		},
+		{
+			"example": "13 (where)",
+			"input": "/ip/address/print where comm",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/address/print where comm\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;$comm;0)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/address/print where comm"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,cmd,cmd,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,syntax-meta,variable-undefined,variable-undefined,variable-undefined,variable-undefined",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,print"],
+					"result": [
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "append",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "as-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "brief",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comments",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "count-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "detail",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "group-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "on-event",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "order-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "proplist",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "show-ids",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "terse",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "timestamp",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "without-paging",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/address/print where comm"],
+					"result": [
+						{
+							"completion": "",
+							"offset": "24",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "quote",
+							"type": "completion"
+						},
+						{
+							"completion": "comment",
+							"offset": "24",
+							"preference": "96",
+							"show": "true",
+							"style": "variable-local",
+							"text": "Short description of the item",
+							"type": "completion"
+						},
+						{
+							"completion": "<value>",
+							"offset": "24",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "literal value that consists only of digits, letters and characters ._",
+							"type": "completion"
+						},
+						{
+							"completion": "<=",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "less or equal",
+							"type": "completion"
+						},
+						{
+							"completion": ">=",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "more or equal",
+							"type": "completion"
+						},
+						{
+							"completion": "!=",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "not equal",
+							"type": "completion"
+						},
+						{
+							"completion": "&&",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "logical and",
+							"type": "completion"
+						},
+						{
+							"completion": "||",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "logical or",
+							"type": "completion"
+						},
+						{
+							"completion": "<<",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "shift left",
+							"type": "completion"
+						},
+						{
+							"completion": ">>",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "shift right",
+							"type": "completion"
+						},
+						{
+							"completion": "->",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "lookup",
+							"type": "completion"
+						},
+						{
+							"completion": "<%%",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "activate in environment",
+							"type": "completion"
+						},
+						{
+							"completion": ".",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "concatenate",
+							"type": "completion"
+						},
+						{
+							"completion": "+",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "sum",
+							"type": "completion"
+						},
+						{
+							"completion": "-",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "difference",
+							"type": "completion"
+						},
+						{
+							"completion": "*",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "multiplication",
+							"type": "completion"
+						},
+						{
+							"completion": "/",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "division",
+							"type": "completion"
+						},
+						{
+							"completion": "%",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "modulus",
+							"type": "completion"
+						},
+						{
+							"completion": "<",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "less",
+							"type": "completion"
+						},
+						{
+							"completion": ">",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "more",
+							"type": "completion"
+						},
+						{
+							"completion": "=",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "equal",
+							"type": "completion"
+						},
+						{
+							"completion": "&",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "bitwise and",
+							"type": "completion"
+						},
+						{
+							"completion": "|",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "bitwise or",
+							"type": "completion"
+						},
+						{
+							"completion": "^",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "bitwise xor",
+							"type": "completion"
+						},
+						{
+							"completion": ",",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "array",
+							"type": "completion"
+						},
+						{
+							"completion": "~",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "match pattern",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "28",
+							"preference": "80",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": "(",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of subexpression",
+							"type": "completion"
+						},
+						{
+							"completion": "$",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "[",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "{",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of array value",
+							"type": "completion"
+						},
+						{
+							"completion": "\"",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of quoted string",
+							"type": "completion"
+						},
+						{
+							"completion": "!",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "logical negation",
+							"type": "completion"
+						},
+						{
+							"completion": "-",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "unary minus",
+							"type": "completion"
+						},
+						{
+							"completion": "~",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "bit inversion",
+							"type": "completion"
+						},
+						{
+							"completion": ">",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "quote",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "28",
+							"preference": "80",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": ";",
+							"offset": "28",
+							"preference": "40",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "end of command",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 28,
+				"at": {
+					"line": 0,
+					"character": 28
+				},
+				"statementId": "s0",
+				"context": "variable",
+				"replace": {
+					"start": 24,
+					"end": 28
+				},
+				"prefix": "comm",
+				"candidates": [
+					{
+						"text": "comment",
+						"kind": "variable",
+						"match": "partial",
+						"ev": "live4"
+					}
+				],
+				"count": 1,
+				"truncated": false,
+				"path": "/ip/address/print"
+			}
+		},
+		{
+			"example": "15 (where value)",
+			"input": "/ip/address/print where disabled=",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/address/print where disabled=\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "expected yes or no (line 1 column 34)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/address/print where disabled="],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,cmd,cmd,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,syntax-meta,variable-local,variable-local,variable-local,variable-local,variable-local,variable-local,variable-local,variable-local,syntax-meta",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,print"],
+					"result": [
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "append",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "as-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "brief",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comments",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "count-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "detail",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "group-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "on-event",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "order-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "proplist",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "show-ids",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "terse",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "timestamp",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "without-paging",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/address/print where disabled="],
+					"result": [
+						{
+							"completion": "[",
+							"offset": "33",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "(",
+							"offset": "33",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of expression",
+							"type": "completion"
+						},
+						{
+							"completion": "$",
+							"offset": "33",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "\"",
+							"offset": "33",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of quoted string",
+							"type": "completion"
+						},
+						{
+							"completion": "no",
+							"offset": "33",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "yes",
+							"offset": "33",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 33,
+				"at": {
+					"line": 0,
+					"character": 33
+				},
+				"statementId": "s0",
+				"context": "value",
+				"replace": {
+					"start": 33,
+					"end": 33
+				},
+				"prefix": "",
+				"candidates": [
+					{
+						"text": "no",
+						"kind": "value",
+						"match": "partial",
+						"ev": "live4"
+					},
+					{
+						"text": "yes",
+						"kind": "value",
+						"match": "partial",
+						"ev": "live4"
+					}
+				],
+				"count": 2,
+				"truncated": false,
+				"path": "/ip/address/print",
+				"argument": "disabled"
+			}
+		},
+		{
+			"example": "19",
+			"input": "/ip/route",
+			"facets": {
+				"schema": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.24.5 (stable)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/route\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "/ip/route/"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/route"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route"],
+					"result": [
+						{
+							"name": "route",
+							"node-type": "dir",
+							"type": "self"
+						},
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "check",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "child"
+						},
+						{
+							"name": "unset",
+							"node-type": "cmd",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,add"],
+					"result": [
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "blackhole",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "check-gateway",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "copy-from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "distance",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "gateway",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "pref-src",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "routing-table",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "scope",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "target-scope",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "vrf-interface",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,check"],
+					"result": [
+						{
+							"name": "check",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "append",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "as-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "do",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-ip",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "duration",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "freeze-frame-interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "once",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "proplist",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "src-ip",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "without-paging",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,comment"],
+					"result": [
+						{
+							"name": "comment",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,disable"],
+					"result": [
+						{
+							"name": "disable",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,edit"],
+					"result": [
+						{
+							"name": "edit",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "number",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-name",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,enable"],
+					"result": [
+						{
+							"name": "enable",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,export"],
+					"result": [
+						{
+							"name": "export",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "compact",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "hide-sensitive",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "path",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "show-sensitive",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "terse",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "verbose",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,find"],
+					"result": [
+						{
+							"name": "find",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,get"],
+					"result": [
+						{
+							"name": "get",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "as-string",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "as-string-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "number",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-name",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,print"],
+					"result": [
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "append",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "as-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "brief",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comments",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "count-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "detail",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "group-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "on-event",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "order-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "proplist",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "show-ids",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "stats",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "terse",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "timestamp",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "without-paging",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,remove"],
+					"result": [
+						{
+							"name": "remove",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,reset"],
+					"result": [
+						{
+							"name": "reset",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "blackhole",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "check-gateway",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "distance",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "gateway",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "pref-src",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "routing-table",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "scope",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "target-scope",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "vrf-interface",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,set"],
+					"result": [
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "blackhole",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "check-gateway",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "distance",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "gateway",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "pref-src",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "routing-table",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "scope",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "target-scope",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "vrf-interface",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,unset"],
+					"result": [
+						{
+							"name": "unset",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "numbers",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-name",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				}
+			],
+			"schema": {
+				"path": "/ip/route",
+				"statementId": "s0",
+				"counts": {
+					"verbs": 14,
+					"menus": 0
+				},
+				"truncated": false,
+				"next": [],
+				"ev": "live3",
+				"node": "menu",
+				"verbs": [
+					{
+						"name": "add",
+						"ev": "live4",
+						"arguments": 13
+					},
+					{
+						"name": "check",
+						"ev": "live5",
+						"arguments": 12
+					},
+					{
+						"name": "comment",
+						"ev": "live6",
+						"arguments": 2
+					},
+					{
+						"name": "disable",
+						"ev": "live7",
+						"arguments": 1
+					},
+					{
+						"name": "edit",
+						"ev": "live8",
+						"arguments": 2
+					},
+					{
+						"name": "enable",
+						"ev": "live9",
+						"arguments": 1
+					},
+					{
+						"name": "export",
+						"ev": "live10",
+						"arguments": 8
+					},
+					{
+						"name": "find",
+						"ev": "live11",
+						"arguments": 1
+					},
+					{
+						"name": "get",
+						"ev": "live12",
+						"arguments": 4
+					},
+					{
+						"name": "print",
+						"ev": "live13",
+						"arguments": 22
+					},
+					{
+						"name": "remove",
+						"ev": "live14",
+						"arguments": 1
+					},
+					{
+						"name": "reset",
+						"ev": "live15",
+						"arguments": 13
+					},
+					{
+						"name": "set",
+						"ev": "live16",
+						"arguments": 13
+					},
+					{
+						"name": "unset",
+						"ev": "live17",
+						"arguments": 2
+					}
+				],
+				"menus": []
+			}
+		}
+	]
+}

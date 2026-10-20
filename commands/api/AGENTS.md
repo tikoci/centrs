@@ -197,6 +197,23 @@ green on CHR 7.23.1.
   validation therefore uses command-level `request=child` only. This does not
   prohibit argument-level completion probes such as `print,proplist`, which are
   a separate shape and returned immediately on the same 7.12.2 controls.
+- **Command-level `request=syntax` is unsafe too, on 7.12.2 and 7.20.8** (#492,
+  2026-10-19, reproduced on a fresh boot of each).
+  - REST: `syntax` with `path=` set to a command (`ip,address,set`,
+    `system,identity,set`, `ip,route,add`, `interface,print`) got no answer
+    within 12 s, 5 of 5 times. The `child` controls queued behind it timed out
+    until the handler recovered about 30 s later.
+  - Native API closed the connection.
+  - The same syntax requests at a menu (`ip,address`) or an argument
+    (`ip,address,set,address`, `put,message`, `do,command`) answered in about
+    25 ms. 7.23.8 and 7.24.5 answer every shape.
+  - restraml's crawlers send `syntax` to `arg` nodes only, so `inspect.json`
+    never exercised the hanging shape.
+  - Input-based `completion` (`input="/ip/address add comm"`) answered at every
+    position tried on both builds, including scripting keywords and `do={`
+    bodies on 7.20.8.
+  - Explain's `--schema`/`--complete` therefore send `syntax` for argument
+    paths and `completion` with `input=` only.
 
 ## CONFIRMED ON CHR (Phase 4 `--stream` follow — CHR 7.23.1, 2026-06-30)
 

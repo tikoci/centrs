@@ -242,8 +242,10 @@ Usage: centrs explain [<router>] '<input>' [flags]
 | `--quickchr` | `<name>` | Resolve one running quickchr VM by name. |
 | `--file` | `<path>` | Read the input from a file instead of the positional (`-` reads stdin). Piped stdin is used automatically when no input positional is given. |
 | `--fail-on` | &lt;error\|warning\|never&gt; | Exit 2 when the verdict reaches this severity. Default `error`; an ambiguous or unknown statement is a warning, never an error. |
-| `--complete` |  | Continuation candidates at the cursor. Live evidence — offline emits a tip and enumerates nothing. |
-| `--schema` |  | Path enumeration (verbs, args, types, enums). Live evidence — offline emits a tip and enumerates nothing. |
+| `--complete` |  | Candidates at the cursor: menus and verbs, argument names, or values. Live evidence — offline emits a tip and enumerates nothing. |
+| `--schema` |  | Describe the path at the cursor: a menu's verbs and submenus, a command's arguments, `print`'s proplist. Live evidence — offline emits a tip and enumerates nothing. |
+| `--cursor` | `<byte>` | UTF-8 byte offset for --complete/--schema. Default: the end of the input. |
+| `--full` |  | Lift --complete/--schema sizing to its safety ceiling (1024 names, 128 expansion probes). |
 | `--curl` |  | Render a ready-to-edit REST curl for statements covered by a runtime-tested mapping rule. |
 | `--tokens` |  | Emit the total, gapless token partition behind `data.tokens[]` (every byte not claimed by an analyzer is `unclassified`). |
 | `--format` | &lt;text\|json\|yaml&gt; | Output format for the CLI response. |

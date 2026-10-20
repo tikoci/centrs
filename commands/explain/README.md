@@ -2591,6 +2591,7 @@ false. A transport/authentication failure stops later requests. Scripting-path
 discovery is conservatively skipped before 7.21.4 or on unknown versions. No
 command-level completion, syntax discovery, user-expression evaluation or
 related configuration-table collection is part of this slice.
+`--schema` and `--complete` add the probes in the next section.
 
 Committed controls are
 [`live-probes.stable.json`](../../test/fixtures/explain/live-probes.stable.json)
@@ -2603,15 +2604,136 @@ the parse classifier and source-aligned highlighter against these controls;
 `test/integration/explain-live.test.ts` repeats the probes on a real CHR and
 checks that the analyzed identity-setting command did not run.
 
-### Designed, not implemented
+### Live describe and completion (#492)
 
-Implemented flags are generated into [`docs/CLI.md`](../../docs/CLI.md).
+`--schema` and `--complete` work on the statement at the cursor. The cursor
+defaults to the end of the input. `--cursor <byte>` is a UTF-8 byte offset,
+which is also the analyzed and device byte offset. Library callers may pass
+`cursor: { line, character }` (0-based, UTF-16) instead. A cursor inside a
+multi-byte character moves back to its first byte. A cursor outside the input
+is [`usage/invalid-cursor`](../../docs/errors/usage/invalid-cursor.md), raised
+before connecting. `--cursor` or `--full` without a facet is
+`usage/conflicting-flags`. Offline, both facets still return the live-target
+tip and enumerate nothing.
 
-| Flag / form | Owner | Current behavior |
-| ----------- | ----- | ---------------- |
-| Live `--complete` / `--schema` | #492 | Refused with `usage/not-implemented` before connecting. Offline still emits its live-target tip and enumerates nothing. |
-| `--cursor <byte>` | #492 | Not accepted until cursor completion is implemented. |
-| `--full` | #492 | Not accepted until describe/completion sizing is implemented; it does not lift safety budgets. |
+**Probe shapes.** Grounded on CHR 7.12.2, 7.20.8, 7.23.8 and 7.24.5 over REST
+and native API:
+
+- `child` names what exists at a path and resolves unique abbreviations
+  (`ip,addr` answers as `address`). It is safe on every build tried.
+- `syntax` is sent only for an **argument** path (`ip,address,set,address`,
+  `put,message`). That shape answers in about 25 ms on every build, scripting
+  keywords included.
+- `completion` is sent only with `input=`, the text before the cursor. It is
+  safe at every position tried, including scripting keywords and `do={`
+  bodies on 7.20.8.
+- Never sent: `syntax` or `completion` with `path=` set to a **command**
+  (`ip,address,set`). On 7.12.2 and 7.20.8 REST stops answering, and the
+  requests queued behind it stall, for about 30 s. Native API closes the
+  connection. 7.23.8 and later answer normally, but the rule is
+  version-independent (`commands/api/AGENTS.md`). restraml's crawlers never
+  meet this, because they send `syntax` to `arg` nodes only.
+
+Every probe is an `evidence[]` entry with `facet: "schema" | "complete"`, its
+path, version and outcome. Facts cite it by `ev`. A facet probe that answers
+`empty` is a result, so it adds no warning diagnostic. Other failed outcomes
+warn as in the foundation, and a transport or authentication failure stops
+later probes.
+
+**`data.schema`** describes one path: the resolved statement, or an absolute
+slash path as typed (`/ip/addr`). The `child` self row decides `node`:
+
+- `menu`: `verbs[]` and `menus[]`. Each child is expanded by one more `child`
+  probe into `arguments` (verb) or `verbs`/`menus` (submenu) counts.
+- `command`: `arguments[]`, each with its argument-level `syntax` rows. A
+  flag's blank row is dropped. For `print`, `proplist` holds the output-field
+  names from `print proplist=` (`source: "print-proplist"`). A singleton
+  settings menu offers none there, so `get value-name=` answers instead
+  (`source: "get-value-name"`; `/ip/dns`, `/system/identity`). These are names
+  a print can show, **not print rows**.
+- `argument`: its `syntax` rows.
+- `unknown`: the device reports nothing there, or the statement at the cursor
+  is neither resolved nor an absolute path (`reason`).
+
+Syntax rows are kept verbatim (`symbol`, RouterOS `symbol-type` as `kind`,
+`text`, `nested` as `depth`). They are declared help, such as
+`A.B.C.D (IP address)` or `input | forward | output` beside `string value`.
+They are not #225's `schemaType`; that projection stays #225's.
+
+**Smart sizing.** By default each list shows up to 64 names, and expansion
+runs only when the listed children fit in 16 probes (a menu's children, or a
+command's arguments for their `syntax`). Otherwise names are listed without
+expansion. `counts` always holds the full sizes, `truncated: true`, `next[]`
+names up to three narrower inputs, and the envelope carries
+`tip/explain-schema-truncated`. On CHR 7.24.5, `/ip` (2 verbs, 29 menus) and
+`/ip/address/print` (21 arguments) truncate; `/ip/address` (12 verbs) and
+`/ip/firewall/filter` (16) do not. `--full` raises the limits to 1024 names and
+128 probes. That is the safety ceiling, not unlimited.
+
+**`data.completion`** reports `cursor`, `at` (original line/character),
+`replace` (the bytes a candidate replaces, ending at the cursor), `prefix`,
+`context`, `candidates[]`, `count` and `truncated`. Candidates are capped like
+names. They are the device's own: one input completion of the text before the
+cursor, keeping shown, non-syntax rows. The row `offset` sets `replace`. The
+navigation punctuation (`/`, `:`, `..`) offered everywhere is left out. So a
+relative path, a block, a `where` clause or an unclosed `[` completes exactly
+as on the console: `/ip { :put 1; address add comm` → `comment`, and
+`/ip address⏎` → that menu's verbs. Where the device offers nothing, neither
+does explain: `do={ add comm` runs at root, so `add` is unknown there.
+
+The `context` comes from the device highlight of the same text. When the
+cursor is not at the end, that is one extra highlight probe whose `coverage`
+says so.
+
+- `path`: in a `dir`/`cmd` word, after a menu, or at the start of a line.
+  Candidates are `menu` or `verb` by row style. A word the device cannot
+  resolve there is `obj-inactive`, and the token before it gives its role:
+  `/ip/address re` → `remove`, `reset`, and `:lo` → `local`, `lock`, `log`.
+- `argument-name`: in an `arg` word, or after a command, flag or value.
+  `match: "exact"` marks a complete name. `takesValue` is whether the same
+  answer offers `=` at the cursor: `comment` does, and the flag `detail` does
+  not.
+- `variable`: a `where` clause, whose property names RouterOS scopes as
+  variables (`where comm` → `comment`).
+- `value`: after `name=`. Candidates may include configuration state, such as
+  interface names. They are never a closed set:
+  `chain=` offers `forward`, `input` and `output`, but custom chains are legal.
+  For a command argument, `syntax` carries its declared type text, so a
+  free-form `comment=` returns no candidates and `string value`. A `where`
+  value (`disabled=` → `no`, `yes`) has no argument path, so no `syntax` is
+  read.
+- `unsupported` with a `reason`: strings, the obsolete spaced `name value`
+  spelling, and other tokens the device does not class as a path, name or
+  value.
+
+Every candidate is an observation of the completion probe its `ev` cites.
+The declared side is `data.schema`: `child` names and argument `syntax`. So
+completion carries no second provenance label, and nothing in it is a closed
+set. `path` names the command at the
+cursor when it is known. It comes from the offline statement or `[…]`
+substitution when that resolved, otherwise from the device's `dir`/`cmd` runs.
+The command is needed only for a value's `syntax`. When it is not visible (a
+relative path after `;`), the candidates are unaffected and `syntax` is
+omitted.
+
+The verdict still judges the input as written, and the two probes agree on
+it. `/ip/address add comm` is rejected by `:parse` (`expected end of command`
+at byte 16), and the highlight marks the same byte `error`. So the result
+fails even while its candidates are published. An assist loop that only wants
+candidates passes `--fail-on never`.
+
+Committed controls are
+[`live-facets.stable.json`](../../test/fixtures/explain/live-facets.stable.json)
+(7.24.5) and
+[`live-facets.long-term.json`](../../test/fixtures/explain/live-facets.long-term.json)
+(7.23.8). They hold every recorded call and its raw answer, plus the projected
+result. `test/unit/explain-live-facets.test.ts` replays them.
+`test/integration/explain-live-facets.test.ts` asserts the examples on both
+transports and regenerates the captures when `CENTRS_EXPLAIN_FACETS_CAPTURE`
+names an output file.
+
+Not covered here: live value types (#225), MCP (#223), related print rows and
+topic checks (#493), and per-target caching of describe results (open 3).
 
 ## MCP and library surfaces
 
@@ -3116,8 +3238,9 @@ test framework is part of this baseline.
 
 ### Current and following capabilities
 
-- **Current — live probes (#236, phase 2):** highlight + `:parse` and
-  completion/child/syntax over rest-api/native-api. B4's projection/agreement
+- **Current — live probes (#236, phase 2):** highlight + `:parse` (#491) and
+  completion/child/syntax (#492) over rest-api/native-api; live types (#225)
+  and the closeout remain. B4's projection/agreement
   informs this work; each live cell requires its own CHR-passing examples.
 - **MCP alignment (#223):** the deliberate flat-to-rich response migration,
   coordinated with rosetta. Independent of the offline token vocabulary.
@@ -3189,8 +3312,10 @@ round):
 
 Still open (implementation opens — none block ratification):
 
-1. Final flag names (`--full`, `--curl`, facet names) and the smart-sizing
-   thresholds (what counts as "cheap", what triggers truncation).
+1. ~~Final flag names and smart-sizing thresholds.~~ Decided by #492:
+   `--schema`, `--complete`, `--cursor <byte>` and `--full`; 64 names and 16
+   expansion probes by default, and 1024 / 128 with `--full`
+   ([Live describe and completion](#live-describe-and-completion-492)).
 2. The mapping table from RouterOS highlight classes to **colors**, and how
    unknown/new upstream classes degrade. Phase 0 pinned the raw inputs (Q13's
    per-occurrence highlight-class corpus; the observed 19 classes on 7.23.2 plus

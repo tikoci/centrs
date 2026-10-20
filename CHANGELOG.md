@@ -20,7 +20,15 @@ part of this section.
 - `explain <router> '<input>'` and `explainLiveEnvelope()` add read-only parse,
   highlight and command-argument evidence over REST/native API. Probe outcomes,
   byte coverage and provenance remain explicit; analyzed input never executes (#491).
-  Describe/completion (#492) and live types (#225) remain follow-ups.
+  Live types (#225) remain a follow-up.
+- Live `explain --schema` describes the path at the cursor: a menu's verbs and
+  submenus with counts, a command's arguments with their declared syntax, and
+  `print`'s proplist. `--complete [--cursor <byte>]` returns menu, verb,
+  argument-name, `where` variable or value candidates. They are the device's
+  own input completion at the cursor, cited by `ev`; declared names and
+  syntax stay in `--schema`. `--full` lifts the sizing limits up to a safety
+  ceiling.
+  Only probe shapes that answer on RouterOS 7.12.2 and 7.20.8 are sent (#492).
 
 - `centrs --version` / `-V` prints the package version alone; `--json` (or
   `--format json|yaml`) returns an envelope with `data.version` (#463).

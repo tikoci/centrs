@@ -39,11 +39,11 @@ export interface InspectBackend {
 
 /**
  * The `/console/inspect` request modes (lsp's `InspectRequest`). Only `child`
- * and `completion` are wired today (the two the {@link InspectBackend} seam
+ * and `completion` are wired here (the two the {@link InspectBackend} seam
  * exposes), plus `input` for completion over CLI text
- * ({@link inspectWhereBooleans}). The protocol adapter also supports `highlight`
- * for live explain. `syntax` and extra inspect request fields remain extension
- * points; they are not used by argument discovery.
+ * ({@link inspectWhereBooleans}). The protocol adapter also supports
+ * `highlight` and `syntax` for live explain, which sends `syntax` for argument
+ * paths only (`src/explain-live-facets.ts`).
  */
 export type InspectRequestKind =
 	| "child"
