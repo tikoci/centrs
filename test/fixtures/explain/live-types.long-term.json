@@ -327,6 +327,296 @@
 			]
 		},
 		{
+			"example": "52 (directive arguments)",
+			"input": ":for i from=0x10 to=20 do={:put $i}; :local yes 2; :local name=no value=yes; :put message=123",
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.23.8 (long-term)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \":for i from=0x10 to=20 do={:put \\$i}; :local yes 2; :local name=no value=yes; :put message=123\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /forcounter=$i;do=;(evl (evl /putmessage=$i));from=16;to=20);(evl /localname=$yes;value=2);(evl /localname=$no;value=true);(evl /putmessage=123)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": [
+						"highlight",
+						"",
+						":for i from=0x10 to=20 do={:put $i}; :local yes 2; :local name=no value=yes; :put message=123"
+					],
+					"result": [
+						{
+							"highlight": "dir,cmd,cmd,cmd,none,variable-auto,none,arg,arg,arg,arg,syntax-meta,none,none,none,none,none,arg,arg,syntax-meta,none,none,none,arg,arg,syntax-meta,syntax-meta,dir,cmd,cmd,cmd,none,syntax-meta,variable-auto,syntax-meta,syntax-meta,none,dir,cmd,cmd,cmd,cmd,cmd,none,variable-local,variable-local,variable-local,none,none,syntax-meta,none,dir,cmd,cmd,cmd,cmd,cmd,none,arg,arg,arg,arg,syntax-meta,variable-local,variable-local,none,arg,arg,arg,arg,arg,syntax-meta,none,none,none,syntax-meta,none,dir,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,arg,arg,syntax-meta,none,none,none",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "for"],
+					"result": [
+						{
+							"name": "for",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "counter",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "do",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "on-error",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "step",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "to",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "put"],
+					"result": [
+						{
+							"name": "put",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "message",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "local"],
+					"result": [
+						{
+							"name": "local",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "do",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "name",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \":local v0 0x10;:local v1 20;:local v2 2;:local v3 yes;:local v4 123\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /localname=$v0;value=16);(evl /localname=$v1;value=20);(evl /localname=$v2;value=2);(evl /localname=$v3;value=true);(evl /localname=$v4;value=123)"
+					}
+				}
+			],
+			"values": [
+				{
+					"id": "v0",
+					"span": {
+						"start": 12,
+						"end": 16
+					},
+					"tokenSpan": {
+						"start": 7,
+						"end": 16
+					},
+					"kind": "attribute",
+					"name": "from",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["str"],
+							"ev": "e9"
+						},
+						"observedType": {
+							"value": "num",
+							"rendered": "16",
+							"ev": "live6"
+						}
+					}
+				},
+				{
+					"id": "v1",
+					"span": {
+						"start": 20,
+						"end": 22
+					},
+					"tokenSpan": {
+						"start": 17,
+						"end": 22
+					},
+					"kind": "attribute",
+					"name": "to",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["num"],
+							"ev": "e9"
+						}
+					}
+				},
+				{
+					"id": "v2",
+					"span": {
+						"start": 44,
+						"end": 47
+					},
+					"tokenSpan": {
+						"start": 44,
+						"end": 47
+					},
+					"kind": "positional",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["bool"],
+							"ev": "e9"
+						}
+					}
+				},
+				{
+					"id": "v3",
+					"span": {
+						"start": 48,
+						"end": 49
+					},
+					"tokenSpan": {
+						"start": 48,
+						"end": 49
+					},
+					"kind": "positional",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["num"],
+							"ev": "e9"
+						}
+					}
+				},
+				{
+					"id": "v4",
+					"span": {
+						"start": 63,
+						"end": 65
+					},
+					"tokenSpan": {
+						"start": 58,
+						"end": 65
+					},
+					"kind": "attribute",
+					"name": "name",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["bool"],
+							"ev": "e9"
+						}
+					}
+				},
+				{
+					"id": "v5",
+					"span": {
+						"start": 72,
+						"end": 75
+					},
+					"tokenSpan": {
+						"start": 66,
+						"end": 75
+					},
+					"kind": "attribute",
+					"name": "value",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["bool"],
+							"ev": "e9"
+						},
+						"observedType": {
+							"value": "bool",
+							"rendered": "true",
+							"ev": "live6"
+						}
+					}
+				},
+				{
+					"id": "v6",
+					"span": {
+						"start": 90,
+						"end": 93
+					},
+					"tokenSpan": {
+						"start": 82,
+						"end": 93
+					},
+					"kind": "attribute",
+					"name": "message",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["num"],
+							"ev": "e9"
+						}
+					}
+				}
+			]
+		},
+		{
 			"example": "53",
 			"input": "/ip/dns/set servers=1.1.1.1,8.8.8.8; /ip/route/add gateway=2.2 dist=2 comment=abc; /ip/firewall/filter/add chain=input dst-port=80,443 protocol=tcp disabled=yes",
 			"calls": [

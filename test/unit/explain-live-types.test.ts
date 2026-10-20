@@ -188,6 +188,38 @@ describe("observedType reaches only bare scripting literals", () => {
 			expect(o.facts.observedType).toBeUndefined();
 	});
 
+	test("a directive's named argument joins the operand batch", async () => {
+		const input = ":for i from=0x10 to=20 do={:put $i}";
+		const { backend, calls } = device({
+			parse: (script) =>
+				script.includes(":local v0 ")
+					? "(evl /localname=$v0;value=16);(evl /localname=$v1;value=20)"
+					: "(evl /forcounter=$i;do=;(evl /putmessage=$i);from=16;to=20)",
+		});
+		const data = explainCommand(input);
+		await collectExplainEvidence(data, input, backend);
+		expect(String(typeProbes(calls)[0]?.args[0])).toContain(
+			":local v0 0x10;:local v1 20",
+		);
+		expect(data.values.occurrences[0]?.facts.observedType?.value).toBe("num");
+		expect(data.values.occurrences[1]?.facts.observedType).toBeUndefined();
+	});
+
+	for (const input of [
+		":local yes 2",
+		":set yes 3",
+		":for yes from=1 to=2 do={}",
+		":local name=no value=1",
+		":for counter=yes from=1 to=2 do={}",
+	])
+		test(`a NAME slot is a variable, never probed: ${input}`, async () => {
+			const { backend, calls } = device();
+			const data = explainCommand(input);
+			await collectExplainEvidence(data, input, backend);
+			const script = String(typeProbes(calls)[0]?.args[0] ?? "");
+			expect(script).not.toMatch(/:local v\d+ (yes|no)\b/);
+		});
+
 	test("a quoted operand is never probed", async () => {
 		const input = ':local x "2.2"';
 		const { backend, calls } = device();

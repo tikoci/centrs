@@ -23,6 +23,11 @@
  * hard-error member (`{*1}`) rejects its whole batch, so members and operands
  * are separate batches and a rejected batch abstains with its reason.
  *
+ * A scripting directive's named argument converts exactly as an operand
+ * (`:for i from=0x10` → `from=16`, `:put message=yes` → `message=true`), so it
+ * joins the operand batch. Its NAME slots never convert (see
+ * {@link isVariableName}).
+ *
  * Menu-command arguments are excluded. Their values are converted by the
  * argument's own parser, which prints a per-argument encoding
  * (`src-address=!1.1.1.1` → `true;1.1.1.1`, `address=2.2` → `2.0.0.2;`), and a
@@ -124,8 +129,7 @@ function observedContext(
 	ctx: LiveProbeContext,
 	occurrence: ExplainValueOccurrence,
 ): Context | undefined {
-	if (occurrence.kind !== "positional" && occurrence.kind !== "element")
-		return undefined;
+	if (isVariableName(ctx, occurrence)) return undefined;
 	// The span keeps a quoted value's quotes, so the byte set refuses it too.
 	const literal = ctx.analyzed.slice(
 		occurrence.span.start,
@@ -133,6 +137,29 @@ function observedContext(
 	);
 	if (!PROBE_LITERAL.test(literal)) return undefined;
 	return occurrence.kind === "element" ? "member" : "operand";
+}
+
+/**
+ * A directive's NAME slot is a variable, never a value: the device renders
+ * `:local yes 2` as `name=$yes`, `:for yes from=1` as `counter=$yes` and
+ * `:local name=no` as `name=$no` (CHR 7.24.5). Probing `yes` there would
+ * publish `bool` for a variable name. The positional spelling is a span the
+ * symbol view claims; the named one is the `name=`/`counter=` argument, which
+ * the symbol view does not resolve to the declared variable.
+ */
+function isVariableName(
+	ctx: LiveProbeContext,
+	occurrence: ExplainValueOccurrence,
+): boolean {
+	if (
+		occurrence.kind === "attribute" &&
+		(occurrence.name === "name" || occurrence.name === "counter")
+	)
+		return true;
+	const { start, end } = occurrence.span;
+	return ctx.data.symbols.occurrences.some(
+		(symbol) => symbol.span.start < end && start < symbol.span.end,
+	);
 }
 
 async function observe(

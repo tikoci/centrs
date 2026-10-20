@@ -1079,6 +1079,13 @@ an unchanged rendering proves no type: `:parse` prints a string unquoted. The
 `shapeHints` are untouched, and no record has `schemaType`, because no value
 here is a menu command's argument.
 
+A scripting directive's named argument is an operand too:
+`:for i from=0x10 to=20 do={:put $i}` gives `from` the fact `num` (`16`), and
+`to=20` renders unchanged and gets nothing. A NAME slot is a variable, never a
+value: in `:local yes 2` and `:local name=no value=yes`, the names `yes` and
+`no` get nothing (the device renders `name=$yes`, `name=$no`), while
+`value=yes` is `bool`.
+
 Each fact cites one `:parse` evidence entry per context (operands, members)
 with `facet: "types"` and `basis: "derived"`. The probe re-parses each literal
 alone, as `:local vN <lit>` or `:local vN {<lit>}`; the analyzed input and

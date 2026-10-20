@@ -94,6 +94,29 @@ const cases: {
 		},
 	},
 	{
+		example: "52 (directive arguments)",
+		input:
+			":for i from=0x10 to=20 do={:put $i}; :local yes 2; :local name=no value=yes; :put message=123",
+		check(data) {
+			// A directive's named argument converts like an operand.
+			expect(fact(data, 12)?.observedType).toMatchObject({
+				value: "num",
+				rendered: "16",
+			});
+			expect(fact(data, 20)?.observedType).toBeUndefined();
+			expect(fact(data, 72)?.observedType).toMatchObject({
+				value: "bool",
+				rendered: "true",
+			});
+			expect(fact(data, 90)?.observedType).toBeUndefined();
+			// NAME slots are variables (`name=$yes`, `name=$no`), never values.
+			expect(fact(data, 44)?.observedType).toBeUndefined();
+			expect(fact(data, 63)?.observedType).toBeUndefined();
+			expect(data.live?.parse?.output).toContain("name=$yes");
+			expect(data.live?.parse?.output).toContain("name=$no");
+		},
+	},
+	{
 		example: "53",
 		input:
 			"/ip/dns/set servers=1.1.1.1,8.8.8.8; /ip/route/add gateway=2.2 dist=2 comment=abc; /ip/firewall/filter/add chain=input dst-port=80,443 protocol=tcp disabled=yes",

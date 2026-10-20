@@ -833,3 +833,4 @@ caf # the ASCII prefix the device reads of `café` before the `é`: `:put "a$caf
 # #225 live value types: CLI Reference `Type` cell spellings the schema vocabulary maps.
 iface # the CLI Reference type `iface_enum`: an argument that names an interface, which `schemaType` calls `name` (#225)
 ubit # the CLI Reference type `ubit (…)`: a set of listed bits, e.g. `ubit (pap, chap, mschap1, mschap2)`, a list of `enum` (#225)
+forcounter # the IL head `/forcounter=$i;…` that `:for i …` renders as; quoted verbatim in the #225 directive-argument probe test (#225)

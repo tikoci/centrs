@@ -2773,6 +2773,14 @@ batch, so the two contexts are separate probes and a rejected batch is
 `invalid-response` with the device's message; its literals abstain. A batch is
 at most 256 literals, otherwise `skipped`.
 
+A scripting directive's named argument converts exactly as an operand
+(`:for i from=0x10` → `from=16`, `:put message=yes` → `message=true`), so it
+joins the operand batch. A directive's NAME slot is a variable and never
+converts: `:local yes 2` renders `name=$yes`, `:for yes from=1` renders
+`counter=$yes` and `:local name=no` renders `name=$no`. So a value the symbol
+view claims as a name, or a directive's `name=`/`counter=` argument, is never
+probed.
+
 Menu-command arguments are never observed. Their own parser converts them
 and prints a per-argument encoding (`src-address=!1.1.1.1` →
 `true;1.1.1.1`, `address=2.2` → `2.0.0.2;`), and a quoted value converts only
