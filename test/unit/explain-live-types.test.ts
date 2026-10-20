@@ -216,7 +216,11 @@ describe("observedType reaches only bare scripting literals", () => {
 			const { backend, calls } = device();
 			const data = explainCommand(input);
 			await collectExplainEvidence(data, input, backend);
-			const script = String(typeProbes(calls)[0]?.args[0] ?? "");
+			// The numeric value still probes, so the guard cannot pass vacuously.
+			const probes = typeProbes(calls);
+			expect(probes).toHaveLength(1);
+			const script = String(probes[0]?.args[0]);
+			expect(script).toMatch(/:local v\d+ \d+/);
 			expect(script).not.toMatch(/:local v\d+ (yes|no)\b/);
 		});
 
