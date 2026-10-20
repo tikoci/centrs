@@ -103,7 +103,8 @@ part of this section.
     the type.
   - `--validate=false` drops both fields on `execute` and `api`.
   - `retrieve`, `transfer` and `api` structured successes now report
-    `stages[]`.
+    `stages[]`. `transfer list` runs no existence probe, so it reports
+    `{ enabled: false }` instead of claiming one.
   - `explain` reports `meta.validation: { enabled: false }` with no `result`
     in all three cases (offline, live, error); it is not a gate.
 - Text stdout is data (#470). In text mode, single-target `execute`, `api`,

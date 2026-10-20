@@ -149,10 +149,11 @@ gate is `/console/inspect` — **not** `:put [:parse]`:
   unaffected — the result matchers are anchored, not substring.
 - Structured path requests are **not** offline-gated. The input is a path plus a
   body, not a CLI string, and an offline *path* gate collides with GH#211's
-  unlisted-path decision. On the success path `meta.validation.stages[]` is
-  absent there; on a `validation/*` rejection it is present and reports the
-  offline stage `skipped` with that reason, so the breakdown never implies an
-  analysis that did not run.
+  unlisted-path decision. `meta.validation.stages[]` reports the offline stage
+  `skipped` with that reason, on success and on a `validation/*` rejection
+  alike, so the breakdown never implies an analysis that did not run. On
+  success the device stage is `passed`, `semantic` is `true`, and there is no
+  `syntax` field, because no `:parse` ran (#535).
 
 `--validate=false` skips **both** stages of the preflight — one flag, one meaning
 (constitution: validation); RouterOS still re-validates writes server-side.

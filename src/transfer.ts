@@ -1404,20 +1404,22 @@ function buildSuccessEnvelope(
 		meta: metaFromResolved(
 			resolved,
 			operationData,
-			resolved.validate.value
-				? {
-						enabled: true,
-						source: TRANSFER_DEVICE_STAGE_SOURCE,
-						result: "passed",
-						stages: [
-							{
-								stage: "device",
-								source: TRANSFER_DEVICE_STAGE_SOURCE,
-								result: "passed",
-							},
-						],
-					}
-				: { enabled: false, source: "disabled", result: "skipped" },
+			!hasExistenceProbe(resolved)
+				? { enabled: false }
+				: resolved.validate.value
+					? {
+							enabled: true,
+							source: TRANSFER_DEVICE_STAGE_SOURCE,
+							result: "passed",
+							stages: [
+								{
+									stage: "device",
+									source: TRANSFER_DEVICE_STAGE_SOURCE,
+									result: "passed",
+								},
+							],
+						}
+					: { enabled: false, source: "disabled", result: "skipped" },
 		),
 	};
 }
@@ -1504,6 +1506,14 @@ function asTransferError(error: unknown): CentrsError {
  */
 const TRANSFER_DEVICE_STAGE_SOURCE = "device /file existence probe";
 
+/**
+ * `list` reads `/file` and has no precondition probe, so it is not a gate:
+ * like `explain`, it reports `{ enabled: false }` and no verdict (#535).
+ */
+function hasExistenceProbe(resolved: ResolvedTransferRequest): boolean {
+	return resolved.verb !== "list";
+}
+
 export function buildTransferErrorEnvelopeFromResolved(
 	resolved: ResolvedTransferRequest,
 	error: unknown,
@@ -1522,12 +1532,14 @@ export function buildTransferErrorEnvelopeFromResolved(
 				remote: resolved.remote,
 				local: resolved.local,
 			}),
-			{
-				enabled: resolved.validate.value,
-				source: resolved.validate.value
-					? TRANSFER_DEVICE_STAGE_SOURCE
-					: "disabled",
-			},
+			hasExistenceProbe(resolved)
+				? {
+						enabled: resolved.validate.value,
+						source: resolved.validate.value
+							? TRANSFER_DEVICE_STAGE_SOURCE
+							: "disabled",
+					}
+				: { enabled: false },
 		),
 	};
 }
