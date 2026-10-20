@@ -2824,8 +2824,8 @@ blank or prints as words. A CLI Reference producer would fill the same fact,
 told apart by its `ev`; delivering those tables is decision 3 (#501).
 
 Grounded on CHR 7.24.5 and 7.23.8 over REST and native API, identical on both:
-a 40-command crawl (863 arguments) set the leaf table (553 project, 282 are
-blank, 10 cite `see documentation` or list no names), and the conversion
+a 40-command crawl (863 arguments) set the leaf table (571 project, 282 are
+blank, 7 cite `see documentation` and 3 list no names), and the conversion
 matrix is recorded raw in
 [`live-types.stable.json`](../../test/fixtures/explain/live-types.stable.json)
 and [`live-types.long-term.json`](../../test/fixtures/explain/live-types.long-term.json).

@@ -649,8 +649,8 @@ export interface ExplainValueTypeFact {
  * An argument's declared type, normalized from a schema source (#225).
  *
  * `values` are the leaf types the declaration mentions, not alternatives of
- * one value: `gateway` (`Address[%Interface][@VRF]`) lists `ip`, `ip6`,
- * `name` and `enum`. `declared` is the source's own top-level term, verbatim,
+ * one value: `gateway` (`Address[%Interface][@VRF]`) lists `ip`, `ip6` and
+ * `enum`, because inspect prints the interface names like keywords. `declared` is the source's own top-level term, verbatim,
  * so a consumer can tell a live `/console/inspect` declaration from a CLI
  * Reference `Type` cell by `ev` and still read the original.
  */
