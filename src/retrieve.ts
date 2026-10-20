@@ -633,7 +633,7 @@ function unsettledValidationMeta(
 	resolved: ResolvedRetrieveRequest,
 	error: CentrsError,
 ): EnvelopeValidationMeta {
-	if (/^(transport|auth|routeros|internal|wait)\//.test(error.code)) {
+	if (stoppedBeforeGateAnswer(error.code)) {
 		return notReachedValidationMeta(resolved, error.code);
 	}
 	if (!resolved.validate.value) {
@@ -651,6 +651,11 @@ function unsettledValidationMeta(
 			},
 		],
 	};
+}
+
+/** Whether an error code stops a run without being a gate answer (GH#435, #537). */
+export function stoppedBeforeGateAnswer(code: string): boolean {
+	return /^(transport|auth|routeros|internal|wait)\//.test(code);
 }
 
 /**

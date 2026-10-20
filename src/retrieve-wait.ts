@@ -1,4 +1,5 @@
 /** Bounded readiness/condition reads; the router evaluates the shared predicate. */
+import type { EnvelopeValidationMeta } from "./core/envelope.ts";
 import { parseQueries, queryErrorForFlag } from "./core/query.ts";
 import { CentrsError } from "./errors.ts";
 import {
@@ -17,6 +18,7 @@ import {
 	type RetrieveRequest,
 	type RetrieveWaitMeta,
 	resolveRetrieveRequest,
+	stoppedBeforeGateAnswer,
 	validateRetrieveRead,
 } from "./retrieve.ts";
 
@@ -72,6 +74,9 @@ export async function retrieveWait(
 	let observations = 0;
 	let backend: ProtocolAdapter | undefined;
 	let prepared: Awaited<ReturnType<typeof validateRetrieveRead>> | undefined;
+	// A retry drops `prepared` with its backend, but a gate that passed once
+	// stays passed: a later failure that is not a gate answer keeps it (#537).
+	let settled: EnvelopeValidationMeta | undefined;
 	let lastError: unknown;
 	const meta = (
 		stopReason: RetrieveWaitMeta["stopReason"],
@@ -105,7 +110,10 @@ export async function retrieveWait(
 		)
 			error = queryErrorForFlag(error, "--until");
 		const envelope = buildRetrieveErrorEnvelopeFromResolved(resolved, error);
-		if (prepared) envelope.meta.validation = prepared.validation;
+		const validation =
+			prepared?.validation ??
+			(stoppedBeforeGateAnswer(envelope.error.code) ? settled : undefined);
+		if (validation) envelope.meta.validation = validation;
 		if (envelope.meta.operation) envelope.meta.operation.wait = meta(reason);
 		return envelope;
 	};
@@ -146,6 +154,7 @@ export async function retrieveWait(
 					signal: controller.signal,
 				});
 				prepared ??= await validateRetrieveRead(observationRequest, backend);
+				settled = prepared.validation;
 				if (
 					settings.untilEmpty &&
 					(prepared.inspection?.singleton ??

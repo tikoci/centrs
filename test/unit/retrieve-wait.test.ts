@@ -28,6 +28,8 @@ function router(
 		inspectDelayMs?: number;
 		status?: number;
 		rows?: () => Record<string, string>[];
+		/** Stop the server mid-read: the read and every reconnect then fail at transport. */
+		dropOnRead?: boolean;
 	} = {},
 ) {
 	let reads = 0;
@@ -35,7 +37,7 @@ function router(
 	const server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
-		fetch: async (req) => {
+		fetch: async (req, server) => {
 			if (options.status)
 				return Response.json(
 					{ error: options.status, detail: "invalid user name or password" },
@@ -71,6 +73,10 @@ function router(
 				);
 			}
 			reads++;
+			if (options.dropOnRead) {
+				server.stop(true);
+				return new Promise<Response>(() => {});
+			}
 			if (options.delayMs) await Bun.sleep(options.delayMs);
 			let rows = options.rows?.() ?? [
 				{ ".id": "*1", address: "192.0.2.1", comment: "ready" },
@@ -360,6 +366,32 @@ describe("retrieveWait", () => {
 						reason: "not reached: wait/interrupted",
 					},
 				],
+			});
+		} finally {
+			clearTimeout(timer);
+		}
+	});
+
+	test("a gate that passed stays passed across retries that then end (#537 review)", async () => {
+		// The gate passes, the read dies, every reconnect is refused, and the
+		// caller cancels. The retry dropped the per-backend plan, but the gate
+		// already answered, so it is not "not reached".
+		const r = router({ dropOnRead: true });
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), 300);
+		try {
+			const result = await retrieveWait({ ...r.request, wait: "5s" }, ENV, {
+				signal: controller.signal,
+			});
+			expect(result.ok ? undefined : result.error.code).toBe(
+				"wait/interrupted",
+			);
+			expect(r.inspections()).toBeGreaterThan(0);
+			expect(result.meta.operation?.wait?.attempts).toBeGreaterThan(1);
+			expect(result.meta.validation).toMatchObject({
+				enabled: true,
+				source: "live /console/inspect request=child",
+				result: "passed",
 			});
 		} finally {
 			clearTimeout(timer);
