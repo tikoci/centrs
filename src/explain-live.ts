@@ -33,6 +33,7 @@ import {
 	type ExplainLiveFacets,
 	resolveExplainCursor,
 } from "./explain-live-facets.ts";
+import { collectValueTypes } from "./explain-live-types.ts";
 import {
 	createProtocolAdapter,
 	type ProtocolAdapter,
@@ -70,7 +71,7 @@ export interface LiveProbeContext {
 	version?: string;
 	highlightBytes: number;
 	sha256(text: string): string;
-	backend: Pick<ProtocolAdapter, "inspect">;
+	backend: Pick<ProtocolAdapter, "inspect" | "execute">;
 	evidence(probe: string, fields?: Partial<ExplainEvidence>): ExplainEvidence;
 	run<T>(ev: ExplainEvidence, action: () => Promise<T>): Promise<T | undefined>;
 }
@@ -354,7 +355,7 @@ export async function collectExplainEvidence(
 			"Device version is unavailable; unsafe probes will be skipped.";
 	}
 
-	// Both probes operate on data: the only executed script is this escaped :parse wrapper.
+	// Both probes operate on data: the only executed scripts are escaped :parse wrappers (this one and the #225 type probes).
 	const parse = evidence(":parse", {
 		coverage: full,
 		inputSha256: sha(input),
@@ -519,21 +520,20 @@ export async function collectExplainEvidence(
 		].sort();
 		live.arguments.push({ ev: ev.id, path, statementIds, names });
 	}
-	if (facets.schema || facets.complete)
-		await collectExplainFacets(
-			{
-				data,
-				input,
-				analyzed: normalized,
-				version,
-				highlightBytes: EXPLAIN_LIVE_LIMITS.highlightBytes,
-				sha256: sha,
-				backend,
-				evidence,
-				run,
-			},
-			facets,
-		);
+	const ctx: LiveProbeContext = {
+		data,
+		input,
+		analyzed: normalized,
+		version,
+		highlightBytes: EXPLAIN_LIVE_LIMITS.highlightBytes,
+		sha256: sha,
+		backend,
+		evidence,
+		run,
+	};
+	if (facets.schema || facets.complete) await collectExplainFacets(ctx, facets);
+	// Last, so the facets' evidence ids do not depend on how many values there are.
+	await collectValueTypes(ctx);
 	for (const ev of data.evidence)
 		if (
 			ev.source === "live-inspect" &&

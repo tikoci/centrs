@@ -104,8 +104,10 @@ and implementation sequencing in the linked issues.
 - `explain`'s two `designed` protocol cells track the whole live capability
   (#236). `explain <router> '<input>'` now collects read-only `:parse`, highlight
   and child argument-name evidence (#491), and `--schema`/`--complete` describe
-  paths and complete at a cursor (#492). Live types (#225) and the #236
-  closeout remain unfinished, so neither cell advances yet. Offline analysis
+  paths and complete at a cursor (#492). Live value types (#225) fill
+  `observedType` from visible `:parse` conversions and `schemaType` from
+  argument `syntax` (examples 52–53). The #236 closeout remains unfinished, so
+  neither cell advances yet. Offline analysis
   has its own capability entry below. The generated structure tables
   `src/explain/menus.ts` and `src/explain/catalog.ts` keep analysis offline;
   their ownership and regeneration contracts live in `commands/explain/README.md`.
@@ -185,9 +187,10 @@ Wire, auth, TCP/UDP, and CI caveats live in `commands/btest/README.md` and the
 
 The #491 live foundation returns read-only parse/highlight/child evidence on
 REST and native API, and #492 adds describe (`--schema`) and cursor completion
-(`--complete`) with their examples green on stable and long-term CHR. Whole
-explain cells remain `designed`: live types (#225) and #236 closeout
-acceptance are still outstanding. The honest
+(`--complete`) with their examples green on stable and long-term CHR. The
+live value types (#225) are green too: examples 52–53 on both channels and
+transports. Whole explain cells remain `designed` until the #236 closeout
+acceptance. The honest
 readings, statement ownership and block byte-span prerequisites are shipped;
 Issue #90 owns the remaining sequencing, including #507 context grounding.
 
@@ -195,8 +198,9 @@ Issue #90 owns the remaining sequencing, including #507 context grounding.
 [#90](https://github.com/tikoci/centrs/issues/90)). In order: make the
 published offline readings honest (#350, #211; complete), give the result a
 statement tree (#497; complete), then the live probe foundation (#491;
-complete). Those probes grounded #351, #358 and #371 (complete), and #492
-added the describe/completion facets. Next is the #236 closeout. The
+complete). Those probes grounded #351, #358 and #371 (complete), #492
+added the describe/completion facets, and #225 the live value types. Next is
+the #236 closeout. The
 plan, and what is deliberately out of this run, is the 2026-10-16 plan
 comment on #90. It is step 3 of the validation track below.
 
@@ -245,7 +249,7 @@ guard.
 The live pass is the device-backed cross-check on the offline result, not a
 replacement for it. It adds read-only `/console/inspect` and `:parse` evidence,
 the describe/completion facets, and the live `observedType`/`schemaType`
-producers owned with #225. REST and native-api cells advance only when their
+producers (#225). REST and native-api cells advance only when their
 applicable examples pass on CHR via `bun run test:integration`.
 
 Open offline follow-ups remain explicit but do not reopen the verified baseline.

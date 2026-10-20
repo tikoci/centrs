@@ -649,7 +649,7 @@ and its phase is named below.
 | `structure.statements[].command` | `path` + `verb`, plus **`args` where the argument list was read** (#202c-1); the ordered token list is `statements[].arguments.tokens` |
 | `structure.statements[].transport` | complete for commands: `api-candidate`, `execute`, or fail-closed `unknown`, with an equivalent `centrs` invocation and opt-in `curl` for tested REST mappings (#202c-2). The `basis` names the evidence for the route it chose or refused |
 | `symbols.occurrences[]` | Q13 name/span/class plus semantic `role`, result-local `bindingIds`, sigil spelling, and an abstention note where needed; **plus** (#239 S2) `valueId` on declarations/assignments with a literal RHS in the same statement, and `reachingValueIds` + `reachingUnknown` on references (flow-sensitive, branch → set, loop/non-literal → `unknown`, no RHS evaluation) |
-| `values.occurrences[]` | result-local value id/span plus three separate fact homes: offline `shapeHints`; live `observedType` and `schemaType` remain absent until phase 2. `kind: "element"` rows are array members, carrying `parent` and, for a keyed member, `name` |
+| `values.occurrences[]` | result-local value id/span plus three separate fact homes: offline `shapeHints`; live `observedType` and `schemaType` are added only by a live call ([Live value types](#live-value-types-225)). `kind: "element"` rows are array members, carrying `parent` and, for a keyed member, `name` |
 | `spans` | comment runs and resolved variable classes only; **no value shape or type** |
 | `schema`, `completion` | absent — live evidence, phase 2 |
 
@@ -757,7 +757,7 @@ and its phase is named below.
   The stable/testing CHR matrix fixes the offline lexicon: `num`, `ip`,
   `ip-prefix`, `ip6`, `ip6-prefix`, `id`, `time`, `array`, `mac`, `bool`, and
   `str` — `op` is deliberately not a member: a deferred `(> …)` abstains
-  offline and is reported only as a live `observedType` (#288); quoted literals
+  offline and live alike (#288, #225); quoted literals
   hint only `str`, while malformed and out-of-range address-like controls
   abstain even in named attributes. Most vocabulary borrows RouterOS scripting
   type names (with the explicit `macAddr` schema exception below), so a hint
@@ -791,8 +791,9 @@ and its phase is named below.
   1 and identical `:parse` IL — only `:typeof` distinguishes them
   (`test/fixtures/explain/operators.json` → `sweep.runtime`
   `typeof-deferred`/`deferred-array-typeof` and `sweep.opAxis` `defer-*` on
-  7.21.5, 7.23.3, 7.24rc4). Offline abstains on every such form; `op` lives
-  only as a live `observedType` (#288, a bounded #225 decision).
+  7.21.5, 7.23.3, 7.24rc4). Offline abstains on every such form, and so does
+  the live `observedType`, which never sends `:typeof` (#288, #225). `op` has
+  no producer.
   Shape remains non-authoritative: `100000w` is time-shaped but observed as
   `str`. Argument context remains separate: on 7.23.3 and 7.24rc3, both
   `/ip/address address=2.2` and firewall `src-address=2.2` canonicalize it to
@@ -806,8 +807,8 @@ and its phase is named below.
   and does not widen the hint. Thus a hint never validates a value or becomes a
   diagnostic, and never changes `runtimeAcceptance`. Quoting likewise never
   earns a wrong-type diagnostic: commands may cast quoted strings at runtime.
-  Offline emits only `shapeHints`; phase 2 adds the two live facts into their
-  existing homes when its safe IL/schema producers land.
+  Offline emits only `shapeHints`; a live call adds the two live facts into
+  their existing homes ([Live value types](#live-value-types-225)).
 
   **A located array is read member by member (#225 V1).** Each member of a
   `{…}`/`(…)` literal is its own `values.occurrences[]` row with `kind:
@@ -2589,9 +2590,10 @@ Work is bounded by the resolved per-request timeout, 32 distinct command paths,
 with their reason; no silent prefix is submitted and `input.truncated` stays
 false. A transport/authentication failure stops later requests. Scripting-path
 discovery is conservatively skipped before 7.21.4 or on unknown versions. No
-command-level completion, syntax discovery, user-expression evaluation or
-related configuration-table collection is part of this slice.
-`--schema` and `--complete` add the probes in the next section.
+command-level completion, user-expression evaluation or related
+configuration-table collection is part of this slice. `--schema` and
+`--complete` add the probes in the next section, and the value-type probes
+after it run on every live call.
 
 Committed controls are
 [`live-probes.stable.json`](../../test/fixtures/explain/live-probes.stable.json)
@@ -2658,7 +2660,8 @@ slash path as typed (`/ip/addr`). The `child` self row decides `node`:
 Syntax rows are kept verbatim (`symbol`, RouterOS `symbol-type` as `kind`,
 `text`, `nested` as `depth`). They are declared help, such as
 `A.B.C.D (IP address)` or `input | forward | output` beside `string value`.
-They are not #225's `schemaType`; that projection stays #225's.
+They are not the `schemaType` value fact, which normalizes the same rows per
+value ([Live value types](#live-value-types-225)).
 
 **Smart sizing.** By default each list shows up to 64 names, and expansion
 runs only when the listed children fit in 16 probes (a menu's children, or a
@@ -2732,8 +2735,105 @@ result. `test/unit/explain-live-facets.test.ts` replays them.
 transports and regenerates the captures when `CENTRS_EXPLAIN_FACETS_CAPTURE`
 names an output file.
 
-Not covered here: live value types (#225), MCP (#223), related print rows and
-topic checks (#493), and per-target caching of describe results (open 3).
+Not covered here: MCP (#223), related print rows and topic checks (#493),
+and per-target caching of describe results (open 3).
+
+### Live value types (#225)
+
+Every live call fills the two live homes on `data.values.occurrences[].facts`
+that offline leaves empty. Neither changes the verdict or
+`runtimeAcceptance`, and neither becomes a diagnostic. Both probes are
+`evidence[]` entries with `facet: "types"` and `basis: "derived"`; an `empty`
+answer is a result, not a warning. They run after `--schema`/`--complete`.
+
+**`observedType: { value, rendered, ev }`** is the type the device's parser
+visibly converted a bare literal to. `:parse` prints a string unquoted, so
+`:local a 123` and `:local b "123"` both render `value=123`. A rendering is
+therefore evidence only when it CHANGED the literal:
+
+| Literal | Device rendering | `observedType` |
+| ------- | ---------------- | -------------- |
+| `2.2`, `2.2/8` | `2.0.0.2`, `2.0.0.2/8` | `ip`, `ip-prefix` |
+| `1:0:0::1` | `1::1` | `ip6` |
+| `0x10`, `0123`, `99999999999999999999` | `16`, `123`, `9223372036854775807` | `num` |
+| `yes`, `no` | `true`, `false` | `bool` |
+| `200ms`, `1d`, `1:2`, `10000w` | `00:00:00.200`, `1d00:00:00`, `01:02:00`, `10000w00:00:00` | `time` |
+| `123`, `1.1.1.1`, `true`, `00:00:02`, `"2.2"` | unchanged | absent |
+| `100000w`, `abc`, `1e5`, `300.1.1.1` | unchanged | absent |
+| member `{abc}`, `{-1}` | `$abc`, `(- 1)` | absent |
+
+The literal is not looked up in the IL of the analyzed input, where a quoted
+`"x;y=1"` prints exactly like two arguments. Each bare literal is re-parsed
+alone: `:local vN <lit>` for a scripting operand, `:local vN {<lit>}` for an
+array member, `;`-joined into one escaped `:put [:parse "…"]` per context.
+`:put <lit>` converts exactly as `:local` does. Only literals of the bytes
+`A-Z a-z 0-9 . _ : / -` are sent, so no literal can leave its slot, and a
+quoted value never qualifies. One hard-error member (`{*1}`) rejects a whole
+batch, so the two contexts are separate probes and a rejected batch is
+`invalid-response` with the device's message; its literals abstain. A batch is
+at most 256 literals, otherwise `skipped`.
+
+Menu-command arguments are never observed. Their own parser converts them
+and prints a per-argument encoding (`src-address=!1.1.1.1` →
+`true;1.1.1.1`, `address=2.2` → `2.0.0.2;`), and a quoted value converts only
+at run time (`address="2.2"` stays `2.2`). That slot is `schemaType`'s. `op`
+has no producer: `(>[:return 1])` and `(>{"a"=1})` parse identically, and only
+`:typeof` separates them.
+
+**`schemaType: { values, list?, declared, ev }`** is the argument's declared
+type. For each `name=value` of a resolved menu command, the name is resolved
+against that command's live `child` names, exactly or as a unique prefix
+(`dist=` → `distance`). One `syntax` probe per distinct argument path
+(`ip,route,add,distance`) reads the declaration; at most 32 per call, later
+ones `skipped`. An ambiguous or unknown name sends no probe. `syntax` is never
+sent to a command path (see [Live describe and completion](#live-describe-and-completion-492)).
+
+The rows are a small grammar (`[!]Range`, `Address[%Interface][@VRF]`), so
+`values` lists the LEAF types the declaration mentions, not alternatives of
+one value. They use the shape-hint names so the two axes compare directly,
+plus three schema-only terms:
+
+| Device leaf | Term |
+| ----------- | ---- |
+| `(integer number)`, `(decimal number)`, `integer value`, `0..65535` | `num` |
+| `(time interval)`, `time interval` | `time` |
+| `(IP address)`, `IPv4 address`, `A.B.C.D` | `ip` |
+| `IPv6 address` | `ip6` |
+| `(IP prefix)`, `(IPv6 prefix)` | `ip-prefix`, `ip6-prefix` |
+| `(IP address range)` | `ip-range` |
+| `(MAC address)` | `mac` |
+| `string value…`, `hexadecimal string value…`, `script`, `filename` | `str` |
+| a listed word set (`input \| forward \| output`, `ether1 \| lo \| ...`) | `enum` |
+
+`enum` is never a closed set: the device lists the current configuration
+names (`ether1 | lo`) exactly like keywords, and ends either kind with `...`
+when the list is long (`ftp | h323 | … | ...`). `list: true` is present when
+the declaration spells a repetition (`[,Type*]`, `(max 15 times)`); its
+absence is not a claim — `servers` (`Address[@VRF]`) splits on a comma
+without saying so. A keyword's help row (`tcp` → `transmission control
+protocol`) is not a leaf, and a blank placeholder beside a real leaf is
+skipped. The fact is ABSENT when the declaration is blank (every flag and
+boolean: `disabled`, `copy-from`) or when any leaf is `see documentation`
+(`/ipv6/address add address`). `declared` is the device's top-level text,
+verbatim (`Address[@VRF]`, `Num`).
+
+The vocabulary also names `bool` and `name` for a second schema source: the
+CLI Reference's `Type` cells (`bool`, `iface_enum`, `ipAddr`, `macAddr`,
+`ubit (…)`), which declare the booleans and object references inspect leaves
+blank or prints as words. A CLI Reference producer would fill the same fact,
+told apart by its `ev`; delivering those tables is decision 3 (#501).
+
+Grounded on CHR 7.24.5 and 7.23.8 over REST and native API, identical on both:
+a 40-command crawl (863 arguments) set the leaf table (553 project, 282 are
+blank, 10 cite `see documentation` or list no names), and the conversion
+matrix is recorded raw in
+[`live-types.stable.json`](../../test/fixtures/explain/live-types.stable.json)
+and [`live-types.long-term.json`](../../test/fixtures/explain/live-types.long-term.json).
+`test/unit/explain-live-types.test.ts` replays them and pins the matrix
+reading; `test/integration/explain-live-types.test.ts` asserts examples 52–53
+on both transports and that every executed script is a `:parse` wrapper and
+every `syntax` probe names a discovered argument. It regenerates the captures
+when `CENTRS_EXPLAIN_TYPES_CAPTURE` names an output file.
 
 ## MCP and library surfaces
 
@@ -3239,8 +3339,8 @@ test framework is part of this baseline.
 ### Current and following capabilities
 
 - **Current — live probes (#236, phase 2):** highlight + `:parse` (#491) and
-  completion/child/syntax (#492) over rest-api/native-api; live types (#225)
-  and the closeout remain. B4's projection/agreement
+  completion/child/syntax (#492) and live value types (#225) over
+  rest-api/native-api; the #236 closeout remains. B4's projection/agreement
   informs this work; each live cell requires its own CHR-passing examples.
 - **MCP alignment (#223):** the deliberate flat-to-rich response migration,
   coordinated with rosetta. Independent of the offline token vocabulary.

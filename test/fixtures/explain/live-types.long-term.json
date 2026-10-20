@@ -1,0 +1,1731 @@
+{
+	"generator": "test/integration/explain-live-types.test.ts",
+	"version": "7.23.8",
+	"captures": [
+		{
+			"example": "52",
+			"input": ":local x 2.2; :set x \"2.2\"; :local z (1,0x10,2.2); :local t 200ms; :local i *1; :local y yes",
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.23.8 (long-term)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \":local x 2.2; :set x \\\"2.2\\\"; :local z (1,0x10,2.2); :local t 200ms; :local i *1; :local y yes\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /localname=$x;value=2.0.0.2);(evl /setname=$x;value=2.2);(evl /localname=$z;value=(, 1 16 2.0.0.2));(evl /localname=$t;value=00:00:00.200);(evl /localname=$i;value=*1);(evl /localname=$y;value=true)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": [
+						"highlight",
+						"",
+						":local x 2.2; :set x \"2.2\"; :local z (1,0x10,2.2); :local t 200ms; :local i *1; :local y yes"
+					],
+					"result": [
+						{
+							"highlight": "dir,cmd,cmd,cmd,cmd,cmd,none,variable-local,none,none,none,none,syntax-meta,none,dir,cmd,cmd,cmd,none,variable-local,none,syntax-meta,none,none,none,syntax-meta,syntax-meta,none,dir,cmd,cmd,cmd,cmd,cmd,none,variable-local,none,syntax-meta,none,syntax-meta,none,none,none,none,syntax-meta,none,none,none,syntax-meta,syntax-meta,none,dir,cmd,cmd,cmd,cmd,cmd,none,variable-local,none,none,none,none,none,none,syntax-meta,none,dir,cmd,cmd,cmd,cmd,cmd,none,variable-local,none,none,none,syntax-meta,none,dir,cmd,cmd,cmd,cmd,cmd,none,variable-local,none,none,none,none",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "local"],
+					"result": [
+						{
+							"name": "local",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "do",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "name",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "set"],
+					"result": [
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "do",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "name",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \":local v0 2.2;:local v1 200ms;:local v2 yes\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /localname=$v0;value=2.0.0.2);(evl /localname=$v1;value=00:00:00.200);(evl /localname=$v2;value=true)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \":local v0 {1};:local v1 {0x10};:local v2 {2.2}\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /localname=$v0;value=1);(evl /localname=$v1;value=16);(evl /localname=$v2;value=2.0.0.2)"
+					}
+				}
+			],
+			"values": [
+				{
+					"id": "v0",
+					"span": {
+						"start": 9,
+						"end": 12
+					},
+					"tokenSpan": {
+						"start": 9,
+						"end": 12
+					},
+					"kind": "positional",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["ip"],
+							"ev": "e9"
+						},
+						"observedType": {
+							"value": "ip",
+							"rendered": "2.0.0.2",
+							"ev": "live5"
+						}
+					}
+				},
+				{
+					"id": "v1",
+					"span": {
+						"start": 21,
+						"end": 26
+					},
+					"tokenSpan": {
+						"start": 21,
+						"end": 26
+					},
+					"kind": "positional",
+					"quoted": true,
+					"facts": {
+						"shapeHints": {
+							"values": ["str"],
+							"ev": "e9"
+						}
+					}
+				},
+				{
+					"id": "v2",
+					"span": {
+						"start": 37,
+						"end": 49
+					},
+					"tokenSpan": {
+						"start": 37,
+						"end": 49
+					},
+					"kind": "positional",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["array"],
+							"ev": "e9"
+						}
+					}
+				},
+				{
+					"id": "v3",
+					"span": {
+						"start": 38,
+						"end": 39
+					},
+					"tokenSpan": {
+						"start": 38,
+						"end": 39
+					},
+					"kind": "element",
+					"quoted": false,
+					"parent": "v2",
+					"facts": {
+						"shapeHints": {
+							"values": ["num"],
+							"ev": "e9"
+						}
+					}
+				},
+				{
+					"id": "v4",
+					"span": {
+						"start": 40,
+						"end": 44
+					},
+					"tokenSpan": {
+						"start": 40,
+						"end": 44
+					},
+					"kind": "element",
+					"quoted": false,
+					"parent": "v2",
+					"facts": {
+						"shapeHints": {
+							"values": ["num"],
+							"ev": "e9"
+						},
+						"observedType": {
+							"value": "num",
+							"rendered": "16",
+							"ev": "live6"
+						}
+					}
+				},
+				{
+					"id": "v5",
+					"span": {
+						"start": 45,
+						"end": 48
+					},
+					"tokenSpan": {
+						"start": 45,
+						"end": 48
+					},
+					"kind": "element",
+					"quoted": false,
+					"parent": "v2",
+					"facts": {
+						"shapeHints": {
+							"values": ["ip"],
+							"ev": "e9"
+						},
+						"observedType": {
+							"value": "ip",
+							"rendered": "2.0.0.2",
+							"ev": "live6"
+						}
+					}
+				},
+				{
+					"id": "v6",
+					"span": {
+						"start": 60,
+						"end": 65
+					},
+					"tokenSpan": {
+						"start": 60,
+						"end": 65
+					},
+					"kind": "positional",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["time"],
+							"ev": "e9"
+						},
+						"observedType": {
+							"value": "time",
+							"rendered": "00:00:00.200",
+							"ev": "live5"
+						}
+					}
+				},
+				{
+					"id": "v7",
+					"span": {
+						"start": 76,
+						"end": 78
+					},
+					"tokenSpan": {
+						"start": 76,
+						"end": 78
+					},
+					"kind": "positional",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["id"],
+							"ev": "e9"
+						}
+					}
+				},
+				{
+					"id": "v8",
+					"span": {
+						"start": 89,
+						"end": 92
+					},
+					"tokenSpan": {
+						"start": 89,
+						"end": 92
+					},
+					"kind": "positional",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["bool"],
+							"ev": "e9"
+						},
+						"observedType": {
+							"value": "bool",
+							"rendered": "true",
+							"ev": "live5"
+						}
+					}
+				}
+			]
+		},
+		{
+			"example": "53",
+			"input": "/ip/dns/set servers=1.1.1.1,8.8.8.8; /ip/route/add gateway=2.2 dist=2 comment=abc; /ip/firewall/filter/add chain=input dst-port=80,443 protocol=tcp disabled=yes",
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.23.8 (long-term)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/dns/set servers=1.1.1.1,8.8.8.8; /ip/route/add gateway=2.2 dist=2 comment=abc; /ip/firewall/filter/add chain=input dst-port=80,443 protocol=tcp disabled=yes\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /ip/dns/setservers=1.1.1.1;8.8.8.8);(evl /ip/route/addcomment=abc;distance=2;gateway=2.2);(evl /ip/firewall/filter/addchain=input;disabled=true;dst-port=;80;443;protocol=;tcp)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": [
+						"highlight",
+						"",
+						"/ip/dns/set servers=1.1.1.1,8.8.8.8; /ip/route/add gateway=2.2 dist=2 comment=abc; /ip/firewall/filter/add chain=input dst-port=80,443 protocol=tcp disabled=yes"
+					],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,arg,arg,syntax-meta,none,none,none,none,none,none,none,syntax-meta,none,none,none,none,none,none,none,syntax-meta,none,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,arg,arg,syntax-meta,none,none,none,none,arg,arg,arg,arg,syntax-meta,none,none,arg,arg,arg,arg,arg,arg,arg,syntax-meta,none,none,none,syntax-meta,none,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,syntax-meta,none,none,none,none,none,none,arg,arg,arg,arg,arg,arg,arg,arg,syntax-meta,none,none,syntax-meta,none,none,none,none,arg,arg,arg,arg,arg,arg,arg,arg,syntax-meta,none,none,none,none,arg,arg,arg,arg,arg,arg,arg,arg,syntax-meta,none,none,none",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,dns,set"],
+					"result": [
+						{
+							"name": "set",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "address-list-extra-time",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "allow-remote-requests",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "cache-max-ttl",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "cache-size",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "doh-max-concurrent-queries",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "doh-max-server-connections",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "doh-timeout",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "max-concurrent-queries",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "max-concurrent-tcp-sessions",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "max-udp-packet-size",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "mdns-repeat-ifaces",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "query-server-timeout",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "query-total-timeout",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "servers",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "use-doh-server",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "verify-doh-cert",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "vrf",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,route,add"],
+					"result": [
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "blackhole",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "check-gateway",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "copy-from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "distance",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "gateway",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "pref-src",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "routing-table",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "scope",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "target-scope",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "vrf-interface",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,firewall,filter,add"],
+					"result": [
+						{
+							"name": "add",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "action",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "address-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "address-list-timeout",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "chain",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-bytes",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-limit",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-mark",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-nat-state",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-rate",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-state",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "connection-type",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "content",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "copy-from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "disabled",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dscp",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-address-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-address-type",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-limit",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "dst-port",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "fragment",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "hotspot",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "icmp-options",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "in-bridge-port",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "in-bridge-port-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "in-interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "in-interface-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "ingress-priority",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "ipsec-policy",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "ipv4-options",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "jump-target",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "layer7-protocol",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "limit",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "log",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "log-prefix",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "nth",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "out-bridge-port",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "out-bridge-port-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "out-interface",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "out-interface-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "p2p",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "packet-mark",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "packet-size",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "per-connection-classifier",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "place-before",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "port",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "priority",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "protocol",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "psd",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "random",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "realm",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "reject-with",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "routing-mark",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "src-address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "src-address-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "src-address-type",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "src-mac-address",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "src-port",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "tcp-flags",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "tcp-mss",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "time",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "tls-host",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "tos",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "ttl",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,dns,set,servers"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Servers",
+							"symbol-type": "explanation",
+							"text": "Address[@VRF]",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "Address",
+							"symbol-type": "definition",
+							"text": "IPv4 | IPv6",
+							"type": "syntax"
+						},
+						{
+							"nested": "2",
+							"nonorm": "false",
+							"symbol": "IPv4",
+							"symbol-type": "explanation",
+							"text": "IPv4 address",
+							"type": "syntax"
+						},
+						{
+							"nested": "2",
+							"nonorm": "false",
+							"symbol": "IPv6",
+							"symbol-type": "explanation",
+							"text": "IPv6 address",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "VRF",
+							"symbol-type": "definition",
+							"text": "main",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,route,add,gateway"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Gateway",
+							"symbol-type": "explanation",
+							"text": "Address[%Interface][@VRF]",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "Address",
+							"symbol-type": "definition",
+							"text": "IPv4 | IPv6 | Interface",
+							"type": "syntax"
+						},
+						{
+							"nested": "2",
+							"nonorm": "false",
+							"symbol": "IPv4",
+							"symbol-type": "explanation",
+							"text": "IPv4 address",
+							"type": "syntax"
+						},
+						{
+							"nested": "2",
+							"nonorm": "false",
+							"symbol": "IPv6",
+							"symbol-type": "explanation",
+							"text": "IPv6 address",
+							"type": "syntax"
+						},
+						{
+							"nested": "2",
+							"nonorm": "false",
+							"symbol": "Interface",
+							"symbol-type": "definition",
+							"text": "lo | ether1",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "Interface",
+							"symbol-type": "definition",
+							"text": "lo | ether1",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "VRF",
+							"symbol-type": "definition",
+							"text": "main",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,route,add,distance"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Distance",
+							"symbol-type": "definition",
+							"text": "Num",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "Num",
+							"symbol-type": "definition",
+							"text": "1..255    (integer number)",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,route,add,comment"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Comment",
+							"symbol-type": "explanation",
+							"text": "string value",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,firewall,filter,add,chain"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Chain",
+							"symbol-type": "definition",
+							"text": "",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "definition",
+							"text": "input | forward | output",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "explanation",
+							"text": "string value",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,firewall,filter,add,dst-port"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "DstPort",
+							"symbol-type": "definition",
+							"text": "[!]Port",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "Port",
+							"symbol-type": "definition",
+							"text": "Range[,Port]    (max 15 times)",
+							"type": "syntax"
+						},
+						{
+							"nested": "2",
+							"nonorm": "false",
+							"symbol": "Range",
+							"symbol-type": "definition",
+							"text": "Start[-End]",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "Start",
+							"symbol-type": "definition",
+							"text": "0..65535",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "End",
+							"symbol-type": "definition",
+							"text": "0..65535",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,firewall,filter,add,protocol"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "Protocol",
+							"symbol-type": "definition",
+							"text": "[!]Protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "1",
+							"nonorm": "false",
+							"symbol": "Protocol",
+							"symbol-type": "definition",
+							"text": "IpProtocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "2",
+							"nonorm": "false",
+							"symbol": "IpProtocol",
+							"symbol-type": "definition",
+							"text": "dccp | ddp | egp | encap | etherip | ...",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "dccp",
+							"symbol-type": "explanation",
+							"text": "datagram congestion control protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "ddp",
+							"symbol-type": "explanation",
+							"text": "datagram delivery protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "egp",
+							"symbol-type": "explanation",
+							"text": "exterior gateway protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "encap",
+							"symbol-type": "explanation",
+							"text": "ip encapsulation",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "etherip",
+							"symbol-type": "explanation",
+							"text": "ethernet within ip encapsulation",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "ggp",
+							"symbol-type": "explanation",
+							"text": "gateway-gateway protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "gre",
+							"symbol-type": "explanation",
+							"text": "general routing encapsulation",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "hmp",
+							"symbol-type": "explanation",
+							"text": "host monitoring protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "icmp",
+							"symbol-type": "explanation",
+							"text": "internet control message protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "icmpv6",
+							"symbol-type": "explanation",
+							"text": "internet control message protocol v6",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "idpr-cmtp",
+							"symbol-type": "explanation",
+							"text": "idpr control message transport",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "igmp",
+							"symbol-type": "explanation",
+							"text": "internet group management protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "ipencap",
+							"symbol-type": "explanation",
+							"text": "ip encapsulated in ip",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "ipip",
+							"symbol-type": "explanation",
+							"text": "ip encapsulation",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "ipsec-ah",
+							"symbol-type": "explanation",
+							"text": "IPsec AH protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "ipsec-esp",
+							"symbol-type": "explanation",
+							"text": "IPsec ESP protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "ipv6-encap",
+							"symbol-type": "explanation",
+							"text": "ipv6 encapsulation",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "ipv6-frag",
+							"symbol-type": "explanation",
+							"text": "fragment header for ipv6",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "ipv6-nonxt",
+							"symbol-type": "explanation",
+							"text": "no next header ipv6",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "ipv6-opts",
+							"symbol-type": "explanation",
+							"text": "destination options for ipv6",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "ipv6-route",
+							"symbol-type": "explanation",
+							"text": "routing header for ipv6",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "iso-tp4",
+							"symbol-type": "explanation",
+							"text": "iso transport protocol class 4",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "l2tp",
+							"symbol-type": "explanation",
+							"text": "layer two tunneling protcol v3",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "ospf",
+							"symbol-type": "explanation",
+							"text": "open shortest path first",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "pim",
+							"symbol-type": "explanation",
+							"text": "protocol independent multicast",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "pup",
+							"symbol-type": "explanation",
+							"text": "parc universal packet protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "rdp",
+							"symbol-type": "explanation",
+							"text": "reliable datagram protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "rspf",
+							"symbol-type": "explanation",
+							"text": "radio shortest path first",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "rsvp",
+							"symbol-type": "explanation",
+							"text": "resource reservation protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "sctp",
+							"symbol-type": "explanation",
+							"text": "stream control transmission protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "st",
+							"symbol-type": "explanation",
+							"text": "st datagram mode",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "tcp",
+							"symbol-type": "explanation",
+							"text": "transmission control protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "udp",
+							"symbol-type": "explanation",
+							"text": "user datagram protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "udp-lite",
+							"symbol-type": "explanation",
+							"text": "lightweight user datagram protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "vmtp",
+							"symbol-type": "explanation",
+							"text": "versatile message transport",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "vrrp",
+							"symbol-type": "explanation",
+							"text": "virtual router redundancy protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "xns-idp",
+							"symbol-type": "explanation",
+							"text": "xerox xns idp",
+							"type": "syntax"
+						},
+						{
+							"nested": "3",
+							"nonorm": "false",
+							"symbol": "xtp",
+							"symbol-type": "explanation",
+							"text": "xpress transfer protocol",
+							"type": "syntax"
+						},
+						{
+							"nested": "2",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "definition",
+							"text": "0..4294967295    (integer number)",
+							"type": "syntax"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["syntax", "ip,firewall,filter,add,disabled"],
+					"result": [
+						{
+							"nested": "0",
+							"nonorm": "false",
+							"symbol": "",
+							"symbol-type": "definition",
+							"text": "",
+							"type": "syntax"
+						}
+					]
+				}
+			],
+			"values": [
+				{
+					"id": "v0",
+					"span": {
+						"start": 20,
+						"end": 35
+					},
+					"tokenSpan": {
+						"start": 12,
+						"end": 35
+					},
+					"kind": "attribute",
+					"name": "servers",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["array", "str"],
+							"ev": "e9"
+						},
+						"schemaType": {
+							"values": ["ip", "ip6", "enum"],
+							"declared": "Address[@VRF]",
+							"ev": "live6"
+						}
+					}
+				},
+				{
+					"id": "v1",
+					"span": {
+						"start": 59,
+						"end": 62
+					},
+					"tokenSpan": {
+						"start": 51,
+						"end": 62
+					},
+					"kind": "attribute",
+					"name": "gateway",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["ip"],
+							"ev": "e9"
+						},
+						"schemaType": {
+							"values": ["ip", "ip6", "enum"],
+							"declared": "Address[%Interface][@VRF]",
+							"ev": "live7"
+						}
+					}
+				},
+				{
+					"id": "v2",
+					"span": {
+						"start": 68,
+						"end": 69
+					},
+					"tokenSpan": {
+						"start": 63,
+						"end": 69
+					},
+					"kind": "attribute",
+					"name": "dist",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["num"],
+							"ev": "e9"
+						},
+						"schemaType": {
+							"values": ["num"],
+							"declared": "Num",
+							"ev": "live8"
+						}
+					}
+				},
+				{
+					"id": "v3",
+					"span": {
+						"start": 78,
+						"end": 81
+					},
+					"tokenSpan": {
+						"start": 70,
+						"end": 81
+					},
+					"kind": "attribute",
+					"name": "comment",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["str"],
+							"ev": "e9"
+						},
+						"schemaType": {
+							"values": ["str"],
+							"declared": "string value",
+							"ev": "live9"
+						}
+					}
+				},
+				{
+					"id": "v4",
+					"span": {
+						"start": 113,
+						"end": 118
+					},
+					"tokenSpan": {
+						"start": 107,
+						"end": 118
+					},
+					"kind": "attribute",
+					"name": "chain",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["str"],
+							"ev": "e9"
+						},
+						"schemaType": {
+							"values": ["enum", "str"],
+							"declared": "Chain",
+							"ev": "live10"
+						}
+					}
+				},
+				{
+					"id": "v5",
+					"span": {
+						"start": 128,
+						"end": 134
+					},
+					"tokenSpan": {
+						"start": 119,
+						"end": 134
+					},
+					"kind": "attribute",
+					"name": "dst-port",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["array", "str"],
+							"ev": "e9"
+						},
+						"schemaType": {
+							"values": ["num"],
+							"list": true,
+							"declared": "[!]Port",
+							"ev": "live11"
+						}
+					}
+				},
+				{
+					"id": "v6",
+					"span": {
+						"start": 144,
+						"end": 147
+					},
+					"tokenSpan": {
+						"start": 135,
+						"end": 147
+					},
+					"kind": "attribute",
+					"name": "protocol",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["str"],
+							"ev": "e9"
+						},
+						"schemaType": {
+							"values": ["enum", "num"],
+							"declared": "[!]Protocol",
+							"ev": "live12"
+						}
+					}
+				},
+				{
+					"id": "v7",
+					"span": {
+						"start": 157,
+						"end": 160
+					},
+					"tokenSpan": {
+						"start": 148,
+						"end": 160
+					},
+					"kind": "attribute",
+					"name": "disabled",
+					"quoted": false,
+					"facts": {
+						"shapeHints": {
+							"values": ["bool"],
+							"ev": "e9"
+						}
+					}
+				}
+			]
+		}
+	],
+	"matrix": [
+		{
+			"context": "operand",
+			"literals": [
+				"2.2",
+				"1.1.1.1",
+				"2.2/8",
+				"1.1.1.1/24",
+				"1::1",
+				"1:0:0::1",
+				"2008:1::2/128",
+				"0123",
+				"0x10",
+				"-1",
+				"123",
+				"99999999999999999999",
+				"yes",
+				"no",
+				"true",
+				"false",
+				"Yes",
+				"200ms",
+				"1d",
+				"1w7h2s",
+				"00:00:02",
+				"1:2",
+				"100000w",
+				"10000w",
+				"00:11:22:33:44:55",
+				"abc",
+				"a-b",
+				"1e5",
+				"1.1.1.1.1",
+				"300.1.1.1",
+				"2.2-3.3"
+			],
+			"output": "(evl /localname=$v0;value=2.0.0.2);(evl /localname=$v1;value=1.1.1.1);(evl /localname=$v2;value=2.0.0.2/8);(evl /localname=$v3;value=1.1.1.1/24);(evl /localname=$v4;value=1::1);(evl /localname=$v5;value=1::1);(evl /localname=$v6;value=2008:1::2/128);(evl /localname=$v7;value=123);(evl /localname=$v8;value=16);(evl /localname=$v9;value=-1);(evl /localname=$v10;value=123);(evl /localname=$v11;value=9223372036854775807);(evl /localname=$v12;value=true);(evl /localname=$v13;value=false);(evl /localname=$v14;value=true);(evl /localname=$v15;value=false);(evl /localname=$v16;value=Yes);(evl /localname=$v17;value=00:00:00.200);(evl /localname=$v18;value=1d00:00:00);(evl /localname=$v19;value=1w07:00:02);(evl /localname=$v20;value=00:00:02);(evl /localname=$v21;value=01:02:00);(evl /localname=$v22;value=100000w);(evl /localname=$v23;value=10000w00:00:00);(evl /localname=$v24;value=00:11:22:33:44:55);(evl /localname=$v25;value=abc);(evl /localname=$v26;value=a-b);(evl /localname=$v27;value=1e5);(evl /localname=$v28;value=1.1.1.1.1);(evl /localname=$v29;value=300.1.1.1);(evl /localname=$v30;value=2.2-3.3)"
+		},
+		{
+			"context": "member",
+			"literals": [
+				"2.2",
+				"1.1.1.1",
+				"2.2/8",
+				"1.1.1.1/24",
+				"1::1",
+				"1:0:0::1",
+				"2008:1::2/128",
+				"0123",
+				"0x10",
+				"-1",
+				"123",
+				"99999999999999999999",
+				"yes",
+				"no",
+				"true",
+				"false",
+				"Yes",
+				"200ms",
+				"1d",
+				"1w7h2s",
+				"00:00:02",
+				"1:2",
+				"100000w",
+				"10000w",
+				"00:11:22:33:44:55",
+				"abc",
+				"a-b",
+				"1e5",
+				"1.1.1.1.1",
+				"300.1.1.1",
+				"2.2-3.3"
+			],
+			"output": "(evl /localname=$v0;value=2.0.0.2);(evl /localname=$v1;value=1.1.1.1);(evl /localname=$v2;value=2.0.0.2/8);(evl /localname=$v3;value=1.1.1.1/24);(evl /localname=$v4;value=1::1);(evl /localname=$v5;value=1::1);(evl /localname=$v6;value=2008:1::2/128);(evl /localname=$v7;value=123);(evl /localname=$v8;value=16);(evl /localname=$v9;value=(- 1));(evl /localname=$v10;value=123);(evl /localname=$v11;value=9223372036854775807);(evl /localname=$v12;value=true);(evl /localname=$v13;value=false);(evl /localname=$v14;value=true);(evl /localname=$v15;value=false);(evl /localname=$v16;value=$Yes);(evl /localname=$v17;value=00:00:00.200);(evl /localname=$v18;value=1d00:00:00);(evl /localname=$v19;value=1w07:00:02);(evl /localname=$v20;value=00:00:02);(evl /localname=$v21;value=01:02:00);(evl /localname=$v22;value=$100000w);(evl /localname=$v23;value=10000w00:00:00);(evl /localname=$v24;value=$00:11:22:33:44:55);(evl /localname=$v25;value=$abc);(evl /localname=$v26;value=(- $a $b));(evl /localname=$v27;value=$1e5);(evl /localname=$v28;value=$1.1.1.1.1);(evl /localname=$v29;value=$300.1.1.1);(evl /localname=$v30;value=(- 2.0.0.2 3.0.0.3))"
+		}
+	]
+}

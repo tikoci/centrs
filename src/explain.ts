@@ -70,9 +70,9 @@
  *     separate optional homes but no offline producer. Each fact has its own
  *     provenance; no hint validates a value or becomes a diagnostic. The
  *     decision and the probe matrix are #225; `op` is deliberately not a shape
- *     hint — `(> …)` abstains offline and is reported only as a live
- *     `observedType` because identical syntax can be `op` or `array` and
- *     `:parse` IL cannot distinguish them (#288). This module is deliberately
+ *     hint — `(> …)` abstains offline AND live, because identical syntax can
+ *     be `op` or `array` and only `:typeof`, which live explain never sends,
+ *     distinguishes them (#288, #225). This module is deliberately
  *     type-blind, which is why a verdict that looks wrong around a value is a
  *     type-axis question before it is a lexical one.
  *   - **`runtimeAcceptance` is always `"not-proven"`**, offline and live alike.
@@ -172,7 +172,12 @@ import {
 	type ExplainTransport,
 } from "./explain/transport.ts";
 import { valueSpans } from "./explain/value-tokens.ts";
-import { type ValueShape, valueShapeHints } from "./explain/values.ts";
+import {
+	type ObservedValueType,
+	type SchemaValueType,
+	type ValueShape,
+	valueShapeHints,
+} from "./explain/values.ts";
 import {
 	type DocumentVerbSplit,
 	resolveVerb,
@@ -626,8 +631,34 @@ export interface ExplainValueShapeFact {
 	ev: string;
 }
 
+/**
+ * A type the device's parser visibly converted a bare literal to (#225).
+ *
+ * Only a conversion is evidence: `:parse` prints a string unquoted, so an
+ * unchanged rendering (`123`, `1.1.1.1`, `"2.2"`) proves nothing and the fact
+ * is absent. See `src/explain-live-types.ts`.
+ */
 export interface ExplainValueTypeFact {
-	value: string;
+	value: ObservedValueType;
+	/** The device's own rendering of the literal (`2.2` → `2.0.0.2`). */
+	rendered: string;
+	ev: string;
+}
+
+/**
+ * An argument's declared type, normalized from a schema source (#225).
+ *
+ * `values` are the leaf types the declaration mentions, not alternatives of
+ * one value: `gateway` (`Address[%Interface][@VRF]`) lists `ip`, `ip6`,
+ * `name` and `enum`. `declared` is the source's own top-level term, verbatim,
+ * so a consumer can tell a live `/console/inspect` declaration from a CLI
+ * Reference `Type` cell by `ev` and still read the original.
+ */
+export interface ExplainSchemaTypeFact {
+	values: SchemaValueType[];
+	/** Present only when the declaration spells a repetition; absence is not a claim. */
+	list?: true;
+	declared: string;
 	ev: string;
 }
 
@@ -635,7 +666,7 @@ export interface ExplainValueTypeFact {
 export interface ExplainValueFacts {
 	shapeHints?: ExplainValueShapeFact;
 	observedType?: ExplainValueTypeFact;
-	schemaType?: ExplainValueTypeFact;
+	schemaType?: ExplainSchemaTypeFact;
 }
 
 export interface ExplainValueOccurrence {
@@ -714,8 +745,11 @@ export interface ExplainEvidence {
 	normalization?: "original-utf8" | "sub-per-non-ascii-byte";
 	reason?: string;
 	errorCode?: CentrsError["code"];
-	/** The facet a live probe served; an `empty` facet answer is not a warning. */
-	facet?: "schema" | "complete";
+	/**
+	 * The facet a live probe served; an `empty` facet answer is not a warning.
+	 * `types` is the value-type probes (#225), which run on every live call.
+	 */
+	facet?: "schema" | "complete" | "types";
 }
 
 /** One `request=syntax` row, verbatim: the device's declared help for one argument. */
@@ -3041,7 +3075,10 @@ function renderValue(occurrence: ExplainValueOccurrence): string {
 	const shapes = occurrence.facts.shapeHints?.values.join("|") ?? "unknown";
 	const parent =
 		occurrence.parent === undefined ? "" : ` in=${occurrence.parent}`;
-	return `${occurrence.kind.padEnd(10)}${name}${parent} shapes=${shapes}`;
+	const observed = occurrence.facts.observedType;
+	const schema = occurrence.facts.schemaType;
+	const live = `${observed ? ` observed=${observed.value}(${observed.rendered})` : ""}${schema ? ` schema=${schema.values.join("|")}${schema.list ? "[list]" : ""}` : ""}`;
+	return `${occurrence.kind.padEnd(10)}${name}${parent} shapes=${shapes}${live}`;
 }
 
 function renderLiveSummary(live: ExplainLiveData): string {

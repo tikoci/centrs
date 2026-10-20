@@ -141,8 +141,14 @@ describe("live evidence controls", () => {
 		expect(
 			explainCommand(input).diagnostics.some((d) => d.span.start > 1),
 		).toBe(true);
+		// Only the analyzed input is rejected; the #225 type probe answers empty.
 		const data = await collect(input, {
-			execute: async () => ({ ret: "syntax error (line 1 column 2)" }) as never,
+			execute: async (request) =>
+				({
+					ret: request.script?.includes("bad-name")
+						? "syntax error (line 1 column 2)"
+						: "",
+				}) as never,
 		});
 		expect(data.diagnostics[0]?.code).toBe(
 			"explain/live-inspect/parse-rejected",
