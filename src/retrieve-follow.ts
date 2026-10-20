@@ -27,6 +27,7 @@ import {
 import {
 	buildRetrieveErrorEnvelope,
 	buildRetrieveErrorEnvelopeFromResolved,
+	notReachedValidationMeta,
 	type ResolvedRetrieveRequest,
 	type RetrieveFollowCounts,
 	type RetrieveFollowLine,
@@ -176,7 +177,7 @@ export async function* retrieveFollow(
 	if (options.signal?.aborted) {
 		yield interruptedSummary(
 			resolved,
-			{ enabled: resolved.validate.value, result: "skipped" },
+			notReachedValidationMeta(resolved, "interrupted"),
 			startedAt,
 		);
 		return;

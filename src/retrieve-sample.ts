@@ -16,6 +16,7 @@ import {
 	buildRetrieveErrorEnvelope,
 	buildRetrieveErrorEnvelopeFromResolved,
 	executeRetrieve,
+	notReachedValidationMeta,
 	type ResolvedRetrieveRequest,
 	type RetrieveRequest,
 	type RetrieveSampleStopReason,
@@ -85,7 +86,7 @@ export async function* retrieveSample(
 	if (options.signal?.aborted) {
 		yield summaryEnvelope(
 			resolved,
-			{ enabled: resolved.validate.value, result: "skipped" },
+			notReachedValidationMeta(resolved, "interrupted"),
 			{ stopReason: "interrupted", samples: 0 },
 			startedAt,
 		);

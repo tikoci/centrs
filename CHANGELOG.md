@@ -173,6 +173,13 @@ part of this section.
 
 ### Fixed
 
+- `retrieve --sample`, `--follow` and `--wait` no longer report a validation
+  verdict the gate never gave (#537). A cancellation before the gate ran now
+  reports the device stage `not reached` (`interrupted` for `--sample` and
+  `--follow`, `wait/interrupted` for `--wait`) instead of
+  `{enabled: true, result: "skipped"}`. A `--wait` cancelled after retried,
+  unanswered attempts no longer reports `result: "failed"`. With validation
+  off, all three report `{enabled: false, source: "disabled"}`.
 - Abbreviated output-file arguments (`fi=`, `file-n=`), and the spaced
   `file-name value` form under print/export/serialize, require write
   confirmation in `execute`, including inside scripts, and are refused for

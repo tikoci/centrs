@@ -87,8 +87,11 @@ alternatives in the error envelope.
 `failed` when the gate refuses: `validation/*`, or `--query` on a singleton.
 It is absent when a `transport/*`, `auth/*`, `routeros/*` or `internal/*` error
 stopped inspect from answering; the device stage then says `not reached`
-(examples 12 and 16b; 16c is the `passed` case). With `--validate=false` it
-is `{enabled: false, source: "disabled"}`.
+(examples 12 and 16b; 16c is the `passed` case). The same holds for a
+`wait/*` error from a `--wait` whose gate never settled, and for
+`--sample` / `--follow` cancelled before the gate ran. That last case has no
+error code, so its reason is `not reached: interrupted` (#537). With
+`--validate=false` it is `{enabled: false, source: "disabled"}`.
 
 If `--all-attributes` is combined with `--attribute(s)`, fail with
 `usage/conflicting-flags` *before* hitting the network.

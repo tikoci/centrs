@@ -625,28 +625,19 @@ const RETRIEVE_DEVICE_STAGE_SOURCE = "live /console/inspect";
  * an inspect answer: `validation/*`, and the singleton `--query` refusal
  * (`usage/conflicting-flags`). A `transport/*` or `auth/*` failure means the
  * device never answered; a `routeros/*` error is a device answer that is not
- * a verdict; `internal/*` is a centrs defect. Those four report no `result`.
+ * a verdict; `internal/*` is a centrs defect. A `wait/*` error ends a `--wait`
+ * whose gate never settled; one that settled reports its own result instead
+ * (#537). Those five report no `result`.
  */
 function unsettledValidationMeta(
 	resolved: ResolvedRetrieveRequest,
 	error: CentrsError,
 ): EnvelopeValidationMeta {
+	if (stoppedBeforeGateAnswer(error.code)) {
+		return notReachedValidationMeta(resolved, error.code);
+	}
 	if (!resolved.validate.value) {
 		return { enabled: false, source: "disabled" };
-	}
-	if (/^(transport|auth|routeros|internal)\//.test(error.code)) {
-		return {
-			enabled: true,
-			source: RETRIEVE_DEVICE_STAGE_SOURCE,
-			stages: [
-				{
-					stage: "device",
-					source: RETRIEVE_DEVICE_STAGE_SOURCE,
-					result: "skipped",
-					reason: notReachedReason(error.code),
-				},
-			],
-		};
 	}
 	return {
 		enabled: true,
@@ -657,6 +648,37 @@ function unsettledValidationMeta(
 				stage: "device",
 				source: RETRIEVE_DEVICE_STAGE_SOURCE,
 				result: "failed",
+			},
+		],
+	};
+}
+
+/** Whether an error code stops a run without being a gate answer (GH#435, #537). */
+export function stoppedBeforeGateAnswer(code: string): boolean {
+	return /^(transport|auth|routeros|internal|wait)\//.test(code);
+}
+
+/**
+ * `meta.validation` when the gate was never reached. `cause` is the error code
+ * that stopped it, or `interrupted` for a caller's cancellation, which has no
+ * code (#537).
+ */
+export function notReachedValidationMeta(
+	resolved: ResolvedRetrieveRequest,
+	cause: string,
+): EnvelopeValidationMeta {
+	if (!resolved.validate.value) {
+		return { enabled: false, source: "disabled" };
+	}
+	return {
+		enabled: true,
+		source: RETRIEVE_DEVICE_STAGE_SOURCE,
+		stages: [
+			{
+				stage: "device",
+				source: RETRIEVE_DEVICE_STAGE_SOURCE,
+				result: "skipped",
+				reason: notReachedReason(cause),
 			},
 		],
 	};
