@@ -156,6 +156,10 @@ async function expectRetrieveSuccess(
 		| { source?: string }
 		| undefined;
 	expect(validation?.source).toContain("/console/inspect");
+	// A gated success reports its device stage (#535).
+	expect(envelope.meta.validation?.stages).toEqual([
+		{ stage: "device", source: validation?.source, result: "passed" },
+	]);
 	return envelope;
 }
 

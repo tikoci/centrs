@@ -67,9 +67,9 @@ centrs execute $R ':local a true; :if ($a = true) do={:put [/system/identity/get
 
 Envelope: `ok: true`, `data` is string-shaped (`data.output` or `data.ret`) and
 contains the CHR identity name, `meta.via=rest-api`, and
-`meta.validation.syntax=true`. `meta.validation.semantic` is absent or marked
-`not-applicable` because `/console/inspect` validates path-shaped commands, not
-arbitrary script expressions. The `$a` variable must survive the validation
+`meta.validation.syntax=true`. `meta.validation.semantic` is absent because
+`/console/inspect` validates path-shaped commands, not arbitrary script
+expressions (#535). The `$a` variable must survive the validation
 wrapper: if that outer string expands it before `:parse`, this example fails even
 though RouterOS accepts the original command.
 
@@ -490,8 +490,8 @@ Envelope: `ok: false`, `error.code=validation/package-missing`,
 `error.context.packages` names the published package, the remediation points at
 `/system/package/print` and never at the syntax, and `error.position` and
 `error.context.detail` keep RouterOS's own column and words. V5–V7 all report
-`meta.validation.syntax=false`. `semantic` is absent, or `not-applicable` for
-the script-shaped `/container print` (GH#435).
+`meta.validation.syntax=false`, and `semantic` is absent because the
+name-level check was never asked (GH#435, #535).
 
 ### V6. A menu no RouterOS build has is an unknown path
 

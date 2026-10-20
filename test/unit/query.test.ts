@@ -16,6 +16,7 @@ import {
 import { inspectWhereBooleans } from "../../src/core/inspect.ts";
 import { compileQueryWords, parseQueries } from "../../src/core/query.ts";
 import { CentrsError } from "../../src/errors.ts";
+import { OFFLINE_GATE_SOURCE } from "../../src/offline-gate.ts";
 import { type RetrieveRequest, retrieve } from "../../src/retrieve.ts";
 
 const ENV = {
@@ -293,6 +294,42 @@ describe("api --query", () => {
 		expect(router.posts.some((post) => post.body["input"] !== undefined)).toBe(
 			true,
 		);
+	});
+
+	test("a structured success reports the device stage and no syntax summary (#535)", async () => {
+		// A structured request runs no `:parse`, so `syntax` is absent rather
+		// than `false`; `/console/inspect` answered, so `semantic` is present.
+		const router = new FakeRouter();
+		routers.push(router);
+		const envelope = await apiEnvelope(
+			{
+				endpoint: "/ip/firewall/address-list",
+				targetInput: router.url,
+				username: "u",
+				password: "p",
+			},
+			ENV,
+		);
+		expect(envelope.ok).toBe(true);
+		expect(envelope.meta.validation).toEqual({
+			enabled: true,
+			source: "/console/inspect request=child",
+			result: "passed",
+			semantic: true,
+			stages: [
+				{
+					stage: "offline",
+					source: OFFLINE_GATE_SOURCE,
+					result: "skipped",
+					reason: "structured path request, not a CLI string (GH#354)",
+				},
+				{
+					stage: "device",
+					source: "/console/inspect request=child",
+					result: "passed",
+				},
+			],
+		});
 	});
 
 	test("a bare name without validation is refused", async () => {

@@ -28,7 +28,7 @@ interface ExecuteSuccessEnvelope {
 		validation?: {
 			source?: string;
 			syntax?: boolean;
-			semantic?: boolean | string;
+			semantic?: boolean;
 			enabled?: boolean;
 		};
 	};
@@ -49,7 +49,7 @@ interface ExecuteFailureEnvelope {
 			source?: string;
 			result?: string;
 			syntax?: boolean;
-			semantic?: boolean | string;
+			semantic?: boolean;
 			stages?: readonly {
 				stage: string;
 				source: string;
@@ -214,7 +214,7 @@ describeFast("execute against CHR", () => {
 			expect(liveIdentity.length).toBeGreaterThan(0);
 			expect(JSON.stringify(script.data)).toContain(liveIdentity);
 			expect(script.meta.validation?.syntax).toBe(true);
-			expect(script.meta.validation?.semantic).toBe("not-applicable");
+			expect(script.meta.validation).not.toHaveProperty("semantic");
 
 			expectExecuteFailure(
 				await executeEnvelope({
@@ -599,12 +599,10 @@ describeFast("execute against CHR", () => {
 					"(line 1 column",
 				);
 				expect(rejected.error.position).toBeDefined();
-				// GH#435: `:parse` refused the command. A script-shaped line
-				// (`/container print`) has no semantic half at all.
+				// GH#435: `:parse` refused the command, so the name-level check
+				// was never asked and there is no `semantic` summary (#535).
 				expect(rejected.meta.validation?.syntax).toBe(false);
-				expect(rejected.meta.validation?.semantic).toBe(
-					command.includes(" ") ? "not-applicable" : undefined,
-				);
+				expect(rejected.meta.validation).not.toHaveProperty("semantic");
 			}
 
 			// V8 (GH#435) — wrong credentials: the device answers 401 before the

@@ -248,6 +248,19 @@ describe("transfer upload (rest)", () => {
 				method: "rest",
 			});
 			expect(envelope.meta.via).toBe("rest-api");
+			// A gated success reports its stage, like every other gate (#535).
+			expect(envelope.meta.validation).toEqual({
+				enabled: true,
+				source: "device /file existence probe",
+				result: "passed",
+				stages: [
+					{
+						stage: "device",
+						source: "device /file existence probe",
+						result: "passed",
+					},
+				],
+			});
 			const paths = fetchMock.calls.map((c) => new URL(c.url).pathname);
 			expect(paths).toEqual([
 				"/rest/file/print",

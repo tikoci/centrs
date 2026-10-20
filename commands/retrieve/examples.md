@@ -22,7 +22,8 @@ centrs retrieve $R /system/resource --username $U --password $P --json
 ```
 
 Envelope: `ok: true`, `data` is an object, `meta.via=rest-api`,
-`meta.validation.source=/console/inspect`.
+`meta.validation.source=/console/inspect`, and `meta.validation.stages` is the
+one `device: passed` stage (#535).
 
 ### 2. /system/identity
 

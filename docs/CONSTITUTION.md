@@ -73,15 +73,20 @@ gate passed keeps `passed`. When something stopped the gate before it gave a
 verdict (a `transport/*` or `auth/*` failure, a device error that is not a
 gate answer, or a refusal before the gate ran), `result` and the
 `syntax`/`semantic` summaries are absent. Each stage the gate did not reach is
-then `skipped` with `reason: "not reached: <error.code>"` (GH#435). On an
-`execute` rejection, `syntax: true` survives only for a name-level refusal (an
-unknown attribute in a structured command). Any other device or offline
-refusal is `syntax: false`, and `semantic` is then absent (`not-applicable` for
-script input), because the name-level check was never asked. `api`'s
-structured requests run no `:parse`, so their `syntax: false` means "not run",
-even on success. That overload is part of the review below. This is an
-interim shape: the validation meta across commands is reviewed again with live
-`explain` (#236).
+then `skipped` with `reason: "not reached: <error.code>"` (GH#435).
+
+The flat `syntax` / `semantic` fields summarize `stages[]`, and each is present
+**only when a stage gave that verdict** (#535). Absent means no stage was
+asked, never "passed" and never "failed". So `--validate=false` carries
+neither. A script has no `semantic` field, because it has no names to check,
+and `api`'s structured requests have no `syntax` field, because they run no
+`:parse`. On a rejection, `syntax: true` with `semantic: false` is a
+name-level refusal (an unknown attribute in a structured command). A `:parse`
+or offline refusal is `syntax: false` with no `semantic`. Every gated success
+reports its `stages[]`, retrieve and transfer included. `explain` is not a
+gate, because it never runs the input: its `meta.validation` is
+`{ enabled: false }` with no `result`, offline and live, and its verdict is
+`data.verdict`.
 
 `--validate=false` disables **both** stages — one flag, one meaning. A bypass
 that covered only the device stage would leave a caller stranded behind a

@@ -431,7 +431,7 @@ test("actual REST authentication failure keeps resolved target and produces a co
 			kind: "config",
 			key: "CENTRS_FORMAT",
 		});
-		expect(result.meta.validation).toBeUndefined();
+		expect(result.meta.validation).toEqual({ enabled: false });
 		expect(JSON.stringify(result)).not.toContain("test-only");
 	} finally {
 		await server.stop(true);

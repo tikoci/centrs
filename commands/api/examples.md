@@ -156,7 +156,7 @@ centrs api $R execute -X POST -f script=':put [/system/identity/get name]' --use
 ```
 
 Envelope: `ok: true`, `data` is string-shaped and contains the CHR identity;
-`meta.validation.semantic=not-applicable` (script, not a path) and
+`meta.validation.syntax=true` with no `semantic` field (script, not a path) and
 `meta.validation.stages` is `offline: passed` then live `device: passed` from
 `:put [:parse ...]`.
 

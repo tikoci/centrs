@@ -1401,13 +1401,24 @@ function buildSuccessEnvelope(
 		data,
 		warnings,
 		tips: [],
-		meta: metaFromResolved(resolved, operationData, {
-			enabled: resolved.validate.value,
-			source: resolved.validate.value
-				? "device /file existence probe"
-				: "disabled",
-			result: resolved.validate.value ? "passed" : "skipped",
-		}),
+		meta: metaFromResolved(
+			resolved,
+			operationData,
+			resolved.validate.value
+				? {
+						enabled: true,
+						source: TRANSFER_DEVICE_STAGE_SOURCE,
+						result: "passed",
+						stages: [
+							{
+								stage: "device",
+								source: TRANSFER_DEVICE_STAGE_SOURCE,
+								result: "passed",
+							},
+						],
+					}
+				: { enabled: false, source: "disabled", result: "skipped" },
+		),
 	};
 }
 
@@ -1491,6 +1502,8 @@ function asTransferError(error: unknown): CentrsError {
  * see which host, user and credential sources were tried. Secrets never enter
  * it — auth meta is `username` + `passwordProvided` only.
  */
+const TRANSFER_DEVICE_STAGE_SOURCE = "device /file existence probe";
+
 export function buildTransferErrorEnvelopeFromResolved(
 	resolved: ResolvedTransferRequest,
 	error: unknown,
@@ -1512,7 +1525,7 @@ export function buildTransferErrorEnvelopeFromResolved(
 			{
 				enabled: resolved.validate.value,
 				source: resolved.validate.value
-					? "device /file existence probe"
+					? TRANSFER_DEVICE_STAGE_SOURCE
 					: "disabled",
 			},
 		),

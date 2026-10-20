@@ -134,7 +134,8 @@ gate is `/console/inspect` — **not** `:put [:parse]`:
   does) answers normally on the same build. See the 7.12.2 finding in
   `AGENTS.md` (GH#343).
 - **Carve-out:** a script-shaped `POST /rest/execute` is a CLI string, not a path,
-  so structured inspect is `not-applicable` (`meta.validation.semantic`). It
+  so structured inspect does not apply and `meta.validation.semantic` is
+  absent. It
   follows the CLI-string pipeline instead: offline analysis, then live
   `:put [:parse ...]`, then run. An offline rejection is still a byte span with
   no connection; an offline pass or abstention continues to the device stage.

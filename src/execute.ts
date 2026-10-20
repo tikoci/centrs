@@ -664,20 +664,15 @@ function failedValidationMeta(
 	}
 	const deviceSource = deviceStageSource(resolved);
 	const structured = resolved.canonical.mode === "structured";
-	// A flat summary is present only when its check gave a verdict (GH#435).
-	// Script-shaped input has no semantic half at all: `not-applicable`. For
-	// structured input, a syntax rejection means the name-level check was
-	// never asked, so `semantic` is left out rather than reported `false`.
-	const semanticNotReached = structured
-		? {}
-		: { semantic: "not-applicable" as const };
+	// A flat summary is present only when a stage gave that verdict (#535). A
+	// syntax rejection means the name-level check was never asked, so
+	// `semantic` is left out rather than reported `false`.
 	if (isOfflineGateRejection(error)) {
 		return {
 			enabled: true,
 			source: OFFLINE_GATE_SOURCE,
 			result: "failed",
 			syntax: false,
-			...semanticNotReached,
 			stages: [
 				{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "failed" },
 				{
@@ -705,9 +700,7 @@ function failedValidationMeta(
 			enabled: true,
 			source: deviceSource,
 			result: "failed",
-			...(nameRejected
-				? { syntax: true, semantic: false }
-				: { syntax: false, ...semanticNotReached }),
+			...(nameRejected ? { syntax: true, semantic: false } : { syntax: false }),
 			stages: [
 				offlineStagePassed(trace?.offlineVerdict),
 				{ stage: "device", source: deviceSource, result: "failed" },
@@ -781,15 +774,14 @@ export function offlineStagePassed(
  * `validate=false`. Both stages are listed as `skipped` rather than omitted:
  * the constitution's rule is that a gated surface always reports each stage, so
  * a consumer reading `stages` never has to special-case the disabled shape.
- * `reason` is left off — `enabled: false` already says why.
+ * `reason` is left off — `enabled: false` already says why. No stage answered,
+ * so there is no `syntax` / `semantic` summary (#535).
  */
 export function disabledValidationMeta(): EnvelopeValidationMeta {
 	return {
 		enabled: false,
 		source: "disabled",
 		result: "skipped",
-		syntax: false,
-		semantic: false,
 		stages: [
 			{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "skipped" },
 			{ stage: "device", source: "device preflight", result: "skipped" },
@@ -862,7 +854,6 @@ async function validateExecuteCommand(
 			source: ":put [:parse]",
 			result: "passed",
 			syntax: true,
-			semantic: "not-applicable",
 			stages: passedStages(offline, ":put [:parse]"),
 		};
 	}
@@ -929,8 +920,7 @@ async function validateConsoleParseCommand(
 		source: `:put [:parse ...] over ${resolved.via.value}`,
 		result: "passed",
 		syntax: true,
-		semantic:
-			resolved.canonical.mode === "structured" ? true : "not-applicable",
+		...(resolved.canonical.mode === "structured" ? { semantic: true } : {}),
 		stages: passedStages(
 			offline,
 			`:put [:parse ...] over ${resolved.via.value}`,

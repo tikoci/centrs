@@ -29,7 +29,8 @@ interface SuccessEnvelope {
 		via: string;
 		validation?: {
 			source?: string;
-			semantic?: boolean | string;
+			syntax?: boolean;
+			semantic?: boolean;
 			enabled?: boolean;
 		} & ValidationStages;
 		operation?: { request?: { path?: string } };
@@ -95,6 +96,18 @@ describeFast("api against CHR (rest-api)", () => {
 			);
 			asArray(list.data);
 			expect(list.meta.validation?.source).toContain("/console/inspect");
+			// A structured request runs no `:parse`: no `syntax` summary (#535).
+			expect(list.meta.validation).not.toHaveProperty("syntax");
+			expect(list.meta.validation?.semantic).toBe(true);
+			expect(
+				list.meta.validation?.stages?.map((stage) => [
+					stage.stage,
+					stage.result,
+				]),
+			).toEqual([
+				["offline", "skipped"],
+				["device", "passed"],
+			]);
 			expect(list.meta.operation?.request?.path).toBe("/ip/address");
 
 			// 2. Endpoint-normalization variants resolve to the same path.
@@ -264,6 +277,8 @@ describeFast("api against CHR (rest-api)", () => {
 				"rest-api",
 			);
 			expect(raw.meta.validation?.enabled).toBe(false);
+			expect(raw.meta.validation).not.toHaveProperty("syntax");
+			expect(raw.meta.validation).not.toHaveProperty("semantic");
 			asArray(raw.data);
 
 			// 14. --raw RouterOS error → ok:false, a RouterOS-mapped error code.
@@ -318,7 +333,9 @@ describeFast("api against CHR (rest-api)", () => {
 				"rest-api",
 			);
 			expect(JSON.stringify(script.data)).toContain(identity);
-			expect(script.meta.validation?.semantic).toBe("not-applicable");
+			// A script has no names to check, so no `semantic` summary (#535).
+			expect(script.meta.validation?.syntax).toBe(true);
+			expect(script.meta.validation).not.toHaveProperty("semantic");
 			// A CLI string uses live `:parse`, not structured `/console/inspect`.
 			expect(script.meta.validation?.stages?.[0]).toMatchObject({
 				stage: "offline",

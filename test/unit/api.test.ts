@@ -751,7 +751,6 @@ describe("api validation metadata survives the error boundary (#354, PR #356 rev
 			enabled: true,
 			source: "/console/inspect request=child",
 			result: "passed" as const,
-			syntax: false,
 			semantic: true,
 		};
 		const envelope = buildApiErrorEnvelopeFromResolved(
@@ -806,12 +805,31 @@ describe("api validation metadata survives the error boundary (#354, PR #356 rev
 		expect(envelope.meta.validation).toMatchObject({
 			source: ":put [:parse]",
 			result: "failed",
-			semantic: "not-applicable",
+			syntax: false,
 			stages: [
 				{ stage: "offline", result: "passed" },
 				{ stage: "device", source: ":put [:parse]", result: "failed" },
 			],
 		});
+		expect(envelope.meta.validation).not.toHaveProperty("semantic");
+	});
+
+	test("a structured device rejection is a name-level verdict with no syntax summary (#535)", async () => {
+		// A structured request runs no `:parse`; `/console/inspect` refused it.
+		const resolved = await resolveApiRequest({ ...base }, {});
+		const envelope = buildApiErrorEnvelopeFromResolved(
+			resolved,
+			new CentrsError({
+				code: "validation/unknown-attribute",
+				summary: "unknown attribute",
+			}),
+			{},
+		);
+		expect(envelope.meta.validation).toMatchObject({
+			result: "failed",
+			semantic: false,
+		});
+		expect(envelope.meta.validation).not.toHaveProperty("syntax");
 	});
 
 	test("--raw (validation disabled) lists both stages as skipped", async () => {
@@ -821,6 +839,9 @@ describe("api validation metadata survives the error boundary (#354, PR #356 rev
 			new CentrsError({ code: "transport/unreachable", summary: "nope" }),
 		);
 		expect(envelope.meta.validation?.enabled).toBe(false);
+		// No stage answered, so no flat summary claims one did (#535).
+		expect(envelope.meta.validation).not.toHaveProperty("syntax");
+		expect(envelope.meta.validation).not.toHaveProperty("semantic");
 		expect(
 			(envelope.meta.validation?.stages ?? []).map((stage) => [
 				stage.stage,

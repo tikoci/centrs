@@ -184,7 +184,7 @@ green on CHR 7.23.1.
   validity (`request=child` ⇒ `validation/unknown-attribute`) fire
   identically over rest-api and native-api, **before** any write — no `:put
   [:parse]` involved (api input is a path, not a CLI string). A `/execute` script
-  is a CLI string ⇒ `meta.validation.semantic = "not-applicable"`.
+  is a CLI string ⇒ no `meta.validation.semantic` field (#535).
 
 ## CONFIRMED ON CHR (RouterOS 7.12.2 compatibility — GH#343, 2026-09-14)
 
