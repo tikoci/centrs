@@ -2695,8 +2695,8 @@ says so.
   not.
 - `variable`: a `where` clause, whose property names RouterOS scopes as
   variables (`where comm` → `comment`).
-- `value`: after `name=`. Candidates are `source: "observed"` and may include
-  configuration state, such as interface names. They are never a closed set:
+- `value`: after `name=`. Candidates may include configuration state, such as
+  interface names. They are never a closed set:
   `chain=` offers `forward`, `input` and `output`, but custom chains are legal.
   For a command argument, `syntax` carries its declared type text, so a
   free-form `comment=` returns no candidates and `string value`. A `where`
@@ -2706,7 +2706,10 @@ says so.
   spelling, and other tokens the device does not class as a path, name or
   value.
 
-Names and verbs are `source: "declared"`. `path` names the command at the
+Every candidate is an observation of the completion probe its `ev` cites.
+The declared side is `data.schema`: `child` names and argument `syntax`. So
+completion carries no second provenance label, and nothing in it is a closed
+set. `path` names the command at the
 cursor when it is known. It comes from the offline statement or `[…]`
 substitution when that resolved, otherwise from the device's `dir`/`cmd` runs.
 The command is needed only for a value's `syntax`. When it is not visible (a

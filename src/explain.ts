@@ -786,15 +786,16 @@ export interface ExplainCompletionCandidate {
 	kind: "menu" | "verb" | "argument" | "variable" | "value";
 	/** `exact` when the typed prefix already spells the whole candidate. */
 	match: "partial" | "exact";
-	/**
-	 * `declared` names come from `child`; `observed` values come from
-	 * `completion` and may reflect configuration state. Neither is a closed set.
-	 */
-	source: "declared" | "observed";
+	/** The input-completion probe that offered it. */
 	ev: string;
 }
 
-/** `--complete`: what may follow at the cursor (#492). */
+/**
+ * `--complete`: what may follow at the cursor (#492). Every candidate is an
+ * observation: the device's input completion, cited by `ev`. It is never a
+ * closed set, and a value may reflect configuration state (interface names).
+ * Declared facts (`child`, argument `syntax`) live in {@link ExplainSchema}.
+ */
 export interface ExplainCompletion {
 	/** Analyzed byte offset; equals the device's UTF-8 byte offset. */
 	cursor: number;

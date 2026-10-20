@@ -108,7 +108,6 @@ const cases: {
 				expect.objectContaining({
 					text: "comment",
 					match: "partial",
-					source: "declared",
 				}),
 			);
 			expect(
@@ -157,9 +156,10 @@ const cases: {
 			const values = completion?.candidates.map((c) => c.text);
 			for (const chain of ["forward", "input", "output"])
 				expect(values).toContain(chain);
-			expect(completion?.candidates.every((c) => c.source === "observed")).toBe(
-				true,
-			);
+			expect(
+				data.evidence.find((e) => e.id === completion?.candidates[0]?.ev)
+					?.probe,
+			).toBe("completion");
 		},
 	},
 	{

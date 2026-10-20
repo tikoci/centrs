@@ -253,7 +253,7 @@ centrs explain $R '/ip/firewall/filter add chain=' -u $U -p $P --complete --json
 ```
 
 With the input ending in `=`, candidates are **values** for `chain`
-(`forward`, `input`, `output` — `source: "observed"`, never a closed set). For
+(`forward`, `input`, `output` — observed from the completion probe, never a closed set). For
 a free-form argument like `comment=`, the same probe yields no candidates and
 `data.completion.syntax` carries `string value`. An unclosed substitution
 (`:local x [/ip/address add interface=`) still completes, from the device's

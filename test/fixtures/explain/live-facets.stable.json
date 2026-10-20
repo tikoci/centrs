@@ -5077,7 +5077,6 @@
 						"text": "comment",
 						"kind": "argument",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live4"
 					}
 				],
@@ -5229,7 +5228,6 @@
 						"text": "comment",
 						"kind": "argument",
 						"match": "exact",
-						"source": "declared",
 						"ev": "live4"
 					}
 				],
@@ -5462,7 +5460,6 @@
 						"text": "detail",
 						"kind": "argument",
 						"match": "exact",
-						"source": "declared",
 						"ev": "live4"
 					}
 				],
@@ -5993,21 +5990,18 @@
 						"text": "forward",
 						"kind": "value",
 						"match": "partial",
-						"source": "observed",
 						"ev": "live4"
 					},
 					{
 						"text": "input",
 						"kind": "value",
 						"match": "partial",
-						"source": "observed",
 						"ev": "live4"
 					},
 					{
 						"text": "output",
 						"kind": "value",
 						"match": "partial",
-						"source": "observed",
 						"ev": "live4"
 					}
 				],
@@ -6441,14 +6435,12 @@
 						"text": "ether1",
 						"kind": "value",
 						"match": "partial",
-						"source": "observed",
 						"ev": "live4"
 					},
 					{
 						"text": "lo",
 						"kind": "value",
 						"match": "partial",
-						"source": "observed",
 						"ev": "live4"
 					}
 				],
@@ -6591,14 +6583,12 @@
 						"text": "remove",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					},
 					{
 						"text": "reset",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					}
 				],
@@ -6764,7 +6754,6 @@
 						"text": "comment",
 						"kind": "argument",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live5"
 					}
 				],
@@ -6865,7 +6854,6 @@
 						"text": "comment",
 						"kind": "argument",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					}
 				],
@@ -7126,84 +7114,72 @@
 						"text": "add",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					},
 					{
 						"text": "comment",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					},
 					{
 						"text": "disable",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					},
 					{
 						"text": "edit",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					},
 					{
 						"text": "enable",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					},
 					{
 						"text": "export",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					},
 					{
 						"text": "find",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					},
 					{
 						"text": "get",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					},
 					{
 						"text": "print",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					},
 					{
 						"text": "remove",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					},
 					{
 						"text": "reset",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					},
 					{
 						"text": "set",
 						"kind": "verb",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live3"
 					}
 				],
@@ -7734,7 +7710,6 @@
 						"text": "comment",
 						"kind": "variable",
 						"match": "partial",
-						"source": "declared",
 						"ev": "live4"
 					}
 				],
@@ -7978,14 +7953,12 @@
 						"text": "no",
 						"kind": "value",
 						"match": "partial",
-						"source": "observed",
 						"ev": "live4"
 					},
 					{
 						"text": "yes",
 						"kind": "value",
 						"match": "partial",
-						"source": "observed",
 						"ev": "live4"
 					}
 				],

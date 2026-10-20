@@ -333,7 +333,7 @@ async function complete(
 			? undefined
 			: reading?.resolution === "resolved" && reading.kind === "command"
 				? pathTokens(`${reading.command.path}/${reading.command.verb}`)
-				: runPath(ctx.analyzed, classes, role.start, true);
+				: commandPath(ctx.analyzed, classes, role.start);
 	if (command) result.path = slashPath(command);
 	if (role.context === "value") result.argument = role.argument;
 
@@ -372,7 +372,6 @@ async function complete(
 				text,
 				kind,
 				match: text === result.prefix ? "exact" : "partial",
-				source: role.context === "value" ? "observed" : "declared",
 				ev: probe.ev.id,
 			});
 	}
@@ -541,16 +540,15 @@ function valueStart(
 }
 
 /**
- * Menu tokens (and, with `verb`, the command word) from the `dir`/`cmd` runs
- * before `start`. Groups closed before the cursor are skipped; a `{` continues
+ * The command (menu tokens plus the verb) from the `dir`/`cmd` runs before
+ * `start`. Groups closed before the cursor are skipped; a `{` continues
  * outward only after a menu (`/ip { address …`). Relative runs are accepted at
  * the start of the input only, where the context is the root.
  */
-function runPath(
+function commandPath(
 	text: string,
 	classes: readonly string[],
 	start: number,
-	verb: boolean,
 ): string[] | undefined {
 	const runs: string[] = [];
 	let command: string | undefined;
@@ -568,14 +566,13 @@ function runPath(
 				depth--;
 				continue;
 			}
-			if (ch !== "{" || runs.length === 0 || (verb && command === undefined))
-				return;
+			if (ch !== "{" || runs.length === 0 || command === undefined) return;
 			continue;
 		}
 		if (depth > 0) continue;
 		if (ch === ";" || ch === "\n" || ch === "\r") return;
 		if (cls === "cmd") {
-			if (!verb || command !== undefined || runs.length > 0) return;
+			if (command !== undefined || runs.length > 0) return;
 			let s = i;
 			while (s > 0 && classes[s - 1] === "cmd") s--;
 			command = text.slice(s, i + 1);
@@ -591,11 +588,13 @@ function runPath(
 			if (run.startsWith("/") || run.startsWith(":")) break;
 		}
 	}
-	if (verb && command === undefined) return;
+	if (command === undefined) return;
 	const absolute = runs[0]?.startsWith("/") || runs[0]?.startsWith(":");
 	if (!absolute && i >= 0) return;
-	const tokens = runs.flatMap((run) => run.split(/[/\s:]+/).filter(Boolean));
-	return command === undefined ? tokens : [...tokens, command];
+	return [
+		...runs.flatMap((run) => run.split(/[/\s:]+/).filter(Boolean)),
+		command,
+	];
 }
 
 // ---------------------------------------------------------------- probes
