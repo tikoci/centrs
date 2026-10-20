@@ -2,36 +2,33 @@
  * Live `--schema` (describe) and `--complete` (cursor completion) for explain
  * (#492). Read-only `/console/inspect` only; the analyzed input never runs.
  *
- * ## Which probe shapes are allowed (CHR 7.12.2 / 7.23.8 / 7.24.5)
+ * ## Which probe shapes are allowed (CHR 7.12.2 / 7.20.8 / 7.23.8 / 7.24.5)
  *
  * - `child` at any path: names, node kinds, unique-abbreviation resolution.
- *   Safe on every build tried, including root and scripting keywords.
- * - `syntax` at an ARGUMENT path (`ip,address,add,comment`): declared type text.
- * - `completion input="… <name>="`: values for an identified argument, and the
- *   `.proplist` / `value-name` name sets.
+ * - `syntax` at an ARGUMENT path (`ip,address,add,comment`, `put,message`):
+ *   declared type text.
+ * - `completion` with `input=` (the text before the cursor) at any position,
+ *   scripting keywords included: the device's own candidates.
  *
- * Never sent: `syntax` at a COMMAND path (`ip,address,set`) hangs the REST
- * handler on 7.12.2 and stalls every request behind it for about 40 s, and
- * command-level `completion` does the same (`commands/api/AGENTS.md`). Argument
- * names therefore come from `child` and are filtered by the typed prefix here.
- * Scripting-keyword commands keep the foundation's pre-7.21.4 skip for
- * `syntax`/`completion`.
+ * Never sent: `syntax` or `completion` with `path=` set to a COMMAND
+ * (`ip,address,set`). On 7.12.2 and 7.20.8 REST stops answering for about
+ * 30 s and native API closes the connection (`commands/api/AGENTS.md`). The
+ * restraml crawlers never hit this: they send `syntax` to `arg` nodes only.
  *
  * ## Where the cursor is comes from the device
  *
- * The highlight classes of the input before the cursor decide whether the
- * cursor is in a path, an argument name or a value. Incomplete assist input
- * (`[/ip/address add interface=`) has no offline reading, so the command a name
- * or value belongs to is the offline statement when it resolved, otherwise the
- * `dir`/`cmd` runs the device highlighted. A relative path whose context the
- * device runs do not show abstains.
+ * Candidates and their replace offset come from input completion, so a
+ * relative path, a block or a `where` clause completes exactly as on the
+ * console. The highlight classes of the input before the cursor name the
+ * context (path, argument name, variable, value). The command whose argument
+ * syntax is read for a value is the offline statement when it resolved,
+ * otherwise the `dir`/`cmd` runs the device highlighted.
  */
 import {
 	extractCompletionNames,
 	type InspectCompletionItem,
 	pathTokens,
 } from "./core/inspect.ts";
-import { routerOsVersionAtLeast } from "./core/preflight.ts";
 import { CentrsError } from "./errors.ts";
 import {
 	analyzeCoordinates,
@@ -169,12 +166,7 @@ async function describe(
 	}
 	if (kind === "arg") {
 		schema.node = "argument";
-		const syntax = await syntaxProbe(
-			ctx,
-			tokens,
-			tokens.slice(0, -1),
-			"schema",
-		);
+		const syntax = await syntaxProbe(ctx, tokens, "schema");
 		if (syntax.rows) schema.syntax = syntax.rows;
 		return schema;
 	}
@@ -189,7 +181,6 @@ async function describe(
 				const syntax = await syntaxProbe(
 					ctx,
 					[...tokens, argument.name],
-					tokens,
 					"schema",
 				);
 				argument.ev = syntax.ev.id;
@@ -257,11 +248,16 @@ async function proplist(
 	limits: Limits,
 ): Promise<ExplainSchema["proplist"]> {
 	let result: ExplainSchema["proplist"];
-	for (const [source, input] of [
-		["print-proplist", `${slashPath(menu)}/print proplist=`],
-		["get-value-name", `${slashPath(menu)}/get value-name=`],
+	for (const [source, verb, input] of [
+		["print-proplist", "print", `${slashPath(menu)}/print proplist=`],
+		["get-value-name", "get", `${slashPath(menu)}/get value-name=`],
 	] as const) {
-		const probe = await completionProbe(ctx, input, menu, "schema");
+		const probe = await completionProbe(
+			ctx,
+			input,
+			slashPath([...menu, verb]),
+			"schema",
+		);
 		if (!probe.rows) return result;
 		const names = [...new Set(shownNames(probe.rows))].sort();
 		result = { ev: probe.ev.id, source, names };
@@ -296,7 +292,8 @@ function describeTokens(
 type CursorRole =
 	| { context: "path"; start: number }
 	| { context: "argument-name"; start: number }
-	| { context: "value"; start: number; argument: string }
+	| { context: "variable"; start: number }
+	| { context: "value"; start: number; argument: string; query: boolean }
 	| { context: "unsupported"; start: number; reason: string };
 
 async function complete(
@@ -330,95 +327,75 @@ async function complete(
 		result.reason = role.reason;
 		return result;
 	}
-	if (role.context === "path") {
-		const parent = runPath(ctx.analyzed, classes, role.start, false);
-		if (!parent) {
-			result.reason =
-				"The path's menu context is not visible before the cursor; give an absolute path.";
-			return result;
-		}
-		result.context = "path";
-		result.path = slashPath(parent);
-		const probe = await childProbe(ctx, parent, "complete");
-		const candidates = (probe.rows ?? [])
-			.filter(
-				(row) => row.type === "child" && row.name?.startsWith(result.prefix),
-			)
-			.flatMap((row): ExplainCompletionCandidate[] => {
-				const kind = row["node-type"];
-				if (!row.name || (kind !== "cmd" && kind !== "dir" && kind !== "path"))
-					return [];
-				return [
-					candidate(
-						row.name,
-						kind === "cmd" ? "verb" : "menu",
-						result.prefix,
-						"declared",
-						probe.ev,
-					),
-				];
-			});
-		return finish(result, candidates, limits, probe.ev);
-	}
+	result.context = role.context;
 	const command =
-		reading?.resolution === "resolved" && reading.kind === "command"
-			? pathTokens(`${reading.command.path}/${reading.command.verb}`)
-			: runPath(ctx.analyzed, classes, role.start, true);
-	if (!command) {
-		result.reason =
-			"The command at the cursor could not be resolved from the input or the device highlight.";
-		return result;
-	}
-	result.path = slashPath(command);
-	if (role.context === "argument-name") {
-		result.context = "argument-name";
-		const probe = await childProbe(ctx, command, "complete");
-		const names = childNames(
-			(probe.rows ?? []).filter((row) => row.type === "child"),
-			(k) => k === "arg",
-		).filter((name) => name.startsWith(result.prefix));
-		const exact = names.includes(result.prefix) && result.prefix !== "";
-		if (exact) {
-			const value = await completionProbe(
-				ctx,
-				`${ctx.analyzed.slice(0, cursor)}=`,
-				command,
-				"complete",
-			);
-			if (value.rows) result.takesValue = value.rows.length > 0;
-		}
-		return finish(
-			result,
-			names.map((name) =>
-				candidate(name, "argument", result.prefix, "declared", probe.ev),
-			),
-			limits,
-			probe.ev,
-		);
-	}
-	result.context = "value";
-	result.argument = role.argument;
+		role.context === "path"
+			? undefined
+			: reading?.resolution === "resolved" && reading.kind === "command"
+				? pathTokens(`${reading.command.path}/${reading.command.verb}`)
+				: runPath(ctx.analyzed, classes, role.start, true);
+	if (command) result.path = slashPath(command);
+	if (role.context === "value") result.argument = role.argument;
+
 	const probe = await completionProbe(
 		ctx,
 		ctx.analyzed.slice(0, cursor),
-		command,
+		result.path ?? "",
 		"complete",
 	);
-	const syntax = await syntaxProbe(
-		ctx,
-		[...command, role.argument],
-		command,
-		"complete",
+	const rows = probe.rows ?? [];
+	// Navigation punctuation (`/`, `:`, `..`) is offered everywhere; it names nothing.
+	const shown = rows.filter(
+		(row) =>
+			row["show"] === "true" &&
+			row["style"] !== "syntax-meta" &&
+			/[A-Za-z0-9]/.test(String(row["completion"] ?? "")),
 	);
-	if (syntax.rows) result.syntax = syntax.rows;
-	return finish(
-		result,
-		[...new Set(shownNames(probe.rows ?? []))].map((text) =>
-			candidate(text, "value", result.prefix, "observed", probe.ev),
-		),
-		limits,
-		probe.ev,
-	);
+	const offset = Number(shown[0]?.["offset"]);
+	if (Number.isInteger(offset) && offset >= 0 && offset <= cursor) {
+		result.replace = { start: offset, end: cursor };
+		result.prefix = ctx.analyzed.slice(offset, cursor);
+	}
+	const candidates = new Map<string, ExplainCompletionCandidate>();
+	for (const row of shown) {
+		const text = String(row["completion"]).trim();
+		const kind: ExplainCompletionCandidate["kind"] =
+			role.context === "path"
+				? row["style"] === "cmd"
+					? "verb"
+					: "menu"
+				: role.context === "argument-name"
+					? "argument"
+					: role.context;
+		if (!candidates.has(text))
+			candidates.set(text, {
+				text,
+				kind,
+				match: text === result.prefix ? "exact" : "partial",
+				source: role.context === "value" ? "observed" : "declared",
+				ev: probe.ev.id,
+			});
+	}
+	if (
+		role.context === "argument-name" &&
+		candidates.get(result.prefix)?.match === "exact"
+	)
+		// The device offers `=` right at the cursor only for a name that takes a value.
+		result.takesValue = rows.some(
+			(row) =>
+				row["style"] === "syntax-meta" &&
+				row["completion"] === "=" &&
+				Number(row["offset"]) === cursor,
+		);
+	if (role.context === "value" && command && !role.query) {
+		const syntax = await syntaxProbe(
+			ctx,
+			[...command, role.argument],
+			"complete",
+		);
+		if (syntax.rows) result.syntax = syntax.rows;
+	}
+	return finish(result, [...candidates.values()], limits, probe.ev);
 }
 
 function finish(
@@ -432,22 +409,6 @@ function finish(
 	result.candidates = candidates.slice(0, limits.items);
 	if (ev.outcome !== "ok" && ev.outcome !== "empty") result.reason = ev.reason;
 	return result;
-}
-
-function candidate(
-	text: string,
-	kind: ExplainCompletionCandidate["kind"],
-	prefix: string,
-	source: ExplainCompletionCandidate["source"],
-	ev: ExplainEvidence,
-): ExplainCompletionCandidate {
-	return {
-		text,
-		kind,
-		match: text === prefix ? "exact" : "partial",
-		source,
-		ev: ev.id,
-	};
 }
 
 /** Highlight classes for the input before the cursor, reusing the full probe at the end. */
@@ -512,6 +473,7 @@ export function cursorRole(
 		while (start > 0 && WORD.test(text[start - 1] ?? "")) start--;
 		if (cls === "arg") return { context: "argument-name", start };
 		if (cls === "dir" || cls === "cmd") return { context: "path", start };
+		if (cls?.startsWith("variable-")) return { context: "variable", start };
 		const value = valueStart(text, classes, cursor);
 		if (value) return { context: "value", ...value };
 		if (cls === "obj-inactive") return followingRole(text, classes, start);
@@ -521,15 +483,17 @@ export function cursorRole(
 			reason: `The cursor is in a \`${cls ?? "unknown"}\` token; completion covers paths, argument names and argument values.`,
 		};
 	}
-	if (/[\r\n]/.test(before) || classes[cursor - 1] === "syntax-obsolete")
+	if (/[\r\n]/.test(before)) return { context: "path", start: cursor };
+	if (classes[cursor - 1] === "syntax-obsolete")
 		return {
 			context: "unsupported",
 			start: cursor,
 			reason:
-				classes[cursor - 1] === "syntax-obsolete"
-					? "The cursor follows an argument name and a space (obsolete `name value` spelling); use `name=`."
-					: "The cursor starts a new line; type the start of a path.",
+				"The cursor follows an argument name and a space (obsolete `name value` spelling); use `name=`.",
 		};
+	// `where ⎀`: the device marks the query's separating space as syntax.
+	if (classes[cursor - 1] === "syntax-meta")
+		return { context: "variable", start: cursor };
 	return followingRole(text, classes, cursor);
 }
 
@@ -556,19 +520,24 @@ function followingRole(
 	};
 }
 
-/** `arg[name] syntax-meta[=] none[value]` ending at `end`. */
+/**
+ * `arg[name] syntax-meta[=] none[value]` ending at `end`. In a `where` clause
+ * the name is a `variable-*` (`variable-local[disabled] syntax-meta[=]`).
+ */
 function valueStart(
 	text: string,
 	classes: readonly string[],
 	end: number,
-): { start: number; argument: string } | undefined {
+): { start: number; argument: string; query: boolean } | undefined {
 	let equals = end - 1;
 	while (equals >= 0 && classes[equals] === "none") equals--;
 	if (text[equals] !== "=" || classes[equals] !== "syntax-meta") return;
+	const nameClass = classes[equals - 1];
+	const query = nameClass?.startsWith("variable-") === true;
+	if (nameClass !== "arg" && !query) return;
 	let name = equals;
-	while (name > 0 && classes[name - 1] === "arg") name--;
-	if (name === equals) return;
-	return { start: equals + 1, argument: text.slice(name, equals) };
+	while (name > 0 && classes[name - 1] === nameClass) name--;
+	return { start: equals + 1, argument: text.slice(name, equals), query };
 }
 
 /**
@@ -676,14 +645,13 @@ async function childProbe(
 	return { ev, rows: objectRows(ev, rows) as ChildRow[] | undefined };
 }
 
+/** Argument paths only: a command path hangs REST on 7.12.2 and 7.20.8. */
 async function syntaxProbe(
 	ctx: LiveProbeContext,
 	tokens: string[],
-	command: string[],
 	facet: "schema" | "complete",
 ): Promise<{ ev: ExplainEvidence; rows?: ExplainSyntaxRow[] }> {
 	const ev = ctx.evidence("syntax", { facet, path: slashPath(tokens) });
-	if (keywordUnsafe(ctx, command, ev)) return { ev };
 	const rows = objectRows(
 		ev,
 		await ctx.run(ev, () => ctx.backend.inspect("syntax", tokens.join(","))),
@@ -702,18 +670,19 @@ async function syntaxProbe(
 	};
 }
 
+/** Input-based only; `path=` completion at a command hangs REST on 7.12.2. */
 async function completionProbe(
 	ctx: LiveProbeContext,
 	input: string,
-	command: string[],
+	path: string,
 	facet: "schema" | "complete",
 ): Promise<{ ev: ExplainEvidence; rows?: Record<string, unknown>[] }> {
 	const ev = ctx.evidence("completion", {
 		facet,
-		path: slashPath(command),
+		...(path ? { path } : {}),
+		inputSha256: ctx.sha256(input),
 		normalization: "sub-per-non-ascii-byte",
 	});
-	if (keywordUnsafe(ctx, command, ev)) return { ev };
 	return {
 		ev,
 		rows: objectRows(
@@ -721,23 +690,6 @@ async function completionProbe(
 			await ctx.run(ev, () => ctx.backend.inspect("completion", "", input)),
 		),
 	};
-}
-
-/** The foundation's pre-7.21.4 skip for scripting-keyword `syntax`/`completion`. */
-function keywordUnsafe(
-	ctx: LiveProbeContext,
-	command: string[],
-	ev: ExplainEvidence,
-): boolean {
-	if (
-		command.length !== 1 ||
-		(ctx.version && routerOsVersionAtLeast(ctx.version, "7.21.4"))
-	)
-		return false;
-	ev.outcome = "skipped";
-	ev.reason =
-		"Scripting-keyword syntax/completion is disabled before 7.21.4 or when version is unknown.";
-	return true;
 }
 
 function objectRows(

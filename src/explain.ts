@@ -782,7 +782,8 @@ export interface ExplainSchema {
 
 export interface ExplainCompletionCandidate {
 	text: string;
-	kind: "menu" | "verb" | "argument" | "value";
+	/** `variable`: a name in a `where` clause, which RouterOS scopes as a variable. */
+	kind: "menu" | "verb" | "argument" | "variable" | "value";
 	/** `exact` when the typed prefix already spells the whole candidate. */
 	match: "partial" | "exact";
 	/**
@@ -800,18 +801,18 @@ export interface ExplainCompletion {
 	/** The cursor in the original document: 0-based line, UTF-16 character. */
 	at: { line: number; character: number };
 	statementId?: string;
-	context: "path" | "argument-name" | "value" | "unsupported";
+	context: "path" | "argument-name" | "variable" | "value" | "unsupported";
 	/** Bytes a chosen candidate replaces; `end` is the cursor. */
 	replace: ExplainSpanRange;
 	prefix: string;
-	/** The menu or command probed. */
+	/** The command at the cursor, when known (argument-name and value contexts). */
 	path?: string;
-	/** Value context: the argument whose value is being completed. */
+	/** Value context: the argument (or `where` property) whose value is being completed. */
 	argument?: string;
-	/** Exact argument name: whether the device completes a value after `=`. */
+	/** Exact argument name: whether the device offers `=` at the cursor. */
 	takesValue?: boolean;
 	candidates: ExplainCompletionCandidate[];
-	/** Value context: argument-level `syntax` rows (type information). */
+	/** Argument value context: argument-level `syntax` rows (type information). */
 	syntax?: ExplainSyntaxRow[];
 	count: number;
 	truncated: boolean;

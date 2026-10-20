@@ -228,9 +228,12 @@ centrs explain $R '/ip/address add comm' -u $U -p $P --complete --json
 
 `data.completion` is `context: "argument-name"` with `comment` as a
 `partial` candidate replacing bytes 16–20. No canonicalizer diagnostic calls
-`comm` unknown. The device still rejects the input as written
-(`expected end of command`), so pass `--fail-on never` when only the
-candidates matter. `--cursor 20` gives the same answer inside a longer input.
+`comm` unknown. The device still rejects the input as written: `:parse` and
+the highlight `error` both name byte 16. So pass `--fail-on never` when only
+the candidates matter. `--cursor 20` gives the same answer inside a longer
+input. The same candidate comes back for a relative path after `;`
+(`/ip { :put 1; address add comm`), and `where comm` completes `comment` as a
+`variable`.
 
 ### 14. Completion: complete argument name, no value yet
 
@@ -238,10 +241,10 @@ candidates matter. `--cursor 20` gives the same answer inside a longer input.
 centrs explain $R '/ip/address add comment' -u $U -p $P --complete --json
 ```
 
-The candidate set marks `comment` as `match: "exact"` with `takesValue: true`
-(an `=` continuation) — distinct from example 13's partial match and from an
-unknown word. The flag `/interface print detail` is exact with
-`takesValue: false`.
+The candidate set marks `comment` as `match: "exact"` with `takesValue: true`,
+because the device offers `=` at the cursor. That is distinct from example 13's
+partial match and from an unknown word. The flag `/interface print detail` is
+exact with `takesValue: false`.
 
 ### 15. Completion: value position
 

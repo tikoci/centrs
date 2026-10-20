@@ -2616,19 +2616,23 @@ before connecting. `--cursor` or `--full` without a facet is
 `usage/conflicting-flags`. Offline, both facets still return the live-target
 tip and enumerate nothing.
 
-**Probe shapes.** Grounded on CHR 7.12.2, 7.23.8 and 7.24.5 over REST and
-native API:
+**Probe shapes.** Grounded on CHR 7.12.2, 7.20.8, 7.23.8 and 7.24.5 over REST
+and native API:
 
 - `child` names what exists at a path and resolves unique abbreviations
   (`ip,addr` answers as `address`). It is safe on every build tried.
-- `syntax` is sent only for an **argument** path (`ip,address,set,address`).
-  On 7.12.2, `syntax` at a command path hangs the REST handler and stalls the
-  requests behind it for about 40 s, the same failure as command-level
-  `completion` (`commands/api/AGENTS.md`).
-- `completion` is sent only with an `input` that ends in an identified
-  argument's `=`: a value position, `print proplist=` or `get value-name=`.
-- Scripting-keyword commands keep the foundation's pre-7.21.4 skip for
-  `syntax` and `completion`. Their evidence entry is `skipped` with the reason.
+- `syntax` is sent only for an **argument** path (`ip,address,set,address`,
+  `put,message`). That shape answers in about 25 ms on every build, scripting
+  keywords included.
+- `completion` is sent only with `input=`, the text before the cursor. It is
+  safe at every position tried, including scripting keywords and `do={`
+  bodies on 7.20.8.
+- Never sent: `syntax` or `completion` with `path=` set to a **command**
+  (`ip,address,set`). On 7.12.2 and 7.20.8 REST stops answering, and the
+  requests queued behind it stall, for about 30 s. Native API closes the
+  connection. 7.23.8 and later answer normally, but the rule is
+  version-independent (`commands/api/AGENTS.md`). restraml's crawlers never
+  meet this, because they send `syntax` to `arg` nodes only.
 
 Every probe is an `evidence[]` entry with `facet: "schema" | "complete"`, its
 path, version and outcome. Facts cite it by `ev`. A facet probe that answers
@@ -2669,42 +2673,51 @@ names up to three narrower inputs, and the envelope carries
 **`data.completion`** reports `cursor`, `at` (original line/character),
 `replace` (the bytes a candidate replaces, ending at the cursor), `prefix`,
 `context`, `candidates[]`, `count` and `truncated`. Candidates are capped like
-names. The context comes from the device highlight of the input before the
-cursor. When the cursor is not at the end, that prefix is one extra highlight
-probe whose `coverage` says so.
+names. They are the device's own: one input completion of the text before the
+cursor, keeping shown, non-syntax rows. The row `offset` sets `replace`. The
+navigation punctuation (`/`, `:`, `..`) offered everywhere is left out. So a
+relative path, a block, a `where` clause or an unclosed `[` completes exactly
+as on the console: `/ip { :put 1; address add comm` → `comment`, and
+`/ip address⏎` → that menu's verbs. Where the device offers nothing, neither
+does explain: `do={ add comm` runs at root, so `add` is unknown there.
 
-- `path`: in a `dir`/`cmd` word, or after a menu. `child` on the parent menu
-  lists menus and verbs that start with the prefix. A word the device cannot
+The `context` comes from the device highlight of the same text. When the
+cursor is not at the end, that is one extra highlight probe whose `coverage`
+says so.
+
+- `path`: in a `dir`/`cmd` word, after a menu, or at the start of a line.
+  Candidates are `menu` or `verb` by row style. A word the device cannot
   resolve there is `obj-inactive`, and the token before it gives its role:
   `/ip/address re` → `remove`, `reset`, and `:lo` → `local`, `lock`, `log`.
-- `argument-name`: in an `arg` word, or after a command, flag or value. `child`
-  on the command lists matching argument names (`source: "declared"`).
-  `match: "exact"` marks a complete name. For an exact name, one value
-  completion probe sets `takesValue`. `comment` takes a value, and the flag
-  `detail` does not (its `detail=` completion is empty).
-- `value`: after `arg[name] syntax-meta[=]`. The completion rows are
-  `source: "observed"` candidates and may include configuration state, such as
-  interface names. They are never a closed set: `chain=` offers `forward`,
-  `input` and `output`, but custom chains are legal. `syntax` carries the
-  argument's declared type text. A free-form `comment=` returns no candidates
-  and `string value`.
-- `unsupported` with a `reason`: a `where` query (its names highlight as
-  variables), strings, the obsolete spaced `name value` spelling, and a cursor
-  at the start of a new line.
+- `argument-name`: in an `arg` word, or after a command, flag or value.
+  `match: "exact"` marks a complete name. `takesValue` is whether the same
+  answer offers `=` at the cursor: `comment` does, and the flag `detail` does
+  not.
+- `variable`: a `where` clause, whose property names RouterOS scopes as
+  variables (`where comm` → `comment`).
+- `value`: after `name=`. Candidates are `source: "observed"` and may include
+  configuration state, such as interface names. They are never a closed set:
+  `chain=` offers `forward`, `input` and `output`, but custom chains are legal.
+  For a command argument, `syntax` carries its declared type text, so a
+  free-form `comment=` returns no candidates and `string value`. A `where`
+  value (`disabled=` → `no`, `yes`) has no argument path, so no `syntax` is
+  read.
+- `unsupported` with a `reason`: strings, the obsolete spaced `name value`
+  spelling, and other tokens the device does not class as a path, name or
+  value.
 
-The command for a name or value is the offline statement or `[…]` substitution
-at the cursor when it resolved. Incomplete assist input has no offline
-reading (`:local x [/ip/address add interface=` is `unknown`), so the command
-then comes from the device's `dir`/`cmd` runs before the cursor. Closed
-groups are skipped, a `{` continues outward only after a menu
-(`/ip { address add comm` → `/ip/address/add`), and a relative run is accepted
-only at the start of the input. Anything else abstains. A relative path after a
-`;`, a new line or a script body (`do={ add comm`) is the known residue.
+Names and verbs are `source: "declared"`. `path` names the command at the
+cursor when it is known. It comes from the offline statement or `[…]`
+substitution when that resolved, otherwise from the device's `dir`/`cmd` runs.
+The command is needed only for a value's `syntax`. When it is not visible (a
+relative path after `;`), the candidates are unaffected and `syntax` is
+omitted.
 
-The verdict still judges the input as written. `/ip/address add comm` is
-rejected by the device (`expected end of command`), so it fails even while its
-candidates are published. An assist loop that only wants candidates passes
-`--fail-on never`.
+The verdict still judges the input as written, and the two probes agree on
+it. `/ip/address add comm` is rejected by `:parse` (`expected end of command`
+at byte 16), and the highlight marks the same byte `error`. So the result
+fails even while its candidates are published. An assist loop that only wants
+candidates passes `--fail-on never`.
 
 Committed controls are
 [`live-facets.stable.json`](../../test/fixtures/explain/live-facets.stable.json)

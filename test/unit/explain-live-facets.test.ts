@@ -68,7 +68,27 @@ describe("cursor role from device classes", () => {
 		[
 			"/ip/firewall/filter add chain=forw",
 			"dir:19 none:1 cmd:3 none:1 arg:5 syntax-meta:1 none:4",
-			{ context: "value", start: 30, argument: "chain" },
+			{ context: "value", start: 30, argument: "chain", query: false },
+		],
+		[
+			"/ip/address/print where comm",
+			"dir:12 cmd:5 none:1 arg:5 syntax-meta:1 variable-undefined:4",
+			{ context: "variable", start: 24 },
+		],
+		[
+			"/ip/address/print where ",
+			"dir:12 cmd:5 none:1 arg:5 syntax-meta:1",
+			{ context: "variable", start: 24 },
+		],
+		[
+			"/ip/address/print where disabled=",
+			"dir:12 cmd:5 none:1 arg:5 syntax-meta:1 variable-local:8 syntax-meta:1",
+			{ context: "value", start: 33, argument: "disabled", query: true },
+		],
+		[
+			"/ip address\n",
+			"dir:3 none:1 dir:7 none:1",
+			{ context: "path", start: 12 },
 		],
 		["/ip/addr", "dir:8", { context: "path", start: 4 }],
 		["/ip/address ad", "dir:11 none:1 cmd:2", { context: "path", start: 12 }],
@@ -99,17 +119,7 @@ describe("cursor role from device classes", () => {
 			expect(cursorRole(text, classes(spec), text.length)).toEqual(role);
 		});
 
-	test("query variables, the obsolete spaced value and a new line are refused", () => {
-		const where = ":put [/ip/address/print where comm";
-		expect(
-			cursorRole(
-				where,
-				classes(
-					"dir:1 cmd:3 none:1 syntax-meta:1 dir:12 cmd:5 none:1 arg:5 syntax-meta:1 variable-undefined:4",
-				),
-				where.length,
-			).context,
-		).toBe("unsupported");
+	test("the obsolete spaced value is refused", () => {
 		const spaced = "/ip/address add comment ";
 		expect(
 			cursorRole(
@@ -118,9 +128,6 @@ describe("cursor role from device classes", () => {
 				spaced.length,
 			).context,
 		).toBe("unsupported");
-		expect(cursorRole("/ip\n", classes("dir:3 none:1"), 4).context).toBe(
-			"unsupported",
-		);
 	});
 });
 
@@ -191,28 +198,28 @@ describe("probe shape safety", () => {
 		).toBe(false);
 	});
 
-	test("scripting-keyword syntax/completion are skipped before 7.21.4", async () => {
-		const { data, sent } = await collect(
+	test("completion is input-based, scripting keywords included (safe on 7.12.2 and 7.20.8)", async () => {
+		const { sent } = await collect(
 			":put message=",
 			{ complete: true },
 			"7.12.2",
-			async () => [
-				{
-					highlight:
-						"dir,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,arg,arg,syntax-meta",
-				},
-			],
+			async (request) =>
+				request === "highlight"
+					? [
+							{
+								highlight:
+									"dir,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,arg,arg,syntax-meta",
+							},
+						]
+					: [],
 		);
-		expect(
-			sent.some(
-				([request]) => request === "syntax" || request === "completion",
-			),
-		).toBe(false);
-		expect(
-			data.evidence
-				.filter((e) => e.facet === "complete" && e.outcome === "skipped")
-				.map((e) => e.probe),
-		).toEqual(["completion", "syntax"]);
+		const facet = sent.filter(
+			([request]) => request === "syntax" || request === "completion",
+		);
+		expect(facet).toEqual([
+			["completion", "", ":put message="],
+			["syntax", "put,message"],
+		]);
 	});
 
 	test("an empty facet answer is a fact, not a warning", async () => {

@@ -116,6 +116,14 @@ const cases: {
 					d.code.startsWith("explain/canonicalizer"),
 				),
 			).toBe(false);
+			// The device rejects the partial word as written, and both probes agree on the byte.
+			for (const code of [
+				"explain/live-inspect/parse-rejected",
+				"explain/live-inspect/highlight-error",
+			])
+				expect(data.diagnostics.find((d) => d.code === code)?.span.start).toBe(
+					16,
+				);
 		},
 	},
 	{
@@ -205,6 +213,52 @@ const cases: {
 					(e) => e.facet === "complete" && e.probe === "highlight",
 				)?.coverage,
 			).toEqual({ start: 0, end: 20 });
+		},
+	},
+	{
+		example: "13 (relative after ;)",
+		input: "/ip { :put 1; address add comm",
+		facets: { complete: true },
+		check(data) {
+			expect(data.completion?.replace).toEqual({ start: 26, end: 30 });
+			expect(data.completion?.candidates.map((c) => c.text)).toEqual([
+				"comment",
+			]);
+		},
+	},
+	{
+		example: "13 (after navigation)",
+		input: "/ip address\n",
+		facets: { complete: true },
+		check(data) {
+			expect(data.completion?.context).toBe("path");
+			const verbs = data.completion?.candidates.map((c) => c.text);
+			for (const verb of ["add", "print", "set"]) expect(verbs).toContain(verb);
+		},
+	},
+	{
+		example: "13 (where)",
+		input: "/ip/address/print where comm",
+		facets: { complete: true },
+		check(data) {
+			expect(data.completion?.context).toBe("variable");
+			expect(data.completion?.candidates.map((c) => c.text)).toEqual([
+				"comment",
+			]);
+		},
+	},
+	{
+		example: "15 (where value)",
+		input: "/ip/address/print where disabled=",
+		facets: { complete: true },
+		check(data) {
+			expect(data.completion?.context).toBe("value");
+			expect(data.completion?.argument).toBe("disabled");
+			expect(data.completion?.candidates.map((c) => c.text)).toEqual([
+				"no",
+				"yes",
+			]);
+			expect(data.completion?.syntax).toBeUndefined();
 		},
 	},
 	{

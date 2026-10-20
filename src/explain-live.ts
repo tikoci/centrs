@@ -141,10 +141,12 @@ export async function explainLiveEnvelope(
 					...envelope.tips,
 					buildTip(
 						"tip/explain-schema-truncated",
-						`The schema of ${schema.path} was cut to the default size; counts are complete.`,
+						`The schema of ${schema.path} was cut to the ${request.full ? "--full safety ceiling" : "default size"}; counts are complete.`,
 						schema.next.length > 0
-							? `Describe a narrower path such as ${schema.next.join(", ")}, or pass --full.`
-							: "Pass --full to lift the size limits.",
+							? `Describe a narrower path such as ${schema.next.join(", ")}${request.full ? "." : ", or pass --full."}`
+							: request.full
+								? "Describe a narrower path."
+								: "Pass --full to lift the size limits.",
 					),
 				];
 			const probes = envelope.data.evidence.filter(

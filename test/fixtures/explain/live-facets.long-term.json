@@ -5009,52 +5009,34 @@
 				},
 				{
 					"method": "inspect",
-					"args": ["child", "ip,address,add"],
+					"args": ["completion", "", "/ip/address add comm"],
 					"result": [
 						{
-							"name": "add",
-							"node-type": "cmd",
-							"type": "self"
+							"completion": "comment",
+							"offset": "16",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "Short description of the item",
+							"type": "completion"
 						},
 						{
-							"name": "address",
-							"node-type": "arg",
-							"type": "child"
+							"completion": "=",
+							"offset": "20",
+							"preference": "95",
+							"show": "true",
+							"style": "syntax-meta",
+							"text": "argument value separator",
+							"type": "completion"
 						},
 						{
-							"name": "broadcast",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "comment",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "copy-from",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "disabled",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "interface",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "netmask",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "network",
-							"node-type": "arg",
-							"type": "child"
+							"completion": " ",
+							"offset": "20",
+							"preference": "-10",
+							"show": "false",
+							"style": "syntax-obsolete",
+							"text": "old syntax",
+							"type": "completion"
 						}
 					]
 				}
@@ -5179,120 +5161,33 @@
 				},
 				{
 					"method": "inspect",
-					"args": ["child", "ip,address,add"],
+					"args": ["completion", "", "/ip/address add comment"],
 					"result": [
 						{
-							"name": "add",
-							"node-type": "cmd",
-							"type": "self"
+							"completion": "comment",
+							"offset": "16",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "Short description of the item",
+							"type": "completion"
 						},
 						{
-							"name": "address",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "broadcast",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "comment",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "copy-from",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "disabled",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "interface",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "netmask",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "network",
-							"node-type": "arg",
-							"type": "child"
-						}
-					]
-				},
-				{
-					"method": "inspect",
-					"args": ["completion", "", "/ip/address add comment="],
-					"result": [
-						{
-							"completion": " ",
-							"offset": "24",
-							"preference": "-1",
-							"show": "false",
-							"style": "none",
-							"text": "whitespace",
+							"completion": "=",
+							"offset": "23",
+							"preference": "95",
+							"show": "true",
+							"style": "syntax-meta",
+							"text": "argument value separator",
 							"type": "completion"
 						},
 						{
 							"completion": " ",
-							"offset": "24",
-							"preference": "64",
+							"offset": "23",
+							"preference": "-10",
 							"show": "false",
-							"style": "none",
-							"text": "",
-							"type": "completion"
-						},
-						{
-							"completion": "[",
-							"offset": "24",
-							"preference": "75",
-							"show": "false",
-							"style": "syntax-meta",
-							"text": "start of command substitution",
-							"type": "completion"
-						},
-						{
-							"completion": "(",
-							"offset": "24",
-							"preference": "75",
-							"show": "false",
-							"style": "syntax-meta",
-							"text": "start of expression",
-							"type": "completion"
-						},
-						{
-							"completion": "$",
-							"offset": "24",
-							"preference": "75",
-							"show": "false",
-							"style": "syntax-meta",
-							"text": "substitution",
-							"type": "completion"
-						},
-						{
-							"completion": "\"",
-							"offset": "24",
-							"preference": "75",
-							"show": "false",
-							"style": "syntax-meta",
-							"text": "start of quoted string",
-							"type": "completion"
-						},
-						{
-							"completion": "<value>",
-							"offset": "24",
-							"preference": "-1",
-							"show": "false",
-							"style": "none",
-							"text": "literal value that consists only of digits, letters and characters -.,:<>/|+_*&^%#@!~",
+							"style": "syntax-obsolete",
+							"text": "old syntax",
 							"type": "completion"
 						}
 					]
@@ -5494,134 +5389,36 @@
 				},
 				{
 					"method": "inspect",
-					"args": ["child", "interface,print"],
+					"args": ["completion", "", "/interface print detail"],
 					"result": [
 						{
-							"name": "print",
-							"node-type": "cmd",
-							"type": "self"
+							"completion": "detail",
+							"offset": "17",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "Displays detailed information",
+							"type": "completion"
 						},
 						{
-							"name": "append",
-							"node-type": "arg",
-							"type": "child"
+							"completion": " ",
+							"offset": "23",
+							"preference": "80",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
 						},
 						{
-							"name": "as-value",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "brief",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "comments",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "count-only",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "detail",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "file",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "follow",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "follow-only",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "from",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "group-by",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "interval",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "oid",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "on-event",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "proplist",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "show-ids",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "stats",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "stats-detail",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "terse",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "timestamp",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "value-list",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "where",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "without-paging",
-							"node-type": "arg",
-							"type": "child"
+							"completion": ";",
+							"offset": "23",
+							"preference": "40",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "end of command",
+							"type": "completion"
 						}
 					]
-				},
-				{
-					"method": "inspect",
-					"args": ["completion", "", "/interface print detail="],
-					"result": []
 				}
 			],
 			"completion": {
@@ -6694,72 +6491,61 @@
 				},
 				{
 					"method": "inspect",
-					"args": ["child", "ip,address"],
+					"args": ["completion", "", "/ip/address re"],
 					"result": [
 						{
-							"name": "address",
-							"node-type": "dir",
-							"type": "self"
+							"completion": "remove",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Remove item",
+							"type": "completion"
 						},
 						{
-							"name": "add",
-							"node-type": "cmd",
-							"type": "child"
+							"completion": "reset",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "",
+							"type": "completion"
 						},
 						{
-							"name": "comment",
-							"node-type": "cmd",
-							"type": "child"
+							"completion": "",
+							"offset": "12",
+							"preference": "-20",
+							"show": "false",
+							"style": "obj-inactive",
+							"text": "unknown command",
+							"type": "completion"
 						},
 						{
-							"name": "disable",
-							"node-type": "cmd",
-							"type": "child"
+							"completion": " ",
+							"offset": "14",
+							"preference": "64",
+							"show": "false",
+							"style": "none",
+							"text": "",
+							"type": "completion"
 						},
 						{
-							"name": "edit",
-							"node-type": "cmd",
-							"type": "child"
+							"completion": " ",
+							"offset": "14",
+							"preference": "80",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
 						},
 						{
-							"name": "enable",
-							"node-type": "cmd",
-							"type": "child"
-						},
-						{
-							"name": "export",
-							"node-type": "cmd",
-							"type": "child"
-						},
-						{
-							"name": "find",
-							"node-type": "cmd",
-							"type": "child"
-						},
-						{
-							"name": "get",
-							"node-type": "cmd",
-							"type": "child"
-						},
-						{
-							"name": "print",
-							"node-type": "cmd",
-							"type": "child"
-						},
-						{
-							"name": "remove",
-							"node-type": "cmd",
-							"type": "child"
-						},
-						{
-							"name": "reset",
-							"node-type": "cmd",
-							"type": "child"
-						},
-						{
-							"name": "set",
-							"node-type": "cmd",
-							"type": "child"
+							"completion": " ",
+							"offset": "14",
+							"preference": "80",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
 						}
 					]
 				}
@@ -6794,8 +6580,7 @@
 					}
 				],
 				"count": 2,
-				"truncated": false,
-				"path": "/ip/address"
+				"truncated": false
 			}
 		},
 		{
@@ -6906,52 +6691,34 @@
 				},
 				{
 					"method": "inspect",
-					"args": ["child", "ip,address,add"],
+					"args": ["completion", "", "/ip/address add comm"],
 					"result": [
 						{
-							"name": "add",
-							"node-type": "cmd",
-							"type": "self"
+							"completion": "comment",
+							"offset": "16",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "Short description of the item",
+							"type": "completion"
 						},
 						{
-							"name": "address",
-							"node-type": "arg",
-							"type": "child"
+							"completion": "=",
+							"offset": "20",
+							"preference": "95",
+							"show": "true",
+							"style": "syntax-meta",
+							"text": "argument value separator",
+							"type": "completion"
 						},
 						{
-							"name": "broadcast",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "comment",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "copy-from",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "disabled",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "interface",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "netmask",
-							"node-type": "arg",
-							"type": "child"
-						},
-						{
-							"name": "network",
-							"node-type": "arg",
-							"type": "child"
+							"completion": " ",
+							"offset": "20",
+							"preference": "-10",
+							"show": "false",
+							"style": "syntax-obsolete",
+							"text": "old syntax",
+							"type": "completion"
 						}
 					]
 				}
@@ -6981,6 +6748,1218 @@
 				"count": 1,
 				"truncated": false,
 				"path": "/ip/address/add"
+			}
+		},
+		{
+			"example": "13 (relative after ;)",
+			"input": "/ip { :put 1; address add comm",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.23.8 (long-term)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip { :put 1; address add comm\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "expected end of command (line 1 column 27)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip { :put 1; address add comm"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,none,syntax-meta,none,dir,cmd,cmd,cmd,none,none,syntax-meta,none,dir,dir,dir,dir,dir,dir,dir,none,cmd,cmd,cmd,none,error,arg,arg,arg",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip { :put 1; address add comm"],
+					"result": [
+						{
+							"completion": "comment",
+							"offset": "26",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "Short description of the item",
+							"type": "completion"
+						},
+						{
+							"completion": "=",
+							"offset": "30",
+							"preference": "95",
+							"show": "true",
+							"style": "syntax-meta",
+							"text": "argument value separator",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "30",
+							"preference": "-10",
+							"show": "false",
+							"style": "syntax-obsolete",
+							"text": "old syntax",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 30,
+				"at": {
+					"line": 0,
+					"character": 30
+				},
+				"statementId": "s0",
+				"context": "argument-name",
+				"replace": {
+					"start": 26,
+					"end": 30
+				},
+				"prefix": "comm",
+				"candidates": [
+					{
+						"text": "comment",
+						"kind": "argument",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					}
+				],
+				"count": 1,
+				"truncated": false
+			}
+		},
+		{
+			"example": "13 (after navigation)",
+			"input": "/ip address\n",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.23.8 (long-term)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip address\\n\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "/ip/address/"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip address\n"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,none,dir,dir,dir,dir,dir,dir,dir,none",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip address\n"],
+					"result": [
+						{
+							"completion": " ",
+							"offset": "12",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": "/",
+							"offset": "12",
+							"preference": "95",
+							"show": "true",
+							"style": "dir",
+							"text": "top of command hierarchy",
+							"type": "completion"
+						},
+						{
+							"completion": ":",
+							"offset": "12",
+							"preference": "95",
+							"show": "true",
+							"style": "dir",
+							"text": "special commands",
+							"type": "completion"
+						},
+						{
+							"completion": "[",
+							"offset": "12",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "(",
+							"offset": "12",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of expression",
+							"type": "completion"
+						},
+						{
+							"completion": "$",
+							"offset": "12",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "{",
+							"offset": "12",
+							"preference": "40",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command block",
+							"type": "completion"
+						},
+						{
+							"completion": ";",
+							"offset": "12",
+							"preference": "40",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "end of command",
+							"type": "completion"
+						},
+						{
+							"completion": "..",
+							"offset": "12",
+							"preference": "95",
+							"show": "true",
+							"style": "dir",
+							"text": "up to ip",
+							"type": "completion"
+						},
+						{
+							"completion": "add",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Create a new item",
+							"type": "completion"
+						},
+						{
+							"completion": "comment",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Set comment for items",
+							"type": "completion"
+						},
+						{
+							"completion": "disable",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Disable items",
+							"type": "completion"
+						},
+						{
+							"completion": "edit",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "enable",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Enable items",
+							"type": "completion"
+						},
+						{
+							"completion": "export",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Print or save an export script that can be used to restore configuration",
+							"type": "completion"
+						},
+						{
+							"completion": "find",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Find items by value",
+							"type": "completion"
+						},
+						{
+							"completion": "get",
+							"offset": "12",
+							"preference": "95",
+							"show": "true",
+							"style": "cmd",
+							"text": "Gets value of item's property",
+							"type": "completion"
+						},
+						{
+							"completion": "print",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Print values of item properties",
+							"type": "completion"
+						},
+						{
+							"completion": "remove",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Remove item",
+							"type": "completion"
+						},
+						{
+							"completion": "reset",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "set",
+							"offset": "12",
+							"preference": "96",
+							"show": "true",
+							"style": "cmd",
+							"text": "Change item properties",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 12,
+				"at": {
+					"line": 1,
+					"character": 0
+				},
+				"context": "path",
+				"replace": {
+					"start": 12,
+					"end": 12
+				},
+				"prefix": "",
+				"candidates": [
+					{
+						"text": "add",
+						"kind": "verb",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					},
+					{
+						"text": "comment",
+						"kind": "verb",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					},
+					{
+						"text": "disable",
+						"kind": "verb",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					},
+					{
+						"text": "edit",
+						"kind": "verb",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					},
+					{
+						"text": "enable",
+						"kind": "verb",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					},
+					{
+						"text": "export",
+						"kind": "verb",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					},
+					{
+						"text": "find",
+						"kind": "verb",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					},
+					{
+						"text": "get",
+						"kind": "verb",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					},
+					{
+						"text": "print",
+						"kind": "verb",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					},
+					{
+						"text": "remove",
+						"kind": "verb",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					},
+					{
+						"text": "reset",
+						"kind": "verb",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					},
+					{
+						"text": "set",
+						"kind": "verb",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live3"
+					}
+				],
+				"count": 12,
+				"truncated": false
+			}
+		},
+		{
+			"example": "13 (where)",
+			"input": "/ip/address/print where comm",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.23.8 (long-term)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/address/print where comm\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "(evl /ip/address/printwhere=$address;$network;$netmask;$broadcast;$interface;$actual-interface;$vrf;$invalid;$dynamic;$slave;$disabled;$comment;$.id;$.nextid;$.dead;$.about;$comm;0)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/address/print where comm"],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,cmd,cmd,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,syntax-meta,variable-undefined,variable-undefined,variable-undefined,variable-undefined",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,print"],
+					"result": [
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "append",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "as-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "brief",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comments",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "count-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "detail",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "group-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "on-event",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "proplist",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "show-ids",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "terse",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "timestamp",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "without-paging",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/address/print where comm"],
+					"result": [
+						{
+							"completion": "",
+							"offset": "24",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "quote",
+							"type": "completion"
+						},
+						{
+							"completion": "comment",
+							"offset": "24",
+							"preference": "96",
+							"show": "true",
+							"style": "variable-local",
+							"text": "Short description of the item",
+							"type": "completion"
+						},
+						{
+							"completion": "<value>",
+							"offset": "24",
+							"preference": "-1",
+							"show": "false",
+							"style": "none",
+							"text": "literal value that consists only of digits, letters and characters ._",
+							"type": "completion"
+						},
+						{
+							"completion": "<=",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "less or equal",
+							"type": "completion"
+						},
+						{
+							"completion": ">=",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "more or equal",
+							"type": "completion"
+						},
+						{
+							"completion": "!=",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "not equal",
+							"type": "completion"
+						},
+						{
+							"completion": "&&",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "logical and",
+							"type": "completion"
+						},
+						{
+							"completion": "||",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "logical or",
+							"type": "completion"
+						},
+						{
+							"completion": "<<",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "shift left",
+							"type": "completion"
+						},
+						{
+							"completion": ">>",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "shift right",
+							"type": "completion"
+						},
+						{
+							"completion": "->",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "lookup",
+							"type": "completion"
+						},
+						{
+							"completion": "<%%",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "activate in environment",
+							"type": "completion"
+						},
+						{
+							"completion": ".",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "concatenate",
+							"type": "completion"
+						},
+						{
+							"completion": "+",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "sum",
+							"type": "completion"
+						},
+						{
+							"completion": "-",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "difference",
+							"type": "completion"
+						},
+						{
+							"completion": "*",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "multiplication",
+							"type": "completion"
+						},
+						{
+							"completion": "/",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "division",
+							"type": "completion"
+						},
+						{
+							"completion": "%",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "modulus",
+							"type": "completion"
+						},
+						{
+							"completion": "<",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "less",
+							"type": "completion"
+						},
+						{
+							"completion": ">",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "more",
+							"type": "completion"
+						},
+						{
+							"completion": "=",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "equal",
+							"type": "completion"
+						},
+						{
+							"completion": "&",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "bitwise and",
+							"type": "completion"
+						},
+						{
+							"completion": "|",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "bitwise or",
+							"type": "completion"
+						},
+						{
+							"completion": "^",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "bitwise xor",
+							"type": "completion"
+						},
+						{
+							"completion": ",",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "array",
+							"type": "completion"
+						},
+						{
+							"completion": "~",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "match pattern",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "28",
+							"preference": "80",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": "(",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of subexpression",
+							"type": "completion"
+						},
+						{
+							"completion": "$",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "[",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "{",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of array value",
+							"type": "completion"
+						},
+						{
+							"completion": "\"",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of quoted string",
+							"type": "completion"
+						},
+						{
+							"completion": "!",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "logical negation",
+							"type": "completion"
+						},
+						{
+							"completion": "-",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "unary minus",
+							"type": "completion"
+						},
+						{
+							"completion": "~",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "bit inversion",
+							"type": "completion"
+						},
+						{
+							"completion": ">",
+							"offset": "28",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "quote",
+							"type": "completion"
+						},
+						{
+							"completion": " ",
+							"offset": "28",
+							"preference": "80",
+							"show": "false",
+							"style": "none",
+							"text": "whitespace",
+							"type": "completion"
+						},
+						{
+							"completion": ";",
+							"offset": "28",
+							"preference": "40",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "end of command",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 28,
+				"at": {
+					"line": 0,
+					"character": 28
+				},
+				"statementId": "s0",
+				"context": "variable",
+				"replace": {
+					"start": 24,
+					"end": 28
+				},
+				"prefix": "comm",
+				"candidates": [
+					{
+						"text": "comment",
+						"kind": "variable",
+						"match": "partial",
+						"source": "declared",
+						"ev": "live4"
+					}
+				],
+				"count": 1,
+				"truncated": false,
+				"path": "/ip/address/print"
+			}
+		},
+		{
+			"example": "15 (where value)",
+			"input": "/ip/address/print where disabled=",
+			"facets": {
+				"complete": true
+			},
+			"calls": [
+				{
+					"method": "getSingleton",
+					"args": ["/system/resource"],
+					"result": {
+						"version": "7.23.8 (long-term)",
+						"architecture-name": "x86_64",
+						"board-name": "CHR QEMU Standard PC (i440FX + PIIX, 1996)"
+					}
+				},
+				{
+					"method": "execute",
+					"args": [
+						{
+							"path": "",
+							"command": "",
+							"script": ":put [:parse \"/ip/address/print where disabled=\"]"
+						}
+					],
+					"result": {
+						"records": [],
+						"ret": "expected yes or no (line 1 column 34)"
+					}
+				},
+				{
+					"method": "inspect",
+					"args": ["highlight", "", "/ip/address/print where disabled="],
+					"result": [
+						{
+							"highlight": "dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,dir,cmd,cmd,cmd,cmd,cmd,none,arg,arg,arg,arg,arg,syntax-meta,variable-local,variable-local,variable-local,variable-local,variable-local,variable-local,variable-local,variable-local,syntax-meta",
+							"type": "highlight"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["child", "ip,address,print"],
+					"result": [
+						{
+							"name": "print",
+							"node-type": "cmd",
+							"type": "self"
+						},
+						{
+							"name": "append",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "as-value",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "brief",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "comments",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "count-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "detail",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "file",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "follow-only",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "from",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "group-by",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "interval",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "on-event",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "proplist",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "show-ids",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "terse",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "timestamp",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "value-list",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "where",
+							"node-type": "arg",
+							"type": "child"
+						},
+						{
+							"name": "without-paging",
+							"node-type": "arg",
+							"type": "child"
+						}
+					]
+				},
+				{
+					"method": "inspect",
+					"args": ["completion", "", "/ip/address/print where disabled="],
+					"result": [
+						{
+							"completion": "[",
+							"offset": "33",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of command substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "(",
+							"offset": "33",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of expression",
+							"type": "completion"
+						},
+						{
+							"completion": "$",
+							"offset": "33",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "substitution",
+							"type": "completion"
+						},
+						{
+							"completion": "\"",
+							"offset": "33",
+							"preference": "75",
+							"show": "false",
+							"style": "syntax-meta",
+							"text": "start of quoted string",
+							"type": "completion"
+						},
+						{
+							"completion": "no",
+							"offset": "33",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "",
+							"type": "completion"
+						},
+						{
+							"completion": "yes",
+							"offset": "33",
+							"preference": "96",
+							"show": "true",
+							"style": "arg",
+							"text": "",
+							"type": "completion"
+						}
+					]
+				}
+			],
+			"completion": {
+				"cursor": 33,
+				"at": {
+					"line": 0,
+					"character": 33
+				},
+				"statementId": "s0",
+				"context": "value",
+				"replace": {
+					"start": 33,
+					"end": 33
+				},
+				"prefix": "",
+				"candidates": [
+					{
+						"text": "no",
+						"kind": "value",
+						"match": "partial",
+						"source": "observed",
+						"ev": "live4"
+					},
+					{
+						"text": "yes",
+						"kind": "value",
+						"match": "partial",
+						"source": "observed",
+						"ev": "live4"
+					}
+				],
+				"count": 2,
+				"truncated": false,
+				"path": "/ip/address/print",
+				"argument": "disabled"
 			}
 		},
 		{
