@@ -10,12 +10,11 @@ validation): the cheap, safe knowledge tier in front of the runners
 (`execute` / `api` / `retrieve`).
 
 Status: offline baseline `verified`; live probes over `rest-api` and `native-api`
-`designed`. **`centrs explain '<input>'` runs today**, without a router or CDB.
+`CHR-passed`. **`centrs explain '<input>'` runs without a router or CDB**, and
+`centrs explain <router> '<input>'` adds read-only device evidence.
 [`docs/MATRIX.md`](../../docs/MATRIX.md#offline-analysis) tracks these separately;
 [#90](https://github.com/tikoci/centrs/issues/90) indexes the remaining tasks.
 The spec is ratified on the [phase-0 grounding lab](#phase-0-ratification-185).
-The current finish line is [Offline baseline acceptance](#offline-baseline-acceptance),
-not completion of the live protocol cells.
 Load-bearing rules — envelope, errors, settings precedence, identity,
 validation, protocol selection — live in
 [`docs/CONSTITUTION.md`](../../docs/CONSTITUTION.md).
@@ -3346,10 +3345,10 @@ test framework is part of this baseline.
 
 ### Current and following capabilities
 
-- **Current — live probes (#236, phase 2):** highlight + `:parse` (#491) and
+- **Done — live probes (#236, phase 2):** highlight + `:parse` (#491),
   completion/child/syntax (#492) and live value types (#225) over
-  rest-api/native-api; the #236 closeout remains. B4's projection/agreement
-  informs this work; each live cell requires its own CHR-passing examples.
+  rest-api/native-api, `CHR-passed` on stable and long-term.
+  `runtimeAcceptance` stays `not-proven`.
 - **MCP alignment (#223):** the deliberate flat-to-rich response migration,
   coordinated with rosetta. Independent of the offline token vocabulary.
 - **Facet polish (phase 3):** live sizing, `--full`, completion/schema ergonomics.

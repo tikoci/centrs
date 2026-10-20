@@ -17,6 +17,9 @@ part of this section.
 
 ### Added
 
+- **Live `explain` over rest-api + native-api is `CHR-passed`** (#236).
+  Examples 7–16, 19, 24, 48 and 52–53 pass on both transports on stable
+  7.24.5 and long-term 7.23.8. `runtimeAcceptance` stays `not-proven`.
 - `explain <router> '<input>'` and `explainLiveEnvelope()` add read-only parse,
   highlight and command-argument evidence over REST/native API. Probe outcomes,
   byte coverage and provenance remain explicit; analyzed input never executes (#491).
