@@ -440,10 +440,10 @@ describe("validation metadata survives the error boundary (#354, PR #356 review)
 		]);
 	});
 
-	test("script-shaped input keeps `semantic: not-applicable` on a gate rejection", async () => {
+	test("script-shaped input has no `semantic` summary on a gate rejection", async () => {
 		// There is no `/console/inspect` half for a script, so `semantic: false`
-		// would claim a semantic gate ran and said no — a different statement from
-		// "there was none". The pre-#354 builder returned `not-applicable` here.
+		// would claim a semantic gate ran and said no. No stage answered it, so
+		// the field is absent (#535; `not-applicable` before that).
 		const resolved = await resolveFor(":put [");
 		expect(resolved.canonical.mode).not.toBe("structured");
 		const envelope = buildExecuteErrorEnvelopeFromResolved(
@@ -452,7 +452,8 @@ describe("validation metadata survives the error boundary (#354, PR #356 review)
 			undefined,
 			{},
 		);
-		expect(envelope.meta.validation?.semantic).toBe("not-applicable");
+		expect(envelope.meta.validation).not.toHaveProperty("semantic");
+		expect(envelope.meta.validation?.syntax).toBe(false);
 	});
 
 	test("`--validate=false` lists both stages as skipped", async () => {
@@ -471,6 +472,9 @@ describe("validation metadata survives the error boundary (#354, PR #356 review)
 			{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "skipped" },
 			{ stage: "device", source: "device preflight", result: "skipped" },
 		]);
+		// No stage answered, so no flat summary claims one did (#535).
+		expect(envelope.meta.validation).not.toHaveProperty("syntax");
+		expect(envelope.meta.validation).not.toHaveProperty("semantic");
 	});
 
 	test("a gate interrupted by a transport error reports not reached, never a verdict (GH#435)", async () => {
@@ -583,7 +587,7 @@ describe("validation metadata survives the error boundary (#354, PR #356 review)
 		]) {
 			expect(await flat(script, error)).toEqual({
 				syntax: false,
-				semantic: "not-applicable",
+				semantic: undefined,
 			});
 		}
 	});

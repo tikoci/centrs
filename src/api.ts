@@ -541,7 +541,7 @@ async function* streamResolvedApi(
 			trace.validation = validation;
 			resolved = await withQueryBooleans(resolved, backend, result.queryMenu);
 		} else {
-			validation = disabledValidationMeta();
+			validation = disabledApiValidationMeta(resolved);
 		}
 	} catch (error) {
 		await backend.close();
@@ -822,16 +822,6 @@ function adapterForResolved(resolved: ResolvedApiRequest): ProtocolAdapter {
 		mac: resolved.target.mac,
 		insecure: resolved.insecure.value,
 	});
-}
-
-function disabledValidationMeta(): EnvelopeValidationMeta {
-	return {
-		enabled: false,
-		source: "disabled",
-		result: "skipped",
-		syntax: false,
-		semantic: false,
-	};
 }
 
 export async function resolveApiRequest(
@@ -1347,7 +1337,8 @@ interface ApiValidationResult {
  * validator is `/console/inspect`, never `:put [:parse]`. Path existence and
  * add/set attribute validity both come from `request=child` — command-level
  * `request=completion` is unsafe on RouterOS 7.12.2 (`core/inspect.ts`). A
- * `/execute` script is a CLI string → `semantic: not-applicable`.
+ * `/execute` script is a CLI string, so it has no `semantic` summary; a
+ * structured request runs no `:parse`, so it has no `syntax` summary (#535).
  */
 async function validateApiRequest(
 	resolved: ResolvedApiRequest,
@@ -1383,8 +1374,7 @@ async function validateApiRequest(
 						? "not-applicable"
 						: API_SCRIPT_DEVICE_STAGE_SOURCE,
 				result: "passed",
-				syntax: script !== undefined,
-				semantic: "not-applicable",
+				...(script !== undefined ? { syntax: true } : {}),
 				stages: [
 					{
 						stage: "offline",
@@ -1468,13 +1458,7 @@ async function validateApiRequest(
 			}
 		}
 		return {
-			validation: {
-				enabled: true,
-				source: "/console/inspect request=child",
-				result: "passed",
-				syntax: false,
-				semantic: true,
-			},
+			validation: structuredValidationPassed(resolved),
 			tips,
 			queryMenu: isCommand ? `/${parent.join("/")}` : resolved.path,
 		};
@@ -1513,11 +1497,7 @@ async function validateApiRequest(
 		}
 		return {
 			validation: {
-				enabled: true,
-				source: "/console/inspect request=child",
-				result: "passed",
-				syntax: false,
-				semantic: true,
+				...structuredValidationPassed(resolved),
 				availableAttributes: available,
 			},
 			tips,
@@ -1526,13 +1506,7 @@ async function validateApiRequest(
 	}
 
 	return {
-		validation: {
-			enabled: true,
-			source: "/console/inspect request=child",
-			result: "passed",
-			syntax: false,
-			semantic: true,
-		},
+		validation: structuredValidationPassed(resolved),
 		tips,
 		queryMenu: resolved.path,
 	};
@@ -1877,6 +1851,22 @@ export function buildApiErrorEnvelopeFromResolved(
 	};
 }
 
+/** A structured request the device stage passed; stage 1 does not apply to it. */
+function structuredValidationPassed(
+	resolved: ResolvedApiRequest,
+): EnvelopeValidationMeta {
+	return {
+		enabled: true,
+		source: API_DEVICE_STAGE_SOURCE,
+		result: "passed",
+		semantic: true,
+		stages: [
+			offlineApiStage(resolved),
+			{ stage: "device", source: API_DEVICE_STAGE_SOURCE, result: "passed" },
+		],
+	};
+}
+
 /**
  * `meta.validation` for an api error envelope. A stage-1 rejection opened no
  * connection, so the meta must not report `/console/inspect` as the validator
@@ -1896,7 +1886,6 @@ function failedApiValidationMeta(
 			source: OFFLINE_GATE_SOURCE,
 			result: "failed",
 			syntax: false,
-			semantic: "not-applicable",
 			stages: [
 				{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "failed" },
 				{
@@ -1911,14 +1900,14 @@ function failedApiValidationMeta(
 	// Only a `validation/*` error identifies the device stage as the rejecter.
 	// Everything downstream of a passed gate — a RouterOS fault on the request,
 	// a transport drop — is served by `trace.validation` before this function is
-	// ever reached.
+	// ever reached. A script is refused by `:parse` (syntax); a structured
+	// request by `/console/inspect` (names) (#535).
 	if (error.code.startsWith("validation/")) {
 		return {
 			enabled: true,
 			source: apiDeviceStageSource(resolved),
 			result: "failed",
-			syntax: false,
-			semantic: resolved.scriptMode ? "not-applicable" : false,
+			...(resolved.scriptMode ? { syntax: false } : { semantic: false }),
 			stages: [offlineApiStage(resolved, trace), deviceStageFailed(resolved)],
 		};
 	}
@@ -2012,8 +2001,6 @@ function disabledApiValidationMeta(
 		enabled: false,
 		source: "disabled",
 		result: "skipped",
-		syntax: false,
-		semantic: resolved.scriptMode ? "not-applicable" : false,
 		stages: [
 			{ stage: "offline", source: OFFLINE_GATE_SOURCE, result: "skipped" },
 			{

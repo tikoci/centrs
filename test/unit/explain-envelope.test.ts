@@ -814,10 +814,8 @@ describe("explainEnvelope", () => {
 		const envelope = explainEnvelope("/ip/address/print");
 		expect(envelope.meta.via).toBeNull();
 		expect(envelope.meta.target).toEqual({});
-		expect(envelope.meta.validation).toEqual({
-			enabled: false,
-			result: "skipped",
-		});
+		// explain is not a gate, so there is no verdict to report (#535).
+		expect(envelope.meta.validation).toEqual({ enabled: false });
 	});
 
 	test("the offline tip points at the live target, and is a tip not a warning", () => {

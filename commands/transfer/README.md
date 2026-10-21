@@ -302,6 +302,10 @@ gate as in `retrieve` / `execute`; RouterOS's own menu errors (missing remote
 file, permission denied) map to `routeros/*`, and SFTP/SCP/fetch errors map to
 `transport/*` and `auth/*`.
 
+`meta.validation` reports that existence probe as one `device` stage. `list`
+runs no probe, so it is not a gate: its `meta.validation` is
+`{ enabled: false }`, on success and on failure (#535).
+
 A failure **after** target resolution keeps what resolution found: the error
 envelope carries the resolved `meta.target` (host, port, identity, sources),
 `meta.via`, the setting sources in `meta.settings`, and `meta.operation`

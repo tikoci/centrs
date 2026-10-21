@@ -59,6 +59,8 @@ describeFast("explain live foundation (#491)", () => {
 						live: result.data.live,
 					});
 					expect(result.meta.operation?.mode).toBe("live");
+					// explain is not a gate: no verdict, offline or live (#535).
+					expect(result.meta.validation).toEqual({ enabled: false });
 					expect(
 						result.tips.some((tip) => tip.code === "tip/explain-offline-only"),
 					).toBe(false);

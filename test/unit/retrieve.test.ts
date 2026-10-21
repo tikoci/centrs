@@ -730,6 +730,13 @@ describe("retrieve meta.validation reports what the gate concluded (GH#435)", ()
 				enabled: true,
 				source: "live /console/inspect request=child",
 				result: "passed",
+				stages: [
+					{
+						stage: "device",
+						source: "live /console/inspect request=child",
+						result: "passed",
+					},
+				],
 			});
 			expect(fetchMock.calls).toHaveLength(3);
 		} finally {

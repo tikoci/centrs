@@ -185,10 +185,17 @@ export interface EnvelopeValidationMeta {
 	 * `stages[]` then says which stage was not reached and why (GH#435).
 	 */
 	result?: "passed" | "failed" | "skipped";
-	/** Syntax gate status for commands that use RouterOS `:parse`. */
+	/**
+	 * The syntax verdict (`:parse` or the offline analyzer). Present only when a
+	 * stage gave one; absent means no stage was asked (#535).
+	 */
 	syntax?: boolean;
-	/** Semantic `/console/inspect` gate status, or not-applicable for script mode. */
-	semantic?: boolean | "not-applicable";
+	/**
+	 * The name-level verdict (`/console/inspect` or a console `:parse` `bad
+	 * parameter`). Present only when a stage gave one; absent means no stage was
+	 * asked, including for script input, which has no names to check (#535).
+	 */
+	semantic?: boolean;
 	availableAttributes?: readonly string[];
 	/**
 	 * Per-stage detail for the gate described in

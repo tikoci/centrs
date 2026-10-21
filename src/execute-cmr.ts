@@ -1002,8 +1002,7 @@ function devicePassed(
 		source: CMR_VALIDATION_SOURCE,
 		result: "passed",
 		syntax: true,
-		semantic:
-			resolved.canonical.mode === "structured" ? true : "not-applicable",
+		...(resolved.canonical.mode === "structured" ? { semantic: true } : {}),
 		stages: passedStages(
 			offline ?? { verdict: "pass", warnings: [] },
 			CMR_VALIDATION_SOURCE,
@@ -1023,12 +1022,7 @@ function deviceRejected(
 		enabled: true,
 		source: CMR_VALIDATION_SOURCE,
 		result: "failed",
-		...(nameRejected
-			? { syntax: true, semantic: false }
-			: {
-					syntax: false,
-					...(structured ? {} : { semantic: "not-applicable" as const }),
-				}),
+		...(nameRejected ? { syntax: true, semantic: false } : { syntax: false }),
 		stages: [
 			offlineStagePassed(offline?.verdict),
 			{ stage: "device", source: CMR_VALIDATION_SOURCE, result: "failed" },

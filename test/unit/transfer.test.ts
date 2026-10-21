@@ -248,6 +248,19 @@ describe("transfer upload (rest)", () => {
 				method: "rest",
 			});
 			expect(envelope.meta.via).toBe("rest-api");
+			// A gated success reports its stage, like every other gate (#535).
+			expect(envelope.meta.validation).toEqual({
+				enabled: true,
+				source: "device /file existence probe",
+				result: "passed",
+				stages: [
+					{
+						stage: "device",
+						source: "device /file existence probe",
+						result: "passed",
+					},
+				],
+			});
 			const paths = fetchMock.calls.map((c) => new URL(c.url).pathname);
 			expect(paths).toEqual([
 				"/rest/file/print",
@@ -855,6 +868,28 @@ describe("transfer list", () => {
 			expect(new URL(String(fetchMock.calls[0]?.url)).pathname).toBe(
 				"/rest/file/print",
 			);
+			// list runs no existence probe, so it is not a gate (#535 review).
+			expect(fetchMock.calls).toHaveLength(1);
+			expect(envelope.meta.validation).toEqual({ enabled: false });
+		} finally {
+			fetchMock.restore();
+		}
+	});
+
+	test("a failed list claims no existence probe either (#535 review)", async () => {
+		const fetchMock = mockFetchSequence([
+			() =>
+				new Response(JSON.stringify({ error: 500, message: "boom" }), {
+					status: 500,
+				}),
+		]);
+		try {
+			const envelope = await transferEnvelope(
+				baseRequest({ verb: "list" }),
+				{},
+			);
+			expect(envelope.ok).toBe(false);
+			expect(envelope.meta.validation).toEqual({ enabled: false });
 		} finally {
 			fetchMock.restore();
 		}

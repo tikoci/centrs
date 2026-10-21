@@ -101,7 +101,12 @@ import type {
 	CommonSettingsMeta,
 	EnvelopeMeta,
 } from "./core/envelope.ts";
-import { buildTip, type Tip, type Warning } from "./core/envelope.ts";
+import {
+	buildTip,
+	type EnvelopeValidationMeta,
+	type Tip,
+	type Warning,
+} from "./core/envelope.ts";
 import {
 	type CanonicalExecuteCommand,
 	canonicalizeExecuteCommand,
@@ -2851,7 +2856,7 @@ export function explainEnvelope(
 		target: {},
 		via: null,
 		settings: settingsMeta(options.format),
-		validation: { enabled: false, result: "skipped" },
+		validation: explainValidationMeta(),
 		operation: {
 			command: "explain",
 			mode: "offline",
@@ -3010,8 +3015,21 @@ export function buildExplainErrorEnvelope(
 		error: serializeCentrsError(centrs),
 		warnings: [],
 		tips,
-		meta: { target: {}, via: null, settings: settingsMeta(format) },
+		meta: {
+			target: {},
+			via: null,
+			settings: settingsMeta(format),
+			validation: explainValidationMeta(),
+		},
 	};
+}
+
+/**
+ * explain is not a gate: it never runs the input, so there is no gate verdict
+ * to report, offline or live. Its verdict is `data.verdict` (#535).
+ */
+export function explainValidationMeta(): EnvelopeValidationMeta {
+	return { enabled: false };
 }
 
 export function renderExplainEnvelope(

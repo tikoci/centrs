@@ -2581,8 +2581,9 @@ failure. A failed/skipped probe adds a warning diagnostic; acquired offline and
 live facts remain available. `ok:true` means analysis produced a result, never
 that all probes succeeded. Resolver/usage failures and transport/authentication/interruption failures before
 any input probe yields a result remain `ok:false`.
-`meta.operation.mode` is `live`; no execution-validation verdict is invented in
-`meta.validation`. `runtimeAcceptance` always remains `not-proven`.
+`meta.operation.mode` is `live`; no execution-validation verdict is invented:
+`meta.validation` is `{ enabled: false }`, offline and live, because explain
+is not a gate (#535). `runtimeAcceptance` always remains `not-proven`.
 
 Work is bounded by the resolved per-request timeout, 32 distinct command paths,
 32,767 bytes for highlight and 65,536 bytes for parse. Larger probes are skipped

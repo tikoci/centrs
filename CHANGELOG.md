@@ -95,6 +95,18 @@ part of this section.
 
 ### Changed
 
+- **`meta.validation` success shapes (#535).** This is a breaking change for
+  `--json` readers of the flat fields. `syntax` and `semantic` are now present
+  only when a gate stage gave that verdict; absent means no stage was asked.
+  - `api` structured requests (no `:parse`) drop `syntax: false`.
+  - Script input drops `semantic: "not-applicable"`; the value is gone from
+    the type.
+  - `--validate=false` drops both fields on `execute` and `api`.
+  - `retrieve`, `transfer` and `api` structured successes now report
+    `stages[]`. `transfer list` runs no existence probe, so it reports
+    `{ enabled: false }` instead of claiming one.
+  - `explain` reports `meta.validation: { enabled: false }` with no `result`
+    in all three cases (offline, live, error); it is not a gate.
 - Text stdout is data (#470). In text mode, single-target `execute`, `api`,
   `retrieve` and `transfer` write only the result to stdout. Everything else
   goes to **stderr** on success and on failure: the `--verbose` header, one

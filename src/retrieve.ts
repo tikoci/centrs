@@ -455,12 +455,10 @@ export async function runResolvedRetrieve(
 				await inspectRetrievePath(resolved, backend),
 				backend,
 			);
-			const validation: EnvelopeValidationMeta = {
-				enabled: true,
-				source: "live /console/inspect request=child+completion",
-				result: "passed",
+			const validation = retrieveValidationPassed(
+				"live /console/inspect request=child+completion",
 				availableAttributes,
-			};
+			);
 			trace.validation = validation;
 			const envelope = buildSuccessEnvelope(
 				resolved,
@@ -533,14 +531,26 @@ export async function validateRetrieveRead(
 	return {
 		inspection,
 		query,
-		validation: {
-			enabled: true,
-			source: availableAttributes
+		validation: retrieveValidationPassed(
+			availableAttributes
 				? "live /console/inspect request=child+completion"
 				: "live /console/inspect request=child",
-			result: "passed",
 			availableAttributes,
-		},
+		),
+	};
+}
+
+/** retrieve's gate is the device stage alone; a path read has no CLI string to analyze. */
+function retrieveValidationPassed(
+	source: string,
+	availableAttributes: readonly string[] | undefined,
+): EnvelopeValidationMeta {
+	return {
+		enabled: true,
+		source,
+		result: "passed",
+		availableAttributes,
+		stages: [{ stage: "device", source, result: "passed" }],
 	};
 }
 

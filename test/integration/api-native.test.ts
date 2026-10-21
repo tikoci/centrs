@@ -19,7 +19,8 @@ interface SuccessEnvelope {
 	meta: {
 		via: string;
 		validation?: {
-			semantic?: boolean | string;
+			syntax?: boolean;
+			semantic?: boolean;
 			enabled?: boolean;
 			stages?: readonly {
 				stage: string;
@@ -177,6 +178,8 @@ describeFast("api against CHR (native-api)", () => {
 				}),
 			);
 			expect(raw.meta.validation?.enabled).toBe(false);
+			expect(raw.meta.validation).not.toHaveProperty("syntax");
+			expect(raw.meta.validation).not.toHaveProperty("semantic");
 			asArray(raw.data);
 
 			// N8. POST a console command via native /execute.
@@ -195,7 +198,9 @@ describeFast("api against CHR (native-api)", () => {
 				}),
 			);
 			expect(JSON.stringify(script.data)).toContain(identity);
-			expect(script.meta.validation?.semantic).toBe("not-applicable");
+			// A script has no names to check, so no `semantic` summary (#535).
+			expect(script.meta.validation?.syntax).toBe(true);
+			expect(script.meta.validation).not.toHaveProperty("semantic");
 			expect(script.meta.validation?.stages?.[1]).toMatchObject({
 				stage: "device",
 				source: ":put [:parse]",

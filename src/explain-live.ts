@@ -26,6 +26,7 @@ import {
 	type ExplainSpanClass,
 	type ExplainSpanRange,
 	explainEnvelope,
+	explainValidationMeta,
 	verdictOf,
 } from "./explain.ts";
 import {
@@ -218,6 +219,7 @@ function liveMeta(
 			),
 		},
 		via: resolved.via.value,
+		validation: explainValidationMeta(),
 		settings: {
 			via: toCoreSource(resolved.via.source),
 			host: toCoreSource(target.hostSource),
