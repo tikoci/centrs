@@ -570,7 +570,9 @@ export async function resolveEgressMac(
 	// mac-server=all and proven L2 adjacency; CHR answers synthetic MACs, so
 	// the integration suite stayed green). The limited `255.255.255.255`
 	// belongs to no one interface and still falls through to undefined — the
-	// default-broadcast path sprays discovery instead.
+	// default-broadcast path sprays discovery instead. On a tie (two NICs on
+	// one subnet sharing a broadcast) the first match wins, which may not be
+	// the route's pick; the discovery spray remains the way to probe every NIC.
 	const owner = interfaces.find((ifc) => ifc.broadcast === host);
 	if (owner !== undefined) {
 		return owner.mac;
