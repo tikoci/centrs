@@ -302,7 +302,9 @@ export async function collectExplainEvidence(
 			ev.errorCode = code;
 			ev.outcome = signal?.aborted
 				? "interrupted"
-				: code.startsWith("auth/") || code === "transport/auth-failed"
+				: code.startsWith("auth/") ||
+						code === "transport/auth-failed" ||
+						code === "transport/edge-auth-failed"
 					? "auth-error"
 					: code.includes("timeout")
 						? "timeout"

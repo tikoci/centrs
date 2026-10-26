@@ -108,6 +108,24 @@ function cleanToken(token: string): string {
  */
 export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 	{
+		code: "routeros/permission-denied",
+		description:
+			"RouterOS refused the command because the user's group lacks a policy it needs.",
+		// Grounded on CHR 7.25. REST answers HTTP 500 with this as `detail`:
+		// `not enough permissions (9)` for a write without `write`, and
+		// `std failure: not allowed (9)` for any request (even a GET) when the
+		// group has `rest-api` but not `api` (fixed in 7.26beta3). The native API traps with the
+		// first string; `/execute as-string` returns it as text with a
+		// `(<path>; line N)` suffix.
+		test: /not enough permissions|not allowed \(9\)/i,
+		resultTest: /^not enough permissions \(9\).*$/i,
+		build: (_match, raw) => ({
+			summary: `RouterOS refused the command for lack of permission: ${raw.trim()}`,
+			remediation:
+				"Grant the missing policy to the RouterOS user's group (`/user/group`): `read` for reads, `write` for changes. If every REST request fails with `not allowed (9)`, the group has `rest-api` without `api`; before RouterOS 7.26beta3, REST needs both. Retrying will not help.",
+		}),
+	},
+	{
 		code: "routeros/unknown-path",
 		description:
 			"RouterOS did not recognize the command path or menu item ('no such ...').",

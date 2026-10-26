@@ -192,6 +192,19 @@ export const PROPLIST_HIGHLIGHT_SPLIT_SINCE = "7.23beta1";
 export const FIREWALL_WHERE_UNQUOTED_LITERALS_SINCE = "7.25beta3";
 
 /**
+ * A REST user whose group has `rest-api` but not `api` stopped being refused.
+ *   - old: every REST request, a GET included, is HTTP 500
+ *     `std failure: not allowed (9)`
+ *   - new: the request runs under the group's other policies
+ *
+ * Measured: old on 7.23.8, 7.25 and 7.26beta1; new on 7.26beta3. 7.26beta2
+ * was not booted; the 7.26beta3 changelog carries the fix ("fix REST API login
+ * for users with rest-api policy, but without api policy"), so this threshold
+ * is the changelog's build. Re-derive with rest-permission.test.ts (P3).
+ */
+export const REST_API_WITHOUT_API_POLICY_SINCE = "7.26beta3";
+
+/**
  * CMR (`/cmr`, `/cmr/client`, the optional `cmr` package) first shipped in
  * 7.26beta1 (MikroTik manual). No earlier build has the menus, so
  * `execute --cmr` suites boot this version explicitly instead of following

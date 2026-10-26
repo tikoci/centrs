@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import {
+	isRetryableFanoutError,
+	NOT_SENT_TRANSPORT_CODES,
+} from "../../src/core/fanout.ts";
 import { mapRouterOsError } from "../../src/core/routeros-errors.ts";
 import {
 	CentrsError,
+	type CentrsErrorCode,
 	createProtocolAdapter,
 	type ProtocolAdapterConfig,
 } from "../../src/index.ts";
@@ -163,7 +168,7 @@ describe("RestAdapter retrieve operations", () => {
 
 	test("maps a 401 to a structured transport/auth-failed error", async () => {
 		const mock = mockFetchSequence([
-			() => jsonResponse({ detail: "not authorized" }, 401),
+			() => jsonResponse({ error: 401, message: "Unauthorized" }, 401),
 		]);
 		try {
 			const adapter = createProtocolAdapter(restConfig());
@@ -172,6 +177,120 @@ describe("RestAdapter retrieve operations", () => {
 				.catch((caught: unknown) => caught);
 			expect(error).toBeInstanceOf(CentrsError);
 			expect((error as CentrsError).code).toBe("transport/auth-failed");
+		} finally {
+			mock.restore();
+		}
+	});
+
+	// Reply shapes captured from CHR 7.25 (RouterOS) and from a Cloudflare
+	// Access app in front of a router (doc'd in the edge-auth-failed page).
+	const restFailureCases: ReadonlyArray<{
+		name: string;
+		reply: () => Response;
+		code: CentrsErrorCode;
+	}> = [
+		{
+			name: "RouterOS 401 for a wrong password",
+			reply: () => jsonResponse({ error: 401, message: "Unauthorized" }, 401),
+			code: "transport/auth-failed",
+		},
+		{
+			name: "RouterOS 401 with its Basic challenge (no credentials sent)",
+			reply: () =>
+				new Response(JSON.stringify({ error: 401, message: "Unauthorized" }), {
+					status: 401,
+					headers: {
+						"Content-Type": "application/json",
+						"WWW-Authenticate": "Basic",
+					},
+				}),
+			code: "transport/auth-failed",
+		},
+		{
+			name: "edge 401 with a Bearer challenge",
+			reply: () =>
+				new Response(JSON.stringify({ error: "invalid_token" }), {
+					status: 401,
+					headers: {
+						"Content-Type": "application/json",
+						"WWW-Authenticate":
+							'Bearer realm="edge", resource_metadata="https://edge.example/.well-known/x"',
+						"cf-ray": "0000000000000000-AAA",
+					},
+				}),
+			code: "transport/edge-auth-failed",
+		},
+		{
+			name: "edge 403 with an HTML page",
+			reply: () =>
+				new Response("<html><body>Forbidden</body></html>", {
+					status: 403,
+					headers: { "Content-Type": "text/html", server: "cloudflare" },
+				}),
+			code: "transport/edge-auth-failed",
+		},
+		{
+			name: "RouterOS 500 for a write without the write policy",
+			reply: () =>
+				jsonResponse(
+					{
+						detail: "not enough permissions (9)",
+						error: 500,
+						message: "Internal Server Error",
+					},
+					500,
+				),
+			code: "routeros/permission-denied",
+		},
+		{
+			name: "RouterOS 500 when the group has rest-api but not api",
+			reply: () =>
+				jsonResponse(
+					{
+						detail: "std failure: not allowed (9)",
+						error: 500,
+						message: "Internal Server Error",
+					},
+					500,
+				),
+			code: "routeros/permission-denied",
+		},
+	];
+
+	for (const testCase of restFailureCases) {
+		test(`classifies ${testCase.name} as ${testCase.code}`, async () => {
+			const mock = mockFetchSequence([testCase.reply]);
+			try {
+				const adapter = createProtocolAdapter(restConfig());
+				const error = await adapter
+					.getSingleton("/system/resource")
+					.catch((caught: unknown) => caught);
+				expect(error).toBeInstanceOf(CentrsError);
+				expect((error as CentrsError).code).toBe(testCase.code);
+				expect(isRetryableFanoutError(error)).toBe(false);
+			} finally {
+				mock.restore();
+			}
+		});
+	}
+
+	test("edge-auth-failed records which layer refused, without secrets", async () => {
+		const edgeCase = restFailureCases.find((c) =>
+			c.name.startsWith("edge 401"),
+		);
+		if (!edgeCase) throw new Error("edge 401 case missing");
+		const mock = mockFetchSequence([edgeCase.reply]);
+		try {
+			const adapter = createProtocolAdapter(restConfig());
+			const error = (await adapter
+				.getSingleton("/system/resource")
+				.catch((caught: unknown) => caught)) as CentrsError;
+			expect(error.context).toMatchObject({
+				status: 401,
+				challengeScheme: "Bearer",
+				cfRay: "present",
+			});
+			expect(NOT_SENT_TRANSPORT_CODES).toContain(error.code);
 		} finally {
 			mock.restore();
 		}

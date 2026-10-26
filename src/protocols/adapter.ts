@@ -562,7 +562,13 @@ class RestAdapter implements ProtocolAdapter {
 			);
 			const data = parseResponseBody(text);
 			if (!response.ok) {
-				throw this.mapHttpFailure(response.status, text, data, path);
+				throw this.mapHttpFailure(
+					response.status,
+					text,
+					data,
+					path,
+					response.headers,
+				);
 			}
 
 			return { status: response.status, text, data };
@@ -581,17 +587,52 @@ class RestAdapter implements ProtocolAdapter {
 		text: string,
 		data: unknown,
 		path: string,
+		headers: Headers,
 	): CentrsError {
 		const { protocol, host, port } = this.config;
 		if (status === 401 || status === 403) {
+			if (!isRouterOsAuthReply(status, data, headers)) {
+				return new CentrsError({
+					code: "transport/edge-auth-failed",
+					summary: `An HTTP layer in front of RouterOS at ${formatEndpoint(host, port)} refused the request (HTTP ${status}); RouterOS did not answer it.`,
+					remediation:
+						"An auth proxy, tunnel edge, or WAF wants its own credentials, and centrs sends only RouterOS Basic auth. Point `--host` at an address that reaches RouterOS directly, or at a local proxy that authenticates to that layer for you. Changing the RouterOS username or password will not help.",
+					context: {
+						via: protocol,
+						host,
+						port,
+						path,
+						status,
+						...edgeEvidence(headers),
+					},
+					causeData: data ?? text,
+				});
+			}
 			return new CentrsError({
 				code: "transport/auth-failed",
 				summary: `RouterOS rejected the REST credentials for ${formatEndpoint(host, port)}.`,
 				remediation:
-					"Check `--username` / `--password` or the matching `CENTRS_*` environment variables, and confirm the user has RouterOS REST access.",
+					"Check `--username` / `--password` or the matching `CENTRS_*` environment variables. RouterOS answers the same 401 when the user's group lacks the `rest-api` policy or the user's `address` excludes this client.",
 				context: { via: protocol, host, port, path, status },
 				causeData: data ?? text,
 			});
+		}
+
+		const detail = isPlainObject(data)
+			? readRecordString(data, "detail")
+			: undefined;
+		if (detail !== undefined) {
+			// RouterOS reports a policy refusal as HTTP 500 with a `(9)` detail.
+			// It is a deterministic router answer, not a dropped connection, so it
+			// must not reach the 5xx retry path below.
+			const mapped = mapRouterOsError(detail, {
+				transport: "rest-api",
+				httpStatus: status,
+				context: { via: protocol, host, port, path, status },
+			});
+			if (mapped.code === "routeros/permission-denied") {
+				return mapped;
+			}
 		}
 
 		if (status >= 500 && status <= 599) {
@@ -610,9 +651,6 @@ class RestAdapter implements ProtocolAdapter {
 			});
 		}
 
-		const detail = isPlainObject(data)
-			? readRecordString(data, "detail")
-			: undefined;
 		const rawRouterOsError = detail ?? text;
 		return mapRouterOsError(rawRouterOsError, {
 			transport: "rest-api",
@@ -1358,6 +1396,45 @@ function collectTransportSignalsInto(
 			collectTransportSignalsInto(nested, signals, seen);
 		}
 	}
+}
+
+/**
+ * True when a REST 401/403 reply has RouterOS's own shape. Grounded on CHR
+ * 7.25: RouterOS answers every auth refusal (wrong password, no `rest-api`
+ * policy, `address` mismatch) with a JSON body `{"error":401,...}`, adding
+ * `WWW-Authenticate: Basic` only when no credentials were sent. Any other
+ * body, or a challenge for another scheme (Cloudflare Access sends `Bearer`),
+ * came from a layer in front of RouterOS. A `cf-ray` header alone proves
+ * nothing: a tunnel passes RouterOS's own 401 through with it.
+ */
+function isRouterOsAuthReply(
+	status: number,
+	data: unknown,
+	headers: Headers,
+): boolean {
+	const challenge = headers.get("www-authenticate");
+	if (challenge !== null && !/^\s*basic\b/i.test(challenge)) {
+		return false;
+	}
+	return isPlainObject(data) && data["error"] === status;
+}
+
+/** Non-secret header facts that show which layer refused a request. */
+function edgeEvidence(headers: Headers): {
+	challengeScheme?: string;
+	server?: string;
+	contentType?: string;
+	cfRay?: "present";
+} {
+	const evidence: ReturnType<typeof edgeEvidence> = {};
+	const scheme = headers.get("www-authenticate")?.trim().split(/\s+/)[0];
+	if (scheme) evidence.challengeScheme = scheme;
+	const server = headers.get("server");
+	if (server) evidence.server = server;
+	const contentType = headers.get("content-type");
+	if (contentType) evidence.contentType = contentType;
+	if (headers.has("cf-ray")) evidence.cfRay = "present";
+	return evidence;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
