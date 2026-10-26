@@ -71,6 +71,10 @@ centrs retrieve $R /interface --attributes name,type --username $U --password $P
 
 Envelope: `data` is an array of objects each containing only `name` and `type`.
 
+A single attribute (`--attributes name`) keeps the array shape: an array of
+single-key objects. On a singleton, one item via either flag returns the bare
+value (example 5) — the rule is the count, not the flag.
+
 ### 7. --all-attributes (RouterOS details=true)
 
 ```bash
@@ -362,6 +366,10 @@ centrs retrieve $A /interface --attributes name,type --via native-api --port $AP
 ```
 
 `data` is an array of objects each containing only `name` and `type`.
+
+A single attribute (`--attributes name`) keeps the array shape here too: an
+array of single-key objects. On a singleton, one item via either flag returns
+the bare value (N5) — the rule is the count, not the flag.
 
 ### N7. `--all-attributes` (native `print detail`)
 
