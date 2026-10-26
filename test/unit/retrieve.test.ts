@@ -1133,6 +1133,9 @@ describe("retrieveUnknownPathRemediation", () => {
 	});
 
 	test("keeps the generic path guidance for anything else", () => {
+		// `/system/routerboard/print` stays generic on purpose: on hardware the
+		// menu exists, so that spelling is a menu+verb mistake, not a missing
+		// routerboard — a prefix match would mis-fire the CHR hint there.
 		for (const path of [
 			"/not/a/real/path",
 			"/system/routerboard/print",
