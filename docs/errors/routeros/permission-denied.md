@@ -1,7 +1,9 @@
 # `routeros/permission-denied`
 
 RouterOS refused the command because the user's group lacks a policy it needs.
-The router answered, so nothing ran and a retry gives the same result.
+The router answered, and a retry gives the same result. A single refused
+command did not run. A multi-statement script run through `/execute` can be
+partly applied: statements before the refused one already ran.
 
 ## Typical RouterOS strings
 

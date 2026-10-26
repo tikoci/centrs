@@ -195,6 +195,8 @@ describe("live evidence controls", () => {
 		"transport/timeout",
 		"transport/connection-closed",
 		"transport/auth-failed",
+		"transport/edge-auth-failed",
+		"routeros/permission-denied",
 	])("%s keeps offline facts and stops subsequent requests", async (code) => {
 		let calls = 0;
 		const data = await collect("/ip/address print", {

@@ -304,7 +304,8 @@ export async function collectExplainEvidence(
 				? "interrupted"
 				: code.startsWith("auth/") ||
 						code === "transport/auth-failed" ||
-						code === "transport/edge-auth-failed"
+						code === "transport/edge-auth-failed" ||
+						code === "routeros/permission-denied"
 					? "auth-error"
 					: code.includes("timeout")
 						? "timeout"
