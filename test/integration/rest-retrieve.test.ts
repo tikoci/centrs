@@ -396,6 +396,34 @@ describeFast("REST retrieve against CHR", () => {
 			const unknownPathContext = unknownPathEnvelope.error.context;
 			expect(unknownPathContext?.availableChildren).toBeDefined();
 
+			// /system/routerboard is absent on CHR by nature, not by typo: the
+			// remediation names that and points at the per-platform license ID.
+			const routerboardEnvelope = await expectRetrieveFailure(
+				consoleCapture,
+				["retrieve", chr.restUrl, "/system/routerboard", ...baseArgs],
+				"validation/unknown-path",
+			);
+			expect(routerboardEnvelope.error.remediation).toContain("CHR");
+			expect(routerboardEnvelope.error.remediation).toContain("x86");
+			expect(routerboardEnvelope.error.remediation).toContain(
+				"/system/license",
+			);
+			expect(routerboardEnvelope.error.remediation).toContain("system-id");
+			expect(routerboardEnvelope.error.remediation).toContain("software-id");
+			// The workaround the hint names actually answers on this CHR, as
+			// the full object the remediation's example reads.
+			const licenseEnvelope = await expectRetrieveSuccess(consoleCapture, [
+				"retrieve",
+				chr.restUrl,
+				"/system/license",
+				...baseArgs,
+			]);
+			const systemId = (licenseEnvelope.data as Record<string, unknown>)[
+				"system-id"
+			];
+			expect(typeof systemId).toBe("string");
+			expect((systemId as string).length).toBeGreaterThan(0);
+
 			const unknownAttributeEnvelope = await expectRetrieveFailure(
 				consoleCapture,
 				[
