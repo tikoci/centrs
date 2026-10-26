@@ -122,6 +122,16 @@ available.
 centrs retrieve $R /not/a/real/path --username $U --password $P --json
 ```
 
+`/system/routerboard` earns a targeted remediation instead of the generic
+one: the menu does not exist on CHR and other virtualized RouterOS, so its
+absence is expected there rather than a typo, and the remediation points at
+`/system/license --attributes system-id` for the device identity.
+
+```bash
+centrs retrieve $R /system/routerboard --username $U --password $P --json
+centrs retrieve $R /system/license --attributes system-id --username $U --password $P --json
+```
+
 ### 11. Unknown attribute
 
 `validation/unknown-attribute` with suggestions.
@@ -379,6 +389,14 @@ centrs retrieve $A /system/resource --list-attributes --via native-api --port $A
 
 ```bash
 centrs retrieve $A /not/a/real/path --via native-api --port $API_PORT --username $U --password $P
+```
+
+`/system/routerboard` on CHR earns the targeted remediation (no routerboard
+on virtualized RouterOS; read `/system/license system-id` instead), same as
+example 10.
+
+```bash
+centrs retrieve $A /system/routerboard --via native-api --port $API_PORT --username $U --password $P
 ```
 
 ### N10. Unknown attribute → `validation/unknown-attribute`

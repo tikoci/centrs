@@ -23,7 +23,7 @@ interface SuccessEnvelope {
 
 interface FailureEnvelope {
 	ok: false;
-	error: { code?: string };
+	error: { code?: string; remediation?: string };
 }
 
 function captureConsole() {
@@ -224,6 +224,15 @@ describeFast("native API retrieve against CHR", () => {
 				["retrieve", "127.0.0.1", "/not/a/real/path", ...baseArgs],
 				"validation/unknown-path",
 			);
+
+			// 9b. /system/routerboard is absent on CHR by nature, not by typo:
+			// the remediation names that and points at system-id.
+			const routerboard = await fail(
+				["retrieve", "127.0.0.1", "/system/routerboard", ...baseArgs],
+				"validation/unknown-path",
+			);
+			expect(routerboard.error.remediation).toContain("CHR");
+			expect(routerboard.error.remediation).toContain("system-id");
 
 			// 10. Unknown attribute → validation/unknown-attribute.
 			await fail(

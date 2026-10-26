@@ -1531,8 +1531,7 @@ export async function inspectRetrievePath(
 		throw new CentrsError({
 			code: "validation/unknown-path",
 			summary: `RouterOS path ${resolved.path} does not expose a retrieve command.`,
-			remediation:
-				"Check the slash-prefixed RouterOS path, or use a known readable path such as `/system/resource`, `/system/identity`, `/ip/address`, or `/interface`.",
+			remediation: retrieveUnknownPathRemediation(resolved.path),
 			context: {
 				path: resolved.path,
 				validationSource: "/console/inspect request=child",
@@ -1556,6 +1555,23 @@ export async function inspectRetrievePath(
 		command: singleton ? "get" : "print",
 		singleton,
 	};
+}
+
+/**
+ * The `validation/unknown-path` remediation for a retrieve read. One path
+ * earns a targeted hint: `/system/routerboard` does not exist on CHR and
+ * other virtualized RouterOS (there is no routerboard), so its absence is
+ * expected there rather than a typo — and the caller's likely want, the
+ * device identity, lives at `/system/license system-id` instead. The hint is
+ * static on purpose: on hardware the menu always validates, so this branch
+ * only fires where the menu is genuinely absent, and no extra round trip is
+ * needed to say so.
+ */
+export function retrieveUnknownPathRemediation(path: string): string {
+	if (path.replace(/\/$/, "").toLowerCase() === "/system/routerboard") {
+		return "This device exposes no /system/routerboard menu — expected on CHR and other virtualized RouterOS, which have no routerboard. For this device's identity, read /system/license instead: `centrs retrieve <router> /system/license --attributes system-id`.";
+	}
+	return "Check the slash-prefixed RouterOS path, or use a known readable path such as `/system/resource`, `/system/identity`, `/ip/address`, or `/interface`.";
 }
 
 /**
