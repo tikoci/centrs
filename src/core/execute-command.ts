@@ -127,7 +127,11 @@ export function isWriteShaped(command: CanonicalExecuteCommand): boolean {
  * a verb in the known-mutator list stays gated even if the table ever
  * mis-tags its path, and any attribute or query (including `;`-smuggled text,
  * which lands in the verb or an attribute, never in a clean menu reading)
- * keeps the gate shut.
+ * keeps the gate shut. The gate is shared, so bare menus also stop tripping
+ * `cdb/write-not-permitted` on `mcp=ro` targets (and stop needing
+ * `confirm:true` on `mcp=rw` ones), and `explain`'s `writeShaped` flips to
+ * false for these inputs — harmless in all three, since the input is a
+ * no-op read either way.
  */
 function isBareMenuNavigation(command: CanonicalExecuteCommand): boolean {
 	if (
