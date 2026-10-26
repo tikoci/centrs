@@ -561,16 +561,25 @@ export async function resolveEgressMac(
 	host: string,
 	port: number,
 ): Promise<MacAddress | undefined> {
+	const interfaces = listBroadcastInterfaces();
+	// A broadcast host owns no route: `connect()` to one reports local
+	// `0.0.0.0`, so match it to the interface whose directed broadcast it is
+	// instead. Without this, an explicit `--host <broadcast>` falls back to a
+	// synthetic source MAC, which RouterOS's mac-server silently ignores
+	// (orca 2026-10-26: 30s login timeout vs 7.26beta3 hardware despite
+	// mac-server=all and proven L2 adjacency; CHR answers synthetic MACs, so
+	// the integration suite stayed green). The limited `255.255.255.255`
+	// belongs to no one interface and still falls through to undefined — the
+	// default-broadcast path sprays discovery instead.
+	const owner = interfaces.find((ifc) => ifc.broadcast === host);
+	if (owner !== undefined) {
+		return owner.mac;
+	}
 	const localAddr = await egressAddressFor(host, port);
-	if (!localAddr) {
+	if (!localAddr || localAddr === "0.0.0.0") {
 		return undefined;
 	}
-	for (const ifc of listBroadcastInterfaces()) {
-		if (ifc.address === localAddr) {
-			return ifc.mac;
-		}
-	}
-	return undefined;
+	return interfaces.find((ifc) => ifc.address === localAddr)?.mac;
 }
 
 /** Which interface (source MAC + delivery host) reaches a target over MAC-Telnet. */

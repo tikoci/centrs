@@ -520,8 +520,13 @@ How it is wired:
   correctness issue — see `commands/terminal/README.md` for the optional fix).
 - **Delivery:** the UDP transport sends to `--host`/`--port` (default L2 broadcast
   `255.255.255.255:20561`); the device replies to our source IP:port, and the
-  in-packet MACs do the addressing. The CHR test points `--host`/`--port` at the
-  loopback L2 bridge.
+  in-packet MACs do the addressing. The device answers only broadcast delivery
+  (unicast gets no reply), and only when the in-packet *source* MAC is the
+  egress interface's real MAC — a synthetic source gets no reply on hardware
+  (CHR answers it, so the suite cannot catch a wrong source). With the default
+  host centrs sprays per-interface discovery with real MACs; with an explicit
+  `--host <directed-broadcast>` it resolves the owning interface's MAC. The CHR
+  test points `--host`/`--port` at the loopback L2 bridge.
 
 Protocol selection: an unresolved MAC target auto-selects mac-telnet (covered by
 `test/unit/execute.test.ts`); callers wanting IP-level execution opt into ARP

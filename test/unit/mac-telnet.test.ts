@@ -20,6 +20,7 @@ import {
 	macTelnetPasswordHash,
 	parseControlBlocks,
 	parseMac,
+	resolveEgressMac,
 } from "../../src/protocols/mac-telnet.ts";
 import { mtweiKeygen } from "../../src/protocols/mtwei.ts";
 
@@ -227,6 +228,30 @@ describe("mac-telnet broadcast interfaces", () => {
 			expect(ifc.broadcast).toMatch(/^\d{1,3}(\.\d{1,3}){3}$/);
 			expect(typeof ifc.name).toBe("string");
 		}
+	});
+});
+
+describe("mac-telnet egress MAC for broadcast hosts", () => {
+	test("a directed-broadcast host resolves to its owning interface's real MAC", async () => {
+		// Regression (orca 2026-10-26): `connect()` to a broadcast reports
+		// local 0.0.0.0, so the egress probe matched no interface and an
+		// explicit `--host <broadcast>` fell back to a synthetic source MAC —
+		// which RouterOS's mac-server silently ignores (30s login timeout vs
+		// 7.26beta3 hardware despite mac-server=all). CHR answers synthetic
+		// MACs, so the integration suite stayed green while hardware timed out.
+		for (const ifc of listBroadcastInterfaces()) {
+			await expect(resolveEgressMac(ifc.broadcast, 20561)).resolves.toEqual(
+				ifc.mac,
+			);
+		}
+	});
+
+	test("the limited broadcast still falls back (no owning interface)", async () => {
+		// 255.255.255.255 belongs to no one interface; the default-broadcast
+		// path sprays discovery instead, so this stays undefined.
+		await expect(
+			resolveEgressMac("255.255.255.255", 20561),
+		).resolves.toBeUndefined();
 	});
 });
 
