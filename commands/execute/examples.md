@@ -633,6 +633,25 @@ This is a grounding version, not an introduction boundary. Unknown or
 ambiguous output-file prefixes stay write-shaped until the device resolves
 them.
 
+### W6. A bare menu path needs no confirmation and answers with a steering tip
+
+```bash
+centrs execute $R '/system/identity' --via rest-api --username $U --password $P
+```
+
+No `--yes` gate: a truly bare known-menu path is console navigation, a no-op
+read, and structured mode proves the input is a single path token with no
+follow-up. The device still answers truthfully — REST reports
+`routeros/request-failed`, native API `routeros/api-trap`, both carrying
+RouterOS's own `no such command` — and the envelope carries
+`tip/execute-bare-menu-path`, naming `/system/identity/print` (or
+`centrs retrieve $R /system/identity`) as the read that answers. A bare
+no-argument *command* such as `/system/reboot` stays write-shaped and still
+requires confirmation.
+
+`test/integration/execute-write-gate.test.ts` proves the gate stays open for
+navigation and shut for no-arg writes, on REST and native API.
+
 ### R1. A post-validation `/execute` rejection fails the overall envelope
 
 ```bash

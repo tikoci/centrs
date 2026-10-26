@@ -142,3 +142,69 @@ describeFast("output-file write gates against CHR", () => {
 		}, 120_000);
 	}
 });
+
+describeFast("bare menu path reads against CHR (W6)", () => {
+	test("navigation needs no confirmation; bare no-arg writes still do (W6)", async () => {
+		const started = await startIntegrationChr({});
+		const { chr } = started;
+		try {
+			const auth = splitQuickChrAuth(
+				readEnv(started.env, "QUICKCHR_AUTH") ?? "admin:",
+			);
+			// Same RouterOS refusal on both transports, mapped per adapter.
+			const expectedCode = {
+				"rest-api": "routeros/request-failed",
+				"native-api": "routeros/api-trap",
+			} as const;
+			for (const via of ["rest-api", "native-api"] as const) {
+				const base = {
+					targetInput: via === "rest-api" ? chr.restUrl : "127.0.0.1",
+					via,
+					...(via === "native-api" ? { port: chr.ports.api } : {}),
+					...auth,
+				};
+				// A truly bare known-menu path runs: validation passes, the
+				// device answers truthfully, and the steering tip names the
+				// read that answers.
+				const nav = await executeEnvelope(
+					{ ...base, command: "/system/identity", stdinIsTty: false },
+					{},
+				);
+				expect(nav.ok).toBe(false);
+				if (!nav.ok) {
+					expect(nav.error.code).toBe(expectedCode[via]);
+					expect(nav.error.message).toContain("no such command");
+				}
+				expect(
+					nav.tips.some((t) => t.code === "tip/execute-bare-menu-path"),
+				).toBe(true);
+				// Controls: a real read passes, and a bare no-argument *write*
+				// stays behind the confirmation gate.
+				const read = await executeEnvelope(
+					{ ...base, command: "/system/identity/print", stdinIsTty: false },
+					{},
+				);
+				expect(read.ok).toBe(true);
+				const gated = await executeEnvelope(
+					{ ...base, command: "/system/reboot", stdinIsTty: false },
+					{},
+				);
+				expect(gated.ok ? undefined : gated.error.code).toBe(
+					"usage/confirmation-required",
+				);
+			}
+			await recordIntegrationEvidence({
+				suite: "bare menu path reads (W6)",
+				command: "execute",
+				protocol: "rest-api+native-api",
+				routerosVersion: chr.state.version,
+				quickChrName: chr.name,
+				requestedChannel: started.requestedChannel,
+				requestedVersion: started.requestedVersion,
+				exampleIds: ["W6"],
+			});
+		} finally {
+			await chr.destroy();
+		}
+	}, 180_000);
+});

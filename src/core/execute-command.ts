@@ -104,9 +104,58 @@ export function isWriteShaped(command: CanonicalExecuteCommand): boolean {
 		if (Object.keys(command.attributes).some(isFileOutputAttribute)) {
 			return true;
 		}
+		if (isBareMenuNavigation(command)) {
+			return false;
+		}
 		return !READ_ONLY_EXECUTE_VERBS.has(command.verb.toLowerCase());
 	}
 	return scriptContainsWriteShapedCommand(command.input);
+}
+
+/**
+ * A truly bare known-menu path (`/system/identity`, no attributes or queries)
+ * is console navigation — a no-op read, not a command — so it needs no write
+ * confirmation. The APIs refuse it (`no such command`) and the consoles
+ * navigate silently; neither mutates.
+ *
+ * This is narrower than the script branch on purpose. There, `/ip firewall
+ * filter` stays write-shaped (#387): a later line may carry a relative verb,
+ * so navigation fails closed. Here structured mode proves the input is a
+ * single path token (any second word without `=` — including a second line —
+ * falls back to script), so no follow-up is possible. The carve-out still
+ * fails closed three ways: anything the menu table does not carry stays gated,
+ * a verb in the known-mutator list stays gated even if the table ever
+ * mis-tags its path, and any attribute or query (including `;`-smuggled text,
+ * which lands in the verb or an attribute, never in a clean menu reading)
+ * keeps the gate shut.
+ */
+function isBareMenuNavigation(command: CanonicalExecuteCommand): boolean {
+	if (
+		Object.keys(command.attributes).length > 0 ||
+		command.queries.length > 0
+	) {
+		return false;
+	}
+	if (KNOWN_WRITE_EXECUTE_VERBS.has(command.verb.toLowerCase())) {
+		return false;
+	}
+	const segments = `${command.path}/${command.verb}`.split("/").filter(Boolean);
+	if (segments.length < 2) {
+		return false;
+	}
+	return isKnownMenuPath(segments);
+}
+
+/**
+ * Whether `execute` was asked to run a bare menu path (see
+ * {@link isBareMenuNavigation}). The envelope carries a steering tip for it:
+ * navigation runs — the gate no longer stops it — but it answers nothing, so
+ * the tip names the read that does.
+ */
+export function isBareMenuPathCommand(
+	command: CanonicalExecuteCommand,
+): boolean {
+	return command.mode === "structured" && isBareMenuNavigation(command);
 }
 
 /**

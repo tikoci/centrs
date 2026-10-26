@@ -27,6 +27,7 @@ import { buildTip, notReachedReason } from "./core/envelope.ts";
 import {
 	type CanonicalExecuteCommand,
 	canonicalizeExecuteCommand,
+	isBareMenuPathCommand,
 	isWriteShaped,
 } from "./core/execute-command.ts";
 import { sentWriteWarnings } from "./core/fanout.ts";
@@ -162,6 +163,7 @@ export type ExecuteErrorEnvelope = CentrsErrorEnvelope<ExecuteOperationMeta>;
 export {
 	type CanonicalExecuteCommand,
 	canonicalizeExecuteCommand,
+	isBareMenuPathCommand,
 	isWriteShaped,
 };
 
@@ -1442,20 +1444,38 @@ function executeRequestSummary(
  * downstream auth error.
  */
 export function resolvedExecuteTips(resolved: ResolvedExecuteRequest): Tip[] {
+	const tips: Tip[] = [];
 	if (
 		resolved.via.value === "mac-telnet" &&
 		resolved.auth.username === undefined &&
 		!resolved.auth.passwordProvided
 	) {
-		return [
+		tips.push(
 			buildTip(
 				"tip/mac-telnet-no-credentials",
 				"No username or password was resolved for this mac-telnet target.",
 				"mac-telnet logs in with RouterOS credentials over MTWEI (MD5 is refused): pass --username/--password, set CENTRS_USERNAME/CENTRS_PASSWORD, or add a CDB record for this device.",
 			),
-		];
+		);
 	}
-	return [];
+	// A bare menu path runs — the write gate no longer stops it — but it
+	// answers nothing: consoles navigate silently and the APIs refuse it with
+	// `no such command`. Name the read that does answer. `canonical` is
+	// always resolved in production; the guard keeps hermetic stubs total.
+	if (
+		resolved.canonical !== undefined &&
+		isBareMenuPathCommand(resolved.canonical)
+	) {
+		const menu = `${resolved.canonical.path}/${resolved.canonical.verb}`;
+		tips.push(
+			buildTip(
+				"tip/execute-bare-menu-path",
+				`"${menu}" is a menu path, not a command: consoles navigate to it (no output) and the APIs refuse it with "no such command".`,
+				`Append a verb such as "${menu}/print", or read rows with "centrs retrieve <router> ${menu}".`,
+			),
+		);
+	}
+	return tips;
 }
 
 function dataFromResult(result: ProtocolExecuteResult): unknown {
