@@ -405,6 +405,24 @@ const cases: GateCase[] = [
 		path: "/system",
 		verb: "identity;",
 	},
+	// A second line in `key=value` form stays structured (whitespace-split),
+	// but its attributes keep the gate shut: bare-only means bare.
+	{
+		input: "/system/identity\nname=x",
+		mode: "structured",
+		write: true,
+		path: "/system",
+		verb: "identity",
+	},
+	// The menu tables fold case, matching RouterOS: an uppercase bare menu is
+	// the same navigation no-op, so it reads as a read too.
+	{
+		input: "/SYSTEM/IDENTITY",
+		mode: "structured",
+		write: false,
+		path: "/SYSTEM",
+		verb: "IDENTITY",
+	},
 ];
 
 describe("execute gate legacy contract", () => {
