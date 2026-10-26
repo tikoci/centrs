@@ -1559,17 +1559,19 @@ export async function inspectRetrievePath(
 
 /**
  * The `validation/unknown-path` remediation for a retrieve read. One path
- * earns a targeted hint: `/system/routerboard` does not exist on CHR and
- * other virtualized RouterOS (there is no routerboard), so its absence is
- * expected there rather than a typo — and the caller's likely want, the
- * device identity, lives at `/system/license system-id` instead. The hint is
- * static on purpose: on hardware the menu always validates, so this branch
- * only fires where the menu is genuinely absent, and no extra round trip is
- * needed to say so.
+ * earns a targeted hint: `/system/routerboard` exists only on MikroTik
+ * hardware, so its absence on CHR and x86 systems is expected rather than a
+ * typo — and the caller's likely want, the device's license ID, lives at
+ * `/system/license` instead (`system-id` on CHR, `software-id` on x86; manual
+ * "RouterOS License Keys", CLI Reference `/system/license`). The example
+ * reads the whole object because a projected attribute would fail on one
+ * platform or the other. The hint is static on purpose: on hardware the menu
+ * always validates, so this branch only fires where the menu is genuinely
+ * absent, and no extra round trip is needed to say so.
  */
 export function retrieveUnknownPathRemediation(path: string): string {
 	if (path.replace(/\/$/, "").toLowerCase() === "/system/routerboard") {
-		return "This device exposes no /system/routerboard menu — expected on CHR and other virtualized RouterOS, which have no routerboard. For this device's identity, read /system/license instead: `centrs retrieve <router> /system/license --attributes system-id`.";
+		return "This device exposes no /system/routerboard menu — expected on CHR and x86 systems, which have no routerboard. For this device's license ID, read /system/license instead: `centrs retrieve <router> /system/license` (system-id on CHR, software-id on x86).";
 	}
 	return "Check the slash-prefixed RouterOS path, or use a known readable path such as `/system/resource`, `/system/identity`, `/ip/address`, or `/interface`.";
 }

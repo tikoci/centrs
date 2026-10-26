@@ -123,13 +123,15 @@ centrs retrieve $R /not/a/real/path --username $U --password $P --json
 ```
 
 `/system/routerboard` earns a targeted remediation instead of the generic
-one: the menu does not exist on CHR and other virtualized RouterOS, so its
-absence is expected there rather than a typo, and the remediation points at
-`/system/license --attributes system-id` for the device identity.
+one: the menu exists only on MikroTik hardware, so its absence on CHR and
+x86 systems is expected rather than a typo, and the remediation points at
+`/system/license` for the device's license ID (`system-id` on CHR,
+`software-id` on x86 — a projected attribute would fail on one platform or
+the other, so the example reads the whole object).
 
 ```bash
 centrs retrieve $R /system/routerboard --username $U --password $P --json
-centrs retrieve $R /system/license --attributes system-id --username $U --password $P --json
+centrs retrieve $R /system/license --username $U --password $P --json
 ```
 
 ### 11. Unknown attribute
@@ -392,8 +394,8 @@ centrs retrieve $A /not/a/real/path --via native-api --port $API_PORT --username
 ```
 
 `/system/routerboard` on CHR earns the targeted remediation (no routerboard
-on virtualized RouterOS; read `/system/license system-id` instead), same as
-example 10.
+outside MikroTik hardware; read `/system/license` for the license ID
+instead), same as example 10.
 
 ```bash
 centrs retrieve $A /system/routerboard --via native-api --port $API_PORT --username $U --password $P

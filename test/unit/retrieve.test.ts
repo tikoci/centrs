@@ -1119,7 +1119,7 @@ describe("retrieve --quickchr trust-by-provenance (#134)", () => {
 });
 
 describe("retrieveUnknownPathRemediation", () => {
-	test("names the CHR reality and the system-id workaround for /system/routerboard", () => {
+	test("names the no-routerboard reality and the per-platform license ID for /system/routerboard", () => {
 		for (const path of [
 			"/system/routerboard",
 			"/system/routerboard/",
@@ -1127,8 +1127,13 @@ describe("retrieveUnknownPathRemediation", () => {
 		]) {
 			const remediation = retrieveUnknownPathRemediation(path);
 			expect(remediation).toContain("CHR");
+			expect(remediation).toContain("x86");
 			expect(remediation).toContain("/system/license");
 			expect(remediation).toContain("system-id");
+			expect(remediation).toContain("software-id");
+			// The example reads the whole object: a projected attribute
+			// would fail on one platform or the other.
+			expect(remediation).not.toContain("--attributes");
 		}
 	});
 

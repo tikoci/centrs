@@ -20,11 +20,11 @@ Two sources raise it:
 Check the spelling of the segment in `error.context.segment`. `centrs explain
 '<command>'` shows how the rest of the command reads offline.
 
-One path is not a typo: `/system/routerboard` does not exist on CHR and
-other virtualized RouterOS — there is no routerboard — so `retrieve` answers
-with a targeted remediation instead of the generic one. For the device
-identity, read `/system/license system-id`:
+One path is not a typo: `/system/routerboard` exists only on MikroTik
+hardware, so `retrieve` answers its absence on CHR and x86 systems with a
+targeted remediation instead of the generic one. For the device's license
+ID, read `/system/license` (`system-id` on CHR, `software-id` on x86):
 
 ```bash
-centrs retrieve <router> /system/license --attributes system-id
+centrs retrieve <router> /system/license
 ```
