@@ -298,6 +298,39 @@ describeFast("REST retrieve against CHR", () => {
 				).toBe(true);
 			}
 
+			// List single-attribute projection keeps the array shape: an array
+			// of single-key objects, never bare values.
+			const singleProjectedEnvelope = await expectRetrieveSuccess(
+				consoleCapture,
+				[
+					"retrieve",
+					chr.restUrl,
+					"/interface",
+					"--attributes",
+					"name",
+					...baseArgs,
+				],
+			);
+			const singleRows = singleProjectedEnvelope.data as Array<
+				Record<string, unknown>
+			>;
+			expect(singleRows.length).toBeGreaterThan(0);
+			for (const row of singleRows) {
+				expect(Object.keys(row)).toEqual(["name"]);
+			}
+
+			// The bare value is about the attribute count, not the flag
+			// spelling: one item via `--attributes` still returns the scalar.
+			const pluralSingleEnvelope = await expectRetrieveSuccess(consoleCapture, [
+				"retrieve",
+				chr.restUrl,
+				"/system/resource",
+				"--attributes",
+				"uptime",
+				...baseArgs,
+			]);
+			expect(typeof pluralSingleEnvelope.data).toBe("string");
+
 			await expectRetrieveSuccess(consoleCapture, [
 				"retrieve",
 				chr.restUrl,
