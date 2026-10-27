@@ -95,6 +95,22 @@ part of this section.
 
 ### Changed
 
+- **Breaking:** permission and edge-auth failures get their own error codes
+  (#541). Three codes change for `--json` and library readers:
+  - A REST policy refusal (HTTP 500 `not enough permissions (9)` or `std
+    failure: not allowed (9)`): `transport/connection-closed` →
+    `routeros/permission-denied`. It is a deterministic router answer, so it
+    is never retried and no longer carries
+    `transport/write-outcome-unknown`.
+  - A native-API `not enough permissions (9)` trap: `routeros/api-trap` →
+    `routeros/permission-denied`. Retrieve's path probe and live explain's
+    child probe surface it instead of reading "path doesn't exist".
+  - A 401/403 from a layer in front of RouterOS (auth proxy, tunnel edge,
+    WAF): `transport/auth-failed` → `transport/edge-auth-failed`, with the
+    challenge scheme, server, content type and `cf-ray` presence as context
+    (no secrets). RouterOS's own 401 — JSON `{"error":401,...}`, measured on
+    CHR 7.12.1, 7.16.2, 7.23.8, 7.25, 7.26beta1 and 7.26beta3 — stays
+    `transport/auth-failed`.
 - **`meta.validation` success shapes (#535).** This is a breaking change for
   `--json` readers of the flat fields. `syntax` and `semantic` are now present
   only when a gate stage gave that verdict; absent means no stage was asked.

@@ -180,6 +180,22 @@ describe("inspectChildrenOrEmpty", () => {
 		}
 	});
 
+	test("propagates routeros/permission-denied (a refusal is not 'path missing')", async () => {
+		const backend: InspectBackend = {
+			inspect() {
+				return Promise.reject(
+					new CentrsError({
+						code: "routeros/permission-denied",
+						summary: "not enough permissions (9)",
+					}),
+				);
+			},
+		};
+		await expect(
+			inspectChildrenOrEmpty(backend, ["ip", "address"]),
+		).rejects.toMatchObject({ code: "routeros/permission-denied" });
+	});
+
 	test("rethrows any other error (CentrsError or otherwise)", async () => {
 		const transport: InspectBackend = {
 			inspect() {

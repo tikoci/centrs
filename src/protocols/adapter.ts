@@ -1399,13 +1399,14 @@ function collectTransportSignalsInto(
 }
 
 /**
- * True when a REST 401/403 reply has RouterOS's own shape. Grounded on CHR
- * 7.25: RouterOS answers every auth refusal (wrong password, no `rest-api`
- * policy, `address` mismatch) with a JSON body `{"error":401,...}`, adding
- * `WWW-Authenticate: Basic` only when no credentials were sent. Any other
- * body, or a challenge for another scheme (Cloudflare Access sends `Bearer`),
- * came from a layer in front of RouterOS. A `cf-ray` header alone proves
- * nothing: a tunnel passes RouterOS's own 401 through with it.
+ * True when a REST 401/403 reply has RouterOS's own shape. RouterOS answers
+ * every auth refusal (wrong password, no `rest-api` policy, `address`
+ * mismatch) with a JSON body `{"error":401,...}`, adding
+ * `WWW-Authenticate: Basic` only when no credentials were sent. Measured on
+ * CHR 7.12.1, 7.16.2, 7.23.8, 7.25, 7.26beta1 and 7.26beta3. Any other body,
+ * or a challenge for another scheme (Cloudflare Access sends `Bearer`), came
+ * from a layer in front of RouterOS. A `cf-ray` header alone proves nothing:
+ * a tunnel passes RouterOS's own 401 through with it.
  */
 function isRouterOsAuthReply(
 	status: number,
