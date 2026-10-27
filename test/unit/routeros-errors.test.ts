@@ -265,18 +265,22 @@ describe("routeros/permission-denied (CHR 7.25 strings)", () => {
 		).toBe("routeros/permission-denied");
 	});
 
-	test("maps /execute as-string text carrying the denial", () => {
+	test.each([
+		"not enough permissions (9)",
+		"not enough permissions (9) (/system/identity/set; line 1)",
+	])("maps /execute as-string denial: %s", (output) => {
 		expect(
-			mapRouterOsResultError(
-				"not enough permissions (9) (/system/identity/set; line 1)",
-				{ transport: "rest-api" },
-			)?.code,
+			mapRouterOsResultError(output, { transport: "rest-api" })?.code,
 		).toBe("routeros/permission-denied");
 	});
 
-	test("leaves ordinary output that merely mentions permissions alone", () => {
+	test.each([
+		"note: not enough permissions here",
+		"not enough permissions (9) is an example from the manual",
+		"not enough permissions (9) (/system/identity/set; line 1) is an example",
+	])("leaves ordinary output alone: %s", (output) => {
 		expect(
-			mapRouterOsResultError("note: not enough permissions here", {
+			mapRouterOsResultError(output, {
 				transport: "rest-api",
 			}),
 		).toBeUndefined();

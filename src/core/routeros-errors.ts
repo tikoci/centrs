@@ -118,7 +118,8 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		// first string; `/execute as-string` returns it as text with a
 		// `(<path>; line N)` suffix.
 		test: /not enough permissions|not allowed \(9\)/i,
-		resultTest: /^not enough permissions \(9\).*$/i,
+		resultTest:
+			/^not enough permissions \(9\)(?: \(\/[^\s();]+; line \d+\))?$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS refused the command for lack of permission: ${raw.trim()}`,
 			remediation:
