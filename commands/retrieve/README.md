@@ -150,6 +150,14 @@ handling.
 }
 ```
 
+Projection rule: the bare value is about the attribute *count*, not the flag
+spelling. On a singleton, exactly one projected attribute — `--attribute x`
+or `--attributes x` alike — returns the bare value (`data` is the scalar,
+not an object); two or more return an object with those keys. On a list, any
+projection returns an array of objects, even a single attribute. Unprojected
+reads return the full object (singleton) or the row array (list). (Examples
+5–6, 20, N5–N6 pin every cell of this table.)
+
 `--max-bytes` / `--max-rows` truncation populates
 `meta.truncated = { returned, total, totalBytes }` and keeps `ok: true` with a
 warning entry — it is not an error. (Earlier text said a byte overflow returns an

@@ -44,7 +44,14 @@ selection**, examples F1–F5). `romon` and `winbox-terminal` remain
   `isWriteShaped` is deliberately independent: script fallback for `[find]`, a
   positional id, or other non-`key=value` input never bypasses confirmation.
   Known read verbs are allowlisted; an unknown menu verb fails closed as a
-  write-shaped operation. In script mode every command head in a statement
+  write-shaped operation. A truly bare known-menu path (`/system/identity`,
+  example W6) is the one exception: structured mode proves the input is a
+  single path token, so it is console navigation — a no-op read — rather than
+  a command. The device still answers truthfully (`no such command` on the
+  APIs) and the envelope carries a steering tip naming the read that answers.
+  A bare no-argument *command* (`/system/reboot`) stays gated, as does
+  script-branch navigation (#387), where a later line may carry a relative
+  verb. In script mode every command head in a statement
   (the statement start and each `[…]` or `{…}` body) must be a read: its verb
   is the first word past the known menu prefix, so `/ip address print` is a
   read and `/user expire-password print` is not (examples W3). Script

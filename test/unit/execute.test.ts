@@ -339,6 +339,42 @@ describe("resolvedExecuteTips — mac-telnet no-credentials tip (JG-24)", () => 
 	});
 });
 
+describe("resolvedExecuteTips — bare menu path steering tip", () => {
+	// Same hermetic stub idea, plus the canonical command the tip reads.
+	function stub(command: string): ResolvedExecuteRequest {
+		return {
+			via: { value: "native-api" },
+			auth: { username: "admin", password: "", passwordProvided: false },
+			canonical: canonicalizeExecuteCommand(command),
+		} as unknown as ResolvedExecuteRequest;
+	}
+
+	test("fires for a bare menu path and names the read", () => {
+		const tips = resolvedExecuteTips(stub("/system/identity"));
+		const tip = tips.find((t) => t.code === "tip/execute-bare-menu-path");
+		expect(tip).toBeDefined();
+		expect(tip?.message).toContain("/system/identity");
+		expect(tip?.fix).toContain("/system/identity/print");
+		expect(tip?.fix).toContain("centrs retrieve <router> /system/identity");
+		expect(tip?.detailsUrl).toContain("/tips/tip/execute-bare-menu-path");
+	});
+
+	test("does not fire for a real command or a gated write", () => {
+		for (const command of [
+			"/system/identity/print",
+			"/system/reboot",
+			"/ip/address/add address=198.51.100.10/32 interface=ether1",
+			"/no/such/menu",
+		]) {
+			expect(
+				resolvedExecuteTips(stub(command)).find(
+					(t) => t.code === "tip/execute-bare-menu-path",
+				),
+			).toBeUndefined();
+		}
+	});
+});
+
 describe("validation metadata survives the error boundary (#354, PR #356 review)", () => {
 	async function resolveFor(
 		command: string,

@@ -23,7 +23,7 @@ interface SuccessEnvelope {
 
 interface FailureEnvelope {
 	ok: false;
-	error: { code?: string };
+	error: { code?: string; remediation?: string };
 }
 
 function captureConsole() {
@@ -179,6 +179,34 @@ describeFast("native API retrieve against CHR", () => {
 				expect(typeof row["name"]).toBe("string");
 			}
 
+			// 6b. List single-attribute projection keeps the array shape: an
+			// array of single-key objects, never bare values.
+			const singleProjected = await ok([
+				"retrieve",
+				"127.0.0.1",
+				"/interface",
+				"--attributes",
+				"name",
+				...baseArgs,
+			]);
+			const singleRows = singleProjected.data as Array<Record<string, unknown>>;
+			expect(singleRows.length).toBeGreaterThan(0);
+			for (const row of singleRows) {
+				expect(Object.keys(row)).toEqual(["name"]);
+			}
+
+			// 5b. The bare value is about the attribute count, not the flag
+			// spelling: one item via `--attributes` still returns the scalar.
+			const pluralSingle = await ok([
+				"retrieve",
+				"127.0.0.1",
+				"/system/resource",
+				"--attributes",
+				"uptime",
+				...baseArgs,
+			]);
+			expect(typeof pluralSingle.data).toBe("string");
+
 			// 7. --all-attributes (native print detail).
 			const all = await ok([
 				"retrieve",
@@ -224,6 +252,17 @@ describeFast("native API retrieve against CHR", () => {
 				["retrieve", "127.0.0.1", "/not/a/real/path", ...baseArgs],
 				"validation/unknown-path",
 			);
+
+			// 9b. /system/routerboard is absent on CHR by nature, not by typo:
+			// the remediation names that and points at the per-platform license ID.
+			const routerboard = await fail(
+				["retrieve", "127.0.0.1", "/system/routerboard", ...baseArgs],
+				"validation/unknown-path",
+			);
+			expect(routerboard.error.remediation).toContain("CHR");
+			expect(routerboard.error.remediation).toContain("x86");
+			expect(routerboard.error.remediation).toContain("system-id");
+			expect(routerboard.error.remediation).toContain("software-id");
 
 			// 10. Unknown attribute → validation/unknown-attribute.
 			await fail(

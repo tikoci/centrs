@@ -71,6 +71,10 @@ centrs retrieve $R /interface --attributes name,type --username $U --password $P
 
 Envelope: `data` is an array of objects each containing only `name` and `type`.
 
+A single attribute (`--attributes name`) keeps the array shape: an array of
+single-key objects. On a singleton, one item via either flag returns the bare
+value (example 5) — the rule is the count, not the flag.
+
 ### 7. --all-attributes (RouterOS details=true)
 
 ```bash
@@ -120,6 +124,18 @@ available.
 
 ```bash
 centrs retrieve $R /not/a/real/path --username $U --password $P --json
+```
+
+`/system/routerboard` earns a targeted remediation instead of the generic
+one: the menu exists only on MikroTik hardware, so its absence on CHR and
+x86 systems is expected rather than a typo, and the remediation points at
+`/system/license` for the device's license ID (`system-id` on CHR,
+`software-id` on x86 — a projected attribute would fail on one platform or
+the other, so the example reads the whole object).
+
+```bash
+centrs retrieve $R /system/routerboard --username $U --password $P --json
+centrs retrieve $R /system/license --username $U --password $P --json
 ```
 
 ### 11. Unknown attribute
@@ -363,6 +379,10 @@ centrs retrieve $A /interface --attributes name,type --via native-api --port $AP
 
 `data` is an array of objects each containing only `name` and `type`.
 
+A single attribute (`--attributes name`) keeps the array shape here too: an
+array of single-key objects. On a singleton, one item via either flag returns
+the bare value (N5) — the rule is the count, not the flag.
+
 ### N7. `--all-attributes` (native `print detail`)
 
 ```bash
@@ -379,6 +399,14 @@ centrs retrieve $A /system/resource --list-attributes --via native-api --port $A
 
 ```bash
 centrs retrieve $A /not/a/real/path --via native-api --port $API_PORT --username $U --password $P
+```
+
+`/system/routerboard` on CHR earns the targeted remediation (no routerboard
+outside MikroTik hardware; read `/system/license` for the license ID
+instead), same as example 10.
+
+```bash
+centrs retrieve $A /system/routerboard --via native-api --port $API_PORT --username $U --password $P
 ```
 
 ### N10. Unknown attribute → `validation/unknown-attribute`

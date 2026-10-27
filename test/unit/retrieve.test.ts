@@ -9,6 +9,7 @@ import {
 import {
 	resolveMacForRetrieve,
 	resolveRetrieveRequest,
+	retrieveUnknownPathRemediation,
 } from "../../src/retrieve.ts";
 import { closedPort } from "./closed-port.ts";
 
@@ -1114,5 +1115,40 @@ describe("retrieve --quickchr trust-by-provenance (#134)", () => {
 		expect(
 			resolved.warnings.some((w) => w.code === "transport/provider-trust"),
 		).toBe(false);
+	});
+});
+
+describe("retrieveUnknownPathRemediation", () => {
+	test("names the no-routerboard reality and the per-platform license ID for /system/routerboard", () => {
+		for (const path of [
+			"/system/routerboard",
+			"/system/routerboard/",
+			"/System/RouterBoard",
+		]) {
+			const remediation = retrieveUnknownPathRemediation(path);
+			expect(remediation).toContain("CHR");
+			expect(remediation).toContain("x86");
+			expect(remediation).toContain("/system/license");
+			expect(remediation).toContain("system-id");
+			expect(remediation).toContain("software-id");
+			// The example reads the whole object: a projected attribute
+			// would fail on one platform or the other.
+			expect(remediation).not.toContain("--attributes");
+		}
+	});
+
+	test("keeps the generic path guidance for anything else", () => {
+		// `/system/routerboard/print` stays generic on purpose: on hardware the
+		// menu exists, so that spelling is a menu+verb mistake, not a missing
+		// routerboard — a prefix match would mis-fire the CHR hint there.
+		for (const path of [
+			"/not/a/real/path",
+			"/system/routerboard/print",
+			"/system/router",
+		]) {
+			expect(retrieveUnknownPathRemediation(path)).toContain(
+				"Check the slash-prefixed RouterOS path",
+			);
+		}
 	});
 });

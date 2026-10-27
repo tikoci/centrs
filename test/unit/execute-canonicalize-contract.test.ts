@@ -324,6 +324,105 @@ const cases: GateCase[] = [
 		path: "/file",
 		verb: "print",
 	},
+	// A truly bare known-menu path is console navigation — a no-op read, not a
+	// command (orca triage 2026-10-26: `/system/identity` needed `--yes`
+	// while `/system/identity/print` did not). Structured mode proves the input is a
+	// single path token, so unlike the script branch (where `/ip firewall
+	// filter` stays write-shaped per #387: a later line may carry a relative
+	// verb) there is no follow-up hazard here.
+	{
+		input: "/system/identity",
+		mode: "structured",
+		write: false,
+		path: "/system",
+		verb: "identity",
+	},
+	{
+		input: "/ip/address",
+		mode: "structured",
+		write: false,
+		path: "/ip",
+		verb: "address",
+	},
+	{
+		input: "/ip/firewall/filter",
+		mode: "structured",
+		write: false,
+		path: "/ip/firewall",
+		verb: "filter",
+	},
+	// …but a bare no-argument WRITE command is not navigation and stays gated,
+	// as does anything the menu table does not carry (fail closed).
+	{
+		input: "/system/reboot",
+		mode: "structured",
+		write: true,
+		path: "/system",
+		verb: "reboot",
+	},
+	{
+		input: "/system/reset-configuration",
+		mode: "structured",
+		write: true,
+		path: "/system",
+		verb: "reset-configuration",
+	},
+	{
+		input: "/no/such/menu",
+		mode: "structured",
+		write: true,
+		path: "/no/such",
+		verb: "menu",
+	},
+	// The carve-out is bare-only: attributes or queries keep the gate closed.
+	{
+		input: "/system/identity name=x",
+		mode: "structured",
+		write: true,
+		path: "/system",
+		verb: "identity",
+	},
+	{
+		input: "/system/identity ?name",
+		mode: "structured",
+		write: true,
+		path: "/system",
+		verb: "identity",
+	},
+	// `;` is not a tokenizer delimiter, so a second statement smuggled into the
+	// path token must not read as a menu.
+	{
+		input: "/system/identity;/system/reboot",
+		mode: "structured",
+		write: true,
+		path: "/system/identity;/system",
+		verb: "reboot",
+	},
+	{
+		input: "/system/identity;",
+		mode: "structured",
+		write: true,
+		path: "/system",
+		verb: "identity;",
+	},
+	// A second line in `key=value` form stays structured (whitespace-split),
+	// but its attributes keep the gate shut: bare-only means bare.
+	{
+		input: "/system/identity\nname=x",
+		mode: "structured",
+		write: true,
+		path: "/system",
+		verb: "identity",
+	},
+	// The menu tables fold case, matching RouterOS: an uppercase bare menu is
+	// the same navigation no-op, so it reads as a read too.
+	{
+		input: "/SYSTEM/IDENTITY",
+		mode: "structured",
+		write: false,
+		path: "/SYSTEM",
+		verb: "IDENTITY",
+	},
 ];
 
 describe("execute gate legacy contract", () => {
