@@ -41,6 +41,7 @@ import {
 	SYNTAX_REJECTED_REMEDIATION,
 	serializeCentrsError,
 } from "./errors.ts";
+import { countExecutableStatements } from "./explain/segment.ts";
 import {
 	assertOfflineSyntax,
 	isOfflineGateRejection,
@@ -610,6 +611,22 @@ export function buildExecuteErrorEnvelope(
 	};
 }
 
+/**
+ * Whether the dispatch carried more than one statement (#549). Mirrors
+ * `runCommand`: the consoles run the raw CLI text whatever the canonical mode,
+ * while REST/native run structured input as one path-POST/talk sentence — a
+ * `;` inside a structured value never separates there, so the refusal means
+ * nothing ran. Executed control scopes count too: `:if … do={ A; B }` applies
+ * A before a refused B, while stored bodies never run at dispatch.
+ */
+function isMultiStatementDispatch(resolved: ResolvedExecuteRequest): boolean {
+	const runsRawText =
+		resolved.via.value === "mac-telnet" ||
+		resolved.via.value === "ssh" ||
+		resolved.canonical.mode === "script";
+	return runsRawText && countExecutableStatements(resolved.command) > 1;
+}
+
 export function buildExecuteErrorEnvelopeFromResolved(
 	resolved: ResolvedExecuteRequest,
 	error: unknown,
@@ -635,6 +652,7 @@ export function buildExecuteErrorEnvelopeFromResolved(
 				isWriteShaped(resolved.canonical),
 				centrsError,
 				trace,
+				isMultiStatementDispatch(resolved),
 			),
 		],
 		tips: resolvedExecuteTips(resolved),

@@ -107,15 +107,24 @@ export const NOT_SENT_TRANSPORT_CODES: readonly string[] = [
  * #448: a write whose request was already sent when a transport failure ended
  * it may have run on the router. It is never retried, and its error envelope
  * says the outcome is unknown rather than implying nothing happened.
+ *
+ * #549: the same warning covers a dispatched multi-statement write refused
+ * with `routeros/permission-denied`, which can be partly applied — statements
+ * before the refused one already ran. A single refused statement did not run
+ * (#541), so it stays silent; the caller passes whether the dispatch carried
+ * more than one statement.
  */
 export function sentWriteWarnings(
 	write: boolean,
 	error: unknown,
 	trace: ValidationTrace | undefined,
+	multiStatement = false,
 ): Warning[] {
 	if (!write || !trace?.dispatched) return [];
-	if (
-		!(error instanceof CentrsError) ||
+	if (!(error instanceof CentrsError)) return [];
+	if (error.code === "routeros/permission-denied") {
+		if (!multiStatement) return [];
+	} else if (
 		!error.code.startsWith("transport/") ||
 		NOT_SENT_TRANSPORT_CODES.includes(error.code)
 	) {

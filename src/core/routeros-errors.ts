@@ -116,10 +116,16 @@ export const routerOsErrorRules: readonly RouterOsErrorRule[] = [
 		// `std failure: not allowed (9)` for any request (even a GET) when the
 		// group has `rest-api` but not `api` (fixed in 7.26beta3). The native API traps with the
 		// first string; `/execute as-string` returns it as text with a
-		// `(<path>; line N)` suffix.
+		// `(<path>; line N)` suffix. In a multi-statement script the refusal is
+		// the last line, after earlier statements' stdout (#549: `:put
+		// "p5-first"; /system/identity/set …` as a read-only user returns HTTP
+		// 200 with ret `p5-first\r\nnot enough permissions (9)
+		// (/system/identity/set; line 1)`, identical on native-api), so the
+		// trailed form matches too — with the location suffix required, so a
+		// script that merely prints the bare phrase stays ordinary output.
 		test: /not enough permissions|not allowed \(9\)/i,
 		resultTest:
-			/^not enough permissions \(9\)(?: \(\/[^\s();]+; line \d+\))?$/i,
+			/^(?:not enough permissions \(9\)(?: \(\/[^\s();]+; line \d+\))?|[\s\S]*\r?\nnot enough permissions \(9\) \(\/[^\s();]+; line \d+\))$/i,
 		build: (_match, raw) => ({
 			summary: `RouterOS refused the command for lack of permission: ${raw.trim()}`,
 			remediation:

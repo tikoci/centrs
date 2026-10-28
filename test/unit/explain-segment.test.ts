@@ -8,6 +8,7 @@ import { type Defect, hasStructuralDefect } from "../../src/explain/defects.ts";
 import { scanQuotedString as scanQuotedStringShared } from "../../src/explain/quoted-string.ts";
 import * as scopeBrace from "../../src/explain/scope-brace.ts";
 import {
+	countExecutableStatements,
 	documentRange,
 	maskComments,
 	nestedRange,
@@ -831,4 +832,28 @@ test("ranged segmentation keeps an uncached large document out of nested index q
 	} finally {
 		braces.mockRestore();
 	}
+});
+
+describe("countExecutableStatements — dispatch effects at any depth (#549)", () => {
+	test.each([
+		[':put "a"; :put "b"', 2],
+		["/system/note/set note=x", 1],
+		// Nested control scopes run before a later refusal, like top-level ones.
+		[":if (true) do={ /system/note/set note=a; /user/add name=u }", 2],
+		[":if (true) do={ /user/add name=u }", 1],
+		[":foreach i in={1;2} do={ :put $i; :put $i }", 2],
+		[":foreach i in={1;2} do={ :put $i }", 1],
+		[":for i from=1 to=2 do={ :put $i }", 1],
+		[":if (true) do={ :if (true) do={ :put 1; :put 2 } }", 2],
+		// Exclusive branches count the larger side, not the sum.
+		[":if (true) do={ :put 1 } else={ :put 2 }", 1],
+		[":if (true) do={ :put 1; :put 2 } else={ :put 3 }", 2],
+		// Stored bodies never run at dispatch: a refused single stays single.
+		["/system/script/add name=x source={ :put 1; :put 2 }", 1],
+		[":global f do={ :put 1; :put 2 }", 1],
+		// Separators inside strings are not statements.
+		[':if (true) do={ :put "a;b" }', 1],
+	])("counts %s as %i", (input, count) => {
+		expect(countExecutableStatements(input)).toBe(count);
+	});
 });

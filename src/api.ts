@@ -62,6 +62,7 @@ import {
 	promptForWriteConfirmation,
 	validateRouterOsScript,
 } from "./execute.ts";
+import { countExecutableStatements } from "./explain/segment.ts";
 import {
 	assertOfflineSyntax,
 	isOfflineGateRejection,
@@ -1831,6 +1832,12 @@ export function buildApiErrorEnvelopeFromResolved(
 	trace?: ValidationTrace,
 ): ApiErrorEnvelope {
 	const centrsError = asApiError(error);
+	// A structured request is one operation; only a `/execute` script can
+	// carry several statements into one dispatch (#549), at the top level or
+	// inside an executed control scope.
+	const script = resolved.scriptMode ? scriptOf(resolved) : undefined;
+	const multiStatement =
+		script !== undefined && countExecutableStatements(script) > 1;
 	return {
 		ok: false,
 		error: serializeCentrsError(centrsError),
@@ -1840,6 +1847,7 @@ export function buildApiErrorEnvelopeFromResolved(
 				isApiMutating(resolved.method, resolved.path),
 				centrsError,
 				trace,
+				multiStatement,
 			),
 		],
 		tips: [],

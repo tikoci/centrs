@@ -9,6 +9,9 @@ whether the write happened.
 
 - A connection closed or reset after an `execute` or `api` write was sent.
 - A REST 5xx or a timeout on a write.
+- A multi-statement `execute` or `api /execute` script refused with
+  `routeros/permission-denied`: statements before the refused one already ran
+  (#549). A single refused statement did not run and warns nothing.
 
 centrs never retries a write that it has sent, in single-target or fan-out
 mode, because replaying an `add`, a script run or a counter change would apply

@@ -275,9 +275,27 @@ describe("routeros/permission-denied (CHR 7.25 strings)", () => {
 	});
 
 	test.each([
+		// #549: earlier statements' stdout precedes the refusal, CRLF (REST)
+		// and LF alike; identical shape on native-api.
+		"p5-first\r\nnot enough permissions (9) (/system/identity/set; line 1)",
+		"p5-first\nnot enough permissions (9) (/system/identity/set; line 1)",
+		"one\ntwo\r\nnot enough permissions (9) (/ip/address/add; line 3)",
+	])("maps a trailed mid-script denial: %s", (output) => {
+		for (const transport of ["native-api", "rest-api"] as const) {
+			expect(mapRouterOsResultError(output, { transport })?.code).toBe(
+				"routeros/permission-denied",
+			);
+		}
+	});
+
+	test.each([
 		"note: not enough permissions here",
 		"not enough permissions (9) is an example from the manual",
 		"not enough permissions (9) (/system/identity/set; line 1) is an example",
+		// A script that merely prints the bare phrase, even last, is output.
+		"p5-first\nnot enough permissions (9)",
+		// Trailing prose after the refusal is not the device's verdict line.
+		"p5-first\nnot enough permissions (9) (/system/identity/set; line 1)\nmore output",
 	])("leaves ordinary output alone: %s", (output) => {
 		expect(
 			mapRouterOsResultError(output, {

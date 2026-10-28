@@ -288,3 +288,164 @@ test("a missing local client (e.g. no ssh binary) never counts as sent", () => {
 	});
 	expect(sentWriteWarnings(true, error, { dispatched: true })).toEqual([]);
 });
+
+/**
+ * #549: a dispatched multi-statement write refused with
+ * `routeros/permission-denied` can be partly applied — statements before the
+ * refused one already ran — so it warns like any sent write of unknown
+ * outcome. A single refused statement did not run (#541) and stays silent.
+ * The loopback REST "router" answers every request with the CHR 500 shape.
+ */
+const permServer = Bun.serve({
+	hostname: "127.0.0.1",
+	port: 0,
+	fetch: () =>
+		Response.json(
+			{
+				detail: "not enough permissions (9)",
+				error: 500,
+				message: "Internal Server Error",
+			},
+			{ status: 500 },
+		),
+});
+afterAll(() => permServer.stop(true));
+
+const refused = (envelope: { ok: boolean; error?: { code: string } }) => {
+	expect(envelope.ok).toBe(false);
+	expect(envelope.error?.code).toBe("routeros/permission-denied");
+};
+
+describe("a refused multi-statement write warns that it may be partly applied (#549)", () => {
+	test("execute: a refused multi-statement write warns; a refused single statement does not", async () => {
+		const multi = await executeEnvelope(
+			{
+				...common,
+				port: permServer.port,
+				command: '/system/note/set note="a"\n/system/note/set note="b"',
+			},
+			ENV,
+		);
+		refused(multi);
+		expect(warned(multi)).toBe(true);
+
+		const single = await executeEnvelope(
+			{
+				...common,
+				port: permServer.port,
+				command: '/system/note/set note="x"',
+			},
+			ENV,
+		);
+		refused(single);
+		expect(warned(single)).toBe(false);
+	});
+
+	test("execute: nested control scopes count; stored bodies do not (#549)", async () => {
+		// `:if (true) do={ …; … }` applies the first statement before a refused
+		// second on CHR 7.25, so it warns like a top-level pair. A single
+		// nested statement, exclusive single branches, and stored bodies
+		// (`source=`, `:global f do=`) stay silent.
+		for (const command of [
+			":if (true) do={ /system/note/set note=a; /user/add name=u }",
+			":foreach i in={1;2} do={ /system/note/set note=$i; /user/add name=u }",
+		]) {
+			const nested = await executeEnvelope(
+				{ ...common, port: permServer.port, command },
+				ENV,
+			);
+			refused(nested);
+			expect({ command, warned: warned(nested) }).toEqual({
+				command,
+				warned: true,
+			});
+		}
+		for (const command of [
+			":if (true) do={ /user/add name=u }",
+			":if (true) do={ /system/note/set note=a } else={ /system/note/set note=b }",
+			"/system/note/set note=x",
+		]) {
+			const single = await executeEnvelope(
+				{ ...common, port: permServer.port, command },
+				ENV,
+			);
+			refused(single);
+			expect({ command, warned: warned(single) }).toEqual({
+				command,
+				warned: false,
+			});
+		}
+	});
+
+	test("execute: a structured REST write is one operation even with a `;` in a value", async () => {
+		// `note=a;note=b` canonicalizes to structured mode, so REST dispatches a
+		// single path-POST: the refusal means nothing ran, though the raw input
+		// segments as two console statements.
+		const smuggled = await executeEnvelope(
+			{
+				...common,
+				port: permServer.port,
+				command: "/system/note/set note=a;note=b",
+			},
+			ENV,
+		);
+		refused(smuggled);
+		expect(warned(smuggled)).toBe(false);
+	});
+
+	test("api: a refused multi-statement /execute script warns; single-statement and structured do not", async () => {
+		const multi = await apiEnvelope(
+			{
+				...common,
+				port: permServer.port,
+				method: "POST",
+				endpoint: "execute",
+				fields: { script: ':put "a"\n/system/note/set note="b"' },
+			},
+			ENV,
+		);
+		refused(multi);
+		expect(warned(multi)).toBe(true);
+
+		const nested = await apiEnvelope(
+			{
+				...common,
+				port: permServer.port,
+				method: "POST",
+				endpoint: "execute",
+				fields: {
+					script: ":if (true) do={ /system/note/set note=a; /user/add name=u }",
+				},
+			},
+			ENV,
+		);
+		refused(nested);
+		expect(warned(nested)).toBe(true);
+
+		const single = await apiEnvelope(
+			{
+				...common,
+				port: permServer.port,
+				method: "POST",
+				endpoint: "execute",
+				fields: { script: '/system/note/set note="x"' },
+			},
+			ENV,
+		);
+		refused(single);
+		expect(warned(single)).toBe(false);
+
+		const structured = await apiEnvelope(
+			{
+				...common,
+				port: permServer.port,
+				method: "PUT",
+				endpoint: "ip/address",
+				fields: { address: "192.0.2.9/32", interface: "ether1" },
+			},
+			ENV,
+		);
+		refused(structured);
+		expect(warned(structured)).toBe(false);
+	});
+});

@@ -114,7 +114,9 @@ vs `--query` distinction.
   before they were sent, keep the `transport/network` /
   `transport/connection-closed` retry. A mutating request that failed after it
   was sent carries the warning `transport/write-outcome-unknown`, in single-target
-  and fan-out mode alike.
+  and fan-out mode alike. A multi-statement `/execute` script refused with
+  `routeros/permission-denied` carries the same warning (#549); a single
+  refused statement, and a refused structured request, stay silent.
 - **`--stream` (or a `/listen` endpoint) is single-session** → `usage/fanout-not-supported` in
   fan-out mode. **`--raw` strips the envelope** → `usage/conflicting-flags` in
   fan-out mode (per-target envelopes can't be bare).
