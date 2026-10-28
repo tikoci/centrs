@@ -35,6 +35,10 @@ import {
  *   the first statement still runs before the refused write, so the same code
  *   and warning. A single nested statement would stay silent.
  * - P8 the P7 script over native-api: the same code and warning.
+ * - P9 the P5 pair inside one command substitution, `:put [:put "p9-first";
+ *   /system/identity/set …]`, over REST: the substitution's first statement
+ *   runs before the refused write, so the same code and warning.
+ * - P10 the P9 script over native-api: the same code and warning.
  * - C1 `read,write,api,rest-api`, REST `set`: succeeds, so P1's refusal is the
  *   missing policy and not the command.
  */
@@ -168,6 +172,41 @@ describeFast("REST permission refusals (routeros/permission-denied)", () => {
 			);
 			expect(await identity()).toBe(before);
 
+			const substituted =
+				':put [:put "p9-first"; /system/identity/set name=centrs-perm-p9]';
+			for (const [id, transport] of [
+				["P9", rest(users.ro[0])],
+				[
+					"P10",
+					{
+						targetInput: "127.0.0.1",
+						port: chr.ports.api,
+						via: "native-api" as const,
+						username: users.ro[0],
+						password: PASSWORD,
+					},
+				],
+			] as const) {
+				const envelope = await executeEnvelope({
+					...transport,
+					command: substituted,
+					yes: true,
+				});
+				expect({ id, ok: envelope.ok }).toEqual({ id, ok: false });
+				if (!envelope.ok) {
+					expect(envelope.error.code).toBe("routeros/permission-denied");
+					expect(envelope.error.summary).toContain("p9-first");
+				}
+				expect({
+					id,
+					warnings: envelope.warnings.map((warning) => warning.code),
+				}).toMatchObject({
+					id,
+					warnings: expect.arrayContaining(["transport/write-outcome-unknown"]),
+				});
+				expect(await identity()).toBe(before);
+			}
+
 			const p3 = await retrieveEnvelope(
 				{ ...rest(users.noApi[0]), path: "/system/resource" },
 				{},
@@ -209,7 +248,19 @@ describeFast("REST permission refusals (routeros/permission-denied)", () => {
 				quickChrName: chr.name,
 				requestedChannel: started.requestedChannel,
 				requestedVersion: started.requestedVersion,
-				exampleIds: ["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "C1"],
+				exampleIds: [
+					"P1",
+					"P2",
+					"P3",
+					"P4",
+					"P5",
+					"P6",
+					"P7",
+					"P8",
+					"P9",
+					"P10",
+					"C1",
+				],
 			});
 		} finally {
 			await chr.destroy();

@@ -292,8 +292,11 @@ being validated). A write that failed after it was sent may have run, so its
 error envelope, single-target or fan-out, carries the warning
 `transport/write-outcome-unknown`. A multi-statement write refused with
 `routeros/permission-denied` carries the same warning: statements before the
-refused one may already have run (#549). A single refused statement did not
-run and stays silent.
+refused one may already have run (#549). Statements inside executed control
+scopes (`:if … do={…}`) and command substitutions (`[…]`) count; stored bodies
+(`source={…}`, `:global f do={…}`) do not. A single refused statement did not
+run and stays silent, including one fed by a lone substitution
+(`remove [find …]`).
 
 ## CMR clients through their controller (`--cmr`)
 

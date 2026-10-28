@@ -639,14 +639,19 @@ const MAX_DISPATCH_STATEMENT_DEPTH = 16;
  * (`source={…}`, `on-event={…}`, any other `name={`) never execute at
  * dispatch, so only `scopeNameFromMasked` scopes recurse — except a `do={…}`
  * under a `:global`/`:local`/`:set` head, which stores a function value.
- * Command substitutions (`[…]`) are not descended into: no grounded case
- * needs it. An `else={…}` paired with its `do={…}` counts the larger side,
- * not the sum, because the branches exclude each other.
+ * Command substitutions (`[…]`) run at dispatch too — `:put [:put "p5-first";
+ * /system/identity/set …]` prints before the refused set on CHR 7.25 — so
+ * they recurse unless they sit inside a stored or array `{…}`. An `else={…}`
+ * paired with its `do={…}` counts the larger side, not the sum, because the
+ * branches exclude each other.
  *
- * A segment with executed blocks counts its inner statements, not itself (a
- * control head is not an effect); any other segment counts one. Past the
- * depth cap the inner text counts its top-level siblings only. Unbalanced
- * input counts what precedes the break and never throws.
+ * A segment with executed blocks or substitutions counts their inner
+ * statements, not itself (a control head is not an effect); any other segment
+ * counts one. So the commonest write shape, `/… remove [find …]`, stays one
+ * statement — at the cost of a lone substitution that itself writes before a
+ * refused enclosing statement, which also counts one. Past the depth cap the
+ * inner text counts its top-level siblings only. Unbalanced input counts what
+ * precedes the break and never throws.
  */
 export function countExecutableStatements(text: string): number {
 	return countExecutableStatementsWithin(text, 0);
@@ -663,7 +668,7 @@ function countExecutableStatementsWithin(text: string, depth: number): number {
 	return count;
 }
 
-/** Executable statements in the segment's executed `{…}` scopes. */
+/** Executable statements in the segment's executed `{…}` scopes and `[…]`. */
 function countExecutedBlockStatements(
 	segmentText: string,
 	depth: number,
@@ -675,6 +680,8 @@ function countExecutedBlockStatements(
 	const stack: string[] = [];
 	// The last executed scope closed at this level, for `do`/`else` pairing.
 	let lastScope: { name: string; count: number; end: number } | null = null;
+	// The outermost open `[` that executes at dispatch, and its stack depth.
+	let substitution: { start: number; depth: number } | null = null;
 	while (i < masked.length) {
 		const c = masked[i];
 		if (c === '"') {
@@ -682,13 +689,25 @@ function countExecutedBlockStatements(
 			continue;
 		}
 		if (c === "[" || c === "(") {
+			if (c === "[" && !stack.includes("[") && !stack.includes("{")) {
+				substitution = { start: i, depth: stack.length };
+			}
 			stack.push(c);
 			i++;
 			continue;
 		}
 		if (c === "]" || c === ")") {
 			const want = c === "]" ? "[" : "(";
-			if (stack.at(-1) === want) stack.pop();
+			if (stack.at(-1) === want) {
+				stack.pop();
+				if (c === "]" && stack.length === substitution?.depth) {
+					total += countExecutableStatementsWithin(
+						segmentText.slice(substitution.start + 1, i),
+						depth + 1,
+					);
+					substitution = null;
+				}
+			}
 			i++;
 			continue;
 		}

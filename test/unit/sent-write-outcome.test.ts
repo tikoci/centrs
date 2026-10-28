@@ -386,12 +386,14 @@ describe("a refused multi-statement write warns that it may be partly applied (#
 
 	test("execute: nested control scopes count; stored bodies do not (#549)", async () => {
 		// `:if (true) do={ …; … }` applies the first statement before a refused
-		// second on CHR 7.25, so it warns like a top-level pair. A single
-		// nested statement, exclusive single branches, and stored bodies
+		// second on CHR 7.25, so it warns like a top-level pair, and so does a
+		// pair inside a command substitution. A single nested statement, a
+		// lone substitution, exclusive single branches, and stored bodies
 		// (`source=`, `:global f do=`) stay silent.
 		for (const command of [
 			":if (true) do={ /system/note/set note=a; /user/add name=u }",
 			":foreach i in={1;2} do={ /system/note/set note=$i; /user/add name=u }",
+			':put [:put "first"; /system/identity/set name=u]',
 		]) {
 			const nested = await executeEnvelope(
 				{ ...common, port: permServer.port, command },
@@ -407,6 +409,7 @@ describe("a refused multi-statement write warns that it may be partly applied (#
 			":if (true) do={ /user/add name=u }",
 			":if (true) do={ /system/note/set note=a } else={ /system/note/set note=b }",
 			"/system/note/set note=x",
+			"/system/note/set note=[/system/identity/get name]",
 		]) {
 			const single = await executeEnvelope(
 				{ ...common, port: permServer.port, command },

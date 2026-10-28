@@ -855,6 +855,20 @@ describe("countExecutableStatements — dispatch effects at any depth (#549)", (
 		[":Local f do={ :put 1; :put 2 }", 1],
 		// Separators inside strings are not statements.
 		[':if (true) do={ :put "a;b" }', 1],
+		// Command substitutions run at dispatch: their statements count, the
+		// enclosing statement does not, so a lone `[find …]` stays single.
+		[':put [:put "p5-first"; /system/identity/set name=x]', 2],
+		["/ip/address/remove [find comment=x]", 1],
+		["/ip/address/remove [find comment=[/system/identity/get name]]", 1],
+		[":local a [:put 1; :put 2]; :put $a", 3],
+		[":put [:put [:put 1; :put 2]; :put 3]", 3],
+		[":if (true) do={ :put [:put 1; :put 2] }", 2],
+		[':put "[a;b]"', 1],
+		// Substitutions inside stored bodies and arrays do not run.
+		["/system/script/add name=x source={ :put [:put 1; :put 2] }", 1],
+		[":global f do={ :put [:put 1; :put 2] }", 1],
+		// An unclosed substitution counts what precedes the break.
+		[":put [:put 1; :put 2", 1],
 	])("counts %s as %i", (input, count) => {
 		expect(countExecutableStatements(input)).toBe(count);
 	});
