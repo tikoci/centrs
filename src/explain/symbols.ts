@@ -522,6 +522,12 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 		 * `BracketFrame`, quotes and `(` never reset.
 		 */
 		loopCounterOpen: boolean;
+		/**
+		 * #533 reorder — likewise a `:local`/`:global` head stays open for a
+		 * later `name=` past an array VALUE (`:local value={1;2} name=foo`).
+		 * Saved only on a `{` that is an argument value; `}` restores it.
+		 */
+		pendingDecl?: SymbolClass | null;
 	}[] = [];
 	/** bracket/brace nesting, strings excluded (the S8 filter region uses it). */
 	let depth = 0;
@@ -1121,6 +1127,8 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 						(frames.at(-1)?.statements ?? true) &&
 						braceStartsStatements(text, i)),
 				loopCounterOpen,
+				pendingDecl:
+					c === "{" && prevNonSpace(text, i) === "=" ? pendingDecl : null,
 			});
 			depth++;
 			if (c === "[") openBracket(leadBefore, i);
@@ -1168,7 +1176,10 @@ export function resolveSymbols(original: string): SymbolAnalysis {
 				else if (scopes.length > 1) scopes.pop();
 				resetStatement();
 				// #533 reorder — the head outlives its own array braces.
-				if (popped !== undefined) loopCounterOpen = popped.loopCounterOpen;
+				if (popped !== undefined) {
+					loopCounterOpen = popped.loopCounterOpen;
+					pendingDecl = popped.pendingDecl ?? null;
+				}
 			}
 			if (depth > 0) depth--;
 			continue;

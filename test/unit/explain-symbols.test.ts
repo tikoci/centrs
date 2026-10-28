@@ -1506,6 +1506,41 @@ describe("explain/symbols — named spelling declares the value (#533)", () => {
 		}
 	});
 
+	test("an array `value={…}` keeps the declaration open for `name=`", () => {
+		// CHR 7.25 (`explainLiveEnvelope`) accepts the reordered form and
+		// lowers it to `(evl /localname=$foo;value=1;2);(evl /putmessage=$foo)`.
+		// The array resets the statement it interrupts, so the pending
+		// `:local`/`:global` rides the brace frame like `counter=` does.
+		for (const cls of ["local", "global"] as const) {
+			for (const input of [
+				`:${cls} name=foo value={1;2}; :put $foo`,
+				`:${cls} value={1;2} name=foo; :put $foo`,
+			]) {
+				const occurrences = resolveSymbols(input).occurrences;
+				const declaration = occurrences.find((o) => o.role === "declaration");
+				const reference = occurrences.find((o) => o.role === "reference");
+				expect({ input, declaration }).toMatchObject({
+					input,
+					declaration: { name: "foo", cls },
+				});
+				expect({ input, reference }).toMatchObject({
+					input,
+					reference: { name: "foo", cls },
+				});
+				expect(reference?.bindingIds).toEqual(declaration?.bindingIds);
+			}
+		}
+	});
+
+	test("an array value never declares its own elements", () => {
+		const occurrences = resolveSymbols(
+			":local value={a;b} name=foo",
+		).occurrences;
+		expect(
+			occurrences.filter((o) => o.role === "declaration").map((o) => o.name),
+		).toEqual(["foo"]);
+	});
+
 	test("a positional word still declares, even when spelled `name`", () => {
 		const [declaration, reference] = resolveSymbols(
 			":local name 1\n:put $name",
