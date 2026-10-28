@@ -284,4 +284,31 @@ describe("probe shape safety", () => {
 			"a prior transport or authentication probe failed",
 		);
 	});
+
+	test("a permission refusal on the child probe is an auth-error, not an empty path", async () => {
+		const { data } = await collect(
+			"/ip/address",
+			{ schema: true },
+			"7.24.5",
+			async (request, _path, text) => {
+				if (request === "highlight")
+					return [
+						{
+							highlight: Array.from(
+								{ length: text?.length ?? 0 },
+								() => "dir",
+							).join(","),
+						},
+					];
+				throw new CentrsError({
+					code: "routeros/permission-denied",
+					summary: "not enough permissions (9)",
+				});
+			},
+		);
+		const child = data.evidence.find((ev) => ev.probe === "child");
+		expect(child?.outcome).toBe("auth-error");
+		expect(child?.errorCode).toBe("routeros/permission-denied");
+		expect(data.schema?.node).toBe("unknown");
+	});
 });

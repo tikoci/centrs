@@ -94,6 +94,7 @@ export const NOT_SENT_TRANSPORT_CODES: readonly string[] = [
 	"transport/auth-failed",
 	"transport/connection-refused",
 	"transport/dns",
+	"transport/edge-auth-failed",
 	"transport/host-key-mismatch",
 	"transport/insecure-trust",
 	"transport/local-tool-missing",

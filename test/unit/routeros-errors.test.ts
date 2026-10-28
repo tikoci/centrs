@@ -247,3 +247,42 @@ describe("mapRouterOsError surfaces error.position when present (JG-16)", () => 
 		expect(mapRouterOsError("unknown parameter foo").position).toBeUndefined();
 	});
 });
+
+describe("routeros/permission-denied (CHR 7.25 strings)", () => {
+	test("maps the native trap and REST detail for a missing write policy", () => {
+		for (const transport of ["native-api", "rest-api"] as const) {
+			expect(
+				mapRouterOsError("not enough permissions (9)", { transport }).code,
+			).toBe("routeros/permission-denied");
+		}
+	});
+
+	test("maps REST's refusal when the group has rest-api but not api", () => {
+		expect(
+			mapRouterOsError("std failure: not allowed (9)", {
+				transport: "rest-api",
+			}).code,
+		).toBe("routeros/permission-denied");
+	});
+
+	test.each([
+		"not enough permissions (9)",
+		"not enough permissions (9) (/system/identity/set; line 1)",
+	])("maps /execute as-string denial: %s", (output) => {
+		expect(
+			mapRouterOsResultError(output, { transport: "rest-api" })?.code,
+		).toBe("routeros/permission-denied");
+	});
+
+	test.each([
+		"note: not enough permissions here",
+		"not enough permissions (9) is an example from the manual",
+		"not enough permissions (9) (/system/identity/set; line 1) is an example",
+	])("leaves ordinary output alone: %s", (output) => {
+		expect(
+			mapRouterOsResultError(output, {
+				transport: "rest-api",
+			}),
+		).toBeUndefined();
+	});
+});

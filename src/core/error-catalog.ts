@@ -432,6 +432,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 		summary: "The device requested an unsupported MAC-Telnet auth mode.",
 	},
 	{
+		code: "routeros/permission-denied",
+		summary:
+			"RouterOS refused the command because the user's group lacks a policy it needs.",
+	},
+	{
 		code: "routeros/protocol-not-implemented",
 		summary: "The requested protocol is planned but not implemented yet.",
 	},
@@ -562,6 +567,11 @@ export const errorCatalog: readonly ErrorCatalogEntry[] = [
 	{
 		code: "transport/dns",
 		summary: "The device host name could not be resolved.",
+	},
+	{
+		code: "transport/edge-auth-failed",
+		summary:
+			"An HTTP layer in front of RouterOS (auth proxy, tunnel edge, WAF) refused the request before RouterOS answered it.",
 	},
 	{
 		code: "transport/host-key-mismatch",

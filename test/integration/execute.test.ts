@@ -422,6 +422,18 @@ describeFast("execute against CHR", () => {
 				}),
 				"rest-api",
 			);
+			const permissionProse =
+				"not enough permissions (9) is an example from the manual";
+			const permissionOutput = expectExecuteSuccess(
+				await executeEnvelope({
+					...base,
+					command: `:put "${permissionProse}"`,
+				}),
+				"rest-api",
+			);
+			expect((permissionOutput.data as { ret: string }).ret.trim()).toBe(
+				permissionProse,
+			);
 			await executeEnvelope({
 				...base,
 				command: ':log warning "no such item"',

@@ -195,6 +195,8 @@ describe("live evidence controls", () => {
 		"transport/timeout",
 		"transport/connection-closed",
 		"transport/auth-failed",
+		"transport/edge-auth-failed",
+		"routeros/permission-denied",
 	])("%s keeps offline facts and stops subsequent requests", async (code) => {
 		let calls = 0;
 		const data = await collect("/ip/address print", {
@@ -405,7 +407,8 @@ test("actual REST authentication failure keeps resolved target and produces a co
 	const server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
-		fetch: () => new Response("unauthorized", { status: 401 }),
+		fetch: () =>
+			Response.json({ error: 401, message: "Unauthorized" }, { status: 401 }),
 	});
 	try {
 		const result = await explainLiveEnvelope(
